@@ -11,7 +11,7 @@ import {
   Sun,
   UserRound,
 } from "lucide-react";
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore, type MouseEvent } from "react";
 import {
   GitHubBrandIcon,
   XBrandIcon,
@@ -19,14 +19,36 @@ import {
 import { WalletButton } from "@/components/wallet-provider";
 
 type ColorTheme = "light" | "dark";
+type ThemeViewTransition = {
+  finished: Promise<void>;
+};
+type ViewTransitionDocument = Document & {
+  startViewTransition?: (update: () => void) => ThemeViewTransition;
+};
 const themeChangeEvent = "programmable:theme-changed";
+let themeTransitionSequence = 0;
+let themeFallbackTimer: number | null = null;
+let themeInstantCleanupFrame: number | null = null;
 
-const navItems = [
+function clearThemeReveal(root: HTMLElement) {
+  if (themeFallbackTimer !== null) {
+    window.clearTimeout(themeFallbackTimer);
+    themeFallbackTimer = null;
+  }
+  delete root.dataset.themeTransition;
+  root.style.removeProperty("--theme-reveal-x");
+  root.style.removeProperty("--theme-reveal-y");
+  root.style.removeProperty("--theme-reveal-radius");
+}
+
+const desktopNavItems = [
   { href: "/", label: "Explore", icon: Compass },
-  { href: "/launch", label: "Launch", icon: Plus },
-  { href: "/profile", label: "Profile", icon: UserRound },
+  { href: "/launch", label: "Create", icon: Plus },
   { href: "/docs", label: "Docs", icon: BookOpen },
+  { href: "/profile", label: "Profile", icon: UserRound },
 ];
+
+const mobileNavItems = desktopNavItems;
 
 function isCurrent(pathname: string, href: string) {
   return href === "/" ? pathname === href : pathname.startsWith(href);
@@ -52,10 +74,10 @@ function ThemeToggle() {
     getServerThemeSnapshot,
   );
 
-  function toggleTheme() {
-    const nextTheme: ColorTheme = theme === "dark" ? "light" : "dark";
-    document.documentElement.dataset.theme = nextTheme;
-    document.documentElement.style.colorScheme = nextTheme;
+  function commitTheme(nextTheme: ColorTheme) {
+    const root = document.documentElement;
+    root.dataset.theme = nextTheme;
+    root.style.colorScheme = nextTheme;
 
     try {
       window.localStorage.setItem("programmable-theme", nextTheme);
@@ -66,6 +88,86 @@ function ThemeToggle() {
     window.dispatchEvent(new Event(themeChangeEvent));
   }
 
+  function toggleTheme(event: MouseEvent<HTMLButtonElement>) {
+    const nextTheme: ColorTheme = theme === "dark" ? "light" : "dark";
+    const viewTransitionDocument = document as ViewTransitionDocument;
+    const root = document.documentElement;
+    const transitionSequence = ++themeTransitionSequence;
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+
+    if (event.detail === 0 || reduceMotion) {
+      clearThemeReveal(root);
+      if (themeInstantCleanupFrame !== null) {
+        window.cancelAnimationFrame(themeInstantCleanupFrame);
+      }
+      root.dataset.themeInput = "instant";
+      commitTheme(nextTheme);
+      themeInstantCleanupFrame = window.requestAnimationFrame(() => {
+        themeInstantCleanupFrame = window.requestAnimationFrame(() => {
+          delete root.dataset.themeInput;
+          themeInstantCleanupFrame = null;
+        });
+      });
+      return;
+    }
+
+    if (themeInstantCleanupFrame !== null) {
+      window.cancelAnimationFrame(themeInstantCleanupFrame);
+      themeInstantCleanupFrame = null;
+    }
+    delete root.dataset.themeInput;
+
+    const toggleBounds = event.currentTarget.getBoundingClientRect();
+    const originX = toggleBounds.left + toggleBounds.width / 2;
+    const originY = toggleBounds.top + toggleBounds.height / 2;
+    const radius = Math.hypot(
+      Math.max(originX, window.innerWidth - originX),
+      Math.max(originY, window.innerHeight - originY),
+    );
+    root.style.setProperty("--theme-reveal-x", `${originX}px`);
+    root.style.setProperty("--theme-reveal-y", `${originY}px`);
+    root.style.setProperty("--theme-reveal-radius", `${radius}px`);
+
+    const runFallbackReveal = () => {
+      root.dataset.themeTransition = `fallback-${nextTheme}`;
+      root.getBoundingClientRect();
+      commitTheme(nextTheme);
+      themeFallbackTimer = window.setTimeout(() => {
+        if (transitionSequence === themeTransitionSequence) {
+          clearThemeReveal(root);
+        }
+      }, 300);
+    };
+
+    if (!viewTransitionDocument.startViewTransition) {
+      runFallbackReveal();
+      return;
+    }
+
+    root.dataset.themeTransition = "radial";
+
+    try {
+      const transition = viewTransitionDocument.startViewTransition(() => {
+        commitTheme(nextTheme);
+      });
+
+      const finishReveal = () => {
+        if (transitionSequence === themeTransitionSequence) {
+          clearThemeReveal(root);
+        }
+      };
+      void transition.finished.then(finishReveal, finishReveal);
+    } catch {
+      clearThemeReveal(root);
+      root.style.setProperty("--theme-reveal-x", `${originX}px`);
+      root.style.setProperty("--theme-reveal-y", `${originY}px`);
+      root.style.setProperty("--theme-reveal-radius", `${radius}px`);
+      runFallbackReveal();
+    }
+  }
+
   return (
     <button
       className="theme-toggle"
@@ -73,6 +175,7 @@ function ThemeToggle() {
       aria-label={
         theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
       }
+      data-theme={theme}
       title={theme === "dark" ? "Light mode" : "Dark mode"}
       onClick={toggleTheme}
     >
@@ -94,35 +197,18 @@ export function SiteHeader() {
           <Link className="wordmark" href="/" aria-label="Programmable home">
             <Image
               className="wordmark-logo"
-              src="/brand/loop/programmable-loop-mark-header.png"
+              src="/brand/loop/programmable-loop-mark-512.png"
               alt=""
-              width={146}
-              height={192}
+              width={512}
+              height={512}
+              sizes="34px"
               priority
             />
           </Link>
-          <a
-            className="header-social-link"
-            href="https://x.com/0xProgrammable"
-            target="_blank"
-            rel="noreferrer"
-            aria-label="Programmable on X"
-          >
-            <XBrandIcon />
-          </a>
-          <a
-            className="header-social-link"
-            href="https://github.com/0xprogrammable"
-            target="_blank"
-            rel="noreferrer"
-            aria-label="Programmable on GitHub"
-          >
-            <GitHubBrandIcon />
-          </a>
         </div>
 
         <nav className="desktop-nav" aria-label="Primary navigation">
-          {navItems.map((item) => (
+          {desktopNavItems.map((item) => (
             <Link
               key={item.href}
               className={isCurrent(pathname, item.href) ? "active" : undefined}
@@ -135,6 +221,26 @@ export function SiteHeader() {
         </nav>
 
         <div className="header-actions">
+          <div className="header-socials">
+            <a
+              className="header-social-link"
+              href="https://x.com/0xProgrammable"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Programmable on X"
+            >
+              <XBrandIcon />
+            </a>
+            <a
+              className="header-social-link"
+              href="https://github.com/0xprogrammable"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Programmable on GitHub"
+            >
+              <GitHubBrandIcon />
+            </a>
+          </div>
           <ThemeToggle />
           <WalletButton compact />
         </div>
@@ -148,7 +254,7 @@ export function MobileNavigation() {
 
   return (
     <nav className="mobile-nav" aria-label="Primary navigation">
-      {navItems.map((item) => {
+      {mobileNavItems.map((item) => {
         const Icon = item.icon;
         const current = isCurrent(pathname, item.href);
         return (

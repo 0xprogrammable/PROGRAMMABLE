@@ -217,13 +217,6 @@ function formatMarketCap(token: ProfileToken) {
   return null;
 }
 
-function formatLaunchModel(model?: ProfileToken["launchModel"]) {
-  if (model === "deep") return "Deep";
-  if (model === "stock-paired") return "Stock paired";
-  if (model === "adaptive") return "Adaptive";
-  return "Classic";
-}
-
 type WaitForTransactionOptions = {
   maxAttempts?: number;
   intervalMs?: number;
@@ -1864,8 +1857,8 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     ],
   );
   const displayName = account
-    ? savedProfile.username || "Your profile"
-    : "Your profile";
+    ? savedProfile.username || "Profile"
+    : "Profile";
   const avatarImage = editingProfile ? avatarDraft : savedProfile.avatarDataUrl;
   const avatarFallback = account
     ? (savedProfile.username || account.slice(2, 4)).slice(0, 2).toUpperCase()
@@ -1877,14 +1870,15 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         <section className={styles.connectCard}>
           <Image
             className={styles.connectMark}
-            src="/brand/loop/programmable-loop-mark-transparent-v1.png"
+            src="/brand/loop/programmable-loop-mark-512.png"
             alt=""
-            width={96}
-            height={96}
-            sizes="82px"
+            width={512}
+            height={512}
+            sizes="(max-width: 700px) 72px, 188px"
+            priority
           />
-          <h1>Connect your wallet</h1>
-          <p>Your launches and creator rewards, in one place.</p>
+          <h1>Profile</h1>
+          <p>Connect to view your tokens, rewards and project settings.</p>
           <button
             className={styles.connectButton}
             type="button"
@@ -2514,13 +2508,6 @@ function ProfileAccountWorkspace({
   );
   const hasRewardSurface = profileHasRewardSurface(entries);
   const nativeClaimable = profileClaimableWei(entries, account);
-  const rewardDistribution = entries
-    .map((entry) => ({
-      address: entry.token.address,
-      name: entry.token.name,
-      value: profileEntryClaimableWei(entry, account),
-    }))
-    .filter((entry) => entry.value > 0n);
   const stockRewardCount = entries.reduce(
     (total, entry) =>
       total +
@@ -2553,7 +2540,7 @@ function ProfileAccountWorkspace({
     >
       <header className={styles.portfolioHeader}>
         <div className={styles.portfolioTitle}>
-          <h2 id="profile-portfolio-title">Tokens &amp; rewards</h2>
+          <h2 id="profile-portfolio-title">Tokens</h2>
         </div>
 
         <div className={styles.portfolioStats}>
@@ -2583,30 +2570,6 @@ function ProfileAccountWorkspace({
           ) : null}
         </div>
 
-        {nativeClaimable > 0n && rewardDistribution.length ? (
-          <div
-            className={styles.rewardDistribution}
-            role="img"
-            aria-label={`Claimable ETH across ${rewardDistribution.length} ${
-              rewardDistribution.length === 1 ? "token" : "tokens"
-            }`}
-          >
-            {rewardDistribution.map((reward) => (
-              <span
-                key={reward.address}
-                title={`${reward.name}: ${formatWei(reward.value)}`}
-                style={{
-                  flexGrow: Math.max(
-                    1,
-                    Number(
-                      (reward.value * 10_000n) / nativeClaimable,
-                    ),
-                  ),
-                }}
-              />
-            ))}
-          </div>
-        ) : null}
       </header>
 
       {sourceWarning ? (
@@ -2659,10 +2622,10 @@ function ProfileAccountWorkspace({
         </div>
       ) : (
         <ProfileSectionEmpty
-          title="No launches yet"
-          detail="Tokens launched by this wallet will appear here."
+          title="No tokens"
+          detail="Tokens created by this wallet will appear here."
           actionHref="/launch"
-          actionLabel="Launch a token"
+          actionLabel="Create token"
         />
       )}
     </section>
@@ -2899,7 +2862,7 @@ function ProfilePortfolioRow({
           <span className={styles.tokenArt}>
             <Image
               src={tokenImageSource}
-              alt={`${token.name} token image`}
+              alt={`${token.name} project artwork`}
               fill
               sizes="58px"
               unoptimized={!canOptimizeTokenImage(tokenImageSource)}
@@ -2909,15 +2872,6 @@ function ProfilePortfolioRow({
             <span className={styles.tokenNameRow}>
               <strong>{token.name}</strong>
               <span className={styles.tokenSymbol}>${token.symbol}</span>
-            </span>
-            <span className={styles.tokenMeta}>
-              <span className={styles.modelLabel}>
-                {formatLaunchModel(token.launchModel)}
-              </span>
-              {token.launchedAt ? <span>{token.launchedAt}</span> : null}
-            </span>
-            <span className={styles.tokenAddress}>
-              {shortenAddress(token.address)}
             </span>
           </span>
         </Link>
@@ -3095,9 +3049,6 @@ function ProfilePortfolioRow({
               );
             },
           )}
-          <Link className={styles.openToken} href={token.href}>
-            View token
-          </Link>
         </div>
       </div>
 

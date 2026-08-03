@@ -1,15 +1,14 @@
 "use client";
 
 import {
-  useCallback,
   useEffect,
   useId,
   useMemo,
-  useRef,
   useState,
 } from "react";
 
 import { useLiveDataRefresh } from "@/components/use-live-data-refresh";
+import { getExplorePreviewChart } from "@/components/explore-preview-data";
 
 import styles from "./token-price-chart.module.css";
 
@@ -70,7 +69,11 @@ export function shouldRenderPriceHistory(input: {
   hasChart: boolean;
   range: ChartRange;
 }) {
-  return input.loading || input.hasChart || input.range !== "all";
+  return (
+    input.loading ||
+    input.hasChart ||
+    CHART_RANGES.some(({ value }) => value === input.range)
+  );
 }
 
 const CHART_RANGES: ReadonlyArray<{
@@ -89,30 +92,6 @@ const PLOT_LEFT = 7;
 const PLOT_RIGHT = VIEWBOX_WIDTH - 7;
 const PLOT_TOP = 9;
 const PLOT_BOTTOM = VIEWBOX_HEIGHT - 9;
-
-export function getChartPointIndex(input: {
-  clientX: number;
-  left: number;
-  width: number;
-  pointCount: number;
-}) {
-  if (
-    !Number.isFinite(input.clientX) ||
-    !Number.isFinite(input.left) ||
-    !Number.isFinite(input.width) ||
-    input.width <= 0 ||
-    !Number.isInteger(input.pointCount) ||
-    input.pointCount <= 0
-  ) {
-    return null;
-  }
-
-  const relative = Math.min(
-    1,
-    Math.max(0, (input.clientX - input.left) / input.width),
-  );
-  return Math.round(relative * Math.max(0, input.pointCount - 1));
-}
 
 function formatPrice(value: number, unit: "USD" | "ETH") {
   if (!Number.isFinite(value) || value < 0) return "Unavailable";
@@ -135,22 +114,6 @@ function formatPrice(value: number, unit: "USD" | "ETH") {
   })} ETH`;
 }
 
-function formatMarketCap(value: number, unit: "USD" | "ETH") {
-  if (!Number.isFinite(value) || value < 0) return null;
-  if (unit === "USD") {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      notation: value >= 1_000 ? "compact" : "standard",
-      maximumFractionDigits: value >= 1_000 ? 1 : 2,
-    }).format(value);
-  }
-  return `${new Intl.NumberFormat("en-US", {
-    notation: value >= 1_000 ? "compact" : "standard",
-    maximumFractionDigits: value >= 1_000 ? 1 : 5,
-  }).format(value)} ETH`;
-}
-
 function linePath(points: PlottedPoint[]) {
   if (points.length === 0) return "";
 
@@ -167,16 +130,14 @@ function linePath(points: PlottedPoint[]) {
 export function TokenPriceChart({
   tokenAddress,
   tokenName,
-  totalSupply,
   launchModel,
-  onMarketCapChange,
+  preview = false,
   onVolumeChange,
 }: {
   tokenAddress: `0x${string}`;
   tokenName: string;
-  totalSupply?: string;
   launchModel?: ChartLaunchModel;
-  onMarketCapChange?: (marketCap: string | null) => void;
+  preview?: boolean;
   onVolumeChange?: (volume: TokenChartVolume | null) => void;
 }) {
   const [request, setRequest] = useState<{
@@ -186,28 +147,25 @@ export function TokenPriceChart({
   } | null>(null);
   const [range, setRange] = useState<ChartRange>("all");
   const refreshKey = useLiveDataRefresh({
-    enabled: launchModel !== "stock-paired",
+    enabled: launchModel !== "stock-paired" && !preview,
   });
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
-  const activeIndexRef = useRef<number | null>(null);
-  const plotRef = useRef<SVGSVGElement | null>(null);
-  const pointerFrameRef = useRef<number | null>(null);
-  const pendingPointerXRef = useRef<number | null>(null);
-  const setActiveIndexIfChanged = useCallback((nextIndex: number | null) => {
-    if (activeIndexRef.current === nextIndex) return;
-    activeIndexRef.current = nextIndex;
-    setActiveIndex(nextIndex);
-  }, []);
   const gradientId = useId().replaceAll(":", "");
   const requestKey = `${tokenAddress.toLowerCase()}:${range}`;
+  const previewPayload = useMemo(
+    () => (preview ? getExplorePreviewChart(tokenAddress, range) : null),
+    [preview, range, tokenAddress],
+  );
   const payload =
-    launchModel === "stock-paired"
+    previewPayload ??
+    (launchModel === "stock-paired"
       ? STOCK_PAIRED_EMPTY_CHART
       : request?.key === requestKey
         ? request.payload
-        : null;
+        : null);
   const failed =
-    launchModel === "stock-paired"
+    preview
+      ? false
+      : launchModel === "stock-paired"
       ? false
       : request?.key === requestKey
         ? request.failed
@@ -215,7 +173,7 @@ export function TokenPriceChart({
   const loading = !payload && !failed;
 
   useEffect(() => {
-    if (launchModel === "stock-paired") {
+    if (launchModel === "stock-paired" || preview) {
       return;
     }
 
@@ -235,7 +193,6 @@ export function TokenPriceChart({
           payload: nextPayload,
           failed: false,
         });
-        setActiveIndexIfChanged(null);
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError")
@@ -250,10 +207,10 @@ export function TokenPriceChart({
     return () => controller.abort();
   }, [
     launchModel,
+    preview,
     range,
     refreshKey,
     requestKey,
-    setActiveIndexIfChanged,
     tokenAddress,
   ]);
 
@@ -296,8 +253,6 @@ export function TokenPriceChart({
     } as const;
   }, [payload]);
 
-  const activePoint =
-    chart && activeIndex !== null ? chart.points[activeIndex] : null;
   const emptyMessage = getPriceHistoryEmptyMessage(launchModel, failed);
   const chartStatus =
     !payload && !failed
@@ -305,18 +260,6 @@ export function TokenPriceChart({
       : chart
         ? `Price history loaded with ${chart.points.length} points`
         : emptyMessage;
-
-  useEffect(() => {
-    const supply = Number(totalSupply);
-    if (!activePoint || !chart || !Number.isFinite(supply) || supply <= 0) {
-      onMarketCapChange?.(null);
-      return;
-    }
-
-    onMarketCapChange?.(
-      formatMarketCap(activePoint.value * supply, chart.unit),
-    );
-  }, [activePoint, chart, onMarketCapChange, totalSupply]);
 
   useEffect(() => {
     if (launchModel === "stock-paired" || range === "all") {
@@ -339,64 +282,6 @@ export function TokenPriceChart({
       volumeUsdWad: payload.volumeUsdWad,
     });
   }, [failed, launchModel, onVolumeChange, payload, range]);
-
-  useEffect(
-    () => () => {
-      if (pointerFrameRef.current !== null) {
-        window.cancelAnimationFrame(pointerFrameRef.current);
-      }
-    },
-    [],
-  );
-
-  function updateActivePoint(clientX: number) {
-    if (!chart || !plotRef.current) return;
-    const bounds = plotRef.current.getBoundingClientRect();
-    const nextIndex = getChartPointIndex({
-      clientX,
-      left: bounds.left,
-      width: bounds.width,
-      pointCount: chart.points.length,
-    });
-    if (nextIndex !== null) setActiveIndexIfChanged(nextIndex);
-  }
-
-  function scheduleActivePoint(clientX: number) {
-    pendingPointerXRef.current = clientX;
-    if (pointerFrameRef.current !== null) return;
-
-    pointerFrameRef.current = window.requestAnimationFrame(() => {
-      pointerFrameRef.current = null;
-      const pendingClientX = pendingPointerXRef.current;
-      pendingPointerXRef.current = null;
-      if (pendingClientX !== null) updateActivePoint(pendingClientX);
-    });
-  }
-
-  function cancelScheduledActivePoint() {
-    pendingPointerXRef.current = null;
-    if (pointerFrameRef.current === null) return;
-    window.cancelAnimationFrame(pointerFrameRef.current);
-    pointerFrameRef.current = null;
-  }
-
-  function moveActivePoint(
-    key: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown" | "Home" | "End",
-  ) {
-    if (!chart) return;
-    const lastIndex = chart.points.length - 1;
-    const currentIndex = activeIndex ?? lastIndex;
-
-    if (key === "Home") {
-      setActiveIndexIfChanged(0);
-    } else if (key === "End") {
-      setActiveIndexIfChanged(lastIndex);
-    } else if (key === "ArrowLeft" || key === "ArrowDown") {
-      setActiveIndexIfChanged(Math.max(0, currentIndex - 1));
-    } else {
-      setActiveIndexIfChanged(Math.min(lastIndex, currentIndex + 1));
-    }
-  }
 
   if (
     !shouldRenderPriceHistory({
@@ -427,7 +312,7 @@ export function TokenPriceChart({
           <p className={styles.eyebrow}>Price</p>
           <p className={styles.value}>
             {chart
-              ? formatPrice(activePoint?.value ?? chart.current, chart.unit)
+              ? formatPrice(chart.current, chart.unit)
               : !loading || launchModel === "stock-paired"
                 ? "Unavailable"
                 : "Onchain"}
@@ -443,14 +328,12 @@ export function TokenPriceChart({
                 key={option.value}
                 onClick={() => {
                   if (option.value === range) return;
-                  cancelScheduledActivePoint();
                   onVolumeChange?.(
                     option.value === "all"
                       ? null
                       : { range: option.value, pending: true },
                   );
                   setRange(option.value);
-                  setActiveIndexIfChanged(null);
                 }}
               >
                 {option.label}
@@ -467,49 +350,10 @@ export function TokenPriceChart({
       ) : chart ? (
         <div className={styles.plot}>
           <svg
-            ref={plotRef}
             viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
             preserveAspectRatio="none"
-            role="slider"
-            tabIndex={0}
-            aria-label={`${tokenName} price point`}
-            aria-orientation="horizontal"
-            aria-valuemin={0}
-            aria-valuemax={chart.points.length - 1}
-            aria-valuenow={activeIndex ?? chart.points.length - 1}
-            aria-valuetext={`${formatPrice(
-              activePoint?.value ?? chart.current,
-              chart.unit,
-            )} at block ${
-              activePoint?.blockNumber ??
-              chart.points.at(-1)?.blockNumber ??
-              "unknown"
-            }`}
-            onBlur={() => {
-              cancelScheduledActivePoint();
-              setActiveIndexIfChanged(null);
-            }}
-            onKeyDown={(event) => {
-              if (
-                event.key === "ArrowLeft" ||
-                event.key === "ArrowRight" ||
-                event.key === "ArrowUp" ||
-                event.key === "ArrowDown" ||
-                event.key === "Home" ||
-                event.key === "End"
-              ) {
-                event.preventDefault();
-                moveActivePoint(event.key);
-              }
-            }}
-            onPointerDown={(event) => updateActivePoint(event.clientX)}
-            onPointerMove={(event) => scheduleActivePoint(event.clientX)}
-            onPointerLeave={(event) => {
-              cancelScheduledActivePoint();
-              if (event.pointerType !== "touch") {
-                setActiveIndexIfChanged(null);
-              }
-            }}
+            aria-hidden="true"
+            focusable="false"
           >
             <defs>
               <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
@@ -540,23 +384,6 @@ export function TokenPriceChart({
               fill={`url(#${gradientId})`}
             />
             <path className={styles.line} d={chart.path} />
-            {activePoint ? (
-              <>
-                <line
-                  className={styles.guide}
-                  x1={activePoint.x}
-                  x2={activePoint.x}
-                  y1={PLOT_TOP}
-                  y2={PLOT_BOTTOM}
-                />
-                <circle
-                  className={styles.point}
-                  cx={activePoint.x}
-                  cy={activePoint.y}
-                  r="4"
-                />
-              </>
-            ) : null}
           </svg>
         </div>
       ) : (

@@ -9,7 +9,7 @@ import styles from "@/components/site-footer.module.css";
 
 const productLinks = [
   { href: "/", label: "Explore" },
-  { href: "/launch", label: "Launch" },
+  { href: "/launch", label: "Create" },
   { href: "/profile", label: "Profile" },
   { href: "/docs", label: "Docs" },
 ];
@@ -43,16 +43,13 @@ export function SiteFooter() {
           <Link href="/" aria-label="Programmable home">
             <Image
               className={styles.mark}
-              src="/brand/loop/programmable-loop-mark-header.png"
+              src="/brand/loop/programmable-loop-mark-512.png"
               alt=""
-              width={146}
-              height={192}
+              width={512}
+              height={512}
+              sizes="34px"
             />
           </Link>
-          <p>
-            Launch and explore fixed-supply tokens whose behavior is defined by
-            Uniswap v4 hooks. Your connected wallet submits every transaction.
-          </p>
         </section>
 
         <nav className={styles.column} aria-label="Product">
@@ -90,29 +87,28 @@ export function SiteFooter() {
             or lose all value. Programmable does not provide financial advice
             or guarantee a token&apos;s quality.
           </p>
-        </section>
-
-        <div className={styles.bottom}>
-          <span>© 2026 Programmable</span>
-          <div className={styles.socials}>
-            <a
-              href="https://x.com/0xProgrammable"
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Programmable on X"
-            >
-              <XBrandIcon />
-            </a>
-            <a
-              href="https://github.com/0xprogrammable"
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Programmable on GitHub"
-            >
-              <GitHubBrandIcon />
-            </a>
+          <div className={styles.riskMeta}>
+            <span>© 2026 Programmable</span>
+            <div className={styles.socials}>
+              <a
+                href="https://x.com/0xProgrammable"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Programmable on X"
+              >
+                <XBrandIcon />
+              </a>
+              <a
+                href="https://github.com/0xprogrammable"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Programmable on GitHub"
+              >
+                <GitHubBrandIcon />
+              </a>
+            </div>
           </div>
-        </div>
+        </section>
       </div>
     </footer>
   );

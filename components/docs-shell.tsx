@@ -1,33 +1,62 @@
+import Link from "next/link";
 import { ReactNode } from "react";
 
 import styles from "@/components/docs-experience.module.css";
-import { DocsNavigation } from "@/components/docs-navigation";
+import {
+  DocsNavigation,
+  type DocsPageSection,
+} from "@/components/docs-navigation";
 import { DocsSearch } from "@/components/docs-search";
+
+const docsGuides = [
+  { href: "/docs", label: "Platform" },
+  { href: "/docs/models/classic", label: "Classic" },
+  { href: "/docs/models/custom", label: "Custom Hook" },
+] as const;
 
 export function DocsShell({
   children,
   currentPath,
   description,
-  kicker = "Programmable docs",
+  sections,
   title,
 }: {
   children: ReactNode;
   currentPath: string;
   description: string;
   kicker?: string;
+  sections?: readonly DocsPageSection[];
   title: string;
 }) {
   return (
     <div className={`${styles.page} page-width`} data-docs-shell>
+      <div className={styles.heroTools} data-docs-tools>
+        <nav className={styles.guideTabs} aria-label="Documentation guides">
+          {docsGuides.map((guide) => {
+            const isActive = currentPath === guide.href;
+            return (
+              <Link
+                key={guide.href}
+                className={styles.guideTab}
+                data-active={isActive ? "true" : undefined}
+                aria-current={isActive ? "page" : undefined}
+                href={guide.href}
+              >
+                {guide.label}
+              </Link>
+            );
+          })}
+        </nav>
+        <DocsSearch />
+      </div>
+
       <header className={styles.hero} data-docs-hero>
-        <span className={styles.kicker}>{kicker}</span>
         <h1>{title}</h1>
         <p>{description}</p>
-        <DocsSearch />
       </header>
 
       <aside className={styles.sidebar} data-docs-sidebar>
-        <DocsNavigation currentPath={currentPath} />
+        <DocsNavigation currentPath={currentPath} sections={sections} />
       </aside>
 
       <div className={styles.layout} data-docs-layout>

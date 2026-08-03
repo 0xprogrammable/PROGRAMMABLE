@@ -1,7 +1,7 @@
 .page {
-  overscroll-behavior-y: contain;
+  overscroll-behavior-y: auto;
   scroll-padding-bottom: 96px;
-  scrollbar-gutter: stable;
+  scrollbar-gutter: auto;
 }
 
 .sheet {
@@ -51,9 +51,12 @@
 
 .devBuyInput {
   align-items: center;
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: 11px;
+  -webkit-backdrop-filter: var(--control-glass-backdrop);
+  backdrop-filter: var(--control-glass-backdrop);
+  background: var(--control-glass-background);
+  border: 1px solid var(--control-glass-border);
+  border-radius: var(--radius-control);
+  box-shadow: inset 0 1px 0 var(--control-glass-highlight);
   display: flex;
   min-height: 44px;
   padding: 3px 8px 3px 12px;
@@ -77,9 +80,10 @@
 }
 
 .devBuyInput > button {
-  background: rgba(213, 111, 165, 0.1);
-  border: 0;
-  border-radius: 8px;
+  background: var(--control-glass-background-strong);
+  border: 1px solid var(--control-glass-border);
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 var(--control-glass-highlight);
   color: var(--accent-strong);
   font: inherit;
   font-size: 11px;
@@ -111,9 +115,9 @@
 
 @media (min-width: 1021px) {
   :global(.launch-page).page {
-    height: calc(100svh - var(--header-height));
-    overflow-x: hidden;
-    overflow-y: auto;
+    height: auto;
+    min-height: calc(100svh - var(--header-height));
+    overflow: visible;
     padding-bottom: max(32px, env(safe-area-inset-bottom));
   }
 

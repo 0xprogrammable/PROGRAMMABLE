@@ -6,7 +6,7 @@ export type DocsSearchItem = {
 
 export const docsNavigation = [
   {
-    label: "Using Programmable",
+    label: "Platform",
     items: [
       { href: "/docs#overview", label: "Overview" },
       { href: "/docs#launching", label: "Launch flow" },
@@ -18,10 +18,7 @@ export const docsNavigation = [
     label: "Launch models",
     items: [
       { href: "/docs/models/classic", label: "Classic" },
-      {
-        href: "/docs/models/stock-paired",
-        label: "Stock-Paired history",
-      },
+      { href: "/docs/models/custom", label: "Custom Hook" },
     ],
   },
   {
@@ -64,10 +61,10 @@ export const docsSearchItems: DocsSearchItem[] = [
     href: "/docs/models/classic",
   },
   {
-    title: "Stock-Paired history",
+    title: "Custom Hook",
     description:
-      "Historical pools, quote assets and support for existing tokens.",
-    href: "/docs/models/stock-paired",
+      "Product boundary and release requirements for custom launches.",
+    href: "/docs/models/custom",
   },
   {
     title: "Network",

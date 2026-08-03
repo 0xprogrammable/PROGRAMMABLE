@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Search } from "lucide-react";
+import { Search, X } from "lucide-react";
 import {
   useEffect,
   useRef,
@@ -70,10 +70,33 @@ export function nextDocsSearchIndex(
     : (current - 1 + resultCount) % resultCount;
 }
 
+export function shouldFocusDocsSearch({
+  defaultPrevented,
+  hasModifier,
+  isContentEditable,
+  key,
+  targetTagName,
+}: {
+  defaultPrevented: boolean;
+  hasModifier: boolean;
+  isContentEditable: boolean;
+  key: string;
+  targetTagName: string;
+}) {
+  return (
+    key === "/" &&
+    !defaultPrevented &&
+    !hasModifier &&
+    !isContentEditable &&
+    !["INPUT", "TEXTAREA", "SELECT"].includes(targetTagName)
+  );
+}
+
 export function DocsSearch() {
   const router = useRouter();
   const pathname = usePathname();
   const formRef = useRef<HTMLFormElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -97,6 +120,32 @@ export function DocsSearch() {
     document.addEventListener("pointerdown", dismissOnOutsidePointer);
     return () =>
       document.removeEventListener("pointerdown", dismissOnOutsidePointer);
+  }, []);
+
+  useEffect(() => {
+    const focusWithShortcut = (event: globalThis.KeyboardEvent) => {
+      const target = event.target;
+      const element = target instanceof HTMLElement ? target : null;
+      if (
+        !shouldFocusDocsSearch({
+          defaultPrevented: event.defaultPrevented,
+          hasModifier:
+            event.altKey || event.ctrlKey || event.metaKey || event.shiftKey,
+          isContentEditable: element?.isContentEditable ?? false,
+          key: event.key,
+          targetTagName: element?.tagName ?? "",
+        })
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    };
+
+    document.addEventListener("keydown", focusWithShortcut);
+    return () => document.removeEventListener("keydown", focusWithShortcut);
   }, []);
 
   function dismissResults() {
@@ -205,6 +254,7 @@ export function DocsSearch() {
       </label>
       <input
         id="docs-search"
+        ref={inputRef}
         role="combobox"
         aria-autocomplete="list"
         aria-controls={isOpen ? listboxId : undefined}
@@ -226,6 +276,24 @@ export function DocsSearch() {
         onFocus={openResults}
         onKeyDown={handleKeyDown}
       />
+      {query ? (
+        <button
+          className={styles.searchClear}
+          type="button"
+          aria-label="Clear documentation search"
+          onClick={() => {
+            setQuery("");
+            dismissResults();
+            window.requestAnimationFrame(() => inputRef.current?.focus());
+          }}
+        >
+          <X aria-hidden="true" size={15} strokeWidth={1.9} />
+        </button>
+      ) : (
+        <kbd className={styles.searchShortcut} aria-hidden="true">
+          /
+        </kbd>
+      )}
       <span className="sr-only" role="status" aria-live="polite">
         {normalizedQuery
           ? `${results.length} ${

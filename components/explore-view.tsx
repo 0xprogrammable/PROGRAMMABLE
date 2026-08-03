@@ -7,24 +7,20 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Copy,
   Search,
   SlidersHorizontal,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import {
-  AnimatedMarketCap,
-  type MarketCapMetric,
-} from "@/components/animated-market-cap";
-import { ScrambleText } from "@/components/scramble-text";
+import { type MarketCapMetric } from "@/components/animated-market-cap";
+import { EXPLORE_PREVIEW_TOKENS } from "@/components/explore-preview-data";
+import { useInterfacePreview } from "@/components/interface-preview";
 import { SiteFooter } from "@/components/site-footer";
 import {
   LIVE_DATA_REFRESH_INTERVAL_MS,
   shouldRefreshLiveData,
   useLiveDataRefresh,
 } from "@/components/use-live-data-refresh";
-import { WebsiteLinkIcon } from "@/components/website-link-icon";
 import {
   canOptimizeTokenImage,
   getTokenCardImageSource,
@@ -32,8 +28,8 @@ import {
 import {
   type LauncherToken,
   type TokenLink,
-  type TokenLinkKind,
 } from "@/lib/tokens";
+import styles from "./explore-experience.module.css";
 
 type TokenCard = {
   id: string;
@@ -42,9 +38,7 @@ type TokenCard = {
   description?: string;
   imageUrl: string;
   usesFallbackImage: boolean;
-  links: TokenLink[];
   tokenAddress: `0x${string}`;
-  marketCap?: MarketCapMetric;
 };
 
 type TokenSort = "newest" | "oldest" | "market-cap" | "market-cap-asc";
@@ -102,7 +96,6 @@ const TOKENS_PER_PAGE = 10;
 const QUERY_DEBOUNCE_MS = 200;
 const EXPLORE_REQUEST_TIMEOUT_MS = 12_000;
 export const EXPLORE_REFRESH_INTERVAL_MS = LIVE_DATA_REFRESH_INTERVAL_MS;
-const PROGRAMMABLE_TOKEN_ADDRESS = "0x7987f03462200b3d8a072e02c89a8a41dcb124ee";
 const fallbackTokenImages = [
   "/brand/programmable-token-fallback-01-dawn.webp",
   "/brand/programmable-token-fallback-02-moon.webp",
@@ -367,10 +360,6 @@ export function getMarketCap(
   return { kind: "eth", value };
 }
 
-function formatTokenAddress(address: `0x${string}`) {
-  return `${address.slice(0, 8)}…${address.slice(-6)}`;
-}
-
 function getPaginationItems(
   currentPage: number,
   pageCount: number,
@@ -414,85 +403,20 @@ function getTokenCards(tokens: LauncherToken[]): TokenCard[] {
     imageUrl:
       token.imageUrl?.trim() || getFallbackTokenImage(token.tokenAddress),
     usesFallbackImage: !token.imageUrl?.trim(),
-    links: token.links ?? [],
     tokenAddress: token.tokenAddress,
-    marketCap: getMarketCap(token),
   }));
 }
 
-function getLinkLabel(kind: TokenLinkKind) {
-  if (kind === "website") return "Website";
-  if (kind === "telegram") return "Telegram";
-  return "X";
-}
-
-function XBrandIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
-      <path
-        fill="currentColor"
-        d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231 5.451-6.231Zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77Z"
-      />
-    </svg>
-  );
-}
-
-function TelegramBrandIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
-      <path
-        fill="currentColor"
-        d="M22.8 3.2 19.5 20.1c-.25 1.2-.91 1.5-1.85.94l-5.03-3.71-2.43 2.34c-.27.27-.5.5-1.02.5l.36-5.13 9.34-8.44c.41-.36-.09-.56-.63-.2L6.7 13.67l-4.98-1.56c-1.08-.34-1.1-1.08.23-1.6L21.36 3c.9-.33 1.69.2 1.44 1.2Z"
-      />
-    </svg>
-  );
-}
-
-function TokenLinkIcon({ kind }: { kind: TokenLinkKind }) {
-  if (kind === "website") {
-    return <WebsiteLinkIcon className="token-website-link-icon" />;
-  }
-  if (kind === "telegram") return <TelegramBrandIcon />;
-  return <XBrandIcon />;
-}
-
-function TokenSocialLink({
-  link,
-  tokenName,
-}: {
-  link: TokenLink;
-  tokenName: string;
-}) {
-  const label = getLinkLabel(link.kind);
-
-  return (
-    <a
-      className={`token-social-link${
-        link.kind === "website" ? " token-social-link-website" : ""
-      }`}
-      href={link.url}
-      target="_blank"
-      rel="noreferrer"
-      aria-label={`${tokenName} on ${label}`}
-      title={label}
-    >
-      <TokenLinkIcon kind={link.kind} />
-    </a>
-  );
-}
-
 export function ExploreView() {
+  const preview = useInterfacePreview();
   const [query, setQuery] = useState("");
   const normalizedQuery = query.trim();
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [sort, setSort] = useState<TokenSort>("market-cap");
   const [currentPage, setCurrentPage] = useState(1);
-  const [copiedAddress, setCopiedAddress] = useState("");
-  const [copyError, setCopyError] = useState("");
   const [retryKey, setRetryKey] = useState(0);
-  const refreshKey = useLiveDataRefresh();
+  const refreshKey = useLiveDataRefresh({ enabled: !preview });
   const [state, setState] = useState<ExploreState>({ phase: "loading" });
-  const copyResetTimer = useRef<number | null>(null);
   const activeExploreContentKey = useRef<string | null>(null);
   const filterRef = useRef<HTMLDetailsElement>(null);
   const contentKey = `${debouncedQuery}\u0000${sort}\u0000${currentPage}`;
@@ -500,9 +424,6 @@ export function ExploreView() {
 
   useEffect(
     () => () => {
-      if (copyResetTimer.current !== null) {
-        window.clearTimeout(copyResetTimer.current);
-      }
       if (activeExploreContentKey.current) {
         abortExplorePayload(activeExploreContentKey.current);
       }
@@ -548,6 +469,8 @@ export function ExploreView() {
   }, []);
 
   useEffect(() => {
+    if (preview) return;
+
     let ignore = false;
     const previousContentKey = activeExploreContentKey.current;
     if (previousContentKey && previousContentKey !== contentKey) {
@@ -594,9 +517,54 @@ export function ExploreView() {
     return () => {
       ignore = true;
     };
-  }, [contentKey, currentPage, debouncedQuery, requestKey, sort]);
+  }, [contentKey, currentPage, debouncedQuery, preview, requestKey, sort]);
 
-  const payload = state.phase === "ready" ? state.payload : null;
+  const previewPayload = useMemo<ExplorePayload>(() => {
+    const searchValue = debouncedQuery.toLowerCase();
+    const filtered = EXPLORE_PREVIEW_TOKENS.filter((token) =>
+      [token.name, token.symbol, token.tokenAddress].some((value) =>
+        value.toLowerCase().includes(searchValue),
+      ),
+    );
+    const ranked = [...filtered].sort((left, right) => {
+      if (sort === "newest" || sort === "oldest") {
+        const delta =
+          new Date(right.launchedAt).getTime() -
+          new Date(left.launchedAt).getTime();
+        return sort === "newest" ? delta : -delta;
+      }
+      const leftMarketCap = BigInt(left.indexedMarketCapUsdWad ?? "0");
+      const rightMarketCap = BigInt(right.indexedMarketCapUsdWad ?? "0");
+      const delta =
+        leftMarketCap === rightMarketCap
+          ? 0
+          : leftMarketCap > rightMarketCap
+            ? -1
+            : 1;
+      return sort === "market-cap" ? delta : -delta;
+    });
+
+    return {
+      status: "ready",
+      tokens: ranked,
+      page: 1,
+      pageSize: TOKENS_PER_PAGE,
+      total: ranked.length,
+      totalPages: ranked.length > 0 ? 1 : 0,
+    };
+  }, [debouncedQuery, sort]);
+
+  const displayState: ExploreState = preview
+    ? {
+        phase: "ready",
+        payload: previewPayload,
+        requestKey,
+        contentKey,
+      }
+    : state;
+
+  const payload =
+    displayState.phase === "ready" ? displayState.payload : null;
   const cards = useMemo(
     () => getTokenCards(payload?.tokens ?? []),
     [payload?.tokens],
@@ -604,35 +572,20 @@ export function ExploreView() {
   const pageCount = Math.max(1, payload?.totalPages ?? 0);
   const activePage = Math.min(payload?.page ?? currentPage, pageCount);
   const paginationItems = getPaginationItems(activePage, pageCount);
-  const busy = state.phase === "loading" || state.requestKey !== requestKey;
+  const busy =
+    !preview &&
+    (displayState.phase === "loading" ||
+      displayState.requestKey !== requestKey);
   const hasPublicTokens =
-    state.phase !== "ready" ||
-    state.payload.total > 0 ||
+    displayState.phase !== "ready" ||
+    displayState.payload.total > 0 ||
     Boolean(debouncedQuery);
-
-  async function copyAddress(address: string) {
-    if (copyResetTimer.current !== null) {
-      window.clearTimeout(copyResetTimer.current);
-    }
-    setCopyError("");
-    try {
-      await navigator.clipboard.writeText(address);
-      setCopiedAddress(address);
-      copyResetTimer.current = window.setTimeout(
-        () => setCopiedAddress(""),
-        1600,
-      );
-    } catch {
-      setCopiedAddress("");
-      setCopyError("Could not copy address");
-      copyResetTimer.current = window.setTimeout(() => setCopyError(""), 2400);
-    }
-  }
 
   function renderTokenState() {
     if (
-      state.phase === "loading" ||
-      (state.phase === "error" && state.requestKey !== requestKey)
+      displayState.phase === "loading" ||
+      (displayState.phase === "error" &&
+        displayState.requestKey !== requestKey)
     ) {
       return (
         <div className="token-empty" role="status">
@@ -641,10 +594,10 @@ export function ExploreView() {
       );
     }
 
-    if (state.phase === "error") {
+    if (displayState.phase === "error") {
       return (
         <div className="token-empty" role="alert">
-          <p>{state.message}</p>
+          <p>{displayState.message}</p>
           <button
             className="text-button"
             type="button"
@@ -656,10 +609,13 @@ export function ExploreView() {
       );
     }
 
-    if (state.payload.status === "not-deployed") {
+    if (displayState.payload.status === "not-deployed") {
       return (
-        <div className="token-empty">
-          <p>No verified tokens yet</p>
+        <div className={`${styles.emptyState} token-empty token-empty-initial`}>
+          <div>
+            <h2>Token index unavailable</h2>
+            <p>Explore is not available in this environment.</p>
+          </div>
         </div>
       );
     }
@@ -684,124 +640,62 @@ export function ExploreView() {
       }
 
       return (
-        <div className="token-empty token-empty-initial">
+        <div className={`${styles.emptyState} token-empty token-empty-initial`}>
           <div>
-            <h2>No public tokens yet</h2>
-            <p>The first public launch will appear here.</p>
+            <h2>No tokens yet</h2>
+            <p>Create the first token.</p>
           </div>
-          <Link className="text-button" href="/launch">
-            Launch a token
+          <Link className={styles.emptyAction} href="/launch">
+            Create token
           </Link>
         </div>
       );
     }
 
     return (
-      <div
-        className="token-card-grid"
-        key={`${activePage}:${sort}:${debouncedQuery}`}
-      >
+      <div className={styles.runnerGrid}>
         {cards.map((token, index) => {
-          const copied = copiedAddress === token.tokenAddress;
           const href = `/token/${token.tokenAddress}`;
           const imageSource = getTokenCardImageSource(token.imageUrl);
 
           return (
-            <article className="token-card" key={token.id}>
+            <article className={styles.runnerCard} key={token.id}>
               <Link
-                className="token-card-hit-area"
+                className={styles.runnerHitArea}
                 href={href}
-                aria-label={`View ${token.name}`}
-              />
-
-              <span className="token-card-art">
-                <Image
-                  className="token-card-image"
-                  src={imageSource}
-                  alt={
-                    token.usesFallbackImage ? "" : `${token.name} token image`
-                  }
-                  fill
-                  sizes="(max-width: 360px) 260px, (max-width: 800px) 46vw, 214px"
-                  unoptimized={!canOptimizeTokenImage(imageSource)}
-                />
-              </span>
-
-              <div className="token-card-body">
-                <header className="token-card-heading">
-                  <span className="token-card-title">
-                    <h3>{token.name}</h3>
-                    <span>${token.symbol}</span>
-                  </span>
-                </header>
-
-                {token.description ? (
-                  <span className="token-card-description">
-                    {token.description}
-                  </span>
-                ) : (
-                  <span
-                    className="token-card-description token-card-description-empty"
-                    aria-hidden="true"
-                  />
-                )}
-
-                {token.marketCap ? (
-                  <span className="token-card-market-cap">
-                    <AnimatedMarketCap
-                      delay={index * 18}
-                      metric={token.marketCap}
-                      replayKey={`${activePage}:${sort}:${debouncedQuery}`}
-                    />
-                    <span>MC</span>
-                  </span>
-                ) : (
-                  <span
-                    className="token-card-market-cap token-card-market-cap-empty"
-                    aria-hidden="true"
-                  />
-                )}
-
-                <div className="token-card-footer">
-                  <button
-                    className="token-address"
-                    type="button"
-                    aria-label={
-                      copied
-                        ? `${token.name} contract address copied`
-                        : `Copy ${token.name} contract address`
+                aria-label={`Open ${token.name}`}
+              >
+                <div className={styles.runnerArt}>
+                  <Image
+                    className={styles.runnerImage}
+                    src={imageSource}
+                    alt={
+                      token.usesFallbackImage ? "" : `${token.name} artwork`
                     }
-                    title={
-                      copied
-                        ? "Copied"
-                        : `${token.tokenAddress} · Copy contract address`
-                    }
-                    onClick={() => copyAddress(token.tokenAddress)}
-                  >
-                    <code>{formatTokenAddress(token.tokenAddress)}</code>
-                    {copied ? (
-                      <Check aria-hidden="true" size={12} />
-                    ) : (
-                      <Copy aria-hidden="true" size={12} />
-                    )}
-                  </button>
-
-                  {token.links.length > 0 ? (
-                    <div
-                      className="token-social-links"
-                      aria-label={`${token.name} links`}
-                    >
-                      {token.links.map((link) => (
-                        <TokenSocialLink
-                          key={`${link.kind}:${link.url}`}
-                          link={link}
-                          tokenName={token.name}
-                        />
-                      ))}
-                    </div>
-                  ) : null}
+                    fill
+                    loading={index < 3 ? "eager" : "lazy"}
+                    sizes="(max-width: 700px) calc(100vw - 28px), (max-width: 1040px) 46vw, 31vw"
+                    unoptimized={!canOptimizeTokenImage(imageSource)}
+                  />
                 </div>
-              </div>
+
+                <div className={styles.runnerBody}>
+                  <header className={styles.runnerHeading}>
+                    <h3>{token.name}</h3>
+                    <span className={styles.runnerSymbol}>${token.symbol}</span>
+                  </header>
+
+                  <p
+                    className={`${styles.runnerDescription}${
+                      token.description
+                        ? ""
+                        : ` ${styles.runnerDescriptionEmpty}`
+                    }`}
+                  >
+                    {token.description ?? "No description yet."}
+                  </p>
+                </div>
+              </Link>
             </article>
           );
         })}
@@ -811,167 +705,140 @@ export function ExploreView() {
 
   return (
     <>
-      <div className="explore-page page-width">
-        <section className="explore-intro">
-          <h1 className="explore-brand-heading">
-            <span className="sr-only">Programmable</span>
-            <Image
-              className="explore-brand-logo"
-              src="/brand/loop/programmable-loop-mark-transparent-v1.png"
-              alt=""
-              width={1254}
-              height={1254}
-              priority
-            />
-          </h1>
-          <p>
-            <ScrambleText
-              text="Launch tokens that work the way you imagine"
-              duration={640}
-            />
-          </p>
-          <button
-            className="explore-token-address"
-            type="button"
-            aria-label={
-              copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS
-                ? "Programmable contract address copied"
-                : "Copy Programmable contract address"
-            }
-            title={
-              copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS
-                ? "Copied"
-                : "Copy contract address"
-            }
-            onClick={() => copyAddress(PROGRAMMABLE_TOKEN_ADDRESS)}
-          >
-            <code>{PROGRAMMABLE_TOKEN_ADDRESS}</code>
-            {copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS ? (
-              <Check aria-hidden="true" size={13} />
-            ) : (
-              <Copy aria-hidden="true" size={13} />
-            )}
-          </button>
-        </section>
+      <div className={`${styles.page} explore-page page-width`}>
+        <header className={styles.pageHeading}>
+          <h1>Explore</h1>
+          <p>Launch tokens that work the way you imagine.</p>
+        </header>
 
-        <section className="token-section" id="tokens" aria-busy={busy}>
-          {hasPublicTokens ? (
-            <div className="token-section-heading">
-              <h2 className="sr-only">Tokens</h2>
-              <div className="token-toolbar">
-                <label className="token-search">
-                  <Search aria-hidden="true" size={17} />
-                  <span className="sr-only">
-                    Search tokens by name, ticker or contract address
-                  </span>
-                  <input
-                    value={query}
-                    placeholder="Search tokens"
-                    onChange={(event) => setQuery(event.target.value)}
-                  />
-                </label>
-
-                <details className="token-filter" ref={filterRef}>
-                  <summary>
-                    <SlidersHorizontal aria-hidden="true" size={16} />
-                    <span>Filter</span>
-                    <ChevronDown
-                      className="token-filter-chevron"
-                      aria-hidden="true"
-                      size={15}
-                    />
-                  </summary>
-                  <div
-                    className="token-filter-menu"
-                    role="group"
-                    aria-label="Sort tokens"
-                  >
-                    {sortOptions.map((option) => (
-                      <button
-                        key={option.id}
-                        className={sort === option.id ? "active" : undefined}
-                        type="button"
-                        aria-pressed={sort === option.id}
-                        onClick={() => {
-                          setSort(option.id);
-                          setCurrentPage(1);
-                          const filter = filterRef.current;
-                          filter?.removeAttribute("open");
-                          filter?.querySelector("summary")?.focus();
-                        }}
-                      >
-                        <span>{option.label}</span>
-                        {sort === option.id ? (
-                          <Check aria-hidden="true" size={15} />
-                        ) : null}
-                      </button>
-                    ))}
-                  </div>
-                </details>
-
-                {state.phase === "ready" &&
-                state.payload.status === "ready" &&
-                state.payload.total > 0 &&
-                cards.length > 0 ? (
-                  <nav className="token-pagination" aria-label="Token pages">
-                    <button
-                      type="button"
-                      aria-label="Previous token page"
-                      disabled={activePage === 1 || busy}
-                      onClick={() =>
-                        setCurrentPage((page) => Math.max(1, page - 1))
-                      }
-                    >
-                      <ChevronLeft aria-hidden="true" size={15} />
-                    </button>
-
-                    <div className="token-pagination-pages">
-                      {paginationItems.map((item) =>
-                        typeof item === "number" ? (
-                          <button
-                            key={item}
-                            className={
-                              activePage === item ? "active" : undefined
-                            }
-                            type="button"
-                            aria-label={`Token page ${item}`}
-                            aria-current={
-                              activePage === item ? "page" : undefined
-                            }
-                            disabled={busy}
-                            onClick={() => setCurrentPage(item)}
-                          >
-                            {item}
-                          </button>
-                        ) : (
-                          <span key={item} aria-hidden="true">
-                            …
-                          </span>
-                        ),
-                      )}
-                    </div>
-
-                    <button
-                      type="button"
-                      aria-label="Next token page"
-                      disabled={activePage === pageCount || busy}
-                      onClick={() =>
-                        setCurrentPage((page) => Math.min(pageCount, page + 1))
-                      }
-                    >
-                      <ChevronRight aria-hidden="true" size={15} />
-                    </button>
-
-                    <span className="sr-only" aria-live="polite">
-                      Page {activePage} of {pageCount}
+        <section
+          className={`${styles.runnersSection} token-section`}
+          id="tokens"
+          aria-busy={busy}
+        >
+          <div className={styles.runnersIntro}>
+            {hasPublicTokens ? (
+              <div className="token-section-heading">
+                <h2 className="sr-only">Tokens</h2>
+                <div className="token-toolbar">
+                  <label className="token-search">
+                    <Search aria-hidden="true" size={17} />
+                    <span className="sr-only">
+                      Search tokens by name, ticker or contract address
                     </span>
-                  </nav>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
+                    <input
+                      value={query}
+                      placeholder="Search tokens"
+                      onChange={(event) => setQuery(event.target.value)}
+                    />
+                  </label>
 
-          {state.phase === "ready" && state.refreshError ? (
+                  <details className="token-filter" ref={filterRef}>
+                    <summary>
+                      <SlidersHorizontal aria-hidden="true" size={16} />
+                      <span>Filter</span>
+                      <ChevronDown
+                        className="token-filter-chevron"
+                        aria-hidden="true"
+                        size={15}
+                      />
+                    </summary>
+                    <div
+                      className="token-filter-menu"
+                      role="group"
+                      aria-label="Sort tokens"
+                    >
+                      {sortOptions.map((option) => (
+                        <button
+                          key={option.id}
+                          className={sort === option.id ? "active" : undefined}
+                          type="button"
+                          aria-pressed={sort === option.id}
+                          onClick={() => {
+                            setSort(option.id);
+                            setCurrentPage(1);
+                            const filter = filterRef.current;
+                            filter?.removeAttribute("open");
+                            filter?.querySelector("summary")?.focus();
+                          }}
+                        >
+                          <span>{option.label}</span>
+                          {sort === option.id ? (
+                            <Check aria-hidden="true" size={15} />
+                          ) : null}
+                        </button>
+                      ))}
+                    </div>
+                  </details>
+
+                  {displayState.phase === "ready" &&
+                  displayState.payload.status === "ready" &&
+                  displayState.payload.total > 0 &&
+                  cards.length > 0 &&
+                  pageCount > 1 ? (
+                    <nav className="token-pagination" aria-label="Token pages">
+                      <button
+                        type="button"
+                        aria-label="Previous token page"
+                        disabled={activePage === 1 || busy}
+                        onClick={() =>
+                          setCurrentPage((page) => Math.max(1, page - 1))
+                        }
+                      >
+                        <ChevronLeft aria-hidden="true" size={15} />
+                      </button>
+
+                      <div className="token-pagination-pages">
+                        {paginationItems.map((item) =>
+                          typeof item === "number" ? (
+                            <button
+                              key={item}
+                              className={
+                                activePage === item ? "active" : undefined
+                              }
+                              type="button"
+                              aria-label={`Token page ${item}`}
+                              aria-current={
+                                activePage === item ? "page" : undefined
+                              }
+                              disabled={busy}
+                              onClick={() => setCurrentPage(item)}
+                            >
+                              {item}
+                            </button>
+                          ) : (
+                            <span key={item} aria-hidden="true">
+                              …
+                            </span>
+                          ),
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        aria-label="Next token page"
+                        disabled={activePage === pageCount || busy}
+                        onClick={() =>
+                          setCurrentPage((page) =>
+                            Math.min(pageCount, page + 1),
+                          )
+                        }
+                      >
+                        <ChevronRight aria-hidden="true" size={15} />
+                      </button>
+
+                      <span className="sr-only" aria-live="polite">
+                        Page {activePage} of {pageCount}
+                      </span>
+                    </nav>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          {displayState.phase === "ready" &&
+          displayState.refreshError ? (
             <div className="token-refresh-warning" role="status">
               <span>Prices may be out of date</span>
               <button
@@ -983,7 +850,7 @@ export function ExploreView() {
             </div>
           ) : null}
 
-          {state.phase === "ready" && busy ? (
+          {displayState.phase === "ready" && busy ? (
             <span className="sr-only" role="status">
               Updating tokens
             </span>
@@ -992,13 +859,6 @@ export function ExploreView() {
         </section>
       </div>
       <SiteFooter />
-      {copyError ? (
-        <div className="toast-region" aria-live="assertive" aria-atomic="true">
-          <p className="toast" role="alert">
-            {copyError}
-          </p>
-        </div>
-      ) : null}
     </>
   );
 }

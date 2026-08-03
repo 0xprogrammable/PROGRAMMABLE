@@ -1,16 +1,43 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { ExternalLink } from "lucide-react";
 
+import { DocsAddress } from "@/components/docs-address";
+import { DocsExternalLink } from "@/components/docs-external-link";
 import { DocsShell } from "@/components/docs-shell";
 import styles from "@/components/docs-experience.module.css";
 
-type ModelSlug = "classic" | "stock-paired";
+type ModelSlug = "classic" | "custom" | "stock-paired";
 
 const classicEvidenceCommit =
   "1fb9558af4f0248de75d5c7983f80036e32f47cb";
 const stockPairedEvidenceCommit =
   "ef2bbb51336a20aa2886dad0232f61495e8f2911";
+
+const classicSections = [
+  { id: "terms", label: "Terms" },
+  { id: "fees", label: "Fees" },
+  { id: "rewards", label: "Rewards" },
+  { id: "initial-buy", label: "Initial Buy" },
+  { id: "launch-transaction", label: "Launch transaction" },
+  { id: "starting-point", label: "Starting point" },
+  { id: "boundaries", label: "Boundaries" },
+  { id: "deployment", label: "Deployment" },
+] as const;
+
+const customSections = [
+  { id: "status", label: "Status" },
+  { id: "release-requirements", label: "Release requirements" },
+  { id: "project-presentation", label: "Project presentation" },
+] as const;
+
+const stockPairedSections = [
+  { id: "token-boundary", label: "Token boundary" },
+  { id: "pool-creation", label: "Pool creation" },
+  { id: "quote-rewards", label: "Quote rewards" },
+  { id: "routing", label: "Routing" },
+  { id: "quote-controls", label: "Quote controls" },
+  { id: "deployment", label: "Deployment" },
+] as const;
 
 const modelMetadata: Record<
   ModelSlug,
@@ -20,6 +47,11 @@ const modelMetadata: Record<
     title: "Classic",
     description:
       "Configure buy and sell fees, creator rewards and Initial Buy custody for a fixed-supply Uniswap v4 token.",
+  },
+  custom: {
+    title: "Custom Hook",
+    description:
+      "Product boundary and release requirements for custom launch configuration.",
   },
   "stock-paired": {
     title: "Stock-Paired",
@@ -70,9 +102,9 @@ function ClassicDocs() {
       kicker="Launch model · Live"
       title="Classic"
       description="A fixed-supply Uniswap v4 launch with configurable fees, creator rewards in ETH and permanent one-sided liquidity."
+      sections={classicSections}
     >
-      <section>
-        <span className={styles.sectionEyebrow}>Model overview</span>
+      <section id="terms">
         <h2>Set the terms before the token launches</h2>
         <p className={styles.lead}>
           Classic creates the token, initializes its ETH pool and deposits the
@@ -100,8 +132,7 @@ function ClassicDocs() {
         </div>
       </section>
 
-      <section>
-        <span className={styles.sectionEyebrow}>Fee path</span>
+      <section id="fees">
         <h2>Each direction has its own fixed fee</h2>
         <div className={styles.flow}>
           <div className={styles.flowItem}>
@@ -131,8 +162,7 @@ function ClassicDocs() {
         </div>
       </section>
 
-      <section>
-        <span className={styles.sectionEyebrow}>Creator rewards</span>
+      <section id="rewards">
         <h2>Choose who receives the ETH</h2>
         <p>
           Rewards can go to the launch wallet, another wallet or a split
@@ -177,8 +207,7 @@ function ClassicDocs() {
         </div>
       </section>
 
-      <section>
-        <span className={styles.sectionEyebrow}>Initial Buy</span>
+      <section id="initial-buy">
         <h2>Buy at launch, then choose how the tokens are held</h2>
         <p>
           The launch wallet chooses at least 0.0006 ETH for its Initial Buy.
@@ -188,8 +217,7 @@ function ClassicDocs() {
         </p>
       </section>
 
-      <section>
-        <span className={styles.sectionEyebrow}>Launch transaction</span>
+      <section id="launch-transaction">
         <h2>One confirmation creates the complete launch</h2>
         <ol className={styles.steps}>
           <li>
@@ -222,8 +250,7 @@ function ClassicDocs() {
         </ol>
       </section>
 
-      <section>
-        <span className={styles.sectionEyebrow}>Opening price</span>
+      <section id="starting-point">
         <h2>A deterministic starting point</h2>
         <p>
           The current Classic curve begins at an approximate fully diluted
@@ -234,8 +261,7 @@ function ClassicDocs() {
         </p>
       </section>
 
-      <section>
-        <span className={styles.sectionEyebrow}>Boundaries</span>
+      <section id="boundaries">
         <h2>What Classic does not add</h2>
         <ul className={styles.contentList}>
           <li>No minting after launch.</li>
@@ -253,8 +279,7 @@ function ClassicDocs() {
         </ul>
       </section>
 
-      <section>
-        <span className={styles.sectionEyebrow}>Contracts</span>
+      <section id="deployment">
         <h2>Active public deployment</h2>
         <div className={styles.tableWrap}>
           <table className={styles.table}>
@@ -268,102 +293,114 @@ function ClassicDocs() {
               <tr>
                 <td>Launcher</td>
                 <td>
-                  <a
-                    className={styles.address}
-                    href={`https://etherscan.io/address/${launcher}#code`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {launcher}
-                  </a>
+                  <DocsAddress address={launcher} label="Launcher" />
                 </td>
               </tr>
               <tr>
                 <td>Fee hook</td>
                 <td>
-                  <a
-                    className={styles.address}
-                    href={`https://etherscan.io/address/${hook}#code`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {hook}
-                  </a>
+                  <DocsAddress address={hook} label="Fee hook" />
                 </td>
               </tr>
               <tr>
                 <td>Reward vault factory</td>
                 <td>
-                  <a
-                    className={styles.address}
-                    href={`https://etherscan.io/address/${rewardVaultFactory}#code`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {rewardVaultFactory}
-                  </a>
+                  <DocsAddress
+                    address={rewardVaultFactory}
+                    label="Reward vault factory"
+                  />
                 </td>
               </tr>
               <tr>
                 <td>Initial Buy custody factory</td>
                 <td>
-                  <a
-                    className={styles.address}
-                    href={`https://etherscan.io/address/${initialBuyCustodyFactory}#code`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {initialBuyCustodyFactory}
-                  </a>
+                  <DocsAddress
+                    address={initialBuyCustodyFactory}
+                    label="Initial Buy custody factory"
+                  />
                 </td>
               </tr>
               <tr>
                 <td>Position recipient factory</td>
                 <td>
-                  <a
-                    className={styles.address}
-                    href={`https://etherscan.io/address/${positionRecipientFactory}#code`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {positionRecipientFactory}
-                  </a>
+                  <DocsAddress
+                    address={positionRecipientFactory}
+                    label="Position recipient factory"
+                  />
                 </td>
               </tr>
               <tr>
                 <td>CTO authority</td>
                 <td>
-                  <a
-                    className={styles.address}
-                    href={`https://etherscan.io/address/${ctoAuthority}#code`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {ctoAuthority}
-                  </a>
+                  <DocsAddress address={ctoAuthority} label="CTO authority" />
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
         <div className={styles.sourceLinks}>
-          <a
+          <DocsExternalLink
             href={`https://github.com/0xprogrammable/programmable/blob/${classicEvidenceCommit}/contracts/deployments/mainnet-classic-v3.json`}
-            target="_blank"
-            rel="noreferrer"
+            variant="chip"
           >
             Deployment record
-            <ExternalLink aria-hidden="true" size={13} />
-          </a>
-          <a
+          </DocsExternalLink>
+          <DocsExternalLink
             href={`https://github.com/0xprogrammable/programmable/blob/${classicEvidenceCommit}/contracts/security/CLASSIC-V3.md`}
-            target="_blank"
-            rel="noreferrer"
+            variant="chip"
           >
             Security notes
-            <ExternalLink aria-hidden="true" size={13} />
-          </a>
+          </DocsExternalLink>
         </div>
+      </section>
+    </DocsShell>
+  );
+}
+
+function CustomDocs() {
+  return (
+    <DocsShell
+      currentPath="/docs/models/custom"
+      title="Custom Hook"
+      description="Custom Hook configuration is not available in this build."
+      sections={customSections}
+    >
+      <section id="status">
+        <h2>Status</h2>
+        <p className={styles.lead}>
+          The Create page reserves a place for Custom Hook, but there is no
+          public transaction path for it. The interface does not prepare,
+          simulate or submit a Custom Hook launch.
+        </p>
+        <div className={styles.callout}>
+          <strong>Custom Hook is not live.</strong>
+          <p>
+            A Custom Hook option becomes actionable only after its
+            configuration, contracts and release evidence are defined and
+            verified.
+          </p>
+        </div>
+      </section>
+
+      <section id="release-requirements">
+        <h2>What a release must define</h2>
+        <ul className={styles.contentList}>
+          <li>The allowed token and pool configuration.</li>
+          <li>The fee path, reward recipients and mutable controls.</li>
+          <li>Liquidity custody and every withdrawal path.</li>
+          <li>Transaction preparation, simulation and wallet validation.</li>
+          <li>Deployment records, runtime verification and supported network.</li>
+        </ul>
+      </section>
+
+      <section id="project-presentation">
+        <h2>Project presentation</h2>
+        <p>
+          A released Custom Hook token would use the same square artwork,
+          project description, links, dedicated token page and community
+          surface as other tokens. Those presentation fields do not make an
+          unreleased transaction path available.
+        </p>
       </section>
     </DocsShell>
   );
@@ -381,9 +418,9 @@ function StockPairedDocs() {
       kicker="Historical launch model"
       title="Stock-Paired"
       description="Existing fixed-supply tokens whose Uniswap v4 pools use a reviewed stock token as the quote asset."
+      sections={stockPairedSections}
     >
-      <section>
-        <span className={styles.sectionEyebrow}>Product boundary</span>
+      <section id="token-boundary">
         <h2>The launched token is not a share</h2>
         <p className={styles.lead}>
           Stock-Paired creates a new Programmable token and pairs it with one
@@ -401,8 +438,7 @@ function StockPairedDocs() {
         </div>
       </section>
 
-      <section>
-        <span className={styles.sectionEyebrow}>Historical launch design</span>
+      <section id="pool-creation">
         <h2>How the existing pools were created</h2>
         <ol className={styles.steps}>
           <li>
@@ -433,8 +469,7 @@ function StockPairedDocs() {
         </ol>
       </section>
 
-      <section>
-        <span className={styles.sectionEyebrow}>Economics</span>
+      <section id="quote-rewards">
         <h2>Rewards accrue in the quote token</h2>
         <div className={styles.factGrid}>
           <div className={styles.fact}>
@@ -456,8 +491,7 @@ function StockPairedDocs() {
         </div>
       </section>
 
-      <section>
-        <span className={styles.sectionEyebrow}>Trading</span>
+      <section id="routing">
         <h2>The interface composes the route</h2>
         <p>
           A buy routes ETH into the reviewed stock token and then into the
@@ -475,8 +509,7 @@ function StockPairedDocs() {
         </div>
       </section>
 
-      <section>
-        <span className={styles.sectionEyebrow}>Issuer assumptions</span>
+      <section id="quote-controls">
         <h2>The quote asset has its own controls</h2>
         <ul className={styles.contentList}>
           <li>
@@ -497,8 +530,7 @@ function StockPairedDocs() {
         </ul>
       </section>
 
-      <section>
-        <span className={styles.sectionEyebrow}>Contracts</span>
+      <section id="deployment">
         <h2>Historical Mainnet deployment</h2>
         <div className={styles.tableWrap}>
           <table className={styles.table}>
@@ -512,70 +544,46 @@ function StockPairedDocs() {
               <tr>
                 <td>Launcher</td>
                 <td>
-                  <a
-                    className={styles.address}
-                    href={`https://etherscan.io/address/${launcher}#code`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {launcher}
-                  </a>
+                  <DocsAddress address={launcher} label="Launcher" />
                 </td>
               </tr>
               <tr>
                 <td>Fee hook</td>
                 <td>
-                  <a
-                    className={styles.address}
-                    href={`https://etherscan.io/address/${hook}#code`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {hook}
-                  </a>
+                  <DocsAddress address={hook} label="Fee hook" />
                 </td>
               </tr>
               <tr>
                 <td>ETH launch coordinator</td>
                 <td>
-                  <a
-                    className={styles.address}
-                    href={`https://etherscan.io/address/${coordinator}#code`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {coordinator}
-                  </a>
+                  <DocsAddress
+                    address={coordinator}
+                    label="ETH launch coordinator"
+                  />
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
         <div className={styles.sourceLinks}>
-          <a
+          <DocsExternalLink
             href={`https://github.com/0xprogrammable/programmable/blob/${stockPairedEvidenceCommit}/docs/superpowers/specs/2026-07-29-stock-paired-v1-design.md`}
-            target="_blank"
-            rel="noreferrer"
+            variant="chip"
           >
             Model specification
-            <ExternalLink aria-hidden="true" size={13} />
-          </a>
-          <a
+          </DocsExternalLink>
+          <DocsExternalLink
             href={`https://github.com/0xprogrammable/programmable/blob/${stockPairedEvidenceCommit}/contracts/deployments/mainnet-stock-paired-v1.json`}
-            target="_blank"
-            rel="noreferrer"
+            variant="chip"
           >
             Deployment record
-            <ExternalLink aria-hidden="true" size={13} />
-          </a>
-          <a
+          </DocsExternalLink>
+          <DocsExternalLink
             href={`https://github.com/0xprogrammable/programmable/blob/${stockPairedEvidenceCommit}/contracts/security/STOCK-PAIRED-V1.md`}
-            target="_blank"
-            rel="noreferrer"
+            variant="chip"
           >
             Security notes
-            <ExternalLink aria-hidden="true" size={13} />
-          </a>
+          </DocsExternalLink>
         </div>
       </section>
     </DocsShell>
@@ -591,5 +599,6 @@ export default async function ModelDocsPage({
   if (!isModelSlug(model)) notFound();
 
   if (model === "classic") return <ClassicDocs />;
+  if (model === "custom") return <CustomDocs />;
   return <StockPairedDocs />;
 }

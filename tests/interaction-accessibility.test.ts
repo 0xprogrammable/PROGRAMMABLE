@@ -3,7 +3,6 @@ import { extname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
-  getChartPointIndex,
   getPriceHistoryEmptyMessage,
   shouldRenderPriceHistory,
 } from "../components/token-price-chart";
@@ -19,6 +18,21 @@ function collectCssFiles(directory: string): string[] {
 }
 
 describe("interaction accessibility", () => {
+  it("keeps the token chart informational instead of showing a crosshair", () => {
+    const chartCss = readFileSync(
+      join(root, "components/token-price-chart.module.css"),
+      "utf8",
+    );
+    const chartSource = readFileSync(
+      join(root, "components/token-price-chart.tsx"),
+      "utf8",
+    );
+
+    expect(chartCss).not.toContain("cursor: crosshair");
+    expect(chartSource).not.toContain("onPointerMove");
+    expect(chartSource).not.toContain("role=\"slider\"");
+  });
+
   it("keeps the default arrow cursor policy across app controls", () => {
     const css = [
       ...collectCssFiles(join(root, "app")),
@@ -38,6 +52,26 @@ describe("interaction accessibility", () => {
 
     expect(source).toContain('theme === "dark" ? "Switch to light mode"');
     expect(source).not.toContain('aria-pressed={theme === "dark"}');
+  });
+
+  it("reveals pointer-triggered theme changes from the toggle without forcing motion", () => {
+    const source = readFileSync(
+      join(root, "components/site-navigation.tsx"),
+      "utf8",
+    );
+    const css = readFileSync(join(root, "app/globals.css"), "utf8");
+
+    expect(source).toContain("startViewTransition");
+    expect(source).toContain("event.detail === 0");
+    expect(source).toContain('root.dataset.themeInput = "instant"');
+    expect(source).toContain('"(prefers-reduced-motion: reduce)"');
+    expect(css).toContain(
+      'html[data-theme-input="instant"] .theme-toggle-icons svg',
+    );
+    expect(css).toContain("@keyframes theme-radial-reveal");
+    expect(css).toMatch(
+      /theme-radial-reveal 280ms cubic-bezier\(0\.23, 1, 0\.32, 1\)/,
+    );
   });
 
   it("exposes the wallet actions as a native, labelled disclosure", () => {
@@ -78,6 +112,14 @@ describe("interaction accessibility", () => {
     );
   });
 
+  it("prioritizes theme and wallet controls when the mobile header is narrow", () => {
+    const css = readFileSync(join(root, "app/globals.css"), "utf8");
+
+    expect(css).toMatch(
+      /@media \(max-width: 360px\)[\s\S]*?\.header-socials\s*\{\s*display:\s*none;/,
+    );
+  });
+
   it("fails the public Classic launch card closed when its verified release is unavailable", () => {
     const source = readFileSync(
       join(root, "components/launch-entry.tsx"),
@@ -93,41 +135,6 @@ describe("interaction accessibility", () => {
     );
   });
 
-  it("maps chart pointer coordinates to a bounded point index", () => {
-    expect(
-      getChartPointIndex({
-        clientX: 100,
-        left: 100,
-        width: 400,
-        pointCount: 5,
-      }),
-    ).toBe(0);
-    expect(
-      getChartPointIndex({
-        clientX: 300,
-        left: 100,
-        width: 400,
-        pointCount: 5,
-      }),
-    ).toBe(2);
-    expect(
-      getChartPointIndex({
-        clientX: 900,
-        left: 100,
-        width: 400,
-        pointCount: 5,
-      }),
-    ).toBe(4);
-    expect(
-      getChartPointIndex({
-        clientX: 100,
-        left: 100,
-        width: 0,
-        pointCount: 5,
-      }),
-    ).toBeNull();
-  });
-
   it("does not promise unsupported Stock-Paired chart history", () => {
     expect(getPriceHistoryEmptyMessage("stock-paired", false)).toBe(
       "Historical price data is not available for Stock-Paired tokens",
@@ -137,14 +144,14 @@ describe("interaction accessibility", () => {
     );
   });
 
-  it("keeps range controls available after selecting an empty chart window", () => {
+  it("keeps the chart surface available without price history", () => {
     expect(
       shouldRenderPriceHistory({
         loading: false,
         hasChart: false,
         range: "all",
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       shouldRenderPriceHistory({
         loading: false,

@@ -275,7 +275,7 @@ const privyConfig = {
   loginMethods: ["wallet", "email"],
   appearance: {
     theme: "light",
-    accentColor: "#e879be",
+    accentColor: "#465a6f",
     logo: "/icon-512.png",
     landingHeader: "Connect to Programmable",
     loginMessage: "Use a wallet or email to continue",

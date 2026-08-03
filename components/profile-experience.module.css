@@ -1,5 +1,5 @@
 .page {
-  max-width: 1120px;
+  max-width: 1180px;
   min-height: calc(100svh - var(--header-height));
   padding-block: 20px 56px;
 }
@@ -8,12 +8,9 @@
 .portfolio,
 .connectCard,
 .accountState {
-  backdrop-filter: blur(22px) saturate(1.08);
-  background: color-mix(in srgb, var(--glass-96) 94%, transparent);
-  border: 1px solid var(--panel-border-soft);
-  box-shadow:
-    0 1px 0 var(--card-shadow),
-    0 20px 56px var(--card-shadow-soft);
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 
 .hero {
@@ -79,8 +76,8 @@
 
 .nameRow h1 {
   font-size: clamp(30px, 3vw, 37px);
-  font-weight: 590;
-  letter-spacing: -0.045em;
+  font-weight: 610;
+  letter-spacing: -0.028em;
   line-height: 1.06;
   overflow: hidden;
   padding-block-end: 0.05em;
@@ -205,38 +202,47 @@
 }
 
 .connectCard {
-  align-items: center;
-  border-radius: 26px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  margin: clamp(38px, 9svh, 82px) auto 0;
-  max-width: 560px;
-  min-height: 326px;
-  padding: 40px 30px;
-  text-align: center;
+  align-items: end;
+  border-block: 1px solid var(--border);
+  border-radius: 0;
+  display: grid;
+  gap: 12px 44px;
+  grid-template-areas:
+    "title mark"
+    "copy mark"
+    "action mark";
+  grid-template-columns: minmax(0, 1fr) auto;
+  justify-items: start;
+  margin: clamp(64px, 12svh, 118px) auto 0;
+  max-width: 1180px;
+  min-height: 340px;
+  padding: clamp(40px, 6vw, 72px) 2px;
+  text-align: left;
 }
 
 .connectMark {
-  filter: drop-shadow(0 14px 30px rgba(142, 68, 109, 0.1));
-  height: 78px;
-  margin-block-end: 22px;
+  grid-area: mark;
+  height: clamp(132px, 15vw, 188px);
+  margin: 0 clamp(18px, 4vw, 54px) 0 0;
   object-fit: contain;
-  width: 78px;
+  opacity: 0.9;
+  width: clamp(132px, 15vw, 188px);
 }
 
 .connectCard h1 {
-  font-size: clamp(36px, 4vw, 46px);
-  font-weight: 590;
-  letter-spacing: -0.048em;
-  line-height: 1;
+  font-size: clamp(62px, 7.5vw, 98px);
+  font-weight: 555;
+  grid-area: title;
+  letter-spacing: -0.042em;
+  line-height: 0.9;
 }
 
 .connectCard p {
   color: var(--text-soft);
-  font-size: 15px;
+  font-size: 16px;
+  grid-area: copy;
   line-height: 1.5;
-  margin-block-start: 12px;
+  margin-block-start: 4px;
   max-width: 380px;
 }
 
@@ -249,15 +255,17 @@
   display: inline-flex;
   font-size: 14px;
   font-weight: 680;
+  grid-area: action;
   justify-content: center;
-  margin-block-start: 22px;
+  margin-block-start: 10px;
   min-height: 48px;
   padding-inline: 20px;
 }
 
 .portfolio {
-  border-radius: 24px;
-  margin-block-start: 10px;
+  border-block-start: 1px solid var(--border);
+  border-radius: 0;
+  margin-block-start: 28px;
   min-width: 0;
   overflow: hidden;
 }
@@ -268,8 +276,8 @@
   display: grid;
   gap: 16px 28px;
   grid-template-columns: minmax(0, 1fr) auto;
-  min-height: 100px;
-  padding: 20px 24px 18px;
+  min-height: 112px;
+  padding: 24px 2px 22px;
 }
 
 .portfolioTitle {
@@ -339,30 +347,6 @@
   white-space: nowrap;
 }
 
-.rewardDistribution {
-  background: color-mix(in srgb, var(--surface-soft) 82%, transparent);
-  border-radius: 999px;
-  display: flex;
-  gap: 2px;
-  grid-column: 1 / -1;
-  height: 4px;
-  overflow: hidden;
-  width: 100%;
-}
-
-.rewardDistribution span {
-  background: var(--accent);
-  min-width: 4px;
-}
-
-.rewardDistribution span:nth-child(3n + 2) {
-  background: color-mix(in srgb, var(--accent) 72%, #c9a8ee);
-}
-
-.rewardDistribution span:nth-child(3n + 3) {
-  background: color-mix(in srgb, var(--accent) 64%, #efc074);
-}
-
 .sourceWarning {
   align-items: center;
   background: var(--warning-background);
@@ -407,7 +391,7 @@
   font-weight: 640;
   letter-spacing: 0.045em;
   min-height: 40px;
-  padding-inline: 24px;
+  padding-inline: 2px;
   text-transform: uppercase;
 }
 
@@ -423,10 +407,10 @@
 
 .tokenRow {
   align-self: stretch;
-  background: color-mix(in srgb, var(--glass-82) 88%, transparent);
+  background: transparent;
   border-block-end: 1px solid var(--border);
   min-width: 0;
-  padding-inline: 24px;
+  padding-inline: 2px;
   transform: translate3d(0, 0, 0);
   transition:
     background-color 170ms ease,
@@ -442,10 +426,9 @@
   background:
     linear-gradient(
       90deg,
-      color-mix(in srgb, var(--accent-soft) 68%, transparent),
-      transparent 42%
-    ),
-    color-mix(in srgb, var(--glass-82) 90%, transparent);
+      color-mix(in srgb, var(--accent-soft) 44%, transparent),
+      transparent 38%
+    );
 }
 
 .tokenMain {
@@ -940,7 +923,8 @@
 
 .accountState {
   align-items: center;
-  border-radius: 24px;
+  border-block: 1px solid var(--border);
+  border-radius: 0;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -997,11 +981,41 @@
   padding-inline: 15px;
 }
 
+.editButton,
+.imageAction,
+.editAction,
+.secondaryAction,
+.openToken,
+.retryButton {
+  -webkit-backdrop-filter: var(--control-glass-backdrop);
+  backdrop-filter: var(--control-glass-backdrop);
+  background: var(--control-glass-background);
+  border-color: var(--control-glass-border);
+  border-radius: var(--radius-control);
+  box-shadow:
+    inset 0 1px 0 var(--control-glass-highlight),
+    0 8px 24px var(--control-glass-shadow-color);
+}
+
+.connectButton,
+.claimButton,
+.saveAction,
+.emptyAction {
+  -webkit-backdrop-filter: var(--control-glass-backdrop);
+  backdrop-filter: var(--control-glass-backdrop);
+  background: var(--accent-glass-background);
+  border-color: var(--accent-glass-border);
+  border-radius: var(--radius-control);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 18%, transparent),
+    0 10px 28px var(--control-glass-shadow-color);
+}
+
 @media (hover: hover) and (pointer: fine) {
   .tokenRow:hover {
-    background: color-mix(in srgb, var(--surface-soft) 88%, transparent);
-    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 58%, transparent);
-    transform: translate3d(0, -1px, 0);
+    background: color-mix(in srgb, var(--surface-soft) 42%, transparent);
+    box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 58%, transparent);
+    transform: translate3d(2px, 0, 0);
   }
 
   .tokenIdentity:hover strong {
@@ -1026,7 +1040,7 @@
   .claimButton:not(:disabled):hover,
   .connectButton:hover,
   .emptyAction:hover {
-    background: var(--accent-hover);
+    background: var(--accent-glass-background-hover);
   }
 }
 
@@ -1089,18 +1103,19 @@
   }
 
   .list {
-    gap: 10px;
-    padding: 10px;
+    gap: 0;
+    padding: 0;
   }
 
   .tokenRow {
-    border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
-    border-radius: 18px;
-    padding-inline: 16px;
+    border: 0;
+    border-block-end: 1px solid var(--border);
+    border-radius: 0;
+    padding-inline: 2px;
   }
 
   .tokenRow:last-child {
-    border-block-end: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+    border-block-end: 0;
   }
 
   .tokenMain {
@@ -1160,7 +1175,7 @@
   .portfolio,
   .connectCard,
   .accountState {
-    border-radius: 21px;
+    border-radius: 0;
   }
 
   .hero {
@@ -1184,17 +1199,31 @@
   }
 
   .connectCard {
-    margin-block-start: 18px;
-    min-height: 272px;
-    padding: 30px 22px;
+    align-items: start;
+    gap: 10px;
+    grid-template-areas:
+      "mark"
+      "title"
+      "copy"
+      "action";
+    grid-template-columns: 1fr;
+    margin-block-start: 38px;
+    min-height: 0;
+    padding: 34px 2px 40px;
   }
 
   .connectCard h1 {
-    font-size: clamp(34px, 10.5vw, 42px);
+    font-size: clamp(48px, 14vw, 70px);
+  }
+
+  .connectMark {
+    height: 72px;
+    margin: 0 0 20px;
+    width: 72px;
   }
 
   .portfolioHeader {
-    padding: 18px;
+    padding: 20px 2px;
   }
 
   .portfolioTitle h2 {
@@ -1211,8 +1240,8 @@
   }
 
   .list {
-    gap: 9px;
-    padding: 9px;
+    gap: 0;
+    padding: 0;
   }
 }
 
@@ -1390,7 +1419,7 @@
   }
 
   .tokenRow {
-    padding-inline: 13px;
+    padding-inline: 2px;
   }
 
   .tokenArt {
