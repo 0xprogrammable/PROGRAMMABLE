@@ -358,6 +358,146 @@ test("verifyPoolerLogins checks all five transaction-pooler identities with SET 
   }
 });
 
+test("verifyPoolerLogins retries each role once after an initial 28P01", async () => {
+  const values = credentials("refreshed_pooler");
+  const attempts = new Map();
+  const closes = [];
+  const waits = [];
+  const result = await verifyPoolerLogins({
+    expectedProjectRef: PROJECT_REF,
+    poolerHost: "aws-0-eu-central-1.pooler.supabase.com",
+    sslCaPem: CA,
+    credentials: values,
+    dependencies: {
+      openPoolerDatabase: async ({ spec }) => {
+        const attempt = (attempts.get(spec.key) ?? 0) + 1;
+        attempts.set(spec.key, attempt);
+        return { sql: { attempt, spec } };
+      },
+      closePoolerDatabase: async (sql) => {
+        closes.push(sql);
+      },
+      readPoolerRolePosture: async ({ attempt }) => {
+        if (attempt === 1) {
+          throw Object.assign(new Error("stale pooler credential"), {
+            code: "28P01",
+          });
+        }
+        return rolePosture();
+      },
+      verifyPoolerSession: async (_sql, spec) => ({
+        loginRole: spec.loginRole,
+        capabilityRole: spec.capabilityRole,
+        verified: true,
+      }),
+      waitForPoolerCredentialRefresh: async () => {
+        waits.push(true);
+      },
+    },
+  });
+
+  assert.deepEqual(
+    [...attempts.values()],
+    ROLE_SPECS.map(() => 2),
+  );
+  assert.equal(closes.length, ROLE_SPECS.length * 2);
+  assert.equal(waits.length, ROLE_SPECS.length);
+  assert.equal(result.roles.length, ROLE_SPECS.length);
+});
+
+test("verifyPoolerLogins fails immediately without retrying a non-28P01 error", async () => {
+  const values = credentials("non_auth_failure");
+  let opens = 0;
+  let closes = 0;
+  let waits = 0;
+  await assert.rejects(
+    verifyPoolerLogins({
+      expectedProjectRef: PROJECT_REF,
+      poolerHost: "aws-0-eu-central-1.pooler.supabase.com",
+      sslCaPem: CA,
+      credentials: values,
+      dependencies: {
+        openPoolerDatabase: async () => {
+          opens += 1;
+          return { sql: {} };
+        },
+        closePoolerDatabase: async () => {
+          closes += 1;
+        },
+        readPoolerRolePosture: async () => {
+          throw Object.assign(new Error("network timeout"), {
+            code: "ETIMEDOUT",
+          });
+        },
+        verifyPoolerSession: async () => {
+          throw new Error("session verification must not run");
+        },
+        waitForPoolerCredentialRefresh: async () => {
+          waits += 1;
+        },
+      },
+    }),
+    (error) => {
+      assert.equal(
+        error.message,
+        "pooler login verification failed (ETIMEDOUT)",
+      );
+      for (const secret of Object.values(values)) {
+        assert.equal(error.message.includes(secret), false);
+      }
+      return true;
+    },
+  );
+  assert.equal(opens, 1);
+  assert.equal(closes, 1);
+  assert.equal(waits, 0);
+});
+
+test("verifyPoolerLogins fails closed after the second 28P01", async () => {
+  const values = credentials("persistent_auth_failure");
+  let opens = 0;
+  let closes = 0;
+  let waits = 0;
+  await assert.rejects(
+    verifyPoolerLogins({
+      expectedProjectRef: PROJECT_REF,
+      poolerHost: "aws-0-eu-central-1.pooler.supabase.com",
+      sslCaPem: CA,
+      credentials: values,
+      dependencies: {
+        openPoolerDatabase: async () => {
+          opens += 1;
+          return { sql: {} };
+        },
+        closePoolerDatabase: async () => {
+          closes += 1;
+        },
+        readPoolerRolePosture: async () => {
+          throw Object.assign(new Error("password rejected"), {
+            code: "28P01",
+          });
+        },
+        verifyPoolerSession: async () => {
+          throw new Error("session verification must not run");
+        },
+        waitForPoolerCredentialRefresh: async () => {
+          waits += 1;
+        },
+      },
+    }),
+    (error) => {
+      assert.equal(error.message, "pooler login verification failed (28P01)");
+      for (const secret of Object.values(values)) {
+        assert.equal(error.message.includes(secret), false);
+      }
+      return true;
+    },
+  );
+  assert.equal(opens, 2);
+  assert.equal(closes, 2);
+  assert.equal(waits, 1);
+});
+
 test("verifyPoolerLogins rejects an unreviewed host and an identity mismatch", async () => {
   await assert.rejects(
     verifyPoolerLogins({
