@@ -34,6 +34,7 @@ const ISOLATION_ID = /^[a-z0-9][a-z0-9_-]{7,31}$/u;
 const SHA256 = /^0x[0-9a-f]{64}$/u;
 const PG_TOOL_VERSION = /\b(\d+)\.(?:\d+)(?:\.\d+)?\b/u;
 const RESTORE_DATABASE_PREFIX = "programmable_restore_";
+const POOLER_CREDENTIAL_REFRESH_DELAY_MS = 250;
 export const BACKUP_SCHEMAS = Object.freeze([
   "programmable_private",
   "programmable_release_probe_private",
@@ -511,6 +512,12 @@ async function closePoolerDatabase(sql) {
   await sql.end({ timeout: 3 });
 }
 
+async function waitForPoolerCredentialRefresh() {
+  await new Promise((resolve) => {
+    setTimeout(resolve, POOLER_CREDENTIAL_REFRESH_DELAY_MS);
+  });
+}
+
 function staticSetLocalRoleSql(spec) {
   return `set local role ${spec.capabilityRole}`;
 }
@@ -564,28 +571,40 @@ export async function verifyPoolerLogins(input) {
     "closePoolerDatabase",
     "readPoolerRolePosture",
     "verifyPoolerSession",
+    "waitForPoolerCredentialRefresh",
   ]);
   const openDatabase = dependencies.openPoolerDatabase ?? openPoolerDatabase;
   const closeDatabase = dependencies.closePoolerDatabase ?? closePoolerDatabase;
   const inspectPosture =
     dependencies.readPoolerRolePosture ?? readPoolerRolePosture;
   const verifySession = dependencies.verifyPoolerSession ?? verifyPoolerSession;
+  const waitForCredentialRefresh =
+    dependencies.waitForPoolerCredentialRefresh ?? waitForPoolerCredentialRefresh;
   const roles = [];
   try {
     for (const spec of ROLE_SPECS) {
-      let connection;
-      try {
-        connection = await openDatabase({
-          target,
-          spec,
-          password: credentials.get(spec.key),
-          sslCaPem,
-          options: Object.freeze({ prepare: false }),
-        });
-        assertRolePosture(await inspectPosture(connection.sql));
-        roles.push(await verifySession(connection.sql, spec));
-      } finally {
-        if (connection?.sql) await closeDatabase(connection.sql).catch(() => {});
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        let connection;
+        let retryAfterCredentialRefresh = false;
+        try {
+          connection = await openDatabase({
+            target,
+            spec,
+            password: credentials.get(spec.key),
+            sslCaPem,
+            options: Object.freeze({ prepare: false }),
+          });
+          assertRolePosture(await inspectPosture(connection.sql));
+          roles.push(await verifySession(connection.sql, spec));
+          break;
+        } catch (error) {
+          retryAfterCredentialRefresh =
+            attempt === 0 && errorCode(error) === "28P01";
+          if (!retryAfterCredentialRefresh) throw error;
+        } finally {
+          if (connection?.sql) await closeDatabase(connection.sql).catch(() => {});
+        }
+        if (retryAfterCredentialRefresh) await waitForCredentialRefresh();
       }
     }
     if (roles.length !== ROLE_SPECS.length) {
