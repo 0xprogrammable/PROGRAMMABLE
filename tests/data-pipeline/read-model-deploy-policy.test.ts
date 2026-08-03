@@ -48,7 +48,11 @@ function environmentFile(input: {
   nonSecret?: Partial<Record<string, string | undefined>>;
   serverSecrets?: Partial<Record<string, string | undefined>>;
   includeRuntimeProviders?: boolean;
+  alchemyRuntime?: string | null;
 } = {}) {
+  const alchemyRuntime = input.alchemyRuntime === undefined
+    ? ALCHEMY_URL
+    : input.alchemyRuntime;
   const values: Record<string, string | undefined> = {
     ...Object.fromEntries(
       RELEASE_GATED_FLAG_NAMES.map((name: string) => [name, "false"]),
@@ -60,9 +64,11 @@ function environmentFile(input: {
     ...Object.fromEntries(
       REQUIRED_SERVER_SECRET_ENV_NAMES.map((name: string) => [name, ""]),
     ),
+    ...(alchemyRuntime === null
+      ? {}
+      : { PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: alchemyRuntime }),
     ...(input.includeRuntimeProviders
       ? {
-          PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY_URL,
           PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE_URL,
         }
       : {}),
@@ -81,6 +87,7 @@ describe("read-model production deploy policy", () => {
   it("attests current Vercel empty sensitive values from exact production metadata", () => {
     const contents = environmentFile({
       workers: { PROGRAMMABLE_PROJECTOR_ACTIVE: "true" },
+      alchemyRuntime: null,
     }).concat(
       "\nPROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL=\nPROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL=",
     );
@@ -123,7 +130,7 @@ describe("read-model production deploy policy", () => {
   });
 
   it("rejects missing, non-sensitive, preview or value-bearing Vercel metadata", () => {
-    const contents = environmentFile().concat(
+    const contents = environmentFile({ alchemyRuntime: null }).concat(
       "\nPROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL=",
     );
     for (const entry of [
@@ -199,7 +206,7 @@ describe("read-model production deploy policy", () => {
     ).toBe(contents);
   });
 
-  it("binds legacy-only to exact false indexed flags and disabled workers", () => {
+  it("binds Alchemy-only to exact false indexed flags and disabled workers", () => {
     const policy = evaluateReadModelDeployPolicy(
       environmentFile({
         workers: { PROGRAMMABLE_PROJECTOR_ACTIVE: undefined },
@@ -208,7 +215,7 @@ describe("read-model production deploy policy", () => {
       EXPECTATIONS,
     );
     expect(policy).toMatchObject({
-      mode: "legacy-only",
+      mode: "alchemy-only",
       evidenceRequired: false,
       policyReady: true,
       commitmentsReady: true,
@@ -219,6 +226,40 @@ describe("read-model production deploy policy", () => {
         PROGRAMMABLE_PROJECTOR_ACTIVE: false,
         PROGRAMMABLE_MARKET_PROJECTOR_ACTIVE: false,
       },
+    });
+  });
+
+  it("requires one exact Alchemy Mainnet RPC for Alchemy-only", () => {
+    for (const alchemyRuntime of [
+      null,
+      "",
+      "https://programmable.quiknode.pro/abcdefgh",
+      "https://eth-mainnet.g.alchemy.com/v2/docs-demo",
+    ]) {
+      const policy = evaluateReadModelDeployPolicy(
+        environmentFile({ alchemyRuntime }),
+        {},
+        EXPECTATIONS,
+      );
+      expect(policy).toMatchObject({
+        mode: "alchemy-only",
+        policyReady: false,
+        invalidAlchemyRuntimeEnvironmentNames: [
+          "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
+        ],
+      });
+    }
+
+    expect(
+      evaluateReadModelDeployPolicy(
+        environmentFile({ alchemyRuntime: "[Sensitive]" }),
+        {},
+        EXPECTATIONS,
+      ),
+    ).toMatchObject({
+      mode: "alchemy-only",
+      policyReady: true,
+      runtimeProviderBinding: "deferred-stage",
     });
   });
 
@@ -321,8 +362,12 @@ describe("read-model production deploy policy", () => {
 
     for (const name of REQUIRED_NON_SECRET_RUNTIME_ENV_NAMES) {
       const drifted = evaluateReadModelDeployPolicy(
-        environmentFile({ nonSecret: { [name]: undefined } }),
-        {},
+        environmentFile({
+          indexed: { [RELEASE_GATED_FLAG_NAMES[0]]: "true" },
+          nonSecret: { [name]: undefined },
+          includeRuntimeProviders: true,
+        }),
+        COMMITMENTS,
         EXPECTATIONS,
       );
       expect(drifted.policyReady).toBe(false);
@@ -330,11 +375,13 @@ describe("read-model production deploy policy", () => {
     }
     const wrongGraph = evaluateReadModelDeployPolicy(
       environmentFile({
+        indexed: { [RELEASE_GATED_FLAG_NAMES[0]]: "true" },
         nonSecret: {
           PROGRAMMABLE_UNISWAP_GRAPH_SCHEMA_COMMITMENT: `0x${"00".repeat(32)}`,
         },
+        includeRuntimeProviders: true,
       }),
-      {},
+      COMMITMENTS,
       EXPECTATIONS,
     );
     expect(wrongGraph.policyReady).toBe(false);
@@ -356,7 +403,7 @@ describe("read-model production deploy policy", () => {
       stagedDeploymentId: `dpl_${"b".repeat(24)}`,
       stagedDeploymentUrl: "https://programmable-stage-abc.vercel.app",
       productionOrigin: "https://programmable.family",
-      expectedMode: "legacy-only",
+      expectedMode: "alchemy-only",
       timestamp: "2026-08-01T12:34:56.000Z",
     });
     expect(JSON.parse(result.json)).toEqual({
@@ -366,7 +413,7 @@ describe("read-model production deploy policy", () => {
       stagedDeploymentId: `dpl_${"b".repeat(24)}`,
       stagedDeploymentUrl: "https://programmable-stage-abc.vercel.app",
       productionOrigin: "https://programmable.family",
-      policyMode: "legacy-only",
+      policyMode: "alchemy-only",
       indexedFlags: policy.indexedFlags,
       workerActivationFlags: policy.workerActivationFlags,
       timestamp: "2026-08-01T12:34:56.000Z",
@@ -468,7 +515,7 @@ describe("read-model production deploy policy", () => {
       stagedDeploymentId: `dpl_${"b".repeat(24)}`,
       stagedDeploymentUrl: "https://programmable-stage-abc.vercel.app",
       productionOrigin: "https://programmable.family",
-      expectedMode: "legacy-only",
+      expectedMode: "alchemy-only",
       timestamp: "2026-08-01T12:34:56.000Z",
     };
     expect(() =>
@@ -514,7 +561,7 @@ describe("read-model production deploy policy", () => {
     expect(PROJECTOR_WAKE_ROUTE).toBe("/api/ops/projector-wake");
   });
 
-  it("smokes the legacy release corpus and stops at a staged candidate", () => {
+  it("smokes the Alchemy-only public APIs and stops at a staged candidate", () => {
     const workflow = readFileSync(
       resolve(ROOT, ".github/workflows/deploy-production.yml"),
       "utf8",
@@ -529,16 +576,31 @@ describe("read-model production deploy policy", () => {
     expect(workflow.match(/--sensitive-env-metadata/g)).toHaveLength(2);
     expect(workflow).toContain("staged-release-attestation.json");
     expect(workflow).toContain("attestation_sha256");
-    expect(workflow).toContain("Smoke legacy staged public APIs");
+    expect(workflow).toContain("Smoke staged Alchemy Explore APIs");
+    expect(workflow).toContain(
+      "if: steps.read-model-policy.outputs.mode == 'alchemy-only'",
+    );
     expect(workflow).toContain(
       '"x-vercel-protection-bypass": automationBypassSecret',
     );
-    expect(workflow).toContain("headers: legacySmokeRequestHeaders");
-    expect(workflow).toContain('"/api/ops/health"');
+    expect(workflow).toContain("headers: alchemySmokeRequestHeaders");
+    expect(workflow).toContain(
+      'response.headers.get("x-programmable-read-source") !== "rpc"',
+    );
+    expect(workflow).toContain(
+      'response.headers.get("x-programmable-rpc-provider") !== "alchemy"',
+    );
     expect(workflow).toContain('"/api/indexers/v1/token-list"');
     expect(workflow).toContain("/api/explore/token?address=");
-    expect(workflow).toContain("/api/explore/profile?account=");
-    expect(workflow).toContain("releaseToken.creatorAddress");
+    const alchemySmoke = workflow.slice(
+      workflow.indexOf("Smoke staged Alchemy Explore APIs"),
+      workflow.indexOf("Record Alchemy-only read path"),
+    );
+    expect(alchemySmoke).not.toContain("/api/ops/health");
+    expect(alchemySmoke).not.toContain("/api/explore/profile");
+    expect(alchemySmoke).not.toMatch(
+      /(?:postgres|database|projector|quicknode|envio|real-block|sla)/iu,
+    );
     expect(workflow).toContain("Reverify staged candidate binding");
     expect(workflow).toContain("Record staged candidate handoff");
     expect(workflow).toContain(

@@ -993,50 +993,66 @@ export function evaluateReadModelOperationsSourceContracts(
       stagedWakeGateBlock.includes('--target-url "$STAGED_TARGET_URL"'),
     "an active fast lane must pass the exact unaliased staged wake canary before attestation",
   );
-  const stagedLegacySmoke = deployWorkflow.indexOf(
-    "Smoke legacy staged public APIs",
+  const stagedAlchemySmoke = deployWorkflow.indexOf(
+    "Smoke staged Alchemy Explore APIs",
   );
-  const stagedLegacySmokeEnd = deployWorkflow.indexOf(
-    "Record legacy-only read path",
+  const stagedAlchemySmokeEnd = deployWorkflow.indexOf(
+    "Record Alchemy-only read path",
   );
-  const stagedLegacySmokeBlock =
-    stagedLegacySmoke >= 0 && stagedLegacySmokeEnd > stagedLegacySmoke
-      ? deployWorkflow.slice(stagedLegacySmoke, stagedLegacySmokeEnd)
+  const stagedAlchemySmokeBlock =
+    stagedAlchemySmoke >= 0 && stagedAlchemySmokeEnd > stagedAlchemySmoke
+      ? deployWorkflow.slice(stagedAlchemySmoke, stagedAlchemySmokeEnd)
       : "";
   check(
-    "ops-protected-legacy-stage-smoke",
-    stagedLegacySmoke > stagedWakeGateEnd &&
-      stagedLegacySmokeBlock.includes(
-        "if: steps.read-model-policy.outputs.evidence_required == 'false'",
+    "ops-protected-alchemy-stage-smoke",
+    stagedAlchemySmoke > stagedWakeGateEnd &&
+      stagedAlchemySmokeBlock.includes(
+        "if: steps.read-model-policy.outputs.mode == 'alchemy-only'",
       ) &&
-      stagedLegacySmokeBlock.includes(
+      stagedAlchemySmokeBlock.includes(
         "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
       ) &&
-      stagedLegacySmokeBlock.includes(
+      stagedAlchemySmokeBlock.includes(
         "process.env.VERCEL_AUTOMATION_BYPASS_SECRET",
       ) &&
-      stagedLegacySmokeBlock.includes(
+      stagedAlchemySmokeBlock.includes(
         'Buffer.byteLength(\n            automationBypassSecret ?? "",\n            "utf8",\n          )',
       ) &&
-      stagedLegacySmokeBlock.includes("automationBypassSecretLength < 32") &&
-      stagedLegacySmokeBlock.includes("automationBypassSecretLength > 512") &&
-      stagedLegacySmokeBlock.includes(
+      stagedAlchemySmokeBlock.includes("automationBypassSecretLength < 32") &&
+      stagedAlchemySmokeBlock.includes("automationBypassSecretLength > 512") &&
+      stagedAlchemySmokeBlock.includes(
         "/[\\r\\n]/.test(automationBypassSecret)",
       ) &&
-      stagedLegacySmokeBlock.includes(
+      stagedAlchemySmokeBlock.includes(
         '"x-vercel-protection-bypass": automationBypassSecret',
       ) &&
-      stagedLegacySmokeBlock.includes("headers: legacySmokeRequestHeaders") &&
-      stagedLegacySmokeBlock.includes(
+      stagedAlchemySmokeBlock.includes("headers: alchemySmokeRequestHeaders") &&
+      stagedAlchemySmokeBlock.includes(
         "STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
       ) &&
-      (stagedLegacySmokeBlock.match(/\bfetch\(/gu) ?? []).length === 1 &&
-      !stagedLegacySmokeBlock.includes(
+      stagedAlchemySmokeBlock.includes(
+        'response.headers.get("x-programmable-read-source") !== "rpc"',
+      ) &&
+      stagedAlchemySmokeBlock.includes(
+        'response.headers.get("x-programmable-rpc-provider") !== "alchemy"',
+      ) &&
+      stagedAlchemySmokeBlock.includes(
+        '"/api/explore?limit=20&page=1&sort=market-cap"',
+      ) &&
+      stagedAlchemySmokeBlock.includes('"/api/indexers/v1/token-list"') &&
+      stagedAlchemySmokeBlock.includes("/api/explore/token?address=") &&
+      (stagedAlchemySmokeBlock.match(/\bfetch\(/gu) ?? []).length === 1 &&
+      !stagedAlchemySmokeBlock.includes("/api/ops/health") &&
+      !stagedAlchemySmokeBlock.includes("/api/explore/profile") &&
+      !/(?:postgres|database|projector|quicknode|envio|real-block|sla)/iu.test(
+        stagedAlchemySmokeBlock,
+      ) &&
+      !stagedAlchemySmokeBlock.includes(
         "NEXT_PUBLIC_VERCEL_AUTOMATION_BYPASS_SECRET",
       ) &&
-      !stagedLegacySmokeBlock.includes("${automationBypassSecret}") &&
-      !stagedLegacySmokeBlock.includes("console."),
-    "the legacy staged API smoke uses the protected deployment bypass only inside its exact step without exposing it",
+      !stagedAlchemySmokeBlock.includes("${automationBypassSecret}") &&
+      !stagedAlchemySmokeBlock.includes("console."),
+    "the Alchemy-only staged API smoke proves direct RPC provenance without indexed infrastructure or exposing its deployment bypass",
   );
   const stagedReadModelCapture = deployWorkflow.indexOf(
     "Capture staged read-model evidence",
@@ -1050,9 +1066,9 @@ export function evaluateReadModelOperationsSourceContracts(
       : "";
   check(
     "ops-protected-indexed-stage-capture",
-    stagedReadModelCapture > stagedLegacySmokeEnd &&
+    stagedReadModelCapture > stagedAlchemySmokeEnd &&
       stagedReadModelCaptureBlock.includes(
-        "if: steps.read-model-policy.outputs.evidence_required == 'true'",
+        "if: steps.read-model-policy.outputs.mode == 'indexed-or-shadow'",
       ) &&
       stagedReadModelCaptureBlock.includes(
         "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",

@@ -28,6 +28,8 @@ import * as providerBinding from "../../scripts/perf/read-model-provider-binding
 import * as releaseProbe from "../../scripts/perf/read-model-release-probe.mjs";
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
 import * as sourceContracts from "../../scripts/perf/read-model-source-contracts.mjs";
+// @ts-expect-error Operational JavaScript modules intentionally have no declarations.
+import * as alchemySourceContracts from "../../scripts/perf/alchemy-explore-source-contracts.mjs";
 
 const temporaryDirectories: string[] = [];
 const GIT_HEAD = "1".repeat(40);
@@ -561,9 +563,14 @@ describe("read-model performance contract", () => {
       maxAggregateCallsPerRun: 256,
     });
     expect(
-      sourceContracts.evaluateReadModelSourceContracts(process.cwd(), profile)
-        .ok,
-    ).toBe(true);
+      sourceContracts
+        .evaluateReadModelSourceContracts(process.cwd(), profile)
+        .failures.map((failure: { id: string }) => failure.id),
+    ).toEqual([
+      "source-cache-exploreList",
+      "source-cache-tokenDetail",
+      "source-cache-publicIndexer",
+    ]);
 
     const fixture = createBundle(true);
     const result = gateCore.evaluateReadModelReleaseEvidence(
@@ -927,15 +934,20 @@ describe("read-model performance contract", () => {
     );
   });
 
-  it("enforces the exact legacy-only deployment boundary", () => {
+  it("enforces the exact Alchemy-only deployment boundary", () => {
     const exactFalse = deployPolicy.RELEASE_GATED_FLAG_NAMES.map(
       (name: string) => `${name}="false"`,
     ).join("\n");
-    const legacy = deployPolicy.evaluateReadModelDeployPolicy(exactFalse, {});
-    expect(legacy).toMatchObject({
-      mode: "legacy-only",
+    const alchemy = deployPolicy.evaluateReadModelDeployPolicy(
+      `${exactFalse}\nPROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL="${RUNTIME_RPC_ENVIRONMENT.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL}"`,
+      {},
+    );
+    expect(alchemy).toMatchObject({
+      mode: "alchemy-only",
       evidenceRequired: false,
       commitmentsReady: true,
+      policyReady: true,
+      runtimeProviderBinding: "verified",
     });
     const indexedEnvironment = `${exactFalse.replace(
       "INDEXED_EXPLORE_TOKEN_READS_ENABLED=\"false\"",
@@ -1273,11 +1285,25 @@ describe("read-model performance contract", () => {
 
   it("detects source drift and keeps smoke distinct from release evidence", () => {
     const profile = gateCore.parseReadModelLoadProfile(profileFixture());
+    const alchemyResult =
+      alchemySourceContracts.evaluateAlchemyExploreSourceContracts(
+        process.cwd(),
+      );
+    expect(alchemyResult.ok).toBe(true);
+    expect(alchemyResult.checks).toHaveLength(7);
+
     const result = sourceContracts.evaluateReadModelSourceContracts(
       process.cwd(),
       profile,
     );
-    expect(result.ok).toBe(true);
+    const disconnectedIndexedFailures = [
+      "source-cache-exploreList",
+      "source-cache-tokenDetail",
+      "source-cache-publicIndexer",
+    ];
+    expect(
+      result.failures.map((failure: { id: string }) => failure.id),
+    ).toEqual(disconnectedIndexedFailures);
     expect(result.checks).toHaveLength(33);
 
     const dualRpcPath = "lib/data-pipeline/dual-rpc.ts";
@@ -1292,11 +1318,18 @@ describe("read-model performance contract", () => {
         "executionTrace :\n          Object.freeze ( {",
       );
     expect(formattingOnly).not.toBe(dualRpcSource);
-    expect(
-      sourceContracts.evaluateReadModelSourceContracts(process.cwd(), profile, {
+    const formattingResult = sourceContracts.evaluateReadModelSourceContracts(
+      process.cwd(),
+      profile,
+      {
         sourceOverrides: { [dualRpcPath]: formattingOnly },
-      }).ok,
-    ).toBe(true);
+      },
+    );
+    expect(
+      formattingResult.failures.map(
+        (failure: { id: string }) => failure.id,
+      ),
+    ).toEqual(disconnectedIndexedFailures);
 
     const semanticDrift = sourceContracts.evaluateReadModelSourceContracts(
       process.cwd(),
