@@ -15,6 +15,8 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 import {
+  BACKUP_SCHEMAS,
+  FINAL_BACKUP_SCHEMAS,
   ROLE_SPECS,
   createBackupAndRestoreEvidence,
   provisionLoginRoles,
@@ -77,7 +79,7 @@ const PRIVATE_MODE = 0o600;
 export const HELP = `Usage:
   node scripts/data-pipeline/cutover-operator.mjs roles-provision --expected-project-ref REF --output FILE
   node scripts/data-pipeline/cutover-operator.mjs roles-verify --expected-project-ref REF --pooler-host HOST --output FILE
-  node scripts/data-pipeline/cutover-operator.mjs backup-restore --expected-project-ref REF --operation-id ID --restore-isolation-id ID --backup FILE --evidence FILE
+  node scripts/data-pipeline/cutover-operator.mjs backup-restore --expected-project-ref REF --operation-id ID --restore-isolation-id ID --backup FILE --evidence FILE [--schema-stage initial|final]
   node scripts/data-pipeline/cutover-operator.mjs candidate-safety-backup --expected-project-ref REF --current-product-commit COMMIT --operation-id ID --restore-isolation-id ID --backup FILE --backup-evidence FILE --output FILE
   node scripts/data-pipeline/cutover-operator.mjs candidate-restore-plan --expected-project-ref REF --current-product-commit COMMIT --snapshot-repository-commit COMMIT --snapshot-backup FILE --snapshot-evidence FILE --safety-backup FILE --safety-backup-evidence FILE --safety-evidence FILE --output FILE
   node scripts/data-pipeline/cutover-operator.mjs candidate-restore-apply --expected-project-ref REF --current-product-commit COMMIT --snapshot-repository-commit COMMIT --snapshot-backup FILE --snapshot-evidence FILE --safety-backup FILE --safety-backup-evidence FILE --safety-evidence FILE --plan FILE --confirm-restore SHA256 --output FILE
@@ -145,6 +147,12 @@ function boundedCycles(value) {
     throw new Error("maximum cycles is invalid");
   }
   return parsed;
+}
+
+export function backupSchemas(value) {
+  if (value === undefined || value === "initial") return BACKUP_SCHEMAS;
+  if (value === "final") return FINAL_BACKUP_SCHEMAS;
+  throw new Error("backup schema stage is invalid");
 }
 
 export function credentialsFromEnvironment(environment) {
@@ -506,7 +514,7 @@ async function runCommand(command, flags, environment) {
       "--restore-isolation-id",
       "--backup",
       "--evidence",
-    ]);
+    ], ["--schema-stage"]);
     return createBackupAndRestoreEvidence({
       operationId: flags.get("--operation-id"),
       repositoryCommit: await assertCleanCheckout(),
@@ -516,6 +524,7 @@ async function runCommand(command, flags, environment) {
       restoreDatabaseUrl: environment.PROGRAMMABLE_CUTOVER_RESTORE_DATABASE_URL,
       restoreIsolationId: flags.get("--restore-isolation-id"),
       restoreSslCaPem: environment.PROGRAMMABLE_CUTOVER_RESTORE_SSL_CA_PEM,
+      schemas: backupSchemas(flags.get("--schema-stage")),
       backupPath: absoluteExternalPath(flags.get("--backup"), "backup path"),
       evidencePath: absoluteExternalPath(flags.get("--evidence"), "evidence path"),
     });
