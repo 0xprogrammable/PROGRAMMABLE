@@ -118,7 +118,7 @@
 .artImage {
   object-fit: cover;
   object-position: center;
-  transform: scale(1.002);
+  transform: scale(1.0012);
 }
 
 .classicArt .artImage {
@@ -176,90 +176,156 @@
 }
 
 .customSparkles > span {
+  --twinkle-rotation: 0deg;
   background: radial-gradient(
     circle,
-    rgb(255 250 223 / 0.96) 0 13%,
-    rgb(255 225 177 / 0.54) 24%,
-    transparent 68%
+    rgb(255 255 255 / 0.98) 0 8%,
+    rgb(255 231 184 / 0.48) 18%,
+    transparent 58%
   );
-  border-radius: 50%;
-  height: 9px;
-  opacity: 0.16;
+  height: 15px;
+  opacity: 0.11;
   position: absolute;
-  transform: scale(0.78);
-  width: 9px;
+  transform: rotate(var(--twinkle-rotation)) scale(0.72);
+  width: 15px;
+}
+
+.customSparkles > span::before,
+.customSparkles > span::after {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(255 249 223 / 0.94) 47%,
+    rgb(255 255 255 / 0.98) 50%,
+    rgb(255 229 181 / 0.82) 53%,
+    transparent
+  );
+  content: "";
+  inset: 50% auto auto 50%;
+  position: absolute;
+  transform: translate3d(-50%, -50%, 0);
+}
+
+.customSparkles > span::before {
+  height: 1px;
+  width: 100%;
+}
+
+.customSparkles > span::after {
+  height: 100%;
+  transform: translate3d(-50%, -50%, 0) rotate(90deg);
+  width: 1px;
 }
 
 .customSparkles > span:nth-child(1) {
-  left: 22%;
-  top: 23%;
+  left: 18%;
+  top: 30%;
 }
 
 .customSparkles > span:nth-child(2) {
-  right: 20%;
-  top: 31%;
+  --twinkle-rotation: 16deg;
+  height: 10px;
+  right: 24%;
+  top: 20%;
+  width: 10px;
 }
 
 .customSparkles > span:nth-child(3) {
-  bottom: 24%;
-  left: 32%;
+  --twinkle-rotation: -12deg;
+  bottom: 23%;
+  left: 27%;
 }
 
-@keyframes classic-botanical-breeze {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1.004);
-  }
+.customSparkles > span:nth-child(4) {
+  --twinkle-rotation: 9deg;
+  bottom: 29%;
+  height: 11px;
+  right: 16%;
+  width: 11px;
+}
 
-  28% {
-    transform: translate3d(-0.1%, 0, 0) scale(1.004);
-  }
+.customSparkles > span:nth-child(5) {
+  --twinkle-rotation: -18deg;
+  height: 8px;
+  left: 39%;
+  top: 17%;
+  width: 8px;
+}
 
-  58% {
-    transform: translate3d(0.08%, -0.08%, 0) scale(1.004);
-  }
-
-  78% {
-    transform: translate3d(0.04%, 0.05%, 0) scale(1.004);
-  }
+.customSparkles > span:nth-child(6) {
+  --twinkle-rotation: 14deg;
+  bottom: 15%;
+  height: 9px;
+  right: 38%;
+  width: 9px;
 }
 
 @keyframes custom-star-sparkle {
   0%,
-  72%,
+  68%,
   100% {
-    opacity: 0.14;
-    transform: scale(0.78);
+    opacity: 0.09;
+    transform: rotate(var(--twinkle-rotation)) scale(0.72);
   }
 
-  78% {
-    opacity: 0.68;
-    transform: scale(1.14);
+  76% {
+    opacity: 0.9;
+    transform: rotate(var(--twinkle-rotation)) scale(1.08);
   }
 
-  84% {
-    opacity: 0.2;
-    transform: scale(0.82);
+  82% {
+    opacity: 0.16;
+    transform: rotate(var(--twinkle-rotation)) scale(0.84);
+  }
+}
+
+@keyframes classic-botanical-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1.0012);
+  }
+
+  34% {
+    transform: translate3d(-0.06%, 0.02%, 0) scale(1.0012);
+  }
+
+  67% {
+    transform: translate3d(0.06%, -0.03%, 0) scale(1.0012);
   }
 }
 
 @media (prefers-reduced-motion: no-preference) {
   .classicArt .artImage {
-    animation: classic-botanical-breeze 9.6s steps(1, end) infinite;
-    will-change: transform;
+    animation: classic-botanical-drift 12s steps(1, end) infinite;
   }
 
   .customSparkles > span {
-    animation: custom-star-sparkle 5.8s cubic-bezier(0.2, 0, 0, 1) infinite;
-    will-change: opacity, transform;
+    animation: custom-star-sparkle 6.4s cubic-bezier(0.2, 0, 0, 1) infinite;
   }
 
   .customSparkles > span:nth-child(2) {
-    animation-delay: -2.1s;
+    animation-delay: -3.7s;
+    animation-duration: 7.7s;
   }
 
   .customSparkles > span:nth-child(3) {
-    animation-delay: -4.2s;
+    animation-delay: -5.1s;
+    animation-duration: 6.9s;
+  }
+
+  .customSparkles > span:nth-child(4) {
+    animation-delay: -2.4s;
+    animation-duration: 8.1s;
+  }
+
+  .customSparkles > span:nth-child(5) {
+    animation-delay: -4.6s;
+    animation-duration: 7.3s;
+  }
+
+  .customSparkles > span:nth-child(6) {
+    animation-delay: -1.2s;
+    animation-duration: 8.6s;
   }
 }
 

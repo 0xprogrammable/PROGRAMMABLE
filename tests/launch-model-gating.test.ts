@@ -180,7 +180,7 @@ describe("unreleased launch model gating", () => {
     expect(html).toContain("Create a Classic coin");
     expect(html).toContain("Create a Custom Hook");
     expect(html).toContain("evidence required for release");
-    expect(html).toContain("/brand/create/classic-botanical-v3.webp");
+    expect(html).toContain("/brand/create/classic-botanical-v4.webp");
     expect(html).toContain("/brand/create/custom-galaxy-v3.webp");
     expect(html).not.toContain("In development");
     expect(html).not.toContain("Not available");

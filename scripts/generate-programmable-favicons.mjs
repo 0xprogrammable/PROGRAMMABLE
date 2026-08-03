@@ -3,15 +3,15 @@ import path from "node:path";
 import sharp from "sharp";
 
 const projectRoot = process.cwd();
-const sourcePath = path.join(projectRoot, "public", "icon-512.png");
+const sourcePath = path.join(
+  projectRoot,
+  "public",
+  "brand",
+  "loop",
+  "programmable-loop-mark-transparent-v1.png",
+);
 const publicDir = path.join(projectRoot, "public");
-const originalPink = { r: 232, g: 121, b: 190 };
-const faviconPink = { r: 226, g: 159, b: 198 };
 const sizes = [16, 32, 48];
-
-function clamp(value, minimum, maximum) {
-  return Math.min(maximum, Math.max(minimum, value));
-}
 
 function createIco(images) {
   const directorySize = 6 + images.length * 16;
@@ -39,49 +39,37 @@ function createIco(images) {
 }
 
 async function createTransparentMaster() {
-  const { data, info } = await sharp(sourcePath)
+  return sharp(sourcePath)
     .ensureAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-  const output = Buffer.alloc(data.length);
-  const greenRange = 255 - originalPink.g;
-
-  for (let offset = 0; offset < data.length; offset += 4) {
-    const sourceAlpha = data[offset + 3] / 255;
-    const coverage = clamp(
-      ((255 - data[offset + 1]) / greenRange) * sourceAlpha,
-      0,
-      1,
-    );
-
-    output[offset] = faviconPink.r;
-    output[offset + 1] = faviconPink.g;
-    output[offset + 2] = faviconPink.b;
-    output[offset + 3] = coverage < 0.01 ? 0 : Math.round(coverage * 255);
-  }
-
-  return sharp(output, {
-    raw: {
-      width: info.width,
-      height: info.height,
-      channels: 4,
-    },
-  });
+    .trim({ background: { r: 0, g: 0, b: 0, alpha: 0 }, threshold: 8 });
 }
 
 const master = await createTransparentMaster();
 const images = [];
 
 for (const size of sizes) {
+  const inset = size <= 32 ? 1 : 2;
+  const innerSize = size - inset * 2;
   const data = await master
     .clone()
-    .resize(size, size, { fit: "fill", kernel: sharp.kernel.lanczos3 })
+    .resize(innerSize, innerSize, {
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+      fit: "contain",
+      kernel: sharp.kernel.lanczos3,
+    })
+    .extend({
+      top: inset,
+      bottom: inset,
+      left: inset,
+      right: inset,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
     .png({ compressionLevel: 9 })
     .toBuffer();
 
   images.push({ size, data });
   await writeFile(
-    path.join(publicDir, `favicon-pastel-v2-${size}x${size}.png`),
+    path.join(publicDir, `favicon-pastel-v3-${size}x${size}.png`),
     data,
   );
 
@@ -94,10 +82,10 @@ for (const size of sizes) {
 }
 
 const ico = createIco(images);
-await writeFile(path.join(publicDir, "favicon-pastel-v2.ico"), ico);
+await writeFile(path.join(publicDir, "favicon-pastel-v3.ico"), ico);
 await writeFile(path.join(publicDir, "favicon.ico"), ico);
 
 const sourceBytes = await readFile(sourcePath);
 console.log(
-  `Generated transparent pastel favicons from ${sourceBytes.length} source bytes`,
+  `Generated tightly framed transparent favicons from ${sourceBytes.length} source bytes`,
 );
