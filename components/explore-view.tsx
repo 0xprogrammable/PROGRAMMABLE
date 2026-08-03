@@ -740,7 +740,7 @@ export function ExploreView() {
                       token.usesFallbackImage ? "" : `${token.name} artwork`
                     }
                     fill
-                    loading={index < 3 ? "eager" : "lazy"}
+                    loading={index < 6 ? "eager" : "lazy"}
                     sizes="(max-width: 700px) calc(100vw - 28px), (max-width: 1040px) 46vw, 31vw"
                     unoptimized={!canOptimizeTokenImage(imageSource)}
                   />

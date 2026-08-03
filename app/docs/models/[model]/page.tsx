@@ -362,22 +362,22 @@ function CustomDocs() {
     <DocsShell
       currentPath="/docs/models/custom"
       title="Custom Hook"
-      description="Custom Hook configuration is not available in this build."
+      description="Framework and release requirements for token-specific Uniswap v4 hook logic."
       sections={customSections}
     >
       <section id="status">
         <h2>Status</h2>
         <p className={styles.lead}>
-          The Create page reserves a place for Custom Hook, but there is no
-          public transaction path for it. The interface does not prepare,
-          simulate or submit a Custom Hook launch.
+          Create links directly to this guide. A public Custom Hook launch path
+          activates only when its configuration, contracts and release
+          evidence match. Until then, the interface does not prepare, simulate
+          or submit a Custom Hook launch.
         </p>
         <div className={styles.callout}>
-          <strong>Custom Hook is not live.</strong>
+          <strong>The framework is open for review.</strong>
           <p>
-            A Custom Hook option becomes actionable only after its
-            configuration, contracts and release evidence are defined and
-            verified.
+            Launch activation requires defined permissions, transaction
+            preparation, deployed contracts and verified release evidence.
           </p>
         </div>
       </section>
