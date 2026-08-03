@@ -138,6 +138,13 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
 
+      - name: Capture sensitive production environment metadata
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          umask 077
+          vercel env ls production --format json --token="$VERCEL_TOKEN" > "$RUNNER_TEMP/vercel-production-env-metadata.json"
+
       - name: Capture current production rollback target
         id: production-before
         env:
@@ -156,6 +163,7 @@ jobs:
         run: >-
           npm run perf:read-model:deploy-policy --
           --env-file .vercel/.env.production.local
+          --sensitive-env-metadata "$RUNNER_TEMP/vercel-production-env-metadata.json"
           --github-output "$GITHUB_OUTPUT"
 
       - name: Build production deployment
@@ -209,6 +217,7 @@ jobs:
         run: >-
           npm run perf:read-model:deploy-policy --
           --env-file .vercel/.env.production.local
+          --sensitive-env-metadata "$RUNNER_TEMP/vercel-production-env-metadata.json"
           --verified-sha "$GITHUB_SHA"
           --vercel-project-id "$VERCEL_PROJECT_ID"
           --staged-deployment-id "$STAGED_DEPLOYMENT_ID"
