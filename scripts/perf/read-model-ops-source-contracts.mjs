@@ -1038,6 +1038,36 @@ export function evaluateReadModelOperationsSourceContracts(
       !stagedLegacySmokeBlock.includes("console."),
     "the legacy staged API smoke uses the protected deployment bypass only inside its exact step without exposing it",
   );
+  const stagedReadModelCapture = deployWorkflow.indexOf(
+    "Capture staged read-model evidence",
+  );
+  const stagedReadModelCaptureEnd = deployWorkflow.indexOf(
+    "Preserve staged read-model evidence",
+  );
+  const stagedReadModelCaptureBlock =
+    stagedReadModelCapture >= 0 && stagedReadModelCaptureEnd > stagedReadModelCapture
+      ? deployWorkflow.slice(stagedReadModelCapture, stagedReadModelCaptureEnd)
+      : "";
+  check(
+    "ops-protected-indexed-stage-capture",
+    stagedReadModelCapture > stagedLegacySmokeEnd &&
+      stagedReadModelCaptureBlock.includes(
+        "if: steps.read-model-policy.outputs.evidence_required == 'true'",
+      ) &&
+      stagedReadModelCaptureBlock.includes(
+        "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
+      ) &&
+      stagedReadModelCaptureBlock.includes(
+        "PROGRAMMABLE_READ_MODEL_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
+      ) &&
+      stagedReadModelCaptureBlock.includes(
+        "PROGRAMMABLE_READ_MODEL_VERCEL_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}",
+      ) &&
+      !stagedReadModelCaptureBlock.includes(
+        "NEXT_PUBLIC_VERCEL_AUTOMATION_BYPASS_SECRET",
+      ),
+    "the indexed staged capture receives the protected deployment bypass only inside its exact step",
+  );
   check(
     "ops-exact-release-dependency",
     deployWorkflow.includes("needs: release-gate") &&
