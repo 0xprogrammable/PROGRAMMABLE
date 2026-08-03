@@ -10,6 +10,7 @@ import { promisify } from "node:util";
 import {
   CANDIDATE_PROJECT_REF,
   CANDIDATE_PG_RESTRICT_KEY,
+  CANDIDATE_FINAL_SCHEMAS,
   CANDIDATE_RESTORE_FLAGS,
   CANDIDATE_RESTORE_SCHEMAS,
   CANDIDATE_SAFETY_RECOVERY_FLAGS,
@@ -48,6 +49,12 @@ const PINNED_TOC_BROTLI_BASE64 = "W1ZXMyLJ6vUKxjErwHkgUJy+DlaMbUj1bgcRpLJ+2AC1Pt
 const ARCHIVE_LIST = brotliDecompressSync(
   Buffer.from(PINNED_TOC_BROTLI_BASE64, "base64"),
 );
+const SAFETY_ARCHIVE_LIST = Buffer.concat([
+  ARCHIVE_LIST,
+  Buffer.from(
+    "25; 2615 31801 SCHEMA - programmable_wake_private programmable_migrator\n",
+  ),
+]);
 const TARGET = Object.freeze({
   projectRef: CANDIDATE_PROJECT_REF,
   host: `db.${CANDIDATE_PROJECT_REF}.supabase.co`,
@@ -323,7 +330,7 @@ function rawSafetyEvidence(archive) {
       format: "pg-custom-v1",
       sha256: sha256(archive),
       bytes: archive.byteLength,
-      archiveListSha256: sha256(ARCHIVE_LIST),
+      archiveListSha256: sha256(SAFETY_ARCHIVE_LIST),
     },
     sourceManifestSha256: current.manifestSha256,
     restoredManifestSha256: current.manifestSha256,
@@ -456,17 +463,28 @@ function safeToolDependency(calls, hook = () => {}) {
       input.args.includes("--schema-only") &&
       !input.args.includes("--no-owner")
     ) {
+      const wakeOwner =
+        path.basename(input.args.at(-1) ?? "") === "safety.dump"
+          ? "ALTER SCHEMA programmable_wake_private OWNER TO programmable_migrator;\n"
+          : "";
       return {
         stdout: Buffer.from(
           "ALTER SCHEMA programmable_private OWNER TO programmable_migrator;\n" +
             "ALTER SCHEMA programmable_release_probe_private OWNER TO programmable_migrator;\n" +
+            wakeOwner +
             "ALTER SCHEMA supabase_migrations OWNER TO postgres;\n" +
             "GRANT USAGE ON SCHEMA programmable_private TO programmable_api_reader;\n",
         ),
         stderr: Buffer.alloc(0),
       };
     }
-    return { stdout: ARCHIVE_LIST, stderr: Buffer.alloc(0) };
+    return {
+      stdout:
+        path.basename(input.args.at(-1) ?? "") === "safety.dump"
+          ? SAFETY_ARCHIVE_LIST
+          : ARCHIVE_LIST,
+      stderr: Buffer.alloc(0),
+    };
   };
 }
 
@@ -611,6 +629,9 @@ function databaseDependencies(overrides = {}) {
 }
 
 function restoreDatabaseDependencies(overrides = {}, { recovery = false } = {}) {
+  const wakeOwner = recovery
+    ? "ALTER SCHEMA programmable_wake_private OWNER TO programmable_migrator;\n"
+    : "";
   const closures = Object.freeze({
     cleanup: Object.freeze({
       sql: "DROP SCHEMA IF EXISTS programmable_private;\n",
@@ -620,8 +641,9 @@ function restoreDatabaseDependencies(overrides = {}, { recovery = false } = {}) 
       sql:
         "ALTER SCHEMA programmable_private OWNER TO programmable_migrator;\n" +
         "ALTER SCHEMA programmable_release_probe_private OWNER TO programmable_migrator;\n" +
+        wakeOwner +
         "ALTER SCHEMA supabase_migrations OWNER TO postgres;\n",
-      statementCount: 3,
+      statementCount: recovery ? 4 : 3,
     }),
     security: Object.freeze({
       sql: "GRANT USAGE ON SCHEMA programmable_private TO programmable_api_reader;\n",
@@ -933,6 +955,9 @@ test("safety backup binds structural manifest, CA and exact official toolchain",
   const files = await fixture(t);
   const events = [];
   let stateReads = 0;
+  let sessionChecks = 0;
+  let scheduledHeartbeat;
+  const heartbeatTimer = { unref: () => events.push("heartbeat-unref") };
   const evidence = await createCandidateSafetyBackup({
     repositoryCommit: OPERATOR_COMMIT,
     currentProductCommit: CURRENT_PRODUCT_COMMIT,
@@ -958,7 +983,19 @@ test("safety backup binds structural manifest, CA and exact official toolchain",
       }),
       closeHostedDatabase: async () => events.push("close"),
       acquireRestoreLock: async () => events.push("lock"),
-      assertOperatorSession: async () => {},
+      assertOperatorSession: async () => {
+        sessionChecks += 1;
+      },
+      scheduleHeartbeat: (heartbeat, interval) => {
+        assert.equal(interval, 15_000);
+        events.push("heartbeat-scheduled");
+        scheduledHeartbeat = heartbeat;
+        return heartbeatTimer;
+      },
+      cancelHeartbeat: (timer) => {
+        assert.equal(timer, heartbeatTimer);
+        events.push("heartbeat-cancelled");
+      },
       inspectCandidateDatabase: async () => {
         stateReads += 1;
         return candidateState();
@@ -971,6 +1008,8 @@ test("safety backup binds structural manifest, CA and exact official toolchain",
       assertRuntimeLoginsFenced: async () => loginFence(),
       createBackupAndRestoreEvidence: async (input) => {
         events.push("backup");
+        scheduledHeartbeat();
+        await Promise.resolve();
         assert.equal(input.pgDumpBinary, files.paths.pg_dump);
         assert.equal(input.pgRestoreBinary, files.paths.pg_restore);
         assert.equal(input.psqlBinary, files.paths.psql);
@@ -984,11 +1023,23 @@ test("safety backup binds structural manifest, CA and exact official toolchain",
         assert.equal(typeof input.dependencies.openHostedDatabase, "function");
         return { evidence: files.safetyRawEvidence };
       },
-      captureDatabaseManifest: async () => manifest(),
+      captureDatabaseManifest: async (_sql, options) => {
+        assert.deepEqual(options, { schemas: FINAL_BACKUP_SCHEMAS });
+        return manifest();
+      },
     },
   });
   assert.equal(stateReads, 2);
-  assert.deepEqual(events, ["lock", "fence", "backup", "close"]);
+  assert.equal(sessionChecks, 3);
+  assert.deepEqual(events, [
+    "lock",
+    "fence",
+    "heartbeat-scheduled",
+    "heartbeat-unref",
+    "backup",
+    "heartbeat-cancelled",
+    "close",
+  ]);
   assert.equal(evidence.caSha256, sha256(Buffer.from(CA)));
   assert.deepEqual(evidence.operatorIdentity, OPERATOR_IDENTITY);
   assert.deepEqual(evidence.postgresToolchain, TOOLCHAIN_EVIDENCE);
@@ -1023,6 +1074,70 @@ test("safety backup binds structural manifest, CA and exact official toolchain",
     () => buildSafetyEvidence(driftedPortable),
     /portable structure/u,
   );
+});
+
+test("safety backup fails closed when its operator-session heartbeat is lost", async (t) => {
+  const files = await fixture(t);
+  let scheduledHeartbeat;
+  let sessionChecks = 0;
+  let cancelled = 0;
+  let closed = 0;
+  await assert.rejects(
+    createCandidateSafetyBackup({
+      repositoryCommit: OPERATOR_COMMIT,
+      currentProductCommit: CURRENT_PRODUCT_COMMIT,
+      expectedProjectRef: CANDIDATE_PROJECT_REF,
+      databaseUrl: DATABASE_URL,
+      sslCaPem: CA,
+      operationId: "candidate-safety-heartbeat-loss",
+      restoreDatabaseUrl:
+        "postgresql://postgres:isolated@127.0.0.1:55439/programmable_restore_cutover01?sslmode=verify-full",
+      restoreIsolationId: "cutover01",
+      restoreSslCaPem: CA,
+      backupPath: files.safetyBackupPath,
+      backupEvidencePath: path.join(files.directory, "safety-heartbeat.json"),
+      pgDumpBinary: files.paths.pg_dump,
+      pgRestoreBinary: files.paths.pg_restore,
+      psqlBinary: files.paths.psql,
+      dependencies: {
+        validateOfficialToolchain: toolchainDependency(files),
+        openHostedDatabase: async () => ({
+          sql: {},
+          target: TARGET,
+          operatorIdentity: OPERATOR_IDENTITY,
+        }),
+        closeHostedDatabase: async () => {
+          closed += 1;
+        },
+        acquireRestoreLock: async () => {},
+        assertOperatorSession: async () => {
+          sessionChecks += 1;
+          if (sessionChecks === 2) throw new Error("operator session lost");
+        },
+        scheduleHeartbeat: (heartbeat) => {
+          scheduledHeartbeat = heartbeat;
+          return {};
+        },
+        cancelHeartbeat: () => {
+          cancelled += 1;
+        },
+        inspectCandidateDatabase: async () => candidateState(),
+        inspectProjectorLeaseDrain: async () => leases(),
+        fenceRuntimeLogins: async () => loginFence(),
+        assertRuntimeLoginsFenced: async () => loginFence(),
+        createBackupAndRestoreEvidence: async () => {
+          scheduledHeartbeat();
+          await Promise.resolve();
+          return { evidence: files.safetyRawEvidence };
+        },
+        captureDatabaseManifest: async () => manifest(),
+      },
+    }),
+    /Candidate safety backup failed; runtime logins may remain fenced/u,
+  );
+  assert.equal(sessionChecks, 2);
+  assert.equal(cancelled, 1);
+  assert.equal(closed, 1);
 });
 
 test("restore apply resumes postchecks without replaying pg_restore", async (t) => {
@@ -1130,7 +1245,14 @@ test("JIT restore SET ROLEs postgres and uses only the immutable restore set", a
           manifestReads += 1;
           return manifestReads === 1 ? manifest() : manifest({ restored: true });
         },
-        cleanupCandidateSchemas: async () => {
+        cleanupCandidateSchemas: async (
+          _sql,
+          _cleanup,
+          posture,
+          options,
+        ) => {
+          assert.equal(posture, undefined);
+          assert.equal(options, undefined);
           destructiveEvents.push("cleanup");
         },
         applyOwnerAndSecurityClosure: async () => {
@@ -1221,7 +1343,7 @@ test("safety recovery plan binds raw evidence, CA, tools and immutable restore s
     SAFETY_PORTABLE_STRUCTURAL_MANIFEST,
   );
   assert.deepEqual(plan.postgresToolchain, TOOLCHAIN_EVIDENCE);
-  assert.deepEqual(plan.restore.schemas, CANDIDATE_RESTORE_SCHEMAS);
+  assert.deepEqual(plan.restore.schemas, CANDIDATE_FINAL_SCHEMAS);
   assert.deepEqual(plan.restore.flags, CANDIDATE_SAFETY_RECOVERY_FLAGS);
   assert.equal(plan.restore.runtimeLoginsRemainFenced, true);
   assert.equal(calls.length, 3);
@@ -1270,10 +1392,13 @@ test("safety recovery apply is idempotent and never opens runtime logins", async
           fences += 1;
           return loginFence();
         },
-        captureDatabaseManifest: async () => ({
-          ...manifest(),
-          structuralManifestSha256: `0x${"8".repeat(64)}`,
-        }),
+        captureDatabaseManifest: async (_sql, options) => {
+          assert.deepEqual(options, { schemas: FINAL_BACKUP_SCHEMAS });
+          return {
+            ...manifest(),
+            structuralManifestSha256: `0x${"8".repeat(64)}`,
+          };
+        },
       }, { recovery: true }),
       validateOfficialToolchain: toolchainDependency(files),
       fileCommitment: commitmentDependency(files),
@@ -1293,7 +1418,7 @@ test("safety recovery apply is idempotent and never opens runtime logins", async
   assert.match(result.evidenceSha256, /^0x[0-9a-f]{64}$/u);
 });
 
-test("safety recovery orders cleanup, restore and owner/security replay", async (t) => {
+test("safety recovery orders cleanup, archive restore and exact owner replay", async (t) => {
   const files = await fixture(t);
   const plan = await createCandidateSafetyRecoveryPlan({
     repositoryCommit: OPERATOR_COMMIT,
@@ -1335,28 +1460,53 @@ test("safety recovery orders cleanup, restore and owner/security replay", async 
           stateReads += 1;
           return stateReads === 1 ? restoredState() : candidateState();
         },
-        captureDatabaseManifest: async () => {
+        captureDatabaseManifest: async (_sql, options) => {
+          assert.deepEqual(options, { schemas: FINAL_BACKUP_SCHEMAS });
           manifestReads += 1;
           return manifestReads === 1 ? manifest({ restored: true }) : manifest();
         },
-        cleanupCandidateSchemas: async () => {
+        cleanupCandidateSchemas: async (
+          _sql,
+          _cleanup,
+          posture,
+          options,
+        ) => {
+          assert.equal(posture, undefined);
+          assert.deepEqual(options, { includePinnedBaselineCleanup: false });
           destructiveEvents.push("cleanup");
         },
-        applyOwnerAndSecurityClosure: async () => {
-          destructiveEvents.push("owner-security");
+        applyOwnerAndSecurityClosure: async (
+          _sql,
+          _owners,
+          _security,
+          posture,
+          options,
+        ) => {
+          assert.equal(posture, undefined);
+          assert.deepEqual(options, {
+            expectedSchemas: CANDIDATE_FINAL_SCHEMAS,
+            replaySecurity: false,
+          });
+          destructiveEvents.push("owner");
         },
       }, { recovery: true }),
       validateOfficialToolchain: toolchainDependency(files),
       fileCommitment: commitmentDependency(files),
       revalidateToolchain: async () => {},
-      safeToolCall: async () => {
+      safeToolCall: async (input) => {
+        assert.deepEqual(
+          input.args.slice(0, CANDIDATE_SAFETY_RECOVERY_FLAGS.length),
+          CANDIDATE_SAFETY_RECOVERY_FLAGS,
+        );
+        assert.equal(input.args.includes("--no-owner"), true);
+        assert.equal(input.args.includes("--no-privileges"), false);
         destructiveEvents.push("restore");
         return { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) };
       },
     },
   });
   assert.equal(result.executionMode, "restored-from-safety-backup");
-  assert.deepEqual(destructiveEvents, ["cleanup", "restore", "owner-security"]);
+  assert.deepEqual(destructiveEvents, ["cleanup", "restore", "owner"]);
 });
 
 async function restoredResult(files) {
