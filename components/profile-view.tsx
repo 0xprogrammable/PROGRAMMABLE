@@ -163,13 +163,11 @@ export function getProfileWorkspacePhase(
   statuses: readonly ProfileWorkspaceSourceStatus[],
   terminalErrorReady: boolean,
 ): ProfileWorkspacePhase {
-  if (statuses.some((status) => status === "ready")) return "ready";
-  if (
-    !terminalErrorReady ||
-    statuses.some((status) => status === "loading")
-  ) {
+  if (statuses.some((status) => status === "loading")) {
     return "loading";
   }
+  if (statuses.some((status) => status === "ready")) return "ready";
+  if (!terminalErrorReady) return "loading";
   return "error";
 }
 
@@ -204,7 +202,12 @@ function formatWei(value: bigint) {
   return formatEth(formatUnits(value, 18));
 }
 
-function formatStockRewardEstimate(reward: StockPairedReward) {
+function formatStockRewardEstimate(
+  reward: Pick<
+    StockPairedReward,
+    "estimatedEth" | "estimatedUsd"
+  >,
+) {
   if (!reward.estimatedEth || !reward.estimatedUsd) return "";
   const usd = Number(reward.estimatedUsd);
   if (!Number.isFinite(usd) || usd <= 0) return "";
@@ -213,6 +216,27 @@ function formatStockRewardEstimate(reward: StockPairedReward) {
     maximumFractionDigits: usd < 1 ? 3 : 2,
   }).format(usd);
   return `≈ $${formattedUsd} · ${formatEth(reward.estimatedEth)}`;
+}
+
+export type StockPairedClaimPath =
+  | "quote-asset"
+  | "quote-asset-to-eth";
+
+export function getStockPairedClaimPaths(
+  reward: Pick<
+    StockPairedReward,
+    "estimatedEth" | "estimatedUsd" | "payoutAddress"
+  >,
+  account?: string,
+): readonly StockPairedClaimPath[] {
+  const canConvertToEth =
+    Boolean(account) &&
+    reward.payoutAddress.toLowerCase() === account?.toLowerCase() &&
+    Boolean(formatStockRewardEstimate(reward));
+
+  return canConvertToEth
+    ? ["quote-asset", "quote-asset-to-eth"]
+    : ["quote-asset"];
 }
 
 type WaitForTransactionOptions = {
@@ -2836,22 +2860,20 @@ function ProfileLoadingState() {
       <span className={styles.visuallyHidden} role="status">
         Loading profile
       </span>
-      <div className={styles.loadingHeading} aria-hidden="true">
-        <span />
-        <span />
-      </div>
-      <div className={styles.loadingRows} aria-hidden="true">
-        {[0, 1, 2].map((index) => (
-          <div className={styles.loadingRow} key={index}>
-            <span className={styles.loadingArt} />
-            <span className={styles.loadingCopy}>
-              <span />
-              <span />
-            </span>
-            <span className={styles.loadingMetric} />
-            <span className={styles.loadingAction} />
+      <div className={styles.profileWorkspace} aria-hidden="true">
+        <div className={styles.loadingPanel}>
+          <span className={styles.loadingPanelTitle} />
+          <span className={styles.loadingPanelTotal} />
+          <span className={styles.loadingPanelChart} />
+        </div>
+        <div className={styles.loadingPanel}>
+          <span className={styles.loadingPanelTitle} />
+          <div className={styles.loadingClaimRows}>
+            {Array.from({ length: profileClaimPageSize }, (_, index) => (
+              <span key={index} />
+            ))}
           </div>
-        ))}
+        </div>
       </div>
     </section>
   );
@@ -3246,6 +3268,146 @@ export function actionLabel(
   return "Claim";
 }
 
+type ProfileClaimDialogAction = {
+  id: string;
+  label: string;
+  description: string;
+  state?: ProfileClaimActionState | ClassicV3ActionState;
+  disabled: boolean;
+  emphasis: "primary" | "secondary";
+  onSelect: () => void;
+};
+
+type ProfileClaimDialogGroup = {
+  id: string;
+  source: string;
+  amount: string;
+  actions: readonly ProfileClaimDialogAction[];
+};
+
+function claimDialogActionLabel(
+  state: ProfileClaimActionState | ClassicV3ActionState | undefined,
+  fallback: string,
+) {
+  const stateLabel = actionLabel(state);
+  return stateLabel === "Claim" ? fallback : stateLabel;
+}
+
+function ProfileClaimDialog({
+  open,
+  dialogId,
+  tokenName,
+  tokenSymbol,
+  groups,
+  onClose,
+}: {
+  open: boolean;
+  dialogId: string;
+  tokenName: string;
+  tokenSymbol: string;
+  groups: readonly ProfileClaimDialogGroup[];
+  onClose: () => void;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const titleId = `${dialogId}-title`;
+  const descriptionId = `${dialogId}-description`;
+  const hasAlternativeReceiptPath = groups.some(
+    (group) => group.actions.length > 1,
+  );
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    if (open && !dialog.open) {
+      dialog.showModal();
+      closeButtonRef.current?.focus();
+      return;
+    }
+    if (!open && dialog.open) dialog.close();
+  }, [open]);
+
+  return (
+    <dialog
+      ref={dialogRef}
+      id={dialogId}
+      className={styles.claimDialog}
+      aria-labelledby={titleId}
+      aria-describedby={descriptionId}
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+      onClose={onClose}
+      onClick={(event) => {
+        if (event.currentTarget === event.target) onClose();
+      }}
+    >
+      <div className={styles.claimDialogSurface}>
+        <header className={styles.claimDialogHeader}>
+          <div>
+            <span>Claimable rewards</span>
+            <h3 id={titleId}>
+              {tokenName} <small>${tokenSymbol}</small>
+            </h3>
+          </div>
+          <button
+            ref={closeButtonRef}
+            className={styles.claimDialogClose}
+            type="button"
+            aria-label="Close claim rewards"
+            onClick={onClose}
+          >
+            <span aria-hidden="true">×</span>
+          </button>
+        </header>
+
+        <p id={descriptionId} className={styles.claimDialogIntro}>
+          {hasAlternativeReceiptPath
+            ? "Choose one reward. Stock-Paired receipt choices are alternatives, not extra rewards."
+            : "Choose the reward you want to claim."}
+        </p>
+
+        <div className={styles.claimDialogGroups}>
+          {groups.map((group) => (
+            <section className={styles.claimDialogGroup} key={group.id}>
+              <header>
+                <span>{group.source}</span>
+                <strong>{group.amount}</strong>
+              </header>
+              <div className={styles.claimDialogActions}>
+                {group.actions.map((action) => (
+                  <div className={styles.claimDialogAction} key={action.id}>
+                    <p>{action.state?.message || action.description}</p>
+                    <button
+                      className={
+                        action.emphasis === "primary"
+                          ? styles.claimButton
+                          : styles.secondaryAction
+                      }
+                      type="button"
+                      aria-label={`${action.label} for ${group.source}`}
+                      aria-busy={actionPending(action.state) || undefined}
+                      disabled={action.disabled}
+                      onClick={() => {
+                        onClose();
+                        action.onSelect();
+                      }}
+                    >
+                      {action.label}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      </div>
+    </dialog>
+  );
+}
+
 function ProfileClaimRow({
   entry,
   account,
@@ -3291,6 +3453,13 @@ function ProfileClaimRow({
     deepRewards,
     stockPairedRewards,
   } = entry;
+  const [claimDialogOpen, setClaimDialogOpen] = useState(false);
+  const claimTriggerRef = useRef<HTMLButtonElement>(null);
+  const dialogId = `profile-claim-${token.address.slice(2).toLowerCase()}`;
+  const closeClaimDialog = useCallback(() => {
+    setClaimDialogOpen(false);
+    window.requestAnimationFrame(() => claimTriggerRef.current?.focus());
+  }, []);
   const claimState = claim
     ? claimActionStates[claim.poolId.toLowerCase()]
     : undefined;
@@ -3393,31 +3562,142 @@ function ProfileClaimRow({
   const tokenImageSource = getTokenCardImageSource(tokenImage);
   const currentClaimAvailable =
     Boolean(claim) && (currentClaimable > 0n || Boolean(activeClaimState));
-  const classicClaimCount = classicClaims.filter(
-    ({ claimable, state }) => claimable > 0n || Boolean(state),
-  ).length;
-  const deepClaimCount = deepClaims.filter(
-    ({ claimable, state }) => claimable > 0n || Boolean(state),
-  ).length;
-  const stockClaimCount = stockPairedClaims.filter(
-    ({ claimable, claimState, ethState }) =>
-      claimable > 0n || Boolean(claimState) || Boolean(ethState),
-  ).length;
-  const claimSourceCount =
-    Number(currentClaimAvailable) +
-    classicClaimCount +
-    deepClaimCount +
-    stockClaimCount;
   const formattedStockReward =
     stockPairedClaimable > 0n && stockQuoteSymbol
       ? `${new Intl.NumberFormat("en-US", {
-        maximumSignificantDigits: 5,
+          maximumSignificantDigits: 5,
         }).format(Number(formatUnits(stockPairedClaimable, 18)))} ${
           stockQuoteSymbol
         }`
       : "";
   const hasClaimableReward =
     totalClaimable > 0n || stockPairedClaimable > 0n;
+  const recipient = account ? shortenAddress(account) : "connected wallet";
+  const claimGroups: ProfileClaimDialogGroup[] = [];
+
+  if (claim && currentClaimAvailable) {
+    claimGroups.push({
+      id: `position:${claim.poolId.toLowerCase()}`,
+      source: "Position fees",
+      amount: formatWei(currentClaimable),
+      actions: [
+        {
+          id: "claim-position",
+          label: claimDialogActionLabel(activeClaimState, "Claim ETH"),
+          description: `Receive ETH at ${recipient}`,
+          state: activeClaimState,
+          disabled:
+            actionPending(activeClaimState) ||
+            (currentClaimable === 0n &&
+              !actionCanCheckStatus(activeClaimState)),
+          emphasis: "primary",
+          onSelect: () => onClaim(claim),
+        },
+      ],
+    });
+  }
+
+  for (const { reward, claimable, state } of classicClaims) {
+    if (claimable === 0n && !state) continue;
+    claimGroups.push({
+      id: `classic:${reward.vaultAddress.toLowerCase()}`,
+      source: `Classic fees · ${shortenAddress(reward.vaultAddress)}`,
+      amount: formatWei(claimable),
+      actions: [
+        {
+          id: "claim-classic",
+          label: claimDialogActionLabel(state, "Claim ETH"),
+          description: `Receive ETH at ${recipient}`,
+          state,
+          disabled:
+            actionPending(state) ||
+            (claimable === 0n && !actionCanCheckStatus(state)),
+          emphasis: "primary",
+          onSelect: () => onClassicV3Action(reward, "claim"),
+        },
+      ],
+    });
+  }
+
+  for (const { reward, claimable, state } of deepClaims) {
+    if (claimable === 0n && !state) continue;
+    claimGroups.push({
+      id: `deep:${reward.vaultAddress.toLowerCase()}`,
+      source: `Deep fees · ${shortenAddress(reward.vaultAddress)}`,
+      amount: formatWei(claimable),
+      actions: [
+        {
+          id: "claim-deep",
+          label: claimDialogActionLabel(state, "Claim ETH"),
+          description: `Receive ETH at ${shortenAddress(reward.payoutAddress)}`,
+          state,
+          disabled:
+            actionPending(state) ||
+            (claimable === 0n && !actionCanCheckStatus(state)),
+          emphasis: "primary",
+          onSelect: () => onDeepAction(reward, "claim"),
+        },
+      ],
+    });
+  }
+
+  for (const {
+    reward,
+    claimable,
+    claimState: stockClaimState,
+    ethState,
+  } of stockPairedClaims) {
+    if (claimable === 0n && !stockClaimState && !ethState) continue;
+    const paths = getStockPairedClaimPaths(reward, account);
+    const estimate = formatStockRewardEstimate(reward);
+    const quoteActionActive =
+      stockClaimState && stockClaimState.status !== "error";
+    const ethActionActive = ethState && ethState.status !== "error";
+    const actions: ProfileClaimDialogAction[] = [
+      {
+        id: "claim-quote-asset",
+        label: claimDialogActionLabel(
+          stockClaimState,
+          `Claim ${reward.quoteAssetSymbol}`,
+        ),
+        description: `Receive ${reward.quoteAssetSymbol} at ${shortenAddress(reward.payoutAddress)}`,
+        state: stockClaimState,
+        disabled:
+          actionPending(stockClaimState) ||
+          Boolean(ethActionActive) ||
+          (claimable === 0n &&
+            !actionCanCheckStatus(stockClaimState)),
+        emphasis: paths.length === 1 ? "primary" : "secondary",
+        onSelect: () => onStockPairedAction(reward, "claim"),
+      },
+    ];
+
+    if (paths.includes("quote-asset-to-eth")) {
+      actions.push({
+        id: "claim-and-convert-to-eth",
+        label: claimDialogActionLabel(ethState, "Claim and swap to ETH"),
+        description: `Claim ${reward.quoteAssetSymbol}, then swap on Uniswap${estimate ? ` · ${estimate}` : ""}`,
+        state: ethState,
+        disabled:
+          actionPending(ethState) ||
+          Boolean(quoteActionActive) ||
+          (claimable === 0n && !actionCanCheckStatus(ethState)),
+        emphasis: "primary",
+        onSelect: () => onStockPairedAction(reward, "claim-as-eth"),
+      });
+    }
+
+    claimGroups.push({
+      id: `stock:${reward.vaultAddress.toLowerCase()}`,
+      source: "Stock-Paired fees",
+      amount: `${reward.claimable} ${reward.quoteAssetSymbol}`,
+      actions,
+    });
+  }
+
+  const rowActionPending = claimGroups.some((group) =>
+    group.actions.some((action) => actionPending(action.state)),
+  );
 
   return (
     <article className={styles.claimRow}>
@@ -3452,155 +3732,29 @@ function ProfileClaimRow({
       </div>
 
       <div className={styles.actions}>
-          {claim && currentClaimAvailable ? (
-            <button
-              className={styles.claimButton}
-              type="button"
-              aria-label={`${actionLabel(activeClaimState)} ${token.name} position rewards`}
-              aria-busy={actionPending(activeClaimState) || undefined}
-              disabled={
-                actionPending(activeClaimState) ||
-                activeClaimState?.status === "confirmed" ||
-                (currentClaimable === 0n &&
-                  !actionCanCheckStatus(activeClaimState))
-              }
-              onClick={() => onClaim(claim)}
-            >
-              {activeClaimState
-                ? actionLabel(activeClaimState)
-                : claimSourceCount > 1
-                  ? "Claim position"
-                  : "Claim"}
-            </button>
-          ) : null}
-          {classicClaims.map(({ reward, claimable, state }) =>
-            claimable > 0n || state ? (
-              <button
-                className={styles.claimButton}
-                type="button"
-                aria-label={`${actionLabel(state)} ${token.name} rewards from ${shortenAddress(reward.vaultAddress)}`}
-                aria-busy={actionPending(state) || undefined}
-                disabled={
-                  actionPending(state) ||
-                  state?.status === "confirmed" ||
-                  (claimable === 0n && !actionCanCheckStatus(state))
-                }
-              key={reward.vaultAddress}
-              onClick={() => onClassicV3Action(reward, "claim")}
-              >
-                {state
-                  ? actionLabel(state)
-                  : claimSourceCount > 1
-                    ? "Claim Classic"
-                    : "Claim"}
-              </button>
-            ) : null,
-          )}
-          {deepClaims.map(({ reward, claimable, state }) =>
-            claimable > 0n || state ? (
-              <button
-                className={styles.claimButton}
-                type="button"
-                aria-label={`${actionLabel(state)} ${token.name} Deep rewards from ${shortenAddress(reward.vaultAddress)}`}
-                aria-busy={actionPending(state) || undefined}
-                disabled={
-                  actionPending(state) ||
-                  state?.status === "confirmed" ||
-                  (claimable === 0n && !actionCanCheckStatus(state))
-                }
-              key={reward.vaultAddress}
-              onClick={() => onDeepAction(reward, "claim")}
-              >
-                {state
-                  ? actionLabel(state)
-                  : claimSourceCount > 1
-                    ? "Claim Deep"
-                    : "Claim"}
-              </button>
-            ) : null,
-          )}
-          {stockPairedClaims.map(
-            ({ reward, claimable, claimState, ethState }) => {
-              if (
-                claimable === 0n &&
-                !claimState &&
-                !ethState
-              ) {
-                return null;
-              }
-              const pending =
-                actionPending(claimState) || actionPending(ethState);
-              const completed =
-                claimState?.status === "confirmed" ||
-                ethState?.status === "confirmed";
-              const estimate = formatStockRewardEstimate(reward);
-              const canClaimAsEth =
-                Boolean(estimate) &&
-                reward.payoutAddress.toLowerCase() ===
-                  account?.toLowerCase();
-              return (
-                <div
-                  className={styles.stockClaimActions}
-                  key={reward.vaultAddress}
-                >
-                  {estimate ? (
-                    <span className={styles.stockClaimEstimate}>
-                      {estimate}
-                    </span>
-                  ) : null}
-                  <div className={styles.stockClaimButtons}>
-                    <button
-                      className={styles.secondaryAction}
-                      type="button"
-                      aria-label={`Claim ${token.name} rewards as ${reward.quoteAssetSymbol}`}
-                      aria-busy={actionPending(claimState) || undefined}
-                      disabled={
-                        pending || completed || claimable === 0n
-                      }
-                      onClick={() =>
-                        onStockPairedAction(reward, "claim")
-                      }
-                    >
-                      {claimState
-                        ? actionLabel(claimState)
-                        : "Claim stock"}
-                    </button>
-                    <button
-                      className={styles.claimButton}
-                      type="button"
-                      aria-label={`Claim ${token.name} rewards as ETH`}
-                      aria-busy={actionPending(ethState) || undefined}
-                      title={
-                        canClaimAsEth
-                          ? undefined
-                          : reward.payoutAddress.toLowerCase() !==
-                              account?.toLowerCase()
-                            ? "Use this wallet as the payout address to claim as ETH"
-                            : "The ETH estimate is temporarily unavailable"
-                      }
-                      disabled={
-                        pending ||
-                        completed ||
-                        claimable === 0n ||
-                        !canClaimAsEth
-                      }
-                      onClick={() =>
-                        onStockPairedAction(
-                          reward,
-                          "claim-as-eth",
-                        )
-                      }
-                    >
-                      {ethState
-                        ? actionLabel(ethState)
-                        : "Claim as ETH"}
-                    </button>
-                  </div>
-                </div>
-              );
-            },
-          )}
+        <button
+          ref={claimTriggerRef}
+          className={styles.claimButton}
+          type="button"
+          aria-haspopup="dialog"
+          aria-controls={dialogId}
+          aria-expanded={claimDialogOpen}
+          aria-busy={rowActionPending || undefined}
+          disabled={rowActionPending || claimGroups.length === 0}
+          onClick={() => setClaimDialogOpen(true)}
+        >
+          Claim rewards
+        </button>
       </div>
+
+      <ProfileClaimDialog
+        open={claimDialogOpen}
+        dialogId={dialogId}
+        tokenName={token.name}
+        tokenSymbol={token.symbol}
+        groups={claimGroups}
+        onClose={closeClaimDialog}
+      />
 
       <ProfileActionState
         state={activeClaimState}
@@ -3636,7 +3790,6 @@ function ProfileClaimRow({
           />
         );
       })}
-
     </article>
   );
 }
