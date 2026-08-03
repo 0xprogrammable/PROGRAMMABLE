@@ -54,6 +54,25 @@ describe("onchain deployment manifest boundary", () => {
     expect(getOnchainDeployment("production").status).toBe("ready");
   });
 
+  it("uses the bound Alchemy and QuickNode RPCs when generic aliases are empty", () => {
+    vi.stubEnv("ETHEREUM_RPC_URL", "");
+    vi.stubEnv("ETHEREUM_RPC_URL_B", "");
+    vi.stubEnv(
+      "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
+      "https://alchemy.example",
+    );
+    vi.stubEnv(
+      "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL",
+      "https://quicknode.example",
+    );
+
+    expect(getOperationalOnchainDeployment("production")).toMatchObject({
+      status: "ready",
+      rpcUrl: "https://alchemy.example",
+      rpcUrlSecondary: "https://quicknode.example",
+    });
+  });
+
   it("rejects production operations without an independent RPC", () => {
     vi.stubEnv("ETHEREUM_RPC_URL", "https://rpc-a.example");
     vi.stubEnv("ETHEREUM_RPC_URL_B", "https://rpc-a.example");
@@ -68,6 +87,8 @@ describe("onchain deployment manifest boundary", () => {
   it("rejects an implicit public fallback for production operations", () => {
     vi.stubEnv("ETHEREUM_RPC_URL", "");
     vi.stubEnv("ETHEREUM_RPC_URL_B", "https://rpc-b.example");
+    vi.stubEnv("PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL", "");
+    vi.stubEnv("PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL", "");
 
     expect(() =>
       getOperationalOnchainDeployment("production"),
@@ -79,6 +100,8 @@ describe("onchain deployment manifest boundary", () => {
   it("keeps public reads fail-closed when the dual-RPC environment is absent", () => {
     vi.stubEnv("ETHEREUM_RPC_URL", "");
     vi.stubEnv("ETHEREUM_RPC_URL_B", "");
+    vi.stubEnv("PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL", "");
+    vi.stubEnv("PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL", "");
 
     expect(getPublicOnchainDeployment("production").status).toBe(
       "not-deployed",
