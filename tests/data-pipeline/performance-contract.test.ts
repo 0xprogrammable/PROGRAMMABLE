@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import {
   mkdtempSync,
   readFileSync,
@@ -7,6 +8,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -422,6 +424,55 @@ afterEach(() => {
 });
 
 describe("read-model performance contract", () => {
+  it("reports safe HTTP metadata when the staged runtime capture is rejected", () => {
+    const directory = mkdtempSync(join(tmpdir(), "read-model-capture-rejection-"));
+    temporaryDirectories.push(directory);
+    const fetchFixturePath = join(directory, "rejected-fetch.mjs");
+    writeFileSync(
+      fetchFixturePath,
+      `globalThis.fetch = async () => new Response(JSON.stringify({ error: "private runtime detail" }), {\n` +
+        `  status: 503,\n` +
+        `  headers: {\n` +
+        `    "cache-control": "private, no-store",\n` +
+        `    "content-type": "application/json",\n` +
+        `    "x-vercel-error": "FUNCTION_INVOCATION_FAILED",\n` +
+        `  },\n` +
+        `});\n`,
+      { mode: 0o600 },
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        resolve(process.cwd(), "scripts/perf/read-model-capture.mjs"),
+        "--target-url",
+        TARGET_URL,
+        "--deployment-id",
+        DEPLOYMENT_ID,
+        "--output-directory",
+        directory,
+        "--kind",
+        "production-canary",
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          NODE_OPTIONS: `--import=${pathToFileURL(fetchFixturePath).href}`,
+          PROGRAMMABLE_PERFORMANCE_PROBE_TOKEN: "p".repeat(32),
+          PROGRAMMABLE_SHADOW_PROBE_TOKEN: "s".repeat(32),
+          VERCEL_AUTOMATION_BYPASS_SECRET: "b".repeat(32),
+        },
+      },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("status=503");
+    expect(result.stderr).toContain("vercelError=FUNCTION_INVOCATION_FAILED");
+    expect(result.stderr).not.toContain("private runtime detail");
+  });
+
   it("signs route-bound release probes without sending the server secret", () => {
     const secret = "s".repeat(32);
     const nonce = `1700000000000-${"55".repeat(32)}-7`;
