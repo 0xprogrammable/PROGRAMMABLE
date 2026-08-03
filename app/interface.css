@@ -217,7 +217,7 @@ code,
 
 .wordmark-logo {
   height: 34px;
-  width: 34px;
+  width: auto;
 }
 
 .header-social-link svg {
@@ -791,8 +791,8 @@ html[data-theme="dark"] .token-card-art {
   }
 
   .wordmark-logo {
-    height: 28px;
-    width: 28px;
+    height: 30px;
+    width: auto;
   }
 
   .token-toolbar {

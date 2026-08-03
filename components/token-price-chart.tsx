@@ -4,6 +4,7 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -41,6 +42,50 @@ export type TokenChartVolume = {
   volumeUsdWad?: string;
 };
 type ChartLaunchModel = "classic" | "adaptive" | "deep" | "stock-paired";
+
+type SerializedChartRefresh = {
+  request(): void;
+  stop(): void;
+};
+
+export function createSerializedChartRefresh(
+  run: (signal: AbortSignal) => Promise<void>,
+): SerializedChartRefresh {
+  let active: Promise<void> | null = null;
+  let activeController: AbortController | null = null;
+  let queued = false;
+  let stopped = false;
+
+  function request() {
+    if (stopped) return;
+    if (active) {
+      queued = true;
+      return;
+    }
+
+    activeController = new AbortController();
+    const signal = activeController.signal;
+    active = Promise.resolve()
+      .then(() => run(signal))
+      .catch(() => undefined)
+      .finally(() => {
+        active = null;
+        activeController = null;
+        if (!queued || stopped) return;
+        queued = false;
+        request();
+      });
+  }
+
+  return {
+    request,
+    stop() {
+      stopped = true;
+      queued = false;
+      activeController?.abort();
+    },
+  };
+}
 
 const STOCK_PAIRED_HISTORY_MESSAGE =
   "Historical price data is not available for Stock-Paired tokens";
@@ -146,6 +191,7 @@ export function TokenPriceChart({
     failed: boolean;
   } | null>(null);
   const [range, setRange] = useState<ChartRange>("all");
+  const refreshTaskRef = useRef<SerializedChartRefresh | null>(null);
   const refreshKey = useLiveDataRefresh({
     enabled: launchModel !== "stock-paired" && !preview,
   });
@@ -174,45 +220,57 @@ export function TokenPriceChart({
 
   useEffect(() => {
     if (launchModel === "stock-paired" || preview) {
+      refreshTaskRef.current = null;
       return;
     }
 
-    const controller = new AbortController();
-
-    void fetch(
-      `/api/explore/token/chart?address=${encodeURIComponent(tokenAddress)}&range=${range}`,
-      { signal: controller.signal },
-    )
-      .then(async (response) => {
+    const refreshTask = createSerializedChartRefresh(async (signal) => {
+      try {
+        const response = await fetch(
+          `/api/explore/token/chart?address=${encodeURIComponent(tokenAddress)}&range=${range}`,
+          { signal },
+        );
         if (!response.ok) throw new Error("Chart request failed");
-        return (await response.json()) as ChartPayload;
-      })
-      .then((nextPayload) => {
+        const nextPayload = (await response.json()) as ChartPayload;
         setRequest({
           key: requestKey,
           payload: nextPayload,
           failed: false,
         });
-      })
-      .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError")
+      } catch (error: unknown) {
+        if (
+          signal.aborted ||
+          (error instanceof DOMException && error.name === "AbortError")
+        )
           return;
         setRequest((current) =>
           current?.key === requestKey && current.payload
             ? current
             : { key: requestKey, payload: null, failed: true },
         );
-      });
+      }
+    });
+    refreshTaskRef.current = refreshTask;
+    refreshTask.request();
 
-    return () => controller.abort();
+    return () => {
+      refreshTask.stop();
+      if (refreshTaskRef.current === refreshTask) {
+        refreshTaskRef.current = null;
+      }
+    };
   }, [
     launchModel,
     preview,
     range,
-    refreshKey,
     requestKey,
     tokenAddress,
   ]);
+
+  useEffect(() => {
+    if (refreshKey === 0) return;
+    refreshTaskRef.current?.request();
+  }, [refreshKey]);
 
   const chart = useMemo(() => {
     if (!payload || payload.points.length < 2) return null;
@@ -315,7 +373,7 @@ export function TokenPriceChart({
               ? formatPrice(chart.current, chart.unit)
               : !loading || launchModel === "stock-paired"
                 ? "Unavailable"
-                : "Onchain"}
+                : "—"}
           </p>
         </div>
         {launchModel !== "stock-paired" ? (

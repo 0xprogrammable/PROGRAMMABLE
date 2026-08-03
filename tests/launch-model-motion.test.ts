@@ -10,7 +10,7 @@ describe("launch model artwork", () => {
     const source = read("components/launch-entry.tsx");
 
     expect(source).toContain(
-      'src="/brand/create/classic-botanical-v3.webp"',
+      'src="/brand/create/classic-botanical-v4.webp"',
     );
     expect(source).toContain(
       'src="/brand/loop/programmable-loop-mark-transparent-v1.png"',
@@ -24,17 +24,26 @@ describe("launch model artwork", () => {
     expect(css).not.toMatch(/:hover[^{}]*\.modelArt img\s*\{/s);
   });
 
-  it("limits decorative movement to opted-in, compositor-safe motion", () => {
+  it("keeps decorative movement subtle and compositor-safe", () => {
+    const source = read("components/launch-entry.tsx");
     const css = read("components/launch-experience.module.css");
+    const sparkleMarkup = source.match(
+      /<span className=\{launchExperience\.customSparkles\}>[\s\S]*?<\/span>/,
+    )?.[0];
+    const classicDrift = css.match(
+      /@keyframes classic-botanical-drift[\s\S]*?(?=\n}\n\n@media)/,
+    )?.[0];
 
     expect(css).toContain("@media (prefers-reduced-motion: no-preference)");
+    expect(sparkleMarkup?.match(/<span \/>/g)).toHaveLength(6);
     expect(css).toContain(
-      "animation: classic-botanical-breeze 9.6s steps(1, end) infinite",
+      "animation: classic-botanical-drift 12s steps(1, end) infinite",
     );
+    expect(css).toContain("translate3d(0.06%, -0.03%, 0) scale(1.0012)");
+    expect(classicDrift).not.toContain("filter:");
     expect(css).toContain(
-      "animation: custom-star-sparkle 5.8s cubic-bezier(0.2, 0, 0, 1) infinite",
+      "animation: custom-star-sparkle 6.4s cubic-bezier(0.2, 0, 0, 1) infinite",
     );
-    expect(css).toContain("will-change: opacity, transform");
     expect(css).toContain("animation: none");
   });
 });

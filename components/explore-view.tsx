@@ -49,6 +49,7 @@ type TokenCard = {
 
 type TokenSort = "newest" | "oldest" | "market-cap" | "market-cap-asc";
 export type ExploreSocialFilter = "all" | "yes" | "no";
+export type ExploreModelFilter = "all" | "classic" | "custom-hook";
 
 type ExplorePayload = {
   status: "ready" | "not-deployed";
@@ -100,6 +101,7 @@ export function preserveExplorePayloadOnRefreshFailure(
 type PaginationItem = number | "start-gap" | "end-gap";
 
 export const EXPLORE_TOKENS_PER_PAGE = 9;
+export const EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE = 100;
 const QUERY_DEBOUNCE_MS = 200;
 const EXPLORE_REQUEST_TIMEOUT_MS = 12_000;
 export const EXPLORE_REFRESH_INTERVAL_MS = LIVE_DATA_REFRESH_INTERVAL_MS;
@@ -123,6 +125,13 @@ const socialFilterOptions: {
 }[] = [
   { id: "yes", label: "Yes" },
   { id: "no", label: "No" },
+];
+const modelFilterOptions: {
+  id: Exclude<ExploreModelFilter, "all">;
+  label: string;
+}[] = [
+  { id: "classic", label: "Classic" },
+  { id: "custom-hook", label: "Custom Hook" },
 ];
 const tokenLinkOrder: Record<TokenLink["kind"], number> = {
   website: 0,
@@ -332,10 +341,60 @@ export function loadExplorePayload(
 }
 
 function abortExplorePayload(contentKey: string) {
-  const pendingRequest = pendingExploreRequests.get(contentKey);
-  if (!pendingRequest) return;
-  pendingExploreRequests.delete(contentKey);
-  pendingRequest.controller.abort();
+  const modelPagePrefix = `${contentKey}\u0000model-page:`;
+  for (const [key, pendingRequest] of pendingExploreRequests) {
+    if (key !== contentKey && !key.startsWith(modelPagePrefix)) continue;
+    pendingExploreRequests.delete(key);
+    pendingRequest.controller.abort();
+  }
+}
+
+export async function loadExploreModelDataset(
+  contentKey: string,
+  search: URLSearchParams,
+) {
+  const firstPageSearch = new URLSearchParams(search);
+  firstPageSearch.set("page", "1");
+  firstPageSearch.set(
+    "limit",
+    String(EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE),
+  );
+  const firstPage = await loadExplorePayload(
+    `${contentKey}\u0000model-page:1`,
+    firstPageSearch,
+  );
+  if (firstPage.totalPages <= 1) {
+    return firstPage;
+  }
+
+  const remainingPages = await Promise.all(
+    Array.from({ length: firstPage.totalPages - 1 }, async (_, index) => {
+      const page = index + 2;
+      const pageSearch = new URLSearchParams(firstPageSearch);
+      pageSearch.set("page", String(page));
+      const payload = await loadExplorePayload(
+        `${contentKey}\u0000model-page:${page}`,
+        pageSearch,
+      );
+      if (
+        payload.status !== firstPage.status ||
+        payload.page !== page ||
+        payload.pageSize !== firstPage.pageSize ||
+        payload.total !== firstPage.total ||
+        payload.totalPages !== firstPage.totalPages
+      ) {
+        throw new Error("Tokens changed while filters were loading");
+      }
+      return payload;
+    }),
+  );
+
+  return {
+    ...firstPage,
+    tokens: [firstPage, ...remainingPages].flatMap(
+      (payload) => payload.tokens,
+    ),
+  };
 }
 
 export function paginateTokensBySocialPresence(
@@ -345,6 +404,65 @@ export function paginateTokensBySocialPresence(
   pageSize = EXPLORE_TOKENS_PER_PAGE,
 ) {
   const filtered = filterTokensBySocialPresence(tokens, socialFilter);
+  const totalPages = Math.ceil(filtered.length / pageSize);
+  const page = totalPages === 0 ? 1 : Math.min(requestedPage, totalPages);
+  const offset = (page - 1) * pageSize;
+
+  return {
+    tokens: filtered.slice(offset, offset + pageSize),
+    page,
+    pageSize,
+    total: filtered.length,
+    totalPages,
+  };
+}
+
+export function tokenLaunchModelGroup(
+  token: Pick<
+    LauncherToken,
+    | "adaptiveCurveHash"
+    | "deepReleaseVersion"
+    | "launchModel"
+    | "launchModelVersion"
+  >,
+): Exclude<ExploreModelFilter, "all"> | null {
+  if (
+    token.launchModel === "classic" ||
+    token.launchModelVersion === "classic-v3"
+  ) {
+    return "classic";
+  }
+  if (
+    token.launchModel ||
+    token.deepReleaseVersion ||
+    token.adaptiveCurveHash
+  ) {
+    return "custom-hook";
+  }
+  return null;
+}
+
+export function filterTokensByLaunchModel(
+  tokens: LauncherToken[],
+  modelFilter: ExploreModelFilter,
+) {
+  if (modelFilter === "all") return tokens;
+  return tokens.filter(
+    (token) => tokenLaunchModelGroup(token) === modelFilter,
+  );
+}
+
+export function paginateTokensByExploreFilters(
+  tokens: LauncherToken[],
+  socialFilter: ExploreSocialFilter,
+  modelFilter: ExploreModelFilter,
+  requestedPage: number,
+  pageSize = EXPLORE_TOKENS_PER_PAGE,
+) {
+  const filtered = filterTokensByLaunchModel(
+    filterTokensBySocialPresence(tokens, socialFilter),
+    modelFilter,
+  );
   const totalPages = Math.ceil(filtered.length / pageSize);
   const page = totalPages === 0 ? 1 : Math.min(requestedPage, totalPages);
   const offset = (page - 1) * pageSize;
@@ -508,14 +626,22 @@ export function ExploreView() {
   const [sort, setSort] = useState<TokenSort>("market-cap");
   const [socialFilter, setSocialFilter] =
     useState<ExploreSocialFilter>("all");
+  const [modelFilter, setModelFilter] = useState<ExploreModelFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [retryKey, setRetryKey] = useState(0);
   const refreshKey = useLiveDataRefresh({ enabled: !preview });
   const [state, setState] = useState<ExploreState>({ phase: "loading" });
   const activeExploreContentKey = useRef<string | null>(null);
+  const modelDatasetCache = useRef<{
+    key: string;
+    payload: ExplorePayload;
+  } | null>(null);
   const filterRef = useRef<HTMLDetailsElement>(null);
-  const contentKey = `${debouncedQuery}\u0000${sort}\u0000${socialFilter}\u0000${currentPage}`;
+  const contentKey = `${debouncedQuery}\u0000${sort}\u0000${socialFilter}\u0000${modelFilter}\u0000${currentPage}`;
   const requestKey = `${contentKey}\u0000${retryKey}\u0000${refreshKey}`;
+  const modelDatasetKey = `${debouncedQuery}\u0000${sort}\u0000${socialFilter}\u0000${modelFilter}\u0000${retryKey}\u0000${refreshKey}`;
+  const activeRequestContentKey =
+    modelFilter === "all" ? contentKey : modelDatasetKey;
 
   useEffect(
     () => () => {
@@ -568,10 +694,10 @@ export function ExploreView() {
 
     let ignore = false;
     const previousContentKey = activeExploreContentKey.current;
-    if (previousContentKey && previousContentKey !== contentKey) {
+    if (previousContentKey && previousContentKey !== activeRequestContentKey) {
       abortExplorePayload(previousContentKey);
     }
-    activeExploreContentKey.current = contentKey;
+    activeExploreContentKey.current = activeRequestContentKey;
     const search = new URLSearchParams({
       q: debouncedQuery,
       sort,
@@ -584,7 +710,35 @@ export function ExploreView() {
 
     async function loadTokens() {
       try {
-        const payload = await loadExplorePayload(contentKey, search);
+        let payload: ExplorePayload;
+        if (modelFilter === "all") {
+          payload = await loadExplorePayload(activeRequestContentKey, search);
+        } else {
+          let dataset =
+            modelDatasetCache.current?.key === modelDatasetKey
+              ? modelDatasetCache.current.payload
+              : null;
+          if (!dataset) {
+            dataset = await loadExploreModelDataset(
+              activeRequestContentKey,
+              search,
+            );
+            if (ignore) return;
+            modelDatasetCache.current = {
+              key: modelDatasetKey,
+              payload: dataset,
+            };
+          }
+          payload = {
+            status: dataset.status,
+            ...paginateTokensByExploreFilters(
+              dataset.tokens,
+              "all",
+              modelFilter,
+              currentPage,
+            ),
+          };
+        }
         if (ignore) return;
         if (payload.page !== currentPage) {
           setCurrentPage(payload.page);
@@ -619,6 +773,9 @@ export function ExploreView() {
     contentKey,
     currentPage,
     debouncedQuery,
+    activeRequestContentKey,
+    modelDatasetKey,
+    modelFilter,
     preview,
     requestKey,
     socialFilter,
@@ -650,9 +807,10 @@ export function ExploreView() {
       return sort === "market-cap" ? delta : -delta;
     });
 
-    const paginated = paginateTokensBySocialPresence(
+    const paginated = paginateTokensByExploreFilters(
       ranked,
       socialFilter,
+      modelFilter,
       currentPage,
     );
 
@@ -660,7 +818,7 @@ export function ExploreView() {
       status: "ready",
       ...paginated,
     };
-  }, [currentPage, debouncedQuery, socialFilter, sort]);
+  }, [currentPage, debouncedQuery, modelFilter, socialFilter, sort]);
 
   const displayState: ExploreState = preview
     ? {
@@ -684,6 +842,8 @@ export function ExploreView() {
     !preview &&
     (displayState.phase === "loading" ||
       displayState.requestKey !== requestKey);
+  const activeFilterCount =
+    Number(socialFilter !== "all") + Number(modelFilter !== "all");
   const hasPublicTokens =
     displayState.phase !== "ready" ||
     displayState.payload.total > 0 ||
@@ -729,14 +889,18 @@ export function ExploreView() {
     }
 
     if (cards.length === 0) {
-      if (debouncedQuery || socialFilter !== "all") {
+      if (
+        debouncedQuery ||
+        socialFilter !== "all" ||
+        modelFilter !== "all"
+      ) {
+        const hasActiveFilter =
+          socialFilter !== "all" || modelFilter !== "all";
         const noMatchMessage = debouncedQuery
-          ? socialFilter === "all"
-            ? "No tokens match this search"
-            : "No tokens match this search and filter"
-          : socialFilter === "yes"
-            ? "No tokens have social links"
-            : "No tokens without social links";
+          ? hasActiveFilter
+            ? "No tokens match this search and filters"
+            : "No tokens match this search"
+          : "No tokens match these filters";
         return (
           <div className="token-empty">
             <p>{noMatchMessage}</p>
@@ -746,6 +910,7 @@ export function ExploreView() {
               onClick={() => {
                 setQuery("");
                 setSocialFilter("all");
+                setModelFilter("all");
                 setCurrentPage(1);
               }}
             >
@@ -883,19 +1048,21 @@ export function ExploreView() {
                   <details className="token-filter" ref={filterRef}>
                     <summary
                       aria-label={
-                        socialFilter === "all"
+                        activeFilterCount === 0
                           ? "Filter and sort tokens"
-                          : "Filter and sort tokens, one filter active"
+                          : `Filter and sort tokens, ${activeFilterCount} ${
+                              activeFilterCount === 1 ? "filter" : "filters"
+                            } active`
                       }
                     >
                       <SlidersHorizontal aria-hidden="true" size={16} />
                       <span>Filter</span>
-                      {socialFilter !== "all" ? (
+                      {activeFilterCount > 0 ? (
                         <span
                           className={styles.activeFilterCount}
                           aria-hidden="true"
                         >
-                          1
+                          {activeFilterCount}
                         </span>
                       ) : null}
                       <ChevronDown
@@ -971,6 +1138,40 @@ export function ExploreView() {
                           >
                             <span>{option.label}</span>
                             {socialFilter === option.id ? (
+                              <Check aria-hidden="true" size={15} />
+                            ) : null}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div
+                        className={styles.filterGroup}
+                        role="group"
+                        aria-labelledby="explore-model-label"
+                      >
+                        <p
+                          className={styles.filterLabel}
+                          id="explore-model-label"
+                        >
+                          Model
+                        </p>
+                        {modelFilterOptions.map((option) => (
+                          <button
+                            key={option.id}
+                            className={
+                              modelFilter === option.id ? "active" : undefined
+                            }
+                            type="button"
+                            aria-pressed={modelFilter === option.id}
+                            onClick={() => {
+                              setModelFilter((current) =>
+                                current === option.id ? "all" : option.id,
+                              );
+                              setCurrentPage(1);
+                            }}
+                          >
+                            <span>{option.label}</span>
+                            {modelFilter === option.id ? (
                               <Check aria-hidden="true" size={15} />
                             ) : null}
                           </button>

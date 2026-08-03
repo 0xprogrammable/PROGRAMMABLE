@@ -1,11 +1,21 @@
 "use client";
 
+import Image from "next/image";
 import { Send } from "lucide-react";
-import { useEffect, useId, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 
 import styles from "@/components/token-community-chat.module.css";
+import { useWallet } from "@/components/wallet-provider";
 
 type CommunityMessage = {
+  authorAddress?: string;
+  authorLabel?: string;
   body: string;
   createdAt: number;
   id: string;
@@ -13,6 +23,13 @@ type CommunityMessage = {
 
 const COMMUNITY_STORAGE_VERSION = "v1";
 const MAX_STORED_MESSAGES = 40;
+const MAX_AUTHOR_LABEL_LENGTH = 32;
+const MAX_MESSAGE_ID_LENGTH = 128;
+const ethereumAddressPattern = /^0x[a-fA-F0-9]{40}$/;
+const messageTimeFormatter = new Intl.DateTimeFormat("en", {
+  hour: "2-digit",
+  minute: "2-digit",
+});
 
 export function getTokenCommunityStorageKey(tokenAddress: string) {
   return `programmable-community:${COMMUNITY_STORAGE_VERSION}:${tokenAddress.toLowerCase()}`;
@@ -35,8 +52,29 @@ export function parseStoredCommunityMessages(value: unknown): CommunityMessage[]
       ) {
         return [];
       }
+      const id = entry.id.trim().slice(0, MAX_MESSAGE_ID_LENGTH);
       const body = entry.body.trim().slice(0, 280);
-      return body ? [{ id: entry.id, body, createdAt: entry.createdAt }] : [];
+      if (!id || !body) return [];
+
+      const authorAddress =
+        "authorAddress" in entry &&
+        typeof entry.authorAddress === "string" &&
+        ethereumAddressPattern.test(entry.authorAddress)
+          ? entry.authorAddress.toLowerCase()
+          : undefined;
+      const authorLabel =
+        "authorLabel" in entry && typeof entry.authorLabel === "string"
+          ? entry.authorLabel.trim().slice(0, MAX_AUTHOR_LABEL_LENGTH)
+          : "";
+      return [
+        {
+          id,
+          body,
+          createdAt: entry.createdAt,
+          ...(authorAddress ? { authorAddress } : {}),
+          ...(authorLabel ? { authorLabel } : {}),
+        },
+      ];
     })
     .slice(-MAX_STORED_MESSAGES);
 }
@@ -44,9 +82,14 @@ export function parseStoredCommunityMessages(value: unknown): CommunityMessage[]
 function readMessages(storageKey: string) {
   try {
     const stored = window.localStorage.getItem(storageKey);
-    return stored ? parseStoredCommunityMessages(JSON.parse(stored)) : [];
+    return {
+      available: true,
+      messages: stored
+        ? parseStoredCommunityMessages(JSON.parse(stored))
+        : [],
+    };
   } catch {
-    return [];
+    return { available: false, messages: [] };
   }
 }
 
@@ -60,15 +103,32 @@ function parseStoredCommunityJson(value: string | null) {
 }
 
 function formatMessageTime(value: number) {
-  return new Intl.DateTimeFormat("en", {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(value);
+  return messageTimeFormatter.format(value);
+}
+
+function authorInitial(label: string) {
+  return label.trim().charAt(0).toUpperCase() || "Y";
+}
+
+function createCommunityMessage(input: {
+  authorAddress?: string;
+  authorLabel: string;
+  body: string;
+}): CommunityMessage {
+  const createdAt = Date.now();
+  return {
+    ...(input.authorAddress ? { authorAddress: input.authorAddress } : {}),
+    authorLabel: input.authorLabel,
+    body: input.body,
+    createdAt,
+    id:
+      typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `${createdAt}-${Math.random().toString(16).slice(2)}`,
+  };
 }
 
 export function TokenCommunityChat({
-  memberCount,
-  preview,
   tokenAddress,
   tokenName,
 }: {
@@ -77,15 +137,22 @@ export function TokenCommunityChat({
   tokenAddress: string;
   tokenName: string;
 }) {
+  const { avatarDataUrl, username, wallet } = useWallet();
   const [messages, setMessages] = useState<CommunityMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [storageAvailable, setStorageAvailable] = useState(true);
   const inputId = useId();
+  const conversationRef = useRef<HTMLDivElement>(null);
   const storageKey = getTokenCommunityStorageKey(tokenAddress);
+  const currentAuthorAddress = wallet?.account.toLowerCase();
+  const currentAuthorLabel = username.trim() || "You";
+  const currentAvatarDataUrl = wallet ? avatarDataUrl : "";
 
   useEffect(() => {
     const readFrame = window.requestAnimationFrame(() => {
-      setMessages(readMessages(storageKey));
+      const stored = readMessages(storageKey);
+      setMessages(stored.messages);
+      setStorageAvailable(stored.available);
     });
 
     function syncMessages(event: StorageEvent) {
@@ -100,19 +167,21 @@ export function TokenCommunityChat({
     };
   }, [storageKey]);
 
+  useEffect(() => {
+    const conversation = conversationRef.current;
+    if (conversation) conversation.scrollTop = conversation.scrollHeight;
+  }, [messages]);
+
   function submitMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const body = draft.trim().slice(0, 280);
     if (!body) return;
 
-    const nextMessage = {
+    const nextMessage = createCommunityMessage({
+      ...(currentAuthorAddress ? { authorAddress: currentAuthorAddress } : {}),
+      authorLabel: currentAuthorLabel,
       body,
-      createdAt: Date.now(),
-      id:
-        typeof crypto.randomUUID === "function"
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    };
+    });
     const nextMessages = [...messages, nextMessage].slice(-MAX_STORED_MESSAGES);
     setMessages(nextMessages);
     setDraft("");
@@ -125,81 +194,96 @@ export function TokenCommunityChat({
   }
 
   return (
-    <section className={styles.panel} aria-labelledby={`${inputId}-title`}>
+    <section
+      className={styles.panel}
+      aria-labelledby={`${inputId}-title`}
+    >
       <header className={styles.heading}>
-        <div>
-          <h2 id={`${inputId}-title`}>Community</h2>
-          <p>
-            {memberCount
-              ? `${memberCount.toLocaleString("en-US")} members`
-              : `Project room for ${tokenName}`}
-          </p>
-        </div>
-        <span className={styles.status}>
-          <span aria-hidden="true" />
-          {preview ? "Preview room" : "Local room"}
-        </span>
+        <h2 id={`${inputId}-title`}>Community</h2>
       </header>
 
-      <div className={styles.conversation} aria-live="polite">
-        <article className={styles.systemMessage}>
-          <span className={styles.avatar} aria-hidden="true">
-            P
-          </span>
-          <div>
-            <p className={styles.messageMeta}>
-              <strong>Programmable</strong>
-              <span>Room notice</span>
-            </p>
-            <p>
-              This room belongs to {tokenName}. Messages are kept separately
-              for this token and saved in this browser.
-            </p>
-          </div>
-        </article>
+      <div
+        className={styles.conversation}
+        ref={conversationRef}
+        role="log"
+        aria-label={`${tokenName} community messages`}
+        aria-live="polite"
+        aria-relevant="additions"
+      >
+        {messages.length === 0 ? (
+          <p className={styles.emptyMessage}>No messages yet.</p>
+        ) : (
+          messages.map((message) => {
+            const authorLabel = message.authorLabel || "You";
+            const usesCurrentAvatar = Boolean(
+              currentAvatarDataUrl &&
+                currentAuthorAddress &&
+                message.authorAddress === currentAuthorAddress,
+            );
 
-        {messages.map((message) => (
-          <article className={styles.message} key={message.id}>
-            <span className={styles.avatar} aria-hidden="true">
-              Y
-            </span>
-            <div>
-              <p className={styles.messageMeta}>
-                <strong>You</strong>
-                <time dateTime={new Date(message.createdAt).toISOString()}>
-                  {formatMessageTime(message.createdAt)}
-                </time>
-              </p>
-              <p>{message.body}</p>
-            </div>
-          </article>
-        ))}
+            return (
+              <article className={styles.message} key={message.id}>
+                <span className={styles.avatar} aria-hidden="true">
+                  {usesCurrentAvatar ? (
+                    <Image
+                      src={currentAvatarDataUrl}
+                      alt=""
+                      fill
+                      sizes="36px"
+                      unoptimized
+                    />
+                  ) : (
+                    authorInitial(authorLabel)
+                  )}
+                </span>
+                <div>
+                  <p className={styles.messageMeta}>
+                    <strong>{authorLabel}</strong>
+                    <time dateTime={new Date(message.createdAt).toISOString()}>
+                      {formatMessageTime(message.createdAt)}
+                    </time>
+                  </p>
+                  <p>{message.body}</p>
+                </div>
+              </article>
+            );
+          })
+        )}
       </div>
 
       <form className={styles.composer} onSubmit={submitMessage}>
+        <span className={styles.composerAvatar} aria-hidden="true">
+          {currentAvatarDataUrl ? (
+            <Image
+              src={currentAvatarDataUrl}
+              alt=""
+              fill
+              sizes="36px"
+              unoptimized
+            />
+          ) : (
+            authorInitial(currentAuthorLabel)
+          )}
+        </span>
         <label className="sr-only" htmlFor={inputId}>
-          Message {tokenName}
+          Write message
         </label>
         <input
           id={inputId}
           autoComplete="off"
           maxLength={280}
-          placeholder={`Message ${tokenName}`}
+          name="community-message"
+          placeholder="Write message"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
         />
-        <button
-          type="submit"
-          aria-label={`Send message to ${tokenName}`}
-          disabled={!draft.trim()}
-        >
+        <button type="submit" disabled={!draft.trim()}>
           <Send aria-hidden="true" size={17} />
+          <span>Send message</span>
         </button>
       </form>
-      <p className={styles.storageNote} role="status">
-        {storageAvailable
-          ? "Messages sync across tabs on this device."
-          : "This message could not be saved on this device."}
+      <p className={styles.storageError} role="status" aria-live="polite">
+        {storageAvailable ? "" : "Messages stay in this tab only."}
       </p>
     </section>
   );

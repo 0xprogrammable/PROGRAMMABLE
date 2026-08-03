@@ -14,7 +14,10 @@ describe("interaction state regressions", () => {
     expect(source).not.toContain("{payoutActionLabel(payoutState)}");
     expect(source).not.toContain("New payout address");
     expect(source).not.toContain("Payouts, fee terms and splits");
-    expect(source).toContain('onClick={() => onClassicV3Action(reward, "claim")}');
+    expect(source).toContain("Claim rewards");
+    expect(source).toContain(
+      'onSelect: () => onClassicV3Action(reward, "claim")',
+    );
   });
 
   it("uses the active profile network for transaction links", () => {

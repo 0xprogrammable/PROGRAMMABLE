@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it, vi } from "vitest";
 import { getAddress } from "viem";
 
@@ -9,6 +11,7 @@ import {
   clearConfirmedProfileActionStates,
   getProfileSessionView,
   getProfileWorkspacePhase,
+  getStockPairedClaimPaths,
   groupPendingProfileTransactionStates,
   groupProfileRewards,
   parsePendingProfileTransactions,
@@ -44,6 +47,10 @@ const secondAddress = getAddress(
 );
 const thirdAddress = getAddress(
   "0x3333333333333333333333333333333333333333",
+);
+const profileExperienceCss = readFileSync(
+  new URL("../components/profile-experience.module.css", import.meta.url),
+  "utf8",
 );
 
 const tokens: ProfileToken[] = [
@@ -172,9 +179,15 @@ describe("profile workspace loading state", () => {
     ).toBe("loading");
   });
 
-  it("shows content as soon as one source is ready and errors only after the grace period", () => {
+  it("waits for every source before replacing the stable loading shell", () => {
     expect(
       getProfileWorkspacePhase(["error", "ready", "loading"], false),
+    ).toBe("loading");
+    expect(
+      getProfileWorkspacePhase(
+        ["error", "ready", "not-deployed"],
+        false,
+      ),
     ).toBe("ready");
     expect(
       getProfileWorkspacePhase(
@@ -182,6 +195,49 @@ describe("profile workspace loading state", () => {
         true,
       ),
     ).toBe("error");
+  });
+
+  it("contains five desktop claim rows inside the workspace while mobile keeps page flow", () => {
+    expect(profileExperienceCss).toMatch(
+      /@media \(min-width: 821px\) and \(min-height: 700px\)[\s\S]*?\.profileWorkspace\s*\{[\s\S]*?height: clamp\(/,
+    );
+    expect(profileExperienceCss).toMatch(
+      /@media \(min-width: 821px\) and \(min-height: 700px\)[\s\S]*?\.claimList\s*\{[\s\S]*?overflow-y: auto;/,
+    );
+    expect(profileExperienceCss).toMatch(
+      /@media \(max-width: 820px\)[\s\S]*?\.profileWorkspace/,
+    );
+  });
+});
+
+describe("profile claim receipt paths", () => {
+  const stockReward = {
+    payoutAddress: firstAddress,
+    estimatedEth: "0.012",
+    estimatedUsd: "41.25",
+  };
+
+  it("offers the verified quote-asset claim and conversion path only to its payout wallet", () => {
+    expect(getStockPairedClaimPaths(stockReward, firstAddress)).toEqual([
+      "quote-asset",
+      "quote-asset-to-eth",
+    ]);
+    expect(getStockPairedClaimPaths(stockReward, secondAddress)).toEqual([
+      "quote-asset",
+    ]);
+  });
+
+  it("does not present ETH as a separate reward without a conversion estimate", () => {
+    expect(
+      getStockPairedClaimPaths(
+        {
+          ...stockReward,
+          estimatedEth: undefined,
+          estimatedUsd: undefined,
+        },
+        firstAddress,
+      ),
+    ).toEqual(["quote-asset"]);
   });
 });
 
