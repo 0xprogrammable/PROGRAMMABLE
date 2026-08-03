@@ -706,6 +706,7 @@ function backupRequestPayload({
   repositoryCommit,
   source,
   restore,
+  schemas,
 }) {
   return {
     kind: "programmable-database-backup-restore-request",
@@ -714,7 +715,7 @@ function backupRequestPayload({
     repositoryCommit,
     source,
     restore,
-    schemas: BACKUP_SCHEMAS,
+    schemas,
     format: "targeted-schema-backup-v2",
   };
 }
@@ -741,6 +742,13 @@ function validateBackupRequest(input) {
     input.restoreDatabaseUrl,
     input.restoreIsolationId,
   );
+  const schemas = Object.freeze([...(input.schemas ?? BACKUP_SCHEMAS)]);
+  if (
+    canonicalJson(schemas) !== canonicalJson(BACKUP_SCHEMAS) &&
+    canonicalJson(schemas) !== canonicalJson(FINAL_BACKUP_SCHEMAS)
+  ) {
+    throw new Error("backup schema stage is invalid");
+  }
   const backupPath = validateAbsoluteOutputPath(input.backupPath, "backup path");
   const evidencePath = validateAbsoluteOutputPath(
     input.evidencePath,
@@ -754,12 +762,14 @@ function validateBackupRequest(input) {
     repositoryCommit: input.repositoryCommit,
     source: source.safeTarget,
     restore: restore.safeTarget,
+    schemas,
   });
   return {
     operationId: input.operationId,
     repositoryCommit: input.repositoryCommit,
     source,
     restore,
+    schemas,
     sslCaPem,
     restoreSslCaPem,
     backupPath,
@@ -1038,7 +1048,15 @@ function roleBootstrapSql() {
         nologin nosuperuser nocreatedb nocreaterole noinherit
         noreplication nobypassrls;`,
   ).join("\n");
-  return `do $programmable_restore_roles$ begin ${body}\nend $programmable_restore_roles$;`;
+  return `do $programmable_restore_roles$ begin ${body}\nend $programmable_restore_roles$;
+alter default privileges for role programmable_migrator
+  revoke execute on functions from public;
+alter default privileges for role programmable_migrator
+  grant execute on functions to programmable_migrator;
+alter default privileges for role programmable_migrator
+  revoke usage on types from public;
+alter default privileges for role programmable_migrator
+  grant usage on types to programmable_migrator;`;
 }
 
 function quoteIdentifier(value) {
@@ -2230,7 +2248,9 @@ export async function createBackupAndRestoreEvidence(input) {
       safeTarget: request.restore.safeTarget,
     });
     await assertRestoreEmpty(restoreConnection.sql, request.restore.safeTarget);
-    const before = await captureManifest(sourceConnection.sql);
+    const before = await captureManifest(sourceConnection.sql, {
+      schemas: request.schemas,
+    });
     if (
       !SHA256.test(before?.manifestSha256 ?? "") ||
       !SHA256.test(before?.structuralManifestSha256 ?? "") ||
@@ -2303,7 +2323,7 @@ export async function createBackupAndRestoreEvidence(input) {
         ...(request.source.username === "cli_login_postgres"
           ? ["--role", "postgres"]
           : []),
-        ...BACKUP_SCHEMAS.flatMap((schema) => ["--schema", schema]),
+        ...request.schemas.flatMap((schema) => ["--schema", schema]),
         ...commandTargetArguments(request.source.safeTarget, request.source.username),
         "--file",
         request.backupPath,
@@ -2319,7 +2339,9 @@ export async function createBackupAndRestoreEvidence(input) {
       });
       await chmod(request.backupPath, 0o600);
     }
-    const after = await captureManifest(sourceConnection.sql);
+    const after = await captureManifest(sourceConnection.sql, {
+      schemas: request.schemas,
+    });
     if (
       after?.manifestSha256 !== before.manifestSha256 ||
       after?.structuralManifestSha256 !== before.structuralManifestSha256 ||
@@ -2386,7 +2408,9 @@ export async function createBackupAndRestoreEvidence(input) {
         throw new Error("Postgres backup changed during isolated restore");
       }
     }
-    const restored = await captureManifest(restoreConnection.sql);
+    const restored = await captureManifest(restoreConnection.sql, {
+      schemas: request.schemas,
+    });
     if (
       restored?.manifestSha256 !== before.manifestSha256 ||
       !SHA256.test(restored?.structuralManifestSha256 ?? "") ||
@@ -2411,6 +2435,7 @@ export async function createBackupAndRestoreEvidence(input) {
       requestSha256: request.requestSha256,
       source: request.source.safeTarget,
       restore: request.restore.safeTarget,
+      schemas: request.schemas,
       backup: Object.freeze({
         format: backupFormat,
         sha256: backup.sha256,

@@ -8,12 +8,17 @@ import {
   assertAttestationMatchesIdentity,
   assertProjectorDrainEvidence,
   assertStagedGateMatchesDrain,
+  backupSchemas,
   credentialsFromEnvironment,
   evidenceCommitment,
   parseArguments,
   reserveRuntimeEnableOutput,
   runRuntimeEnableWithReservedOutput,
 } from "./cutover-operator.mjs";
+import {
+  BACKUP_SCHEMAS,
+  FINAL_BACKUP_SCHEMAS,
+} from "./cutover-credentials.mjs";
 import {
   createEnvioPromotionAttestation,
   loadEnvioCutoverIdentity,
@@ -54,6 +59,13 @@ test("operator parser rejects positional, duplicate and value-less arguments", (
     () => parseArguments(["roles-provision", "--output", "a", "--output", "b"]),
     /arguments/u,
   );
+});
+
+test("backup schema stage is exact and fail-closed", () => {
+  assert.equal(backupSchemas(), BACKUP_SCHEMAS);
+  assert.equal(backupSchemas("initial"), BACKUP_SCHEMAS);
+  assert.equal(backupSchemas("final"), FINAL_BACKUP_SCHEMAS);
+  assert.throws(() => backupSchemas("partial"), /schema stage/u);
 });
 
 test("credentials are read from five environment-only names", () => {

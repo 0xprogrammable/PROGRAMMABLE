@@ -5,6 +5,8 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  BACKUP_SCHEMAS,
+  FINAL_BACKUP_SCHEMAS,
   ROLE_SPECS,
   canonicalizePostgresAclRows,
   canonicalizePostgresDefinition,
@@ -838,6 +840,7 @@ test("createBackupAndRestoreEvidence keeps secrets in child env and proves an is
   assert.equal(result.evidence.tableCount, 27);
   assert.equal(result.evidence.rowCount, 265);
   assert.equal(result.evidence.backup.format, "pg-custom-v1");
+  assert.deepEqual(result.evidence.schemas, BACKUP_SCHEMAS);
   assert.equal(result.evidence.postgresVersion, "PostgreSQL 17.6");
   assert.equal(harness.closeCount, 2);
   const dump = harness.calls.find(
@@ -866,6 +869,22 @@ test("createBackupAndRestoreEvidence keeps secrets in child env and proves an is
     assert.match(roleSql, new RegExp(loginRole, "u"));
     assert.match(roleSql, new RegExp(capabilityRole, "u"));
   }
+  assert.match(
+    roleSql,
+    /alter default privileges for role programmable_migrator\s+revoke execute on functions from public/iu,
+  );
+  assert.match(
+    roleSql,
+    /alter default privileges for role programmable_migrator\s+grant execute on functions to programmable_migrator/iu,
+  );
+  assert.match(
+    roleSql,
+    /alter default privileges for role programmable_migrator\s+revoke usage on types from public/iu,
+  );
+  assert.match(
+    roleSql,
+    /alter default privileges for role programmable_migrator\s+grant usage on types to programmable_migrator/iu,
+  );
   const [backupMode, evidenceMode] = await Promise.all([
     lstat(fixture.input.backupPath),
     lstat(fixture.input.evidencePath),
@@ -879,6 +898,51 @@ test("createBackupAndRestoreEvidence keeps secrets in child env and proves an is
   for (const caPath of harness.caPaths) {
     await assert.rejects(lstat(caPath), { code: "ENOENT" });
   }
+});
+
+test("createBackupAndRestoreEvidence binds and restores the final schema stage", async (t) => {
+  const fixture = await backupFixture();
+  t.after(() => rm(fixture.directory, { recursive: true, force: true }));
+  const observedSchemas = [];
+  const harness = backupDependencies(fixture, {
+    captureDatabaseManifest: async (_sql, options) => {
+      observedSchemas.push(options.schemas);
+      return manifest();
+    },
+  });
+  const result = await createBackupAndRestoreEvidence({
+    ...fixture.input,
+    schemas: FINAL_BACKUP_SCHEMAS,
+    dependencies: harness.dependencies,
+  });
+  assert.deepEqual(result.evidence.schemas, FINAL_BACKUP_SCHEMAS);
+  assert.deepEqual(observedSchemas, [
+    FINAL_BACKUP_SCHEMAS,
+    FINAL_BACKUP_SCHEMAS,
+    FINAL_BACKUP_SCHEMAS,
+  ]);
+  const dump = harness.calls.find(
+    ({ binary, args }) => binary === "pg_dump" && !args.includes("--version"),
+  );
+  assert.ok(dump);
+  assert.deepEqual(
+    dump.args.flatMap((value, index) =>
+      value === "--schema" ? [dump.args[index + 1]] : []
+    ),
+    FINAL_BACKUP_SCHEMAS,
+  );
+});
+
+test("createBackupAndRestoreEvidence rejects an unreviewed schema stage", async (t) => {
+  const fixture = await backupFixture();
+  t.after(() => rm(fixture.directory, { recursive: true, force: true }));
+  await assert.rejects(
+    createBackupAndRestoreEvidence({
+      ...fixture.input,
+      schemas: ["programmable_private"],
+    }),
+    /backup schema stage is invalid/u,
+  );
 });
 
 test("createBackupAndRestoreEvidence accepts only portable-equivalent cross-build structure", async (t) => {
