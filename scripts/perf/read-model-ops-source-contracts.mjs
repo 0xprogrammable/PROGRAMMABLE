@@ -939,27 +939,34 @@ export function evaluateReadModelOperationsSourceContracts(
   const stagedWakeGate = deployWorkflow.indexOf(
     "Gate exact staged QuickNode wake route",
   );
+  const stagedWakeGateEnd = deployWorkflow.indexOf(
+    "Attest exact staged release policy",
+  );
+  const stagedWakeGateBlock =
+    stagedWakeGate >= 0 && stagedWakeGateEnd > stagedWakeGate
+      ? deployWorkflow.slice(stagedWakeGate, stagedWakeGateEnd)
+      : "";
   check(
     "ops-quicknode-stream-stage-gate",
     packageJson?.scripts?.["perf:read-model:wake-canary"] ===
       `node ${approvedTrigger.canary.path}` &&
       wakeCanary.includes("projectorWakeCanaryArgumentsFrom") &&
       stagedWakeGate > deployWorkflow.indexOf("Resolve exact staged deployment") &&
-      stagedWakeGate < deployWorkflow.indexOf("Attest exact staged release policy") &&
-      deployWorkflow.includes(
+      stagedWakeGate < stagedWakeGateEnd &&
+      stagedWakeGateBlock.includes(
         "if: steps.read-model-policy.outputs.wake_canary_required == 'true'",
       ) &&
-      deployWorkflow.includes(
+      stagedWakeGateBlock.includes(
         "PROGRAMMABLE_QUICKNODE_STREAM_SECRET: ${{ secrets.PROGRAMMABLE_QUICKNODE_STREAM_SECRET }}",
       ) &&
-      deployWorkflow.includes(
+      stagedWakeGateBlock.includes(
         "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
       ) &&
-      deployWorkflow.includes(
+      stagedWakeGateBlock.includes(
         "STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
       ) &&
-      deployWorkflow.includes("npm run perf:read-model:wake-canary --") &&
-      deployWorkflow.includes('--target-url "$STAGED_TARGET_URL"'),
+      stagedWakeGateBlock.includes("npm run perf:read-model:wake-canary --") &&
+      stagedWakeGateBlock.includes('--target-url "$STAGED_TARGET_URL"'),
     "an active fast lane must pass the exact unaliased staged wake canary before attestation",
   );
   check(
