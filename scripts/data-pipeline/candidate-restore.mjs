@@ -23,6 +23,7 @@ import postgres from "postgres";
 
 import {
   BACKUP_SCHEMAS,
+  FINAL_BACKUP_SCHEMAS,
   ROLE_SPECS,
   captureDatabaseManifest,
   createBackupAndRestoreEvidence,
@@ -1047,6 +1048,7 @@ export async function createCandidateSafetyBackup(input) {
       restoreDatabaseUrl: input.restoreDatabaseUrl,
       restoreIsolationId: input.restoreIsolationId,
       restoreSslCaPem: input.restoreSslCaPem,
+      schemas: FINAL_BACKUP_SCHEMAS,
       backupPath: input.backupPath,
       evidencePath: input.backupEvidencePath,
       pgDumpBinary: toolchain.paths.pg_dump,
