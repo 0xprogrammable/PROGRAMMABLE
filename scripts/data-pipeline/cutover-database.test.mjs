@@ -189,11 +189,14 @@ test("database promotion atomically persists the reviewed commit and deployment"
   const productCommit = "a".repeat(40);
   const stagedDeploymentId = "dpl_12345678901234567890";
   let mutationValues;
+  const statements = [];
   const transaction = async (_strings, ...values) => {
+    statements.push("tagged promotion mutation");
     mutationValues = values;
     return [{ changed: true }];
   };
   transaction.unsafe = (query) => {
+    statements.push(query.trim());
     if (query.startsWith("set local")) {
       return { simple: async () => undefined };
     }
@@ -225,4 +228,24 @@ test("database promotion atomically persists the reviewed commit and deployment"
   assert.equal(mutationValues[5], productCommit);
   assert.equal(mutationValues[6], stagedDeploymentId);
   assert.equal(mutationValues.length, 8);
+  const advisoryLock = statements.findIndex((statement) =>
+    statement.includes("pg_try_advisory_xact_lock"),
+  );
+  const migratorRole = statements.indexOf("set local role programmable_migrator");
+  const sourceLease = statements.findIndex((statement) =>
+    statement.includes("from programmable_private.projector_runtime_lease_current"),
+  );
+  const marketLease = statements.findIndex((statement) =>
+    statement.includes(
+      "from programmable_private.market_projector_runtime_lease_current",
+    ),
+  );
+  const operatorRole = statements.indexOf("set local role programmable_operator");
+  const promotionMutation = statements.indexOf("tagged promotion mutation");
+  assert.ok(advisoryLock >= 0);
+  assert.ok(migratorRole > advisoryLock);
+  assert.ok(sourceLease > migratorRole);
+  assert.ok(marketLease > sourceLease);
+  assert.ok(operatorRole > marketLease);
+  assert.ok(promotionMutation > operatorRole);
 });
