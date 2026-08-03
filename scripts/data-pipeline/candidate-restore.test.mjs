@@ -1145,6 +1145,7 @@ test("restore apply resumes postchecks without replaying pg_restore", async (t) 
   const { plan } = await createPlan(files);
   let stateReads = 0;
   let manifestReads = 0;
+  const manifestScopes = [];
   let fences = 0;
   const result = await applyCandidateRestore({
     plan,
@@ -1170,7 +1171,8 @@ test("restore apply resumes postchecks without replaying pg_restore", async (t) 
           fences += 1;
           return loginFence();
         },
-        captureDatabaseManifest: async () => {
+        captureDatabaseManifest: async (_sql, options) => {
+          manifestScopes.push(options);
           manifestReads += 1;
           return manifest({ restored: true });
         },
@@ -1196,6 +1198,7 @@ test("restore apply resumes postchecks without replaying pg_restore", async (t) 
   assert.equal(validateCandidateRestoreResult(result), result);
   assert.equal(stateReads, 2);
   assert.equal(manifestReads, 3);
+  assert.deepEqual(manifestScopes, [undefined, undefined, undefined]);
   assert.equal(fences, 1);
 });
 
@@ -1214,6 +1217,7 @@ test("JIT restore SET ROLEs postgres and uses only the immutable restore set", a
   });
   let stateReads = 0;
   let manifestReads = 0;
+  const manifestScopes = [];
   const restoreCalls = [];
   const destructiveEvents = [];
   const result = await applyCandidateRestore({
@@ -1241,7 +1245,8 @@ test("JIT restore SET ROLEs postgres and uses only the immutable restore set", a
           stateReads += 1;
           return stateReads === 1 ? candidateState() : restoredState();
         },
-        captureDatabaseManifest: async () => {
+        captureDatabaseManifest: async (_sql, options) => {
+          manifestScopes.push(options);
           manifestReads += 1;
           return manifestReads === 1 ? manifest() : manifest({ restored: true });
         },
@@ -1284,6 +1289,11 @@ test("JIT restore SET ROLEs postgres and uses only the immutable restore set", a
   assert.equal(args[args.indexOf("--role") + 1], "postgres");
   assert.equal(args.includes("--disable-triggers"), false);
   assert.deepEqual(destructiveEvents, ["cleanup", "restore", "owner-security"]);
+  assert.deepEqual(manifestScopes, [
+    { schemas: FINAL_BACKUP_SCHEMAS },
+    undefined,
+    undefined,
+  ]);
 });
 
 test("restore apply rejects a changed CA before opening Candidate", async (t) => {
