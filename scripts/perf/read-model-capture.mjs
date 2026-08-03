@@ -1122,7 +1122,19 @@ async function runtimeEvidence(input) {
       declaredLength > MAX_RUNTIME_EVIDENCE_BYTES) ||
     response.headers.get("cache-control") !== "private, no-store"
   ) {
-    throw new Error("staged runtime evidence endpoint rejected the capture");
+    const rawVercelError = response.headers.get("x-vercel-error");
+    const vercelError =
+      typeof rawVercelError === "string" &&
+      /^[A-Z0-9_]{1,64}$/u.test(rawVercelError)
+        ? rawVercelError
+        : "missing";
+    const cacheControl =
+      response.headers.get("cache-control") === "private, no-store"
+        ? "expected"
+        : "unexpected";
+    throw new Error(
+      `staged runtime evidence endpoint rejected the capture (status=${response.status}, cacheControl=${cacheControl}, declaredLength=${Number.isFinite(declaredLength) ? declaredLength : "unknown"}, vercelError=${vercelError})`,
+    );
   }
   const bytes = Buffer.from(await response.arrayBuffer());
   const completedAtMs = Date.now();
