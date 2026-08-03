@@ -15,22 +15,14 @@
   min-width: 0;
 }
 
-.code {
-  color: var(--accent-strong);
-  font-family: var(--font-plex-mono), monospace;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.035em;
-}
-
 .copy h1 {
   color: var(--text);
-  font-size: clamp(58px, 6.7vw, 94px);
+  font-size: clamp(56px, 6vw, 84px);
   font-weight: 580;
   letter-spacing: -0.035em;
-  line-height: 0.96;
-  margin-top: 18px;
-  max-width: 8.6ch;
+  line-height: 0.98;
+  margin: 0;
+  max-width: 10.6ch;
   text-wrap: balance;
 }
 
@@ -159,7 +151,7 @@
   }
 
   .copy h1 {
-    max-width: 10ch;
+    max-width: 10.6ch;
   }
 
   .art {
@@ -174,7 +166,7 @@
   }
 
   .copy h1 {
-    font-size: clamp(49px, 15vw, 68px);
+    font-size: clamp(47px, 14vw, 64px);
     letter-spacing: -0.035em;
   }
 

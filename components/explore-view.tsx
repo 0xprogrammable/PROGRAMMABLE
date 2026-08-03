@@ -13,6 +13,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { type MarketCapMetric } from "@/components/animated-market-cap";
+import { XBrandIcon } from "@/components/brand-icons";
 import { EXPLORE_PREVIEW_TOKENS } from "@/components/explore-preview-data";
 import { useInterfacePreview } from "@/components/interface-preview";
 import { SiteFooter } from "@/components/site-footer";
@@ -21,6 +22,7 @@ import {
   shouldRefreshLiveData,
   useLiveDataRefresh,
 } from "@/components/use-live-data-refresh";
+import { WebsiteLinkIcon } from "@/components/website-link-icon";
 import {
   canOptimizeTokenImage,
   getTokenCardImageSource,
@@ -34,14 +36,15 @@ import styles from "./explore-experience.module.css";
 type TokenCard = {
   id: string;
   name: string;
-  symbol: string;
   description?: string;
   imageUrl: string;
+  links: TokenLink[];
   usesFallbackImage: boolean;
   tokenAddress: `0x${string}`;
 };
 
 type TokenSort = "newest" | "oldest" | "market-cap" | "market-cap-asc";
+export type ExploreSocialFilter = "all" | "yes" | "no";
 
 type ExplorePayload = {
   status: "ready" | "not-deployed";
@@ -92,7 +95,7 @@ export function preserveExplorePayloadOnRefreshFailure(
 
 type PaginationItem = number | "start-gap" | "end-gap";
 
-const TOKENS_PER_PAGE = 10;
+export const EXPLORE_TOKENS_PER_PAGE = 9;
 const QUERY_DEBOUNCE_MS = 200;
 const EXPLORE_REQUEST_TIMEOUT_MS = 12_000;
 export const EXPLORE_REFRESH_INTERVAL_MS = LIVE_DATA_REFRESH_INTERVAL_MS;
@@ -109,6 +112,11 @@ const sortOptions: { id: TokenSort; label: string }[] = [
   { id: "oldest", label: "Oldest" },
   { id: "market-cap", label: "Highest market cap" },
   { id: "market-cap-asc", label: "Lowest market cap" },
+];
+const socialFilterOptions: { id: ExploreSocialFilter; label: string }[] = [
+  { id: "all", label: "Any" },
+  { id: "yes", label: "Yes" },
+  { id: "no", label: "No" },
 ];
 
 export function shouldRefreshExplore(input: {
@@ -237,7 +245,10 @@ function parseExplorePayload(value: unknown): ExplorePayload {
     status: value.status,
     tokens: tokens as LauncherToken[],
     page: Math.max(1, positiveInteger(value.page, 1)),
-    pageSize: Math.max(1, positiveInteger(value.pageSize, TOKENS_PER_PAGE)),
+    pageSize: Math.max(
+      1,
+      positiveInteger(value.pageSize, EXPLORE_TOKENS_PER_PAGE),
+    ),
     total: positiveInteger(value.total, tokens.length),
     totalPages: positiveInteger(value.totalPages, 0),
   };
@@ -360,23 +371,22 @@ export function getMarketCap(
   return { kind: "eth", value };
 }
 
-function getPaginationItems(
+export function getExplorePaginationItems(
   currentPage: number,
   pageCount: number,
 ): PaginationItem[] {
-  if (pageCount <= 5) {
+  if (pageCount <= 4) {
     return Array.from({ length: pageCount }, (_, index) => index + 1);
   }
 
   if (currentPage <= 3) {
-    return [1, 2, 3, 4, "end-gap", pageCount];
+    return [1, 2, 3, "end-gap", pageCount];
   }
 
   if (currentPage >= pageCount - 2) {
     return [
       1,
       "start-gap",
-      pageCount - 3,
       pageCount - 2,
       pageCount - 1,
       pageCount,
@@ -386,25 +396,67 @@ function getPaginationItems(
   return [
     1,
     "start-gap",
-    currentPage - 1,
     currentPage,
-    currentPage + 1,
     "end-gap",
     pageCount,
   ];
+}
+
+export function tokenHasSocialLinks(
+  token: Pick<LauncherToken, "links">,
+) {
+  return Boolean(
+    token.links?.some(
+      (link) => link.kind === "x" || link.kind === "telegram",
+    ),
+  );
+}
+
+export function filterTokensBySocialPresence(
+  tokens: LauncherToken[],
+  socialFilter: ExploreSocialFilter,
+) {
+  if (socialFilter === "all") return tokens;
+  const shouldHaveSocials = socialFilter === "yes";
+  return tokens.filter(
+    (token) => tokenHasSocialLinks(token) === shouldHaveSocials,
+  );
 }
 
 function getTokenCards(tokens: LauncherToken[]): TokenCard[] {
   return tokens.map((token) => ({
     id: token.id,
     name: token.name,
-    symbol: token.symbol,
     description: token.description?.trim() || undefined,
     imageUrl:
       token.imageUrl?.trim() || getFallbackTokenImage(token.tokenAddress),
+    links: token.links ?? [],
     usesFallbackImage: !token.imageUrl?.trim(),
     tokenAddress: token.tokenAddress,
   }));
+}
+
+function getTokenLinkLabel(kind: TokenLink["kind"]) {
+  if (kind === "website") return "Website";
+  if (kind === "telegram") return "Telegram";
+  return "X";
+}
+
+function TelegramBrandIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path
+        fill="currentColor"
+        d="M22.8 3.2 19.5 20.1c-.25 1.2-.91 1.5-1.85.94l-5.03-3.71-2.43 2.34c-.27.27-.5.5-1.02.5l.36-5.13 9.34-8.44c.41-.36-.09-.56-.63-.2L6.7 13.67l-4.98-1.56c-1.08-.34-1.1-1.08.23-1.6L21.36 3c.9-.33 1.69.2 1.44 1.2Z"
+      />
+    </svg>
+  );
+}
+
+function TokenLinkIcon({ kind }: { kind: TokenLink["kind"] }) {
+  if (kind === "website") return <WebsiteLinkIcon />;
+  if (kind === "telegram") return <TelegramBrandIcon />;
+  return <XBrandIcon />;
 }
 
 export function ExploreView() {
@@ -413,6 +465,8 @@ export function ExploreView() {
   const normalizedQuery = query.trim();
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [sort, setSort] = useState<TokenSort>("market-cap");
+  const [socialFilter, setSocialFilter] =
+    useState<ExploreSocialFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [retryKey, setRetryKey] = useState(0);
   const refreshKey = useLiveDataRefresh({ enabled: !preview });
@@ -481,7 +535,7 @@ export function ExploreView() {
       q: debouncedQuery,
       sort,
       page: String(currentPage),
-      limit: String(TOKENS_PER_PAGE),
+      limit: String(EXPLORE_TOKENS_PER_PAGE),
     });
 
     async function loadTokens() {
@@ -548,7 +602,7 @@ export function ExploreView() {
       status: "ready",
       tokens: ranked,
       page: 1,
-      pageSize: TOKENS_PER_PAGE,
+      pageSize: EXPLORE_TOKENS_PER_PAGE,
       total: ranked.length,
       totalPages: ranked.length > 0 ? 1 : 0,
     };
@@ -565,13 +619,18 @@ export function ExploreView() {
 
   const payload =
     displayState.phase === "ready" ? displayState.payload : null;
+  const filteredTokens = useMemo(
+    () =>
+      filterTokensBySocialPresence(payload?.tokens ?? [], socialFilter),
+    [payload?.tokens, socialFilter],
+  );
   const cards = useMemo(
-    () => getTokenCards(payload?.tokens ?? []),
-    [payload?.tokens],
+    () => getTokenCards(filteredTokens),
+    [filteredTokens],
   );
   const pageCount = Math.max(1, payload?.totalPages ?? 0);
   const activePage = Math.min(payload?.page ?? currentPage, pageCount);
-  const paginationItems = getPaginationItems(activePage, pageCount);
+  const paginationItems = getExplorePaginationItems(activePage, pageCount);
   const busy =
     !preview &&
     (displayState.phase === "loading" ||
@@ -621,19 +680,27 @@ export function ExploreView() {
     }
 
     if (cards.length === 0) {
-      if (debouncedQuery) {
+      if (debouncedQuery || socialFilter !== "all") {
+        const noMatchMessage = debouncedQuery
+          ? socialFilter === "all"
+            ? "No tokens match this search"
+            : "No tokens match this search and filter"
+          : socialFilter === "yes"
+            ? "No tokens on this page have social links"
+            : "Every token on this page has social links";
         return (
           <div className="token-empty">
-            <p>No tokens match this search</p>
+            <p>{noMatchMessage}</p>
             <button
               className="text-button"
               type="button"
               onClick={() => {
                 setQuery("");
+                setSocialFilter("all");
                 setCurrentPage(1);
               }}
             >
-              Clear search
+              Clear filters
             </button>
           </div>
         );
@@ -673,7 +740,7 @@ export function ExploreView() {
                       token.usesFallbackImage ? "" : `${token.name} artwork`
                     }
                     fill
-                    loading={index < 3 ? "eager" : "lazy"}
+                    loading={index < 6 ? "eager" : "lazy"}
                     sizes="(max-width: 700px) calc(100vw - 28px), (max-width: 1040px) 46vw, 31vw"
                     unoptimized={!canOptimizeTokenImage(imageSource)}
                   />
@@ -681,8 +748,7 @@ export function ExploreView() {
 
                 <div className={styles.runnerBody}>
                   <header className={styles.runnerHeading}>
-                    <h3>{token.name}</h3>
-                    <span className={styles.runnerSymbol}>${token.symbol}</span>
+                    <h3 title={token.name}>{token.name}</h3>
                   </header>
 
                   <p
@@ -696,6 +762,31 @@ export function ExploreView() {
                   </p>
                 </div>
               </Link>
+
+              {token.links.length > 0 ? (
+                <div
+                  className={styles.runnerSocials}
+                  role="group"
+                  aria-label={`${token.name} links`}
+                >
+                  {token.links.map((link) => {
+                    const label = getTokenLinkLabel(link.kind);
+                    return (
+                      <a
+                        className={styles.runnerSocialLink}
+                        href={link.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label={`${token.name} ${label}`}
+                        title={label}
+                        key={`${link.kind}:${link.url}`}
+                      >
+                        <TokenLinkIcon kind={link.kind} />
+                      </a>
+                    );
+                  })}
+                </div>
+              ) : null}
             </article>
           );
         })}
@@ -707,8 +798,7 @@ export function ExploreView() {
     <>
       <div className={`${styles.page} explore-page page-width`}>
         <header className={styles.pageHeading}>
-          <h1>Explore</h1>
-          <p>Launch tokens that work the way you imagine.</p>
+          <h1>Launch tokens that work the way you imagine.</h1>
         </header>
 
         <section
@@ -734,9 +824,23 @@ export function ExploreView() {
                   </label>
 
                   <details className="token-filter" ref={filterRef}>
-                    <summary>
+                    <summary
+                      aria-label={
+                        socialFilter === "all"
+                          ? "Filter and sort tokens"
+                          : "Filter and sort tokens, one filter active"
+                      }
+                    >
                       <SlidersHorizontal aria-hidden="true" size={16} />
                       <span>Filter</span>
+                      {socialFilter !== "all" ? (
+                        <span
+                          className={styles.activeFilterCount}
+                          aria-hidden="true"
+                        >
+                          1
+                        </span>
+                      ) : null}
                       <ChevronDown
                         className="token-filter-chevron"
                         aria-hidden="true"
@@ -744,37 +848,87 @@ export function ExploreView() {
                       />
                     </summary>
                     <div
-                      className="token-filter-menu"
+                      className={`token-filter-menu ${styles.filterMenu}`}
                       role="group"
-                      aria-label="Sort tokens"
+                      aria-label="Filter and sort tokens"
                     >
-                      {sortOptions.map((option) => (
-                        <button
-                          key={option.id}
-                          className={sort === option.id ? "active" : undefined}
-                          type="button"
-                          aria-pressed={sort === option.id}
-                          onClick={() => {
-                            setSort(option.id);
-                            setCurrentPage(1);
-                            const filter = filterRef.current;
-                            filter?.removeAttribute("open");
-                            filter?.querySelector("summary")?.focus();
-                          }}
+                      <div
+                        className={styles.filterGroup}
+                        role="group"
+                        aria-labelledby="explore-sort-label"
+                      >
+                        <p
+                          className={styles.filterLabel}
+                          id="explore-sort-label"
                         >
-                          <span>{option.label}</span>
-                          {sort === option.id ? (
-                            <Check aria-hidden="true" size={15} />
-                          ) : null}
-                        </button>
-                      ))}
+                          Sort by
+                        </p>
+                        {sortOptions.map((option) => (
+                          <button
+                            key={option.id}
+                            className={
+                              sort === option.id ? "active" : undefined
+                            }
+                            type="button"
+                            aria-pressed={sort === option.id}
+                            onClick={() => {
+                              setSort(option.id);
+                              setCurrentPage(1);
+                              const filter = filterRef.current;
+                              filter?.removeAttribute("open");
+                              filter?.querySelector("summary")?.focus();
+                            }}
+                          >
+                            <span>{option.label}</span>
+                            {sort === option.id ? (
+                              <Check aria-hidden="true" size={15} />
+                            ) : null}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div
+                        className={styles.filterGroup}
+                        role="group"
+                        aria-labelledby="explore-socials-label"
+                      >
+                        <p
+                          className={styles.filterLabel}
+                          id="explore-socials-label"
+                        >
+                          Socials
+                        </p>
+                        {socialFilterOptions.map((option) => (
+                          <button
+                            key={option.id}
+                            className={
+                              socialFilter === option.id
+                                ? "active"
+                                : undefined
+                            }
+                            type="button"
+                            aria-pressed={socialFilter === option.id}
+                            onClick={() => {
+                              setSocialFilter(option.id);
+                              setCurrentPage(1);
+                              const filter = filterRef.current;
+                              filter?.removeAttribute("open");
+                              filter?.querySelector("summary")?.focus();
+                            }}
+                          >
+                            <span>{option.label}</span>
+                            {socialFilter === option.id ? (
+                              <Check aria-hidden="true" size={15} />
+                            ) : null}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </details>
 
                   {displayState.phase === "ready" &&
                   displayState.payload.status === "ready" &&
                   displayState.payload.total > 0 &&
-                  cards.length > 0 &&
                   pageCount > 1 ? (
                     <nav className="token-pagination" aria-label="Token pages">
                       <button

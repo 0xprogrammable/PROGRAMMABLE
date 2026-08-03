@@ -1,10 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
 
-import {
-  GitHubBrandIcon,
-  XBrandIcon,
-} from "@/components/brand-icons";
 import styles from "@/components/site-footer.module.css";
 
 const productLinks = [
@@ -40,20 +36,26 @@ export function SiteFooter() {
     >
       <div className={styles.surface}>
         <section className={styles.brand}>
-          <Link href="/" aria-label="Programmable home">
+          <Link
+            className={styles.brandLink}
+            href="/"
+            aria-label="Programmable home"
+          >
             <Image
               className={styles.mark}
               src="/brand/loop/programmable-loop-mark-512.png"
               alt=""
               width={512}
               height={512}
-              sizes="34px"
+              sizes="36px"
             />
+            <span>Programmable</span>
           </Link>
+          <p className={styles.copyright}>© 2026 Programmable</p>
         </section>
 
         <nav className={styles.column} aria-label="Product">
-          <p className={styles.label}>Product</p>
+          <h2 className={styles.label}>Product</h2>
           <ul>
             {productLinks.map((link) => (
               <li key={link.href}>
@@ -64,7 +66,7 @@ export function SiteFooter() {
         </nav>
 
         <nav className={styles.column} aria-label="Resources">
-          <p className={styles.label}>Resources</p>
+          <h2 className={styles.label}>Resources</h2>
           <ul>
             {resourceLinks.map((link) => (
               <li key={link.href}>
@@ -81,33 +83,12 @@ export function SiteFooter() {
         </nav>
 
         <section className={styles.risk}>
-          <p className={styles.label}>Risk notice</p>
+          <h2 className={styles.label}>Risk notice</h2>
           <p>
             Transactions may be irreversible. Tokens can be volatile, illiquid
             or lose all value. Programmable does not provide financial advice
             or guarantee a token&apos;s quality.
           </p>
-          <div className={styles.riskMeta}>
-            <span>© 2026 Programmable</span>
-            <div className={styles.socials}>
-              <a
-                href="https://x.com/0xProgrammable"
-                target="_blank"
-                rel="noreferrer"
-                aria-label="Programmable on X"
-              >
-                <XBrandIcon />
-              </a>
-              <a
-                href="https://github.com/0xprogrammable"
-                target="_blank"
-                rel="noreferrer"
-                aria-label="Programmable on GitHub"
-              >
-                <GitHubBrandIcon />
-              </a>
-            </div>
-          </div>
         </section>
       </div>
     </footer>

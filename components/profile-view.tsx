@@ -142,9 +142,33 @@ export type ProfileViewProps = {
   onchainData?: ProfileOnchainData;
 };
 
+type ProfileWorkspaceSourceStatus =
+  | ProfileOnchainData["status"]
+  | ClassicV3ProfileRewards["status"]
+  | DeepProfileRewards["status"]
+  | DeepV3CreatorProfile["status"]
+  | StockPairedProfileRewards["status"];
+
+export type ProfileWorkspacePhase = "loading" | "ready" | "error";
+
+export function getProfileWorkspacePhase(
+  statuses: readonly ProfileWorkspaceSourceStatus[],
+  terminalErrorReady: boolean,
+): ProfileWorkspacePhase {
+  if (statuses.some((status) => status === "ready")) return "ready";
+  if (
+    !terminalErrorReady ||
+    statuses.some((status) => status === "loading")
+  ) {
+    return "loading";
+  }
+  return "error";
+}
+
 const pendingProfileTransactionStoragePrefix =
   "programmable:profile-pending-transactions:v1:";
 const maximumPersistedProfileTransactions = 32;
+const terminalProfileErrorDelayMs = 900;
 const ethereumAddressPattern = /^0x[0-9a-f]{40}$/;
 const ethereumBytes32Pattern = /^0x[0-9a-f]{64}$/;
 
@@ -736,6 +760,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   const [remoteOnchainData, setRemoteOnchainData] =
     useState<ProfileOnchainData>(UNAVAILABLE_PROFILE_DATA);
   const [profileRefresh, setProfileRefresh] = useState(0);
+  const [terminalErrorReadyKey, setTerminalErrorReadyKey] = useState("");
   const [classicV3Rewards, setClassicV3Rewards] =
     useState<ClassicV3ProfileRewards>(EMPTY_CLASSIC_V3_PROFILE);
   const [deepRewards, setDeepRewards] =
@@ -758,6 +783,11 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   >({});
   const editingProfile =
     Boolean(account) && editingAccount === account?.toLowerCase();
+  const profileLoadKey = account
+    ? `${account.toLowerCase()}:${profileRefresh}`
+    : "";
+  const terminalErrorReady =
+    Boolean(profileLoadKey) && terminalErrorReadyKey === profileLoadKey;
   const abortTransactionPolls = useCallback(() => {
     for (const controller of transactionPollControllersRef.current) {
       controller.abort();
@@ -821,6 +851,14 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     },
     [abortTransactionPolls],
   );
+
+  useEffect(() => {
+    if (!profileLoadKey) return;
+    const timeout = window.setTimeout(() => {
+      setTerminalErrorReadyKey(profileLoadKey);
+    }, terminalProfileErrorDelayMs);
+    return () => window.clearTimeout(timeout);
+  }, [profileLoadKey]);
 
   useEffect(() => {
     if (onchainData) return;
@@ -1074,24 +1112,36 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       ? requestedOnchainData
       : loadingProfileData(account)
     : UNAVAILABLE_PROFILE_DATA;
-  const scopedClassicV3Rewards =
-    account &&
-    classicV3Rewards.account?.toLowerCase() === account.toLowerCase()
+  const scopedClassicV3Rewards = useMemo<ClassicV3ProfileRewards>(() => {
+    if (!account || !classicV3ReleaseAvailable) {
+      return EMPTY_CLASSIC_V3_PROFILE;
+    }
+    return classicV3Rewards.account?.toLowerCase() === account.toLowerCase()
       ? classicV3Rewards
-      : EMPTY_CLASSIC_V3_PROFILE;
-  const scopedDeepRewards =
-    account && deepRewards.account?.toLowerCase() === account.toLowerCase()
+      : { status: "loading", account, rewards: [] };
+  }, [account, classicV3Rewards]);
+  const scopedDeepRewards = useMemo<DeepProfileRewards>(() => {
+    if (!account || !deepReleaseAvailable) return EMPTY_DEEP_PROFILE;
+    return deepRewards.account?.toLowerCase() === account.toLowerCase()
       ? deepRewards
-      : EMPTY_DEEP_PROFILE;
-  const scopedDeepV3Profile =
-    account && deepV3Profile.account?.toLowerCase() === account.toLowerCase()
+      : { status: "loading", account, rewards: [] };
+  }, [account, deepRewards]);
+  const scopedDeepV3Profile = useMemo<DeepV3CreatorProfile>(() => {
+    if (!account || !deepV3ReleaseAvailable) {
+      return EMPTY_DEEP_V3_CREATOR_PROFILE;
+    }
+    return deepV3Profile.account?.toLowerCase() === account.toLowerCase()
       ? deepV3Profile
-      : EMPTY_DEEP_V3_CREATOR_PROFILE;
-  const scopedStockPairedRewards =
-    account &&
-    stockPairedRewards.account?.toLowerCase() === account.toLowerCase()
+      : { status: "loading", account, tokens: [] };
+  }, [account, deepV3Profile]);
+  const scopedStockPairedRewards = useMemo<StockPairedProfileRewards>(() => {
+    if (!account || !stockPairedReleaseAvailable) {
+      return EMPTY_STOCK_PAIRED_PROFILE;
+    }
+    return stockPairedRewards.account?.toLowerCase() === account.toLowerCase()
       ? stockPairedRewards
-      : EMPTY_STOCK_PAIRED_PROFILE;
+      : { status: "loading", account, rewards: [] };
+  }, [account, stockPairedRewards]);
   const settleSubmittedTransaction = useCallback(
     async ({
       transactionHash,
@@ -1864,6 +1914,32 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     ? (savedProfile.username || account.slice(2, 4)).slice(0, 2).toUpperCase()
     : "P";
 
+  function retryProfileData() {
+    if (!account) return;
+    if (!onchainData && scopedOnchainData.status === "error") {
+      setRemoteOnchainData(loadingProfileData(account));
+    }
+    if (
+      classicV3ReleaseAvailable &&
+      scopedClassicV3Rewards.status === "error"
+    ) {
+      setClassicV3Rewards({ status: "loading", account, rewards: [] });
+    }
+    if (deepReleaseAvailable && scopedDeepRewards.status === "error") {
+      setDeepRewards({ status: "loading", account, rewards: [] });
+    }
+    if (deepV3ReleaseAvailable && scopedDeepV3Profile.status === "error") {
+      setDeepV3Profile({ status: "loading", account, tokens: [] });
+    }
+    if (
+      stockPairedReleaseAvailable &&
+      scopedStockPairedRewards.status === "error"
+    ) {
+      setStockPairedRewards({ status: "loading", account, rewards: [] });
+    }
+    setProfileRefresh((current) => current + 1);
+  }
+
   if (!account) {
     return (
       <div className={`${styles.page} page-width`}>
@@ -1921,7 +1997,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
                 type="button"
                 onClick={beginEditingProfile}
               >
-                Edit
+                Edit profile
               </button>
             ) : null}
           </div>
@@ -1992,6 +2068,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
                       className={`${styles.editAction} ${styles.saveAction}`}
                       type="submit"
                       disabled={preparingImage}
+                      aria-busy={preparingImage || undefined}
                     >
                       Save
                     </button>
@@ -2046,7 +2123,8 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         onDeepAction={submitDeepAction}
         onStockPairedAction={submitStockPairedAction}
         onConnect={openWallet}
-        onRetry={() => setProfileRefresh((current) => current + 1)}
+        onRetry={retryProfileData}
+        terminalErrorReady={terminalErrorReady}
       />
     </div>
   );
@@ -2319,6 +2397,36 @@ export function profileClaimableWei(
   );
 }
 
+export function profileClaimActionCount(
+  entries: readonly ProfilePortfolioEntry[],
+  account?: string,
+) {
+  return entries.reduce((total, entry) => {
+    const currentClaim =
+      BigInt(entry.claim?.claimableWei ?? "0") > 0n ? 1 : 0;
+    const classicClaims = profileRewardsForAccount(
+      entry.classicRewards,
+      account,
+    ).filter((reward) => BigInt(reward.claimableWei) > 0n).length;
+    const deepClaims = profileRewardsForAccount(
+      entry.deepRewards,
+      account,
+    ).filter((reward) => BigInt(reward.claimableWei) > 0n).length;
+    const stockPairedClaims = profileRewardsForAccount(
+      entry.stockPairedRewards,
+      account,
+    ).filter((reward) => BigInt(reward.claimableRaw) > 0n).length;
+
+    return (
+      total +
+      currentClaim +
+      classicClaims +
+      deepClaims +
+      stockPairedClaims
+    );
+  }, 0);
+}
+
 function profileEntryClaimableWei(
   entry: ProfilePortfolioEntry,
   account?: string,
@@ -2374,6 +2482,37 @@ export function profileRewardsForAccount<
   );
 }
 
+function ProfileLoadingState() {
+  return (
+    <section
+      className={styles.profileLoading}
+      aria-busy="true"
+      aria-label="Loading profile"
+    >
+      <span className={styles.visuallyHidden} role="status">
+        Loading profile
+      </span>
+      <div className={styles.loadingHeading} aria-hidden="true">
+        <span />
+        <span />
+      </div>
+      <div className={styles.loadingRows} aria-hidden="true">
+        {[0, 1, 2].map((index) => (
+          <div className={styles.loadingRow} key={index}>
+            <span className={styles.loadingArt} />
+            <span className={styles.loadingCopy}>
+              <span />
+              <span />
+            </span>
+            <span className={styles.loadingMetric} />
+            <span className={styles.loadingAction} />
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function ProfileAccountWorkspace({
   connected,
   data,
@@ -2392,6 +2531,7 @@ function ProfileAccountWorkspace({
   onStockPairedAction,
   onConnect,
   onRetry,
+  terminalErrorReady,
 }: {
   connected: boolean;
   data: ProfileOnchainData;
@@ -2423,6 +2563,7 @@ function ProfileAccountWorkspace({
   ) => void;
   onConnect: () => void;
   onRetry: () => void;
+  terminalErrorReady: boolean;
 }) {
   if (!connected) {
     return (
@@ -2451,25 +2592,27 @@ function ProfileAccountWorkspace({
     deepRewards.status === "loading" ||
     deepV3Profile.status === "loading" ||
     stockPairedRewards.status === "loading";
+  const phase = getProfileWorkspacePhase(
+    [
+      data.status,
+      classicV3Rewards.status,
+      deepRewards.status,
+      deepV3Profile.status,
+      stockPairedRewards.status,
+    ],
+    terminalErrorReady,
+  );
 
-  if (
-    !currentReady &&
-    !classicReady &&
-    !deepReady &&
-    !deepV3Ready &&
-    !stockPairedReady
-  ) {
+  if (phase === "loading") {
+    return <ProfileLoadingState />;
+  }
+
+  if (phase === "error") {
     return (
-      <section
-        className={styles.accountState}
-        aria-busy={loading}
-        aria-live="polite"
-      >
-        <h2>{loading ? "Loading profile" : "Unable to load profile"}</h2>
+      <section className={styles.accountState} aria-live="polite">
+        <h2>Profile data unavailable</h2>
         <p>
-          {loading
-            ? "Reading your launches and rewards."
-            : data.status === "error" && data.errorMessage
+          {data.status === "error" && data.errorMessage
               ? data.errorMessage
               : classicV3Rewards.status === "error" &&
                   classicV3Rewards.errorMessage
@@ -2483,17 +2626,15 @@ function ProfileAccountWorkspace({
                   : stockPairedRewards.status === "error" &&
                       stockPairedRewards.errorMessage
                     ? stockPairedRewards.errorMessage
-                  : "Check your connection and try again."}
+                    : "Check your connection and try again."}
         </p>
-        {!loading ? (
-          <button
-            className={styles.retryButton}
-            type="button"
-            onClick={onRetry}
-          >
-            Try again
-          </button>
-        ) : null}
+        <button
+          className={styles.retryButton}
+          type="button"
+          onClick={onRetry}
+        >
+          Try again
+        </button>
       </section>
     );
   }
@@ -2508,6 +2649,7 @@ function ProfileAccountWorkspace({
   );
   const hasRewardSurface = profileHasRewardSurface(entries);
   const nativeClaimable = profileClaimableWei(entries, account);
+  const claimActionCount = profileClaimActionCount(entries, account);
   const stockRewardCount = entries.reduce(
     (total, entry) =>
       total +
@@ -2537,21 +2679,18 @@ function ProfileAccountWorkspace({
     <section
       className={styles.portfolio}
       aria-labelledby="profile-portfolio-title"
+      aria-busy={loading || undefined}
     >
       <header className={styles.portfolioHeader}>
         <div className={styles.portfolioTitle}>
-          <h2 id="profile-portfolio-title">Tokens</h2>
+          <h2 id="profile-portfolio-title">Your tokens</h2>
         </div>
 
-        <div className={styles.portfolioStats}>
-          <div className={styles.portfolioStat}>
-            <span>Tokens</span>
-            <strong>{entries.length}</strong>
-          </div>
-          {hasRewardSurface ? (
-            <div className={`${styles.portfolioStat} ${styles.portfolioTotal}`}>
-              <span>Claimable</span>
-              <strong>
+        {hasRewardSurface ? (
+          <dl className={styles.portfolioStats}>
+            <div className={styles.portfolioTotal}>
+              <dt>Claimable</dt>
+              <dd>
                 {nativeClaimable > 0n
                   ? formatWei(nativeClaimable)
                   : stockRewardCount > 0
@@ -2559,17 +2698,23 @@ function ProfileAccountWorkspace({
                         stockRewardCount === 1 ? "reward" : "rewards"
                       }`
                     : formatWei(0n)}
-              </strong>
+              </dd>
               {nativeClaimable > 0n && stockRewardCount > 0 ? (
                 <small>
                   + {stockRewardCount} quote{" "}
                   {stockRewardCount === 1 ? "reward" : "rewards"}
                 </small>
               ) : null}
+              {claimActionCount > 1 ? (
+                <small>
+                  {claimActionCount} rewards · separate wallet confirmations
+                </small>
+              ) : claimActionCount === 1 ? (
+                <small>1 reward ready</small>
+              ) : null}
             </div>
-          ) : null}
-        </div>
-
+          </dl>
+        ) : null}
       </header>
 
       {sourceWarning ? (
@@ -2583,12 +2728,6 @@ function ProfileAccountWorkspace({
 
       {entries.length ? (
         <div className={styles.ledger}>
-          <div className={styles.ledgerHeader} aria-hidden="true">
-            <span>Token</span>
-            <span>Market cap</span>
-            <span>Creator rewards</span>
-            <span />
-          </div>
           <div className={styles.list}>
             {entries.map((entry) => (
               <ProfilePortfolioRow
@@ -2622,8 +2761,8 @@ function ProfileAccountWorkspace({
         </div>
       ) : (
         <ProfileSectionEmpty
-          title="No tokens"
-          detail="Tokens created by this wallet will appear here."
+          title="No tokens yet"
+          detail="Tokens created with this wallet will appear here."
           actionHref="/launch"
           actionLabel="Create token"
         />
@@ -2911,6 +3050,7 @@ function ProfilePortfolioRow({
               className={styles.claimButton}
               type="button"
               aria-label={`${actionLabel(activeClaimState)} ${token.name} position rewards`}
+              aria-busy={actionPending(activeClaimState) || undefined}
               disabled={
                 actionPending(activeClaimState) ||
                 activeClaimState?.status === "confirmed" ||
@@ -2932,6 +3072,7 @@ function ProfilePortfolioRow({
                 className={styles.claimButton}
                 type="button"
                 aria-label={`${actionLabel(state)} ${token.name} rewards from ${shortenAddress(reward.vaultAddress)}`}
+                aria-busy={actionPending(state) || undefined}
                 disabled={
                   actionPending(state) ||
                   state?.status === "confirmed" ||
@@ -2954,6 +3095,7 @@ function ProfilePortfolioRow({
                 className={styles.claimButton}
                 type="button"
                 aria-label={`${actionLabel(state)} ${token.name} Deep rewards from ${shortenAddress(reward.vaultAddress)}`}
+                aria-busy={actionPending(state) || undefined}
                 disabled={
                   actionPending(state) ||
                   state?.status === "confirmed" ||
@@ -3004,6 +3146,7 @@ function ProfilePortfolioRow({
                       className={styles.secondaryAction}
                       type="button"
                       aria-label={`Claim ${token.name} rewards as ${reward.quoteAssetSymbol}`}
+                      aria-busy={actionPending(claimState) || undefined}
                       disabled={
                         pending || completed || claimable === 0n
                       }
@@ -3019,6 +3162,7 @@ function ProfilePortfolioRow({
                       className={styles.claimButton}
                       type="button"
                       aria-label={`Claim ${token.name} rewards as ETH`}
+                      aria-busy={actionPending(ethState) || undefined}
                       title={
                         canClaimAsEth
                           ? undefined

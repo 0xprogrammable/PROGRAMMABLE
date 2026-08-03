@@ -9,8 +9,12 @@
   border-radius: 0;
   box-shadow: none;
   display: grid;
-  gap: 0 44px;
-  grid-template-columns: minmax(120px, 0.65fr) 0.7fr 0.8fr minmax(300px, 1.45fr);
+  gap: 0 48px;
+  grid-template-columns:
+    minmax(210px, 1.1fr)
+    minmax(110px, 0.56fr)
+    minmax(128px, 0.68fr)
+    minmax(300px, 1.5fr);
   overflow: visible;
   padding: 38px 0 34px;
 }
@@ -18,14 +22,33 @@
 .brand {
   align-content: start;
   display: grid;
-  gap: 14px;
+  gap: 18px;
+}
+
+.brandLink {
+  align-items: center;
+  color: var(--text);
+  display: inline-flex;
+  font-size: 17px;
+  font-weight: 650;
+  gap: 11px;
+  letter-spacing: -0.025em;
+  min-height: 44px;
+  width: fit-content;
 }
 
 .mark {
-  height: 34px;
+  height: 36px;
   object-fit: contain;
   object-position: left center;
-  width: 34px;
+  width: 36px;
+}
+
+.copyright {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
 }
 
 .risk p {
@@ -46,6 +69,8 @@
   font-size: 12px;
   font-weight: 650;
   letter-spacing: 0.08em;
+  line-height: 1.5;
+  margin: 0;
   text-transform: uppercase;
 }
 
@@ -65,9 +90,7 @@
   font-size: 14px;
   font-weight: 560;
   min-height: 31px;
-  transition:
-    color 150ms ease,
-    transform 160ms var(--ease-out);
+  transition: color 150ms ease;
 }
 
 .risk {
@@ -76,49 +99,9 @@
   gap: 12px;
 }
 
-.riskMeta {
-  align-items: center;
-  color: var(--muted);
-  display: flex;
-  font-size: 12px;
-  justify-content: space-between;
-  margin-top: 16px;
-  min-height: 44px;
-}
-
-.socials {
-  align-items: center;
-  display: flex;
-  gap: 4px;
-}
-
-.socials a {
-  align-items: center;
-  border-radius: 50%;
-  color: var(--brand-pink);
-  display: inline-flex;
-  height: 44px;
-  justify-content: center;
-  transition:
-    background-color 150ms ease,
-    transform 160ms var(--ease-out);
-  width: 44px;
-}
-
-.socials svg {
-  height: 17px;
-  width: 17px;
-}
-
 @media (hover: hover) and (pointer: fine) {
   .column a:hover {
     color: var(--text);
-    transform: translateX(2px);
-  }
-
-  .socials a:hover {
-    background: var(--accent-soft);
-    transform: translateY(-1px);
   }
 }
 
@@ -155,11 +138,6 @@
   .risk {
     grid-column: 1 / -1;
   }
-
-  .riskMeta {
-    justify-content: flex-start;
-    gap: 14px;
-  }
 }
 
 @media (max-width: 420px) {
@@ -173,19 +151,10 @@
   .risk {
     grid-column: 1 / -1;
   }
-
-  .riskMeta {
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 8px 14px;
-    justify-content: center;
-    margin-top: 12px;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .column a,
-  .socials a {
+  .column a {
     transition: none;
   }
 }

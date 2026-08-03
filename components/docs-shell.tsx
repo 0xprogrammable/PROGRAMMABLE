@@ -30,39 +30,41 @@ export function DocsShell({
 }) {
   return (
     <div className={`${styles.page} page-width`} data-docs-shell>
-      <div className={styles.heroTools} data-docs-tools>
-        <nav className={styles.guideTabs} aria-label="Documentation guides">
-          {docsGuides.map((guide) => {
-            const isActive = currentPath === guide.href;
-            return (
-              <Link
-                key={guide.href}
-                className={styles.guideTab}
-                data-active={isActive ? "true" : undefined}
-                aria-current={isActive ? "page" : undefined}
-                href={guide.href}
-              >
-                {guide.label}
-              </Link>
-            );
-          })}
-        </nav>
-        <DocsSearch />
-      </div>
-
-      <header className={styles.hero} data-docs-hero>
-        <h1>{title}</h1>
-        <p>{description}</p>
-      </header>
-
       <aside className={styles.sidebar} data-docs-sidebar>
         <DocsNavigation currentPath={currentPath} sections={sections} />
       </aside>
 
-      <div className={styles.layout} data-docs-layout>
-        <article className={styles.content} data-docs-content>
-          {children}
-        </article>
+      <div className={styles.mainColumn}>
+        <div className={styles.heroTools} data-docs-tools>
+          <nav className={styles.guideTabs} aria-label="Documentation guides">
+            {docsGuides.map((guide) => {
+              const isActive = currentPath === guide.href;
+              return (
+                <Link
+                  key={guide.href}
+                  className={styles.guideTab}
+                  data-active={isActive ? "true" : undefined}
+                  aria-current={isActive ? "page" : undefined}
+                  href={guide.href}
+                >
+                  {guide.label}
+                </Link>
+              );
+            })}
+          </nav>
+          <DocsSearch />
+        </div>
+
+        <header className={styles.hero} data-docs-hero>
+          <h1>{title}</h1>
+          <p>{description}</p>
+        </header>
+
+        <div className={styles.layout} data-docs-layout>
+          <article className={styles.content} data-docs-content>
+            {children}
+          </article>
+        </div>
       </div>
     </div>
   );
