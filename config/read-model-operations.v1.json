@@ -118,7 +118,7 @@
       },
       "canary": {
         "path": "scripts/perf/read-model-projector-wake-canary.mjs",
-        "sha256": "5ea9c8704126fe17982515038ed75dd3eb850479a5dc8c7b092e2db076c14900"
+        "sha256": "6820b5bf29cdbf34ae7c5f1bfab55c7bccafb53a7989e09b87aad81cfa111db7"
       },
       "dependencies": [
         {

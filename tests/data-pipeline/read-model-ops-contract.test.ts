@@ -178,6 +178,48 @@ describe("read-model operations source contract", () => {
     );
   });
 
+  it("fails closed when the protected staged wake bypass is not bound", () => {
+    const workflowPath = ".github/workflows/deploy-production.yml";
+    const unsafeWorkflow = readFileSync(resolve(ROOT, workflowPath), "utf8")
+      .replace(
+        "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n",
+        "",
+      );
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [workflowPath]: unsafeWorkflow,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-quicknode-stream-stage-gate",
+    );
+  });
+
+  it("rejects a staged wake bypass secret relocated to another workflow step", () => {
+    const workflowPath = ".github/workflows/deploy-production.yml";
+    const secretLine =
+      "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n";
+    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
+    const unsafeWorkflow = workflow
+      .replace(secretLine, "")
+      .replace(
+        "      - name: Pull production configuration\n        env:\n",
+        `      - name: Pull production configuration\n        env:\n${secretLine}`,
+      );
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [workflowPath]: unsafeWorkflow,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-quicknode-stream-stage-gate",
+    );
+  });
+
   it("rejects comment-only controls and jointly drifted manifests", () => {
     const operations = JSON.parse(
       readFileSync(resolve(ROOT, "config/read-model-operations.v1.json"), "utf8"),

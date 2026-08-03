@@ -123,7 +123,7 @@ const APPROVED_OPERATIONS = Object.freeze({
       }),
       canary: Object.freeze({
         path: "scripts/perf/read-model-projector-wake-canary.mjs",
-        sha256: "5ea9c8704126fe17982515038ed75dd3eb850479a5dc8c7b092e2db076c14900",
+        sha256: "6820b5bf29cdbf34ae7c5f1bfab55c7bccafb53a7989e09b87aad81cfa111db7",
       }),
       dependencies: Object.freeze([
         Object.freeze({
@@ -348,6 +348,8 @@ function eventTriggerCanaryIsFailClosed(source, trigger) {
       'export const PROJECTOR_WAKE_ROUTE = "/api/ops/projector-wake"',
     ) &&
     source.includes('"PROGRAMMABLE_QUICKNODE_STREAM_SECRET"') &&
+    source.includes('"VERCEL_AUTOMATION_BYPASS_SECRET"') &&
+    source.includes('"x-vercel-protection-bypass"') &&
     source.includes('createHmac("sha256", secret)') &&
     source.includes('id: "invalid-signature"') &&
     source.includes('id: "stale-timestamp"') &&
@@ -356,7 +358,8 @@ function eventTriggerCanaryIsFailClosed(source, trigger) {
     source.includes("status: 202") &&
     source.includes('"cache-control"') &&
     source.includes('hostname.endsWith(".vercel.app")') &&
-    !source.includes("NEXT_PUBLIC_PROGRAMMABLE_QUICKNODE_STREAM_SECRET")
+    !source.includes("NEXT_PUBLIC_PROGRAMMABLE_QUICKNODE_STREAM_SECRET") &&
+    !source.includes("NEXT_PUBLIC_VERCEL_AUTOMATION_BYPASS_SECRET")
   );
 }
 
@@ -936,24 +939,34 @@ export function evaluateReadModelOperationsSourceContracts(
   const stagedWakeGate = deployWorkflow.indexOf(
     "Gate exact staged QuickNode wake route",
   );
+  const stagedWakeGateEnd = deployWorkflow.indexOf(
+    "Attest exact staged release policy",
+  );
+  const stagedWakeGateBlock =
+    stagedWakeGate >= 0 && stagedWakeGateEnd > stagedWakeGate
+      ? deployWorkflow.slice(stagedWakeGate, stagedWakeGateEnd)
+      : "";
   check(
     "ops-quicknode-stream-stage-gate",
     packageJson?.scripts?.["perf:read-model:wake-canary"] ===
       `node ${approvedTrigger.canary.path}` &&
       wakeCanary.includes("projectorWakeCanaryArgumentsFrom") &&
       stagedWakeGate > deployWorkflow.indexOf("Resolve exact staged deployment") &&
-      stagedWakeGate < deployWorkflow.indexOf("Attest exact staged release policy") &&
-      deployWorkflow.includes(
+      stagedWakeGate < stagedWakeGateEnd &&
+      stagedWakeGateBlock.includes(
         "if: steps.read-model-policy.outputs.wake_canary_required == 'true'",
       ) &&
-      deployWorkflow.includes(
+      stagedWakeGateBlock.includes(
         "PROGRAMMABLE_QUICKNODE_STREAM_SECRET: ${{ secrets.PROGRAMMABLE_QUICKNODE_STREAM_SECRET }}",
       ) &&
-      deployWorkflow.includes(
+      stagedWakeGateBlock.includes(
+        "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
+      ) &&
+      stagedWakeGateBlock.includes(
         "STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
       ) &&
-      deployWorkflow.includes("npm run perf:read-model:wake-canary --") &&
-      deployWorkflow.includes('--target-url "$STAGED_TARGET_URL"'),
+      stagedWakeGateBlock.includes("npm run perf:read-model:wake-canary --") &&
+      stagedWakeGateBlock.includes('--target-url "$STAGED_TARGET_URL"'),
     "an active fast lane must pass the exact unaliased staged wake canary before attestation",
   );
   check(
