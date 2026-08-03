@@ -13,30 +13,27 @@
 }
 
 .pickerHeading {
-  display: grid;
-  gap: 18px;
-  justify-content: flex-start;
-  max-width: 780px;
-  text-align: left;
+  display: block;
+  margin-inline: auto;
+  max-width: none;
+  text-align: center;
   width: 100%;
 }
 
 .pickerHeading h1 {
-  font-size: clamp(52px, 6.6vw, 88px);
+  font-size: clamp(48px, 5.1vw, 68px);
   font-weight: 580;
   letter-spacing: -0.04em;
   line-height: 0.96;
-  max-width: 11ch;
+  margin-inline: auto;
+  max-width: 100%;
   text-wrap: balance;
 }
 
-.pickerHeading p {
-  color: var(--text-soft);
-  font-size: clamp(16px, 1.5vw, 19px);
-  line-height: 1.5;
-  margin: 0;
-  max-width: 56ch;
-  text-wrap: pretty;
+@media (min-width: 761px) {
+  .pickerHeading h1 {
+    white-space: nowrap;
+  }
 }
 
 .modelGrid {
@@ -46,7 +43,9 @@
   max-width: 1200px;
 }
 
-.modelCard {
+.modelCard.modelCard {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   background: transparent;
   border: 0;
   border-radius: 0;
@@ -60,9 +59,6 @@
   position: relative;
   text-align: left;
   text-decoration: none;
-  transition:
-    color 180ms ease,
-    transform 220ms var(--ease-out);
   width: 100%;
 }
 
@@ -77,18 +73,13 @@
   background: #d9dde1;
   border: 0;
   border-radius: 28px;
-  box-shadow:
-    0 1px 1px rgb(0 0 0 / 0.04),
-    0 18px 54px rgb(23 29 36 / 0.08);
+  box-shadow: none;
   height: auto;
   isolation: isolate;
   outline: 1px solid rgb(0 0 0 / 0.1);
   outline-offset: -1px;
   overflow: hidden;
   position: relative;
-  transition:
-    box-shadow 240ms ease,
-    transform 240ms var(--ease-out);
 }
 
 .modelArt::before,
@@ -107,9 +98,7 @@
 }
 
 :global(html[data-theme="dark"]) .modelArt {
-  box-shadow:
-    0 1px 0 rgb(255 255 255 / 0.04),
-    0 22px 64px rgb(0 0 0 / 0.28);
+  box-shadow: none;
   outline-color: rgb(255 255 255 / 0.1);
 }
 
@@ -134,7 +123,7 @@
 }
 
 .classicArt .artImage {
-  filter: grayscale(1) saturate(0.05) contrast(1.06);
+  filter: none;
 }
 
 .brandMark {
@@ -150,9 +139,6 @@
   mask-size: contain;
   position: absolute;
   transform: translate(-50%, -50%);
-  transition:
-    filter 320ms ease,
-    transform 320ms var(--ease-out);
   width: clamp(88px, 9.4vw, 128px);
   z-index: 2;
 }
@@ -160,10 +146,10 @@
 .classicMark {
   background: linear-gradient(
     145deg,
-    rgb(255 255 255 / 0.98),
-    rgb(206 212 218 / 0.84)
+    rgb(24 27 30 / 0.98),
+    rgb(91 94 95 / 0.9)
   );
-  filter: drop-shadow(0 10px 28px rgb(0 0 0 / 0.24));
+  filter: none;
 }
 
 .customMark {
@@ -182,7 +168,10 @@
     drop-shadow(0 12px 32px rgb(0 0 0 / 0.32));
 }
 
-.modelBody {
+.modelBody.modelBody {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
   min-height: 230px;
   padding: 24px 4px 0;
 }
@@ -264,7 +253,7 @@
 }
 
 .modelAction svg {
-  transition: transform 160ms var(--ease-out);
+  transition: none;
 }
 
 .modelCard[data-launch-model-available="false"] .modelArt img {
@@ -715,25 +704,14 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .modelCard[data-launch-model-available="true"]:hover {
-    transform: translateY(-2px);
-  }
-
-  .modelCard[data-launch-model-available="true"]:hover .modelArt {
-    border-color: var(--border-strong);
-    box-shadow: 0 24px 60px var(--hover-shadow);
+  .modelCard.modelCard[data-launch-model-available="true"]:hover {
+    background: transparent;
+    box-shadow: none;
+    transform: none;
   }
 
   .modelCard[data-launch-model-available="true"]:hover .modelArt img {
-    transform: scale(1.014);
-  }
-
-  .modelCard[data-launch-model-available="true"]:hover .brandMark {
-    transform: translate(-50%, -50%) scale(1.025);
-  }
-
-  .modelCard[data-launch-model-available="true"]:hover .modelAction svg {
-    transform: translateX(3px);
+    transform: scale(1.006);
   }
 
   .formPage :global(.launch-select-trigger:hover) {
@@ -747,7 +725,7 @@
 }
 
 .modelCard[data-launch-model-available="true"]:active {
-  transform: scale(0.992);
+  transform: none;
 }
 
 @media (max-width: 1020px) {
@@ -820,11 +798,6 @@
 
   .pickerHeading h1 {
     font-size: clamp(42px, 11vw, 54px);
-  }
-
-  .pickerHeading p {
-    font-size: 16px;
-    max-width: 46ch;
   }
 
   .modelGrid {
@@ -938,11 +911,11 @@
   }
 
   .pickerHeading {
-    text-align: left;
+    text-align: center;
   }
 
   .pickerHeading h1 {
-    max-width: 10ch;
+    max-width: 12ch;
   }
 
   .modelCard {
