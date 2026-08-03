@@ -577,15 +577,7 @@ export function DocsNavigation({
   }
 
   function renderNavigation() {
-    const navigationGroups = docsNavigation.filter(
-      (group) =>
-        !(
-          sections.length > 0 &&
-          group.items.every(
-            (item) => item.href.split("#")[0] === currentPath,
-          )
-        ),
-    );
+    const navigationGroups = sections.length === 0 ? docsNavigation : [];
 
     return (
       <>

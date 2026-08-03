@@ -54,10 +54,11 @@ export default function DocsPage() {
           launch wallet, another wallet or a split of up to five wallets.
         </p>
         <div className={styles.callout}>
-          <strong>Classic is available for new launches.</strong>
+          <strong>Classic is the active launch model.</strong>
           <p>
-            Custom Hook is documented as a product boundary but is not
-            available in this build.
+            Custom Hook opens its framework and release requirements. Launch
+            configuration activates only after matching contracts and release
+            evidence are published.
           </p>
         </div>
       </section>

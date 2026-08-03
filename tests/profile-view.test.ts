@@ -7,10 +7,12 @@ import {
   actionPending,
   buildProfilePortfolio,
   clearConfirmedProfileActionStates,
+  getProfileWorkspacePhase,
   groupPendingProfileTransactionStates,
   groupProfileRewards,
   parsePendingProfileTransactions,
   profileClaimableWei,
+  profileClaimActionCount,
   profileHasRewardSurface,
   profileRewardsForAccount,
   profileTransactionPollAttempts,
@@ -141,6 +143,35 @@ const deepV3Token = {
   rollingCapacityWei: "250",
   blockedReason: "0x00000000",
 } satisfies DeepV3CreatorToken;
+
+describe("profile workspace loading state", () => {
+  it("keeps a stable loading state until every pending source settles", () => {
+    expect(
+      getProfileWorkspacePhase(
+        ["error", "loading", "not-deployed"],
+        true,
+      ),
+    ).toBe("loading");
+    expect(
+      getProfileWorkspacePhase(
+        ["error", "not-deployed", "unavailable"],
+        false,
+      ),
+    ).toBe("loading");
+  });
+
+  it("shows content as soon as one source is ready and errors only after the grace period", () => {
+    expect(
+      getProfileWorkspacePhase(["error", "ready", "loading"], false),
+    ).toBe("ready");
+    expect(
+      getProfileWorkspacePhase(
+        ["error", "not-deployed", "unavailable"],
+        true,
+      ),
+    ).toBe("error");
+  });
+});
 
 describe("profile reward grouping", () => {
   it("removes closed Deep data from the public profile surface", () => {
@@ -326,6 +357,7 @@ describe("profile reward grouping", () => {
     expect(profileClaimableWei(portfolio)).toBe(
       3_000_000_000_000_000n,
     );
+    expect(profileClaimActionCount(portfolio, firstAddress)).toBe(2);
   });
 
   it("keeps reward-only tokens visible when the launch feed is unavailable", () => {
@@ -394,6 +426,8 @@ describe("profile reward grouping", () => {
     expect(profileClaimableWei(portfolio, secondAddress)).toBe(
       4_000_000_000_000_000n,
     );
+    expect(profileClaimActionCount(portfolio, firstAddress)).toBe(1);
+    expect(profileClaimActionCount(portfolio, secondAddress)).toBe(1);
     expect(
       profileRewardsForAccount(
         [classicReward, otherBeneficiaryReward],

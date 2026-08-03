@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { lazy, Suspense, useState } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 
@@ -111,7 +112,8 @@ export function LaunchModelPicker({
       <header
         className={`launch-model-heading ${launchExperience.pickerHeading}`}
       >
-        <h1>Create</h1>
+        <h1>Create a token</h1>
+        <p>Choose a launch model, then configure the token and its pool.</p>
       </header>
 
       <div className={`launch-model-grid ${launchExperience.modelGrid}`}>
@@ -121,6 +123,7 @@ export function LaunchModelPicker({
           data-launch-model-available={classicV3LaunchAvailable}
           type="button"
           disabled={!classicV3LaunchAvailable}
+          aria-labelledby="launch-model-classic-title"
           aria-describedby="launch-model-classic-description"
           onPointerEnter={
             classicV3LaunchAvailable ? preloadAvailableForm : undefined
@@ -129,15 +132,20 @@ export function LaunchModelPicker({
           onClick={() => onChoose("classic-v3")}
         >
           <span
-            className={`launch-model-art launch-model-art-classic ${launchExperience.modelArt}`}
+            className={`launch-model-art launch-model-art-classic ${launchExperience.modelArt} ${launchExperience.classicArt}`}
             aria-hidden="true"
           >
             <Image
-              src="/brand/programmable-classic-launch-art-card.webp"
+              className={launchExperience.artImage}
+              src="/brand/create/classic-model-v2.webp"
               alt=""
               fill
-              sizes="(max-width: 520px) calc(100vw - 28px), (max-width: 800px) calc(100vw - 48px), 500px"
+              sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 88px) / 2), 560px"
               priority
+              unoptimized
+            />
+            <span
+              className={`${launchExperience.brandMark} ${launchExperience.classicMark}`}
             />
           </span>
 
@@ -147,7 +155,7 @@ export function LaunchModelPicker({
             <span
               className={`launch-model-card-heading ${launchExperience.modelHeading}`}
             >
-              <strong>Classic</strong>
+              <strong id="launch-model-classic-title">Classic</strong>
               {!classicV3LaunchAvailable ? (
                 <small data-status="pending">Unavailable</small>
               ) : null}
@@ -156,24 +164,26 @@ export function LaunchModelPicker({
               className={`launch-model-description ${launchExperience.modelDescription}`}
               id="launch-model-classic-description"
             >
-              Fixed supply, permanent one-sided liquidity and configurable
-              creator rewards.
+              Create a fixed-supply token with permanently locked, one-sided
+              Uniswap v4 liquidity. Set buy and sell fees, reward recipients,
+              and the initial buy before you sign.
             </span>
             {classicV3LaunchAvailable ? (
               <span
                 className={`launch-model-action ${launchExperience.modelAction}`}
               >
-                Create token
+                Create with Classic
                 <ArrowRight aria-hidden="true" size={16} />
               </span>
             ) : null}
           </span>
         </button>
 
-        <article
-          className={`launch-model-card ${launchExperience.modelCard} ${launchExperience.customCard}`}
+        <Link
+          href="/docs/models/custom"
+          className={`launch-model-card ${launchExperience.modelCard}`}
           data-launch-model-option="custom"
-          data-launch-model-available="false"
+          data-launch-model-available="true"
           aria-labelledby="launch-model-custom-title"
           aria-describedby="launch-model-custom-description"
         >
@@ -182,11 +192,16 @@ export function LaunchModelPicker({
             aria-hidden="true"
           >
             <Image
-              src="/brand/projects/north-star-v1.webp"
+              className={launchExperience.artImage}
+              src="/brand/create/custom-hook-model-v2.webp"
               alt=""
               fill
               loading="eager"
-              sizes="(max-width: 520px) calc(100vw - 28px), (max-width: 800px) calc(100vw - 48px), 500px"
+              sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 88px) / 2), 560px"
+              unoptimized
+            />
+            <span
+              className={`${launchExperience.brandMark} ${launchExperience.customMark}`}
             />
           </span>
 
@@ -197,21 +212,23 @@ export function LaunchModelPicker({
               className={`launch-model-card-heading ${launchExperience.modelHeading}`}
             >
               <strong id="launch-model-custom-title">Custom Hook</strong>
-              <small data-status="pending">In development</small>
             </span>
             <span
               className={`launch-model-description ${launchExperience.modelDescription}`}
               id="launch-model-custom-description"
             >
-              Custom Hook configuration is not available in this build.
+              Review the framework for token-specific Uniswap v4 hook logic,
+              including permissions, fee behavior, liquidity rules, and the
+              evidence required for release.
             </span>
             <span
-              className={`launch-model-action ${launchExperience.modelAction} ${launchExperience.customStatus}`}
+              className={`launch-model-action ${launchExperience.modelAction}`}
             >
-              Not available
+              Open Custom Hook
+              <ArrowRight aria-hidden="true" size={16} />
             </span>
           </span>
-        </article>
+        </Link>
       </div>
     </div>
   );
