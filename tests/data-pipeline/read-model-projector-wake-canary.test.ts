@@ -12,6 +12,7 @@ const {
 } = wakeCanary;
 
 const SECRET = "quicknode-stream-secret-at-least-32-bytes";
+const BYPASS_SECRET = "vercel-automation-bypass-at-least-32-bytes";
 const NOW_MS = Date.parse("2026-08-02T12:00:00.000Z");
 const TARGET = "https://programmable-stage-abc.vercel.app";
 
@@ -34,6 +35,7 @@ describe("read-model projector wake canary", () => {
       expect(init?.method).toBe("POST");
       expect(init?.redirect).toBe("error");
       const headers = new Headers(init?.headers);
+      expect(headers.get("x-vercel-protection-bypass")).toBe(BYPASS_SECRET);
       const nonce = headers.get("x-qn-nonce") ?? "";
       const timestamp = headers.get("x-qn-timestamp") ?? "";
       const signature = headers.get("x-qn-signature") ?? "";
@@ -57,7 +59,10 @@ describe("read-model projector wake canary", () => {
 
     const result = await runProjectorWakeCanary({
       targetUrl: TARGET,
-      environment: { PROGRAMMABLE_QUICKNODE_STREAM_SECRET: SECRET },
+      environment: {
+        PROGRAMMABLE_QUICKNODE_STREAM_SECRET: SECRET,
+        VERCEL_AUTOMATION_BYPASS_SECRET: BYPASS_SECRET,
+      },
       fetchImpl,
       nowMs: NOW_MS,
       nonceFactory: (id: string) => `nonce-${id}-0123456789abcdef`,
@@ -86,6 +91,7 @@ describe("read-model projector wake canary", () => {
     expect(new Set(observations.map(({ nonce }) => nonce)).size).toBe(3);
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain(SECRET);
+    expect(serialized).not.toContain(BYPASS_SECRET);
     for (const observation of observations) {
       expect(serialized).not.toContain(observation.nonce);
     }
@@ -101,9 +107,18 @@ describe("read-model projector wake canary", () => {
     await expect(
       runProjectorWakeCanary({
         targetUrl: "https://programmable.family",
-        environment: { PROGRAMMABLE_QUICKNODE_STREAM_SECRET: SECRET },
+        environment: {
+          PROGRAMMABLE_QUICKNODE_STREAM_SECRET: SECRET,
+          VERCEL_AUTOMATION_BYPASS_SECRET: BYPASS_SECRET,
+        },
       }),
     ).rejects.toThrow("deployment-specific Vercel HTTPS origin");
+    await expect(
+      runProjectorWakeCanary({
+        targetUrl: TARGET,
+        environment: { PROGRAMMABLE_QUICKNODE_STREAM_SECRET: SECRET },
+      }),
+    ).rejects.toThrow("automation bypass is unavailable or invalid");
   });
 
   it("fails when any exact response contract drifts", async () => {
@@ -116,7 +131,10 @@ describe("read-model projector wake canary", () => {
     await expect(
       runProjectorWakeCanary({
         targetUrl: TARGET,
-        environment: { PROGRAMMABLE_QUICKNODE_STREAM_SECRET: SECRET },
+        environment: {
+          PROGRAMMABLE_QUICKNODE_STREAM_SECRET: SECRET,
+          VERCEL_AUTOMATION_BYPASS_SECRET: BYPASS_SECRET,
+        },
         fetchImpl,
         nowMs: NOW_MS,
         nonceFactory: () => "0123456789abcdef0123456789abcdef",
@@ -134,7 +152,10 @@ describe("read-model projector wake canary", () => {
     try {
       await runProjectorWakeCanary({
         targetUrl: TARGET,
-        environment: { PROGRAMMABLE_QUICKNODE_STREAM_SECRET: SECRET },
+        environment: {
+          PROGRAMMABLE_QUICKNODE_STREAM_SECRET: SECRET,
+          VERCEL_AUTOMATION_BYPASS_SECRET: BYPASS_SECRET,
+        },
         fetchImpl,
         nowMs: NOW_MS,
         nonceFactory: () => "0123456789abcdef0123456789abcdef",

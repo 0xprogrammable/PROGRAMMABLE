@@ -178,6 +178,133 @@ describe("read-model operations source contract", () => {
     );
   });
 
+  it("fails closed when the protected staged wake bypass is not bound", () => {
+    const workflowPath = ".github/workflows/deploy-production.yml";
+    const unsafeWorkflow = readFileSync(resolve(ROOT, workflowPath), "utf8")
+      .replace(
+        "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n",
+        "",
+      );
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [workflowPath]: unsafeWorkflow,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-quicknode-stream-stage-gate",
+    );
+  });
+
+  it("rejects a staged wake bypass secret relocated to another workflow step", () => {
+    const workflowPath = ".github/workflows/deploy-production.yml";
+    const secretLine =
+      "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n";
+    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
+    const unsafeWorkflow = workflow
+      .replace(secretLine, "")
+      .replace(
+        "      - name: Pull production configuration\n        env:\n",
+        `      - name: Pull production configuration\n        env:\n${secretLine}`,
+      );
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [workflowPath]: unsafeWorkflow,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-quicknode-stream-stage-gate",
+    );
+  });
+
+  it("fails closed when the protected legacy staged smoke bypass is missing", () => {
+    const workflowPath = ".github/workflows/deploy-production.yml";
+    const legacyStep =
+      "      - name: Smoke legacy staged public APIs\n" +
+      "        if: steps.read-model-policy.outputs.evidence_required == 'false'\n" +
+      "        env:\n" +
+      "          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}\n" +
+      "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n";
+    const unsafeWorkflow = readFileSync(resolve(ROOT, workflowPath), "utf8").replace(
+      legacyStep,
+      legacyStep.replace(
+        "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n",
+        "",
+      ),
+    );
+    expect(unsafeWorkflow).not.toBe(
+      readFileSync(resolve(ROOT, workflowPath), "utf8"),
+    );
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [workflowPath]: unsafeWorkflow,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-legacy-stage-smoke",
+    );
+  });
+
+  it("rejects a legacy staged smoke bypass relocated to another workflow step", () => {
+    const workflowPath = ".github/workflows/deploy-production.yml";
+    const secretLine =
+      "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n";
+    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
+    const legacyStepStart = workflow.indexOf(
+      "      - name: Smoke legacy staged public APIs",
+    );
+    const legacyStepEnd = workflow.indexOf(
+      "      - name: Record legacy-only read path",
+    );
+    expect(legacyStepStart).toBeGreaterThanOrEqual(0);
+    expect(legacyStepEnd).toBeGreaterThan(legacyStepStart);
+    const legacyStep = workflow.slice(legacyStepStart, legacyStepEnd);
+    expect(legacyStep).toContain(secretLine);
+    const unsafeLegacyStep = legacyStep.replace(secretLine, "");
+    const unsafeWorkflow =
+      workflow.slice(0, legacyStepStart) +
+      unsafeLegacyStep +
+      workflow.slice(legacyStepEnd).replace(
+        "      - name: Record legacy-only read path\n",
+        `      - name: Record legacy-only read path\n        env:\n${secretLine}`,
+      );
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [workflowPath]: unsafeWorkflow,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-legacy-stage-smoke",
+    );
+  });
+
+  it("fails closed when the legacy staged smoke drops the bypass header", () => {
+    const workflowPath = ".github/workflows/deploy-production.yml";
+    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
+    const unsafeWorkflow = workflow.replace(
+      '            "x-vercel-protection-bypass": automationBypassSecret,\n',
+      "",
+    );
+    expect(unsafeWorkflow).not.toBe(workflow);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [workflowPath]: unsafeWorkflow,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-legacy-stage-smoke",
+    );
+  });
+
   it("rejects comment-only controls and jointly drifted manifests", () => {
     const operations = JSON.parse(
       readFileSync(resolve(ROOT, "config/read-model-operations.v1.json"), "utf8"),
