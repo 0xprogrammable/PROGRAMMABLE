@@ -437,6 +437,28 @@ function promotedCandidateState(value, currentProductCommit) {
   return state;
 }
 
+function resettableCandidateState(value, currentProductCommit) {
+  if (currentProductCommit !== null) {
+    return promotedCandidateState(value, currentProductCommit);
+  }
+  const state = candidateState(value, "current Candidate state");
+  if (
+    state.promoted !== false ||
+    state.promotedAt !== null ||
+    state.publicationCount !== 0 ||
+    state.promotionAttestationCommitment !== null ||
+    state.productCommit !== null ||
+    state.stagedDeploymentId !== null
+  ) {
+    throw new Error("current Candidate unbound fence is not exact");
+  }
+  return state;
+}
+
+function validCurrentProductCommit(value) {
+  return value === null || COMMIT.test(value ?? "");
+}
+
 function drainedLeases(value) {
   const evidence = plainObject(value, "Candidate projector lease state");
   if (
@@ -602,11 +624,11 @@ export function buildCandidateSafetyBackupEvidence(input) {
   ) {
     throw new Error("Candidate safety backup operator identity is invalid");
   }
-  const before = promotedCandidateState(
+  const before = resettableCandidateState(
     input.beforeCandidateState,
     input.currentProductCommit,
   );
-  const after = promotedCandidateState(
+  const after = resettableCandidateState(
     input.afterCandidateState,
     input.currentProductCommit,
   );
@@ -692,7 +714,7 @@ export function validateCandidateSafetyBackupEvidence(value, {
     evidence.schemaVersion !== 1 ||
     !COMMIT.test(evidence.operatorCommit ?? "") ||
     (operatorCommit !== undefined && evidence.operatorCommit !== operatorCommit) ||
-    !COMMIT.test(evidence.currentProductCommit ?? "") ||
+    !validCurrentProductCommit(evidence.currentProductCommit) ||
     (currentProductCommit !== undefined &&
       evidence.currentProductCommit !== currentProductCommit) ||
     !SHA256.test(evidence.evidenceSha256 ?? "") ||
@@ -718,7 +740,7 @@ export function validateCandidateSafetyBackupEvidence(value, {
   ) {
     throw new Error("Candidate safety backup operator identity is invalid");
   }
-  promotedCandidateState(
+  resettableCandidateState(
     evidence.currentCandidateState,
     evidence.currentProductCommit,
   );
@@ -1060,7 +1082,7 @@ export async function createCandidateSafetyBackup(input) {
       throw new Error("Candidate safety backup target changed");
     }
     const operatorSession = await acquire(connection.sql);
-    const beforeCandidateState = promotedCandidateState(
+    const beforeCandidateState = resettableCandidateState(
       await inspectState(connection.sql),
       input.currentProductCommit,
     );
@@ -2030,7 +2052,7 @@ function planPayload(value) {
 export async function createCandidateRestorePlan(input) {
   if (
     !COMMIT.test(input.repositoryCommit ?? "") ||
-    !COMMIT.test(input.currentProductCommit ?? "") ||
+    !validCurrentProductCommit(input.currentProductCommit) ||
     input.snapshotRepositoryCommit !==
       PINNED_PRE_ATTESTATION_SNAPSHOT.repositoryCommit
   ) {
@@ -2326,7 +2348,7 @@ export function validateCandidateRestorePlan(value) {
     plan.kind !== "programmable-candidate-in-place-restore-plan" ||
     plan.schemaVersion !== 1 ||
     !COMMIT.test(plan.operatorCommit ?? "") ||
-    !COMMIT.test(plan.currentProductCommit ?? "") ||
+    !validCurrentProductCommit(plan.currentProductCommit) ||
     !SHA256.test(plan.planSha256 ?? "") ||
     !SHA256.test(plan.confirmRestore ?? "") ||
     sha256(canonicalJson(planPayload(plan))) !== plan.planSha256 ||
@@ -2709,7 +2731,7 @@ export async function applyCandidateRestore(input) {
     try {
       originalStateMatches =
         canonicalJson(
-          promotedCandidateState(beforeState, plan.currentProductCommit),
+          resettableCandidateState(beforeState, plan.currentProductCommit),
         ) === canonicalJson(safetyEvidence.currentCandidateState);
     } catch {
       originalStateMatches = false;
@@ -2878,7 +2900,7 @@ function recoveryPlanPayload(value) {
 export async function createCandidateSafetyRecoveryPlan(input) {
   if (
     !COMMIT.test(input.repositoryCommit ?? "") ||
-    !COMMIT.test(input.currentProductCommit ?? "")
+    !validCurrentProductCommit(input.currentProductCommit)
   ) {
     throw new Error("Candidate safety recovery commit is invalid");
   }
@@ -3042,7 +3064,7 @@ export function validateCandidateSafetyRecoveryPlan(value) {
     plan.kind !== "programmable-candidate-safety-recovery-plan" ||
     plan.schemaVersion !== 1 ||
     !COMMIT.test(plan.operatorCommit ?? "") ||
-    !COMMIT.test(plan.currentProductCommit ?? "") ||
+    !validCurrentProductCommit(plan.currentProductCommit) ||
     !SHA256.test(plan.planSha256 ?? "") ||
     !SHA256.test(plan.confirmRecovery ?? "") ||
     sha256(canonicalJson(recoveryPlanPayload(plan))) !== plan.planSha256 ||
@@ -3097,7 +3119,7 @@ export function validateCandidateSafetyRecoveryPlan(value) {
   ) {
     throw new Error("Candidate safety recovery plan is invalid");
   }
-  promotedCandidateState(
+  resettableCandidateState(
     plan.postRestore.candidateState,
     plan.currentProductCommit,
   );
@@ -3283,7 +3305,7 @@ export async function applyCandidateSafetyRecovery(input) {
       ]);
       alreadyRecovered =
         canonicalJson(
-          promotedCandidateState(state, plan.currentProductCommit),
+          resettableCandidateState(state, plan.currentProductCommit),
         ) === canonicalJson(plan.postRestore.candidateState) &&
         manifest.manifestSha256 === plan.postRestore.manifestSha256 &&
         SHA256.test(manifest.structuralManifestSha256 ?? "") &&
@@ -3345,7 +3367,7 @@ export async function applyCandidateSafetyRecovery(input) {
     ]);
     if (
       canonicalJson(
-        promotedCandidateState(state, plan.currentProductCommit),
+        resettableCandidateState(state, plan.currentProductCommit),
       ) !== canonicalJson(plan.postRestore.candidateState) ||
       manifest.manifestSha256 !== plan.postRestore.manifestSha256 ||
       !SHA256.test(manifest.structuralManifestSha256 ?? "") ||

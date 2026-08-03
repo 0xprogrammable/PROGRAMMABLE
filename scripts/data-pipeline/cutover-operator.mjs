@@ -80,11 +80,11 @@ export const HELP = `Usage:
   node scripts/data-pipeline/cutover-operator.mjs roles-provision --expected-project-ref REF --output FILE
   node scripts/data-pipeline/cutover-operator.mjs roles-verify --expected-project-ref REF --pooler-host HOST --output FILE
   node scripts/data-pipeline/cutover-operator.mjs backup-restore --expected-project-ref REF --operation-id ID --restore-isolation-id ID --backup FILE --evidence FILE [--schema-stage initial|final]
-  node scripts/data-pipeline/cutover-operator.mjs candidate-safety-backup --expected-project-ref REF --current-product-commit COMMIT --operation-id ID --restore-isolation-id ID --backup FILE --backup-evidence FILE --output FILE
-  node scripts/data-pipeline/cutover-operator.mjs candidate-restore-plan --expected-project-ref REF --current-product-commit COMMIT --snapshot-repository-commit COMMIT --snapshot-backup FILE --snapshot-evidence FILE --safety-backup FILE --safety-backup-evidence FILE --safety-evidence FILE --output FILE
-  node scripts/data-pipeline/cutover-operator.mjs candidate-restore-apply --expected-project-ref REF --current-product-commit COMMIT --snapshot-repository-commit COMMIT --snapshot-backup FILE --snapshot-evidence FILE --safety-backup FILE --safety-backup-evidence FILE --safety-evidence FILE --plan FILE --confirm-restore SHA256 --output FILE
-  node scripts/data-pipeline/cutover-operator.mjs candidate-recovery-plan --expected-project-ref REF --current-product-commit COMMIT --safety-backup FILE --safety-backup-evidence FILE --safety-evidence FILE --output FILE
-  node scripts/data-pipeline/cutover-operator.mjs candidate-recovery-apply --expected-project-ref REF --current-product-commit COMMIT --safety-backup FILE --safety-backup-evidence FILE --safety-evidence FILE --plan FILE --confirm-recovery SHA256 --output FILE
+  node scripts/data-pipeline/cutover-operator.mjs candidate-safety-backup --expected-project-ref REF --current-product-commit COMMIT|unbound --operation-id ID --restore-isolation-id ID --backup FILE --backup-evidence FILE --output FILE
+  node scripts/data-pipeline/cutover-operator.mjs candidate-restore-plan --expected-project-ref REF --current-product-commit COMMIT|unbound --snapshot-repository-commit COMMIT --snapshot-backup FILE --snapshot-evidence FILE --safety-backup FILE --safety-backup-evidence FILE --safety-evidence FILE --output FILE
+  node scripts/data-pipeline/cutover-operator.mjs candidate-restore-apply --expected-project-ref REF --current-product-commit COMMIT|unbound --snapshot-repository-commit COMMIT --snapshot-backup FILE --snapshot-evidence FILE --safety-backup FILE --safety-backup-evidence FILE --safety-evidence FILE --plan FILE --confirm-restore SHA256 --output FILE
+  node scripts/data-pipeline/cutover-operator.mjs candidate-recovery-plan --expected-project-ref REF --current-product-commit COMMIT|unbound --safety-backup FILE --safety-backup-evidence FILE --safety-evidence FILE --output FILE
+  node scripts/data-pipeline/cutover-operator.mjs candidate-recovery-apply --expected-project-ref REF --current-product-commit COMMIT|unbound --safety-backup FILE --safety-backup-evidence FILE --safety-evidence FILE --plan FILE --confirm-recovery SHA256 --output FILE
   node scripts/data-pipeline/cutover-operator.mjs candidate-runtime-enable-plan --expected-project-ref REF --pooler-host HOST --restore-result FILE --output FILE
   node scripts/data-pipeline/cutover-operator.mjs candidate-runtime-enable-apply --expected-project-ref REF --pooler-host HOST --restore-result FILE --plan FILE --confirm-enable SHA256 --output FILE
   node scripts/data-pipeline/cutover-operator.mjs raw-backfill --expected-project-ref REF --backup-evidence FILE --output FILE [--maximum-cycles N]
@@ -138,6 +138,10 @@ function exactFlags(flags, required, optional = []) {
   for (const key of required) {
     if (!flags.has(key)) throw new Error(`${key} is required`);
   }
+}
+
+function currentProductCommit(value) {
+  return value === "unbound" ? null : value;
 }
 
 function boundedCycles(value) {
@@ -542,7 +546,9 @@ async function runCommand(command, flags, environment) {
     const repositoryCommit = await assertCleanCheckout();
     const result = await createCandidateSafetyBackup({
       repositoryCommit,
-      currentProductCommit: flags.get("--current-product-commit"),
+      currentProductCommit: currentProductCommit(
+        flags.get("--current-product-commit"),
+      ),
       operationId: flags.get("--operation-id"),
       expectedProjectRef: flags.get("--expected-project-ref"),
       databaseUrl: environment.PROGRAMMABLE_MIGRATOR_DATABASE_URL,
@@ -602,7 +608,9 @@ async function runCommand(command, flags, environment) {
     );
     const plan = await createCandidateRestorePlan({
       repositoryCommit,
-      currentProductCommit: flags.get("--current-product-commit"),
+      currentProductCommit: currentProductCommit(
+        flags.get("--current-product-commit"),
+      ),
       expectedProjectRef: flags.get("--expected-project-ref"),
       databaseUrl: environment.PROGRAMMABLE_MIGRATOR_DATABASE_URL,
       sslCaPem: environment.PROGRAMMABLE_POSTGRES_SSL_CA_PEM,
@@ -673,7 +681,9 @@ async function runCommand(command, flags, environment) {
     );
     const plan = await createCandidateSafetyRecoveryPlan({
       repositoryCommit,
-      currentProductCommit: flags.get("--current-product-commit"),
+      currentProductCommit: currentProductCommit(
+        flags.get("--current-product-commit"),
+      ),
       expectedProjectRef: flags.get("--expected-project-ref"),
       databaseUrl: environment.PROGRAMMABLE_MIGRATOR_DATABASE_URL,
       sslCaPem: environment.PROGRAMMABLE_POSTGRES_SSL_CA_PEM,

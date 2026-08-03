@@ -365,6 +365,24 @@ function buildSafetyEvidence(rawEvidence, operatorIdentity = OPERATOR_IDENTITY) 
   });
 }
 
+function buildUnboundSafetyEvidence(rawEvidence) {
+  return buildCandidateSafetyBackupEvidence({
+    operatorCommit: OPERATOR_COMMIT,
+    currentProductCommit: null,
+    target: TARGET,
+    operatorIdentity: OPERATOR_IDENTITY,
+    beforeCandidateState: restoredState(),
+    afterCandidateState: restoredState(),
+    projectorLeases: leases(),
+    runtimeLoginFence: loginFence(),
+    caSha256: sha256(Buffer.from(CA)),
+    postgresToolchain: TOOLCHAIN_EVIDENCE,
+    backupResult: { evidence: rawEvidence },
+    currentManifest: manifest(),
+    createdAt: rawEvidence.createdAt,
+  });
+}
+
 async function fixture(t) {
   const directory = await mkdtemp(path.join(os.tmpdir(), "candidate-restore-test-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
@@ -812,6 +830,54 @@ test("restore plan binds CA, raw safety evidence, three tools, schemas and flags
     assert.equal(
       call.args.includes(`--restrict-key=${CANDIDATE_PG_RESTRICT_KEY}`),
       true,
+    );
+  }
+});
+
+test("an exactly unbound Candidate can be safely backed up and reset again", async (t) => {
+  const files = await fixture(t);
+  const safetyEvidence = buildUnboundSafetyEvidence(files.safetyRawEvidence);
+  assert.equal(safetyEvidence.currentProductCommit, null);
+  assert.equal(
+    validateCandidateSafetyBackupEvidence(safetyEvidence, {
+      operatorCommit: OPERATOR_COMMIT,
+      currentProductCommit: null,
+      now: new Date("2026-08-02T09:10:00.000Z"),
+    }),
+    safetyEvidence,
+  );
+  const { plan } = await createPlan(files, {
+    currentProductCommit: null,
+    safetyEvidence,
+  });
+  assert.equal(plan.currentProductCommit, null);
+
+  for (const unsafeState of [
+    { promoted: true },
+    { promotedAt: "2026-08-02T09:00:00.000Z" },
+    { publicationCount: 1 },
+    { promotionAttestationCommitment: `0x${"c".repeat(64)}` },
+    { productCommit: CURRENT_PRODUCT_COMMIT },
+    { stagedDeploymentId: "dpl_12345678901234567890" },
+  ]) {
+    assert.throws(
+      () =>
+        buildCandidateSafetyBackupEvidence({
+          operatorCommit: OPERATOR_COMMIT,
+          currentProductCommit: null,
+          target: TARGET,
+          operatorIdentity: OPERATOR_IDENTITY,
+          beforeCandidateState: restoredState(unsafeState),
+          afterCandidateState: restoredState(unsafeState),
+          projectorLeases: leases(),
+          runtimeLoginFence: loginFence(),
+          caSha256: sha256(Buffer.from(CA)),
+          postgresToolchain: TOOLCHAIN_EVIDENCE,
+          backupResult: { evidence: files.safetyRawEvidence },
+          currentManifest: manifest(),
+          createdAt: files.safetyRawEvidence.createdAt,
+        }),
+      /unbound fence/u,
     );
   }
 });
