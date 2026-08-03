@@ -969,6 +969,51 @@ export function evaluateReadModelOperationsSourceContracts(
       stagedWakeGateBlock.includes('--target-url "$STAGED_TARGET_URL"'),
     "an active fast lane must pass the exact unaliased staged wake canary before attestation",
   );
+  const stagedLegacySmoke = deployWorkflow.indexOf(
+    "Smoke legacy staged public APIs",
+  );
+  const stagedLegacySmokeEnd = deployWorkflow.indexOf(
+    "Record legacy-only read path",
+  );
+  const stagedLegacySmokeBlock =
+    stagedLegacySmoke >= 0 && stagedLegacySmokeEnd > stagedLegacySmoke
+      ? deployWorkflow.slice(stagedLegacySmoke, stagedLegacySmokeEnd)
+      : "";
+  check(
+    "ops-protected-legacy-stage-smoke",
+    stagedLegacySmoke > stagedWakeGateEnd &&
+      stagedLegacySmokeBlock.includes(
+        "if: steps.read-model-policy.outputs.evidence_required == 'false'",
+      ) &&
+      stagedLegacySmokeBlock.includes(
+        "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
+      ) &&
+      stagedLegacySmokeBlock.includes(
+        "process.env.VERCEL_AUTOMATION_BYPASS_SECRET",
+      ) &&
+      stagedLegacySmokeBlock.includes(
+        'Buffer.byteLength(\n            automationBypassSecret ?? "",\n            "utf8",\n          )',
+      ) &&
+      stagedLegacySmokeBlock.includes("automationBypassSecretLength < 32") &&
+      stagedLegacySmokeBlock.includes("automationBypassSecretLength > 512") &&
+      stagedLegacySmokeBlock.includes(
+        "/[\\r\\n]/.test(automationBypassSecret)",
+      ) &&
+      stagedLegacySmokeBlock.includes(
+        '"x-vercel-protection-bypass": automationBypassSecret',
+      ) &&
+      stagedLegacySmokeBlock.includes("headers: legacySmokeRequestHeaders") &&
+      stagedLegacySmokeBlock.includes(
+        "STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
+      ) &&
+      (stagedLegacySmokeBlock.match(/\bfetch\(/gu) ?? []).length === 1 &&
+      !stagedLegacySmokeBlock.includes(
+        "NEXT_PUBLIC_VERCEL_AUTOMATION_BYPASS_SECRET",
+      ) &&
+      !stagedLegacySmokeBlock.includes("${automationBypassSecret}") &&
+      !stagedLegacySmokeBlock.includes("console."),
+    "the legacy staged API smoke uses the protected deployment bypass only inside its exact step without exposing it",
+  );
   check(
     "ops-exact-release-dependency",
     deployWorkflow.includes("needs: release-gate") &&

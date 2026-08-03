@@ -248,6 +248,7 @@ jobs:
         if: steps.read-model-policy.outputs.evidence_required == 'false'
         env:
           STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
           node --input-type=module <<'NODE'
           const origin = new URL(process.env.STAGED_TARGET_URL);
@@ -260,6 +261,24 @@ jobs:
           ) {
             throw new Error("legacy smoke target is not an exact Vercel origin");
           }
+          const automationBypassSecret =
+            process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+          const automationBypassSecretLength = Buffer.byteLength(
+            automationBypassSecret ?? "",
+            "utf8",
+          );
+          if (
+            typeof automationBypassSecret !== "string" ||
+            automationBypassSecretLength < 32 ||
+            automationBypassSecretLength > 512 ||
+            /[\r\n]/.test(automationBypassSecret)
+          ) {
+            throw new Error("legacy smoke automation bypass is unavailable");
+          }
+          const legacySmokeRequestHeaders = Object.freeze({
+            Accept: "application/json",
+            "x-vercel-protection-bypass": automationBypassSecret,
+          });
 
           const requestJson = async (path) => {
             let lastError;
@@ -267,7 +286,7 @@ jobs:
               try {
                 const response = await fetch(new URL(path, origin), {
                   redirect: "error",
-                  headers: { Accept: "application/json" },
+                  headers: legacySmokeRequestHeaders,
                   signal: AbortSignal.timeout(30_000),
                 });
                 const text = await response.text();
