@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { keccak256, toBytes } from "viem";
 
 import {
+  resolveDurableExploreBlobToken,
   selectFreshDurableExploreModel,
   shouldReplaceDurableSnapshot,
   validateDurableExploreEnvelope,
@@ -65,6 +66,19 @@ const model: Extract<ExploreReadModel, { status: "ready" }> = {
   launcherFeesAccruedWei: "0",
   launcherFeesAccruedEth: "0",
 };
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+describe("durable Explore storage configuration", () => {
+  it("falls back to the shared Blob token when the ops override is empty", () => {
+    vi.stubEnv("OPS_BLOB_READ_WRITE_TOKEN", "");
+    vi.stubEnv("BLOB_READ_WRITE_TOKEN", " shared-token ");
+
+    expect(resolveDurableExploreBlobToken()).toBe("shared-token");
+  });
+});
 
 const deepRelease = {
   releaseVersion: "deep-full-range-v1",

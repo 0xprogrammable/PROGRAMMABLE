@@ -812,9 +812,7 @@ export async function readDurableExploreModel(
   deployment: ReadyOnchainDeployment,
   maxAgeMs = DEFAULT_MAX_AGE_MS,
 ): Promise<DurableExploreRead> {
-  const blobToken =
-    process.env.OPS_BLOB_READ_WRITE_TOKEN ??
-    process.env.BLOB_READ_WRITE_TOKEN;
+  const blobToken = resolveDurableExploreBlobToken();
   if (!blobToken) {
     return {
       status: "unavailable",
@@ -862,9 +860,7 @@ export async function writeDurableExploreModel(
   if (model.status !== "ready") {
     throw new Error("Only a verified ready model can be persisted");
   }
-  const blobToken =
-    process.env.OPS_BLOB_READ_WRITE_TOKEN ??
-    process.env.BLOB_READ_WRITE_TOKEN;
+  const blobToken = resolveDurableExploreBlobToken();
   if (!blobToken) {
     throw new Error("Persistent index storage is not configured");
   }
@@ -942,4 +938,11 @@ export async function writeDurableExploreModel(
     deepV3LifecycleEvidenceHash:
       deepV3Release?.lifecycleEvidenceHash ?? null,
   };
+}
+
+export function resolveDurableExploreBlobToken() {
+  return (
+    process.env.OPS_BLOB_READ_WRITE_TOKEN?.trim() ||
+    process.env.BLOB_READ_WRITE_TOKEN?.trim()
+  );
 }
