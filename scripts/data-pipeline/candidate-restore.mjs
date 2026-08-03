@@ -173,13 +173,16 @@ export const CANDIDATE_SAFETY_RECOVERY_FLAGS = Object.freeze([
   "--exit-on-error",
   "--single-transaction",
   "--no-owner",
-  "--no-privileges",
 ]);
 
 const EXPECTED_ARCHIVE_SCHEMA_OWNERS = Object.freeze({
   programmable_private: "programmable_migrator",
   programmable_release_probe_private: "programmable_migrator",
   supabase_migrations: "postgres",
+});
+const EXPECTED_SAFETY_ARCHIVE_SCHEMA_OWNERS = Object.freeze({
+  ...EXPECTED_ARCHIVE_SCHEMA_OWNERS,
+  programmable_wake_private: "programmable_migrator",
 });
 const BASELINE_SECURITY_CLOSURE_URL = new URL(
   "./pinned-pre-attestation-security.sql.gz",
@@ -851,6 +854,37 @@ async function assertCandidateOperatorSession(sql, checkpoint) {
   });
 }
 
+async function withCandidateOperatorSessionHeartbeat({
+  operation,
+  heartbeat,
+  schedule = setInterval,
+  cancel = clearInterval,
+}) {
+  let pendingHeartbeat = Promise.resolve();
+  let heartbeatFailure;
+  const timer = schedule(() => {
+    pendingHeartbeat = pendingHeartbeat
+      .then(heartbeat)
+      .catch((error) => {
+        heartbeatFailure ??= error;
+      });
+  }, 15_000);
+  timer?.unref?.();
+  let operationResult;
+  let operationFailure;
+  try {
+    operationResult = await operation();
+  } catch (error) {
+    operationFailure = error;
+  } finally {
+    cancel(timer);
+  }
+  await pendingHeartbeat;
+  if (heartbeatFailure) throw heartbeatFailure;
+  if (operationFailure) throw operationFailure;
+  return operationResult;
+}
+
 const RUNTIME_LOGIN_ROLES = Object.freeze(
   ROLE_SPECS.map(({ loginRole }) => loginRole).sort(),
 );
@@ -972,6 +1006,8 @@ export async function createCandidateSafetyBackup(input) {
     "assertRuntimeLoginsFenced",
     "createBackupAndRestoreEvidence",
     "captureDatabaseManifest",
+    "scheduleHeartbeat",
+    "cancelHeartbeat",
   ]);
   const runner = dependencies.runCommand ?? defaultRunCommand;
   const inspectToolchain =
@@ -1035,36 +1071,44 @@ export async function createCandidateSafetyBackup(input) {
       await revalidateToolchain(toolchain);
       return runner(...arguments_);
     };
-    const backupResult = await createBackup({
-      operationId: input.operationId,
-      repositoryCommit: input.repositoryCommit,
-      sourceDatabaseUrl: input.databaseUrl,
-      expectedProjectRef: input.expectedProjectRef,
-      allowedSourceUsernames: Object.freeze([
-        "postgres",
-        "cli_login_postgres",
-      ]),
-      sslCaPem: input.sslCaPem,
-      restoreDatabaseUrl: input.restoreDatabaseUrl,
-      restoreIsolationId: input.restoreIsolationId,
-      restoreSslCaPem: input.restoreSslCaPem,
-      schemas: FINAL_BACKUP_SCHEMAS,
-      backupPath: input.backupPath,
-      evidencePath: input.backupEvidencePath,
-      pgDumpBinary: toolchain.paths.pg_dump,
-      pgRestoreBinary: toolchain.paths.pg_restore,
-      psqlBinary: toolchain.paths.psql,
-      toolCommitments: OFFICIAL_POSTGRES_17_TOOLCHAIN.binaries,
-      dependencies: Object.freeze({
-        runCommand: pinnedRunner,
-        openHostedDatabase: openCandidateDatabase,
+    const backupResult = await withCandidateOperatorSessionHeartbeat({
+      schedule: dependencies.scheduleHeartbeat ?? setInterval,
+      cancel: dependencies.cancelHeartbeat ?? clearInterval,
+      heartbeat: () =>
+        assertOperatorSession(connection.sql, operatorSession),
+      operation: () => createBackup({
+        operationId: input.operationId,
+        repositoryCommit: input.repositoryCommit,
+        sourceDatabaseUrl: input.databaseUrl,
+        expectedProjectRef: input.expectedProjectRef,
+        allowedSourceUsernames: Object.freeze([
+          "postgres",
+          "cli_login_postgres",
+        ]),
+        sslCaPem: input.sslCaPem,
+        restoreDatabaseUrl: input.restoreDatabaseUrl,
+        restoreIsolationId: input.restoreIsolationId,
+        restoreSslCaPem: input.restoreSslCaPem,
+        schemas: FINAL_BACKUP_SCHEMAS,
+        backupPath: input.backupPath,
+        evidencePath: input.backupEvidencePath,
+        pgDumpBinary: toolchain.paths.pg_dump,
+        pgRestoreBinary: toolchain.paths.pg_restore,
+        psqlBinary: toolchain.paths.psql,
+        toolCommitments: OFFICIAL_POSTGRES_17_TOOLCHAIN.binaries,
+        dependencies: Object.freeze({
+          runCommand: pinnedRunner,
+          openHostedDatabase: openCandidateDatabase,
+        }),
       }),
     });
     await assertOperatorSession(connection.sql, operatorSession);
     const afterCandidateState = await inspectState(connection.sql);
     drainedLeases(await inspectLeases(connection.sql));
     await inspectLoginFence(connection.sql);
-    const currentManifest = await captureManifest(connection.sql);
+    const currentManifest = await captureManifest(connection.sql, {
+      schemas: FINAL_BACKUP_SCHEMAS,
+    });
     return buildCandidateSafetyBackupEvidence({
       operatorCommit: input.repositoryCommit,
       currentProductCommit: input.currentProductCommit,
@@ -1425,13 +1469,13 @@ function postgresVersion(stdout) {
   return `PostgreSQL ${match[0]}`;
 }
 
-function archiveSchemas(list) {
+function archiveSchemas(list, expectedOwners = EXPECTED_ARCHIVE_SCHEMA_OWNERS) {
   const owners = {};
   for (const line of list.toString("utf8").split(/\r?\n/u)) {
     const match = /^\d+;\s+\d+\s+\d+\s+SCHEMA\s+-\s+(\S+)\s+(\S+)$/u.exec(line);
     if (match) owners[match[1]] = match[2];
   }
-  if (canonicalJson(owners) !== canonicalJson(EXPECTED_ARCHIVE_SCHEMA_OWNERS)) {
+  if (canonicalJson(owners) !== canonicalJson(expectedOwners)) {
     throw new Error("Candidate archive schema set is not exact");
   }
   return Object.freeze({ ...owners });
@@ -1740,19 +1784,31 @@ export async function assertCandidateSchemaStage(sql, expectedSchemas) {
   }
 }
 
-export async function cleanupCandidateSchemas(sql, closure, posture) {
+export async function cleanupCandidateSchemas(
+  sql,
+  closure,
+  posture,
+  { includePinnedBaselineCleanup = true } = {},
+) {
+  if (typeof includePinnedBaselineCleanup !== "boolean") {
+    throw new Error("Candidate restore cleanup mode is invalid");
+  }
   const statements = partitionClosure(closure, "Candidate cleanup closure");
   await assertRestoreRolePosture(sql, posture);
   await sql.begin(async (transaction) => {
     await transaction.unsafe("set local role programmable_migrator").simple();
-    await transaction.unsafe(LATER_ONLY_RESTRICT_CLEANUP_SQL).simple();
+    if (includePinnedBaselineCleanup) {
+      await transaction.unsafe(LATER_ONLY_RESTRICT_CLEANUP_SQL).simple();
+    }
     if (statements.app) await transaction.unsafe(statements.app).simple();
-    await transaction.unsafe(`
-      alter default privileges for role programmable_migrator
-        grant execute on functions to public;
-      alter default privileges for role programmable_migrator
-        grant usage on types to public;
-    `).simple();
+    if (includePinnedBaselineCleanup) {
+      await transaction.unsafe(`
+        alter default privileges for role programmable_migrator
+          grant execute on functions to public;
+        alter default privileges for role programmable_migrator
+          grant usage on types to public;
+      `).simple();
+    }
     await transaction.unsafe("set local role postgres").simple();
     if (statements.postgresOwned) {
       await transaction.unsafe(statements.postgresOwned).simple();
@@ -1767,26 +1823,46 @@ export async function applyOwnerAndSecurityClosure(
   owners,
   security,
   posture,
+  {
+    expectedSchemas = CANDIDATE_RESTORE_SCHEMAS,
+    replaySecurity = true,
+  } = {},
 ) {
+  const expected = Object.freeze([...expectedSchemas].sort());
+  if (
+    (canonicalJson(expected) !==
+      canonicalJson([...CANDIDATE_RESTORE_SCHEMAS].sort()) &&
+      canonicalJson(expected) !==
+        canonicalJson([...CANDIDATE_FINAL_SCHEMAS].sort())) ||
+    typeof replaySecurity !== "boolean"
+  ) {
+    throw new Error("Candidate owner closure mode is invalid");
+  }
   const ownerLines = owners.sql.trimEnd().split("\n");
   const objectOwners = ownerLines.filter((line) => !line.startsWith("ALTER SCHEMA "));
   const schemaOwners = ownerLines.filter((line) => line.startsWith("ALTER SCHEMA "));
-  if (schemaOwners.length !== CANDIDATE_RESTORE_SCHEMAS.length) {
+  if (schemaOwners.length !== expected.length) {
     throw new Error("Candidate schema owner closure is incomplete");
   }
-  const acl = partitionClosure(security, "Candidate security closure");
+  const migratorSchemas = expected
+    .filter((schema) => schema !== "supabase_migrations")
+    .join(", ");
+  const acl = replaySecurity
+    ? partitionClosure(security, "Candidate security closure")
+    : undefined;
   await assertRestoreRolePosture(sql, posture);
   await sql.begin(async (transaction) => {
-    await transaction.unsafe(`
-      grant create on schema programmable_private,
-        programmable_release_probe_private to programmable_migrator;
-    `).simple();
+    await transaction.unsafe(
+      `grant create on schema ${migratorSchemas} to programmable_migrator;`,
+    ).simple();
     await transaction.unsafe(`${objectOwners.join("\n")}\n`).simple();
     await transaction.unsafe(`${schemaOwners.join("\n")}\n`).simple();
-    await transaction.unsafe("set local role programmable_migrator").simple();
-    if (acl.app) await transaction.unsafe(acl.app).simple();
-    await transaction.unsafe("set local role postgres").simple();
-    if (acl.postgresOwned) await transaction.unsafe(acl.postgresOwned).simple();
+    if (replaySecurity) {
+      await transaction.unsafe("set local role programmable_migrator").simple();
+      if (acl.app) await transaction.unsafe(acl.app).simple();
+      await transaction.unsafe("set local role postgres").simple();
+      if (acl.postgresOwned) await transaction.unsafe(acl.postgresOwned).simple();
+    }
   });
   await assertRestoreRolePosture(sql, posture);
 }
@@ -2072,7 +2148,7 @@ export async function createCandidateRestorePlan(input) {
     throw new Error("Candidate backup archive listing changed");
   }
   archiveSchemas(snapshotList.stdout);
-  archiveSchemas(safetyList.stdout);
+  archiveSchemas(safetyList.stdout, EXPECTED_SAFETY_ARCHIVE_SCHEMA_OWNERS);
   validateArtifact(
     snapshot,
     await commitFile(snapshotFile.path),
@@ -2825,7 +2901,7 @@ export async function createCandidateSafetyRecoveryPlan(input) {
   if (sha256(list.stdout) !== safety.archiveListSha256) {
     throw new Error("Candidate safety archive listing changed");
   }
-  archiveSchemas(list.stdout);
+  archiveSchemas(list.stdout, EXPECTED_SAFETY_ARCHIVE_SCHEMA_OWNERS);
   const prepareClosures =
     dependencies.prepareSafetyRestoreClosures ?? prepareSafetyRestoreClosures;
   const closures = await prepareClosures({
@@ -2862,7 +2938,7 @@ export async function createCandidateSafetyRecoveryPlan(input) {
     }),
     postgresToolchain: toolchain.evidence,
     restore: Object.freeze({
-      schemas: CANDIDATE_RESTORE_SCHEMAS,
+      schemas: CANDIDATE_FINAL_SCHEMAS,
       flags: CANDIDATE_SAFETY_RECOVERY_FLAGS,
       runtimeLoginsRemainFenced: true,
     }),
@@ -2902,7 +2978,7 @@ export function validateCandidateSafetyRecoveryPlan(value) {
     canonicalJson(plan.postgresToolchain) !==
       canonicalJson(OFFICIAL_TOOLCHAIN_EVIDENCE) ||
     canonicalJson(plan.restore?.schemas) !==
-      canonicalJson(CANDIDATE_RESTORE_SCHEMAS) ||
+      canonicalJson(CANDIDATE_FINAL_SCHEMAS) ||
     canonicalJson(plan.restore?.flags) !==
       canonicalJson(CANDIDATE_SAFETY_RECOVERY_FLAGS) ||
     plan.restore?.runtimeLoginsRemainFenced !== true ||
@@ -3041,7 +3117,7 @@ export async function applyCandidateSafetyRecovery(input) {
     dependencies.prepareSafetyRestoreClosures ?? prepareSafetyRestoreClosures;
   const performCleanup =
     dependencies.cleanupCandidateSchemas ?? cleanupCandidateSchemas;
-  const applyClosures =
+  const applyOwners =
     dependencies.applyOwnerAndSecurityClosure ?? applyOwnerAndSecurityClosure;
   const assertSchemaStage =
     dependencies.assertCandidateSchemaStage ?? assertCandidateSchemaStage;
@@ -3126,10 +3202,10 @@ export async function applyCandidateSafetyRecovery(input) {
     await inspectLoginFence(connection.sql);
     let alreadyRecovered = false;
     try {
-      await assertSchemaStage(connection.sql, CANDIDATE_RESTORE_SCHEMAS);
+      await assertSchemaStage(connection.sql, CANDIDATE_FINAL_SCHEMAS);
       const [state, manifest] = await Promise.all([
         inspectState(connection.sql),
-        captureManifest(connection.sql),
+        captureManifest(connection.sql, { schemas: FINAL_BACKUP_SCHEMAS }),
       ]);
       alreadyRecovered =
         canonicalJson(
@@ -3154,7 +3230,9 @@ export async function applyCandidateSafetyRecovery(input) {
       await recheckToolchain(toolchain);
       await assertOperatorSession(connection.sql, operatorSession);
       recoveryStarted = true;
-      await performCleanup(connection.sql, closures.cleanup);
+      await performCleanup(connection.sql, closures.cleanup, undefined, {
+        includePinnedBaselineCleanup: false,
+      });
       await assertOperatorSession(connection.sql, operatorSession);
       await executeSafeTool({
         runner,
@@ -3172,18 +3250,23 @@ export async function applyCandidateSafetyRecovery(input) {
           OFFICIAL_POSTGRES_17_TOOLCHAIN.runtimeLibrariesSha256,
       });
       await assertOperatorSession(connection.sql, operatorSession);
-      await applyClosures(
+      await applyOwners(
         connection.sql,
         closures.owners,
         closures.security,
+        undefined,
+        {
+          expectedSchemas: CANDIDATE_FINAL_SCHEMAS,
+          replaySecurity: false,
+        },
       );
       await assertOperatorSession(connection.sql, operatorSession);
     }
     await inspectLoginFence(connection.sql);
-    await assertSchemaStage(connection.sql, CANDIDATE_RESTORE_SCHEMAS);
+    await assertSchemaStage(connection.sql, CANDIDATE_FINAL_SCHEMAS);
     const [state, manifest] = await Promise.all([
       inspectState(connection.sql),
-      captureManifest(connection.sql),
+      captureManifest(connection.sql, { schemas: FINAL_BACKUP_SCHEMAS }),
     ]);
     if (
       canonicalJson(
@@ -3198,7 +3281,9 @@ export async function applyCandidateSafetyRecovery(input) {
     ) {
       throw new Error("Candidate safety recovery verification failed");
     }
-    const stableManifest = await captureManifest(connection.sql);
+    const stableManifest = await captureManifest(connection.sql, {
+      schemas: FINAL_BACKUP_SCHEMAS,
+    });
     if (canonicalJson(stableManifest) !== canonicalJson(manifest)) {
       throw new Error("Candidate safety recovery manifest is not stable");
     }

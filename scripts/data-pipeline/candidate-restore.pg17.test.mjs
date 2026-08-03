@@ -10,18 +10,16 @@ import postgres from "postgres";
 
 import {
   CANDIDATE_FINAL_SCHEMAS,
-  CANDIDATE_RESTORE_SCHEMAS,
   CANDIDATE_SAFETY_RECOVERY_FLAGS,
   PINNED_PRE_ATTESTATION_SNAPSHOT,
   applyOwnerAndSecurityClosure,
   assertCandidateSchemaStage,
   cleanupCandidateSchemas,
   prepareSafetyRestoreClosures,
-  readRuntimeRolePosture,
 } from "./candidate-restore.mjs";
 import {
-  BACKUP_SCHEMAS,
   captureDatabaseManifest,
+  FINAL_BACKUP_SCHEMAS,
 } from "./cutover-credentials.mjs";
 import {
   discoverMigrationPlan,
@@ -132,22 +130,6 @@ test(
       PINNED_PRE_ATTESTATION_SNAPSHOT.structuralManifestSha256,
     );
 
-    await runTool(config.pgDump, [
-      "--format=custom",
-      "--file",
-      safetyArchive,
-      "--host",
-      config.host,
-      "--port",
-      config.port,
-      "--username",
-      config.adminUser,
-      "--dbname",
-      database,
-      ...BACKUP_SCHEMAS.flatMap((schema) => ["--schema", schema]),
-    ]);
-    const safetyBytes = await readFile(safetyArchive);
-    const safetySha256 = sha256(safetyBytes);
     const migrationPlan = await discoverMigrationPlan({
       workspace,
       repositoryCommit: "a".repeat(40),
@@ -155,7 +137,7 @@ test(
     const pending = migrationPlan.migrations.slice(
       PINNED_PRE_ATTESTATION_SNAPSHOT.migrationSourceCount,
     );
-    assert.equal(pending.length, 10);
+    assert.equal(pending.length, 13);
     for (const migration of pending) {
       await runTool(config.psql, [
         "-X",
@@ -266,12 +248,24 @@ test(
     });
     assert.equal(
       forward.structuralManifestSha256,
-      "0x8073e412ca77ba6a350c11e0421444049fa8fe644d253e2432465ecec69c5f7d",
+      "0xc015d251ee33b075d49aa7d1a89e755df96ffd4f2748c8c22aad841afe10d2d7",
     );
-    const runtimeRolePosture = await readRuntimeRolePosture(sql);
-    assert.equal(runtimeRolePosture.rows.length, 10);
-    assert.equal(runtimeRolePosture.memberships.length, 5);
-
+    await runTool(config.pgDump, [
+      "--format=custom",
+      "--file",
+      safetyArchive,
+      "--host",
+      config.host,
+      "--port",
+      config.port,
+      "--username",
+      config.adminUser,
+      "--dbname",
+      database,
+      ...FINAL_BACKUP_SCHEMAS.flatMap((schema) => ["--schema", schema]),
+    ]);
+    const safetyBytes = await readFile(safetyArchive);
+    const safetySha256 = sha256(safetyBytes);
     const closures = await prepareSafetyRestoreClosures({
       runner: undefined,
       executeSafeTool: (input) => runTool(input.binary, input.args),
@@ -281,9 +275,12 @@ test(
       environment: Object.freeze({ LANG: "C", LC_ALL: "C" }),
       secrets: [],
     });
-    await cleanupCandidateSchemas(sql, closures.cleanup, {
-      supabaseHosted: false,
-    });
+    await cleanupCandidateSchemas(
+      sql,
+      closures.cleanup,
+      { supabaseHosted: false },
+      { includePinnedBaselineCleanup: false },
+    );
     await runTool(config.pgRestore, [
       ...CANDIDATE_SAFETY_RECOVERY_FLAGS,
       "--host",
@@ -301,11 +298,25 @@ test(
       closures.owners,
       closures.security,
       { supabaseHosted: false },
+      {
+        expectedSchemas: CANDIDATE_FINAL_SCHEMAS,
+        replaySecurity: false,
+      },
     );
-    await assertCandidateSchemaStage(sql, CANDIDATE_RESTORE_SCHEMAS);
-    const recovered = await captureDatabaseManifest(sql);
-    assert.deepEqual(recovered, baseline);
-    const recoveredAgain = await captureDatabaseManifest(sql);
+    await assertCandidateSchemaStage(sql, CANDIDATE_FINAL_SCHEMAS);
+    const recovered = await captureDatabaseManifest(sql, {
+      schemas: FINAL_BACKUP_SCHEMAS,
+    });
+    assert.equal(recovered.manifestSha256, forward.manifestSha256);
+    assert.equal(
+      recovered.portableStructuralManifestSha256,
+      forward.portableStructuralManifestSha256,
+    );
+    assert.equal(recovered.tableCount, forward.tableCount);
+    assert.equal(recovered.rowCount, forward.rowCount);
+    const recoveredAgain = await captureDatabaseManifest(sql, {
+      schemas: FINAL_BACKUP_SCHEMAS,
+    });
     assert.deepEqual(recoveredAgain, recovered);
   },
 );
