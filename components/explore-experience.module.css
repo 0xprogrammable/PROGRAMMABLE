@@ -9,12 +9,12 @@
 .pageHeading {
   align-items: end;
   display: grid;
-  gap: clamp(36px, 7vw, 116px);
-  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  gap: clamp(36px, 6vw, 92px);
+  grid-template-columns: minmax(0, 1.38fr) minmax(320px, 0.62fr);
   margin-inline: auto;
   max-width: 1180px;
-  min-height: clamp(226px, 27svh, 270px);
-  padding: clamp(48px, 6svh, 62px) 0 clamp(30px, 4svh, 40px);
+  min-height: clamp(184px, 22svh, 220px);
+  padding: clamp(38px, 5svh, 52px) 0 clamp(28px, 3.5svh, 36px);
   position: relative;
   text-align: left;
   width: 100%;
@@ -26,26 +26,19 @@
 
 .pageHeading h1 {
   color: var(--text);
-  font-size: clamp(82px, 9.2vw, 132px);
-  font-weight: 575;
-  letter-spacing: -0.035em;
-  line-height: 0.88;
+  font-size: clamp(38px, 4.4vw, 58px);
+  font-weight: 555;
+  grid-column: 2;
+  justify-self: end;
+  letter-spacing: -0.042em;
+  line-height: 1.02;
   margin: 0;
-}
-
-.pageHeading p {
-  color: var(--text-soft);
-  font-size: clamp(25px, 2.5vw, 35px);
-  font-weight: 535;
-  letter-spacing: -0.015em;
-  line-height: 1.1;
-  margin: 0 0 0.04em;
-  max-width: 21ch;
+  max-width: 17ch;
   text-wrap: balance;
 }
 
 .runnersSection {
-  padding: 4px 0 88px;
+  padding: 0 0 84px;
   position: relative;
 }
 
@@ -56,8 +49,8 @@
 .runnersIntro {
   display: flex;
   justify-content: center;
-  margin: 0 auto 34px;
-  max-width: 900px;
+  margin: 0 auto 30px;
+  max-width: 940px;
   width: 100%;
 }
 
@@ -68,22 +61,58 @@
 }
 
 .runnersIntro :global(.token-toolbar) {
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: center;
   width: 100%;
 }
 
 .runnersIntro :global(.token-search) {
-  flex: 1 1 420px;
-  max-width: 540px;
+  flex: 0 1 420px;
+  max-width: 420px;
+  width: min(42vw, 420px);
+}
+
+.filterMenu {
+  gap: 0;
+  min-width: 232px;
+  padding: 6px;
+}
+
+.filterGroup + .filterGroup {
+  margin-top: 9px;
+}
+
+.filterLabel {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.035em;
+  line-height: 1.2;
+  margin: 8px 11px 5px;
+  text-transform: uppercase;
+}
+
+.activeFilterCount {
+  align-items: center;
+  background: var(--accent-soft);
+  border-radius: 999px;
+  color: var(--text);
+  display: inline-flex;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  height: 18px;
+  justify-content: center;
+  line-height: 1;
+  width: 18px;
 }
 
 .runnerGrid {
   display: grid;
-  gap: clamp(52px, 5vw, 76px) clamp(20px, 2.4vw, 32px);
+  gap: clamp(40px, 4vw, 56px) clamp(18px, 2.2vw, 26px);
   grid-template-columns: repeat(3, minmax(0, 1fr));
   margin: 0 auto;
-  max-width: 1180px;
+  max-width: 1080px;
   transition: opacity 120ms ease-out;
 }
 
@@ -98,6 +127,7 @@
   box-shadow: none;
   min-width: 0;
   overflow: visible;
+  position: relative;
   transition:
     box-shadow 190ms ease,
     transform 190ms var(--ease-out);
@@ -106,7 +136,6 @@
 .runnerHitArea {
   color: inherit;
   display: block;
-  height: 100%;
   outline: 0;
   padding: 0;
 }
@@ -115,7 +144,7 @@
   aspect-ratio: 1;
   background: var(--surface-soft);
   border: 0;
-  border-radius: 24px;
+  border-radius: 22px;
   box-shadow: 0 1px 0 color-mix(in srgb, white 28%, transparent);
   outline: 1px solid oklch(0 0 0 / 0.1);
   outline-offset: -1px;
@@ -137,20 +166,18 @@
 
 .runnerBody {
   min-width: 0;
-  padding: 18px 2px 0;
+  padding: 15px 2px 0;
 }
 
 .runnerHeading {
   align-items: baseline;
   display: flex;
-  gap: 10px;
-  justify-content: space-between;
   min-width: 0;
 }
 
 .runnerHeading h3 {
   color: var(--text);
-  font-size: clamp(25px, 2.25vw, 32px);
+  font-size: clamp(23px, 2vw, 29px);
   font-weight: 585;
   letter-spacing: -0.032em;
   line-height: 1.03;
@@ -161,24 +188,14 @@
   white-space: nowrap;
 }
 
-.runnerSymbol {
-  color: var(--muted);
-  flex: none;
-  font-family: var(--font-plex-mono), monospace;
-  font-size: 13px;
-  font-weight: 650;
-  letter-spacing: 0.025em;
-  line-height: 1.3;
-}
-
 .runnerDescription {
   color: var(--text-soft);
   display: -webkit-box;
-  font-size: 16px;
+  font-size: 15px;
   letter-spacing: -0.004em;
   line-height: 1.56;
-  margin: 12px 0 0;
-  min-height: 50px;
+  margin: 9px 0 0;
+  min-height: 47px;
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -186,6 +203,38 @@
 
 .runnerDescriptionEmpty {
   color: var(--muted);
+}
+
+.runnerSocials {
+  align-items: center;
+  display: flex;
+  gap: 2px;
+  margin: 0;
+  margin-block-start: 7px;
+  margin-inline-start: -9px;
+  min-height: 40px;
+}
+
+.runnerSocialLink {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  color: var(--muted);
+  display: inline-flex;
+  height: 40px;
+  justify-content: center;
+  outline: 0;
+  transition:
+    color 140ms ease-out,
+    opacity 140ms ease-out,
+    transform 140ms var(--ease-out);
+  width: 40px;
+}
+
+.runnerSocialLink svg {
+  height: 18px;
+  width: 18px;
 }
 
 .emptyState {
@@ -254,6 +303,10 @@
     transform: scale(1.018);
   }
 
+  .runnerSocialLink:hover {
+    color: var(--text);
+  }
+
   .emptyAction:hover {
     box-shadow: 0 14px 34px var(--hover-shadow);
     transform: translate3d(0, -2px, 0);
@@ -261,9 +314,18 @@
 }
 
 .runnerHitArea:focus-visible {
-  border-radius: 26px;
+  border-radius: 24px;
   outline: 2px solid var(--focus);
   outline-offset: 5px;
+}
+
+.runnerSocialLink:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.runnerSocialLink:active {
+  transform: scale(0.96);
 }
 
 .emptyAction:focus-visible {
@@ -282,8 +344,8 @@
 
 @media (max-width: 1040px) {
   .pageHeading {
-    gap: 48px;
-    grid-template-columns: minmax(0, 1.1fr) minmax(250px, 0.9fr);
+    gap: 44px;
+    grid-template-columns: minmax(0, 1.1fr) minmax(300px, 0.9fr);
   }
 
   .runnerGrid {
@@ -291,22 +353,35 @@
   }
 }
 
+@media (max-width: 880px) and (min-width: 701px) {
+  .runnersIntro :global(.token-toolbar) {
+    flex-wrap: wrap;
+  }
+
+  .runnersIntro :global(.token-search) {
+    flex-basis: 440px;
+    max-width: 440px;
+    width: 100%;
+  }
+
+  .runnersIntro :global(.token-pagination) {
+    flex-basis: auto;
+  }
+}
+
 @media (max-width: 700px) {
   .pageHeading {
     align-items: start;
-    gap: 18px;
     grid-template-columns: 1fr;
-    min-height: 190px;
-    padding: 28px 0 22px;
+    min-height: 156px;
+    padding: 26px 0 18px;
   }
 
   .pageHeading h1 {
-    font-size: clamp(66px, 20vw, 86px);
-  }
-
-  .pageHeading p {
-    font-size: clamp(22px, 6.2vw, 27px);
-    max-width: 15ch;
+    font-size: clamp(35px, 10.2vw, 46px);
+    grid-column: 1;
+    justify-self: start;
+    max-width: 16ch;
   }
 
   .runnersSection {
@@ -314,7 +389,7 @@
   }
 
   .runnersIntro {
-    margin-bottom: 24px;
+    margin-bottom: 20px;
   }
 
   .runnersIntro :global(.token-toolbar) {
@@ -345,19 +420,26 @@
   }
 
   .runnerBody {
-    padding: 17px 2px 0;
+    padding: 14px 2px 0;
   }
 
   .runnerHeading h3 {
-    font-size: clamp(27px, 8vw, 34px);
-  }
-
-  .runnerSymbol {
-    font-size: 13px;
+    font-size: clamp(26px, 7.6vw, 32px);
   }
 
   .runnerDescription {
     font-size: 16px;
+  }
+
+  .runnerSocials {
+    gap: 0;
+    margin-inline-start: -11px;
+    min-height: 44px;
+  }
+
+  .runnerSocialLink {
+    height: 44px;
+    width: 44px;
   }
 
   .emptyState {
@@ -371,7 +453,7 @@
 
 @media (max-width: 480px) {
   .runnerGrid {
-    max-width: 334px;
+    max-width: 320px;
   }
 }
 

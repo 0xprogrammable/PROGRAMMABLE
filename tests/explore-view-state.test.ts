@@ -1,11 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  EXPLORE_TOKENS_PER_PAGE,
   EXPLORE_REFRESH_INTERVAL_MS,
+  filterTokensBySocialPresence,
+  getExplorePaginationItems,
   getMarketCap,
   loadExplorePayload,
   preserveExplorePayloadOnRefreshFailure,
   shouldRefreshExplore,
+  tokenHasSocialLinks,
 } from "../components/explore-view";
 import type { LauncherToken } from "../lib/tokens";
 
@@ -13,7 +17,7 @@ const payload = {
   status: "ready" as const,
   tokens: [],
   page: 1,
-  pageSize: 10,
+  pageSize: 9,
   total: 1,
   totalPages: 1,
 };
@@ -24,6 +28,75 @@ afterEach(() => {
 });
 
 describe("Explore refresh state", () => {
+  it("uses a balanced nine-card page and compact desktop pagination", () => {
+    expect(EXPLORE_TOKENS_PER_PAGE).toBe(9);
+    expect(getExplorePaginationItems(1, 10)).toEqual([
+      1,
+      2,
+      3,
+      "end-gap",
+      10,
+    ]);
+    expect(getExplorePaginationItems(5, 10)).toEqual([
+      1,
+      "start-gap",
+      5,
+      "end-gap",
+      10,
+    ]);
+    expect(getExplorePaginationItems(10, 10)).toEqual([
+      1,
+      "start-gap",
+      8,
+      9,
+      10,
+    ]);
+  });
+
+  it("treats only X and Telegram as social links", () => {
+    const websiteOnly = { links: [{ kind: "website", url: "https://example.com" }] } satisfies Pick<
+      LauncherToken,
+      "links"
+    >;
+    const withX = { links: [{ kind: "x", url: "https://x.com/example" }] } satisfies Pick<
+      LauncherToken,
+      "links"
+    >;
+
+    expect(tokenHasSocialLinks(websiteOnly)).toBe(false);
+    expect(tokenHasSocialLinks(withX)).toBe(true);
+  });
+
+  it("filters the loaded token page without fabricating social data", () => {
+    const baseToken = {
+      id: "1:test",
+      name: "Test",
+      symbol: "TEST",
+      tokenAddress: "0x1111111111111111111111111111111111111111",
+      hookAddress: "0x2222222222222222222222222222222222222222",
+      poolId: `0x${"33".repeat(32)}`,
+      launchedAt: "2026-07-29T00:00:00.000Z",
+      totalSwapFeeBps: 100,
+      liquidityPath: "meme",
+    } satisfies LauncherToken;
+    const withSocials = {
+      ...baseToken,
+      id: "1:social",
+      links: [{ kind: "telegram" as const, url: "https://t.me/example" }],
+    };
+
+    expect(
+      filterTokensBySocialPresence([baseToken, withSocials], "yes").map(
+        (token) => token.id,
+      ),
+    ).toEqual(["1:social"]);
+    expect(
+      filterTokensBySocialPresence([baseToken, withSocials], "no").map(
+        (token) => token.id,
+      ),
+    ).toEqual(["1:test"]);
+  });
+
   it("refreshes only visible Explore content after the freshness interval", () => {
     expect(EXPLORE_REFRESH_INTERVAL_MS).toBe(5_000);
     expect(
@@ -125,7 +198,7 @@ describe("Explore refresh state", () => {
       q: "",
       sort: "market-cap",
       page: "1",
-      limit: "10",
+      limit: "9",
     });
 
     const first = loadExplorePayload("same-content-dedupe", search);
@@ -150,7 +223,7 @@ describe("Explore refresh state", () => {
         q: "",
         sort: "market-cap",
         page: "1",
-        limit: "10",
+        limit: "9",
       }),
     );
     const rejection = expect(request).rejects.toThrow(
