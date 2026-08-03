@@ -32,7 +32,7 @@ import {
   validateCandidateSafetyBackupEvidence,
   validatePinnedSnapshotEvidence,
 } from "./candidate-restore.mjs";
-import { ROLE_SPECS } from "./cutover-credentials.mjs";
+import { FINAL_BACKUP_SCHEMAS, ROLE_SPECS } from "./cutover-credentials.mjs";
 import { canonicalJson, sha256 } from "./hosted-db-operator-core.mjs";
 
 const OPERATOR_COMMIT = "a".repeat(40);
@@ -979,6 +979,7 @@ test("safety backup binds structural manifest, CA and exact official toolchain",
           "postgres",
           "cli_login_postgres",
         ]);
+        assert.deepEqual(input.schemas, FINAL_BACKUP_SCHEMAS);
         assert.equal(typeof input.dependencies.runCommand, "function");
         assert.equal(typeof input.dependencies.openHostedDatabase, "function");
         return { evidence: files.safetyRawEvidence };
