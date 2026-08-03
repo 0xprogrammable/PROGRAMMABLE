@@ -1,7 +1,7 @@
 .page {
-  max-width: 1180px;
+  max-width: 1080px;
   min-height: calc(100svh - var(--header-height));
-  padding-block: 20px 56px;
+  padding-block: clamp(34px, 5vw, 64px) 96px;
 }
 
 .hero,
@@ -21,10 +21,10 @@
   border-radius: 0;
   box-shadow: none;
   display: grid;
-  gap: 16px;
+  gap: 20px;
   grid-template-columns: auto minmax(0, 1fr);
-  min-height: 90px;
-  padding: 10px 8px;
+  min-height: 108px;
+  padding: 0;
 }
 
 .heroEditing {
@@ -32,29 +32,29 @@
   backdrop-filter: blur(22px) saturate(1.08);
   background: color-mix(in srgb, var(--glass-96) 94%, transparent);
   border: 1px solid var(--panel-border-soft);
-  border-radius: 22px;
+  border-radius: 26px;
   box-shadow:
     0 1px 0 var(--card-shadow),
     0 20px 56px var(--card-shadow-soft);
-  padding: 18px 20px;
+  padding: 22px 24px;
 }
 
 .avatar {
   align-items: center;
   background: var(--avatar-background);
   border: 1px solid color-mix(in srgb, var(--glass-94) 88%, var(--border));
-  border-radius: 18px;
+  border-radius: 22px;
   color: var(--accent-strong);
   display: flex;
   flex: none;
   font-family: var(--font-plex-mono), monospace;
-  font-size: 19px;
+  font-size: 21px;
   font-weight: 600;
-  height: 64px;
+  height: 72px;
   justify-content: center;
   overflow: hidden;
   position: relative;
-  width: 64px;
+  width: 72px;
 }
 
 .avatar img {
@@ -75,10 +75,10 @@
 }
 
 .nameRow h1 {
-  font-size: clamp(30px, 3vw, 37px);
-  font-weight: 610;
-  letter-spacing: -0.028em;
-  line-height: 1.06;
+  font-size: clamp(36px, 4.2vw, 52px);
+  font-weight: 570;
+  letter-spacing: -0.043em;
+  line-height: 0.98;
   overflow: hidden;
   padding-block-end: 0.05em;
   text-overflow: ellipsis;
@@ -95,9 +95,9 @@
 
 .address {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: -0.01em;
-  margin-block-start: 7px;
+  margin-block-start: 10px;
 }
 
 .editButton,
@@ -119,16 +119,14 @@
   border-radius: 12px;
   color: var(--text-soft);
   flex: none;
-  font-size: 12px;
+  font-size: 13px;
   min-height: 44px;
   padding-inline: 14px;
 }
 
 .editForm {
-  border-block-start: 1px solid var(--border);
-  margin-block-start: 15px;
+  margin-block-start: 20px;
   max-width: 760px;
-  padding-block-start: 15px;
 }
 
 .editGrid {
@@ -202,48 +200,40 @@
 }
 
 .connectCard {
-  align-items: end;
-  border-block: 1px solid var(--border);
-  border-radius: 0;
-  display: grid;
-  gap: 12px 44px;
-  grid-template-areas:
-    "title mark"
-    "copy mark"
-    "action mark";
-  grid-template-columns: minmax(0, 1fr) auto;
-  justify-items: start;
-  margin: clamp(64px, 12svh, 118px) auto 0;
-  max-width: 1180px;
-  min-height: 340px;
-  padding: clamp(40px, 6vw, 72px) 2px;
-  text-align: left;
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  margin: 0 auto;
+  max-width: 620px;
+  min-height: min(640px, calc(100svh - var(--header-height) - 96px));
+  padding: 64px 24px 88px;
+  text-align: center;
 }
 
 .connectMark {
-  grid-area: mark;
-  height: clamp(132px, 15vw, 188px);
-  margin: 0 clamp(18px, 4vw, 54px) 0 0;
+  height: clamp(84px, 10vw, 116px);
+  margin-block-end: 34px;
   object-fit: contain;
-  opacity: 0.9;
-  width: clamp(132px, 15vw, 188px);
+  opacity: 0.94;
+  width: clamp(84px, 10vw, 116px);
 }
 
 .connectCard h1 {
-  font-size: clamp(62px, 7.5vw, 98px);
-  font-weight: 555;
-  grid-area: title;
-  letter-spacing: -0.042em;
-  line-height: 0.9;
+  font-size: clamp(54px, 7vw, 82px);
+  font-weight: 540;
+  letter-spacing: -0.05em;
+  line-height: 0.92;
 }
 
 .connectCard p {
   color: var(--text-soft);
   font-size: 16px;
-  grid-area: copy;
-  line-height: 1.5;
-  margin-block-start: 4px;
-  max-width: 380px;
+  line-height: 1.55;
+  margin-block-start: 18px;
+  max-width: 410px;
+  text-wrap: pretty;
+  width: 100%;
 }
 
 .connectButton {
@@ -255,29 +245,24 @@
   display: inline-flex;
   font-size: 14px;
   font-weight: 680;
-  grid-area: action;
   justify-content: center;
-  margin-block-start: 10px;
+  margin-block-start: 28px;
   min-height: 48px;
   padding-inline: 20px;
 }
 
 .portfolio {
-  border-block-start: 1px solid var(--border);
-  border-radius: 0;
-  margin-block-start: 28px;
+  margin-block-start: 48px;
   min-width: 0;
-  overflow: hidden;
 }
 
 .portfolioHeader {
   align-items: center;
-  border-block-end: 1px solid var(--border);
   display: grid;
-  gap: 16px 28px;
+  gap: 20px 32px;
   grid-template-columns: minmax(0, 1fr) auto;
-  min-height: 112px;
-  padding: 24px 2px 22px;
+  min-height: 0;
+  padding: 0 2px 24px;
 }
 
 .portfolioTitle {
@@ -285,79 +270,64 @@
 }
 
 .portfolioTitle h2 {
-  font-size: 28px;
-  font-weight: 610;
-  letter-spacing: -0.04em;
-  line-height: 1;
+  font-size: clamp(30px, 3.4vw, 40px);
+  font-weight: 570;
+  letter-spacing: -0.045em;
+  line-height: 0.98;
 }
 
 .portfolioStats {
-  align-items: stretch;
-  display: flex;
-  flex: none;
-}
-
-.portfolioStat {
-  align-content: center;
+  align-items: end;
   display: grid;
-  gap: 4px;
-  min-width: 82px;
-  padding-block: 2px;
-  padding-inline: 18px;
-}
-
-.portfolioStat + .portfolioStat {
-  border-inline-start: 1px solid var(--border);
-}
-
-.portfolioStat:last-child {
-  padding-inline-end: 0;
-}
-
-.portfolioStat span {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 620;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-.portfolioStat strong {
-  color: var(--text);
-  font-size: 20px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 640;
-  letter-spacing: -0.025em;
-  line-height: 1.1;
-  white-space: nowrap;
+  margin: 0;
+  text-align: end;
 }
 
 .portfolioTotal {
-  min-width: 176px;
+  display: grid;
+  gap: 3px;
+  justify-items: end;
+  min-width: 188px;
 }
 
-.portfolioTotal strong {
+.portfolioTotal dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.portfolioTotal dd {
   color: var(--accent-strong);
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 640;
+  letter-spacing: -0.03em;
+  line-height: 1.08;
+  margin: 0;
+  white-space: nowrap;
 }
 
 .portfolioTotal small {
   color: var(--muted);
-  font-size: 11px;
-  line-height: 1.2;
+  display: block;
+  font-size: 12px;
+  line-height: 1.35;
   white-space: nowrap;
 }
 
 .sourceWarning {
   align-items: center;
   background: var(--warning-background);
-  border-block-end: 1px solid var(--warning-border);
+  border: 1px solid var(--warning-border);
+  border-radius: 16px;
   color: var(--warning-text);
   display: flex;
   font-size: 12px;
   gap: 16px;
   justify-content: space-between;
+  margin-block-end: 14px;
   min-height: 44px;
-  padding: 8px 22px;
+  padding: 8px 16px;
 }
 
 .sourceWarning button {
@@ -374,66 +344,50 @@
   min-width: 0;
 }
 
-.ledgerHeader,
 .tokenMain {
   display: grid;
   grid-template-columns:
-    minmax(300px, 1.7fr)
-    minmax(118px, 0.66fr)
-    minmax(158px, 0.86fr)
-    minmax(182px, auto);
-}
-
-.ledgerHeader {
-  align-items: center;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 640;
-  letter-spacing: 0.045em;
-  min-height: 40px;
-  padding-inline: 2px;
-  text-transform: uppercase;
-}
-
-.ledgerHeader span:nth-child(2),
-.ledgerHeader span:nth-child(3) {
-  padding-inline-start: 18px;
+    minmax(260px, 1.45fr)
+    minmax(106px, 0.55fr)
+    minmax(148px, 0.75fr)
+    minmax(160px, auto);
 }
 
 .list {
-  border-block-start: 1px solid var(--border);
   display: grid;
+  gap: 14px;
 }
 
 .tokenRow {
   align-self: stretch;
-  background: transparent;
-  border-block-end: 1px solid var(--border);
+  background: color-mix(in srgb, var(--glass-94) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 22px;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--glass-96) 72%, transparent),
+    0 12px 34px color-mix(in srgb, var(--card-shadow-soft) 62%, transparent);
   min-width: 0;
-  padding-inline: 2px;
+  overflow: hidden;
+  padding-inline: 20px;
   transform: translate3d(0, 0, 0);
   transition:
     background-color 170ms ease,
-    box-shadow 170ms ease,
-    transform 170ms var(--ease-out);
-}
-
-.tokenRow:last-child {
-  border-block-end: 0;
+    border-color 170ms ease,
+    box-shadow 170ms ease;
 }
 
 .tokenRowClaimable {
-  background:
-    linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--accent-soft) 44%, transparent),
-      transparent 38%
-    );
+  border-color: color-mix(in srgb, var(--accent-strong) 30%, var(--border));
+  box-shadow:
+    inset 3px 0 0 color-mix(in srgb, var(--accent) 58%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--glass-96) 72%, transparent),
+    0 12px 34px color-mix(in srgb, var(--card-shadow-soft) 62%, transparent);
 }
 
 .tokenMain {
   align-items: center;
-  min-height: 96px;
+  column-gap: 24px;
+  min-height: 112px;
   min-width: 0;
 }
 
@@ -441,20 +395,20 @@
   align-items: center;
   color: var(--text);
   display: flex;
-  gap: 14px;
+  gap: 16px;
   min-width: 0;
-  padding-inline-end: 20px;
+  padding-inline-end: 8px;
 }
 
 .tokenArt {
   background: var(--surface-soft);
   border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-  border-radius: 16px;
+  border-radius: 18px;
   flex: none;
-  height: 58px;
+  height: 64px;
   overflow: hidden;
   position: relative;
-  width: 58px;
+  width: 64px;
 }
 
 .tokenArt img {
@@ -473,9 +427,9 @@
 }
 
 .tokenCopy strong {
-  font-size: 17px;
-  font-weight: 640;
-  letter-spacing: -0.02em;
+  font-size: 18px;
+  font-weight: 630;
+  letter-spacing: -0.025em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -530,25 +484,20 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding-inline: 18px;
-}
-
-.marketMetric,
-.rewardMetric {
-  border-inline-start: 1px solid var(--border);
+  padding-inline: 0;
 }
 
 .metric span {
   color: var(--muted);
-  display: none;
-  font-size: 11px;
-  font-weight: 590;
+  display: block;
+  font-size: 12px;
+  font-weight: 560;
 }
 
 .metric strong {
-  font-size: 15px;
+  font-size: 16px;
   font-variant-numeric: tabular-nums;
-  font-weight: 650;
+  font-weight: 630;
   letter-spacing: -0.015em;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -569,9 +518,9 @@
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
+  gap: 8px;
   justify-content: flex-end;
-  padding-inline-start: 16px;
+  padding-inline-start: 0;
 }
 
 .actions:empty {
@@ -895,8 +844,11 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: 182px;
-  padding: 30px 24px;
+  background: color-mix(in srgb, var(--glass-94) 64%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 22px;
+  min-height: 220px;
+  padding: 34px 30px;
 }
 
 .emptySection strong {
@@ -921,47 +873,137 @@
   padding-inline: 16px;
 }
 
+.visuallyHidden {
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  width: 1px;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.profileLoading {
+  display: grid;
+  gap: 24px;
+  margin-block-start: 48px;
+}
+
+.loadingHeading {
+  align-items: end;
+  display: flex;
+  justify-content: space-between;
+  padding-inline: 2px;
+}
+
+.loadingHeading > span,
+.loadingArt,
+.loadingCopy > span,
+.loadingMetric,
+.loadingAction {
+  animation: profile-skeleton-pulse 1.6s ease-in-out infinite;
+  background: color-mix(in srgb, var(--surface-soft) 76%, transparent);
+}
+
+.loadingHeading > span:first-child {
+  border-radius: 12px;
+  height: 38px;
+  width: min(230px, 48vw);
+}
+
+.loadingHeading > span:last-child {
+  border-radius: 9px;
+  height: 18px;
+  width: min(130px, 28vw);
+}
+
+.loadingRows {
+  display: grid;
+  gap: 14px;
+}
+
+.loadingRow {
+  align-items: center;
+  background: color-mix(in srgb, var(--glass-94) 62%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  border-radius: 22px;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: 64px minmax(180px, 1fr) 120px 108px;
+  min-height: 112px;
+  padding-inline: 20px;
+}
+
+.loadingArt {
+  border-radius: 18px;
+  height: 64px;
+  width: 64px;
+}
+
+.loadingCopy {
+  display: grid;
+  gap: 9px;
+}
+
+.loadingCopy > span:first-child {
+  border-radius: 7px;
+  height: 17px;
+  width: min(190px, 74%);
+}
+
+.loadingCopy > span:last-child {
+  border-radius: 6px;
+  height: 11px;
+  opacity: 0.72;
+  width: min(120px, 52%);
+}
+
+.loadingMetric {
+  border-radius: 7px;
+  height: 16px;
+  width: 82px;
+}
+
+.loadingAction {
+  border-radius: var(--radius-control);
+  height: 44px;
+  justify-self: end;
+  width: 96px;
+}
+
+@keyframes profile-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.52;
+  }
+
+  50% {
+    opacity: 0.92;
+  }
+}
+
 .accountState {
   align-items: center;
-  border-block: 1px solid var(--border);
-  border-radius: 0;
+  background: color-mix(in srgb, var(--glass-94) 58%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  border-radius: 22px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  margin-block-start: 12px;
-  min-height: 260px;
+  margin-block-start: 48px;
+  min-height: 280px;
   overflow: hidden;
   padding: 28px;
   position: relative;
   text-align: center;
 }
 
-.accountState[aria-busy="true"]::before {
-  animation: profile-loading 1.4s ease-in-out infinite;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--accent) 48%, transparent),
-    transparent
-  );
-  content: "";
-  height: 2px;
-  inset-block-start: 0;
-  inset-inline: 0;
-  position: absolute;
-  transform: translateX(-100%);
-}
-
-@keyframes profile-loading {
-  to {
-    transform: translateX(100%);
-  }
-}
-
 .accountState h2 {
-  font-size: 25px;
-  font-weight: 610;
-  letter-spacing: -0.03em;
+  font-size: 28px;
+  font-weight: 590;
+  letter-spacing: -0.035em;
 }
 
 .accountState p {
@@ -1013,9 +1055,11 @@
 
 @media (hover: hover) and (pointer: fine) {
   .tokenRow:hover {
-    background: color-mix(in srgb, var(--surface-soft) 42%, transparent);
-    box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 58%, transparent);
-    transform: translate3d(2px, 0, 0);
+    background: color-mix(in srgb, var(--glass-94) 86%, transparent);
+    border-color: color-mix(in srgb, var(--border-strong) 82%, transparent);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--glass-96) 82%, transparent),
+      0 16px 42px color-mix(in srgb, var(--card-shadow-soft) 82%, transparent);
   }
 
   .tokenIdentity:hover strong {
@@ -1090,7 +1134,7 @@
 .textAction:not(:disabled):active,
 .retryButton:active,
 .emptyAction:active {
-  transform: scale(0.97);
+  transform: scale(0.96);
 }
 
 @media (max-width: 980px) {
@@ -1098,31 +1142,20 @@
     max-width: 840px;
   }
 
-  .ledgerHeader {
-    display: none;
-  }
-
   .list {
-    gap: 0;
+    gap: 12px;
     padding: 0;
   }
 
   .tokenRow {
-    border: 0;
-    border-block-end: 1px solid var(--border);
-    border-radius: 0;
-    padding-inline: 2px;
-  }
-
-  .tokenRow:last-child {
-    border-block-end: 0;
+    padding-inline: 18px;
   }
 
   .tokenMain {
-    gap: 14px 0;
+    gap: 18px 24px;
     grid-template-columns: minmax(0, 1fr) minmax(180px, auto);
     min-height: 0;
-    padding-block: 15px;
+    padding-block: 18px;
   }
 
   .tokenIdentity {
@@ -1131,10 +1164,8 @@
   }
 
   .marketMetric {
-    border-inline-start: 0;
     grid-column: 1;
     grid-row: 2;
-    padding-inline-start: 0;
   }
 
   .rewardMetric {
@@ -1143,12 +1174,7 @@
   }
 
   .metric {
-    border-block-start: 1px solid var(--border);
-    padding-block-start: 12px;
-  }
-
-  .metric span {
-    display: block;
+    padding-block-start: 2px;
   }
 
   .metric strong {
@@ -1163,25 +1189,21 @@
   .advancedSettingsBody {
     margin-block-end: 15px;
   }
+
+  .loadingRow {
+    grid-template-columns: 64px minmax(160px, 1fr) 110px 100px;
+  }
 }
 
 @media (max-width: 720px) {
   .page {
     min-height: calc(100svh - var(--header-height) - 68px);
-    padding-block: 14px 104px;
-  }
-
-  .hero,
-  .portfolio,
-  .connectCard,
-  .accountState {
-    border-radius: 0;
+    padding-block: 28px 104px;
   }
 
   .hero {
-    gap: 13px;
-    min-height: 86px;
-    padding: 12px;
+    gap: 14px;
+    min-height: 82px;
   }
 
   .avatar {
@@ -1199,17 +1221,8 @@
   }
 
   .connectCard {
-    align-items: start;
-    gap: 10px;
-    grid-template-areas:
-      "mark"
-      "title"
-      "copy"
-      "action";
-    grid-template-columns: 1fr;
-    margin-block-start: 38px;
-    min-height: 0;
-    padding: 34px 2px 40px;
+    min-height: calc(100svh - var(--header-height) - 124px);
+    padding: 42px 18px 72px;
   }
 
   .connectCard h1 {
@@ -1218,30 +1231,41 @@
 
   .connectMark {
     height: 72px;
-    margin: 0 0 20px;
+    margin-block-end: 26px;
     width: 72px;
   }
 
   .portfolioHeader {
-    padding: 20px 2px;
+    padding: 0 2px 20px;
   }
 
   .portfolioTitle h2 {
-    font-size: 26px;
-  }
-
-  .portfolioStat {
-    min-width: 72px;
-    padding-inline: 14px;
-  }
-
-  .portfolioStat strong {
-    font-size: 18px;
+    font-size: 30px;
   }
 
   .list {
-    gap: 0;
+    gap: 12px;
     padding: 0;
+  }
+
+  .profileLoading {
+    margin-block-start: 42px;
+  }
+
+  .loadingRow {
+    grid-template-columns: 56px minmax(0, 1fr) 94px;
+    min-height: 100px;
+    padding-inline: 16px;
+  }
+
+  .loadingArt {
+    border-radius: 16px;
+    height: 56px;
+    width: 56px;
+  }
+
+  .loadingMetric {
+    display: none;
   }
 }
 
@@ -1282,17 +1306,11 @@
 
   .portfolioStats {
     width: 100%;
-  }
-
-  .portfolioStat:first-child {
-    padding-inline-start: 0;
-  }
-
-  .portfolioStat:last-child {
-    padding-inline-end: 0;
+    text-align: start;
   }
 
   .portfolioTotal {
+    justify-items: start;
     min-width: 0;
   }
 
@@ -1314,15 +1332,14 @@
   .rewardMetric {
     grid-column: 2;
     grid-row: 2;
-    padding-inline-start: 13px;
+    padding-inline-start: 10px;
   }
 
   .actions {
-    border-block-start: 1px solid var(--border);
     grid-column: 1 / -1;
     grid-row: 3;
     justify-content: stretch;
-    padding-block-start: 12px;
+    padding-block-start: 4px;
     padding-inline-start: 0;
   }
 
@@ -1381,6 +1398,19 @@
     gap: 3px;
     justify-content: flex-start;
   }
+
+  .loadingHeading > span:last-child {
+    display: none;
+  }
+
+  .loadingRow {
+    grid-template-columns: 54px minmax(0, 1fr);
+    min-height: 96px;
+  }
+
+  .loadingAction {
+    display: none;
+  }
 }
 
 @media (max-width: 380px) {
@@ -1390,7 +1420,6 @@
 
   .hero {
     gap: 10px;
-    padding-inline: 8px;
   }
 
   .avatar {
@@ -1407,19 +1436,12 @@
   }
 
   .portfolioHeader {
-    padding-inline: 15px;
-  }
-
-  .portfolioStat {
-    padding-inline: 11px;
-  }
-
-  .portfolioStat strong {
-    font-size: 17px;
+    padding-inline: 2px;
   }
 
   .tokenRow {
-    padding-inline: 2px;
+    border-radius: 18px;
+    padding-inline: 14px;
   }
 
   .tokenArt {
@@ -1469,10 +1491,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .accountState[aria-busy="true"]::before {
+  .loadingHeading > span,
+  .loadingArt,
+  .loadingCopy > span,
+  .loadingMetric,
+  .loadingAction {
     animation: none;
-    opacity: 0.55;
-    transform: none;
+    opacity: 0.72;
   }
 
   .tokenRow,
