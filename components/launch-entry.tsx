@@ -112,8 +112,7 @@ export function LaunchModelPicker({
       <header
         className={`launch-model-heading ${launchExperience.pickerHeading}`}
       >
-        <h1>Create a token</h1>
-        <p>Choose a launch model, then configure the token and its pool.</p>
+        <h1>Choose your launch model</h1>
       </header>
 
       <div className={`launch-model-grid ${launchExperience.modelGrid}`}>
@@ -137,7 +136,7 @@ export function LaunchModelPicker({
           >
             <Image
               className={launchExperience.artImage}
-              src="/brand/create/classic-model-v2.webp"
+              src="/brand/create/classic-botanical-v3.webp"
               alt=""
               fill
               sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 88px) / 2), 560px"
@@ -172,7 +171,7 @@ export function LaunchModelPicker({
               <span
                 className={`launch-model-action ${launchExperience.modelAction}`}
               >
-                Create with Classic
+                Create a Classic coin
                 <ArrowRight aria-hidden="true" size={16} />
               </span>
             ) : null}
@@ -193,7 +192,7 @@ export function LaunchModelPicker({
           >
             <Image
               className={launchExperience.artImage}
-              src="/brand/create/custom-hook-model-v2.webp"
+              src="/brand/create/custom-galaxy-v3.webp"
               alt=""
               fill
               loading="eager"
@@ -224,7 +223,7 @@ export function LaunchModelPicker({
             <span
               className={`launch-model-action ${launchExperience.modelAction}`}
             >
-              Open Custom Hook
+              Create a Custom Hook
               <ArrowRight aria-hidden="true" size={16} />
             </span>
           </span>

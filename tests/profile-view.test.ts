@@ -13,6 +13,7 @@ import {
   parsePendingProfileTransactions,
   profileClaimableWei,
   profileClaimActionCount,
+  profileEntryHasClaimableReward,
   profileHasRewardSurface,
   profileRewardsForAccount,
   profileTransactionPollAttempts,
@@ -428,6 +429,12 @@ describe("profile reward grouping", () => {
     );
     expect(profileClaimActionCount(portfolio, firstAddress)).toBe(1);
     expect(profileClaimActionCount(portfolio, secondAddress)).toBe(1);
+    expect(
+      profileEntryHasClaimableReward(portfolio[0]!, firstAddress),
+    ).toBe(true);
+    expect(
+      profileEntryHasClaimableReward(portfolio[0]!, thirdAddress),
+    ).toBe(false);
     expect(
       profileRewardsForAccount(
         [classicReward, otherBeneficiaryReward],

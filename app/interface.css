@@ -193,9 +193,11 @@ code,
 /* Header */
 
 .site-header {
-  backdrop-filter: blur(28px) saturate(1.16);
-  border-bottom-color: transparent;
-  box-shadow: 0 10px 28px color-mix(in srgb, var(--header-shadow) 60%, transparent);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: var(--body-background);
+  border: 0;
+  box-shadow: none;
 }
 
 .header-inner {
@@ -229,16 +231,14 @@ code,
 }
 
 .desktop-nav {
-  -webkit-backdrop-filter: var(--control-glass-backdrop);
-  backdrop-filter: var(--control-glass-backdrop);
-  background: var(--control-glass-background);
-  border: 1px solid var(--control-glass-border);
-  border-radius: 22px;
-  box-shadow:
-    inset 0 1px 0 var(--control-glass-highlight),
-    0 8px 24px color-mix(in srgb, var(--control-glass-shadow-color) 78%, transparent);
-  gap: 2px;
-  padding: 3px;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  gap: 4px;
+  padding: 0;
 }
 
 .desktop-nav a {
@@ -254,10 +254,8 @@ code,
 }
 
 .desktop-nav a.active {
-  background: var(--control-glass-background-strong);
-  box-shadow:
-    inset 0 1px 0 var(--control-glass-highlight),
-    0 4px 12px var(--card-shadow-soft);
+  background: var(--accent-soft);
+  box-shadow: none;
 }
 
 .theme-toggle,

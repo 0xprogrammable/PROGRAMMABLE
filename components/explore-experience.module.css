@@ -7,16 +7,15 @@
 }
 
 .pageHeading {
-  align-items: end;
-  display: grid;
-  gap: clamp(36px, 6vw, 92px);
-  grid-template-columns: minmax(0, 1.38fr) minmax(320px, 0.62fr);
+  align-items: center;
+  display: flex;
+  justify-content: center;
   margin-inline: auto;
-  max-width: 1180px;
-  min-height: clamp(184px, 22svh, 220px);
-  padding: clamp(38px, 5svh, 52px) 0 clamp(28px, 3.5svh, 36px);
+  max-width: 1240px;
+  min-height: clamp(190px, 23svh, 230px);
+  padding: clamp(46px, 6svh, 64px) 0 clamp(30px, 4svh, 40px);
   position: relative;
-  text-align: left;
+  text-align: center;
   width: 100%;
 }
 
@@ -26,14 +25,12 @@
 
 .pageHeading h1 {
   color: var(--text);
-  font-size: clamp(38px, 4.4vw, 58px);
+  font-size: clamp(38px, 3.35vw, 48px);
   font-weight: 555;
-  grid-column: 2;
-  justify-self: end;
-  letter-spacing: -0.042em;
-  line-height: 1.02;
+  letter-spacing: -0.045em;
+  line-height: 1.04;
   margin: 0;
-  max-width: 17ch;
+  max-width: 100%;
   text-wrap: balance;
 }
 
@@ -343,13 +340,14 @@
 }
 
 @media (max-width: 1040px) {
-  .pageHeading {
-    gap: 44px;
-    grid-template-columns: minmax(0, 1.1fr) minmax(300px, 0.9fr);
-  }
-
   .runnerGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 960px) {
+  .pageHeading h1 {
+    white-space: nowrap;
   }
 }
 
@@ -371,17 +369,14 @@
 
 @media (max-width: 700px) {
   .pageHeading {
-    align-items: start;
-    grid-template-columns: 1fr;
-    min-height: 156px;
-    padding: 26px 0 18px;
+    min-height: 166px;
+    padding: 30px 0 22px;
   }
 
   .pageHeading h1 {
     font-size: clamp(35px, 10.2vw, 46px);
-    grid-column: 1;
-    justify-self: start;
     max-width: 16ch;
+    white-space: normal;
   }
 
   .runnersSection {

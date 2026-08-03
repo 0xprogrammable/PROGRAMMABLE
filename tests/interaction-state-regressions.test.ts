@@ -5,33 +5,28 @@ import { describe, expect, it } from "vitest";
 const root = process.cwd();
 
 describe("interaction state regressions", () => {
-  it("keeps Classic payout editing aligned with the shared transaction state", () => {
+  it("keeps the profile claim surface free of payout-setting controls", () => {
     const source = readFileSync(
       join(root, "components/profile-view.tsx"),
       "utf8",
     );
 
-    expect(source).toContain("{payoutActionLabel(payoutState)}");
-    expect(source).toMatch(
-      /aria-label=\{`New payout address[\s\S]*?disabled=\{payoutPending \|\| actionCanCheckStatus\(payoutState\)\}/,
-    );
-    expect(source).toContain(
-      "disabled={payoutPending || actionCanCheckStatus(payoutState)}",
-    );
+    expect(source).not.toContain("{payoutActionLabel(payoutState)}");
+    expect(source).not.toContain("New payout address");
+    expect(source).not.toContain("Payouts, fee terms and splits");
+    expect(source).toContain('onClick={() => onClassicV3Action(reward, "claim")}');
   });
 
-  it("uses the active profile network for Stock-Paired payout links", () => {
+  it("uses the active profile network for transaction links", () => {
     const source = readFileSync(
       join(root, "components/profile-view.tsx"),
       "utf8",
     );
 
-    expect(source).not.toContain(
-      'href={`https://etherscan.io/address/${reward.payoutAddress}`}',
-    );
     expect(source).toMatch(
-      /chainId === 11_155_111[\s\S]*?sepolia\.etherscan\.io[\s\S]*?reward\.payoutAddress/,
+      /function transactionHref[\s\S]*?chainId === 11_155_111[\s\S]*?sepolia\.etherscan\.io[\s\S]*?etherscan\.io/,
     );
+    expect(source).toContain("View transaction");
   });
 
   it("remounts token-detail trade state when the connected account changes", () => {
