@@ -70,7 +70,7 @@ describe("interaction accessibility", () => {
     );
     expect(css).toContain("@keyframes theme-radial-reveal");
     expect(css).toMatch(
-      /theme-radial-reveal 280ms cubic-bezier\(0\.23, 1, 0\.32, 1\)/,
+      /theme-radial-reveal 292ms cubic-bezier\(0\.32, 0\.72, 0, 1\)/,
     );
   });
 

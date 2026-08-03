@@ -11,11 +11,10 @@ export default function NotFound() {
       <div className={`${styles.page} page-width`}>
         <section className={styles.stage} aria-labelledby="not-found-title">
           <div className={styles.copy}>
-            <p className={styles.code}>404 · Page not found</p>
-            <h1 id="not-found-title">This page isn&apos;t here.</h1>
+            <h1 id="not-found-title">This page isn’t available.</h1>
             <p className={styles.description}>
-              The link may have moved, or the project is no longer available.
-              Explore current tokens or return to the documentation.
+              The link may have moved. Explore current tokens or return to the
+              documentation.
             </p>
             <div className={styles.actions}>
               <Link className={styles.primaryAction} href="/">

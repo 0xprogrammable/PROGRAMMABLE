@@ -21,6 +21,7 @@ import { WalletButton } from "@/components/wallet-provider";
 type ColorTheme = "light" | "dark";
 type ThemeViewTransition = {
   finished: Promise<void>;
+  skipTransition: () => void;
 };
 type ViewTransitionDocument = Document & {
   startViewTransition?: (update: () => void) => ThemeViewTransition;
@@ -29,6 +30,7 @@ const themeChangeEvent = "programmable:theme-changed";
 let themeTransitionSequence = 0;
 let themeFallbackTimer: number | null = null;
 let themeInstantCleanupFrame: number | null = null;
+let activeThemeViewTransition: ThemeViewTransition | null = null;
 
 function clearThemeReveal(root: HTMLElement) {
   if (themeFallbackTimer !== null) {
@@ -97,8 +99,11 @@ function ThemeToggle() {
       "(prefers-reduced-motion: reduce)",
     ).matches;
 
+    activeThemeViewTransition?.skipTransition();
+    activeThemeViewTransition = null;
+    clearThemeReveal(root);
+
     if (event.detail === 0 || reduceMotion) {
-      clearThemeReveal(root);
       if (themeInstantCleanupFrame !== null) {
         window.cancelAnimationFrame(themeInstantCleanupFrame);
       }
@@ -138,7 +143,7 @@ function ThemeToggle() {
         if (transitionSequence === themeTransitionSequence) {
           clearThemeReveal(root);
         }
-      }, 300);
+      }, 320);
     };
 
     if (!viewTransitionDocument.startViewTransition) {
@@ -152,8 +157,12 @@ function ThemeToggle() {
       const transition = viewTransitionDocument.startViewTransition(() => {
         commitTheme(nextTheme);
       });
+      activeThemeViewTransition = transition;
 
       const finishReveal = () => {
+        if (activeThemeViewTransition === transition) {
+          activeThemeViewTransition = null;
+        }
         if (transitionSequence === themeTransitionSequence) {
           clearThemeReveal(root);
         }
