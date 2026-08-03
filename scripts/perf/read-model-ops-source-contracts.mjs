@@ -35,7 +35,7 @@ const APPROVED_OPERATIONS = Object.freeze({
       dependencies: Object.freeze([
         Object.freeze({
           path: "lib/data-pipeline/candidate-projector-runtime-binding.server.ts",
-          sha256: "32efa13d740614f7e66fd20a0158edf3383f4f6643a7fe34268fabda6261931c",
+          sha256: "9a97556d3fca540586b56eb1bccf8c9c779e56c890cf03e585cd172206944615",
         }),
       ]),
       migrations: Object.freeze([
@@ -102,6 +102,10 @@ const APPROVED_OPERATIONS = Object.freeze({
         Object.freeze({
           path: "supabase/migrations/20260802092800_market_projector_fast_lane.sql",
           sha256: "70c2719af30e0d3438e3de306376c7fa62d0196be98f81d7bd6b327559c14dc7",
+        }),
+        Object.freeze({
+          path: "supabase/migrations/20260803000100_market_projector_health_view.sql",
+          sha256: "946000d60600f8b144fb535579f6808b0acfd6da3331f17511f712e7bb24b2fd",
         }),
       ]),
     }),
@@ -838,7 +842,7 @@ export function evaluateReadModelOperationsSourceContracts(
   );
   check(
     "ops-market-projector-migration",
-    marketWorker?.migrations?.length === 2 &&
+    marketWorker?.migrations?.length === 3 &&
       migrationContract(
         "market-projector",
         source(marketWorker.migrations[0]?.path),
@@ -846,6 +850,9 @@ export function evaluateReadModelOperationsSourceContracts(
       migrationContract(
         "market-projector-fast-lane",
         source(marketWorker.migrations[1]?.path),
+      ) &&
+      source(marketWorker.migrations[2]?.path)?.includes(
+        "market_projector_health_v1",
       ),
     "the market worker is bound to exact lineage, terminal checkpoint and lease SQL",
   );

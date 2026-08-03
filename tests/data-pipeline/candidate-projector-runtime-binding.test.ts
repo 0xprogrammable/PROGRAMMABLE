@@ -280,6 +280,12 @@ describe("candidate projector runtime binding", () => {
       if (text.includes("verify_candidate_database_promoted_v2")) {
         return [{ verified: true }];
       }
+      if (text.includes("pg_control_system")) {
+        return [{
+          database_name: "postgres",
+          system_identifier: "72623859790382856",
+        }];
+      }
       return [];
     });
     const executor = {
@@ -290,7 +296,10 @@ describe("candidate projector runtime binding", () => {
     await expect(assertCandidateDatabasePromotedState({
       executor,
       binding: selection.promotedDatabase,
-    })).resolves.toBeUndefined();
+    })).resolves.toEqual({
+      databaseName: "postgres",
+      systemIdentifier: "72623859790382856",
+    });
     expect(query).toHaveBeenCalledWith(
       expect.stringContaining("verify_candidate_database_promoted_v2"),
       expect.arrayContaining([
@@ -300,6 +309,60 @@ describe("candidate projector runtime binding", () => {
         "dpl_12345678901234567890",
       ]),
     );
+    expect(query).toHaveBeenCalledWith(
+      expect.stringContaining("pg_catalog.pg_control_system()"),
+    );
+  });
+
+  it.each([
+    ["missing", []],
+    ["multiple", [
+      { database_name: "postgres", system_identifier: "72623859790382856" },
+      { database_name: "postgres", system_identifier: "72623859790382856" },
+    ]],
+    ["malformed database", [
+      { database_name: "postgres;select", system_identifier: "72623859790382856" },
+    ]],
+    ["zero system identifier", [
+      { database_name: "postgres", system_identifier: "0" },
+    ]],
+    ["oversized system identifier", [
+      { database_name: "postgres", system_identifier: "18446744073709551616" },
+    ]],
+    ["non-text system identifier", [
+      { database_name: "postgres", system_identifier: 72623859790382856n },
+    ]],
+  ])("rejects a %s physical database identity", async (_label, identityRows) => {
+    const selection = selectProjectorRuntimeBinding({
+      env: promotedReleaseEnvironment(),
+      canonicalBinding: canonicalCandidateBinding(),
+    });
+    if (!selection.promotedDatabase) throw new Error("missing promotion proof");
+    const query = vi.fn(async (text: string) => {
+      if (text.includes("current_role::text")) {
+        return [{
+          session_user: "programmable_projector_login",
+          current_role: "programmable_projector",
+        }];
+      }
+      if (text === "select session_user::text as session_user") {
+        return [{ session_user: "programmable_projector_login" }];
+      }
+      if (text.includes("verify_candidate_database_promoted_v2")) {
+        return [{ verified: true }];
+      }
+      if (text.includes("pg_control_system")) return identityRows;
+      return [];
+    });
+    const executor = {
+      transaction: vi.fn(async (work) => work({ query })),
+      close: vi.fn(),
+    } as never;
+
+    await expect(assertCandidateDatabasePromotedState({
+      executor,
+      binding: selection.promotedDatabase,
+    })).rejects.toThrow();
   });
 
   it("validates real Envio progress against the selected candidate identity", async () => {
