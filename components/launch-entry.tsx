@@ -41,8 +41,7 @@ function LaunchFormLoading({ onBack }: { onBack: () => void }) {
           Back
         </button>
         <div className={`launch-page-title ${launchExperience.formPageTitle}`}>
-          <span className={launchExperience.formModelName}>Launch</span>
-          <h1>Create your token</h1>
+          <h1>Create token</h1>
         </div>
       </header>
       <div
@@ -112,7 +111,7 @@ export function LaunchModelPicker({
       <header
         className={`launch-model-heading ${launchExperience.pickerHeading}`}
       >
-        <h1>Choose a launch model</h1>
+        <h1>Create</h1>
       </header>
 
       <div className={`launch-model-grid ${launchExperience.modelGrid}`}>
@@ -157,20 +156,62 @@ export function LaunchModelPicker({
               className={`launch-model-description ${launchExperience.modelDescription}`}
               id="launch-model-classic-description"
             >
-              Fixed swap fees with creator rewards paid in ETH. A familiar
-              token launch on Uniswap v4.
+              Fixed supply, permanent one-sided liquidity and configurable
+              creator rewards.
             </span>
             {classicV3LaunchAvailable ? (
               <span
                 className={`launch-model-action ${launchExperience.modelAction}`}
               >
-                Launch
+                Create token
                 <ArrowRight aria-hidden="true" size={16} />
               </span>
             ) : null}
           </span>
         </button>
 
+        <article
+          className={`launch-model-card ${launchExperience.modelCard} ${launchExperience.customCard}`}
+          data-launch-model-option="custom"
+          data-launch-model-available="false"
+          aria-labelledby="launch-model-custom-title"
+          aria-describedby="launch-model-custom-description"
+        >
+          <span
+            className={`launch-model-art ${launchExperience.modelArt} ${launchExperience.customArt}`}
+            aria-hidden="true"
+          >
+            <Image
+              src="/brand/projects/north-star-v1.webp"
+              alt=""
+              fill
+              loading="eager"
+              sizes="(max-width: 520px) calc(100vw - 28px), (max-width: 800px) calc(100vw - 48px), 500px"
+            />
+          </span>
+
+          <span
+            className={`launch-model-card-body ${launchExperience.modelBody}`}
+          >
+            <span
+              className={`launch-model-card-heading ${launchExperience.modelHeading}`}
+            >
+              <strong id="launch-model-custom-title">Custom Hook</strong>
+              <small data-status="pending">In development</small>
+            </span>
+            <span
+              className={`launch-model-description ${launchExperience.modelDescription}`}
+              id="launch-model-custom-description"
+            >
+              Custom Hook configuration is not available in this build.
+            </span>
+            <span
+              className={`launch-model-action ${launchExperience.modelAction} ${launchExperience.customStatus}`}
+            >
+              Not available
+            </span>
+          </span>
+        </article>
       </div>
     </div>
   );

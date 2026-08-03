@@ -38,6 +38,21 @@ export const MIN_BUY_GAS_RESERVE_WEI = parseEther("0.003");
 const BUY_GAS_RESERVE_UNITS = 500_000n;
 const BUY_GAS_RESERVE_MULTIPLIER = 150n;
 
+export function parseTradeSlippageBps(value: string) {
+  const normalized = value.trim();
+  if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) {
+    throw new Error("Enter slippage with up to two decimal places");
+  }
+
+  const [wholePart, decimalPart = ""] = normalized.split(".");
+  const basisPoints =
+    Number(wholePart) * 100 + Number(decimalPart.padEnd(2, "0"));
+  if (!Number.isSafeInteger(basisPoints) || basisPoints < 1 || basisPoints > 1_000) {
+    throw new Error("Slippage must be between 0.01% and 10%");
+  }
+  return basisPoints;
+}
+
 export function calculateBuyMaxWei(
   nativeBalanceWei: bigint,
   gasPriceWei: bigint,
@@ -302,10 +317,13 @@ export function TokenTrade({
 }) {
   const [side, setSide] = useState<TradeSide>("buy");
   const [amount, setAmount] = useState("");
-  const slippageBps = DEFAULT_TRADE_SLIPPAGE_BPS;
+  const [slippagePercent, setSlippagePercent] = useState(
+    String(DEFAULT_TRADE_SLIPPAGE_BPS / 100),
+  );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [amountInvalid, setAmountInvalid] = useState(false);
+  const [slippageInvalid, setSlippageInvalid] = useState(false);
   const [message, setMessage] = useState("");
   const [review, setReview] = useState<PreparedTokenTrade | null>(null);
   const [maxPending, setMaxPending] = useState(false);
@@ -313,7 +331,9 @@ export function TokenTrade({
     useState<WalletTradeBalanceState | null>(null);
   const amountInputId = useId();
   const amountErrorId = useId();
+  const slippageInputId = useId();
   const amountInputRef = useRef<HTMLInputElement>(null);
+  const slippageInputRef = useRef<HTMLInputElement>(null);
   const activeSwapFeeBps = side === "buy" ? buySwapFeeBps : sellSwapFeeBps;
   const activeInputAsset = token;
   const activeInputSymbol = side === "buy" ? "ETH" : symbol;
@@ -379,6 +399,7 @@ export function TokenTrade({
   async function applyMaximumBalance() {
     setError("");
     setAmountInvalid(false);
+    setSlippageInvalid(false);
     setMessage("");
     if (!owner) {
       setError("Connect a wallet to use your balance");
@@ -441,6 +462,20 @@ export function TokenTrade({
       setAmountInvalid(true);
       setError(amountValidationError);
       amountInputRef.current?.focus();
+      return;
+    }
+
+    let slippageBps: number;
+    try {
+      slippageBps = parseTradeSlippageBps(slippagePercent);
+    } catch (caught) {
+      setSlippageInvalid(true);
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Enter a valid slippage tolerance",
+      );
+      slippageInputRef.current?.focus();
       return;
     }
 
@@ -639,8 +674,33 @@ export function TokenTrade({
           <dd>{formatBasisPoints(activeSwapFeeBps)}</dd>
         </div>
         <div>
-          <dt>Slippage</dt>
-          <dd>{formatBasisPoints(slippageBps)}</dd>
+          <dt>
+            <label htmlFor={slippageInputId}>Slippage</label>
+          </dt>
+          <dd>
+            <span
+              className={`${styles.slippageControl} ${
+                slippageInvalid ? styles.slippageControlInvalid : ""
+              }`}
+            >
+              <input
+                ref={slippageInputRef}
+                id={slippageInputId}
+                aria-invalid={slippageInvalid || undefined}
+                aria-describedby={slippageInvalid ? amountErrorId : undefined}
+                autoComplete="off"
+                inputMode="decimal"
+                maxLength={5}
+                value={slippagePercent}
+                onChange={(event) => {
+                  setSlippagePercent(event.target.value);
+                  if (error) setError("");
+                  if (slippageInvalid) setSlippageInvalid(false);
+                }}
+              />
+              <span aria-hidden="true">%</span>
+            </span>
+          </dd>
         </div>
       </dl>
 

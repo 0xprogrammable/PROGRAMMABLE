@@ -2,7 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, Check, Copy, ExternalLink } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowUpRight,
+  Check,
+  Copy,
+  ExternalLink,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   formatUnits,
@@ -22,6 +28,12 @@ import {
   TokenPriceChart,
   type TokenChartVolume,
 } from "@/components/token-price-chart";
+import { TokenCommunityChat } from "@/components/token-community-chat";
+import {
+  getExplorePreviewProject,
+  getExplorePreviewToken,
+} from "@/components/explore-preview-data";
+import { useInterfacePreview } from "@/components/interface-preview";
 import { useLiveDataRefresh } from "@/components/use-live-data-refresh";
 import { WebsiteLinkIcon } from "@/components/website-link-icon";
 import { useWallet } from "@/components/wallet-provider";
@@ -533,7 +545,7 @@ export function buildTokenDetailMetrics(
         : null),
     officialLiquidityUsd !== null
       ? {
-          label: "Liquidity",
+          label: "Liquidity now",
           value: officialLiquidityUsd,
         }
       : null,
@@ -597,6 +609,27 @@ function getLinkLabel(kind: TokenLinkKind) {
   return "X";
 }
 
+function getNetworkLabel(chainId: number) {
+  if (chainId === 1) return "Ethereum";
+  if (chainId === 11_155_111) return "Sepolia";
+  return `Chain ${chainId}`;
+}
+
+function formatProjectDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Published onchain";
+
+  return new Intl.DateTimeFormat("en", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(date);
+}
+
+function formatProjectAddress(address: `0x${string}`) {
+  return `${address.slice(0, 8)}…${address.slice(-6)}`;
+}
+
 function XBrandIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -639,6 +672,97 @@ function MetricGrid({ metrics }: { metrics: TokenMetric[] }) {
         </div>
       ))}
     </dl>
+  );
+}
+
+function PreviewTokenTrade({ token }: { token: LauncherToken }) {
+  const [slippagePercent, setSlippagePercent] = useState("1");
+
+  return (
+    <div
+      className={styles.tradeForm}
+      aria-label={`Trade ${token.symbol} preview`}
+    >
+      <header className={styles.tradeHeader}>
+        <h2>Trade ${token.symbol}</h2>
+        <span>Interface preview</span>
+      </header>
+
+      <div className={styles.sideControl} role="group" aria-label="Trade side">
+        <span aria-hidden="true" className={styles.sideIndicator} />
+        <button
+          className={`${styles.sideButton} ${styles.sideButtonSelected}`}
+          type="button"
+          aria-pressed="true"
+          disabled
+        >
+          Buy
+        </button>
+        <button
+          className={styles.sideButton}
+          type="button"
+          aria-pressed="false"
+          disabled
+        >
+          Sell
+        </button>
+      </div>
+
+      <div className={styles.amountCard}>
+        <div className={styles.amountHeader}>
+          <span>You pay</span>
+          <span className={styles.balance}>Wallet disconnected</span>
+        </div>
+        <div className={styles.amountInputRow}>
+          <input
+            className={styles.amountInput}
+            aria-label="You pay"
+            inputMode="decimal"
+            placeholder="0"
+            disabled
+          />
+          <span className={styles.asset}>ETH</span>
+        </div>
+        <div className={styles.amountMeta} aria-hidden="true">
+          <span>&nbsp;</span>
+        </div>
+      </div>
+
+      <dl className={styles.tradeFacts}>
+        <div>
+          <dt>Swap fee</dt>
+          <dd>{formatSwapFee(token.totalSwapFeeBps) ?? "—"}</dd>
+        </div>
+        <div>
+          <dt>
+            <label htmlFor={`preview-slippage-${token.id}`}>Slippage</label>
+          </dt>
+          <dd>
+            <span className={styles.slippageControl}>
+              <input
+                id={`preview-slippage-${token.id}`}
+                aria-label="Slippage tolerance"
+                autoComplete="off"
+                inputMode="decimal"
+                maxLength={5}
+                value={slippagePercent}
+                onChange={(event) => setSlippagePercent(event.target.value)}
+              />
+              <span aria-hidden="true">%</span>
+            </span>
+          </dd>
+        </div>
+      </dl>
+
+      <div className={styles.tradeFooter}>
+        <div className={styles.statusMessage} role="status">
+          Local preview · no wallet request or transaction
+        </div>
+        <button className={styles.primaryAction} type="button" disabled>
+          Trading unavailable in preview
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -692,15 +816,16 @@ function DeepLiquiditySummary({ token }: { token: LauncherToken }) {
 function TokenDetailContent({
   token,
   chainId,
+  preview,
 }: {
   token: LauncherToken;
   chainId: number;
+  preview: boolean;
 }) {
   const { wallet, openWallet, readTradeBalances, sendTransaction } =
     useWallet();
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState("");
-  const [hoveredMarketCap, setHoveredMarketCap] = useState<string | null>(null);
   const [chartVolume, setChartVolume] = useState<TokenChartVolume | null>(null);
   const [tradeFlow, setTradeFlow] = useState<TradeFlow>({
     phase: "form",
@@ -709,6 +834,13 @@ function TokenDetailContent({
   const imageUrl =
     token.imageUrl?.trim() || getFallbackTokenImage(token.tokenAddress);
   const imageSource = getTokenCardImageSource(imageUrl);
+  const projectLinks = token.links ?? [];
+  const creatorAddress = isTokenAddress(token.creatorAddress)
+    ? token.creatorAddress
+    : null;
+  const previewProject = preview
+    ? getExplorePreviewProject(token.tokenAddress)
+    : undefined;
   const tokenDecimals =
     typeof token.tokenDecimals === "number" &&
     Number.isInteger(token.tokenDecimals) &&
@@ -729,10 +861,10 @@ function TokenDetailContent({
   const metrics = useMemo(() => {
     return buildTokenDetailMetrics(
       token,
-      hoveredMarketCap,
+      null,
       buildChartVolumeMetric(chartVolume),
     );
-  }, [chartVolume, hoveredMarketCap, token]);
+  }, [chartVolume, token]);
 
   const explorerBase =
     chainId === 1
@@ -926,10 +1058,12 @@ function TokenDetailContent({
 
   return (
     <div className={`${styles.page} page-width`}>
-      <Link className={styles.back} href="/">
-        <ArrowLeft aria-hidden="true" size={16} />
-        Explore
-      </Link>
+      <div className={styles.navigationRow}>
+        <Link className={styles.back} href="/">
+          <ArrowLeft aria-hidden="true" size={16} />
+          Explore
+        </Link>
+      </div>
 
       <div className={styles.layout}>
         <section className={styles.overview}>
@@ -937,7 +1071,9 @@ function TokenDetailContent({
             <div className={styles.image}>
               <Image
                 src={imageSource}
-                alt={token.imageUrl?.trim() ? `${token.name} token image` : ""}
+                alt={
+                  token.imageUrl?.trim() ? `${token.name} artwork` : ""
+                }
                 fill
                 priority
                 sizes="(max-width: 800px) 100vw, 420px"
@@ -946,56 +1082,21 @@ function TokenDetailContent({
             </div>
 
             <div className={styles.identityCopy}>
-              <span className={styles.symbol}>${token.symbol}</span>
-              <h1 className={styles.name}>{token.name}</h1>
-              <div className={styles.addressActions}>
-                <button
-                  className={styles.address}
-                  type="button"
-                  aria-label={
-                    copied
-                      ? `${token.name} contract address copied`
-                      : `Copy ${token.name} contract address`
-                  }
-                  title={copied ? "Copied" : "Copy contract address"}
-                  onClick={copyAddress}
-                >
-                  <code>{token.tokenAddress}</code>
-                  {copied ? (
-                    <Check aria-hidden="true" size={14} />
-                  ) : (
-                    <Copy aria-hidden="true" size={14} />
-                  )}
-                </button>
-                {explorerBase ? (
-                  <a
-                    className={styles.explorerLink}
-                    href={`${explorerBase}/token/${token.tokenAddress}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label={`View ${token.name} on Etherscan`}
-                    title="View on Etherscan"
-                  >
-                    <ExternalLink aria-hidden="true" size={15} />
-                  </a>
-                ) : null}
+              <div className={styles.tokenSymbolRow}>
+                <span className={styles.symbol}>${token.symbol}</span>
               </div>
-            </div>
-          </div>
-
-          {token.description?.trim() ||
-          (token.links && token.links.length > 0) ? (
-            <div className={styles.tokenMeta}>
-              {token.description?.trim() ? (
-                <p className={styles.description}>{token.description.trim()}</p>
-              ) : null}
-
-              {token.links && token.links.length > 0 ? (
-                <div
-                  className={styles.links}
-                  aria-label={`${token.name} links`}
-                >
-                  {token.links.map((link) => {
+              <h1
+                className={styles.name}
+                data-single-line={
+                  token.name.trim().length <= 22 ? "true" : undefined
+                }
+                title={token.name}
+              >
+                {token.name}
+              </h1>
+              {projectLinks.length > 0 ? (
+                <div className={styles.links} aria-label={`${token.name} links`}>
+                  {projectLinks.map((link) => {
                     const label = getLinkLabel(link.kind);
                     return (
                       <a
@@ -1015,19 +1116,48 @@ function TokenDetailContent({
                   })}
                 </div>
               ) : null}
-            </div>
-          ) : null}
+              <div className={styles.addressActions}>
+                <button
+                  className={styles.address}
+                  type="button"
+                  aria-label={
+                    copied
+                      ? `${token.name} contract address copied`
+                      : `Copy ${token.name} contract address`
+                  }
+                  title={copied ? "Copied" : "Copy contract address"}
+                  onClick={copyAddress}
+                >
+                  <code>{token.tokenAddress}</code>
+                  {copied ? (
+                    <Check aria-hidden="true" size={14} />
+                  ) : (
+                    <Copy aria-hidden="true" size={14} />
+                  )}
+                </button>
+              </div>
 
-          <MetricGrid metrics={metrics} />
+              <p
+                className={`${styles.description}${
+                  token.description?.trim()
+                    ? ""
+                    : ` ${styles.descriptionEmpty}`
+                }`}
+              >
+                {token.description?.trim() || "No description provided."}
+              </p>
+            </div>
+          </div>
 
           <TokenPriceChart
             tokenAddress={token.tokenAddress}
             tokenName={token.name}
-            totalSupply={token.totalSupply}
             launchModel={token.launchModel}
-            onMarketCapChange={setHoveredMarketCap}
+            preview={preview}
             onVolumeChange={setChartVolume}
           />
+
+          <MetricGrid metrics={metrics} />
 
           {token.launchModel === "deep" &&
           token.growthTargetNativeWei &&
@@ -1035,10 +1165,86 @@ function TokenDetailContent({
           token.tokenReserveRaw ? (
             <DeepLiquiditySummary token={token} />
           ) : null}
+
+          <div className={styles.projectInformation}>
+            <section
+              className={`${styles.projectPanel} ${styles.projectPanelWide}`}
+            >
+              <header className={styles.projectPanelHeading}>
+                <h2>Token details</h2>
+              </header>
+              <dl className={styles.projectFacts}>
+                <div>
+                  <dt>Network</dt>
+                  <dd>{getNetworkLabel(chainId)}</dd>
+                </div>
+                <div>
+                  <dt>Published</dt>
+                  <dd>{formatProjectDate(token.launchedAt)}</dd>
+                </div>
+                <div>
+                  <dt>Quote asset</dt>
+                  <dd>{token.quoteAssetSymbol ?? "ETH"}</dd>
+                </div>
+              </dl>
+            </section>
+
+            <section
+              className={`${styles.projectPanel} ${styles.projectPanelWide}`}
+            >
+              <header className={styles.projectPanelHeading}>
+                <h2>Team</h2>
+              </header>
+              {creatorAddress ? (
+                <>
+                  <div className={styles.creatorRecord}>
+                    <span className={styles.creatorMark} aria-hidden="true">
+                      {token.name.trim().charAt(0).toUpperCase() || "P"}
+                    </span>
+                    <div>
+                      <strong>
+                        {previewProject?.teamName ?? "Creator wallet"}
+                      </strong>
+                      {explorerBase ? (
+                        <a
+                          href={`${explorerBase}/address/${creatorAddress}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <code>{formatProjectAddress(creatorAddress)}</code>
+                          <ArrowUpRight aria-hidden="true" size={13} />
+                        </a>
+                      ) : (
+                        <code>{formatProjectAddress(creatorAddress)}</code>
+                      )}
+                    </div>
+                  </div>
+                  <p className={styles.projectNote}>
+                    {previewProject
+                      ? `${previewProject.contributors} contributors · ${previewProject.teamSummary}`
+                      : "No team profile provided."}
+                  </p>
+                </>
+              ) : (
+                <p className={styles.projectEmpty}>
+                  No team information provided.
+                </p>
+              )}
+            </section>
+
+            <TokenCommunityChat
+              memberCount={previewProject?.communityMembers}
+              preview={preview}
+              tokenAddress={token.tokenAddress}
+              tokenName={token.name}
+            />
+          </div>
         </section>
 
         <aside className={styles.tradeShell} aria-label={`${token.name} trade`}>
-          {chainId !== 1 && chainId !== 11_155_111 ? (
+          {preview ? (
+            <PreviewTokenTrade token={token} />
+          ) : chainId !== 1 && chainId !== 11_155_111 ? (
             <div className={styles.submitted} role="status">
               <p>Trading is not supported on this network</p>
             </div>
@@ -1183,9 +1389,16 @@ function TokenDetailContent({
 
 export function TokenDetailView({ address }: { address: string }) {
   const { wallet: activeWallet } = useWallet();
+  const preview = useInterfacePreview();
   const normalizedAddress = isAddress(address) ? getAddress(address) : null;
+  const previewToken =
+    preview && normalizedAddress
+      ? getExplorePreviewToken(normalizedAddress)
+      : undefined;
   const [retryKey, setRetryKey] = useState(0);
-  const refreshKey = useLiveDataRefresh({ enabled: normalizedAddress !== null });
+  const refreshKey = useLiveDataRefresh({
+    enabled: normalizedAddress !== null && !preview,
+  });
   const requestKey = `${normalizedAddress ?? "invalid"}\u0000${retryKey}`;
   const [state, setState] = useState<DetailState>({
     phase: "loading",
@@ -1193,7 +1406,7 @@ export function TokenDetailView({ address }: { address: string }) {
   });
 
   useEffect(() => {
-    if (!normalizedAddress) return;
+    if (!normalizedAddress || preview) return;
 
     const tokenAddress = normalizedAddress;
     const controller = new AbortController();
@@ -1259,11 +1472,32 @@ export function TokenDetailView({ address }: { address: string }) {
 
     void loadToken();
     return () => controller.abort();
-  }, [normalizedAddress, refreshKey, requestKey]);
+  }, [normalizedAddress, preview, refreshKey, requestKey]);
 
   if (!normalizedAddress) {
     return (
-      <TokenDetailMessage message="This is not a valid Ethereum token address" />
+      <TokenDetailMessage
+        message="This is not a valid Ethereum token address"
+      />
+    );
+  }
+
+  if (previewToken) {
+    return (
+      <TokenDetailContent
+        key={`${previewToken.tokenAddress}:preview:${
+          activeWallet?.account.toLowerCase() ?? "disconnected"
+        }`}
+        token={previewToken}
+        chainId={1}
+        preview
+      />
+    );
+  }
+
+  if (preview) {
+    return (
+      <TokenDetailMessage message="This token is not in the preview index" />
     );
   }
 
@@ -1278,6 +1512,7 @@ export function TokenDetailView({ address }: { address: string }) {
         }`}
         token={activeState.token}
         chainId={activeState.chainId}
+        preview={false}
       />
     );
   }
@@ -1286,9 +1521,9 @@ export function TokenDetailView({ address }: { address: string }) {
     activeState.phase === "loading"
       ? "Loading token"
       : activeState.phase === "not-found"
-        ? "This token is not in the Programmable launch index yet"
+        ? "This token is not in the Programmable index yet"
         : activeState.phase === "not-deployed"
-          ? "No verified launch data is available"
+          ? "No verified token data is available"
           : activeState.message;
 
   return (

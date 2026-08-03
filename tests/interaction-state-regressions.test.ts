@@ -46,14 +46,44 @@ describe("interaction state regressions", () => {
     );
   });
 
-  it("shows visible feedback when address copying fails", () => {
-    for (const file of [
-      "components/explore-view.tsx",
-      "components/token-detail-view.tsx",
-    ]) {
-      const source = readFileSync(join(root, file), "utf8");
-      expect(source).toContain('setCopyError("Could not copy address")');
-      expect(source).toContain('<p className="toast" role="alert">');
-    }
+  it("shows visible feedback when the detail-page address copy fails", () => {
+    const detailSource = readFileSync(
+      join(root, "components/token-detail-view.tsx"),
+      "utf8",
+    );
+    const exploreSource = readFileSync(
+      join(root, "components/explore-view.tsx"),
+      "utf8",
+    );
+
+    expect(detailSource).toContain('setCopyError("Could not copy address")');
+    expect(detailSource).toContain('<p className="toast" role="alert">');
+    expect(exploreSource).not.toContain("Copy contract address");
+  });
+
+  it("keeps Explore project-first and removes the repeated footer slogan", () => {
+    const exploreSource = readFileSync(
+      join(root, "components/explore-view.tsx"),
+      "utf8",
+    );
+    const footerSource = readFileSync(
+      join(root, "components/site-footer.tsx"),
+      "utf8",
+    );
+    const exploreStyles = readFileSync(
+      join(root, "components/explore-experience.module.css"),
+      "utf8",
+    );
+
+    expect(exploreSource).not.toContain("All tokens");
+    expect(exploreSource).not.toContain("V4 model");
+    expect(exploreSource).not.toContain("<dt>Market cap</dt>");
+    expect(exploreSource).not.toContain("runnerMeta");
+    expect(footerSource).not.toContain(
+      "Launch tokens that work the way you imagine.",
+    );
+    expect(exploreStyles).toMatch(
+      /\.page\s*\{[^}]*display:\s*block;[^}]*height:\s*auto;[^}]*overflow:\s*visible;/s,
+    );
   });
 });

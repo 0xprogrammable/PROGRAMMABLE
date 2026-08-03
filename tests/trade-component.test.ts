@@ -11,6 +11,7 @@ import {
   calculateTradeUsdValue,
   formatTradeAmount,
   getTradeAmountValidationError,
+  parseTradeSlippageBps,
 } from "../components/token-trade";
 
 const OWNER = getAddress("0x5555555555555555555555555555555555555555");
@@ -19,6 +20,15 @@ const TOKEN = getAddress("0x1111111111111111111111111111111111111111");
 describe("TokenTrade request construction", () => {
   it("defaults to one percent slippage", () => {
     expect(DEFAULT_TRADE_SLIPPAGE_BPS).toBe(100);
+  });
+
+  it("converts editable percentage input to basis points", () => {
+    expect(parseTradeSlippageBps("0.01")).toBe(1);
+    expect(parseTradeSlippageBps("0.5")).toBe(50);
+    expect(parseTradeSlippageBps("1")).toBe(100);
+    expect(parseTradeSlippageBps("10.00")).toBe(1_000);
+    expect(() => parseTradeSlippageBps("1.005")).toThrow("two decimal");
+    expect(() => parseTradeSlippageBps("10.01")).toThrow("between");
   });
 
   it("uses 18 decimals for native ETH buys and an explicit deadline", () => {

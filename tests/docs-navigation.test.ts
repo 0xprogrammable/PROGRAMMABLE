@@ -1,15 +1,21 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  calculateDocsReadingOffset,
   docsNavigateEvent,
+  easeDocsScroll,
+  getDocsScrollDuration,
   isDocsNavigationItemActive,
   normalizeDocsHash,
   pickActiveDocsSection,
+  resolveDocsPageLocationTarget,
   resolveDocsLocationTarget,
 } from "../components/docs-navigation";
+import { getDocsExternalLinkProvider } from "../components/docs-external-link";
 import {
   getDocsSearchResults,
   nextDocsSearchIndex,
+  shouldFocusDocsSearch,
 } from "../components/docs-search";
 
 describe("Docs navigation state", () => {
@@ -63,6 +69,31 @@ describe("Docs navigation state", () => {
     });
   });
 
+  it("resolves model chapters without falling back to the platform overview", () => {
+    expect(
+      resolveDocsPageLocationTarget({
+        currentPath: "/docs/models/classic",
+        hash: "#fees",
+        sectionIds: ["terms", "fees", "rewards"],
+      }),
+    ).toEqual({
+      href: "/docs/models/classic#fees",
+      sectionId: "fees",
+      shouldScroll: true,
+    });
+    expect(
+      resolveDocsPageLocationTarget({
+        currentPath: "/docs/models/classic",
+        hash: "#unknown",
+        sectionIds: ["terms", "fees", "rewards"],
+      }),
+    ).toEqual({
+      href: "/docs/models/classic#terms",
+      sectionId: "terms",
+      shouldScroll: true,
+    });
+  });
+
   it("keeps model routes active independently of the overview hash", () => {
     expect(
       isDocsNavigationItemActive({
@@ -92,6 +123,47 @@ describe("Docs navigation state", () => {
         ],
       }),
     ).toBe("launching");
+  });
+
+  it("places the reading marker below whichever Docs control is fixed", () => {
+    expect(
+      calculateDocsReadingOffset({
+        mobileNavigationHeight: 0,
+        scrollPaddingTop: 88,
+        stickyToolsHeight: 52,
+      }),
+    ).toBe(160);
+    expect(
+      calculateDocsReadingOffset({
+        mobileNavigationHeight: 50,
+        scrollPaddingTop: 84,
+        stickyToolsHeight: 0,
+      }),
+    ).toBe(154);
+  });
+
+  it("keeps topic scrolling short, smooth and distance-aware", () => {
+    expect(getDocsScrollDuration(0)).toBe(180);
+    expect(getDocsScrollDuration(800)).toBe(230);
+    expect(getDocsScrollDuration(10_000)).toBe(280);
+    expect(easeDocsScroll(0)).toBe(0);
+    expect(easeDocsScroll(0.5)).toBe(0.5);
+    expect(easeDocsScroll(1)).toBe(1);
+  });
+
+  it("assigns recognizable provider icons to documentation links", () => {
+    expect(getDocsExternalLinkProvider("https://github.com/openai/codex")).toBe(
+      "GitHub",
+    );
+    expect(getDocsExternalLinkProvider("https://x.com/0xProgrammable")).toBe(
+      "X",
+    );
+    expect(
+      getDocsExternalLinkProvider("https://etherscan.io/address/0x123"),
+    ).toBe("Etherscan");
+    expect(
+      getDocsExternalLinkProvider("https://docs.uniswap.org/contracts/v4"),
+    ).toBe("Uniswap");
   });
 
   it("selects from cached document positions with an absolute scroll marker", () => {
@@ -149,13 +221,15 @@ describe("Docs navigation state", () => {
     expect(getDocsSearchResults("")).toEqual([]);
   });
 
-  it("keeps hidden models out of search and labels Stock-Paired as historical", () => {
+  it("keeps hidden models out of search and exposes Custom Hook documentation", () => {
     const deepResults = getDocsSearchResults("deep");
     const stockResults = getDocsSearchResults("stock");
+    const customResults = getDocsSearchResults("custom");
 
     expect(deepResults).toEqual([]);
-    expect(stockResults[0]?.title).toBe("Stock-Paired history");
-    expect(stockResults[0]?.description).toContain("Historical");
+    expect(stockResults).toEqual([]);
+    expect(customResults[0]?.title).toBe("Custom Hook");
+    expect(customResults[0]?.description).toContain("release requirements");
   });
 
   it("opens keyboard navigation on the first or last result", () => {
@@ -163,5 +237,35 @@ describe("Docs navigation state", () => {
     expect(nextDocsSearchIndex(-1, 3, "previous")).toBe(2);
     expect(nextDocsSearchIndex(0, 3, "previous")).toBe(2);
     expect(nextDocsSearchIndex(2, 3, "next")).toBe(0);
+  });
+
+  it("focuses search with slash only outside editable controls", () => {
+    expect(
+      shouldFocusDocsSearch({
+        defaultPrevented: false,
+        hasModifier: false,
+        isContentEditable: false,
+        key: "/",
+        targetTagName: "BODY",
+      }),
+    ).toBe(true);
+    expect(
+      shouldFocusDocsSearch({
+        defaultPrevented: false,
+        hasModifier: false,
+        isContentEditable: false,
+        key: "/",
+        targetTagName: "INPUT",
+      }),
+    ).toBe(false);
+    expect(
+      shouldFocusDocsSearch({
+        defaultPrevented: false,
+        hasModifier: true,
+        isContentEditable: false,
+        key: "/",
+        targetTagName: "BODY",
+      }),
+    ).toBe(false);
   });
 });

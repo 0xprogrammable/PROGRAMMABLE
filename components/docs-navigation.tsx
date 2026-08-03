@@ -5,6 +5,8 @@ import { ChevronDown } from "lucide-react";
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type MouseEvent,
@@ -16,6 +18,16 @@ import styles from "@/components/docs-experience.module.css";
 type SectionPosition = {
   id: string;
   top: number;
+};
+
+type ChapterIndicator = {
+  height: number;
+  offset: number;
+};
+
+export type DocsPageSection = {
+  id: string;
+  label: string;
 };
 
 const overviewHref = "/docs#overview";
@@ -30,6 +42,7 @@ const docsSectionHrefs = (() => {
 })();
 const docsSectionIds = docsSectionHrefs.map((href) => href.slice(6));
 const docsSectionHrefSet = new Set<string>(docsSectionHrefs);
+const emptyDocsPageSections: readonly DocsPageSection[] = [];
 
 export const docsNavigateEvent = "programmable:docs-navigate";
 
@@ -49,6 +62,32 @@ export function resolveDocsLocationTarget(hash: string): {
     href,
     sectionId: href.slice(6),
     shouldScroll: hash.length > 0,
+  };
+}
+
+export function resolveDocsPageLocationTarget({
+  currentPath,
+  hash,
+  sectionIds,
+}: {
+  currentPath: string;
+  hash: string;
+  sectionIds: readonly string[];
+}): {
+  href: string;
+  sectionId: string;
+  shouldScroll: boolean;
+} {
+  if (currentPath === "/docs") return resolveDocsLocationTarget(hash);
+
+  const requestedId = hash.replace(/^#/, "").split("#", 1)[0];
+  const sectionId = sectionIds.includes(requestedId)
+    ? requestedId
+    : (sectionIds[0] ?? "");
+  return {
+    href: sectionId ? `${currentPath}#${sectionId}` : currentPath,
+    sectionId,
+    shouldScroll: hash.length > 0 && sectionId.length > 0,
   };
 }
 
@@ -90,6 +129,39 @@ export function pickActiveDocsSection({
   return activeId;
 }
 
+export function calculateDocsReadingOffset({
+  mobileNavigationHeight,
+  scrollPaddingTop,
+  stickyToolsHeight,
+}: {
+  mobileNavigationHeight: number;
+  scrollPaddingTop: number;
+  stickyToolsHeight: number;
+}): number {
+  const safeHeight = (value: number) =>
+    Number.isFinite(value) && value > 0 ? value : 0;
+  return (
+    safeHeight(scrollPaddingTop) +
+    Math.max(
+      safeHeight(stickyToolsHeight),
+      safeHeight(mobileNavigationHeight),
+    ) +
+    20
+  );
+}
+
+export function easeDocsScroll(progress: number): number {
+  const value = Math.min(1, Math.max(0, progress));
+  return value < 0.5
+    ? 4 * value * value * value
+    : 1 - Math.pow(-2 * value + 2, 3) / 2;
+}
+
+export function getDocsScrollDuration(distance: number): number {
+  const safeDistance = Number.isFinite(distance) ? Math.abs(distance) : 0;
+  return Math.round(180 + (Math.min(safeDistance, 1600) / 1600) * 100);
+}
+
 function hasModifiedClick(event: MouseEvent<HTMLAnchorElement>) {
   return (
     event.button !== 0 ||
@@ -107,17 +179,181 @@ function focusDocsSection(section: HTMLElement) {
   heading.focus({ preventScroll: true });
 }
 
-export function DocsNavigation({ currentPath }: { currentPath: string }) {
+function shouldAnimateDocsScroll() {
+  return !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function getDocsScrollOffset(
+  mobileNavigation: HTMLDetailsElement | null,
+): number {
+  const documentStyles = window.getComputedStyle(document.documentElement);
+  const measuredScrollPadding = Number.parseFloat(
+    documentStyles.scrollPaddingTop,
+  );
+  const siteHeaderHeight =
+    document.querySelector<HTMLElement>(".site-header")?.offsetHeight ?? 68;
+  const docsTools = document.querySelector<HTMLElement>("[data-docs-tools]");
+  const stickyToolsHeight =
+    docsTools && window.getComputedStyle(docsTools).position === "sticky"
+      ? docsTools.offsetHeight
+      : 0;
+  const mobileNavigationSummary =
+    mobileNavigation?.querySelector<HTMLElement>("summary");
+  const mobileNavigationHeight =
+    mobileNavigation &&
+    window.getComputedStyle(mobileNavigation).display !== "none"
+      ? (mobileNavigationSummary?.offsetHeight ?? 0)
+      : 0;
+
+  return calculateDocsReadingOffset({
+    mobileNavigationHeight,
+    scrollPaddingTop: Number.isFinite(measuredScrollPadding)
+      ? measuredScrollPadding
+      : siteHeaderHeight + 20,
+    stickyToolsHeight,
+  });
+}
+
+function getDocsSectionTop(
+  section: HTMLElement,
+  mobileNavigation: HTMLDetailsElement | null,
+) {
+  return Math.max(
+    0,
+    section.getBoundingClientRect().top +
+      window.scrollY -
+      getDocsScrollOffset(mobileNavigation),
+  );
+}
+
+export function DocsNavigation({
+  currentPath,
+  sections = emptyDocsPageSections,
+}: {
+  currentPath: string;
+  sections?: readonly DocsPageSection[];
+}) {
   const mobileNavigationRef = useRef<HTMLDetailsElement>(null);
-  const [activeSectionHref, setActiveSectionHref] = useState(overviewHref);
+  const desktopNavigationRef = useRef<HTMLElement>(null);
+  const locationInitializedRef = useRef(false);
+  const scrollAnimationFrameRef = useRef<number | null>(null);
+  const [chapterIndicator, setChapterIndicator] =
+    useState<ChapterIndicator | null>(null);
+  const trackedSectionIds = useMemo(
+    () =>
+      currentPath === "/docs"
+        ? docsSectionIds
+        : sections.map((section) => section.id),
+    [currentPath, sections],
+  );
+  const trackedSectionIdSet = useMemo(
+    () => new Set(trackedSectionIds),
+    [trackedSectionIds],
+  );
+  const initialSectionHref =
+    currentPath === "/docs"
+      ? overviewHref
+      : trackedSectionIds[0]
+        ? `${currentPath}#${trackedSectionIds[0]}`
+        : currentPath;
+  const [activeSectionHref, setActiveSectionHref] =
+    useState(initialSectionHref);
   const activeHref =
-    currentPath === "/docs" ? activeSectionHref : currentPath;
+    trackedSectionIds.length > 0 ? activeSectionHref : currentPath;
+  let activeLabel = "Reference";
+  for (const group of docsNavigation) {
+    for (const item of group.items) {
+      if (item.href === activeHref || item.href === currentPath) {
+        activeLabel = item.label;
+      }
+    }
+  }
+  for (const section of sections) {
+    if (`${currentPath}#${section.id}` === activeHref) {
+      activeLabel = section.label;
+    }
+  }
+
+  const cancelDocsScroll = useCallback(() => {
+    if (scrollAnimationFrameRef.current === null) return;
+    window.cancelAnimationFrame(scrollAnimationFrameRef.current);
+    scrollAnimationFrameRef.current = null;
+  }, []);
+
+  const scrollToDocsSection = useCallback(
+    (
+      section: HTMLElement,
+      animate: boolean,
+      onComplete?: () => void,
+    ) => {
+      cancelDocsScroll();
+      const targetY = getDocsSectionTop(
+        section,
+        mobileNavigationRef.current,
+      );
+      const startY = window.scrollY;
+      const distance = targetY - startY;
+
+      const complete = () => {
+        scrollAnimationFrameRef.current = null;
+        focusDocsSection(section);
+        onComplete?.();
+      };
+
+      if (!animate || Math.abs(distance) < 2) {
+        window.scrollTo({ behavior: "auto", top: targetY });
+        complete();
+        return;
+      }
+
+      const duration = getDocsScrollDuration(distance);
+      const startedAt = window.performance.now();
+      const update = (now: number) => {
+        const progress = Math.min(1, (now - startedAt) / duration);
+        window.scrollTo({
+          behavior: "auto",
+          top: startY + distance * easeDocsScroll(progress),
+        });
+
+        if (progress < 1) {
+          scrollAnimationFrameRef.current = window.requestAnimationFrame(update);
+          return;
+        }
+        complete();
+      };
+
+      scrollAnimationFrameRef.current = window.requestAnimationFrame(update);
+    },
+    [cancelDocsScroll],
+  );
+
+  useEffect(() => {
+    const cancelOnUserIntent = () => cancelDocsScroll();
+    window.addEventListener("wheel", cancelOnUserIntent, { passive: true });
+    window.addEventListener("touchstart", cancelOnUserIntent, {
+      passive: true,
+    });
+    window.addEventListener("pointerdown", cancelOnUserIntent, {
+      passive: true,
+    });
+    window.addEventListener("keydown", cancelOnUserIntent);
+
+    return () => {
+      cancelDocsScroll();
+      window.removeEventListener("wheel", cancelOnUserIntent);
+      window.removeEventListener("touchstart", cancelOnUserIntent);
+      window.removeEventListener("pointerdown", cancelOnUserIntent);
+      window.removeEventListener("keydown", cancelOnUserIntent);
+    };
+  }, [cancelDocsScroll]);
 
   const navigateToDocsTopic = useCallback(
-    (itemHref: string) => {
+    (itemHref: string, animate = true) => {
       const [itemPath, itemHash] = itemHref.split("#");
       const isSamePageTopic =
-        currentPath === "/docs" && itemPath === "/docs" && Boolean(itemHash);
+        itemPath === currentPath &&
+        Boolean(itemHash) &&
+        trackedSectionIdSet.has(itemHash);
       if (!isSamePageTopic) return false;
 
       const section = document.getElementById(itemHash);
@@ -126,8 +362,6 @@ export function DocsNavigation({ currentPath }: { currentPath: string }) {
       if (window.location.pathname + window.location.hash !== itemHref) {
         window.history.pushState(null, "", itemHref);
       }
-      setActiveSectionHref(itemHref);
-
       const mobileNavigationWasOpen =
         mobileNavigationRef.current?.open === true;
       if (mobileNavigationRef.current) {
@@ -135,13 +369,11 @@ export function DocsNavigation({ currentPath }: { currentPath: string }) {
       }
 
       const scrollToSection = () => {
-        section.scrollIntoView({
-          behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-            ? "auto"
-            : "smooth",
-          block: "start",
-        });
-        focusDocsSection(section);
+        scrollToDocsSection(
+          section,
+          animate && shouldAnimateDocsScroll(),
+          () => setActiveSectionHref(itemHref),
+        );
       };
 
       if (mobileNavigationWasOpen) {
@@ -151,16 +383,51 @@ export function DocsNavigation({ currentPath }: { currentPath: string }) {
       }
       return true;
     },
-    [currentPath],
+    [currentPath, scrollToDocsSection, trackedSectionIdSet],
   );
 
+  const measureChapterIndicator = useCallback(() => {
+    const navigation = desktopNavigationRef.current;
+    const activeLink = navigation?.querySelector<HTMLElement>(
+      "[data-docs-context-link][data-active='true']",
+    );
+    const group = activeLink?.closest<HTMLElement>(
+      "[data-docs-context-group]",
+    );
+    if (!activeLink || !group) {
+      setChapterIndicator(null);
+      return;
+    }
+
+    const linkRect = activeLink.getBoundingClientRect();
+    const groupRect = group.getBoundingClientRect();
+    const nextIndicator = {
+      height: linkRect.height,
+      offset: linkRect.top - groupRect.top,
+    };
+    setChapterIndicator((current) =>
+      current &&
+      Math.abs(current.height - nextIndicator.height) < 0.5 &&
+      Math.abs(current.offset - nextIndicator.offset) < 0.5
+        ? current
+        : nextIndicator,
+    );
+  }, []);
+
+  useLayoutEffect(() => {
+    measureChapterIndicator();
+    window.addEventListener("resize", measureChapterIndicator);
+    return () =>
+      window.removeEventListener("resize", measureChapterIndicator);
+  }, [activeHref, measureChapterIndicator, sections.length]);
+
   useEffect(() => {
-    if (currentPath !== "/docs") return;
+    if (trackedSectionIds.length === 0) return;
 
     let scrollFrame = 0;
     let layoutFrame = 0;
     let locationFrame = 0;
-    let headerHeight = 68;
+    let readingMarkerOffset = 108;
     let sectionPositions: SectionPosition[] = [];
 
     const updateFromScroll = () => {
@@ -170,10 +437,10 @@ export function DocsNavigation({ currentPath }: { currentPath: string }) {
         atPageEnd:
           Math.ceil(scrollY + window.innerHeight) >=
           document.documentElement.scrollHeight - 2,
-        marker: scrollY + headerHeight + 36,
+        marker: scrollY + readingMarkerOffset,
         positions: sectionPositions,
       });
-      const nextHref = `/docs#${activeId}`;
+      const nextHref = `${currentPath}#${activeId}`;
       setActiveSectionHref((currentHref) =>
         currentHref === nextHref ? currentHref : nextHref,
       );
@@ -187,14 +454,38 @@ export function DocsNavigation({ currentPath }: { currentPath: string }) {
     const measureLayout = () => {
       layoutFrame = 0;
       const scrollY = window.scrollY;
-      sectionPositions = docsSectionIds.flatMap((id) => {
+      sectionPositions = trackedSectionIds.flatMap((id) => {
         const section = document.getElementById(id);
         return section
           ? [{ id, top: section.getBoundingClientRect().top + scrollY }]
           : [];
       });
-      headerHeight =
+      const documentStyles = window.getComputedStyle(document.documentElement);
+      const measuredScrollPadding = Number.parseFloat(
+        documentStyles.scrollPaddingTop,
+      );
+      const siteHeaderHeight =
         document.querySelector<HTMLElement>(".site-header")?.offsetHeight ?? 68;
+      const docsTools =
+        document.querySelector<HTMLElement>("[data-docs-tools]");
+      const stickyToolsHeight =
+        docsTools && window.getComputedStyle(docsTools).position === "sticky"
+          ? docsTools.offsetHeight
+          : 0;
+      const mobileNavigationSummary =
+        mobileNavigationRef.current?.querySelector<HTMLElement>("summary");
+      const mobileNavigationHeight =
+        mobileNavigationRef.current &&
+        window.getComputedStyle(mobileNavigationRef.current).display !== "none"
+          ? (mobileNavigationSummary?.offsetHeight ?? 0)
+          : 0;
+      readingMarkerOffset = calculateDocsReadingOffset({
+        mobileNavigationHeight,
+        scrollPaddingTop: Number.isFinite(measuredScrollPadding)
+          ? measuredScrollPadding
+          : siteHeaderHeight + 20,
+        stickyToolsHeight,
+      }) + 2;
       scheduleScrollUpdate();
     };
 
@@ -204,22 +495,33 @@ export function DocsNavigation({ currentPath }: { currentPath: string }) {
     };
 
     const updateFromLocation = () => {
-      const target = resolveDocsLocationTarget(window.location.hash);
+      const target = resolveDocsPageLocationTarget({
+        currentPath,
+        hash: window.location.hash,
+        sectionIds: trackedSectionIds,
+      });
       const currentHref = window.location.pathname + window.location.hash;
       if (window.location.hash && currentHref !== target.href) {
         window.history.replaceState(window.history.state, "", target.href);
       }
-      setActiveSectionHref(target.href);
       const section = document.getElementById(target.sectionId);
       if (section && target.shouldScroll) {
+        const animate =
+          locationInitializedRef.current && shouldAnimateDocsScroll();
+        locationInitializedRef.current = true;
         if (locationFrame) window.cancelAnimationFrame(locationFrame);
         locationFrame = window.requestAnimationFrame(() => {
           locationFrame = 0;
-          section.scrollIntoView({ behavior: "auto", block: "start" });
-          focusDocsSection(section);
+          scrollToDocsSection(
+            section,
+            animate,
+            () => setActiveSectionHref(target.href),
+          );
           scheduleLayoutMeasurement();
         });
       } else {
+        setActiveSectionHref(target.href);
+        locationInitializedRef.current = true;
         scheduleLayoutMeasurement();
       }
     };
@@ -239,7 +541,7 @@ export function DocsNavigation({ currentPath }: { currentPath: string }) {
       window.removeEventListener("resize", scheduleLayoutMeasurement);
       window.removeEventListener("scroll", scheduleScrollUpdate);
     };
-  }, [currentPath]);
+  }, [currentPath, scrollToDocsSection, trackedSectionIds]);
 
   useEffect(() => {
     const handleDocsNavigationRequest = (event: Event) => {
@@ -262,50 +564,107 @@ export function DocsNavigation({ currentPath }: { currentPath: string }) {
     if (hasModifiedClick(event)) return;
     const [itemPath, itemHash] = itemHref.split("#");
     const isSamePageTopic =
-      currentPath === "/docs" && itemPath === "/docs" && Boolean(itemHash);
+      itemPath === currentPath &&
+      Boolean(itemHash) &&
+      trackedSectionIdSet.has(itemHash);
 
     if (isSamePageTopic) {
       event.preventDefault();
-      navigateToDocsTopic(itemHref);
+      navigateToDocsTopic(itemHref, event.detail > 0);
     } else if (mobileNavigationRef.current?.open) {
       mobileNavigationRef.current.open = false;
     }
   }
 
   function renderNavigation() {
-    return docsNavigation.map((group) => (
-      <div className={styles.navGroup} key={group.label}>
-        <p className={styles.navLabel}>{group.label}</p>
-        <ul>
-          {group.items.map((item) => {
-            const active = isDocsNavigationItemActive({
-              activeHref,
-              currentPath,
-              itemHref: item.href,
-            });
+    const navigationGroups = docsNavigation.filter(
+      (group) =>
+        !(
+          sections.length > 0 &&
+          group.items.every(
+            (item) => item.href.split("#")[0] === currentPath,
+          )
+        ),
+    );
 
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  data-active={active ? "true" : undefined}
-                  aria-current={
-                    active
-                      ? item.href.includes("#")
-                        ? "location"
-                        : "page"
-                      : undefined
-                  }
-                  onClick={(event) => handleNavigation(event, item.href)}
-                >
-                  {item.label}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-    ));
+    return (
+      <>
+        {sections.length > 0 ? (
+          <div
+            className={`${styles.navGroup} ${styles.contextNavGroup}`}
+            data-docs-context-group
+          >
+            <span
+              aria-hidden="true"
+              className={styles.chapterIndicator}
+              data-visible={chapterIndicator ? "true" : undefined}
+              style={
+                chapterIndicator
+                  ? {
+                      height: `${chapterIndicator.height}px`,
+                      transform: `translate3d(0, ${chapterIndicator.offset}px, 0)`,
+                    }
+                  : undefined
+              }
+            />
+            <p className={styles.navLabel}>On this page</p>
+            <ul>
+              {sections.map((section) => {
+                const href = `${currentPath}#${section.id}`;
+                const active = href === activeHref;
+                return (
+                  <li key={href}>
+                    <Link
+                      href={href}
+                      data-docs-context-link
+                      data-active={active ? "true" : undefined}
+                      aria-current={active ? "location" : undefined}
+                      onClick={(event) => handleNavigation(event, href)}
+                    >
+                      {section.label}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ) : null}
+
+        {navigationGroups.map((group) => (
+          <div className={styles.navGroup} key={group.label}>
+            <p className={styles.navLabel}>{group.label}</p>
+            <ul>
+              {group.items.map((item) => {
+                const active = isDocsNavigationItemActive({
+                  activeHref,
+                  currentPath,
+                  itemHref: item.href,
+                });
+
+                return (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      data-active={active ? "true" : undefined}
+                      aria-current={
+                        active
+                          ? item.href.includes("#")
+                            ? "location"
+                            : "page"
+                          : undefined
+                      }
+                      onClick={(event) => handleNavigation(event, item.href)}
+                    >
+                      {item.label}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </>
+    );
   }
 
   return (
@@ -313,13 +672,17 @@ export function DocsNavigation({ currentPath }: { currentPath: string }) {
       <nav
         className={styles.desktopNav}
         aria-label="Documentation navigation"
+        ref={desktopNavigationRef}
       >
         {renderNavigation()}
       </nav>
 
       <details className={styles.mobileNav} ref={mobileNavigationRef}>
         <summary>
-          Browse the docs
+          <span className={styles.mobileNavCurrent}>
+            <span>Docs</span>
+            <strong>{activeLabel}</strong>
+          </span>
           <ChevronDown aria-hidden="true" size={17} />
         </summary>
         <nav

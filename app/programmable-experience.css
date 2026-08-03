@@ -1,9 +1,9 @@
 /* Shared visual system */
 
 html[data-theme="light"] {
-  --text-soft: #433b41;
-  --muted: #685f65;
-  --dim: #746a70;
+  --text-soft: #454d57;
+  --muted: #68727e;
+  --dim: #75808c;
   --background-overlay-top: rgba(255, 255, 255, 0.44);
   --background-overlay-middle: rgba(255, 255, 255, 0.63);
   --background-overlay-bottom: rgba(255, 255, 255, 0.81);
@@ -12,12 +12,12 @@ html[data-theme="light"] {
   --glass-88: rgba(255, 255, 255, 0.91);
   --glass-90: rgba(255, 255, 255, 0.93);
   --glass-96: rgba(255, 255, 255, 0.97);
-  --panel-border: rgba(205, 194, 202, 0.82);
-  --panel-border-soft: rgba(210, 199, 207, 0.72);
-  --panel-border-muted: rgba(205, 194, 202, 0.76);
-  --control-border: rgba(205, 194, 202, 0.86);
-  --card-shadow: rgba(63, 39, 55, 0.05);
-  --card-shadow-soft: rgba(63, 39, 55, 0.035);
+  --panel-border: rgba(199, 205, 212, 0.84);
+  --panel-border-soft: rgba(207, 213, 220, 0.74);
+  --panel-border-muted: rgba(199, 205, 212, 0.78);
+  --control-border: rgba(199, 205, 212, 0.88);
+  --card-shadow: rgba(25, 32, 42, 0.05);
+  --card-shadow-soft: rgba(25, 32, 42, 0.035);
 }
 
 /* Stable-width text reveal */
@@ -165,7 +165,7 @@ html[data-theme="light"] {
 }
 
 .launch-page:has(.classic-launch-sheet) {
-  padding-top: 16px;
+  padding-top: 8px;
 }
 
 .launch-page:has(.classic-launch-sheet) .launch-page-heading {

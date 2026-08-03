@@ -12,21 +12,36 @@ const docsShell = readFileSync(
   join(root, "components/docs-shell.tsx"),
   "utf8",
 );
+const docsNavigation = readFileSync(
+  join(root, "components/docs-navigation.tsx"),
+  "utf8",
+);
+const docsPage = readFileSync(join(root, "app/docs/page.tsx"), "utf8");
 const interfaceCss = readFileSync(join(root, "app/interface.css"), "utf8");
 
 describe("Docs rail layout stability", () => {
   it("keeps the desktop rail sticky in its own full-height grid column", () => {
     expect(docsCss).toMatch(
-      /\.page\s*\{[^}]*--docs-layout-width:\s*1116px;[^}]*--docs-rail-width:\s*236px;/s,
+      /\.page\s*\{[^}]*--docs-layout-width:\s*1168px;[^}]*--docs-rail-width:\s*210px;/s,
     );
     expect(docsCss).toMatch(
       /\.page\s*\{[^}]*grid-template-columns:[^}]*var\(--docs-rail-width\)[^}]*minmax\(0,\s*var\(--docs-content-width\)\);/s,
     );
     expect(docsCss).toMatch(
-      /\.sidebar\s*\{[^}]*grid-column:\s*1;[^}]*grid-row:\s*1 \/ span 2;[^}]*inline-size:\s*var\(--docs-rail-width\);[^}]*position:\s*sticky;[^}]*top:\s*calc\(var\(--header-height\) \+ 16px\);/s,
+      /\.sidebar\s*\{[^}]*grid-column:\s*1;[^}]*grid-row:\s*1 \/ span 3;[^}]*inline-size:\s*var\(--docs-rail-width\);[^}]*position:\s*sticky;[^}]*top:\s*calc\(var\(--header-height\) \+ 16px\);/s,
     );
     expect(docsCss).toMatch(
       /\.layout\s*\{[^}]*grid-column:\s*2;/s,
+    );
+  });
+
+  it("keeps the desktop tools available without pinning them on mobile", () => {
+    expect(docsShell).toContain("data-docs-tools");
+    expect(docsCss).toMatch(
+      /\.heroTools\s*\{[^}]*grid-column:\s*2;[^}]*position:\s*sticky;[^}]*top:\s*calc\(var\(--header-height\) \+ 12px\);/s,
+    );
+    expect(docsCss).toMatch(
+      /@media \(max-width:\s*900px\)[\s\S]*?\.heroTools\s*\{[^}]*position:\s*static;/s,
     );
   });
 
@@ -45,8 +60,19 @@ describe("Docs rail layout stability", () => {
     );
     expect(docsShell).toContain("data-docs-sidebar");
     expect(docsShell).toContain("data-docs-content");
+    expect(docsShell.indexOf("data-docs-tools")).toBeLessThan(
+      docsShell.indexOf("data-docs-hero"),
+    );
     expect(docsShell.indexOf("data-docs-hero")).toBeLessThan(
       docsShell.indexOf("data-docs-sidebar"),
     );
+  });
+
+  it("uses the same current-page chapter rail for every guide", () => {
+    expect(docsPage).toContain("sections={platformSections}");
+    expect(docsNavigation).toContain(
+      '<p className={styles.navLabel}>On this page</p>',
+    );
+    expect(docsNavigation).toContain("group.items.every(");
   });
 });
