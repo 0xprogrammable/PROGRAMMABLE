@@ -120,6 +120,7 @@ export async function attestCandidateDatabasePromotion({ sql, promotion }) {
     if (lock?.acquired !== true) {
       throw new Error("another candidate cutover operator holds the database lock");
     }
+    await transaction.unsafe("set local role programmable_migrator").simple();
     const [sourceLease] = await transaction.unsafe(`
       select lease_generation::text as lease_generation,
              expires_at,
