@@ -1,9 +1,9 @@
 .pickerPage {
   isolation: isolate;
   justify-content: flex-start;
-  max-width: 1200px;
+  max-width: 1160px;
   padding-bottom: clamp(72px, 9svh, 112px);
-  padding-top: clamp(44px, 7svh, 76px);
+  padding-top: clamp(38px, 6svh, 68px);
   position: relative;
 }
 
@@ -21,10 +21,10 @@
 }
 
 .pickerHeading h1 {
-  font-size: clamp(48px, 5.1vw, 68px);
+  font-size: clamp(47px, 4.9vw, 66px);
   font-weight: 580;
-  letter-spacing: -0.04em;
-  line-height: 0.96;
+  letter-spacing: -0.035em;
+  line-height: 0.99;
   margin-inline: auto;
   max-width: 100%;
   text-wrap: balance;
@@ -37,10 +37,10 @@
 }
 
 .modelGrid {
-  gap: clamp(24px, 2.6vw, 34px);
+  gap: clamp(24px, 2.4vw, 30px);
   grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-top: clamp(36px, 5svh, 52px);
-  max-width: 1200px;
+  max-width: 1160px;
 }
 
 .modelCard.modelCard {
@@ -119,7 +119,7 @@
   object-fit: cover;
   object-position: center;
   transform: scale(1.002);
-  transition: transform 420ms var(--ease-out);
+  transition: transform 240ms var(--ease-out);
 }
 
 .classicArt .artImage {
@@ -172,7 +172,7 @@
   background: transparent;
   border: 0;
   box-shadow: none;
-  min-height: 230px;
+  min-height: 218px;
   padding: 24px 4px 0;
 }
 
@@ -253,7 +253,27 @@
 }
 
 .modelAction svg {
-  transition: none;
+  transition: transform 160ms var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .modelCard.modelCard:hover {
+    border-color: transparent;
+    box-shadow: none;
+    transform: none;
+  }
+
+  .modelCard:hover .modelArt {
+    outline-color: color-mix(in srgb, var(--text) 18%, transparent);
+  }
+
+  .modelCard:hover .artImage {
+    transform: scale(1.012);
+  }
+
+  .modelCard:hover .modelAction svg {
+    transform: translate3d(2px, 0, 0);
+  }
 }
 
 .modelCard[data-launch-model-available="false"] .modelArt img {

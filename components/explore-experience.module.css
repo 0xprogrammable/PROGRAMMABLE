@@ -12,8 +12,8 @@
   justify-content: center;
   margin-inline: auto;
   max-width: 1240px;
-  min-height: clamp(190px, 23svh, 230px);
-  padding: clamp(46px, 6svh, 64px) 0 clamp(30px, 4svh, 40px);
+  min-height: clamp(168px, 20svh, 204px);
+  padding: clamp(38px, 5svh, 54px) 0 clamp(24px, 3svh, 32px);
   position: relative;
   text-align: center;
   width: 100%;
@@ -25,10 +25,10 @@
 
 .pageHeading h1 {
   color: var(--text);
-  font-size: clamp(38px, 3.35vw, 48px);
+  font-size: clamp(38px, 3.2vw, 46px);
   font-weight: 555;
-  letter-spacing: -0.045em;
-  line-height: 1.04;
+  letter-spacing: -0.037em;
+  line-height: 1.06;
   margin: 0;
   max-width: 100%;
   text-wrap: balance;
@@ -46,7 +46,7 @@
 .runnersIntro {
   display: flex;
   justify-content: center;
-  margin: 0 auto 30px;
+  margin: 0 auto 26px;
   max-width: 940px;
   width: 100%;
 }
@@ -64,9 +64,9 @@
 }
 
 .runnersIntro :global(.token-search) {
-  flex: 0 1 420px;
-  max-width: 420px;
-  width: min(42vw, 420px);
+  flex: 0 1 390px;
+  max-width: 390px;
+  width: min(39vw, 390px);
 }
 
 .filterMenu {
@@ -106,10 +106,10 @@
 
 .runnerGrid {
   display: grid;
-  gap: clamp(40px, 4vw, 56px) clamp(18px, 2.2vw, 26px);
+  gap: clamp(42px, 4vw, 54px) clamp(18px, 2vw, 24px);
   grid-template-columns: repeat(3, minmax(0, 1fr));
   margin: 0 auto;
-  max-width: 1080px;
+  max-width: 1020px;
   transition: opacity 120ms ease-out;
 }
 
@@ -125,9 +125,7 @@
   min-width: 0;
   overflow: visible;
   position: relative;
-  transition:
-    box-shadow 190ms ease,
-    transform 190ms var(--ease-out);
+  transition: opacity 160ms ease-out;
 }
 
 .runnerHitArea {
@@ -141,15 +139,13 @@
   aspect-ratio: 1;
   background: var(--surface-soft);
   border: 0;
-  border-radius: 22px;
+  border-radius: 20px;
   box-shadow: 0 1px 0 color-mix(in srgb, white 28%, transparent);
   outline: 1px solid oklch(0 0 0 / 0.1);
   outline-offset: -1px;
   overflow: hidden;
   position: relative;
-  transition:
-    outline-color 180ms ease,
-    box-shadow 220ms ease;
+  transition: outline-color 180ms ease;
 }
 
 :global(html[data-theme="dark"]) .runnerArt {
@@ -158,7 +154,7 @@
 
 .runnerImage {
   object-fit: cover;
-  transition: transform 200ms var(--ease-out);
+  transition: transform 220ms var(--ease-out);
 }
 
 .runnerBody {
@@ -174,7 +170,7 @@
 
 .runnerHeading h3 {
   color: var(--text);
-  font-size: clamp(23px, 2vw, 29px);
+  font-size: clamp(23px, 1.9vw, 28px);
   font-weight: 585;
   letter-spacing: -0.032em;
   line-height: 1.03;
@@ -287,17 +283,12 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .runnerCard:hover {
-    transform: translate3d(0, -2px, 0);
-  }
-
   .runnerCard:hover .runnerArt {
     outline-color: color-mix(in srgb, var(--text) 22%, transparent);
-    box-shadow: 0 24px 56px var(--hover-shadow);
   }
 
   .runnerCard:hover .runnerImage {
-    transform: scale(1.018);
+    transform: scale(1.012);
   }
 
   .runnerSocialLink:hover {
@@ -369,12 +360,13 @@
 
 @media (max-width: 700px) {
   .pageHeading {
-    min-height: 166px;
-    padding: 30px 0 22px;
+    min-height: 164px;
+    padding: 28px 0 22px;
   }
 
   .pageHeading h1 {
     font-size: clamp(35px, 10.2vw, 46px);
+    letter-spacing: -0.035em;
     max-width: 16ch;
     white-space: normal;
   }
@@ -394,6 +386,7 @@
 
   .runnersIntro :global(.token-search) {
     max-width: none;
+    width: 100%;
   }
 
   .runnersIntro :global(.token-pagination) {
@@ -411,7 +404,7 @@
   }
 
   .runnerArt {
-    border-radius: 22px;
+    border-radius: 20px;
   }
 
   .runnerBody {

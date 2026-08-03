@@ -606,7 +606,14 @@ html[data-theme="dark"] .token-card-art {
 @media (hover: hover) and (pointer: fine) {
   .wordmark:hover,
   .header-social-link:hover,
-  .theme-toggle:hover,
+  .theme-toggle:hover {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    color: var(--accent-hover);
+    transform: scale(1.04);
+  }
+
   .wallet-button:hover,
   .token-filter summary:hover {
     background: var(--control-glass-background-hover);
@@ -629,8 +636,7 @@ html[data-theme="dark"] .token-card-art {
     background: var(--control-glass-background-hover);
   }
 
-  .token-card:hover,
-  .launch-model-card:not(:disabled):hover {
+  .token-card:hover {
     border-color: var(--border-strong);
     box-shadow: var(--shadow-floating);
     transform: translateY(-3px);

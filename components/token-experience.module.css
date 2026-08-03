@@ -90,7 +90,7 @@
   color: var(--accent-strong);
   display: inline-flex;
   font-family: var(--font-plex-mono), monospace;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 700;
   letter-spacing: 0.04em;
   line-height: 1.2;
