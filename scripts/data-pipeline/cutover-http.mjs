@@ -187,7 +187,8 @@ export async function inspectUnexposedStagedDeployment(input) {
     throw new Error("production domain is invalid");
   }
   const lookup = input.fetchDeployment ?? fetchVercelDeployment;
-  const [candidate, production] = await Promise.all([
+  const resolveAlias = input.resolveAlias ?? resolveVercelAlias;
+  const [candidate, production, productionAlias] = await Promise.all([
     lookup({
       idOrUrl: input.deploymentId,
       token: input.token,
@@ -196,6 +197,12 @@ export async function inspectUnexposedStagedDeployment(input) {
     }),
     lookup({
       idOrUrl: productionDomain,
+      token: input.token,
+      teamId: input.teamId,
+      fetchImpl: input.fetchImpl,
+    }),
+    resolveAlias({
+      alias: productionDomain,
       token: input.token,
       teamId: input.teamId,
       fetchImpl: input.fetchImpl,
@@ -210,7 +217,7 @@ export async function inspectUnexposedStagedDeployment(input) {
     token: input.token,
     teamId: input.teamId,
     fetchImpl: input.fetchImpl,
-    resolveAlias: input.resolveAlias,
+    resolveAlias,
   });
   const projectMatches =
     candidate?.projectId === input.projectId ||
@@ -218,8 +225,8 @@ export async function inspectUnexposedStagedDeployment(input) {
   const productionProjectMatches =
     production?.projectId === input.projectId ||
     production?.project?.id === input.projectId;
-  const productionAliases = deploymentAliases(production);
-  const productionDomainAssigned = aliases.includes(productionDomain);
+  const productionDomainAssigned = productionAlias?.deploymentId === input.deploymentId;
+  const productionDomainCurrent = productionAlias?.deploymentId === production?.id;
   const schedulerExposure = candidate?.id === production?.id;
   if (
     candidate?.id !== input.deploymentId ||
@@ -234,7 +241,7 @@ export async function inspectUnexposedStagedDeployment(input) {
     production?.readyState !== "READY" ||
     production?.target !== "production" ||
     !productionProjectMatches ||
-    !productionAliases.includes(productionDomain) ||
+    !productionDomainCurrent ||
     !/^[0-9a-f]{40}$/u.test(deploymentCommit(production) ?? "")
   ) {
     throw new Error("staged deployment is exposed, aliased or not exactly bound");
