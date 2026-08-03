@@ -2637,8 +2637,6 @@ export async function applyCandidateRestore(input) {
     drainedLeases(await inspectLeases(connection.sql));
     await fenceLogins(connection.sql);
     await inspectLoginFence(connection.sql);
-    const currentManifest = await captureManifest(connection.sql);
-    let executionMode;
     let originalStateMatches = false;
     try {
       originalStateMatches =
@@ -2648,6 +2646,11 @@ export async function applyCandidateRestore(input) {
     } catch {
       originalStateMatches = false;
     }
+    const currentManifest = await captureManifest(
+      connection.sql,
+      originalStateMatches ? { schemas: FINAL_BACKUP_SCHEMAS } : undefined,
+    );
+    let executionMode;
     const originalManifestMatches =
       currentManifest.manifestSha256 === plan.safetyBackup.manifestSha256 &&
       currentManifest.structuralManifestSha256 ===
