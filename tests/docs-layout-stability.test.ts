@@ -20,34 +20,34 @@ const docsPage = readFileSync(join(root, "app/docs/page.tsx"), "utf8");
 const interfaceCss = readFileSync(join(root, "app/interface.css"), "utf8");
 
 describe("Docs rail layout stability", () => {
-  it("keeps the desktop rail sticky in its own full-height grid column", () => {
+  it("keeps the desktop rail sticky beside one bounded reading column", () => {
     expect(docsCss).toMatch(
-      /\.page\s*\{[^}]*--docs-layout-width:\s*1168px;[^}]*--docs-rail-width:\s*210px;/s,
+      /\.page\s*\{[^}]*--docs-content-width:\s*820px;[^}]*--docs-rail-width:\s*208px;/s,
     );
     expect(docsCss).toMatch(
       /\.page\s*\{[^}]*grid-template-columns:[^}]*var\(--docs-rail-width\)[^}]*minmax\(0,\s*var\(--docs-content-width\)\);/s,
     );
     expect(docsCss).toMatch(
-      /\.sidebar\s*\{[^}]*grid-column:\s*1;[^}]*grid-row:\s*1 \/ span 3;[^}]*inline-size:\s*var\(--docs-rail-width\);[^}]*position:\s*sticky;[^}]*top:\s*calc\(var\(--header-height\) \+ 16px\);/s,
+      /\.sidebar\s*\{[^}]*grid-column:\s*1;[^}]*inline-size:\s*var\(--docs-rail-width\);[^}]*position:\s*sticky;[^}]*top:\s*calc\(var\(--header-height\) \+ 22px\);/s,
     );
     expect(docsCss).toMatch(
-      /\.layout\s*\{[^}]*grid-column:\s*2;/s,
+      /\.mainColumn\s*\{[^}]*grid-column:\s*2;[^}]*min-width:\s*0;/s,
     );
   });
 
   it("keeps the desktop tools available without pinning them on mobile", () => {
     expect(docsShell).toContain("data-docs-tools");
     expect(docsCss).toMatch(
-      /\.heroTools\s*\{[^}]*grid-column:\s*2;[^}]*position:\s*sticky;[^}]*top:\s*calc\(var\(--header-height\) \+ 12px\);/s,
+      /\.heroTools\s*\{[^}]*position:\s*sticky;[^}]*top:\s*calc\(var\(--header-height\) \+ 12px\);/s,
     );
     expect(docsCss).toMatch(
-      /@media \(max-width:\s*900px\)[\s\S]*?\.heroTools\s*\{[^}]*position:\s*static;/s,
+      /@media \(max-width:\s*960px\)[\s\S]*?\.heroTools\s*\{[^}]*position:\s*static;/s,
     );
   });
 
   it("keeps the mobile disclosure fixed to the page inset", () => {
     expect(docsCss).toMatch(
-      /@media \(max-width:\s*900px\)[\s\S]*?\.sidebar\s*\{[^}]*inline-size:\s*auto;[^}]*inset-inline:\s*24px;[^}]*position:\s*fixed;[^}]*top:\s*calc\(var\(--header-height\) \+ 8px\);/s,
+      /@media \(max-width:\s*960px\)[\s\S]*?\.sidebar\s*\{[^}]*inline-size:\s*auto;[^}]*inset-inline:\s*24px;[^}]*position:\s*fixed;[^}]*top:\s*calc\(var\(--header-height\) \+ 8px\);/s,
     );
     expect(docsCss).toMatch(
       /@media \(max-width:\s*700px\)[\s\S]*?\.sidebar\s*\{[^}]*inset-inline:\s*14px;/s,
@@ -60,11 +60,11 @@ describe("Docs rail layout stability", () => {
     );
     expect(docsShell).toContain("data-docs-sidebar");
     expect(docsShell).toContain("data-docs-content");
+    expect(docsShell.indexOf("data-docs-sidebar")).toBeLessThan(
+      docsShell.indexOf("data-docs-tools"),
+    );
     expect(docsShell.indexOf("data-docs-tools")).toBeLessThan(
       docsShell.indexOf("data-docs-hero"),
-    );
-    expect(docsShell.indexOf("data-docs-hero")).toBeLessThan(
-      docsShell.indexOf("data-docs-sidebar"),
     );
   });
 
@@ -73,6 +73,8 @@ describe("Docs rail layout stability", () => {
     expect(docsNavigation).toContain(
       '<p className={styles.navLabel}>On this page</p>',
     );
-    expect(docsNavigation).toContain("group.items.every(");
+    expect(docsNavigation).toContain(
+      "const navigationGroups = sections.length === 0 ? docsNavigation : [];",
+    );
   });
 });
