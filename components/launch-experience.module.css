@@ -119,11 +119,20 @@
   object-fit: cover;
   object-position: center;
   transform: scale(1.002);
-  transition: transform 240ms var(--ease-out);
 }
 
 .classicArt .artImage {
   filter: none;
+}
+
+.brandMark,
+.classicLogo {
+  aspect-ratio: 1;
+  inset: 50% auto auto 50%;
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: clamp(88px, 9.4vw, 128px);
+  z-index: 2;
 }
 
 .brandMark {
@@ -131,25 +140,16 @@
   -webkit-mask-position: center;
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-size: contain;
-  aspect-ratio: 1;
-  inset: 50% auto auto 50%;
   mask-image: url("/brand/loop/programmable-loop-mark-transparent-v1.png");
   mask-position: center;
   mask-repeat: no-repeat;
   mask-size: contain;
-  position: absolute;
-  transform: translate(-50%, -50%);
-  width: clamp(88px, 9.4vw, 128px);
-  z-index: 2;
 }
 
-.classicMark {
-  background: linear-gradient(
-    145deg,
-    rgb(24 27 30 / 0.98),
-    rgb(91 94 95 / 0.9)
-  );
-  filter: none;
+.classicLogo {
+  filter: drop-shadow(0 9px 22px rgb(95 54 68 / 0.13));
+  height: auto;
+  object-fit: contain;
 }
 
 .customMark {
@@ -166,6 +166,101 @@
   filter:
     drop-shadow(0 0 14px rgb(255 186 111 / 0.42))
     drop-shadow(0 12px 32px rgb(0 0 0 / 0.32));
+}
+
+.customSparkles {
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 3;
+}
+
+.customSparkles > span {
+  background: radial-gradient(
+    circle,
+    rgb(255 250 223 / 0.96) 0 13%,
+    rgb(255 225 177 / 0.54) 24%,
+    transparent 68%
+  );
+  border-radius: 50%;
+  height: 9px;
+  opacity: 0.16;
+  position: absolute;
+  transform: scale(0.78);
+  width: 9px;
+}
+
+.customSparkles > span:nth-child(1) {
+  left: 22%;
+  top: 23%;
+}
+
+.customSparkles > span:nth-child(2) {
+  right: 20%;
+  top: 31%;
+}
+
+.customSparkles > span:nth-child(3) {
+  bottom: 24%;
+  left: 32%;
+}
+
+@keyframes classic-botanical-breeze {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1.004);
+  }
+
+  28% {
+    transform: translate3d(-0.1%, 0, 0) scale(1.004);
+  }
+
+  58% {
+    transform: translate3d(0.08%, -0.08%, 0) scale(1.004);
+  }
+
+  78% {
+    transform: translate3d(0.04%, 0.05%, 0) scale(1.004);
+  }
+}
+
+@keyframes custom-star-sparkle {
+  0%,
+  72%,
+  100% {
+    opacity: 0.14;
+    transform: scale(0.78);
+  }
+
+  78% {
+    opacity: 0.68;
+    transform: scale(1.14);
+  }
+
+  84% {
+    opacity: 0.2;
+    transform: scale(0.82);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .classicArt .artImage {
+    animation: classic-botanical-breeze 9.6s steps(1, end) infinite;
+    will-change: transform;
+  }
+
+  .customSparkles > span {
+    animation: custom-star-sparkle 5.8s cubic-bezier(0.2, 0, 0, 1) infinite;
+    will-change: opacity, transform;
+  }
+
+  .customSparkles > span:nth-child(2) {
+    animation-delay: -2.1s;
+  }
+
+  .customSparkles > span:nth-child(3) {
+    animation-delay: -4.2s;
+  }
 }
 
 .modelBody.modelBody {
@@ -267,10 +362,6 @@
     outline-color: color-mix(in srgb, var(--text) 18%, transparent);
   }
 
-  .modelCard:hover .artImage {
-    transform: scale(1.012);
-  }
-
   .modelCard:hover .modelAction svg {
     transform: translate3d(2px, 0, 0);
   }
@@ -281,6 +372,8 @@
 }
 
 .formPage {
+  --launch-control-height: 52px;
+  --launch-panel-gap: 14px;
   isolation: isolate;
   min-height: calc(100svh - var(--header-height));
   padding-top: 8px;
@@ -377,7 +470,7 @@
 }
 
 .formPage :global(.classic-launch-content) {
-  padding: 24px 28px 19px;
+  padding: 26px 28px 22px;
 }
 
 .formFieldset {
@@ -408,15 +501,15 @@
 }
 
 .formPage :global(.classic-token-grid) {
-  gap: 22px;
-  grid-template-columns: 156px minmax(0, 1fr);
-  margin-top: 14px;
+  gap: 24px;
+  grid-template-columns: 148px minmax(0, 1fr);
+  margin-top: 16px;
 }
 
 .formPage :global(.classic-token-section) :global(.token-image-upload) {
   border-color: var(--control-border);
   border-radius: 17px;
-  width: 156px;
+  width: 148px;
 }
 
 .formPage :global(.token-image-upload),
@@ -439,8 +532,19 @@
   font-weight: 630;
 }
 
+.formPage :global(.classic-token-main .field),
+.formPage :global(.classic-link-fields .field) {
+  gap: 7px;
+}
+
+.formPage :global(.classic-token-main .two-column-fields),
+.formPage :global(.classic-link-fields) {
+  gap: 12px;
+}
+
 .formPage :global(.field input) {
-  min-height: 48px;
+  height: var(--launch-control-height);
+  min-height: var(--launch-control-height);
 }
 
 .formPage :global(.field textarea) {
@@ -449,7 +553,7 @@
 }
 
 .formPage :global(.classic-description-field) {
-  margin-top: 13px !important;
+  margin-top: 14px !important;
 }
 
 .formPage :global(.classic-description-field textarea) {
@@ -457,16 +561,15 @@
 }
 
 .formPage :global(.classic-link-fields) {
-  gap: 10px;
   margin-left: 0;
-  margin-top: 11px;
+  margin-top: 14px;
 }
 
 .formPage :global(.classic-fee-section),
 .formPage :global(.classic-v3-settings) {
   border-color: var(--panel-border-soft);
-  margin-top: 14px;
-  padding-top: 13px;
+  margin-top: 18px;
+  padding-top: 17px;
 }
 
 .formPage :global(.classic-fee-layout) {
@@ -487,15 +590,15 @@
 }
 
 .formPage :global(.meme-dev-buy-input) {
-  min-height: 46px;
+  min-height: var(--launch-control-height);
 }
 
 .formPage :global(.classic-launch-footer) {
   backdrop-filter: blur(18px);
   background: color-mix(in srgb, var(--glass-90) 82%, transparent);
   border-color: var(--panel-border-soft);
-  min-height: 50px;
-  padding: 0 28px;
+  min-height: 70px;
+  padding: 10px 28px;
 }
 
 .formPage :global(.classic-launch-button) {
@@ -512,13 +615,13 @@
 }
 
 .formPage :global(.classic-v3-core) {
-  gap: 12px;
+  gap: var(--launch-panel-gap);
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .formPage :global(.classic-v3-settings) {
   grid-template-columns: minmax(0, 1fr);
-  row-gap: 10px;
+  row-gap: 16px;
 }
 
 .formPage :global(.classic-v3-settings > .classic-section-heading),
@@ -554,13 +657,15 @@
   backdrop-filter: var(--control-glass-backdrop);
   background: var(--control-glass-background);
   border-color: var(--control-glass-border);
-  border-radius: 20px;
+  border-radius: 15px;
   box-shadow: inset 0 1px 0 var(--control-glass-highlight);
-  padding: 4px;
+  height: var(--launch-control-height);
+  min-height: var(--launch-control-height);
+  padding: 3px;
 }
 
 .formPage :global(.classic-v3-reward-mode button) {
-  border-radius: 16px;
+  border-radius: 11px;
   min-height: 44px;
   transition:
     background-color 160ms ease,
@@ -580,17 +685,43 @@
 .formPage :global(.classic-v3-reward-mode),
 .formPage :global(.classic-v3-initial-buy .meme-dev-buy),
 .formPage :global(.classic-v3-custody) {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  border-top: 1px solid var(--panel-border-soft);
-  padding-inline: 0;
+  background: color-mix(in srgb, var(--glass-90) 92%, transparent);
+  border: 1px solid var(--control-border);
+  border-radius: 18px;
+  box-shadow: inset 0 1px 0 var(--control-glass-highlight);
+  padding: 15px;
+}
+
+.formPage :global(.classic-v3-fees legend),
+.formPage :global(.classic-v3-reward-mode legend) {
+  padding-inline: 5px;
+}
+
+.formPage :global(.launch-select-trigger),
+.formPage :global(.classic-v3-address-field input),
+.formPage :global(.classic-v3-split-row input),
+.formPage :global(.classic-v3-custody input) {
+  min-height: var(--launch-control-height);
 }
 
 .formPage :global(.classic-v3-initial-buy .meme-dev-buy-input button) {
   border-radius: 12px;
   min-height: 44px;
   min-width: 44px;
+}
+
+.formPage :global(.classic-v3-initial-buy) {
+  gap: var(--launch-panel-gap);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.formPage :global(.classic-v3-initial-buy .meme-dev-buy) {
+  align-content: start;
+  grid-template-columns: minmax(128px, 0.8fr) minmax(190px, 1.2fr);
+}
+
+.formPage :global(.classic-v3-custody) {
+  align-content: start;
 }
 
 .formPage :global(.deep-preset) {
@@ -662,14 +793,14 @@
 
 .formPage[data-launch-model="classic-v3"] :global(.classic-launch-content),
 .formPage[data-launch-model="deep"] :global(.classic-launch-content) {
-  padding-bottom: 10px;
-  padding-top: 14px;
+  padding-bottom: 20px;
+  padding-top: 20px;
 }
 
 .formPage[data-launch-model="classic-v3"] :global(.classic-token-grid),
 .formPage[data-launch-model="deep"] :global(.classic-token-grid) {
-  grid-template-columns: 128px minmax(0, 1fr);
-  margin-top: 10px;
+  grid-template-columns: 148px minmax(0, 1fr);
+  margin-top: 14px;
 }
 
 .formPage[data-launch-model="classic-v3"]
@@ -678,12 +809,12 @@
 .formPage[data-launch-model="deep"]
   :global(.classic-token-section)
   :global(.token-image-upload) {
-  width: 128px;
+  width: 148px;
 }
 
 .formPage[data-launch-model="classic-v3"] :global(.classic-description-field),
 .formPage[data-launch-model="deep"] :global(.classic-description-field) {
-  margin-top: 9px !important;
+  margin-top: 12px !important;
 }
 
 .formPage[data-launch-model="classic-v3"]
@@ -698,7 +829,7 @@
 .formPage[data-launch-model="classic-v3"] :global(.classic-link-fields),
 .formPage[data-launch-model="deep"] :global(.classic-link-fields) {
   margin-left: 0;
-  margin-top: 9px;
+  margin-top: 12px;
 }
 
 .formPage[data-launch-model="deep"] :global(.deep-preset) {
@@ -728,10 +859,6 @@
     background: transparent;
     box-shadow: none;
     transform: none;
-  }
-
-  .modelCard[data-launch-model-available="true"]:hover .modelArt img {
-    transform: scale(1.006);
   }
 
   .formPage :global(.launch-select-trigger:hover) {
@@ -905,6 +1032,14 @@
     margin-left: 0;
   }
 
+  .formPage :global(.classic-v3-initial-buy) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .formPage :global(.classic-v3-initial-buy .meme-dev-buy) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .formPage[data-launch-model="classic-v3"] :global(.classic-link-fields),
   .formPage[data-launch-model="deep"] :global(.classic-link-fields) {
     margin-left: 0;
@@ -1028,6 +1163,14 @@
     grid-template-columns: 1fr;
   }
 
+  .formPage :global(.classic-v3-reward-mode > div) {
+    gap: 5px;
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+    min-height: 0;
+    padding: 5px;
+  }
+
   .formPage :global(.deep-preset-stats > div),
   .formPage :global(.deep-preset-stats > div:first-child) {
     border-left: 0;
@@ -1058,11 +1201,17 @@
 
 @media (prefers-reduced-motion: reduce) {
   .brandMark,
+  .classicLogo,
   .modelArt img,
   .modelArt,
   .modelAction svg,
   .modelCard {
     transition-duration: 0.01ms;
+  }
+
+  .classicArt .artImage,
+  .customSparkles > span {
+    animation: none;
   }
 
   .formLoadingTitle,

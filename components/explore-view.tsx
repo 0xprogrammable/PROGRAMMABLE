@@ -12,7 +12,10 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { type MarketCapMetric } from "@/components/animated-market-cap";
+import {
+  formatMarketCapMetric,
+  type MarketCapMetric,
+} from "@/components/animated-market-cap";
 import { XBrandIcon } from "@/components/brand-icons";
 import { EXPLORE_PREVIEW_TOKENS } from "@/components/explore-preview-data";
 import { useInterfacePreview } from "@/components/interface-preview";
@@ -39,6 +42,7 @@ type TokenCard = {
   description?: string;
   imageUrl: string;
   links: TokenLink[];
+  marketCap?: MarketCapMetric;
   usesFallbackImage: boolean;
   tokenAddress: `0x${string}`;
 };
@@ -110,14 +114,21 @@ const fallbackTokenImages = [
 const sortOptions: { id: TokenSort; label: string }[] = [
   { id: "newest", label: "Newest" },
   { id: "oldest", label: "Oldest" },
-  { id: "market-cap", label: "Highest market cap" },
-  { id: "market-cap-asc", label: "Lowest market cap" },
+  { id: "market-cap", label: "Highest Market Cap" },
+  { id: "market-cap-asc", label: "Lowest Market Cap" },
 ];
-const socialFilterOptions: { id: ExploreSocialFilter; label: string }[] = [
-  { id: "all", label: "Any" },
+const socialFilterOptions: {
+  id: Exclude<ExploreSocialFilter, "all">;
+  label: string;
+}[] = [
   { id: "yes", label: "Yes" },
   { id: "no", label: "No" },
 ];
+const tokenLinkOrder: Record<TokenLink["kind"], number> = {
+  website: 0,
+  x: 1,
+  telegram: 2,
+};
 
 export function shouldRefreshExplore(input: {
   visibilityState: DocumentVisibilityState;
@@ -267,6 +278,21 @@ type PendingExploreRequest = {
 
 const pendingExploreRequests = new Map<string, PendingExploreRequest>();
 
+async function fetchExplorePayload(
+  search: URLSearchParams,
+  signal: AbortSignal,
+) {
+  const response = await fetch(`/api/explore?${search.toString()}`, {
+    headers: { Accept: "application/json" },
+    signal,
+  });
+  const body: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(readApiError(body));
+  }
+  return parseExplorePayload(body);
+}
+
 export function loadExplorePayload(
   contentKey: string,
   search: URLSearchParams,
@@ -282,15 +308,7 @@ export function loadExplorePayload(
   }, EXPLORE_REQUEST_TIMEOUT_MS);
   const request = (async (): Promise<ExplorePayload> => {
     try {
-      const response = await fetch(`/api/explore?${search.toString()}`, {
-        headers: { Accept: "application/json" },
-        signal: controller.signal,
-      });
-      const body: unknown = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(readApiError(body));
-      }
-      return parseExplorePayload(body);
+      return await fetchExplorePayload(search, controller.signal);
     } catch (error) {
       if (timedOut) {
         throw new Error("Tokens took too long to respond");
@@ -318,6 +336,26 @@ function abortExplorePayload(contentKey: string) {
   if (!pendingRequest) return;
   pendingExploreRequests.delete(contentKey);
   pendingRequest.controller.abort();
+}
+
+export function paginateTokensBySocialPresence(
+  tokens: LauncherToken[],
+  socialFilter: ExploreSocialFilter,
+  requestedPage: number,
+  pageSize = EXPLORE_TOKENS_PER_PAGE,
+) {
+  const filtered = filterTokensBySocialPresence(tokens, socialFilter);
+  const totalPages = Math.ceil(filtered.length / pageSize);
+  const page = totalPages === 0 ? 1 : Math.min(requestedPage, totalPages);
+  const offset = (page - 1) * pageSize;
+
+  return {
+    tokens: filtered.slice(offset, offset + pageSize),
+    page,
+    pageSize,
+    total: filtered.length,
+    totalPages,
+  };
 }
 
 function getFallbackTokenImage(address: string) {
@@ -430,7 +468,10 @@ function getTokenCards(tokens: LauncherToken[]): TokenCard[] {
     description: token.description?.trim() || undefined,
     imageUrl:
       token.imageUrl?.trim() || getFallbackTokenImage(token.tokenAddress),
-    links: token.links ?? [],
+    links: [...(token.links ?? [])].sort(
+      (left, right) => tokenLinkOrder[left.kind] - tokenLinkOrder[right.kind],
+    ),
+    marketCap: getMarketCap(token),
     usesFallbackImage: !token.imageUrl?.trim(),
     tokenAddress: token.tokenAddress,
   }));
@@ -473,7 +514,7 @@ export function ExploreView() {
   const [state, setState] = useState<ExploreState>({ phase: "loading" });
   const activeExploreContentKey = useRef<string | null>(null);
   const filterRef = useRef<HTMLDetailsElement>(null);
-  const contentKey = `${debouncedQuery}\u0000${sort}\u0000${currentPage}`;
+  const contentKey = `${debouncedQuery}\u0000${sort}\u0000${socialFilter}\u0000${currentPage}`;
   const requestKey = `${contentKey}\u0000${retryKey}\u0000${refreshKey}`;
 
   useEffect(
@@ -537,6 +578,9 @@ export function ExploreView() {
       page: String(currentPage),
       limit: String(EXPLORE_TOKENS_PER_PAGE),
     });
+    if (socialFilter !== "all") {
+      search.set("socials", socialFilter);
+    }
 
     async function loadTokens() {
       try {
@@ -571,7 +615,15 @@ export function ExploreView() {
     return () => {
       ignore = true;
     };
-  }, [contentKey, currentPage, debouncedQuery, preview, requestKey, sort]);
+  }, [
+    contentKey,
+    currentPage,
+    debouncedQuery,
+    preview,
+    requestKey,
+    socialFilter,
+    sort,
+  ]);
 
   const previewPayload = useMemo<ExplorePayload>(() => {
     const searchValue = debouncedQuery.toLowerCase();
@@ -598,15 +650,17 @@ export function ExploreView() {
       return sort === "market-cap" ? delta : -delta;
     });
 
+    const paginated = paginateTokensBySocialPresence(
+      ranked,
+      socialFilter,
+      currentPage,
+    );
+
     return {
       status: "ready",
-      tokens: ranked,
-      page: 1,
-      pageSize: EXPLORE_TOKENS_PER_PAGE,
-      total: ranked.length,
-      totalPages: ranked.length > 0 ? 1 : 0,
+      ...paginated,
     };
-  }, [debouncedQuery, sort]);
+  }, [currentPage, debouncedQuery, socialFilter, sort]);
 
   const displayState: ExploreState = preview
     ? {
@@ -619,14 +673,9 @@ export function ExploreView() {
 
   const payload =
     displayState.phase === "ready" ? displayState.payload : null;
-  const filteredTokens = useMemo(
-    () =>
-      filterTokensBySocialPresence(payload?.tokens ?? [], socialFilter),
-    [payload?.tokens, socialFilter],
-  );
   const cards = useMemo(
-    () => getTokenCards(filteredTokens),
-    [filteredTokens],
+    () => getTokenCards(payload?.tokens ?? []),
+    [payload?.tokens],
   );
   const pageCount = Math.max(1, payload?.totalPages ?? 0);
   const activePage = Math.min(payload?.page ?? currentPage, pageCount);
@@ -686,8 +735,8 @@ export function ExploreView() {
             ? "No tokens match this search"
             : "No tokens match this search and filter"
           : socialFilter === "yes"
-            ? "No tokens on this page have social links"
-            : "Every token on this page has social links";
+            ? "No tokens have social links"
+            : "No tokens without social links";
         return (
           <div className="token-empty">
             <p>{noMatchMessage}</p>
@@ -740,7 +789,9 @@ export function ExploreView() {
                       token.usesFallbackImage ? "" : `${token.name} artwork`
                     }
                     fill
-                    loading={index < 6 ? "eager" : "lazy"}
+                    loading={
+                      index < EXPLORE_TOKENS_PER_PAGE ? "eager" : "lazy"
+                    }
                     sizes="(max-width: 700px) calc(100vw - 28px), (max-width: 1040px) 46vw, 31vw"
                     unoptimized={!canOptimizeTokenImage(imageSource)}
                   />
@@ -751,40 +802,46 @@ export function ExploreView() {
                     <h3 title={token.name}>{token.name}</h3>
                   </header>
 
-                  <p
-                    className={`${styles.runnerDescription}${
-                      token.description
-                        ? ""
-                        : ` ${styles.runnerDescriptionEmpty}`
-                    }`}
-                  >
-                    {token.description ?? "No description yet."}
-                  </p>
+                  {token.description ? (
+                    <p className={styles.runnerDescription}>
+                      {token.description}
+                    </p>
+                  ) : null}
                 </div>
               </Link>
 
-              {token.links.length > 0 ? (
-                <div
-                  className={styles.runnerSocials}
-                  role="group"
-                  aria-label={`${token.name} links`}
-                >
-                  {token.links.map((link) => {
-                    const label = getTokenLinkLabel(link.kind);
-                    return (
-                      <a
-                        className={styles.runnerSocialLink}
-                        href={link.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        aria-label={`${token.name} ${label}`}
-                        title={label}
-                        key={`${link.kind}:${link.url}`}
-                      >
-                        <TokenLinkIcon kind={link.kind} />
-                      </a>
-                    );
-                  })}
+              {token.marketCap || token.links.length > 0 ? (
+                <div className={styles.runnerMeta}>
+                  {token.marketCap ? (
+                    <span className={styles.runnerMarketCap}>
+                      <span className={styles.runnerMarketCapLabel}>MC</span>
+                      {formatMarketCapMetric(token.marketCap)}
+                    </span>
+                  ) : null}
+                  {token.links.length > 0 ? (
+                    <div
+                      className={styles.runnerSocials}
+                      role="group"
+                      aria-label={`${token.name} links`}
+                    >
+                      {token.links.map((link) => {
+                        const label = getTokenLinkLabel(link.kind);
+                        return (
+                          <a
+                            className={styles.runnerSocialLink}
+                            href={link.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label={`${token.name} ${label}`}
+                            title={label}
+                            key={`${link.kind}:${link.url}`}
+                          >
+                            <TokenLinkIcon kind={link.kind} />
+                          </a>
+                        );
+                      })}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </article>
@@ -874,9 +931,6 @@ export function ExploreView() {
                             onClick={() => {
                               setSort(option.id);
                               setCurrentPage(1);
-                              const filter = filterRef.current;
-                              filter?.removeAttribute("open");
-                              filter?.querySelector("summary")?.focus();
                             }}
                           >
                             <span>{option.label}</span>
@@ -909,11 +963,10 @@ export function ExploreView() {
                             type="button"
                             aria-pressed={socialFilter === option.id}
                             onClick={() => {
-                              setSocialFilter(option.id);
+                              setSocialFilter((current) =>
+                                current === option.id ? "all" : option.id,
+                              );
                               setCurrentPage(1);
-                              const filter = filterRef.current;
-                              filter?.removeAttribute("open");
-                              filter?.querySelector("summary")?.focus();
                             }}
                           >
                             <span>{option.label}</span>

@@ -422,6 +422,7 @@ describe("indexed Explore list adapter v2", () => {
       ready({
         request: {
           query: "",
+          socials: "yes",
           sort: "newest",
           requestedPage: 1,
           pageSize: 5,
@@ -532,6 +533,7 @@ describe("indexed Explore list adapter v2", () => {
       ready({
         request: {
           query: "$token",
+          socials: null,
           sort: "market-cap",
           requestedPage: 2,
           pageSize: 2,
@@ -560,6 +562,7 @@ describe("indexed Explore list adapter v2", () => {
           ready({
             request: {
               query: "$token",
+              socials: null,
               sort: "market-cap",
               requestedPage: 2,
               pageSize: 2,
@@ -587,7 +590,13 @@ describe("indexed Explore list adapter v2", () => {
     const later = token("classic-v2", TOKEN_B, "explore-list", "25650002");
     const badRoute = token("classic-v2", TOKEN_B, "creator-profile", "25650000");
     const page = {
-      request: { query: "", sort: "newest" as const, requestedPage: 1, pageSize: 2 },
+      request: {
+        query: "",
+        socials: null,
+        sort: "newest" as const,
+        requestedPage: 1,
+        pageSize: 2,
+      },
       page: {
         resolvedPage: 1,
         totalCount: "2",

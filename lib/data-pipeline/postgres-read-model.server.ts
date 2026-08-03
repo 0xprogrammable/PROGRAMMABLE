@@ -2,6 +2,7 @@ import "server-only";
 
 import type { TokenChartRange } from "../onchain/chart";
 import type { ExploreSort } from "../onchain/types";
+import type { ExploreSocialFilter } from "../onchain/query";
 
 import type { PostgresTransaction } from "./postgres";
 import {
@@ -33,6 +34,7 @@ export type IndexedExploreReadRequest = {
   sort: ExploreSort;
   page: number;
   pageSize: number;
+  socials: ExploreSocialFilter | null;
 };
 
 export type IndexedTokenReadRequest = {

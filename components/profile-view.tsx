@@ -149,6 +149,15 @@ type ProfileWorkspaceSourceStatus =
   | StockPairedProfileRewards["status"];
 
 export type ProfileWorkspacePhase = "loading" | "ready" | "error";
+export type ProfileSessionView = "loading" | "connect" | "profile";
+
+export function getProfileSessionView(
+  connecting: boolean,
+  account?: string,
+): ProfileSessionView {
+  if (connecting) return "loading";
+  return account ? "profile" : "connect";
+}
 
 export function getProfileWorkspacePhase(
   statuses: readonly ProfileWorkspaceSourceStatus[],
@@ -204,40 +213,6 @@ function formatStockRewardEstimate(reward: StockPairedReward) {
     maximumFractionDigits: usd < 1 ? 3 : 2,
   }).format(usd);
   return `≈ $${formattedUsd} · ${formatEth(reward.estimatedEth)}`;
-}
-
-function formatMarketCap(token: ProfileToken) {
-  if (token.fdvUsdWad) {
-    const dollars = Number(BigInt(token.fdvUsdWad) / 10n ** 18n);
-    if (Number.isFinite(dollars)) {
-      if (dollars >= 1_000_000_000) {
-        return `$${(dollars / 1_000_000_000).toFixed(1).replace(/\.0$/, "")}B`;
-      }
-      if (dollars >= 1_000_000) {
-        return `$${(dollars / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-      }
-      if (dollars >= 1_000) {
-        return `$${(dollars / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
-      }
-      return `$${dollars.toLocaleString("en-US")}`;
-    }
-  }
-  if (token.marketCapEthWei) {
-    return formatEth(formatUnits(BigInt(token.marketCapEthWei), 18));
-  }
-  if (token.marketCapQuoteWad && token.quoteAssetSymbol) {
-    const value = Number(
-      formatUnits(BigInt(token.marketCapQuoteWad), 18),
-    );
-    if (Number.isFinite(value)) {
-      return `${new Intl.NumberFormat("en-US", {
-        notation: value >= 1_000 ? "compact" : "standard",
-        maximumFractionDigits: 2,
-        maximumSignificantDigits: 6,
-      }).format(value)} ${token.quoteAssetSymbol}`;
-    }
-  }
-  return null;
 }
 
 type WaitForTransactionOptions = {
@@ -526,6 +501,17 @@ export function clearConfirmedProfileActionStates<
   return changed ? next : states;
 }
 
+export function reflectedConfirmedProfileTransactions(
+  confirmed: ReadonlyMap<string, Hex>,
+  claimableForStateKey: (stateKey: string) => bigint | undefined,
+) {
+  return new Map(
+    [...confirmed].filter(([stateKey]) =>
+      claimableForStateKey(stateKey) === 0n,
+    ),
+  );
+}
+
 function pendingProfileTransactionStorageKey(account: string) {
   const normalizedAccount = normalizeEthereumAddress(account);
   return normalizedAccount
@@ -732,7 +718,7 @@ export function withoutClosedDeepProfileData(
 }
 
 export function ProfileView({ onchainData }: ProfileViewProps = {}) {
-  const { wallet, openWallet, sendTransaction } = useWallet();
+  const { wallet, openWallet, sendTransaction, connecting } = useWallet();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const account = wallet?.account;
   const activeAccountRef = useRef(account);
@@ -871,13 +857,23 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     void fetchCreatorProfile(account, controller.signal)
       .then((data) => {
         if (!controller.signal.aborted) {
+          const reflectedTransactions =
+            reflectedConfirmedProfileTransactions(
+              confirmedTransactions,
+              (stateKey) => {
+                const claim = data.claims.find(
+                  (entry) => entry.poolId.toLowerCase() === stateKey,
+                );
+                return claim ? BigInt(claim.claimableWei) : 0n;
+              },
+            );
           setRemoteOnchainData(data);
           setClaimActionStates((current) =>
-            clearConfirmedProfileActionStates(current, confirmedTransactions),
+            clearConfirmedProfileActionStates(current, reflectedTransactions),
           );
           consumeConfirmedProfileTransactions(
             confirmedProfileTransactionsRef.current.classic,
-            confirmedTransactions,
+            reflectedTransactions,
           );
         }
       })
@@ -905,13 +901,26 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     void fetchClassicV3ProfileRewards(account, controller.signal)
       .then((data) => {
         if (!controller.signal.aborted) {
+          const reflectedTransactions =
+            reflectedConfirmedProfileTransactions(
+              confirmedTransactions,
+              (stateKey) => {
+                if (stateKey.includes(":update-payout")) return 0n;
+                const vaultAddress = stateKey.split(":")[0];
+                const reward = data.rewards.find(
+                  (entry) =>
+                    entry.vaultAddress.toLowerCase() === vaultAddress,
+                );
+                return reward ? BigInt(reward.claimableWei) : 0n;
+              },
+            );
           setClassicV3Rewards(data);
           setClassicV3ActionStates((current) =>
-            clearConfirmedProfileActionStates(current, confirmedTransactions),
+            clearConfirmedProfileActionStates(current, reflectedTransactions),
           );
           consumeConfirmedProfileTransactions(
             confirmedProfileTransactionsRef.current["classic-v3"],
-            confirmedTransactions,
+            reflectedTransactions,
           );
         }
       })
@@ -939,13 +948,26 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     void fetchDeepProfileRewards(account, controller.signal)
       .then((data) => {
         if (!controller.signal.aborted) {
+          const reflectedTransactions =
+            reflectedConfirmedProfileTransactions(
+              confirmedTransactions,
+              (stateKey) => {
+                if (stateKey.endsWith(":update-payout")) return 0n;
+                const vaultAddress = stateKey.split(":")[0];
+                const reward = data.rewards.find(
+                  (entry) =>
+                    entry.vaultAddress.toLowerCase() === vaultAddress,
+                );
+                return reward ? BigInt(reward.claimableWei) : 0n;
+              },
+            );
           setDeepRewards(data);
           setDeepActionStates((current) =>
-            clearConfirmedProfileActionStates(current, confirmedTransactions),
+            clearConfirmedProfileActionStates(current, reflectedTransactions),
           );
           consumeConfirmedProfileTransactions(
             confirmedProfileTransactionsRef.current.deep,
-            confirmedTransactions,
+            reflectedTransactions,
           );
         }
       })
@@ -998,13 +1020,26 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     void fetchStockPairedProfileRewards(account, controller.signal)
       .then((data) => {
         if (!controller.signal.aborted) {
+          const reflectedTransactions =
+            reflectedConfirmedProfileTransactions(
+              confirmedTransactions,
+              (stateKey) => {
+                if (stateKey.endsWith(":update-payout")) return 0n;
+                const vaultAddress = stateKey.split(":")[0];
+                const reward = data.rewards.find(
+                  (entry) =>
+                    entry.vaultAddress.toLowerCase() === vaultAddress,
+                );
+                return reward ? BigInt(reward.claimableRaw) : 0n;
+              },
+            );
           setStockPairedRewards(data);
           setStockPairedActionStates((current) =>
-            clearConfirmedProfileActionStates(current, confirmedTransactions),
+            clearConfirmedProfileActionStates(current, reflectedTransactions),
           );
           consumeConfirmedProfileTransactions(
             confirmedProfileTransactionsRef.current["stock-paired"],
-            confirmedTransactions,
+            reflectedTransactions,
           );
         }
       })
@@ -1854,6 +1889,10 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
                 );
               }
               if (transactionKind === "swap") {
+                confirmedProfileTransactionsRef.current["stock-paired"].set(
+                  stateKey,
+                  transactionHash,
+                );
                 setActionState({
                   status: "confirmed",
                   message: "Claimed as ETH",
@@ -1867,6 +1906,10 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
               "The conversion needs more approval steps than expected",
             );
           }
+          confirmedProfileTransactionsRef.current["stock-paired"].set(
+            stateKey,
+            transactionHash,
+          );
           setActionState({
             status: "confirmed",
             message:
@@ -1939,7 +1982,13 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     setProfileRefresh((current) => current + 1);
   }
 
-  if (!account) {
+  const sessionView = getProfileSessionView(connecting, account);
+
+  if (sessionView === "loading") {
+    return <ProfileSessionLoadingState />;
+  }
+
+  if (sessionView === "connect" || !account) {
     return (
       <div className={`${styles.page} page-width`}>
         <section className={styles.connectCard}>
@@ -2106,6 +2155,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       </section>
 
       <ProfileAccountWorkspace
+        key={account.toLowerCase()}
         connected={Boolean(account)}
         data={scopedOnchainData}
         account={account}
@@ -2141,6 +2191,15 @@ export type ProfilePortfolioEntry = ProfileTokenReward & {
   deepV3Token?: DeepV3CreatorToken;
   launchedByWallet: boolean;
 };
+
+type ProfileActionStateCollections = {
+  claim: Record<string, ProfileClaimActionState>;
+  classicV3: Record<string, ClassicV3ActionState>;
+  deep: Record<string, DeepActionState>;
+  stockPaired: Record<string, StockPairedActionState>;
+};
+
+export const profileClaimPageSize = 5;
 
 export function groupProfileRewards(
   tokens: readonly ProfileToken[],
@@ -2455,6 +2514,153 @@ function profileEntryClaimableWei(
   );
 }
 
+function confirmedForAccount(
+  state: ProfileClaimActionState | ClassicV3ActionState | undefined,
+  account?: string,
+) {
+  return (
+    state?.status === "confirmed" &&
+    (!account || state.account.toLowerCase() === account.toLowerCase())
+  );
+}
+
+function profileEntryActionableNativeWei(
+  entry: ProfilePortfolioEntry,
+  account: string | undefined,
+  actionStates?: ProfileActionStateCollections,
+) {
+  const normalizedAccount = account?.toLowerCase();
+  const ownsReward = (beneficiary: string) =>
+    !normalizedAccount || beneficiary.toLowerCase() === normalizedAccount;
+  let total = 0n;
+
+  if (
+    entry.claim &&
+    !confirmedForAccount(
+      actionStates?.claim[entry.claim.poolId.toLowerCase()],
+      account,
+    )
+  ) {
+    total += BigInt(entry.claim.claimableWei);
+  }
+
+  for (const reward of entry.classicRewards) {
+    if (
+      ownsReward(reward.beneficiary) &&
+      !confirmedForAccount(
+        actionStates?.classicV3[
+          `${reward.vaultAddress.toLowerCase()}:claim`
+        ],
+        account,
+      )
+    ) {
+      total += BigInt(reward.claimableWei);
+    }
+  }
+
+  for (const reward of entry.deepRewards) {
+    if (
+      ownsReward(reward.beneficiary) &&
+      !confirmedForAccount(
+        actionStates?.deep[`${reward.vaultAddress.toLowerCase()}:claim`],
+        account,
+      )
+    ) {
+      total += BigInt(reward.claimableWei);
+    }
+  }
+
+  return total;
+}
+
+function profileEntryActionableStockAmounts(
+  entry: ProfilePortfolioEntry,
+  account: string | undefined,
+  actionStates?: ProfileActionStateCollections,
+) {
+  const normalizedAccount = account?.toLowerCase();
+  let raw = 0n;
+  let estimatedEthWei = 0n;
+
+  for (const reward of entry.stockPairedRewards) {
+    if (
+      normalizedAccount &&
+      reward.beneficiary.toLowerCase() !== normalizedAccount
+    ) {
+      continue;
+    }
+    const vault = reward.vaultAddress.toLowerCase();
+    if (
+      confirmedForAccount(actionStates?.stockPaired[`${vault}:claim`], account) ||
+      confirmedForAccount(
+        actionStates?.stockPaired[`${vault}:claim-as-eth`],
+        account,
+      )
+    ) {
+      continue;
+    }
+
+    raw += BigInt(reward.claimableRaw);
+    if (reward.estimatedEthRaw && /^(0|[1-9]\d*)$/.test(reward.estimatedEthRaw)) {
+      estimatedEthWei += BigInt(reward.estimatedEthRaw);
+    }
+  }
+
+  return { raw, estimatedEthWei };
+}
+
+export function sortProfileClaimableEntries(
+  entries: readonly ProfilePortfolioEntry[],
+  account?: string,
+  actionStates?: ProfileActionStateCollections,
+) {
+  return [...entries].sort((first, second) => {
+    const firstStock = profileEntryActionableStockAmounts(
+      first,
+      account,
+      actionStates,
+    );
+    const secondStock = profileEntryActionableStockAmounts(
+      second,
+      account,
+      actionStates,
+    );
+    const firstEstimatedEth =
+      profileEntryActionableNativeWei(first, account, actionStates) +
+      firstStock.estimatedEthWei;
+    const secondEstimatedEth =
+      profileEntryActionableNativeWei(second, account, actionStates) +
+      secondStock.estimatedEthWei;
+
+    if (firstEstimatedEth !== secondEstimatedEth) {
+      return firstEstimatedEth > secondEstimatedEth ? -1 : 1;
+    }
+    if (firstStock.raw !== secondStock.raw) {
+      return firstStock.raw > secondStock.raw ? -1 : 1;
+    }
+    return first.token.address.localeCompare(second.token.address);
+  });
+}
+
+export function paginateProfileClaimableEntries<T>(
+  entries: readonly T[],
+  requestedPage: number,
+  pageSize = profileClaimPageSize,
+) {
+  const safePageSize = Math.max(1, Math.floor(pageSize));
+  const totalPages = Math.max(1, Math.ceil(entries.length / safePageSize));
+  const currentPage = Math.min(
+    totalPages,
+    Math.max(1, Math.floor(requestedPage) || 1),
+  );
+  const start = (currentPage - 1) * safePageSize;
+  return {
+    currentPage,
+    totalPages,
+    items: entries.slice(start, start + safePageSize),
+  };
+}
+
 function profileEntryStockClaimableRaw(
   entry: ProfilePortfolioEntry,
   account?: string,
@@ -2490,7 +2696,9 @@ function profileEntryHasVisibleClaimState(
   if (!normalizedAccount) return false;
   const belongsToAccount = (
     state: ProfileClaimActionState | ClassicV3ActionState | undefined,
-  ) => state?.account.toLowerCase() === normalizedAccount;
+  ) =>
+    state?.account.toLowerCase() === normalizedAccount &&
+    state.status !== "confirmed";
 
   if (
     entry.claim &&
@@ -2541,6 +2749,30 @@ function profileEntryHasVisibleClaimState(
   );
 }
 
+function profileEntryHasActionableReward(
+  entry: ProfilePortfolioEntry,
+  account: string | undefined,
+  actionStates: ProfileActionStateCollections,
+) {
+  const stock = profileEntryActionableStockAmounts(
+    entry,
+    account,
+    actionStates,
+  );
+  return (
+    profileEntryActionableNativeWei(entry, account, actionStates) > 0n ||
+    stock.raw > 0n ||
+    profileEntryHasVisibleClaimState(
+      entry,
+      account,
+      actionStates.claim,
+      actionStates.classicV3,
+      actionStates.deep,
+      actionStates.stockPaired,
+    )
+  );
+}
+
 export function profileHasRewardSurface(
   entries: readonly ProfilePortfolioEntry[],
 ) {
@@ -2564,6 +2796,33 @@ export function profileRewardsForAccount<
   return rewards.filter(
     (reward) =>
       reward.beneficiary.toLowerCase() === normalizedAccount,
+  );
+}
+
+function ProfileSessionLoadingState() {
+  return (
+    <div className={`${styles.page} page-width`}>
+      <section
+        className={styles.sessionLoading}
+        aria-busy="true"
+        aria-label="Restoring wallet profile"
+      >
+        <span className={styles.visuallyHidden} role="status">
+          Restoring wallet profile
+        </span>
+        <div className={styles.sessionLoadingHero} aria-hidden="true">
+          <span className={styles.sessionLoadingAvatar} />
+          <span className={styles.sessionLoadingIdentity}>
+            <span />
+            <span />
+          </span>
+        </div>
+        <div className={styles.sessionLoadingWorkspace} aria-hidden="true">
+          <span />
+          <span />
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -2650,6 +2909,8 @@ function ProfileAccountWorkspace({
   onRetry: () => void;
   terminalErrorReady: boolean;
 }) {
+  const [claimPage, setClaimPage] = useState(1);
+
   if (!connected) {
     return (
       <section className={styles.accountState}>
@@ -2741,19 +3002,23 @@ function ProfileAccountWorkspace({
       ).length,
     0,
   );
-  const claimableEntries = entries.filter(
-    (entry) =>
-      profileEntryHasClaimableReward(entry, account) ||
-      profileEntryHasVisibleClaimState(
-        entry,
-        account,
-        claimActionStates,
-        classicV3ActionStates,
-        deepActionStates,
-        stockPairedActionStates,
-      ),
+  const actionStates: ProfileActionStateCollections = {
+    claim: claimActionStates,
+    classicV3: classicV3ActionStates,
+    deep: deepActionStates,
+    stockPaired: stockPairedActionStates,
+  };
+  const claimableEntries = sortProfileClaimableEntries(
+    entries.filter((entry) =>
+      profileEntryHasActionableReward(entry, account, actionStates),
+    ),
+    account,
+    actionStates,
   );
-  const ownedEntries = entries.filter((entry) => entry.launchedByWallet);
+  const claimPageData = paginateProfileClaimableEntries(
+    claimableEntries,
+    claimPage,
+  );
   const chainId = currentReady
     ? data.chainId
     : classicReady
@@ -2809,25 +3074,62 @@ function ProfileAccountWorkspace({
         >
           <header className={styles.panelHeader}>
             <h2 id="profile-claimable-title">Claimable</h2>
+            {claimPageData.totalPages > 1 ? (
+              <nav
+                className={styles.claimPagination}
+                aria-label="Claimable rewards pages"
+              >
+                <button
+                  type="button"
+                  aria-label="Previous claimable rewards page"
+                  disabled={claimPageData.currentPage === 1}
+                  onClick={() =>
+                    setClaimPage(Math.max(1, claimPageData.currentPage - 1))
+                  }
+                >
+                  <span aria-hidden="true">←</span>
+                </button>
+                <span aria-live="polite" aria-atomic="true">
+                  {claimPageData.currentPage} / {claimPageData.totalPages}
+                </span>
+                <button
+                  type="button"
+                  aria-label="Next claimable rewards page"
+                  disabled={
+                    claimPageData.currentPage === claimPageData.totalPages
+                  }
+                  onClick={() =>
+                    setClaimPage(
+                      Math.min(
+                        claimPageData.totalPages,
+                        claimPageData.currentPage + 1,
+                      ),
+                    )
+                  }
+                >
+                  <span aria-hidden="true">→</span>
+                </button>
+              </nav>
+            ) : null}
           </header>
 
           {claimableEntries.length ? (
             <div className={styles.claimList}>
-              {claimableEntries.map((entry) => (
+              {claimPageData.items.map((entry) => (
                 <ProfileClaimRow
-                key={entry.token.address}
-                entry={entry}
-                account={account}
-                chainId={chainId}
-                claimActionStates={claimActionStates}
-                classicV3ActionStates={classicV3ActionStates}
-                deepActionStates={deepActionStates}
-                stockPairedActionStates={stockPairedActionStates}
-                onClaim={onClaim}
-                onClassicV3Action={onClassicV3Action}
-                onDeepAction={onDeepAction}
-                onStockPairedAction={onStockPairedAction}
-              />
+                  key={entry.token.address}
+                  entry={entry}
+                  account={account}
+                  chainId={chainId}
+                  claimActionStates={claimActionStates}
+                  classicV3ActionStates={classicV3ActionStates}
+                  deepActionStates={deepActionStates}
+                  stockPairedActionStates={stockPairedActionStates}
+                  onClaim={onClaim}
+                  onClassicV3Action={onClassicV3Action}
+                  onDeepAction={onDeepAction}
+                  onStockPairedAction={onStockPairedAction}
+                />
               ))}
             </div>
           ) : (
@@ -2838,29 +3140,6 @@ function ProfileAccountWorkspace({
           )}
         </section>
       </div>
-
-      <section
-        className={styles.tokenCollection}
-        aria-labelledby="profile-tokens-title"
-      >
-        <header className={styles.panelHeader}>
-          <h2 id="profile-tokens-title">Your tokens</h2>
-        </header>
-        {ownedEntries.length ? (
-          <div className={styles.tokenGrid}>
-            {ownedEntries.map((entry) => (
-              <ProfileTokenLink key={entry.token.address} entry={entry} />
-            ))}
-          </div>
-        ) : (
-          <ProfileSectionEmpty
-            title="No tokens yet"
-            detail="Tokens created with this wallet will appear here."
-            actionHref="/launch"
-            actionLabel="Create token"
-          />
-        )}
-      </section>
     </section>
   );
 }
@@ -2928,36 +3207,6 @@ function FeeEarningsPanel({
         </figcaption>
       </figure>
     </section>
-  );
-}
-
-function ProfileTokenLink({ entry }: { entry: ProfilePortfolioEntry }) {
-  const { token } = entry;
-  const tokenImage =
-    token.imageUrl?.trim() || getFallbackTokenImage(token.address);
-  const tokenImageSource = getTokenCardImageSource(tokenImage);
-  const marketCap = formatMarketCap(token);
-
-  return (
-    <Link className={styles.tokenCard} href={token.href}>
-      <span className={styles.tokenCardArt}>
-        <Image
-          src={tokenImageSource}
-          alt=""
-          fill
-          sizes="52px"
-          unoptimized={!canOptimizeTokenImage(tokenImageSource)}
-        />
-      </span>
-      <span className={styles.tokenCardCopy}>
-        <strong>{token.name}</strong>
-        <span>${token.symbol}</span>
-      </span>
-      <span className={styles.tokenCardMetric}>
-        <small>Market cap</small>
-        <strong>{marketCap ?? "—"}</strong>
-      </span>
-    </Link>
   );
 }
 
@@ -3045,10 +3294,12 @@ function ProfileClaimRow({
   const claimState = claim
     ? claimActionStates[claim.poolId.toLowerCase()]
     : undefined;
-  const activeClaimState =
+  const scopedClaimState =
     claimState?.account.toLowerCase() === account?.toLowerCase()
       ? claimState
       : undefined;
+  const activeClaimState =
+    scopedClaimState?.status === "confirmed" ? undefined : scopedClaimState;
   const ownedClassicRewards = profileRewardsForAccount(
     classicRewards,
     account,
@@ -3058,13 +3309,15 @@ function ProfileClaimRow({
       classicV3ActionStates[
         `${reward.vaultAddress.toLowerCase()}:claim`
       ];
+    const scopedState =
+      state?.account.toLowerCase() === account?.toLowerCase()
+        ? state
+        : undefined;
+    const confirmed = scopedState?.status === "confirmed";
     return {
       reward,
-      claimable: BigInt(reward.claimableWei),
-      state:
-        state?.account.toLowerCase() === account?.toLowerCase()
-          ? state
-          : undefined,
+      claimable: confirmed ? 0n : BigInt(reward.claimableWei),
+      state: confirmed ? undefined : scopedState,
     };
   });
   const ownedDeepRewards = profileRewardsForAccount(deepRewards, account);
@@ -3073,13 +3326,15 @@ function ProfileClaimRow({
       deepActionStates[
         `${reward.vaultAddress.toLowerCase()}:claim`
       ];
+    const scopedState =
+      state?.account.toLowerCase() === account?.toLowerCase()
+        ? state
+        : undefined;
+    const confirmed = scopedState?.status === "confirmed";
     return {
       reward,
-      claimable: BigInt(reward.claimableWei),
-      state:
-        state?.account.toLowerCase() === account?.toLowerCase()
-          ? state
-          : undefined,
+      claimable: confirmed ? 0n : BigInt(reward.claimableWei),
+      state: confirmed ? undefined : scopedState,
     };
   });
   const ownedStockPairedRewards = profileRewardsForAccount(
@@ -3095,20 +3350,28 @@ function ProfileClaimRow({
       stockPairedActionStates[
         `${reward.vaultAddress.toLowerCase()}:claim-as-eth`
       ];
+    const scopedClaimState =
+      claimState?.account.toLowerCase() === account?.toLowerCase()
+        ? claimState
+        : undefined;
+    const scopedEthState =
+      ethState?.account.toLowerCase() === account?.toLowerCase()
+        ? ethState
+        : undefined;
+    const confirmed =
+      scopedClaimState?.status === "confirmed" ||
+      scopedEthState?.status === "confirmed";
     return {
       reward,
-      claimable: BigInt(reward.claimableRaw),
-      claimState:
-        claimState?.account.toLowerCase() === account?.toLowerCase()
-          ? claimState
-          : undefined,
-      ethState:
-        ethState?.account.toLowerCase() === account?.toLowerCase()
-          ? ethState
-          : undefined,
+      claimable: confirmed ? 0n : BigInt(reward.claimableRaw),
+      claimState: confirmed ? undefined : scopedClaimState,
+      ethState: confirmed ? undefined : scopedEthState,
     };
   });
-  const currentClaimable = BigInt(claim?.claimableWei ?? "0");
+  const currentClaimable =
+    scopedClaimState?.status === "confirmed"
+      ? 0n
+      : BigInt(claim?.claimableWei ?? "0");
   const classicClaimable = classicClaims.reduce(
     (total, item) => total + item.claimable,
     0n,
@@ -3404,30 +3667,5 @@ function ProfileActionState({
         </a>
       ) : null}
     </p>
-  );
-}
-
-
-function ProfileSectionEmpty({
-  title,
-  detail,
-  actionHref,
-  actionLabel,
-}: {
-  title: string;
-  detail: string;
-  actionHref?: string;
-  actionLabel?: string;
-}) {
-  return (
-    <div className={styles.emptySection}>
-      <strong>{title}</strong>
-      <p>{detail}</p>
-      {actionHref && actionLabel ? (
-        <Link className={styles.emptyAction} href={actionHref}>
-          {actionLabel}
-        </Link>
-      ) : null}
-    </div>
   );
 }

@@ -36,17 +36,18 @@ describe("public shell polish", () => {
     expect(source).not.toContain("key={pathname}");
   });
 
-  it("makes the theme reveal deliberate without crossing 300ms", () => {
+  it("makes the infrequent theme change a calm, bounded crossfade", () => {
     const source = read("components/site-navigation.tsx");
     const css = read("app/globals.css");
 
     expect(source).toContain("activeThemeViewTransition?.skipTransition()");
     expect(css).toContain(
-      "theme-radial-reveal 292ms cubic-bezier(0.32, 0.72, 0, 1)",
+      "theme-soft-reveal 380ms cubic-bezier(0.2, 0, 0, 1)",
     );
     expect(css).toContain(
-      "theme-radial-tint 292ms cubic-bezier(0.32, 0.72, 0, 1)",
+      "theme-soft-fade 380ms cubic-bezier(0.2, 0, 0, 1)",
     );
+    expect(css).not.toContain("clip-path: circle(");
   });
 
   it("avoids unbounded transitions in the owned style sheets", () => {

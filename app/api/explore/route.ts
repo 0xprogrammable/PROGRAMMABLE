@@ -25,7 +25,13 @@ import { readIndexedFeedSnapshot } from "../indexers/v1/read-indexed-feed.server
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const EXPLORE_QUERY_PARAMETERS = new Set(["limit", "page", "q", "sort"]);
+const EXPLORE_QUERY_PARAMETERS = new Set([
+  "limit",
+  "page",
+  "q",
+  "socials",
+  "sort",
+]);
 
 function hasCanonicalQueryShape(search: URLSearchParams) {
   const seen = new Set<string>();
@@ -67,6 +73,13 @@ export async function GET(request: NextRequest) {
       { status: 400, headers: { "Cache-Control": "no-store" } },
     );
   }
+  const socials = search.get("socials");
+  if (socials !== null && socials !== "yes" && socials !== "no") {
+    return NextResponse.json(
+      { error: "Unsupported socials filter" },
+      { status: 400, headers: { "Cache-Control": "no-store" } },
+    );
+  }
 
   try {
     const options = {
@@ -74,6 +87,7 @@ export async function GET(request: NextRequest) {
       sort: parseExploreSort(search.get("sort")),
       page: integerQuery(search.get("page"), 1),
       pageSize: integerQuery(search.get("limit"), 6),
+      socials,
     } as const;
     const canonical = await coordinatePublicRouteRead({
       route: "explore-list",

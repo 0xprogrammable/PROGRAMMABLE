@@ -110,13 +110,20 @@ describe("atomic public route queries", () => {
           sort: "newest",
           page: 2,
           pageSize: 12,
+          socials: "yes",
         }),
-      functionName: "get_public_explore_page_v1",
-      values: [1, "v4", "newest", 2, 12],
+      functionName: "get_public_explore_page_v2",
+      values: [1, "v4", "newest", 2, 12, "yes"],
       kind: "explore",
       scope: DISCOVERY,
       data: {
-        request: { query: "v4", sort: "newest", requestedPage: 2, pageSize: 12 },
+        request: {
+          query: "v4",
+          socials: "yes",
+          sort: "newest",
+          requestedPage: 2,
+          pageSize: 12,
+        },
         page: {
           resolvedPage: 1,
           totalCount: "0",

@@ -10,6 +10,8 @@ const DEFAULT_PAGE_SIZE = 6;
 const MAX_PAGE_SIZE = 100;
 const MAINNET_PUBLIC_EXPLORE_START_BLOCK = 25_626_490n;
 
+export type ExploreSocialFilter = "yes" | "no";
+
 export function parseExploreSort(value: string | null): ExploreSort {
   if (value === "newest") return "newest";
   if (value === "oldest") return "oldest";
@@ -65,19 +67,30 @@ export function filterAndSortTokens(
   tokens: LauncherToken[],
   query: string,
   sort: ExploreSort,
+  socials: ExploreSocialFilter | null = null,
 ) {
   const normalizedQuery = query
     .trim()
     .toLowerCase()
     .replace(/^\$/, "");
+  const socialMatches = socials
+    ? tokens.filter((token) => {
+        const hasSocials = Boolean(
+          token.links?.some(
+            (link) => link.kind === "x" || link.kind === "telegram",
+          ),
+        );
+        return hasSocials === (socials === "yes");
+      })
+    : [...tokens];
   const filtered = normalizedQuery
-    ? tokens.filter(
+    ? socialMatches.filter(
         (token) =>
           token.name.toLowerCase().includes(normalizedQuery) ||
           token.symbol.toLowerCase().includes(normalizedQuery) ||
           token.tokenAddress.toLowerCase().includes(normalizedQuery),
       )
-    : [...tokens];
+    : socialMatches;
   const marketCapSource = filtered.some(
     (token) =>
       unsignedWad(
@@ -121,6 +134,7 @@ export function paginateExplore(
     sort?: ExploreSort;
     page?: number;
     pageSize?: number;
+    socials?: ExploreSocialFilter | null;
   } = {},
 ): ExplorePage {
   const query = options.query?.trim() ?? "";
@@ -146,7 +160,12 @@ export function paginateExplore(
           );
         })
       : model.tokens;
-  const sorted = filterAndSortTokens(visibleTokens, query, sort);
+  const sorted = filterAndSortTokens(
+    visibleTokens,
+    query,
+    sort,
+    options.socials ?? null,
+  );
   const totalPages = Math.ceil(sorted.length / pageSize);
   const page = totalPages === 0 ? 1 : Math.min(requestedPage, totalPages);
   const offset = (page - 1) * pageSize;
