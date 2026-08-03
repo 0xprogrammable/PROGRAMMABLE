@@ -21,7 +21,6 @@ import {
   EMPTY_CLASSIC_V3_PROFILE,
   fetchClassicV3ProfileRewards,
   prepareClassicV3RewardAction,
-  type ClassicV3Beneficiary,
   type ClassicV3ProfileRewards,
   type ClassicV3Reward,
 } from "@/lib/profile/classic-v3-rewards";
@@ -2456,6 +2455,92 @@ function profileEntryClaimableWei(
   );
 }
 
+function profileEntryStockClaimableRaw(
+  entry: ProfilePortfolioEntry,
+  account?: string,
+) {
+  const rewards = account
+    ? profileRewardsForAccount(entry.stockPairedRewards, account)
+    : entry.stockPairedRewards;
+  return rewards.reduce(
+    (total, reward) => total + BigInt(reward.claimableRaw),
+    0n,
+  );
+}
+
+export function profileEntryHasClaimableReward(
+  entry: ProfilePortfolioEntry,
+  account?: string,
+) {
+  return (
+    profileEntryClaimableWei(entry, account) > 0n ||
+    profileEntryStockClaimableRaw(entry, account) > 0n
+  );
+}
+
+function profileEntryHasVisibleClaimState(
+  entry: ProfilePortfolioEntry,
+  account: string | undefined,
+  claimActionStates: Record<string, ProfileClaimActionState>,
+  classicV3ActionStates: Record<string, ClassicV3ActionState>,
+  deepActionStates: Record<string, DeepActionState>,
+  stockPairedActionStates: Record<string, StockPairedActionState>,
+) {
+  const normalizedAccount = account?.toLowerCase();
+  if (!normalizedAccount) return false;
+  const belongsToAccount = (
+    state: ProfileClaimActionState | ClassicV3ActionState | undefined,
+  ) => state?.account.toLowerCase() === normalizedAccount;
+
+  if (
+    entry.claim &&
+    belongsToAccount(
+      claimActionStates[entry.claim.poolId.toLowerCase()],
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    profileRewardsForAccount(entry.classicRewards, account).some((reward) =>
+      belongsToAccount(
+        classicV3ActionStates[
+          `${reward.vaultAddress.toLowerCase()}:claim`
+        ],
+      ),
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    profileRewardsForAccount(entry.deepRewards, account).some((reward) =>
+      belongsToAccount(
+        deepActionStates[`${reward.vaultAddress.toLowerCase()}:claim`],
+      ),
+    )
+  ) {
+    return true;
+  }
+
+  return profileRewardsForAccount(
+    entry.stockPairedRewards,
+    account,
+  ).some(
+    (reward) =>
+      belongsToAccount(
+        stockPairedActionStates[
+          `${reward.vaultAddress.toLowerCase()}:claim`
+        ],
+      ) ||
+      belongsToAccount(
+        stockPairedActionStates[
+          `${reward.vaultAddress.toLowerCase()}:claim-as-eth`
+        ],
+      ),
+  );
+}
+
 export function profileHasRewardSurface(
   entries: readonly ProfilePortfolioEntry[],
 ) {
@@ -2647,9 +2732,7 @@ function ProfileAccountWorkspace({
     deepV3Ready ? deepV3Profile.tokens : [],
     stockPairedReady ? stockPairedRewards.rewards : [],
   );
-  const hasRewardSurface = profileHasRewardSurface(entries);
   const nativeClaimable = profileClaimableWei(entries, account);
-  const claimActionCount = profileClaimActionCount(entries, account);
   const stockRewardCount = entries.reduce(
     (total, entry) =>
       total +
@@ -2658,6 +2741,30 @@ function ProfileAccountWorkspace({
       ).length,
     0,
   );
+  const claimableEntries = entries.filter(
+    (entry) =>
+      profileEntryHasClaimableReward(entry, account) ||
+      profileEntryHasVisibleClaimState(
+        entry,
+        account,
+        claimActionStates,
+        classicV3ActionStates,
+        deepActionStates,
+        stockPairedActionStates,
+      ),
+  );
+  const ownedEntries = entries.filter((entry) => entry.launchedByWallet);
+  const chainId = currentReady
+    ? data.chainId
+    : classicReady
+      ? classicV3Rewards.chainId
+      : deepReady
+        ? deepRewards.chainId
+        : deepV3Ready
+          ? deepV3Profile.chainId
+          : stockPairedReady
+            ? stockPairedRewards.chainId
+            : undefined;
   const sourceWarning =
     data.status === "error"
       ? data.errorMessage || "Some token rewards could not be refreshed"
@@ -2678,45 +2785,9 @@ function ProfileAccountWorkspace({
   return (
     <section
       className={styles.portfolio}
-      aria-labelledby="profile-portfolio-title"
+      aria-label="Profile overview"
       aria-busy={loading || undefined}
     >
-      <header className={styles.portfolioHeader}>
-        <div className={styles.portfolioTitle}>
-          <h2 id="profile-portfolio-title">Your tokens</h2>
-        </div>
-
-        {hasRewardSurface ? (
-          <dl className={styles.portfolioStats}>
-            <div className={styles.portfolioTotal}>
-              <dt>Claimable</dt>
-              <dd>
-                {nativeClaimable > 0n
-                  ? formatWei(nativeClaimable)
-                  : stockRewardCount > 0
-                    ? `${stockRewardCount} ${
-                        stockRewardCount === 1 ? "reward" : "rewards"
-                      }`
-                    : formatWei(0n)}
-              </dd>
-              {nativeClaimable > 0n && stockRewardCount > 0 ? (
-                <small>
-                  + {stockRewardCount} quote{" "}
-                  {stockRewardCount === 1 ? "reward" : "rewards"}
-                </small>
-              ) : null}
-              {claimActionCount > 1 ? (
-                <small>
-                  {claimActionCount} rewards · separate wallet confirmations
-                </small>
-              ) : claimActionCount === 1 ? (
-                <small>1 reward ready</small>
-              ) : null}
-            </div>
-          </dl>
-        ) : null}
-      </header>
-
       {sourceWarning ? (
         <div className={styles.sourceWarning} role="status">
           <span>{sourceWarning}</span>
@@ -2726,27 +2797,28 @@ function ProfileAccountWorkspace({
         </div>
       ) : null}
 
-      {entries.length ? (
-        <div className={styles.ledger}>
-          <div className={styles.list}>
-            {entries.map((entry) => (
-              <ProfilePortfolioRow
+      <div className={styles.profileWorkspace}>
+        <FeeEarningsPanel
+          nativeClaimable={nativeClaimable}
+          stockRewardCount={stockRewardCount}
+        />
+
+        <section
+          className={styles.claimablePanel}
+          aria-labelledby="profile-claimable-title"
+        >
+          <header className={styles.panelHeader}>
+            <h2 id="profile-claimable-title">Claimable</h2>
+          </header>
+
+          {claimableEntries.length ? (
+            <div className={styles.claimList}>
+              {claimableEntries.map((entry) => (
+                <ProfileClaimRow
                 key={entry.token.address}
                 entry={entry}
                 account={account}
-                chainId={
-                  currentReady
-                    ? data.chainId
-                    : classicReady
-                      ? classicV3Rewards.chainId
-                      : deepReady
-                        ? deepRewards.chainId
-                        : deepV3Ready
-                          ? deepV3Profile.chainId
-                          : stockPairedReady
-                            ? stockPairedRewards.chainId
-                            : undefined
-                }
+                chainId={chainId}
                 claimActionStates={claimActionStates}
                 classicV3ActionStates={classicV3ActionStates}
                 deepActionStates={deepActionStates}
@@ -2756,18 +2828,136 @@ function ProfileAccountWorkspace({
                 onDeepAction={onDeepAction}
                 onStockPairedAction={onStockPairedAction}
               />
+              ))}
+            </div>
+          ) : (
+            <div className={styles.claimEmpty}>
+              <strong>No rewards ready</strong>
+              <p>Claimable rewards will appear here.</p>
+            </div>
+          )}
+        </section>
+      </div>
+
+      <section
+        className={styles.tokenCollection}
+        aria-labelledby="profile-tokens-title"
+      >
+        <header className={styles.panelHeader}>
+          <h2 id="profile-tokens-title">Your tokens</h2>
+        </header>
+        {ownedEntries.length ? (
+          <div className={styles.tokenGrid}>
+            {ownedEntries.map((entry) => (
+              <ProfileTokenLink key={entry.token.address} entry={entry} />
             ))}
           </div>
-        </div>
-      ) : (
-        <ProfileSectionEmpty
-          title="No tokens yet"
-          detail="Tokens created with this wallet will appear here."
-          actionHref="/launch"
-          actionLabel="Create token"
-        />
-      )}
+        ) : (
+          <ProfileSectionEmpty
+            title="No tokens yet"
+            detail="Tokens created with this wallet will appear here."
+            actionHref="/launch"
+            actionLabel="Create token"
+          />
+        )}
+      </section>
     </section>
+  );
+}
+
+type FeeEarningsTimeframe = "1H" | "1D" | "1W";
+
+const feeEarningsTimeframes: readonly FeeEarningsTimeframe[] = [
+  "1H",
+  "1D",
+  "1W",
+];
+
+function FeeEarningsPanel({
+  nativeClaimable,
+  stockRewardCount,
+}: {
+  nativeClaimable: bigint;
+  stockRewardCount: number;
+}) {
+  const [timeframe, setTimeframe] = useState<FeeEarningsTimeframe>("1D");
+
+  return (
+    <section
+      className={styles.feePanel}
+      aria-labelledby="fee-earnings-title"
+    >
+      <header className={styles.feePanelHeader}>
+        <div>
+          <h2 id="fee-earnings-title">Fee earnings</h2>
+          <p>Claimable now</p>
+        </div>
+        <div
+          className={styles.timeframeControls}
+          role="group"
+          aria-label="Fee earnings timeframe"
+        >
+          {feeEarningsTimeframes.map((value) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={timeframe === value}
+              onClick={() => setTimeframe(value)}
+            >
+              {value}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      <div className={styles.feeSummary}>
+        <strong>{formatWei(nativeClaimable)}</strong>
+        {stockRewardCount > 0 ? (
+          <span>
+            + {stockRewardCount} quote{" "}
+            {stockRewardCount === 1 ? "reward" : "rewards"}
+          </span>
+        ) : null}
+      </div>
+
+      <figure className={styles.feeChart}>
+        <div className={styles.chartGrid} aria-hidden="true" />
+        <figcaption className={styles.chartEmpty}>
+          <strong>History isn’t available for {timeframe}.</strong>
+          <p>Current claimable rewards are shown above.</p>
+        </figcaption>
+      </figure>
+    </section>
+  );
+}
+
+function ProfileTokenLink({ entry }: { entry: ProfilePortfolioEntry }) {
+  const { token } = entry;
+  const tokenImage =
+    token.imageUrl?.trim() || getFallbackTokenImage(token.address);
+  const tokenImageSource = getTokenCardImageSource(tokenImage);
+  const marketCap = formatMarketCap(token);
+
+  return (
+    <Link className={styles.tokenCard} href={token.href}>
+      <span className={styles.tokenCardArt}>
+        <Image
+          src={tokenImageSource}
+          alt=""
+          fill
+          sizes="52px"
+          unoptimized={!canOptimizeTokenImage(tokenImageSource)}
+        />
+      </span>
+      <span className={styles.tokenCardCopy}>
+        <strong>{token.name}</strong>
+        <span>${token.symbol}</span>
+      </span>
+      <span className={styles.tokenCardMetric}>
+        <small>Market cap</small>
+        <strong>{marketCap ?? "—"}</strong>
+      </span>
+    </Link>
   );
 }
 
@@ -2807,19 +2997,7 @@ export function actionLabel(
   return "Claim";
 }
 
-function payoutActionLabel(
-  state: ProfileClaimActionState | ClassicV3ActionState | undefined,
-) {
-  if (state?.status === "preparing") return "Preparing";
-  if (state?.status === "wallet") return "Confirm in wallet";
-  if (state?.status === "confirming") return "Confirming";
-  if (actionCanCheckStatus(state)) return "Check status";
-  if (state?.status === "confirmed") return "Updated";
-  if (state?.status === "error") return "Try again";
-  return "Save";
-}
-
-function ProfilePortfolioRow({
+function ProfileClaimRow({
   entry,
   account,
   chainId,
@@ -2863,7 +3041,6 @@ function ProfilePortfolioRow({
     classicRewards,
     deepRewards,
     stockPairedRewards,
-    deepV3Token,
   } = entry;
   const claimState = claim
     ? claimActionStates[claim.poolId.toLowerCase()]
@@ -2942,18 +3119,12 @@ function ProfilePortfolioRow({
   );
   const totalClaimable =
     currentClaimable + classicClaimable + deepClaimable;
-  const hasRewardSurface =
-    Boolean(claim) ||
-    ownedClassicRewards.length > 0 ||
-    ownedDeepRewards.length > 0 ||
-    ownedStockPairedRewards.length > 0;
   const stockPairedClaimable = stockPairedClaims.reduce(
     (total, item) => total + item.claimable,
     0n,
   );
   const stockQuoteSymbol =
     ownedStockPairedRewards[0]?.quoteAssetSymbol;
-  const marketCap = formatMarketCap(token);
   const tokenImage =
     token.imageUrl?.trim() || getFallbackTokenImage(token.address);
   const tokenImageSource = getTokenCardImageSource(tokenImage);
@@ -2984,67 +3155,40 @@ function ProfilePortfolioRow({
       : "";
   const hasClaimableReward =
     totalClaimable > 0n || stockPairedClaimable > 0n;
-  const advancedSettingsCount =
-    ownedClassicRewards.length +
-    ownedDeepRewards.length +
-    ownedStockPairedRewards.length +
-    Number(Boolean(deepV3Token));
 
   return (
-    <article
-      className={`${styles.tokenRow} ${
-        hasClaimableReward ? styles.tokenRowClaimable : ""
-      }`}
-    >
-      <div className={styles.tokenMain}>
-        <Link className={styles.tokenIdentity} href={token.href}>
-          <span className={styles.tokenArt}>
+    <article className={styles.claimRow}>
+      <div className={styles.claimRowHeader}>
+        <Link className={styles.claimIdentity} href={token.href}>
+          <span className={styles.claimArt}>
             <Image
               src={tokenImageSource}
-              alt={`${token.name} project artwork`}
+              alt=""
               fill
-              sizes="58px"
+              sizes="48px"
               unoptimized={!canOptimizeTokenImage(tokenImageSource)}
             />
           </span>
-          <span className={styles.tokenCopy}>
-            <span className={styles.tokenNameRow}>
-              <strong>{token.name}</strong>
-              <span className={styles.tokenSymbol}>${token.symbol}</span>
-            </span>
+          <span className={styles.claimCopy}>
+            <strong>{token.name}</strong>
+            <span>${token.symbol}</span>
           </span>
         </Link>
 
-        <div className={`${styles.metric} ${styles.marketMetric}`}>
-          <span>Market cap</span>
-          <strong>{marketCap ?? "—"}</strong>
-        </div>
-
-        <div
-          className={`${styles.metric} ${styles.rewardMetric} ${
-            hasClaimableReward ? styles.rewardMetricReady : ""
-          }`}
-        >
-          <span>
-            {deepV3Token && !hasRewardSurface
-              ? "Liquidity added"
-              : hasClaimableReward
-                ? "Ready to claim"
-                : "Creator rewards"}
-          </span>
+        <div className={styles.claimAmount}>
+          <span>{hasClaimableReward ? "Ready" : "Status"}</span>
           <strong>
-            {deepV3Token && !hasRewardSurface
-              ? formatWei(BigInt(deepV3Token.totalNativeAddedWei))
-              : totalClaimable > 0n
-                ? formatWei(totalClaimable)
-                : formattedStockReward || formatWei(0n)}
+            {totalClaimable > 0n
+              ? formatWei(totalClaimable)
+              : formattedStockReward || formatWei(0n)}
           </strong>
           {totalClaimable > 0n && formattedStockReward ? (
             <small>+ {formattedStockReward}</small>
           ) : null}
         </div>
+      </div>
 
-        <div className={styles.actions}>
+      <div className={styles.actions}>
           {claim && currentClaimAvailable ? (
             <button
               className={styles.claimButton}
@@ -3078,9 +3222,9 @@ function ProfilePortfolioRow({
                   state?.status === "confirmed" ||
                   (claimable === 0n && !actionCanCheckStatus(state))
                 }
-                onClick={() => onClassicV3Action(reward, "claim")}
               key={reward.vaultAddress}
-            >
+              onClick={() => onClassicV3Action(reward, "claim")}
+              >
                 {state
                   ? actionLabel(state)
                   : claimSourceCount > 1
@@ -3101,9 +3245,9 @@ function ProfilePortfolioRow({
                   state?.status === "confirmed" ||
                   (claimable === 0n && !actionCanCheckStatus(state))
                 }
-                onClick={() => onDeepAction(reward, "claim")}
               key={reward.vaultAddress}
-            >
+              onClick={() => onDeepAction(reward, "claim")}
+              >
                 {state
                   ? actionLabel(state)
                   : claimSourceCount > 1
@@ -3193,7 +3337,6 @@ function ProfilePortfolioRow({
               );
             },
           )}
-        </div>
       </div>
 
       <ProfileActionState
@@ -3231,90 +3374,7 @@ function ProfilePortfolioRow({
         );
       })}
 
-      {advancedSettingsCount > 0 ? (
-        <details className={styles.advancedSettings}>
-          <summary>
-            <span>Reward settings</span>
-            <small>Payouts, fee terms and splits</small>
-          </summary>
-          <div className={styles.advancedSettingsBody}>
-            {deepV3Token ? (
-              <DeepV3GrowthState token={deepV3Token} />
-            ) : null}
-
-            {ownedClassicRewards.map((reward) => (
-              <ClassicRewardSettings
-                key={reward.vaultAddress}
-                reward={reward}
-                account={account}
-                actionStates={classicV3ActionStates}
-                chainId={chainId}
-                onAction={onClassicV3Action}
-              />
-            ))}
-            {ownedDeepRewards.map((reward) => (
-              <DeepRewardSettings
-                key={`${reward.vaultAddress}:${reward.payoutAddress}`}
-                reward={reward}
-                account={account}
-                actionStates={deepActionStates}
-                chainId={chainId}
-                onAction={onDeepAction}
-              />
-            ))}
-            {ownedStockPairedRewards.map((reward) => (
-              <StockPairedRewardSettings
-                key={`${reward.vaultAddress}:${reward.payoutAddress}`}
-                reward={reward}
-                account={account}
-                actionStates={stockPairedActionStates}
-                chainId={chainId}
-                onAction={onStockPairedAction}
-              />
-            ))}
-          </div>
-        </details>
-      ) : null}
     </article>
-  );
-}
-
-function DeepV3GrowthState({ token }: { token: DeepV3CreatorToken }) {
-  const compoundCount = BigInt(token.compoundCount);
-  return (
-    <section
-      className={styles.rewardSettingGroup}
-      aria-labelledby={`liquidity-growth-${token.vaultAddress}`}
-    >
-      <header className={styles.rewardSettingHeader}>
-        <h3 id={`liquidity-growth-${token.vaultAddress}`}>
-          Liquidity growth
-        </h3>
-        <p>
-          {compoundCount === 0n
-            ? "No compounds yet"
-            : `${compoundCount.toString()} ${
-                compoundCount === 1n ? "compound" : "compounds"
-              }`}
-        </p>
-      </header>
-      <div className={styles.settingsBody}>
-        <dl className={styles.rewardTerms}>
-          <div>
-            <dt>Added</dt>
-            <dd>{formatWei(BigInt(token.totalNativeAddedWei))}</dd>
-          </div>
-          <div>
-            <dt>Pending</dt>
-            <dd>{formatWei(BigInt(token.pendingGrowthNativeWei))}</dd>
-          </div>
-          <div>
-            <dt>Received</dt>
-            <dd>{formatWei(BigInt(token.totalGrowthEthReceivedWei))}</dd>
-          </div>
-        </dl>
-      </div>
-    </section>
   );
 }
 
@@ -3347,531 +3407,6 @@ function ProfileActionState({
   );
 }
 
-function ClassicRewardSettings({
-  reward,
-  account,
-  actionStates,
-  chainId,
-  onAction,
-}: {
-  reward: ClassicV3Reward;
-  account?: string;
-  actionStates: Record<string, ClassicV3ActionState>;
-  chainId?: number;
-  onAction: (
-    reward: ClassicV3Reward,
-    action: "claim" | "update-payout",
-    newPayoutAddress?: string,
-    allocationIndex?: number,
-  ) => void;
-}) {
-  return (
-    <section className={styles.rewardSettingGroup}>
-      <header className={styles.rewardSettingHeader}>
-        <h3>Classic rewards</h3>
-        <p>
-          {reward.shareBps > 0
-            ? `${(reward.shareBps / 100).toFixed(2)}% current share`
-            : "Historic rewards"}
-        </p>
-      </header>
-      <div className={styles.settingsBody}>
-        <dl className={styles.rewardTerms}>
-          <div>
-            <dt>Buy fee</dt>
-            <dd>{(reward.buySwapFeeBps / 100).toFixed(2)}%</dd>
-          </div>
-          <div>
-            <dt>Sell fee</dt>
-            <dd>{(reward.sellSwapFeeBps / 100).toFixed(2)}%</dd>
-          </div>
-          <div>
-            <dt>Your share</dt>
-            <dd>{(reward.shareBps / 100).toFixed(2)}%</dd>
-          </div>
-        </dl>
-
-        {reward.ownedAllocations.map((allocation) => (
-          <ClassicAllocationSettings
-            key={`${allocation.allocationIndex}:${allocation.payoutAddress}`}
-            reward={reward}
-            allocation={allocation}
-            account={account}
-            actionStates={actionStates}
-            chainId={chainId}
-            onAction={onAction}
-          />
-        ))}
-
-        {reward.beneficiaries.length > 1 ? (
-          <div className={styles.split}>
-            <span className={styles.splitLabel}>Current reward split</span>
-            <div className={styles.splitList}>
-              {reward.beneficiaries.map((item) => (
-                <div
-                  className={styles.splitItem}
-                  key={item.allocationIndex}
-                >
-                  <span>{shortenAddress(item.payoutAddress)}</span>
-                  <strong>{(item.shareBps / 100).toFixed(2)}%</strong>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-      </div>
-    </section>
-  );
-}
-
-function ClassicAllocationSettings({
-  reward,
-  allocation,
-  account,
-  actionStates,
-  chainId,
-  onAction,
-}: {
-  reward: ClassicV3Reward;
-  allocation: ClassicV3Beneficiary;
-  account?: string;
-  actionStates: Record<string, ClassicV3ActionState>;
-  chainId?: number;
-  onAction: (
-    reward: ClassicV3Reward,
-    action: "claim" | "update-payout",
-    newPayoutAddress?: string,
-    allocationIndex?: number,
-  ) => void;
-}) {
-  const [editingPayout, setEditingPayout] = useState(false);
-  const [payoutDraft, setPayoutDraft] = useState<string>(
-    allocation.payoutAddress,
-  );
-  const rawPayoutState =
-    actionStates[
-      `${reward.vaultAddress.toLowerCase()}:update-payout:${allocation.allocationIndex}`
-    ];
-  const payoutState =
-    rawPayoutState?.account.toLowerCase() === account?.toLowerCase()
-      ? rawPayoutState
-      : undefined;
-  const ownsAllocation =
-    Boolean(account) &&
-    allocation.payoutAddress.toLowerCase() === account?.toLowerCase();
-  const payoutPending = actionPending(payoutState);
-
-  return (
-    <div className={styles.payout}>
-      <span className={styles.payoutLabel}>
-        Payout · {(allocation.shareBps / 100).toFixed(2)}%
-      </span>
-      {editingPayout ? (
-        <div className={styles.payoutEdit}>
-          <input
-            value={payoutDraft}
-            spellCheck={false}
-            autoComplete="off"
-            aria-label={`New payout address for allocation ${allocation.allocationIndex + 1}`}
-            disabled={payoutPending || actionCanCheckStatus(payoutState)}
-            onChange={(event) => setPayoutDraft(event.target.value)}
-          />
-          <button
-            className={styles.secondaryAction}
-            type="button"
-            disabled={
-              !ownsAllocation ||
-              payoutPending ||
-              payoutState?.status === "confirmed"
-            }
-            onClick={() =>
-              onAction(
-                reward,
-                "update-payout",
-                payoutDraft.trim(),
-                allocation.allocationIndex,
-              )
-            }
-          >
-            {payoutActionLabel(payoutState)}
-          </button>
-          <button
-            className={styles.textAction}
-            type="button"
-            disabled={payoutPending || actionCanCheckStatus(payoutState)}
-            onClick={() => {
-              setPayoutDraft(allocation.payoutAddress);
-              setEditingPayout(false);
-            }}
-          >
-            Cancel
-          </button>
-        </div>
-      ) : (
-        <div className={styles.payoutRow}>
-          <a
-            href={`${
-              chainId === 11_155_111
-                ? "https://sepolia.etherscan.io"
-                : "https://etherscan.io"
-            }/address/${allocation.payoutAddress}`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {shortenAddress(allocation.payoutAddress)}
-          </a>
-          <button
-            className={styles.textAction}
-            type="button"
-            disabled={!ownsAllocation}
-            onClick={() => setEditingPayout(true)}
-          >
-            Change
-          </button>
-        </div>
-      )}
-      <ProfileActionState state={payoutState} chainId={chainId} />
-    </div>
-  );
-}
-
-function StockPairedRewardSettings({
-  reward,
-  account,
-  actionStates,
-  chainId,
-  onAction,
-}: {
-  reward: StockPairedReward;
-  account?: string;
-  actionStates: Record<string, StockPairedActionState>;
-  chainId?: number;
-  onAction: (
-    reward: StockPairedReward,
-    action: "claim" | "claim-as-eth" | "update-payout",
-    newPayoutAddress?: string,
-  ) => void;
-}) {
-  const [editingPayout, setEditingPayout] = useState(false);
-  const [payoutDraft, setPayoutDraft] = useState<string>(
-    reward.payoutAddress,
-  );
-  const rawPayoutState =
-    actionStates[`${reward.vaultAddress.toLowerCase()}:update-payout`];
-  const payoutState =
-    rawPayoutState?.account.toLowerCase() === account?.toLowerCase()
-      ? rawPayoutState
-      : undefined;
-  const ownsReward =
-    Boolean(account) &&
-    reward.beneficiary.toLowerCase() === account?.toLowerCase();
-  const payoutPending = actionPending(payoutState);
-
-  return (
-    <section className={styles.rewardSettingGroup}>
-      <header className={styles.rewardSettingHeader}>
-        <h3>
-          Stock-Paired rewards · {reward.quoteAssetSymbol}
-        </h3>
-        <p>{shortenAddress(reward.payoutAddress)}</p>
-      </header>
-      <div className={styles.settingsBody}>
-        <dl className={styles.rewardTerms}>
-          <div>
-            <dt>Swap fee</dt>
-            <dd>1.00%</dd>
-          </div>
-          <div>
-            <dt>Your share</dt>
-            <dd>{(reward.shareBps / 100).toFixed(2)}%</dd>
-          </div>
-          <div>
-            <dt>Paid in</dt>
-            <dd>{reward.quoteAssetSymbol}</dd>
-          </div>
-        </dl>
-
-        <div className={styles.payout}>
-          <span className={styles.payoutLabel}>Payout address</span>
-          {editingPayout ? (
-            <div className={styles.payoutEdit}>
-              <input
-                value={payoutDraft}
-                spellCheck={false}
-                autoComplete="off"
-                aria-label="New Stock-Paired payout address"
-                disabled={
-                  payoutPending || actionCanCheckStatus(payoutState)
-                }
-                onChange={(event) => setPayoutDraft(event.target.value)}
-              />
-              <button
-                className={styles.secondaryAction}
-                type="button"
-                disabled={
-                  !ownsReward ||
-                  payoutPending ||
-                  payoutState?.status === "confirmed"
-                }
-                onClick={() =>
-                  onAction(reward, "update-payout", payoutDraft.trim())
-                }
-              >
-                {payoutActionLabel(payoutState)}
-              </button>
-              <button
-                className={styles.textAction}
-                type="button"
-                disabled={
-                  payoutPending || actionCanCheckStatus(payoutState)
-                }
-                onClick={() => {
-                  setPayoutDraft(reward.payoutAddress);
-                  setEditingPayout(false);
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <div className={styles.payoutRow}>
-              <a
-                href={`${
-                  chainId === 11_155_111
-                    ? "https://sepolia.etherscan.io"
-                    : "https://etherscan.io"
-                }/address/${reward.payoutAddress}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {shortenAddress(reward.payoutAddress)}
-              </a>
-              <button
-                className={styles.textAction}
-                type="button"
-                disabled={
-                  !ownsReward ||
-                  actionPending(payoutState) ||
-                  actionCanCheckStatus(payoutState)
-                }
-                onClick={() => setEditingPayout(true)}
-              >
-                Change
-              </button>
-            </div>
-          )}
-          <ProfileActionState state={payoutState} chainId={chainId} />
-        </div>
-
-        {reward.beneficiaries.length > 1 ? (
-          <div className={styles.split}>
-            <span className={styles.splitLabel}>Fixed reward split</span>
-            <div className={styles.splitList}>
-              {reward.beneficiaries.map((item) => (
-                <div className={styles.splitItem} key={item.beneficiary}>
-                  <span>{shortenAddress(item.beneficiary)}</span>
-                  <strong>{(item.shareBps / 100).toFixed(2)}%</strong>
-                  <small>to {shortenAddress(item.payoutAddress)}</small>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-      </div>
-    </section>
-  );
-}
-
-function DeepRewardSettings({
-  reward,
-  account,
-  actionStates,
-  chainId,
-  onAction,
-}: {
-  reward: DeepReward;
-  account?: string;
-  actionStates: Record<string, DeepActionState>;
-  chainId?: number;
-  onAction: (
-    reward: DeepReward,
-    action: "claim" | "update-payout",
-    newPayoutAddress?: string,
-  ) => void;
-}) {
-  const [editingPayout, setEditingPayout] = useState(false);
-  const [payoutDraft, setPayoutDraft] = useState<string>(
-    reward.payoutAddress,
-  );
-  const rawPayoutState =
-    actionStates[`${reward.vaultAddress.toLowerCase()}:update-payout`];
-  const payoutState =
-    rawPayoutState?.account.toLowerCase() === account?.toLowerCase()
-      ? rawPayoutState
-      : undefined;
-  const ownsReward =
-    Boolean(account) &&
-    reward.beneficiary.toLowerCase() === account?.toLowerCase();
-  const payoutPending = actionPending(payoutState);
-  const growthTarget = BigInt(reward.growthTargetWei);
-  const growthAdded = BigInt(reward.nativeAddedToLiquidityWei);
-  const progressBps =
-    reward.growthTargetReached
-      ? 10_000
-      : growthTarget === 0n
-      ? 0
-      : Number(
-          (minimumBigInt(growthAdded, growthTarget) * 10_000n) /
-            growthTarget,
-        );
-  const deferredRewards = BigInt(reward.deferredRewardFeesWei);
-  const automationLabels = [
-    "No work ready",
-    "Creator fees ready",
-    "Liquidity update ready",
-    "Oracle update ready",
-  ] as const;
-  const cooldownEnds = BigInt(reward.nextCompoundTimestamp);
-  const cooldownDate =
-    cooldownEnds > 0n && cooldownEnds <= 253_402_300_799n
-      ? new Date(Number(cooldownEnds) * 1_000).toLocaleString("en-US", {
-          dateStyle: "medium",
-          timeStyle: "short",
-          timeZone: "UTC",
-        })
-      : null;
-
-  return (
-    <section className={styles.rewardSettingGroup}>
-      <header className={styles.rewardSettingHeader}>
-        <h3>
-          Deep liquidity ·{" "}
-          {reward.growthTargetReached
-            ? "Target reached"
-            : `${(progressBps / 100).toFixed(2)}% added`}
-        </h3>
-        <p>{shortenAddress(reward.payoutAddress)}</p>
-      </header>
-      <div className={styles.settingsBody}>
-        <div>
-          <dl className={styles.rewardTerms}>
-            <div>
-              <dt>Liquidity added</dt>
-              <dd>{formatEth(reward.nativeAddedToLiquidityEth)}</dd>
-            </div>
-            <div>
-              <dt>Growth target</dt>
-              <dd>{formatEth(reward.growthTargetEth)}</dd>
-            </div>
-            <div>
-              <dt>Your reward share</dt>
-              <dd>{(reward.shareBps / 100).toFixed(2)}%</dd>
-            </div>
-            {deferredRewards > 0n ? (
-              <div>
-                <dt>Rewards deferred</dt>
-                <dd>{formatEth(reward.deferredRewardFeesEth)}</dd>
-              </div>
-            ) : null}
-            {reward.automationAction > 0 ? (
-              <div>
-                <dt>Permissionless work</dt>
-                <dd>{automationLabels[reward.automationAction]}</dd>
-              </div>
-            ) : null}
-            {cooldownDate ? (
-              <div>
-                <dt>Cooldown ends</dt>
-                <dd>{cooldownDate} UTC</dd>
-              </div>
-            ) : null}
-          </dl>
-          <p className={styles.formHelp}>
-            Creator fees deepen the locked pool before rewards begin. The
-            150M reserve stays locked, and unused reserve is not active
-            liquidity. Automation is not guaranteed.
-          </p>
-        </div>
-
-        <div className={styles.payout}>
-          <span className={styles.payoutLabel}>Payout address</span>
-          {editingPayout ? (
-            <div className={styles.payoutEdit}>
-              <input
-                value={payoutDraft}
-                spellCheck={false}
-                autoComplete="off"
-                aria-label="New Deep payout address"
-                disabled={
-                  payoutPending || actionCanCheckStatus(payoutState)
-                }
-                onChange={(event) => setPayoutDraft(event.target.value)}
-              />
-              <button
-                className={styles.secondaryAction}
-                type="button"
-                disabled={
-                  !ownsReward ||
-                  payoutPending ||
-                  payoutState?.status === "confirmed"
-                }
-                onClick={() =>
-                  onAction(reward, "update-payout", payoutDraft.trim())
-                }
-              >
-                {payoutActionLabel(payoutState)}
-              </button>
-              <button
-                className={styles.textAction}
-                type="button"
-                disabled={
-                  payoutPending || actionCanCheckStatus(payoutState)
-                }
-                onClick={() => {
-                  setPayoutDraft(reward.payoutAddress);
-                  setEditingPayout(false);
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <div className={styles.payoutRow}>
-              <a
-                href={`${
-                  chainId === 11_155_111
-                    ? "https://sepolia.etherscan.io"
-                    : "https://etherscan.io"
-                }/address/${reward.payoutAddress}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {shortenAddress(reward.payoutAddress)}
-              </a>
-              <button
-                className={styles.textAction}
-                type="button"
-                disabled={
-                  !ownsReward ||
-                  actionPending(payoutState) ||
-                  actionCanCheckStatus(payoutState)
-                }
-                onClick={() => setEditingPayout(true)}
-              >
-                Change
-              </button>
-            </div>
-          )}
-          <ProfileActionState state={payoutState} chainId={chainId} />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function minimumBigInt(left: bigint, right: bigint) {
-  return left < right ? left : right;
-}
 
 function ProfileSectionEmpty({
   title,

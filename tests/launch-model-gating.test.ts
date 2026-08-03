@@ -166,6 +166,8 @@ describe("unreleased launch model gating", () => {
     );
 
     expect(html.match(/data-launch-model-option=/g)).toHaveLength(2);
+    expect(html).toContain("<h1>Choose your launch model</h1>");
+    expect(html).not.toContain("Choose a launch model, then configure");
     expect(html).toContain('data-launch-model-option="classic"');
     expect(html).toContain(
       'id="launch-model-classic-title">Classic</strong>',
@@ -175,10 +177,11 @@ describe("unreleased launch model gating", () => {
       'id="launch-model-custom-title">Custom Hook</strong>',
     );
     expect(html).toContain('href="/docs/models/custom"');
-    expect(html).toContain("Open Custom Hook");
+    expect(html).toContain("Create a Classic coin");
+    expect(html).toContain("Create a Custom Hook");
     expect(html).toContain("evidence required for release");
-    expect(html).toContain("/brand/create/classic-model-v2.webp");
-    expect(html).toContain("/brand/create/custom-hook-model-v2.webp");
+    expect(html).toContain("/brand/create/classic-botanical-v3.webp");
+    expect(html).toContain("/brand/create/custom-galaxy-v3.webp");
     expect(html).not.toContain("In development");
     expect(html).not.toContain("Not available");
     expect(html).not.toContain("launch-model-classic-details");

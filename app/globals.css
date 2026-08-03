@@ -477,17 +477,15 @@ html[data-theme="dark"] .app-frame::before {
 }
 
 .site-header {
-  backdrop-filter: blur(24px) saturate(1.08);
-  background: var(--header-background);
-  border-bottom: 1px solid var(--header-border);
-  box-shadow: 0 7px 24px var(--header-shadow);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: var(--body-background);
+  border: 0;
+  box-shadow: none;
   height: var(--header-height);
   position: sticky;
   top: 0;
-  transition:
-    background-color 180ms ease,
-    border-color 180ms ease,
-    box-shadow 180ms ease;
+  transition: background-color 180ms ease;
   z-index: 30;
 }
 
@@ -5014,10 +5012,6 @@ html[data-theme="dark"] .theme-toggle-sun {
 
   .page-width {
     width: calc(100% - 32px);
-  }
-
-  .site-header {
-    border-bottom: 1px solid var(--border);
   }
 
   .header-inner {
