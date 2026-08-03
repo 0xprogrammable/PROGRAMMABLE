@@ -7,19 +7,23 @@ import {
   actionPending,
   buildProfilePortfolio,
   clearConfirmedProfileActionStates,
+  getProfileSessionView,
   getProfileWorkspacePhase,
   groupPendingProfileTransactionStates,
   groupProfileRewards,
   parsePendingProfileTransactions,
+  paginateProfileClaimableEntries,
   profileClaimableWei,
   profileClaimActionCount,
   profileEntryHasClaimableReward,
   profileHasRewardSurface,
   profileRewardsForAccount,
   profileTransactionPollAttempts,
+  reflectedConfirmedProfileTransactions,
   preserveInterruptedTransactionStates,
   removePendingProfileTransactionRecord,
   sortProfileTokensByMarketCap,
+  sortProfileClaimableEntries,
   upsertPendingProfileTransactionRecords,
   waitForTransaction,
   withoutClosedDeepProfileData,
@@ -146,6 +150,13 @@ const deepV3Token = {
 } satisfies DeepV3CreatorToken;
 
 describe("profile workspace loading state", () => {
+  it("keeps the profile in a stable loading shell while the wallet session hydrates", () => {
+    expect(getProfileSessionView(true)).toBe("loading");
+    expect(getProfileSessionView(true, firstAddress)).toBe("loading");
+    expect(getProfileSessionView(false)).toBe("connect");
+    expect(getProfileSessionView(false, firstAddress)).toBe("profile");
+  });
+
   it("keeps a stable loading state until every pending source settles", () => {
     expect(
       getProfileWorkspacePhase(
@@ -393,6 +404,24 @@ describe("profile reward grouping", () => {
     expect(profileClaimableWei(portfolio)).toBe(
       7_000_000_000_000_000n,
     );
+  });
+
+  it("orders claimable entries by the highest current amount and paginates five at a time", () => {
+    const portfolio = buildProfilePortfolio(
+      tokens,
+      [claim],
+      [classicReward, secondClassicReward],
+    );
+    const ranked = sortProfileClaimableEntries(portfolio, firstAddress);
+
+    expect(ranked.map((entry) => entry.token.symbol)).toEqual([
+      "SECOND",
+      "FIRST",
+    ]);
+    expect(paginateProfileClaimableEntries([1, 2, 3, 4, 5, 6, 7], 1))
+      .toEqual({ currentPage: 1, totalPages: 2, items: [1, 2, 3, 4, 5] });
+    expect(paginateProfileClaimableEntries([1, 2, 3, 4, 5, 6, 7], 9))
+      .toEqual({ currentPage: 2, totalPages: 2, items: [6, 7] });
   });
 
   it("scopes claimable split rewards and actions to the connected beneficiary", () => {
@@ -685,6 +714,20 @@ describe("profile transaction status", () => {
       new Map([[firstKey, secondTransactionHash]]),
     );
     expect(hashMismatch).toBe(states);
+  });
+
+  it("keeps a confirmed action suppressed until a refreshed snapshot reports zero", () => {
+    const firstKey = `${secondAddress.toLowerCase()}:claim`;
+    const secondKey = `${thirdAddress.toLowerCase()}:claim`;
+    const reflected = reflectedConfirmedProfileTransactions(
+      new Map([
+        [firstKey, transactionHash],
+        [secondKey, secondTransactionHash],
+      ]),
+      (stateKey) => (stateKey === firstKey ? 0n : 10n),
+    );
+
+    expect([...reflected]).toEqual([[firstKey, transactionHash]]);
   });
 
   it("restores only validated pending transactions for the connected account", () => {
