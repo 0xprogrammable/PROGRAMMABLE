@@ -104,6 +104,59 @@ function readSelectedDotenvValues(contents, selectedNames) {
   return Object.fromEntries(selectedNames.map((name) => [name, values.get(name)]));
 }
 
+export function materializeVercelSensitiveRuntimePlaceholders(
+  contents,
+  metadataContents,
+) {
+  const runtimeValues = readSelectedDotenvValues(
+    contents,
+    RUNTIME_RPC_URL_NAMES,
+  );
+  const emptyNames = RUNTIME_RPC_URL_NAMES.filter(
+    (name) => runtimeValues[name] === "",
+  );
+  if (emptyNames.length === 0) return contents;
+  let metadata;
+  try {
+    metadata = JSON.parse(metadataContents);
+  } catch {
+    throw new Error("Vercel sensitive environment metadata is invalid");
+  }
+  if (
+    metadata === null ||
+    typeof metadata !== "object" ||
+    Array.isArray(metadata) ||
+    !Array.isArray(metadata.envs)
+  ) {
+    throw new Error("Vercel sensitive environment metadata is invalid");
+  }
+  for (const name of emptyNames) {
+    const matches = metadata.envs.filter(
+      (entry) => entry !== null && typeof entry === "object" && entry.key === name,
+    );
+    if (
+      matches.length !== 1 ||
+      matches[0].type !== "sensitive" ||
+      !Array.isArray(matches[0].target) ||
+      matches[0].target.length !== 1 ||
+      matches[0].target[0] !== "production" ||
+      Object.hasOwn(matches[0], "value")
+    ) {
+      throw new Error(`${name} is not exact sensitive production metadata`);
+    }
+  }
+  const materializedNames = new Set(emptyNames);
+  return contents
+    .split(/\r?\n/u)
+    .map((line) => {
+      const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/u.exec(line);
+      return match && materializedNames.has(match[1])
+        ? `${match[1]}="[Sensitive]"`
+        : line;
+    })
+    .join("\n");
+}
+
 export function readReleaseGatedFlags(contents) {
   return readSelectedDotenvValues(contents, RELEASE_GATED_FLAG_NAMES);
 }
@@ -576,8 +629,18 @@ function argumentsFrom(argv) {
 function main() {
   const args = argumentsFrom(process.argv.slice(2));
   const expectations = readReleasePolicyExpectations(process.cwd());
+  const rawEnvironmentContents = readFileSync(
+    resolve(args["env-file"]),
+    "utf8",
+  );
+  const environmentContents = args["sensitive-env-metadata"]
+    ? materializeVercelSensitiveRuntimePlaceholders(
+        rawEnvironmentContents,
+        readFileSync(resolve(args["sensitive-env-metadata"]), "utf8"),
+      )
+    : rawEnvironmentContents;
   const result = evaluateReadModelDeployPolicy(
-    readFileSync(resolve(args["env-file"]), "utf8"),
+    environmentContents,
     process.env,
     expectations,
   );

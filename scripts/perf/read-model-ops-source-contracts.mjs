@@ -943,6 +943,23 @@ export function evaluateReadModelOperationsSourceContracts(
       deployPolicy.includes("invalidServerSecretEnvironmentNames"),
     "the stream secret name is documented without a value and is fail-closed in deploy policy",
   );
+  check(
+    "ops-vercel-sensitive-runtime-metadata",
+    deployWorkflow.includes(
+      "Capture sensitive production environment metadata",
+    ) &&
+      deployWorkflow.includes(
+        'vercel env ls production --format json --token="$VERCEL_TOKEN" > "$RUNNER_TEMP/vercel-production-env-metadata.json"',
+      ) &&
+      (deployWorkflow.match(/--sensitive-env-metadata/gu) ?? []).length === 2 &&
+      deployPolicy.includes(
+        "materializeVercelSensitiveRuntimePlaceholders",
+      ) &&
+      deployPolicy.includes('matches[0].type !== "sensitive"') &&
+      deployPolicy.includes('matches[0].target[0] !== "production"') &&
+      deployPolicy.includes('Object.hasOwn(matches[0], "value")'),
+    "Vercel empty sensitive placeholders require exact value-free production metadata",
+  );
   const stagedWakeGate = deployWorkflow.indexOf(
     "Gate exact staged QuickNode wake route",
   );

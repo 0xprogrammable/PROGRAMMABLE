@@ -12,6 +12,7 @@ import { runtimeProductionProviderBindingsFromUrls } from "../../scripts/perf/re
 const {
   createStagedReleaseAttestation,
   evaluateReadModelDeployPolicy,
+  materializeVercelSensitiveRuntimePlaceholders,
   PROJECTOR_WAKE_ROUTE,
   readReleasePolicyExpectations,
   validateStagedReleaseAttestation,
@@ -77,6 +78,77 @@ function environmentFile(input: {
 }
 
 describe("read-model production deploy policy", () => {
+  it("attests current Vercel empty sensitive values from exact production metadata", () => {
+    const contents = environmentFile({
+      workers: { PROGRAMMABLE_PROJECTOR_ACTIVE: "true" },
+      serverSecrets: {
+        [QUICKNODE_STREAM_SECRET_ENV_NAME]: "[sensitive]",
+      },
+    }).concat(
+      "\nPROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL=\nPROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL=",
+    );
+    const metadata = JSON.stringify({
+      envs: [
+        {
+          key: "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
+          type: "sensitive",
+          target: ["production"],
+        },
+        {
+          key: "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL",
+          type: "sensitive",
+          target: ["production"],
+        },
+      ],
+    });
+    const materialized = materializeVercelSensitiveRuntimePlaceholders(
+      contents,
+      metadata,
+    );
+    expect(materialized).toContain(
+      'PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL="[Sensitive]"',
+    );
+    expect(
+      evaluateReadModelDeployPolicy(materialized, COMMITMENTS, EXPECTATIONS),
+    ).toMatchObject({
+      policyReady: true,
+      commitmentsReady: true,
+      runtimeProviderBinding: "deferred-stage",
+    });
+  });
+
+  it("rejects missing, non-sensitive, preview or value-bearing Vercel metadata", () => {
+    const contents = environmentFile().concat(
+      "\nPROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL=",
+    );
+    for (const entry of [
+      undefined,
+      {
+        key: "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
+        type: "plain",
+        target: ["production"],
+      },
+      {
+        key: "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
+        type: "sensitive",
+        target: ["preview"],
+      },
+      {
+        key: "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
+        type: "sensitive",
+        target: ["production"],
+        value: "must-not-be-present",
+      },
+    ]) {
+      expect(() =>
+        materializeVercelSensitiveRuntimePlaceholders(
+          contents,
+          JSON.stringify({ envs: entry ? [entry] : [] }),
+        ),
+      ).toThrow(/exact sensitive production metadata/u);
+    }
+  });
+
   it("binds legacy-only to exact false indexed flags and disabled workers", () => {
     const policy = evaluateReadModelDeployPolicy(
       environmentFile({
@@ -398,6 +470,13 @@ describe("read-model production deploy policy", () => {
       "utf8",
     );
     expect(workflow).toContain("Attest exact staged release policy");
+    expect(workflow).toContain(
+      "Capture sensitive production environment metadata",
+    );
+    expect(workflow).toContain(
+      'vercel env ls production --format json --token="$VERCEL_TOKEN"',
+    );
+    expect(workflow.match(/--sensitive-env-metadata/g)).toHaveLength(2);
     expect(workflow).toContain("staged-release-attestation.json");
     expect(workflow).toContain("attestation_sha256");
     expect(workflow).toContain("Smoke legacy staged public APIs");
