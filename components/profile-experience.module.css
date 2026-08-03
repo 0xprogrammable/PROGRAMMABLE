@@ -1753,8 +1753,8 @@
 
 @media (max-width: 720px) {
   .page {
-    min-height: calc(100svh - var(--header-height) - 68px);
-    padding-block: 28px 104px;
+    min-height: 0;
+    padding-block: 28px 40px;
   }
 
   .hero {
@@ -1777,8 +1777,8 @@
   }
 
   .connectCard {
-    min-height: calc(100svh - var(--header-height) - 124px);
-    padding: 42px 18px 72px;
+    min-height: 0;
+    padding: 42px 18px 36px;
   }
 
   .connectCard h1 {
