@@ -143,6 +143,12 @@ node scripts/data-pipeline/cutover-operator.mjs candidate-safety-backup \
   --output /secure/cutover/candidate-current-safety.json
 ```
 
+If an earlier reset already left the Candidate database strictly unpromoted,
+unbound and unpublished, use `--current-product-commit unbound`. The operator
+accepts that literal only when every promotion binding is null,
+`promoted=false`, and the publication count is zero. Use the same literal for
+the matching restore and recovery commands.
+
 Create a deterministic restore plan from the reviewed pre-attestation archive
 and its original backup evidence. The plan hashes the exact bytes and
 `pg_restore --list` output of both the source snapshot and the fresh safety
