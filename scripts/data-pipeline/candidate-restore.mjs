@@ -1788,9 +1788,18 @@ export async function cleanupCandidateSchemas(
   sql,
   closure,
   posture,
-  { includePinnedBaselineCleanup = true } = {},
+  {
+    includePinnedBaselineCleanup = true,
+    restorePinnedGlobalDefaults = includePinnedBaselineCleanup,
+    restoreHardenedGlobalDefaults = false,
+  } = {},
 ) {
-  if (typeof includePinnedBaselineCleanup !== "boolean") {
+  if (
+    typeof includePinnedBaselineCleanup !== "boolean" ||
+    typeof restorePinnedGlobalDefaults !== "boolean" ||
+    typeof restoreHardenedGlobalDefaults !== "boolean" ||
+    (restorePinnedGlobalDefaults && restoreHardenedGlobalDefaults)
+  ) {
     throw new Error("Candidate restore cleanup mode is invalid");
   }
   const statements = partitionClosure(closure, "Candidate cleanup closure");
@@ -1801,12 +1810,20 @@ export async function cleanupCandidateSchemas(
       await transaction.unsafe(LATER_ONLY_RESTRICT_CLEANUP_SQL).simple();
     }
     if (statements.app) await transaction.unsafe(statements.app).simple();
-    if (includePinnedBaselineCleanup) {
+    if (restorePinnedGlobalDefaults) {
       await transaction.unsafe(`
         alter default privileges for role programmable_migrator
           grant execute on functions to public;
         alter default privileges for role programmable_migrator
           grant usage on types to public;
+      `).simple();
+    }
+    if (restoreHardenedGlobalDefaults) {
+      await transaction.unsafe(`
+        alter default privileges for role programmable_migrator
+          revoke execute on functions from public;
+        alter default privileges for role programmable_migrator
+          revoke usage on types from public;
       `).simple();
     }
     await transaction.unsafe("set local role postgres").simple();
@@ -2065,6 +2082,7 @@ export async function createCandidateRestorePlan(input) {
     "safeToolCall",
     "schemaSqlSha256",
     "prepareRestoreClosures",
+    "prepareSafetyRestoreClosures",
   ]);
   const runner = dependencies.runCommand ?? defaultRunCommand;
   const executeSafeTool = dependencies.safeToolCall ?? safeToolCall;
@@ -2193,10 +2211,27 @@ export async function createCandidateRestorePlan(input) {
     environment: processEnvironment,
     secrets: input.secrets ?? [],
   });
+  const prepareSafetyClosures =
+    dependencies.prepareSafetyRestoreClosures ??
+    prepareSafetyRestoreClosures;
+  const safetyClosures = await prepareSafetyClosures({
+    runner,
+    executeSafeTool,
+    pgRestoreBinary: toolchain.paths.pg_restore,
+    archivePath: safetyFile.path,
+    restrictKey: safety.sha256.slice(2),
+    environment: processEnvironment,
+    secrets: input.secrets ?? [],
+  });
   validateArtifact(
     snapshot,
     await commitFile(snapshotFile.path),
     "snapshot backup",
+  );
+  validateArtifact(
+    safety,
+    await commitFile(safetyFile.path),
+    "safety backup",
   );
   const migrationSourceClosure =
     await verifyPinnedBaselineMigrationSourceClosure();
@@ -2251,6 +2286,8 @@ export async function createCandidateRestorePlan(input) {
     safetyBackup: Object.freeze({
       ...safety,
       safetyEvidenceSha256: safetyEvidence.evidenceSha256,
+      cleanClosureSha256: sha256(Buffer.from(safetyClosures.cleanup.sql)),
+      cleanClosureStatementCount: safetyClosures.cleanup.statementCount,
     }),
     postgresToolchain: toolchain.evidence,
     restore: Object.freeze({
@@ -2340,6 +2377,9 @@ export function validateCandidateRestorePlan(value) {
     !SHA256.test(plan.safetyBackup?.manifestSha256 ?? "") ||
     !SHA256.test(plan.safetyBackup?.structuralManifestSha256 ?? "") ||
     !SHA256.test(plan.safetyBackup?.portableStructuralManifestSha256 ?? "") ||
+    !SHA256.test(plan.safetyBackup?.cleanClosureSha256 ?? "") ||
+    !Number.isSafeInteger(plan.safetyBackup?.cleanClosureStatementCount) ||
+    plan.safetyBackup.cleanClosureStatementCount < 1 ||
     !Number.isSafeInteger(plan.safetyBackup?.bytes) ||
     plan.safetyBackup.bytes <= 0 ||
     canonicalJson(plan.postgresToolchain) !==
@@ -2537,6 +2577,7 @@ export async function applyCandidateRestore(input) {
     "captureDatabaseManifest",
     "migrationCount",
     "prepareRestoreClosures",
+    "prepareSafetyRestoreClosures",
     "cleanupCandidateSchemas",
     "applyOwnerAndSecurityClosure",
     "assertCandidateSchemaStage",
@@ -2565,6 +2606,9 @@ export async function applyCandidateRestore(input) {
   const readMigrationCount = dependencies.migrationCount ?? migrationCount;
   const prepareClosures =
     dependencies.prepareRestoreClosures ?? preparePinnedRestoreClosures;
+  const prepareSafetyClosures =
+    dependencies.prepareSafetyRestoreClosures ??
+    prepareSafetyRestoreClosures;
   const performCleanup =
     dependencies.cleanupCandidateSchemas ?? cleanupCandidateSchemas;
   const applyClosures =
@@ -2576,6 +2620,7 @@ export async function applyCandidateRestore(input) {
   let toolchain;
   let snapshotCopy;
   let closures;
+  let safetyCleanup;
   let restoreStarted = false;
   try {
     const inspectedToolchain = await inspectToolchain({
@@ -2619,6 +2664,29 @@ export async function applyCandidateRestore(input) {
       environment: Object.freeze({ LANG: "C", LC_ALL: "C" }),
       secrets: [password, input.databaseUrl, caPem],
     });
+    const safetyClosures = await prepareSafetyClosures({
+      runner,
+      executeSafeTool,
+      pgRestoreBinary: toolchain.paths.pg_restore,
+      archivePath: safetyFile.path,
+      restrictKey: plan.safetyBackup.sha256.slice(2),
+      environment: Object.freeze({ LANG: "C", LC_ALL: "C" }),
+      secrets: [password, input.databaseUrl, caPem],
+    });
+    if (
+      sha256(Buffer.from(safetyClosures.cleanup.sql)) !==
+        plan.safetyBackup.cleanClosureSha256 ||
+      safetyClosures.cleanup.statementCount !==
+        plan.safetyBackup.cleanClosureStatementCount
+    ) {
+      throw new Error("Candidate safety cleanup closure changed after review");
+    }
+    safetyCleanup = safetyClosures.cleanup;
+    validateArtifact(
+      plan.safetyBackup,
+      await commitFile(safetyFile.path),
+      "safety backup",
+    );
     connection = await openDatabase({
       databaseUrl: input.databaseUrl,
       expectedProjectRef: input.expectedProjectRef,
@@ -2684,7 +2752,10 @@ export async function applyCandidateRestore(input) {
       await recheckToolchain(toolchain);
       await assertOperatorSession(connection.sql, operatorSession);
       restoreStarted = true;
-      await performCleanup(connection.sql, closures.cleanup);
+      await performCleanup(connection.sql, safetyCleanup, undefined, {
+        includePinnedBaselineCleanup: false,
+        restorePinnedGlobalDefaults: true,
+      });
       await assertOperatorSession(connection.sql, operatorSession);
       await executeSafeTool({
         runner,
@@ -3235,6 +3306,7 @@ export async function applyCandidateSafetyRecovery(input) {
       recoveryStarted = true;
       await performCleanup(connection.sql, closures.cleanup, undefined, {
         includePinnedBaselineCleanup: false,
+        restoreHardenedGlobalDefaults: true,
       });
       await assertOperatorSession(connection.sql, operatorSession);
       await executeSafeTool({

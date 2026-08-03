@@ -10,6 +10,8 @@ import postgres from "postgres";
 
 import {
   CANDIDATE_FINAL_SCHEMAS,
+  CANDIDATE_RESTORE_FLAGS,
+  CANDIDATE_RESTORE_SCHEMAS,
   CANDIDATE_SAFETY_RECOVERY_FLAGS,
   PINNED_PRE_ATTESTATION_SNAPSHOT,
   applyOwnerAndSecurityClosure,
@@ -76,6 +78,7 @@ test(
     const directory = await mkdtemp(
       path.join(os.tmpdir(), "programmable-candidate-pg17-it-"),
     );
+    const baselineArchive = path.join(directory, "baseline.dump");
     const safetyArchive = path.join(directory, "safety.dump");
     const admin = postgres({
       host: config.host,
@@ -129,6 +132,31 @@ test(
       baseline.structuralManifestSha256,
       PINNED_PRE_ATTESTATION_SNAPSHOT.structuralManifestSha256,
     );
+    await runTool(config.pgDump, [
+      "--format=custom",
+      "--file",
+      baselineArchive,
+      "--host",
+      config.host,
+      "--port",
+      config.port,
+      "--username",
+      config.adminUser,
+      "--dbname",
+      database,
+      ...CANDIDATE_RESTORE_SCHEMAS.flatMap((schema) => ["--schema", schema]),
+    ]);
+    const baselineBytes = await readFile(baselineArchive);
+    const baselineSha256 = sha256(baselineBytes);
+    const baselineClosures = await prepareSafetyRestoreClosures({
+      runner: undefined,
+      executeSafeTool: (input) => runTool(input.binary, input.args),
+      pgRestoreBinary: config.pgRestore,
+      archivePath: baselineArchive,
+      restrictKey: baselineSha256.slice(2),
+      environment: Object.freeze({ LANG: "C", LC_ALL: "C" }),
+      secrets: [],
+    });
 
     const migrationPlan = await discoverMigrationPlan({
       workspace,
@@ -279,7 +307,109 @@ test(
       sql,
       closures.cleanup,
       { supabaseHosted: false },
-      { includePinnedBaselineCleanup: false },
+      {
+        includePinnedBaselineCleanup: false,
+        restorePinnedGlobalDefaults: true,
+      },
+    );
+    const remainingSchemas = await sql.unsafe(`
+      select namespace.nspname
+        from pg_catalog.pg_namespace as namespace
+       where namespace.nspname = any($1::text[])
+       order by namespace.nspname
+    `, [CANDIDATE_FINAL_SCHEMAS]);
+    assert.deepEqual(remainingSchemas.map(({ nspname }) => nspname), []);
+    const restoredGlobalDefaults = await sql.unsafe(`
+      select default_acl.defaclobjtype,
+             default_acl.defaclacl::text as acl
+        from pg_catalog.pg_default_acl as default_acl
+        join pg_catalog.pg_roles as owner_role
+          on owner_role.oid = default_acl.defaclrole
+       where owner_role.rolname = 'programmable_migrator'
+         and default_acl.defaclnamespace = 0
+       order by default_acl.defaclobjtype
+    `);
+    assert.deepEqual(restoredGlobalDefaults.map((row) => ({ ...row })), []);
+    await runTool(config.pgRestore, [
+      ...CANDIDATE_RESTORE_FLAGS,
+      "--host",
+      config.host,
+      "--port",
+      config.port,
+      "--username",
+      "postgres",
+      "--dbname",
+      database,
+      baselineArchive,
+    ]);
+    await applyOwnerAndSecurityClosure(
+      sql,
+      baselineClosures.owners,
+      baselineClosures.security,
+      { supabaseHosted: false },
+    );
+    await assertCandidateSchemaStage(sql, CANDIDATE_RESTORE_SCHEMAS);
+    const pinned = await captureDatabaseManifest(sql);
+    assert.equal(pinned.manifestSha256, baseline.manifestSha256);
+    assert.equal(
+      pinned.portableStructuralManifestSha256,
+      baseline.portableStructuralManifestSha256,
+    );
+    assert.equal(pinned.tableCount, baseline.tableCount);
+    assert.equal(pinned.rowCount, baseline.rowCount);
+    await sql.unsafe(`
+      set role programmable_migrator;
+      create function programmable_private.pinned_default_acl_probe_v1()
+      returns integer language sql immutable as 'select 1';
+      create type programmable_private.pinned_default_acl_probe_type_v1
+        as enum ('one');
+      set role postgres;
+    `).simple();
+    const [pinnedFuturePrivileges] = await sql.unsafe(`
+      select
+        pg_catalog.has_function_privilege(
+          'public',
+          (
+            select procedure.oid
+              from pg_catalog.pg_proc as procedure
+              join pg_catalog.pg_namespace as namespace
+                on namespace.oid = procedure.pronamespace
+             where namespace.nspname = 'programmable_private'
+               and procedure.proname = 'pinned_default_acl_probe_v1'
+          ),
+          'EXECUTE'
+        ) as function_execute,
+        pg_catalog.has_type_privilege(
+          'public',
+          (
+            select type.oid
+              from pg_catalog.pg_type as type
+              join pg_catalog.pg_namespace as namespace
+                on namespace.oid = type.typnamespace
+             where namespace.nspname = 'programmable_private'
+               and type.typname = 'pinned_default_acl_probe_type_v1'
+          ),
+          'USAGE'
+        ) as type_usage
+    `);
+    assert.deepEqual({ ...pinnedFuturePrivileges }, {
+      function_execute: true,
+      type_usage: true,
+    });
+    await sql.unsafe(`
+      set role programmable_migrator;
+      drop type programmable_private.pinned_default_acl_probe_type_v1;
+      drop function programmable_private.pinned_default_acl_probe_v1();
+      set role postgres;
+    `).simple();
+    await cleanupCandidateSchemas(
+      sql,
+      baselineClosures.cleanup,
+      { supabaseHosted: false },
+      {
+        includePinnedBaselineCleanup: false,
+        restoreHardenedGlobalDefaults: true,
+      },
     );
     await runTool(config.pgRestore, [
       ...CANDIDATE_SAFETY_RECOVERY_FLAGS,
