@@ -1,16 +1,21 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE,
   EXPLORE_TOKENS_PER_PAGE,
   EXPLORE_REFRESH_INTERVAL_MS,
+  filterTokensByLaunchModel,
   filterTokensBySocialPresence,
   getExplorePaginationItems,
   getMarketCap,
+  loadExploreModelDataset,
   loadExplorePayload,
+  paginateTokensByExploreFilters,
   paginateTokensBySocialPresence,
   preserveExplorePayloadOnRefreshFailure,
   shouldRefreshExplore,
   tokenHasSocialLinks,
+  tokenLaunchModelGroup,
 } from "../components/explore-view";
 import type { LauncherToken } from "../lib/tokens";
 
@@ -140,6 +145,141 @@ describe("Explore refresh state", () => {
         expect.objectContaining({ id: "1:1" }),
         expect.objectContaining({ id: "1:17" }),
       ]),
+    });
+  });
+
+  it("groups only explicit Classic launches as Classic", () => {
+    expect(tokenLaunchModelGroup({ launchModel: "classic" })).toBe("classic");
+    expect(tokenLaunchModelGroup({ launchModelVersion: "classic-v3" })).toBe(
+      "classic",
+    );
+    expect(tokenLaunchModelGroup({ launchModel: "adaptive" })).toBe(
+      "custom-hook",
+    );
+    expect(tokenLaunchModelGroup({ launchModel: "deep" })).toBe(
+      "custom-hook",
+    );
+    expect(tokenLaunchModelGroup({ launchModel: "stock-paired" })).toBe(
+      "custom-hook",
+    );
+    expect(tokenLaunchModelGroup({})).toBeNull();
+  });
+
+  it("combines model and social filters before nine-token pagination", () => {
+    const tokens = Array.from({ length: 25 }, (_, index) => ({
+      id: `1:model-${index}`,
+      name: `Model ${index}`,
+      symbol: `M${index}`,
+      tokenAddress: `0x${(index + 1).toString(16).padStart(40, "0")}`,
+      hookAddress: "0x2222222222222222222222222222222222222222",
+      poolId: `0x${(index + 1).toString(16).padStart(64, "0")}`,
+      launchedAt: "2026-08-03T00:00:00.000Z",
+      totalSwapFeeBps: 100,
+      liquidityPath: "meme" as const,
+      launchModel: index < 20 ? ("classic" as const) : ("deep" as const),
+      ...(index < 20
+        ? {
+            links: [
+              { kind: "x" as const, url: `https://x.com/model${index}` },
+            ],
+          }
+        : {}),
+    })) satisfies LauncherToken[];
+
+    expect(filterTokensByLaunchModel(tokens, "classic")).toHaveLength(20);
+    expect(filterTokensByLaunchModel(tokens, "custom-hook")).toHaveLength(5);
+    expect(
+      paginateTokensByExploreFilters(tokens, "yes", "classic", 1),
+    ).toMatchObject({ page: 1, pageSize: 9, total: 20, totalPages: 3 });
+    expect(
+      paginateTokensByExploreFilters(tokens, "yes", "classic", 2).tokens,
+    ).toHaveLength(9);
+    expect(
+      paginateTokensByExploreFilters(tokens, "yes", "classic", 3).tokens,
+    ).toHaveLength(2);
+    expect(
+      paginateTokensByExploreFilters(tokens, "yes", "custom-hook", 1),
+    ).toMatchObject({ total: 0, totalPages: 0, tokens: [] });
+  });
+
+  it("loads every server page before model filtering and preserves server order", async () => {
+    const tokens = Array.from({ length: 230 }, (_, index) => ({
+      id: `1:server-model-${index}`,
+      name: `Server model ${index}`,
+      symbol: `SM${index}`,
+      tokenAddress: `0x${(index + 1).toString(16).padStart(40, "0")}`,
+      hookAddress: "0x2222222222222222222222222222222222222222",
+      poolId: `0x${(index + 1).toString(16).padStart(64, "0")}`,
+      launchedAt: "2026-08-03T00:00:00.000Z",
+      totalSwapFeeBps: 100,
+      liquidityPath: "meme" as const,
+      launchModel: index < 145 ? ("classic" as const) : ("deep" as const),
+      links: [
+        { kind: "x" as const, url: `https://x.com/server-model-${index}` },
+      ],
+    })) satisfies LauncherToken[];
+    const totalPages = Math.ceil(
+      tokens.length / EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE,
+    );
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const url = new URL(String(input), "https://example.test");
+        const page = Number(url.searchParams.get("page"));
+        const pageSize = Number(url.searchParams.get("limit"));
+        const offset = (page - 1) * pageSize;
+
+        expect(pageSize).toBe(EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE);
+        expect(url.searchParams.get("q")).toBe("server");
+        expect(url.searchParams.get("sort")).toBe("newest");
+        expect(url.searchParams.get("socials")).toBe("yes");
+
+        return new Response(
+          JSON.stringify({
+            status: "ready",
+            tokens: tokens.slice(offset, offset + pageSize),
+            page,
+            pageSize,
+            total: tokens.length,
+            totalPages,
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      });
+
+    const dataset = await loadExploreModelDataset(
+      "complete-model-dataset",
+      new URLSearchParams({
+        q: "server",
+        sort: "newest",
+        socials: "yes",
+        page: "12",
+        limit: "9",
+      }),
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(dataset.tokens.map((token) => token.id)).toEqual(
+      tokens.map((token) => token.id),
+    );
+    expect(
+      paginateTokensByExploreFilters(
+        dataset.tokens,
+        "all",
+        "classic",
+        12,
+      ),
+    ).toMatchObject({
+      page: 12,
+      pageSize: 9,
+      total: 145,
+      totalPages: 17,
+      tokens: tokens
+        .slice(99, 108)
+        .map((token) => expect.objectContaining({ id: token.id })),
     });
   });
 

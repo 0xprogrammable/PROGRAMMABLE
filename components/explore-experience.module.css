@@ -194,7 +194,7 @@
 .runnerMeta {
   align-items: center;
   display: flex;
-  gap: 8px;
+  gap: 2px;
   margin-block-start: 7px;
   min-height: 40px;
   min-width: 0;
@@ -221,8 +221,6 @@
   display: flex;
   gap: 2px;
   margin: 0;
-  margin-inline-start: auto;
-  margin-inline-end: -9px;
   min-height: 40px;
 }
 
@@ -443,7 +441,6 @@
 
   .runnerSocials {
     gap: 0;
-    margin-inline-end: -11px;
     min-height: 44px;
   }
 

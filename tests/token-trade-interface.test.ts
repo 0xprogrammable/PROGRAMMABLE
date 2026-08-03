@@ -33,7 +33,7 @@ describe("token trade amount interface", () => {
 
   it("uses a compact amount surface without shrinking touch controls", () => {
     expect(styles).toMatch(
-      /\.amountCard\s*\{[^}]*min-height:\s*132px;[^}]*padding:\s*10px 14px 9px;/s,
+      /\.amountCard\s*\{[^}]*min-height:\s*116px;[^}]*padding:\s*10px 14px 9px;/s,
     );
     expect(styles).toMatch(
       /\.amountInput\s*\{[^}]*height:\s*44px;/s,

@@ -136,7 +136,7 @@ export function LaunchModelPicker({
           >
             <Image
               className={launchExperience.artImage}
-              src="/brand/create/classic-botanical-v3.webp"
+              src="/brand/create/classic-botanical-v4.webp"
               alt=""
               fill
               sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 88px) / 2), 560px"
@@ -210,6 +210,9 @@ export function LaunchModelPicker({
               className={`${launchExperience.brandMark} ${launchExperience.customMark}`}
             />
             <span className={launchExperience.customSparkles}>
+              <span />
+              <span />
+              <span />
               <span />
               <span />
               <span />
