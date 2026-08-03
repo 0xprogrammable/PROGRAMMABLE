@@ -158,7 +158,7 @@ describe("unreleased launch model gating", () => {
     ).toEqual([-1, -1, 0, -1, -1, -1]);
   });
 
-  it("shows Classic and an honest unavailable Custom placeholder", () => {
+  it("shows Classic and links the Custom Hook model to its documented boundary", () => {
     const html = renderToStaticMarkup(
       createElement(LaunchModelPicker, {
         onChoose: () => undefined,
@@ -167,14 +167,20 @@ describe("unreleased launch model gating", () => {
 
     expect(html.match(/data-launch-model-option=/g)).toHaveLength(2);
     expect(html).toContain('data-launch-model-option="classic"');
-    expect(html).toContain("<strong>Classic</strong>");
+    expect(html).toContain(
+      'id="launch-model-classic-title">Classic</strong>',
+    );
     expect(html).toContain('data-launch-model-option="custom"');
     expect(html).toContain(
       'id="launch-model-custom-title">Custom Hook</strong>',
     );
-    expect(html).toContain(
-      "Custom Hook configuration is not available",
-    );
+    expect(html).toContain('href="/docs/models/custom"');
+    expect(html).toContain("Open Custom Hook");
+    expect(html).toContain("evidence required for release");
+    expect(html).toContain("/brand/create/classic-model-v2.webp");
+    expect(html).toContain("/brand/create/custom-hook-model-v2.webp");
+    expect(html).not.toContain("In development");
+    expect(html).not.toContain("Not available");
     expect(html).not.toContain("launch-model-classic-details");
     expect(html).not.toContain('data-launch-model-option="stock-paired"');
     expect(html).not.toContain("<strong>Stock-Paired</strong>");

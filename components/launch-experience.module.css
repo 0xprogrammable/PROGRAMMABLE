@@ -1,8 +1,9 @@
 .pickerPage {
   isolation: isolate;
   justify-content: flex-start;
-  max-width: 1180px;
-  padding-top: clamp(54px, 8svh, 92px);
+  max-width: 1200px;
+  padding-bottom: clamp(72px, 9svh, 112px);
+  padding-top: clamp(44px, 7svh, 76px);
   position: relative;
 }
 
@@ -12,23 +13,37 @@
 }
 
 .pickerHeading {
+  display: grid;
+  gap: 18px;
   justify-content: flex-start;
+  max-width: 780px;
   text-align: left;
   width: 100%;
 }
 
 .pickerHeading h1 {
-  font-size: clamp(60px, 7vw, 96px);
+  font-size: clamp(52px, 6.6vw, 88px);
   font-weight: 580;
-  letter-spacing: -0.035em;
-  line-height: 0.94;
+  letter-spacing: -0.04em;
+  line-height: 0.96;
+  max-width: 11ch;
+  text-wrap: balance;
+}
+
+.pickerHeading p {
+  color: var(--text-soft);
+  font-size: clamp(16px, 1.5vw, 19px);
+  line-height: 1.5;
+  margin: 0;
+  max-width: 56ch;
+  text-wrap: pretty;
 }
 
 .modelGrid {
-  gap: clamp(24px, 3vw, 42px);
+  gap: clamp(24px, 2.6vw, 34px);
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-top: clamp(38px, 6svh, 64px);
-  max-width: 1180px;
+  margin-top: clamp(36px, 5svh, 52px);
+  max-width: 1200px;
 }
 
 .modelCard {
@@ -36,36 +51,48 @@
   border: 0;
   border-radius: 0;
   box-shadow: none;
+  color: inherit;
+  font: inherit;
   isolation: isolate;
   min-height: 0;
   overflow: visible;
   padding: 0;
+  position: relative;
   text-align: left;
+  text-decoration: none;
   transition:
-    border-color 180ms ease,
-    box-shadow 220ms ease,
-    transform 180ms var(--ease-out);
+    color 180ms ease,
+    transform 220ms var(--ease-out);
+  width: 100%;
+}
+
+.modelCard:focus-visible {
+  border-radius: 28px;
+  outline: 2px solid var(--focus);
+  outline-offset: 6px;
 }
 
 .modelArt {
-  background: var(--surface-soft);
-  aspect-ratio: 1.42;
-  border: 1px solid var(--panel-border-soft);
-  border-radius: 26px;
+  aspect-ratio: 1.54;
+  background: #d9dde1;
+  border: 0;
+  border-radius: 28px;
+  box-shadow:
+    0 1px 1px rgb(0 0 0 / 0.04),
+    0 18px 54px rgb(23 29 36 / 0.08);
   height: auto;
   isolation: isolate;
+  outline: 1px solid rgb(0 0 0 / 0.1);
+  outline-offset: -1px;
   overflow: hidden;
+  position: relative;
   transition:
-    border-color 180ms ease,
-    box-shadow 220ms ease;
+    box-shadow 240ms ease,
+    transform 240ms var(--ease-out);
 }
 
+.modelArt::before,
 .modelArt::after {
-  background: linear-gradient(
-    180deg,
-    transparent 72%,
-    color-mix(in srgb, var(--surface-tint-strong) 18%, transparent)
-  );
   content: "";
   inset: 0;
   pointer-events: none;
@@ -73,41 +100,102 @@
   z-index: 1;
 }
 
-.modelArt img {
+.modelArt::after {
+  background:
+    linear-gradient(180deg, rgb(0 0 0 / 0.02), transparent 32%),
+    linear-gradient(0deg, rgb(0 0 0 / 0.12), transparent 38%);
+}
+
+:global(html[data-theme="dark"]) .modelArt {
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.04),
+    0 22px 64px rgb(0 0 0 / 0.28);
+  outline-color: rgb(255 255 255 / 0.1);
+}
+
+.classicArt::before {
+  background:
+    radial-gradient(circle at 50% 45%, rgb(255 255 255 / 0.04), transparent 38%),
+    linear-gradient(135deg, rgb(5 8 11 / 0.08), rgb(255 255 255 / 0.06));
+}
+
+.customArt::before {
+  background:
+    radial-gradient(circle at 50% 48%, rgb(255 222 168 / 0.16), transparent 24%),
+    radial-gradient(circle at 80% 12%, rgb(214 112 255 / 0.14), transparent 34%),
+    linear-gradient(145deg, rgb(7 10 22 / 0.05), rgb(11 7 20 / 0.2));
+}
+
+.artImage {
+  object-fit: cover;
+  object-position: center;
   transform: scale(1.002);
-  transition: transform 260ms var(--ease-out);
+  transition: transform 420ms var(--ease-out);
+}
+
+.classicArt .artImage {
+  filter: grayscale(1) saturate(0.05) contrast(1.06);
+}
+
+.brandMark {
+  -webkit-mask-image: url("/brand/loop/programmable-loop-mark-transparent-v1.png");
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  aspect-ratio: 1;
+  inset: 50% auto auto 50%;
+  mask-image: url("/brand/loop/programmable-loop-mark-transparent-v1.png");
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+  position: absolute;
+  transform: translate(-50%, -50%);
+  transition:
+    filter 320ms ease,
+    transform 320ms var(--ease-out);
+  width: clamp(88px, 9.4vw, 128px);
+  z-index: 2;
+}
+
+.classicMark {
+  background: linear-gradient(
+    145deg,
+    rgb(255 255 255 / 0.98),
+    rgb(206 212 218 / 0.84)
+  );
+  filter: drop-shadow(0 10px 28px rgb(0 0 0 / 0.24));
+}
+
+.customMark {
+  background: conic-gradient(
+    from 218deg,
+    #ff8c78,
+    #ffc86b,
+    #f5f4a7,
+    #93e6d0,
+    #8bb8ff,
+    #d69bff,
+    #ff8c78
+  );
+  filter:
+    drop-shadow(0 0 14px rgb(255 186 111 / 0.42))
+    drop-shadow(0 12px 32px rgb(0 0 0 / 0.32));
 }
 
 .modelBody {
-  min-height: 190px;
-  padding: 23px 4px 0;
-}
-
-.customCard {
-  cursor: default;
-}
-
-.customCard:active {
-  transform: none;
-}
-
-.customArt img {
-  filter: grayscale(0.28) saturate(0.72) contrast(0.94);
-  object-fit: cover;
-}
-
-.customStatus {
-  color: var(--muted);
+  min-height: 230px;
+  padding: 24px 4px 0;
 }
 
 .modelHeading {
-  min-height: 31px;
+  min-height: 38px;
 }
 
 .modelHeading strong {
-  font-size: clamp(28px, 3vw, 38px);
+  font-size: clamp(27px, 2.8vw, 36px);
   font-weight: 595;
   letter-spacing: -0.03em;
+  line-height: 1.08;
 }
 
 .modelHeading small {
@@ -122,11 +210,12 @@
 
 .modelDescription {
   color: var(--text-soft);
-  font-size: 15px;
-  line-height: 1.55;
-  margin-top: 13px;
-  min-height: 45px;
-  max-width: 44ch;
+  font-size: 15.5px;
+  line-height: 1.58;
+  margin-top: 12px;
+  min-height: 74px;
+  max-width: 49ch;
+  text-wrap: pretty;
 }
 
 .modelDetails {
@@ -178,16 +267,8 @@
   transition: transform 160ms var(--ease-out);
 }
 
-.modelCard[data-launch-model-available="false"] {
-  background: transparent;
-}
-
 .modelCard[data-launch-model-available="false"] .modelArt img {
   filter: saturate(0.78) contrast(0.92);
-}
-
-.customCard[data-launch-model-available="false"] .customArt img {
-  filter: grayscale(1) contrast(0.9) brightness(1.03);
 }
 
 .formPage {
@@ -647,6 +728,10 @@
     transform: scale(1.014);
   }
 
+  .modelCard[data-launch-model-available="true"]:hover .brandMark {
+    transform: translate(-50%, -50%) scale(1.025);
+  }
+
   .modelCard[data-launch-model-available="true"]:hover .modelAction svg {
     transform: translateX(3px);
   }
@@ -667,7 +752,7 @@
 
 @media (max-width: 1020px) {
   .pickerPage {
-    padding-top: 52px;
+    padding-top: 48px;
   }
 
   .modelGrid {
@@ -684,7 +769,7 @@
   }
 
   .modelBody {
-    min-height: 178px;
+    min-height: 220px;
     padding-inline: 4px;
   }
 
@@ -730,18 +815,23 @@
 
   .pickerPage {
     padding-bottom: 104px;
-    padding-top: 42px;
+    padding-top: 38px;
   }
 
   .pickerHeading h1 {
-    font-size: clamp(38px, 10vw, 48px);
+    font-size: clamp(42px, 11vw, 54px);
+  }
+
+  .pickerHeading p {
+    font-size: 16px;
+    max-width: 46ch;
   }
 
   .modelGrid {
-    gap: 42px;
+    gap: 48px;
     grid-template-columns: minmax(0, 1fr);
-    margin-top: 23px;
-    max-width: 600px;
+    margin-top: 34px;
+    max-width: 640px;
   }
 
   .modelCard {
@@ -750,7 +840,7 @@
   }
 
   .modelArt {
-    aspect-ratio: 1.55;
+    aspect-ratio: 1.5;
     height: auto;
     min-height: 0;
   }
@@ -760,7 +850,7 @@
   }
 
   :global(.launch-model-art-classic).modelArt img {
-    object-position: 68% center;
+    object-position: center;
   }
 
   .modelBody {
@@ -773,8 +863,8 @@
   }
 
   .modelDescription {
-    font-size: 13px;
-    line-height: 1.42;
+    font-size: 15px;
+    line-height: 1.55;
     min-height: 0;
   }
 
@@ -852,7 +942,7 @@
   }
 
   .pickerHeading h1 {
-    max-width: 12ch;
+    max-width: 10ch;
   }
 
   .modelCard {
@@ -861,15 +951,15 @@
   }
 
   .modelArt {
-    aspect-ratio: 1.28;
-    border-radius: 22px;
+    aspect-ratio: 1.35;
+    border-radius: 24px;
     height: auto;
     min-height: 0;
   }
 
   .modelBody {
     min-height: 0;
-    padding: 19px 2px 0;
+    padding: 18px 2px 0;
   }
 
   .modelHeading {
@@ -888,8 +978,8 @@
   }
 
   .modelDescription {
-    font-size: 14px;
-    line-height: 1.48;
+    font-size: 15px;
+    line-height: 1.52;
   }
 
   .modelDetails > span,
@@ -974,7 +1064,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .brandMark,
   .modelArt img,
+  .modelArt,
   .modelAction svg,
   .modelCard {
     transition-duration: 0.01ms;
