@@ -531,6 +531,14 @@ async function createPlan(files, overrides = {}) {
             PINNED_PRE_ATTESTATION_SNAPSHOT.securityClosureStatementCount,
         },
       }),
+      prepareSafetyRestoreClosures: async () => ({
+        cleanup: {
+          sql: "unit safety cleanup\n",
+          statementCount: 2,
+        },
+        owners: { sql: "unit safety owners\n", statementCount: 2 },
+        security: { sql: "unit safety security\n", statementCount: 2 },
+      }),
     },
     ...overrides,
   });
@@ -650,6 +658,13 @@ function restoreDatabaseDependencies(overrides = {}, { recovery = false } = {}) 
       statementCount: 1,
     }),
   });
+  const safetyClosures = Object.freeze({
+    ...closures,
+    cleanup: Object.freeze({
+      sql: "unit safety cleanup\n",
+      statementCount: 2,
+    }),
+  });
   const dependencies = {
     ...databaseDependencies(),
     cleanupCandidateSchemas: async () => {},
@@ -657,9 +672,12 @@ function restoreDatabaseDependencies(overrides = {}, { recovery = false } = {}) 
     assertCandidateSchemaStage: async () => {},
     ...overrides,
   };
-  dependencies[
-    recovery ? "prepareSafetyRestoreClosures" : "prepareRestoreClosures"
-  ] = async () => closures;
+  if (recovery) {
+    dependencies.prepareSafetyRestoreClosures = async () => closures;
+  } else {
+    dependencies.prepareRestoreClosures = async () => closures;
+    dependencies.prepareSafetyRestoreClosures = async () => safetyClosures;
+  }
   return dependencies;
 }
 
@@ -770,6 +788,11 @@ test("restore plan binds CA, raw safety evidence, three tools, schemas and flags
     plan.safetyBackup.portableStructuralManifestSha256,
     SAFETY_PORTABLE_STRUCTURAL_MANIFEST,
   );
+  assert.equal(
+    plan.safetyBackup.cleanClosureSha256,
+    sha256(Buffer.from("unit safety cleanup\n")),
+  );
+  assert.equal(plan.safetyBackup.cleanClosureStatementCount, 2);
   assert.equal(
     plan.postRestore.portableStructuralManifestSha256,
     RESTORED_PORTABLE_STRUCTURAL_MANIFEST,
@@ -1252,12 +1275,16 @@ test("JIT restore SET ROLEs postgres and uses only the immutable restore set", a
         },
         cleanupCandidateSchemas: async (
           _sql,
-          _cleanup,
+          cleanup,
           posture,
           options,
         ) => {
+          assert.equal(cleanup.sql, "unit safety cleanup\n");
           assert.equal(posture, undefined);
-          assert.equal(options, undefined);
+          assert.deepEqual(options, {
+            includePinnedBaselineCleanup: false,
+            restorePinnedGlobalDefaults: true,
+          });
           destructiveEvents.push("cleanup");
         },
         applyOwnerAndSecurityClosure: async () => {
@@ -1482,7 +1509,10 @@ test("safety recovery orders cleanup, archive restore and exact owner replay", a
           options,
         ) => {
           assert.equal(posture, undefined);
-          assert.deepEqual(options, { includePinnedBaselineCleanup: false });
+          assert.deepEqual(options, {
+            includePinnedBaselineCleanup: false,
+            restoreHardenedGlobalDefaults: true,
+          });
           destructiveEvents.push("cleanup");
         },
         applyOwnerAndSecurityClosure: async (
