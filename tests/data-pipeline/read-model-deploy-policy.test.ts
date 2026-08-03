@@ -401,6 +401,10 @@ describe("read-model production deploy policy", () => {
     expect(workflow).toContain("staged-release-attestation.json");
     expect(workflow).toContain("attestation_sha256");
     expect(workflow).toContain("Smoke legacy staged public APIs");
+    expect(workflow).toContain(
+      '"x-vercel-protection-bypass": automationBypassSecret',
+    );
+    expect(workflow).toContain("headers: legacySmokeRequestHeaders");
     expect(workflow).toContain('"/api/ops/health"');
     expect(workflow).toContain('"/api/indexers/v1/token-list"');
     expect(workflow).toContain("/api/explore/token?address=");
