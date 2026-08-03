@@ -232,15 +232,20 @@ test("staged exposure gate accepts only the exact unaliased deployment", async (
     readyState: "READY",
     target: "production",
     projectId,
-    alias: ["programmable.family"],
+    alias: [],
     meta: { githubCommitSha: productionCommit },
   };
   const fetchDeployment = async ({ idOrUrl }) =>
     idOrUrl === DEPLOYMENT ? candidate : production;
-  const resolveAlias = async ({ alias }) =>
-    candidate.alias.includes(alias)
-      ? { alias, deploymentId: DEPLOYMENT }
+  let productionAliasDeploymentId = production.id;
+  const resolveAlias = async ({ alias }) => {
+    if (candidate.alias.includes(alias)) {
+      return { alias, deploymentId: DEPLOYMENT };
+    }
+    return alias === "programmable.family"
+      ? { alias, deploymentId: productionAliasDeploymentId }
       : undefined;
+  };
   const result = await inspectUnexposedStagedDeployment({
     targetUrl: "https://launcher-abc.vercel.app/",
     deploymentId: DEPLOYMENT,
@@ -270,7 +275,23 @@ test("staged exposure gate accepts only the exact unaliased deployment", async (
   );
 
   candidate.alias = [];
+  productionAliasDeploymentId = "dpl_11111111111111111111";
+  await assert.rejects(
+    inspectUnexposedStagedDeployment({
+      targetUrl: "https://launcher-abc.vercel.app/",
+      deploymentId: DEPLOYMENT,
+      productCommit: candidateCommit,
+      projectId,
+      token: "v".repeat(32),
+      teamId: "team_123",
+      fetchDeployment,
+      resolveAlias,
+    }),
+    /exposed, aliased or not exactly bound/u,
+  );
+
   production.id = DEPLOYMENT;
+  productionAliasDeploymentId = production.id;
   await assert.rejects(
     inspectUnexposedStagedDeployment({
       targetUrl: "https://launcher-abc.vercel.app/",
