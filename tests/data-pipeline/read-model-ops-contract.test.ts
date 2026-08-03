@@ -285,6 +285,37 @@ describe("read-model operations source contract", () => {
     );
   });
 
+  it("fails closed when the protected indexed staged capture bypass is missing", () => {
+    const workflowPath = ".github/workflows/deploy-production.yml";
+    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
+    const captureStepStart = workflow.indexOf(
+      "      - name: Capture staged read-model evidence",
+    );
+    const captureStepEnd = workflow.indexOf(
+      "      - name: Preserve staged read-model evidence",
+    );
+    expect(captureStepStart).toBeGreaterThanOrEqual(0);
+    expect(captureStepEnd).toBeGreaterThan(captureStepStart);
+    const captureStep = workflow.slice(captureStepStart, captureStepEnd);
+    const secretLine =
+      "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n";
+    expect(captureStep).toContain(secretLine);
+    const unsafeWorkflow =
+      workflow.slice(0, captureStepStart) +
+      captureStep.replace(secretLine, "") +
+      workflow.slice(captureStepEnd);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [workflowPath]: unsafeWorkflow,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-indexed-stage-capture",
+    );
+  });
+
   it("fails closed when the legacy staged smoke drops the bypass header", () => {
     const workflowPath = ".github/workflows/deploy-production.yml";
     const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");

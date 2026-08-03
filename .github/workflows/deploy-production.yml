@@ -394,6 +394,7 @@ jobs:
         env:
           PROGRAMMABLE_PERFORMANCE_PROBE_TOKEN: ${{ secrets.PROGRAMMABLE_PERFORMANCE_PROBE_TOKEN }}
           PROGRAMMABLE_SHADOW_PROBE_TOKEN: ${{ secrets.PROGRAMMABLE_SHADOW_PROBE_TOKEN }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
           PROGRAMMABLE_READ_MODEL_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
           PROGRAMMABLE_READ_MODEL_VERCEL_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
         run: >-
