@@ -143,8 +143,15 @@ export function LaunchModelPicker({
               priority
               unoptimized
             />
-            <span
-              className={`${launchExperience.brandMark} ${launchExperience.classicMark}`}
+            <Image
+              className={launchExperience.classicLogo}
+              src="/brand/loop/programmable-loop-mark-transparent-v1.png"
+              alt=""
+              width={1254}
+              height={1254}
+              sizes="128px"
+              priority
+              unoptimized
             />
           </span>
 
@@ -202,6 +209,11 @@ export function LaunchModelPicker({
             <span
               className={`${launchExperience.brandMark} ${launchExperience.customMark}`}
             />
+            <span className={launchExperience.customSparkles}>
+              <span />
+              <span />
+              <span />
+            </span>
           </span>
 
           <span

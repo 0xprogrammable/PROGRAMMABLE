@@ -396,6 +396,7 @@ export type IndexedExploreCursorV2 = {
 export type IndexedExploreListDataV2 = {
   request: {
     query: string;
+    socials: "yes" | "no" | null;
     sort: ExploreSort;
     requestedPage: number;
     pageSize: number;
@@ -1608,6 +1609,13 @@ export function adaptIndexedExploreListV2(
   );
   const { request, page, tokens } = ready.data;
   if (!validExploreSort(request.sort)) fail("invalid-input", "explore-sort");
+  if (
+    request.socials !== null &&
+    request.socials !== "yes" &&
+    request.socials !== "no"
+  ) {
+    fail("invalid-input", "explore-socials");
+  }
   const requestedPage = boundedInteger(
     request.requestedPage,
     1,
@@ -1657,13 +1665,21 @@ export function adaptIndexedExploreListV2(
     : null;
   const positions = tokens.map((projection) => {
     validateRowSource(projection.source, ready.snapshot, "explore-list");
+    const hasSocials = Boolean(
+      projection.metadata?.links.some(
+        (link: IndexedProjectMetadataV2["links"][number]) =>
+          link.kind === "x" || link.kind === "telegram",
+      ),
+    );
     if (
-      normalizedQuery &&
-      !projection.name.toLowerCase().includes(normalizedQuery) &&
-      !projection.symbol.toLowerCase().includes(normalizedQuery) &&
-      !projection.tokenAddress.toLowerCase().includes(normalizedQuery)
+      (normalizedQuery &&
+        !projection.name.toLowerCase().includes(normalizedQuery) &&
+        !projection.symbol.toLowerCase().includes(normalizedQuery) &&
+        !projection.tokenAddress.toLowerCase().includes(normalizedQuery)) ||
+      (request.socials !== null &&
+        hasSocials !== (request.socials === "yes"))
     ) {
-      fail("scope-mismatch", "explore-query");
+      fail("scope-mismatch", "explore-filter");
     }
     return cursorPosition(projection, page.valuationUnit);
   });

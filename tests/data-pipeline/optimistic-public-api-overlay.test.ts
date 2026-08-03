@@ -250,7 +250,13 @@ describe("optimistic public API overlay", () => {
   it("merges before pagination without mixing native and USD market-cap ranks", () => {
     const page = buildOptimisticExplorePage({
       canonicalModel,
-      options: { query: "", sort: "market-cap", page: 1, pageSize: 1 },
+      options: {
+        query: "",
+        sort: "market-cap",
+        page: 1,
+        pageSize: 1,
+        socials: null,
+      },
       snapshot: persistedSnapshot(),
       nowMs: NOW,
     });
@@ -289,7 +295,13 @@ describe("optimistic public API overlay", () => {
         ...canonicalModel,
         tokens: [stock, classic],
       },
-      options: { query: "", sort: "market-cap", page: 1, pageSize: 1 },
+      options: {
+        query: "",
+        sort: "market-cap",
+        page: 1,
+        pageSize: 1,
+        socials: null,
+      },
       snapshot: persistedSnapshot(),
       nowMs: NOW,
     });
@@ -623,7 +635,13 @@ describe("optimistic public API overlay", () => {
           ethUsdQuote: undefined,
         },
       },
-      options: { query: "", sort: "market-cap", page: 1, pageSize: 2 },
+      options: {
+        query: "",
+        sort: "market-cap",
+        page: 1,
+        pageSize: 2,
+        socials: null,
+      },
       snapshot: persistedSnapshot(),
       nowMs: NOW,
     })).toBeNull();
@@ -810,7 +828,13 @@ describe("optimistic public API overlay", () => {
   it("sets no-store and exact disclosure headers only for an active overlay", () => {
     const disclosure = buildOptimisticExplorePage({
       canonicalModel,
-      options: { query: "", sort: "market-cap", page: 1, pageSize: 1 },
+      options: {
+        query: "",
+        sort: "market-cap",
+        page: 1,
+        pageSize: 1,
+        socials: null,
+      },
       snapshot: persistedSnapshot(),
       nowMs: NOW,
     })!.optimisticOverlay;

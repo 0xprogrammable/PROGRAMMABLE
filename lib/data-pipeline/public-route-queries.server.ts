@@ -372,13 +372,14 @@ export const postgresPublicRouteQueries: IndexedRouteSnapshotQueries =
     explore(transaction, request) {
       return readEnvelope<IndexedExploreListDataV2>({
         transaction,
-        sql: `select * from programmable_private.get_public_explore_page_v1($1, $2, $3, $4, $5)`,
+        sql: `select * from programmable_private.get_public_explore_page_v2($1, $2, $3, $4, $5, $6)`,
         values: [
           request.chainId,
           request.query,
           request.sort,
           request.page,
           request.pageSize,
+          request.socials,
         ],
         kind: "explore",
         scope: DISCOVERY_SCOPE,

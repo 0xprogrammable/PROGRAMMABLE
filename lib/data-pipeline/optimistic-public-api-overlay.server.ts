@@ -2,7 +2,10 @@ import "server-only";
 
 import { formatUnits, getAddress, isAddress, type Hex } from "viem";
 
-import { paginateExplore } from "../onchain/query";
+import {
+  paginateExplore,
+  type ExploreSocialFilter,
+} from "../onchain/query";
 import type {
   ExplorePage,
   ExploreReadModel,
@@ -524,6 +527,7 @@ export function buildOptimisticExplorePage(input: Readonly<{
     sort: ExploreSort;
     page: number;
     pageSize: number;
+    socials: ExploreSocialFilter | null;
   }>;
   snapshot: PersistedOptimisticPublicSnapshot;
   nowMs?: number;
@@ -754,6 +758,7 @@ export async function overlayExploreCanonicalResponse(input: Readonly<{
     sort: ExploreSort;
     page: number;
     pageSize: number;
+    socials: ExploreSocialFilter | null;
   }>;
   nowMs?: number;
 }>): Promise<Response> {

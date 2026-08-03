@@ -65,6 +65,7 @@ function exploreEnvelope(): IndexedRouteEnvelopeV2<IndexedExploreListDataV2> {
     data: {
       request: {
         query: "",
+        socials: null,
         sort: "newest",
         requestedPage: 1,
         pageSize: 12,
@@ -124,6 +125,7 @@ describe("Postgres public route snapshot adapters", () => {
       sort: "newest" as const,
       page: 1,
       pageSize: 12,
+      socials: null,
     };
 
     const result = await adapters.explore(test.transaction, request);
@@ -196,6 +198,7 @@ describe("Postgres public route snapshot adapters", () => {
         sort: "newest",
         page: 1,
         pageSize: 12,
+        socials: null,
       }),
     ).resolves.toEqual({
       status: "not-ready",
