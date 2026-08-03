@@ -119,11 +119,20 @@
   object-fit: cover;
   object-position: center;
   transform: scale(1.002);
-  transition: transform 240ms var(--ease-out);
 }
 
 .classicArt .artImage {
   filter: none;
+}
+
+.brandMark,
+.classicLogo {
+  aspect-ratio: 1;
+  inset: 50% auto auto 50%;
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: clamp(88px, 9.4vw, 128px);
+  z-index: 2;
 }
 
 .brandMark {
@@ -131,25 +140,16 @@
   -webkit-mask-position: center;
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-size: contain;
-  aspect-ratio: 1;
-  inset: 50% auto auto 50%;
   mask-image: url("/brand/loop/programmable-loop-mark-transparent-v1.png");
   mask-position: center;
   mask-repeat: no-repeat;
   mask-size: contain;
-  position: absolute;
-  transform: translate(-50%, -50%);
-  width: clamp(88px, 9.4vw, 128px);
-  z-index: 2;
 }
 
-.classicMark {
-  background: linear-gradient(
-    145deg,
-    rgb(24 27 30 / 0.98),
-    rgb(91 94 95 / 0.9)
-  );
-  filter: none;
+.classicLogo {
+  filter: drop-shadow(0 9px 22px rgb(95 54 68 / 0.13));
+  height: auto;
+  object-fit: contain;
 }
 
 .customMark {
@@ -166,6 +166,101 @@
   filter:
     drop-shadow(0 0 14px rgb(255 186 111 / 0.42))
     drop-shadow(0 12px 32px rgb(0 0 0 / 0.32));
+}
+
+.customSparkles {
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 3;
+}
+
+.customSparkles > span {
+  background: radial-gradient(
+    circle,
+    rgb(255 250 223 / 0.96) 0 13%,
+    rgb(255 225 177 / 0.54) 24%,
+    transparent 68%
+  );
+  border-radius: 50%;
+  height: 9px;
+  opacity: 0.16;
+  position: absolute;
+  transform: scale(0.78);
+  width: 9px;
+}
+
+.customSparkles > span:nth-child(1) {
+  left: 22%;
+  top: 23%;
+}
+
+.customSparkles > span:nth-child(2) {
+  right: 20%;
+  top: 31%;
+}
+
+.customSparkles > span:nth-child(3) {
+  bottom: 24%;
+  left: 32%;
+}
+
+@keyframes classic-botanical-breeze {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1.004);
+  }
+
+  28% {
+    transform: translate3d(-0.1%, 0, 0) scale(1.004);
+  }
+
+  58% {
+    transform: translate3d(0.08%, -0.08%, 0) scale(1.004);
+  }
+
+  78% {
+    transform: translate3d(0.04%, 0.05%, 0) scale(1.004);
+  }
+}
+
+@keyframes custom-star-sparkle {
+  0%,
+  72%,
+  100% {
+    opacity: 0.14;
+    transform: scale(0.78);
+  }
+
+  78% {
+    opacity: 0.68;
+    transform: scale(1.14);
+  }
+
+  84% {
+    opacity: 0.2;
+    transform: scale(0.82);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .classicArt .artImage {
+    animation: classic-botanical-breeze 9.6s steps(1, end) infinite;
+    will-change: transform;
+  }
+
+  .customSparkles > span {
+    animation: custom-star-sparkle 5.8s cubic-bezier(0.2, 0, 0, 1) infinite;
+    will-change: opacity, transform;
+  }
+
+  .customSparkles > span:nth-child(2) {
+    animation-delay: -2.1s;
+  }
+
+  .customSparkles > span:nth-child(3) {
+    animation-delay: -4.2s;
+  }
 }
 
 .modelBody.modelBody {
@@ -265,10 +360,6 @@
 
   .modelCard:hover .modelArt {
     outline-color: color-mix(in srgb, var(--text) 18%, transparent);
-  }
-
-  .modelCard:hover .artImage {
-    transform: scale(1.012);
   }
 
   .modelCard:hover .modelAction svg {
@@ -730,10 +821,6 @@
     transform: none;
   }
 
-  .modelCard[data-launch-model-available="true"]:hover .modelArt img {
-    transform: scale(1.006);
-  }
-
   .formPage :global(.launch-select-trigger:hover) {
     border-color: color-mix(in srgb, var(--accent) 34%, var(--control-border));
   }
@@ -1058,11 +1145,17 @@
 
 @media (prefers-reduced-motion: reduce) {
   .brandMark,
+  .classicLogo,
   .modelArt img,
   .modelArt,
   .modelAction svg,
   .modelCard {
     transition-duration: 0.01ms;
+  }
+
+  .classicArt .artImage,
+  .customSparkles > span {
+    animation: none;
   }
 
   .formLoadingTitle,

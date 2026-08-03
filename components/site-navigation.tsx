@@ -38,9 +38,6 @@ function clearThemeReveal(root: HTMLElement) {
     themeFallbackTimer = null;
   }
   delete root.dataset.themeTransition;
-  root.style.removeProperty("--theme-reveal-x");
-  root.style.removeProperty("--theme-reveal-y");
-  root.style.removeProperty("--theme-reveal-radius");
 }
 
 const desktopNavItems = [
@@ -124,17 +121,6 @@ function ThemeToggle() {
     }
     delete root.dataset.themeInput;
 
-    const toggleBounds = event.currentTarget.getBoundingClientRect();
-    const originX = toggleBounds.left + toggleBounds.width / 2;
-    const originY = toggleBounds.top + toggleBounds.height / 2;
-    const radius = Math.hypot(
-      Math.max(originX, window.innerWidth - originX),
-      Math.max(originY, window.innerHeight - originY),
-    );
-    root.style.setProperty("--theme-reveal-x", `${originX}px`);
-    root.style.setProperty("--theme-reveal-y", `${originY}px`);
-    root.style.setProperty("--theme-reveal-radius", `${radius}px`);
-
     const runFallbackReveal = () => {
       root.dataset.themeTransition = `fallback-${nextTheme}`;
       root.getBoundingClientRect();
@@ -143,7 +129,7 @@ function ThemeToggle() {
         if (transitionSequence === themeTransitionSequence) {
           clearThemeReveal(root);
         }
-      }, 320);
+      }, 420);
     };
 
     if (!viewTransitionDocument.startViewTransition) {
@@ -151,7 +137,7 @@ function ThemeToggle() {
       return;
     }
 
-    root.dataset.themeTransition = "radial";
+    root.dataset.themeTransition = "soft";
 
     try {
       const transition = viewTransitionDocument.startViewTransition(() => {
@@ -170,9 +156,6 @@ function ThemeToggle() {
       void transition.finished.then(finishReveal, finishReveal);
     } catch {
       clearThemeReveal(root);
-      root.style.setProperty("--theme-reveal-x", `${originX}px`);
-      root.style.setProperty("--theme-reveal-y", `${originY}px`);
-      root.style.setProperty("--theme-reveal-radius", `${radius}px`);
       runFallbackReveal();
     }
   }

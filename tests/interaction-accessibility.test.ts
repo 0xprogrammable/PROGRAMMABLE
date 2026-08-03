@@ -68,10 +68,11 @@ describe("interaction accessibility", () => {
     expect(css).toContain(
       'html[data-theme-input="instant"] .theme-toggle-icons svg',
     );
-    expect(css).toContain("@keyframes theme-radial-reveal");
+    expect(css).toContain("@keyframes theme-soft-reveal");
     expect(css).toMatch(
-      /theme-radial-reveal 292ms cubic-bezier\(0\.32, 0\.72, 0, 1\)/,
+      /theme-soft-reveal 380ms cubic-bezier\(0\.2, 0, 0, 1\)/,
     );
+    expect(css).toContain("@media (prefers-reduced-motion: no-preference)");
   });
 
   it("exposes the wallet actions as a native, labelled disclosure", () => {
