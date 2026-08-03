@@ -31,10 +31,16 @@
 }
 
 .layout {
-  align-items: stretch;
+  align-items: start;
   display: grid;
-  gap: 16px;
-  grid-template-columns: minmax(0, 1fr);
+  gap: 16px 22px;
+  grid-template-areas:
+    "identity identity"
+    "chart trade"
+    "metrics trade"
+    "deep community"
+    "details community";
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
   margin: 0 auto;
   max-width: 1100px;
 }
@@ -49,23 +55,23 @@
 }
 
 .overview {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
+  display: contents;
 }
 
 .identity {
-  align-items: start;
+  align-items: center;
   display: grid;
-  gap: clamp(30px, 5vw, 54px);
-  grid-template-columns: minmax(320px, 0.98fr) minmax(0, 1.02fr);
+  gap: 22px;
+  grid-area: identity;
+  grid-template-columns: 132px minmax(0, 1fr);
+  padding: 8px 0 10px;
 }
 
 .image {
   aspect-ratio: 1;
   background: var(--surface-soft);
   border: 1px solid var(--panel-border-soft);
-  border-radius: 30px;
+  border-radius: 24px;
   overflow: hidden;
   position: relative;
 }
@@ -76,7 +82,7 @@
 
 .identityCopy {
   min-width: 0;
-  padding: clamp(14px, 4vw, 42px) 0 0;
+  padding: 0;
 }
 
 .tokenSymbolRow {
@@ -90,7 +96,7 @@
   color: var(--accent-strong);
   display: inline-flex;
   font-family: var(--font-plex-mono), monospace;
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.04em;
   line-height: 1.2;
@@ -98,11 +104,11 @@
 
 .name {
   color: var(--text);
-  font-size: clamp(46px, 4.7vw, 64px);
-  font-weight: 580;
+  font-size: clamp(34px, 3.6vw, 46px);
+  font-weight: 600;
   letter-spacing: -0.03em;
-  line-height: 0.98;
-  margin-top: 12px;
+  line-height: 1;
+  margin-top: 6px;
   overflow-wrap: break-word;
   text-wrap: balance;
 }
@@ -115,8 +121,23 @@
   align-items: center;
   display: flex;
   gap: 7px;
-  margin-top: 15px;
+  margin-top: 10px;
   min-width: 0;
+}
+
+.networkMark {
+  align-items: center;
+  color: var(--text-soft);
+  display: inline-flex;
+  flex: none;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.networkMark svg {
+  height: 18px;
+  width: 18px;
 }
 
 .address,
@@ -139,7 +160,8 @@
   gap: 9px;
   max-width: 100%;
   min-width: 0;
-  padding: 0 12px;
+  min-height: 40px;
+  padding: 0 11px;
 }
 
 .address code {
@@ -170,15 +192,11 @@
 
 .description {
   color: var(--text-soft);
-  font-size: 16px;
+  font-size: 14px;
   letter-spacing: -0.012em;
   line-height: 1.58;
-  margin: 28px 0 0;
+  margin: 11px 0 0;
   max-width: 62ch;
-}
-
-.descriptionEmpty {
-  color: var(--muted);
 }
 
 .links {
@@ -186,7 +204,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin: 20px 0 0;
+  margin: 10px 0 0;
 }
 
 .socialLink {
@@ -194,15 +212,15 @@
   border-radius: 50%;
   color: var(--text-soft);
   display: inline-flex;
-  height: 48px;
+  height: 40px;
   justify-content: center;
   padding: 0;
-  width: 48px;
+  width: 40px;
 }
 
 .socialLink svg:first-child {
-  height: 21px;
-  width: 21px;
+  height: 18px;
+  width: 18px;
 }
 
 .websiteLink {
@@ -213,13 +231,19 @@
   display: block;
 }
 
+.marketChart {
+  grid-area: chart;
+  min-width: 0;
+}
+
 .metrics {
   border-bottom: 1px solid var(--border);
   display: grid;
-  gap: clamp(20px, 4vw, 48px);
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  margin: 30px 0 0;
-  padding: 23px 0 25px;
+  gap: 14px;
+  grid-area: metrics;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  margin: 0;
+  padding: 15px 2px 17px;
 }
 
 .metric {
@@ -228,17 +252,17 @@
 
 .metric dt {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 11px;
   line-height: 1.2;
 }
 
 .metric dd {
   color: var(--text);
-  font-size: clamp(22px, 2.6vw, 30px);
+  font-size: clamp(18px, 2vw, 22px);
   font-variant-numeric: tabular-nums;
   font-weight: 610;
   letter-spacing: -0.022em;
-  margin: 8px 0 0;
+  margin: 5px 0 0;
   overflow-wrap: anywhere;
 }
 
@@ -248,6 +272,7 @@
   border-radius: 18px;
   display: grid;
   gap: 11px;
+  grid-area: deep;
   margin-top: 16px;
   padding: 15px 16px;
 }
@@ -304,8 +329,11 @@
 }
 
 .projectInformation {
-  display: block;
-  margin-top: 44px;
+  display: grid;
+  gap: 0 32px;
+  grid-area: details;
+  grid-template-columns: minmax(180px, 0.58fr) minmax(0, 1.42fr);
+  margin-top: 28px;
 }
 
 .projectPanel {
@@ -313,7 +341,11 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding: 31px 0 32px;
+  padding: 24px 0 26px;
+}
+
+.projectPanelMeta {
+  justify-content: center;
 }
 
 .projectPanelWide {
@@ -345,8 +377,8 @@
 
 .projectFacts {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin: 20px 0 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
 }
 
 .projectFacts > div {
@@ -415,6 +447,14 @@
 .communitySecondary {
   color: var(--text-soft);
   font-size: 11px;
+}
+
+.communityShell {
+  align-self: start;
+  grid-area: community;
+  min-width: 0;
+  position: sticky;
+  top: calc(var(--header-height) + 18px);
 }
 
 .creatorRecord a {
@@ -494,15 +534,20 @@
 }
 
 .tradeShell {
-  align-self: stretch;
-  background: transparent;
-  border-bottom: 1px solid var(--border);
-  border-radius: 0;
-  box-shadow: none;
+  align-self: start;
+  -webkit-backdrop-filter: blur(24px) saturate(1.03);
+  backdrop-filter: blur(24px) saturate(1.03);
+  background: color-mix(in srgb, var(--glass-96) 92%, transparent);
+  border: 1px solid var(--panel-border);
+  border-radius: 24px;
+  box-shadow:
+    0 1px 0 var(--card-shadow),
+    0 18px 48px var(--card-shadow-soft);
   display: flex;
-  margin-top: 28px;
+  grid-area: trade;
+  margin: 0;
   min-width: 0;
-  padding: 32px 2px;
+  padding: 18px;
   position: static;
   width: 100%;
 }
@@ -510,7 +555,7 @@
 .tradeShell > * {
   flex: 1;
   margin-inline: auto;
-  max-width: 640px;
+  max-width: none;
   width: 100%;
 }
 
@@ -527,13 +572,13 @@
   align-items: baseline;
   display: flex;
   justify-content: space-between;
-  padding: 2px 1px 18px;
+  padding: 0 1px 14px;
 }
 
 .tradeHeader h2,
 .review h2 {
   color: var(--text);
-  font-size: 25px;
+  font-size: 20px;
   font-weight: 650;
   letter-spacing: -0.03em;
   line-height: 1.1;
@@ -549,7 +594,7 @@
   backdrop-filter: var(--control-glass-backdrop);
   background: var(--control-glass-background);
   border: 1px solid var(--control-glass-border);
-  border-radius: 22px;
+  border-radius: 18px;
   box-shadow:
     inset 0 1px 0 var(--control-glass-highlight),
     0 9px 26px var(--control-glass-shadow-color);
@@ -565,7 +610,7 @@
 .sideButton {
   background: transparent;
   border: 0;
-  border-radius: 17px;
+  border-radius: 13px;
   color: var(--muted);
   font-size: 14px;
   font-weight: 640;
@@ -581,7 +626,7 @@
 .sideIndicator {
   background: var(--control-glass-background-strong);
   border: 1px solid var(--control-glass-border);
-  border-radius: 17px;
+  border-radius: 13px;
   bottom: 4px;
   box-shadow:
     inset 0 1px 0 var(--control-glass-highlight),
@@ -606,7 +651,7 @@
   border: 1px solid var(--border-strong);
   border-radius: 18px;
   margin-top: 12px;
-  min-height: 132px;
+  min-height: 116px;
   padding: 10px 14px 9px;
   transition: border-color 150ms ease;
 }
@@ -700,7 +745,7 @@
   background: transparent;
   border: 0;
   color: var(--text);
-  font-size: clamp(32px, 2.8vw, 38px);
+  font-size: clamp(28px, 2.4vw, 34px);
   font-variant-numeric: tabular-nums;
   font-weight: 540;
   height: 44px;
@@ -746,7 +791,7 @@
   border-top: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin: 16px 0 0;
+  margin: 13px 0 0;
   padding: 0;
 }
 
@@ -756,7 +801,7 @@
   gap: 10px;
   justify-content: space-between;
   min-width: 0;
-  padding: 12px 1px;
+  padding: 10px 1px;
 }
 
 .tradeFacts > div + div {
@@ -847,7 +892,7 @@
 
 .tradeFooter {
   margin-top: auto;
-  padding-top: 20px;
+  padding-top: 16px;
 }
 
 .primaryAction,
@@ -860,7 +905,7 @@
   font-size: 14px;
   font-weight: 690;
   justify-content: center;
-  min-height: 52px;
+  min-height: 48px;
   padding: 0 18px;
 }
 
@@ -1012,6 +1057,13 @@
   font-size: 14px;
 }
 
+.loadingState {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 34px auto 0;
+  max-width: 1100px;
+}
+
 .retry {
   color: var(--accent-strong);
   font-size: 13px;
@@ -1123,6 +1175,14 @@
 
 @media (max-width: 1020px) {
   .layout {
+    grid-template-areas:
+      "identity"
+      "chart"
+      "metrics"
+      "trade"
+      "community"
+      "deep"
+      "details";
     grid-template-columns: 1fr;
   }
 
@@ -1133,11 +1193,15 @@
     position: static;
   }
 
+  .communityShell {
+    position: static;
+  }
+
   .tradeForm,
   .review,
   .submitted {
     height: auto;
-    min-height: 320px;
+    min-height: 0;
   }
 }
 
@@ -1160,13 +1224,14 @@
   }
 
   .tradeShell {
-    border-radius: 0;
+    border-radius: 22px;
   }
 
   .identity {
-    align-items: start;
-    gap: 24px;
-    grid-template-columns: minmax(0, 1fr);
+    align-items: center;
+    gap: 15px;
+    grid-template-columns: 88px minmax(0, 1fr);
+    padding-block: 4px 8px;
   }
 
   .image {
@@ -1174,22 +1239,22 @@
   }
 
   .identityCopy {
-    padding: 0 2px;
+    padding: 0;
   }
 
   .symbol {
-    font-size: 15px;
+    font-size: 11px;
   }
 
   .name {
-    font-size: clamp(39px, 11.2vw, 54px);
+    font-size: clamp(27px, 8vw, 38px);
     letter-spacing: -0.026em;
     line-height: 1;
     margin-top: 8px;
   }
 
   .addressActions {
-    margin-top: 10px;
+    margin-top: 8px;
   }
 
   .address {
@@ -1201,19 +1266,19 @@
   }
 
   .description {
-    font-size: 14px;
-    margin-top: 22px;
+    font-size: 13px;
+    margin-top: 9px;
   }
 
   .links {
-    margin-top: 18px;
+    margin-top: 6px;
   }
 
   .metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 24px 18px;
-    margin-top: 26px;
-    padding-block: 20px;
+    gap: 16px 12px;
+    margin-top: 0;
+    padding-block: 15px;
   }
 
   .metric {
@@ -1229,7 +1294,8 @@
   }
 
   .projectInformation {
-    margin-top: 36px;
+    grid-template-columns: 1fr;
+    margin-top: 22px;
   }
 
   .projectPanelWide {
@@ -1267,7 +1333,7 @@
 
   .tradeShell {
     max-width: none;
-    padding: 26px 2px;
+    padding: 16px;
   }
 
   .tradeForm,
@@ -1293,11 +1359,12 @@
 
 @media (max-width: 430px) {
   .name {
-    font-size: clamp(38px, 12vw, 48px);
+    font-size: clamp(25px, 8vw, 34px);
   }
 
   .tradeShell {
-    padding: 24px 2px;
+    border-radius: 20px;
+    padding: 14px;
   }
 
   .metrics[data-count="3"] {
@@ -1335,7 +1402,7 @@
 
 @media (max-width: 360px) {
   .name {
-    font-size: 37px;
+    font-size: 27px;
     letter-spacing: -0.025em;
   }
 

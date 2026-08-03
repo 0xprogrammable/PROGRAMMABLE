@@ -652,6 +652,17 @@ function TelegramBrandIcon() {
   );
 }
 
+function EthereumMark() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path
+        fill="currentColor"
+        d="m12 2-6.1 10.1L12 15.7l6.1-3.6L12 2Zm0 15-6.1-3.6L12 22l6.1-8.6L12 17Z"
+      />
+    </svg>
+  );
+}
+
 function TokenLinkIcon({ kind }: { kind: TokenLinkKind }) {
   if (kind === "website") {
     return <WebsiteLinkIcon className={styles.websiteIcon} />;
@@ -1076,7 +1087,7 @@ function TokenDetailContent({
                 }
                 fill
                 priority
-                sizes="(max-width: 800px) 100vw, 420px"
+                sizes="(max-width: 720px) 88px, 132px"
                 unoptimized={!canOptimizeTokenImage(imageSource)}
               />
             </div>
@@ -1117,6 +1128,13 @@ function TokenDetailContent({
                 </div>
               ) : null}
               <div className={styles.addressActions}>
+                <span
+                  className={styles.networkMark}
+                  aria-label={getNetworkLabel(chainId)}
+                  title={getNetworkLabel(chainId)}
+                >
+                  <EthereumMark />
+                </span>
                 <button
                   className={styles.address}
                   type="button"
@@ -1137,25 +1155,21 @@ function TokenDetailContent({
                 </button>
               </div>
 
-              <p
-                className={`${styles.description}${
-                  token.description?.trim()
-                    ? ""
-                    : ` ${styles.descriptionEmpty}`
-                }`}
-              >
-                {token.description?.trim() || "No description provided."}
-              </p>
+              {token.description?.trim() ? (
+                <p className={styles.description}>{token.description.trim()}</p>
+              ) : null}
             </div>
           </div>
 
-          <TokenPriceChart
-            tokenAddress={token.tokenAddress}
-            tokenName={token.name}
-            launchModel={token.launchModel}
-            preview={preview}
-            onVolumeChange={setChartVolume}
-          />
+          <div className={styles.marketChart}>
+            <TokenPriceChart
+              tokenAddress={token.tokenAddress}
+              tokenName={token.name}
+              launchModel={token.launchModel}
+              preview={preview}
+              onVolumeChange={setChartVolume}
+            />
+          </div>
 
           <MetricGrid metrics={metrics} />
 
@@ -1168,16 +1182,10 @@ function TokenDetailContent({
 
           <div className={styles.projectInformation}>
             <section
-              className={`${styles.projectPanel} ${styles.projectPanelWide}`}
+              className={`${styles.projectPanel} ${styles.projectPanelMeta}`}
+              aria-label="Token metadata"
             >
-              <header className={styles.projectPanelHeading}>
-                <h2>Token details</h2>
-              </header>
               <dl className={styles.projectFacts}>
-                <div>
-                  <dt>Network</dt>
-                  <dd>{getNetworkLabel(chainId)}</dd>
-                </div>
                 <div>
                   <dt>Published</dt>
                   <dd>{formatProjectDate(token.launchedAt)}</dd>
@@ -1190,7 +1198,7 @@ function TokenDetailContent({
             </section>
 
             <section
-              className={`${styles.projectPanel} ${styles.projectPanelWide}`}
+              className={styles.projectPanel}
             >
               <header className={styles.projectPanelHeading}>
                 <h2>Team</h2>
@@ -1231,13 +1239,6 @@ function TokenDetailContent({
                 </p>
               )}
             </section>
-
-            <TokenCommunityChat
-              memberCount={previewProject?.communityMembers}
-              preview={preview}
-              tokenAddress={token.tokenAddress}
-              tokenName={token.name}
-            />
           </div>
         </section>
 
@@ -1375,6 +1376,15 @@ function TokenDetailContent({
             </div>
           )}
         </aside>
+
+        <div className={styles.communityShell}>
+          <TokenCommunityChat
+            memberCount={previewProject?.communityMembers}
+            preview={preview}
+            tokenAddress={token.tokenAddress}
+            tokenName={token.name}
+          />
+        </div>
       </div>
       {copyError ? (
         <div className="toast-region" aria-live="assertive" aria-atomic="true">
@@ -1517,14 +1527,26 @@ export function TokenDetailView({ address }: { address: string }) {
     );
   }
 
+  if (activeState.phase === "loading") {
+    return (
+      <div className={`${styles.page} page-width`}>
+        <Link className={styles.back} href="/">
+          <ArrowLeft aria-hidden="true" size={16} />
+          Explore
+        </Link>
+        <div className={styles.loadingState} role="status">
+          Loading
+        </div>
+      </div>
+    );
+  }
+
   const message =
-    activeState.phase === "loading"
-      ? "Loading token"
-      : activeState.phase === "not-found"
-        ? "This token is not in the Programmable index yet"
-        : activeState.phase === "not-deployed"
-          ? "No verified token data is available"
-          : activeState.message;
+    activeState.phase === "not-found"
+      ? "This token is not in the Programmable index yet"
+      : activeState.phase === "not-deployed"
+        ? "No verified token data is available"
+        : activeState.message;
 
   return (
     <div className={`${styles.page} page-width`}>
