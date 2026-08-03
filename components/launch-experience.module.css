@@ -372,6 +372,8 @@
 }
 
 .formPage {
+  --launch-control-height: 52px;
+  --launch-panel-gap: 14px;
   isolation: isolate;
   min-height: calc(100svh - var(--header-height));
   padding-top: 8px;
@@ -468,7 +470,7 @@
 }
 
 .formPage :global(.classic-launch-content) {
-  padding: 24px 28px 19px;
+  padding: 26px 28px 22px;
 }
 
 .formFieldset {
@@ -499,15 +501,15 @@
 }
 
 .formPage :global(.classic-token-grid) {
-  gap: 22px;
-  grid-template-columns: 156px minmax(0, 1fr);
-  margin-top: 14px;
+  gap: 24px;
+  grid-template-columns: 148px minmax(0, 1fr);
+  margin-top: 16px;
 }
 
 .formPage :global(.classic-token-section) :global(.token-image-upload) {
   border-color: var(--control-border);
   border-radius: 17px;
-  width: 156px;
+  width: 148px;
 }
 
 .formPage :global(.token-image-upload),
@@ -530,8 +532,19 @@
   font-weight: 630;
 }
 
+.formPage :global(.classic-token-main .field),
+.formPage :global(.classic-link-fields .field) {
+  gap: 7px;
+}
+
+.formPage :global(.classic-token-main .two-column-fields),
+.formPage :global(.classic-link-fields) {
+  gap: 12px;
+}
+
 .formPage :global(.field input) {
-  min-height: 48px;
+  height: var(--launch-control-height);
+  min-height: var(--launch-control-height);
 }
 
 .formPage :global(.field textarea) {
@@ -540,7 +553,7 @@
 }
 
 .formPage :global(.classic-description-field) {
-  margin-top: 13px !important;
+  margin-top: 14px !important;
 }
 
 .formPage :global(.classic-description-field textarea) {
@@ -548,16 +561,15 @@
 }
 
 .formPage :global(.classic-link-fields) {
-  gap: 10px;
   margin-left: 0;
-  margin-top: 11px;
+  margin-top: 14px;
 }
 
 .formPage :global(.classic-fee-section),
 .formPage :global(.classic-v3-settings) {
   border-color: var(--panel-border-soft);
-  margin-top: 14px;
-  padding-top: 13px;
+  margin-top: 18px;
+  padding-top: 17px;
 }
 
 .formPage :global(.classic-fee-layout) {
@@ -578,15 +590,15 @@
 }
 
 .formPage :global(.meme-dev-buy-input) {
-  min-height: 46px;
+  min-height: var(--launch-control-height);
 }
 
 .formPage :global(.classic-launch-footer) {
   backdrop-filter: blur(18px);
   background: color-mix(in srgb, var(--glass-90) 82%, transparent);
   border-color: var(--panel-border-soft);
-  min-height: 50px;
-  padding: 0 28px;
+  min-height: 70px;
+  padding: 10px 28px;
 }
 
 .formPage :global(.classic-launch-button) {
@@ -603,13 +615,13 @@
 }
 
 .formPage :global(.classic-v3-core) {
-  gap: 12px;
+  gap: var(--launch-panel-gap);
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .formPage :global(.classic-v3-settings) {
   grid-template-columns: minmax(0, 1fr);
-  row-gap: 10px;
+  row-gap: 16px;
 }
 
 .formPage :global(.classic-v3-settings > .classic-section-heading),
@@ -645,13 +657,15 @@
   backdrop-filter: var(--control-glass-backdrop);
   background: var(--control-glass-background);
   border-color: var(--control-glass-border);
-  border-radius: 20px;
+  border-radius: 15px;
   box-shadow: inset 0 1px 0 var(--control-glass-highlight);
-  padding: 4px;
+  height: var(--launch-control-height);
+  min-height: var(--launch-control-height);
+  padding: 3px;
 }
 
 .formPage :global(.classic-v3-reward-mode button) {
-  border-radius: 16px;
+  border-radius: 11px;
   min-height: 44px;
   transition:
     background-color 160ms ease,
@@ -671,17 +685,43 @@
 .formPage :global(.classic-v3-reward-mode),
 .formPage :global(.classic-v3-initial-buy .meme-dev-buy),
 .formPage :global(.classic-v3-custody) {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  border-top: 1px solid var(--panel-border-soft);
-  padding-inline: 0;
+  background: color-mix(in srgb, var(--glass-90) 92%, transparent);
+  border: 1px solid var(--control-border);
+  border-radius: 18px;
+  box-shadow: inset 0 1px 0 var(--control-glass-highlight);
+  padding: 15px;
+}
+
+.formPage :global(.classic-v3-fees legend),
+.formPage :global(.classic-v3-reward-mode legend) {
+  padding-inline: 5px;
+}
+
+.formPage :global(.launch-select-trigger),
+.formPage :global(.classic-v3-address-field input),
+.formPage :global(.classic-v3-split-row input),
+.formPage :global(.classic-v3-custody input) {
+  min-height: var(--launch-control-height);
 }
 
 .formPage :global(.classic-v3-initial-buy .meme-dev-buy-input button) {
   border-radius: 12px;
   min-height: 44px;
   min-width: 44px;
+}
+
+.formPage :global(.classic-v3-initial-buy) {
+  gap: var(--launch-panel-gap);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.formPage :global(.classic-v3-initial-buy .meme-dev-buy) {
+  align-content: start;
+  grid-template-columns: minmax(128px, 0.8fr) minmax(190px, 1.2fr);
+}
+
+.formPage :global(.classic-v3-custody) {
+  align-content: start;
 }
 
 .formPage :global(.deep-preset) {
@@ -753,14 +793,14 @@
 
 .formPage[data-launch-model="classic-v3"] :global(.classic-launch-content),
 .formPage[data-launch-model="deep"] :global(.classic-launch-content) {
-  padding-bottom: 10px;
-  padding-top: 14px;
+  padding-bottom: 20px;
+  padding-top: 20px;
 }
 
 .formPage[data-launch-model="classic-v3"] :global(.classic-token-grid),
 .formPage[data-launch-model="deep"] :global(.classic-token-grid) {
-  grid-template-columns: 128px minmax(0, 1fr);
-  margin-top: 10px;
+  grid-template-columns: 148px minmax(0, 1fr);
+  margin-top: 14px;
 }
 
 .formPage[data-launch-model="classic-v3"]
@@ -769,12 +809,12 @@
 .formPage[data-launch-model="deep"]
   :global(.classic-token-section)
   :global(.token-image-upload) {
-  width: 128px;
+  width: 148px;
 }
 
 .formPage[data-launch-model="classic-v3"] :global(.classic-description-field),
 .formPage[data-launch-model="deep"] :global(.classic-description-field) {
-  margin-top: 9px !important;
+  margin-top: 12px !important;
 }
 
 .formPage[data-launch-model="classic-v3"]
@@ -789,7 +829,7 @@
 .formPage[data-launch-model="classic-v3"] :global(.classic-link-fields),
 .formPage[data-launch-model="deep"] :global(.classic-link-fields) {
   margin-left: 0;
-  margin-top: 9px;
+  margin-top: 12px;
 }
 
 .formPage[data-launch-model="deep"] :global(.deep-preset) {
@@ -992,6 +1032,14 @@
     margin-left: 0;
   }
 
+  .formPage :global(.classic-v3-initial-buy) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .formPage :global(.classic-v3-initial-buy .meme-dev-buy) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .formPage[data-launch-model="classic-v3"] :global(.classic-link-fields),
   .formPage[data-launch-model="deep"] :global(.classic-link-fields) {
     margin-left: 0;
@@ -1113,6 +1161,14 @@
   .formPage :global(.classic-v3-fee-grid),
   .formPage :global(.deep-preset-stats) {
     grid-template-columns: 1fr;
+  }
+
+  .formPage :global(.classic-v3-reward-mode > div) {
+    gap: 5px;
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+    min-height: 0;
+    padding: 5px;
   }
 
   .formPage :global(.deep-preset-stats > div),
