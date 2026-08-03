@@ -220,17 +220,17 @@ describe("read-model operations source contract", () => {
     );
   });
 
-  it("fails closed when the protected legacy staged smoke bypass is missing", () => {
+  it("fails closed when the protected Alchemy staged smoke bypass is missing", () => {
     const workflowPath = ".github/workflows/deploy-production.yml";
-    const legacyStep =
-      "      - name: Smoke legacy staged public APIs\n" +
-      "        if: steps.read-model-policy.outputs.evidence_required == 'false'\n" +
+    const alchemyStep =
+      "      - name: Smoke staged Alchemy Explore APIs\n" +
+      "        if: steps.read-model-policy.outputs.mode == 'alchemy-only'\n" +
       "        env:\n" +
       "          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}\n" +
       "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n";
     const unsafeWorkflow = readFileSync(resolve(ROOT, workflowPath), "utf8").replace(
-      legacyStep,
-      legacyStep.replace(
+      alchemyStep,
+      alchemyStep.replace(
         "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n",
         "",
       ),
@@ -246,32 +246,32 @@ describe("read-model operations source contract", () => {
       expectedSha256Overrides: fixtureDigests(),
     });
     expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-protected-legacy-stage-smoke",
+      "ops-protected-alchemy-stage-smoke",
     );
   });
 
-  it("rejects a legacy staged smoke bypass relocated to another workflow step", () => {
+  it("rejects an Alchemy staged smoke bypass relocated to another workflow step", () => {
     const workflowPath = ".github/workflows/deploy-production.yml";
     const secretLine =
       "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n";
     const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
-    const legacyStepStart = workflow.indexOf(
-      "      - name: Smoke legacy staged public APIs",
+    const alchemyStepStart = workflow.indexOf(
+      "      - name: Smoke staged Alchemy Explore APIs",
     );
-    const legacyStepEnd = workflow.indexOf(
-      "      - name: Record legacy-only read path",
+    const alchemyStepEnd = workflow.indexOf(
+      "      - name: Record Alchemy-only read path",
     );
-    expect(legacyStepStart).toBeGreaterThanOrEqual(0);
-    expect(legacyStepEnd).toBeGreaterThan(legacyStepStart);
-    const legacyStep = workflow.slice(legacyStepStart, legacyStepEnd);
-    expect(legacyStep).toContain(secretLine);
-    const unsafeLegacyStep = legacyStep.replace(secretLine, "");
+    expect(alchemyStepStart).toBeGreaterThanOrEqual(0);
+    expect(alchemyStepEnd).toBeGreaterThan(alchemyStepStart);
+    const alchemyStep = workflow.slice(alchemyStepStart, alchemyStepEnd);
+    expect(alchemyStep).toContain(secretLine);
+    const unsafeAlchemyStep = alchemyStep.replace(secretLine, "");
     const unsafeWorkflow =
-      workflow.slice(0, legacyStepStart) +
-      unsafeLegacyStep +
-      workflow.slice(legacyStepEnd).replace(
-        "      - name: Record legacy-only read path\n",
-        `      - name: Record legacy-only read path\n        env:\n${secretLine}`,
+      workflow.slice(0, alchemyStepStart) +
+      unsafeAlchemyStep +
+      workflow.slice(alchemyStepEnd).replace(
+        "      - name: Record Alchemy-only read path\n",
+        `      - name: Record Alchemy-only read path\n        env:\n${secretLine}`,
       );
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: {
@@ -281,7 +281,7 @@ describe("read-model operations source contract", () => {
       expectedSha256Overrides: fixtureDigests(),
     });
     expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-protected-legacy-stage-smoke",
+      "ops-protected-alchemy-stage-smoke",
     );
   });
 
@@ -316,7 +316,7 @@ describe("read-model operations source contract", () => {
     );
   });
 
-  it("fails closed when the legacy staged smoke drops the bypass header", () => {
+  it("fails closed when the Alchemy staged smoke drops the bypass header", () => {
     const workflowPath = ".github/workflows/deploy-production.yml";
     const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
     const unsafeWorkflow = workflow.replace(
@@ -332,7 +332,7 @@ describe("read-model operations source contract", () => {
       expectedSha256Overrides: fixtureDigests(),
     });
     expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-protected-legacy-stage-smoke",
+      "ops-protected-alchemy-stage-smoke",
     );
   });
 

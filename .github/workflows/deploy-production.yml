@@ -253,8 +253,8 @@ jobs:
             --retry 12 --retry-all-errors --retry-delay 5 \
             --max-time 30 "$DEPLOYMENT_URL/" > /dev/null
 
-      - name: Smoke legacy staged public APIs
-        if: steps.read-model-policy.outputs.evidence_required == 'false'
+      - name: Smoke staged Alchemy Explore APIs
+        if: steps.read-model-policy.outputs.mode == 'alchemy-only'
         env:
           STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
@@ -268,7 +268,7 @@ jobs:
             origin.search ||
             origin.hash
           ) {
-            throw new Error("legacy smoke target is not an exact Vercel origin");
+            throw new Error("Alchemy smoke target is not an exact Vercel origin");
           }
           const automationBypassSecret =
             process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
@@ -282,9 +282,9 @@ jobs:
             automationBypassSecretLength > 512 ||
             /[\r\n]/.test(automationBypassSecret)
           ) {
-            throw new Error("legacy smoke automation bypass is unavailable");
+            throw new Error("Alchemy smoke automation bypass is unavailable");
           }
-          const legacySmokeRequestHeaders = Object.freeze({
+          const alchemySmokeRequestHeaders = Object.freeze({
             Accept: "application/json",
             "x-vercel-protection-bypass": automationBypassSecret,
           });
@@ -295,7 +295,7 @@ jobs:
               try {
                 const response = await fetch(new URL(path, origin), {
                   redirect: "error",
-                  headers: legacySmokeRequestHeaders,
+                  headers: alchemySmokeRequestHeaders,
                   signal: AbortSignal.timeout(30_000),
                 });
                 const text = await response.text();
@@ -304,6 +304,12 @@ jobs:
                 }
                 if (Buffer.byteLength(text, "utf8") > 2 * 1024 * 1024) {
                   throw new Error(`${path} returned an oversized response`);
+                }
+                if (
+                  response.headers.get("x-programmable-read-source") !== "rpc" ||
+                  response.headers.get("x-programmable-rpc-provider") !== "alchemy"
+                ) {
+                  throw new Error(`${path} did not prove the Alchemy RPC source`);
                 }
                 return JSON.parse(text);
               } catch (error) {
@@ -316,23 +322,23 @@ jobs:
             throw lastError ?? new Error(`${path} failed`);
           };
 
-          const health = await requestJson("/api/ops/health");
-          if (health.status !== "healthy") {
-            throw new Error("legacy staged health is not healthy");
-          }
           const explore = await requestJson(
-            "/api/explore?limit=6&page=1&sort=market-cap",
+            "/api/explore?limit=20&page=1&sort=market-cap",
           );
-          if (explore.status !== "ready" || !Array.isArray(explore.tokens)) {
-            throw new Error("legacy staged Explore is not ready");
+          if (
+            explore.status !== "ready" ||
+            !Array.isArray(explore.tokens) ||
+            explore.tokens.length < 1 ||
+            explore.tokens.length > 20
+          ) {
+            throw new Error("staged Alchemy Explore is not a populated bounded page");
           }
           const releaseToken = explore.tokens.find(
             (token) =>
-              /^0x[0-9a-fA-F]{40}$/.test(token?.tokenAddress ?? "") &&
-              /^0x[0-9a-fA-F]{40}$/.test(token?.creatorAddress ?? ""),
+              /^0x[0-9a-fA-F]{40}$/.test(token?.tokenAddress ?? ""),
           );
           if (!releaseToken) {
-            throw new Error("legacy staged Explore has no release-corpus identity");
+            throw new Error("staged Alchemy Explore has no token identity");
           }
           const tokenList = await requestJson("/api/indexers/v1/token-list");
           if (
@@ -343,7 +349,7 @@ jobs:
                 releaseToken.tokenAddress.toLowerCase(),
             )
           ) {
-            throw new Error("legacy staged token list is not populated with the release token");
+            throw new Error("staged Alchemy token list does not contain the Explore token");
           }
           const tokenDetail = await requestJson(
             `/api/explore/token?address=${encodeURIComponent(releaseToken.tokenAddress)}`,
@@ -353,44 +359,29 @@ jobs:
             tokenDetail.token?.tokenAddress?.toLowerCase() !==
               releaseToken.tokenAddress.toLowerCase()
           ) {
-            throw new Error("legacy staged token lookup did not resolve the release token");
-          }
-          const profile = await requestJson(
-            `/api/explore/profile?account=${encodeURIComponent(releaseToken.creatorAddress)}`,
-          );
-          if (
-            profile.status !== "ready" ||
-            profile.account?.toLowerCase() !== releaseToken.creatorAddress.toLowerCase() ||
-            !Array.isArray(profile.tokens) ||
-            !profile.tokens.some(
-              (token) =>
-                token?.tokenAddress?.toLowerCase() ===
-                releaseToken.tokenAddress.toLowerCase(),
-            )
-          ) {
-            throw new Error("legacy staged creator profile did not resolve the release token");
+            throw new Error("staged Alchemy token lookup did not resolve the Explore token");
           }
           process.stdout.write(
             `${JSON.stringify({
-              status: "verified-legacy-staged-public-apis",
+              status: "verified-alchemy-only-staged-public-apis",
               tokenAddress: releaseToken.tokenAddress,
-              creatorAddress: releaseToken.creatorAddress,
             })}\n`,
           );
           NODE
 
-      - name: Record legacy-only read path
-        if: steps.read-model-policy.outputs.evidence_required == 'false'
+      - name: Record Alchemy-only read path
+        if: steps.read-model-policy.outputs.mode == 'alchemy-only'
         run: |
           {
             echo "## Read-model release policy"
             echo
-            echo "Legacy-only: every indexed route flag and shadow comparison are exactly false."
+            echo "Alchemy-only: Explore, token detail and token list read directly through Alchemy RPC."
+            echo "Every non-Alchemy public read path is disabled."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Capture staged read-model evidence
         id: read-model-capture
-        if: steps.read-model-policy.outputs.evidence_required == 'true'
+        if: steps.read-model-policy.outputs.mode == 'indexed-or-shadow'
         env:
           PROGRAMMABLE_PERFORMANCE_PROBE_TOKEN: ${{ secrets.PROGRAMMABLE_PERFORMANCE_PROBE_TOKEN }}
           PROGRAMMABLE_SHADOW_PROBE_TOKEN: ${{ secrets.PROGRAMMABLE_SHADOW_PROBE_TOKEN }}
@@ -406,7 +397,7 @@ jobs:
           --github-output "$GITHUB_OUTPUT"
 
       - name: Preserve staged read-model evidence
-        if: steps.read-model-policy.outputs.evidence_required == 'true'
+        if: steps.read-model-policy.outputs.mode == 'indexed-or-shadow'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: read-model-evidence-${{ github.run_id }}-${{ github.run_attempt }}
@@ -415,7 +406,7 @@ jobs:
           retention-days: 7
 
       - name: Gate indexed or shadow read path
-        if: steps.read-model-policy.outputs.evidence_required == 'true'
+        if: steps.read-model-policy.outputs.mode == 'indexed-or-shadow'
         env:
           PROGRAMMABLE_READ_MODEL_PERF_EVIDENCE_PATH: ${{ steps.read-model-capture.outputs.evidence_path }}
           PROGRAMMABLE_READ_MODEL_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
@@ -445,6 +436,7 @@ jobs:
           STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
           PREVIOUS_DEPLOYMENT_ID: ${{ steps.production-before.outputs.deployment_id }}
           PREVIOUS_GIT_HEAD: ${{ steps.production-before.outputs.git_head }}
+          POLICY_MODE: ${{ steps.read-model-policy.outputs.mode }}
         run: |
           {
             echo "## Staged production candidate"
@@ -457,5 +449,12 @@ jobs:
             echo "- Read model: ${{ steps.read-model-policy.outputs.mode }}"
             echo
             echo "Stage-only: no production promotion was attempted."
-            echo "The manual operator must next capture and verify the DB-authored real-block SLA attestation, reverify this exact staged binding, promote this exact deployment ID, and run the post-promotion binding gate."
+            if [ "$POLICY_MODE" = "indexed-or-shadow" ]; then
+              echo "The manual operator must next capture and verify the DB-authored real-block SLA attestation, reverify this exact staged binding, promote this exact deployment ID, and run the post-promotion binding gate."
+            elif [ "$POLICY_MODE" = "alchemy-only" ]; then
+              echo "Before any separately authorized promotion, reverify this exact staged deployment ID and commit binding."
+            else
+              echo "Unrecognized staged release policy mode" >&2
+              exit 1
+            fi
           } >> "$GITHUB_STEP_SUMMARY"

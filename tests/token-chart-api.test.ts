@@ -4,15 +4,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 const mocks = vi.hoisted(() => ({
-  getPublicOnchainDeployment: vi.fn(),
+  getAlchemyOnchainDeployment: vi.fn(),
   isTokenChartRange: vi.fn(),
-  readExploreModel: vi.fn(),
+  readAlchemyExploreModel: vi.fn(),
   readTokenChartSeries: vi.fn(),
+  safeAlchemyError: vi.fn((error) => error),
 }));
 
-vi.mock("../lib/onchain", () => ({
-  getPublicOnchainDeployment: mocks.getPublicOnchainDeployment,
-  readExploreModel: mocks.readExploreModel,
+vi.mock("../lib/alchemy/explore.server", () => ({
+  getAlchemyOnchainDeployment: mocks.getAlchemyOnchainDeployment,
+  readAlchemyExploreModel: mocks.readAlchemyExploreModel,
+  safeAlchemyError: mocks.safeAlchemyError,
 }));
 
 vi.mock("../lib/onchain/chart", () => ({
@@ -34,23 +36,34 @@ const token = {
   liquidityPath: "meme",
 } as const;
 
-describe("token chart API", () => {
+const deployment = {
+  status: "ready",
+  chainId: 1,
+  rpcUrl: "https://eth-mainnet.g.alchemy.com/v2/redacted",
+} as const;
+
+const snapshot = {
+  chainId: 1,
+  blockNumber: "25630000",
+  blockHash: `0x${"44".repeat(32)}`,
+  confirmations: 12,
+  ethUsdQuote: { answer: "350000000000", decimals: 8 },
+} as const;
+
+describe("token chart Alchemy API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.isTokenChartRange.mockImplementation((range) =>
       ["1h", "1d", "1w", "all"].includes(range),
     );
-    mocks.getPublicOnchainDeployment.mockReturnValue({
-      status: "ready",
-      chainId: 1,
-    });
-    mocks.readExploreModel.mockResolvedValue({
+    mocks.getAlchemyOnchainDeployment.mockReturnValue(deployment);
+    mocks.readAlchemyExploreModel.mockResolvedValue({
       status: "ready",
       tokens: [token],
-      snapshot: {
-        blockNumber: "25630000",
-        ethUsdQuote: { answer: "350000000000", decimals: 8 },
-      },
+      snapshot,
+      creatorClaims: [],
+      launcherFeesAccruedWei: "0",
+      launcherFeesAccruedEth: "0",
     });
     mocks.readTokenChartSeries.mockResolvedValue({
       status: "ready",
@@ -62,7 +75,7 @@ describe("token chart API", () => {
     });
   });
 
-  it("forwards the selected range and returns its exact volume fields", async () => {
+  it("forwards the selected range through Alchemy and returns exact volume fields", async () => {
     const response = await GET(
       new NextRequest(
         `http://localhost/api/explore/token/chart?address=${token.tokenAddress}&range=1h`,
@@ -70,8 +83,11 @@ describe("token chart API", () => {
     );
 
     expect(response.status).toBe(200);
+    expect(mocks.readAlchemyExploreModel).toHaveBeenCalledTimes(1);
+    expect(mocks.getAlchemyOnchainDeployment).toHaveBeenCalledTimes(1);
     expect(mocks.readTokenChartSeries).toHaveBeenCalledWith(
       expect.objectContaining({
+        deployment,
         token,
         snapshotBlock: 25_630_000n,
         range: "1h",
@@ -85,8 +101,28 @@ describe("token chart API", () => {
       volumeEth: "1.25",
       volumeUsdWad: "4375000000000000000000",
     });
+    expect(response.headers.get("X-Programmable-Read-Source")).toBe(
+      "rpc",
+    );
+    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
+      "alchemy",
+    );
     expect(response.headers.get("Cache-Control")).toBe(
       "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
     );
+  });
+
+  it.each([
+    `address=${token.tokenAddress}&unused=random`,
+    `address=${token.tokenAddress}&address=0x2222222222222222222222222222222222222222`,
+    `address=${token.tokenAddress}&range=1h&range=1d`,
+  ])("rejects non-canonical query shapes before the Alchemy read: %s", async (query) => {
+    const response = await GET(
+      new NextRequest(`http://localhost/api/explore/token/chart?${query}`),
+    );
+
+    expect(response.status).toBe(400);
+    expect(mocks.readAlchemyExploreModel).not.toHaveBeenCalled();
+    expect(mocks.getAlchemyOnchainDeployment).not.toHaveBeenCalled();
   });
 });

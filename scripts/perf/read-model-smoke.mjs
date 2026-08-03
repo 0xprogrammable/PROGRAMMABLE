@@ -1,10 +1,6 @@
 #!/usr/bin/env node
 
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-
-import { parseReadModelLoadProfile } from "./read-model-gate-core.mjs";
-import { evaluateReadModelSourceContracts } from "./read-model-source-contracts.mjs";
+import { evaluateAlchemyExploreSourceContracts } from "./alchemy-explore-source-contracts.mjs";
 
 function output(value, exitCode) {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
@@ -13,20 +9,12 @@ function output(value, exitCode) {
 
 try {
   const rootDirectory = process.cwd();
-  const profile = parseReadModelLoadProfile(
-    JSON.parse(
-      readFileSync(
-        resolve(rootDirectory, "config/read-model-load-profile.v1.json"),
-        "utf8",
-      ),
-    ),
-  );
-  const source = evaluateReadModelSourceContracts(rootDirectory, profile);
+  const source = evaluateAlchemyExploreSourceContracts(rootDirectory);
   output(
     {
       schemaVersion: 1,
-      profileId: profile.profileId,
-      mode: "contract-smoke",
+      profileId: "alchemy-explore-source-v1",
+      mode: "alchemy-only-contract-smoke",
       contractValid: source.ok,
       releaseEvidenceAccepted: false,
       checks: source.checks,
@@ -38,7 +26,7 @@ try {
   output(
     {
       schemaVersion: 1,
-      mode: "contract-smoke",
+      mode: "alchemy-only-contract-smoke",
       contractValid: false,
       releaseEvidenceAccepted: false,
       checks: [],

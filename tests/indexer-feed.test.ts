@@ -3,26 +3,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 const routeMocks = vi.hoisted(() => ({
-  readIndexedFeedSnapshot: vi.fn(),
-  readExploreModel: vi.fn(),
-  getPublicOnchainDeployment: vi.fn(() => ({ chainId: 1 })),
+  readAlchemyExploreModel: vi.fn(),
+  getAlchemyOnchainDeployment: vi.fn(() => ({ chainId: 1 })),
+  safeAlchemyError: vi.fn(() => ({
+    name: "Error",
+    message: "Alchemy request failed",
+  })),
 }));
 
-vi.mock("../lib/onchain", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/onchain")>();
-  return {
-    ...actual,
-    readExploreModel: routeMocks.readExploreModel,
-    getPublicOnchainDeployment: routeMocks.getPublicOnchainDeployment,
-  };
-});
-
-vi.mock(
-  "../app/api/indexers/v1/read-indexed-feed.server",
-  () => ({
-    readIndexedFeedSnapshot: routeMocks.readIndexedFeedSnapshot,
-  }),
-);
+vi.mock("../lib/alchemy/explore.server", () => ({
+  readAlchemyExploreModel: routeMocks.readAlchemyExploreModel,
+  getAlchemyOnchainDeployment: routeMocks.getAlchemyOnchainDeployment,
+  safeAlchemyError: routeMocks.safeAlchemyError,
+}));
 
 import { GET as getTokenList } from "../app/api/indexers/v1/token-list/route";
 import { GET as getIndexerTokens } from "../app/api/indexers/v1/tokens/route";
@@ -84,20 +77,16 @@ const readyModel: ExploreReadModel = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.stubEnv("INDEXED_PUBLIC_INDEXER_FEED_READS_ENABLED", "true");
 });
 
-function indexedFeedSnapshot() {
-  return {
-    chainId: 1 as const,
-    model: readyModel as ExploreReadModel & { status: "ready" },
-    capturedAt: "2026-07-27T12:00:00.000Z",
-    snapshotCommitment: `0x${"77".repeat(32)}` as const,
-    sourceCommitment: `0x${"88".repeat(32)}` as const,
-    projectionLag: 2,
-    reconciledAt: "2026-07-27T12:00:01.000Z",
-    releaseVersions: ["classic-v2"] as const,
-  };
+function expectAlchemyRpcHeaders(response: Response) {
+  expect(response.headers.get("x-programmable-read-source")).toBe("rpc");
+  expect(response.headers.get("x-programmable-rpc-provider")).toBe(
+    "alchemy",
+  );
+  expect(response.headers.get("access-control-expose-headers")).toBe(
+    "X-Programmable-Read-Source, X-Programmable-Rpc-Provider",
+  );
 }
 
 describe("public indexer fee disclosure", () => {
@@ -417,10 +406,8 @@ describe("public indexer fee disclosure", () => {
     ).toThrow("missing onchain fee disclosure");
   });
 
-  it("serves the unchanged feed ABI from the indexed snapshot", async () => {
-    routeMocks.readIndexedFeedSnapshot.mockResolvedValueOnce(
-      indexedFeedSnapshot(),
-    );
+  it("serves the unchanged feed ABI from Alchemy", async () => {
+    routeMocks.readAlchemyExploreModel.mockResolvedValueOnce(readyModel);
     const response = await getIndexerTokens(
       new Request(
         "https://programmable.family/api/indexers/v1/tokens",
@@ -431,24 +418,9 @@ describe("public indexer fee disclosure", () => {
     expect(response.headers.get("access-control-allow-origin")).toBe(
       "*",
     );
-    expect(response.headers.get("x-programmable-read-source")).toBe(
-      "indexed",
-    );
-    expect(response.headers.get("x-programmable-projection-block")).toBe(
-      readyModel.snapshot?.blockNumber,
-    );
-    expect(response.headers.get("x-programmable-projection-hash")).toBe(
-      readyModel.snapshot?.blockHash,
-    );
-    expect(response.headers.get("x-programmable-projection-lag")).toBe(
-      "2",
-    );
-    expect(
-      response.headers.get("x-programmable-snapshot-commitment"),
-    ).toBe(`0x${"77".repeat(32)}`);
-    expect(response.headers.get("x-programmable-source-commitment")).toBe(
-      `0x${"88".repeat(32)}`,
-    );
+    expectAlchemyRpcHeaders(response);
+    expect(routeMocks.getAlchemyOnchainDeployment).toHaveBeenCalledTimes(1);
+    expect(routeMocks.readAlchemyExploreModel).toHaveBeenCalledTimes(1);
     expect(await response.json()).toMatchObject({
       schemaVersion: "programmable-indexer-v1",
       status: "ready",
@@ -463,43 +435,9 @@ describe("public indexer fee disclosure", () => {
     });
   });
 
-  it("keeps the public feed on the legacy reader while its dedicated flag is off", async () => {
-    vi.stubEnv("INDEXED_PUBLIC_INDEXER_FEED_READS_ENABLED", "false");
-    vi.stubEnv("INDEXED_EXPLORE_LIST_READS_ENABLED", "true");
-    vi.stubEnv("INDEXED_LAUNCH_LOOKUP_ENABLED", "true");
-    routeMocks.readExploreModel.mockResolvedValueOnce(readyModel);
-
-    const response = await getIndexerTokens(
-      new Request("https://programmable.family/api/indexers/v1/tokens"),
-    );
-
-    expect(response.status).toBe(200);
-    expect(routeMocks.readExploreModel).toHaveBeenCalledTimes(1);
-    expect(routeMocks.readIndexedFeedSnapshot).not.toHaveBeenCalled();
-    expect(response.headers.get("x-programmable-read-source")).toBeNull();
-  });
-
-  it("keeps the public token list on the legacy reader while its dedicated flag is off", async () => {
-    vi.stubEnv("INDEXED_PUBLIC_INDEXER_FEED_READS_ENABLED", "false");
-    vi.stubEnv("INDEXED_EXPLORE_LIST_READS_ENABLED", "true");
-    vi.stubEnv("INDEXED_LAUNCH_LOOKUP_ENABLED", "true");
-    routeMocks.readExploreModel.mockResolvedValueOnce(readyModel);
-
-    const response = await getTokenList();
-
-    expect(response.status).toBe(200);
-    expect(routeMocks.readExploreModel).toHaveBeenCalledTimes(1);
-    expect(routeMocks.readIndexedFeedSnapshot).not.toHaveBeenCalled();
-    expect(response.headers.get("x-programmable-read-source")).toBeNull();
-  });
-
-  it.each([
-    "snapshot-unavailable",
-    "projection-lag",
-    "reconciliation-incomplete",
-  ])("fails closed with no-store when indexed data is %s", async () => {
-    routeMocks.readIndexedFeedSnapshot.mockRejectedValueOnce(
-      new Error("Indexed feed is not ready"),
+  it("fails closed with no-store when Alchemy is unavailable", async () => {
+    routeMocks.readAlchemyExploreModel.mockRejectedValueOnce(
+      new Error("Alchemy request failed"),
     );
 
     const response = await getIndexerTokens(
@@ -508,27 +446,23 @@ describe("public indexer fee disclosure", () => {
 
     expect(response.status).toBe(503);
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(response.headers.get("x-programmable-read-source")).toBeNull();
+    expectAlchemyRpcHeaders(response);
     expect(await response.json()).toEqual({
       error: "Indexer data is temporarily unavailable",
     });
   });
 
-  it("serves direct token lookup from the same indexed snapshot", async () => {
-    routeMocks.readIndexedFeedSnapshot.mockResolvedValueOnce(
-      indexedFeedSnapshot(),
-    );
+  it("serves direct token lookup from the same Alchemy model", async () => {
+    routeMocks.readAlchemyExploreModel.mockResolvedValueOnce(readyModel);
 
     const response = await getIndexerTokens(
       new Request(
-        `https://programmable.family/api/indexers/v1/token?address=${token.tokenAddress}`,
+        `https://programmable.family/api/indexers/v1/tokens?address=${token.tokenAddress}`,
       ),
     );
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("x-programmable-read-source")).toBe(
-      "indexed",
-    );
+    expectAlchemyRpcHeaders(response);
     expect(await response.json()).toMatchObject({
       schemaVersion: "programmable-token-v1",
       address: token.tokenAddress,
@@ -537,10 +471,8 @@ describe("public indexer fee disclosure", () => {
     });
   });
 
-  it("keeps the direct-token 404 cache contract after an exact indexed lookup", async () => {
-    routeMocks.readIndexedFeedSnapshot.mockResolvedValueOnce(
-      indexedFeedSnapshot(),
-    );
+  it("keeps the direct-token 404 cache contract after an Alchemy lookup", async () => {
+    routeMocks.readAlchemyExploreModel.mockResolvedValueOnce(readyModel);
 
     const response = await getIndexerTokens(
       new Request(
@@ -552,27 +484,10 @@ describe("public indexer fee disclosure", () => {
     expect(response.headers.get("cache-control")).toBe(
       "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
     );
-    expect(response.headers.get("x-programmable-read-source")).toBe(
-      "indexed",
-    );
+    expectAlchemyRpcHeaders(response);
     expect(await response.json()).toEqual({
       error: "Programmable token not found",
     });
-  });
-
-  it("fails closed when provenance headers are not canonical", async () => {
-    routeMocks.readIndexedFeedSnapshot.mockResolvedValueOnce({
-      ...indexedFeedSnapshot(),
-      releaseVersions: ["stock-paired-v1", "classic-v2"],
-    });
-
-    const response = await getIndexerTokens(
-      new Request("https://programmable.family/api/indexers/v1/tokens"),
-    );
-
-    expect(response.status).toBe(503);
-    expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(response.headers.get("x-programmable-read-source")).toBeNull();
   });
 
   it("rejects an invalid direct token lookup without reading chain state", async () => {
@@ -586,14 +501,17 @@ describe("public indexer fee disclosure", () => {
     expect(response.headers.get("access-control-allow-origin")).toBe(
       "*",
     );
+    expectAlchemyRpcHeaders(response);
+    expect(routeMocks.getAlchemyOnchainDeployment).not.toHaveBeenCalled();
+    expect(routeMocks.readAlchemyExploreModel).not.toHaveBeenCalled();
     expect(await response.json()).toEqual({
       error: "Invalid token address",
     });
   });
 
-  it("does not expose an unavailable indexed token list", async () => {
-    routeMocks.readIndexedFeedSnapshot.mockRejectedValueOnce(
-      new Error("Indexed feed is not ready"),
+  it("does not expose a token list when Alchemy is unavailable", async () => {
+    routeMocks.readAlchemyExploreModel.mockRejectedValueOnce(
+      new Error("Alchemy request failed"),
     );
     const response = await getTokenList();
 
@@ -602,18 +520,16 @@ describe("public indexer fee disclosure", () => {
       "*",
     );
     expect(response.headers.get("cache-control")).toBe("no-store");
+    expectAlchemyRpcHeaders(response);
     expect(await response.json()).toEqual({
       error: "Token list is temporarily unavailable",
     });
   });
 
-  it("keeps the exact cached first-launch response for a ready empty snapshot", async () => {
-    routeMocks.readIndexedFeedSnapshot.mockResolvedValueOnce({
-      ...indexedFeedSnapshot(),
-      model: {
-        ...readyModel,
-        tokens: [],
-      },
+  it("keeps the exact cached first-launch response for an empty Alchemy model", async () => {
+    routeMocks.readAlchemyExploreModel.mockResolvedValueOnce({
+      ...readyModel,
+      tokens: [],
     });
 
     const response = await getTokenList();
@@ -623,9 +539,7 @@ describe("public indexer fee disclosure", () => {
       "public, max-age=0, s-maxage=60",
     );
     expect(response.headers.get("retry-after")).toBe("60");
-    expect(response.headers.get("x-programmable-read-source")).toBe(
-      "indexed",
-    );
+    expectAlchemyRpcHeaders(response);
     expect(await response.json()).toEqual({
       status: "ready",
       error:
@@ -633,19 +547,15 @@ describe("public indexer fee disclosure", () => {
     });
   });
 
-  it("binds the token-list timestamp and provenance to the indexed snapshot", async () => {
-    routeMocks.readIndexedFeedSnapshot.mockResolvedValueOnce(
-      indexedFeedSnapshot(),
-    );
+  it("serves the token list from the Alchemy model", async () => {
+    routeMocks.readAlchemyExploreModel.mockResolvedValueOnce(readyModel);
 
     const response = await getTokenList();
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("x-programmable-read-source")).toBe(
-      "indexed",
-    );
-    expect(body.timestamp).toBe("2026-07-27T12:00:00.000Z");
+    expectAlchemyRpcHeaders(response);
+    expect(Number.isNaN(Date.parse(body.timestamp))).toBe(false);
     expect(body.tokens).toHaveLength(1);
     expect(body.tokens[0]).toMatchObject({
       address: token.tokenAddress,
