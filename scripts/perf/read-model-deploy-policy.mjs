@@ -108,11 +108,15 @@ export function materializeVercelSensitiveRuntimePlaceholders(
   contents,
   metadataContents,
 ) {
+  const sensitiveRuntimeNames = [
+    ...RUNTIME_RPC_URL_NAMES,
+    ...REQUIRED_SERVER_SECRET_ENV_NAMES,
+  ];
   const runtimeValues = readSelectedDotenvValues(
     contents,
-    RUNTIME_RPC_URL_NAMES,
+    sensitiveRuntimeNames,
   );
-  const emptyNames = RUNTIME_RPC_URL_NAMES.filter(
+  const emptyNames = sensitiveRuntimeNames.filter(
     (name) => runtimeValues[name] === "",
   );
   if (emptyNames.length === 0) return contents;

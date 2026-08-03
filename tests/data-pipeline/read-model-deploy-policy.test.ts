@@ -81,9 +81,6 @@ describe("read-model production deploy policy", () => {
   it("attests current Vercel empty sensitive values from exact production metadata", () => {
     const contents = environmentFile({
       workers: { PROGRAMMABLE_PROJECTOR_ACTIVE: "true" },
-      serverSecrets: {
-        [QUICKNODE_STREAM_SECRET_ENV_NAME]: "[sensitive]",
-      },
     }).concat(
       "\nPROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL=\nPROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL=",
     );
@@ -99,6 +96,11 @@ describe("read-model production deploy policy", () => {
           type: "sensitive",
           target: ["production"],
         },
+        {
+          key: QUICKNODE_STREAM_SECRET_ENV_NAME,
+          type: "sensitive",
+          target: ["production"],
+        },
       ],
     });
     const materialized = materializeVercelSensitiveRuntimePlaceholders(
@@ -107,6 +109,9 @@ describe("read-model production deploy policy", () => {
     );
     expect(materialized).toContain(
       'PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL="[Sensitive]"',
+    );
+    expect(materialized).toContain(
+      `${QUICKNODE_STREAM_SECRET_ENV_NAME}="[Sensitive]"`,
     );
     expect(
       evaluateReadModelDeployPolicy(materialized, COMMITMENTS, EXPECTATIONS),
@@ -143,10 +148,55 @@ describe("read-model production deploy policy", () => {
       expect(() =>
         materializeVercelSensitiveRuntimePlaceholders(
           contents,
-          JSON.stringify({ envs: entry ? [entry] : [] }),
+          JSON.stringify({
+            envs: [
+              ...(entry ? [entry] : []),
+              {
+                key: QUICKNODE_STREAM_SECRET_ENV_NAME,
+                type: "sensitive",
+                target: ["production"],
+              },
+            ],
+          }),
         ),
       ).toThrow(/exact sensitive production metadata/u);
     }
+  });
+
+  it("requires exact sensitive QuickNode stream-secret metadata", () => {
+    const contents = environmentFile();
+    const exact = {
+      key: QUICKNODE_STREAM_SECRET_ENV_NAME,
+      type: "sensitive",
+      target: ["production"],
+    };
+    for (const envs of [
+      [],
+      [{ ...exact, type: "plain" }],
+      [{ ...exact, type: "encrypted" }],
+      [{ ...exact, target: ["preview"] }],
+      [{ ...exact, target: ["production", "preview"] }],
+      [{ ...exact, value: "must-not-be-present" }],
+      [exact, exact],
+    ]) {
+      expect(() =>
+        materializeVercelSensitiveRuntimePlaceholders(
+          contents,
+          JSON.stringify({ envs }),
+        ),
+      ).toThrow(/exact sensitive production metadata/u);
+    }
+  });
+
+  it("preserves a materialized QuickNode stream secret byte-for-byte", () => {
+    const contents = environmentFile({
+      serverSecrets: {
+        [QUICKNODE_STREAM_SECRET_ENV_NAME]: "x".repeat(32),
+      },
+    });
+    expect(
+      materializeVercelSensitiveRuntimePlaceholders(contents, "not-json"),
+    ).toBe(contents);
   });
 
   it("binds legacy-only to exact false indexed flags and disabled workers", () => {
