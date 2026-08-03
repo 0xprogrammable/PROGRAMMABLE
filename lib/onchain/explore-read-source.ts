@@ -48,14 +48,19 @@ export async function resolveExploreReadSource(
       return enrichOrReturn(durableModel, config, dependencies);
     }
     if (durable.status === "unavailable") {
+      if (durable.reason === "stale") {
+        dependencies.warn(
+          "Durable Explore index is stale; serving the last verified snapshot",
+          {
+            reason: durable.reason,
+            ageSeconds: Math.floor(durable.ageMs / 1_000),
+          },
+        );
+        return durable.envelope.payload.model;
+      }
       dependencies.warn(
         "Durable Explore index unavailable; using live RPCs",
-        durable.reason === "stale"
-          ? {
-              reason: durable.reason,
-              ageSeconds: Math.floor(durable.ageMs / 1_000),
-            }
-          : { reason: durable.reason, detail: durable.detail },
+        { reason: durable.reason, detail: durable.detail },
       );
     }
   }

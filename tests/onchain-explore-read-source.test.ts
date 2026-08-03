@@ -39,7 +39,7 @@ const liveModel = {
 } satisfies ExploreReadModel;
 
 describe("Explore read source", () => {
-  it("falls through a stale durable snapshot to the live RPC model", async () => {
+  it("serves a stale verified snapshot without touching live RPCs", async () => {
     const readLive = vi.fn().mockResolvedValue(liveModel);
     const enrichWithUsd = vi.fn().mockResolvedValue(liveModel);
     const warn = vi.fn();
@@ -74,11 +74,38 @@ describe("Explore read source", () => {
     });
 
     expect(result).toBe(liveModel);
+    expect(readLive).not.toHaveBeenCalled();
+    expect(enrichWithUsd).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      "Durable Explore index is stale; serving the last verified snapshot",
+      { reason: "stale", ageSeconds: 901 },
+    );
+  });
+
+  it("uses live RPCs when no verified durable snapshot exists", async () => {
+    const readLive = vi.fn().mockResolvedValue(liveModel);
+    const enrichWithUsd = vi.fn().mockResolvedValue(liveModel);
+    const warn = vi.fn();
+
+    const result = await resolveExploreReadSource(config, {
+      readDurable: vi.fn().mockResolvedValue({
+        status: "unavailable",
+        reason: "missing",
+        detail: "No durable index snapshot exists",
+      }),
+      selectFreshDurable: vi.fn().mockReturnValue(null),
+      readLive,
+      enrichWithUsd,
+      warn,
+      error: vi.fn(),
+    });
+
+    expect(result).toBe(liveModel);
     expect(readLive).toHaveBeenCalledOnce();
     expect(enrichWithUsd).toHaveBeenCalledWith(liveModel, config);
     expect(warn).toHaveBeenCalledWith(
       "Durable Explore index unavailable; using live RPCs",
-      { reason: "stale", ageSeconds: 901 },
+      { reason: "missing", detail: "No durable index snapshot exists" },
     );
   });
 
