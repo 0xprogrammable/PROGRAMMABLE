@@ -30,7 +30,7 @@
       "dependencies": [
         {
           "path": "lib/data-pipeline/candidate-projector-runtime-binding.server.ts",
-          "sha256": "32efa13d740614f7e66fd20a0158edf3383f4f6643a7fe34268fabda6261931c"
+          "sha256": "9a97556d3fca540586b56eb1bccf8c9c779e56c890cf03e585cd172206944615"
         }
       ],
       "migrations": [
@@ -97,6 +97,10 @@
         {
           "path": "supabase/migrations/20260802092800_market_projector_fast_lane.sql",
           "sha256": "70c2719af30e0d3438e3de306376c7fa62d0196be98f81d7bd6b327559c14dc7"
+        },
+        {
+          "path": "supabase/migrations/20260803000100_market_projector_health_view.sql",
+          "sha256": "946000d60600f8b144fb535579f6808b0acfd6da3331f17511f712e7bb24b2fd"
         }
       ]
     }

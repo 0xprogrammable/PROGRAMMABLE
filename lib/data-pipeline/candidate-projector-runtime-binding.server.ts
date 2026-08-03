@@ -116,6 +116,11 @@ export type CandidateDatabasePromotionBinding = Readonly<{
   stagedDeploymentId: string;
 }>;
 
+export type DatabasePhysicalIdentity = Readonly<{
+  databaseName: string;
+  systemIdentifier: string;
+}>;
+
 export type ProjectorRuntimeBindingSelection =
   | Readonly<{
       mode: typeof CANDIDATE_PROJECTOR_RUNTIME_MODE;
@@ -404,8 +409,8 @@ export async function assertCandidateDatabaseBootstrapState(input: Readonly<{
 export async function assertCandidateDatabasePromotedState(input: Readonly<{
   executor: PostgresExecutor;
   binding: CandidateDatabasePromotionBinding;
-}>): Promise<void> {
-  await input.executor.transaction(async (transaction) => {
+}>): Promise<DatabasePhysicalIdentity> {
+  return input.executor.transaction(async (transaction) => {
     const login = await transaction.query<{ session_user: unknown }>(
       "select session_user::text as session_user",
     );
@@ -446,5 +451,27 @@ export async function assertCandidateDatabasePromotedState(input: Readonly<{
     if (rows.length !== 1 || rows[0]?.verified !== true) {
       return invalidCandidateBinding();
     }
+    const identityRows = await transaction.query<{
+      database_name: unknown;
+      system_identifier: unknown;
+    }>(
+      `select
+         pg_catalog.current_database()::text as database_name,
+         ((pg_catalog.pg_control_system()).system_identifier)::text
+           as system_identifier`,
+    );
+    const databaseName = identityRows[0]?.database_name;
+    const systemIdentifier = identityRows[0]?.system_identifier;
+    if (
+      identityRows.length !== 1 ||
+      typeof databaseName !== "string" ||
+      !/^[a-z][a-z0-9_]{0,62}$/u.test(databaseName) ||
+      typeof systemIdentifier !== "string" ||
+      !/^[1-9]\d{0,19}$/u.test(systemIdentifier) ||
+      BigInt(systemIdentifier) > 18_446_744_073_709_551_615n
+    ) {
+      return invalidCandidateBinding();
+    }
+    return Object.freeze({ databaseName, systemIdentifier });
   });
 }
