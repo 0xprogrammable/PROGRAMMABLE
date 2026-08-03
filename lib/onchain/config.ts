@@ -57,6 +57,28 @@ function asBytes32(value: string | null | undefined): Hex | null {
     : null;
 }
 
+function firstNonEmpty(...values: Array<string | undefined>) {
+  for (const value of values) {
+    const normalized = value?.trim();
+    if (normalized) return normalized;
+  }
+  return undefined;
+}
+
+function productionPrimaryRpc() {
+  return firstNonEmpty(
+    process.env.ETHEREUM_RPC_URL,
+    process.env.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL,
+  );
+}
+
+function productionSecondaryRpc() {
+  return firstNonEmpty(
+    process.env.ETHEREUM_RPC_URL_B,
+    process.env.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL,
+  );
+}
+
 export function selectedDeploymentEnvironment(
   value = process.env.PROGRAMMABLE_ONCHAIN_NETWORK,
 ): DeploymentEnvironment {
@@ -99,12 +121,12 @@ function resolveOnchainDeployment(
 
   const rpcUrl =
     environment === "production"
-      ? process.env.ETHEREUM_RPC_URL ?? "https://eth.drpc.org"
+      ? productionPrimaryRpc() ?? "https://eth.drpc.org"
       : process.env.SEPOLIA_RPC_URL ?? "https://sepolia.drpc.org";
   const rpcUrlSecondary = getDistinctSecondaryRpc(
     rpcUrl,
     environment === "production"
-      ? process.env.ETHEREUM_RPC_URL_B
+      ? productionSecondaryRpc()
       : process.env.SEPOLIA_RPC_URL_B,
   );
   const common = {
@@ -204,8 +226,8 @@ export function getOperationalOnchainDeployment(
   if (
     deployment.status === "ready" &&
     deployment.environment === "production" &&
-    (!process.env.ETHEREUM_RPC_URL?.trim() ||
-      !process.env.ETHEREUM_RPC_URL_B?.trim() ||
+    (!productionPrimaryRpc() ||
+      !productionSecondaryRpc() ||
       !deployment.rpcUrlSecondary)
   ) {
     throw new Error(
