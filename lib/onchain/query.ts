@@ -183,6 +183,8 @@ export function paginateExplore(
     sort,
     query,
     snapshot: model.snapshot,
+    launchDiscoverySnapshot:
+      model.status === "ready" ? model.launchDiscoverySnapshot : undefined,
     launcherFeesAccruedWei: model.launcherFeesAccruedWei,
     launcherFeesAccruedEth: model.launcherFeesAccruedEth,
   };
