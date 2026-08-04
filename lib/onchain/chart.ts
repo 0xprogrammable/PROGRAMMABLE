@@ -69,6 +69,9 @@ export type TokenChartSeries = {
   volumeWei: string;
   volumeEth: string;
   volumeUsdWad?: string;
+  marketCapEthWei?: string;
+  marketCapEth?: string;
+  marketCapUsdWad?: string;
 };
 
 export function isTokenChartRange(
@@ -406,5 +409,10 @@ export async function readTokenChartSeries(input: {
     volumeWei: volumeWei.toString(),
     volumeEth: formatUnits(volumeWei, 18),
     ...(volumeUsdWad === undefined ? {} : { volumeUsdWad }),
+    ...(token.marketCapEthWei
+      ? { marketCapEthWei: token.marketCapEthWei }
+      : {}),
+    ...(token.marketCapEth ? { marketCapEth: token.marketCapEth } : {}),
+    ...(token.fdvUsdWad ? { marketCapUsdWad: token.fdvUsdWad } : {}),
   };
 }

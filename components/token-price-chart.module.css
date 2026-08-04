@@ -128,29 +128,18 @@
   text-align: center;
 }
 
-.loadingLine {
-  background: color-mix(in srgb, var(--border) 54%, transparent);
-  border-radius: 999px;
-  display: block;
-  height: 2px;
-  overflow: hidden;
-  position: relative;
-  width: min(360px, 72%);
-}
-
-.loadingLine::after {
-  animation: chart-loading 0.9s linear infinite;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--accent) 58%, transparent),
-    transparent
-  );
-  content: "";
-  inset: 0;
-  position: absolute;
-  transform: translateX(-100%);
-  width: 80%;
+.waitingPlot {
+  background:
+    linear-gradient(
+      to bottom,
+      transparent 32%,
+      color-mix(in srgb, var(--border) 38%, transparent) 33%,
+      transparent 34%,
+      transparent 65%,
+      color-mix(in srgb, var(--border) 38%, transparent) 66%,
+      transparent 67%
+    );
+  opacity: 0.55;
 }
 
 @keyframes reveal-line {
@@ -172,16 +161,6 @@
 
   to {
     opacity: 1;
-  }
-}
-
-@keyframes chart-loading {
-  from {
-    transform: translateX(-100%);
-  }
-
-  to {
-    transform: translateX(225%);
   }
 }
 
@@ -248,8 +227,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .area,
-  .line,
-  .loadingLine::after {
+  .line {
     animation: none;
   }
 

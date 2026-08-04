@@ -75,7 +75,9 @@ const chain = environment === "rehearsal" ? sepolia : mainnet;
 const rpcUrl =
   environment === "rehearsal"
     ? process.env.SEPOLIA_RPC_URL ?? "https://sepolia.drpc.org"
-    : process.env.ETHEREUM_RPC_URL ?? "https://eth.drpc.org";
+    : process.env.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL ??
+      process.env.ETHEREUM_RPC_URL ??
+      "https://eth.drpc.org";
 
 function json(body: unknown, status = 200) {
   return NextResponse.json(body, {

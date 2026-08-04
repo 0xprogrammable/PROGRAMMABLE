@@ -15,6 +15,7 @@ import {
 } from "react";
 
 import { useWallet } from "@/components/wallet-provider";
+import { useLiveDataRefresh } from "@/components/use-live-data-refresh";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
 import { prepareAvatarImage } from "@/lib/profile/avatar";
 import {
@@ -67,6 +68,7 @@ import {
   loadingProfileData,
   UNAVAILABLE_PROFILE_DATA,
   type ProfileClaim,
+  type ProfileActivity,
   type ProfileOnchainData,
   type ProfileToken,
 } from "@/lib/profile/onchain-profile";
@@ -769,6 +771,9 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   const [remoteOnchainData, setRemoteOnchainData] =
     useState<ProfileOnchainData>(UNAVAILABLE_PROFILE_DATA);
   const [profileRefresh, setProfileRefresh] = useState(0);
+  const liveProfileRefresh = useLiveDataRefresh({
+    enabled: Boolean(account),
+  });
   const [terminalErrorReadyKey, setTerminalErrorReadyKey] = useState("");
   const [classicV3Rewards, setClassicV3Rewards] =
     useState<ClassicV3ProfileRewards>(EMPTY_CLASSIC_V3_PROFILE);
@@ -903,18 +908,21 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       })
       .catch((caught: unknown) => {
         if (controller.signal.aborted) return;
-        setRemoteOnchainData(
-          errorProfileData(
-            account,
-            caught instanceof Error
-              ? caught.message
-              : "Onchain profile data could not be loaded",
-          ),
+        setRemoteOnchainData((current) =>
+          isProfileDataForAccount(current, account) &&
+          current.status === "ready"
+            ? current
+            : errorProfileData(
+                account,
+                caught instanceof Error
+                  ? caught.message
+                  : "Onchain profile data could not be loaded",
+              ),
         );
       });
 
     return () => controller.abort();
-  }, [account, onchainData, profileRefresh]);
+  }, [account, liveProfileRefresh, onchainData, profileRefresh]);
 
   useEffect(() => {
     if (!account || !classicV3ReleaseAvailable) return;
@@ -950,18 +958,23 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       })
       .catch((caught: unknown) => {
         if (controller.signal.aborted) return;
-        setClassicV3Rewards({
-          status: "error",
-          account,
-          rewards: [],
-          errorMessage:
-            caught instanceof Error
-              ? caught.message
-              : "Classic rewards could not be loaded",
-        });
+        setClassicV3Rewards((current) =>
+          current.status === "ready" &&
+          current.account.toLowerCase() === account.toLowerCase()
+            ? current
+            : {
+                status: "error",
+                account,
+                rewards: [],
+                errorMessage:
+                  caught instanceof Error
+                    ? caught.message
+                    : "Classic rewards could not be loaded",
+              },
+        );
       });
     return () => controller.abort();
-  }, [account, profileRefresh]);
+  }, [account, liveProfileRefresh, profileRefresh]);
 
   useEffect(() => {
     if (!account || !deepReleaseAvailable) return;
@@ -997,18 +1010,23 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       })
       .catch((caught: unknown) => {
         if (controller.signal.aborted) return;
-        setDeepRewards({
-          status: "error",
-          account,
-          rewards: [],
-          errorMessage:
-            caught instanceof Error
-              ? caught.message
-              : "Deep rewards could not be loaded",
-        });
+        setDeepRewards((current) =>
+          current.status === "ready" &&
+          current.account.toLowerCase() === account.toLowerCase()
+            ? current
+            : {
+                status: "error",
+                account,
+                rewards: [],
+                errorMessage:
+                  caught instanceof Error
+                    ? caught.message
+                    : "Deep rewards could not be loaded",
+              },
+        );
       });
     return () => controller.abort();
-  }, [account, profileRefresh]);
+  }, [account, liveProfileRefresh, profileRefresh]);
 
   useEffect(() => {
     if (!account || !deepV3ReleaseAvailable) return;
@@ -1033,7 +1051,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         });
       });
     return () => controller.abort();
-  }, [account, profileRefresh]);
+  }, [account, liveProfileRefresh, profileRefresh]);
 
   useEffect(() => {
     if (!account || !stockPairedReleaseAvailable) return;
@@ -1069,19 +1087,24 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       })
       .catch((caught: unknown) => {
         if (controller.signal.aborted) return;
-        setStockPairedRewards({
-          status: "error",
-          account,
-          chainId: 1,
-          rewards: [],
-          errorMessage:
-            caught instanceof Error
-              ? caught.message
-              : "Stock-Paired rewards could not be loaded",
-        });
+        setStockPairedRewards((current) =>
+          current.status === "ready" &&
+          current.account.toLowerCase() === account.toLowerCase()
+            ? current
+            : {
+                status: "error",
+                account,
+                chainId: 1,
+                rewards: [],
+                errorMessage:
+                  caught instanceof Error
+                    ? caught.message
+                    : "Stock-Paired rewards could not be loaded",
+              },
+        );
       });
     return () => controller.abort();
-  }, [account, profileRefresh]);
+  }, [account, liveProfileRefresh, profileRefresh]);
 
   function beginEditingProfile() {
     setUsernameDraft(savedProfile.username);
@@ -3016,6 +3039,20 @@ function ProfileAccountWorkspace({
     stockPairedReady ? stockPairedRewards.rewards : [],
   );
   const nativeClaimable = profileClaimableWei(entries, account);
+  const nativeClaimed =
+    (currentReady && data.claimedWei ? BigInt(data.claimedWei) : 0n) +
+    (classicReady
+      ? classicV3Rewards.rewards.reduce(
+          (total, reward) => total + BigInt(reward.claimedWei),
+          0n,
+        )
+      : 0n) +
+    (deepReady
+      ? deepRewards.rewards.reduce(
+          (total, reward) => total + BigInt(reward.claimedWei),
+          0n,
+        )
+      : 0n);
   const stockRewardCount = entries.reduce(
     (total, entry) =>
       total +
@@ -3087,7 +3124,9 @@ function ProfileAccountWorkspace({
       <div className={styles.profileWorkspace}>
         <FeeEarningsPanel
           nativeClaimable={nativeClaimable}
+          nativeClaimed={nativeClaimed}
           stockRewardCount={stockRewardCount}
+          activity={currentReady ? data.activity : []}
         />
 
         <section
@@ -3166,22 +3205,20 @@ function ProfileAccountWorkspace({
   );
 }
 
-type FeeEarningsTimeframe = "1H" | "1D" | "1W";
-
-const feeEarningsTimeframes: readonly FeeEarningsTimeframe[] = [
-  "1H",
-  "1D",
-  "1W",
-];
-
 function FeeEarningsPanel({
   nativeClaimable,
+  nativeClaimed,
   stockRewardCount,
+  activity,
 }: {
   nativeClaimable: bigint;
+  nativeClaimed: bigint;
   stockRewardCount: number;
+  activity: readonly ProfileActivity[];
 }) {
-  const [timeframe, setTimeframe] = useState<FeeEarningsTimeframe>("1D");
+  const claimHistory = activity
+    .filter((item) => /fees claimed/iu.test(item.label))
+    .slice(0, 4);
 
   return (
     <section
@@ -3193,40 +3230,33 @@ function FeeEarningsPanel({
           <h2 id="fee-earnings-title">Fee earnings</h2>
           <p>Claimable now</p>
         </div>
-        <div
-          className={styles.timeframeControls}
-          role="group"
-          aria-label="Fee earnings timeframe"
-        >
-          {feeEarningsTimeframes.map((value) => (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={timeframe === value}
-              onClick={() => setTimeframe(value)}
-            >
-              {value}
-            </button>
-          ))}
-        </div>
       </header>
 
       <div className={styles.feeSummary}>
         <strong>{formatWei(nativeClaimable)}</strong>
+        <span>{formatWei(nativeClaimed)} claimed</span>
         {stockRewardCount > 0 ? (
-          <span>
-            + {stockRewardCount} quote{" "}
-            {stockRewardCount === 1 ? "reward" : "rewards"}
-          </span>
+          <span>+ {stockRewardCount} quote {stockRewardCount === 1 ? "reward" : "rewards"}</span>
         ) : null}
       </div>
 
       <figure className={styles.feeChart}>
         <div className={styles.chartGrid} aria-hidden="true" />
-        <figcaption className={styles.chartEmpty}>
-          <strong>History isn’t available for {timeframe}.</strong>
-          <p>Current claimable rewards are shown above.</p>
-        </figcaption>
+        {claimHistory.length ? (
+          <figcaption className={styles.claimHistory}>
+            {claimHistory.map((item) => (
+              <Link href={item.href} key={item.id}>
+                <span>{item.detail}</span>
+                <time>{item.occurredAt}</time>
+              </Link>
+            ))}
+          </figcaption>
+        ) : (
+          <figcaption className={styles.chartEmpty}>
+            <strong>No claims yet.</strong>
+            <p>New confirmed claims appear here automatically.</p>
+          </figcaption>
+        )}
       </figure>
     </section>
   );

@@ -8,12 +8,21 @@ import type { LauncherToken } from "../lib/tokens";
 
 const mocks = vi.hoisted(() => ({
   enrichTokensWithAlchemyPrices: vi.fn(),
+  enrichTokensWithAlchemyPoolState: vi.fn(),
+  getAlchemyOnchainDeployment: vi.fn(),
   readAlchemyExploreModel: vi.fn(),
+  safeAlchemyError: vi.fn((error) => error),
 }));
 
 vi.mock("../lib/alchemy/explore.server", () => ({
   enrichTokensWithAlchemyPrices: mocks.enrichTokensWithAlchemyPrices,
+  getAlchemyOnchainDeployment: mocks.getAlchemyOnchainDeployment,
   readAlchemyExploreModel: mocks.readAlchemyExploreModel,
+  safeAlchemyError: mocks.safeAlchemyError,
+}));
+
+vi.mock("../lib/alchemy/live-market.server", () => ({
+  enrichTokensWithAlchemyPoolState: mocks.enrichTokensWithAlchemyPoolState,
 }));
 
 import { GET } from "../app/api/explore/token/route";
@@ -59,6 +68,10 @@ const launchDiscoverySnapshot = {
 describe("token detail Alchemy read", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.getAlchemyOnchainDeployment.mockReturnValue({ status: "ready" });
+    mocks.enrichTokensWithAlchemyPoolState.mockImplementation(
+      async ({ tokens }: { tokens: readonly LauncherToken[] }) => [...tokens],
+    );
   });
 
   it("price-enriches only the canonical token from the Alchemy read model", async () => {
