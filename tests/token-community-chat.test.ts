@@ -65,8 +65,9 @@ describe("token community room storage", () => {
     expect(source).toContain("currentAvatarDataUrl");
     expect(source).toContain('placeholder="Write message"');
     expect(source).toContain("<span>Send message</span>");
-    expect(source).not.toMatch(/Local room|Preview room|Room notice/);
-    expect(source).not.toContain("Messages sync across tabs");
+    expect(source).not.toMatch(/Local Room|Room Notice/i);
+    expect(source).not.toMatch(/Messages sync across tabs/i);
+    expect(source).not.toMatch(/Message Programmable/i);
   });
 
   it("keeps the desktop panel compact and sticky without pinning mobile", () => {

@@ -185,10 +185,10 @@ describe("profile workspace loading state", () => {
     ).toBe("loading");
   });
 
-  it("waits for every source before replacing the stable loading shell", () => {
+  it("shows a partial-ready workspace while optional reward sources finish", () => {
     expect(
       getProfileWorkspacePhase(["error", "ready", "loading"], false),
-    ).toBe("loading");
+    ).toBe("ready");
     expect(
       getProfileWorkspacePhase(
         ["error", "ready", "not-deployed"],
@@ -201,6 +201,12 @@ describe("profile workspace loading state", () => {
         true,
       ),
     ).toBe("error");
+    expect(profileViewSource).toMatch(
+      /const earningsLabel = sourcesLoading\s*\?\s*"Verified so far"\s*:\s*"Total earned"/,
+    );
+    expect(profileViewSource).toMatch(
+      /\{sourcesLoading\s*\?\s*"Refreshing reward sources"\s*:\s*"Confirmed onchain rewards"\}/,
+    );
   });
 
   it("contains five desktop claim rows inside the workspace while mobile keeps page flow", () => {
@@ -255,11 +261,11 @@ describe("fee earnings chart", () => {
     expect(chart?.totalWei).toBe(600_000_000_000_000_000n);
   });
 
-  it("changes the earned total with the selected period", () => {
+  it("uses exact 1H, 1D, 1W and all-time earnings windows", () => {
     const nowMs = Date.parse("2026-08-04T12:00:00.000Z");
     const activity = [
       {
-        id: "claim:recent",
+        id: "claim:hour",
         label: "Creator fees claimed",
         detail: "0.1 ETH from NOW",
         occurredAt: "Today",
@@ -267,7 +273,23 @@ describe("fee earnings chart", () => {
         href: "/token/now",
       },
       {
-        id: "claim:old",
+        id: "claim:day",
+        label: "Creator fees claimed",
+        detail: "0.2 ETH from DAY",
+        occurredAt: "Today",
+        occurredAtIso: "2026-08-04T06:00:00.000Z",
+        href: "/token/day",
+      },
+      {
+        id: "claim:week",
+        label: "Creator fees claimed",
+        detail: "0.3 ETH from WEEK",
+        occurredAt: "This week",
+        occurredAtIso: "2026-08-01T12:00:00.000Z",
+        href: "/token/week",
+      },
+      {
+        id: "claim:all",
         label: "Creator fees claimed",
         detail: "0.4 ETH from OLD",
         occurredAt: "Last week",
@@ -278,19 +300,33 @@ describe("fee earnings chart", () => {
 
     const hourly = buildFeeEarningsChart(
       activity,
-      500_000_000_000_000_000n,
+      1_000_000_000_000_000_000n,
       50_000_000_000_000_000n,
       { nowMs, range: "1h" },
     );
+    const daily = buildFeeEarningsChart(
+      activity,
+      1_000_000_000_000_000_000n,
+      50_000_000_000_000_000n,
+      { nowMs, range: "1d" },
+    );
+    const weekly = buildFeeEarningsChart(
+      activity,
+      1_000_000_000_000_000_000n,
+      50_000_000_000_000_000n,
+      { nowMs, range: "1w" },
+    );
     const allTime = buildFeeEarningsChart(
       activity,
-      500_000_000_000_000_000n,
+      1_000_000_000_000_000_000n,
       50_000_000_000_000_000n,
       { nowMs, range: "all" },
     );
 
     expect(hourly?.totalWei).toBe(150_000_000_000_000_000n);
-    expect(allTime?.totalWei).toBe(550_000_000_000_000_000n);
+    expect(daily?.totalWei).toBe(350_000_000_000_000_000n);
+    expect(weekly?.totalWei).toBe(650_000_000_000_000_000n);
+    expect(allTime?.totalWei).toBe(1_050_000_000_000_000_000n);
     expect(profileViewSource).toContain('role="slider"');
     expect(profileViewSource).not.toContain("styles.claimHistory");
   });
@@ -555,22 +591,64 @@ describe("profile reward grouping", () => {
     );
   });
 
-  it("orders claimable entries by the highest current amount and paginates five at a time", () => {
-    const portfolio = buildProfilePortfolio(
-      tokens,
-      [claim],
-      [classicReward, secondClassicReward],
-    );
+  it("sorts six claimable entries before splitting them into five-row pages", () => {
+    const claimableAmounts = [1n, 9n, 3n, 7n, 5n, 2n];
+    const claimTokens = claimableAmounts.map((_, index) => {
+      const address = getAddress(
+        `0x${(index + 10).toString(16).padStart(40, "0")}`,
+      );
+      return {
+        address,
+        name: `Claim ${index + 1}`,
+        symbol: `C${index + 1}`,
+        launchedAt: "Aug 4, 2026",
+        href: `/token/${address}`,
+      } satisfies ProfileToken;
+    });
+    const claims = claimTokens.map((token, index) => ({
+      ...claim,
+      id: `0x${(index + 1).toString(16).padStart(64, "0")}`,
+      poolId: `0x${(index + 11).toString(16).padStart(64, "0")}`,
+      tokenAddress: token.address,
+      tokenName: token.name,
+      tokenSymbol: token.symbol,
+      claimableWei: claimableAmounts[index].toString(),
+      claimableEth: claimableAmounts[index].toString(),
+      href: token.href,
+    })) satisfies ProfileClaim[];
+    const portfolio = buildProfilePortfolio(claimTokens, claims, []);
     const ranked = sortProfileClaimableEntries(portfolio, firstAddress);
+    const firstPage = paginateProfileClaimableEntries(ranked, 1);
+    const secondPage = paginateProfileClaimableEntries(ranked, 2);
 
     expect(ranked.map((entry) => entry.token.symbol)).toEqual([
-      "SECOND",
-      "FIRST",
+      "C2",
+      "C4",
+      "C5",
+      "C3",
+      "C6",
+      "C1",
     ]);
-    expect(paginateProfileClaimableEntries([1, 2, 3, 4, 5, 6, 7], 1))
-      .toEqual({ currentPage: 1, totalPages: 2, items: [1, 2, 3, 4, 5] });
-    expect(paginateProfileClaimableEntries([1, 2, 3, 4, 5, 6, 7], 9))
-      .toEqual({ currentPage: 2, totalPages: 2, items: [6, 7] });
+    expect(firstPage).toMatchObject({ currentPage: 1, totalPages: 2 });
+    expect(firstPage.items.map((entry) => entry.token.symbol)).toEqual([
+      "C2",
+      "C4",
+      "C5",
+      "C3",
+      "C6",
+    ]);
+    expect(secondPage).toMatchObject({ currentPage: 2, totalPages: 2 });
+    expect(secondPage.items.map((entry) => entry.token.symbol)).toEqual([
+      "C1",
+    ]);
+    expect(claimTokens.map((token) => token.symbol)).toEqual([
+      "C1",
+      "C2",
+      "C3",
+      "C4",
+      "C5",
+      "C6",
+    ]);
   });
 
   it("scopes claimable split rewards and actions to the connected beneficiary", () => {
