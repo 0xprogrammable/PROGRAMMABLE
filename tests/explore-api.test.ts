@@ -25,7 +25,7 @@ vi.mock("../lib/alchemy/live-market.server", () => ({
   enrichTokensWithAlchemyPoolState: mocks.enrichTokensWithAlchemyPoolState,
 }));
 
-import { GET } from "../app/api/explore/route";
+import { GET, inheritExploreEthUsdQuote } from "../app/api/explore/route";
 
 const HOOK_ADDRESS =
   "0x3333333333333333333333333333333333333333" as const;
@@ -80,6 +80,36 @@ describe("Explore API Alchemy boundary", () => {
     mocks.enrichTokensWithAlchemyPoolState.mockImplementation(
       async ({ tokens }: { tokens: readonly LauncherToken[] }) => [...tokens],
     );
+  });
+
+  it("inherits the durable ETH/USD quote for newest live market values", () => {
+    const ethUsdQuote = {
+      feedAddress: "0x1111111111111111111111111111111111111111" as const,
+      roundId: "12",
+      answer: "350000000000",
+      decimals: 8,
+      updatedAt: "2026-08-04T10:00:00.000Z",
+    };
+    const launchSnapshot = {
+      ...snapshot,
+      blockNumber: "25630001",
+    };
+
+    expect(
+      inheritExploreEthUsdQuote(launchSnapshot, {
+        ...snapshot,
+        ethUsdQuote,
+      }),
+    ).toEqual({
+      ...launchSnapshot,
+      ethUsdQuote,
+    });
+    expect(
+      inheritExploreEthUsdQuote(
+        { ...launchSnapshot, ethUsdQuote },
+        snapshot,
+      ),
+    ).toEqual({ ...launchSnapshot, ethUsdQuote });
   });
 
   it.each([

@@ -13,6 +13,8 @@ import {
   useSyncExternalStore,
   type ChangeEvent,
   type FormEvent,
+  type KeyboardEvent,
+  type PointerEvent,
 } from "react";
 
 import { useWallet } from "@/components/wallet-provider";
@@ -3253,15 +3255,68 @@ function FeeEarningsPanel({
   stockRewardCount: number;
   activity: readonly ProfileActivity[];
 }) {
-  const claimHistory = activity
-    .filter((item) => /fees claimed/iu.test(item.label))
-    .slice(0, 3);
-  const chart = buildFeeEarningsChart(
-    activity,
-    nativeClaimed,
-    nativeClaimable,
+  const [timeframe, setTimeframe] = useState<FeeEarningsRange>("all");
+  const chart = useMemo(
+    () =>
+      buildFeeEarningsChart(activity, nativeClaimed, nativeClaimable, {
+        range: timeframe,
+      }),
+    [activity, nativeClaimable, nativeClaimed, timeframe],
   );
+  const [activePointIndex, setActivePointIndex] = useState(-1);
   const gradientId = useId().replaceAll(":", "");
+  const resolvedActivePointIndex = chart
+    ? activePointIndex >= 0 && activePointIndex < chart.points.length
+      ? activePointIndex
+      : chart.points.length - 1
+    : -1;
+  const activePoint = chart
+    ? chart.points[resolvedActivePointIndex]
+    : undefined;
+
+  function resetActivePoint() {
+    setActivePointIndex(-1);
+  }
+
+  function selectPointFromPointer(event: PointerEvent<HTMLDivElement>) {
+    if (!chart) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    if (bounds.width <= 0) return;
+    const pointerX = Math.min(
+      620,
+      Math.max(0, ((event.clientX - bounds.left) / bounds.width) * 620),
+    );
+    const nearestIndex = chart.points.reduce(
+      (nearest, point, index) =>
+        Math.abs(point.x - pointerX) <
+        Math.abs(chart.points[nearest].x - pointerX)
+          ? index
+          : nearest,
+      0,
+    );
+    setActivePointIndex(nearestIndex);
+  }
+
+  function handleChartKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (!chart) return;
+    let nextIndex = resolvedActivePointIndex;
+    if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
+      nextIndex = Math.max(0, resolvedActivePointIndex - 1);
+    } else if (event.key === "ArrowRight" || event.key === "ArrowUp") {
+      nextIndex = Math.min(
+        chart.points.length - 1,
+        resolvedActivePointIndex + 1,
+      );
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = chart.points.length - 1;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    setActivePointIndex(nextIndex);
+  }
 
   return (
     <section
@@ -3272,6 +3327,22 @@ function FeeEarningsPanel({
         <div>
           <h2 id="fee-earnings-title">Fee earnings</h2>
           <p>Claimable now</p>
+        </div>
+        <div className={styles.timeframeControls} aria-label="Earnings period">
+          {feeEarningsRanges.map((range) => (
+            <button
+              aria-label={`Show earnings for ${range.description}`}
+              aria-pressed={timeframe === range.value}
+              key={range.value}
+              onClick={() => {
+                setActivePointIndex(-1);
+                setTimeframe(range.value);
+              }}
+              type="button"
+            >
+              {range.label}
+            </button>
+          ))}
         </div>
       </header>
 
@@ -3285,63 +3356,74 @@ function FeeEarningsPanel({
 
       <figure
         className={styles.feeChart}
-        aria-label={`Fee earnings history. ${formatWei(nativeClaimed + nativeClaimable)} earned in total.`}
+        aria-label={`Fee earnings for ${feeEarningsRangeLabel(timeframe)}.`}
       >
         <div className={styles.chartGrid} aria-hidden="true" />
-        {chart ? (
+        {chart && activePoint ? (
           <>
-            <svg
-              className={styles.feePlot}
-              viewBox="0 0 620 150"
-              preserveAspectRatio="none"
-              role="img"
-              aria-label={`Cumulative fee earnings ending at ${formatWei(chart.totalWei)}`}
+            <div
+              aria-label="Fee earnings timeline"
+              aria-orientation="horizontal"
+              aria-valuemax={chart.points.length - 1}
+              aria-valuemin={0}
+              aria-valuenow={resolvedActivePointIndex}
+              aria-valuetext={`${formatWei(activePoint.valueWei)} at ${formatFeeChartMoment(activePoint.timestampMs, chart.nowMs)}`}
+              className={styles.feeChartInteraction}
+              onBlur={resetActivePoint}
+              onKeyDown={handleChartKeyDown}
+              onPointerDown={(event) => event.currentTarget.focus()}
+              onPointerLeave={resetActivePoint}
+              onPointerMove={selectPointFromPointer}
+              role="slider"
+              tabIndex={0}
             >
-              <defs>
-                <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
-                  <stop
-                    offset="0%"
-                    stopColor="var(--accent)"
-                    stopOpacity="0.24"
-                  />
-                  <stop
-                    offset="100%"
-                    stopColor="var(--accent)"
-                    stopOpacity="0"
-                  />
-                </linearGradient>
-              </defs>
-              <path
-                className={styles.feeArea}
-                d={chart.areaPath}
-                fill={`url(#${gradientId})`}
-              />
-              <path className={styles.feeLine} d={chart.linePath} />
-              <circle
-                className={styles.feeEndPoint}
-                cx={chart.points.at(-1)?.x}
-                cy={chart.points.at(-1)?.y}
-                r="4.5"
-              />
-            </svg>
-            <div className={styles.feeChartTotal} aria-hidden="true">
-              <span>Total earned</span>
-              <strong>{formatWei(chart.totalWei)}</strong>
+              <svg
+                aria-hidden="true"
+                className={styles.feePlot}
+                viewBox="0 0 620 150"
+                preserveAspectRatio="none"
+              >
+                <defs>
+                  <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
+                    <stop
+                      offset="0%"
+                      stopColor="var(--accent)"
+                      stopOpacity="0.24"
+                    />
+                    <stop
+                      offset="100%"
+                      stopColor="var(--accent)"
+                      stopOpacity="0"
+                    />
+                  </linearGradient>
+                </defs>
+                <path
+                  className={styles.feeArea}
+                  d={chart.areaPath}
+                  fill={`url(#${gradientId})`}
+                />
+                <path className={styles.feeLine} d={chart.linePath} />
+                <line
+                  className={styles.feeCursor}
+                  x1={activePoint.x}
+                  x2={activePoint.x}
+                  y1="10"
+                  y2="140"
+                />
+                <circle
+                  className={styles.feeActivePoint}
+                  cx={activePoint.x}
+                  cy={activePoint.y}
+                  r="4.5"
+                />
+              </svg>
             </div>
-            {claimHistory.length ? (
-              <figcaption className={styles.claimHistory}>
-                {claimHistory.map((item) => (
-                  <Link href={item.href} key={item.id}>
-                    <span>{item.detail}</span>
-                    <time>{item.occurredAt}</time>
-                  </Link>
-                ))}
-              </figcaption>
-            ) : (
-              <figcaption className={styles.chartCaption}>
-                Current unclaimed earnings
-              </figcaption>
-            )}
+            <div className={styles.feeChartTotal} aria-hidden="true">
+              <span>
+                Total earned · {formatFeeChartMoment(activePoint.timestampMs, chart.nowMs)}
+              </span>
+              <strong>{formatWei(activePoint.valueWei)}</strong>
+            </div>
           </>
         ) : (
           <figcaption className={styles.chartEmpty}>
@@ -3357,8 +3439,43 @@ function FeeEarningsPanel({
 type FeeEarningsChartPoint = {
   x: number;
   y: number;
+  timestampMs: number;
   valueWei: bigint;
 };
+
+export type FeeEarningsRange = "1h" | "1d" | "1w" | "all";
+
+const feeEarningsRanges: ReadonlyArray<{
+  description: string;
+  label: string;
+  value: FeeEarningsRange;
+}> = [
+  { description: "the last hour", label: "1H", value: "1h" },
+  { description: "the last day", label: "1D", value: "1d" },
+  { description: "the last week", label: "1W", value: "1w" },
+  { description: "all time", label: "ALL", value: "all" },
+];
+
+const feeEarningsRangeMs: Record<Exclude<FeeEarningsRange, "all">, number> = {
+  "1h": 60 * 60 * 1_000,
+  "1d": 24 * 60 * 60 * 1_000,
+  "1w": 7 * 24 * 60 * 60 * 1_000,
+};
+
+function feeEarningsRangeLabel(range: FeeEarningsRange) {
+  return feeEarningsRanges.find((candidate) => candidate.value === range)
+    ?.description ?? "all time";
+}
+
+function formatFeeChartMoment(timestampMs: number, nowMs: number) {
+  if (Math.abs(nowMs - timestampMs) < 1_000) return "Now";
+  return new Intl.DateTimeFormat("en", {
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "short",
+  }).format(timestampMs);
+}
 
 export function parseClaimedFeeWei(detail: string) {
   const match = detail.trim().match(/^([0-9]+(?:\.[0-9]+)?)\s+ETH\b/iu);
@@ -3374,26 +3491,58 @@ export function buildFeeEarningsChart(
   activity: readonly ProfileActivity[],
   nativeClaimed: bigint,
   nativeClaimable: bigint,
+  options: Readonly<{
+    nowMs?: number;
+    range?: FeeEarningsRange;
+  }> = {},
 ) {
-  const claims = activity
+  const nowMs = options.nowMs ?? Date.now();
+  const range = options.range ?? "all";
+  const rawClaims = activity
     .filter((item) => /fees claimed/iu.test(item.label))
-    .map((item) => parseClaimedFeeWei(item.detail))
-    .filter((value): value is bigint => value !== null)
-    .reverse();
-  const historyTotal = claims.reduce((total, value) => total + value, 0n);
+    .flatMap((item) => {
+      const valueWei = parseClaimedFeeWei(item.detail);
+      if (valueWei === null) return [];
+      const parsedTimestamp = Date.parse(
+        item.occurredAtIso ?? item.occurredAt,
+      );
+      return [{
+        timestampMs: Number.isFinite(parsedTimestamp) ? parsedTimestamp : null,
+        valueWei,
+      }];
+    });
+  const claims = rawClaims
+    .map((claim, index) => ({
+      ...claim,
+      timestampMs:
+        claim.timestampMs ?? nowMs - (index + 1) * 24 * 60 * 60 * 1_000,
+    }))
+    .sort((first, second) => first.timestampMs - second.timestampMs);
+  const historyTotal = claims.reduce(
+    (total, claim) => total + claim.valueWei,
+    0n,
+  );
+  const rangeStartMs =
+    range === "all"
+      ? (claims[0]?.timestampMs ?? nowMs - 24 * 60 * 60 * 1_000)
+      : nowMs - feeEarningsRangeMs[range];
+  const visibleClaims =
+    range === "all"
+      ? claims
+      : claims.filter((claim) => claim.timestampMs >= rangeStartMs);
   const startingTotal =
-    nativeClaimed > historyTotal ? nativeClaimed - historyTotal : 0n;
-  const values = [startingTotal];
+    range === "all" && nativeClaimed > historyTotal
+      ? nativeClaimed - historyTotal
+      : 0n;
+  const values = [{ timestampMs: rangeStartMs, valueWei: startingTotal }];
   let cumulative = startingTotal;
-  for (const claim of claims) {
-    cumulative += claim;
-    values.push(cumulative);
+  for (const claim of visibleClaims) {
+    cumulative += claim.valueWei;
+    values.push({ timestampMs: claim.timestampMs, valueWei: cumulative });
   }
 
-  const totalWei = nativeClaimed + nativeClaimable;
-  if (values.at(-1) !== totalWei || values.length === 1) {
-    values.push(totalWei);
-  }
+  const totalWei = cumulative + nativeClaimable;
+  values.push({ timestampMs: nowMs, valueWei: totalWei });
   if (totalWei <= 0n || values.length < 2) return null;
 
   const width = 620;
@@ -3403,18 +3552,26 @@ export function buildFeeEarningsChart(
   const top = 12;
   const bottom = height - 10;
   const maximum = values.reduce(
-    (current, value) => (value > current ? value : current),
+    (current, value) => (value.valueWei > current ? value.valueWei : current),
     1n,
   );
-  const points: FeeEarningsChartPoint[] = values.map((valueWei, index) => ({
-    valueWei,
-    x: left + (index / (values.length - 1)) * (right - left),
-    y:
-      bottom -
-      Number((valueWei * 1_000_000n) / maximum) /
-        1_000_000 *
-        (bottom - top),
-  }));
+  const timeSpanMs = Math.max(1, nowMs - rangeStartMs);
+  const points: FeeEarningsChartPoint[] = values.map(
+    ({ timestampMs, valueWei }) => ({
+      timestampMs,
+      valueWei,
+      x:
+        left +
+        ((Math.min(nowMs, Math.max(rangeStartMs, timestampMs)) - rangeStartMs) /
+          timeSpanMs) *
+          (right - left),
+      y:
+        bottom -
+        Number((valueWei * 1_000_000n) / maximum) /
+          1_000_000 *
+          (bottom - top),
+    }),
+  );
   const linePath = points
     .map((point, index) =>
       `${index === 0 ? "M" : "L"}${point.x.toFixed(2)},${point.y.toFixed(2)}`,
@@ -3424,6 +3581,7 @@ export function buildFeeEarningsChart(
   return {
     areaPath: `${linePath} L${right},${height} L${left},${height} Z`,
     linePath,
+    nowMs,
     points,
     totalWei,
   };

@@ -1,5 +1,7 @@
 import { ReactNode } from "react";
+import Link from "next/link";
 
+import { docsCategories } from "@/components/docs-data";
 import styles from "@/components/docs-experience.module.css";
 import {
   DocsNavigation,
@@ -31,6 +33,34 @@ export function DocsShell({
         <div className={styles.heroTools} data-docs-tools>
           <DocsSearch />
         </div>
+
+        <nav
+          aria-label="Documentation categories"
+          className={styles.docsCategories}
+        >
+          {docsCategories.map((category) =>
+            category.status === "available" ? (
+              <Link
+                aria-current="page"
+                className={`${styles.docsCategory} ${styles.docsCategoryActive}`}
+                href={category.href}
+                key={category.label}
+              >
+                <strong>{category.label}</strong>
+                <span>Integrations</span>
+              </Link>
+            ) : (
+              <span
+                aria-disabled="true"
+                className={`${styles.docsCategory} ${styles.docsCategoryUnavailable}`}
+                key={category.label}
+              >
+                <strong>{category.label}</strong>
+                <span>Available soon</span>
+              </span>
+            ),
+          )}
+        </nav>
 
         <header className={styles.hero} data-docs-hero>
           <h1>{title}</h1>

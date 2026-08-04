@@ -73,6 +73,9 @@ describe("Docs rail layout stability", () => {
     expect(docsPage).toContain("<DocsLaunchInspector />");
     expect(docsShell).not.toContain("docsGuides");
     expect(docsShell).not.toContain("Documentation guides");
+    expect(docsShell).toContain('aria-label="Documentation categories"');
+    expect(docsShell).toContain("Available soon");
+    expect(docsShell).toContain("Integrations");
     expect(docsNavigation).toContain(
       '<p className={styles.navLabel}>On this page</p>',
     );

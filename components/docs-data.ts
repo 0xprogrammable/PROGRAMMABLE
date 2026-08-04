@@ -4,6 +4,22 @@ export type DocsSearchItem = {
   title: string;
 };
 
+export const docsCategories = [
+  {
+    label: "Classic",
+    status: "coming-soon",
+  },
+  {
+    label: "Custom Hook",
+    status: "coming-soon",
+  },
+  {
+    href: "/docs",
+    label: "Developers",
+    status: "available",
+  },
+] as const;
+
 export const docsNavigation = [
   {
     label: "Developers",
