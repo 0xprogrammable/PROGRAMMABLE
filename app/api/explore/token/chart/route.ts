@@ -6,6 +6,7 @@ import {
   readAlchemyExploreModel,
   safeAlchemyError,
 } from "../../../../../lib/alchemy/explore.server";
+import { enrichTokensWithAlchemyPoolState } from "../../../../../lib/alchemy/live-market.server";
 import {
   isTokenChartRange,
   readTokenChartSeries,
@@ -90,10 +91,18 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const liveSnapshot = model.launchDiscoverySnapshot ?? model.snapshot;
+    const liveToken = (
+      await enrichTokensWithAlchemyPoolState({
+        deployment,
+        snapshot: liveSnapshot,
+        tokens: [token],
+      })
+    )[0] ?? token;
     const series = await readTokenChartSeries({
       deployment,
-      token,
-      snapshotBlock: BigInt(model.snapshot.blockNumber),
+      token: liveToken,
+      snapshotBlock: BigInt(liveSnapshot.blockNumber),
       ethUsdQuote: model.snapshot.ethUsdQuote,
       range: requestedRange,
     });
@@ -102,8 +111,8 @@ export async function GET(request: NextRequest) {
         ...series,
         address,
         range: requestedRange,
-        snapshotBlock: model.snapshot.blockNumber,
-        snapshotHash: model.snapshot.blockHash,
+        snapshotBlock: liveSnapshot.blockNumber,
+        snapshotHash: liveSnapshot.blockHash,
       },
       {
         headers: {

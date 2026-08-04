@@ -26,6 +26,8 @@ import {
 } from "@/components/token-trade";
 import {
   TokenPriceChart,
+  preloadTokenChart,
+  type TokenChartMarketCap,
   type TokenChartVolume,
 } from "@/components/token-price-chart";
 import { TokenCommunityChat } from "@/components/token-community-chat";
@@ -838,6 +840,8 @@ function TokenDetailContent({
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState("");
   const [chartVolume, setChartVolume] = useState<TokenChartVolume | null>(null);
+  const [chartMarketCap, setChartMarketCap] =
+    useState<TokenChartMarketCap | null>(null);
   const [tradeFlow, setTradeFlow] = useState<TradeFlow>({
     phase: "form",
   });
@@ -872,10 +876,13 @@ function TokenDetailContent({
   const metrics = useMemo(() => {
     return buildTokenDetailMetrics(
       token,
-      null,
+      chartMarketCap
+        ? (formatUsdWadAmount(chartMarketCap.marketCapUsdWad) ??
+          formatEth(chartMarketCap.marketCapEth, "amount"))
+        : null,
       buildChartVolumeMetric(chartVolume),
     );
-  }, [chartVolume, token]);
+  }, [chartMarketCap, chartVolume, token]);
 
   const explorerBase =
     chainId === 1
@@ -1168,6 +1175,7 @@ function TokenDetailContent({
               launchModel={token.launchModel}
               preview={preview}
               onVolumeChange={setChartVolume}
+              onMarketCapChange={setChartMarketCap}
             />
           </div>
 
@@ -1420,6 +1428,7 @@ export function TokenDetailView({ address }: { address: string }) {
 
     const tokenAddress = normalizedAddress;
     const controller = new AbortController();
+    void preloadTokenChart(tokenAddress, "1d");
 
     async function loadToken() {
       try {

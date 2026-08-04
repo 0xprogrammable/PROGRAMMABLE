@@ -19,14 +19,18 @@ type ChartPoint = {
   priceUsd?: string;
 };
 
-type ChartPayload = {
+export type TokenChartPayload = {
   status: "ready" | "insufficient-history" | "not-deployed";
   points: ChartPoint[];
   swapCount: number;
   volumeWei: string;
   volumeEth: string;
   volumeUsdWad?: string;
+  marketCapEthWei?: string;
+  marketCapEth?: string;
+  marketCapUsdWad?: string;
 };
+type ChartPayload = TokenChartPayload;
 
 type PlottedPoint = ChartPoint & {
   x: number;
@@ -41,7 +45,66 @@ export type TokenChartVolume = {
   volumeEth?: string;
   volumeUsdWad?: string;
 };
+export type TokenChartMarketCap = {
+  marketCapEthWei?: string;
+  marketCapEth?: string;
+  marketCapUsdWad?: string;
+};
 type ChartLaunchModel = "classic" | "adaptive" | "deep" | "stock-paired";
+
+const chartPayloadCache = new Map<
+  string,
+  Readonly<{ payload: ChartPayload; updatedAt: number }>
+>();
+const chartPayloadRequests = new Map<string, Promise<ChartPayload>>();
+const MAX_CHART_PAYLOAD_CACHE_ENTRIES = 64;
+
+function cacheChartPayload(key: string, payload: ChartPayload) {
+  chartPayloadCache.delete(key);
+  chartPayloadCache.set(key, { payload, updatedAt: Date.now() });
+  while (chartPayloadCache.size > MAX_CHART_PAYLOAD_CACHE_ENTRIES) {
+    const oldest = chartPayloadCache.keys().next().value;
+    if (oldest === undefined) return;
+    chartPayloadCache.delete(oldest);
+  }
+}
+
+async function requestTokenChartPayload(
+  tokenAddress: `0x${string}`,
+  range: ChartRange,
+) {
+  const key = `${tokenAddress.toLowerCase()}:${range}`;
+  const active = chartPayloadRequests.get(key);
+  if (active) return active;
+  const cached = chartPayloadCache.get(key);
+  if (cached && Date.now() - cached.updatedAt < 2_000) {
+    return cached.payload;
+  }
+  const request = fetch(
+    `/api/explore/token/chart?address=${encodeURIComponent(tokenAddress)}&range=${range}`,
+    { headers: { Accept: "application/json" } },
+  )
+    .then(async (response) => {
+      if (!response.ok) throw new Error("Chart request failed");
+      const payload = (await response.json()) as ChartPayload;
+      cacheChartPayload(key, payload);
+      return payload;
+    })
+    .finally(() => {
+      if (chartPayloadRequests.get(key) === request) {
+        chartPayloadRequests.delete(key);
+      }
+    });
+  chartPayloadRequests.set(key, request);
+  return request;
+}
+
+export function preloadTokenChart(
+  tokenAddress: `0x${string}`,
+  range: ChartRange = "1d",
+) {
+  return requestTokenChartPayload(tokenAddress, range).catch(() => null);
+}
 
 type SerializedChartRefresh = {
   request(): void;
@@ -178,19 +241,21 @@ export function TokenPriceChart({
   launchModel,
   preview = false,
   onVolumeChange,
+  onMarketCapChange,
 }: {
   tokenAddress: `0x${string}`;
   tokenName: string;
   launchModel?: ChartLaunchModel;
   preview?: boolean;
   onVolumeChange?: (volume: TokenChartVolume | null) => void;
+  onMarketCapChange?: (marketCap: TokenChartMarketCap | null) => void;
 }) {
   const [request, setRequest] = useState<{
     key: string;
     payload: ChartPayload | null;
     failed: boolean;
   } | null>(null);
-  const [range, setRange] = useState<ChartRange>("all");
+  const [range, setRange] = useState<ChartRange>("1d");
   const refreshTaskRef = useRef<SerializedChartRefresh | null>(null);
   const refreshKey = useLiveDataRefresh({
     enabled: launchModel !== "stock-paired" && !preview,
@@ -201,13 +266,13 @@ export function TokenPriceChart({
     () => (preview ? getExplorePreviewChart(tokenAddress, range) : null),
     [preview, range, tokenAddress],
   );
-  const payload =
+  const payload: ChartPayload | null =
     previewPayload ??
     (launchModel === "stock-paired"
       ? STOCK_PAIRED_EMPTY_CHART
       : request?.key === requestKey
         ? request.payload
-        : null);
+        : (chartPayloadCache.get(requestKey)?.payload ?? null));
   const failed =
     preview
       ? false
@@ -226,12 +291,11 @@ export function TokenPriceChart({
 
     const refreshTask = createSerializedChartRefresh(async (signal) => {
       try {
-        const response = await fetch(
-          `/api/explore/token/chart?address=${encodeURIComponent(tokenAddress)}&range=${range}`,
-          { signal },
+        const nextPayload = await requestTokenChartPayload(
+          tokenAddress,
+          range,
         );
-        if (!response.ok) throw new Error("Chart request failed");
-        const nextPayload = (await response.json()) as ChartPayload;
+        if (signal.aborted) return;
         setRequest({
           key: requestKey,
           payload: nextPayload,
@@ -341,6 +405,18 @@ export function TokenPriceChart({
     });
   }, [failed, launchModel, onVolumeChange, payload, range]);
 
+  useEffect(() => {
+    if (!payload) {
+      onMarketCapChange?.(null);
+      return;
+    }
+    onMarketCapChange?.({
+      marketCapEthWei: payload.marketCapEthWei,
+      marketCapEth: payload.marketCapEth,
+      marketCapUsdWad: payload.marketCapUsdWad,
+    });
+  }, [onMarketCapChange, payload]);
+
   if (
     !shouldRenderPriceHistory({
       loading,
@@ -402,9 +478,7 @@ export function TokenPriceChart({
       </div>
 
       {loading ? (
-        <div className={styles.placeholder} aria-hidden="true">
-          <span className={styles.loadingLine} />
-        </div>
+        <div className={`${styles.plot} ${styles.waitingPlot}`} aria-hidden="true" />
       ) : chart ? (
         <div className={styles.plot}>
           <svg

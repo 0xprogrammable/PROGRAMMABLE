@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAddress, isAddress } from "viem";
 
 import {
+  getAlchemyOnchainDeployment,
   enrichTokensWithAlchemyPrices,
   readAlchemyExploreModel,
   safeAlchemyError,
 } from "../../../../lib/alchemy/explore.server";
+import { enrichTokensWithAlchemyPoolState } from "../../../../lib/alchemy/live-market.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -58,9 +60,24 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const enriched = token
+    const priced = token
       ? (await enrichTokensWithAlchemyPrices([token]))[0] ?? token
       : null;
+    const liveSnapshot =
+      model.status === "ready"
+        ? (model.launchDiscoverySnapshot ?? model.snapshot)
+        : null;
+    const deployment = getAlchemyOnchainDeployment();
+    const enriched =
+      priced && liveSnapshot && deployment.status === "ready"
+        ? (
+            await enrichTokensWithAlchemyPoolState({
+              deployment,
+              snapshot: liveSnapshot,
+              tokens: [priced],
+            })
+          )[0] ?? priced
+        : priced;
     return NextResponse.json(
       {
         status: model.status,

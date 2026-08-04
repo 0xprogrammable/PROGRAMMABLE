@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 
 import {
   enrichTokensWithAlchemyPrices,
+  getAlchemyOnchainDeployment,
   readAlchemyExploreModel,
   safeAlchemyError,
 } from "../../../lib/alchemy/explore.server";
+import { enrichTokensWithAlchemyPoolState } from "../../../lib/alchemy/live-market.server";
 import {
   filterAndSortTokens,
   paginateExplore,
@@ -12,6 +14,7 @@ import {
   visibleExploreTokens,
 } from "../../../lib/onchain/query";
 import type { ExplorePage, ExploreReadModel } from "../../../lib/onchain/types";
+import type { LauncherToken } from "../../../lib/tokens";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -24,6 +27,19 @@ const EXPLORE_QUERY_PARAMETERS = new Set([
   "sort",
 ]);
 const TOP_MARKET_CAP_LIMIT = 20;
+const NEWEST_LIVE_MARKET_LIMIT = 20;
+
+function mergeTokenUpdates(
+  tokens: readonly LauncherToken[],
+  updates: readonly LauncherToken[],
+) {
+  const byAddress = new Map(
+    updates.map((token) => [token.tokenAddress.toLowerCase(), token]),
+  );
+  return tokens.map(
+    (token) => byAddress.get(token.tokenAddress.toLowerCase()) ?? token,
+  );
+}
 
 function hasCanonicalQueryShape(search: URLSearchParams) {
   const seen = new Set<string>();
@@ -120,17 +136,60 @@ export async function GET(request: NextRequest) {
       socials,
     } as const;
     const model = await readAlchemyExploreModel();
-    const pricedModel = {
+    let pricedModel = {
       ...model,
       tokens: await enrichTokensWithAlchemyPrices(model.tokens),
     } satisfies ExploreReadModel;
+    const deployment = getAlchemyOnchainDeployment();
+    const liveSnapshot =
+      pricedModel.status === "ready"
+        ? (pricedModel.launchDiscoverySnapshot ?? pricedModel.snapshot)
+        : null;
+    if (deployment.status === "ready" && liveSnapshot) {
+      const visible = visibleExploreTokens(pricedModel);
+      const top = filterAndSortTokens(
+        [...visible],
+        "",
+        "market-cap",
+      ).slice(0, TOP_MARKET_CAP_LIMIT);
+      const newest = filterAndSortTokens(
+        [...visible],
+        "",
+        "newest",
+      ).slice(0, NEWEST_LIVE_MARKET_LIMIT);
+      const warm = [...new Map(
+        [...top, ...newest].map((token) => [
+          token.tokenAddress.toLowerCase(),
+          token,
+        ]),
+      ).values()];
+      const updates = await enrichTokensWithAlchemyPoolState({
+        deployment,
+        snapshot: liveSnapshot,
+        tokens: warm,
+      });
+      pricedModel = {
+        ...pricedModel,
+        tokens: mergeTokenUpdates(pricedModel.tokens, updates),
+      };
+    }
     const useTopMarketCapView =
       options.sort === "market-cap" &&
       options.query.length === 0 &&
       options.socials === null;
-    const page = useTopMarketCapView
+    let page = useTopMarketCapView
       ? topThenNewestPage(pricedModel, options)
       : paginateExplore(pricedModel, options);
+    if (deployment.status === "ready" && liveSnapshot && page.tokens.length) {
+      page = {
+        ...page,
+        tokens: await enrichTokensWithAlchemyPoolState({
+          deployment,
+          snapshot: liveSnapshot,
+          tokens: page.tokens,
+        }),
+      };
+    }
 
     return NextResponse.json(
       page,

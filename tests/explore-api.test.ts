@@ -8,12 +8,21 @@ import type { LauncherToken } from "../lib/tokens";
 
 const mocks = vi.hoisted(() => ({
   enrichTokensWithAlchemyPrices: vi.fn(),
+  enrichTokensWithAlchemyPoolState: vi.fn(),
+  getAlchemyOnchainDeployment: vi.fn(),
   readAlchemyExploreModel: vi.fn(),
+  safeAlchemyError: vi.fn((error) => error),
 }));
 
 vi.mock("../lib/alchemy/explore.server", () => ({
   enrichTokensWithAlchemyPrices: mocks.enrichTokensWithAlchemyPrices,
+  getAlchemyOnchainDeployment: mocks.getAlchemyOnchainDeployment,
   readAlchemyExploreModel: mocks.readAlchemyExploreModel,
+  safeAlchemyError: mocks.safeAlchemyError,
+}));
+
+vi.mock("../lib/alchemy/live-market.server", () => ({
+  enrichTokensWithAlchemyPoolState: mocks.enrichTokensWithAlchemyPoolState,
 }));
 
 import { GET } from "../app/api/explore/route";
@@ -64,9 +73,13 @@ describe("Explore API Alchemy boundary", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.readAlchemyExploreModel.mockResolvedValue(readyModel());
+    mocks.getAlchemyOnchainDeployment.mockReturnValue({ status: "ready" });
     mocks.enrichTokensWithAlchemyPrices.mockImplementation(async (tokens) => [
       ...tokens,
     ]);
+    mocks.enrichTokensWithAlchemyPoolState.mockImplementation(
+      async ({ tokens }: { tokens: readonly LauncherToken[] }) => [...tokens],
+    );
   });
 
   it.each([
