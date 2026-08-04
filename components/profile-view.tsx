@@ -197,10 +197,10 @@ export function getProfileWorkspacePhase(
   statuses: readonly ProfileWorkspaceSourceStatus[],
   terminalErrorReady: boolean,
 ): ProfileWorkspacePhase {
+  if (statuses.some((status) => status === "ready")) return "ready";
   if (statuses.some((status) => status === "loading")) {
     return "loading";
   }
-  if (statuses.some((status) => status === "ready")) return "ready";
   if (!terminalErrorReady) return "loading";
   return "error";
 }
@@ -2088,7 +2088,9 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
             priority
           />
           <h1>Profile</h1>
-          <p>Connect to view your tokens, rewards and project settings.</p>
+          <p>
+            Connect to review verified fee earnings and claim rewards.
+          </p>
           <button
             className={styles.connectButton}
             type="button"
@@ -2610,6 +2612,70 @@ function confirmedForAccount(
   );
 }
 
+function profileStockRewardConfirmed(
+  reward: StockPairedReward,
+  account: string | undefined,
+  actionStates: ProfileActionStateCollections,
+) {
+  const vault = reward.vaultAddress.toLowerCase();
+  return (
+    confirmedForAccount(actionStates.stockPaired[`${vault}:claim`], account) ||
+    confirmedForAccount(
+      actionStates.stockPaired[`${vault}:claim-as-eth`],
+      account,
+    )
+  );
+}
+
+function profileEntryOptimisticallyClaimedWei(
+  entry: ProfilePortfolioEntry,
+  account: string | undefined,
+  actionStates: ProfileActionStateCollections,
+) {
+  const normalizedAccount = account?.toLowerCase();
+  const ownsReward = (beneficiary: string) =>
+    !normalizedAccount || beneficiary.toLowerCase() === normalizedAccount;
+  let total = 0n;
+
+  if (
+    entry.claim &&
+    confirmedForAccount(
+      actionStates.claim[entry.claim.poolId.toLowerCase()],
+      account,
+    )
+  ) {
+    total += BigInt(entry.claim.claimableWei);
+  }
+
+  for (const reward of entry.classicRewards) {
+    if (
+      ownsReward(reward.beneficiary) &&
+      confirmedForAccount(
+        actionStates.classicV3[
+          `${reward.vaultAddress.toLowerCase()}:claim`
+        ],
+        account,
+      )
+    ) {
+      total += BigInt(reward.claimableWei);
+    }
+  }
+
+  for (const reward of entry.deepRewards) {
+    if (
+      ownsReward(reward.beneficiary) &&
+      confirmedForAccount(
+        actionStates.deep[`${reward.vaultAddress.toLowerCase()}:claim`],
+        account,
+      )
+    ) {
+      total += BigInt(reward.claimableWei);
+    }
+  }
+
+  return total;
+}
+
 function profileEntryActionableNativeWei(
   entry: ProfilePortfolioEntry,
   account: string | undefined,
@@ -3077,8 +3143,19 @@ function ProfileAccountWorkspace({
     deepV3Ready ? deepV3Profile.tokens : [],
     stockPairedReady ? stockPairedRewards.rewards : [],
   );
-  const nativeClaimable = profileClaimableWei(entries, account);
-  const nativeClaimed =
+  const actionStates: ProfileActionStateCollections = {
+    claim: claimActionStates,
+    classicV3: classicV3ActionStates,
+    deep: deepActionStates,
+    stockPaired: stockPairedActionStates,
+  };
+  const nativeClaimable = entries.reduce(
+    (total, entry) =>
+      total +
+      profileEntryActionableNativeWei(entry, account, actionStates),
+    0n,
+  );
+  const recordedNativeClaimed =
     (currentReady && data.claimedWei ? BigInt(data.claimedWei) : 0n) +
     (classicReady
       ? classicV3Rewards.rewards.reduce(
@@ -3092,20 +3169,24 @@ function ProfileAccountWorkspace({
           0n,
         )
       : 0n);
+  const nativeClaimed =
+    recordedNativeClaimed +
+    entries.reduce(
+      (total, entry) =>
+        total +
+        profileEntryOptimisticallyClaimedWei(entry, account, actionStates),
+      0n,
+    );
   const stockRewardCount = entries.reduce(
     (total, entry) =>
       total +
       profileRewardsForAccount(entry.stockPairedRewards, account).filter(
-        (reward) => BigInt(reward.claimableRaw) > 0n,
+        (reward) =>
+          BigInt(reward.claimableRaw) > 0n &&
+          !profileStockRewardConfirmed(reward, account, actionStates),
       ).length,
     0,
   );
-  const actionStates: ProfileActionStateCollections = {
-    claim: claimActionStates,
-    classicV3: classicV3ActionStates,
-    deep: deepActionStates,
-    stockPaired: stockPairedActionStates,
-  };
   const claimableEntries = sortProfileClaimableEntries(
     entries.filter((entry) =>
       profileEntryHasActionableReward(entry, account, actionStates),
@@ -3166,6 +3247,7 @@ function ProfileAccountWorkspace({
           nativeClaimed={nativeClaimed}
           stockRewardCount={stockRewardCount}
           activity={currentReady ? data.activity : []}
+          sourcesLoading={loading}
         />
 
         <section
@@ -3174,6 +3256,9 @@ function ProfileAccountWorkspace({
         >
           <header className={styles.panelHeader}>
             <h2 id="profile-claimable-title">Claimable</h2>
+            <span className={styles.panelStatus} role="status">
+              {loading ? "Refreshing reward sources" : "Highest first"}
+            </span>
             {claimPageData.totalPages > 1 ? (
               <nav
                 className={styles.claimPagination}
@@ -3249,22 +3334,61 @@ function FeeEarningsPanel({
   nativeClaimed,
   stockRewardCount,
   activity,
+  sourcesLoading,
 }: {
   nativeClaimable: bigint;
   nativeClaimed: bigint;
   stockRewardCount: number;
   activity: readonly ProfileActivity[];
+  sourcesLoading: boolean;
 }) {
   const [timeframe, setTimeframe] = useState<FeeEarningsRange>("all");
+  const [chartNowMs, setChartNowMs] = useState<number | null>(null);
+  const initialChartReferenceMs = useMemo(
+    () =>
+      timestampedFeeClaims(activity).reduce(
+        (latest, claim) => Math.max(latest, claim.timestampMs),
+        0,
+      ),
+    [activity],
+  );
+  const chartReferenceMs = chartNowMs ?? initialChartReferenceMs;
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setChartNowMs(Date.now());
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activity]);
+
+  const availableRanges: readonly FeeEarningsRange[] = useMemo(
+    () =>
+      chartNowMs === null
+        ? ["all"]
+        : getAvailableFeeEarningsRanges(activity, chartNowMs),
+    [activity, chartNowMs],
+  );
+  const activeTimeframe = availableRanges.includes(timeframe)
+    ? timeframe
+    : "all";
   const chart = useMemo(
     () =>
       buildFeeEarningsChart(activity, nativeClaimed, nativeClaimable, {
-        range: timeframe,
+        nowMs: chartReferenceMs,
+        range: activeTimeframe,
       }),
-    [activity, nativeClaimable, nativeClaimed, timeframe],
+    [
+      activeTimeframe,
+      activity,
+      chartReferenceMs,
+      nativeClaimable,
+      nativeClaimed,
+    ],
   );
   const [activePointIndex, setActivePointIndex] = useState(-1);
+  const activePointIndexRef = useRef(-1);
   const gradientId = useId().replaceAll(":", "");
+  const chartHelpId = `${gradientId}-help`;
   const resolvedActivePointIndex = chart
     ? activePointIndex >= 0 && activePointIndex < chart.points.length
       ? activePointIndex
@@ -3273,8 +3397,17 @@ function FeeEarningsPanel({
   const activePoint = chart
     ? chart.points[resolvedActivePointIndex]
     : undefined;
+  const displayedTotal =
+    activePoint?.valueWei ?? nativeClaimed + nativeClaimable;
+  const displayedMoment =
+    chart && activePoint
+      ? formatFeeChartMoment(activePoint.timestampMs, chart.nowMs)
+      : "Now";
+  const earningsLabel = sourcesLoading ? "Verified so far" : "Total earned";
 
   function resetActivePoint() {
+    if (activePointIndexRef.current === -1) return;
+    activePointIndexRef.current = -1;
     setActivePointIndex(-1);
   }
 
@@ -3294,6 +3427,8 @@ function FeeEarningsPanel({
           : nearest,
       0,
     );
+    if (activePointIndexRef.current === nearestIndex) return;
+    activePointIndexRef.current = nearestIndex;
     setActivePointIndex(nearestIndex);
   }
 
@@ -3315,6 +3450,7 @@ function FeeEarningsPanel({
       return;
     }
     event.preventDefault();
+    activePointIndexRef.current = nextIndex;
     setActivePointIndex(nextIndex);
   }
 
@@ -3326,15 +3462,28 @@ function FeeEarningsPanel({
       <header className={styles.feePanelHeader}>
         <div>
           <h2 id="fee-earnings-title">Fee earnings</h2>
-          <p>Claimable now</p>
+          <p>
+            {sourcesLoading
+              ? "Refreshing reward sources"
+              : "Confirmed onchain rewards"}
+          </p>
         </div>
         <div className={styles.timeframeControls} aria-label="Earnings period">
           {feeEarningsRanges.map((range) => (
             <button
-              aria-label={`Show earnings for ${range.description}`}
-              aria-pressed={timeframe === range.value}
+              aria-label={
+                range.value === "all" || availableRanges.includes(range.value)
+                  ? `Show earnings for ${range.description}`
+                  : `No timestamped claims for ${range.description}`
+              }
+              aria-pressed={activeTimeframe === range.value}
+              disabled={
+                range.value !== "all" &&
+                !availableRanges.includes(range.value)
+              }
               key={range.value}
               onClick={() => {
+                activePointIndexRef.current = -1;
                 setActivePointIndex(-1);
                 setTimeframe(range.value);
               }}
@@ -3347,22 +3496,38 @@ function FeeEarningsPanel({
       </header>
 
       <div className={styles.feeSummary}>
-        <strong>{formatWei(nativeClaimable)}</strong>
-        <span>{formatWei(nativeClaimed)} claimed</span>
-        {stockRewardCount > 0 ? (
-          <span>+ {stockRewardCount} quote {stockRewardCount === 1 ? "reward" : "rewards"}</span>
-        ) : null}
+        <span className={styles.feeSummaryLabel}>
+          {earningsLabel} · {displayedMoment}
+        </span>
+        <strong>{formatWei(displayedTotal)}</strong>
+        <div className={styles.feeBreakdown}>
+          <span>
+            <b>{formatWei(nativeClaimable)}</b> claimable now
+          </span>
+          <span>
+            <b>{formatWei(nativeClaimed)}</b> claimed
+          </span>
+          {stockRewardCount > 0 ? (
+            <span>
+              <b>{stockRewardCount}</b> quote {stockRewardCount === 1 ? "reward" : "rewards"}
+            </span>
+          ) : null}
+        </div>
       </div>
 
       <figure
         className={styles.feeChart}
-        aria-label={`Fee earnings for ${feeEarningsRangeLabel(timeframe)}.`}
+        aria-label={`Fee earnings for ${feeEarningsRangeLabel(activeTimeframe)}.`}
       >
         <div className={styles.chartGrid} aria-hidden="true" />
         {chart && activePoint ? (
           <>
+            <p className={styles.visuallyHidden} id={chartHelpId}>
+              Use the arrow keys to inspect each confirmed earnings point.
+            </p>
             <div
               aria-label="Fee earnings timeline"
+              aria-describedby={chartHelpId}
               aria-orientation="horizontal"
               aria-valuemax={chart.points.length - 1}
               aria-valuemin={0}
@@ -3418,17 +3583,19 @@ function FeeEarningsPanel({
                 />
               </svg>
             </div>
-            <div className={styles.feeChartTotal} aria-hidden="true">
+            <div className={styles.chartScale} aria-hidden="true">
               <span>
-                Total earned · {formatFeeChartMoment(activePoint.timestampMs, chart.nowMs)}
+                {formatFeeChartMoment(chart.rangeStartMs, chart.nowMs)}
               </span>
-              <strong>{formatWei(activePoint.valueWei)}</strong>
+              <span>Now</span>
             </div>
           </>
         ) : (
           <figcaption className={styles.chartEmpty}>
-            <strong>No claims yet.</strong>
-            <p>New confirmed claims appear here automatically.</p>
+            <strong>No verified timeline yet</strong>
+            <p>
+              Confirmed claims with exact timestamps will build this chart.
+            </p>
           </figcaption>
         )}
       </figure>
@@ -3487,6 +3654,35 @@ export function parseClaimedFeeWei(detail: string) {
   }
 }
 
+function timestampedFeeClaims(activity: readonly ProfileActivity[]) {
+  return activity.flatMap((item) => {
+    if (!/fees claimed/iu.test(item.label) || !item.occurredAtIso) {
+      return [];
+    }
+    const valueWei = parseClaimedFeeWei(item.detail);
+    const timestampMs = Date.parse(item.occurredAtIso);
+    if (valueWei === null || !Number.isFinite(timestampMs)) return [];
+    return [{ timestampMs, valueWei }];
+  });
+}
+
+export function getAvailableFeeEarningsRanges(
+  activity: readonly ProfileActivity[],
+  nowMs = Date.now(),
+) {
+  const claims = timestampedFeeClaims(activity).filter(
+    (claim) => claim.timestampMs <= nowMs,
+  );
+
+  return feeEarningsRanges.flatMap((range) => {
+    if (range.value === "all") return [range.value];
+    const rangeStartMs = nowMs - feeEarningsRangeMs[range.value];
+    return claims.some((claim) => claim.timestampMs >= rangeStartMs)
+      ? [range.value]
+      : [];
+  });
+}
+
 export function buildFeeEarningsChart(
   activity: readonly ProfileActivity[],
   nativeClaimed: bigint,
@@ -3498,26 +3694,10 @@ export function buildFeeEarningsChart(
 ) {
   const nowMs = options.nowMs ?? Date.now();
   const range = options.range ?? "all";
-  const rawClaims = activity
-    .filter((item) => /fees claimed/iu.test(item.label))
-    .flatMap((item) => {
-      const valueWei = parseClaimedFeeWei(item.detail);
-      if (valueWei === null) return [];
-      const parsedTimestamp = Date.parse(
-        item.occurredAtIso ?? item.occurredAt,
-      );
-      return [{
-        timestampMs: Number.isFinite(parsedTimestamp) ? parsedTimestamp : null,
-        valueWei,
-      }];
-    });
-  const claims = rawClaims
-    .map((claim, index) => ({
-      ...claim,
-      timestampMs:
-        claim.timestampMs ?? nowMs - (index + 1) * 24 * 60 * 60 * 1_000,
-    }))
+  const claims = timestampedFeeClaims(activity)
+    .filter((claim) => claim.timestampMs <= nowMs)
     .sort((first, second) => first.timestampMs - second.timestampMs);
+  if (claims.length === 0) return null;
   const historyTotal = claims.reduce(
     (total, claim) => total + claim.valueWei,
     0n,
@@ -3529,7 +3709,11 @@ export function buildFeeEarningsChart(
   const visibleClaims =
     range === "all"
       ? claims
-      : claims.filter((claim) => claim.timestampMs >= rangeStartMs);
+      : claims.filter(
+          (claim) =>
+            claim.timestampMs >= rangeStartMs &&
+            claim.timestampMs <= nowMs,
+        );
   const startingTotal =
     range === "all" && nativeClaimed > historyTotal
       ? nativeClaimed - historyTotal
@@ -3574,7 +3758,9 @@ export function buildFeeEarningsChart(
   );
   const linePath = points
     .map((point, index) =>
-      `${index === 0 ? "M" : "L"}${point.x.toFixed(2)},${point.y.toFixed(2)}`,
+      index === 0
+        ? `M${point.x.toFixed(2)},${point.y.toFixed(2)}`
+        : `H${point.x.toFixed(2)} V${point.y.toFixed(2)}`,
     )
     .join(" ");
 
@@ -3583,6 +3769,7 @@ export function buildFeeEarningsChart(
     linePath,
     nowMs,
     points,
+    rangeStartMs,
     totalWei,
   };
 }
@@ -3697,9 +3884,11 @@ function ProfileClaimDialog({
       <div className={styles.claimDialogSurface}>
         <header className={styles.claimDialogHeader}>
           <div>
-            <h3 id={titleId}>
+            <span>Choose how to receive</span>
+            <h3 id={titleId}>Claim Rewards</h3>
+            <p>
               {tokenName} <small>${tokenSymbol}</small>
-            </h3>
+            </p>
           </div>
           <button
             ref={closeButtonRef}
@@ -3730,7 +3919,7 @@ function ProfileClaimDialog({
                           : styles.secondaryAction
                       }
                       type="button"
-                      aria-label={`${action.label} for ${group.source}`}
+                      aria-label={`${action.label} from ${group.source} for ${tokenName} (${tokenSymbol})`}
                       aria-busy={actionPending(action.state) || undefined}
                       disabled={action.disabled}
                       onClick={() => {
@@ -3926,7 +4115,10 @@ function ProfileClaimRow({
       actions: [
         {
           id: "claim-position",
-          label: claimDialogActionLabel(activeClaimState, "Claim ETH"),
+          label: claimDialogActionLabel(
+            activeClaimState,
+            "Receive in Ethereum",
+          ),
           description: `Receive ETH at ${recipient}`,
           state: activeClaimState,
           disabled:
@@ -3949,7 +4141,7 @@ function ProfileClaimRow({
       actions: [
         {
           id: "claim-classic",
-          label: claimDialogActionLabel(state, "Claim ETH"),
+          label: claimDialogActionLabel(state, "Receive in Ethereum"),
           description: `Receive ETH at ${recipient}`,
           state,
           disabled:
@@ -3971,7 +4163,7 @@ function ProfileClaimRow({
       actions: [
         {
           id: "claim-deep",
-          label: claimDialogActionLabel(state, "Claim ETH"),
+          label: claimDialogActionLabel(state, "Receive in Ethereum"),
           description: `Receive ETH at ${shortenAddress(reward.payoutAddress)}`,
           state,
           disabled:
@@ -4001,7 +4193,7 @@ function ProfileClaimRow({
         id: "claim-quote-asset",
         label: claimDialogActionLabel(
           stockClaimState,
-          `Claim ${reward.quoteAssetSymbol}`,
+          "Receive in Stocks",
         ),
         description: `Receive ${reward.quoteAssetSymbol} at ${shortenAddress(reward.payoutAddress)}`,
         state: stockClaimState,
@@ -4018,7 +4210,7 @@ function ProfileClaimRow({
     if (paths.includes("quote-asset-to-eth")) {
       actions.push({
         id: "claim-and-convert-to-eth",
-        label: claimDialogActionLabel(ethState, "Claim and swap to ETH"),
+        label: claimDialogActionLabel(ethState, "Receive in Ethereum"),
         description: `Claim ${reward.quoteAssetSymbol}, then swap on Uniswap${estimate ? ` · ${estimate}` : ""}`,
         state: ethState,
         disabled:
@@ -4083,10 +4275,11 @@ function ProfileClaimRow({
           aria-controls={dialogId}
           aria-expanded={claimDialogOpen}
           aria-busy={rowActionPending || undefined}
+          aria-label={`Claim rewards for ${token.name} (${token.symbol})`}
           disabled={rowActionPending || claimGroups.length === 0}
           onClick={() => setClaimDialogOpen(true)}
         >
-          Claim rewards
+          Claim Rewards
         </button>
       </div>
 
