@@ -6,7 +6,7 @@
 
 ## Semantic consistency
 
-This proposal, `submission.json`, `MECHANISM.md`, `SECURITY.md`, and the tests describe the same mechanism: one immutable custom hook, one canonical dynamic-fee PoolKey, independent buy/sell controllers, executed gross quote as the signal, a one-block lag, constant-time decay, irreversible expiry, and Programmable fee policy `programmable-volume-fee-v1@1.1.0`. The project selects no project hook fee. LP fees go to LPs; the mandatory 10 bps quote-volume liability belongs only to the immutable Programmable owner.
+This proposal, `submission.json`, `MECHANISM.md`, `SECURITY.md`, and the tests describe the same mechanism: one immutable custom hook, one canonical dynamic-fee PoolKey, independent buy/sell controllers, executed gross quote as the signal, a one-block lag, constant-time decay, irreversible expiry, and Programmable fee policy `programmable-volume-fee-v1@1.0.0`. The project selects no project hook fee. LP fees go to LPs; the mandatory 10 bps quote-volume liability belongs only to the immutable Programmable owner.
 
 ## Why Uniswap v4
 
