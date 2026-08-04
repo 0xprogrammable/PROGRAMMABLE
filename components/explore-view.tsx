@@ -286,6 +286,40 @@ type PendingExploreRequest = {
 };
 
 const pendingExploreRequests = new Map<string, PendingExploreRequest>();
+const resolvedExplorePayloads = new Map<
+  string,
+  Readonly<{ payload: ExplorePayload; updatedAt: number }>
+>();
+const RESOLVED_EXPLORE_PAYLOAD_TTL_MS = 4_500;
+const MAX_RESOLVED_EXPLORE_PAYLOADS = 24;
+
+function readResolvedExplorePayload(contentKey: string) {
+  const cached = resolvedExplorePayloads.get(contentKey);
+  if (!cached) return null;
+  if (Date.now() - cached.updatedAt >= RESOLVED_EXPLORE_PAYLOAD_TTL_MS) {
+    resolvedExplorePayloads.delete(contentKey);
+    return null;
+  }
+  resolvedExplorePayloads.delete(contentKey);
+  resolvedExplorePayloads.set(contentKey, cached);
+  return cached.payload;
+}
+
+function cacheResolvedExplorePayload(
+  contentKey: string,
+  payload: ExplorePayload,
+) {
+  resolvedExplorePayloads.delete(contentKey);
+  resolvedExplorePayloads.set(contentKey, {
+    payload,
+    updatedAt: Date.now(),
+  });
+  while (resolvedExplorePayloads.size > MAX_RESOLVED_EXPLORE_PAYLOADS) {
+    const oldestKey = resolvedExplorePayloads.keys().next().value;
+    if (oldestKey === undefined) return;
+    resolvedExplorePayloads.delete(oldestKey);
+  }
+}
 
 async function fetchExplorePayload(
   search: URLSearchParams,
@@ -306,6 +340,8 @@ export function loadExplorePayload(
   contentKey: string,
   search: URLSearchParams,
 ) {
+  const resolved = readResolvedExplorePayload(contentKey);
+  if (resolved) return Promise.resolve(resolved);
   const pendingRequest = pendingExploreRequests.get(contentKey);
   if (pendingRequest) return pendingRequest.promise;
 
@@ -317,7 +353,9 @@ export function loadExplorePayload(
   }, EXPLORE_REQUEST_TIMEOUT_MS);
   const request = (async (): Promise<ExplorePayload> => {
     try {
-      return await fetchExplorePayload(search, controller.signal);
+      const payload = await fetchExplorePayload(search, controller.signal);
+      cacheResolvedExplorePayload(contentKey, payload);
+      return payload;
     } catch (error) {
       if (timedOut) {
         throw new Error("Tokens took too long to respond");
@@ -630,7 +668,6 @@ export function ExploreView() {
   const [currentPage, setCurrentPage] = useState(1);
   const [retryKey, setRetryKey] = useState(0);
   const refreshKey = useLiveDataRefresh({ enabled: !preview });
-  const [state, setState] = useState<ExploreState>({ phase: "loading" });
   const activeExploreContentKey = useRef<string | null>(null);
   const modelDatasetCache = useRef<{
     key: string;
@@ -642,6 +679,17 @@ export function ExploreView() {
   const modelDatasetKey = `${debouncedQuery}\u0000${sort}\u0000${socialFilter}\u0000${modelFilter}\u0000${retryKey}\u0000${refreshKey}`;
   const activeRequestContentKey =
     modelFilter === "all" ? contentKey : modelDatasetKey;
+  const [state, setState] = useState<ExploreState>(() => {
+    const cached = readResolvedExplorePayload(activeRequestContentKey);
+    return cached
+      ? {
+          phase: "ready",
+          payload: cached,
+          requestKey,
+          contentKey,
+        }
+      : { phase: "loading" };
+  });
 
   useEffect(
     () => () => {
@@ -954,9 +1002,8 @@ export function ExploreView() {
                       token.usesFallbackImage ? "" : `${token.name} artwork`
                     }
                     fill
-                    loading={
-                      index < EXPLORE_TOKENS_PER_PAGE ? "eager" : "lazy"
-                    }
+                    loading={index < 3 ? "eager" : "lazy"}
+                    priority={index < 3}
                     sizes="(max-width: 700px) calc(100vw - 28px), (max-width: 1040px) 46vw, 31vw"
                     unoptimized={!canOptimizeTokenImage(imageSource)}
                   />

@@ -216,6 +216,10 @@ export function LaunchModelPicker({
               <span />
               <span />
               <span />
+              <span />
+              <span />
+              <span />
+              <span />
             </span>
           </span>
 

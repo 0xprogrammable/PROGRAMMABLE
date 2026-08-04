@@ -466,14 +466,13 @@
 }
 
 .feeChart {
-  align-items: center;
   background: color-mix(in srgb, var(--surface-soft) 48%, transparent);
   border-radius: 20px;
-  display: flex;
+  display: grid;
   flex: none;
-  justify-content: center;
+  grid-template-rows: minmax(150px, 1fr) auto;
   margin: 20px 0 0;
-  min-height: 164px;
+  min-height: 226px;
   min-width: 0;
   overflow: hidden;
   position: relative;
@@ -495,6 +494,71 @@
   inset: 0;
   opacity: 0.48;
   position: absolute;
+}
+
+.feePlot {
+  align-self: stretch;
+  grid-column: 1;
+  grid-row: 1;
+  height: 100%;
+  min-height: 150px;
+  overflow: visible;
+  position: relative;
+  width: 100%;
+  z-index: 1;
+}
+
+.feeArea {
+  opacity: 0.9;
+}
+
+.feeLine {
+  fill: none;
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.feeEndPoint {
+  fill: var(--canvas);
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.feeChartTotal {
+  display: grid;
+  gap: 2px;
+  grid-column: 1;
+  grid-row: 1;
+  left: 16px;
+  pointer-events: none;
+  position: absolute;
+  top: 13px;
+  z-index: 2;
+}
+
+.feeChartTotal span,
+.chartCaption {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.feeChartTotal strong {
+  color: var(--text);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 680;
+}
+
+.chartCaption {
+  grid-column: 1;
+  grid-row: 2;
+  padding: 0 16px 14px;
+  position: relative;
+  z-index: 1;
 }
 
 .chartEmpty {
@@ -521,8 +585,11 @@
 .claimHistory {
   display: grid;
   gap: 7px;
-  padding: 16px;
+  grid-column: 1;
+  grid-row: 2;
+  padding: 0 14px 14px;
   position: relative;
+  z-index: 1;
   width: 100%;
 }
 
@@ -1142,16 +1209,6 @@
   min-width: 0;
 }
 
-.claimDialogHeader > div > span {
-  color: var(--muted);
-  display: block;
-  font-size: 10px;
-  font-weight: 680;
-  letter-spacing: 0.08em;
-  margin-block-end: 5px;
-  text-transform: uppercase;
-}
-
 .claimDialogHeader h3 {
   font-size: 22px;
   font-weight: 620;
@@ -1184,19 +1241,10 @@
   width: 44px;
 }
 
-.claimDialogIntro {
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.5;
-  margin-block-start: 13px;
-  max-width: 350px;
-  text-wrap: pretty;
-}
-
 .claimDialogGroups {
   display: grid;
   gap: 9px;
-  margin-block-start: 17px;
+  margin-block-start: 13px;
 }
 
 .claimDialogGroup {

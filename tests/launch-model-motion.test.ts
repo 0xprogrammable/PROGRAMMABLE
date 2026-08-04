@@ -35,7 +35,7 @@ describe("launch model artwork", () => {
     )?.[0];
 
     expect(css).toContain("@media (prefers-reduced-motion: no-preference)");
-    expect(sparkleMarkup?.match(/<span \/>/g)).toHaveLength(6);
+    expect(sparkleMarkup?.match(/<span \/>/g)).toHaveLength(10);
     expect(css).toContain(
       "animation: classic-botanical-drift 12s steps(1, end) infinite",
     );

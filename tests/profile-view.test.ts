@@ -7,6 +7,7 @@ import {
   actionCanCheckStatus,
   actionLabel,
   actionPending,
+  buildFeeEarningsChart,
   buildProfilePortfolio,
   clearConfirmedProfileActionStates,
   getProfileSessionView,
@@ -15,6 +16,7 @@ import {
   groupPendingProfileTransactionStates,
   groupProfileRewards,
   parsePendingProfileTransactions,
+  parseClaimedFeeWei,
   paginateProfileClaimableEntries,
   profileClaimableWei,
   profileClaimActionCount,
@@ -50,6 +52,10 @@ const thirdAddress = getAddress(
 );
 const profileExperienceCss = readFileSync(
   new URL("../components/profile-experience.module.css", import.meta.url),
+  "utf8",
+);
+const profileViewSource = readFileSync(
+  new URL("../components/profile-view.tsx", import.meta.url),
   "utf8",
 );
 
@@ -206,6 +212,51 @@ describe("profile workspace loading state", () => {
     );
     expect(profileExperienceCss).toMatch(
       /@media \(max-width: 820px\)[\s\S]*?\.profileWorkspace/,
+    );
+  });
+});
+
+describe("fee earnings chart", () => {
+  it("builds a cumulative chart from confirmed claims and current accrual", () => {
+    const activity = [
+      {
+        id: "claim:new",
+        label: "Creator fees claimed",
+        detail: "0.3 ETH from NEW",
+        occurredAt: "Today",
+        href: "/token/new",
+      },
+      {
+        id: "claim:old",
+        label: "Creator fees claimed",
+        detail: "0.2 ETH from OLD",
+        occurredAt: "Yesterday",
+        href: "/token/old",
+      },
+    ];
+
+    expect(parseClaimedFeeWei("0.25 ETH from TEST")).toBe(
+      250_000_000_000_000_000n,
+    );
+    const chart = buildFeeEarningsChart(
+      activity,
+      500_000_000_000_000_000n,
+      100_000_000_000_000_000n,
+    );
+
+    expect(chart?.points.map((point) => point.valueWei)).toEqual([
+      0n,
+      200_000_000_000_000_000n,
+      500_000_000_000_000_000n,
+      600_000_000_000_000_000n,
+    ]);
+    expect(chart?.totalWei).toBe(600_000_000_000_000_000n);
+  });
+
+  it("keeps the claim dialog focused on the selected token and actions", () => {
+    expect(profileViewSource).not.toContain(">Claimable rewards<");
+    expect(profileViewSource).not.toContain(
+      "Choose the reward you want to claim.",
     );
   });
 });

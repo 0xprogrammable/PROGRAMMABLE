@@ -26,7 +26,10 @@ describe("token detail layout", () => {
 
   it("uses a compact two-column market workspace with community on the right", () => {
     expect(detailStyles).toMatch(
-      /grid-template-areas:\s*"identity identity"\s*"chart trade"\s*"metrics trade"\s*"deep community"\s*"details community";/s,
+      /grid-template-areas:\s*"identity identity"\s*"chart trade"\s*"deep community"\s*"details community";/s,
+    );
+    expect(detailSource).toMatch(
+      /<div className=\{styles\.marketChart\}>[\s\S]*?<TokenPriceChart[\s\S]*?<MetricGrid metrics=\{metrics\} \/>[\s\S]*?<\/div>/s,
     );
     expect(detailStyles).toMatch(
       /\.communityShell\s*\{[^}]*grid-area:\s*community;[^}]*position:\s*sticky;/s,

@@ -6,6 +6,8 @@ import {
   useMemo,
   useRef,
   useState,
+  type KeyboardEvent,
+  type PointerEvent,
 } from "react";
 
 import { useLiveDataRefresh } from "@/components/use-live-data-refresh";
@@ -235,6 +237,31 @@ function linePath(points: PlottedPoint[]) {
   );
 }
 
+export function nearestChartPointIndex(
+  clientX: number,
+  boundsLeft: number,
+  boundsWidth: number,
+  pointCount: number,
+) {
+  if (
+    !Number.isFinite(clientX) ||
+    !Number.isFinite(boundsLeft) ||
+    !Number.isFinite(boundsWidth) ||
+    boundsWidth <= 0 ||
+    !Number.isSafeInteger(pointCount) ||
+    pointCount < 1
+  ) {
+    return 0;
+  }
+  const pointerX =
+    ((clientX - boundsLeft) / boundsWidth) * VIEWBOX_WIDTH;
+  const normalized = Math.min(
+    1,
+    Math.max(0, (pointerX - PLOT_LEFT) / (PLOT_RIGHT - PLOT_LEFT)),
+  );
+  return Math.round(normalized * (pointCount - 1));
+}
+
 export function TokenPriceChart({
   tokenAddress,
   tokenName,
@@ -256,6 +283,9 @@ export function TokenPriceChart({
     failed: boolean;
   } | null>(null);
   const [range, setRange] = useState<ChartRange>("1d");
+  const [activePointIndex, setActivePointIndex] = useState<number | null>(
+    null,
+  );
   const refreshTaskRef = useRef<SerializedChartRefresh | null>(null);
   const refreshKey = useLiveDataRefresh({
     enabled: launchModel !== "stock-paired" && !preview,
@@ -376,6 +406,11 @@ export function TokenPriceChart({
   }, [payload]);
 
   const emptyMessage = getPriceHistoryEmptyMessage(launchModel, failed);
+  const activePoint =
+    chart && activePointIndex !== null
+      ? chart.points[Math.min(activePointIndex, chart.points.length - 1)]
+      : null;
+  const displayedPrice = activePoint?.value ?? chart?.current;
   const chartStatus =
     !payload && !failed
       ? "Loading price history"
@@ -417,6 +452,44 @@ export function TokenPriceChart({
     });
   }, [onMarketCapChange, payload]);
 
+  function inspectPointer(event: PointerEvent<HTMLDivElement>) {
+    if (!chart) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    setActivePointIndex(
+      nearestChartPointIndex(
+        event.clientX,
+        bounds.left,
+        bounds.width,
+        chart.points.length,
+      ),
+    );
+  }
+
+  function inspectKeyboard(event: KeyboardEvent<HTMLDivElement>) {
+    if (!chart) return;
+    const lastIndex = chart.points.length - 1;
+    const current = activePointIndex ?? lastIndex;
+    let next: number | null = null;
+
+    if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
+      next = Math.max(0, current - 1);
+    } else if (event.key === "ArrowRight" || event.key === "ArrowUp") {
+      next = Math.min(lastIndex, current + 1);
+    } else if (event.key === "Home") {
+      next = 0;
+    } else if (event.key === "End") {
+      next = lastIndex;
+    } else if (event.key === "Escape") {
+      setActivePointIndex(null);
+      return;
+    } else {
+      return;
+    }
+
+    event.preventDefault();
+    setActivePointIndex(next);
+  }
+
   if (
     !shouldRenderPriceHistory({
       loading,
@@ -445,8 +518,8 @@ export function TokenPriceChart({
         <div>
           <p className={styles.eyebrow}>Price</p>
           <p className={styles.value}>
-            {chart
-              ? formatPrice(chart.current, chart.unit)
+            {chart && displayedPrice !== undefined
+              ? formatPrice(displayedPrice, chart.unit)
               : !loading || launchModel === "stock-paired"
                 ? "Unavailable"
                 : "—"}
@@ -467,6 +540,7 @@ export function TokenPriceChart({
                       ? null
                       : { range: option.value, pending: true },
                   );
+                  setActivePointIndex(null);
                   setRange(option.value);
                 }}
               >
@@ -480,7 +554,16 @@ export function TokenPriceChart({
       {loading ? (
         <div className={`${styles.plot} ${styles.waitingPlot}`} aria-hidden="true" />
       ) : chart ? (
-        <div className={styles.plot}>
+        <div
+          className={styles.plot}
+          tabIndex={0}
+          aria-label={`${tokenName} interactive price chart. Move the pointer or use arrow keys to inspect exact prices.`}
+          onBlur={() => setActivePointIndex(null)}
+          onKeyDown={inspectKeyboard}
+          onPointerEnter={inspectPointer}
+          onPointerMove={inspectPointer}
+          onPointerLeave={() => setActivePointIndex(null)}
+        >
           <svg
             viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
             preserveAspectRatio="none"
@@ -516,7 +599,50 @@ export function TokenPriceChart({
               fill={`url(#${gradientId})`}
             />
             <path className={styles.line} d={chart.path} />
+            {activePoint ? (
+              <>
+                <line
+                  className={styles.hoverGuide}
+                  x1={activePoint.x}
+                  x2={activePoint.x}
+                  y1={PLOT_TOP}
+                  y2={PLOT_BOTTOM}
+                />
+                <circle
+                  className={styles.hoverDot}
+                  cx={activePoint.x}
+                  cy={activePoint.y}
+                  r="4.5"
+                />
+              </>
+            ) : null}
           </svg>
+          {activePoint ? (
+            <div
+              className={styles.tooltip}
+              data-horizontal-edge={
+                activePointIndex === 0
+                  ? "start"
+                  : activePointIndex === chart.points.length - 1
+                    ? "end"
+                    : "middle"
+              }
+              data-vertical={activePoint.y < 44 ? "below" : "above"}
+              style={{
+                left: `${(activePoint.x / VIEWBOX_WIDTH) * 100}%`,
+                top: `${(activePoint.y / VIEWBOX_HEIGHT) * 100}%`,
+              }}
+              aria-hidden="true"
+            >
+              <strong>{formatPrice(activePoint.value, chart.unit)}</strong>
+              <span>Block {activePoint.blockNumber}</span>
+            </div>
+          ) : null}
+          <span className="sr-only" aria-live="polite" aria-atomic="true">
+            {activePoint
+              ? `${formatPrice(activePoint.value, chart.unit)}, block ${activePoint.blockNumber}`
+              : ""}
+          </span>
         </div>
       ) : (
         <div className={styles.placeholder}>
