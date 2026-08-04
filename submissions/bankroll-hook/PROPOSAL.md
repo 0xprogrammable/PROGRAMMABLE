@@ -40,7 +40,7 @@ The creator may include an initial ETH buy in the same transaction. It uses empt
 
 During Funding, ordinary swaps work and wager mode is disabled. Bankroll providers deposit or withdraw WETH 1:1. After the deadline, anyone can activate a sufficiently funded game or cancel an underfunded game.
 
-During Active, ordinary swaps still work. The wager router deposits WETH, stages one pending identifier and performs one exact-input swap. The hook creates the ticket only after successful execution and removes the pending record atomically.
+During Active, ordinary swaps still work. The wager router deposits WETH, stores the player and stake under one pending identifier, then performs one exact-input swap. Hook data carries only that identifier and does not claim to identify the user. The hook creates the ticket only after successful execution and removes the pending record atomically.
 
 Anyone can close the game at its deadline or capacity. Anyone can pay the exact quoted VRF fee within a caller-selected maximum. The adapter callback stores one word. Anyone can pull the word, settle tickets in bounded batches and finalise.
 

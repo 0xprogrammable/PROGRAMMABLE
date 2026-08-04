@@ -24,7 +24,7 @@ The immutable registrar is the only accepted pool initializer. The factory must 
 
 The launcher trusts its immutable UERC20 factory and Uniswap PositionManager. It checks the fixed supply path and the hook's complete configuration before it initializes the pool. The position locker accepts NFTs only from its immutable PositionManager and exposes no transfer, decrease, rescue or arbitrary-call path.
 
-The router is the only accepted source of non-empty hook data. It may stage a player and stake but cannot change hook economics or settle tickets. The pending record must exist in the same block and the swap must be exact input.
+The router is the only accepted source of non-empty hook data. Hook data carries a pending identifier, not a user identity. The immutable router records the player and stake before the swap. The pending record must exist in the same block and the swap must be exact input. The router cannot change hook economics or settle tickets.
 
 The immutable Chainlink adapter is the only randomness source. Its wrapper base authenticates fulfilment. The adapter lets only the hook consume a stored word.
 
