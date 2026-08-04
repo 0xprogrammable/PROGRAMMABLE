@@ -105,8 +105,16 @@
   background: rgb(248 240 233 / 0.018);
 }
 
+.classicArt {
+  background: #f8f0e9;
+}
+
 .customArt::before {
   background: rgb(5 9 28 / 0.08);
+}
+
+.customArt {
+  background: #07112f;
 }
 
 .artImage {

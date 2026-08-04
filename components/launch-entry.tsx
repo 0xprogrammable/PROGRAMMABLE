@@ -142,7 +142,6 @@ export function LaunchModelPicker({
               fill
               sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 88px) / 2), 560px"
               priority
-              unoptimized
             />
             <Image
               className={launchExperience.classicLogo}
@@ -151,8 +150,6 @@ export function LaunchModelPicker({
               width={1254}
               height={1254}
               sizes="128px"
-              priority
-              unoptimized
             />
           </span>
 
@@ -204,9 +201,9 @@ export function LaunchModelPicker({
               src="/brand/create/custom-galaxy-v3.webp"
               alt=""
               fill
-              loading="eager"
+              loading="lazy"
+              fetchPriority="low"
               sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 88px) / 2), 560px"
-              unoptimized
             />
             <Image
               className={`${launchExperience.classicLogo} ${launchExperience.customLogo}`}
@@ -215,8 +212,8 @@ export function LaunchModelPicker({
               width={1254}
               height={1254}
               sizes="128px"
-              loading="eager"
-              unoptimized
+              loading="lazy"
+              fetchPriority="low"
             />
             <span className={launchExperience.customSparkles}>
               <span />
