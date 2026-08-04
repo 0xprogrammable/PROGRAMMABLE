@@ -13,6 +13,8 @@ export function DocsShell({
   children,
   currentPath,
   description,
+  heroAside,
+  heroMeta,
   kicker,
   sections,
   title,
@@ -20,6 +22,8 @@ export function DocsShell({
   children: ReactNode;
   currentPath: string;
   description: string;
+  heroAside?: ReactNode;
+  heroMeta?: ReactNode;
   kicker?: string;
   sections?: readonly DocsPageSection[];
   title: string;
@@ -70,10 +74,23 @@ export function DocsShell({
           })}
         </nav>
 
-        <header className={styles.hero} data-docs-hero>
-          {kicker ? <p className={styles.heroKicker}>{kicker}</p> : null}
-          <h1>{title}</h1>
-          <p>{description}</p>
+        <header
+          className={styles.hero}
+          data-docs-hero
+          data-has-aside={heroAside ? "true" : undefined}
+          id={heroAside ? "quickstart" : undefined}
+        >
+          <div className={styles.heroCopy}>
+            {kicker ? <p className={styles.heroKicker}>{kicker}</p> : null}
+            <h1>{title}</h1>
+            <p>{description}</p>
+            {heroMeta ? (
+              <div className={styles.heroMeta}>{heroMeta}</div>
+            ) : null}
+          </div>
+          {heroAside ? (
+            <div className={styles.heroAside}>{heroAside}</div>
+          ) : null}
         </header>
 
         <div className={styles.layout} data-docs-layout>
