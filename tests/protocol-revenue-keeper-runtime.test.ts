@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import {
+  classifyProtocolRevenueSubmissionError,
   ProtocolRevenueKeeperV2Error,
   runConfiguredProtocolRevenueKeeperV2,
   safeProtocolRevenueKeeperV2Error,
@@ -58,5 +59,23 @@ describe("protocol revenue keeper runtime boundary", () => {
         new Error("private key and provider URL must never escape"),
       ),
     ).toEqual({ code: "unexpected_failure", retryable: true });
+  });
+
+  it("classifies private relay failures without returning provider text", () => {
+    expect(
+      classifyProtocolRevenueSubmissionError(
+        new Error("max fee per gas less than block base fee: secret payload"),
+      ),
+    ).toBe("fee_rejected");
+    expect(
+      classifyProtocolRevenueSubmissionError(
+        new Error("nonce too low: raw transaction must stay private"),
+      ),
+    ).toBe("nonce_conflict");
+    expect(
+      classifyProtocolRevenueSubmissionError(
+        new Error("unexpected provider response with sensitive details"),
+      ),
+    ).toBe("unknown");
   });
 });
