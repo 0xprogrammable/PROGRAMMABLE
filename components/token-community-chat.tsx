@@ -214,7 +214,7 @@ export function TokenCommunityChat({
           <p className={styles.emptyMessage}>No messages yet.</p>
         ) : (
           messages.map((message) => {
-            const authorLabel = message.authorLabel || "You";
+            const authorLabel = message.authorLabel || "Member";
             const usesCurrentAvatar = Boolean(
               currentAvatarDataUrl &&
                 currentAuthorAddress &&
@@ -283,7 +283,7 @@ export function TokenCommunityChat({
         </button>
       </form>
       <p className={styles.storageError} role="status" aria-live="polite">
-        {storageAvailable ? "" : "Messages stay in this tab only."}
+        {storageAvailable ? "" : "Messages could not be saved."}
       </p>
     </section>
   );
