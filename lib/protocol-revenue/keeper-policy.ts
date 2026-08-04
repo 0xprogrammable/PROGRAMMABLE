@@ -3,6 +3,65 @@ export const PROTOCOL_REVENUE_KEEPER_BALANCE_HEADROOM = 2n;
 export const PROTOCOL_REVENUE_MIN_GAS_MULTIPLIER = 250n;
 export const PROTOCOL_REVENUE_MAX_EXECUTION_GAS = 15_000_000n;
 
+export type ProtocolRevenueV2ActionDecision =
+  | Readonly<{ status: "pending_transaction" }>
+  | Readonly<{ status: "process"; revenue: bigint }>
+  | Readonly<{ status: "transfer"; amount: bigint }>
+  | Readonly<{ status: "claim"; accruedRevenue: bigint }>
+  | Readonly<{ status: "not_due"; nextRunAt: bigint }>
+  | Readonly<{ status: "permission_exhausted" }>
+  | Readonly<{ status: "below_minimum"; minimumRevenue: bigint }>;
+
+export function evaluateProtocolRevenueV2Action(input: Readonly<{
+  finalizedTimestamp: bigint;
+  pendingRevenue: bigint;
+  vaultNextRunAt: bigint;
+  vaultMinimumRevenue: bigint;
+  rewardWalletBalance: bigint;
+  permissionAvailable: bigint;
+  maximumTransfer: bigint;
+  claimReady: boolean;
+  claimAccruedRevenue: bigint;
+  claimMinimumRevenue: bigint;
+  latestNonce: number;
+  pendingNonce: number;
+}>): ProtocolRevenueV2ActionDecision {
+  if (input.pendingNonce !== input.latestNonce) {
+    return { status: "pending_transaction" };
+  }
+  if (input.pendingRevenue >= input.vaultMinimumRevenue) {
+    if (input.finalizedTimestamp < input.vaultNextRunAt) {
+      return { status: "not_due", nextRunAt: input.vaultNextRunAt };
+    }
+    return { status: "process", revenue: input.pendingRevenue };
+  }
+
+  const transferable = [
+    input.rewardWalletBalance,
+    input.permissionAvailable,
+    input.maximumTransfer,
+  ].reduce((current, value) => value < current ? value : current);
+  if (transferable >= input.vaultMinimumRevenue) {
+    return { status: "transfer", amount: transferable };
+  }
+  if (
+    input.claimReady &&
+    input.claimAccruedRevenue >= input.claimMinimumRevenue
+  ) {
+    return { status: "claim", accruedRevenue: input.claimAccruedRevenue };
+  }
+  if (
+    input.rewardWalletBalance >= input.vaultMinimumRevenue &&
+    input.permissionAvailable < input.vaultMinimumRevenue
+  ) {
+    return { status: "permission_exhausted" };
+  }
+  return {
+    status: "below_minimum",
+    minimumRevenue: input.vaultMinimumRevenue,
+  };
+}
+
 export type ProtocolRevenueStateDecision =
   | Readonly<{ status: "ready" }>
   | Readonly<{ status: "delegation_missing" }>
