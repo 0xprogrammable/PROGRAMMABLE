@@ -250,15 +250,15 @@ seller payout or a claim.
 
 ## Release gates
 
-This model is not available for launch. Before it can move past `design`:
+This model is not available for launch. The complete lifecycle — deploy, wire, initialise, third-party swap,
+redeem, hook-market buy and sell, holder accrual and all three claim paths — now runs against the pinned canonical
+Uniswap v4 `PoolManager` on an Ethereum Mainnet fork in
+[`test/ShardV1MainnetFork.t.sol`](../../test/ShardV1MainnetFork.t.sol), confirming the design composes with the
+real v4 contract it would market-make on. Before it can move past `design`:
 
 - **Factory contract.** v1 has no factory. Every launch is a manual CREATE2 deployment plus a two-call wiring
   step, which is not a shippable creator path. A factory must deploy and wire the token, hook, NFT and renderer
   atomically, closing the window between deployment and `initialise`.
-- **Ethereum mainnet fork lifecycle test.** The complete lifecycle — deploy, wire, initialise, third-party swap,
-  hook-market buy and sell, batch paths, accrual and all three claim paths — must run against the pinned Uniswap
-  v4 deployment on a Mainnet fork, in the style of
-  [`test/ClassicV3MainnetFork.t.sol`](../../test/ClassicV3MainnetFork.t.sol).
 - **Independent review.** No independent smart-contract audit or public security contest has been performed.
 - **Deployment and source-verification evidence.** A published Ethereum deployment record with transaction
   hashes, runtime code hashes and explorer source verification for every contract, plus a release manifest.

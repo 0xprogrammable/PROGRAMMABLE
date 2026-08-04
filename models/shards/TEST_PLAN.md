@@ -20,6 +20,7 @@ Suites live in [`test/`](../../test/), and each one owns a named area so no cove
 | [`ShardLaunchSequenceV1.t.sol`](../../test/ShardLaunchSequenceV1.t.sol) | Deploy → `setNFT` → `initialise` ordering and its failure modes |
 | [`ShardSwapRouterV1.t.sol`](../../test/ShardSwapRouterV1.t.sol) | Third-party routing, refunds, approvals, wrong-pool rejection |
 | [`invariant/ShardV1.t.sol`](../../test/invariant/ShardV1.t.sol) | Stateful backing, custody, conservation and lock invariants |
+| [`ShardV1MainnetFork.t.sol`](../../test/ShardV1MainnetFork.t.sol) | Full lifecycle against the pinned Ethereum Uniswap v4 `PoolManager` on a Mainnet fork |
 
 ## Unit behavior
 
@@ -145,12 +146,15 @@ Suites live in [`test/`](../../test/), and each one owns a named area so no cove
   [`spec/shards-v1.json`](../../spec/shards-v1.json). `ShardScaffoldV1.t.sol` pins the import and type surface
   those libraries expose, so a dependency bump that moves a path or a constant fails the build rather than the
   economics.
-- **Add a mainnet-fork lifecycle before Ethereum release.** A release gate. The whole lifecycle — deploy, wire,
-  initialise, third-party swap, hook-market buy and sell, batch paths, accrual, and all three claim paths — must
-  run against the pinned Uniswap v4 `PoolManager` on an Ethereum fork, in the style of
-  [`test/ClassicV3MainnetFork.t.sol`](../../test/ClassicV3MainnetFork.t.sol). The fork run must also confirm the
-  hook mines to an address whose low bits match `getHookPermissions()`
-  (`test_hookPermissionsMatchAddressBits`).
+- **Mainnet-fork lifecycle.** [`ShardV1MainnetFork.t.sol`](../../test/ShardV1MainnetFork.t.sol) runs the whole
+  lifecycle — deploy, wire, initialise, third-party swap, redeem, hook-market buy and sell, holder accrual, and all
+  three claim paths — against the pinned canonical Uniswap v4 `PoolManager` on an Ethereum fork, in the style of
+  [`test/ClassicV3MainnetFork.t.sol`](../../test/ClassicV3MainnetFork.t.sol). It mines the hook against the live
+  PoolManager and asserts the deployed address equals the mined one, so its low bits match
+  `getHookPermissions()`, and it pins the PoolManager's runtime code hash so the fork cannot silently swap in a
+  different contract. It needs an archive RPC (`ETHEREUM_RPC_URL`, or the public default) and so is excluded from
+  the default CI run, exactly as the Classic fork suite is; run it with
+  `forge test --match-contract ShardV1MainnetForkTest`.
 - **Record runtime code hashes and source verification after deployment.** For every deployed contract, publish
   the deployment transaction, the runtime code hash and the explorer verification state, and record the hook's
   runtime size against the 24,576-byte EIP-170 limit — 24,388 bytes at the pinned settings, 188 bytes of

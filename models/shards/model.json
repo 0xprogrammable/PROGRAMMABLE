@@ -22,7 +22,6 @@
   },
   "releaseGates": [
     "Add a factory that deploys and wires the token, hook, NFT and renderer atomically, closing the window between deployment and initialise.",
-    "Pass the complete lifecycle, including all three claim paths, against the pinned Ethereum Uniswap v4 deployment on a Mainnet fork.",
     "Complete stateful invariant coverage for backing, ETH custody, fee conservation and the permanent liquidity lock.",
     "Obtain independent review of the hook, the fee accumulator and the NFT inventory accounting.",
     "Publish the Ethereum deployment record, runtime code hashes and explorer source verification for every contract."
