@@ -869,6 +869,163 @@ async function readReadyModel(
   };
 }
 
+type ReadyExploreModel = Extract<ExploreReadModel, { status: "ready" }>;
+
+function launchIdentity(token: LauncherToken) {
+  return [
+    token.tokenAddress.toLowerCase(),
+    token.launchTransactionHash?.toLowerCase() ?? "",
+    token.launchLogIndex ?? -1,
+  ].join(":");
+}
+
+function claimIdentity(
+  claim: ReadyExploreModel["creatorClaims"][number],
+) {
+  return [
+    claim.transactionHash.toLowerCase(),
+    claim.logIndex,
+  ].join(":");
+}
+
+function mergeIncrementalClassicModel(
+  base: ReadyExploreModel,
+  incremental: ReadyExploreModel,
+): ReadyExploreModel {
+  if (base.snapshot.chainId !== incremental.snapshot.chainId) {
+    throw new Error("Incremental Explore registry changed chains");
+  }
+  const tokens = new Map(
+    base.tokens.map((token) => [token.tokenAddress.toLowerCase(), token]),
+  );
+  for (const token of incremental.tokens) {
+    const key = token.tokenAddress.toLowerCase();
+    const existing = tokens.get(key);
+    if (existing && launchIdentity(existing) !== launchIdentity(token)) {
+      throw new Error(
+        `Incremental Explore registry changed launch identity for ${token.tokenAddress}`,
+      );
+    }
+    tokens.set(key, token);
+  }
+  const claims = new Map(
+    base.creatorClaims.map((claim) => [claimIdentity(claim), claim]),
+  );
+  for (const claim of incremental.creatorClaims) {
+    claims.set(claimIdentity(claim), claim);
+  }
+  return {
+    status: "ready",
+    tokens: [...tokens.values()],
+    snapshot: incremental.snapshot,
+    creatorClaims: [...claims.values()],
+    launcherFeesAccruedWei: incremental.launcherFeesAccruedWei,
+    launcherFeesAccruedEth: incremental.launcherFeesAccruedEth,
+  };
+}
+
+async function assertSnapshotIsCanonical(
+  config: ReadyOnchainDeployment,
+  snapshot: ReadyExploreModel["snapshot"],
+) {
+  if (snapshot.chainId !== config.chainId) {
+    throw new Error("Durable Explore snapshot changed chains");
+  }
+  const clients = [
+    createOnchainClient(config),
+    ...(config.rpcUrlSecondary
+      ? [createOnchainClient(config, config.rpcUrlSecondary)]
+      : []),
+  ];
+  const blocks = await mapInBatches(
+    clients,
+    RPC_PROVENANCE_BATCH_SIZE,
+    (client) =>
+      client.getBlock({ blockNumber: BigInt(snapshot.blockNumber) }),
+  );
+  if (
+    blocks.some(
+      (block) =>
+        !block.hash ||
+        block.hash.toLowerCase() !== snapshot.blockHash.toLowerCase(),
+    )
+  ) {
+    throw new Error("Durable Explore snapshot is no longer canonical");
+  }
+}
+
+export async function advanceExploreLaunchDiscovery(
+  config: ReadyOnchainDeployment,
+  base: ExploreReadModel,
+  target: "confirmed" | "latest" = "confirmed",
+): Promise<ReadyExploreModel> {
+  if (base.status !== "ready") {
+    throw new Error("Incremental Explore requires a ready durable registry");
+  }
+  if (
+    isDeepExploreReleaseReady(config) ||
+    isDeepV2ExploreReleaseReady(config) ||
+    isDeepV3ExploreReleaseReady(config)
+  ) {
+    throw new Error(
+      "Incremental Alchemy registry does not support an active Deep release",
+    );
+  }
+
+  await assertSnapshotIsCanonical(config, base.snapshot);
+  const fromBlock = BigInt(base.snapshot.blockNumber) + 1n;
+  const incrementalConfig: ReadyOnchainDeployment = {
+    ...config,
+    confirmations: target === "latest" ? 0n : config.confirmations,
+    deploymentBlock: fromBlock,
+  };
+  const incremental = await readReadyModel(incrementalConfig);
+  if (incremental.status !== "ready") {
+    throw new Error("Incremental Classic registry is not ready");
+  }
+  const incomingBlock = BigInt(incremental.snapshot.blockNumber);
+  const currentBlock = BigInt(base.snapshot.blockNumber);
+  if (incomingBlock < currentBlock) {
+    throw new Error("Incremental Explore head moved behind the durable cursor");
+  }
+  if (incomingBlock === currentBlock) {
+    if (
+      incremental.snapshot.blockHash.toLowerCase() !==
+      base.snapshot.blockHash.toLowerCase()
+    ) {
+      throw new Error("Incremental Explore head replaced the durable cursor");
+    }
+    return base;
+  }
+
+  let registry = mergeIncrementalClassicModel(base, incremental);
+  if (isClassicV3ExploreReleaseReady(config)) {
+    registry = mergeClassicV3ExploreModel(
+      registry,
+      await withReadStage("classic-v3-incremental", () =>
+        readClassicV3ExploreModel(
+          incrementalConfig,
+          incremental.snapshot.blockNumber,
+          { fromBlock },
+        ),
+      ),
+    );
+  }
+  if (isStockPairedExploreReleaseReady(config)) {
+    registry = mergeStockPairedExploreModel(
+      registry,
+      await withReadStage("stock-paired-incremental", () =>
+        readStockPairedExploreModel(
+          incrementalConfig,
+          incremental.snapshot.blockNumber,
+          { fromBlock },
+        ),
+      ),
+    );
+  }
+  return registry;
+}
+
 async function readReadyRegistryModel(
   config: ReadyOnchainDeployment,
 ): Promise<ExploreReadModel> {

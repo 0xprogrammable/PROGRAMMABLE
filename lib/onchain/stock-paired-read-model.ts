@@ -203,6 +203,7 @@ async function readEvents(
   config: ReadyOnchainDeployment,
   release: VerifiedStockPairedRelease,
   toBlock: bigint,
+  fromBlockFloor: bigint,
 ) {
   const launches: StockLaunch[] = [];
   const ethLaunches: StockEthLaunch[] = [];
@@ -210,7 +211,11 @@ async function readEvents(
   const initialBuys: StockInitialBuy[] = [];
   const volumes = new Map<string, StockVolume>();
 
-  let fromBlock = BigInt(release.startBlock);
+  const releaseStartBlock = BigInt(release.startBlock);
+  let fromBlock =
+    fromBlockFloor > releaseStartBlock
+      ? fromBlockFloor
+      : releaseStartBlock;
   let logBlockRange = config.logBlockRange;
   while (fromBlock <= toBlock) {
     const rangeEnd = minimum(
@@ -708,6 +713,7 @@ export function isStockPairedExploreReleaseReady(
 export async function readStockPairedExploreModel(
   config: ReadyOnchainDeployment,
   snapshotBlockNumber: string,
+  options: Readonly<{ fromBlock?: bigint }> = {},
 ): Promise<LauncherToken[]> {
   const releases = getConfiguredStockPairedReleases();
   if (
@@ -788,7 +794,13 @@ export async function readStockPairedExploreModel(
         clients,
         RPC_PROVENANCE_BATCH_SIZE,
         (candidate) =>
-          readEvents(candidate, config, release, toBlock),
+          readEvents(
+            candidate,
+            config,
+            release,
+            toBlock,
+            options.fromBlock ?? BigInt(release.startBlock),
+          ),
       );
       const fingerprint = eventFingerprint(eventSets[0]);
       if (

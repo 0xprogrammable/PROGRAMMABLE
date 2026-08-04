@@ -173,10 +173,14 @@ async function readEvents(
   config: ReadyOnchainDeployment,
   release: ClassicV3Release,
   toBlock: bigint,
+  fromBlockFloor: bigint,
 ) {
   const launches: LaunchRecord[] = [];
   const volumes = new Map<string, FeeVolume>();
-  let fromBlock = release.startBlock;
+  let fromBlock =
+    fromBlockFloor > release.startBlock
+      ? fromBlockFloor
+      : release.startBlock;
   let logBlockRange = config.logBlockRange;
   while (fromBlock <= toBlock) {
     const rangeEnd = minimum(
@@ -444,6 +448,7 @@ export function isClassicV3ExploreReleaseReady(
 export async function readClassicV3ExploreModel(
   config: ReadyOnchainDeployment,
   snapshotBlockNumber: string,
+  options: Readonly<{ fromBlock?: bigint }> = {},
 ): Promise<ClassicV3ExploreSlice> {
   const release = resolveClassicV3Release(config);
   if (!release || !/^(?:0|[1-9]\d*)$/.test(snapshotBlockNumber)) {
@@ -500,7 +505,14 @@ export async function readClassicV3ExploreModel(
   const eventSets = await mapInBatches(
     clients,
     RPC_PROVENANCE_BATCH_SIZE,
-    (client) => readEvents(client, config, release, toBlock),
+    (client) =>
+      readEvents(
+        client,
+        config,
+        release,
+        toBlock,
+        options.fromBlock ?? release.startBlock,
+      ),
   );
   const launcherFees = await mapInBatches(
     clients,

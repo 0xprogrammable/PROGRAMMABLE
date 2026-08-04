@@ -121,7 +121,7 @@ describe("Explore API Alchemy boundary", () => {
       "alchemy",
     );
     expect(response.headers.get("Cache-Control")).toBe(
-      "public, max-age=0, s-maxage=5, stale-while-revalidate=15",
+      "public, max-age=0, s-maxage=2, stale-while-revalidate=5",
     );
   });
 

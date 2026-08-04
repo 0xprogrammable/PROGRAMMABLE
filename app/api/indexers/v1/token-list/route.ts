@@ -28,7 +28,7 @@ export async function GET() {
         {
           status: 503,
           headers: {
-            ...alchemyFeedHeaders("public, max-age=0, s-maxage=60"),
+            ...alchemyFeedHeaders("public, max-age=0, s-maxage=5"),
             "Retry-After": "60",
           },
         },
@@ -41,7 +41,7 @@ export async function GET() {
 
     return NextResponse.json(tokenList, {
       headers: alchemyFeedHeaders(
-        "public, max-age=0, s-maxage=60, stale-while-revalidate=300",
+        "public, max-age=0, s-maxage=2, stale-while-revalidate=5",
       ),
     });
   } catch (error) {

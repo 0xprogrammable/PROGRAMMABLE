@@ -146,6 +146,7 @@ export type ExploreReadModel =
       status: "ready";
       tokens: LauncherToken[];
       snapshot: ExploreSnapshot;
+      launchDiscoverySnapshot?: ExploreSnapshot;
       creatorClaims: CreatorClaim[];
       launcherFeesAccruedWei: string;
       launcherFeesAccruedEth: string;
@@ -167,6 +168,7 @@ export type ExplorePage = {
   sort: ExploreSort;
   query: string;
   snapshot: ExploreSnapshot | null;
+  launchDiscoverySnapshot?: ExploreSnapshot;
   launcherFeesAccruedWei: string;
   launcherFeesAccruedEth: string;
 };

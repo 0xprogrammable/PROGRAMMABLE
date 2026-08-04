@@ -50,6 +50,11 @@ const snapshot = {
   blockHash: `0x${"55".repeat(32)}` as const,
   confirmations: 12,
 };
+const launchDiscoverySnapshot = {
+  ...snapshot,
+  blockNumber: "25630100",
+  blockHash: `0x${"66".repeat(32)}` as const,
+};
 
 describe("token detail Alchemy read", () => {
   beforeEach(() => {
@@ -65,6 +70,7 @@ describe("token detail Alchemy read", () => {
       status: "ready",
       tokens: [canonical, token(OTHER_TOKEN_ADDRESS)],
       snapshot,
+      launchDiscoverySnapshot,
       creatorClaims: [],
       launcherFeesAccruedWei: "0",
       launcherFeesAccruedEth: "0",
@@ -75,7 +81,6 @@ describe("token detail Alchemy read", () => {
         ...canonical,
         tokenPriceUsdWad: "1250000000000000000",
         fdvUsdWad: "1250000000000000000000000",
-        indexedMarketCapUsdWad: "1250000000000000000000000",
       },
     ]);
 
@@ -98,8 +103,8 @@ describe("token detail Alchemy read", () => {
       tokenAddress: canonical.tokenAddress,
       tokenPriceUsdWad: "1250000000000000000",
       fdvUsdWad: "1250000000000000000000000",
-      indexedMarketCapUsdWad: "1250000000000000000000000",
     });
+    expect(body.launchDiscoverySnapshot).toEqual(launchDiscoverySnapshot);
     expect(response.headers.get("X-Programmable-Read-Source")).toBe(
       "blob",
     );
@@ -109,8 +114,11 @@ describe("token detail Alchemy read", () => {
     expect(response.headers.get("X-Programmable-Price-Source")).toBe(
       "alchemy",
     );
+    expect(response.headers.get("X-Programmable-Launch-Source")).toBe(
+      "alchemy",
+    );
     expect(response.headers.get("Cache-Control")).toBe(
-      "public, max-age=0, s-maxage=5, stale-while-revalidate=15",
+      "public, max-age=0, s-maxage=2, stale-while-revalidate=5",
     );
   });
 
@@ -132,6 +140,7 @@ describe("token detail Alchemy read", () => {
       status: "ready",
       tokens: [],
       snapshot,
+      launchDiscoverySnapshot,
       creatorClaims: [],
       launcherFeesAccruedWei: "0",
       launcherFeesAccruedEth: "0",
@@ -144,6 +153,9 @@ describe("token detail Alchemy read", () => {
     );
 
     expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      launchDiscoverySnapshot,
+    });
     expect(mocks.enrichTokensWithAlchemyPrices).not.toHaveBeenCalled();
   });
 });

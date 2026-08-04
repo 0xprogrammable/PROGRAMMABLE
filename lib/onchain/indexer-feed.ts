@@ -115,6 +115,7 @@ export type ProgrammableIndexerFeed = {
   status: ExploreReadModel["status"];
   chainId: number;
   snapshot: ExploreSnapshot | null;
+  launchDiscoverySnapshot?: ExploreSnapshot;
   tokens: ProgrammableIndexerToken[];
 };
 
@@ -471,6 +472,8 @@ export function buildIndexerFeed(
     status: model.status,
     chainId,
     snapshot: model.snapshot,
+    launchDiscoverySnapshot:
+      model.status === "ready" ? model.launchDiscoverySnapshot : undefined,
     tokens: model.tokens.map((token) =>
       serializeIndexerToken(token, chainId),
     ),
