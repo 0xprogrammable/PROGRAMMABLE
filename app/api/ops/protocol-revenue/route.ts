@@ -3,9 +3,9 @@ import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import {
-  runConfiguredProtocolRevenueKeeper,
-  safeProtocolRevenueKeeperError,
-} from "../../../../lib/protocol-revenue/keeper.server";
+  runConfiguredProtocolRevenueKeeperV2,
+  safeProtocolRevenueKeeperV2Error,
+} from "../../../../lib/protocol-revenue/keeper-v2.server";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 90;
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
 
   const startedAt = Date.now();
   try {
-    const result = await runConfiguredProtocolRevenueKeeper();
+    const result = await runConfiguredProtocolRevenueKeeperV2();
     console.info("Programmable protocol revenue keeper completed", {
       status: result.status,
       transactionHash:
@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Programmable protocol revenue keeper failed", {
-      ...safeProtocolRevenueKeeperError(error),
+      ...safeProtocolRevenueKeeperV2Error(error),
       durationMs: Date.now() - startedAt,
     });
     return NextResponse.json(

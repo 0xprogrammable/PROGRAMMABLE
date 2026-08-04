@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "system": "protocol-revenue-v2",
+  "status": "deployed-source-verified-automation-disabled",
+  "chainId": 1,
+  "checkedAt": "2026-08-04T19:06:10Z",
+  "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+  "revenueAuthority": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+  "keeper": "0xD00fDE8d640E20542a323302537FdCD8CB14cc08",
+  "treasury": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+  "v4Token": "0x7987f03462200b3D8A072E02C89A8A41dCB124EE",
+  "contracts": {
+    "claimCoordinator": {
+      "address": "0x4860143AE250bF8156e5993eBFE0Fce4672E4069",
+      "transaction": "0xaa77da359cdaf15b3132c53ebf7691259781f24443e0bf9331f0fe21ef661053",
+      "block": 25682795,
+      "runtimeCodeHash": "0x964700ee05f1a6dadee5e1fe241b8e5ac6e141e51c69357eba14eae3a0263d39",
+      "constructorArguments": "0x000000000000000000000000d00fde8d640e20542a323302537fdcd8cb14cc08"
+    },
+    "revenueVault": {
+      "address": "0xB603994cf90eD0Ce057D9D50a22257bBC89a4DEA",
+      "transaction": "0x6df4fadef3d5c671a6bad7aa36738b906470f748cd86c970347245765f684205",
+      "block": 25682799,
+      "runtimeCodeHash": "0x55ef6e1f4735086f17d65d122e422469d3fdc2f6ff6cddbec3c21ed5d436417c",
+      "constructorArguments": "0x000000000000000000000000d00fde8d640e20542a323302537fdcd8cb14cc08"
+    }
+  },
+  "permission": {
+    "standard": "ERC-7715",
+    "delegationManager": "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3",
+    "periodAmountWei": "5000000000000000000",
+    "periodDurationSeconds": 86400,
+    "onlyPayee": "0xB603994cf90eD0Ce057D9D50a22257bBC89a4DEA",
+    "onlyRedeemer": "0xD00fDE8d640E20542a323302537FdCD8CB14cc08",
+    "emptyCalldataOnly": true,
+    "savedAt": "2026-08-04T18:58:29.808Z",
+    "expiry": 1817405899
+  },
+  "sourceVerification": {
+    "sourcify": {
+      "status": "creation-and-runtime-match",
+      "claimCoordinatorJob": "86947eea-ba50-48a8-8e37-3914cca391d5",
+      "revenueVaultJob": "726595c7-87e1-45a2-8852-74c2bc31e9ca"
+    },
+    "routescan": "submitted-by-sourcify",
+    "blockscout": "submitted-by-sourcify",
+    "etherscan": {
+      "claimCoordinator": "submitted-by-sourcify",
+      "revenueVault": "daily-submission-limit-reached"
+    }
+  },
+  "automation": {
+    "enabled": false,
+    "canaryRequired": true,
+    "scope": "Classic V1 and Classic V2 native launcher fees only"
+  }
+}
