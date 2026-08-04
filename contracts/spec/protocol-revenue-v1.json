@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "model": "protocol-revenue-v1",
+  "status": "local-release-candidate-not-deployed",
+  "chainId": 1,
+  "deployment": {
+    "router": null,
+    "enforcer": null,
+    "executor": null,
+    "keeper": null
+  },
+  "revenueAuthority": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+  "treasury": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+  "token": "0x7987f03462200b3d8a072e02c89a8a41dcb124ee",
+  "pool": {
+    "id": "0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0",
+    "currency0": "0x0000000000000000000000000000000000000000",
+    "currency1": "0x7987f03462200b3d8a072e02c89a8a41dcb124ee",
+    "feePips": 0,
+    "tickSpacing": 200,
+    "hook": "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC",
+    "outputRecipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
+  },
+  "splitBps": {
+    "treasury": 5000,
+    "buyV4": 4950,
+    "keeperGas": 50
+  },
+  "liquidityAction": "none",
+  "claimScope": "exact-current-hook-snapshot-only",
+  "existingWalletEthIncluded": false,
+  "existingRouterEthIncluded": false,
+  "cycle": {
+    "intervalSeconds": 86400,
+    "vercelCheckSchedule": "*/15 * * * *",
+    "minimumNewRevenueWei": "1000000000000000",
+    "maximumSwapChunkWei": "100000000000000000",
+    "maximumSwapChunks": 32,
+    "maximumSwapTickMove": 100,
+    "maximumTotalSwapTickMove": 500,
+    "maximumReferenceTickDeviation": 100,
+    "maximumObservationAgeSeconds": 1800,
+    "executionDeadlineSeconds": 300
+  },
+  "automation": {
+    "provider": "vercel-cron-restricted-keeper",
+    "status": "built-disabled-not-deployed",
+    "triggerRoute": "/api/ops/protocol-revenue",
+    "referenceBlock": "two-provider-agreed-finalized",
+    "privateSubmission": "https://boost.rpc.mevblocker.io/noreverts",
+    "keeperKeyScope": "gas-only-disposable-eoa",
+    "maximumGasPriceGweiDefault": "5",
+    "minimumRevenueGasMultiplier": "250",
+    "gasLimitBufferBps": 12500,
+    "keeperBalanceHeadroom": 2
+  },
+  "nativeFeeSources": [
+    "0x48bB2672c7fd2a12e7fb5D46c441ccD3726520Cc",
+    "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC",
+    "0x35Fe236EA82F7cF525c9719d7df8F49F94D720CC",
+    "0x48dC3009eC1d3298BBA31f718A9A29d02fC9B0cC"
+  ],
+  "excludedRevenue": [
+    "stock-paired quote-asset protocol fees",
+    "future hook versions not explicitly pinned"
+  ],
+  "activationGates": [
+    "clean integration and complete regression",
+    "mainnet deployment",
+    "source verification",
+    "signed and configured MetaMask delegation",
+    "disabled Vercel sensitive configuration",
+    "small private-relay mainnet lifecycle",
+    "production monitoring",
+    "explicit enablement"
+  ]
+}
