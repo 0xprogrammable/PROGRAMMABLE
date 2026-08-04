@@ -1077,7 +1077,7 @@ function TokenDetailContent({
   return (
     <div className={`${styles.page} page-width`}>
       <div className={styles.navigationRow}>
-        <Link className={styles.back} href="/">
+        <Link className={styles.back} href="/explore">
           <ArrowLeft aria-hidden="true" size={16} />
           Explore
         </Link>
@@ -1530,7 +1530,7 @@ export function TokenDetailView({ address }: { address: string }) {
   if (activeState.phase === "loading") {
     return (
       <div className={`${styles.page} page-width`}>
-        <Link className={styles.back} href="/">
+        <Link className={styles.back} href="/explore">
           <ArrowLeft aria-hidden="true" size={16} />
           Explore
         </Link>
@@ -1554,7 +1554,7 @@ export function TokenDetailView({ address }: { address: string }) {
 
   return (
     <div className={`${styles.page} page-width`}>
-      <Link className={styles.back} href="/">
+      <Link className={styles.back} href="/explore">
         <ArrowLeft aria-hidden="true" size={16} />
         Explore
       </Link>
@@ -1580,7 +1580,7 @@ export function TokenDetailView({ address }: { address: string }) {
 function TokenDetailMessage({ message }: { message: string }) {
   return (
     <div className={`${styles.page} page-width`}>
-      <Link className={styles.back} href="/">
+      <Link className={styles.back} href="/explore">
         <ArrowLeft aria-hidden="true" size={16} />
         Explore
       </Link>
