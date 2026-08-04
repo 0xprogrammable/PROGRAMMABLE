@@ -57,7 +57,7 @@ the ETH still reaches the revenue wallet and can be transferred to the Vault on 
 
 ## Price and MEV boundary
 
-The keeper submits through MEV Blocker's private `noreverts` endpoint. This reduces public-mempool exposure but is not
+The keeper submits through Flashbots Protect's private fast endpoint. This reduces public-mempool exposure but is not
 a cryptographic MEV guarantee. The Vault independently enforces a finalized-block reference tick, 30-minute maximum
 observation age, 100-tick reference deviation, 100-tick per-chunk movement, 500-tick total movement, fee-aware minimum
 output, `0.1 ETH` chunks and 32 chunks maximum. Any failed check reverts the complete cycle.
