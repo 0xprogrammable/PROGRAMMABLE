@@ -66,8 +66,37 @@ describe("Developer documentation experience", () => {
     expect(workbench).toContain(
       'fetch("/api/developer-docs/launch-preview"',
     );
+    expect(workbench).toContain("controller.abort(), 30_000");
     expect(livePreviewRoute).toContain(
       "https://developers.programmable.family/api/v1/launches?limit=1",
+    );
+  });
+
+  it("links integrators to complete guides and a real token-detail response", () => {
+    expect(developerPage).toContain("Terminals and scanners");
+    expect(developerPage).toContain("Indexers and data platforms");
+    expect(developerPage).toContain("docs/guides/terminals-and-scanners.md");
+    expect(developerPage).toContain(
+      "/api/v1/launches/1/0x56a96463ead0c0b9b4e4df9e41805bb8877074a6",
+    );
+    expect(developerPage).not.toContain(
+      'endpoint.path.replace("/{chainId}/{tokenAddress}", "")',
+    );
+    expect(developerDocsMarkdown).toContain(
+      "`/token` alone is not an API route",
+    );
+    expect(programmableLlmsIndex).not.toContain(
+      "https://developers.programmable.family/schemas/v1/",
+    );
+  });
+
+  it("states the public discovery and market-data boundary without implying execution", () => {
+    expect(developerPage).toContain("Available from v1");
+    expect(developerPage).toContain("Separate market capability");
+    expect(developerPage).toContain("Price candles and normalized volume");
+    expect(developerPage).toContain("Open community Custom intake");
+    expect(developerDocsMarkdown).toContain(
+      "transaction execution require a separately verified market adapter",
     );
   });
 

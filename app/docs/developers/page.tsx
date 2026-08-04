@@ -33,11 +33,39 @@ export const metadata: Metadata = {
 
 const developerSections = [
   { id: "quickstart", label: "Quickstart" },
+  { id: "integrations", label: "Integration guides" },
   { id: "response", label: "Response model" },
   { id: "sync", label: "Backfill and updates" },
   { id: "rendering", label: "Rendering rules" },
   { id: "agents", label: "AI agents" },
   { id: "reference", label: "API reference" },
+] as const;
+
+const integrationGuides = [
+  {
+    title: "Terminals and scanners",
+    detail:
+      "Detect launches, preserve finality and provenance, and enable market features only when support is declared.",
+    href: "https://github.com/0xprogrammable/developers/blob/main/docs/guides/terminals-and-scanners.md",
+  },
+  {
+    title: "Indexers and data platforms",
+    detail:
+      "Backfill every page, persist durable cursors, and reconcile non-final launches without duplicates.",
+    href: "https://github.com/0xprogrammable/developers/blob/main/docs/guides/indexers.md",
+  },
+  {
+    title: "Wallets and explorers",
+    detail:
+      "Key assets by chain and address while keeping creator metadata separate from verified launch origin.",
+    href: "https://github.com/0xprogrammable/developers/blob/main/docs/guides/wallets.md",
+  },
+  {
+    title: "Bots, apps and games",
+    detail:
+      "Consume the read-only feed safely and treat unknown capabilities or extensions as non-executable data.",
+    href: "https://github.com/0xprogrammable/developers/blob/main/docs/guides/apps-and-games.md",
+  },
 ] as const;
 
 const responseGroups = [
@@ -88,31 +116,37 @@ const responseGroups = [
 const endpoints = [
   {
     path: "/.well-known/programmable.json",
+    href: "/.well-known/programmable.json",
     label: "Discover the API",
     note: "Stable links to the current API, manifest, schemas, and docs.",
   },
   {
     path: "/api/v1/status",
+    href: "/api/v1/status",
     label: "Check availability",
     note: "Service lifecycle, indexing progress, freshness, and finality.",
   },
   {
     path: "/api/v1/manifest",
+    href: "/api/v1/manifest",
     label: "Resolve deployments",
     note: "Current and historical sources, start blocks, and compatibility state.",
   },
   {
     path: "/api/v1/launches",
+    href: "/api/v1/launches",
     label: "Read the launch feed",
     note: "Cursor-paginated Classic and Custom launch records.",
   },
   {
     path: "/api/v1/launches/{chainId}/{tokenAddress}",
+    href: "/api/v1/launches/1/0x56a96463ead0c0b9b4e4df9e41805bb8877074a6",
     label: "Fetch one launch",
-    note: "Canonical record for one chain and token contract.",
+    note: "Opens a real Ethereum record with both required path values.",
   },
   {
     path: "/api/v1/token-list",
+    href: "/api/v1/token-list",
     label: "Use the compatibility list",
     note: "Finalized token identity for wallet-style integrations.",
   },
@@ -147,13 +181,80 @@ export default function DeveloperDocsPage() {
   return (
     <DocsShell
       currentPath="/docs/developers"
-      description="Integrate the public Programmable launch feed into terminals, wallets, scanners, indexers, apps, and agents. Read-only REST, no API key."
+      description="Discover and verify Programmable launches through one public, versioned feed. Read-only REST, no API key."
       heroAside={<DeveloperDocsWorkbench />}
       heroMeta={<DeveloperDocsActions />}
       kicker="Docs / Developers"
       sections={developerSections}
       title="Developer documentation"
     >
+      <section id="integrations">
+        <div className={styles.sectionIntro}>
+          <h2>Choose your integration</h2>
+          <p>
+            Start with the guide for your product, then use OpenAPI and the
+            published schemas as the field-level contract.
+          </p>
+        </div>
+
+        <div className={styles.integrationPaths}>
+          {integrationGuides.map((guide) => (
+            <a
+              href={guide.href}
+              key={guide.title}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <span>
+                <strong>{guide.title}</strong>
+                <small>{guide.detail}</small>
+              </span>
+              <ArrowUpRight aria-hidden="true" size={18} strokeWidth={1.8} />
+            </a>
+          ))}
+        </div>
+
+        <div className={styles.integrationScope}>
+          <div>
+            <span className={styles.scopeLabel}>Available from v1</span>
+            <ul>
+              <li>Classic and listed first-party Custom launch discovery</li>
+              <li>
+                Token identity, provenance, finality, markets and fee disclosure
+              </li>
+              <li>
+                Manifest, individual records, token list, cursors and schemas
+              </li>
+              <li>Public CORS access without an API key</li>
+            </ul>
+          </div>
+          <div>
+            <span className={styles.scopeLabel}>Separate market capability</span>
+            <ul>
+              <li>Price candles and normalized volume</li>
+              <li>Quotes, simulation and transaction execution</li>
+              <li>
+                Any market feature not marked available by a verified adapter
+              </li>
+              <li>Open community Custom intake, which remains prelaunch</li>
+            </ul>
+          </div>
+        </div>
+
+        <p className={styles.scopeNote}>
+          The feed makes launches integrable; it does not fabricate market data
+          or authorize trades. Check the{" "}
+          <a
+            href="https://developers.programmable.family/api/v1/status"
+            rel="noreferrer"
+            target="_blank"
+          >
+            live API status
+          </a>{" "}
+          and each market&apos;s support fields before enabling product features.
+        </p>
+      </section>
+
       <section id="response">
         <div className={styles.sectionIntro}>
           <h2>Response model</h2>
@@ -360,7 +461,7 @@ export default function DeveloperDocsPage() {
         <div className={styles.endpointList}>
           {endpoints.map((endpoint) => (
             <a
-              href={`https://developers.programmable.family${endpoint.path.replace("/{chainId}/{tokenAddress}", "")}`}
+              href={`https://developers.programmable.family${endpoint.href}`}
               key={endpoint.path}
               rel="noreferrer"
               target="_blank"
@@ -374,6 +475,21 @@ export default function DeveloperDocsPage() {
               <ArrowUpRight aria-hidden="true" size={17} strokeWidth={1.8} />
             </a>
           ))}
+        </div>
+
+        <div className={styles.endpointGuidance}>
+          <p>
+            A token detail request needs both path values. Use
+            <code>/api/v1/launches/1/0x…</code>; <code>/token</code> by itself
+            is not an API route.
+          </p>
+          <div aria-label="Launch feed query parameters">
+            <code>chainId=1</code>
+            <code>category=classic|custom</code>
+            <code>limit=1..100</code>
+            <code>cursor=&lt;opaque&gt;</code>
+            <code>after=&lt;resumeCursor&gt;</code>
+          </div>
         </div>
 
         <div className={styles.httpStates} aria-label="HTTP response handling">
@@ -418,6 +534,18 @@ export default function DeveloperDocsPage() {
             meta="Guides, fixtures, and tests"
           >
             Developer repository
+          </ExternalResource>
+          <ExternalResource
+            href="https://github.com/0xprogrammable/developers/blob/main/CHANGELOG.md"
+            meta="Track additive and versioned changes"
+          >
+            API changelog
+          </ExternalResource>
+          <ExternalResource
+            href="https://github.com/0xprogrammable/developers/issues"
+            meta="Ask integration questions or report discrepancies"
+          >
+            Integration support
           </ExternalResource>
         </div>
 
