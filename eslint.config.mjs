@@ -17,5 +17,7 @@ export default defineConfig([
     "contracts/broadcast/**",
     "indexer/.envio/**",
     "indexer/envio-env.d.ts",
+    "ops/**/.cre_build_tmp.*",
+    "ops/**/binary.wasm",
   ]),
 ]);
