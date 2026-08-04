@@ -9,12 +9,7 @@ import {
   Play,
   Sparkles,
 } from "lucide-react";
-import {
-  useEffect,
-  useRef,
-  useState,
-  type KeyboardEvent,
-} from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import styles from "@/components/developer-docs.module.css";
 
@@ -67,10 +62,9 @@ const languageExamples: readonly LanguageExample[] = [
     id: "curl",
     label: "cURL",
     filename: "terminal",
-    code: [
-      "curl -fsSL \\",
-      `  '${apiOrigin}/api/v1/launches?limit=50'`,
-    ].join("\n"),
+    code: ["curl -fsSL \\", `  '${apiOrigin}/api/v1/launches?limit=50'`].join(
+      "\n",
+    ),
   },
   {
     id: "typescript",
@@ -244,8 +238,7 @@ export function compactFeedPreview(feed: FeedPreview) {
 }
 
 export function DeveloperDocsWorkbench() {
-  const [activeLanguage, setActiveLanguage] =
-    useState<LanguageId>("typescript");
+  const [activeLanguage, setActiveLanguage] = useState<LanguageId>("curl");
   const [requestState, setRequestState] = useState<LiveRequestState>("idle");
   const [httpStatus, setHttpStatus] = useState<number | null>(null);
   const [responseText, setResponseText] = useState(
@@ -339,7 +332,7 @@ export function DeveloperDocsWorkbench() {
             <i />
             <i />
           </span>
-          <span className={styles.workbenchLabel}>Quickstart workbench</span>
+          <span className={styles.workbenchLabel}>Live API</span>
         </div>
         <a
           className={styles.openApiLink}
@@ -369,9 +362,7 @@ export function DeveloperDocsWorkbench() {
                     id={`developer-language-${example.id}`}
                     key={example.id}
                     onClick={() => selectLanguage(index)}
-                    onKeyDown={(event) =>
-                      handleLanguageKeyDown(event, index)
-                    }
+                    onKeyDown={(event) => handleLanguageKeyDown(event, index)}
                     ref={(element) => {
                       tabRefs.current[index] = element;
                     }}
@@ -453,7 +444,11 @@ export function DeveloperAgentPrompt() {
           <span className={styles.agentPromptEyebrow}>Agent handoff</span>
           <strong>Give any coding agent the same source of truth</strong>
         </div>
-        <CopyAction label="Copy agent prompt" text={agentPrompt} variant="prompt" />
+        <CopyAction
+          label="Copy agent prompt"
+          text={agentPrompt}
+          variant="prompt"
+        />
       </div>
       <pre className={styles.agentPromptCode}>
         <code>{agentPrompt}</code>

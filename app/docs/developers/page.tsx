@@ -4,13 +4,10 @@ import {
   ArrowUpRight,
   Bot,
   Braces,
-  CheckCircle2,
   CircleDot,
   Database,
   FileJson,
-  Globe2,
   Layers3,
-  Radio,
   ShieldCheck,
   Terminal,
   Workflow,
@@ -60,7 +57,8 @@ const responseGroups = [
     summary: "Original onchain provenance",
     detail:
       "Preserve the launch transaction, block position, timestamp, origin, model, and finality. Do not replace the onchain timestamp with first observation time.",
-    fields: "status · transactionHash · blockNumber · logIndex · timestamp · finality",
+    fields:
+      "status · transactionHash · blockNumber · logIndex · timestamp · finality",
   },
   {
     name: "verification",
@@ -84,7 +82,8 @@ const responseGroups = [
     summary: "Verified fee disclosure",
     detail:
       "Read fee behavior from each record. Do not infer the rate or charge mode from Classic or Custom alone.",
-    fields: "kind · ratePpm · rateBps · recipient · chargeMode · verificationStatus",
+    fields:
+      "kind · ratePpm · rateBps · recipient · chargeMode · verificationStatus",
   },
 ] as const;
 
@@ -131,7 +130,12 @@ function ExternalResource({
   meta: string;
 }) {
   return (
-    <a className={styles.resourceLink} href={href} rel="noreferrer" target="_blank">
+    <a
+      className={styles.resourceLink}
+      href={href}
+      rel="noreferrer"
+      target="_blank"
+    >
       <span>
         <strong>{children}</strong>
         <small>{meta}</small>
@@ -146,61 +150,29 @@ export default function DeveloperDocsPage() {
     <DocsShell
       currentPath="/docs/developers"
       description="Fetch launches, track new tokens, and add Programmable data to a terminal, scanner, wallet, indexer, app, or agent. The public v1 API is read-only and needs no API key."
+      heroAside={<DeveloperDocsWorkbench />}
+      heroMeta={
+        <>
+          <div className={styles.integrationMeta} aria-label="API summary">
+            <span>Public REST</span>
+            <span>No API key</span>
+            <span>Ethereum mainnet</span>
+            <span>v1 JSON</span>
+          </div>
+          <div className={styles.endpointBar}>
+            <span>Base URL</span>
+            <code>developers.programmable.family</code>
+            <span className={styles.endpointLive}>
+              <i aria-hidden="true" />
+              Live
+            </span>
+          </div>
+        </>
+      }
       kicker="Docs / Developers"
       sections={developerSections}
       title="Developer integrations"
     >
-      <section className={styles.quickstartSection} id="quickstart">
-        <div className={styles.integrationMeta} aria-label="API summary">
-          <div>
-            <Radio aria-hidden="true" size={16} strokeWidth={1.9} />
-            <span>Public REST</span>
-          </div>
-          <div>
-            <ShieldCheck aria-hidden="true" size={16} strokeWidth={1.9} />
-            <span>No API key</span>
-          </div>
-          <div>
-            <Globe2 aria-hidden="true" size={16} strokeWidth={1.9} />
-            <span>Ethereum mainnet</span>
-          </div>
-          <div>
-            <Braces aria-hidden="true" size={16} strokeWidth={1.9} />
-            <span>v1 · JSON</span>
-          </div>
-        </div>
-
-        <div className={styles.endpointBar}>
-          <span>Base URL</span>
-          <code>https://developers.programmable.family</code>
-          <span className={styles.endpointLive}>
-            <i aria-hidden="true" />
-            Live
-          </span>
-        </div>
-
-        <div className={styles.sectionIntro}>
-          <span className={styles.sectionKicker}>Start here</span>
-          <h2>Get a real launch into your code</h2>
-          <p>
-            Choose your stack, copy the request, or run it against the live
-            public feed. No SDK setup and no placeholder response.
-          </p>
-        </div>
-        <DeveloperDocsWorkbench />
-
-        <div className={styles.firstSuccess}>
-          <CheckCircle2 aria-hidden="true" size={20} strokeWidth={1.9} />
-          <div>
-            <strong>That is the complete first request.</strong>
-            <p>
-              In production, start from the discovery document, read the
-              manifest, then traverse and persist the feed as described below.
-            </p>
-          </div>
-        </div>
-      </section>
-
       <section id="response">
         <div className={styles.sectionIntro}>
           <span className={styles.sectionKicker}>Understand the payload</span>
@@ -227,7 +199,10 @@ export default function DeveloperDocsPage() {
                 key={group.name}
               >
                 <summary>
-                  <span className={styles.responseGroupDot} aria-hidden="true" />
+                  <span
+                    className={styles.responseGroupDot}
+                    aria-hidden="true"
+                  />
                   <span>
                     <code>{group.name}</code>
                     <small>{group.summary}</small>
@@ -320,7 +295,9 @@ export default function DeveloperDocsPage() {
               <small>Finish this traversal</small>
             </span>
           </div>
-          <span className={styles.cursorArrow} aria-hidden="true">→</span>
+          <span className={styles.cursorArrow} aria-hidden="true">
+            →
+          </span>
           <div>
             <Database aria-hidden="true" size={18} strokeWidth={1.8} />
             <span>
@@ -451,11 +428,21 @@ export default function DeveloperDocsPage() {
         </div>
 
         <div className={styles.httpStates} aria-label="HTTP response handling">
-          <span><code>200</code> Process</span>
-          <span><code>304</code> Reuse cache</span>
-          <span><code>400</code> Fix request</span>
-          <span><code>429</code> Back off</span>
-          <span><code>503</code> Keep last good state</span>
+          <span>
+            <code>200</code> Process
+          </span>
+          <span>
+            <code>304</code> Reuse cache
+          </span>
+          <span>
+            <code>400</code> Fix request
+          </span>
+          <span>
+            <code>429</code> Back off
+          </span>
+          <span>
+            <code>503</code> Keep last good state
+          </span>
         </div>
 
         <div className={styles.resourceGrid}>
@@ -488,7 +475,9 @@ export default function DeveloperDocsPage() {
         <div className={styles.docsBoundary}>
           <Terminal aria-hidden="true" size={20} strokeWidth={1.8} />
           <div>
-            <strong>Classic and Custom Hook product guides are not published yet.</strong>
+            <strong>
+              Classic and Custom Hook product guides are not published yet.
+            </strong>
             <p>
               This page covers only the public developer integration contract.
               The other Docs categories stay marked Available soon until their
