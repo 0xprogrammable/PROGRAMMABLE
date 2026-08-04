@@ -35,13 +35,18 @@ description = "Protocol revenue sources pin the public V4 token address and runt
 condition = "AND"
 regexTarget = "match"
 paths = [
+  '''contracts/deployments/mainnet-protocol-revenue-v2\.json''',
   '''contracts/script/DeployMainnetProtocolRevenueV1\.s\.sol''',
+  '''contracts/script/DeployMainnetProtocolRevenueV2\.s\.sol''',
   '''contracts/spec/protocol-revenue-v1\.json''',
   '''contracts/src/ProtocolRevenueExecutionEnforcerV1\.sol''',
   '''contracts/src/ProtocolRevenueMetaMaskExecutorV1\.sol''',
   '''contracts/src/ProtocolRevenueRouterV1\.sol''',
+  '''contracts/src/ProtocolRevenueVaultV2\.sol''',
+  '''contracts/test/ProtocolRevenueV2\.t\.sol''',
   '''contracts/test/ProtocolRevenueRouterV1MainnetFork\.t\.sol''',
   '''contracts/test/invariant/ProtocolRevenueRouterV1Invariant\.t\.sol''',
+  '''contracts/test/invariant/ProtocolRevenueVaultV2Invariant\.t\.sol''',
 ]
 regexes = [
   '''(?i)0x7987f03462200b3d8a072e02c89a8a41dcb124ee''',
