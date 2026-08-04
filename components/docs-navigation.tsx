@@ -631,7 +631,7 @@ export function DocsNavigation({
                   : undefined
               }
             />
-            <p className={styles.navLabel}>On this page</p>
+            <p className={styles.navLabel}>Contents</p>
             <ul>
               {sections.map((section) => {
                 const href = `${currentPath}#${section.id}`;

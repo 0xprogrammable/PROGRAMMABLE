@@ -1,27 +1,17 @@
 .page {
-  --explore-pink: #a83f64;
-  --explore-pink-strong: #873149;
+  --explore-pink: var(--accent);
+  --explore-pink-strong: var(--accent-strong);
   --explore-pink-soft: color-mix(
     in srgb,
     var(--explore-pink) 9%,
     transparent
   );
-  --accent: var(--explore-pink);
-  --accent-strong: var(--explore-pink-strong);
-  --accent-soft: var(--explore-pink-soft);
-  --brand-pink: var(--explore-pink);
-  --focus: var(--explore-pink);
   display: block;
   height: auto;
   min-height: calc(100svh - var(--header-height));
   min-width: 0;
   overflow: visible;
   padding-bottom: 0;
-}
-
-:global(html[data-theme="dark"]) .page {
-  --explore-pink: #e087a6;
-  --explore-pink-strong: #f0a7be;
 }
 
 .pageHeading {
@@ -36,17 +26,6 @@
   position: relative;
   text-align: center;
   width: 100%;
-}
-
-.pageKicker {
-  color: var(--explore-pink);
-  font-family: var(--font-plex-mono), monospace;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.12em;
-  line-height: 1;
-  margin: 0 0 14px;
-  text-transform: uppercase;
 }
 
 .pageHeading h1 {
@@ -227,43 +206,6 @@
   width: 18px;
 }
 
-.indexRail {
-  align-items: baseline;
-  display: flex;
-  gap: 24px;
-  justify-content: space-between;
-  margin: 0 auto;
-  max-width: 1020px;
-  min-height: 20px;
-  min-width: 0;
-  padding-inline: 2px;
-  width: 100%;
-}
-
-.resultCount,
-.sortReadout {
-  color: var(--muted);
-  font-family: var(--font-plex-mono), monospace;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.45;
-  margin: 0;
-}
-
-.sortReadout {
-  min-width: 0;
-  overflow: hidden;
-  text-align: end;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sortReadout span {
-  color: var(--explore-pink);
-  margin-inline-end: 8px;
-  text-transform: uppercase;
-}
-
 .runnerGrid {
   align-items: stretch;
   display: grid;
@@ -337,20 +279,7 @@
 .runnerHeading {
   align-items: baseline;
   display: flex;
-  gap: 9px;
   min-width: 0;
-}
-
-.runnerIndex {
-  color: var(--explore-pink);
-  flex: none;
-  font-family: var(--font-plex-mono), monospace;
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  line-height: 1;
-  transform: translateY(-2px);
 }
 
 .runnerHeading h3 {
@@ -358,7 +287,7 @@
   font-size: clamp(22px, 1.75vw, 26px);
   font-weight: 585;
   letter-spacing: -0.032em;
-  line-height: 1.03;
+  line-height: 1.15;
   margin: 0;
   min-width: 0;
   overflow: hidden;
@@ -406,7 +335,7 @@
 }
 
 .runnerMarketCapLabel {
-  color: var(--explore-pink);
+  color: var(--muted);
   font-size: 10px;
   letter-spacing: 0.08em;
 }
@@ -646,10 +575,6 @@
     padding: 22px 0 18px;
   }
 
-  .pageKicker {
-    margin-bottom: 10px;
-  }
-
   .pageHeading h1 {
     font-size: clamp(31px, 9vw, 38px);
     letter-spacing: -0.035em;
@@ -754,15 +679,6 @@
 
   .runnersIntro :global(.token-toolbar) {
     gap: 8px;
-  }
-
-  .indexRail {
-    gap: 12px;
-  }
-
-  .resultCount,
-  .sortReadout {
-    font-size: 10px;
   }
 
   .runnerHitArea {

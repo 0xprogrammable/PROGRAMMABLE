@@ -963,8 +963,6 @@ export function ExploreView() {
   const pageCount = Math.max(1, payload?.totalPages ?? 0);
   const activePage = Math.min(payload?.page ?? currentPage, pageCount);
   const paginationItems = getExplorePaginationItems(activePage, pageCount);
-  const activeSortLabel =
-    sortOptions.find((option) => option.id === sort)?.label ?? "Newest";
   const resultLabel = resultRangeLabel(payload);
   const busy =
     !preview &&
@@ -1067,11 +1065,6 @@ export function ExploreView() {
         {cards.map((token, index) => {
           const href = `/token/${token.tokenAddress}`;
           const imageSource = getTokenCardImageSource(token.imageUrl);
-          const rank =
-            (activePage - 1) *
-              (payload?.pageSize ?? EXPLORE_TOKENS_PER_PAGE) +
-            index +
-            1;
           const marketCapLabel = token.marketCap
             ? formatMarketCapMetric(token.marketCap)
             : null;
@@ -1101,9 +1094,6 @@ export function ExploreView() {
 
                 <div className={styles.runnerBody}>
                   <header className={styles.runnerHeading}>
-                    <span className={styles.runnerIndex} aria-hidden="true">
-                      {String(rank).padStart(2, "0")}
-                    </span>
                     <h3 title={token.name}>{token.name}</h3>
                   </header>
 
@@ -1163,7 +1153,6 @@ export function ExploreView() {
     <>
       <div className={`${styles.page} explore-page page-width`}>
         <header className={styles.pageHeading}>
-          <p className={styles.pageKicker}>Explore</p>
           <h1>Launch tokens that work the way you imagine.</h1>
         </header>
 
@@ -1409,20 +1398,14 @@ export function ExploreView() {
           </div>
 
           {hasPublicTokens ? (
-            <div className={styles.indexRail}>
-              <p
-                className={styles.resultCount}
-                role="status"
-                aria-live="polite"
-                aria-atomic="true"
-              >
-                {resultLabel}
-              </p>
-              <p className={styles.sortReadout}>
-                <span>Sort</span>
-                {activeSortLabel}
-              </p>
-            </div>
+            <p
+              className="sr-only"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              {resultLabel}
+            </p>
           ) : null}
 
           {displayState.phase === "ready" &&

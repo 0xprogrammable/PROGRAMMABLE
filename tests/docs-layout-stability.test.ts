@@ -25,7 +25,7 @@ const interfaceCss = readFileSync(join(root, "app/interface.css"), "utf8");
 describe("Docs rail layout stability", () => {
   it("keeps the desktop rail sticky beside one bounded reading column", () => {
     expect(docsCss).toMatch(
-      /\.page\s*\{[^}]*--docs-content-width:\s*900px;[^}]*--docs-rail-width:\s*208px;/s,
+      /\.page\s*\{[^}]*--docs-content-width:\s*860px;[^}]*--docs-rail-width:\s*240px;/s,
     );
     expect(docsCss).toMatch(
       /\.page\s*\{[^}]*grid-template-columns:[^}]*var\(--docs-rail-width\)[^}]*minmax\(0,\s*var\(--docs-content-width\)\);/s,
@@ -38,13 +38,14 @@ describe("Docs rail layout stability", () => {
     );
   });
 
-  it("keeps the desktop tools available without pinning them on mobile", () => {
+  it("keeps search in the persistent rail and includes it in mobile offsets", () => {
     expect(docsShell).toContain("data-docs-tools");
+    expect(docsShell).toContain("styles.sidebarSearch");
     expect(docsCss).toMatch(
-      /\.heroTools\s*\{[^}]*position:\s*sticky;[^}]*top:\s*calc\(var\(--header-height\) \+ 12px\);/s,
+      /\.sidebarSearch,\s*\.sidebarSearch \.search\s*\{[^}]*width:\s*100%;/s,
     );
     expect(docsCss).toMatch(
-      /@media \(max-width:\s*960px\)[\s\S]*?\.heroTools\s*\{[^}]*position:\s*static;/s,
+      /@media \(max-width:\s*960px\)[\s\S]*?\.sidebarSearch\s*\{[^}]*position:\s*sticky;[^}]*top:\s*0;/s,
     );
   });
 
@@ -79,10 +80,10 @@ describe("Docs rail layout stability", () => {
     expect(docsShell).not.toContain("docsGuides");
     expect(docsShell).not.toContain("Documentation guides");
     expect(docsShell).toContain('aria-label="Documentation categories"');
-    expect(docsShell).toContain("Available soon");
-    expect(docsShell).toContain("Integrations");
+    expect(docsShell).toContain("Public API");
+    expect(docsShell).toContain("Soon");
     expect(docsNavigation).toContain(
-      '<p className={styles.navLabel}>On this page</p>',
+      '<p className={styles.navLabel}>Contents</p>',
     );
     expect(docsNavigation).toContain(
       "const navigationGroups = sections.length === 0 ? docsNavigation : [];",
