@@ -93,6 +93,12 @@
   width: 100%;
 }
 
+.plot:focus-visible {
+  border-radius: 12px;
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
 .plot svg {
   overflow: visible;
 }
@@ -117,6 +123,68 @@
   stroke-linejoin: round;
   stroke-width: 2.45;
   vector-effect: non-scaling-stroke;
+}
+
+.hoverGuide {
+  stroke: color-mix(in srgb, var(--text) 28%, transparent);
+  stroke-dasharray: 3 4;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.hoverDot {
+  fill: var(--canvas);
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.tooltip {
+  background: color-mix(in srgb, var(--glass-96) 95%, var(--canvas));
+  border: 1px solid var(--panel-border-soft);
+  border-radius: 11px;
+  box-shadow: 0 10px 28px color-mix(in srgb, black 14%, transparent);
+  display: grid;
+  gap: 2px;
+  min-width: max-content;
+  padding: 7px 9px;
+  pointer-events: none;
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 11px));
+  z-index: 2;
+}
+
+.tooltip[data-horizontal-edge="start"] {
+  transform: translate(0, calc(-100% - 11px));
+}
+
+.tooltip[data-horizontal-edge="end"] {
+  transform: translate(-100%, calc(-100% - 11px));
+}
+
+.tooltip[data-vertical="below"] {
+  transform: translate(-50%, 11px);
+}
+
+.tooltip[data-horizontal-edge="start"][data-vertical="below"] {
+  transform: translate(0, 11px);
+}
+
+.tooltip[data-horizontal-edge="end"][data-vertical="below"] {
+  transform: translate(-100%, 11px);
+}
+
+.tooltip strong {
+  color: var(--text);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 680;
+}
+
+.tooltip span {
+  color: var(--muted);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
 }
 
 .placeholder {

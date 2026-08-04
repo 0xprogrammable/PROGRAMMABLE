@@ -18,7 +18,7 @@ function collectCssFiles(directory: string): string[] {
 }
 
 describe("interaction accessibility", () => {
-  it("keeps the token chart informational instead of showing a crosshair", () => {
+  it("makes exact chart prices available to pointer and keyboard input", () => {
     const chartCss = readFileSync(
       join(root, "components/token-price-chart.module.css"),
       "utf8",
@@ -29,8 +29,30 @@ describe("interaction accessibility", () => {
     );
 
     expect(chartCss).not.toContain("cursor: crosshair");
-    expect(chartSource).not.toContain("onPointerMove");
+    expect(chartSource).toContain("onPointerMove={inspectPointer}");
+    expect(chartSource).toContain("onKeyDown={inspectKeyboard}");
+    expect(chartSource).toContain("tabIndex={0}");
     expect(chartSource).not.toContain("role=\"slider\"");
+  });
+
+  it("removes decorative token separators and image-edge outlines", () => {
+    const tokenCss = readFileSync(
+      join(root, "components/token-experience.module.css"),
+      "utf8",
+    );
+    const exploreCss = readFileSync(
+      join(root, "components/explore-experience.module.css"),
+      "utf8",
+    );
+    const launchCss = readFileSync(
+      join(root, "components/launch-experience.module.css"),
+      "utf8",
+    );
+
+    expect(tokenCss).not.toContain("border-bottom:");
+    expect(tokenCss).not.toContain("border-top:");
+    expect(exploreCss).not.toMatch(/\.runnerArt\s*\{[^}]*outline:/s);
+    expect(launchCss).not.toMatch(/\.modelArt\s*\{[^}]*outline:/s);
   });
 
   it("keeps the default arrow cursor policy across app controls", () => {
