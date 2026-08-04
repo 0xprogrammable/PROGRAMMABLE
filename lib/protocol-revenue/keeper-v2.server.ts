@@ -2,7 +2,6 @@ import "server-only";
 
 import { DelegationManager } from "@metamask/delegation-abis";
 import {
-  erc7710WalletActions,
   getNativeTokenPeriodTransferEnforcerAvailableAmount,
 } from "@metamask/smart-accounts-kit/actions";
 import { getSmartAccountsEnvironment } from "@metamask/smart-accounts-kit";
@@ -14,7 +13,6 @@ import {
 } from "@metamask/smart-accounts-kit/utils";
 import {
   createPublicClient,
-  createWalletClient,
   encodeFunctionData,
   getAddress,
   http,
@@ -704,46 +702,32 @@ export async function runConfiguredProtocolRevenueKeeperV2(
   }
 
   let transactionHash: Hex;
+  let submissionStage: "sign" | "broadcast" | "hash" = "sign";
   try {
-    if (action === "transfer") {
-      const walletClient = createWalletClient({
-        account,
-        chain: mainnet,
-        transport: http(privateEndpoint, { retryCount: 1, timeout: 12_000 }),
-      }).extend(erc7710WalletActions());
-      transactionHash = await walletClient.sendTransactionWithDelegation({
-        account,
-        chain: mainnet,
-        to: configuration.vault,
-        value: decision.amount,
-        data: "0x",
-        permissionContext: configuration.permissionContext,
-        delegationManager: configuration.delegationManager,
-        gas: economics.gasLimit,
-        maxFeePerGas,
-        maxPriorityFeePerGas,
-        nonce: latestNonce,
-      });
-    } else {
-      const serializedTransaction = await account.signTransaction({
-        chainId: mainnet.id,
-        data: transaction.data,
-        gas: economics.gasLimit,
-        maxFeePerGas,
-        maxPriorityFeePerGas,
-        nonce: latestNonce,
-        to: transaction.to,
-        type: "eip1559",
-        value: 0n,
-      });
-      transactionHash = await privateClient.sendRawTransaction({
-        serializedTransaction,
-      });
-      if (transactionHash.toLowerCase() !== keccak256(serializedTransaction)) {
-        throw new Error();
-      }
+    const serializedTransaction = await account.signTransaction({
+      chainId: mainnet.id,
+      data: transaction.data,
+      gas: economics.gasLimit,
+      maxFeePerGas,
+      maxPriorityFeePerGas,
+      nonce: latestNonce,
+      to: transaction.to,
+      type: "eip1559",
+      value: transaction.value,
+    });
+    submissionStage = "broadcast";
+    transactionHash = await privateClient.sendRawTransaction({
+      serializedTransaction,
+    });
+    submissionStage = "hash";
+    if (transactionHash.toLowerCase() !== keccak256(serializedTransaction)) {
+      throw new Error();
     }
   } catch {
+    console.error("Programmable protocol revenue submission rejected", {
+      action,
+      stage: submissionStage,
+    });
     throw new ProtocolRevenueKeeperV2Error("submission_failed");
   }
 
