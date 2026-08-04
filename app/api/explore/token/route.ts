@@ -41,7 +41,14 @@ export async function GET(request: NextRequest) {
     if (model.status === "ready" && !token) {
       return NextResponse.json(
         { status: model.status, token: null, snapshot: model.snapshot },
-        { status: 404, headers: { "Cache-Control": "no-store" } },
+        {
+          status: 404,
+          headers: {
+            "Cache-Control": "no-store",
+            "X-Programmable-Read-Source": "blob",
+            "X-Programmable-Rpc-Provider": "alchemy",
+          },
+        },
       );
     }
 
@@ -61,7 +68,7 @@ export async function GET(request: NextRequest) {
               ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
               : "public, max-age=0, s-maxage=30",
           "X-Programmable-Price-Source": "alchemy",
-          "X-Programmable-Read-Source": "rpc",
+          "X-Programmable-Read-Source": "blob",
           "X-Programmable-Rpc-Provider": "alchemy",
         },
       },

@@ -118,17 +118,20 @@ export async function GET(request: NextRequest) {
       socials,
     } as const;
     const model = await readAlchemyExploreModel();
+    const pricedModel = {
+      ...model,
+      tokens: await enrichTokensWithAlchemyPrices(model.tokens),
+    } satisfies ExploreReadModel;
     const useTopMarketCapView =
       options.sort === "market-cap" &&
       options.query.length === 0 &&
       options.socials === null;
     const page = useTopMarketCapView
-      ? topThenNewestPage(model, options)
-      : paginateExplore(model, options);
-    const tokens = await enrichTokensWithAlchemyPrices(page.tokens);
+      ? topThenNewestPage(pricedModel, options)
+      : paginateExplore(pricedModel, options);
 
     return NextResponse.json(
-      { ...page, tokens },
+      page,
       {
         headers: {
           "Cache-Control":
@@ -136,7 +139,7 @@ export async function GET(request: NextRequest) {
               ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
               : "public, max-age=0, s-maxage=30",
           "X-Programmable-Price-Source": "alchemy",
-          "X-Programmable-Read-Source": "rpc",
+          "X-Programmable-Read-Source": "blob",
           "X-Programmable-Rpc-Provider": "alchemy",
         },
       },

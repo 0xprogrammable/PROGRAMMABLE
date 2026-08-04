@@ -112,7 +112,7 @@ describe("Explore API Alchemy boundary", () => {
       Array.from({ length: 10 }, (_, index) => `T${10 - index}`),
     );
     expect(response.headers.get("X-Programmable-Read-Source")).toBe(
-      "rpc",
+      "blob",
     );
     expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
       "alchemy",
@@ -151,7 +151,7 @@ describe("Explore API Alchemy boundary", () => {
       ]),
     );
     expect(response.headers.get("X-Programmable-Read-Source")).toBe(
-      "rpc",
+      "blob",
     );
     expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
       "alchemy",

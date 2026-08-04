@@ -24,7 +24,7 @@ export function alchemyFeedHeaders(
     "Access-Control-Expose-Headers":
       "X-Programmable-Read-Source, X-Programmable-Rpc-Provider",
     "Cache-Control": cacheControl,
-    "X-Programmable-Read-Source": "rpc",
+    "X-Programmable-Read-Source": "blob",
     "X-Programmable-Rpc-Provider": "alchemy",
   });
 }
@@ -34,6 +34,6 @@ export const ALCHEMY_NO_STORE_HEADERS = Object.freeze({
   "Access-Control-Expose-Headers":
     "X-Programmable-Read-Source, X-Programmable-Rpc-Provider",
   "Cache-Control": "no-store",
-  "X-Programmable-Read-Source": "rpc",
+  "X-Programmable-Read-Source": "blob",
   "X-Programmable-Rpc-Provider": "alchemy",
 });

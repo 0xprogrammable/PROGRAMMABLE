@@ -306,7 +306,7 @@ jobs:
                   throw new Error(`${path} returned an oversized response`);
                 }
                 if (
-                  response.headers.get("x-programmable-read-source") !== "rpc" ||
+                  response.headers.get("x-programmable-read-source") !== "blob" ||
                   response.headers.get("x-programmable-rpc-provider") !== "alchemy"
                 ) {
                   throw new Error(`${path} did not prove the Alchemy RPC source`);
@@ -375,7 +375,7 @@ jobs:
           {
             echo "## Read-model release policy"
             echo
-            echo "Alchemy-only: Explore, token detail and token list read directly through Alchemy RPC."
+            echo "Alchemy-only: Explore, token detail and token list use the verified durable registry with live Alchemy enrichment."
             echo "Every non-Alchemy public read path is disabled."
           } >> "$GITHUB_STEP_SUMMARY"
 

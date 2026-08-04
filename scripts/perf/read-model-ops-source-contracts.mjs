@@ -1031,7 +1031,7 @@ export function evaluateReadModelOperationsSourceContracts(
         "STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
       ) &&
       stagedAlchemySmokeBlock.includes(
-        'response.headers.get("x-programmable-read-source") !== "rpc"',
+        'response.headers.get("x-programmable-read-source") !== "blob"',
       ) &&
       stagedAlchemySmokeBlock.includes(
         'response.headers.get("x-programmable-rpc-provider") !== "alchemy"',
@@ -1052,7 +1052,7 @@ export function evaluateReadModelOperationsSourceContracts(
       ) &&
       !stagedAlchemySmokeBlock.includes("${automationBypassSecret}") &&
       !stagedAlchemySmokeBlock.includes("console."),
-    "the Alchemy-only staged API smoke proves direct RPC provenance without indexed infrastructure or exposing its deployment bypass",
+    "the Alchemy-only staged API smoke proves durable-registry and live-provider provenance without indexed infrastructure or exposing its deployment bypass",
   );
   const stagedReadModelCapture = deployWorkflow.indexOf(
     "Capture staged read-model evidence",
