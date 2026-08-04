@@ -164,7 +164,7 @@
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --duration-fast: 120ms;
   --duration-base: 180ms;
-  --theme-transition-duration: 220ms;
+  --theme-transition-duration: 380ms;
   --header-height: 68px;
   --page-width: 1280px;
 }
@@ -298,7 +298,7 @@ html[data-theme="dark"] {
   }
 
   html[data-theme-transition^="fallback-"] {
-    transition-duration: 220ms;
+    transition-duration: 380ms;
     transition-property:
       --body-background,
       --surface,
@@ -320,7 +320,7 @@ html[data-theme="dark"] {
   }
 
   html[data-theme-transition^="fallback-"] body::after {
-    animation: theme-soft-fade 220ms cubic-bezier(0.2, 0, 0, 1) both;
+    animation: theme-soft-fade 380ms cubic-bezier(0.2, 0, 0, 1) both;
     content: "";
     inset: 0;
     pointer-events: none;
