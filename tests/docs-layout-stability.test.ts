@@ -16,13 +16,16 @@ const docsNavigation = readFileSync(
   join(root, "components/docs-navigation.tsx"),
   "utf8",
 );
-const docsPage = readFileSync(join(root, "app/docs/page.tsx"), "utf8");
+const docsPage = readFileSync(
+  join(root, "app/docs/developers/page.tsx"),
+  "utf8",
+);
 const interfaceCss = readFileSync(join(root, "app/interface.css"), "utf8");
 
 describe("Docs rail layout stability", () => {
   it("keeps the desktop rail sticky beside one bounded reading column", () => {
     expect(docsCss).toMatch(
-      /\.page\s*\{[^}]*--docs-content-width:\s*820px;[^}]*--docs-rail-width:\s*208px;/s,
+      /\.page\s*\{[^}]*--docs-content-width:\s*900px;[^}]*--docs-rail-width:\s*208px;/s,
     );
     expect(docsCss).toMatch(
       /\.page\s*\{[^}]*grid-template-columns:[^}]*var\(--docs-rail-width\)[^}]*minmax\(0,\s*var\(--docs-content-width\)\);/s,
@@ -70,7 +73,9 @@ describe("Docs rail layout stability", () => {
 
   it("uses one concise developer guide with a current-page chapter rail", () => {
     expect(docsPage).toContain("sections={developerSections}");
-    expect(docsPage).toContain("<DocsLaunchInspector />");
+    expect(docsPage).toContain("<DeveloperDocsWorkbench />");
+    expect(docsPage).toContain("<DeveloperAgentPrompt />");
+    expect(docsPage).toContain('currentPath="/docs/developers"');
     expect(docsShell).not.toContain("docsGuides");
     expect(docsShell).not.toContain("Documentation guides");
     expect(docsShell).toContain('aria-label="Documentation categories"');

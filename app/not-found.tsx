@@ -21,7 +21,7 @@ export default function NotFound() {
                 <ArrowLeft aria-hidden="true" size={17} />
                 Explore tokens
               </Link>
-              <Link className={styles.secondaryAction} href="/docs">
+              <Link className={styles.secondaryAction} href="/docs/developers">
                 <BookOpen aria-hidden="true" size={17} />
                 Open docs
               </Link>

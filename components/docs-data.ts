@@ -14,7 +14,7 @@ export const docsCategories = [
     status: "coming-soon",
   },
   {
-    href: "/docs",
+    href: "/docs/developers",
     label: "Developers",
     status: "available",
   },
@@ -24,54 +24,56 @@ export const docsNavigation = [
   {
     label: "Developers",
     items: [
-      { href: "/docs#overview", label: "Overview" },
-      { href: "/docs#formats", label: "Launch formats" },
-      { href: "/docs#quickstart", label: "Quickstart" },
-      { href: "/docs#rules", label: "Integration rules" },
-      { href: "/docs#resources", label: "Resources" },
+      { href: "/docs/developers#quickstart", label: "Quickstart" },
+      { href: "/docs/developers#response", label: "Response model" },
+      { href: "/docs/developers#sync", label: "Backfill and updates" },
+      { href: "/docs/developers#rendering", label: "Rendering rules" },
+      { href: "/docs/developers#agents", label: "AI agents" },
+      { href: "/docs/developers#reference", label: "API reference" },
     ],
   },
 ] as const;
 
 export const docsSearchItems: DocsSearchItem[] = [
   {
-    title: "Developer API overview",
+    title: "Developer quickstart",
     description:
-      "One public interface for terminals, scanners, wallets and apps.",
-    href: "/docs#overview",
+      "Run the public launch feed for terminals, scanners, wallets, and apps in cURL, TypeScript, or Python.",
+    href: "/docs/developers#quickstart",
   },
   {
-    title: "Launch formats",
+    title: "Response model",
     description:
-      "Classic, Custom pool, no-pool and contract-market records.",
-    href: "/docs#formats",
+      "Classic and Custom records: token identity, provenance, markets, verification, and fees.",
+    href: "/docs/developers#response",
   },
   {
-    title: "Quickstart",
-    description: "Discover the interface and fetch the launch feed.",
-    href: "/docs#quickstart",
+    title: "Backfill and updates",
+    description: "Traverse pages and persist a durable polling checkpoint.",
+    href: "/docs/developers#sync",
   },
   {
-    title: "Trading terminals and scanners",
+    title: "Rendering rules",
     description:
-      "List new Programmable launches and preserve their original provenance.",
-    href: "/docs#overview",
+      "Show every launch without inventing unsupported market features.",
+    href: "/docs/developers#rendering",
   },
   {
-    title: "Apps and agents",
+    title: "AI agents",
     description:
-      "Build games, dashboards and tools around declared capabilities.",
-    href: "/docs#overview",
+      "Use llms.txt, Markdown, OpenAPI, schemas, and a copy-ready prompt.",
+    href: "/docs/developers#agents",
   },
   {
-    title: "Integration rules",
+    title: "API reference",
     description:
-      "Categories, market support, no-pool launches and deployment discovery.",
-    href: "/docs#rules",
+      "Endpoints, HTTP states, OpenAPI, JSON Schemas, and integration examples.",
+    href: "/docs/developers#reference",
   },
   {
-    title: "OpenAPI and schemas",
-    description: "Machine-readable contracts and complete integration examples.",
-    href: "/docs#resources",
+    title: "OpenAPI and JSON Schemas",
+    description:
+      "Generate clients and validate public responses against the normative contracts.",
+    href: "/docs/developers#reference",
   },
 ];

@@ -163,7 +163,7 @@ export function DocsSearch() {
     setQuery("");
     dismissResults();
 
-    if (pathname === "/docs" && href.startsWith("/docs#")) {
+    if (href.startsWith(`${pathname}#`)) {
       window.dispatchEvent(
         new CustomEvent(docsNavigateEvent, { detail: { href } }),
       );
@@ -312,7 +312,7 @@ export function DocsSearch() {
             results.map((item, index) => (
               <Link
                 id={`docs-search-result-${index}`}
-                key={item.href}
+                key={`${item.href}:${item.title}`}
                 href={item.href}
                 role="option"
                 aria-selected={resolvedActiveIndex === index}

@@ -30,17 +30,20 @@ export type DocsPageSection = {
   label: string;
 };
 
-const overviewHref = "/docs#overview";
+const docsRootPath = "/docs/developers";
+const overviewHref = `${docsRootPath}#quickstart`;
 const docsSectionHrefs = (() => {
   const hrefs: string[] = [];
   for (const group of docsNavigation) {
     for (const item of group.items) {
-      if (item.href.startsWith("/docs#")) hrefs.push(item.href);
+      if (item.href.startsWith(`${docsRootPath}#`)) hrefs.push(item.href);
     }
   }
   return hrefs;
 })();
-const docsSectionIds = docsSectionHrefs.map((href) => href.slice(6));
+const docsSectionIds = docsSectionHrefs.map((href) =>
+  href.slice(docsRootPath.length + 1),
+);
 const docsSectionHrefSet = new Set<string>(docsSectionHrefs);
 const emptyDocsPageSections: readonly DocsPageSection[] = [];
 
@@ -48,7 +51,7 @@ export const docsNavigateEvent = "programmable:docs-navigate";
 
 export function normalizeDocsHash(hash: string): string {
   const sectionId = hash.replace(/^#/, "").split("#", 1)[0];
-  const href = `/docs#${sectionId}`;
+  const href = `${docsRootPath}#${sectionId}`;
   return docsSectionHrefSet.has(href) ? href : overviewHref;
 }
 
@@ -60,7 +63,7 @@ export function resolveDocsLocationTarget(hash: string): {
   const href = normalizeDocsHash(hash);
   return {
     href,
-    sectionId: href.slice(6),
+    sectionId: href.slice(docsRootPath.length + 1),
     shouldScroll: hash.length > 0,
   };
 }
@@ -78,7 +81,7 @@ export function resolveDocsPageLocationTarget({
   sectionId: string;
   shouldScroll: boolean;
 } {
-  if (currentPath === "/docs") return resolveDocsLocationTarget(hash);
+  if (currentPath === docsRootPath) return resolveDocsLocationTarget(hash);
 
   const requestedId = hash.replace(/^#/, "").split("#", 1)[0];
   const sectionId = sectionIds.includes(requestedId)
@@ -102,10 +105,8 @@ export function isDocsNavigationItemActive({
 }): boolean {
   const itemPath = itemHref.split("#")[0];
   if (itemPath !== currentPath) return false;
-  if (itemHref.includes("#")) {
-    return currentPath === "/docs" && activeHref === itemHref;
-  }
-  return itemPath !== "/docs";
+  if (itemHref.includes("#")) return activeHref === itemHref;
+  return itemPath === currentPath;
 }
 
 export function pickActiveDocsSection({
@@ -183,6 +184,27 @@ function shouldAnimateDocsScroll() {
   return !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
+export function shouldCancelDocsScrollForKey({
+  defaultPrevented,
+  key,
+}: {
+  defaultPrevented: boolean;
+  key: string;
+}) {
+  return (
+    !defaultPrevented &&
+    [
+      " ",
+      "ArrowDown",
+      "ArrowUp",
+      "End",
+      "Home",
+      "PageDown",
+      "PageUp",
+    ].includes(key)
+  );
+}
+
 function getDocsScrollOffset(
   mobileNavigation: HTMLDetailsElement | null,
 ): number {
@@ -241,7 +263,7 @@ export function DocsNavigation({
     useState<ChapterIndicator | null>(null);
   const trackedSectionIds = useMemo(
     () =>
-      currentPath === "/docs"
+      currentPath === docsRootPath
         ? docsSectionIds
         : sections.map((section) => section.id),
     [currentPath, sections],
@@ -251,7 +273,7 @@ export function DocsNavigation({
     [trackedSectionIds],
   );
   const initialSectionHref =
-    currentPath === "/docs"
+    currentPath === docsRootPath
       ? overviewHref
       : trackedSectionIds[0]
         ? `${currentPath}#${trackedSectionIds[0]}`
@@ -329,6 +351,16 @@ export function DocsNavigation({
 
   useEffect(() => {
     const cancelOnUserIntent = () => cancelDocsScroll();
+    const cancelOnKeyboardScroll = (event: globalThis.KeyboardEvent) => {
+      if (
+        shouldCancelDocsScrollForKey({
+          defaultPrevented: event.defaultPrevented,
+          key: event.key,
+        })
+      ) {
+        cancelDocsScroll();
+      }
+    };
     window.addEventListener("wheel", cancelOnUserIntent, { passive: true });
     window.addEventListener("touchstart", cancelOnUserIntent, {
       passive: true,
@@ -336,14 +368,14 @@ export function DocsNavigation({
     window.addEventListener("pointerdown", cancelOnUserIntent, {
       passive: true,
     });
-    window.addEventListener("keydown", cancelOnUserIntent);
+    window.addEventListener("keydown", cancelOnKeyboardScroll);
 
     return () => {
       cancelDocsScroll();
       window.removeEventListener("wheel", cancelOnUserIntent);
       window.removeEventListener("touchstart", cancelOnUserIntent);
       window.removeEventListener("pointerdown", cancelOnUserIntent);
-      window.removeEventListener("keydown", cancelOnUserIntent);
+      window.removeEventListener("keydown", cancelOnKeyboardScroll);
     };
   }, [cancelDocsScroll]);
 
