@@ -3,93 +3,85 @@
 ## Status
 
 This release candidate is implemented and tested locally against current Ethereum Mainnet state. It is not deployed,
-delegated or active. No production revenue has moved through this code.
+delegated, enabled on Vercel or active. No production revenue has moved through this code.
 
-## Policy
+## Immutable policy
 
-Every successful 24-hour cycle applies one fixed split to the native ETH claimed in that cycle:
+Every successful cycle applies one fixed allocation to newly claimed native ETH:
 
 | Destination | Share |
 | --- | ---: |
 | Treasury `0x2Bb333d48DFAF1596D9036671d2E43168994249E` | 50% |
-| `$V4` purchase | 50% |
+| `$V4` purchase | 49.5% |
+| Restricted keeper gas reserve | 0.5% |
 
-The purchase uses Uniswap's deployed Universal Router and the existing native ETH / `$V4` main pool:
+The keeper share is 1% of the buyback half. It keeps the disposable transaction signer funded without giving it
+custody over protocol revenue. Integer dust is assigned to Treasury, so the three outputs always equal the exact claim.
 
-`0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0`
+The buy uses Uniswap's deployed Universal Router and the existing native ETH / `$V4` main pool
+`0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0`. Bought `$V4` is delivered to the fixed
+revenue wallet `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. No liquidity is added and no token is burned.
 
-The bought `$V4` is sent to the fixed revenue wallet
-`0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. This policy adds no liquidity and burns no tokens.
-
-The router is non-upgradeable and has no owner, proxy, pause, recovery, arbitrary-call, token-approval,
-liquidity-management or configuration function. The shares, addresses, exact pool, cadence, dependencies and price
-bounds are compile-time constants.
+The router is non-upgradeable. It has no owner, proxy, pause, recovery, arbitrary-call, token-approval,
+liquidity-management or configuration function. Recipients, token, pool, shares, cadence, dependencies and price
+bounds are fixed in bytecode. The keeper is immutable and cannot redirect funds.
 
 ## Exact claim scope
 
-The executor snapshots the accrued native protocol fees on four pinned shared hooks:
+The executor snapshots native protocol fees on four pinned shared hooks: Classic V1, Classic V2, Classic V3 and Deep
+V1. A shared-hook claim covers all tokens on that hook version. Non-zero Classic fees are claimed directly to the
+router. Deep V1 can only claim to the revenue wallet, so the same atomic batch forwards exactly the Deep snapshot from
+that wallet to the router. Prior wallet ETH and unrelated router ETH are never swept.
 
-1. Classic V1;
-2. Classic V2;
-3. Classic V3;
-4. Deep V1.
+The enforcer reconstructs the current snapshot and rejects an altered amount, recipient, target, selector, ordering or
+transfer value. Future hook versions and non-native fee assets are excluded until a separate reviewed source update.
 
-Non-zero Classic fees are claimed directly to the router. Deep V1 can only claim to the fixed revenue wallet, so the
-same atomic batch forwards exactly the Deep snapshot from that wallet to the router. It never sweeps the wallet's prior
-ETH balance.
+## Delegation and keeper boundary
 
-The final process call includes the exact aggregate snapshot. The enforcer independently reconstructs that value and
-rejects any altered amount, recipient, target, selector, ordering or transfer value. The router spends exactly the
-declared claim amount; ETH already held by the wallet or router is not included implicitly.
+The revenue wallet uses MetaMask's EIP-7702 Stateless Delegator. It signs one revocable EIP-712 delegation to the exact
+executor runtime with one custom caveat. The manager, delegator, delegate, redeemer, execution mode, immutable caveat
+terms, empty unsigned arguments and final postcondition are all checked. Revocation stops future cycles.
 
-One shared-hook claim covers every token using that hook version. Future hooks are not included automatically and need
-an explicit reviewed source update. Stock-paired quote-asset fees remain excluded because they require separate
-conversion and market controls.
+Vercel stores only a private key for a disposable keeper EOA. That keeper can call only
+`executeKeeperCycle(uint64,int24)`. It cannot claim to itself, change a recipient, change a share, choose another token
+or pool, move old wallet balances or call through the delegation with arbitrary calldata. The reward-wallet private key
+is never stored on Vercel.
 
-## Wallet delegation
+## Scheduling, retries and economics
 
-The revenue wallet already uses MetaMask's v1.3.0 EIP-7702 Stateless Delegator. It signs one revocable EIP-712 root
-delegation to the exact executor runtime with one custom caveat. The deployment manager, delegator, delegate, redeemer,
-execution mode, caveat terms, empty unsigned arguments and final postcondition are all checked. Revoking that delegation
-stops future automated cycles.
+Vercel calls the authenticated route every 15 minutes. The contract permits at most one successful cycle per 24 hours.
+Frequent checks provide retry opportunities because Vercel does not retry failed Cron invocations. Duplicate or
+overlapping invocations fail closed through the keeper nonce, replayed-observation rejection and the onchain cooldown.
 
-## Cadence and price controls
+Before signing, the server requires agreement from two independent Ethereum RPC providers on a finalized block,
+runtime code, immutable policy, accrued revenue and pool tick. It skips when the cycle is not due, the delegation is
+missing, a keeper transaction is pending, gas exceeds the configured cap, the keeper lacks balance or revenue is too
+small to replenish buffered gas. The minimum economic multiplier is 250, matching the 0.5% keeper allocation with
+headroom.
 
-A successful cycle starts a 24-hour wall-clock cooldown. Scheduler timestamps cannot bypass it. Zero, stale, future or
-replayed reports fail.
+## MEV and price controls
 
-Chainlink CRE reads the main-pool tick from the last finalized Ethereum block and includes it in the signed report. The
-router requires the execution tick to remain within 100 ticks of that reference. Purchases are split into at most 32
-chunks of `0.1 ETH`; every chunk has a fee-aware minimum output and a 100-tick movement limit. The complete purchase has
-a separate 500-tick limit. The maximum input per cycle is therefore `3.2 ETH`, subject to the tighter price bound.
-Larger or excessively price-impacting cycles fail atomically instead of weakening execution safety.
+The raw signed transaction is submitted only to MEV Blocker's private `noreverts` boost endpoint with Flashbots
+fallback. It is not deliberately broadcast to a public mempool. MEV Blocker is an external availability and privacy
+dependency, not a cryptographic guarantee.
 
-These checks are not a TWAP and do not eliminate MEV. Production monitoring must cover reverts, price bounds and
-accumulated backlog.
+The reference tick comes from a block agreed as finalized by both read providers. The executor accepts observations no
+more than 30 minutes old. The router independently requires the execution tick within 100 ticks of that reference.
+Purchases are split into at most 32 chunks of `0.1 ETH`; each chunk has a fee-aware minimum output and a 100-tick
+movement limit. The complete purchase has a separate 500-tick limit. Maximum buy input is `3.2 ETH`, subject to the
+tighter price bound. A stale price, high impact, excessive amount or failed private simulation stops the whole cycle.
 
-The minimum claim is `0.001 ETH`. If any claim, exact Deep transfer, Treasury payment or swap fails, the complete cycle
-reverts.
-
-## CRE workflow
-
-The disabled release configuration schedules one report at midnight UTC. The receiver accepts only the code-hash-pinned
-Ethereum Mainnet CRE Forwarder, the Treasury workflow owner and workflow name `revenue-v1`. The checked-in production
-configuration remains `enabled: false` with a zero receiver. Activation requires the deployed executor address and an
-explicit reviewed release.
-
-The manual fallback is `executeCycle(int24)` called by the revenue wallet. It uses the same delegation and enforcer.
+These controls materially reduce sandwich and slippage risk but cannot make MEV, builder trust or price impact zero.
 
 ## Local evidence
 
-The Mainnet-fork suite covers the current hook backlog, exact 50/50 accounting, old wallet and router balance exclusion,
-delivery of bought `$V4`, chunked Universal Router execution, cooldown, capacity, cumulative price impact, CRE identity,
-replay protection, delegation revocation and every caveat-controlled execution surface.
+The Mainnet-fork suite covers live accrued fees, exact three-way conservation, keeper funding, old-balance exclusion,
+bought-token delivery, Universal Router execution, cooldown, capacity, price impact, keeper authorization, observation
+freshness and replay, delegation revocation and every caveat-controlled call surface. The deployment suite verifies the
+three-contract order, predicted addresses, nonce progression, keeper binding, runtime sizes and source commitment.
+TypeScript tests cover Cron authentication, safe responses, due-state decisions and economic gates.
 
-The deployment suite verifies the three-contract order, predicted addresses, nonce progression, immutable bindings,
-runtime sizes and source commitment. The CRE workflow passes its TypeScript and codec tests. Slither raw results and
-manual triage are stored beside this document.
-
-This is internal engineering evidence, not an independent audit.
+This is internal engineering evidence, not an independent audit or production proof.
 
 ## Activation gates
 
@@ -99,6 +91,7 @@ Production remains blocked until all of these are complete:
 2. reviewed Mainnet deployment of router, enforcer and executor;
 3. Etherscan and Sourcify source matches for all three contracts;
 4. one valid EIP-712 delegation signed by the revenue wallet and configured on the executor;
-5. CRE receiver configuration, deployment funding and activation;
-6. one deliberately small Mainnet lifecycle with exact receipts;
-7. monitoring for missed cycles, reverts, code-hash drift, revocation, backlog and pool binding.
+5. Vercel sensitive configuration for the restricted keeper, exact executor and runtime hash, initially disabled;
+6. keeper seed gas plus one deliberately small Mainnet lifecycle through the private relay;
+7. monitoring for missed cycles, pending transactions, reverts, code-hash drift, revocation, backlog and pool binding;
+8. explicit enablement only after the lifecycle evidence is accepted.

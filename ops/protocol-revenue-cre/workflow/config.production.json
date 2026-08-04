@@ -1,7 +1,0 @@
-{
-  "enabled": false,
-  "schedule": "0 0 0 * * *",
-  "chainSelectorName": "ethereum-mainnet",
-  "receiver": "0x0000000000000000000000000000000000000000",
-  "gasLimit": "12000000"
-}

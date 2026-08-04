@@ -7,7 +7,7 @@ is stored alongside this document.
 | --- | ---: | ---: | ---: | ---: | --- |
 | Router | 4 | 8 | 7 | 0 | Reviewed; no unmitigated finding identified |
 | Enforcer | 0 | 0 | 1 | 9 | Reviewed; no unmitigated finding identified |
-| Executor | 0 | 0 | 2 | 12 | Reviewed; no unmitigated finding identified |
+| Executor | 0 | 0 | 2 | 11 | Reviewed; no unmitigated finding identified |
 
 ## Router
 
@@ -36,9 +36,10 @@ is stored alongside this document.
 
 - **Strict equality:** zero accrued fees are omitted from the canonical batch. This does not grant access or determine
   ownership.
-- **Timestamp:** checks enforce CRE freshness, future skew, replay ordering and the router's actual wall-clock cooldown.
-- **Assembly:** `_workflowIdentity` runs only after the official 62-byte metadata length is verified. The offsets match
-  CRE's packed `bytes32 workflowId + bytes10 workflowName + address workflowOwner` layout.
+- **Timestamp:** checks enforce finalized-observation freshness, future skew, replay ordering and the router's actual
+  wall-clock cooldown.
+- **Keeper boundary:** only the immutable keeper may use the automated entry point. The keeper selects only a recent
+  observation timestamp and bounded reference tick; the caveat reconstructs every funds-moving call independently.
 - **Naming and literal style:** names match deployed getter ABIs and the exact ERC-7579 mode encoding.
 
 ## Review-driven changes
@@ -47,5 +48,6 @@ The initial chunked swap design limited every `0.1 ETH` chunk to 100 ticks but d
 purchase. Review added `MAX_TOTAL_SWAP_TICK_MOVE = 500` from the cycle's starting tick and an atomic failure test. This
 closes a cumulative price-impact bypass while preserving the current live-backlog execution path.
 
-The 50/50 revision also replaced the prior complete wallet sweep with an exact claim amount bound in both the enforcer
-and router call. Tests prove that pre-existing revenue-wallet ETH and unrelated router ETH remain untouched.
+The Vercel-keeper revision removed the CRE receiver and workflow-identity parser. The immutable split is now 50% to
+Treasury, 49.5% to the buy and 0.5% to the keeper gas reserve. The exact claim amount remains bound in the enforcer and
+router, and tests prove that pre-existing revenue-wallet ETH and unrelated router ETH remain untouched.

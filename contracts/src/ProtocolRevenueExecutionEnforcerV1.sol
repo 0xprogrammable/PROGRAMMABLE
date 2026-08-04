@@ -66,7 +66,8 @@ contract ProtocolRevenueExecutionEnforcerV1 is IProtocolRevenueMetaMaskCaveatEnf
         if (
             block.chainid != 1 || routerAddress.code.length == 0 || router_.REVENUE_AUTHORITY() != REVENUE_AUTHORITY
                 || router_.TREASURY() != TREASURY || router_.V4_TOKEN() != V4_TOKEN
-                || router_.MAIN_POOL_ID() != MAIN_POOL_ID
+                || router_.MAIN_POOL_ID() != MAIN_POOL_ID || router_.keeper() == address(0)
+                || router_.keeper() == REVENUE_AUTHORITY || router_.keeper() == TREASURY
         ) {
             revert InvalidRouter(routerAddress);
         }

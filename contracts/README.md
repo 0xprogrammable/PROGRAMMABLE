@@ -61,6 +61,20 @@ Explore and Profile pair verified `MemeTokenLaunched` and `MemeLiquidityConfigur
 
 Both paths fail closed unless the release manifest is ready and runtime code matches its recorded hashes.
 
+## Protocol revenue automation
+
+The local protocol-revenue candidate claims the current native-fee balances from four explicitly pinned shared hook
+versions at most once every 24 hours. Its immutable allocation sends 50% to Treasury, swaps 49.5% for `$V4`, and sends
+0.5% to a restricted gas-only keeper. Purchased `$V4` returns to the fixed revenue wallet. Existing wallet and router
+balances are excluded, and no liquidity or burn action is performed.
+
+Vercel only schedules and signs the restricted keeper transaction. The revenue wallet grants one revocable MetaMask
+EIP-7702 delegation to an exact caveat-enforced call batch; its private key is not stored on Vercel. Private transaction
+submission, two-provider finalized-state agreement, price bounds and gas-economics gates are described in
+[`security/PROTOCOL-REVENUE-V1.md`](security/PROTOCOL-REVENUE-V1.md).
+
+This automation is a local release candidate. It is not deployed or active.
+
 ## Verification
 
 ```sh

@@ -18,6 +18,26 @@ const APPROVED_OPERATIONS = Object.freeze({
       sha256: "bb498b00334df908029a588bec552516f281fdc0dfc3185bc5cd820984a9ee1f",
     }),
   }),
+  independentCrons: Object.freeze([
+    Object.freeze({
+      id: "protocol-revenue",
+      path: "/api/ops/protocol-revenue",
+      schedule: "*/15 * * * *",
+      activationEnvironment: "PROTOCOL_REVENUE_AUTOMATION_ENABLED",
+      route: Object.freeze({
+        path: "app/api/ops/protocol-revenue/route.ts",
+        sha256: "c1bb705cee0fa3cfa5d6926d35c07e8959482717bc63a1a2a9a92c757db6d62f",
+      }),
+      runtime: Object.freeze({
+        path: "lib/protocol-revenue/keeper.server.ts",
+        sha256: "70c3b8af21bbe8ab65ffe92bc68d3f47d62cb3532a6cc0686e1e617ae0a2698e",
+      }),
+      policy: Object.freeze({
+        path: "lib/protocol-revenue/keeper-policy.ts",
+        sha256: "4b822323780f1648f91aa589e0ea272de0397a9a8704ac3a034ff24a62db089d",
+      }),
+    }),
+  ]),
   workers: Object.freeze([
     Object.freeze({
       id: "source-projector",
@@ -616,6 +636,7 @@ export function evaluateReadModelOperationsSourceContracts(
   const approvedCrons = new Map([
     [APPROVED_OPERATIONS.legacyIndexer.path, APPROVED_OPERATIONS.legacyIndexer.schedule],
     ...APPROVED_OPERATIONS.workers.map((worker) => [worker.path, worker.schedule]),
+    ...APPROVED_OPERATIONS.independentCrons.map((cron) => [cron.path, cron.schedule]),
   ]);
 
   check(
@@ -636,6 +657,34 @@ export function evaluateReadModelOperationsSourceContracts(
       ),
     "Vercel has only the independently approved schedules",
   );
+  for (const approvedCron of APPROVED_OPERATIONS.independentCrons) {
+    const route = source(approvedCron.route.path);
+    const runtime = source(approvedCron.runtime.path);
+    check(
+      `ops-${approvedCron.id}-schedule`,
+      crons?.get(approvedCron.path) === approvedCron.schedule,
+      `${approvedCron.id} has its independently fixed production schedule`,
+    );
+    check(
+      `ops-${approvedCron.id}-source-digests`,
+      sourceBindingMatches(source, approvedCron.route, expectedSha256Overrides) &&
+        sourceBindingMatches(source, approvedCron.runtime, expectedSha256Overrides) &&
+        sourceBindingMatches(source, approvedCron.policy, expectedSha256Overrides),
+      `${approvedCron.id} route, runtime and policy match reviewed bytes`,
+    );
+    check(
+      `ops-${approvedCron.id}-route-auth`,
+      routeIsAuthenticatedAndFailClosed(route),
+      `${approvedCron.id} requires the bounded timing-safe cron secret and fails closed`,
+    );
+    check(
+      `ops-${approvedCron.id}-activation`,
+      runtime.includes(`env.${approvedCron.activationEnvironment}`) &&
+        runtime.includes(`env.${approvedCron.activationEnvironment} !== "true"`) &&
+        exactFalseEnvironmentKey(source(".env.example"), approvedCron.activationEnvironment),
+      `${approvedCron.id} is disabled by default behind one server-only activation flag`,
+    );
+  }
   check(
     "ops-legacy-cron-preserved",
     crons?.get(APPROVED_OPERATIONS.legacyIndexer.path) ===

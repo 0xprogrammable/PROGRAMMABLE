@@ -6,7 +6,8 @@
   "deployment": {
     "router": null,
     "enforcer": null,
-    "executor": null
+    "executor": null,
+    "keeper": null
   },
   "revenueAuthority": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
   "treasury": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
@@ -22,7 +23,8 @@
   },
   "splitBps": {
     "treasury": 5000,
-    "buyV4": 5000
+    "buyV4": 4950,
+    "keeperGas": 50
   },
   "liquidityAction": "none",
   "claimScope": "exact-current-hook-snapshot-only",
@@ -30,29 +32,27 @@
   "existingRouterEthIncluded": false,
   "cycle": {
     "intervalSeconds": 86400,
-    "schedule": "0 0 0 * * *",
+    "vercelCheckSchedule": "*/15 * * * *",
     "minimumNewRevenueWei": "1000000000000000",
     "maximumSwapChunkWei": "100000000000000000",
     "maximumSwapChunks": 32,
     "maximumSwapTickMove": 100,
     "maximumTotalSwapTickMove": 500,
     "maximumReferenceTickDeviation": 100,
-    "maximumReportAgeSeconds": 21600,
+    "maximumObservationAgeSeconds": 1800,
     "executionDeadlineSeconds": 300
   },
   "automation": {
-    "provider": "chainlink-cre",
+    "provider": "vercel-cron-restricted-keeper",
     "status": "built-disabled-not-deployed",
-    "workflowName": "revenue-v1",
-    "workflowNameOnchain": "0x32666664393234346538",
-    "workflowOwner": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
-    "ethereumMainnetChainSelector": "5009297550715157269",
-    "forwarder": "0x0b93082D9b3C7C97fAcd250082899BAcf3af3885",
-    "receiver": null,
-    "referenceBlock": "last-finalized",
-    "reportEncoding": "abi.encode(uint64 chainSelector,uint64 scheduledAt,int24 referenceTick)",
-    "workflowWasmBytes": 3791885,
-    "workflowWasmSha256": "3ee59989c167675821338e8a7f68c6eb64ae7169ea7197bc316272f16ee88b2d"
+    "triggerRoute": "/api/ops/protocol-revenue",
+    "referenceBlock": "two-provider-agreed-finalized",
+    "privateSubmission": "https://boost.rpc.mevblocker.io/noreverts",
+    "keeperKeyScope": "gas-only-disposable-eoa",
+    "maximumGasPriceGweiDefault": "5",
+    "minimumRevenueGasMultiplier": "250",
+    "gasLimitBufferBps": 12500,
+    "keeperBalanceHeadroom": 2
   },
   "nativeFeeSources": [
     "0x48bB2672c7fd2a12e7fb5D46c441ccD3726520Cc",
@@ -69,8 +69,9 @@
     "mainnet deployment",
     "source verification",
     "signed and configured MetaMask delegation",
-    "CRE receiver configuration and funded activation",
-    "small-value mainnet lifecycle",
-    "production monitoring"
+    "disabled Vercel sensitive configuration",
+    "small private-relay mainnet lifecycle",
+    "production monitoring",
+    "explicit enablement"
   ]
 }

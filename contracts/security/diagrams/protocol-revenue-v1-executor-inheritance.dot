@@ -1,0 +1,5 @@
+digraph "Protocol revenue V1 executor inheritance" {
+  ReentrancyGuardTransient [shape="box"];
+  ProtocolRevenueMetaMaskExecutorV1 [shape="box"];
+  ProtocolRevenueMetaMaskExecutorV1 -> ReentrancyGuardTransient;
+}

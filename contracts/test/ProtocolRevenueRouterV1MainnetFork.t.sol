@@ -28,27 +28,26 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
     address internal constant CLASSIC_V2_HOOK = 0x025a386eAa79f6067d29848FD05ccC71bEAb20CC;
     address internal constant CLASSIC_V3_HOOK = 0x35Fe236EA82F7cF525c9719d7df8F49F94D720CC;
     address internal constant DEEP_V1_HOOK = 0x48dC3009eC1d3298BBA31f718A9A29d02fC9B0cC;
-    address internal constant CRE_FORWARDER = 0x0b93082D9b3C7C97fAcd250082899BAcf3af3885;
     address internal constant METAMASK_DELEGATION_MANAGER = 0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3;
-    uint64 internal constant ETHEREUM_MAINNET_CHAIN_SELECTOR = 5_009_297_550_715_157_269;
-    bytes10 internal constant CRE_WORKFLOW_NAME = 0x32666664393234346538;
-    bytes32 internal constant CRE_WORKFLOW_ID = "workflow-id";
     bytes4 internal constant EIP1271_MAGIC_VALUE = 0x1626ba7e;
 
     ProtocolRevenueRouterV1 internal router;
     ProtocolRevenueExecutionEnforcerV1 internal enforcer;
     ProtocolRevenueMetaMaskExecutorV1 internal executor;
     bytes32 internal revenueAuthorityCodeHash;
+    address internal keeper;
 
     function setUp() public {
         string memory rpc = vm.envOr("ETHEREUM_RPC_URL", string("https://ethereum-rpc.publicnode.com"));
         vm.createSelectFork(rpc);
         revenueAuthorityCodeHash = REVENUE_AUTHORITY.codehash;
-        router = new ProtocolRevenueRouterV1();
+        keeper = makeAddr("protocolRevenueKeeper");
+        router = new ProtocolRevenueRouterV1(keeper);
         enforcer = new ProtocolRevenueExecutionEnforcerV1(IProtocolRevenueRouterTargetV1(address(router)));
         executor = new ProtocolRevenueMetaMaskExecutorV1(
             IProtocolRevenueRouterTargetV1(address(router)),
-            IProtocolRevenueExecutionEnforcerTargetV1(address(enforcer))
+            IProtocolRevenueExecutionEnforcerTargetV1(address(enforcer)),
+            keeper
         );
     }
 
@@ -58,29 +57,35 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
         assertGt(accruedBefore, router.MIN_NEW_REVENUE());
 
         uint256 treasuryBefore = TREASURY.balance;
+        uint256 keeperBefore = keeper.balance;
         uint256 authorityTokenBefore = IERC20(V4_TOKEN).balanceOf(REVENUE_AUTHORITY);
         uint256 unallocatedRouterEthBefore = address(router).balance;
         _configureValidDelegation();
         uint64 scheduledAt = uint64(block.timestamp);
         int24 referenceTick = router.currentMainPoolTick();
-        vm.prank(CRE_FORWARDER);
-        executor.onReport(_creMetadata(), _cycleReport(scheduledAt, referenceTick));
+        vm.prank(keeper);
+        executor.executeKeeperCycle(scheduledAt, referenceTick);
         int24 tickAfter = router.currentMainPoolTick();
         assertLe(int256(referenceTick) - int256(tickAfter), int256(router.MAX_TOTAL_SWAP_TICK_MOVE()));
 
         assertEq(REVENUE_AUTHORITY.codehash, revenueAuthorityCodeHash);
         assertEq(REVENUE_AUTHORITY.balance, authorityBalanceBefore);
         assertEq(router.totalRevenueProcessed(), accruedBefore);
-        assertEq(router.totalNativeSwapped(), accruedBefore / 2);
-        assertEq(router.totalTreasurySent(), accruedBefore - accruedBefore / 2);
-        assertEq(TREASURY.balance - treasuryBefore, accruedBefore - accruedBefore / 2);
-        assertEq(router.totalTreasurySent() + router.totalNativeSwapped(), accruedBefore);
+        uint256 expectedSwap = accruedBefore * router.BUY_SHARE_BPS() / router.BASIS_POINTS();
+        uint256 expectedKeeperGas = accruedBefore * router.KEEPER_GAS_SHARE_BPS() / router.BASIS_POINTS();
+        uint256 expectedTreasury = accruedBefore - expectedSwap - expectedKeeperGas;
+        assertEq(router.totalNativeSwapped(), expectedSwap);
+        assertEq(router.totalKeeperGasSent(), expectedKeeperGas);
+        assertEq(router.totalTreasurySent(), expectedTreasury);
+        assertEq(TREASURY.balance - treasuryBefore, expectedTreasury);
+        assertEq(keeper.balance - keeperBefore, expectedKeeperGas);
+        assertEq(router.totalTreasurySent() + router.totalKeeperGasSent() + router.totalNativeSwapped(), accruedBefore);
         assertEq(address(router).balance, unallocatedRouterEthBefore);
         assertGt(IERC20(V4_TOKEN).balanceOf(REVENUE_AUTHORITY), authorityTokenBefore);
         assertEq(IERC20(V4_TOKEN).balanceOf(address(router)), 0);
         assertEq(router.totalTokensBought(), IERC20(V4_TOKEN).balanceOf(REVENUE_AUTHORITY) - authorityTokenBefore);
         assertEq(router.lastProcessedAt(), block.timestamp);
-        assertEq(executor.lastAcceptedScheduledAt(), scheduledAt);
+        assertEq(executor.lastAcceptedObservationAt(), scheduledAt);
     }
 
     /// forge-config: default.fuzz.runs = 32
@@ -89,6 +94,7 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
         uint256 revenue = bound(uint256(rawRevenue), 0.004 ether, 0.4 ether);
         vm.deal(address(router), revenue);
         uint256 treasuryBefore = TREASURY.balance;
+        uint256 keeperBefore = keeper.balance;
         uint256 authorityTokenBefore = IERC20(V4_TOKEN).balanceOf(REVENUE_AUTHORITY);
         int24 referenceTick = router.currentMainPoolTick();
 
@@ -96,10 +102,15 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
         router.process(uint64(block.timestamp), referenceTick, revenue);
 
         assertEq(router.totalRevenueProcessed(), revenue);
-        assertEq(router.totalNativeSwapped(), revenue / 2);
-        assertEq(router.totalTreasurySent(), revenue - revenue / 2);
-        assertEq(TREASURY.balance - treasuryBefore, revenue - revenue / 2);
-        assertEq(router.totalTreasurySent() + router.totalNativeSwapped(), revenue);
+        uint256 expectedSwap = revenue * router.BUY_SHARE_BPS() / router.BASIS_POINTS();
+        uint256 expectedKeeperGas = revenue * router.KEEPER_GAS_SHARE_BPS() / router.BASIS_POINTS();
+        uint256 expectedTreasury = revenue - expectedSwap - expectedKeeperGas;
+        assertEq(router.totalNativeSwapped(), expectedSwap);
+        assertEq(router.totalKeeperGasSent(), expectedKeeperGas);
+        assertEq(router.totalTreasurySent(), expectedTreasury);
+        assertEq(TREASURY.balance - treasuryBefore, expectedTreasury);
+        assertEq(keeper.balance - keeperBefore, expectedKeeperGas);
+        assertEq(router.totalTreasurySent() + router.totalKeeperGasSent() + router.totalNativeSwapped(), revenue);
         assertEq(address(router).balance, 0);
         assertGt(IERC20(V4_TOKEN).balanceOf(REVENUE_AUTHORITY), authorityTokenBefore);
         assertEq(IERC20(V4_TOKEN).balanceOf(address(router)), 0);
@@ -125,7 +136,9 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
         router.process(uint64(block.timestamp), secondReferenceTick, secondRevenue);
 
         assertEq(router.totalRevenueProcessed() - revenueBefore, secondRevenue);
-        assertEq(router.totalNativeSwapped() - swapBefore, secondRevenue / 2);
+        assertEq(
+            router.totalNativeSwapped() - swapBefore, secondRevenue * router.BUY_SHARE_BPS() / router.BASIS_POINTS()
+        );
         assertEq(REVENUE_AUTHORITY.balance, unrelatedWalletEth);
         assertEq(router.cycleCount(), 2);
     }
@@ -142,7 +155,9 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
 
         assertEq(address(router).balance, unrelatedRouterEth);
         assertEq(router.totalRevenueProcessed(), claimedRevenue);
-        assertEq(TREASURY.balance - treasuryBefore, claimedRevenue - claimedRevenue / 2);
+        uint256 expectedSwap = claimedRevenue * router.BUY_SHARE_BPS() / router.BASIS_POINTS();
+        uint256 expectedKeeperGas = claimedRevenue * router.KEEPER_GAS_SHARE_BPS() / router.BASIS_POINTS();
+        assertEq(TREASURY.balance - treasuryBefore, claimedRevenue - expectedSwap - expectedKeeperGas);
     }
 
     function test_executorDoesNotSweepExistingRevenueWalletBalance() public {
@@ -150,8 +165,8 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
         _configureValidDelegation();
         int24 firstReferenceTick = router.currentMainPoolTick();
         uint256 hookRevenue = _totalHookFees();
-        vm.prank(CRE_FORWARDER);
-        executor.onReport(_creMetadata(), _cycleReport(uint64(block.timestamp), firstReferenceTick));
+        vm.prank(keeper);
+        executor.executeKeeperCycle(uint64(block.timestamp), firstReferenceTick);
         assertEq(REVENUE_AUTHORITY.balance, 0.04 ether);
         assertEq(router.totalRevenueProcessed(), hookRevenue);
     }
@@ -241,15 +256,17 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
     }
 
     function test_cycleCapacityFailsAtomically() public {
-        uint256 excessiveRevenue = router.MAX_NATIVE_SWAP_CHUNK() * router.MAX_SWAP_CHUNKS() * 2 + 2;
+        uint256 maximumSwap = router.MAX_NATIVE_SWAP_CHUNK() * router.MAX_SWAP_CHUNKS();
+        uint256 excessiveRevenue =
+            ((maximumSwap + 1) * router.BASIS_POINTS() + router.BUY_SHARE_BPS() - 1) / router.BUY_SHARE_BPS();
         vm.deal(address(router), excessiveRevenue);
         uint256 treasuryBefore = TREASURY.balance;
         int24 referenceTick = router.currentMainPoolTick();
         vm.expectRevert(
             abi.encodeWithSelector(
                 ProtocolRevenueRouterV1.SwapAmountExceedsCycleCapacity.selector,
-                excessiveRevenue / 2,
-                router.MAX_NATIVE_SWAP_CHUNK() * router.MAX_SWAP_CHUNKS()
+                excessiveRevenue * router.BUY_SHARE_BPS() / router.BASIS_POINTS(),
+                maximumSwap
             )
         );
         vm.prank(REVENUE_AUTHORITY);
@@ -331,8 +348,8 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
                 ProtocolRevenueMetaMaskExecutorV1.DelegationDisabled.selector, executor.delegationHash()
             )
         );
-        vm.prank(CRE_FORWARDER);
-        executor.onReport(_creMetadata(), _cycleReport(uint64(block.timestamp), referenceTick));
+        vm.prank(keeper);
+        executor.executeKeeperCycle(uint64(block.timestamp), referenceTick);
         assertEq(TREASURY.balance, treasuryBefore);
     }
 
@@ -479,82 +496,44 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
         );
     }
 
-    function test_creRejectsWrongForwarderChainReplayAndStaleReport() public {
+    function test_keeperRejectsWrongCallerReplayAndStaleObservation() public {
         _configureValidDelegation();
-        uint64 scheduledAt = uint64(block.timestamp);
+        uint64 observedAt = uint64(block.timestamp);
         int24 referenceTick = router.currentMainPoolTick();
-        address outsider = makeAddr("reporter");
-        vm.expectRevert(abi.encodeWithSelector(ProtocolRevenueMetaMaskExecutorV1.OnlyCREForwarder.selector, outsider));
+        address outsider = makeAddr("keeperOutsider");
+        vm.expectRevert(abi.encodeWithSelector(ProtocolRevenueMetaMaskExecutorV1.OnlyKeeper.selector, outsider));
         vm.prank(outsider);
-        executor.onReport(_creMetadata(), _cycleReport(scheduledAt, referenceTick));
+        executor.executeKeeperCycle(observedAt, referenceTick);
 
+        uint64 staleObservedAt = uint64(block.timestamp - executor.MAX_OBSERVATION_AGE() - 1);
         vm.expectRevert(
             abi.encodeWithSelector(
-                ProtocolRevenueMetaMaskExecutorV1.UnexpectedChainSelector.selector,
-                uint64(1),
-                ETHEREUM_MAINNET_CHAIN_SELECTOR
+                ProtocolRevenueMetaMaskExecutorV1.StaleObservation.selector,
+                staleObservedAt,
+                block.timestamp - executor.MAX_OBSERVATION_AGE()
             )
         );
-        vm.prank(CRE_FORWARDER);
-        executor.onReport(_creMetadata(), abi.encode(uint64(1), scheduledAt, referenceTick));
+        vm.prank(keeper);
+        executor.executeKeeperCycle(staleObservedAt, referenceTick);
 
-        uint64 staleScheduledAt = uint64(block.timestamp - executor.MAX_REPORT_AGE() - 1);
+        uint64 futureObservedAt = uint64(block.timestamp + 1);
         vm.expectRevert(
             abi.encodeWithSelector(
-                ProtocolRevenueMetaMaskExecutorV1.StaleReport.selector,
-                staleScheduledAt,
-                block.timestamp - executor.MAX_REPORT_AGE()
+                ProtocolRevenueMetaMaskExecutorV1.FutureObservation.selector, futureObservedAt, block.timestamp
             )
         );
-        vm.prank(CRE_FORWARDER);
-        executor.onReport(_creMetadata(), _cycleReport(staleScheduledAt, referenceTick));
+        vm.prank(keeper);
+        executor.executeKeeperCycle(futureObservedAt, referenceTick);
 
-        uint64 futureScheduledAt = uint64(block.timestamp + executor.MAX_REPORT_FUTURE_SKEW() + 1);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                ProtocolRevenueMetaMaskExecutorV1.FutureReport.selector,
-                futureScheduledAt,
-                block.timestamp + executor.MAX_REPORT_FUTURE_SKEW()
-            )
-        );
-        vm.prank(CRE_FORWARDER);
-        executor.onReport(_creMetadata(), _cycleReport(futureScheduledAt, referenceTick));
-
-        vm.expectRevert(abi.encodeWithSelector(ProtocolRevenueMetaMaskExecutorV1.InvalidMetadataLength.selector, 63));
-        vm.prank(CRE_FORWARDER);
-        executor.onReport(abi.encodePacked(_creMetadata(), bytes1(0)), _cycleReport(scheduledAt, referenceTick));
-
-        // The literal is exactly ten bytes, so this fixed-bytes cast cannot truncate it.
-        // forge-lint: disable-next-line(unsafe-typecast)
-        bytes10 wrongWorkflowName = bytes10("wrong-name");
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                ProtocolRevenueMetaMaskExecutorV1.UnexpectedWorkflow.selector, wrongWorkflowName, TREASURY
-            )
-        );
-        vm.prank(CRE_FORWARDER);
-        executor.onReport(_creMetadataFor(wrongWorkflowName, TREASURY), _cycleReport(scheduledAt, referenceTick));
-
-        vm.prank(CRE_FORWARDER);
-        executor.onReport(_creMetadata(), _cycleReport(scheduledAt, referenceTick));
+        vm.prank(keeper);
+        executor.executeKeeperCycle(observedAt, referenceTick);
         vm.warp(block.timestamp + 1 days);
         referenceTick = router.currentMainPoolTick();
         vm.expectRevert(
-            abi.encodeWithSelector(ProtocolRevenueMetaMaskExecutorV1.ReportReplay.selector, scheduledAt, scheduledAt)
+            abi.encodeWithSelector(ProtocolRevenueMetaMaskExecutorV1.ObservationReplay.selector, observedAt, observedAt)
         );
-        vm.prank(CRE_FORWARDER);
-        executor.onReport(_creMetadata(), _cycleReport(scheduledAt, referenceTick));
-    }
-
-    function test_creWorkflowNameMatchesProductionHashTruncationAndMetadataIsCanonical() public pure {
-        bytes32 digest = sha256(bytes("revenue-v1"));
-        bytes memory digestHex = bytes(_toHexString(abi.encodePacked(digest)));
-        bytes10 expected;
-        assembly ("memory-safe") {
-            expected := mload(add(digestHex, 32))
-        }
-        assertEq(CRE_WORKFLOW_NAME, expected);
-        assertEq(_creMetadata().length, 62);
+        vm.prank(keeper);
+        executor.executeKeeperCycle(observedAt, referenceTick);
     }
 
     function test_manualFallbackIsRevenueAuthorityOnly() public {
@@ -670,27 +649,5 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
         total += IProtocolRevenueEthFeeHookV1(CLASSIC_V2_HOOK).launcherFeesAccrued();
         total += IProtocolRevenueEthFeeHookV1(CLASSIC_V3_HOOK).launcherFeesAccrued();
         total += IProtocolRevenueEthFeeHookV1(DEEP_V1_HOOK).launcherFeesAccrued();
-    }
-
-    function _creMetadata() private pure returns (bytes memory) {
-        return _creMetadataFor(CRE_WORKFLOW_NAME, TREASURY);
-    }
-
-    function _creMetadataFor(bytes10 workflowName, address workflowOwner) private pure returns (bytes memory) {
-        return abi.encodePacked(CRE_WORKFLOW_ID, workflowName, workflowOwner);
-    }
-
-    function _cycleReport(uint64 scheduledAt, int24 referenceTick) private pure returns (bytes memory) {
-        return abi.encode(ETHEREUM_MAINNET_CHAIN_SELECTOR, scheduledAt, referenceTick);
-    }
-
-    function _toHexString(bytes memory data) private pure returns (string memory) {
-        bytes16 symbols = "0123456789abcdef";
-        bytes memory encoded = new bytes(data.length * 2);
-        for (uint256 i; i < data.length; ++i) {
-            encoded[i * 2] = symbols[uint8(data[i] >> 4)];
-            encoded[i * 2 + 1] = symbols[uint8(data[i] & 0x0f)];
-        }
-        return string(encoded);
     }
 }

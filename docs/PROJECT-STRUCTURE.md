@@ -11,7 +11,7 @@ Programmable/
 ├── contracts/    Foundry contracts, tests, scripts, specifications, and evidence
 ├── config/       Shared application configuration
 ├── scripts/      Development, verification, and release utilities
-├── ops/          Versioned external workflow and operations configuration
+├── ops/          Versioned operations configuration outside the web runtime
 ├── tests/        Application and integration tests
 ├── docs/         Maintained product, security, and operations documentation
 ├── outputs/      Research reports and ignored QA output
@@ -31,6 +31,10 @@ Programmable/
 - `codex/*` branches contain one scoped workstream and merge through a pull request.
 
 New product work starts from `production` unless a contract-only task explicitly targets `main`. Production is never deployed from a feature branch or a dirty worktree.
+
+The protocol-revenue scheduler is part of the Next.js runtime: its authenticated route lives under
+`app/api/ops/protocol-revenue`, and its server-only signing policy lives under `lib/protocol-revenue`. The retired
+Chainlink CRE prototype is not part of the release candidate.
 
 ## Local generated directories
 

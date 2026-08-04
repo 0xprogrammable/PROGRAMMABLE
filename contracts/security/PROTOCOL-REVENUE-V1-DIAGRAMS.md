@@ -4,59 +4,75 @@
 
 ```mermaid
 flowchart LR
-    CRE["Chainlink CRE Forwarder\nfixed code hash"] --> EX["MetaMask Executor\nfixed workflow identity"]
-    RW["Revenue wallet\nMetaMask EIP-7702"] -->|"one revocable delegation"| DM["MetaMask DelegationManager"]
+    VC["Vercel Cron\nauthenticated trigger"] --> K["Restricted keeper\ngas only"]
+    K -->|"private raw transaction"| MB["MEV Blocker\nFlashbots fallback"]
+    MB --> EX["Immutable executor\nkeeper only"]
+    RW["Revenue wallet\nMetaMask EIP-7702"] -->|"one revocable delegation"| DM["DelegationManager"]
     EX -->|"redeem exact batch"| DM
-    DM --> EN["Execution Enforcer\ncanonical calls only"]
-    EN --> H["Four pinned shared fee hooks"]
-    EN --> R["Revenue Router\nimmutable 50 / 50"]
+    DM --> EN["Execution enforcer\ncanonical calls only"]
+    EN --> H["Four pinned fee hooks"]
+    EN --> R["Immutable revenue router"]
     R --> T["Treasury\n50%"]
-    R --> UR["Uniswap Universal Router\n50% buys V4"]
+    R --> K2["Keeper gas\n0.5%"]
+    R --> UR["Uniswap Universal Router\n49.5% buys V4"]
     UR --> RW
 ```
 
-## Atomic daily sequence
+## Daily execution
 
 ```mermaid
 sequenceDiagram
-    participant C as CRE Forwarder
-    participant E as Executor
-    participant D as MetaMask DelegationManager
+    participant V as Vercel Cron
+    participant Q as Two RPC vendors
+    participant K as Keeper
+    participant M as Private MEV relay
+    participant E as Executor and delegation
     participant H as Pinned fee hooks
-    participant W as Revenue wallet
     participant R as Revenue router
     participant T as Treasury
     participant U as Uniswap Universal Router
+    participant W as Revenue wallet
 
-    C->>E: signed report(chain, time, finalized tick)
-    E->>E: verify workflow, freshness, replay and readiness
-    E->>D: redeem signed permission context
-    D->>H: claim Classic fees directly to router
-    D->>H: claim Deep fees to revenue wallet
-    D->>W: send exactly the Deep claim to router
-    W->>R: exact Deep amount only
-    D->>R: process(time, tick, aggregate claim)
-    R->>T: send 50%
-    R->>U: swap 50% for V4 in bounded chunks
-    U-->>R: bought V4
-    R->>W: deliver bought V4
-    R-->>D: record current block timestamp
+    V->>Q: read one agreed finalized block
+    Q-->>V: runtime hashes, due state, fees, tick
+    V->>V: simulate and enforce gas economics
+    V->>K: sign fixed executor call locally
+    K->>M: eth_sendRawTransaction
+    M->>E: private inclusion
+    E->>H: claim exact current fees
+    E->>R: process exact aggregate
+    R->>T: 50%
+    R->>K: 0.5% gas reserve
+    R->>U: bounded 49.5% V4 buy
+    U-->>R: V4
+    R->>W: purchased V4
 ```
 
-Any failed step reverts the complete sequence. Prior wallet and router balances are not part of the aggregate claim.
+Any failed onchain step reverts the complete cycle. Prior wallet and router balances are excluded.
 
-## State writers
+## Inheritance and state authorization
+
+Slither's inheritance printer confirms that the router and executor inherit only OpenZeppelin's transient reentrancy
+guard; the enforcer is a direct implementation of its narrow caveat interface. There is no proxy or upgrade base.
 
 ```mermaid
-flowchart TD
-    A["Revenue wallet only"] --> P["Router.process"]
-    A --> F["Executor.executeCycle"]
-    A --> G["Executor.configureDelegation once"]
-    C["CRE Forwarder only"] --> O["Executor.onReport"]
-    O --> X["Executor.lastAcceptedScheduledAt"]
-    F --> D["DelegationManager exact batch"]
-    O --> D
-    D --> P
-    P --> S["Router totals and cooldown"]
-    N["No external caller"] -.->|"no owner, recovery or withdrawal function"| S
+classDiagram
+    class ReentrancyGuardTransient
+    class ProtocolRevenueRouterV1
+    class ProtocolRevenueMetaMaskExecutorV1
+    class ProtocolRevenueExecutionEnforcerV1
+    ReentrancyGuardTransient <|-- ProtocolRevenueRouterV1
+    ReentrancyGuardTransient <|-- ProtocolRevenueMetaMaskExecutorV1
 ```
+
+Slither's function and authorization printers reduce the state-writing surface to:
+
+| Contract | State writer | Authorization |
+| --- | --- | --- |
+| Executor | `configureDelegation` | fixed revenue wallet |
+| Executor | `executeKeeperCycle` | immutable keeper |
+| Executor | `executeCycle` | fixed revenue wallet |
+| Router | `process` | fixed revenue wallet through the enforced delegation or manual fallback |
+| Enforcer | none | stateless validation only |
+
+The raw inheritance output is stored in `security/diagrams/protocol-revenue-v1-executor-inheritance.dot`.

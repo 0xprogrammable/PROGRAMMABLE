@@ -9,14 +9,13 @@
             "type": "function",
             "name": "afterAllHook",
             "source_mapping": {
-              "start": 5513,
+              "start": 5636,
               "length": 1096,
               "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
-              "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
+              "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/ProtocolRevenueExecutionEnforcerV1.sol",
               "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
               "is_dependency": false,
               "lines": [
-                119,
                 120,
                 121,
                 122,
@@ -36,7 +35,8 @@
                 136,
                 137,
                 138,
-                139
+                139,
+                140
               ],
               "starting_column": 5,
               "ending_column": 6
@@ -47,9 +47,9 @@
                 "name": "ProtocolRevenueExecutionEnforcerV1",
                 "source_mapping": {
                   "start": 682,
-                  "length": 12609,
+                  "length": 12732,
                   "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
-                  "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
+                  "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/ProtocolRevenueExecutionEnforcerV1.sol",
                   "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                   "is_dependency": false,
                   "lines": [
@@ -329,7 +329,8 @@
                     289,
                     290,
                     291,
-                    292
+                    292,
+                    293
                   ],
                   "starting_column": 1,
                   "ending_column": 2
@@ -342,14 +343,14 @@
             "type": "node",
             "name": "actual != expected || scheduledAt == 0",
             "source_mapping": {
-              "start": 6517,
+              "start": 6640,
               "length": 38,
               "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
-              "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
+              "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/ProtocolRevenueExecutionEnforcerV1.sol",
               "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
               "is_dependency": false,
               "lines": [
-                138
+                139
               ],
               "starting_column": 13,
               "ending_column": 51
@@ -359,14 +360,13 @@
                 "type": "function",
                 "name": "afterAllHook",
                 "source_mapping": {
-                  "start": 5513,
+                  "start": 5636,
                   "length": 1096,
                   "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
-                  "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
+                  "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/ProtocolRevenueExecutionEnforcerV1.sol",
                   "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                   "is_dependency": false,
                   "lines": [
-                    119,
                     120,
                     121,
                     122,
@@ -386,7 +386,8 @@
                     136,
                     137,
                     138,
-                    139
+                    139,
+                    140
                   ],
                   "starting_column": 5,
                   "ending_column": 6
@@ -397,9 +398,9 @@
                     "name": "ProtocolRevenueExecutionEnforcerV1",
                     "source_mapping": {
                       "start": 682,
-                      "length": 12609,
+                      "length": 12732,
                       "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
-                      "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
+                      "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/ProtocolRevenueExecutionEnforcerV1.sol",
                       "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                       "is_dependency": false,
                       "lines": [
@@ -679,7 +680,8 @@
                         289,
                         290,
                         291,
-                        292
+                        292,
+                        293
                       ],
                       "starting_column": 1,
                       "ending_column": 2
@@ -691,10 +693,10 @@
             }
           }
         ],
-        "description": "ProtocolRevenueExecutionEnforcerV1.afterAllHook(bytes,bytes,bytes32,bytes,bytes32,address,address) (src/ProtocolRevenueExecutionEnforcerV1.sol#119-139) uses timestamp for comparisons\n\tDangerous comparisons:\n\t- actual != expected || scheduledAt == 0 (src/ProtocolRevenueExecutionEnforcerV1.sol#138)\n",
-        "markdown": "[ProtocolRevenueExecutionEnforcerV1.afterAllHook(bytes,bytes,bytes32,bytes,bytes32,address,address)](src/ProtocolRevenueExecutionEnforcerV1.sol#L119-L139) uses timestamp for comparisons\n\tDangerous comparisons:\n\t- [actual != expected || scheduledAt == 0](src/ProtocolRevenueExecutionEnforcerV1.sol#L138)\n",
-        "first_markdown_element": "src/ProtocolRevenueExecutionEnforcerV1.sol#L119-L139",
-        "id": "e161bc24eaf0611991698b27e4d46969dc767f549a4590a11b695d79e9ea38f5",
+        "description": "ProtocolRevenueExecutionEnforcerV1.afterAllHook(bytes,bytes,bytes32,bytes,bytes32,address,address) (src/ProtocolRevenueExecutionEnforcerV1.sol#120-140) uses timestamp for comparisons\n\tDangerous comparisons:\n\t- actual != expected || scheduledAt == 0 (src/ProtocolRevenueExecutionEnforcerV1.sol#139)\n",
+        "markdown": "[ProtocolRevenueExecutionEnforcerV1.afterAllHook(bytes,bytes,bytes32,bytes,bytes32,address,address)](src/ProtocolRevenueExecutionEnforcerV1.sol#L120-L140) uses timestamp for comparisons\n\tDangerous comparisons:\n\t- [actual != expected || scheduledAt == 0](src/ProtocolRevenueExecutionEnforcerV1.sol#L139)\n",
+        "first_markdown_element": "src/ProtocolRevenueExecutionEnforcerV1.sol#L120-L140",
+        "id": "05dbeedf39bda4fbaa2035db72e03b53b7bd5fcc944861208843f4b19a05c38f",
         "check": "timestamp",
         "impact": "Low",
         "confidence": "Medium"
@@ -705,14 +707,13 @@
             "type": "function",
             "name": "_decodeProcessCall",
             "source_mapping": {
-              "start": 10141,
+              "start": 10264,
               "length": 1057,
               "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
-              "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
+              "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/ProtocolRevenueExecutionEnforcerV1.sol",
               "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
               "is_dependency": false,
               "lines": [
-                226,
                 227,
                 228,
                 229,
@@ -735,7 +736,8 @@
                 246,
                 247,
                 248,
-                249
+                249,
+                250
               ],
               "starting_column": 5,
               "ending_column": 6
@@ -746,9 +748,9 @@
                 "name": "ProtocolRevenueExecutionEnforcerV1",
                 "source_mapping": {
                   "start": 682,
-                  "length": 12609,
+                  "length": 12732,
                   "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
-                  "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
+                  "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/ProtocolRevenueExecutionEnforcerV1.sol",
                   "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                   "is_dependency": false,
                   "lines": [
@@ -1028,7 +1030,8 @@
                     289,
                     290,
                     291,
-                    292
+                    292,
+                    293
                   ],
                   "starting_column": 1,
                   "ending_column": 2
@@ -1041,19 +1044,19 @@
             "type": "node",
             "name": "",
             "source_mapping": {
-              "start": 10478,
+              "start": 10601,
               "length": 244,
               "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
-              "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
+              "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/ProtocolRevenueExecutionEnforcerV1.sol",
               "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
               "is_dependency": false,
               "lines": [
-                235,
                 236,
                 237,
                 238,
                 239,
-                240
+                240,
+                241
               ],
               "starting_column": 9,
               "ending_column": 10
@@ -1063,14 +1066,13 @@
                 "type": "function",
                 "name": "_decodeProcessCall",
                 "source_mapping": {
-                  "start": 10141,
+                  "start": 10264,
                   "length": 1057,
                   "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
-                  "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
+                  "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/ProtocolRevenueExecutionEnforcerV1.sol",
                   "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                   "is_dependency": false,
                   "lines": [
-                    226,
                     227,
                     228,
                     229,
@@ -1093,7 +1095,8 @@
                     246,
                     247,
                     248,
-                    249
+                    249,
+                    250
                   ],
                   "starting_column": 5,
                   "ending_column": 6
@@ -1104,9 +1107,9 @@
                     "name": "ProtocolRevenueExecutionEnforcerV1",
                     "source_mapping": {
                       "start": 682,
-                      "length": 12609,
+                      "length": 12732,
                       "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
-                      "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
+                      "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/ProtocolRevenueExecutionEnforcerV1.sol",
                       "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                       "is_dependency": false,
                       "lines": [
@@ -1386,7 +1389,8 @@
                         289,
                         290,
                         291,
-                        292
+                        292,
+                        293
                       ],
                       "starting_column": 1,
                       "ending_column": 2
@@ -1398,10 +1402,10 @@
             }
           }
         ],
-        "description": "ProtocolRevenueExecutionEnforcerV1._decodeProcessCall(bytes) (src/ProtocolRevenueExecutionEnforcerV1.sol#226-249) uses assembly\n\t- INLINE ASM (src/ProtocolRevenueExecutionEnforcerV1.sol#235-240)\n",
-        "markdown": "[ProtocolRevenueExecutionEnforcerV1._decodeProcessCall(bytes)](src/ProtocolRevenueExecutionEnforcerV1.sol#L226-L249) uses assembly\n\t- [INLINE ASM](src/ProtocolRevenueExecutionEnforcerV1.sol#L235-L240)\n",
-        "first_markdown_element": "src/ProtocolRevenueExecutionEnforcerV1.sol#L226-L249",
-        "id": "f2f7d5f54615177d788056cf17d626ba88e015a1f0e670a91d8b2bc2632e66f8",
+        "description": "ProtocolRevenueExecutionEnforcerV1._decodeProcessCall(bytes) (src/ProtocolRevenueExecutionEnforcerV1.sol#227-250) uses assembly\n\t- INLINE ASM (src/ProtocolRevenueExecutionEnforcerV1.sol#236-241)\n",
+        "markdown": "[ProtocolRevenueExecutionEnforcerV1._decodeProcessCall(bytes)](src/ProtocolRevenueExecutionEnforcerV1.sol#L227-L250) uses assembly\n\t- [INLINE ASM](src/ProtocolRevenueExecutionEnforcerV1.sol#L236-L241)\n",
+        "first_markdown_element": "src/ProtocolRevenueExecutionEnforcerV1.sol#L227-L250",
+        "id": "c034dad56c6e6cb7a7a77d35b2edbf7e765ee5ef2844713067ae184a9c412244",
         "check": "assembly",
         "impact": "Informational",
         "confidence": "High"
@@ -1412,14 +1416,14 @@
             "type": "function",
             "name": "CYCLE_INTERVAL",
             "source_mapping": {
-              "start": 1950,
+              "start": 2006,
               "length": 57,
               "filename_relative": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
-              "filename_absolute": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
+              "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/interfaces/IProtocolRevenueMetaMaskV1.sol",
               "filename_short": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
               "is_dependency": false,
               "lines": [
-                65
+                67
               ],
               "starting_column": 5,
               "ending_column": 62
@@ -1430,9 +1434,9 @@
                 "name": "IProtocolRevenueRouterTargetV1",
                 "source_mapping": {
                   "start": 1658,
-                  "length": 647,
+                  "length": 703,
                   "filename_relative": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
-                  "filename_absolute": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
+                  "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/interfaces/IProtocolRevenueMetaMaskV1.sol",
                   "filename_short": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
                   "is_dependency": false,
                   "lines": [
@@ -1454,7 +1458,9 @@
                     71,
                     72,
                     73,
-                    74
+                    74,
+                    75,
+                    76
                   ],
                   "starting_column": 1,
                   "ending_column": 2
@@ -1468,9 +1474,9 @@
             }
           }
         ],
-        "description": "Function IProtocolRevenueRouterTargetV1.CYCLE_INTERVAL() (src/interfaces/IProtocolRevenueMetaMaskV1.sol#65) is not in mixedCase\n",
-        "markdown": "Function [IProtocolRevenueRouterTargetV1.CYCLE_INTERVAL()](src/interfaces/IProtocolRevenueMetaMaskV1.sol#L65) is not in mixedCase\n",
-        "first_markdown_element": "src/interfaces/IProtocolRevenueMetaMaskV1.sol#L65",
+        "description": "Function IProtocolRevenueRouterTargetV1.CYCLE_INTERVAL() (src/interfaces/IProtocolRevenueMetaMaskV1.sol#67) is not in mixedCase\n",
+        "markdown": "Function [IProtocolRevenueRouterTargetV1.CYCLE_INTERVAL()](src/interfaces/IProtocolRevenueMetaMaskV1.sol#L67) is not in mixedCase\n",
+        "first_markdown_element": "src/interfaces/IProtocolRevenueMetaMaskV1.sol#L67",
         "id": "2226fe8f56a43f18f3a52e21b71979389f279c6f47f76e15c7e903b2f1be8363",
         "check": "naming-convention",
         "impact": "Informational",
@@ -1482,14 +1488,14 @@
             "type": "function",
             "name": "MIN_NEW_REVENUE",
             "source_mapping": {
-              "start": 2013,
+              "start": 2069,
               "length": 59,
               "filename_relative": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
-              "filename_absolute": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
+              "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/interfaces/IProtocolRevenueMetaMaskV1.sol",
               "filename_short": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
               "is_dependency": false,
               "lines": [
-                67
+                69
               ],
               "starting_column": 5,
               "ending_column": 64
@@ -1500,9 +1506,9 @@
                 "name": "IProtocolRevenueRouterTargetV1",
                 "source_mapping": {
                   "start": 1658,
-                  "length": 647,
+                  "length": 703,
                   "filename_relative": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
-                  "filename_absolute": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
+                  "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/interfaces/IProtocolRevenueMetaMaskV1.sol",
                   "filename_short": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
                   "is_dependency": false,
                   "lines": [
@@ -1524,7 +1530,9 @@
                     71,
                     72,
                     73,
-                    74
+                    74,
+                    75,
+                    76
                   ],
                   "starting_column": 1,
                   "ending_column": 2
@@ -1538,9 +1546,9 @@
             }
           }
         ],
-        "description": "Function IProtocolRevenueRouterTargetV1.MIN_NEW_REVENUE() (src/interfaces/IProtocolRevenueMetaMaskV1.sol#67) is not in mixedCase\n",
-        "markdown": "Function [IProtocolRevenueRouterTargetV1.MIN_NEW_REVENUE()](src/interfaces/IProtocolRevenueMetaMaskV1.sol#L67) is not in mixedCase\n",
-        "first_markdown_element": "src/interfaces/IProtocolRevenueMetaMaskV1.sol#L67",
+        "description": "Function IProtocolRevenueRouterTargetV1.MIN_NEW_REVENUE() (src/interfaces/IProtocolRevenueMetaMaskV1.sol#69) is not in mixedCase\n",
+        "markdown": "Function [IProtocolRevenueRouterTargetV1.MIN_NEW_REVENUE()](src/interfaces/IProtocolRevenueMetaMaskV1.sol#L69) is not in mixedCase\n",
+        "first_markdown_element": "src/interfaces/IProtocolRevenueMetaMaskV1.sol#L69",
         "id": "3488dd6417506af826aa2a950ef3988f78ff876b0ffb10b9e69a0099ac5aa9b1",
         "check": "naming-convention",
         "impact": "Informational",
@@ -1555,7 +1563,7 @@
               "start": 1772,
               "length": 52,
               "filename_relative": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
-              "filename_absolute": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
+              "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/interfaces/IProtocolRevenueMetaMaskV1.sol",
               "filename_short": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
               "is_dependency": false,
               "lines": [
@@ -1570,9 +1578,9 @@
                 "name": "IProtocolRevenueRouterTargetV1",
                 "source_mapping": {
                   "start": 1658,
-                  "length": 647,
+                  "length": 703,
                   "filename_relative": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
-                  "filename_absolute": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
+                  "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/interfaces/IProtocolRevenueMetaMaskV1.sol",
                   "filename_short": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
                   "is_dependency": false,
                   "lines": [
@@ -1594,7 +1602,9 @@
                     71,
                     72,
                     73,
-                    74
+                    74,
+                    75,
+                    76
                   ],
                   "starting_column": 1,
                   "ending_column": 2
@@ -1625,7 +1635,7 @@
               "start": 1705,
               "length": 61,
               "filename_relative": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
-              "filename_absolute": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
+              "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/interfaces/IProtocolRevenueMetaMaskV1.sol",
               "filename_short": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
               "is_dependency": false,
               "lines": [
@@ -1640,9 +1650,9 @@
                 "name": "IProtocolRevenueRouterTargetV1",
                 "source_mapping": {
                   "start": 1658,
-                  "length": 647,
+                  "length": 703,
                   "filename_relative": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
-                  "filename_absolute": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
+                  "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/interfaces/IProtocolRevenueMetaMaskV1.sol",
                   "filename_short": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
                   "is_dependency": false,
                   "lines": [
@@ -1664,7 +1674,9 @@
                     71,
                     72,
                     73,
-                    74
+                    74,
+                    75,
+                    76
                   ],
                   "starting_column": 1,
                   "ending_column": 2
@@ -1692,14 +1704,14 @@
             "type": "function",
             "name": "MAIN_POOL_ID",
             "source_mapping": {
-              "start": 1888,
+              "start": 1944,
               "length": 56,
               "filename_relative": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
-              "filename_absolute": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
+              "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/interfaces/IProtocolRevenueMetaMaskV1.sol",
               "filename_short": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
               "is_dependency": false,
               "lines": [
-                63
+                65
               ],
               "starting_column": 5,
               "ending_column": 61
@@ -1710,9 +1722,9 @@
                 "name": "IProtocolRevenueRouterTargetV1",
                 "source_mapping": {
                   "start": 1658,
-                  "length": 647,
+                  "length": 703,
                   "filename_relative": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
-                  "filename_absolute": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
+                  "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/interfaces/IProtocolRevenueMetaMaskV1.sol",
                   "filename_short": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
                   "is_dependency": false,
                   "lines": [
@@ -1734,7 +1746,9 @@
                     71,
                     72,
                     73,
-                    74
+                    74,
+                    75,
+                    76
                   ],
                   "starting_column": 1,
                   "ending_column": 2
@@ -1748,9 +1762,9 @@
             }
           }
         ],
-        "description": "Function IProtocolRevenueRouterTargetV1.MAIN_POOL_ID() (src/interfaces/IProtocolRevenueMetaMaskV1.sol#63) is not in mixedCase\n",
-        "markdown": "Function [IProtocolRevenueRouterTargetV1.MAIN_POOL_ID()](src/interfaces/IProtocolRevenueMetaMaskV1.sol#L63) is not in mixedCase\n",
-        "first_markdown_element": "src/interfaces/IProtocolRevenueMetaMaskV1.sol#L63",
+        "description": "Function IProtocolRevenueRouterTargetV1.MAIN_POOL_ID() (src/interfaces/IProtocolRevenueMetaMaskV1.sol#65) is not in mixedCase\n",
+        "markdown": "Function [IProtocolRevenueRouterTargetV1.MAIN_POOL_ID()](src/interfaces/IProtocolRevenueMetaMaskV1.sol#L65) is not in mixedCase\n",
+        "first_markdown_element": "src/interfaces/IProtocolRevenueMetaMaskV1.sol#L65",
         "id": "6e6d6a982ff3036cfda147f5e25fc5b01577c801b830835acc26859da674b3d3",
         "check": "naming-convention",
         "impact": "Informational",
@@ -1765,7 +1779,7 @@
               "start": 1830,
               "length": 52,
               "filename_relative": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
-              "filename_absolute": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
+              "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/interfaces/IProtocolRevenueMetaMaskV1.sol",
               "filename_short": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
               "is_dependency": false,
               "lines": [
@@ -1780,9 +1794,9 @@
                 "name": "IProtocolRevenueRouterTargetV1",
                 "source_mapping": {
                   "start": 1658,
-                  "length": 647,
+                  "length": 703,
                   "filename_relative": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
-                  "filename_absolute": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
+                  "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/interfaces/IProtocolRevenueMetaMaskV1.sol",
                   "filename_short": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
                   "is_dependency": false,
                   "lines": [
@@ -1804,7 +1818,9 @@
                     71,
                     72,
                     73,
-                    74
+                    74,
+                    75,
+                    76
                   ],
                   "starting_column": 1,
                   "ending_column": 2
@@ -1835,7 +1851,7 @@
               "start": 756,
               "length": 58,
               "filename_relative": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
-              "filename_absolute": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
+              "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/interfaces/IProtocolRevenueMetaMaskV1.sol",
               "filename_short": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
               "is_dependency": false,
               "lines": [
@@ -1852,7 +1868,7 @@
                   "start": 696,
                   "length": 785,
                   "filename_relative": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
-                  "filename_absolute": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
+                  "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/interfaces/IProtocolRevenueMetaMaskV1.sol",
                   "filename_short": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
                   "is_dependency": false,
                   "lines": [
@@ -1905,9 +1921,9 @@
             "name": "slitherConstructorConstantVariables",
             "source_mapping": {
               "start": 682,
-              "length": 12609,
+              "length": 12732,
               "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
-              "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
+              "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/ProtocolRevenueExecutionEnforcerV1.sol",
               "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
               "is_dependency": false,
               "lines": [
@@ -2187,7 +2203,8 @@
                 289,
                 290,
                 291,
-                292
+                292,
+                293
               ],
               "starting_column": 1,
               "ending_column": 2
@@ -2198,9 +2215,9 @@
                 "name": "ProtocolRevenueExecutionEnforcerV1",
                 "source_mapping": {
                   "start": 682,
-                  "length": 12609,
+                  "length": 12732,
                   "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
-                  "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
+                  "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/ProtocolRevenueExecutionEnforcerV1.sol",
                   "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                   "is_dependency": false,
                   "lines": [
@@ -2480,7 +2497,8 @@
                     289,
                     290,
                     291,
-                    292
+                    292,
+                    293
                   ],
                   "starting_column": 1,
                   "ending_column": 2
@@ -2496,7 +2514,7 @@
               "start": 776,
               "length": 111,
               "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
-              "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
+              "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/ProtocolRevenueExecutionEnforcerV1.sol",
               "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
               "is_dependency": false,
               "lines": [
@@ -2511,9 +2529,9 @@
                 "name": "slitherConstructorConstantVariables",
                 "source_mapping": {
                   "start": 682,
-                  "length": 12609,
+                  "length": 12732,
                   "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
-                  "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
+                  "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/ProtocolRevenueExecutionEnforcerV1.sol",
                   "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                   "is_dependency": false,
                   "lines": [
@@ -2793,7 +2811,8 @@
                     289,
                     290,
                     291,
-                    292
+                    292,
+                    293
                   ],
                   "starting_column": 1,
                   "ending_column": 2
@@ -2804,9 +2823,9 @@
                     "name": "ProtocolRevenueExecutionEnforcerV1",
                     "source_mapping": {
                       "start": 682,
-                      "length": 12609,
+                      "length": 12732,
                       "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
-                      "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
+                      "filename_absolute": "/private/tmp/programmable-revenue-vercel-20260804.bgE63l/contracts/src/ProtocolRevenueExecutionEnforcerV1.sol",
                       "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                       "is_dependency": false,
                       "lines": [
@@ -3086,7 +3105,8 @@
                         289,
                         290,
                         291,
-                        292
+                        292,
+                        293
                       ],
                       "starting_column": 1,
                       "ending_column": 2
@@ -3098,9 +3118,9 @@
             }
           }
         ],
-        "description": "ProtocolRevenueExecutionEnforcerV1.slitherConstructorConstantVariables() (src/ProtocolRevenueExecutionEnforcerV1.sol#16-292) uses literals with too many digits:\n\t- BATCH_DEFAULT_MODE = 0x0100000000000000000000000000000000000000000000000000000000000000 (src/ProtocolRevenueExecutionEnforcerV1.sol#17)\n",
-        "markdown": "[ProtocolRevenueExecutionEnforcerV1.slitherConstructorConstantVariables()](src/ProtocolRevenueExecutionEnforcerV1.sol#L16-L292) uses literals with too many digits:\n\t- [BATCH_DEFAULT_MODE = 0x0100000000000000000000000000000000000000000000000000000000000000](src/ProtocolRevenueExecutionEnforcerV1.sol#L17)\n",
-        "first_markdown_element": "src/ProtocolRevenueExecutionEnforcerV1.sol#L16-L292",
+        "description": "ProtocolRevenueExecutionEnforcerV1.slitherConstructorConstantVariables() (src/ProtocolRevenueExecutionEnforcerV1.sol#16-293) uses literals with too many digits:\n\t- BATCH_DEFAULT_MODE = 0x0100000000000000000000000000000000000000000000000000000000000000 (src/ProtocolRevenueExecutionEnforcerV1.sol#17)\n",
+        "markdown": "[ProtocolRevenueExecutionEnforcerV1.slitherConstructorConstantVariables()](src/ProtocolRevenueExecutionEnforcerV1.sol#L16-L293) uses literals with too many digits:\n\t- [BATCH_DEFAULT_MODE = 0x0100000000000000000000000000000000000000000000000000000000000000](src/ProtocolRevenueExecutionEnforcerV1.sol#L17)\n",
+        "first_markdown_element": "src/ProtocolRevenueExecutionEnforcerV1.sol#L16-L293",
         "id": "a98be363bd8ccb0bd561a9578ade05c5312714a67a1c521e739f17e75c583cc1",
         "check": "too-many-digits",
         "impact": "Informational",

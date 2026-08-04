@@ -1,6 +1,0 @@
-production-settings:
-  account:
-    workflow-owner-address: "0x2Bb333d48DFAF1596D9036671d2E43168994249E"
-  rpcs:
-    - chain-name: ethereum-mainnet
-      url: https://ethereum-rpc.publicnode.com

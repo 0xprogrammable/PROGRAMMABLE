@@ -60,6 +60,8 @@ interface IProtocolRevenueRouterTargetV1 {
 
     function V4_TOKEN() external view returns (address);
 
+    function keeper() external view returns (address);
+
     function MAIN_POOL_ID() external view returns (bytes32);
 
     function CYCLE_INTERVAL() external view returns (uint64);

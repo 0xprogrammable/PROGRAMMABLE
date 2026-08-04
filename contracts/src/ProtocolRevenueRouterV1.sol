@@ -35,10 +35,11 @@ interface IProtocolRevenueMainHookV1 {
 }
 
 /// @title ProtocolRevenueRouterV1
-/// @notice Applies Programmable's immutable 50/50 protocol-revenue policy to newly claimed native ETH.
-/// @dev Each cycle sends half of the exact claim amount to the fixed treasury and swaps the other half for $V4 through
-///      Uniswap's official Universal Router. Purchased $V4 is delivered to the fixed revenue wallet. The contract is
-///      non-upgradeable and exposes no owner, recovery, arbitrary-call, liquidity-management or configuration surface.
+/// @notice Applies Programmable's immutable protocol-revenue policy to newly claimed native ETH.
+/// @dev Each cycle sends 50% of the exact claim amount to the fixed treasury, reserves 0.5% for the fixed keeper's
+///      gas, and swaps the remaining 49.5% for $V4 through Uniswap's official Universal Router. Purchased $V4 is
+///      delivered to the fixed revenue wallet. The contract is non-upgradeable and exposes no owner, recovery,
+///      arbitrary-call, liquidity-management or configuration surface.
 contract ProtocolRevenueRouterV1 is ReentrancyGuardTransient {
     using Address for address payable;
     using PoolIdLibrary for PoolKey;
@@ -47,7 +48,8 @@ contract ProtocolRevenueRouterV1 is ReentrancyGuardTransient {
 
     uint16 public constant BASIS_POINTS = 10_000;
     uint16 public constant TREASURY_SHARE_BPS = 5000;
-    uint16 public constant BUY_SHARE_BPS = 5000;
+    uint16 public constant BUY_SHARE_BPS = 4950;
+    uint16 public constant KEEPER_GAS_SHARE_BPS = 50;
     uint16 public constant MAIN_POOL_SWAP_FEE_BPS = 100;
 
     uint64 public constant CYCLE_INTERVAL = 1 days;
@@ -70,6 +72,7 @@ contract ProtocolRevenueRouterV1 is ReentrancyGuardTransient {
     address public constant TREASURY = 0x2Bb333d48DFAF1596D9036671d2E43168994249E;
     address public constant V4_TOKEN = 0x7987f03462200b3D8A072E02C89A8A41dCB124EE;
     address public constant MAIN_HOOK = 0x025a386eAa79f6067d29848FD05ccC71bEAb20CC;
+    address public immutable keeper;
 
     IPoolManager public constant POOL_MANAGER = IPoolManager(0x000000000004444c5dc75cB358380D2e3dE08A90);
     IProtocolRevenueUniversalRouterV1 public constant UNIVERSAL_ROUTER =
@@ -97,6 +100,7 @@ contract ProtocolRevenueRouterV1 is ReentrancyGuardTransient {
     uint256 public cycleCount;
     uint256 public totalRevenueProcessed;
     uint256 public totalTreasurySent;
+    uint256 public totalKeeperGasSent;
     uint256 public totalNativeSwapped;
     uint256 public totalTokensBought;
 
@@ -107,6 +111,7 @@ contract ProtocolRevenueRouterV1 is ReentrancyGuardTransient {
     error CycleTimestampInFuture(uint64 cycleTimestamp, uint256 latestAllowed);
     error DependencyBindingMismatch();
     error InsufficientNewRevenue(uint256 actual, uint256 minimum);
+    error InvalidKeeper(address keeper);
     error InvalidPoolState();
     error OnlyRevenueAuthority(address caller);
     error ReferenceTickDeviationTooLarge(int24 referenceTick, int24 currentTick, int24 maximum);
@@ -120,13 +125,18 @@ contract ProtocolRevenueRouterV1 is ReentrancyGuardTransient {
         uint256 indexed cycle,
         uint256 claimedRevenue,
         uint256 treasuryAmount,
+        uint256 keeperGasAmount,
         uint256 nativeSwapped,
         uint256 tokenBought,
         address indexed tokenRecipient
     );
 
-    constructor() {
+    constructor(address keeper_) {
         if (block.chainid != 1) revert DependencyBindingMismatch();
+        if (keeper_ == address(0) || keeper_ == REVENUE_AUTHORITY || keeper_ == TREASURY) {
+            revert InvalidKeeper(keeper_);
+        }
+        keeper = keeper_;
         _assertCodeHash(V4_TOKEN, V4_TOKEN_CODE_HASH);
         _assertCodeHash(MAIN_HOOK, MAIN_HOOK_CODE_HASH);
         _assertCodeHash(address(POOL_MANAGER), POOL_MANAGER_CODE_HASH);
@@ -173,8 +183,10 @@ contract ProtocolRevenueRouterV1 is ReentrancyGuardTransient {
         }
 
         uint256 nativeToSwap = FullMath.mulDiv(claimedRevenue, BUY_SHARE_BPS, BASIS_POINTS);
-        uint256 treasuryAmount = claimedRevenue - nativeToSwap;
+        uint256 keeperGasAmount = FullMath.mulDiv(claimedRevenue, KEEPER_GAS_SHARE_BPS, BASIS_POINTS);
+        uint256 treasuryAmount = claimedRevenue - nativeToSwap - keeperGasAmount;
         payable(TREASURY).sendValue(treasuryAmount);
+        payable(keeper).sendValue(keeperGasAmount);
         uint256 tokenBought = _buyV4(nativeToSwap, referenceTick);
         IERC20(V4_TOKEN).safeTransfer(REVENUE_AUTHORITY, tokenBought);
 
@@ -186,10 +198,13 @@ contract ProtocolRevenueRouterV1 is ReentrancyGuardTransient {
         }
         totalRevenueProcessed += claimedRevenue;
         totalTreasurySent += treasuryAmount;
+        totalKeeperGasSent += keeperGasAmount;
         totalNativeSwapped += nativeToSwap;
         totalTokensBought += tokenBought;
 
-        emit RevenueProcessed(cycleCount, claimedRevenue, treasuryAmount, nativeToSwap, tokenBought, REVENUE_AUTHORITY);
+        emit RevenueProcessed(
+            cycleCount, claimedRevenue, treasuryAmount, keeperGasAmount, nativeToSwap, tokenBought, REVENUE_AUTHORITY
+        );
     }
 
     function _buyV4(uint256 nativeToSwap, int24 referenceTick) private returns (uint256 tokenBought) {

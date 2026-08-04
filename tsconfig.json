@@ -36,7 +36,6 @@
     "contracts/lib",
     "contracts/out",
     "contracts/cache",
-    "contracts/broadcast",
-    "ops/protocol-revenue-cre/workflow"
+    "contracts/broadcast"
   ]
 }
