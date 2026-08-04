@@ -1,6 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createSerializedChartRefresh } from "../components/token-price-chart";
+import {
+  createSerializedChartRefresh,
+  nearestChartPointIndex,
+} from "../components/token-price-chart";
+
+describe("token price chart inspection", () => {
+  it("maps the pointer to the nearest plotted price point", () => {
+    expect(nearestChartPointIndex(100, 100, 600, 7)).toBe(0);
+    expect(nearestChartPointIndex(400, 100, 600, 7)).toBe(3);
+    expect(nearestChartPointIndex(700, 100, 600, 7)).toBe(6);
+    expect(nearestChartPointIndex(10_000, 100, 600, 7)).toBe(6);
+  });
+});
 
 describe("token price chart refresh", () => {
   afterEach(() => {

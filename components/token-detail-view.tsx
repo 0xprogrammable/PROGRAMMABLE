@@ -1177,9 +1177,8 @@ function TokenDetailContent({
               onVolumeChange={setChartVolume}
               onMarketCapChange={setChartMarketCap}
             />
+            <MetricGrid metrics={metrics} />
           </div>
-
-          <MetricGrid metrics={metrics} />
 
           {token.launchModel === "deep" &&
           token.growthTargetNativeWei &&

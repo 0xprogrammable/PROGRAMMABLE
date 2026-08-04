@@ -2,10 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { formatUnits, type Hex } from "viem";
+import { formatUnits, parseUnits, type Hex } from "viem";
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -92,6 +93,35 @@ const deepReleaseAvailable = false;
 const deepV3ReleaseAvailable = false;
 const stockPairedReleaseAvailable =
   isConfiguredStockPairedRewardsReady();
+const creatorProfileCache = new Map<
+  string,
+  Readonly<{ data: ProfileOnchainData; updatedAt: number }>
+>();
+const CREATOR_PROFILE_CACHE_TTL_MS = 30_000;
+const MAX_CREATOR_PROFILE_CACHE_ENTRIES = 8;
+
+function readCachedCreatorProfile(account: string) {
+  const key = account.toLowerCase();
+  const cached = creatorProfileCache.get(key);
+  if (!cached) return null;
+  if (Date.now() - cached.updatedAt >= CREATOR_PROFILE_CACHE_TTL_MS) {
+    creatorProfileCache.delete(key);
+    return null;
+  }
+  return cached.data;
+}
+
+function cacheCreatorProfile(data: ProfileOnchainData) {
+  if (!data.account || data.status !== "ready") return;
+  const key = data.account.toLowerCase();
+  creatorProfileCache.delete(key);
+  creatorProfileCache.set(key, { data, updatedAt: Date.now() });
+  while (creatorProfileCache.size > MAX_CREATOR_PROFILE_CACHE_ENTRIES) {
+    const oldestKey = creatorProfileCache.keys().next().value;
+    if (oldestKey === undefined) return;
+    creatorProfileCache.delete(oldestKey);
+  }
+}
 
 type ProfileClaimActionState = {
   account: string;
@@ -886,6 +916,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     void fetchCreatorProfile(account, controller.signal)
       .then((data) => {
         if (!controller.signal.aborted) {
+          cacheCreatorProfile(data);
           const reflectedTransactions =
             reflectedConfirmedProfileTransactions(
               confirmedTransactions,
@@ -1185,8 +1216,14 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     }
   }
 
+  const cachedOnchainData =
+    !onchainData && account ? readCachedCreatorProfile(account) : null;
+  const remoteOrCachedOnchainData =
+    account && isProfileDataForAccount(remoteOnchainData, account)
+      ? remoteOnchainData
+      : (cachedOnchainData ?? remoteOnchainData);
   const requestedOnchainData = withoutClosedDeepProfileData(
-    onchainData ?? remoteOnchainData,
+    onchainData ?? remoteOrCachedOnchainData,
   );
   const scopedOnchainData = account
     ? isProfileDataForAccount(requestedOnchainData, account)
@@ -3218,7 +3255,13 @@ function FeeEarningsPanel({
 }) {
   const claimHistory = activity
     .filter((item) => /fees claimed/iu.test(item.label))
-    .slice(0, 4);
+    .slice(0, 3);
+  const chart = buildFeeEarningsChart(
+    activity,
+    nativeClaimed,
+    nativeClaimable,
+  );
+  const gradientId = useId().replaceAll(":", "");
 
   return (
     <section
@@ -3240,17 +3283,66 @@ function FeeEarningsPanel({
         ) : null}
       </div>
 
-      <figure className={styles.feeChart}>
+      <figure
+        className={styles.feeChart}
+        aria-label={`Fee earnings history. ${formatWei(nativeClaimed + nativeClaimable)} earned in total.`}
+      >
         <div className={styles.chartGrid} aria-hidden="true" />
-        {claimHistory.length ? (
-          <figcaption className={styles.claimHistory}>
-            {claimHistory.map((item) => (
-              <Link href={item.href} key={item.id}>
-                <span>{item.detail}</span>
-                <time>{item.occurredAt}</time>
-              </Link>
-            ))}
-          </figcaption>
+        {chart ? (
+          <>
+            <svg
+              className={styles.feePlot}
+              viewBox="0 0 620 150"
+              preserveAspectRatio="none"
+              role="img"
+              aria-label={`Cumulative fee earnings ending at ${formatWei(chart.totalWei)}`}
+            >
+              <defs>
+                <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
+                  <stop
+                    offset="0%"
+                    stopColor="var(--accent)"
+                    stopOpacity="0.24"
+                  />
+                  <stop
+                    offset="100%"
+                    stopColor="var(--accent)"
+                    stopOpacity="0"
+                  />
+                </linearGradient>
+              </defs>
+              <path
+                className={styles.feeArea}
+                d={chart.areaPath}
+                fill={`url(#${gradientId})`}
+              />
+              <path className={styles.feeLine} d={chart.linePath} />
+              <circle
+                className={styles.feeEndPoint}
+                cx={chart.points.at(-1)?.x}
+                cy={chart.points.at(-1)?.y}
+                r="4.5"
+              />
+            </svg>
+            <div className={styles.feeChartTotal} aria-hidden="true">
+              <span>Total earned</span>
+              <strong>{formatWei(chart.totalWei)}</strong>
+            </div>
+            {claimHistory.length ? (
+              <figcaption className={styles.claimHistory}>
+                {claimHistory.map((item) => (
+                  <Link href={item.href} key={item.id}>
+                    <span>{item.detail}</span>
+                    <time>{item.occurredAt}</time>
+                  </Link>
+                ))}
+              </figcaption>
+            ) : (
+              <figcaption className={styles.chartCaption}>
+                Current unclaimed earnings
+              </figcaption>
+            )}
+          </>
         ) : (
           <figcaption className={styles.chartEmpty}>
             <strong>No claims yet.</strong>
@@ -3260,6 +3352,81 @@ function FeeEarningsPanel({
       </figure>
     </section>
   );
+}
+
+type FeeEarningsChartPoint = {
+  x: number;
+  y: number;
+  valueWei: bigint;
+};
+
+export function parseClaimedFeeWei(detail: string) {
+  const match = detail.trim().match(/^([0-9]+(?:\.[0-9]+)?)\s+ETH\b/iu);
+  if (!match) return null;
+  try {
+    return parseUnits(match[1], 18);
+  } catch {
+    return null;
+  }
+}
+
+export function buildFeeEarningsChart(
+  activity: readonly ProfileActivity[],
+  nativeClaimed: bigint,
+  nativeClaimable: bigint,
+) {
+  const claims = activity
+    .filter((item) => /fees claimed/iu.test(item.label))
+    .map((item) => parseClaimedFeeWei(item.detail))
+    .filter((value): value is bigint => value !== null)
+    .reverse();
+  const historyTotal = claims.reduce((total, value) => total + value, 0n);
+  const startingTotal =
+    nativeClaimed > historyTotal ? nativeClaimed - historyTotal : 0n;
+  const values = [startingTotal];
+  let cumulative = startingTotal;
+  for (const claim of claims) {
+    cumulative += claim;
+    values.push(cumulative);
+  }
+
+  const totalWei = nativeClaimed + nativeClaimable;
+  if (values.at(-1) !== totalWei || values.length === 1) {
+    values.push(totalWei);
+  }
+  if (totalWei <= 0n || values.length < 2) return null;
+
+  const width = 620;
+  const height = 150;
+  const left = 8;
+  const right = width - 8;
+  const top = 12;
+  const bottom = height - 10;
+  const maximum = values.reduce(
+    (current, value) => (value > current ? value : current),
+    1n,
+  );
+  const points: FeeEarningsChartPoint[] = values.map((valueWei, index) => ({
+    valueWei,
+    x: left + (index / (values.length - 1)) * (right - left),
+    y:
+      bottom -
+      Number((valueWei * 1_000_000n) / maximum) /
+        1_000_000 *
+        (bottom - top),
+  }));
+  const linePath = points
+    .map((point, index) =>
+      `${index === 0 ? "M" : "L"}${point.x.toFixed(2)},${point.y.toFixed(2)}`,
+    )
+    .join(" ");
+
+  return {
+    areaPath: `${linePath} L${right},${height} L${left},${height} Z`,
+    linePath,
+    points,
+    totalWei,
+  };
 }
 
 function transactionHref(chainId: number | undefined, hash: Hex) {
@@ -3341,10 +3508,6 @@ function ProfileClaimDialog({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const titleId = `${dialogId}-title`;
-  const descriptionId = `${dialogId}-description`;
-  const hasAlternativeReceiptPath = groups.some(
-    (group) => group.actions.length > 1,
-  );
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -3364,7 +3527,6 @@ function ProfileClaimDialog({
       id={dialogId}
       className={styles.claimDialog}
       aria-labelledby={titleId}
-      aria-describedby={descriptionId}
       onCancel={(event) => {
         event.preventDefault();
         onClose();
@@ -3377,7 +3539,6 @@ function ProfileClaimDialog({
       <div className={styles.claimDialogSurface}>
         <header className={styles.claimDialogHeader}>
           <div>
-            <span>Claimable rewards</span>
             <h3 id={titleId}>
               {tokenName} <small>${tokenSymbol}</small>
             </h3>
@@ -3392,12 +3553,6 @@ function ProfileClaimDialog({
             <span aria-hidden="true">×</span>
           </button>
         </header>
-
-        <p id={descriptionId} className={styles.claimDialogIntro}>
-          {hasAlternativeReceiptPath
-            ? "Choose one reward. Stock-Paired receipt choices are alternatives, not extra rewards."
-            : "Choose the reward you want to claim."}
-        </p>
 
         <div className={styles.claimDialogGroups}>
           {groups.map((group) => (

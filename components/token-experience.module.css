@@ -33,11 +33,10 @@
 .layout {
   align-items: start;
   display: grid;
-  gap: 16px 22px;
+  gap: 11px 22px;
   grid-template-areas:
     "identity identity"
     "chart trade"
-    "metrics trade"
     "deep community"
     "details community";
   grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
@@ -232,18 +231,18 @@
 }
 
 .marketChart {
+  display: grid;
+  gap: 9px;
   grid-area: chart;
   min-width: 0;
 }
 
 .metrics {
-  border-bottom: 1px solid var(--border);
   display: grid;
-  gap: 14px;
-  grid-area: metrics;
+  gap: 12px;
   grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   margin: 0;
-  padding: 15px 2px 17px;
+  padding: 3px 2px 8px;
 }
 
 .metric {
@@ -333,15 +332,14 @@
   gap: 0 32px;
   grid-area: details;
   grid-template-columns: minmax(180px, 0.58fr) minmax(0, 1.42fr);
-  margin-top: 28px;
+  margin-top: 18px;
 }
 
 .projectPanel {
-  border-bottom: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding: 24px 0 26px;
+  padding: 18px 0 20px;
 }
 
 .projectPanelMeta {
@@ -382,9 +380,8 @@
 }
 
 .projectFacts > div {
-  border-left: 1px solid var(--border);
   min-width: 0;
-  padding: 0 14px;
+  padding: 0 12px;
 }
 
 .projectFacts > div:first-child {
@@ -787,8 +784,6 @@
 }
 
 .tradeFacts {
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
-  border-top: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   margin: 13px 0 0;
@@ -805,7 +800,6 @@
 }
 
 .tradeFacts > div + div {
-  border-left: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
   padding-left: 14px;
 }
 
@@ -972,7 +966,6 @@
 
 .reviewDetails > div {
   align-items: center;
-  border-bottom: 1px solid var(--border);
   display: flex;
   gap: 18px;
   justify-content: space-between;
@@ -1178,7 +1171,6 @@
     grid-template-areas:
       "identity"
       "chart"
-      "metrics"
       "trade"
       "community"
       "deep"
@@ -1276,9 +1268,9 @@
 
   .metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px 12px;
+    gap: 12px;
     margin-top: 0;
-    padding-block: 15px;
+    padding-block: 4px 9px;
   }
 
   .metric {
@@ -1295,7 +1287,7 @@
 
   .projectInformation {
     grid-template-columns: 1fr;
-    margin-top: 22px;
+    margin-top: 16px;
   }
 
   .projectPanelWide {
@@ -1304,7 +1296,7 @@
 
   .projectPanel {
     min-height: 0;
-    padding: 26px 0;
+    padding: 20px 0;
   }
 
   .projectFacts {
@@ -1317,7 +1309,6 @@
   }
 
   .projectFacts > div:nth-child(n + 3) {
-    border-top: 1px solid var(--border);
     margin-top: 14px;
     padding-top: 14px;
   }

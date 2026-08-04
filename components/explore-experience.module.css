@@ -136,22 +136,23 @@
   background: var(--surface-soft);
   border: 0;
   border-radius: 20px;
-  box-shadow: 0 1px 0 color-mix(in srgb, white 28%, transparent);
-  outline: 1px solid oklch(0 0 0 / 0.1);
-  outline-offset: -1px;
+  box-shadow: none;
   overflow: hidden;
   position: relative;
-  transition: outline-color 180ms ease;
   width: 100%;
 }
 
 :global(html[data-theme="dark"]) .runnerArt {
-  outline-color: oklch(1 0 0 / 0.1);
+  background: var(--surface-soft);
 }
 
 .runnerImage {
+  display: block;
+  height: calc(100% + 2px) !important;
+  inset: -1px !important;
   object-fit: cover;
   transition: transform 220ms var(--ease-out);
+  width: calc(100% + 2px) !important;
 }
 
 .runnerBody {
@@ -299,10 +300,6 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .runnerCard:hover .runnerArt {
-    outline-color: color-mix(in srgb, var(--text) 22%, transparent);
-  }
-
   .runnerCard:hover .runnerImage {
     transform: scale(1.012);
   }

@@ -76,8 +76,6 @@
   box-shadow: none;
   height: auto;
   isolation: isolate;
-  outline: 1px solid rgb(0 0 0 / 0.1);
-  outline-offset: -1px;
   overflow: hidden;
   position: relative;
 }
@@ -99,7 +97,6 @@
 
 :global(html[data-theme="dark"]) .modelArt {
   box-shadow: none;
-  outline-color: rgb(255 255 255 / 0.1);
 }
 
 .classicArt::before {
@@ -116,9 +113,13 @@
 }
 
 .artImage {
+  display: block;
+  height: calc(100% + 2px) !important;
+  inset: -1px !important;
   object-fit: cover;
   object-position: center;
   transform: scale(1.0012);
+  width: calc(100% + 2px) !important;
 }
 
 .classicArt .artImage {
@@ -184,7 +185,8 @@
     transparent 58%
   );
   height: 15px;
-  opacity: 0.11;
+  filter: drop-shadow(0 0 5px rgb(255 224 176 / 0.65));
+  opacity: 0.2;
   position: absolute;
   transform: rotate(var(--twinkle-rotation)) scale(0.72);
   width: 15px;
@@ -260,17 +262,49 @@
   width: 9px;
 }
 
+.customSparkles > span:nth-child(7) {
+  --twinkle-rotation: 21deg;
+  height: 12px;
+  left: 11%;
+  top: 58%;
+  width: 12px;
+}
+
+.customSparkles > span:nth-child(8) {
+  --twinkle-rotation: -8deg;
+  height: 8px;
+  right: 9%;
+  top: 49%;
+  width: 8px;
+}
+
+.customSparkles > span:nth-child(9) {
+  --twinkle-rotation: 12deg;
+  bottom: 9%;
+  height: 10px;
+  left: 49%;
+  width: 10px;
+}
+
+.customSparkles > span:nth-child(10) {
+  --twinkle-rotation: -22deg;
+  height: 7px;
+  right: 43%;
+  top: 8%;
+  width: 7px;
+}
+
 @keyframes custom-star-sparkle {
   0%,
   68%,
   100% {
-    opacity: 0.09;
-    transform: rotate(var(--twinkle-rotation)) scale(0.72);
+    opacity: 0.14;
+    transform: rotate(var(--twinkle-rotation)) scale(0.66);
   }
 
   76% {
-    opacity: 0.9;
-    transform: rotate(var(--twinkle-rotation)) scale(1.08);
+    opacity: 1;
+    transform: rotate(var(--twinkle-rotation)) scale(1.28);
   }
 
   82% {
@@ -326,6 +360,26 @@
   .customSparkles > span:nth-child(6) {
     animation-delay: -1.2s;
     animation-duration: 8.6s;
+  }
+
+  .customSparkles > span:nth-child(7) {
+    animation-delay: -5.8s;
+    animation-duration: 7.1s;
+  }
+
+  .customSparkles > span:nth-child(8) {
+    animation-delay: -2.9s;
+    animation-duration: 6.6s;
+  }
+
+  .customSparkles > span:nth-child(9) {
+    animation-delay: -4.1s;
+    animation-duration: 8.3s;
+  }
+
+  .customSparkles > span:nth-child(10) {
+    animation-delay: -1.8s;
+    animation-duration: 7.5s;
   }
 }
 
@@ -402,14 +456,13 @@
 }
 
 .modelAction {
-  border-top: 1px solid transparent;
   color: var(--accent-strong);
   font-size: 14px;
   font-weight: 650;
   gap: 8px;
-  margin-top: 18px;
-  min-height: 48px;
-  padding-top: 13px;
+  margin-top: 8px;
+  min-height: 40px;
+  padding-top: 2px;
   width: fit-content;
 }
 
@@ -422,10 +475,6 @@
     border-color: transparent;
     box-shadow: none;
     transform: none;
-  }
-
-  .modelCard:hover .modelArt {
-    outline-color: color-mix(in srgb, var(--text) 18%, transparent);
   }
 
   .modelCard:hover .modelAction svg {
