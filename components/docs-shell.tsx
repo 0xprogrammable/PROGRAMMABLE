@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { ReactNode } from "react";
 
 import styles from "@/components/docs-experience.module.css";
@@ -7,12 +6,6 @@ import {
   type DocsPageSection,
 } from "@/components/docs-navigation";
 import { DocsSearch } from "@/components/docs-search";
-
-const docsGuides = [
-  { href: "/docs", label: "Platform" },
-  { href: "/docs/models/classic", label: "Classic" },
-  { href: "/docs/models/custom", label: "Custom Hook" },
-] as const;
 
 export function DocsShell({
   children,
@@ -36,22 +29,6 @@ export function DocsShell({
 
       <div className={styles.mainColumn}>
         <div className={styles.heroTools} data-docs-tools>
-          <nav className={styles.guideTabs} aria-label="Documentation guides">
-            {docsGuides.map((guide) => {
-              const isActive = currentPath === guide.href;
-              return (
-                <Link
-                  key={guide.href}
-                  className={styles.guideTab}
-                  data-active={isActive ? "true" : undefined}
-                  aria-current={isActive ? "page" : undefined}
-                  href={guide.href}
-                >
-                  {guide.label}
-                </Link>
-              );
-            })}
-          </nav>
           <DocsSearch />
         </div>
 

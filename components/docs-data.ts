@@ -6,89 +6,56 @@ export type DocsSearchItem = {
 
 export const docsNavigation = [
   {
-    label: "Platform",
+    label: "Developers",
     items: [
       { href: "/docs#overview", label: "Overview" },
-      { href: "/docs#launching", label: "Launch flow" },
-      { href: "/docs#trading", label: "Trading and pricing" },
-      { href: "/docs#rewards", label: "Creator rewards" },
-    ],
-  },
-  {
-    label: "Launch models",
-    items: [
-      { href: "/docs/models/classic", label: "Classic" },
-      { href: "/docs/models/custom", label: "Custom Hook" },
-    ],
-  },
-  {
-    label: "Verify",
-    items: [
-      { href: "/docs#network", label: "Network" },
-      { href: "/docs#contracts", label: "Contracts" },
-      { href: "/docs#metadata", label: "Token metadata" },
-      { href: "/docs#releases", label: "Release evidence" },
-      { href: "/docs#risks", label: "Risks" },
+      { href: "/docs#formats", label: "Launch formats" },
+      { href: "/docs#quickstart", label: "Quickstart" },
+      { href: "/docs#rules", label: "Integration rules" },
+      { href: "/docs#resources", label: "Resources" },
     ],
   },
 ] as const;
 
 export const docsSearchItems: DocsSearchItem[] = [
   {
-    title: "Overview",
-    description: "What Programmable launches and what a launch model controls.",
+    title: "Developer API overview",
+    description:
+      "One public interface for terminals, scanners, wallets and apps.",
     href: "/docs#overview",
   },
   {
-    title: "Launch flow",
-    description: "From model selection to a confirmed wallet transaction.",
-    href: "/docs#launching",
-  },
-  {
-    title: "Trading and pricing",
-    description: "Canonical pools, quotes, market cap and routing.",
-    href: "/docs#trading",
-  },
-  {
-    title: "Creator rewards",
-    description: "How model-specific rewards accrue and are claimed.",
-    href: "/docs#rewards",
-  },
-  {
-    title: "Classic",
+    title: "Launch formats",
     description:
-      "Directional swap fees, ETH creator rewards and Initial Buy custody.",
-    href: "/docs/models/classic",
+      "Classic, Custom pool, no-pool and contract-market records.",
+    href: "/docs#formats",
   },
   {
-    title: "Custom Hook",
+    title: "Quickstart",
+    description: "Discover the interface and fetch the launch feed.",
+    href: "/docs#quickstart",
+  },
+  {
+    title: "Trading terminals and scanners",
     description:
-      "Product boundary and release requirements for custom launches.",
-    href: "/docs/models/custom",
+      "List new Programmable launches and preserve their original provenance.",
+    href: "/docs#overview",
   },
   {
-    title: "Network",
-    description: "Ethereum Mainnet and the canonical Uniswap v4 dependencies.",
-    href: "/docs#network",
+    title: "Apps and agents",
+    description:
+      "Build games, dashboards and tools around declared capabilities.",
+    href: "/docs#overview",
   },
   {
-    title: "Contracts",
-    description: "Public deployment records and contract addresses.",
-    href: "/docs#contracts",
+    title: "Integration rules",
+    description:
+      "Categories, market support, no-pool launches and deployment discovery.",
+    href: "/docs#rules",
   },
   {
-    title: "Token metadata",
-    description: "Names, tickers, images, descriptions and project links.",
-    href: "/docs#metadata",
-  },
-  {
-    title: "Release evidence",
-    description: "How source, runtime and lifecycle evidence reach the app.",
-    href: "/docs#releases",
-  },
-  {
-    title: "Risks",
-    description: "Transaction, token, liquidity and integration boundaries.",
-    href: "/docs#risks",
+    title: "OpenAPI and schemas",
+    description: "Machine-readable contracts and complete integration examples.",
+    href: "/docs#resources",
   },
 ];
