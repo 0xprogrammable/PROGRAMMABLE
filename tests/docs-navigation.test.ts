@@ -10,6 +10,7 @@ import {
   pickActiveDocsSection,
   resolveDocsPageLocationTarget,
   resolveDocsLocationTarget,
+  shouldCancelDocsScrollForKey,
 } from "../components/docs-navigation";
 import { getDocsExternalLinkProvider } from "../components/docs-external-link";
 import {
@@ -23,48 +24,68 @@ describe("Docs navigation state", () => {
     expect(docsNavigateEvent).toBe("programmable:docs-navigate");
   });
 
-  it("uses the URL hash instead of keeping Overview active", () => {
-    expect(normalizeDocsHash("#formats")).toBe("/docs#formats");
+  it("does not cancel a keyboard navigation animation after a handled search submit", () => {
     expect(
-      isDocsNavigationItemActive({
-        activeHref: "/docs#formats",
-        currentPath: "/docs",
-        itemHref: "/docs#overview",
-      }),
+      shouldCancelDocsScrollForKey({ defaultPrevented: true, key: "Enter" }),
     ).toBe(false);
     expect(
-      isDocsNavigationItemActive({
-        activeHref: "/docs#formats",
-        currentPath: "/docs",
-        itemHref: "/docs#formats",
+      shouldCancelDocsScrollForKey({
+        defaultPrevented: false,
+        key: "PageDown",
       }),
     ).toBe(true);
   });
 
-  it("falls back to Overview for missing or unknown hashes", () => {
-    expect(normalizeDocsHash("")).toBe("/docs#overview");
-    expect(normalizeDocsHash("#unknown")).toBe("/docs#overview");
+  it("uses the URL hash instead of keeping Overview active", () => {
+    expect(normalizeDocsHash("#response")).toBe(
+      "/docs/developers#response",
+    );
+    expect(
+      isDocsNavigationItemActive({
+        activeHref: "/docs/developers#response",
+        currentPath: "/docs/developers",
+        itemHref: "/docs/developers#quickstart",
+      }),
+    ).toBe(false);
+    expect(
+      isDocsNavigationItemActive({
+        activeHref: "/docs/developers#response",
+        currentPath: "/docs/developers",
+        itemHref: "/docs/developers#response",
+      }),
+    ).toBe(true);
+  });
+
+  it("falls back to Quickstart for missing or unknown hashes", () => {
+    expect(normalizeDocsHash("")).toBe("/docs/developers#quickstart");
+    expect(normalizeDocsHash("#unknown")).toBe(
+      "/docs/developers#quickstart",
+    );
   });
 
   it("canonicalizes a duplicated topic hash", () => {
-    expect(normalizeDocsHash("#overview#overview")).toBe("/docs#overview");
-    expect(normalizeDocsHash("#rules#rules")).toBe("/docs#rules");
+    expect(normalizeDocsHash("#quickstart#quickstart")).toBe(
+      "/docs/developers#quickstart",
+    );
+    expect(normalizeDocsHash("#rendering#rendering")).toBe(
+      "/docs/developers#rendering",
+    );
   });
 
   it("resolves browser Back and Forward hashes to one deterministic scroll target", () => {
-    expect(resolveDocsLocationTarget("#rules")).toEqual({
-      href: "/docs#rules",
-      sectionId: "rules",
+    expect(resolveDocsLocationTarget("#rendering")).toEqual({
+      href: "/docs/developers#rendering",
+      sectionId: "rendering",
       shouldScroll: true,
     });
     expect(resolveDocsLocationTarget("#unknown")).toEqual({
-      href: "/docs#overview",
-      sectionId: "overview",
+      href: "/docs/developers#quickstart",
+      sectionId: "quickstart",
       shouldScroll: true,
     });
     expect(resolveDocsLocationTarget("")).toEqual({
-      href: "/docs#overview",
-      sectionId: "overview",
+      href: "/docs/developers#quickstart",
+      sectionId: "quickstart",
       shouldScroll: false,
     });
   });
@@ -106,7 +127,7 @@ describe("Docs navigation state", () => {
       isDocsNavigationItemActive({
         activeHref: "/docs/models/classic",
         currentPath: "/docs/models/classic",
-        itemHref: "/docs#overview",
+        itemHref: "/docs/developers#quickstart",
       }),
     ).toBe(false);
   });
@@ -214,14 +235,14 @@ describe("Docs navigation state", () => {
     const schemaResults = getDocsSearchResults("schema");
 
     expect(terminalResults.length).toBeGreaterThan(0);
-    expect(terminalResults[0]?.title).toBe("Trading terminals and scanners");
+    expect(terminalResults[0]?.title).toBe("Developer quickstart");
     expect(schemaResults.length).toBeGreaterThan(0);
-    expect(schemaResults[0]?.title).toBe("OpenAPI and schemas");
+    expect(schemaResults[0]?.title).toBe("OpenAPI and JSON Schemas");
     expect(schemaResults).not.toEqual(terminalResults);
     expect(getDocsSearchResults("")).toEqual([]);
   });
 
-  it("keeps standalone model guides out of search while explaining launch formats", () => {
+  it("keeps unpublished product guides out of search while explaining record categories", () => {
     const deepResults = getDocsSearchResults("deep");
     const stockResults = getDocsSearchResults("stock");
     const classicResults = getDocsSearchResults("classic");
@@ -229,9 +250,9 @@ describe("Docs navigation state", () => {
 
     expect(deepResults).toEqual([]);
     expect(stockResults).toEqual([]);
-    expect(classicResults[0]?.title).toBe("Launch formats");
-    expect(customResults[0]?.title).toBe("Launch formats");
-    expect(customResults[0]?.description).toContain("no-pool");
+    expect(classicResults[0]?.title).toBe("Response model");
+    expect(customResults[0]?.title).toBe("Response model");
+    expect(customResults[0]?.description).toContain("Classic and Custom");
   });
 
   it("opens keyboard navigation on the first or last result", () => {

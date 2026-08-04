@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 
 import { docsCategories } from "@/components/docs-data";
@@ -13,6 +13,7 @@ export function DocsShell({
   children,
   currentPath,
   description,
+  kicker,
   sections,
   title,
 }: {
@@ -38,18 +39,25 @@ export function DocsShell({
           aria-label="Documentation categories"
           className={styles.docsCategories}
         >
-          {docsCategories.map((category) =>
-            category.status === "available" ? (
-              <Link
-                aria-current="page"
-                className={`${styles.docsCategory} ${styles.docsCategoryActive}`}
-                href={category.href}
-                key={category.label}
-              >
-                <strong>{category.label}</strong>
-                <span>Integrations</span>
-              </Link>
-            ) : (
+          {docsCategories.map((category) => {
+            if (category.status === "available") {
+              const active = currentPath === category.href;
+              return (
+                <Link
+                  aria-current={active ? "page" : undefined}
+                  className={`${styles.docsCategory} ${
+                    active ? styles.docsCategoryActive : ""
+                  }`}
+                  href={category.href}
+                  key={category.label}
+                >
+                  <strong>{category.label}</strong>
+                  <span>Integrations</span>
+                </Link>
+              );
+            }
+
+            return (
               <span
                 aria-disabled="true"
                 className={`${styles.docsCategory} ${styles.docsCategoryUnavailable}`}
@@ -58,11 +66,12 @@ export function DocsShell({
                 <strong>{category.label}</strong>
                 <span>Available soon</span>
               </span>
-            ),
-          )}
+            );
+          })}
         </nav>
 
         <header className={styles.hero} data-docs-hero>
+          {kicker ? <p className={styles.heroKicker}>{kicker}</p> : null}
           <h1>{title}</h1>
           <p>{description}</p>
         </header>
