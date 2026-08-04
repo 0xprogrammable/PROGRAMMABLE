@@ -3,9 +3,13 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 
-import { ALCHEMY_EXPLORE_CACHE_TAG } from "../../../../lib/alchemy/explore.server";
+import {
+  ALCHEMY_EXPLORE_CACHE_TAG,
+  refreshAlchemyExploreRegistry,
+} from "../../../../lib/alchemy/explore.server";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 export const runtime = "nodejs";
 
 const MAXIMUM_BODY_BYTES = 128 * 1024;
@@ -123,7 +127,12 @@ export async function POST(request: Request) {
     }
 
     parsePayload(rawBody);
-    revalidateTag(ALCHEMY_EXPLORE_CACHE_TAG, "max");
+    await refreshAlchemyExploreRegistry({
+      forcePersist: true,
+      includeLatest: false,
+      requirePersistence: true,
+    });
+    revalidateTag(ALCHEMY_EXPLORE_CACHE_TAG, { expire: 0 });
     return new NextResponse(null, {
       status: 200,
       headers: PRIVATE_NO_STORE,

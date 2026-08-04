@@ -340,6 +340,72 @@ jobs:
           if (!releaseToken) {
             throw new Error("staged Alchemy Explore has no token identity");
           }
+          const newest = await requestJson(
+            "/api/explore?limit=20&page=1&sort=newest",
+          );
+          if (
+            newest.status !== "ready" ||
+            !Array.isArray(newest.tokens) ||
+            newest.tokens.length < 1
+          ) {
+            throw new Error("staged Alchemy newest page is not populated");
+          }
+          for (let index = 1; index < newest.tokens.length; index += 1) {
+            const previous = newest.tokens[index - 1];
+            const current = newest.tokens[index];
+            const previousOrder = [
+              BigInt(previous.launchBlockNumber ?? "-1"),
+              BigInt(previous.launchTransactionIndex ?? -1),
+              BigInt(previous.launchLogIndex ?? -1),
+            ];
+            const currentOrder = [
+              BigInt(current.launchBlockNumber ?? "-1"),
+              BigInt(current.launchTransactionIndex ?? -1),
+              BigInt(current.launchLogIndex ?? -1),
+            ];
+            if (
+              currentOrder.some(
+                (value, offset) =>
+                  value > previousOrder[offset] &&
+                  currentOrder.slice(0, offset).every(
+                    (prefix, prefixOffset) =>
+                      prefix === previousOrder[prefixOffset],
+                  ),
+              )
+            ) {
+              throw new Error("staged Alchemy newest page is not ordered newest-first");
+            }
+          }
+          const incrementalLaunchAddress =
+            "0x468505087c2dfec4779f2d6a5f8481f03e32e905";
+          const incrementalDetail = await requestJson(
+            `/api/explore/token?address=${encodeURIComponent(incrementalLaunchAddress)}`,
+          );
+          const incrementalLaunch = incrementalDetail.token;
+          const incrementalLaunchBlock = BigInt(
+            incrementalLaunch?.launchBlockNumber ?? "-1",
+          );
+          const durableBlock = BigInt(
+            incrementalDetail.snapshot?.blockNumber ?? "-1",
+          );
+          const launchCursorBlock = BigInt(
+            incrementalDetail.launchDiscoverySnapshot?.blockNumber ?? "-1",
+          );
+          if (
+            incrementalDetail.status !== "ready" ||
+            incrementalLaunch?.tokenAddress?.toLowerCase() !==
+              incrementalLaunchAddress ||
+            launchCursorBlock < incrementalLaunchBlock ||
+            (
+              incrementalLaunch.launchDiscoverySource !==
+                "alchemy-launch-overlay" &&
+              durableBlock < incrementalLaunchBlock
+            )
+          ) {
+            throw new Error(
+              "staged Alchemy Explore did not recover the incremental launch cursor",
+            );
+          }
           const tokenList = await requestJson("/api/indexers/v1/token-list");
           if (
             !Array.isArray(tokenList.tokens) ||
@@ -365,6 +431,9 @@ jobs:
             `${JSON.stringify({
               status: "verified-alchemy-only-staged-public-apis",
               tokenAddress: releaseToken.tokenAddress,
+              incrementalLaunchAddress,
+              launchCursorBlockNumber:
+                incrementalDetail.launchDiscoverySnapshot.blockNumber,
             })}\n`,
           );
           NODE

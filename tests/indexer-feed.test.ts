@@ -70,6 +70,12 @@ const readyModel: ExploreReadModel = {
     blockHash: `0x${"66".repeat(32)}`,
     confirmations: 12,
   },
+  launchDiscoverySnapshot: {
+    chainId: 1,
+    blockNumber: "140",
+    blockHash: `0x${"77".repeat(32)}`,
+    confirmations: 0,
+  },
   creatorClaims: [],
   launcherFeesAccruedWei: "0",
   launcherFeesAccruedEth: "0",
@@ -80,12 +86,15 @@ beforeEach(() => {
 });
 
 function expectAlchemyRpcHeaders(response: Response) {
+  expect(response.headers.get("x-programmable-launch-source")).toBe(
+    "alchemy",
+  );
   expect(response.headers.get("x-programmable-read-source")).toBe("blob");
   expect(response.headers.get("x-programmable-rpc-provider")).toBe(
     "alchemy",
   );
   expect(response.headers.get("access-control-expose-headers")).toBe(
-    "X-Programmable-Read-Source, X-Programmable-Rpc-Provider",
+    "X-Programmable-Launch-Source, X-Programmable-Read-Source, X-Programmable-Rpc-Provider",
   );
 }
 
@@ -120,6 +129,7 @@ describe("public indexer fee disclosure", () => {
       status: "ready",
       chainId: 1,
       snapshot: readyModel.snapshot,
+      launchDiscoverySnapshot: readyModel.launchDiscoverySnapshot,
       tokens: [
         {
           address: token.tokenAddress,
@@ -137,6 +147,15 @@ describe("public indexer fee disclosure", () => {
         },
       ],
     });
+    const feed = buildIndexerFeed(readyModel, 1);
+    expect(
+      feed.tokens.every(
+        (candidate) =>
+          candidate.launch.blockNumber == null ||
+          BigInt(candidate.launch.blockNumber) <=
+            BigInt(feed.launchDiscoverySnapshot!.blockNumber),
+      ),
+    ).toBe(true);
   });
 
   it("publishes the complete verified Deep V2 launch provenance", () => {
@@ -536,7 +555,7 @@ describe("public indexer fee disclosure", () => {
 
     expect(response.status).toBe(503);
     expect(response.headers.get("cache-control")).toBe(
-      "public, max-age=0, s-maxage=60",
+      "public, max-age=0, s-maxage=5",
     );
     expect(response.headers.get("retry-after")).toBe("60");
     expectAlchemyRpcHeaders(response);

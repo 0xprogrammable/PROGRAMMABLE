@@ -22,8 +22,9 @@ export function alchemyFeedHeaders(
   return Object.freeze({
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Expose-Headers":
-      "X-Programmable-Read-Source, X-Programmable-Rpc-Provider",
+      "X-Programmable-Launch-Source, X-Programmable-Read-Source, X-Programmable-Rpc-Provider",
     "Cache-Control": cacheControl,
+    "X-Programmable-Launch-Source": "alchemy",
     "X-Programmable-Read-Source": "blob",
     "X-Programmable-Rpc-Provider": "alchemy",
   });
@@ -32,8 +33,9 @@ export function alchemyFeedHeaders(
 export const ALCHEMY_NO_STORE_HEADERS = Object.freeze({
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Expose-Headers":
-    "X-Programmable-Read-Source, X-Programmable-Rpc-Provider",
+    "X-Programmable-Launch-Source, X-Programmable-Read-Source, X-Programmable-Rpc-Provider",
   "Cache-Control": "no-store",
+  "X-Programmable-Launch-Source": "alchemy",
   "X-Programmable-Read-Source": "blob",
   "X-Programmable-Rpc-Provider": "alchemy",
 });

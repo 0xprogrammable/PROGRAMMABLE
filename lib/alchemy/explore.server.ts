@@ -3,12 +3,20 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 
 import { getOnchainDeployment } from "../onchain/config";
-import { readExploreModel } from "../onchain/read-model";
+import { readDurableExploreModel } from "../onchain/durable-model";
+import { advanceExploreLaunchDiscovery } from "../onchain/read-model";
 import type {
   ExploreReadModel,
   OnchainDeployment,
+  ReadyOnchainDeployment,
 } from "../onchain/types";
 import type { LauncherToken } from "../tokens";
+import {
+  readAlchemyLaunchRegistry,
+  writeAlchemyLaunchRegistry,
+  type AlchemyLaunchCursor,
+  type AlchemyLaunchRegistry,
+} from "./launch-registry.server";
 
 export const ALCHEMY_EXPLORE_CACHE_TAG = "alchemy-explore-v1";
 
@@ -22,6 +30,7 @@ const MAX_CONCURRENT_ALCHEMY_PRICE_BATCHES = 5;
 const MAX_ALCHEMY_PRICE_AGE_MS = 5 * 60 * 1_000;
 const MAX_ALCHEMY_PRICE_CLOCK_SKEW_MS = 60 * 1_000;
 const MAX_PRICE_CACHE_ENTRIES = 100;
+const LAUNCH_CURSOR_PERSIST_INTERVAL_BLOCKS = 64n;
 const USD_WAD = 10n ** 18n;
 
 type AlchemyPrice = Readonly<{
@@ -99,20 +108,243 @@ export function getAlchemyOnchainDeployment(): OnchainDeployment {
 }
 
 async function readAlchemyExploreModelUncached(): Promise<ExploreReadModel> {
-  return readExploreModel(getAlchemyOnchainDeployment());
+  return (
+    await refreshAlchemyExploreRegistry({
+      includeLatest: true,
+      requirePersistence: false,
+    })
+  ).model;
 }
 
 const readCachedAlchemyExploreModel = unstable_cache(
   readAlchemyExploreModelUncached,
   [ALCHEMY_EXPLORE_CACHE_TAG],
   {
-    revalidate: 15,
+    revalidate: 5,
     tags: [ALCHEMY_EXPLORE_CACHE_TAG],
   },
 );
 
 export async function readAlchemyExploreModel() {
   return readCachedAlchemyExploreModel();
+}
+
+type AlchemyRegistryRefreshOptions = Readonly<{
+  forcePersist?: boolean;
+  includeLatest?: boolean;
+  persist?: boolean;
+  requirePersistence?: boolean;
+}>;
+
+type ReadyExploreModel = Extract<ExploreReadModel, { status: "ready" }>;
+
+function durableReadyModel(
+  deployment: ReadyOnchainDeployment,
+  read: Awaited<ReturnType<typeof readDurableExploreModel>>,
+): ReadyExploreModel {
+  if (read.status !== "ready") {
+    throw new Error(
+      `Durable Alchemy registry is ${read.reason}: ${read.detail}`,
+    );
+  }
+  const model = read.envelope.payload.model;
+  if (
+    model.status !== "ready" ||
+    model.snapshot.chainId !== deployment.chainId
+  ) {
+    throw new Error("Durable Alchemy registry is not ready");
+  }
+  return model;
+}
+
+function sameLaunch(left: LauncherToken, right: LauncherToken) {
+  return (
+    left.tokenAddress.toLowerCase() === right.tokenAddress.toLowerCase() &&
+    left.launchTransactionHash?.toLowerCase() ===
+      right.launchTransactionHash?.toLowerCase() &&
+    left.launchLogIndex === right.launchLogIndex
+  );
+}
+
+function mergeLaunchOverlay(
+  base: ReadyExploreModel,
+  overlayTokens: readonly LauncherToken[],
+) {
+  const tokens = new Map(
+    base.tokens.map((token) => [token.tokenAddress.toLowerCase(), token]),
+  );
+  for (const token of overlayTokens) {
+    const key = token.tokenAddress.toLowerCase();
+    const existing = tokens.get(key);
+    if (existing && !sameLaunch(existing, token)) {
+      throw new Error(`Alchemy launch overlay conflicts for ${token.tokenAddress}`);
+    }
+    tokens.set(key, {
+      ...token,
+      launchDiscoverySource: "alchemy-launch-overlay",
+    });
+  }
+  return { ...base, tokens: [...tokens.values()] } satisfies ReadyExploreModel;
+}
+
+function overlayTokensAfterBase(
+  base: ReadyExploreModel,
+  tokens: readonly LauncherToken[],
+) {
+  const baseTokens = new Map(
+    base.tokens.map((token) => [token.tokenAddress.toLowerCase(), token]),
+  );
+  const output: LauncherToken[] = [];
+  for (const token of tokens) {
+    const existing = baseTokens.get(token.tokenAddress.toLowerCase());
+    if (existing) {
+      if (!sameLaunch(existing, token)) {
+        throw new Error(`Durable registry conflicts for ${token.tokenAddress}`);
+      }
+      continue;
+    }
+    output.push(token);
+  }
+  return output;
+}
+
+function registryTokenIdentity(registry: AlchemyLaunchRegistry) {
+  return JSON.stringify(
+    registry.tokens.map((token) => [
+      token.tokenAddress.toLowerCase(),
+      token.launchTransactionHash?.toLowerCase(),
+      token.launchLogIndex,
+    ]),
+  );
+}
+
+function persistentOverlayTokensAfterBase(
+  base: ReadyExploreModel,
+  tokens: readonly LauncherToken[],
+) {
+  return overlayTokensAfterBase(base, tokens).map((token) => {
+    const persistent = { ...token };
+    delete persistent.launchDiscoverySource;
+    return persistent;
+  });
+}
+
+async function refreshAlchemyExploreRegistryOnce(
+  options: AlchemyRegistryRefreshOptions = {},
+) {
+  const deployment = getAlchemyOnchainDeployment();
+  if (deployment.status !== "ready") {
+    throw new Error("Alchemy production deployment is not ready");
+  }
+  const durable = await readDurableExploreModel(
+    deployment,
+    Number.MAX_SAFE_INTEGER,
+  );
+  const base = durableReadyModel(deployment, durable);
+  const initialCursor: AlchemyLaunchCursor = {
+    blockNumber: base.snapshot.blockNumber,
+    blockHash: base.snapshot.blockHash,
+  };
+  const stored = await readAlchemyLaunchRegistry(
+    deployment,
+    initialCursor,
+  );
+  const baseBlock = BigInt(base.snapshot.blockNumber);
+  const storedCursorBlock = BigInt(stored.registry.cursor.blockNumber);
+  const compactedTokens = overlayTokensAfterBase(
+    base,
+    stored.registry.tokens,
+  );
+  const cursor = storedCursorBlock >= baseBlock
+    ? stored.registry.cursor
+    : initialCursor;
+  const cursorModel: ReadyExploreModel = {
+    ...mergeLaunchOverlay(base, compactedTokens),
+    snapshot: {
+      ...base.snapshot,
+      blockNumber: cursor.blockNumber,
+      blockHash: cursor.blockHash,
+    },
+  };
+  const confirmed = await advanceExploreLaunchDiscovery(
+    deployment,
+    cursorModel,
+    "confirmed",
+  );
+  const confirmedRegistry: AlchemyLaunchRegistry = {
+    generatedAt: new Date().toISOString(),
+    repositoryCommit: stored.registry.repositoryCommit,
+    chainId: deployment.chainId,
+    cursor: {
+      blockNumber: confirmed.snapshot.blockNumber,
+      blockHash: confirmed.snapshot.blockHash,
+    },
+    tokens: persistentOverlayTokensAfterBase(base, confirmed.tokens),
+  };
+  const registryChanged =
+    registryTokenIdentity(confirmedRegistry) !==
+      registryTokenIdentity(stored.registry) ||
+    BigInt(confirmedRegistry.cursor.blockNumber) -
+      BigInt(stored.registry.cursor.blockNumber) >=
+      LAUNCH_CURSOR_PERSIST_INTERVAL_BLOCKS;
+  let persisted = false;
+  if (
+    options.persist !== false &&
+    (options.forcePersist || registryChanged)
+  ) {
+    try {
+      await writeAlchemyLaunchRegistry(
+        deployment,
+        confirmedRegistry,
+        stored.etag,
+      );
+      persisted = true;
+    } catch (error) {
+      if (options.requirePersistence) throw error;
+      console.warn("Alchemy registry persistence failed", safeAlchemyError(error));
+    }
+  }
+  const servedCursorModel = options.includeLatest === false
+    ? confirmed
+    : await advanceExploreLaunchDiscovery(deployment, confirmed, "latest");
+  const model: ReadyExploreModel = {
+    ...mergeLaunchOverlay(
+      base,
+      overlayTokensAfterBase(base, servedCursorModel.tokens),
+    ),
+    launchDiscoverySnapshot: servedCursorModel.snapshot,
+  };
+  return {
+    model,
+    baseBlockNumber: base.snapshot.blockNumber,
+    confirmedBlockNumber: confirmed.snapshot.blockNumber,
+    servedBlockNumber: servedCursorModel.snapshot.blockNumber,
+    persisted,
+    registryChanged,
+  } as const;
+}
+
+export async function refreshAlchemyExploreRegistry(
+  options: AlchemyRegistryRefreshOptions = {},
+) {
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      return await refreshAlchemyExploreRegistryOnce(options);
+    } catch (error) {
+      if (
+        attempt === 1 &&
+        error instanceof Error &&
+        (
+          error.name === "BlobPreconditionFailedError" ||
+          error.name === "AlchemyLaunchRegistryCreateConflictError"
+        )
+      ) {
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error("Alchemy registry refresh retry exhausted");
 }
 
 export function safeAlchemyError(error: unknown) {

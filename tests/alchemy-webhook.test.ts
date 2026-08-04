@@ -6,11 +6,17 @@ vi.mock("server-only", () => ({}));
 
 const mocks = vi.hoisted(() => ({
   revalidateTag: vi.fn(),
+  refreshAlchemyExploreRegistry: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({
   revalidateTag: mocks.revalidateTag,
   unstable_cache: (callback: unknown) => callback,
+}));
+
+vi.mock("../lib/alchemy/explore.server", () => ({
+  ALCHEMY_EXPLORE_CACHE_TAG: "alchemy-explore-v1",
+  refreshAlchemyExploreRegistry: mocks.refreshAlchemyExploreRegistry,
 }));
 
 import { POST } from "../app/api/alchemy/webhook/route";
@@ -42,6 +48,9 @@ function request(
 describe("Alchemy webhook route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.refreshAlchemyExploreRegistry.mockResolvedValue({
+      persisted: true,
+    });
     vi.stubEnv("ALCHEMY_WEBHOOK_SIGNING_KEY", SIGNING_KEY);
   });
 
@@ -56,10 +65,26 @@ describe("Alchemy webhook route", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    expect(mocks.refreshAlchemyExploreRegistry).toHaveBeenCalledWith({
+      forcePersist: true,
+      includeLatest: false,
+      requirePersistence: true,
+    });
     expect(mocks.revalidateTag).toHaveBeenCalledWith(
       ALCHEMY_EXPLORE_CACHE_TAG,
-      "max",
+      { expire: 0 },
     );
+  });
+
+  it("returns a retryable error without invalidating cache when persistence fails", async () => {
+    mocks.refreshAlchemyExploreRegistry.mockRejectedValueOnce(
+      new Error("Blob write failed"),
+    );
+
+    const response = await POST(request('{"event":{"block":123}}'));
+
+    expect(response.status).toBe(503);
+    expect(mocks.revalidateTag).not.toHaveBeenCalled();
   });
 
   it("rejects a signature for a normalized body", async () => {

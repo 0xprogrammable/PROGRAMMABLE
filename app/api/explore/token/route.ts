@@ -40,11 +40,17 @@ export async function GET(request: NextRequest) {
 
     if (model.status === "ready" && !token) {
       return NextResponse.json(
-        { status: model.status, token: null, snapshot: model.snapshot },
+        {
+          status: model.status,
+          token: null,
+          snapshot: model.snapshot,
+          launchDiscoverySnapshot: model.launchDiscoverySnapshot,
+        },
         {
           status: 404,
           headers: {
             "Cache-Control": "no-store",
+            "X-Programmable-Launch-Source": "alchemy",
             "X-Programmable-Read-Source": "blob",
             "X-Programmable-Rpc-Provider": "alchemy",
           },
@@ -60,14 +66,19 @@ export async function GET(request: NextRequest) {
         status: model.status,
         token: enriched,
         snapshot: model.snapshot,
+        launchDiscoverySnapshot:
+          model.status === "ready"
+            ? model.launchDiscoverySnapshot
+            : undefined,
       },
       {
         headers: {
           "Cache-Control":
             model.status === "ready"
-              ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
+              ? "public, max-age=0, s-maxage=2, stale-while-revalidate=5"
               : "public, max-age=0, s-maxage=30",
           "X-Programmable-Price-Source": "alchemy",
+          "X-Programmable-Launch-Source": "alchemy",
           "X-Programmable-Read-Source": "blob",
           "X-Programmable-Rpc-Provider": "alchemy",
         },

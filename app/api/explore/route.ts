@@ -87,6 +87,8 @@ function topThenNewestPage(
     sort: "market-cap",
     query: "",
     snapshot: model.snapshot,
+    launchDiscoverySnapshot:
+      model.status === "ready" ? model.launchDiscoverySnapshot : undefined,
     launcherFeesAccruedWei: model.launcherFeesAccruedWei,
     launcherFeesAccruedEth: model.launcherFeesAccruedEth,
   };
@@ -136,9 +138,10 @@ export async function GET(request: NextRequest) {
         headers: {
           "Cache-Control":
             page.status === "ready"
-              ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
+              ? "public, max-age=0, s-maxage=2, stale-while-revalidate=5"
               : "public, max-age=0, s-maxage=30",
           "X-Programmable-Price-Source": "alchemy",
+          "X-Programmable-Launch-Source": "alchemy",
           "X-Programmable-Read-Source": "blob",
           "X-Programmable-Rpc-Provider": "alchemy",
         },

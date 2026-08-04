@@ -8,19 +8,19 @@ const ROUTES = Object.freeze([
     id: "explore",
     path: "app/api/explore/route.ts",
     readyCache:
-      "public, max-age=0, s-maxage=5, stale-while-revalidate=15",
+      "public, max-age=0, s-maxage=2, stale-while-revalidate=5",
   }),
   Object.freeze({
     id: "token-detail",
     path: "app/api/explore/token/route.ts",
     readyCache:
-      "public, max-age=0, s-maxage=5, stale-while-revalidate=15",
+      "public, max-age=0, s-maxage=2, stale-while-revalidate=5",
   }),
   Object.freeze({
     id: "token-list",
     path: "app/api/indexers/v1/token-list/route.ts",
     readyCache:
-      "public, max-age=0, s-maxage=60, stale-while-revalidate=300",
+      "public, max-age=0, s-maxage=2, stale-while-revalidate=5",
   }),
 ]);
 
@@ -61,19 +61,117 @@ export function evaluateAlchemyExploreSourceContracts(
     responsePath,
     sourceOverrides,
   );
+  const publicIndexerSource = readSource(
+    rootDirectory,
+    "app/api/indexers/v1/tokens/route.ts",
+    sourceOverrides,
+  );
+  const publicIndexerAliasSource = readSource(
+    rootDirectory,
+    "app/api/indexers/v1/token/route.ts",
+    sourceOverrides,
+  );
+  const indexerFeedSource = readSource(
+    rootDirectory,
+    "lib/onchain/indexer-feed.ts",
+    sourceOverrides,
+  );
   const runtimePath = "lib/alchemy/explore.server.ts";
   const runtimeSource = readSource(
     rootDirectory,
     runtimePath,
     sourceOverrides,
   );
+  const registrySource = readSource(
+    rootDirectory,
+    "lib/alchemy/launch-registry.server.ts",
+    sourceOverrides,
+  );
+  const onchainSource = readSource(
+    rootDirectory,
+    "lib/onchain/read-model.ts",
+    sourceOverrides,
+  );
+  const classicV3Source = readSource(
+    rootDirectory,
+    "lib/onchain/classic-v3-read-model.ts",
+    sourceOverrides,
+  );
+  const stockPairedSource = readSource(
+    rootDirectory,
+    "lib/onchain/stock-paired-read-model.ts",
+    sourceOverrides,
+  );
+  const webhookSource = readSource(
+    rootDirectory,
+    "app/api/alchemy/webhook/route.ts",
+    sourceOverrides,
+  );
+  const deployWorkflowSource = readSource(
+    rootDirectory,
+    ".github/workflows/deploy-production.yml",
+    sourceOverrides,
+  );
 
   check(
     "alchemy-durable-registry",
-    runtimeSource.includes(
-      "return readExploreModel(getAlchemyOnchainDeployment());",
-    ) && !runtimeSource.includes("readLiveExploreModel"),
-    "the request path starts from the verified durable registry instead of rescanning launch history",
+    runtimeSource.includes("readDurableExploreModel(") &&
+      runtimeSource.includes("Number.MAX_SAFE_INTEGER") &&
+      runtimeSource.includes("readAlchemyLaunchRegistry(") &&
+      runtimeSource.includes("advanceExploreLaunchDiscovery(") &&
+      !runtimeSource.includes("readExploreModel(") &&
+      !runtimeSource.includes("readLiveExploreModel"),
+    "the request path starts from the verified durable registry and advances only its separate launch overlay",
+  );
+  check(
+    "alchemy-launch-registry-cas",
+    registrySource.includes(
+      '"indexes/mainnet-classic-v2/alchemy-launch-registry-v1"',
+    ) &&
+      registrySource.includes("VERCEL_GIT_COMMIT_SHA") &&
+      registrySource.includes("payload.repositoryCommit !== repositoryCommit") &&
+      registrySource.includes("contentHash(registry)") &&
+      registrySource.includes("ifMatch: expectedEtag") &&
+      registrySource.includes("allowOverwrite: expectedEtag !== null") &&
+      registrySource.includes("AlchemyLaunchRegistryCreateConflictError") &&
+      registrySource.includes("useCache: false"),
+    "the incremental launch cursor is content-addressed and compare-and-swap protected",
+  );
+  check(
+    "alchemy-bounded-launch-advance",
+    onchainSource.includes(
+      "const fromBlock = BigInt(base.snapshot.blockNumber) + 1n;",
+    ) &&
+      onchainSource.includes("deploymentBlock: fromBlock") &&
+      classicV3Source.includes("options.fromBlock ?? release.startBlock") &&
+      stockPairedSource.includes(
+        "options.fromBlock ?? BigInt(release.startBlock)",
+      ),
+    "every active launch family reads only blocks after the committed cursor",
+  );
+  check(
+    "alchemy-request-self-refresh",
+    runtimeSource.includes("includeLatest: true") &&
+      runtimeSource.includes("requirePersistence: false") &&
+      runtimeSource.includes("revalidate: 5") &&
+      runtimeSource.includes("LAUNCH_CURSOR_PERSIST_INTERVAL_BLOCKS") &&
+      runtimeSource.includes(
+        "launchDiscoverySnapshot: servedCursorModel.snapshot",
+      ) &&
+      runtimeSource.includes(
+        'advanceExploreLaunchDiscovery(deployment, confirmed, "latest")',
+      ),
+    "public requests self-refresh to the live Alchemy head without depending on cron or webhook delivery",
+  );
+  check(
+    "alchemy-webhook-persist-before-invalidate",
+    webhookSource.indexOf("await refreshAlchemyExploreRegistry({") >= 0 &&
+      webhookSource.indexOf("await refreshAlchemyExploreRegistry({") <
+        webhookSource.indexOf("revalidateTag(ALCHEMY_EXPLORE_CACHE_TAG") &&
+      webhookSource.includes("requirePersistence: true") &&
+      webhookSource.includes("{ expire: 0 }") &&
+      webhookSource.includes("return errorResponse(503)"),
+    "an authenticated webhook persists the confirmed cursor before invalidating public caches",
   );
   check(
     "alchemy-complete-price-batching",
@@ -100,18 +198,50 @@ export function evaluateAlchemyExploreSourceContracts(
   }
 
   check(
+    "alchemy-public-indexer-runtime",
+    publicIndexerSource.includes("readAlchemyExploreModel") &&
+      publicIndexerSource.includes("alchemyFeedHeaders") &&
+      publicIndexerAliasSource.includes(
+        'import { GET as getToken } from "../tokens/route";',
+      ) &&
+      FORBIDDEN_ROUTE_BINDINGS.every(
+        (binding) =>
+          !publicIndexerSource.includes(binding) &&
+          !publicIndexerAliasSource.includes(binding),
+      ),
+    "the public indexer feed uses the same direct Alchemy launch-discovery runtime",
+  );
+  check(
+    "alchemy-discovery-snapshot-provenance",
+    indexerFeedSource.includes("launchDiscoverySnapshot?: ExploreSnapshot") &&
+      indexerFeedSource.includes("model.launchDiscoverySnapshot") &&
+      deployWorkflowSource.includes(
+        'incrementalLaunch.launchDiscoverySource !==',
+      ) &&
+      deployWorkflowSource.includes(
+        "launchCursorBlock < incrementalLaunchBlock",
+      ) &&
+      responseSource.includes(
+        '"public, max-age=0, s-maxage=2, stale-while-revalidate=2"',
+      ),
+    "Explore and public indexer payloads distinguish market-state from launch-discovery coverage",
+  );
+
+  check(
     "alchemy-explore-provenance",
     routeSources
       .filter(({ id }) => id !== "token-list")
       .every(
         ({ source }) =>
+          source.includes('"X-Programmable-Launch-Source": "alchemy"') &&
           source.includes('"X-Programmable-Read-Source": "blob"') &&
           source.includes('"X-Programmable-Rpc-Provider": "alchemy"'),
       ) &&
       responseSource.includes('"X-Programmable-Read-Source": "blob"') &&
       responseSource.includes('"X-Programmable-Rpc-Provider": "alchemy"') &&
+      responseSource.includes('"X-Programmable-Launch-Source": "alchemy"') &&
       responseSource.includes(
-        '"X-Programmable-Read-Source, X-Programmable-Rpc-Provider"',
+        '"X-Programmable-Launch-Source, X-Programmable-Read-Source, X-Programmable-Rpc-Provider"',
       ),
     "Alchemy public responses expose durable registry and live provider provenance",
   );

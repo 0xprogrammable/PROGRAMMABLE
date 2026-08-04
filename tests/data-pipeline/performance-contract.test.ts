@@ -569,6 +569,7 @@ describe("read-model performance contract", () => {
     ).toEqual([
       "source-cache-exploreList",
       "source-cache-tokenDetail",
+      "source-cache-tokenList",
       "source-cache-publicIndexer",
     ]);
 
@@ -1290,7 +1291,7 @@ describe("read-model performance contract", () => {
         process.cwd(),
       );
     expect(alchemyResult.ok).toBe(true);
-    expect(alchemyResult.checks).toHaveLength(9);
+    expect(alchemyResult.checks).toHaveLength(15);
 
     const result = sourceContracts.evaluateReadModelSourceContracts(
       process.cwd(),
@@ -1299,6 +1300,7 @@ describe("read-model performance contract", () => {
     const disconnectedIndexedFailures = [
       "source-cache-exploreList",
       "source-cache-tokenDetail",
+      "source-cache-tokenList",
       "source-cache-publicIndexer",
     ];
     expect(
