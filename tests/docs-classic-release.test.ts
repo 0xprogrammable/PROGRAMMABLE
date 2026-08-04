@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import classicRelease from "../contracts/deployments/mainnet-classic-v3.json";
 
 const docsOverview = readFileSync(
-  new URL("../app/docs/page.tsx", import.meta.url),
+  new URL("../app/docs/developers/page.tsx", import.meta.url),
   "utf8",
 );
 const classicDocs = readFileSync(

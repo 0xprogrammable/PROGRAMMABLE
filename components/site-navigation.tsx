@@ -43,7 +43,7 @@ function clearThemeReveal(root: HTMLElement) {
 const desktopNavItems = [
   { href: "/", label: "Explore", icon: Compass },
   { href: "/launch", label: "Create", icon: Plus },
-  { href: "/docs", label: "Docs", icon: BookOpen },
+  { href: "/docs/developers", label: "Docs", icon: BookOpen },
   { href: "/profile", label: "Profile", icon: UserRound },
 ];
 

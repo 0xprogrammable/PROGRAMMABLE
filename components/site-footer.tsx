@@ -7,7 +7,7 @@ const productLinks = [
   { href: "/", label: "Explore" },
   { href: "/launch", label: "Create" },
   { href: "/profile", label: "Profile" },
-  { href: "/docs", label: "Docs" },
+  { href: "/docs/developers", label: "Docs" },
 ];
 
 const resourceLinks = [
