@@ -2,35 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAddress, isAddress } from "viem";
 
 import {
-  buildCreatorProfile,
-  readExploreModel,
-} from "../../../../lib/onchain";
-import {
-  coordinatePublicRouteRead,
-  PUBLIC_INDEXED_ROUTE_READS,
-  PUBLIC_DISCOVERY_ROUTE_SCOPES,
-  preparePublicRouteRequest,
-  publicSnapshotCheckpoint,
-} from "../../../../lib/data-pipeline/public-route-readiness.server";
+  getAlchemyOnchainDeployment,
+  readAlchemyExploreModel,
+  safeAlchemyError,
+} from "../../../../lib/alchemy/explore.server";
+import { readAlchemyCreatorProfile } from "../../../../lib/alchemy/profile.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
-  const routeRequest = await preparePublicRouteRequest(
-    request.nextUrl.searchParams,
-    request.headers,
-    "creator-profile",
-  );
-  if (routeRequest.probeFailure) return routeRequest.probeFailure;
-  const search = routeRequest.searchParams;
+  const search = request.nextUrl.searchParams;
   if (
-    [...search.keys()].some(
-      (key) => key !== "account" && key !== "launch" && key !== "attempt",
-    ) ||
-    search.getAll("account").length !== 1 ||
-    search.getAll("launch").length > 1 ||
-    search.getAll("attempt").length > 1
+    [...search.keys()].some((key) => key !== "account") ||
+    search.getAll("account").length !== 1
   ) {
     return NextResponse.json(
       { error: "Unsupported query parameters" },
@@ -47,38 +32,40 @@ export async function GET(request: NextRequest) {
 
   try {
     const account = getAddress(input);
-    return await coordinatePublicRouteRead({
-      route: "creator-profile",
-      scope: PUBLIC_DISCOVERY_ROUTE_SCOPES,
-      ...(routeRequest.releaseProbe
-        ? { releaseProbe: routeRequest.releaseProbe }
-        : {}),
-      indexed: (transaction) =>
-        PUBLIC_INDEXED_ROUTE_READS.creatorProfile(transaction, {
-          chainId: 1,
-          account,
-        }),
-      async legacy() {
-        const model = await readExploreModel();
-        return {
-          source: "rpc" as const,
-          checkpoint: publicSnapshotCheckpoint(model.snapshot),
-          response: NextResponse.json(
-            buildCreatorProfile(model, account),
-            {
-              headers: {
-                "Cache-Control":
-                  model.status === "ready"
-                    ? "private, max-age=0, s-maxage=15"
-                    : "private, max-age=0, s-maxage=60",
-              },
+    const deployment = getAlchemyOnchainDeployment();
+    const model = await readAlchemyExploreModel();
+    const profile =
+      deployment.status === "ready"
+        ? await readAlchemyCreatorProfile({ account, deployment, model })
+        : {
+            status: "not-deployed" as const,
+            account,
+            tokens: [],
+            pools: [],
+            claims: [],
+            totals: {
+              claimableWei: "0",
+              claimableEth: "0",
+              generatedWei: "0",
+              generatedEth: "0",
+              claimedWei: "0",
+              claimedEth: "0",
             },
-          ),
-        };
+            snapshot: null,
+          };
+    return NextResponse.json(profile, {
+      headers: {
+        "Cache-Control": "private, max-age=0, s-maxage=15",
+        "X-Programmable-Launch-Source": "alchemy",
+        "X-Programmable-Read-Source": "rpc",
+        "X-Programmable-Rpc-Provider": "alchemy",
       },
     });
   } catch (error) {
-    console.error("Creator profile onchain read failed", error);
+    console.error(
+      "Alchemy creator profile read failed",
+      safeAlchemyError(error),
+    );
     return NextResponse.json(
       { error: "Onchain creator data is temporarily unavailable" },
       { status: 503, headers: { "Cache-Control": "no-store" } },

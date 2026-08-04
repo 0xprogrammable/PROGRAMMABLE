@@ -4,8 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 const mocks = vi.hoisted(() => ({
-  buildCreatorProfile: vi.fn(),
   coordinatePublicRouteRead: vi.fn(),
+  getAlchemyOnchainDeployment: vi.fn(),
   preparePublicRouteRequest: vi.fn(
     async (value: URLSearchParams, headers: Headers, _route: string) => {
       void _route;
@@ -33,7 +33,9 @@ const mocks = vi.hoisted(() => ({
       };
     },
   ),
-  readExploreModel: vi.fn(),
+  readAlchemyCreatorProfile: vi.fn(),
+  readAlchemyExploreModel: vi.fn(),
+  safeAlchemyError: vi.fn((error) => error),
 }));
 
 const fixtures = vi.hoisted(() => {
@@ -60,9 +62,14 @@ vi.mock("../lib/data-pipeline/public-route-readiness.server", () => ({
   publicSnapshotCheckpoint: (value: unknown) => value ?? undefined,
 }));
 
-vi.mock("../lib/onchain", () => ({
-  buildCreatorProfile: mocks.buildCreatorProfile,
-  readExploreModel: mocks.readExploreModel,
+vi.mock("../lib/alchemy/explore.server", () => ({
+  getAlchemyOnchainDeployment: mocks.getAlchemyOnchainDeployment,
+  readAlchemyExploreModel: mocks.readAlchemyExploreModel,
+  safeAlchemyError: mocks.safeAlchemyError,
+}));
+
+vi.mock("../lib/alchemy/profile.server", () => ({
+  readAlchemyCreatorProfile: mocks.readAlchemyCreatorProfile,
 }));
 
 import { GET as creatorProfile } from "../app/api/explore/profile/route";
@@ -76,21 +83,20 @@ describe("public route coordinator wiring", () => {
     vi.clearAllMocks();
   });
 
-  it("wires creator profile through the aggregate reviewed scope", async () => {
+  it("reads creator profile directly from the current Alchemy model", async () => {
     const snapshot = {
       blockNumber: "25650000",
       blockHash: `0x${"33".repeat(32)}`,
     };
-    mocks.readExploreModel.mockResolvedValue({ status: "ready", snapshot });
-    mocks.buildCreatorProfile.mockReturnValue({
+    const model = { status: "ready", snapshot };
+    const deployment = { status: "ready", chainId: 1 };
+    mocks.readAlchemyExploreModel.mockResolvedValue(model);
+    mocks.getAlchemyOnchainDeployment.mockReturnValue(deployment);
+    mocks.readAlchemyCreatorProfile.mockResolvedValue({
       status: "ready",
       account: ACCOUNT,
       tokens: [],
     });
-    mocks.coordinatePublicRouteRead.mockImplementation(
-      async (input: { legacy: () => Promise<{ response: Response }> }) =>
-        (await input.legacy()).response,
-    );
 
     const response = await creatorProfile(
       new NextRequest(
@@ -99,14 +105,16 @@ describe("public route coordinator wiring", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(mocks.coordinatePublicRouteRead).toHaveBeenCalledWith(
-      expect.objectContaining({
-        route: "creator-profile",
-        scope: fixtures.discoveryScope,
-      }),
-    );
+    expect(mocks.readAlchemyCreatorProfile).toHaveBeenCalledWith({
+      account: ACCOUNT,
+      deployment,
+      model,
+    });
     expect(response.headers.get("Cache-Control")).toBe(
       "private, max-age=0, s-maxage=15",
+    );
+    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
+      "alchemy",
     );
   });
 

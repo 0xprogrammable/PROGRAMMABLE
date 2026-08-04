@@ -6,6 +6,7 @@ vi.mock("server-only", () => ({}));
 const mocks = vi.hoisted(() => ({
   getAlchemyOnchainDeployment: vi.fn(),
   isTokenChartRange: vi.fn(),
+  enrichTokensWithAlchemyPoolState: vi.fn(),
   readAlchemyExploreModel: vi.fn(),
   readTokenChartSeries: vi.fn(),
   safeAlchemyError: vi.fn((error) => error),
@@ -20,6 +21,10 @@ vi.mock("../lib/alchemy/explore.server", () => ({
 vi.mock("../lib/onchain/chart", () => ({
   isTokenChartRange: mocks.isTokenChartRange,
   readTokenChartSeries: mocks.readTokenChartSeries,
+}));
+
+vi.mock("../lib/alchemy/live-market.server", () => ({
+  enrichTokensWithAlchemyPoolState: mocks.enrichTokensWithAlchemyPoolState,
 }));
 
 import { GET } from "../app/api/explore/token/chart/route";
@@ -49,6 +54,11 @@ const snapshot = {
   confirmations: 12,
   ethUsdQuote: { answer: "350000000000", decimals: 8 },
 } as const;
+const launchDiscoverySnapshot = {
+  ...snapshot,
+  blockNumber: "25630005",
+  blockHash: `0x${"55".repeat(32)}`,
+} as const;
 
 describe("token chart Alchemy API", () => {
   beforeEach(() => {
@@ -57,10 +67,12 @@ describe("token chart Alchemy API", () => {
       ["1h", "1d", "1w", "all"].includes(range),
     );
     mocks.getAlchemyOnchainDeployment.mockReturnValue(deployment);
+    mocks.enrichTokensWithAlchemyPoolState.mockResolvedValue([token]);
     mocks.readAlchemyExploreModel.mockResolvedValue({
       status: "ready",
       tokens: [token],
       snapshot,
+      launchDiscoverySnapshot,
       creatorClaims: [],
       launcherFeesAccruedWei: "0",
       launcherFeesAccruedEth: "0",
@@ -89,7 +101,7 @@ describe("token chart Alchemy API", () => {
       expect.objectContaining({
         deployment,
         token,
-        snapshotBlock: 25_630_000n,
+        snapshotBlock: 25_630_005n,
         range: "1h",
       }),
     );

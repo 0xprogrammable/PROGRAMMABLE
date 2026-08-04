@@ -518,6 +518,41 @@
   text-wrap: pretty;
 }
 
+.claimHistory {
+  display: grid;
+  gap: 7px;
+  padding: 16px;
+  position: relative;
+  width: 100%;
+}
+
+.claimHistory a {
+  align-items: center;
+  background: color-mix(in srgb, var(--glass-96) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+  border-radius: 12px;
+  color: var(--text);
+  display: flex;
+  font-size: 12px;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 32px;
+  padding: 7px 10px;
+  text-decoration: none;
+}
+
+.claimHistory span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.claimHistory time {
+  color: var(--muted);
+  flex: none;
+  font-size: 10px;
+}
+
 .claimList {
   display: grid;
   gap: 10px;
