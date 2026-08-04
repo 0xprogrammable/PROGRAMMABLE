@@ -68,8 +68,11 @@ describe("Docs rail layout stability", () => {
     );
   });
 
-  it("uses the same current-page chapter rail for every guide", () => {
-    expect(docsPage).toContain("sections={platformSections}");
+  it("uses one concise developer guide with a current-page chapter rail", () => {
+    expect(docsPage).toContain("sections={developerSections}");
+    expect(docsPage).toContain("<DocsLaunchInspector />");
+    expect(docsShell).not.toContain("docsGuides");
+    expect(docsShell).not.toContain("Documentation guides");
     expect(docsNavigation).toContain(
       '<p className={styles.navLabel}>On this page</p>',
     );
