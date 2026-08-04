@@ -80,7 +80,7 @@ beforeEach(() => {
 });
 
 function expectAlchemyRpcHeaders(response: Response) {
-  expect(response.headers.get("x-programmable-read-source")).toBe("rpc");
+  expect(response.headers.get("x-programmable-read-source")).toBe("blob");
   expect(response.headers.get("x-programmable-rpc-provider")).toBe(
     "alchemy",
   );

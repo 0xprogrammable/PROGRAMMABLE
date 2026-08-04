@@ -585,7 +585,7 @@ describe("read-model production deploy policy", () => {
     );
     expect(workflow).toContain("headers: alchemySmokeRequestHeaders");
     expect(workflow).toContain(
-      'response.headers.get("x-programmable-read-source") !== "rpc"',
+      'response.headers.get("x-programmable-read-source") !== "blob"',
     );
     expect(workflow).toContain(
       'response.headers.get("x-programmable-rpc-provider") !== "alchemy"',

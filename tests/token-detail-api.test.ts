@@ -101,7 +101,7 @@ describe("token detail Alchemy read", () => {
       indexedMarketCapUsdWad: "1250000000000000000000000",
     });
     expect(response.headers.get("X-Programmable-Read-Source")).toBe(
-      "rpc",
+      "blob",
     );
     expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
       "alchemy",

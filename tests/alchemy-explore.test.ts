@@ -91,8 +91,8 @@ describe("Alchemy Explore price enrichment", () => {
     });
   });
 
-  it("price-enriches 100 visible tokens in five 20-address batches", async () => {
-    const tokens = Array.from({ length: 100 }, (_, index) =>
+  it("price-enriches every visible token in bounded 20-address batches", async () => {
+    const tokens = Array.from({ length: 125 }, (_, index) =>
       token(
         `0x${(index + 1).toString(16).padStart(40, "0")}` as `0x${string}`,
       ),
@@ -124,13 +124,21 @@ describe("Alchemy Explore price enrichment", () => {
 
     const enriched = await enrichTokensWithAlchemyPrices(tokens);
 
-    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(fetchMock).toHaveBeenCalledTimes(7);
     const batches = fetchMock.mock.calls.map(([, init]) =>
       (JSON.parse(String(init.body)) as { addresses: unknown[] }).addresses,
     );
-    expect(batches.map((batch) => batch.length)).toEqual([20, 20, 20, 20, 20]);
-    expect(batches.flat()).toHaveLength(100);
-    expect(enriched).toHaveLength(100);
+    expect(batches.map((batch) => batch.length)).toEqual([
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      5,
+    ]);
+    expect(batches.flat()).toHaveLength(125);
+    expect(enriched).toHaveLength(125);
     expect(enriched.every((candidate) =>
       candidate.tokenPriceUsdWad === "2000000000000000000" &&
       candidate.fdvUsdWad ===
