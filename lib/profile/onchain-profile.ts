@@ -52,6 +52,7 @@ export type ProfileActivity = {
   label: string;
   detail: string;
   occurredAt: string;
+  occurredAtIso?: string;
   href: string;
 };
 
@@ -705,6 +706,7 @@ export function mapCreatorProfileResponse(
         label: "Token launched",
         detail: `${token.name} (${token.symbol})`,
         occurredAt: formatActivityDate(token.launchedAt),
+        occurredAtIso: token.launchedAt,
         href: token.href,
       } satisfies ProfileActivity,
     })),
@@ -723,6 +725,7 @@ export function mapCreatorProfileResponse(
           label: "Creator fees claimed",
           detail: `${formatUnits(BigInt(claim.amountWei), 18)} ETH from ${token.symbol}`,
           occurredAt: formatActivityDate(claim.claimedAt),
+          occurredAtIso: claim.claimedAt,
           href: token.href,
         } satisfies ProfileActivity,
       };

@@ -13,7 +13,11 @@ import {
   parseExploreSort,
   visibleExploreTokens,
 } from "../../../lib/onchain/query";
-import type { ExplorePage, ExploreReadModel } from "../../../lib/onchain/types";
+import type {
+  ExplorePage,
+  ExploreReadModel,
+  ExploreSnapshot,
+} from "../../../lib/onchain/types";
 import type { LauncherToken } from "../../../lib/tokens";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +32,19 @@ const EXPLORE_QUERY_PARAMETERS = new Set([
 ]);
 const TOP_MARKET_CAP_LIMIT = 20;
 const NEWEST_LIVE_MARKET_LIMIT = 20;
+
+export function inheritExploreEthUsdQuote(
+  liveSnapshot: ExploreSnapshot,
+  referenceSnapshot: ExploreSnapshot,
+): ExploreSnapshot {
+  if (liveSnapshot.ethUsdQuote || !referenceSnapshot.ethUsdQuote) {
+    return liveSnapshot;
+  }
+  return {
+    ...liveSnapshot,
+    ethUsdQuote: referenceSnapshot.ethUsdQuote,
+  };
+}
 
 function mergeTokenUpdates(
   tokens: readonly LauncherToken[],
@@ -143,7 +160,10 @@ export async function GET(request: NextRequest) {
     const deployment = getAlchemyOnchainDeployment();
     const liveSnapshot =
       pricedModel.status === "ready"
-        ? (pricedModel.launchDiscoverySnapshot ?? pricedModel.snapshot)
+        ? inheritExploreEthUsdQuote(
+            pricedModel.launchDiscoverySnapshot ?? pricedModel.snapshot,
+            pricedModel.snapshot,
+          )
         : null;
     if (deployment.status === "ready" && liveSnapshot) {
       const visible = visibleExploreTokens(pricedModel);
