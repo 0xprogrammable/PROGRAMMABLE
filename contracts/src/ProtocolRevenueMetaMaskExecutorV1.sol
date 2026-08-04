@@ -31,9 +31,9 @@ interface IProtocolRevenueReceiverV1 is IERC165 {
 }
 
 /// @title ProtocolRevenueMetaMaskExecutorV1
-/// @notice Executes Programmable's immutable daily revenue policy through MetaMask's existing delegation framework.
+/// @notice Executes Programmable's immutable daily 50/50 revenue policy through MetaMask's delegation framework.
 /// @dev The revenue wallet signs one revocable EIP-712 delegation to this exact runtime. The executor can only build
-///      the claim, sweep and process batch enforced by ProtocolRevenueExecutionEnforcerV1.
+///      the exact current-claim and process batch enforced by ProtocolRevenueExecutionEnforcerV1.
 contract ProtocolRevenueMetaMaskExecutorV1 is IProtocolRevenueReceiverV1, ReentrancyGuardTransient {
     using MessageHashUtils for bytes32;
 
@@ -87,7 +87,6 @@ contract ProtocolRevenueMetaMaskExecutorV1 is IProtocolRevenueReceiverV1, Reentr
         uint256 classicV2;
         uint256 classicV3;
         uint256 deepV1;
-        uint256 authorityBalanceToSweep;
     }
 
     error AlreadyConfigured();
@@ -109,12 +108,7 @@ contract ProtocolRevenueMetaMaskExecutorV1 is IProtocolRevenueReceiverV1, Reentr
     error UnexpectedWorkflow(bytes10 name, address owner);
 
     event DelegationConfigured(bytes32 indexed delegationHash, bytes32 indexed permissionContextHash);
-    event RevenueCycleExecuted(
-        uint64 indexed scheduledAt,
-        uint256 availableRevenue,
-        uint256 authorityBalanceSwept,
-        uint256 nativeHookFeesClaimed
-    );
+    event RevenueCycleExecuted(uint64 indexed scheduledAt, uint256 nativeHookFeesClaimed, uint256 deepRevenueForwarded);
 
     constructor(IProtocolRevenueRouterTargetV1 router_, IProtocolRevenueExecutionEnforcerTargetV1 enforcer_) {
         address routerAddress = address(router_);
@@ -233,7 +227,7 @@ contract ProtocolRevenueMetaMaskExecutorV1 is IProtocolRevenueReceiverV1, Reentr
     }
 
     function availableRevenue() public view returns (uint256) {
-        return router.pendingNewRevenue() + REVENUE_AUTHORITY.balance + totalAccruedNativeHookFees();
+        return totalAccruedNativeHookFees();
     }
 
     function nextRunAt() public view returns (uint256) {
@@ -275,12 +269,7 @@ contract ProtocolRevenueMetaMaskExecutorV1 is IProtocolRevenueReceiverV1, Reentr
         // Equality proves the router completed inside this transaction; validator discretion cannot redirect funds.
         // forge-lint: disable-next-line(block-timestamp)
         if (router.lastProcessedAt() != uint64(block.timestamp)) revert InvalidRouterOrEnforcer();
-        emit RevenueCycleExecuted(
-            scheduledAt,
-            totalAvailable,
-            fees.authorityBalanceToSweep,
-            fees.classicV1 + fees.classicV2 + fees.classicV3 + fees.deepV1
-        );
+        emit RevenueCycleExecuted(scheduledAt, totalAvailable, fees.deepV1);
     }
 
     function _buildExecutions(uint64 scheduledAt, int24 referenceTick)
@@ -292,14 +281,14 @@ contract ProtocolRevenueMetaMaskExecutorV1 is IProtocolRevenueReceiverV1, Reentr
         fees.classicV2 = IProtocolRevenueEthFeeHookV1(CLASSIC_V2_HOOK).launcherFeesAccrued();
         fees.classicV3 = IProtocolRevenueEthFeeHookV1(CLASSIC_V3_HOOK).launcherFeesAccrued();
         fees.deepV1 = IProtocolRevenueEthFeeHookV1(DEEP_V1_HOOK).launcherFeesAccrued();
-        fees.authorityBalanceToSweep = REVENUE_AUTHORITY.balance + fees.deepV1;
+        uint256 claimedRevenue = fees.classicV1 + fees.classicV2 + fees.classicV3 + fees.deepV1;
 
         uint256 executionCount = 1;
         if (fees.classicV1 != 0) ++executionCount;
         if (fees.classicV2 != 0) ++executionCount;
         if (fees.classicV3 != 0) ++executionCount;
         if (fees.deepV1 != 0) ++executionCount;
-        if (fees.authorityBalanceToSweep != 0) ++executionCount;
+        if (fees.deepV1 != 0) ++executionCount;
 
         executions = new ProtocolRevenueExecution[](executionCount);
         uint256 cursor = 0;
@@ -316,10 +305,9 @@ contract ProtocolRevenueMetaMaskExecutorV1 is IProtocolRevenueReceiverV1, Reentr
                 ++cursor;
             }
         }
-        if (fees.authorityBalanceToSweep != 0) {
-            executions[cursor] = ProtocolRevenueExecution({
-                target: address(router), value: fees.authorityBalanceToSweep, callData: bytes("")
-            });
+        if (fees.deepV1 != 0) {
+            executions[cursor] =
+                ProtocolRevenueExecution({ target: address(router), value: fees.deepV1, callData: bytes("") });
             unchecked {
                 ++cursor;
             }
@@ -327,7 +315,9 @@ contract ProtocolRevenueMetaMaskExecutorV1 is IProtocolRevenueReceiverV1, Reentr
         executions[cursor] = ProtocolRevenueExecution({
             target: address(router),
             value: 0,
-            callData: abi.encodeCall(IProtocolRevenueRouterTargetV1.process, (scheduledAt, referenceTick))
+            callData: abi.encodeCall(
+                IProtocolRevenueRouterTargetV1.process, (scheduledAt, referenceTick, claimedRevenue)
+            )
         });
     }
 

@@ -9,8 +9,8 @@
             "type": "function",
             "name": "afterAllHook",
             "source_mapping": {
-              "start": 5503,
-              "length": 1095,
+              "start": 5513,
+              "length": 1096,
               "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
               "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
               "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
@@ -46,8 +46,8 @@
                 "type": "contract",
                 "name": "ProtocolRevenueExecutionEnforcerV1",
                 "source_mapping": {
-                  "start": 672,
-                  "length": 11954,
+                  "start": 682,
+                  "length": 12609,
                   "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                   "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                   "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
@@ -314,7 +314,22 @@
                     274,
                     275,
                     276,
-                    277
+                    277,
+                    278,
+                    279,
+                    280,
+                    281,
+                    282,
+                    283,
+                    284,
+                    285,
+                    286,
+                    287,
+                    288,
+                    289,
+                    290,
+                    291,
+                    292
                   ],
                   "starting_column": 1,
                   "ending_column": 2
@@ -327,7 +342,7 @@
             "type": "node",
             "name": "actual != expected || scheduledAt == 0",
             "source_mapping": {
-              "start": 6506,
+              "start": 6517,
               "length": 38,
               "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
               "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
@@ -344,8 +359,8 @@
                 "type": "function",
                 "name": "afterAllHook",
                 "source_mapping": {
-                  "start": 5503,
-                  "length": 1095,
+                  "start": 5513,
+                  "length": 1096,
                   "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                   "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                   "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
@@ -381,8 +396,8 @@
                     "type": "contract",
                     "name": "ProtocolRevenueExecutionEnforcerV1",
                     "source_mapping": {
-                      "start": 672,
-                      "length": 11954,
+                      "start": 682,
+                      "length": 12609,
                       "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                       "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                       "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
@@ -649,7 +664,22 @@
                         274,
                         275,
                         276,
-                        277
+                        277,
+                        278,
+                        279,
+                        280,
+                        281,
+                        282,
+                        283,
+                        284,
+                        285,
+                        286,
+                        287,
+                        288,
+                        289,
+                        290,
+                        291,
+                        292
                       ],
                       "starting_column": 1,
                       "ending_column": 2
@@ -675,23 +705,13 @@
             "type": "function",
             "name": "_decodeProcessCall",
             "source_mapping": {
-              "start": 9585,
-              "length": 948,
+              "start": 10141,
+              "length": 1057,
               "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
               "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
               "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
               "is_dependency": false,
               "lines": [
-                216,
-                217,
-                218,
-                219,
-                220,
-                221,
-                222,
-                223,
-                224,
-                225,
                 226,
                 227,
                 228,
@@ -700,7 +720,22 @@
                 231,
                 232,
                 233,
-                234
+                234,
+                235,
+                236,
+                237,
+                238,
+                239,
+                240,
+                241,
+                242,
+                243,
+                244,
+                245,
+                246,
+                247,
+                248,
+                249
               ],
               "starting_column": 5,
               "ending_column": 6
@@ -710,8 +745,8 @@
                 "type": "contract",
                 "name": "ProtocolRevenueExecutionEnforcerV1",
                 "source_mapping": {
-                  "start": 672,
-                  "length": 11954,
+                  "start": 682,
+                  "length": 12609,
                   "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                   "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                   "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
@@ -978,7 +1013,22 @@
                     274,
                     275,
                     276,
-                    277
+                    277,
+                    278,
+                    279,
+                    280,
+                    281,
+                    282,
+                    283,
+                    284,
+                    285,
+                    286,
+                    287,
+                    288,
+                    289,
+                    290,
+                    291,
+                    292
                   ],
                   "starting_column": 1,
                   "ending_column": 2
@@ -991,18 +1041,19 @@
             "type": "node",
             "name": "",
             "source_mapping": {
-              "start": 9869,
-              "length": 188,
+              "start": 10478,
+              "length": 244,
               "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
               "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
               "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
               "is_dependency": false,
               "lines": [
-                221,
-                222,
-                223,
-                224,
-                225
+                235,
+                236,
+                237,
+                238,
+                239,
+                240
               ],
               "starting_column": 9,
               "ending_column": 10
@@ -1012,23 +1063,13 @@
                 "type": "function",
                 "name": "_decodeProcessCall",
                 "source_mapping": {
-                  "start": 9585,
-                  "length": 948,
+                  "start": 10141,
+                  "length": 1057,
                   "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                   "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                   "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                   "is_dependency": false,
                   "lines": [
-                    216,
-                    217,
-                    218,
-                    219,
-                    220,
-                    221,
-                    222,
-                    223,
-                    224,
-                    225,
                     226,
                     227,
                     228,
@@ -1037,7 +1078,22 @@
                     231,
                     232,
                     233,
-                    234
+                    234,
+                    235,
+                    236,
+                    237,
+                    238,
+                    239,
+                    240,
+                    241,
+                    242,
+                    243,
+                    244,
+                    245,
+                    246,
+                    247,
+                    248,
+                    249
                   ],
                   "starting_column": 5,
                   "ending_column": 6
@@ -1047,8 +1103,8 @@
                     "type": "contract",
                     "name": "ProtocolRevenueExecutionEnforcerV1",
                     "source_mapping": {
-                      "start": 672,
-                      "length": 11954,
+                      "start": 682,
+                      "length": 12609,
                       "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                       "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                       "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
@@ -1315,7 +1371,22 @@
                         274,
                         275,
                         276,
-                        277
+                        277,
+                        278,
+                        279,
+                        280,
+                        281,
+                        282,
+                        283,
+                        284,
+                        285,
+                        286,
+                        287,
+                        288,
+                        289,
+                        290,
+                        291,
+                        292
                       ],
                       "starting_column": 1,
                       "ending_column": 2
@@ -1327,10 +1398,10 @@
             }
           }
         ],
-        "description": "ProtocolRevenueExecutionEnforcerV1._decodeProcessCall(bytes) (src/ProtocolRevenueExecutionEnforcerV1.sol#216-234) uses assembly\n\t- INLINE ASM (src/ProtocolRevenueExecutionEnforcerV1.sol#221-225)\n",
-        "markdown": "[ProtocolRevenueExecutionEnforcerV1._decodeProcessCall(bytes)](src/ProtocolRevenueExecutionEnforcerV1.sol#L216-L234) uses assembly\n\t- [INLINE ASM](src/ProtocolRevenueExecutionEnforcerV1.sol#L221-L225)\n",
-        "first_markdown_element": "src/ProtocolRevenueExecutionEnforcerV1.sol#L216-L234",
-        "id": "7b9367a15ae48dd32797ff504b0db68f7cdbec6356f1fb9a6e514dc4db1b85a0",
+        "description": "ProtocolRevenueExecutionEnforcerV1._decodeProcessCall(bytes) (src/ProtocolRevenueExecutionEnforcerV1.sol#226-249) uses assembly\n\t- INLINE ASM (src/ProtocolRevenueExecutionEnforcerV1.sol#235-240)\n",
+        "markdown": "[ProtocolRevenueExecutionEnforcerV1._decodeProcessCall(bytes)](src/ProtocolRevenueExecutionEnforcerV1.sol#L226-L249) uses assembly\n\t- [INLINE ASM](src/ProtocolRevenueExecutionEnforcerV1.sol#L235-L240)\n",
+        "first_markdown_element": "src/ProtocolRevenueExecutionEnforcerV1.sol#L226-L249",
+        "id": "f2f7d5f54615177d788056cf17d626ba88e015a1f0e670a91d8b2bc2632e66f8",
         "check": "assembly",
         "impact": "Informational",
         "confidence": "High"
@@ -1359,7 +1430,7 @@
                 "name": "IProtocolRevenueRouterTargetV1",
                 "source_mapping": {
                   "start": 1658,
-                  "length": 690,
+                  "length": 647,
                   "filename_relative": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
                   "filename_absolute": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
                   "filename_short": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
@@ -1383,9 +1454,7 @@
                     71,
                     72,
                     73,
-                    74,
-                    75,
-                    76
+                    74
                   ],
                   "starting_column": 1,
                   "ending_column": 2
@@ -1431,7 +1500,7 @@
                 "name": "IProtocolRevenueRouterTargetV1",
                 "source_mapping": {
                   "start": 1658,
-                  "length": 690,
+                  "length": 647,
                   "filename_relative": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
                   "filename_absolute": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
                   "filename_short": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
@@ -1455,9 +1524,7 @@
                     71,
                     72,
                     73,
-                    74,
-                    75,
-                    76
+                    74
                   ],
                   "starting_column": 1,
                   "ending_column": 2
@@ -1503,7 +1570,7 @@
                 "name": "IProtocolRevenueRouterTargetV1",
                 "source_mapping": {
                   "start": 1658,
-                  "length": 690,
+                  "length": 647,
                   "filename_relative": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
                   "filename_absolute": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
                   "filename_short": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
@@ -1527,9 +1594,7 @@
                     71,
                     72,
                     73,
-                    74,
-                    75,
-                    76
+                    74
                   ],
                   "starting_column": 1,
                   "ending_column": 2
@@ -1575,7 +1640,7 @@
                 "name": "IProtocolRevenueRouterTargetV1",
                 "source_mapping": {
                   "start": 1658,
-                  "length": 690,
+                  "length": 647,
                   "filename_relative": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
                   "filename_absolute": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
                   "filename_short": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
@@ -1599,9 +1664,7 @@
                     71,
                     72,
                     73,
-                    74,
-                    75,
-                    76
+                    74
                   ],
                   "starting_column": 1,
                   "ending_column": 2
@@ -1647,7 +1710,7 @@
                 "name": "IProtocolRevenueRouterTargetV1",
                 "source_mapping": {
                   "start": 1658,
-                  "length": 690,
+                  "length": 647,
                   "filename_relative": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
                   "filename_absolute": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
                   "filename_short": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
@@ -1671,9 +1734,7 @@
                     71,
                     72,
                     73,
-                    74,
-                    75,
-                    76
+                    74
                   ],
                   "starting_column": 1,
                   "ending_column": 2
@@ -1719,7 +1780,7 @@
                 "name": "IProtocolRevenueRouterTargetV1",
                 "source_mapping": {
                   "start": 1658,
-                  "length": 690,
+                  "length": 647,
                   "filename_relative": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
                   "filename_absolute": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
                   "filename_short": "src/interfaces/IProtocolRevenueMetaMaskV1.sol",
@@ -1743,9 +1804,7 @@
                     71,
                     72,
                     73,
-                    74,
-                    75,
-                    76
+                    74
                   ],
                   "starting_column": 1,
                   "ending_column": 2
@@ -1845,8 +1904,8 @@
             "type": "function",
             "name": "slitherConstructorConstantVariables",
             "source_mapping": {
-              "start": 672,
-              "length": 11954,
+              "start": 682,
+              "length": 12609,
               "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
               "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
               "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
@@ -2113,7 +2172,22 @@
                 274,
                 275,
                 276,
-                277
+                277,
+                278,
+                279,
+                280,
+                281,
+                282,
+                283,
+                284,
+                285,
+                286,
+                287,
+                288,
+                289,
+                290,
+                291,
+                292
               ],
               "starting_column": 1,
               "ending_column": 2
@@ -2123,8 +2197,8 @@
                 "type": "contract",
                 "name": "ProtocolRevenueExecutionEnforcerV1",
                 "source_mapping": {
-                  "start": 672,
-                  "length": 11954,
+                  "start": 682,
+                  "length": 12609,
                   "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                   "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                   "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
@@ -2391,7 +2465,22 @@
                     274,
                     275,
                     276,
-                    277
+                    277,
+                    278,
+                    279,
+                    280,
+                    281,
+                    282,
+                    283,
+                    284,
+                    285,
+                    286,
+                    287,
+                    288,
+                    289,
+                    290,
+                    291,
+                    292
                   ],
                   "starting_column": 1,
                   "ending_column": 2
@@ -2404,7 +2493,7 @@
             "type": "node",
             "name": "BATCH_DEFAULT_MODE = 0x0100000000000000000000000000000000000000000000000000000000000000",
             "source_mapping": {
-              "start": 766,
+              "start": 776,
               "length": 111,
               "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
               "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
@@ -2421,8 +2510,8 @@
                 "type": "function",
                 "name": "slitherConstructorConstantVariables",
                 "source_mapping": {
-                  "start": 672,
-                  "length": 11954,
+                  "start": 682,
+                  "length": 12609,
                   "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                   "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                   "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
@@ -2689,7 +2778,22 @@
                     274,
                     275,
                     276,
-                    277
+                    277,
+                    278,
+                    279,
+                    280,
+                    281,
+                    282,
+                    283,
+                    284,
+                    285,
+                    286,
+                    287,
+                    288,
+                    289,
+                    290,
+                    291,
+                    292
                   ],
                   "starting_column": 1,
                   "ending_column": 2
@@ -2699,8 +2803,8 @@
                     "type": "contract",
                     "name": "ProtocolRevenueExecutionEnforcerV1",
                     "source_mapping": {
-                      "start": 672,
-                      "length": 11954,
+                      "start": 682,
+                      "length": 12609,
                       "filename_relative": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                       "filename_absolute": "src/ProtocolRevenueExecutionEnforcerV1.sol",
                       "filename_short": "src/ProtocolRevenueExecutionEnforcerV1.sol",
@@ -2967,7 +3071,22 @@
                         274,
                         275,
                         276,
-                        277
+                        277,
+                        278,
+                        279,
+                        280,
+                        281,
+                        282,
+                        283,
+                        284,
+                        285,
+                        286,
+                        287,
+                        288,
+                        289,
+                        290,
+                        291,
+                        292
                       ],
                       "starting_column": 1,
                       "ending_column": 2
@@ -2979,9 +3098,9 @@
             }
           }
         ],
-        "description": "ProtocolRevenueExecutionEnforcerV1.slitherConstructorConstantVariables() (src/ProtocolRevenueExecutionEnforcerV1.sol#16-277) uses literals with too many digits:\n\t- BATCH_DEFAULT_MODE = 0x0100000000000000000000000000000000000000000000000000000000000000 (src/ProtocolRevenueExecutionEnforcerV1.sol#17)\n",
-        "markdown": "[ProtocolRevenueExecutionEnforcerV1.slitherConstructorConstantVariables()](src/ProtocolRevenueExecutionEnforcerV1.sol#L16-L277) uses literals with too many digits:\n\t- [BATCH_DEFAULT_MODE = 0x0100000000000000000000000000000000000000000000000000000000000000](src/ProtocolRevenueExecutionEnforcerV1.sol#L17)\n",
-        "first_markdown_element": "src/ProtocolRevenueExecutionEnforcerV1.sol#L16-L277",
+        "description": "ProtocolRevenueExecutionEnforcerV1.slitherConstructorConstantVariables() (src/ProtocolRevenueExecutionEnforcerV1.sol#16-292) uses literals with too many digits:\n\t- BATCH_DEFAULT_MODE = 0x0100000000000000000000000000000000000000000000000000000000000000 (src/ProtocolRevenueExecutionEnforcerV1.sol#17)\n",
+        "markdown": "[ProtocolRevenueExecutionEnforcerV1.slitherConstructorConstantVariables()](src/ProtocolRevenueExecutionEnforcerV1.sol#L16-L292) uses literals with too many digits:\n\t- [BATCH_DEFAULT_MODE = 0x0100000000000000000000000000000000000000000000000000000000000000](src/ProtocolRevenueExecutionEnforcerV1.sol#L17)\n",
+        "first_markdown_element": "src/ProtocolRevenueExecutionEnforcerV1.sol#L16-L292",
         "id": "a98be363bd8ccb0bd561a9578ade05c5312714a67a1c521e739f17e75c583cc1",
         "check": "too-many-digits",
         "impact": "Informational",

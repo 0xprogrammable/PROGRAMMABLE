@@ -7,117 +7,89 @@ delegated or active. No production revenue has moved through this code.
 
 ## Policy
 
-Each successful cycle applies this fixed split to newly collected native ETH:
+Every successful 24-hour cycle applies one fixed split to the native ETH claimed in that cycle:
 
 | Destination | Share |
 | --- | ---: |
 | Treasury `0x2Bb333d48DFAF1596D9036671d2E43168994249E` | 50% |
-| `$V4` purchase | 25% |
-| Native ETH budget for full-range liquidity | 25% |
+| `$V4` purchase | 50% |
 
-The router is non-upgradeable and has no owner, proxy, pause, recovery, arbitrary-call or configuration function. The
-shares, addresses, exact pool, cadence, dependencies and price bounds are compile-time constants.
-
-The purchase uses Uniswap's deployed Universal Router. The resulting `$V4` and native ETH are supplied through the
-deployed v4 PositionManager to this existing pool only:
+The purchase uses Uniswap's deployed Universal Router and the existing native ETH / `$V4` main pool:
 
 `0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0`
 
-Its key is native ETH / `0x7987f03462200b3d8a072e02c89a8a41dcb124ee`, fee `0`, tick spacing `200`, and
-hook `0x025a386eAa79f6067d29848FD05ccC71bEAb20CC`. Constructor checks bind every dependency and runtime code hash.
+The bought `$V4` is sent to the fixed revenue wallet
+`0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. This policy adds no liquidity and burns no tokens.
 
-## Claims and wallet delegation
+The router is non-upgradeable and has no owner, proxy, pause, recovery, arbitrary-call, token-approval,
+liquidity-management or configuration function. The shares, addresses, exact pool, cadence, dependencies and price
+bounds are compile-time constants.
 
-Existing native protocol fees belong to the live revenue wallet
-`0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. That wallet already uses MetaMask's v1.3.0 EIP-7702 Stateless Delegator.
-This release preserves that account implementation instead of replacing it.
+## Exact claim scope
 
-The wallet signs one revocable EIP-712 root delegation to the exact executor runtime with one custom caveat. The
-enforcer permits one canonical batch only:
+The executor snapshots the accrued native protocol fees on four pinned shared hooks:
 
-1. claim non-zero Classic V1, Classic V2 and Classic V3 protocol fees directly to the router;
-2. claim non-zero Deep V1 protocol fees to the revenue wallet;
-3. sweep the revenue wallet's complete native ETH balance to the router;
-4. call the router's fixed process function last.
+1. Classic V1;
+2. Classic V2;
+3. Classic V3;
+4. Deep V1.
 
-The manager, delegator, delegate, redeemer, execution mode, caveat terms, empty unsigned arguments, targets, values,
-selectors, recipients, order and final postcondition are checked. Revoking the MetaMask delegation stops future cycles.
-The executor cannot construct an ERC-20 transfer, arbitrary call, alternate recipient or alternate policy.
+Non-zero Classic fees are claimed directly to the router. Deep V1 can only claim to the fixed revenue wallet, so the
+same atomic batch forwards exactly the Deep snapshot from that wallet to the router. It never sweeps the wallet's prior
+ETH balance.
 
-Any native ETH sent to the dedicated revenue wallet is treated as protocol revenue during the next cycle. The wallet
-must not be used to hold unrelated native ETH. ERC-20 balances are not swept.
+The final process call includes the exact aggregate snapshot. The enforcer independently reconstructs that value and
+rejects any altered amount, recipient, target, selector, ordering or transfer value. The router spends exactly the
+declared claim amount; ETH already held by the wallet or router is not included implicitly.
 
-This V1 release pins four shared hook contracts, not individual launched token addresses. One batch therefore covers all
-tokens using those hook versions. A future hook is not covered automatically and requires an explicit reviewed source
-update. Stock-paired quote-asset fees are excluded because they require separate conversion and market controls.
+One shared-hook claim covers every token using that hook version. Future hooks are not included automatically and need
+an explicit reviewed source update. Stock-paired quote-asset fees remain excluded because they require separate
+conversion and market controls.
 
-## Liquidity custody and accounting
+## Wallet delegation
 
-The first cycle mints one PositionManager NFT at ticks `-887200` and `887200`. Later cycles increase the same position.
-The NFT remains owned by the immutable router, which exposes no approval, transfer, decrease, collect, burn or withdrawal
-path. The principal is code-locked in that position; this is not a claim of an independent audit.
-
-Only the exact calculated principal is sent to PositionManager. Pairing and rounding dust remains in the router. Native
-dust is added to the following cycle's purchase so the token/native pairing converges; token dust remains available for
-the following liquidity increase. Dust is accounted separately and is not split again as new revenue.
-
-The main pool charges its fixed 1% hook fee. As a result, the gross policy remains 50/25/25 while the exact same-cycle LP
-principal can be slightly lower than the two 25% budgets. Hook fees generated by the policy purchase accrue normally and
-become eligible for a later cycle.
+The revenue wallet already uses MetaMask's v1.3.0 EIP-7702 Stateless Delegator. It signs one revocable EIP-712 root
+delegation to the exact executor runtime with one custom caveat. The deployment manager, delegator, delegate, redeemer,
+execution mode, caveat terms, empty unsigned arguments and final postcondition are all checked. Revoking that delegation
+stops future automated cycles.
 
 ## Cadence and price controls
 
-A successful cycle starts a 24-hour wall-clock cooldown. Reports may be delayed by up to six hours, but scheduler
-timestamps cannot bypass the cooldown. Reports with zero, stale, future or replayed timestamps fail.
+A successful cycle starts a 24-hour wall-clock cooldown. Scheduler timestamps cannot bypass it. Zero, stale, future or
+replayed reports fail.
 
-The Chainlink CRE workflow reads the main-pool tick from the last finalized Ethereum block and includes it in the signed
-report. The router requires the execution tick to remain within 100 ticks of that reference. Purchases are split into
-at most 32 chunks of `0.1 ETH`; each chunk has a fee-aware minimum output and may move the pool by at most 100 ticks. The
-complete purchase may move the pool by at most 500 ticks from its starting point. The maximum purchase per cycle is
-therefore `3.2 ETH`, subject to the tighter cumulative tick bound. Larger or excessively price-impacting cycles fail
-atomically and require an explicit operational response rather than silently weakening the price guard.
+Chainlink CRE reads the main-pool tick from the last finalized Ethereum block and includes it in the signed report. The
+router requires the execution tick to remain within 100 ticks of that reference. Purchases are split into at most 32
+chunks of `0.1 ETH`; every chunk has a fee-aware minimum output and a 100-tick movement limit. The complete purchase has
+a separate 500-tick limit. The maximum input per cycle is therefore `3.2 ETH`, subject to the tighter price bound.
+Larger or excessively price-impacting cycles fail atomically instead of weakening execution safety.
 
-These checks limit stale pricing and extreme execution, but they are not a TWAP oracle and do not eliminate MEV. A
-production operator must monitor reverts, price bounds and accumulated backlog.
+These checks are not a TWAP and do not eliminate MEV. Production monitoring must cover reverts, price bounds and
+accumulated backlog.
 
-The minimum new revenue is `0.001 ETH`. If a batch or router operation fails, the fee claims, wallet sweep, treasury
-payment, swap and liquidity addition all revert in the same transaction.
+The minimum claim is `0.001 ETH`. If any claim, exact Deep transfer, Treasury payment or swap fails, the complete cycle
+reverts.
 
 ## CRE workflow
 
 The disabled release configuration schedules one report at midnight UTC. The receiver accepts only the code-hash-pinned
-Ethereum Mainnet CRE Forwarder, the treasury workflow owner and the production encoding of workflow name `revenue-v1`.
-CRE encodes that name as the first ten ASCII hex characters of `SHA-256("revenue-v1")`:
-`0x32666664393234346538`.
+Ethereum Mainnet CRE Forwarder, the Treasury workflow owner and workflow name `revenue-v1`. The checked-in production
+configuration remains `enabled: false` with a zero receiver. Activation requires the deployed executor address and an
+explicit reviewed release.
 
-The checked-in production configuration uses `enabled: false` and the zero receiver. Activation requires replacing the
-receiver with the deployed executor and setting `enabled: true`. The receiver must never be the revenue wallet.
-
-The only manual fallback is `executeCycle(int24)` called by the revenue wallet itself. It still uses the same signed
-MetaMask delegation and exact enforcer.
+The manual fallback is `executeCycle(int24)` called by the revenue wallet. It uses the same delegation and enforcer.
 
 ## Local evidence
 
-`ProtocolRevenueRouterV1MainnetForkTest` exercises the deployed MetaMask DelegationManager and current Mainnet hooks,
-Uniswap dependencies and `$V4` pool. It verifies the complete backlog claim and wallet sweep, 50/25/25 accounting,
-chunked Universal Router purchases, creation and reuse of one full-range position, code-locked NFT custody, exact
-PositionManager ETH conservation, cooldown, capacity, report identity, replay protection, delegation revocation and
-permission validation.
+The Mainnet-fork suite covers the current hook backlog, exact 50/50 accounting, old wallet and router balance exclusion,
+delivery of bought `$V4`, chunked Universal Router execution, cooldown, capacity, cumulative price impact, CRE identity,
+replay protection, delegation revocation and every caveat-controlled execution surface.
 
-`DeployMainnetProtocolRevenueV1Test` verifies the reviewed three-contract deployment order, predicted addresses, nonce
-progression, immutable bindings, runtime sizes and source commitment.
+The deployment suite verifies the three-contract order, predicted addresses, nonce progression, immutable bindings,
+runtime sizes and source commitment. The CRE workflow passes its TypeScript and codec tests. Slither raw results and
+manual triage are stored beside this document.
 
-The CRE workflow passes strict TypeScript checks and codec tests. Using the documented output path, it compiles twice
-identically with `@chainlink/cre-sdk` 1.16.0 and Bun 1.3.14 to a 3,791,885-byte WASM artifact with SHA-256
-`3ee59989c167675821338e8a7f68c6eb64ae7169ea7197bc316272f16ee88b2d`. The artifact is reproducible build evidence and
-is not committed. The compiler embeds its output path, so reproducing this hash requires the documented command and
-path.
-
-Slither 0.11.5 raw results, manual triage, property-based security properties and trust/custody diagrams are stored in
-this directory. The review added an independent 500-tick cumulative purchase bound after identifying that per-chunk
-bounds alone did not constrain total price movement.
-
-This is internal engineering evidence, not an independent security audit.
+This is internal engineering evidence, not an independent audit.
 
 ## Activation gates
 
@@ -127,6 +99,6 @@ Production remains blocked until all of these are complete:
 2. reviewed Mainnet deployment of router, enforcer and executor;
 3. Etherscan and Sourcify source matches for all three contracts;
 4. one valid EIP-712 delegation signed by the revenue wallet and configured on the executor;
-5. CRE receiver address, workflow owner, deployment funding and activation verified;
-6. a deliberately small Mainnet lifecycle with exact receipts and position evidence;
-7. monitoring for missed cycles, reverts, code-hash drift, revocation, backlog, pool binding and position ownership.
+5. CRE receiver configuration, deployment funding and activation;
+6. one deliberately small Mainnet lifecycle with exact receipts;
+7. monitoring for missed cycles, reverts, code-hash drift, revocation, backlog and pool binding.

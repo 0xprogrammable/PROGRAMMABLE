@@ -18,14 +18,16 @@
     "feePips": 0,
     "tickSpacing": 200,
     "hook": "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC",
-    "fullRangeTickLower": -887200,
-    "fullRangeTickUpper": 887200
+    "outputRecipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
   },
   "splitBps": {
     "treasury": 5000,
-    "buyV4": 2500,
-    "nativeForLiquidity": 2500
+    "buyV4": 5000
   },
+  "liquidityAction": "none",
+  "claimScope": "exact-current-hook-snapshot-only",
+  "existingWalletEthIncluded": false,
+  "existingRouterEthIncluded": false,
   "cycle": {
     "intervalSeconds": 86400,
     "schedule": "0 0 0 * * *",

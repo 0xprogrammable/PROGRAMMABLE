@@ -123,16 +123,7 @@ contract DeployMainnetProtocolRevenueV1 is Script {
     function deploymentSourceCommitment() public pure returns (bytes32) {
         bytes32 policyCommitment = keccak256(
             abi.encode(
-                uint16(5000),
-                uint16(2500),
-                uint16(2500),
-                uint64(1 days),
-                uint256(0.1 ether),
-                uint256(32),
-                int24(100),
-                int24(500),
-                int24(-887_200),
-                int24(887_200)
+                uint16(5000), uint16(5000), uint64(1 days), uint256(0.1 ether), uint256(32), int24(100), int24(500)
             )
         );
         bytes32 automationCommitment = keccak256(

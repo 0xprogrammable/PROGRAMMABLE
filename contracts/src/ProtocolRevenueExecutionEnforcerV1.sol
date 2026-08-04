@@ -11,8 +11,8 @@ import {
 
 /// @title ProtocolRevenueExecutionEnforcerV1
 /// @notice Restricts a MetaMask delegation to one exact Programmable protocol-revenue cycle.
-/// @dev The enforcer accepts only the current native-fee hooks, a complete revenue-wallet sweep to the immutable
-///      router, and one final process call. It exposes no administration, arbitrary-call or withdrawal surface.
+/// @dev The enforcer accepts only the current native-fee hooks, the exact Deep claim transfer to the immutable router,
+///      and one final process call for the exact aggregate claim. Existing wallet and router balances are excluded.
 contract ProtocolRevenueExecutionEnforcerV1 is IProtocolRevenueMetaMaskCaveatEnforcerV1 {
     bytes32 public constant BATCH_DEFAULT_MODE = 0x0100000000000000000000000000000000000000000000000000000000000000;
 
@@ -130,7 +130,7 @@ contract ProtocolRevenueExecutionEnforcerV1 is IProtocolRevenueMetaMaskCaveatEnf
         if (keccak256(executionCalldata) != keccak256(abi.encode(executions)) || executions.length == 0) {
             revert NonCanonicalExecutionCalldata();
         }
-        (uint64 scheduledAt,) = _decodeProcessCall(executions[executions.length - 1].callData);
+        (uint64 scheduledAt,,) = _decodeProcessCall(executions[executions.length - 1].callData);
         uint64 actual = router.lastProcessedAt();
         // The router records the actual block timestamp, independently from a delayed scheduler timestamp.
         // forge-lint: disable-next-line(unsafe-typecast)
@@ -144,11 +144,15 @@ contract ProtocolRevenueExecutionEnforcerV1 is IProtocolRevenueMetaMaskCaveatEnf
 
     function _validateExecutionBatch(ProtocolRevenueExecution[] memory executions) private view {
         uint256 cursor = 0;
+        uint256 classicV1Accrued = IProtocolRevenueEthFeeHookV1(CLASSIC_V1_HOOK).launcherFeesAccrued();
+        uint256 classicV2Accrued = IProtocolRevenueEthFeeHookV1(CLASSIC_V2_HOOK).launcherFeesAccrued();
+        uint256 classicV3Accrued = IProtocolRevenueEthFeeHookV1(CLASSIC_V3_HOOK).launcherFeesAccrued();
         uint256 deepAccrued = IProtocolRevenueEthFeeHookV1(DEEP_V1_HOOK).launcherFeesAccrued();
+        uint256 claimedRevenue = classicV1Accrued + classicV2Accrued + classicV3Accrued + deepAccrued;
 
-        cursor = _requireRedirectClaimIfAccrued(executions, cursor, CLASSIC_V1_HOOK);
-        cursor = _requireRedirectClaimIfAccrued(executions, cursor, CLASSIC_V2_HOOK);
-        cursor = _requireRedirectClaimIfAccrued(executions, cursor, CLASSIC_V3_HOOK);
+        cursor = _requireRedirectClaimIfAccrued(executions, cursor, CLASSIC_V1_HOOK, classicV1Accrued);
+        cursor = _requireRedirectClaimIfAccrued(executions, cursor, CLASSIC_V2_HOOK, classicV2Accrued);
+        cursor = _requireRedirectClaimIfAccrued(executions, cursor, CLASSIC_V3_HOOK, classicV3Accrued);
         if (deepAccrued != 0) {
             _requireExecution(
                 executions, cursor, DEEP_V1_HOOK, 0, abi.encodeCall(IProtocolRevenueEthFeeHookV1.claimLauncherFees, ())
@@ -158,9 +162,8 @@ contract ProtocolRevenueExecutionEnforcerV1 is IProtocolRevenueMetaMaskCaveatEnf
             }
         }
 
-        uint256 completeAuthorityBalance = REVENUE_AUTHORITY.balance + deepAccrued;
-        if (completeAuthorityBalance != 0) {
-            _requireExecution(executions, cursor, address(router), completeAuthorityBalance, bytes(""));
+        if (deepAccrued != 0) {
+            _requireExecution(executions, cursor, address(router), deepAccrued, bytes(""));
             unchecked {
                 ++cursor;
             }
@@ -169,21 +172,28 @@ contract ProtocolRevenueExecutionEnforcerV1 is IProtocolRevenueMetaMaskCaveatEnf
         if (executions.length != cursor + 1) revert InvalidExecution(cursor);
         ProtocolRevenueExecution memory processExecution = executions[cursor];
         if (processExecution.target != address(router) || processExecution.value != 0) revert InvalidExecution(cursor);
-        (uint64 scheduledAt, int24 referenceTick) = _decodeProcessCall(processExecution.callData);
+        (uint64 scheduledAt, int24 referenceTick, uint256 processRevenue) =
+            _decodeProcessCall(processExecution.callData);
         if (
-            keccak256(processExecution.callData)
-                != keccak256(abi.encodeCall(IProtocolRevenueRouterTargetV1.process, (scheduledAt, referenceTick)))
+            processRevenue != claimedRevenue
+                || keccak256(processExecution.callData)
+                    != keccak256(
+                        abi.encodeCall(
+                            IProtocolRevenueRouterTargetV1.process, (scheduledAt, referenceTick, claimedRevenue)
+                        )
+                    )
         ) {
             revert InvalidExecution(cursor);
         }
     }
 
-    function _requireRedirectClaimIfAccrued(ProtocolRevenueExecution[] memory executions, uint256 cursor, address hook)
-        private
-        view
-        returns (uint256 nextCursor)
-    {
-        if (IProtocolRevenueEthFeeHookV1(hook).launcherFeesAccrued() == 0) return cursor;
+    function _requireRedirectClaimIfAccrued(
+        ProtocolRevenueExecution[] memory executions,
+        uint256 cursor,
+        address hook,
+        uint256 accrued
+    ) private view returns (uint256 nextCursor) {
+        if (accrued == 0) return cursor;
         _requireExecution(
             executions,
             cursor,
@@ -213,8 +223,12 @@ contract ProtocolRevenueExecutionEnforcerV1 is IProtocolRevenueMetaMaskCaveatEnf
         }
     }
 
-    function _decodeProcessCall(bytes memory callData) private pure returns (uint64 scheduledAt, int24 referenceTick) {
-        if (callData.length != 68) revert InvalidExecution(type(uint256).max);
+    function _decodeProcessCall(bytes memory callData)
+        private
+        pure
+        returns (uint64 scheduledAt, int24 referenceTick, uint256 claimedRevenue)
+    {
+        if (callData.length != 100) revert InvalidExecution(type(uint256).max);
         bytes4 selector;
         uint256 scheduledWord;
         int256 tickWord;
@@ -222,6 +236,7 @@ contract ProtocolRevenueExecutionEnforcerV1 is IProtocolRevenueMetaMaskCaveatEnf
             selector := mload(add(callData, 32))
             scheduledWord := mload(add(callData, 36))
             tickWord := mload(add(callData, 68))
+            claimedRevenue := mload(add(callData, 100))
         }
         if (selector != IProtocolRevenueRouterTargetV1.process.selector || scheduledWord > type(uint64).max) {
             revert InvalidExecution(type(uint256).max);

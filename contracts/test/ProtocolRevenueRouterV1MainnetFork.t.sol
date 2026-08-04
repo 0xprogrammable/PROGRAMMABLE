@@ -3,12 +3,6 @@ pragma solidity 0.8.26;
 
 import { IERC1271 } from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { IERC721 } from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import { IPoolManager } from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
-import { StateLibrary } from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
-import { PoolId } from "@uniswap/v4-core/src/types/PoolId.sol";
-import { IPositionManager } from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
-import { PositionInfo, PositionInfoLibrary } from "@uniswap/v4-periphery/src/libraries/PositionInfoLibrary.sol";
 import { Test } from "forge-std/Test.sol";
 
 import { ProtocolRevenueExecutionEnforcerV1 } from "../src/ProtocolRevenueExecutionEnforcerV1.sol";
@@ -27,9 +21,6 @@ import {
 } from "../src/interfaces/IProtocolRevenueMetaMaskV1.sol";
 
 contract ProtocolRevenueRouterV1MainnetForkTest is Test {
-    using PositionInfoLibrary for PositionInfo;
-    using StateLibrary for IPoolManager;
-
     address internal constant REVENUE_AUTHORITY = 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c;
     address internal constant TREASURY = 0x2Bb333d48DFAF1596D9036671d2E43168994249E;
     address internal constant V4_TOKEN = 0x7987f03462200b3D8A072E02C89A8A41dCB124EE;
@@ -64,12 +55,11 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
     function test_liveBacklogClaimsAllCurrentNativeSourcesAndExecutesOneAtomicPolicyCycle() public {
         uint256 authorityBalanceBefore = REVENUE_AUTHORITY.balance;
         uint256 accruedBefore = _totalHookFees();
-        uint256 pendingBefore = router.pendingNewRevenue();
-        uint256 expectedRevenue = authorityBalanceBefore + accruedBefore + pendingBefore;
-        assertGt(expectedRevenue, 2 ether);
+        assertGt(accruedBefore, router.MIN_NEW_REVENUE());
 
         uint256 treasuryBefore = TREASURY.balance;
-        uint256 positionManagerBalanceBefore = address(router.POSITION_MANAGER()).balance;
+        uint256 authorityTokenBefore = IERC20(V4_TOKEN).balanceOf(REVENUE_AUTHORITY);
+        uint256 unallocatedRouterEthBefore = address(router).balance;
         _configureValidDelegation();
         uint64 scheduledAt = uint64(block.timestamp);
         int24 referenceTick = router.currentMainPoolTick();
@@ -79,86 +69,98 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
         assertLe(int256(referenceTick) - int256(tickAfter), int256(router.MAX_TOTAL_SWAP_TICK_MOVE()));
 
         assertEq(REVENUE_AUTHORITY.codehash, revenueAuthorityCodeHash);
-        assertEq(REVENUE_AUTHORITY.balance, 0);
-        assertEq(router.totalRevenueProcessed(), expectedRevenue);
-        assertEq(router.totalTreasurySent(), expectedRevenue / 2);
-        assertEq(TREASURY.balance - treasuryBefore, expectedRevenue / 2);
-        assertEq(router.totalNativeSwapped(), expectedRevenue / 4);
-        assertEq(
-            router.totalTreasurySent() + router.totalNativeSwapped() + router.totalNativePrincipalAdded()
-                + router.accountedNativeLiquidityDust(),
-            expectedRevenue
-        );
-        assertEq(address(router.POSITION_MANAGER()).balance, positionManagerBalanceBefore);
+        assertEq(REVENUE_AUTHORITY.balance, authorityBalanceBefore);
+        assertEq(router.totalRevenueProcessed(), accruedBefore);
+        assertEq(router.totalNativeSwapped(), accruedBefore / 2);
+        assertEq(router.totalTreasurySent(), accruedBefore - accruedBefore / 2);
+        assertEq(TREASURY.balance - treasuryBefore, accruedBefore - accruedBefore / 2);
+        assertEq(router.totalTreasurySent() + router.totalNativeSwapped(), accruedBefore);
+        assertEq(address(router).balance, unallocatedRouterEthBefore);
+        assertGt(IERC20(V4_TOKEN).balanceOf(REVENUE_AUTHORITY), authorityTokenBefore);
+        assertEq(IERC20(V4_TOKEN).balanceOf(address(router)), 0);
+        assertEq(router.totalTokensBought(), IERC20(V4_TOKEN).balanceOf(REVENUE_AUTHORITY) - authorityTokenBefore);
         assertEq(router.lastProcessedAt(), block.timestamp);
         assertEq(executor.lastAcceptedScheduledAt(), scheduledAt);
-
-        uint256 tokenId = router.positionTokenId();
-        assertGt(tokenId, 0);
-        assertEq(IERC721(address(router.POSITION_MANAGER())).ownerOf(tokenId), address(router));
-        (, PositionInfo info) = router.POSITION_MANAGER().getPoolAndPositionInfo(tokenId);
-        assertEq(info.tickLower(), router.FULL_RANGE_TICK_LOWER());
-        assertEq(info.tickUpper(), router.FULL_RANGE_TICK_UPPER());
-        assertGt(router.POSITION_MANAGER().getPositionLiquidity(tokenId), 0);
-        assertGt(router.totalTokenPrincipalAdded(), 0);
     }
 
     /// forge-config: default.fuzz.runs = 32
     /// forge-config: ci.fuzz.runs = 128
-    function testFuzz_firstCycleConservesRevenueAndNeverStrandsEthInPositionManager(uint96 rawRevenue) public {
+    function testFuzz_firstCycleConservesExactRevenueAndDeliversBoughtTokens(uint96 rawRevenue) public {
         uint256 revenue = bound(uint256(rawRevenue), 0.004 ether, 0.4 ether);
         vm.deal(address(router), revenue);
         uint256 treasuryBefore = TREASURY.balance;
-        uint256 positionManagerBalanceBefore = address(router.POSITION_MANAGER()).balance;
+        uint256 authorityTokenBefore = IERC20(V4_TOKEN).balanceOf(REVENUE_AUTHORITY);
         int24 referenceTick = router.currentMainPoolTick();
 
         vm.prank(REVENUE_AUTHORITY);
-        router.process(uint64(block.timestamp), referenceTick);
+        router.process(uint64(block.timestamp), referenceTick, revenue);
 
         assertEq(router.totalRevenueProcessed(), revenue);
-        assertEq(router.totalTreasurySent(), revenue / 2);
-        assertEq(TREASURY.balance - treasuryBefore, revenue / 2);
-        assertEq(router.totalNativeSwapped(), revenue / 4);
-        assertEq(
-            router.totalTreasurySent() + router.totalNativeSwapped() + router.totalNativePrincipalAdded()
-                + router.accountedNativeLiquidityDust(),
-            revenue
-        );
-        assertEq(address(router).balance, router.accountedNativeLiquidityDust());
-        assertEq(address(router.POSITION_MANAGER()).balance, positionManagerBalanceBefore);
-        assertGt(router.totalTokenPrincipalAdded(), 0);
+        assertEq(router.totalNativeSwapped(), revenue / 2);
+        assertEq(router.totalTreasurySent(), revenue - revenue / 2);
+        assertEq(TREASURY.balance - treasuryBefore, revenue - revenue / 2);
+        assertEq(router.totalTreasurySent() + router.totalNativeSwapped(), revenue);
+        assertEq(address(router).balance, 0);
+        assertGt(IERC20(V4_TOKEN).balanceOf(REVENUE_AUTHORITY), authorityTokenBefore);
+        assertEq(IERC20(V4_TOKEN).balanceOf(address(router)), 0);
     }
 
-    function test_secondDayReusesPositionAndUsesPriorNativeDustForTheNextBuy() public {
+    function test_secondDayProcessesOnlyNewClaimsAndLeavesOldWalletEthUntouched() public {
+        uint256 unrelatedWalletEth = 0.04 ether;
+        uint256 firstRevenue = 0.08 ether;
+        uint256 secondRevenue = 0.06 ether;
+        vm.deal(REVENUE_AUTHORITY, unrelatedWalletEth);
+        vm.deal(address(router), firstRevenue);
+        int24 firstReferenceTick = router.currentMainPoolTick();
+        vm.prank(REVENUE_AUTHORITY);
+        router.process(uint64(block.timestamp), firstReferenceTick, firstRevenue);
+        assertEq(REVENUE_AUTHORITY.balance, unrelatedWalletEth);
+
+        vm.warp(block.timestamp + 1 days);
+        vm.deal(address(router), secondRevenue);
+        uint256 revenueBefore = router.totalRevenueProcessed();
+        uint256 swapBefore = router.totalNativeSwapped();
+        int24 secondReferenceTick = router.currentMainPoolTick();
+        vm.prank(REVENUE_AUTHORITY);
+        router.process(uint64(block.timestamp), secondReferenceTick, secondRevenue);
+
+        assertEq(router.totalRevenueProcessed() - revenueBefore, secondRevenue);
+        assertEq(router.totalNativeSwapped() - swapBefore, secondRevenue / 2);
+        assertEq(REVENUE_AUTHORITY.balance, unrelatedWalletEth);
+        assertEq(router.cycleCount(), 2);
+    }
+
+    function test_unallocatedRouterEthIsNotIncludedInClaimedRevenue() public {
+        uint256 unrelatedRouterEth = 1 ether;
+        uint256 claimedRevenue = 0.04 ether;
+        vm.deal(address(router), unrelatedRouterEth + claimedRevenue);
+        uint256 treasuryBefore = TREASURY.balance;
+        int24 referenceTick = router.currentMainPoolTick();
+
+        vm.prank(REVENUE_AUTHORITY);
+        router.process(uint64(block.timestamp), referenceTick, claimedRevenue);
+
+        assertEq(address(router).balance, unrelatedRouterEth);
+        assertEq(router.totalRevenueProcessed(), claimedRevenue);
+        assertEq(TREASURY.balance - treasuryBefore, claimedRevenue - claimedRevenue / 2);
+    }
+
+    function test_executorDoesNotSweepExistingRevenueWalletBalance() public {
         vm.deal(REVENUE_AUTHORITY, 0.04 ether);
         _configureValidDelegation();
         int24 firstReferenceTick = router.currentMainPoolTick();
+        uint256 hookRevenue = _totalHookFees();
         vm.prank(CRE_FORWARDER);
         executor.onReport(_creMetadata(), _cycleReport(uint64(block.timestamp), firstReferenceTick));
-
-        uint256 tokenId = router.positionTokenId();
-        uint128 liquidityBefore = router.POSITION_MANAGER().getPositionLiquidity(tokenId);
-        uint256 firstCycleDust = router.accountedNativeLiquidityDust();
-        assertGt(firstCycleDust, 0);
-
-        vm.warp(block.timestamp + 1 days);
-        vm.deal(REVENUE_AUTHORITY, 0.04 ether);
-        uint256 swapBefore = router.totalNativeSwapped();
-        int24 secondReferenceTick = router.currentMainPoolTick();
-        vm.prank(CRE_FORWARDER);
-        executor.onReport(_creMetadata(), _cycleReport(uint64(block.timestamp), secondReferenceTick));
-
-        assertEq(router.positionTokenId(), tokenId);
-        assertGt(router.POSITION_MANAGER().getPositionLiquidity(tokenId), liquidityBefore);
-        assertGt(router.totalNativeSwapped() - swapBefore, 0.01 ether);
-        assertEq(router.cycleCount(), 2);
+        assertEq(REVENUE_AUTHORITY.balance, 0.04 ether);
+        assertEq(router.totalRevenueProcessed(), hookRevenue);
     }
 
     function test_actualWallClockCooldownCannotBeBypassedWithSchedulerTimestamps() public {
         vm.deal(address(router), 0.04 ether);
         int24 referenceTick = router.currentMainPoolTick();
         vm.prank(REVENUE_AUTHORITY);
-        router.process(uint64(block.timestamp), referenceTick);
+        router.process(uint64(block.timestamp), referenceTick, 0.04 ether);
 
         vm.warp(block.timestamp + 23 hours);
         vm.deal(address(router), address(router).balance + 0.04 ether);
@@ -166,7 +168,7 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
         referenceTick = router.currentMainPoolTick();
         vm.expectRevert(abi.encodeWithSelector(ProtocolRevenueRouterV1.CooldownActive.selector, eligibleAt));
         vm.prank(REVENUE_AUTHORITY);
-        router.process(uint64(block.timestamp), referenceTick);
+        router.process(uint64(block.timestamp), referenceTick, 0.04 ether);
     }
 
     function test_staleOrZeroCycleTimestampIsRejectedBeforeFundsMove() public {
@@ -178,7 +180,7 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
             abi.encodeWithSelector(ProtocolRevenueRouterV1.CycleTimestampTooOld.selector, uint64(0), oldestAllowed)
         );
         vm.prank(REVENUE_AUTHORITY);
-        router.process(0, referenceTick);
+        router.process(0, referenceTick, 0.04 ether);
         assertEq(TREASURY.balance, treasuryBefore);
         assertEq(address(router).balance, 0.04 ether);
     }
@@ -197,7 +199,7 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
             )
         );
         vm.prank(REVENUE_AUTHORITY);
-        router.process(futureTimestamp, referenceTick);
+        router.process(futureTimestamp, referenceTick, 0.04 ether);
 
         int24 staleReference = referenceTick + router.MAX_REFERENCE_TICK_DEVIATION() + 1;
         vm.expectRevert(
@@ -209,7 +211,7 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
             )
         );
         vm.prank(REVENUE_AUTHORITY);
-        router.process(uint64(block.timestamp), staleReference);
+        router.process(uint64(block.timestamp), staleReference, 0.04 ether);
 
         assertEq(TREASURY.balance, treasuryBefore);
         assertEq(address(router).balance, 0.04 ether);
@@ -225,7 +227,7 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
             )
         );
         vm.prank(REVENUE_AUTHORITY);
-        router.process(uint64(block.timestamp), referenceTick);
+        router.process(uint64(block.timestamp), referenceTick, belowMinimum);
         assertEq(address(router).balance, belowMinimum);
     }
 
@@ -235,23 +237,23 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
         int24 referenceTick = router.currentMainPoolTick();
         vm.expectRevert(abi.encodeWithSelector(ProtocolRevenueRouterV1.OnlyRevenueAuthority.selector, outsider));
         vm.prank(outsider);
-        router.process(uint64(block.timestamp), referenceTick);
+        router.process(uint64(block.timestamp), referenceTick, 0.04 ether);
     }
 
     function test_cycleCapacityFailsAtomically() public {
-        uint256 excessiveRevenue = router.MAX_NATIVE_SWAP_CHUNK() * router.MAX_SWAP_CHUNKS() * 4 + 4;
+        uint256 excessiveRevenue = router.MAX_NATIVE_SWAP_CHUNK() * router.MAX_SWAP_CHUNKS() * 2 + 2;
         vm.deal(address(router), excessiveRevenue);
         uint256 treasuryBefore = TREASURY.balance;
         int24 referenceTick = router.currentMainPoolTick();
         vm.expectRevert(
             abi.encodeWithSelector(
                 ProtocolRevenueRouterV1.SwapAmountExceedsCycleCapacity.selector,
-                excessiveRevenue / 4,
+                excessiveRevenue / 2,
                 router.MAX_NATIVE_SWAP_CHUNK() * router.MAX_SWAP_CHUNKS()
             )
         );
         vm.prank(REVENUE_AUTHORITY);
-        router.process(uint64(block.timestamp), referenceTick);
+        router.process(uint64(block.timestamp), referenceTick, excessiveRevenue);
         assertEq(TREASURY.balance, treasuryBefore);
         assertEq(address(router).balance, excessiveRevenue);
     }
@@ -263,25 +265,23 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
         int24 referenceTick = router.currentMainPoolTick();
         vm.expectPartialRevert(ProtocolRevenueRouterV1.SwapTotalTickMoveTooLarge.selector);
         vm.prank(REVENUE_AUTHORITY);
-        router.process(uint64(block.timestamp), referenceTick);
+        router.process(uint64(block.timestamp), referenceTick, revenue);
         assertEq(TREASURY.balance, treasuryBefore);
         assertEq(address(router).balance, revenue);
         assertEq(router.cycleCount(), 0);
     }
 
-    function test_positionCannotBeTransferredByAnExternalCaller() public {
+    function test_claimedRevenueCannotExceedRouterBalance() public {
         vm.deal(address(router), 0.04 ether);
         int24 referenceTick = router.currentMainPoolTick();
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ProtocolRevenueRouterV1.ClaimedRevenueExceedsBalance.selector, 0.05 ether, 0.04 ether
+            )
+        );
         vm.prank(REVENUE_AUTHORITY);
-        router.process(uint64(block.timestamp), referenceTick);
-
-        uint256 tokenId = router.positionTokenId();
-        address outsider = makeAddr("positionThief");
-        IERC721 positionNft = IERC721(address(router.POSITION_MANAGER()));
-        vm.expectRevert();
-        vm.prank(outsider);
-        positionNft.transferFrom(address(router), outsider, tokenId);
-        assertEq(positionNft.ownerOf(tokenId), address(router));
+        router.process(uint64(block.timestamp), referenceTick, 0.05 ether);
+        assertEq(address(router).balance, 0.04 ether);
     }
 
     function test_permissionConfigurationRejectsWrongDelegateAndFreezesValidContext() public {
@@ -340,7 +340,8 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
         bytes memory terms = executor.expectedDelegationTerms();
         bytes32 delegationHash = keccak256("delegation");
         bytes memory processCall = abi.encodeCall(
-            IProtocolRevenueRouterTargetV1.process, (uint64(block.timestamp), router.currentMainPoolTick())
+            IProtocolRevenueRouterTargetV1.process,
+            (uint64(block.timestamp), router.currentMainPoolTick(), _totalHookFees())
         );
         ProtocolRevenueExecution[] memory incomplete = new ProtocolRevenueExecution[](1);
         incomplete[0] = ProtocolRevenueExecution({ target: address(router), value: 0, callData: processCall });
@@ -402,6 +403,14 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
         uint256 processIndex = executions.length - 1;
         executions[processIndex].callData = abi.encodeWithSelector(bytes4(0xdeadbeef));
         _expectInvalidExecution(terms, mode, delegationHash, executions, type(uint256).max);
+
+        executions = _mockedCompleteBatch();
+        processIndex = executions.length - 1;
+        executions[processIndex].callData = abi.encodeCall(
+            IProtocolRevenueRouterTargetV1.process,
+            (uint64(block.timestamp), router.currentMainPoolTick(), 10 ether + 1)
+        );
+        _expectInvalidExecution(terms, mode, delegationHash, executions, processIndex);
 
         executions = _mockedCompleteBatch();
         processIndex = executions.length - 1;
@@ -599,7 +608,7 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
         uint256 classicV2 = 2 ether;
         uint256 classicV3 = 3 ether;
         uint256 deepV1 = 4 ether;
-        uint256 authorityBalance = 5 ether;
+        uint256 claimedRevenue = classicV1 + classicV2 + classicV3 + deepV1;
         vm.mockCall(
             CLASSIC_V1_HOOK, abi.encodeCall(IProtocolRevenueEthFeeHookV1.launcherFeesAccrued, ()), abi.encode(classicV1)
         );
@@ -612,8 +621,6 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
         vm.mockCall(
             DEEP_V1_HOOK, abi.encodeCall(IProtocolRevenueEthFeeHookV1.launcherFeesAccrued, ()), abi.encode(deepV1)
         );
-        vm.deal(REVENUE_AUTHORITY, authorityBalance);
-
         executions = new ProtocolRevenueExecution[](6);
         executions[0] = ProtocolRevenueExecution({
             target: CLASSIC_V1_HOOK,
@@ -633,14 +640,13 @@ contract ProtocolRevenueRouterV1MainnetForkTest is Test {
         executions[3] = ProtocolRevenueExecution({
             target: DEEP_V1_HOOK, value: 0, callData: abi.encodeCall(IProtocolRevenueEthFeeHookV1.claimLauncherFees, ())
         });
-        executions[4] = ProtocolRevenueExecution({
-            target: address(router), value: authorityBalance + deepV1, callData: bytes("")
-        });
+        executions[4] = ProtocolRevenueExecution({ target: address(router), value: deepV1, callData: bytes("") });
         executions[5] = ProtocolRevenueExecution({
             target: address(router),
             value: 0,
             callData: abi.encodeCall(
-                IProtocolRevenueRouterTargetV1.process, (uint64(block.timestamp), router.currentMainPoolTick())
+                IProtocolRevenueRouterTargetV1.process,
+                (uint64(block.timestamp), router.currentMainPoolTick(), claimedRevenue)
             )
         });
     }

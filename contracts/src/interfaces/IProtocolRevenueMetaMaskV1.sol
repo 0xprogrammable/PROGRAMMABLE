@@ -68,11 +68,9 @@ interface IProtocolRevenueRouterTargetV1 {
 
     function lastProcessedAt() external view returns (uint64);
 
-    function pendingNewRevenue() external view returns (uint256);
-
     function currentMainPoolTick() external view returns (int24);
 
-    function process(uint64 cycleTimestamp, int24 referenceTick) external;
+    function process(uint64 cycleTimestamp, int24 referenceTick, uint256 claimedRevenue) external;
 }
 
 interface IProtocolRevenueEthFeeHookV1 {

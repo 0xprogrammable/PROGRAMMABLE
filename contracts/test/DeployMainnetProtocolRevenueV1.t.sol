@@ -40,14 +40,11 @@ contract DeployMainnetProtocolRevenueV1Test is Test {
         assertEq(result.router.V4_TOKEN(), deployment.V4_TOKEN());
         assertEq(result.router.MAIN_POOL_ID(), deployment.MAIN_POOL_ID());
         assertEq(result.router.TREASURY_SHARE_BPS(), 5000);
-        assertEq(result.router.BUY_SHARE_BPS(), 2500);
-        assertEq(result.router.LIQUIDITY_NATIVE_SHARE_BPS(), 2500);
+        assertEq(result.router.BUY_SHARE_BPS(), 5000);
         assertEq(result.router.CYCLE_INTERVAL(), 1 days);
         assertEq(result.router.MAX_NATIVE_SWAP_CHUNK(), 0.1 ether);
         assertEq(result.router.MAX_SWAP_CHUNKS(), 32);
         assertEq(result.router.MAX_TOTAL_SWAP_TICK_MOVE(), 500);
-        assertEq(result.router.FULL_RANGE_TICK_LOWER(), -887_200);
-        assertEq(result.router.FULL_RANGE_TICK_UPPER(), 887_200);
         assertEq(result.executor.CRE_FORWARDER(), deployment.CRE_FORWARDER());
         assertEq(result.executor.CRE_WORKFLOW_OWNER(), deployment.CRE_WORKFLOW_OWNER());
         assertEq(result.executor.CRE_WORKFLOW_NAME(), deployment.CRE_WORKFLOW_NAME());
