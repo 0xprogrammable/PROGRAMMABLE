@@ -35,20 +35,9 @@ export function RouteTransition({ children }: { children: ReactNode }) {
 
     const enteringDocs = pathname.startsWith("/docs");
     const animation = content.animate(
-      enteringDocs
-        ? [{ opacity: 0.96 }, { opacity: 1 }]
-        : [
-            {
-              opacity: 0.94,
-              transform: "translate3d(0, 3px, 0)",
-            },
-            {
-              opacity: 1,
-              transform: "translate3d(0, 0, 0)",
-            },
-          ],
+      [{ opacity: enteringDocs ? 0.97 : 0.92 }, { opacity: 1 }],
       {
-        duration: enteringDocs ? 120 : 160,
+        duration: enteringDocs ? 90 : 120,
         easing: "cubic-bezier(0.23, 1, 0.32, 1)",
       },
     );
@@ -81,7 +70,6 @@ export function RouteTransition({ children }: { children: ReactNode }) {
     <div
       className={`route-transition${isDocsPath ? " route-transition-docs" : ""}`}
       ref={contentRef}
-      style={{ animation: "none" }}
     >
       {children}
     </div>

@@ -98,8 +98,8 @@ export const viewport: Viewport = {
   colorScheme: "light dark",
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#09111f" },
+    { media: "(prefers-color-scheme: light)", color: "#f8f3ec" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b141d" },
   ],
 };
 
@@ -107,7 +107,12 @@ const themeInitializationScript = `
   (() => {
     try {
       const savedTheme = window.localStorage.getItem("programmable-theme");
-      const theme = savedTheme === "dark" ? "dark" : "light";
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const theme = savedTheme === "light" || savedTheme === "dark"
+        ? savedTheme
+        : prefersDark
+          ? "dark"
+          : "light";
       document.documentElement.dataset.theme = theme;
       document.documentElement.style.colorScheme = theme;
     } catch {
