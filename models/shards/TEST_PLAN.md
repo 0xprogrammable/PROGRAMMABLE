@@ -152,8 +152,9 @@ Suites live in [`test/`](../../test/), and each one owns a named area so no cove
   [`test/ClassicV3MainnetFork.t.sol`](../../test/ClassicV3MainnetFork.t.sol). It mines the hook against the live
   PoolManager and asserts the deployed address equals the mined one, so its low bits match
   `getHookPermissions()`, and it pins the PoolManager's runtime code hash so the fork cannot silently swap in a
-  different contract. It needs an archive RPC (`ETHEREUM_RPC_URL`, or the public default) and so is excluded from
-  the default CI run, exactly as the Classic fork suite is; run it with
+  different contract. It needs an RPC (`ETHEREUM_RPC_URL`, or the public default), so it is excluded from the
+  default no-RPC `forge test`, coverage and gas-snapshot runs exactly as the Classic fork suite is. The
+  scheduled-and-on-PR `Ethereum Evidence` workflow runs it against a live RPC; run it locally with
   `forge test --match-contract ShardV1MainnetForkTest`.
 - **Record runtime code hashes and source verification after deployment.** For every deployed contract, publish
   the deployment transaction, the runtime code hash and the explorer verification state, and record the hook's

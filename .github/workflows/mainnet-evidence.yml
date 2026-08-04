@@ -8,6 +8,7 @@ on:
     paths:
       - "src/**"
       - "test/ClassicV3MainnetFork.t.sol"
+      - "test/ShardV1MainnetFork.t.sol"
       - "deployments/**"
       - "models/**"
       - "releases/**"
@@ -49,6 +50,18 @@ jobs:
             for attempt in 1 2; do
               echo "Fork attempt ${attempt} with ${rpc_url}"
               if ETHEREUM_RPC_URL="${rpc_url}" forge test --match-contract ClassicV3MainnetForkTest; then
+                exit 0
+              fi
+            done
+          done
+          exit 1
+
+      - name: Run Shards lifecycle fork test
+        run: |
+          for rpc_url in https://rpc.flashbots.net https://eth.drpc.org; do
+            for attempt in 1 2; do
+              echo "Fork attempt ${attempt} with ${rpc_url}"
+              if ETHEREUM_RPC_URL="${rpc_url}" forge test --match-contract ShardV1MainnetForkTest; then
                 exit 0
               fi
             done

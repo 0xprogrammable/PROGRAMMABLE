@@ -230,19 +230,30 @@ contract ShardV1MainnetForkTest is Test {
         _assertBacking();
     }
 
-    /// @notice The entropy source is an Arbitrum-only precompile; on Mainnet it returns zero. Art
-    ///         must still regenerate from the remaining sources, so distinct acquisitions must still
-    ///         carry distinct seeds and render distinct pieces.
-    function test_entropyDegradesButArtStillRegeneratesOnMainnet() public {
+    /// @notice The seed mixes an `arbBlockNumber()` staticcall to an Arbitrum-only precompile that
+    ///         does not exist on Ethereum. The load-bearing fact this pins is that the gas-capped
+    ///         staticcall degrades to zero rather than reverting, so a Mainnet acquisition still
+    ///         mints — and that the piece still renders distinct on-chain art. (Seeds always differ
+    ///         via the per-acquisition nonce, so seed inequality alone would prove nothing; the
+    ///         mint succeeding and the rendered art differing are the meaningful checks.)
+    function test_entropyDegradesGracefullyAndArtRendersOnMainnet() public {
         vm.startPrank(buyer);
         uint256 first = hook.buyNFT{ value: 1 ether }(type(uint256).max, deadline);
         vm.roll(block.number + 1);
         uint256 second = hook.buyNFT{ value: 1 ether }(type(uint256).max, deadline);
         vm.stopPrank();
 
-        assertTrue(nft.tokenSeed(first) != nft.tokenSeed(second), "two acquisitions share a seed on Mainnet");
-        assertGt(bytes(nft.tokenURI(first)).length, 0, "no art rendered for the first piece");
-        assertGt(bytes(nft.tokenURI(second)).length, 0, "no art rendered for the second piece");
+        // The mint itself is the proof: the absent ARB_SYS precompile returned no data and the
+        // gas-capped staticcall degraded to zero instead of reverting the acquisition.
+        assertEq(nft.ownerOf(first), buyer, "first Mainnet acquisition did not mint");
+        assertEq(nft.ownerOf(second), buyer, "second Mainnet acquisition did not mint");
+
+        // Art regenerates per acquisition: two pieces render to different on-chain SVG.
+        string memory artFirst = nft.tokenURI(first);
+        string memory artSecond = nft.tokenURI(second);
+        assertGt(bytes(artFirst).length, 0, "no art rendered for the first piece");
+        assertGt(bytes(artSecond).length, 0, "no art rendered for the second piece");
+        assertTrue(keccak256(bytes(artFirst)) != keccak256(bytes(artSecond)), "two acquisitions rendered identical art");
     }
 
     /// @dev ETH held for the hook, whether sitting as a v4 credit or as a plain balance.
