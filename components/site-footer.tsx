@@ -4,7 +4,7 @@ import Link from "next/link";
 import styles from "@/components/site-footer.module.css";
 
 const productLinks = [
-  { href: "/", label: "Explore" },
+  { href: "/explore", label: "Explore" },
   { href: "/launch", label: "Create" },
   { href: "/profile", label: "Profile" },
   { href: "/docs/developers", label: "Docs" },
