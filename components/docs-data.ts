@@ -25,6 +25,7 @@ export const docsNavigation = [
     label: "Developers",
     items: [
       { href: "/docs/developers#quickstart", label: "Quickstart" },
+      { href: "/docs/developers#integrations", label: "Integration guides" },
       { href: "/docs/developers#response", label: "Response model" },
       { href: "/docs/developers#sync", label: "Backfill and updates" },
       { href: "/docs/developers#rendering", label: "Rendering rules" },
@@ -40,6 +41,12 @@ export const docsSearchItems: DocsSearchItem[] = [
     description:
       "Run the public launch feed for terminals, scanners, wallets, and apps in cURL, TypeScript, or Python.",
     href: "/docs/developers#quickstart",
+  },
+  {
+    title: "Integration guides",
+    description:
+      "Implementation paths for terminals, scanners, indexers, wallets, bots, apps, and games.",
+    href: "/docs/developers#integrations",
   },
   {
     title: "Response model",
@@ -67,7 +74,7 @@ export const docsSearchItems: DocsSearchItem[] = [
   {
     title: "API reference",
     description:
-      "Endpoints, HTTP states, OpenAPI, JSON Schemas, and integration examples.",
+      "Endpoints, token detail paths, query parameters, HTTP states, OpenAPI, JSON Schemas, and examples.",
     href: "/docs/developers#reference",
   },
   {
