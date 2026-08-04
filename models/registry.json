@@ -1,7 +1,7 @@
 {
   "$schema": "./schema/registry.schema.json",
   "schemaVersion": 1,
-  "updatedAt": "2026-07-31",
+  "updatedAt": "2026-08-04",
   "statuses": [
     "design",
     "candidate",

@@ -1,0 +1,325 @@
+{
+  "fixtureVersion": 1,
+  "id": "managed-usdc-quote",
+  "name": "managed USDC quote asset fails closed, then reaches high-risk review",
+  "description": "A v4 pool using an issuer-controlled quote asset must resolve issuer, legal, router and unwind facts and integrate the mandatory Programmable volume fee. It is not Uniswap's official permissioned-pool architecture and makes no issuer, routing or availability approval claim.",
+  "steps": [
+    {
+      "id": "missing-trust-facts",
+      "patch": {
+        "model": {
+          "id": "managed-usdc-quote-launch",
+          "name": "Managed USDC Quote Launch",
+          "summary": "Launch one USDC-quoted canonical pool while making the quote asset's issuer controls and unwind limits explicit.",
+          "userOutcome": "A participant can trade the launched token against USDC with visible issuer, routing and unwind dependencies.",
+          "category": "permissioned-asset",
+          "whyV4": "An afterSwap hook records canonical-pool activity without changing core settlement or pretending to override USDC issuer controls."
+        },
+        "assets": [
+          {
+            "id": "usdc",
+            "role": "quote",
+            "origin": "existing-erc20",
+            "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "decimals": 6,
+            "decimalsSource": "issuer-documentation",
+            "supplyPolicy": "externally-managed",
+            "initialSupply": null,
+            "behaviors": [
+              "blacklistable",
+              "upgradeable"
+            ],
+            "controls": [
+              "Issuer may block addresses under the USDC terms",
+              "USDC implementation is issuer-administered"
+            ]
+          },
+          {
+            "id": "launched-token",
+            "role": "launched",
+            "origin": "new-fixed-supply",
+            "address": null,
+            "decimals": 18,
+            "decimalsSource": "implementation-constant",
+            "supplyPolicy": "fixed-at-creation",
+            "initialSupply": "1000000000000000000000000000",
+            "behaviors": [
+              "standard"
+            ],
+            "controls": []
+          }
+        ],
+        "pool": {
+          "currency0": "usdc",
+          "currency1": "launched-token",
+          "orderingRule": "Mine the launched-token CREATE2 salt so its predicted address sorts after the documented USDC address; otherwise regenerate the PoolKey before implementation."
+        },
+        "hook": {
+          "used": true,
+          "permissions": {
+            "beforeSwap": false,
+            "afterSwap": true
+          },
+          "callbackPolicies": [
+            {
+              "callback": "afterSwap",
+              "necessity": "The hook records one pool-scoped aggregate only after a completed USDC swap.",
+              "allowedReverts": "Only invalid PoolId admission or an atomic storage failure may revert the complete action.",
+              "userExitImpact": "This callback does not govern swaps, claims or liquidity removal.",
+              "noSelfCallImpact": "The model initiates no nested PoolManager or router action."
+            }
+          ],
+          "hookData": {
+            "used": false,
+            "schema": null,
+            "identitySource": null,
+            "trustedRouterDeploymentRecordId": null,
+            "callbackSenderRule": null,
+            "validation": null
+          }
+        },
+        "authorities": [
+          {
+            "role": "USDC issuer administration",
+            "controller": "Circle-administered roles at the declared Ethereum USDC contract",
+            "capabilities": [
+              "blacklist USDC addresses",
+              "upgrade the USDC implementation"
+            ],
+            "mutable": true,
+            "delay": "No Programmable-controlled delay is assumed.",
+            "userExitImpact": "Issuer action can make a USDC swap or liquidity removal fail even when the hook remains available."
+          }
+        ],
+        "integration": {
+          "routerGeneration": null,
+          "routerDependencyId": null,
+          "events": [
+            "SwapAggregateUpdated(bytes32 indexed poolId,uint256 swapCount)"
+          ]
+        },
+        "capabilities": {
+          "permissionedAsset": {
+            "used": true,
+            "officialUniswapPermissionedPool": false,
+            "issuer": null,
+            "jurisdiction": "USDC issuer terms and each participant's applicable law govern eligibility; the pool makes no universal jurisdiction claim.",
+            "legalDocuments": [],
+            "underlyingClaim": "USDC redemption rights remain subject to Circle terms and account eligibility; pairing does not create a claim on the launched token.",
+            "custodian": "USDC reserve and redemption arrangements remain Circle dependencies and are never represented as Programmable custody.",
+            "adapter": null,
+            "hooks": "The immutable v4 hook records aggregate activity and never overrides USDC transfer controls.",
+            "positionManager": "The standard v4 PositionManager remains authoritative; this proposal adds no privileged position-transfer path.",
+            "swapEligibility": "The hook adds no allowlist; USDC transfers remain subject to issuer controls, account status, terms and applicable law.",
+            "liquidityEligibility": "The hook adds no liquidity allowlist; USDC transfer controls can still make addition or removal fail.",
+            "positionTransferability": "The hook adds no position restriction and does not claim that transfer changes USDC terms or issuer controls.",
+            "pauseFreezeUnwind": null,
+            "redemption": "USDC redemption is exclusively subject to Circle terms; the launched token has no issuer redemption promise.",
+            "routingLimitations": null
+          }
+        },
+        "operations": {
+          "monitoring": "Alert on USDC transfer failures, issuer-control events and changes to the declared USDC implementation.",
+          "incidentResponse": "Stop presenting new routes when issuer or runtime checks fail; preserve all hook-layer exit paths and disclose issuer limits."
+        },
+        "risk": {
+          "dimensions": {
+            "complexity": 2,
+            "customMath": 0,
+            "externalDependencies": 2,
+            "externalLiquidity": 0,
+            "valueAtRisk": 3,
+            "teamMaturity": 1,
+            "upgradeability": 1,
+            "autonomy": 0,
+            "priceImpact": 0
+          },
+          "rationales": {
+            "complexity": "Issuer controls, router binding and a two-asset failure matrix expand the standard launch path.",
+            "customMath": "The hook uses no custom price curve, fee formula or return-delta arithmetic.",
+            "externalDependencies": "Trading depends on USDC issuer controls and one exact router generation.",
+            "externalLiquidity": "The hook holds no external inventory, vault share, PoolManager claim or beneficiary balance.",
+            "valueAtRisk": "Issuer controls or transfer failure can interrupt a pool containing user and LP value.",
+            "teamMaturity": "A conservative nonzero process score remains until legal and security reviews are complete.",
+            "upgradeability": "The quote token is an upgradeable issuer dependency even though the hook and launched token are immutable.",
+            "autonomy": "No keeper, oracle or autonomous parameter can alter pool behavior.",
+            "priceImpact": "The observer does not change core price math, LP fees or settlement deltas."
+          },
+          "declaredTotal": 9,
+          "declaredTier": "high",
+          "featureTriggers": [
+            "permissioned-asset",
+            "upgradeable"
+          ]
+        },
+        "disclosures": [
+          "This is a standard v4 pool with a managed quote asset, not Uniswap's Permissions Adapter, PermissionedHooks and Permissioned Position Manager architecture.",
+          "This proposal is not issuer approval, legal approval, routing approval or evidence that the pool is available.",
+          "Circle does not provide or endorse this pool; Circle remains only the external USDC issuer dependency.",
+          "USDC pause, blacklist or upgrade behavior can interrupt swaps and may also prevent an otherwise standard unwind."
+        ]
+      },
+      "expected": {
+        "decision": "REDESIGN_REQUIRED",
+        "hookPermissionMask": "0x0040",
+        "risk": {
+          "score": 9,
+          "baseTier": "medium",
+          "effectiveTier": "high",
+          "featureTriggers": [
+            "permissioned-asset",
+            "upgradeable"
+          ]
+        },
+        "findingKeys": [
+          "blocker|PERMISSIONED_ASSET_LEGAL_DOCUMENTS_MISSING|$.capabilities.permissionedAsset.legalDocuments",
+          "blocker|PERMISSIONED_ASSET_PROFILE_INCOMPLETE|$.capabilities.permissionedAsset.adapter",
+          "blocker|PERMISSIONED_ASSET_PROFILE_INCOMPLETE|$.capabilities.permissionedAsset.issuer",
+          "blocker|PERMISSIONED_ASSET_PROFILE_INCOMPLETE|$.capabilities.permissionedAsset.pauseFreezeUnwind",
+          "blocker|PERMISSIONED_ASSET_PROFILE_INCOMPLETE|$.capabilities.permissionedAsset.routingLimitations",
+          "blocker|PROGRAMMABLE_FEE_INTEGRATION_PENDING|$.programmableFee.collection.status",
+          "blocker|ROUTER_GENERATION_UNRESOLVED|$.integration.routerGeneration",
+          "warning|ASSET_SPECIAL_BEHAVIOR|$.assets[0].behaviors",
+          "warning|BUILDER_FIELD_PENDING|$.builder.contact",
+          "warning|BUILDER_FIELD_PENDING|$.builder.github",
+          "warning|BUILDER_FIELD_PENDING|$.builder.licenseDeclaration"
+        ],
+        "gateKeys": [
+          "candidate|human-economic-and-security-review",
+          "candidate|independent-security-review-one",
+          "candidate|permissioned-asset-legal-and-trust-review",
+          "candidate|permissioned-asset-trust-and-legal-profile",
+          "candidate|pinned-fork-and-current-head-smoke",
+          "candidate|privileged-authority-review",
+          "candidate|programmable-fee-architecture-review",
+          "candidate|programmable-indexer-integration-review",
+          "candidate|programmable-integration-test-review",
+          "candidate|programmable-registry-integration-review",
+          "candidate|programmable-ui-integration-review",
+          "candidate|upgrade-storage-and-authority-review",
+          "external|independent-routing-provider-approval",
+          "prototype|adversarial-token-tests",
+          "prototype|callback-authentication-and-permission-mask",
+          "prototype|callback-selector-return-length-and-self-call-tests",
+          "prototype|event-reorg-backfill-freshness-tests",
+          "prototype|format-build-size-warnings",
+          "prototype|static-analysis",
+          "prototype|unit-integration-fuzz-invariant-tests",
+          "release|independent-security-review-two",
+          "release|monitoring-and-lifecycle-evidence",
+          "release|production-anomaly-monitoring",
+          "release|public-bug-bounty",
+          "release|runtime-source-config-verification"
+        ]
+      }
+    },
+    {
+      "id": "trust-facts-complete",
+      "patch": {
+        "dependencies": {
+          "onchain": [
+            {
+              "id": "universal-router-2-2-ethereum",
+              "name": "Uniswap Universal Router 2.2",
+              "kind": "swap router",
+              "repository": "https://github.com/Uniswap/universal-router.git",
+              "revision": "020e1b786ad9a6bad924874752167934734ad1e1",
+              "packageVersion": "2.2.0",
+              "license": "GPL-3.0",
+              "sourceProvenance": "pinned-source",
+              "deploymentRecordId": "universal-router-universalrouter-v2-2-ethereum",
+              "chainAddress": "0xCb640A86855f1A828c27241bA364348de28abe66",
+              "runtimeHash": null,
+              "deploymentEvidencePath": null,
+              "trust": "The proposal pairs an exact source candidate with the committed deployment record; a prototype must prove source and runtime identity before execution.",
+              "failure": "A missing or mismatched router record blocks route preparation before any transaction is produced.",
+              "fallback": "No silent router fallback is allowed; select and review another exact generation."
+            }
+          ]
+        },
+        "integration": {
+          "routerGeneration": "V2_2_0",
+          "routerDependencyId": "universal-router-2-2-ethereum"
+        },
+        "capabilities": {
+          "permissionedAsset": {
+            "issuer": "Circle Internet Financial or the applicable Circle USDC issuer under the linked USDC terms.",
+            "legalDocuments": [
+              "https://www.circle.com/legal/usdc-terms",
+              "https://developers.circle.com/stablecoins/usdc-contract-addresses"
+            ],
+            "adapter": "No currency adapter is used: the PoolKey contains the documented Ethereum USDC contract and the hook adds no eligibility layer.",
+            "pauseFreezeUnwind": "On USDC pause, blocklist or transfer failure, new routes fail closed. The hook never blocks removal, but it cannot promise completion when USDC itself rejects transfer; no rescue path bypasses issuer controls.",
+            "routingLimitations": "Only the exact Universal Router 2.2 record is encoded. Quotes and transactions surface issuer controls, final-delta bounds and USDC transfer failure; no routing provider approval is claimed."
+          }
+        },
+        "launchLifecycle": {
+          "dependencyFailure": {
+            "actor": "A trader or liquidity provider encounters a USDC or router dependency failure.",
+            "valueFlow": "The complete action reverts before partial settlement and no hook balance is created.",
+            "custody": "The hook never receives USDC or launched tokens during a failed dependency call.",
+            "failure": "New routes fail closed; removal remains ungated by the hook but still depends on USDC transfer liveness.",
+            "event": "The application records the failed dependency class offchain without claiming an onchain lifecycle transition.",
+            "notApplicableReason": null
+          },
+          "retirement": {
+            "actor": "The application stops offering new routes when issuer terms, controls or runtime identity assumptions change.",
+            "valueFlow": "Existing positions keep the standard PoolManager removal path; no migration or redemption is promised.",
+            "custody": "Neither the hook nor application takes custody during retirement.",
+            "failure": "USDC issuer controls may still prevent transfer, and the interface must disclose that external limitation.",
+            "event": "A versioned registry status marks the model retired for new launches without claiming the pool is closed.",
+            "notApplicableReason": null
+          }
+        }
+      },
+      "expected": {
+        "decision": "REDESIGN_REQUIRED",
+        "hookPermissionMask": "0x0040",
+        "risk": {
+          "score": 9,
+          "baseTier": "medium",
+          "effectiveTier": "high",
+          "featureTriggers": [
+            "permissioned-asset",
+            "upgradeable"
+          ]
+        },
+        "findingKeys": [
+          "blocker|PROGRAMMABLE_FEE_INTEGRATION_PENDING|$.programmableFee.collection.status",
+          "warning|ASSET_SPECIAL_BEHAVIOR|$.assets[0].behaviors",
+          "warning|BUILDER_FIELD_PENDING|$.builder.contact",
+          "warning|BUILDER_FIELD_PENDING|$.builder.github",
+          "warning|BUILDER_FIELD_PENDING|$.builder.licenseDeclaration"
+        ],
+        "gateKeys": [
+          "candidate|human-economic-and-security-review",
+          "candidate|independent-security-review-one",
+          "candidate|permissioned-asset-legal-and-trust-review",
+          "candidate|permissioned-asset-trust-and-legal-profile",
+          "candidate|pinned-fork-and-current-head-smoke",
+          "candidate|privileged-authority-review",
+          "candidate|programmable-fee-architecture-review",
+          "candidate|programmable-indexer-integration-review",
+          "candidate|programmable-integration-test-review",
+          "candidate|programmable-registry-integration-review",
+          "candidate|programmable-ui-integration-review",
+          "candidate|upgrade-storage-and-authority-review",
+          "external|independent-routing-provider-approval",
+          "prototype|adversarial-token-tests",
+          "prototype|callback-authentication-and-permission-mask",
+          "prototype|callback-selector-return-length-and-self-call-tests",
+          "prototype|dependency-failure-tests",
+          "prototype|event-reorg-backfill-freshness-tests",
+          "prototype|format-build-size-warnings",
+          "prototype|static-analysis",
+          "prototype|unit-integration-fuzz-invariant-tests",
+          "release|independent-security-review-two",
+          "release|monitoring-and-lifecycle-evidence",
+          "release|production-anomaly-monitoring",
+          "release|public-bug-bounty",
+          "release|runtime-source-config-verification"
+        ]
+      }
+    }
+  ]
+}

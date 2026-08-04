@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:runtime-assets:1",
+  "title": "Programmable runtime asset manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schemaVersion", "assets"],
+  "properties": {
+    "$schema": { "const": "urn:programmable:runtime-assets:1" },
+    "schemaVersion": { "const": 1 },
+    "assets": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "source", "repositoryPath", "externalUri", "gitBlob", "sha256", "mime", "bytes", "load", "license", "provenance"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+          "source": { "enum": ["repository", "external"] },
+          "repositoryPath": { "type": ["string", "null"], "minLength": 1, "maxLength": 1024 },
+          "externalUri": { "type": ["string", "null"], "minLength": 1, "maxLength": 1024 },
+          "gitBlob": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40}$" },
+          "sha256": { "type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$" },
+          "mime": { "type": "string", "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]{0,126}/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}$" },
+          "bytes": { "type": "integer", "minimum": 1, "maximum": 512000000 },
+          "load": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["phase", "mechanism", "reference", "integrityEnforced", "failureBehavior"],
+            "properties": {
+              "phase": { "enum": ["static-preload", "runtime-on-demand", "level-on-demand", "streamed", "offline-build-only"] },
+              "mechanism": { "enum": ["bundled-copy", "http-fetch", "cdn-fetch", "ipfs-fetch", "map-provider", "sdk-resolver", "other-reviewed"] },
+              "reference": { "type": "string", "minLength": 1, "maxLength": 1024 },
+              "integrityEnforced": { "type": ["boolean", "null"] },
+              "failureBehavior": { "type": "string", "minLength": 1, "maxLength": 1024 }
+            }
+          },
+          "license": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["status", "expression", "evidencePath", "url"],
+            "properties": {
+              "status": { "enum": ["declared", "review-required", "not-applicable-generated"] },
+              "expression": { "type": ["string", "null"], "minLength": 1, "maxLength": 300 },
+              "evidencePath": { "type": ["string", "null"], "minLength": 1, "maxLength": 1024 },
+              "url": { "type": ["string", "null"], "minLength": 1, "maxLength": 1024 }
+            }
+          },
+          "provenance": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "source", "creator", "evidencePath"],
+            "properties": {
+              "kind": { "enum": ["builder-created", "third-party-licensed", "public-domain", "procedurally-generated", "provider-supplied", "other-reviewed"] },
+              "source": { "type": "string", "minLength": 1, "maxLength": 1024 },
+              "creator": { "type": ["string", "null"], "minLength": 1, "maxLength": 300 },
+              "evidencePath": { "type": ["string", "null"], "minLength": 1, "maxLength": 1024 }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "1.0.0",
+  "observedOn": "2026-08-01",
+  "repository": "https://github.com/Uniswap/uniswap-ai.git",
+  "commit": "9660491dc662fea76c2f8565c2f7ba2abf6e8840",
+  "license": "MIT",
+  "purpose": "Official primary-source observations used to align framework shape and construct independent adversarial cases.",
+  "files": [
+    {
+      "path": "evals/promptfoo.yaml",
+      "gitBlob": "ec2cbc7d809d3467e8a352bcd8a7a34fb19ca03a",
+      "sha256": "c0c155ac838cda092583055d30cc1e7ff64fcc9eeff5657edb63198c36625e1a",
+      "use": "Promptfoo root configuration style"
+    },
+    {
+      "path": "evals/project.json",
+      "gitBlob": "2b93dc5f570ee4698be891d438162bbd617850df",
+      "sha256": "52a70ae33d5fbee2a43efba47ccdb7d285815fef24014ee12fea7348725d9df5",
+      "use": "Nx eval project shape"
+    },
+    {
+      "path": "package.json",
+      "gitBlob": "debcff34907427a2c20d9e230409a36373e1967a",
+      "sha256": "f9a26a060affcc2b86de3cf0ba0d1c293051f3f606793cd330b7d6a4f9db4e38",
+      "use": "Reviewed Promptfoo 0.121.11 and Nx 22.0.2 tool versions"
+    },
+    {
+      "path": "evals/suites/v4-security-foundations/promptfoo.yaml",
+      "gitBlob": "7f3f986d6f3f3ddfe6d2c979fb9b0630e6a8e552",
+      "sha256": "321e711644a7ecee47e6fc65b806687598470aecfad8279b2eed893d48497f45",
+      "use": "Skill-context and rubric evaluation pattern"
+    },
+    {
+      "path": "evals/suites/v4-security-foundations/prompt-wrapper.txt",
+      "gitBlob": "c27bb10914276ae13bd1318b971507dcb8d5f2b0",
+      "sha256": "6db18572f4d52ea3ad6482e1429e238890ea61c943d442299b5ce9cb65a30ccd",
+      "use": "Prompt isolation and context injection pattern"
+    },
+    {
+      "path": "packages/plugins/uniswap-hooks/skills/v4-security-foundations/SKILL.md",
+      "gitBlob": "c16f5b7faa294ce04ad6ebf47abd03db205ffc5b",
+      "sha256": "2d66ed0779a73e86dd006b474645a363e571768cc18cf663dbc915d8ec674cb4",
+      "use": "Official Uniswap v4 security concepts and NoOp coverage"
+    },
+    {
+      "path": "packages/plugins/uniswap-hooks/skills/v4-hook-generator/SKILL.md",
+      "gitBlob": "600aef46f0a68e165c66f6d5d162db4da7bbc408",
+      "sha256": "441ef1b497fa88f4bb412e56140a4a1ec2d15f3eb91bdb0b9fbede34ca9cb6e6",
+      "use": "Official permission and HookMiner guidance"
+    },
+    {
+      "path": "packages/plugins/uniswap-cca/skills/deployer/SKILL.md",
+      "gitBlob": "cf32a01ce2c9010b4bf6235c8fb7346b98c47806",
+      "sha256": "aaf51bca8983f2adebb953520779c85d34a1971fe8620927eab062d1a538e4b6",
+      "use": "Deliberately stale v1.1 CCA recommendation used as an upstream-drift regression input, never as deployment proof"
+    }
+  ]
+}

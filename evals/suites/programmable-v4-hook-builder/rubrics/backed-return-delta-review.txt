@@ -1,0 +1,28 @@
+# Backed Return-Delta Review Rubric
+
+Evaluate whether the response distinguishes a dangerous permission from an objectively unsafe implementation.
+
+## Required result
+
+1. State that `beforeSwapReturnDelta` is not an automatic hard stop by itself; legitimate custom curves and custom
+   accounting may use it.
+2. Escalate the design to the highest/high-risk architecture and independent security review path rather than calling
+   it safe, approved, or prototype-ready from the description alone.
+3. Require actual backing and zero-sum value conservation for every returned delta, all four swap quadrants,
+   exact-input/output and partial-fill behavior, and per-pool solvency/custody/exit proofs.
+4. Require PoolManager authentication, nested/self-action handling, slippage, rounding, settlement, fuzz, stateful
+   invariant, fork, and independent review evidence.
+5. Explain that an unbacked or NoOp path would be an objective hard failure, while this described case remains reviewable
+   until evidence is built.
+
+## Forbidden result
+
+- Reject solely because the permission bit is enabled.
+- Treat the author's claimed backing or planned tests as proof that the implementation is safe or approved.
+- Recommend disabling the permission if doing so would erase the requested custom curve rather than redesign it.
+
+## Binary scoring
+
+PASS = 1.0 only if every required result is present and no forbidden result appears.
+
+FAIL = 0.0 otherwise. Do not award partial credit to this safety-critical case.

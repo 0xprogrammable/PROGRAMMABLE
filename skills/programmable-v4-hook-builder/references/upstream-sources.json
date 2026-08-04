@@ -1,0 +1,840 @@
+{
+  "schemaVersion": 2,
+  "snapshotDate": "2026-08-01",
+  "observedAt": "2026-08-01T04:07:25Z",
+  "driftPolicy": {
+    "organization": "Uniswap",
+    "repositoryNamePatterns": [
+      "^v4-",
+      "hook",
+      "uniroute",
+      "onchain-router",
+      "^ignite$"
+    ],
+    "ignoreArchivedRepositories": true
+  },
+  "programmableTestedBaseline": [
+    {
+      "name": "Uniswap v4 Core",
+      "repository": "https://github.com/Uniswap/v4-core.git",
+      "commit": "59d3ecf53afa9264a16bba0e38f4c5d2231f80bc"
+    },
+    {
+      "name": "Uniswap v4 Periphery",
+      "repository": "https://github.com/Uniswap/v4-periphery.git",
+      "commit": "ad04c9f24a170accf5ea1b2836bbafd514537ca6"
+    },
+    {
+      "name": "Uniswap Liquidity Launcher",
+      "repository": "https://github.com/Uniswap/liquidity-launcher.git",
+      "commit": "e4660afe4f820f4a39181c7ea1f9bce6c423499f"
+    },
+    {
+      "name": "Uniswap UERC20 Factory",
+      "repository": "https://github.com/Uniswap/uerc20-factory.git",
+      "commit": "6f18f1cdf80dc173d33d3cd6bbe91ee52c314f68"
+    },
+    {
+      "name": "OpenZeppelin Uniswap Hooks",
+      "repository": "https://github.com/OpenZeppelin/uniswap-hooks.git",
+      "commit": "26dc8e53f812a1ca390d470342adb6cd8c3286ad"
+    },
+    {
+      "name": "OpenZeppelin Contracts",
+      "repository": "https://github.com/OpenZeppelin/openzeppelin-contracts.git",
+      "commit": "21c8312b022f495ebe3621d5daeed20552b43ff9"
+    },
+    {
+      "name": "Permit2",
+      "repository": "https://github.com/Uniswap/permit2.git",
+      "commit": "cc56ad0f3439c502c246fc5cfcc3db92bb8b7219"
+    },
+    {
+      "name": "Forge Standard Library",
+      "repository": "https://github.com/foundry-rs/forge-std.git",
+      "commit": "3b20d60d14b343ee4f908cb8079495c07f5e8981"
+    }
+  ],
+  "openZeppelinProfiles": {
+    "policy": "These are reproducible package candidates for isolated new-model or dependency-upgrade work. They do not replace or rewrite the Programmable-tested baseline.",
+    "stable": {
+      "status": "npm latest and GitHub latest release",
+      "package": {
+        "name": "@openzeppelin/uniswap-hooks",
+        "version": "1.1.1",
+        "integrity": "sha512-DI5lNlNsWCcSbEGdc2SCmxpkAAjlnwf4a1MQcpPEO6kRi1OQUZwYwGG/n379wJdrcj5n0/z7uhZ/wWetG92lrQ==",
+        "tarball": "https://registry.npmjs.org/@openzeppelin/uniswap-hooks/-/uniswap-hooks-1.1.1.tgz"
+      },
+      "verifiedSource": {
+        "repository": "https://github.com/OpenZeppelin/uniswap-hooks.git",
+        "commit": "a5f831963087d44a857ec41ddff4da01949f38ff",
+        "srcTree": "cc1f2d1788c1baf1521f3876521c33af28a86eb7"
+      },
+      "exactDependencyResolution": [
+        {
+          "name": "@openzeppelin/contracts",
+          "version": "5.5.0",
+          "integrity": "sha512-R8hq4zmKKWP2c7OxeRgAcjZwvF5W0Qq2OIX7degrtdM52Q9xYr4MLJdUAVPKGUewNJ1qo+M6YiZLLnNUnjP/gg=="
+        },
+        {
+          "name": "@uniswap/v4-core",
+          "version": "1.0.2",
+          "integrity": "sha512-X15Tm2wWd+USAzEExMbo+g9naA6QN6mPgWm0MzDwRNlOfaNlepfUpSyt9RSrUfEODspwbyWbcLg6t5nwc/e7lg=="
+        },
+        {
+          "name": "@uniswap/v4-periphery",
+          "version": "1.0.3",
+          "integrity": "sha512-JxLL0Djv9XcMvI2PatEnWrCrxuEaYNVhHxstndBOP+aJfh1XLg5ec8SDZ0xyoVfg2ElJTvuKpBgnu90bNValsg=="
+        }
+      ],
+      "notIncluded": [
+        "BaseHookFee",
+        "ReHypothecationHook",
+        "BaseOracleHook",
+        "OracleHookWithV3Adapters"
+      ]
+    },
+    "preview": {
+      "status": "npm dev and GitHub pre-release",
+      "package": {
+        "name": "@openzeppelin/uniswap-hooks",
+        "version": "1.2.1",
+        "integrity": "sha512-x8mOuXtiHX3uOutu+v3VFYVyaC/R2nQ9EJNoV21+c1YsJMx0LNdyIbKb5Xm3hDfWrAeRKwqA9eMff7S+ZvPMDg==",
+        "tarball": "https://registry.npmjs.org/@openzeppelin/uniswap-hooks/-/uniswap-hooks-1.2.1.tgz"
+      },
+      "verifiedSource": {
+        "repository": "https://github.com/OpenZeppelin/uniswap-hooks.git",
+        "commit": "12048bb17b93ad9ed683aff9c34b89596280c77d",
+        "srcTree": "14e4e6843b27d5b914341938d71406636a4a8bd8"
+      },
+      "directLibraryExactDependencyResolution": [
+        {
+          "name": "@openzeppelin/contracts",
+          "version": "5.5.0",
+          "integrity": "sha512-R8hq4zmKKWP2c7OxeRgAcjZwvF5W0Qq2OIX7degrtdM52Q9xYr4MLJdUAVPKGUewNJ1qo+M6YiZLLnNUnjP/gg=="
+        },
+        {
+          "name": "@uniswap/v4-core",
+          "version": "1.0.2",
+          "integrity": "sha512-X15Tm2wWd+USAzEExMbo+g9naA6QN6mPgWm0MzDwRNlOfaNlepfUpSyt9RSrUfEODspwbyWbcLg6t5nwc/e7lg=="
+        },
+        {
+          "name": "@uniswap/v4-periphery",
+          "version": "1.0.3",
+          "integrity": "sha512-JxLL0Djv9XcMvI2PatEnWrCrxuEaYNVhHxstndBOP+aJfh1XLg5ec8SDZ0xyoVfg2ElJTvuKpBgnu90bNValsg=="
+        }
+      ],
+      "reviewTier": "Preview-only bases and specialized hooks require a stricter model-specific review and cannot inherit a stable or audited label."
+    },
+    "gitTagWarning": {
+      "doNotPinByTag": true,
+      "reason": "The similarly named official tags do not identify the npm artifacts with the same declared version.",
+      "refs": [
+        {
+          "ref": "refs/tags/v1.1.1",
+          "commit": "bd5287c4a9f5c22c2393f7587a9b357662916115",
+          "declaredPackageVersion": "1.2.1",
+          "srcTree": "14e4e6843b27d5b914341938d71406636a4a8bd8"
+        },
+        {
+          "ref": "refs/tags/v1.2.1",
+          "commit": "acbd604c409a827f7f98c9517236da860c4fca1a",
+          "declaredPackageVersion": "1.2.0",
+          "srcTree": "14e4e6843b27d5b914341938d71406636a4a8bd8"
+        }
+      ]
+    },
+    "generatorTools": {
+      "source": {
+        "repository": "https://github.com/OpenZeppelin/contracts-wizard.git",
+        "commit": "90100ee0ca18f44c08ef2071f489d68265b35981"
+      },
+      "packages": [
+        {
+          "name": "@openzeppelin/contracts-cli",
+          "version": "0.1.3",
+          "integrity": "sha512-lrFm9QzCCO9ZSLI6WkYk47KsO3H6Mjkly1InMy4adz7VwlEDs8igAFB86/4Xt5nrekpEl5e0CfvSR9pdta36tw==",
+          "license": "AGPL-3.0-only"
+        },
+        {
+          "name": "@openzeppelin/contracts-mcp",
+          "version": "0.5.10",
+          "integrity": "sha512-/O00rKABjMZQOFuA1MGgMVAp6Lb4NcRMyndkk7xWIcL4oHfSsTxhxfOjltxa+JanKT7QX1seE9A9Gx+Z085V2Q==",
+          "license": "AGPL-3.0-only"
+        },
+        {
+          "name": "@openzeppelin/wizard-uniswap-hooks",
+          "version": "0.1.1",
+          "integrity": "sha512-5a6VG3+e24jlXMI0KpPxuyfEjAXMYeUGo1a37+p+HDGZn9b+VO89SfkDcwo/4MxM8hjYdeLTnVtZIhSkw6HiDQ==",
+          "license": "AGPL-3.0-only"
+        }
+      ],
+      "toolName": "uniswap-hooks",
+      "hookPackageVersion": "1.2.1",
+      "exactContractsResolution": {
+        "name": "@openzeppelin/contracts",
+        "version": "5.6.0",
+        "integrity": "sha512-eZJSS8+RbWzX/7oDJPi+lYzfeuWwHXSsw336Yff35pTkmLEwRWKde2PQMW2objjMi1C1hNn9QiHjGktEJPSSWQ=="
+      },
+      "usePolicy": "Invoke the exact pinned package only as a scaffold generator. Do not copy or modify AGPL tooling code. Remove all TODO behavior and review permissions, access control, pausing, accounting, and lifecycle semantics before acceptance."
+    },
+    "baseHookFeeConstraints": {
+      "availability": "Preview profile only",
+      "feeType": "Hook-owned fee independent of the pool LP fee",
+      "feeCurrency": "The swap's unspecified currency, not a guaranteed ETH or quote asset",
+      "requiredQuadrants": [
+        "zeroForOne exact-input",
+        "zeroForOne exact-output",
+        "oneForZero exact-input",
+        "oneForZero exact-output"
+      ],
+      "maximumInBase": "100%; every accepted model must enforce and disclose a lower application cap",
+      "handler": "handleHookFees is application-defined and has no built-in recipient, split, beneficiary authorization, or payout policy",
+      "sharedHookRule": "Prefer one hook instance per pool. A shared hook must namespace liabilities by PoolId and prove aggregate pool and beneficiary liabilities do not exceed the corresponding ERC-6909 claim balance or redeemable underlying."
+    },
+    "auditClaims": {
+      "allowedWording": "Uses OpenZeppelin Uniswap Hooks primitives from the pinned release.",
+      "forbiddenWithoutExactReviewEvidence": "Audited by OpenZeppelin.",
+      "scopeRule": "Historical reports cover only their named commits and files, not later packages, derived code, configuration, deployment, or lifecycle behavior.",
+      "historicalReports": [
+        {
+          "name": "OpenZeppelin Uniswap Hooks v1.0.0 RC 1 Audit",
+          "reviewedCommit": "1db96464698ee567521bd2dd65833ff1e1864ac7",
+          "url": "https://github.com/OpenZeppelin/uniswap-hooks/blob/26dc8e53f812a1ca390d470342adb6cd8c3286ad/audits/OpenZeppelin%20Uniswap%20Hooks%20v1.0.0%20RC%201%20Audit.pdf"
+        },
+        {
+          "name": "OpenZeppelin Uniswap Hooks v1.1.0 RC 1 Audit",
+          "reviewedCommit": "087974776fb7285ec844ca090eab860bd8430a11",
+          "url": "https://github.com/OpenZeppelin/uniswap-hooks/blob/26dc8e53f812a1ca390d470342adb6cd8c3286ad/audits/OpenZeppelin%20Uniswap%20Hooks%20v1.1.0%20RC%201%20Audit.pdf"
+        },
+        {
+          "name": "OpenZeppelin Uniswap Hooks v1.1.0 RC 2 Audit",
+          "reviewedCommit": "3e9fa228ec0f7fe05a95e09e25442466b459a712",
+          "fixCommit": "67ddcdf5182e777389a63f7a7b1c7095dda966c6",
+          "url": "https://github.com/OpenZeppelin/uniswap-hooks/blob/26dc8e53f812a1ca390d470342adb6cd8c3286ad/audits/OpenZeppelin%20Uniswap%20Hooks%20v1.1.0%20RC%202%20Audit.pdf"
+        }
+      ],
+      "notCoveredByV1_1Rc2": [
+        "BaseHookFee",
+        "ReHypothecationHook",
+        "BaseOracleHook",
+        "OracleHookWithV3Adapters"
+      ]
+    }
+  },
+  "observedOfficialFeeds": [
+    {
+      "name": "Uniswap Trading API OpenAPI",
+      "url": "https://trade-api.gateway.uniswap.org/v1/api.json",
+      "observedAt": "2026-08-01T04:07:25Z",
+      "sha256": "f8be75871fc23c2036bc12633bbd5d74faadb325b29a2e7cdaa57b6a38ec994c",
+      "classification": "public-api-contract-reference",
+      "license": null,
+      "note": "Use only public operations and fields. Any item marked x-internal true is outside the public contract. An API response is not routing approval or onchain execution evidence."
+    },
+    {
+      "name": "Uniswap Deployments Feed",
+      "url": "https://developers.uniswap.org/deployments.json",
+      "observedAt": "2026-08-01T04:07:25Z",
+      "generatedAt": "2026-07-15T22:25:40.000Z",
+      "sha256": "225d2c77b3b53a9c9c1a8663359577bd1f52ed0c139e10e7ee846687959282d2",
+      "classification": "official-deployment-record-feed",
+      "source": {
+        "repository": "https://github.com/Uniswap/contracts.git",
+        "commit": "37936185dee7decf681360ec799c124e0e034672"
+      },
+      "license": null,
+      "note": "An address record still needs chain, active version, source resolution, runtime bytecode, and interface verification."
+    }
+  ],
+  "observedOfficialSources": [
+    {
+      "name": "Uniswap v4 Core",
+      "repository": "https://github.com/Uniswap/v4-core.git",
+      "defaultBranch": "main",
+      "trackedRef": "refs/heads/main",
+      "commit": "46c6834698c48bc4a463a86d8420f4eb1d7f3b75",
+      "commitTimestamp": "2026-04-02T19:42:06Z",
+      "archived": false,
+      "classification": "observed-core-source-head",
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true,
+      "note": "Observed current upstream. Do not mix with the tested baseline without migration review."
+    },
+    {
+      "name": "Uniswap v4 Periphery",
+      "repository": "https://github.com/Uniswap/v4-periphery.git",
+      "defaultBranch": "main",
+      "trackedRef": "refs/heads/main",
+      "commit": "3245c3cb99c48fa1dc2459c3b60abc37d4294aba",
+      "commitTimestamp": "2026-07-13T18:34:41Z",
+      "archived": false,
+      "license": "MIT",
+      "classification": "observed-periphery-source-head",
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true,
+      "dependencyEdges": [
+        {
+          "repository": "https://github.com/Uniswap/v4-core.git",
+          "commit": "59d3ecf53afa9264a16bba0e38f4c5d2231f80bc"
+        }
+      ],
+      "note": "BaseHook and HookMiner are no longer located here; its pinned core differs from the observed v4-core head."
+    },
+    {
+      "name": "Uniswap v4 Hooks Public",
+      "repository": "https://github.com/Uniswap/v4-hooks-public.git",
+      "defaultBranch": "main",
+      "trackedRef": "refs/heads/main",
+      "commit": "7da5210f2c81a700820a6b4f585264233d91f349",
+      "commitTimestamp": "2026-07-29T14:44:12Z",
+      "archived": false,
+      "license": "MIT",
+      "classification": "observed-hook-base-source-head",
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true,
+      "dependencyEdgeSource": "repository-gitlinks-at-observed-commit",
+      "dependencyEdges": [
+        { "repository": "https://github.com/Uniswap/v4-core.git", "commit": "d153b048868a60c2403a3ef5b2301bb247884d46" },
+        { "repository": "https://github.com/Uniswap/v4-periphery.git", "commit": "76c1891c481cebb4ff58f262473303f01a2d7393" }
+      ],
+      "foundryLockRecords": [
+        { "repository": "https://github.com/Uniswap/v4-core.git", "commit": "d153b048868a60c2403a3ef5b2301bb247884d46" },
+        { "repository": "https://github.com/Uniswap/v4-periphery.git", "commit": "3779387e5d296f39df543d23524b050f89a62917" }
+      ],
+      "note": "Observed official home for current BaseHook and HookMiner. The v4-periphery gitlink differs from foundry.lock, so this checkout is evidence of upstream drift, not a resolved dependency profile."
+    },
+    {
+      "name": "Uniswap Documentation",
+      "repository": "https://github.com/Uniswap/docs.git",
+      "defaultBranch": "main",
+      "trackedRef": "refs/heads/main",
+      "commit": "a0da460b1becfe920330adfab5d11f2f3f63863a",
+      "commitTimestamp": "2026-07-20T16:27:23Z",
+      "archived": false,
+      "classification": "official-documentation-reference",
+      "license": "MIT",
+      "licenseEvidence": {
+        "status": "license-file",
+        "path": "LICENSE"
+      },
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true,
+      "note": "Pins published documentation source where available. Live policy and API pages still require a dated observation because deployment can lead this repository."
+    },
+    {
+      "name": "Uniswap UniRoute Public",
+      "repository": "https://github.com/Uniswap/uniroute-public.git",
+      "defaultBranch": "main",
+      "trackedRef": "refs/heads/main",
+      "commit": "3cce57b8ad8aae7ffa72d4947c535321ada60486",
+      "commitTimestamp": "2026-07-31T18:47:04Z",
+      "archived": false,
+      "classification": "observed-offchain-routing-engine-source",
+      "license": null,
+      "licenseEvidence": {
+        "status": "readme-claim-without-license-file",
+        "readmeClaim": "MIT",
+        "repositoryMetadata": "NOASSERTION"
+      },
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true,
+      "previousObservedCommit": "beaab6050068be2efa329ce9fbcf76d3a14dabe7",
+      "note": "Public core routing logic with placeholder configuration. The reviewed successor adds Robinhood hook allowlist entries, one exact-input-only routing limitation, and configurable token-negative and block-number caches. It is not a hosted quote service, a production configuration, evidence that those settings are deployed, or evidence that a hook is routed."
+    },
+    {
+      "name": "Uniswap Onchain Router",
+      "repository": "https://github.com/Uniswap/onchain-router.git",
+      "defaultBranch": "main",
+      "trackedRef": "refs/heads/main",
+      "commit": "b01c21e64ae899a8410df91370ab647b1ecec33a",
+      "commitTimestamp": "2026-02-17T21:56:34Z",
+      "archived": false,
+      "classification": "observed-onchain-routing-source",
+      "license": null,
+      "licenseEvidence": {
+        "status": "no-repository-license-and-mixed-file-headers",
+        "readmeClaim": "GPL-2.0-or-later",
+        "repositoryMetadata": "NOASSERTION"
+      },
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true,
+      "note": "Discovery is limited to four default unhooked configurations and a per-pair leaderboard of at most eight registered v4 pools. The observed executor passes empty hookData and its v4 quoter does not execute hook code."
+    },
+    {
+      "name": "Uniswap v4 Subgraph",
+      "repository": "https://github.com/Uniswap/v4-subgraph.git",
+      "defaultBranch": "main",
+      "trackedRef": "refs/heads/main",
+      "commit": "0c13ab2fbd95306272528ed781511d7e2aa338d3",
+      "commitTimestamp": "2026-07-26T04:08:31Z",
+      "archived": false,
+      "classification": "observed-indexer-source-head",
+      "license": "GPL-3.0",
+      "licenseEvidence": {
+        "status": "license-file",
+        "path": "LICENSE"
+      },
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true,
+      "note": "Indexes PoolManager events and derived entities. A subgraph result is discovery evidence, not quote, execution, source-verification, or routing approval evidence."
+    },
+    {
+      "name": "Uniswap Ignite",
+      "repository": "https://github.com/Uniswap/ignite.git",
+      "defaultBranch": "main",
+      "trackedRef": "refs/heads/main",
+      "commit": "77963ec737be39217c4c16284f13d621b356001f",
+      "commitTimestamp": "2026-07-28T21:40:07Z",
+      "archived": false,
+      "classification": "observed-local-deployment-tool-source",
+      "license": "MIT",
+      "licenseEvidence": {
+        "status": "license-file",
+        "path": "LICENSE"
+      },
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true,
+      "note": "Local visual deployment tooling with container plugins. Never execute it as source material or treat its self-description as deployment, verification, or review evidence."
+    },
+    {
+      "name": "UniswapX",
+      "repository": "https://github.com/Uniswap/UniswapX.git",
+      "defaultBranch": "main",
+      "trackedRef": "refs/heads/main",
+      "commit": "3f5019cf206bc2b37a47c7653f039914f93ad60d",
+      "commitTimestamp": "2026-06-23T20:07:04Z",
+      "archived": false,
+      "classification": "observed-intent-settlement-protocol-source",
+      "license": "GPL-3.0",
+      "licenseEvidence": {
+        "status": "license-file",
+        "path": "LICENSE"
+      },
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true,
+      "note": "Protocol source for signed orders and filler settlement. Permissionless filling does not grant the permissioned quoter role or make a hook eligible for Uniswap Labs routing."
+    },
+    {
+      "name": "Uniswap Routing API",
+      "repository": "https://github.com/Uniswap/routing-api.git",
+      "defaultBranch": "main",
+      "trackedRef": "refs/heads/main",
+      "commit": "f5a81893b812b6745b1f8b7fa3a55a714cb9d89b",
+      "commitTimestamp": "2026-03-19T19:15:50Z",
+      "archived": false,
+      "classification": "secondary-routing-integration-reference",
+      "license": "GPL-3.0",
+      "licenseEvidence": {
+        "status": "license-file",
+        "path": "LICENSE"
+      },
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true,
+      "note": "Contains v4 hook filtering and allowlist integration despite a v3-centered README. It is source context, not the public API contract or proof of provider configuration."
+    },
+    {
+      "name": "Uniswap Smart Order Router",
+      "repository": "https://github.com/Uniswap/smart-order-router.git",
+      "defaultBranch": "main",
+      "trackedRef": "refs/heads/main",
+      "commit": "04c7c0b4d85ac2a19a3ff53987d21f9c8f1fe647",
+      "commitTimestamp": "2026-04-02T19:57:30Z",
+      "archived": false,
+      "classification": "secondary-routing-integration-reference",
+      "license": "GPL-3.0",
+      "licenseEvidence": {
+        "status": "license-file",
+        "path": "LICENSE"
+      },
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true,
+      "note": "Contains v4 providers, subgraph providers, quoting, and hook options. Prefer UniRoute for the current public routing architecture and pin any package separately."
+    },
+    {
+      "name": "Uniswap Mixed Quoter",
+      "repository": "https://github.com/Uniswap/mixed-quoter.git",
+      "defaultBranch": "main",
+      "trackedRef": "refs/heads/main",
+      "commit": "d576527bff2e7c9db5434bb2b3806fd184610865",
+      "commitTimestamp": "2025-05-05T18:46:29Z",
+      "archived": false,
+      "classification": "mixed-route-quote-source-reference",
+      "license": "GPL-3.0",
+      "licenseEvidence": {
+        "status": "license-file",
+        "path": "LICENSE"
+      },
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true,
+      "note": "Source reference for mixed-route quoting. Bind a deployed quoter by chain, address, runtime, and version before use."
+    },
+    {
+      "name": "Uniswap Briefcase",
+      "repository": "https://github.com/Uniswap/briefcase.git",
+      "defaultBranch": "main",
+      "trackedRef": "refs/heads/main",
+      "commit": "149109751c321cf285a519c84425a8f4bfbf3d72",
+      "commitTimestamp": "2026-07-24T23:08:53Z",
+      "archived": false,
+      "classification": "integration-interface-package-reference",
+      "license": null,
+      "licenseEvidence": {
+        "status": "no-root-license-with-mixed-file-licenses",
+        "packageClaim": "MIT",
+        "repositoryMetadata": "NOASSERTION"
+      },
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true,
+      "note": "Aggregates current interfaces and test helpers from several protocols. Preserve licenses per file and use canonical repositories as authority."
+    },
+    {
+      "name": "Uniswap Continuous Clearing Auction",
+      "repository": "https://github.com/Uniswap/continuous-clearing-auction.git",
+      "defaultBranch": "main",
+      "trackedRef": "refs/heads/main",
+      "commit": "6c9e559e63a7a141a4fe4bd5aa0f47fee1354b58",
+      "commitTimestamp": "2026-07-13T15:36:23Z",
+      "archived": false,
+      "classification": "official-auction-implementation-reference",
+      "license": "MIT",
+      "licenseEvidence": {
+        "status": "license-file",
+        "path": "LICENSE"
+      },
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true,
+      "note": "Official CCA contracts, validation hooks, tests, and review artifacts. It does not make every launch model a CCA."
+    },
+    {
+      "name": "Uniswap Liquidity Launcher Current Head",
+      "repository": "https://github.com/Uniswap/liquidity-launcher.git",
+      "defaultBranch": "main",
+      "trackedRef": "refs/heads/main",
+      "commit": "e4660afe4f820f4a39181c7ea1f9bce6c423499f",
+      "archived": false,
+      "license": "MIT",
+      "classification": "observed-liquidity-launcher-source-head",
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true,
+      "note": "Observed release-documentation head. It remains distinct from the exact deployment commits in the official launchpad reference."
+    },
+    {
+      "name": "Uniswap Request for Comment Registry",
+      "repository": "https://github.com/Uniswap/URCs.git",
+      "defaultBranch": "main",
+      "trackedRef": "refs/heads/main",
+      "commit": "c8ed8f5099f32d0e016ede06a234267f0e33cab6",
+      "commitTimestamp": "2026-07-16T16:27:50Z",
+      "archived": false,
+      "classification": "uniswap-standards-registry",
+      "license": "CC0-1.0",
+      "licenseEvidence": {
+        "status": "license-file",
+        "path": "LICENSE"
+      },
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true,
+      "note": "Treat an individual URC as normative only at Final status. URC-4 Active Liquidity Framework remains Discussion at this snapshot."
+    },
+    {
+      "name": "Uniswap Hooklist",
+      "repository": "https://github.com/Uniswap/hooklist.git",
+      "defaultBranch": "main",
+      "trackedRef": "refs/heads/main",
+      "commit": "8488c73fd6042a0d37b3312e9f9b74e8d5ced71d",
+      "commitTimestamp": "2026-07-30T14:56:38Z",
+      "archived": false,
+      "classification": "registry-and-intake-reference",
+      "license": null,
+      "licenseEvidence": {
+        "status": "no-license-file",
+        "repositoryMetadata": "NOASSERTION"
+      },
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true,
+      "note": "A public registry of known hook deployments. Inclusion is not an audit, endorsement, route, or routing allowlist decision."
+    },
+    {
+      "name": "Uniswap AI",
+      "repository": "https://github.com/Uniswap/uniswap-ai.git",
+      "defaultBranch": "main",
+      "trackedRef": "refs/heads/main",
+      "commit": "9660491dc662fea76c2f8565c2f7ba2abf6e8840",
+      "commitTimestamp": "2026-07-31T22:08:37Z",
+      "archived": false,
+      "classification": "agent-guidance-reference",
+      "license": "MIT",
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true
+    },
+    {
+      "name": "Uniswap AI Toolkit",
+      "repository": "https://github.com/Uniswap/ai-toolkit.git",
+      "defaultBranch": "next",
+      "trackedRef": "refs/heads/next",
+      "commit": "9b405c71e42d0cec4026f2c158edf99716600baa",
+      "commitTimestamp": "2026-07-31T21:11:13Z",
+      "archived": false,
+      "classification": "general-agent-development-tooling-reference",
+      "license": "MIT",
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true,
+      "previousObservedCommit": "bb873ee808564ed0c917b156b651f4ddda43a4c2",
+      "note": "The default branch is next and contains general development tooling. The reviewed successor changes ai-toolkit's own GitHub pull-request review workflow and adds workflow-security and plugin-convention reviewers; it does not change protocol-specific v4 guidance, which remains in Uniswap/uniswap-ai."
+    },
+    {
+      "name": "Uniswap Foundation Hooks Security Framework",
+      "repository": "https://github.com/uniswapfoundation/security-framework.git",
+      "commit": "e7e8da52fd5717b6eb4517ea779b766f63148c41",
+      "classification": "unlicensed-security-guidance-reference",
+      "license": null,
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true
+    },
+    {
+      "name": "Agent Skills Specification",
+      "repository": "https://github.com/agentskills/agentskills.git",
+      "commit": "38a2ff82958afee88dadf4831509e6f7e9d8ef4e",
+      "classification": "agent-skill-format-specification",
+      "license": "Apache-2.0",
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true
+    },
+    {
+      "name": "Ethereum EIPs",
+      "repository": "https://github.com/ethereum/EIPs.git",
+      "commit": "05469aa96bf65b532b6239d37c1a5d8b2eca15e6",
+      "classification": "normative-core-and-interface-standards",
+      "license": "CC0-1.0",
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true
+    },
+    {
+      "name": "Ethereum ERCs",
+      "repository": "https://github.com/ethereum/ERCs.git",
+      "commit": "2bc5bccf25aa06f98644c35fc92e6bf82947cfe2",
+      "classification": "normative-erc-standards",
+      "license": "CC0-1.0",
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true
+    },
+    {
+      "name": "Ethereum Execution Specifications",
+      "repository": "https://github.com/ethereum/execution-specs.git",
+      "commit": "2384e39d17a226106a88f6ab34aad4461550ea63",
+      "classification": "executable-evm-semantics",
+      "license": "CC0-1.0",
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true
+    },
+    {
+      "name": "Solidity 0.8.26 Compiler Source",
+      "repository": "https://github.com/argotorg/solidity.git",
+      "commit": "8a97fa7a1db1ec509221ead6fea6802c684ee887",
+      "sourceTree": "4ecc702563263869217d8a42262d09bd6015f597",
+      "classification": "compiler-source-release",
+      "license": "GPL-3.0",
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true,
+      "note": "The historical ethereum/solidity URL redirects to the current official repository. Executable provenance and build-info remain separate evidence."
+    },
+    {
+      "name": "Uniswap Contracts Deployment Registry",
+      "repository": "https://github.com/Uniswap/contracts.git",
+      "defaultBranch": "main",
+      "trackedRef": "refs/heads/main",
+      "commit": "d47f0f73407c1b0b9d8959bf460a612cdc4a516e",
+      "archived": false,
+      "classification": "observed-deployment-registry-head",
+      "license": null,
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true,
+      "deploymentSnapshotSourceCommit": "37936185dee7decf681360ec799c124e0e034672",
+      "note": "The committed deployment snapshot remains bound to its feed-producing commit, not this current head. Consume registry data without copying unlicensed code or prose."
+    },
+    {
+      "name": "Uniswap SDK Monorepo",
+      "repository": "https://github.com/Uniswap/sdks.git",
+      "commit": "275572cf5257df4c60bba502504406eb0c649032",
+      "classification": "observed-monorepo-head",
+      "license": null,
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true,
+      "note": "Runtime integrations bind each package's exact version, registry integrity, declared license and release gitHead instead of treating monorepo HEAD as a package lock."
+    },
+    {
+      "name": "Uniswap Universal Router",
+      "repository": "https://github.com/Uniswap/universal-router.git",
+      "defaultBranch": "main",
+      "trackedRef": "refs/heads/main",
+      "commit": "fa3f856951967abd7e0cf33901f6cead31eb5469",
+      "archived": false,
+      "classification": "observed-router-source-head",
+      "license": "GPL-3.0",
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true,
+      "dependencyEdges": [
+        {
+          "repository": "https://github.com/Uniswap/v4-periphery.git",
+          "commit": "9dafaaecc1e2e1e824eda9d941085f96517d827b"
+        },
+        {
+          "repository": "https://github.com/Uniswap/permit2.git",
+          "commit": "cc56ad0f3439c502c246fc5cfcc3db92bb8b7219"
+        }
+      ],
+      "note": "Observed source only. A deployed router generation requires independent release, address, runtime and interface evidence."
+    },
+    {
+      "name": "Uniswap Permit2 Current Head",
+      "repository": "https://github.com/Uniswap/permit2.git",
+      "defaultBranch": "main",
+      "trackedRef": "refs/heads/main",
+      "commit": "cc56ad0f3439c502c246fc5cfcc3db92bb8b7219",
+      "archived": false,
+      "classification": "observed-permit2-source-head",
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true,
+      "note": "Observed source head only. Deployment-feed labels, runtime code and Permit2 integration remain separate evidence."
+    },
+    {
+      "name": "Uniswap v4 Template",
+      "repository": "https://github.com/Uniswap/v4-template.git",
+      "commit": "1fbf95547791f0821a170b88c750cb2e04e6818b",
+      "classification": "mechanical-foundry-scaffold-only",
+      "license": "MIT",
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true,
+      "dependencyEdges": [
+        {
+          "repository": "https://github.com/foundry-rs/forge-std.git",
+          "commit": "8bbcf6e3f8f62f419e5429a0bd89331c85c37824"
+        },
+        {
+          "repository": "https://github.com/OpenZeppelin/uniswap-hooks.git",
+          "commit": "e59fe72c110c3862eec9b332530dce49ca506bbb"
+        },
+        {
+          "repository": "https://github.com/akshatmittal/hookmate.git",
+          "commit": "33408fbc15e083eb0bc4205fa37cb6ba0a926f44"
+        }
+      ],
+      "note": "Mechanical scaffold only. Its example and mixed third-party dependency set are not a Programmable compatibility profile."
+    },
+    {
+      "name": "Uniswap Foundation Foundational Hooks",
+      "repository": "https://github.com/UniswapFoundation/foundational-hooks.git",
+      "commit": "0c62b3fb35aaaa91296df78026f221b7ffc644de",
+      "classification": "experimental-under-construction",
+      "license": "MIT",
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true
+    },
+    {
+      "name": "Uniswap Foundation Scaffold Hook",
+      "repository": "https://github.com/UniswapFoundation/scaffold-hook.git",
+      "commit": "66dddea1d5b1f099105ccbef3cbd5d8dac0322e8",
+      "classification": "obsolete-historical-scaffold",
+      "license": "MIT",
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true
+    },
+    {
+      "name": "Uniswap Foundation v4 by Example",
+      "repository": "https://github.com/UniswapFoundation/v4-by-example.git",
+      "commit": "d73984aeff43462d61c29a009e34d842bdc1bec6",
+      "classification": "educational-pre-final-concepts",
+      "license": "MIT",
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true
+    },
+    {
+      "name": "Uniswap Foundation HookRegistry",
+      "repository": "https://github.com/UniswapFoundation/HookRegistry.git",
+      "commit": "ac06ed968326d1187ed071688811658c57058722",
+      "classification": "inert-legacy-registry",
+      "license": null,
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true,
+      "note": "Superseded for current intake work by Uniswap/hooklist. Do not copy its unlicensed schema or prose."
+    },
+    {
+      "name": "Uniswap Foundation Router Rebates",
+      "repository": "https://github.com/UniswapFoundation/router-rebates.git",
+      "commit": "5e656dc19102486a1a7e7a4d36d34048e7118b9e",
+      "classification": "under-construction-research-only",
+      "license": "GPL-3.0",
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true
+    },
+    {
+      "name": "Uniswap UERC20 Factory Current Head",
+      "repository": "https://github.com/Uniswap/uerc20-factory.git",
+      "defaultBranch": "main",
+      "trackedRef": "refs/heads/main",
+      "commit": "a747318fcce114f56a3a21b8bcec83663a61208b",
+      "archived": false,
+      "license": "MIT",
+      "classification": "observed-token-factory-source-head",
+      "compatibilitySet": null,
+      "notAResolvedBaseline": true,
+      "note": "Observed drift only. The Programmable-tested baseline remains pinned to 6f18f1cdf80dc173d33d3cd6bbe91ee52c314f68."
+    }
+  ],
+  "officialLaunchpadDeploymentReference": {
+    "path": "official-launchpad-deployments.json",
+    "sha256": "ef7e12bf1312edf374749bfeb18ac41cb83623856fbfd39892606579b7119fd6",
+    "schemaVersion": 1,
+    "classification": "official-feed-and-repository-reference-runtime-unverified",
+    "failClosed": true
+  },
+  "sdkPackages": [
+    {
+      "name": "@uniswap/v4-sdk",
+      "version": "2.3.1",
+      "integrity": "sha512-RByok7qIy7B4A3z2lIru5gTxQVZcmP2wqOsmbV+bTrUkFr8ABjzan0DD/pW64x3akiUe4WnxeX/yMvnq04uBJA==",
+      "gitHead": "57f126ee4ae5d435938569ad22c489e4a0262ca2",
+      "license": "MIT"
+    },
+    {
+      "name": "@uniswap/sdk-core",
+      "version": "7.19.0",
+      "integrity": "sha512-h+WsmaPYyoi7S4Q/SzqdG1tEnVx79KhgXXN3d51SUyvTS03CSHPj9+yymlgrx2hrUQvue9S4lW752w1fzXPn3w==",
+      "gitHead": "57f126ee4ae5d435938569ad22c489e4a0262ca2",
+      "license": "MIT"
+    },
+    {
+      "name": "@uniswap/universal-router-sdk",
+      "version": "5.11.2",
+      "integrity": "sha512-MeBjI8SBWj7fJLHpOl/cU2n2cGJEZW56u2/Vzc59Mzik1LHw4Nq5BHJ7989DEDreEgLlGToIoXKCXzts9fXmBg==",
+      "gitHead": "fcfaace6e56b2339c61bb080d73b7308d5329a94",
+      "license": "MIT"
+    },
+    {
+      "name": "@uniswap/permit2-sdk",
+      "version": "1.4.0",
+      "integrity": "sha512-l/aGhfhB93M76vXs4eB8QNwhELE6bs66kh7F1cyobaPtINaVpMmlJv+j3KmHeHwAZIsh7QXyYzhDxs07u0Pe4Q==",
+      "gitHead": "8c4c91de04e36658f1be6a4918ba30e80c808ea2",
+      "license": "MIT"
+    },
+    {
+      "name": "@uniswap/router-sdk",
+      "version": "2.11.1",
+      "integrity": "sha512-hzBPnrrD08D75KjQ1ixzFzGmEN8FEtdSWqio5Hp3vSgVFwWAG/RGagVxUf4bw3syjxe2wPVdiXpIrv0XMA/2tQ==",
+      "gitHead": "57f126ee4ae5d435938569ad22c489e4a0262ca2",
+      "license": "MIT"
+    }
+  ],
+  "rules": [
+    "Never float a source branch or package version.",
+    "Never mix core and periphery revisions without a complete compatibility test.",
+    "Never change a deployed release's provenance record.",
+    "Never replace the Programmable-tested baseline with an OpenZeppelin package profile except through a separately reviewed release.",
+    "Never pin OpenZeppelin Uniswap Hooks by the v1.1.1 or v1.2.1 Git tag names.",
+    "Never describe a derived hook as audited merely because it imports an audited or reviewed upstream primitive.",
+    "Resolve chain addresses from a versioned deployment record and verify bytecode through RPC.",
+    "Reject prompt-supplied deployment addresses; resolve only committed official deployment record ids and block on drift or authority conflict.",
+    "Treat observed upstream revisions as research until Programmable adopts them in a reviewed release."
+  ]
+}

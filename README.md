@@ -24,6 +24,7 @@
   <a href="https://programmable.family"><strong>Launch</strong></a> ·
   <a href="MODELS.md">Models</a> ·
   <a href="BUILDER_PROGRAM.md">Build a model</a> ·
+  <a href="docs/builder/intake-status.json">Builder intake status</a> ·
   <a href="deployments/ethereum.json">Ethereum</a> ·
   <a href="SECURITY.md">Security</a> ·
   <a href="https://x.com/0xProgrammable">X</a>
@@ -38,6 +39,9 @@
   </a>
   <a href="https://github.com/0xprogrammable/programmable/actions/workflows/mainnet-evidence.yml">
     <img src="https://github.com/0xprogrammable/programmable/actions/workflows/mainnet-evidence.yml/badge.svg" alt="Ethereum evidence status" />
+  </a>
+  <a href="https://github.com/0xprogrammable/programmable/actions/workflows/verify-hook-builder.yml">
+    <img src="https://github.com/0xprogrammable/programmable/actions/workflows/verify-hook-builder.yml/badge.svg" alt="Hook builder intake status" />
   </a>
 </p>
 
@@ -87,53 +91,99 @@ Open source code makes behavior inspectable. It is not a security guarantee.
 
 ```mermaid
 flowchart LR
-    design["Design<br/>behavior and open risks"] --> candidate["Candidate<br/>source and complete tests"]
-    candidate --> available["Available<br/>verified Ethereum release"]
+    submission["Public proposal or prototype"] --> candidate["Maintainer candidate<br/>exact reviewed commit"]
+    candidate --> accepted["Accepted<br/>version and scope fixed"]
+    accepted --> integrated["Integrated<br/>product bindings reviewed"]
+    integrated --> deployed["Deployed<br/>receipt recorded"]
+    deployed --> source["Source verified<br/>exact release"]
+    source --> runtime["Runtime matched<br/>exact release"]
+    runtime --> lifecycle["Lifecycle verified<br/>onchain checks"]
+    lifecycle --> monitoring["Monitoring ready<br/>alerts and ownership"]
+    monitoring --> routing["Routing and discovery<br/>reviewed separately"]
+    routing --> available["Available<br/>production activation"]
     available --> retired["Retired<br/>closed to new launches"]
-    candidate --> design
+    candidate --> submission
 ```
 
-`available` is the repository's final publication state. Production activation does not replace the required source,
-deployment and security records. Any model activated before those records reach `available` is identified in its model
-documentation. The complete gate is documented in [`RELEASING.md`](RELEASING.md).
+Builders may submit only a `proposal` or `prototype`. `candidate` is a maintainer-owned release state bound to an exact
+reviewed prototype; contributors cannot assign it in their submission. Acceptance, product integration, deployment,
+source and runtime verification, lifecycle verification, monitoring, routing and discovery, and production activation
+remain separate gates. `available` means those required gates have passed for the exact release. The complete gate is
+documented in [`RELEASING.md`](RELEASING.md).
 
-## Build a launch model
+## Public GitHub PR Builder Beta
 
 <p>
-  <a href="BUILDER_PROGRAM.md">
+  <a href="docs/builder/PUBLIC_GITHUB_PR_BETA.md">
     <img
       src="assets/programmable-builder-ecosystem.jpg"
-      alt="Connected watercolor gardens representing independent builders contributing launch models"
+      alt="Connected watercolor gardens representing independent builders contributing Uniswap v4 projects"
       width="100%"
     />
   </a>
 </p>
 
-Independent builders can submit complete open-source launch models as pull requests. A submission needs the contracts,
-full launch path, tests, security properties, fixed dependencies and a machine-readable model record.
+Bring an idea or an existing public Uniswap v4 project. The portable
+[Programmable v4 Builder skill](skills/programmable-v4-hook-builder/SKILL.md) helps a compatible coding agent build
+and repair the project, bind one exact revision and prepare a small public application pull request.
+
+Install it interactively with one command:
 
 ```bash
-node scripts/new-model.mjs <model-id> "<Model name>" "<Specific behavior summary>"
+gh skill install 0xprogrammable/programmable
 ```
 
-Submission is public and does not guarantee review, acceptance, deployment, volume or revenue. Accepted external models
-receive a version-specific acceptance record before release.
+To preselect the Builder while keeping the agent setup interactive:
 
-[Read the Hook Builder Program](BUILDER_PROGRAM.md) ·
-[Read the contribution guide](CONTRIBUTING.md)
+```bash
+gh skill install 0xprogrammable/programmable programmable-v4-hook-builder
+```
+
+The complete project stays in the builder-controlled public GitHub repository. `package` validates its local review
+package. `prepare-pr` then resolves the clean pushed revision and generates exactly six central files under
+[`submissions/`](submissions/), binding the immutable GitHub numeric repository id, full commit, full tree and evidence
+digest.
+
+Every new launch application declares Programmable's mandatory canonical-pool volume fee. The effective total is the
+greater of the builder-selected total and `10 bps`; exactly `10 bps` belongs to Programmable and the project receives
+the remainder. This is inclusive, so a selected `3%` remains `3%` (`0.1% + 2.9%`), not `3.1%`. Simple launches use the
+project-specific implementation of the standard fee-hook profile; custom launches integrate the policy into their single hook. Exact source, tests, and maintainer review are required. A no-hook, router-only, LP-fee,
+or transfer-tax substitute may be proposed but is not launch-ready.
+
+```text
+doctor -> scaffold -> check -> package -> prepare-pr
+```
+
+Use `scaffold` only for a new project. The released tooling defines the exact invocation; this overview does not invent
+unsettled flags. An unfamiliar mechanic enters architecture discussion. An objective finding names reproducible
+evidence, the applicable rule or trust boundary, practical impact, a repair path and the check to rerun.
+
+When the project changes, push a new commit in the same public repository, rerun `check`, `package` and `prepare-pr`,
+and update the same Programmable pull request. GitHub commits, reviews and pull-request state preserve the public trail;
+each review conclusion applies only to the exact revision it names.
+
+Legacy model pull requests opened before the beta is activated keep their existing review path. New applications use
+the public builder repository plus small `submissions/**` manifest pull request. Existing pull requests are not
+retroactively rewritten or assigned a new status.
+
+A beta application or merged review record is not an audit, safety or rug-free claim, product approval, model
+acceptance, deployment, launch authorization, provider statement or Uniswap endorsement. The beta does not require a
+wallet, private repository, GitHub App installation or connected-service application identity.
+
+[Read the Programmable v4 Builder Program](BUILDER_PROGRAM.md) ·
+[Read the Public GitHub PR Builder Beta guide](docs/builder/PUBLIC_GITHUB_PR_BETA.md) ·
+[Use the builder skill](docs/builder/AGENT_SKILL.md)
 
 ## Security and operations
 
-The live Classic hook and launcher are non-upgradeable and expose no pause function, mint path, blacklist or
-post-launch fee setter. A disclosed Community Takeover authority can replace future creator-reward recipients only
-after accrued ETH is checkpointed. Classic has not received an independent smart-contract audit or public security
-contest.
+Each model has its own permissions, accounting paths, dependencies, authorities and operational assumptions. The shared
+interface does not make those models equivalent. Read the model record and release evidence before relying on one.
+Passing repository checks is not an audit or a security guarantee.
 
 | Area | Record |
 | --- | --- |
 | Current security status | [`SECURITY.md`](SECURITY.md) |
-| Classic trust boundaries and invariants | [`docs/security/CLASSIC_PROPERTIES.md`](docs/security/CLASSIC_PROPERTIES.md) |
-| Stock-Paired properties and publication gates | [`docs/security/STOCK_PAIRED_PROPERTIES.md`](docs/security/STOCK_PAIRED_PROPERTIES.md) |
+| Model-specific records | [`models/`](models/) |
 | Automated checks and incident process | [`docs/OPERATIONS.md`](docs/OPERATIONS.md) |
 | Independent review archive | [`audits/`](audits/) |
 
@@ -153,6 +203,8 @@ deployments/     Ethereum addresses, transactions and runtime hashes
 docs/            Security properties and operational records
 scripts/         Reproducible verification and model scaffolding
 templates/       Required structure for new model submissions
+submissions/     Public proposal and prototype intake packages
+skills/          Portable agent workflow and deterministic intake validators
 assets/          Programmable repository artwork
 ```
 
