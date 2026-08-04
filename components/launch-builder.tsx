@@ -2789,58 +2789,64 @@ function TokenStep({
             <small>{descriptionRemaining} left</small>
           </label>
 
-          <div className="classic-link-fields">
-            <label className="field">
-              <span>Website</span>
-              <input
-                type="text"
-                inputMode="url"
-                value={draft.tokenWebsite}
-                maxLength={MAX_METADATA_URL_BYTES}
-                placeholder="your-site.com"
-                spellCheck={false}
-                autoComplete="url"
-                onBlur={normalizeWebsite}
-                onChange={(event) =>
-                  updateTokenDraft({ tokenWebsite: event.target.value })
-                }
-              />
-            </label>
+          <details className="classic-link-disclosure">
+            <summary>
+              <span>Project links</span>
+              <small>Optional</small>
+            </summary>
+            <div className="classic-link-fields">
+              <label className="field">
+                <span>Website</span>
+                <input
+                  type="text"
+                  inputMode="url"
+                  value={draft.tokenWebsite}
+                  maxLength={MAX_METADATA_URL_BYTES}
+                  placeholder="your-site.com"
+                  spellCheck={false}
+                  autoComplete="url"
+                  onBlur={normalizeWebsite}
+                  onChange={(event) =>
+                    updateTokenDraft({ tokenWebsite: event.target.value })
+                  }
+                />
+              </label>
 
-            <label className="field">
-              <span>X</span>
-              <input
-                type="text"
-                inputMode="url"
-                value={draft.tokenX}
-                maxLength={MAX_SOCIAL_URL_BYTES}
-                placeholder="@account or post URL"
-                spellCheck={false}
-                autoComplete="off"
-                onBlur={() => normalizeSocial("x")}
-                onChange={(event) =>
-                  updateTokenDraft({ tokenX: event.target.value })
-                }
-              />
-            </label>
+              <label className="field">
+                <span>X</span>
+                <input
+                  type="text"
+                  inputMode="url"
+                  value={draft.tokenX}
+                  maxLength={MAX_SOCIAL_URL_BYTES}
+                  placeholder="@account or post URL"
+                  spellCheck={false}
+                  autoComplete="off"
+                  onBlur={() => normalizeSocial("x")}
+                  onChange={(event) =>
+                    updateTokenDraft({ tokenX: event.target.value })
+                  }
+                />
+              </label>
 
-            <label className="field">
-              <span>Telegram</span>
-              <input
-                type="text"
-                inputMode="url"
-                value={draft.tokenTelegram}
-                maxLength={MAX_SOCIAL_URL_BYTES}
-                placeholder="@group or t.me/group"
-                spellCheck={false}
-                autoComplete="off"
-                onBlur={() => normalizeSocial("telegram")}
-                onChange={(event) =>
-                  updateTokenDraft({ tokenTelegram: event.target.value })
-                }
-              />
-            </label>
-          </div>
+              <label className="field">
+                <span>Telegram</span>
+                <input
+                  type="text"
+                  inputMode="url"
+                  value={draft.tokenTelegram}
+                  maxLength={MAX_SOCIAL_URL_BYTES}
+                  placeholder="@group or t.me/group"
+                  spellCheck={false}
+                  autoComplete="off"
+                  onBlur={() => normalizeSocial("telegram")}
+                  onChange={(event) =>
+                    updateTokenDraft({ tokenTelegram: event.target.value })
+                  }
+                />
+              </label>
+            </div>
+          </details>
         </div>
       </div>
     </section>

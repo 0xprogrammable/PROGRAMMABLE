@@ -120,6 +120,7 @@ export function LaunchModelPicker({
           className={`launch-model-card ${launchExperience.modelCard}`}
           data-launch-model-option="classic"
           data-launch-model-available={classicV3LaunchAvailable}
+          data-launch-model-launchable={classicV3LaunchAvailable}
           type="button"
           disabled={!classicV3LaunchAvailable}
           aria-labelledby="launch-model-classic-title"
@@ -190,6 +191,7 @@ export function LaunchModelPicker({
           className={`launch-model-card ${launchExperience.modelCard}`}
           data-launch-model-option="custom"
           data-launch-model-available="true"
+          data-launch-model-launchable="false"
           aria-labelledby="launch-model-custom-title"
           aria-describedby="launch-model-custom-description"
         >
@@ -206,8 +208,15 @@ export function LaunchModelPicker({
               sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 88px) / 2), 560px"
               unoptimized
             />
-            <span
-              className={`${launchExperience.brandMark} ${launchExperience.customMark}`}
+            <Image
+              className={`${launchExperience.classicLogo} ${launchExperience.customLogo}`}
+              src="/brand/loop/programmable-loop-mark-transparent-v1.png"
+              alt=""
+              width={1254}
+              height={1254}
+              sizes="128px"
+              loading="eager"
+              unoptimized
             />
             <span className={launchExperience.customSparkles}>
               <span />
@@ -242,7 +251,7 @@ export function LaunchModelPicker({
             <span
               className={`launch-model-action ${launchExperience.modelAction}`}
             >
-              Create a Custom Hook
+              Review Custom Hook framework
               <ArrowRight aria-hidden="true" size={16} />
             </span>
           </span>
