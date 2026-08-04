@@ -1350,46 +1350,39 @@ function TokenDetailContent({
             </dl>
           </section>
 
-          <section className={styles.projectPanel}>
-            <header className={styles.projectPanelHeading}>
-              <h2>Team</h2>
-            </header>
-            {creatorAddress ? (
-              <>
-                <div className={styles.creatorRecord}>
-                  <span className={styles.creatorMark} aria-hidden="true">
-                    {token.name.trim().charAt(0).toUpperCase() || "P"}
-                  </span>
-                  <div>
-                    <strong>
-                      {previewProject?.teamName ?? "Creator wallet"}
-                    </strong>
-                    {explorerBase ? (
-                      <a
-                        href={`${explorerBase}/address/${creatorAddress}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        <code>{formatProjectAddress(creatorAddress)}</code>
-                        <ArrowUpRight aria-hidden="true" size={13} />
-                      </a>
-                    ) : (
+          {creatorAddress ? (
+            <section className={styles.projectPanel}>
+              <header className={styles.projectPanelHeading}>
+                <h2>Team</h2>
+              </header>
+              <div className={styles.creatorRecord}>
+                <span className={styles.creatorMark} aria-hidden="true">
+                  {token.name.trim().charAt(0).toUpperCase() || "P"}
+                </span>
+                <div>
+                  <strong>{previewProject?.teamName ?? "Creator wallet"}</strong>
+                  {explorerBase ? (
+                    <a
+                      href={`${explorerBase}/address/${creatorAddress}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
                       <code>{formatProjectAddress(creatorAddress)}</code>
-                    )}
-                  </div>
+                      <ArrowUpRight aria-hidden="true" size={13} />
+                    </a>
+                  ) : (
+                    <code>{formatProjectAddress(creatorAddress)}</code>
+                  )}
                 </div>
+              </div>
+              {previewProject ? (
                 <p className={styles.projectNote}>
-                  {previewProject
-                    ? `${previewProject.contributors} contributors · ${previewProject.teamSummary}`
-                    : "No team profile provided."}
+                  {previewProject.contributors} contributors ·{" "}
+                  {previewProject.teamSummary}
                 </p>
-              </>
-            ) : (
-              <p className={styles.projectEmpty}>
-                No team information provided.
-              </p>
-            )}
-          </section>
+              ) : null}
+            </section>
+          ) : null}
         </div>
       </div>
       {copyError ? (

@@ -79,15 +79,15 @@ describe("Developer documentation experience", () => {
     expect(nextLanguageIndex(1, "End", 3)).toBe(2);
   });
 
-  it("collapses the workbench and integration metadata for narrow screens", () => {
+  it("collapses the workbench and keeps document actions usable on narrow screens", () => {
     expect(developerDocsCss).toMatch(
       /@media \(max-width: 820px\)[\s\S]*?\.workbenchGrid\s*\{[^}]*grid-template-columns:\s*1fr;/,
     );
     expect(developerDocsCss).toMatch(
-      /@media \(max-width: 620px\)[\s\S]*?\.integrationMeta\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(2,/,
+      /@media \(max-width: 620px\)[\s\S]*?\.docsActions\s*\{[^}]*justify-content:\s*flex-start;[^}]*width:\s*100%;/,
     );
     expect(developerDocsCss).toMatch(
-      /@media \(max-width: 360px\)[\s\S]*?\.integrationMeta\s*\{[^}]*grid-template-columns:\s*1fr;/,
+      /@media \(max-width: 620px\)[\s\S]*?\.docsActions button,\s*\.docsActions a\s*\{[^}]*flex:\s*1 1 140px;[^}]*min-height:\s*44px;/,
     );
   });
 
@@ -131,8 +131,8 @@ describe("Developer documentation experience", () => {
   });
 
   it("keeps unpublished product docs visibly separate", () => {
-    expect(developerPage).toContain(
-      "Classic and Custom Hook product guides are not published yet.",
-    );
+    expect(developerPage).not.toContain("Classic and Custom Hook product guides");
+    expect(workbench).toContain('fetch("/docs/developers.md")');
+    expect(workbench).toContain("Copy Markdown");
   });
 });

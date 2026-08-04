@@ -278,8 +278,8 @@ export function TokenCommunityChat({
           onChange={(event) => setDraft(event.target.value)}
         />
         <button type="submit" disabled={!draft.trim()}>
-          <Send aria-hidden="true" size={17} />
-          <span>Send message</span>
+          <Send aria-hidden="true" size={15} />
+          <span>Send</span>
         </button>
       </form>
       <p className={styles.storageError} role="status" aria-live="polite">

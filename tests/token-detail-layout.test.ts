@@ -112,4 +112,10 @@ describe("token detail layout", () => {
     expect(detailSource).toContain("<EthereumMark />");
     expect(detailSource).toContain('aria-label="Token metadata"');
   });
+
+  it("omits empty team-profile filler copy", () => {
+    expect(detailSource).not.toContain("No team profile provided.");
+    expect(detailSource).not.toContain("No team information provided.");
+    expect(detailSource).toContain("{previewProject ? (");
+  });
 });

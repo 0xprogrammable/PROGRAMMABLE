@@ -2,19 +2,17 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import {
   ArrowUpRight,
-  Bot,
-  Braces,
   CircleDot,
   Database,
   FileJson,
   Layers3,
   ShieldCheck,
-  Terminal,
   Workflow,
 } from "lucide-react";
 
 import {
   DeveloperAgentPrompt,
+  DeveloperDocsActions,
   DeveloperDocsWorkbench,
 } from "@/components/developer-docs-workbench";
 import styles from "@/components/developer-docs.module.css";
@@ -149,37 +147,19 @@ export default function DeveloperDocsPage() {
   return (
     <DocsShell
       currentPath="/docs/developers"
-      description="Fetch launches, track new tokens, and add Programmable data to a terminal, scanner, wallet, indexer, app, or agent. The public v1 API is read-only and needs no API key."
+      description="Integrate the public Programmable launch feed into terminals, wallets, scanners, indexers, apps, and agents. Read-only REST, no API key."
       heroAside={<DeveloperDocsWorkbench />}
-      heroMeta={
-        <>
-          <div className={styles.integrationMeta} aria-label="API summary">
-            <span>Public REST</span>
-            <span>No API key</span>
-            <span>Ethereum mainnet</span>
-            <span>v1 JSON</span>
-          </div>
-          <div className={styles.endpointBar}>
-            <span>Base URL</span>
-            <code>developers.programmable.family</code>
-            <span className={styles.endpointLive}>
-              <i aria-hidden="true" />
-              Live
-            </span>
-          </div>
-        </>
-      }
+      heroMeta={<DeveloperDocsActions />}
       kicker="Docs / Developers"
       sections={developerSections}
-      title="Developer integrations"
+      title="Developer documentation"
     >
       <section id="response">
         <div className={styles.sectionIntro}>
-          <span className={styles.sectionKicker}>Understand the payload</span>
-          <h2>Store identity once. Add features only when supported.</h2>
+          <h2>Response model</h2>
           <p>
-            Every record keeps the same trusted core. Open a group to see what
-            it means and which values your integration should preserve.
+            Preserve the trusted core of every launch. Open a group to inspect
+            its fields and the rules your integration must keep.
           </p>
         </div>
 
@@ -232,11 +212,10 @@ export default function DeveloperDocsPage() {
 
       <section id="sync">
         <div className={styles.sectionIntro}>
-          <span className={styles.sectionKicker}>Keep the feed current</span>
-          <h2>Backfill once, then poll from a durable checkpoint</h2>
+          <h2>Backfill and live updates</h2>
           <p>
-            The two cursors do different jobs. Treat them as opaque strings and
-            never advance your durable checkpoint before every page is stored.
+            Complete one snapshot, store it, then poll from a durable
+            checkpoint. Treat every cursor as opaque.
           </p>
         </div>
 
@@ -310,19 +289,16 @@ export default function DeveloperDocsPage() {
 
       <section id="rendering">
         <div className={styles.sectionIntro}>
-          <span className={styles.sectionKicker}>Ship safe defaults</span>
-          <h2>Discovery is universal. Market features are explicit.</h2>
+          <h2>Rendering rules</h2>
           <p>
-            Keep every recognized launch visible. Then enable price, chart,
-            quote, simulation, or execution only when that market declares
-            verified support.
+            Keep recognized launches visible. Enable price, chart, quote,
+            simulation, or execution only when a market declares support.
           </p>
         </div>
 
         <div className={styles.renderingRules}>
           <article>
             <CircleDot aria-hidden="true" size={20} strokeWidth={1.8} />
-            <span>Always show</span>
             <h3>Identity and provenance</h3>
             <p>
               Chain, contract address, launch ID, category, onchain timestamp,
@@ -331,7 +307,6 @@ export default function DeveloperDocsPage() {
           </article>
           <article>
             <Layers3 aria-hidden="true" size={20} strokeWidth={1.8} />
-            <span>Read before rendering</span>
             <h3>Markets and capabilities</h3>
             <p>
               Accept zero, one, or several markets. Keep unfamiliar types
@@ -340,7 +315,6 @@ export default function DeveloperDocsPage() {
           </article>
           <article>
             <ShieldCheck aria-hidden="true" size={20} strokeWidth={1.8} />
-            <span>Never guess</span>
             <h3>Price, volume, or actions</h3>
             <p>
               Null is not zero. No market is not an error. Discovery never
@@ -362,46 +336,21 @@ export default function DeveloperDocsPage() {
 
       <section id="agents">
         <div className={styles.sectionIntro}>
-          <span className={styles.sectionKicker}>Agent-ready by default</span>
-          <h2>Give an AI agent structured context, not a screenshot</h2>
+          <h2>AI agent integration</h2>
           <p>
-            The human page, Markdown export, compact index, full integration
-            context, OpenAPI contract, and JSON Schemas all point to the same
-            current public interface.
+            Give an agent Markdown, OpenAPI, and schemas instead of a
+            screenshot. Every machine-readable surface points to the same
+            public interface.
           </p>
         </div>
 
         <DeveloperAgentPrompt />
 
-        <div className={styles.agentSurfaces}>
-          <div>
-            <Bot aria-hidden="true" size={19} strokeWidth={1.8} />
-            <span>
-              <strong>Discover</strong>
-              <code>/llms.txt</code>
-            </span>
-          </div>
-          <div>
-            <FileJson aria-hidden="true" size={19} strokeWidth={1.8} />
-            <span>
-              <strong>Read</strong>
-              <code>/docs/developers.md</code>
-            </span>
-          </div>
-          <div>
-            <Braces aria-hidden="true" size={19} strokeWidth={1.8} />
-            <span>
-              <strong>Generate</strong>
-              <code>OpenAPI + Schemas</code>
-            </span>
-          </div>
-        </div>
       </section>
 
       <section id="reference">
         <div className={styles.sectionIntro}>
-          <span className={styles.sectionKicker}>Public v1 reference</span>
-          <h2>Every endpoint you need</h2>
+          <h2>API reference</h2>
           <p>
             Successful responses are JSON. Errors use the published problem
             schema. Honor cache headers, ETags, retry timing, and feed status.
@@ -472,19 +421,6 @@ export default function DeveloperDocsPage() {
           </ExternalResource>
         </div>
 
-        <div className={styles.docsBoundary}>
-          <Terminal aria-hidden="true" size={20} strokeWidth={1.8} />
-          <div>
-            <strong>
-              Classic and Custom Hook product guides are not published yet.
-            </strong>
-            <p>
-              This page covers only the public developer integration contract.
-              The other Docs categories stay marked Available soon until their
-              product documentation is ready.
-            </p>
-          </div>
-        </div>
       </section>
     </DocsShell>
   );
