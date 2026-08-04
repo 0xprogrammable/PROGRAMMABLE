@@ -9,6 +9,9 @@
 
 .backdrop,
 .backdrop img,
+.ambientWindow,
+.ambientArt,
+.starField,
 .veil {
   inset: 0;
   position: absolute;
@@ -16,7 +19,7 @@
 
 .backdrop {
   display: block;
-  z-index: -3;
+  z-index: -5;
 }
 
 .backdrop img {
@@ -26,9 +29,108 @@
   width: 100%;
 }
 
+.ambientWindow {
+  overflow: hidden;
+  pointer-events: none;
+  z-index: -4;
+}
+
+.ambientArt {
+  background-image: url("/brand/landing/programmable-botanical-cosmos-desktop-v2-1920.avif");
+  background-image: image-set(
+    url("/brand/landing/programmable-botanical-cosmos-desktop-v2-1920.avif") 1x,
+    url("/brand/landing/programmable-botanical-cosmos-desktop-v2.avif") 2x
+  );
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  transform: scale(1.006);
+  will-change: transform;
+}
+
+.floraLeft {
+  -webkit-mask-image: radial-gradient(
+    ellipse 48% 78% at 0% 100%,
+    #000 0%,
+    #000 43%,
+    rgba(0, 0, 0, 0.72) 59%,
+    transparent 82%
+  );
+  mask-image: radial-gradient(
+    ellipse 48% 78% at 0% 100%,
+    #000 0%,
+    #000 43%,
+    rgba(0, 0, 0, 0.72) 59%,
+    transparent 82%
+  );
+}
+
+.floraLeft .ambientArt {
+  animation: flora-sway-left 13s cubic-bezier(0.77, 0, 0.175, 1) infinite;
+  transform-origin: 4% 100%;
+}
+
+.floraRight {
+  -webkit-mask-image: radial-gradient(
+    ellipse 48% 78% at 100% 100%,
+    #000 0%,
+    #000 43%,
+    rgba(0, 0, 0, 0.72) 59%,
+    transparent 82%
+  );
+  mask-image: radial-gradient(
+    ellipse 48% 78% at 100% 100%,
+    #000 0%,
+    #000 43%,
+    rgba(0, 0, 0, 0.72) 59%,
+    transparent 82%
+  );
+}
+
+.floraRight .ambientArt {
+  animation: flora-sway-right 15s cubic-bezier(0.77, 0, 0.175, 1) infinite;
+  transform-origin: 96% 100%;
+}
+
+.floraBottom {
+  -webkit-mask-image: radial-gradient(
+    ellipse 72% 30% at 50% 100%,
+    #000 0%,
+    #000 42%,
+    rgba(0, 0, 0, 0.68) 63%,
+    transparent 100%
+  );
+  mask-image: radial-gradient(
+    ellipse 72% 30% at 50% 100%,
+    #000 0%,
+    #000 42%,
+    rgba(0, 0, 0, 0.68) 63%,
+    transparent 100%
+  );
+}
+
+.floraBottom .ambientArt {
+  animation: flora-breathe 17s cubic-bezier(0.77, 0, 0.175, 1) infinite;
+  transform-origin: 50% 100%;
+}
+
+.starField {
+  animation: stars-breathe 9s cubic-bezier(0.77, 0, 0.175, 1) infinite;
+  background-image:
+    radial-gradient(circle at 27% 8%, rgba(255, 253, 249, 0.8) 0 1px, transparent 2px),
+    radial-gradient(circle at 53% 11%, rgba(255, 253, 249, 0.68) 0 1px, transparent 2px),
+    radial-gradient(circle at 81% 8%, rgba(255, 253, 249, 0.78) 0 1px, transparent 2px),
+    radial-gradient(circle at 84% 31%, rgba(255, 253, 249, 0.72) 0 1px, transparent 2px),
+    radial-gradient(circle at 65% 24%, rgba(235, 127, 179, 0.32) 0 1px, transparent 2px);
+  opacity: 0.18;
+  pointer-events: none;
+  will-change: opacity;
+  z-index: -3;
+}
+
 .veil {
-  background: rgba(3, 9, 28, 0.16);
-  z-index: -2;
+  background: rgba(3, 9, 28, 0.12);
+  z-index: -1;
 }
 
 .hero {
@@ -44,23 +146,8 @@
   align-items: center;
   display: flex;
   flex-direction: column;
-  margin-top: -8px;
+  margin-top: -4px;
   max-width: 820px;
-}
-
-.proof {
-  -webkit-backdrop-filter: blur(18px) saturate(1.06);
-  backdrop-filter: blur(18px) saturate(1.06);
-  background: rgba(7, 17, 47, 0.48);
-  border: 1px solid rgba(248, 240, 233, 0.2);
-  border-radius: 999px;
-  color: rgba(255, 253, 249, 0.86);
-  font-size: 14px;
-  font-weight: 560;
-  letter-spacing: -0.01em;
-  line-height: 20px;
-  margin: 0 0 24px;
-  padding: 8px 12px;
 }
 
 .content h1 {
@@ -75,22 +162,12 @@
   text-wrap: balance;
 }
 
-.summary {
-  color: rgba(255, 253, 249, 0.8);
-  font-size: 18px;
-  line-height: 28px;
-  margin: 32px 0 0;
-  max-width: 520px;
-  text-shadow: 0 1px 18px rgba(1, 5, 20, 0.28);
-  text-wrap: pretty;
-}
-
 .actions {
   align-items: center;
   display: flex;
   gap: 12px;
   justify-content: center;
-  margin-top: 32px;
+  margin-top: 40px;
 }
 
 .primaryAction,
@@ -105,10 +182,10 @@
   min-height: 52px;
   padding: 8px 24px;
   transition:
-    background-color 700ms cubic-bezier(0.32, 0.72, 0, 1),
-    border-color 700ms cubic-bezier(0.32, 0.72, 0, 1),
-    color 700ms cubic-bezier(0.32, 0.72, 0, 1),
-    transform 700ms cubic-bezier(0.32, 0.72, 0, 1);
+    background-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .primaryAction {
@@ -250,11 +327,7 @@
   }
 
   .content {
-    margin-top: -20px;
-  }
-
-  .proof {
-    margin-bottom: 24px;
+    margin-top: -12px;
   }
 
   .content h1 {
@@ -264,15 +337,8 @@
     max-width: 600px;
   }
 
-  .summary {
-    font-size: 16px;
-    line-height: 24px;
-    margin-top: 24px;
-    max-width: 360px;
-  }
-
   .actions {
-    margin-top: 24px;
+    margin-top: 32px;
   }
 
 }
@@ -299,8 +365,70 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .ambientWindow,
+  .starField {
+    display: none;
+  }
+
   .primaryAction,
   .secondaryAction {
-    transition-duration: 0.01ms;
+    transition:
+      background-color 160ms ease,
+      border-color 160ms ease,
+      color 160ms ease;
+  }
+}
+
+@media (max-width: 640px) {
+  .ambientArt {
+    background-image: url("/brand/landing/programmable-botanical-cosmos-mobile-v2-1080.avif");
+    background-image: image-set(
+      url("/brand/landing/programmable-botanical-cosmos-mobile-v2-1080.avif") 1x,
+      url("/brand/landing/programmable-botanical-cosmos-mobile-v2.avif") 2x
+    );
+  }
+}
+
+@keyframes flora-sway-left {
+  0%,
+  100% {
+    transform: scale(1.006) translate3d(-1px, 1px, 0) rotate(-0.06deg);
+  }
+
+  50% {
+    transform: scale(1.006) translate3d(2px, -1px, 0) rotate(0.1deg);
+  }
+}
+
+@keyframes flora-sway-right {
+  0%,
+  100% {
+    transform: scale(1.006) translate3d(1px, 0, 0) rotate(0.05deg);
+  }
+
+  50% {
+    transform: scale(1.006) translate3d(-2px, -1px, 0) rotate(-0.09deg);
+  }
+}
+
+@keyframes flora-breathe {
+  0%,
+  100% {
+    transform: scale(1.006) translate3d(0, 1px, 0);
+  }
+
+  50% {
+    transform: scale(1.009) translate3d(0, -1px, 0);
+  }
+}
+
+@keyframes stars-breathe {
+  0%,
+  100% {
+    opacity: 0.12;
+  }
+
+  50% {
+    opacity: 0.34;
   }
 }
