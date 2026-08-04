@@ -189,8 +189,10 @@ describe("unreleased launch model gating", () => {
     expect(html).toContain("Review Custom Hook framework");
     expect(html).not.toContain("Create a Custom Hook");
     expect(html).toContain("evidence required for release");
-    expect(html).toContain("/brand/create/classic-botanical-v4.webp");
-    expect(html).toContain("/brand/create/custom-galaxy-v3.webp");
+    // Next/Image may emit the source as an encoded optimizer URL. Assert the
+    // asset identity without coupling this contract to that transport detail.
+    expect(html).toContain("classic-botanical-v4.webp");
+    expect(html).toContain("custom-galaxy-v3.webp");
     expect(html).not.toContain("In development");
     expect(html).not.toContain("Not available");
     expect(html).not.toContain("launch-model-classic-details");
