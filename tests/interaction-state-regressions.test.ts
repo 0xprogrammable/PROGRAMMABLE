@@ -20,6 +20,35 @@ describe("interaction state regressions", () => {
     );
   });
 
+  it("gives repeated claim controls token- and position-specific accessible names", () => {
+    const source = readFileSync(
+      join(root, "components/profile-view.tsx"),
+      "utf8",
+    );
+    const rowSource = source.slice(source.indexOf("function ProfileClaimRow"));
+    const claimTrigger = rowSource.match(
+      /<button[\s\S]*?aria-haspopup="dialog"[\s\S]*?<\/button>/,
+    )?.[0];
+    const claimAccessibleName = claimTrigger?.match(
+      /aria-label=\{`([^`]+)`\}/,
+    )?.[1];
+    const actionAccessibleName = [
+      ...source.matchAll(/aria-label=\{`([^`]+)`\}/g),
+    ]
+      .map((match) => match[1])
+      .find((label) => label.includes("${action.label}"));
+
+    expect(claimTrigger).toBeDefined();
+    expect(claimAccessibleName).toBeDefined();
+    expect(claimAccessibleName).toContain("${token.name}");
+    expect(claimAccessibleName).toContain("${token.symbol}");
+    expect(actionAccessibleName).toBeDefined();
+    expect(actionAccessibleName).toContain("${action.label}");
+    expect(actionAccessibleName).toContain("${group.source}");
+    expect(actionAccessibleName).toContain("${tokenName}");
+    expect(actionAccessibleName).toContain("${tokenSymbol}");
+  });
+
   it("uses the active profile network for transaction links", () => {
     const source = readFileSync(
       join(root, "components/profile-view.tsx"),

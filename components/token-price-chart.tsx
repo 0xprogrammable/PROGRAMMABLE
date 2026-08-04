@@ -210,16 +210,16 @@ function formatPrice(value: number, unit: "USD" | "ETH") {
       return new Intl.NumberFormat("en-US", {
         style: "currency",
         currency: "USD",
-        maximumFractionDigits: 4,
+        maximumFractionDigits: 6,
       }).format(value);
     }
     return `$${value.toLocaleString("en-US", {
-      maximumSignificantDigits: 5,
+      maximumSignificantDigits: 8,
       useGrouping: false,
     })}`;
   }
   return `${value.toLocaleString("en-US", {
-    maximumSignificantDigits: 5,
+    maximumSignificantDigits: 8,
     useGrouping: false,
   })} ETH`;
 }
@@ -290,7 +290,10 @@ export function TokenPriceChart({
   const refreshKey = useLiveDataRefresh({
     enabled: launchModel !== "stock-paired" && !preview,
   });
-  const gradientId = useId().replaceAll(":", "");
+  const chartId = useId().replaceAll(":", "");
+  const gradientId = `${chartId}-fill`;
+  const instructionId = `${chartId}-instructions`;
+  const activeValueId = `${chartId}-active-value`;
   const requestKey = `${tokenAddress.toLowerCase()}:${range}`;
   const previewPayload = useMemo(
     () => (preview ? getExplorePreviewChart(tokenAddress, range) : null),
@@ -514,6 +517,11 @@ export function TokenPriceChart({
       >
         {chartStatus}
       </span>
+      <span className="sr-only" id={instructionId}>
+        Use the left and right arrow keys to inspect each recorded price. Press
+        Home or End for the first or latest point, and Escape to return to the
+        latest price.
+      </span>
       <div className={styles.header}>
         <div>
           <p className={styles.eyebrow}>Price</p>
@@ -558,11 +566,17 @@ export function TokenPriceChart({
           className={styles.plot}
           tabIndex={0}
           aria-label={`${tokenName} interactive price chart. Move the pointer or use arrow keys to inspect exact prices.`}
+          aria-describedby={`${instructionId} ${activeValueId}`}
           onBlur={() => setActivePointIndex(null)}
           onKeyDown={inspectKeyboard}
+          onPointerDown={inspectPointer}
           onPointerEnter={inspectPointer}
           onPointerMove={inspectPointer}
-          onPointerLeave={() => setActivePointIndex(null)}
+          onPointerUp={inspectPointer}
+          onPointerCancel={() => setActivePointIndex(null)}
+          onPointerLeave={(event) => {
+            if (event.pointerType !== "touch") setActivePointIndex(null);
+          }}
         >
           <svg
             viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
@@ -620,16 +634,9 @@ export function TokenPriceChart({
           {activePoint ? (
             <div
               className={styles.tooltip}
-              data-horizontal-edge={
-                activePointIndex === 0
-                  ? "start"
-                  : activePointIndex === chart.points.length - 1
-                    ? "end"
-                    : "middle"
-              }
               data-vertical={activePoint.y < 44 ? "below" : "above"}
               style={{
-                left: `${(activePoint.x / VIEWBOX_WIDTH) * 100}%`,
+                left: `clamp(4.5rem, ${(activePoint.x / VIEWBOX_WIDTH) * 100}%, calc(100% - 4.5rem))`,
                 top: `${(activePoint.y / VIEWBOX_HEIGHT) * 100}%`,
               }}
               aria-hidden="true"
@@ -638,7 +645,13 @@ export function TokenPriceChart({
               <span>Block {activePoint.blockNumber}</span>
             </div>
           ) : null}
-          <span className="sr-only" aria-live="polite" aria-atomic="true">
+          <span
+            className="sr-only"
+            id={activeValueId}
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
             {activePoint
               ? `${formatPrice(activePoint.value, chart.unit)}, block ${activePoint.blockNumber}`
               : ""}

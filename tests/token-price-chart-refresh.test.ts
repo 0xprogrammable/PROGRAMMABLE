@@ -12,6 +12,14 @@ describe("token price chart inspection", () => {
     expect(nearestChartPointIndex(700, 100, 600, 7)).toBe(6);
     expect(nearestChartPointIndex(10_000, 100, 600, 7)).toBe(6);
   });
+
+  it("clamps inspection at both edges and fails safely for invalid geometry", () => {
+    expect(nearestChartPointIndex(-10_000, 100, 600, 7)).toBe(0);
+    expect(nearestChartPointIndex(400, 100, 600, 1)).toBe(0);
+    expect(nearestChartPointIndex(400, 100, 0, 7)).toBe(0);
+    expect(nearestChartPointIndex(Number.NaN, 100, 600, 7)).toBe(0);
+    expect(nearestChartPointIndex(400, 100, 600, 0)).toBe(0);
+  });
 });
 
 describe("token price chart refresh", () => {

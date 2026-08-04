@@ -1,13 +1,13 @@
 .panel {
-  background: color-mix(in srgb, var(--surface-soft) 42%, transparent);
-  border: 1px solid var(--border);
-  border-radius: 22px;
+  background: color-mix(in srgb, var(--surface-soft) 24%, transparent);
+  border: 0;
+  border-radius: 18px;
   display: flex;
   flex-direction: column;
-  margin: 32px 0 0 auto;
+  margin: 0 0 0 auto;
   max-width: 380px;
-  min-height: 420px;
-  padding: 20px;
+  min-height: 340px;
+  padding: 18px;
   width: 100%;
 }
 
@@ -19,7 +19,7 @@
 
 .heading h2 {
   color: var(--text);
-  font-size: 21px;
+  font-size: 18px;
   font-weight: 600;
   letter-spacing: -0.028em;
   line-height: 1.08;
@@ -35,10 +35,10 @@
   align-content: start;
   display: grid;
   flex: 1;
-  gap: 16px;
-  margin-top: 20px;
-  max-height: min(344px, 44svh);
-  min-height: 220px;
+  gap: 14px;
+  margin-top: 14px;
+  max-height: min(260px, 38svh);
+  min-height: 156px;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-right: 6px;
@@ -55,7 +55,7 @@
 .composerAvatar {
   align-items: center;
   background: var(--surface-soft);
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: 50%;
   color: var(--text-soft);
   display: inline-flex;
@@ -110,18 +110,16 @@
 
 .composer {
   align-items: center;
-  -webkit-backdrop-filter: var(--control-glass-backdrop);
-  backdrop-filter: var(--control-glass-backdrop);
-  background: var(--control-glass-background);
-  border: 1px solid var(--control-glass-border);
-  border-radius: 24px;
-  box-shadow:
-    inset 0 1px 0 var(--control-glass-highlight),
-    0 10px 28px var(--control-glass-shadow-color);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: color-mix(in srgb, var(--surface-soft) 58%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  box-shadow: none;
   display: grid;
   gap: 7px;
   grid-template-columns: 36px minmax(0, 1fr) auto;
-  margin-top: 18px;
+  margin-top: 14px;
   padding: 4px;
 }
 
@@ -148,10 +146,10 @@
 
 .composer button {
   align-items: center;
-  background: var(--accent-glass-background);
-  border: 1px solid var(--accent-glass-border);
-  border-radius: 18px;
-  color: var(--accent-ink);
+  background: var(--token-accent, var(--accent));
+  border: 0;
+  border-radius: 11px;
+  color: var(--token-accent-ink, var(--accent-ink));
   display: inline-flex;
   font-size: 12px;
   font-weight: 680;
@@ -166,7 +164,9 @@
 }
 
 .composer button:disabled {
-  opacity: 0.42;
+  background: color-mix(in srgb, var(--surface-soft) 72%, transparent);
+  color: var(--muted);
+  opacity: 1;
 }
 
 .composer button:focus-visible {
@@ -199,17 +199,17 @@
 @media (max-width: 560px) {
   .panel {
     background: transparent;
-    border-inline: 0;
+    border: 0;
     border-radius: 0;
-    margin-top: 26px;
+    margin-top: 12px;
     max-width: none;
     min-height: 0;
-    padding: 24px 0 28px;
+    padding: 18px 0 22px;
   }
 
   .conversation {
-    max-height: 320px;
-    min-height: 180px;
+    max-height: 280px;
+    min-height: 96px;
     padding-right: 0;
   }
 

@@ -81,7 +81,6 @@ export function RouteTransition({ children }: { children: ReactNode }) {
     <div
       className={`route-transition${isDocsPath ? " route-transition-docs" : ""}`}
       ref={contentRef}
-      style={{ animation: "none" }}
     >
       {children}
     </div>

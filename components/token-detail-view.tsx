@@ -677,7 +677,11 @@ function MetricGrid({ metrics }: { metrics: TokenMetric[] }) {
   if (metrics.length === 0) return null;
 
   return (
-    <dl className={styles.metrics} data-count={metrics.length}>
+    <dl
+      className={styles.metrics}
+      data-count={metrics.length}
+      aria-label="Market summary"
+    >
       {metrics.map((metric) => (
         <div className={styles.metric} key={metric.label}>
           <dt>{metric.label}</dt>
@@ -698,7 +702,6 @@ function PreviewTokenTrade({ token }: { token: LauncherToken }) {
     >
       <header className={styles.tradeHeader}>
         <h2>Trade ${token.symbol}</h2>
-        <span>Interface preview</span>
       </header>
 
       <div className={styles.sideControl} role="group" aria-label="Trade side">
@@ -768,9 +771,6 @@ function PreviewTokenTrade({ token }: { token: LauncherToken }) {
       </dl>
 
       <div className={styles.tradeFooter}>
-        <div className={styles.statusMessage} role="status">
-          Local preview · no wallet request or transaction
-        </div>
         <button className={styles.primaryAction} type="button" disabled>
           Trading unavailable in preview
         </button>
@@ -1135,13 +1135,6 @@ function TokenDetailContent({
                 </div>
               ) : null}
               <div className={styles.addressActions}>
-                <span
-                  className={styles.networkMark}
-                  aria-label={getNetworkLabel(chainId)}
-                  title={getNetworkLabel(chainId)}
-                >
-                  <EthereumMark />
-                </span>
                 <button
                   className={styles.address}
                   type="button"
@@ -1153,6 +1146,14 @@ function TokenDetailContent({
                   title={copied ? "Copied" : "Copy contract address"}
                   onClick={copyAddress}
                 >
+                  <span
+                    className={styles.networkMark}
+                    aria-label={getNetworkLabel(chainId)}
+                    title={getNetworkLabel(chainId)}
+                  >
+                    <EthereumMark />
+                    <span aria-hidden="true">CA</span>
+                  </span>
                   <code>{token.tokenAddress}</code>
                   {copied ? (
                     <Check aria-hidden="true" size={14} />
@@ -1178,74 +1179,6 @@ function TokenDetailContent({
               onMarketCapChange={setChartMarketCap}
             />
             <MetricGrid metrics={metrics} />
-          </div>
-
-          {token.launchModel === "deep" &&
-          token.growthTargetNativeWei &&
-          token.totalNativeAddedToLiquidityWei &&
-          token.tokenReserveRaw ? (
-            <DeepLiquiditySummary token={token} />
-          ) : null}
-
-          <div className={styles.projectInformation}>
-            <section
-              className={`${styles.projectPanel} ${styles.projectPanelMeta}`}
-              aria-label="Token metadata"
-            >
-              <dl className={styles.projectFacts}>
-                <div>
-                  <dt>Published</dt>
-                  <dd>{formatProjectDate(token.launchedAt)}</dd>
-                </div>
-                <div>
-                  <dt>Quote asset</dt>
-                  <dd>{token.quoteAssetSymbol ?? "ETH"}</dd>
-                </div>
-              </dl>
-            </section>
-
-            <section
-              className={styles.projectPanel}
-            >
-              <header className={styles.projectPanelHeading}>
-                <h2>Team</h2>
-              </header>
-              {creatorAddress ? (
-                <>
-                  <div className={styles.creatorRecord}>
-                    <span className={styles.creatorMark} aria-hidden="true">
-                      {token.name.trim().charAt(0).toUpperCase() || "P"}
-                    </span>
-                    <div>
-                      <strong>
-                        {previewProject?.teamName ?? "Creator wallet"}
-                      </strong>
-                      {explorerBase ? (
-                        <a
-                          href={`${explorerBase}/address/${creatorAddress}`}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          <code>{formatProjectAddress(creatorAddress)}</code>
-                          <ArrowUpRight aria-hidden="true" size={13} />
-                        </a>
-                      ) : (
-                        <code>{formatProjectAddress(creatorAddress)}</code>
-                      )}
-                    </div>
-                  </div>
-                  <p className={styles.projectNote}>
-                    {previewProject
-                      ? `${previewProject.contributors} contributors · ${previewProject.teamSummary}`
-                      : "No team profile provided."}
-                  </p>
-                </>
-              ) : (
-                <p className={styles.projectEmpty}>
-                  No team information provided.
-                </p>
-              )}
-            </section>
           </div>
         </section>
 
@@ -1391,6 +1324,72 @@ function TokenDetailContent({
             tokenAddress={token.tokenAddress}
             tokenName={token.name}
           />
+        </div>
+
+        {token.launchModel === "deep" &&
+        token.growthTargetNativeWei &&
+        token.totalNativeAddedToLiquidityWei &&
+        token.tokenReserveRaw ? (
+          <DeepLiquiditySummary token={token} />
+        ) : null}
+
+        <div className={styles.projectInformation}>
+          <section
+            className={`${styles.projectPanel} ${styles.projectPanelMeta}`}
+            aria-label="Token metadata"
+          >
+            <dl className={styles.projectFacts}>
+              <div>
+                <dt>Published</dt>
+                <dd>{formatProjectDate(token.launchedAt)}</dd>
+              </div>
+              <div>
+                <dt>Quote asset</dt>
+                <dd>{token.quoteAssetSymbol ?? "ETH"}</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section className={styles.projectPanel}>
+            <header className={styles.projectPanelHeading}>
+              <h2>Team</h2>
+            </header>
+            {creatorAddress ? (
+              <>
+                <div className={styles.creatorRecord}>
+                  <span className={styles.creatorMark} aria-hidden="true">
+                    {token.name.trim().charAt(0).toUpperCase() || "P"}
+                  </span>
+                  <div>
+                    <strong>
+                      {previewProject?.teamName ?? "Creator wallet"}
+                    </strong>
+                    {explorerBase ? (
+                      <a
+                        href={`${explorerBase}/address/${creatorAddress}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <code>{formatProjectAddress(creatorAddress)}</code>
+                        <ArrowUpRight aria-hidden="true" size={13} />
+                      </a>
+                    ) : (
+                      <code>{formatProjectAddress(creatorAddress)}</code>
+                    )}
+                  </div>
+                </div>
+                <p className={styles.projectNote}>
+                  {previewProject
+                    ? `${previewProject.contributors} contributors · ${previewProject.teamSummary}`
+                    : "No team profile provided."}
+                </p>
+              </>
+            ) : (
+              <p className={styles.projectEmpty}>
+                No team information provided.
+              </p>
+            )}
+          </section>
         </div>
       </div>
       {copyError ? (
@@ -1542,7 +1541,11 @@ export function TokenDetailView({ address }: { address: string }) {
           <ArrowLeft aria-hidden="true" size={16} />
           Explore
         </Link>
-        <div className={styles.loadingState} role="status">
+        <div
+          className={styles.loadingState}
+          role="status"
+          aria-live="polite"
+        >
           Loading
         </div>
       </div>

@@ -1,6 +1,7 @@
 .footer {
-  margin-bottom: 30px;
-  margin-top: 56px;
+  margin-bottom: 28px;
+  margin-top: clamp(52px, 7vw, 86px);
+  min-width: 0;
 }
 
 .surface {
@@ -9,53 +10,61 @@
   border-radius: 0;
   box-shadow: none;
   display: grid;
-  gap: 0 48px;
+  gap: 0 clamp(32px, 4vw, 58px);
   grid-template-columns:
     minmax(210px, 1.1fr)
     minmax(110px, 0.56fr)
     minmax(128px, 0.68fr)
     minmax(300px, 1.5fr);
   overflow: visible;
-  padding: 38px 0 34px;
+  min-width: 0;
+  padding: 36px 0 32px;
+}
+
+.surface > * {
+  min-width: 0;
 }
 
 .brand {
   align-content: start;
   display: grid;
-  gap: 18px;
+  gap: 14px;
 }
 
 .brandLink {
   align-items: center;
   color: var(--text);
   display: inline-flex;
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 650;
-  gap: 11px;
+  gap: 12px;
   letter-spacing: -0.025em;
   min-height: 44px;
   width: fit-content;
 }
 
 .mark {
-  height: 36px;
+  height: 38px;
   object-fit: contain;
   object-position: left center;
-  width: 36px;
+  width: 38px;
 }
 
 .copyright {
   color: var(--muted);
-  font-size: 12px;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
   line-height: 1.5;
   margin: 0;
 }
 
 .risk p {
   color: var(--text-soft);
-  font-size: 14px;
-  line-height: 1.58;
-  max-width: 310px;
+  font-size: 13.5px;
+  line-height: 1.62;
+  max-width: 38ch;
+  text-wrap: pretty;
 }
 
 .column {
@@ -66,9 +75,10 @@
 
 .label {
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 650;
-  letter-spacing: 0.08em;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
   line-height: 1.5;
   margin: 0;
   text-transform: uppercase;
@@ -76,7 +86,7 @@
 
 .column ul {
   display: grid;
-  gap: 3px;
+  gap: 1px;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -84,13 +94,13 @@
 
 .column a {
   align-items: center;
-  border-radius: 8px;
+  border-radius: 0;
   color: var(--text-soft);
   display: inline-flex;
   font-size: 14px;
   font-weight: 560;
-  min-height: 31px;
-  transition: color 150ms ease;
+  min-height: 34px;
+  transition: color 120ms ease;
 }
 
 .risk {
@@ -123,7 +133,7 @@
 
 @media (max-width: 680px) {
   .footer {
-    margin-bottom: 92px;
+    margin-bottom: 12px;
     margin-top: 48px;
   }
 
@@ -131,12 +141,16 @@
     border-radius: 0;
     gap: 28px 22px;
     grid-template-columns: 1fr 1fr;
-    padding: 27px 0;
+    padding: 28px 0 20px;
   }
 
   .brand,
   .risk {
     grid-column: 1 / -1;
+  }
+
+  .column a {
+    min-height: 44px;
   }
 }
 

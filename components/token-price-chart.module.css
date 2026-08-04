@@ -1,11 +1,11 @@
 .shell {
-  background: color-mix(in srgb, var(--surface-tint) 58%, transparent);
+  background: color-mix(in srgb, var(--surface-soft) 34%, transparent);
   border: 1px solid var(--panel-border-soft);
-  border-radius: 24px;
+  border-radius: 20px;
   margin: 0;
-  min-height: 236px;
+  min-height: 224px;
   overflow: hidden;
-  padding: 18px 18px 14px;
+  padding: 17px 18px 12px;
 }
 
 .header {
@@ -36,14 +36,10 @@
 
 .ranges {
   align-items: center;
-  -webkit-backdrop-filter: var(--control-glass-backdrop);
-  backdrop-filter: var(--control-glass-backdrop);
-  background: var(--control-glass-background);
-  border: 1px solid var(--control-glass-border);
-  border-radius: 17px;
-  box-shadow:
-    inset 0 1px 0 var(--control-glass-highlight),
-    0 9px 26px var(--control-glass-shadow-color);
+  background: color-mix(in srgb, var(--surface-soft) 62%, transparent);
+  border: 0;
+  border-radius: 14px;
+  box-shadow: none;
   display: flex;
   gap: 2px;
   padding: 3px;
@@ -52,7 +48,7 @@
 .rangeButton {
   background: transparent;
   border: 0;
-  border-radius: 13px;
+  border-radius: 11px;
   color: var(--muted);
   font-size: 10px;
   font-weight: 700;
@@ -68,10 +64,12 @@
 }
 
 .rangeButton[aria-pressed="true"] {
-  background: var(--control-glass-background-strong);
-  box-shadow:
-    inset 0 1px 0 var(--control-glass-highlight),
-    0 4px 12px color-mix(in srgb, var(--text) 8%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--token-accent, var(--accent)) 15%,
+    var(--surface-raised)
+  );
+  box-shadow: none;
   color: var(--text);
 }
 
@@ -81,7 +79,7 @@
 }
 
 .rangeButton:active {
-  transform: scale(0.97);
+  transform: scale(0.96);
 }
 
 .plot {
@@ -90,6 +88,7 @@
   margin-top: 9px;
   position: relative;
   touch-action: pan-y;
+  user-select: none;
   width: 100%;
 }
 
@@ -100,7 +99,10 @@
 }
 
 .plot svg {
+  display: block;
+  height: 100%;
   overflow: visible;
+  width: 100%;
 }
 
 .grid {
@@ -110,15 +112,12 @@
 }
 
 .area {
-  animation: reveal-area 180ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1))
-    both;
+  opacity: 1;
 }
 
 .line {
-  animation: reveal-line 190ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1))
-    both;
   fill: none;
-  stroke: var(--accent);
+  stroke: var(--token-accent, var(--accent));
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 2.45;
@@ -134,7 +133,7 @@
 
 .hoverDot {
   fill: var(--canvas);
-  stroke: var(--accent);
+  stroke: var(--token-accent, var(--accent));
   stroke-width: 2.5;
   vector-effect: non-scaling-stroke;
 }
@@ -146,6 +145,7 @@
   box-shadow: 0 10px 28px color-mix(in srgb, black 14%, transparent);
   display: grid;
   gap: 2px;
+  max-width: calc(100% - 16px);
   min-width: max-content;
   padding: 7px 9px;
   pointer-events: none;
@@ -154,24 +154,8 @@
   z-index: 2;
 }
 
-.tooltip[data-horizontal-edge="start"] {
-  transform: translate(0, calc(-100% - 11px));
-}
-
-.tooltip[data-horizontal-edge="end"] {
-  transform: translate(-100%, calc(-100% - 11px));
-}
-
 .tooltip[data-vertical="below"] {
   transform: translate(-50%, 11px);
-}
-
-.tooltip[data-horizontal-edge="start"][data-vertical="below"] {
-  transform: translate(0, 11px);
-}
-
-.tooltip[data-horizontal-edge="end"][data-vertical="below"] {
-  transform: translate(-100%, 11px);
 }
 
 .tooltip strong {
@@ -185,6 +169,7 @@
   color: var(--muted);
   font-size: 9px;
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
 .placeholder {
@@ -232,6 +217,18 @@
   }
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  .area {
+    animation: reveal-area 180ms
+      var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)) both;
+  }
+
+  .line {
+    animation: reveal-line 190ms
+      var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)) both;
+  }
+}
+
 @media (hover: hover) and (pointer: fine) {
   .rangeButton:not([aria-pressed="true"]):hover {
     color: var(--text-soft);
@@ -240,9 +237,9 @@
 
 @media (max-width: 560px) {
   .shell {
-    border-radius: 20px;
+    border-radius: 18px;
     margin: 0;
-    min-height: 220px;
+    min-height: 212px;
     padding: 16px 14px 12px;
   }
 

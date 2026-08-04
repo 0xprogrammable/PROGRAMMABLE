@@ -2,8 +2,9 @@
   isolation: isolate;
   justify-content: flex-start;
   max-width: 1160px;
-  padding-bottom: clamp(72px, 9svh, 112px);
-  padding-top: clamp(38px, 6svh, 68px);
+  min-width: 0;
+  padding-bottom: clamp(64px, 8svh, 96px);
+  padding-top: clamp(30px, 4.8svh, 54px);
   position: relative;
 }
 
@@ -15,7 +16,8 @@
 .pickerHeading {
   display: block;
   margin-inline: auto;
-  max-width: none;
+  max-width: 780px;
+  min-width: 0;
   text-align: center;
   width: 100%;
 }
@@ -39,8 +41,9 @@
 .modelGrid {
   gap: clamp(24px, 2.4vw, 30px);
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-top: clamp(36px, 5svh, 52px);
+  margin-top: clamp(28px, 3.8svh, 40px);
   max-width: 1160px;
+  min-width: 0;
 }
 
 .modelCard.modelCard {
@@ -53,6 +56,7 @@
   color: inherit;
   font: inherit;
   isolation: isolate;
+  min-width: 0;
   min-height: 0;
   overflow: visible;
   padding: 0;
@@ -90,9 +94,7 @@
 }
 
 .modelArt::after {
-  background:
-    linear-gradient(180deg, rgb(0 0 0 / 0.02), transparent 32%),
-    linear-gradient(0deg, rgb(0 0 0 / 0.12), transparent 38%);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.08);
 }
 
 :global(html[data-theme="dark"]) .modelArt {
@@ -100,16 +102,19 @@
 }
 
 .classicArt::before {
-  background:
-    radial-gradient(circle at 50% 45%, rgb(255 255 255 / 0.04), transparent 38%),
-    linear-gradient(135deg, rgb(5 8 11 / 0.08), rgb(255 255 255 / 0.06));
+  background: rgb(248 240 233 / 0.018);
+}
+
+.classicArt {
+  background: #f8f0e9;
 }
 
 .customArt::before {
-  background:
-    radial-gradient(circle at 50% 48%, rgb(255 222 168 / 0.16), transparent 24%),
-    radial-gradient(circle at 80% 12%, rgb(214 112 255 / 0.14), transparent 34%),
-    linear-gradient(145deg, rgb(7 10 22 / 0.05), rgb(11 7 20 / 0.2));
+  background: rgb(5 9 28 / 0.08);
+}
+
+.customArt {
+  background: #07112f;
 }
 
 .artImage {
@@ -126,7 +131,6 @@
   filter: none;
 }
 
-.brandMark,
 .classicLogo {
   aspect-ratio: 1;
   inset: 50% auto auto 50%;
@@ -136,37 +140,14 @@
   z-index: 2;
 }
 
-.brandMark {
-  -webkit-mask-image: url("/brand/loop/programmable-loop-mark-transparent-v1.png");
-  -webkit-mask-position: center;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-size: contain;
-  mask-image: url("/brand/loop/programmable-loop-mark-transparent-v1.png");
-  mask-position: center;
-  mask-repeat: no-repeat;
-  mask-size: contain;
-}
-
 .classicLogo {
   filter: drop-shadow(0 9px 22px rgb(95 54 68 / 0.13));
   height: auto;
   object-fit: contain;
 }
 
-.customMark {
-  background: conic-gradient(
-    from 218deg,
-    #ff8c78,
-    #ffc86b,
-    #f5f4a7,
-    #93e6d0,
-    #8bb8ff,
-    #d69bff,
-    #ff8c78
-  );
-  filter:
-    drop-shadow(0 0 14px rgb(255 186 111 / 0.42))
-    drop-shadow(0 12px 32px rgb(0 0 0 / 0.32));
+.customLogo {
+  filter: drop-shadow(0 5px 12px rgb(0 0 0 / 0.28));
 }
 
 .customSparkles {
@@ -177,31 +158,20 @@
 }
 
 .customSparkles > span {
+  --spark-size: 12px;
   --twinkle-rotation: 0deg;
-  background: radial-gradient(
-    circle,
-    rgb(255 255 255 / 0.98) 0 8%,
-    rgb(255 231 184 / 0.48) 18%,
-    transparent 58%
-  );
-  height: 15px;
-  filter: drop-shadow(0 0 5px rgb(255 224 176 / 0.65));
-  opacity: 0.2;
+  background: rgb(255 249 231 / 0.92);
+  color: rgb(255 249 231 / 0.78);
+  height: 2px;
+  opacity: 0.12;
   position: absolute;
-  transform: rotate(var(--twinkle-rotation)) scale(0.72);
-  width: 15px;
+  transform: rotate(var(--twinkle-rotation)) scale(0.76);
+  width: 2px;
 }
 
 .customSparkles > span::before,
 .customSparkles > span::after {
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgb(255 249 223 / 0.94) 47%,
-    rgb(255 255 255 / 0.98) 50%,
-    rgb(255 229 181 / 0.82) 53%,
-    transparent
-  );
+  background: currentColor;
   content: "";
   inset: 50% auto auto 50%;
   position: absolute;
@@ -210,12 +180,11 @@
 
 .customSparkles > span::before {
   height: 1px;
-  width: 100%;
+  width: var(--spark-size);
 }
 
 .customSparkles > span::after {
-  height: 100%;
-  transform: translate3d(-50%, -50%, 0) rotate(90deg);
+  height: var(--spark-size);
   width: 1px;
 }
 
@@ -226,10 +195,9 @@
 
 .customSparkles > span:nth-child(2) {
   --twinkle-rotation: 16deg;
-  height: 10px;
+  --spark-size: 8px;
   right: 24%;
   top: 20%;
-  width: 10px;
 }
 
 .customSparkles > span:nth-child(3) {
@@ -240,76 +208,69 @@
 
 .customSparkles > span:nth-child(4) {
   --twinkle-rotation: 9deg;
+  --spark-size: 9px;
   bottom: 29%;
-  height: 11px;
   right: 16%;
-  width: 11px;
 }
 
 .customSparkles > span:nth-child(5) {
   --twinkle-rotation: -18deg;
-  height: 8px;
+  --spark-size: 7px;
   left: 39%;
   top: 17%;
-  width: 8px;
 }
 
 .customSparkles > span:nth-child(6) {
   --twinkle-rotation: 14deg;
+  --spark-size: 8px;
   bottom: 15%;
-  height: 9px;
   right: 38%;
-  width: 9px;
 }
 
 .customSparkles > span:nth-child(7) {
   --twinkle-rotation: 21deg;
-  height: 12px;
+  --spark-size: 10px;
   left: 11%;
   top: 58%;
-  width: 12px;
 }
 
 .customSparkles > span:nth-child(8) {
   --twinkle-rotation: -8deg;
-  height: 8px;
+  --spark-size: 7px;
   right: 9%;
   top: 49%;
-  width: 8px;
 }
 
 .customSparkles > span:nth-child(9) {
   --twinkle-rotation: 12deg;
+  --spark-size: 9px;
   bottom: 9%;
-  height: 10px;
   left: 49%;
-  width: 10px;
 }
 
 .customSparkles > span:nth-child(10) {
   --twinkle-rotation: -22deg;
-  height: 7px;
+  --spark-size: 6px;
   right: 43%;
   top: 8%;
-  width: 7px;
 }
 
 @keyframes custom-star-sparkle {
   0%,
-  68%,
+  70%,
   100% {
-    opacity: 0.14;
-    transform: rotate(var(--twinkle-rotation)) scale(0.66);
+    opacity: 0.1;
+    transform: rotate(var(--twinkle-rotation)) scale(0.74);
   }
 
-  76% {
-    opacity: 1;
-    transform: rotate(var(--twinkle-rotation)) scale(1.28);
+  78% {
+    opacity: 0.82;
+    transform: rotate(var(--twinkle-rotation)) scale(1.08);
   }
 
-  82% {
+  84% {
     opacity: 0.16;
-    transform: rotate(var(--twinkle-rotation)) scale(0.84);
+    transform: rotate(var(--twinkle-rotation)) scale(0.88);
   }
 }
 
@@ -373,13 +334,13 @@
   }
 
   .customSparkles > span:nth-child(9) {
-    animation-delay: -4.1s;
-    animation-duration: 8.3s;
+    animation-delay: -4.2s;
+    animation-duration: 7.9s;
   }
 
   .customSparkles > span:nth-child(10) {
     animation-delay: -1.8s;
-    animation-duration: 7.5s;
+    animation-duration: 8.3s;
   }
 }
 
@@ -387,12 +348,14 @@
   background: transparent;
   border: 0;
   box-shadow: none;
-  min-height: 218px;
-  padding: 24px 4px 0;
+  min-height: 202px;
+  min-width: 0;
+  padding: 18px 4px 0;
 }
 
 .modelHeading {
-  min-height: 38px;
+  min-height: 34px;
+  min-width: 0;
 }
 
 .modelHeading strong {
@@ -416,9 +379,10 @@
   color: var(--text-soft);
   font-size: 15.5px;
   line-height: 1.58;
-  margin-top: 12px;
-  min-height: 74px;
+  margin-top: 8px;
+  min-height: 72px;
   max-width: 49ch;
+  overflow-wrap: anywhere;
   text-wrap: pretty;
 }
 
@@ -460,7 +424,7 @@
   font-size: 14px;
   font-weight: 650;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 4px;
   min-height: 40px;
   padding-top: 2px;
   width: fit-content;
@@ -490,7 +454,9 @@
   --launch-control-height: 52px;
   --launch-panel-gap: 14px;
   isolation: isolate;
+  max-width: 100%;
   min-height: calc(100svh - var(--header-height));
+  min-width: 0;
   padding-top: 8px;
   position: relative;
 }
@@ -550,6 +516,7 @@
 
 .formPageTitle {
   gap: 3px;
+  min-width: 0;
 }
 
 .formPage :global(.launch-page-heading) {
@@ -581,6 +548,7 @@
     0 1px 0 var(--card-shadow),
     0 22px 62px var(--card-shadow-soft);
   max-width: 1000px;
+  min-width: 0;
   margin-top: 0;
 }
 
@@ -678,6 +646,63 @@
 .formPage :global(.classic-link-fields) {
   margin-left: 0;
   margin-top: 14px;
+}
+
+.formPage :global(.classic-link-disclosure) {
+  margin-top: 14px;
+  min-width: 0;
+}
+
+.formPage :global(.classic-link-disclosure summary) {
+  align-items: center;
+  background: color-mix(in srgb, var(--glass-90) 92%, transparent);
+  border: 1px solid var(--control-border);
+  border-radius: 14px;
+  color: var(--text-soft);
+  display: flex;
+  font-size: 12px;
+  font-weight: 630;
+  gap: 9px;
+  justify-content: flex-start;
+  list-style: none;
+  min-height: 44px;
+  padding: 0 13px;
+  width: 100%;
+}
+
+.formPage :global(.classic-link-disclosure summary::-webkit-details-marker) {
+  display: none;
+}
+
+.formPage :global(.classic-link-disclosure summary small) {
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 540;
+}
+
+.formPage :global(.classic-link-disclosure summary::after) {
+  color: var(--accent-strong);
+  content: "+";
+  font-size: 17px;
+  font-weight: 480;
+  line-height: 1;
+  margin-inline-start: auto;
+}
+
+.formPage :global(.classic-link-disclosure[open] summary::after) {
+  content: "−";
+}
+
+.formPage :global(.classic-link-disclosure summary:focus-visible),
+.formPage :global(.token-image-meta button:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.formPage :global(.token-image-meta button) {
+  border-radius: 9px;
+  min-height: 40px;
+  padding-inline: 8px;
 }
 
 .formPage :global(.classic-fee-section),
@@ -984,6 +1009,11 @@
     background: var(--accent-wash);
     color: var(--text);
   }
+
+  .formPage :global(.classic-link-disclosure summary:hover) {
+    border-color: color-mix(in srgb, var(--accent) 30%, var(--control-border));
+    color: var(--text);
+  }
 }
 
 .modelCard[data-launch-model-available="true"]:active {
@@ -1055,7 +1085,7 @@
 
   .pickerPage {
     padding-bottom: 104px;
-    padding-top: 38px;
+    padding-top: 32px;
   }
 
   .pickerHeading h1 {
@@ -1063,9 +1093,9 @@
   }
 
   .modelGrid {
-    gap: 48px;
+    gap: 40px;
     grid-template-columns: minmax(0, 1fr);
-    margin-top: 34px;
+    margin-top: 28px;
     max-width: 640px;
   }
 
@@ -1090,7 +1120,7 @@
 
   .modelBody {
     min-height: 0;
-    padding: 20px 2px 0;
+    padding: 16px 2px 0;
   }
 
   .modelHeading strong {
@@ -1100,6 +1130,7 @@
   .modelDescription {
     font-size: 15px;
     line-height: 1.55;
+    margin-top: 7px;
     min-height: 0;
   }
 
@@ -1116,7 +1147,7 @@
 
   .modelAction {
     min-height: 42px;
-    padding-top: 8px;
+    padding-top: 5px;
   }
 
   .formPage {
@@ -1202,7 +1233,7 @@
 
   .modelBody {
     min-height: 0;
-    padding: 18px 2px 0;
+    padding: 15px 2px 0;
   }
 
   .modelHeading {
@@ -1286,6 +1317,13 @@
     padding: 5px;
   }
 
+  .formPage :global(.classic-v3-reward-mode button) {
+    line-height: 1.2;
+    min-height: 52px;
+    padding-inline: 4px;
+    white-space: normal;
+  }
+
   .formPage :global(.deep-preset-stats > div),
   .formPage :global(.deep-preset-stats > div:first-child) {
     border-left: 0;
@@ -1305,17 +1343,20 @@
 }
 
 @media (max-width: 340px) {
+  .pickerHeading h1 {
+    font-size: 36px;
+  }
+
   .modelCard {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .modelBody {
-    padding-inline: 16px;
+    padding-inline: 2px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .brandMark,
   .classicLogo,
   .modelArt img,
   .modelArt,

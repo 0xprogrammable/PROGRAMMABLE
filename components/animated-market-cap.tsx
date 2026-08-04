@@ -20,13 +20,7 @@ const usdCompactFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
   notation: "compact",
-  maximumFractionDigits: 0,
-});
-const usdCompactPreciseFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  notation: "compact",
-  maximumFractionDigits: 2,
+  maximumSignificantDigits: 3,
 });
 const standardNumberFormatter = new Intl.NumberFormat("en-US", {
   notation: "standard",
@@ -42,9 +36,8 @@ const compactNumberFormatter = new Intl.NumberFormat("en-US", {
 });
 
 function compactUsd(value: number, target: number) {
-  if (target < 1_000) return usdStandardFormatter.format(value);
-  return target >= 1_000_000
-    ? usdCompactPreciseFormatter.format(value)
+  return target < 1_000
+    ? usdStandardFormatter.format(value)
     : usdCompactFormatter.format(value);
 }
 
@@ -178,8 +171,18 @@ export function AnimatedMarketCap({
   ]);
 
   return (
-    <strong className="animated-market-cap">
-      <span aria-hidden="true" ref={valueRef}>
+    <strong
+      className="animated-market-cap"
+      style={{ position: "relative" }}
+    >
+      <span aria-hidden="true" style={{ visibility: "hidden" }}>
+        {finalLabel}
+      </span>
+      <span
+        aria-hidden="true"
+        ref={valueRef}
+        style={{ inset: 0, position: "absolute" }}
+      >
         {finalLabel}
       </span>
       <span className="sr-only">{finalLabel}</span>

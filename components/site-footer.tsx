@@ -47,7 +47,7 @@ export function SiteFooter() {
               alt=""
               width={512}
               height={512}
-              sizes="36px"
+              sizes="38px"
             />
             <span>Programmable</span>
           </Link>
