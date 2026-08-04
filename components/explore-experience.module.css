@@ -108,7 +108,7 @@
   display: grid;
   gap: clamp(42px, 4vw, 54px) clamp(18px, 2vw, 24px);
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin: 0 auto;
+  margin: clamp(16px, 2svh, 24px) auto 0;
   max-width: 1020px;
   width: 100%;
 }
@@ -410,6 +410,7 @@
   .runnerGrid {
     gap: 56px;
     grid-template-columns: 1fr;
+    margin-top: 0;
   }
 
   .runnerCard {

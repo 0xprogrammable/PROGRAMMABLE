@@ -224,6 +224,7 @@ describe("fee earnings chart", () => {
         label: "Creator fees claimed",
         detail: "0.3 ETH from NEW",
         occurredAt: "Today",
+        occurredAtIso: "2026-08-04T11:30:00.000Z",
         href: "/token/new",
       },
       {
@@ -231,6 +232,7 @@ describe("fee earnings chart", () => {
         label: "Creator fees claimed",
         detail: "0.2 ETH from OLD",
         occurredAt: "Yesterday",
+        occurredAtIso: "2026-08-03T11:30:00.000Z",
         href: "/token/old",
       },
     ];
@@ -251,6 +253,46 @@ describe("fee earnings chart", () => {
       600_000_000_000_000_000n,
     ]);
     expect(chart?.totalWei).toBe(600_000_000_000_000_000n);
+  });
+
+  it("changes the earned total with the selected period", () => {
+    const nowMs = Date.parse("2026-08-04T12:00:00.000Z");
+    const activity = [
+      {
+        id: "claim:recent",
+        label: "Creator fees claimed",
+        detail: "0.1 ETH from NOW",
+        occurredAt: "Today",
+        occurredAtIso: "2026-08-04T11:30:00.000Z",
+        href: "/token/now",
+      },
+      {
+        id: "claim:old",
+        label: "Creator fees claimed",
+        detail: "0.4 ETH from OLD",
+        occurredAt: "Last week",
+        occurredAtIso: "2026-07-24T12:00:00.000Z",
+        href: "/token/old",
+      },
+    ];
+
+    const hourly = buildFeeEarningsChart(
+      activity,
+      500_000_000_000_000_000n,
+      50_000_000_000_000_000n,
+      { nowMs, range: "1h" },
+    );
+    const allTime = buildFeeEarningsChart(
+      activity,
+      500_000_000_000_000_000n,
+      50_000_000_000_000_000n,
+      { nowMs, range: "all" },
+    );
+
+    expect(hourly?.totalWei).toBe(150_000_000_000_000_000n);
+    expect(allTime?.totalWei).toBe(550_000_000_000_000_000n);
+    expect(profileViewSource).toContain('role="slider"');
+    expect(profileViewSource).not.toContain("styles.claimHistory");
   });
 
   it("keeps the claim dialog focused on the selected token and actions", () => {
