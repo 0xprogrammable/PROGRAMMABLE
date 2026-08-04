@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     template: "%s · Programmable Docs",
   },
   description:
-    "How Programmable project markets launch, route fees and use Uniswap v4 on Ethereum.",
+    "Developer documentation for discovering and building with Programmable launches.",
 };
 
 export default function DocsLayout({ children }: { children: ReactNode }) {

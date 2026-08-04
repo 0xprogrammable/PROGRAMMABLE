@@ -27,10 +27,9 @@
 
 .heroTools {
   align-items: center;
-  display: grid;
-  gap: 12px;
-  grid-template-columns: 340px minmax(260px, 1fr);
+  display: flex;
   isolation: isolate;
+  justify-content: flex-end;
   position: sticky;
   top: calc(var(--header-height) + 12px);
   width: 100%;
@@ -51,51 +50,6 @@
   z-index: -1;
 }
 
-.guideTabs {
-  align-items: center;
-  -webkit-backdrop-filter: var(--control-glass-backdrop);
-  backdrop-filter: var(--control-glass-backdrop);
-  background: var(--control-glass-background);
-  border: 1px solid var(--control-glass-border);
-  border-radius: 18px;
-  box-shadow:
-    inset 0 1px 0 var(--control-glass-highlight),
-    0 12px 32px var(--control-glass-shadow-color);
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  padding: 4px;
-  width: 340px;
-}
-
-.guideTab {
-  align-items: center;
-  border: 1px solid transparent;
-  border-radius: 13px;
-  color: var(--muted);
-  display: inline-flex;
-  font-size: 13px;
-  font-weight: 620;
-  justify-content: center;
-  min-height: 42px;
-  padding-inline: 10px;
-  transition:
-    background-color 150ms var(--ease-out),
-    border-color 150ms var(--ease-out),
-    box-shadow 150ms var(--ease-out),
-    color 150ms var(--ease-out);
-  white-space: nowrap;
-}
-
-.guideTab[data-active="true"] {
-  background: color-mix(in srgb, var(--glass-98) 95%, transparent);
-  border-color: var(--panel-border-soft);
-  box-shadow:
-    inset 0 1px 0 var(--control-glass-highlight),
-    0 3px 10px var(--control-glass-shadow-color);
-  color: var(--text);
-}
-
-.guideTab:focus-visible,
 .navGroup a:focus-visible,
 .mobileNav summary:focus-visible {
   outline: 2px solid var(--focus);
@@ -122,6 +76,7 @@
     background-color 150ms var(--ease-out),
     border-color 150ms var(--ease-out),
     box-shadow 150ms var(--ease-out);
+  width: min(100%, 420px);
   z-index: 30;
 }
 
@@ -425,6 +380,229 @@
 .callout p {
   font-size: 15px;
   line-height: 1.58;
+}
+
+.launchInspector {
+  background: color-mix(in srgb, var(--glass-90) 92%, transparent);
+  border: 1px solid var(--panel-border-soft);
+  border-radius: 20px;
+  box-shadow:
+    inset 0 1px 0 var(--control-glass-highlight),
+    0 22px 54px var(--card-shadow-soft);
+  margin-top: 30px;
+  overflow: hidden;
+}
+
+.inspectorHeader {
+  align-items: center;
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  padding: 18px 20px 15px;
+}
+
+.inspectorHeader > div {
+  display: grid;
+  gap: 4px;
+}
+
+.inspectorHeader > div > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.085em;
+  text-transform: uppercase;
+}
+
+.inspectorHeader strong {
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.sampleBadge {
+  border: 1px solid var(--panel-border-soft);
+  border-radius: 999px;
+  color: var(--muted);
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 680;
+  padding: 5px 9px;
+}
+
+.sampleTabs {
+  border-block: 1px solid var(--panel-border-soft);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 4px;
+}
+
+.sampleTab {
+  background: transparent;
+  border: 0;
+  border-radius: 11px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 620;
+  min-height: 44px;
+  padding-inline: 8px;
+  transition:
+    background-color 140ms var(--ease-out),
+    color 140ms var(--ease-out);
+}
+
+.sampleTab[aria-selected="true"] {
+  background: var(--surface-soft);
+  color: var(--text);
+}
+
+.sampleTab:focus-visible,
+.codeWindow:focus-visible,
+.codeCopyButton:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.codeWindow {
+  min-width: 0;
+}
+
+.codeWindowBar {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 12px;
+  gap: 9px;
+  justify-content: space-between;
+  min-height: 50px;
+  padding: 7px 10px 7px 18px;
+}
+
+.codePre,
+.commandPre {
+  background: color-mix(in srgb, var(--body-background) 82%, var(--surface));
+  border-top: 1px solid var(--panel-border-soft);
+  color: var(--text-soft);
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 13px;
+  line-height: 1.62;
+  margin: 0;
+  overflow-x: auto;
+  padding: 20px;
+  scrollbar-gutter: stable;
+  tab-size: 2;
+}
+
+.codePre {
+  min-height: 282px;
+}
+
+.codeCopyButton {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  color: var(--text-soft);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  gap: 7px;
+  min-height: 44px;
+  padding-inline: 10px;
+  transition:
+    background-color 140ms var(--ease-out),
+    color 140ms var(--ease-out),
+    transform 140ms var(--ease-out);
+}
+
+.codeCopyButton[data-state="copied"] {
+  color: var(--success);
+}
+
+.codeCopyButton[data-state="error"] {
+  color: var(--danger);
+}
+
+.codeCopyIcons {
+  display: grid;
+  height: 15px;
+  place-items: center;
+  position: relative;
+  width: 15px;
+}
+
+.codeCopyIcons svg {
+  grid-area: 1 / 1;
+  height: 15px;
+  transition:
+    filter 150ms ease,
+    opacity 150ms var(--ease-out),
+    transform 150ms var(--ease-out);
+  width: 15px;
+}
+
+.codeCopyIdleIcon {
+  filter: blur(0);
+  opacity: 1;
+  transform: scale(1);
+}
+
+.codeCopySuccessIcon,
+.codeCopyErrorIcon {
+  filter: blur(2px);
+  opacity: 0;
+  transform: scale(0.88);
+}
+
+.codeCopyButton[data-state="copied"] .codeCopyIdleIcon,
+.codeCopyButton[data-state="error"] .codeCopyIdleIcon {
+  filter: blur(2px);
+  opacity: 0;
+  transform: scale(0.88);
+}
+
+.codeCopyButton[data-state="copied"] .codeCopySuccessIcon,
+.codeCopyButton[data-state="error"] .codeCopyErrorIcon {
+  filter: blur(0);
+  opacity: 1;
+  transform: scale(1);
+}
+
+.codeNote {
+  border-top: 1px solid var(--panel-border-soft);
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+  max-width: none !important;
+  padding: 11px 18px 13px;
+}
+
+.commandPanel {
+  background: color-mix(in srgb, var(--glass-90) 92%, transparent);
+  border: 1px solid var(--panel-border-soft);
+  border-radius: 16px;
+  box-shadow: inset 0 1px 0 var(--control-glass-highlight);
+  margin-top: 28px;
+  overflow: hidden;
+}
+
+.commandMethod {
+  background: var(--accent-soft);
+  border-radius: 7px;
+  color: var(--accent-strong);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 760;
+  letter-spacing: 0.06em;
+  padding: 4px 6px;
+}
+
+.commandPre {
+  min-height: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .steps {
@@ -793,7 +971,6 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .guideTab:not([data-active="true"]):hover,
   .searchResults a:hover,
   .navGroup a:hover {
     background: var(--surface-soft);
@@ -841,6 +1018,16 @@
     box-shadow:
       inset 0 1px 0 var(--control-glass-highlight),
       0 3px 10px var(--card-shadow-soft);
+  }
+
+  .sampleTab:not([aria-selected="true"]):hover,
+  .codeCopyButton:hover {
+    background: var(--surface-soft);
+    color: var(--text);
+  }
+
+  .codeCopyButton:active {
+    transform: scale(0.96);
   }
 }
 
@@ -980,15 +1167,10 @@
 
   .heroTools {
     gap: 10px;
-    grid-template-columns: minmax(0, 1fr);
   }
 
-  .guideTabs {
+  .search {
     width: 100%;
-  }
-
-  .guideTab {
-    padding-inline: 5px;
   }
 
   .search input {
@@ -1043,6 +1225,14 @@
 
   .steps {
     gap: 21px;
+  }
+
+  .sampleTabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .codePre {
+    min-height: 0;
   }
 
   .tableWrap {
@@ -1114,11 +1304,26 @@
 }
 
 @media (max-width: 430px) {
-  .guideTab {
-    font-size: 12.5px;
+  .callout {
+    padding: 16px;
   }
 
-  .callout {
+  .inspectorHeader {
+    align-items: flex-start;
+    padding: 16px;
+  }
+
+  .sampleBadge {
+    display: none;
+  }
+
+  .codeWindowBar {
+    padding-inline-start: 16px;
+  }
+
+  .codePre,
+  .commandPre {
+    font-size: 12px;
     padding: 16px;
   }
 
@@ -1143,9 +1348,11 @@
   .chapterIndicator,
   .externalLinkChip,
   .externalLinkIcon,
-  .guideTab,
+  .codeCopyButton,
+  .codeCopyIcons svg,
   .mobileNav summary svg,
   .navGroup a,
+  .sampleTab,
   .search,
   .searchResults a {
     transition: none;
@@ -1163,9 +1370,11 @@
 
 @media (forced-colors: active) {
   .addressCopyButton:focus-visible .addressCopyIcons,
-  .guideTab:focus-visible,
+  .codeCopyButton:focus-visible,
+  .codeWindow:focus-visible,
   .mobileNav summary:focus-visible,
-  .navGroup a:focus-visible {
+  .navGroup a:focus-visible,
+  .sampleTab:focus-visible {
     outline-color: Highlight;
   }
 }

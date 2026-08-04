@@ -1,304 +1,170 @@
 import type { Metadata } from "next";
 
-import { DocsAddress } from "@/components/docs-address";
+import {
+  DocsLaunchInspector,
+  DocsQuickstartCommand,
+} from "@/components/docs-code-preview";
 import { DocsExternalLink } from "@/components/docs-external-link";
 import { DocsShell } from "@/components/docs-shell";
 import styles from "@/components/docs-experience.module.css";
 
 export const metadata: Metadata = {
-  title: "Docs",
+  title: "Developers",
+  description:
+    "One public interface for terminals, scanners, wallets, indexers and apps building with Programmable launches.",
   alternates: { canonical: "/docs" },
 };
 
-const classicEvidenceCommit =
-  "1fb9558af4f0248de75d5c7983f80036e32f47cb";
-const classicLauncher =
-  "0xC3bd04aAc2fb2ba58efD7Eb673E544E0B80De770";
-const classicHook =
-  "0x35Fe236EA82F7cF525c9719d7df8F49F94D720CC";
-const classicRewardVaultFactory =
-  "0xF28967f9DFaC3Ca21384b59D6D75C8106b3eab2a";
-const positionLockFactory =
-  "0x291a9ff1059d225d02B1659430804486404dB507";
-
-const platformSections = [
+const developerSections = [
   { id: "overview", label: "Overview" },
-  { id: "launching", label: "Launch flow" },
-  { id: "trading", label: "Trading and pricing" },
-  { id: "rewards", label: "Creator rewards" },
-  { id: "network", label: "Network" },
-  { id: "contracts", label: "Contracts" },
-  { id: "metadata", label: "Token metadata" },
-  { id: "releases", label: "Release evidence" },
-  { id: "risks", label: "Risks" },
+  { id: "formats", label: "Launch formats" },
+  { id: "quickstart", label: "Quickstart" },
+  { id: "rules", label: "Integration rules" },
+  { id: "resources", label: "Resources" },
 ] as const;
 
 export default function DocsPage() {
   return (
     <DocsShell
       currentPath="/docs"
-      title="Docs"
-      description="Platform reference and launch-model documentation."
-      sections={platformSections}
+      title="Build with Programmable"
+      description="One public interface for every Programmable launch. Add launches to a terminal, scanner, wallet or app without a private integration."
+      sections={developerSections}
     >
       <section id="overview">
-        <h2>Platform</h2>
+        <h2>Start from one public interface</h2>
         <p className={styles.lead}>
-          Programmable launches fixed-supply ERC-20 tokens into Uniswap v4
-          pools on Ethereum. A launch model defines the pool structure, fee
-          path, reward rules and available controls before the wallet submits
-          the transaction.
+          The Developer API lets you discover Programmable launches, verify
+          where they came from and build with their available markets. It is
+          read-only, public and does not require an API key.
         </p>
+        <div className={styles.factGrid}>
+          <div className={styles.fact}>
+            <span>Trading terminals</span>
+            <strong>List Programmable launches from one feed</strong>
+          </div>
+          <div className={styles.fact}>
+            <span>New-pair scanners</span>
+            <strong>Show the original launch time and source</strong>
+          </div>
+          <div className={styles.fact}>
+            <span>Wallets and explorers</span>
+            <strong>Identify Classic and Custom launches consistently</strong>
+          </div>
+          <div className={styles.fact}>
+            <span>Apps and agents</span>
+            <strong>Build tools around each launch&apos;s capabilities</strong>
+          </div>
+        </div>
+      </section>
+
+      <section id="formats">
+        <h2>One record, every launch</h2>
         <p>
-          Set buy and sell fees in Classic, then route creator rewards to the
-          launch wallet, another wallet or a split of up to five wallets.
+          Public labels stay simple: <strong>Classic</strong> or{" "}
+          <strong>Custom</strong>. A Custom launch can use a Uniswap pool,
+          another contract market or no market at all. Read the record instead
+          of assuming every token works the same way.
         </p>
+        <DocsLaunchInspector />
         <div className={styles.callout}>
-          <strong>Classic is the active launch model.</strong>
+          <strong>The examples share the same stable envelope.</strong>
           <p>
-            Custom Hook opens its framework and release requirements. Launch
-            configuration activates only after matching contracts and release
-            evidence are published.
+            Current live records include Classic and existing first-party
+            Custom launches. Community Custom submissions remain prelaunch
+            until the public launch flow is activated.
           </p>
         </div>
       </section>
 
-      <section id="launching">
-        <h2>From setup to a confirmed transaction</h2>
+      <section id="quickstart">
+        <h2>Fetch the launch feed</h2>
+        <p>
+          Start with the well-known document, check the current status, then
+          ingest the launch feed. The manifest supplies current deployments so
+          your product does not need hardcoded launcher addresses.
+        </p>
         <ol className={styles.steps}>
           <li>
-            <strong>Choose a model</strong>
-            <span>
-              Check its release status, fee path and model-specific risks.
-            </span>
+            <strong>Discover the interface</strong>
+            <span>Read the well-known document and current manifest.</span>
           </li>
           <li>
-            <strong>Set the token and launch terms</strong>
-            <span>
-              Add the name, ticker, image, description, project links and the
-              settings available for that model.
-            </span>
+            <strong>Ingest every page</strong>
+            <span>Store the launch ID and continue with the supplied cursor.</span>
           </li>
           <li>
-            <strong>Review the prepared transaction</strong>
+            <strong>Enable only declared support</strong>
             <span>
-              Programmable checks the configured release and validates the
-              prepared call before opening the wallet.
-            </span>
-          </li>
-          <li>
-            <strong>Confirm in the wallet</strong>
-            <span>
-              The connected wallet submits the transaction and pays Ethereum
-              gas. A confirmed receipt becomes the launch record.
+              Show charts, quotes or actions only when the market record says
+              they are available.
             </span>
           </li>
         </ol>
-        <div className={styles.callout}>
-          <strong>There is no separate Programmable launch charge.</strong>
-          <p>
-            The launch wallet pays network gas and the Initial Buy required by
-            the selected model.
-          </p>
-        </div>
+        <DocsQuickstartCommand />
       </section>
 
-      <section id="trading">
-        <h2>The recorded pool is the source of truth</h2>
-        <p>
-          Explore and token pages read the pool recorded by the verified launch
-          event. Market cap is an estimate based on confirmed pool price and
-          fixed token supply. It is not a promise that the full supply can be
-          sold at that price.
-        </p>
-        <div className={styles.factGrid}>
-          <div className={styles.fact}>
-            <span>Quotes</span>
-            <strong>Prepared against the recorded Uniswap v4 pool</strong>
-          </div>
-          <div className={styles.fact}>
-            <span>Market cap</span>
-            <strong>Confirmed pool price multiplied by fixed supply</strong>
-          </div>
-          <div className={styles.fact}>
-            <span>Price impact</span>
-            <strong>Changes with live liquidity and trade size</strong>
-          </div>
-          <div className={styles.fact}>
-            <span>External routes</span>
-            <strong>May not support the pool or its hook correctly</strong>
-          </div>
-        </div>
+      <section id="rules">
+        <h2>Four rules keep integrations future-proof</h2>
+        <ol className={styles.steps}>
+          <li>
+            <strong>Use only Classic and Custom as public categories</strong>
+            <span>Market design belongs in the record, not in new labels.</span>
+          </li>
+          <li>
+            <strong>Keep launches visible when no market exists</strong>
+            <span>No pool is a valid state, not a broken token.</span>
+          </li>
+          <li>
+            <strong>Read support before showing an action</strong>
+            <span>Discovery does not automatically authorize trading.</span>
+          </li>
+          <li>
+            <strong>Follow the manifest instead of contract addresses</strong>
+            <span>Compatible future deployments then arrive without a rebuild.</span>
+          </li>
+        </ol>
       </section>
 
-      <section id="rewards">
-        <h2>Rewards follow the launch terms</h2>
+      <section id="resources">
+        <h2>Use the full reference when you need it</h2>
         <p>
-          Classic rewards accrue in ETH. A launch can assign them to the launch
-          wallet, another wallet or a recorded split of up to five wallets. Each
-          current payout wallet claims only its own allocation and can move
-          future rewards for that allocation to a new address.
-        </p>
-        <p>
-          Moving an allocation to a new payout address does not change its
-          percentage. The disclosed CTO authority can replace future recipients
-          and split percentages after checkpointing rewards already accrued
-          under the current configuration.
-        </p>
-        <div className={styles.callout}>
-          <strong>Claiming cannot change the launch economics.</strong>
-          <p>
-            A claim pays only the caller&apos;s recorded entitlement. It cannot
-            alter fee rates, reward percentages or liquidity custody.
-          </p>
-        </div>
-      </section>
-
-      <section id="network">
-        <h2>Ethereum Mainnet</h2>
-        <p>
-          Public launches use Ethereum Mainnet and the official Uniswap v4
-          PoolManager, PositionManager, StateView, Quoter and Universal Router
-          deployments. The wallet must be connected to Ethereum before it can
-          submit a launch or trade.
-        </p>
-        <div className={styles.factGrid}>
-          <div className={styles.fact}>
-            <span>Chain ID</span>
-            <strong>1</strong>
-          </div>
-          <div className={styles.fact}>
-            <span>Gas asset</span>
-            <strong>ETH</strong>
-          </div>
-        </div>
-      </section>
-
-      <section id="contracts">
-        <h2>Active Classic deployment</h2>
-        <p>
-          These are the primary contracts behind the public Classic launcher.
-          The release manifest records the complete deployment, runtime hashes
-          and lifecycle evidence.
-        </p>
-        <div className={styles.tableWrap}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Contract</th>
-                <th>Address</th>
-                <th>Purpose</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Classic launcher</td>
-                <td>
-                  <DocsAddress
-                    address={classicLauncher}
-                    label="Classic launcher"
-                  />
-                </td>
-                <td>Creates the token, pool and launch records.</td>
-              </tr>
-              <tr>
-                <td>Classic fee hook</td>
-                <td>
-                  <DocsAddress address={classicHook} label="Classic fee hook" />
-                </td>
-                <td>Applies the immutable buy and sell fee settings.</td>
-              </tr>
-              <tr>
-                <td>Reward vault factory</td>
-                <td>
-                  <DocsAddress
-                    address={classicRewardVaultFactory}
-                    label="Reward vault factory"
-                  />
-                </td>
-                <td>Creates the reward vault for each Classic pool.</td>
-              </tr>
-              <tr>
-                <td>Position recipient factory</td>
-                <td>
-                  <DocsAddress
-                    address={positionLockFactory}
-                    label="Position recipient factory"
-                  />
-                </td>
-                <td>Permanently holds the launch position.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section id="metadata">
-        <h2>Project details are public</h2>
-        <p>
-          Token metadata can include a description, image, website, X link and
-          Telegram link. Programmable uses those values on Explore and token
-          pages. External terminals control their own indexing, moderation and
-          refresh timing, so display there is not guaranteed.
-        </p>
-      </section>
-
-      <section id="releases">
-        <h2>Source and deployment must match</h2>
-        <p>
-          A model reaches the public launcher only when its deployment record,
-          runtime code and required lifecycle evidence match the application
-          release. Local tests and design documents do not make a model live.
+          The public repository contains the OpenAPI document, JSON Schemas,
+          complete examples and longer guides. This page stays intentionally
+          short.
         </p>
         <div className={styles.sourceLinks}>
           <DocsExternalLink
-            href="https://github.com/0xprogrammable/programmable"
+            href="https://developers.programmable.family/.well-known/programmable.json"
             variant="chip"
           >
-            Source repository
+            Discovery document
           </DocsExternalLink>
           <DocsExternalLink
-            href={`https://github.com/0xprogrammable/programmable/blob/${classicEvidenceCommit}/contracts/deployments/mainnet-classic-v3.json`}
+            href="https://developers.programmable.family/openapi/programmable-v1.yaml"
             variant="chip"
           >
-            Classic release record
+            OpenAPI
           </DocsExternalLink>
           <DocsExternalLink
-            href={`https://github.com/0xprogrammable/programmable/blob/${classicEvidenceCommit}/contracts/security/CLASSIC-V3.md`}
+            href="https://developers.programmable.family/schemas/v1/launch.schema.json"
             variant="chip"
           >
-            Classic security notes
+            Launch schema
           </DocsExternalLink>
           <DocsExternalLink
-            href="https://docs.uniswap.org/contracts/v4/overview"
+            href="https://developers.programmable.family/api/v1/status"
             variant="chip"
           >
-            Uniswap v4 documentation
+            Live status
+          </DocsExternalLink>
+          <DocsExternalLink
+            href="https://github.com/0xprogrammable/developers"
+            variant="chip"
+          >
+            Developer repository
           </DocsExternalLink>
         </div>
-      </section>
-
-      <section id="risks">
-        <h2>What Programmable cannot guarantee</h2>
-        <ul className={styles.contentList}>
-          <li>
-            A transaction can fail, be irreversible or cost more when network
-            conditions change.
-          </li>
-          <li>
-            Fixed supply and locked launch liquidity do not guarantee demand,
-            price stability or deep liquidity.
-          </li>
-          <li>Tokens can be volatile, illiquid or lose all value.</li>
-          <li>
-            Third-party wallets, scanners and trading terminals make their own
-            routing and display decisions.
-          </li>
-          <li>
-            Source verification and lifecycle tests are not an independent
-            audit or a guarantee that no vulnerability exists.
-          </li>
-        </ul>
       </section>
     </DocsShell>
   );

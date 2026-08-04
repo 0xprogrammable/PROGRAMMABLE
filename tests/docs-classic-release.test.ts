@@ -19,24 +19,23 @@ const legacyLauncher = "0xD240D06f8586eB799f20056054e5b527405E6bAd";
 const legacyFeeHook = "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC";
 
 describe("Classic docs release binding", () => {
-  it("binds both public docs routes to the active Classic V3 contracts", () => {
+  it("keeps the hidden Classic reference bound to the active V3 contracts", () => {
     expect(classicRelease.status).toBe(
       "deployment-source-and-lifecycle-verified",
     );
     expect(classicRelease.lifecycleEvidence.releaseEligible).toBe(true);
 
-    for (const source of [docsOverview, classicDocs]) {
-      expect(source).toContain(currentLauncher);
-      expect(source).toContain(currentFeeHook);
-      expect(source).not.toContain(legacyLauncher);
-      expect(source).not.toContain(legacyFeeHook);
-      expect(source).not.toContain("mainnet-classic-v2.json");
-    }
+    expect(classicDocs).toContain(currentLauncher);
+    expect(classicDocs).toContain(currentFeeHook);
+    expect(classicDocs).not.toContain(legacyLauncher);
+    expect(classicDocs).not.toContain(legacyFeeHook);
+    expect(classicDocs).not.toContain("mainnet-classic-v2.json");
   });
 
-  it("documents configurable directional fees instead of the retired fixed-fee terms", () => {
-    expect(docsOverview).toContain("Set buy and sell fees");
-    expect(docsOverview).toContain("up to five wallets");
+  it("keeps launch-model details out of the developer overview", () => {
+    expect(docsOverview).not.toContain(currentLauncher);
+    expect(docsOverview).not.toContain(currentFeeHook);
+    expect(docsOverview).not.toContain("Set buy and sell fees");
     expect(classicDocs).toContain("Set separately from 1% to 10%");
     expect(classicDocs).toContain(
       "The 0.10% Programmable share is included.",

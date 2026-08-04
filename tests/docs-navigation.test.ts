@@ -24,19 +24,19 @@ describe("Docs navigation state", () => {
   });
 
   it("uses the URL hash instead of keeping Overview active", () => {
-    expect(normalizeDocsHash("#rewards")).toBe("/docs#rewards");
+    expect(normalizeDocsHash("#formats")).toBe("/docs#formats");
     expect(
       isDocsNavigationItemActive({
-        activeHref: "/docs#rewards",
+        activeHref: "/docs#formats",
         currentPath: "/docs",
         itemHref: "/docs#overview",
       }),
     ).toBe(false);
     expect(
       isDocsNavigationItemActive({
-        activeHref: "/docs#rewards",
+        activeHref: "/docs#formats",
         currentPath: "/docs",
-        itemHref: "/docs#rewards",
+        itemHref: "/docs#formats",
       }),
     ).toBe(true);
   });
@@ -48,13 +48,13 @@ describe("Docs navigation state", () => {
 
   it("canonicalizes a duplicated topic hash", () => {
     expect(normalizeDocsHash("#overview#overview")).toBe("/docs#overview");
-    expect(normalizeDocsHash("#rewards#rewards")).toBe("/docs#rewards");
+    expect(normalizeDocsHash("#rules#rules")).toBe("/docs#rules");
   });
 
   it("resolves browser Back and Forward hashes to one deterministic scroll target", () => {
-    expect(resolveDocsLocationTarget("#rewards")).toEqual({
-      href: "/docs#rewards",
-      sectionId: "rewards",
+    expect(resolveDocsLocationTarget("#rules")).toEqual({
+      href: "/docs#rules",
+      sectionId: "rules",
       shouldScroll: true,
     });
     expect(resolveDocsLocationTarget("#unknown")).toEqual({
@@ -118,11 +118,11 @@ describe("Docs navigation state", () => {
         marker: 104,
         positions: [
           { id: "overview", top: -640 },
-          { id: "launching", top: -40 },
-          { id: "trading", top: 380 },
+          { id: "formats", top: -40 },
+          { id: "quickstart", top: 380 },
         ],
       }),
-    ).toBe("launching");
+    ).toBe("formats");
   });
 
   it("places the reading marker below whichever Docs control is fixed", () => {
@@ -173,11 +173,11 @@ describe("Docs navigation state", () => {
         marker: 844,
         positions: [
           { id: "overview", top: 120 },
-          { id: "launching", top: 760 },
-          { id: "trading", top: 1180 },
+          { id: "formats", top: 760 },
+          { id: "quickstart", top: 1180 },
         ],
       }),
-    ).toBe("launching");
+    ).toBe("formats");
   });
 
   it("selects the final section at the bottom of the page", () => {
@@ -186,12 +186,12 @@ describe("Docs navigation state", () => {
         atPageEnd: true,
         marker: 104,
         positions: [
-          { id: "metadata", top: -220 },
-          { id: "releases", top: 180 },
-          { id: "risks", top: 520 },
+          { id: "quickstart", top: -220 },
+          { id: "rules", top: 180 },
+          { id: "resources", top: 520 },
         ],
       }),
-    ).toBe("risks");
+    ).toBe("resources");
   });
 
   it("uses document position when navigation groups are out of page order", () => {
@@ -201,35 +201,37 @@ describe("Docs navigation state", () => {
         marker: 104,
         positions: [
           { id: "overview", top: -2000 },
-          { id: "risks", top: 720 },
-          { id: "network", top: -80 },
-          { id: "contracts", top: 260 },
+          { id: "resources", top: 720 },
+          { id: "formats", top: -80 },
+          { id: "quickstart", top: 260 },
         ],
       }),
-    ).toBe("network");
+    ).toBe("formats");
   });
 
   it("resolves search results from the current input", () => {
-    const launchResults = getDocsSearchResults("launch");
-    const rewardResults = getDocsSearchResults("reward");
+    const terminalResults = getDocsSearchResults("terminal");
+    const schemaResults = getDocsSearchResults("schema");
 
-    expect(launchResults.length).toBeGreaterThan(0);
-    expect(launchResults[0]?.title).toBe("Launch flow");
-    expect(rewardResults.length).toBeGreaterThan(0);
-    expect(rewardResults[0]?.title).toBe("Creator rewards");
-    expect(rewardResults).not.toEqual(launchResults);
+    expect(terminalResults.length).toBeGreaterThan(0);
+    expect(terminalResults[0]?.title).toBe("Trading terminals and scanners");
+    expect(schemaResults.length).toBeGreaterThan(0);
+    expect(schemaResults[0]?.title).toBe("OpenAPI and schemas");
+    expect(schemaResults).not.toEqual(terminalResults);
     expect(getDocsSearchResults("")).toEqual([]);
   });
 
-  it("keeps hidden models out of search and exposes Custom Hook documentation", () => {
+  it("keeps standalone model guides out of search while explaining launch formats", () => {
     const deepResults = getDocsSearchResults("deep");
     const stockResults = getDocsSearchResults("stock");
+    const classicResults = getDocsSearchResults("classic");
     const customResults = getDocsSearchResults("custom");
 
     expect(deepResults).toEqual([]);
     expect(stockResults).toEqual([]);
-    expect(customResults[0]?.title).toBe("Custom Hook");
-    expect(customResults[0]?.description).toContain("release requirements");
+    expect(classicResults[0]?.title).toBe("Launch formats");
+    expect(customResults[0]?.title).toBe("Launch formats");
+    expect(customResults[0]?.description).toContain("no-pool");
   });
 
   it("opens keyboard navigation on the first or last result", () => {
