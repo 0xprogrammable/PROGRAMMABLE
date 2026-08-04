@@ -282,7 +282,7 @@ export function DeveloperDocsWorkbench() {
     requestController.current?.abort();
     const controller = new AbortController();
     requestController.current = controller;
-    const timeout = window.setTimeout(() => controller.abort(), 12_000);
+    const timeout = window.setTimeout(() => controller.abort(), 30_000);
 
     setRequestState("loading");
     setHttpStatus(null);
@@ -473,6 +473,10 @@ export function DeveloperDocsActions() {
               : "Copy Markdown"}
         </span>
       </button>
+      <a href={apiOrigin} rel="noreferrer" target="_blank">
+        API home
+        <ExternalLink aria-hidden="true" size={15} strokeWidth={1.8} />
+      </a>
       <a
         href={`${apiOrigin}/openapi/programmable-v1.yaml`}
         rel="noreferrer"
