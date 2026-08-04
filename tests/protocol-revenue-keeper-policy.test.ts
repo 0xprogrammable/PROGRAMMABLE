@@ -9,7 +9,7 @@ import {
 const DELEGATION_HASH = `0x${"11".repeat(32)}`;
 
 describe("protocol revenue keeper policy", () => {
-  it("processes, transfers, then claims in fail-closed priority order", () => {
+  it("processes, claims, then transfers in fail-closed priority order", () => {
     const base = {
       finalizedTimestamp: 2_000n,
       pendingRevenue: 0n,
@@ -37,6 +37,14 @@ describe("protocol revenue keeper policy", () => {
     expect(
       evaluateProtocolRevenueV2Action({
         ...base,
+        claimReady: true,
+        claimAccruedRevenue: 200n,
+      }),
+    ).toEqual({ status: "claim", accruedRevenue: 200n });
+    expect(
+      evaluateProtocolRevenueV2Action({
+        ...base,
+        rewardWalletBalance: 900n,
         claimReady: true,
         claimAccruedRevenue: 200n,
       }),

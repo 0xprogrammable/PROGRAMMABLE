@@ -36,6 +36,13 @@ export function evaluateProtocolRevenueV2Action(input: Readonly<{
     return { status: "process", revenue: input.pendingRevenue };
   }
 
+  if (
+    input.claimReady &&
+    input.claimAccruedRevenue >= input.claimMinimumRevenue
+  ) {
+    return { status: "claim", accruedRevenue: input.claimAccruedRevenue };
+  }
+
   const transferable = [
     input.rewardWalletBalance,
     input.permissionAvailable,
@@ -43,12 +50,6 @@ export function evaluateProtocolRevenueV2Action(input: Readonly<{
   ].reduce((current, value) => value < current ? value : current);
   if (transferable >= input.vaultMinimumRevenue) {
     return { status: "transfer", amount: transferable };
-  }
-  if (
-    input.claimReady &&
-    input.claimAccruedRevenue >= input.claimMinimumRevenue
-  ) {
-    return { status: "claim", accruedRevenue: input.claimAccruedRevenue };
   }
   if (
     input.rewardWalletBalance >= input.vaultMinimumRevenue &&
