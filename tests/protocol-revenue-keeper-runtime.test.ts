@@ -7,6 +7,7 @@ import {
   ProtocolRevenueKeeperV2Error,
   runConfiguredProtocolRevenueKeeperV2,
   safeProtocolRevenueKeeperV2Error,
+  selectProtocolRevenuePrivateRelayFees,
 } from "../lib/protocol-revenue/keeper-v2.server";
 
 describe("protocol revenue keeper runtime boundary", () => {
@@ -77,5 +78,27 @@ describe("protocol revenue keeper runtime boundary", () => {
         new Error("unexpected provider response with sensitive details"),
       ),
     ).toBe("unknown");
+  });
+
+  it("keeps a nonzero private-relay priority fee without shrinking base-fee headroom", () => {
+    expect(
+      selectProtocolRevenuePrivateRelayFees({
+        maxFeesPerGas: [46_388_542n, 46_488_542n],
+        maxPriorityFeesPerGas: [0n, 100_000n],
+      }),
+    ).toEqual({
+      maxFeePerGas: 146_388_542n,
+      maxPriorityFeePerGas: 100_000_000n,
+    });
+
+    expect(
+      selectProtocolRevenuePrivateRelayFees({
+        maxFeesPerGas: [2_000_000_000n],
+        maxPriorityFeesPerGas: [200_000_000n],
+      }),
+    ).toEqual({
+      maxFeePerGas: 2_000_000_000n,
+      maxPriorityFeePerGas: 200_000_000n,
+    });
   });
 });

@@ -50,7 +50,8 @@ const V4_TOKEN = getAddress(
 );
 const PERMISSION_PERIOD_AMOUNT = 5n * 10n ** 18n;
 const PERMISSION_PERIOD_DURATION = 86_400;
-const MEV_SUBMISSION_ORIGIN = "https://boost.rpc.mevblocker.io/noreverts";
+const PRIVATE_SUBMISSION_ORIGIN = "https://rpc.flashbots.net/fast";
+const MIN_PRIVATE_PRIORITY_FEE = parseGwei("0.1");
 const SINGLE_DEFAULT_MODE =
   "0x0000000000000000000000000000000000000000000000000000000000000000" as const;
 const SMART_ACCOUNTS_ENVIRONMENT = getSmartAccountsEnvironment(mainnet.id);
@@ -392,10 +393,9 @@ function validatePermissionContext(input: Readonly<{
   return delegation;
 }
 
-function mevEndpoint(keeper: Address) {
-  const endpoint = new URL(MEV_SUBMISSION_ORIGIN);
-  endpoint.searchParams.set("refundRecipient", keeper);
-  endpoint.searchParams.set("referrer", "programmable");
+function privateSubmissionEndpoint() {
+  const endpoint = new URL(PRIVATE_SUBMISSION_ORIGIN);
+  endpoint.searchParams.set("originId", "programmable");
   return endpoint.toString();
 }
 
@@ -461,6 +461,25 @@ export function classifyProtocolRevenueSubmissionError(
 
 function maximum(values: readonly bigint[]) {
   return values.reduce((current, value) => value > current ? value : current);
+}
+
+export function selectProtocolRevenuePrivateRelayFees(input: Readonly<{
+  maxFeesPerGas: readonly bigint[];
+  maxPriorityFeesPerGas: readonly bigint[];
+}>) {
+  const providerMaxFeePerGas = maximum(input.maxFeesPerGas);
+  const providerMaxPriorityFeePerGas = maximum(
+    input.maxPriorityFeesPerGas,
+  );
+  const maxPriorityFeePerGas = providerMaxPriorityFeePerGas <
+      MIN_PRIVATE_PRIORITY_FEE
+    ? MIN_PRIVATE_PRIORITY_FEE
+    : providerMaxPriorityFeePerGas;
+  return {
+    maxFeePerGas: providerMaxFeePerGas +
+      (maxPriorityFeePerGas - providerMaxPriorityFeePerGas),
+    maxPriorityFeePerGas,
+  } as const;
 }
 
 function requiredEip1559Fee(value: bigint | undefined) {
@@ -615,7 +634,7 @@ export async function runConfiguredProtocolRevenueKeeperV2(
     throw new ProtocolRevenueKeeperV2Error("permission_binding_failed");
   }
 
-  const privateEndpoint = mevEndpoint(account.address);
+  const privateEndpoint = privateSubmissionEndpoint();
   const privateClient = client(privateEndpoint);
   let latestNonce: number;
   let pendingNonce: number;
@@ -736,14 +755,15 @@ export async function runConfiguredProtocolRevenueKeeperV2(
   } catch {
     throw new ProtocolRevenueKeeperV2Error("rpc_quorum_failed");
   }
-  const maxFeePerGas = maximum(
-    feeEstimates.map((estimate) => requiredEip1559Fee(estimate.maxFeePerGas)),
-  );
-  const maxPriorityFeePerGas = maximum(
-    feeEstimates.map((estimate) =>
-      requiredEip1559Fee(estimate.maxPriorityFeePerGas)
-    ),
-  );
+  const { maxFeePerGas, maxPriorityFeePerGas } =
+    selectProtocolRevenuePrivateRelayFees({
+      maxFeesPerGas: feeEstimates.map((estimate) =>
+        requiredEip1559Fee(estimate.maxFeePerGas)
+      ),
+      maxPriorityFeesPerGas: feeEstimates.map((estimate) =>
+        requiredEip1559Fee(estimate.maxPriorityFeePerGas)
+      ),
+    });
   const economics = evaluateProtocolRevenueEconomics({
     availableRevenue: transaction.economicRevenue,
     gasEstimate: maximum(gasEstimates),
