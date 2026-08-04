@@ -1290,7 +1290,7 @@ describe("read-model performance contract", () => {
         process.cwd(),
       );
     expect(alchemyResult.ok).toBe(true);
-    expect(alchemyResult.checks).toHaveLength(7);
+    expect(alchemyResult.checks).toHaveLength(9);
 
     const result = sourceContracts.evaluateReadModelSourceContracts(
       process.cwd(),

@@ -61,6 +61,27 @@ export function evaluateAlchemyExploreSourceContracts(
     responsePath,
     sourceOverrides,
   );
+  const runtimePath = "lib/alchemy/explore.server.ts";
+  const runtimeSource = readSource(
+    rootDirectory,
+    runtimePath,
+    sourceOverrides,
+  );
+
+  check(
+    "alchemy-durable-registry",
+    runtimeSource.includes(
+      "return readExploreModel(getAlchemyOnchainDeployment());",
+    ) && !runtimeSource.includes("readLiveExploreModel"),
+    "the request path starts from the verified durable registry instead of rescanning launch history",
+  );
+  check(
+    "alchemy-complete-price-batching",
+    runtimeSource.includes("MAX_CONCURRENT_ALCHEMY_PRICE_BATCHES") &&
+      !runtimeSource.includes("MAX_ALCHEMY_PRICE_BATCHES") &&
+      !runtimeSource.includes(".slice(0, MAX_ALCHEMY_PRICE_ADDRESSES"),
+    "live Alchemy price enrichment covers the complete registry in bounded concurrent batches",
+  );
 
   for (const route of routeSources) {
     check(
@@ -84,15 +105,15 @@ export function evaluateAlchemyExploreSourceContracts(
       .filter(({ id }) => id !== "token-list")
       .every(
         ({ source }) =>
-          source.includes('"X-Programmable-Read-Source": "rpc"') &&
+          source.includes('"X-Programmable-Read-Source": "blob"') &&
           source.includes('"X-Programmable-Rpc-Provider": "alchemy"'),
       ) &&
-      responseSource.includes('"X-Programmable-Read-Source": "rpc"') &&
+      responseSource.includes('"X-Programmable-Read-Source": "blob"') &&
       responseSource.includes('"X-Programmable-Rpc-Provider": "alchemy"') &&
       responseSource.includes(
         '"X-Programmable-Read-Source, X-Programmable-Rpc-Provider"',
       ),
-    "Alchemy public responses expose RPC source and provider provenance",
+    "Alchemy public responses expose durable registry and live provider provenance",
   );
 
   return Object.freeze({

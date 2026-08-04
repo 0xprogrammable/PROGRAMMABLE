@@ -3,7 +3,7 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 
 import { getOnchainDeployment } from "../onchain/config";
-import { readLiveExploreModel } from "../onchain/read-model";
+import { readExploreModel } from "../onchain/read-model";
 import type {
   ExploreReadModel,
   OnchainDeployment,
@@ -18,7 +18,7 @@ const ALCHEMY_RPC_URL_SECRET =
   /https:\/\/eth-mainnet\.g\.alchemy\.com\/v2\/[A-Za-z0-9_-]{8,256}/gu;
 const ALCHEMY_PRICE_CACHE_TTL_MS = 10_000;
 const MAX_ALCHEMY_PRICE_ADDRESSES = 20;
-const MAX_ALCHEMY_PRICE_BATCHES = 5;
+const MAX_CONCURRENT_ALCHEMY_PRICE_BATCHES = 5;
 const MAX_ALCHEMY_PRICE_AGE_MS = 5 * 60 * 1_000;
 const MAX_ALCHEMY_PRICE_CLOCK_SKEW_MS = 60 * 1_000;
 const MAX_PRICE_CACHE_ENTRIES = 100;
@@ -99,7 +99,7 @@ export function getAlchemyOnchainDeployment(): OnchainDeployment {
 }
 
 async function readAlchemyExploreModelUncached(): Promise<ExploreReadModel> {
-  return readLiveExploreModel(getAlchemyOnchainDeployment());
+  return readExploreModel(getAlchemyOnchainDeployment());
 }
 
 const readCachedAlchemyExploreModel = unstable_cache(
@@ -207,8 +207,9 @@ async function requestAlchemyPrices(addresses: readonly string[]) {
 }
 
 async function currentAlchemyPrices(addresses: readonly string[]) {
-  const unique = [...new Set(addresses.map((address) => address.toLowerCase()))]
-    .slice(0, MAX_ALCHEMY_PRICE_ADDRESSES * MAX_ALCHEMY_PRICE_BATCHES);
+  const unique = [
+    ...new Set(addresses.map((address) => address.toLowerCase())),
+  ];
   if (unique.length === 0) return new Map<string, bigint>();
 
   const key = unique.join(",");
@@ -225,7 +226,23 @@ async function currentAlchemyPrices(addresses: readonly string[]) {
         (index + 1) * MAX_ALCHEMY_PRICE_ADDRESSES,
       ),
   );
-  const value = Promise.all(batches.map(requestAlchemyPrices))
+  const value = (async () => {
+    const results: Array<ReadonlyMap<string, bigint>> = [];
+    for (
+      let offset = 0;
+      offset < batches.length;
+      offset += MAX_CONCURRENT_ALCHEMY_PRICE_BATCHES
+    ) {
+      results.push(
+        ...(await Promise.all(
+          batches
+            .slice(offset, offset + MAX_CONCURRENT_ALCHEMY_PRICE_BATCHES)
+            .map(requestAlchemyPrices),
+        )),
+      );
+    }
+    return results;
+  })()
     .then((results) => {
       const merged = new Map<string, bigint>();
       for (const result of results) {
