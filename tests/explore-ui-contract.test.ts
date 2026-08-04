@@ -47,5 +47,14 @@ describe("Explore UI contract", () => {
     expect(styles).not.toMatch(
       /\.runnerSocials\s*\{[^}]*margin-inline-start:\s*auto;/s,
     );
+    expect(source).not.toContain("styles.runnerIndex");
+    expect(source).not.toContain("styles.sortReadout");
+    expect(source).not.toContain("styles.pageKicker");
+    expect(styles).not.toContain(".runnerIndex");
+    expect(styles).not.toContain(".sortReadout");
+    expect(styles).not.toContain("#a83f64");
+    expect(styles).toMatch(
+      /\.runnerHeading h3\s*\{[^}]*line-height:\s*1\.15;/s,
+    );
   });
 });

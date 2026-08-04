@@ -5,6 +5,7 @@ import {
   CircleAlert,
   Copy,
   ExternalLink,
+  FileText,
   LoaderCircle,
   Play,
   Sparkles,
@@ -326,14 +327,7 @@ export function DeveloperDocsWorkbench() {
   return (
     <div className={styles.workbench} data-request-state={requestState}>
       <div className={styles.workbenchTopbar}>
-        <div>
-          <span className={styles.windowDots} aria-hidden="true">
-            <i />
-            <i />
-            <i />
-          </span>
-          <span className={styles.workbenchLabel}>Live API</span>
-        </div>
+        <span className={styles.workbenchLabel}>Quickstart</span>
         <a
           className={styles.openApiLink}
           href={`${apiOrigin}/openapi/programmable-v1.yaml`}
@@ -436,14 +430,73 @@ export function DeveloperDocsWorkbench() {
   );
 }
 
+export function DeveloperDocsActions() {
+  const [state, setState] = useState<CopyState>("idle");
+  const resetTimer = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (resetTimer.current !== null) window.clearTimeout(resetTimer.current);
+    },
+    [],
+  );
+
+  async function copyMarkdown() {
+    if (resetTimer.current !== null) window.clearTimeout(resetTimer.current);
+    try {
+      const response = await fetch("/docs/developers.md");
+      if (!response.ok) throw new Error(`Markdown returned ${response.status}`);
+      await navigator.clipboard.writeText(await response.text());
+      setState("copied");
+      resetTimer.current = window.setTimeout(() => setState("idle"), 1800);
+    } catch {
+      setState("error");
+      resetTimer.current = window.setTimeout(() => setState("idle"), 2400);
+    }
+  }
+
+  return (
+    <div className={styles.docsActions}>
+      <button data-state={state} onClick={copyMarkdown} type="button">
+        {state === "copied" ? (
+          <Check aria-hidden="true" size={16} strokeWidth={2.1} />
+        ) : state === "error" ? (
+          <CircleAlert aria-hidden="true" size={16} strokeWidth={1.9} />
+        ) : (
+          <FileText aria-hidden="true" size={16} strokeWidth={1.8} />
+        )}
+        <span>
+          {state === "copied"
+            ? "Copied"
+            : state === "error"
+              ? "Retry"
+              : "Copy Markdown"}
+        </span>
+      </button>
+      <a
+        href={`${apiOrigin}/openapi/programmable-v1.yaml`}
+        rel="noreferrer"
+        target="_blank"
+      >
+        OpenAPI
+        <ExternalLink aria-hidden="true" size={15} strokeWidth={1.8} />
+      </a>
+      <span className="sr-only" role="status" aria-live="polite">
+        {state === "copied"
+          ? "Developer documentation Markdown copied"
+          : state === "error"
+            ? "Unable to copy developer documentation Markdown"
+            : ""}
+      </span>
+    </div>
+  );
+}
+
 export function DeveloperAgentPrompt() {
   return (
     <div className={styles.agentPrompt}>
       <div className={styles.agentPromptHeader}>
-        <div>
-          <span className={styles.agentPromptEyebrow}>Agent handoff</span>
-          <strong>Give any coding agent the same source of truth</strong>
-        </div>
+        <strong>Give any coding agent the same source of truth</strong>
         <CopyAction
           label="Copy agent prompt"
           text={agentPrompt}
