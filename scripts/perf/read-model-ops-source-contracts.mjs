@@ -26,15 +26,15 @@ const APPROVED_OPERATIONS = Object.freeze({
       activationEnvironment: "PROTOCOL_REVENUE_AUTOMATION_ENABLED",
       route: Object.freeze({
         path: "app/api/ops/protocol-revenue/route.ts",
-        sha256: "c1bb705cee0fa3cfa5d6926d35c07e8959482717bc63a1a2a9a92c757db6d62f",
+        sha256: "9a7012e88ec958c61db08295401cd1b9a932dce9bec14b85075f090782485726",
       }),
       runtime: Object.freeze({
-        path: "lib/protocol-revenue/keeper.server.ts",
-        sha256: "70c3b8af21bbe8ab65ffe92bc68d3f47d62cb3532a6cc0686e1e617ae0a2698e",
+        path: "lib/protocol-revenue/keeper-v2.server.ts",
+        sha256: "582b6f1fd78c5863b70a34977e5baa142f56310f0b92458ad4440954ab769f9d",
       }),
       policy: Object.freeze({
         path: "lib/protocol-revenue/keeper-policy.ts",
-        sha256: "4b822323780f1648f91aa589e0ea272de0397a9a8704ac3a034ff24a62db089d",
+        sha256: "4b4e0b56265743a102d4f1a9be271dfb8f13014f89e3ac1fba53ae3d8aa2d7bd",
       }),
     }),
   ]),

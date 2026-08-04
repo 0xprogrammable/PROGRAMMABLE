@@ -9,9 +9,9 @@ const mocks = vi.hoisted(() => ({
   })),
 }));
 
-vi.mock("../lib/protocol-revenue/keeper.server", () => ({
-  runConfiguredProtocolRevenueKeeper: mocks.run,
-  safeProtocolRevenueKeeperError: mocks.safeError,
+vi.mock("../lib/protocol-revenue/keeper-v2.server", () => ({
+  runConfiguredProtocolRevenueKeeperV2: mocks.run,
+  safeProtocolRevenueKeeperV2Error: mocks.safeError,
 }));
 
 import { GET } from "../app/api/ops/protocol-revenue/route";
@@ -55,6 +55,7 @@ describe("protocol revenue Vercel route", () => {
   it("returns a bounded successful private submission result", async () => {
     const result = {
       status: "submitted",
+      action: "process",
       transactionHash: `0x${"22".repeat(32)}`,
       finalizedBlockNumber: "25680000",
       availableRevenue: "100000000000000000",
