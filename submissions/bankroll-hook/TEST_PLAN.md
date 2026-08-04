@@ -14,6 +14,12 @@ The current Foundry suite covers:
 - successful randomness request, fulfilment, pull, settlement and finalisation
 - unrequested randomness timeout and WETH refund
 - owner-only Programmable fee claim to an owner-selected destination
+- callback rejection for a wrong PoolManager, wrong router, alternate pool and malformed hook data
+- wager rejection for replay, stale blocks, exact output, stake bounds, volume limits and bankroll capacity
+- atomic deadline, native-value, minimum-output and volume-cap failures
+- both randomness timeout paths, fulfilled-request non-expiry and terminal-state finality
+- repeated ticket settlement, ticket claim and Programmable fee claim rejection
+- 5 stateful invariants at 128 runs and depth 48
 - deterministic fixed-token, hook and router launch through a real PoolManager and PositionManager
 - permanent position ownership, fixed supply, empty launcher custody and initial-buy fee accrual
 - EIP-170 runtime-size checks and lint
@@ -28,27 +34,27 @@ forge lint
 
 ## Required contract tests
 
-Add focused tests for every lifecycle transition, including insufficient Funding cancellation, early and repeat calls, a zero-ticket close, maximum ticket capacity and bounded batch settlement.
+Add focused tests for insufficient Funding cancellation, a zero-ticket close, maximum ticket capacity and bounded batch settlement.
 
-Add adversarial router tests for malformed, missing, replayed and next-block pending ids; wrong router; exact-output wager attempts; stake below and above bounds; volume-cap failure; bankroll-cap failure; partial fills; price limits; minimum output; deadlines; refund recipients; and failed native or token transfers.
+Add the remaining router tests for specified-quote partial fills, price-limit boundaries, refund recipients and failed native or token transfers.
 
-Add fee tests for exact amounts and events in all four quadrants. Cover dust, specified-quote partial fills, claim with no liability, zero recipient, repeated claim, failed recipient, unrelated owner, direct donation, alternative PoolKey and cross-pool isolation.
+Add fee tests for exact amounts and events in all four quadrants. Cover dust, specified-quote partial fills, a failed recipient, direct donation and cross-pool isolation.
 
 Add VRF adapter tests for exact payment, maximum fee, duplicate request key, unknown request id, wrapper-only fulfilment, duplicate fulfilment, consumer-only consumption, timeout boundaries and fulfilled-request non-expiry.
 
 ## Stateful invariants
 
-Use handlers for deposits, withdrawals, activation, wagers, close, randomness, settlement, claims and redemption. Check after every action:
+The current handler covers Funding deposits and withdrawals, activation or cancellation, wagered buys and sells, close, randomness, settlement, claims, finalisation and redemption. It checks after every action:
 
 ```text
 WETH balance ≥ bankroll assets + open stake liability + player claim liability
 reserved exposure ≤ bankroll assets
 reserved exposure ≤ floor(80% × bankroll assets)
-settled tickets + open tickets = ticket count before refund claims
-Programmable liability ≤ native PoolManager claims held by the hook
 ```
 
-Check that no state path revives Active after a terminal transition and that no ticket can pay or refund twice.
+The suite also checks bankroll-share conservation, terminal-state finality and one payment per ticket. Each property runs 128 sequences at depth 48.
+
+Extend the handler to cover Programmable fee claims. Add properties for ticket-count conservation and native Programmable claim backing.
 
 ## Further launch tests
 

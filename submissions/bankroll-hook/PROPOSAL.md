@@ -78,7 +78,7 @@ No production API, indexer, routing registration, monitoring or deployment exist
 
 - Verify the exact Ethereum UERC20 factory, PoolManager, PositionManager, WETH and VRF wrapper deployment records.
 - Add adversarial failed-launch, token-factory and permanent-locker tests.
-- Add stateful bankroll and liability invariants.
+- Extend the stateful invariants to Programmable fee claims and native claim backing.
 - Run Slither, mainnet-fork dependency checks and independent review.
 - Resolve the current runtime-unverified official Ethereum launchpad profile before deployment evidence.
 - Request Programmable maintainer review of the public GitHub source.

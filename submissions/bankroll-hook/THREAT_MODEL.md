@@ -87,7 +87,7 @@ The current official Ethereum launcher deployment profile is runtime-unverified.
 ## Missing evidence
 
 - no failed-launch or hostile token-factory test matrix
-- no stateful invariant suite
+- the stateful invariant suite does not yet cover Programmable fee claims or native claim backing
 - no Slither report
 - no fork test against live PoolManager, WETH or VRF wrapper
 - no independent audit
