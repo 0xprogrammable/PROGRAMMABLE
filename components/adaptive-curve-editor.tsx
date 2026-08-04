@@ -348,8 +348,8 @@ export function AdaptiveCurveEditor({
         <div>
           <h2 id="adaptive-curve-title">Price-based swap fees</h2>
           <p>
-            Set the total fee at different market caps. The curve moves between
-            your points as the token price changes.
+            Set the total fee at market-cap checkpoints. The contract moves
+            between them as the token price changes.
           </p>
         </div>
         <button
@@ -404,10 +404,13 @@ export function AdaptiveCurveEditor({
                   left: `${xPercent(point.fdvIndex)}%`,
                   top: `${yPercent(point.totalSwapFeeBps)}%`,
                 }}
-                aria-label={`${pointName(index)}, ${ethFdvForIndex(
-                  point.fdvIndex,
-                )}, ${formatFee(point.totalSwapFeeBps)} total fee`}
+                aria-label={`${pointName(index)}${
+                  selected ? ", selected" : ""
+                }, ${ethFdvForIndex(point.fdvIndex)}, ${formatFee(
+                  point.totalSwapFeeBps,
+                )} total fee`}
                 aria-describedby="adaptive-curve-instructions"
+                aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"
                 onFocus={() => setSelectedPointIndex(index)}
                 onPointerDown={(event) => onPointerDown(index, event)}
                 onPointerMove={(event) => {
@@ -425,7 +428,8 @@ export function AdaptiveCurveEditor({
       </div>
 
       <p className={styles.instructions} id="adaptive-curve-instructions">
-        Select a point to edit it. Arrow keys make precise changes.
+        Drag a point, or focus it and use the arrow keys. Hold Shift for larger
+        steps.
       </p>
 
       {selectedPoint ? (

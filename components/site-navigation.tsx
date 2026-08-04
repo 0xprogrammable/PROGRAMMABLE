@@ -129,7 +129,7 @@ function ThemeToggle() {
         if (transitionSequence === themeTransitionSequence) {
           clearThemeReveal(root);
         }
-      }, 420);
+      }, 260);
     };
 
     if (!viewTransitionDocument.startViewTransition) {
@@ -172,8 +172,12 @@ function ThemeToggle() {
       onClick={toggleTheme}
     >
       <span className="theme-toggle-icons" aria-hidden="true">
-        <Moon className="theme-toggle-moon" size={20} strokeWidth={1.9} />
-        <Sun className="theme-toggle-sun" size={20} strokeWidth={1.9} />
+        <span className="theme-toggle-icon theme-toggle-moon">
+          <Moon size={20} strokeWidth={1.9} />
+        </span>
+        <span className="theme-toggle-icon theme-toggle-sun">
+          <Sun size={20} strokeWidth={1.9} />
+        </span>
       </span>
     </button>
   );
@@ -193,7 +197,7 @@ export function SiteHeader() {
               alt=""
               width={146}
               height={192}
-              sizes="28px"
+              sizes="32px"
               priority
             />
           </Link>

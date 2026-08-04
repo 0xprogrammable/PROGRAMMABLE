@@ -448,6 +448,7 @@ export function TokenTrade({
     event.preventDefault();
     setError("");
     setAmountInvalid(false);
+    setSlippageInvalid(false);
     setMessage("");
     if (!owner) {
       setError("Connect a wallet to prepare this trade");

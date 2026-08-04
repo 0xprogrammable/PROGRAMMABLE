@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Search,
   SlidersHorizontal,
+  X as CloseIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -116,8 +117,8 @@ const fallbackTokenImages = [
 const sortOptions: { id: TokenSort; label: string }[] = [
   { id: "newest", label: "Newest" },
   { id: "oldest", label: "Oldest" },
-  { id: "market-cap", label: "Highest Market Cap" },
-  { id: "market-cap-asc", label: "Lowest Market Cap" },
+  { id: "market-cap", label: "Highest market cap" },
+  { id: "market-cap-asc", label: "Lowest market cap" },
 ];
 const socialFilterOptions: {
   id: Exclude<ExploreSocialFilter, "all">;
@@ -138,6 +139,45 @@ const tokenLinkOrder: Record<TokenLink["kind"], number> = {
   x: 1,
   telegram: 2,
 };
+
+function launchBlockNumber(token: LauncherToken) {
+  return token.launchBlockNumber && /^\d+$/.test(token.launchBlockNumber)
+    ? BigInt(token.launchBlockNumber)
+    : 0n;
+}
+
+function comparePreviewLaunchOrder(
+  left: LauncherToken,
+  right: LauncherToken,
+) {
+  const leftBlock = launchBlockNumber(left);
+  const rightBlock = launchBlockNumber(right);
+  if (leftBlock !== rightBlock) return leftBlock < rightBlock ? -1 : 1;
+
+  const leftTransaction = left.launchTransactionIndex ?? 0;
+  const rightTransaction = right.launchTransactionIndex ?? 0;
+  if (leftTransaction !== rightTransaction) {
+    return leftTransaction - rightTransaction;
+  }
+
+  const leftLog = left.launchLogIndex ?? 0;
+  const rightLog = right.launchLogIndex ?? 0;
+  if (leftLog !== rightLog) return leftLog - rightLog;
+
+  if (leftBlock === 0n) {
+    const leftTime = Date.parse(left.launchedAt);
+    const rightTime = Date.parse(right.launchedAt);
+    if (
+      Number.isFinite(leftTime) &&
+      Number.isFinite(rightTime) &&
+      leftTime !== rightTime
+    ) {
+      return leftTime - rightTime;
+    }
+  }
+
+  return left.tokenAddress.localeCompare(right.tokenAddress);
+}
 
 export function shouldRefreshExplore(input: {
   visibilityState: DocumentVisibilityState;
@@ -656,6 +696,45 @@ function TokenLinkIcon({ kind }: { kind: TokenLink["kind"] }) {
   return <XBrandIcon />;
 }
 
+const exploreSkeletonItems = Array.from(
+  { length: EXPLORE_TOKENS_PER_PAGE },
+  (_, index) => index,
+);
+
+function ExploreGridSkeleton() {
+  return (
+    <div
+      className={`${styles.runnerGrid} ${styles.skeletonGrid}`}
+      aria-hidden="true"
+    >
+      {exploreSkeletonItems.map((index) => (
+        <article
+          className={`${styles.runnerCard} ${styles.skeletonCard}`}
+          key={index}
+        >
+          <div className={`${styles.runnerArt} ${styles.skeletonArt}`} />
+          <div className={styles.skeletonBody}>
+            <span className={styles.skeletonTitle} />
+            <span className={styles.skeletonDescription} />
+            <span className={styles.skeletonMeta} />
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function resultRangeLabel(payload: ExplorePayload | null) {
+  if (!payload || payload.status !== "ready") return "Loading token index";
+  if (payload.total === 0) return "0 tokens";
+
+  const start = (payload.page - 1) * payload.pageSize + 1;
+  const end = Math.min(payload.total, start + payload.tokens.length - 1);
+  return `${start}–${end} of ${payload.total} ${
+    payload.total === 1 ? "token" : "tokens"
+  }`;
+}
+
 export function ExploreView() {
   const preview = useInterfacePreview();
   const [query, setQuery] = useState("");
@@ -839,10 +918,8 @@ export function ExploreView() {
     );
     const ranked = [...filtered].sort((left, right) => {
       if (sort === "newest" || sort === "oldest") {
-        const delta =
-          new Date(right.launchedAt).getTime() -
-          new Date(left.launchedAt).getTime();
-        return sort === "newest" ? delta : -delta;
+        const launchComparison = comparePreviewLaunchOrder(left, right);
+        return sort === "newest" ? -launchComparison : launchComparison;
       }
       const leftMarketCap = BigInt(left.indexedMarketCapUsdWad ?? "0");
       const rightMarketCap = BigInt(right.indexedMarketCapUsdWad ?? "0");
@@ -886,6 +963,9 @@ export function ExploreView() {
   const pageCount = Math.max(1, payload?.totalPages ?? 0);
   const activePage = Math.min(payload?.page ?? currentPage, pageCount);
   const paginationItems = getExplorePaginationItems(activePage, pageCount);
+  const activeSortLabel =
+    sortOptions.find((option) => option.id === sort)?.label ?? "Newest";
+  const resultLabel = resultRangeLabel(payload);
   const busy =
     !preview &&
     (displayState.phase === "loading" ||
@@ -904,15 +984,16 @@ export function ExploreView() {
         displayState.requestKey !== requestKey)
     ) {
       return (
-        <div className="token-empty" role="status">
-          <p>Loading tokens</p>
+        <div className={styles.loadingState} role="status">
+          <span className="sr-only">Loading tokens</span>
+          <ExploreGridSkeleton />
         </div>
       );
     }
 
     if (displayState.phase === "error") {
       return (
-        <div className="token-empty" role="alert">
+        <div className={styles.messageState} role="alert">
           <p>{displayState.message}</p>
           <button
             className="text-button"
@@ -927,7 +1008,7 @@ export function ExploreView() {
 
     if (displayState.payload.status === "not-deployed") {
       return (
-        <div className={`${styles.emptyState} token-empty token-empty-initial`}>
+        <div className={styles.emptyState}>
           <div>
             <h2>Token index unavailable</h2>
             <p>Explore is not available in this environment.</p>
@@ -950,7 +1031,7 @@ export function ExploreView() {
             : "No tokens match this search"
           : "No tokens match these filters";
         return (
-          <div className="token-empty">
+          <div className={styles.messageState}>
             <p>{noMatchMessage}</p>
             <button
               className="text-button"
@@ -969,7 +1050,7 @@ export function ExploreView() {
       }
 
       return (
-        <div className={`${styles.emptyState} token-empty token-empty-initial`}>
+        <div className={styles.emptyState}>
           <div>
             <h2>No tokens yet</h2>
             <p>Create the first token.</p>
@@ -986,6 +1067,14 @@ export function ExploreView() {
         {cards.map((token, index) => {
           const href = `/token/${token.tokenAddress}`;
           const imageSource = getTokenCardImageSource(token.imageUrl);
+          const rank =
+            (activePage - 1) *
+              (payload?.pageSize ?? EXPLORE_TOKENS_PER_PAGE) +
+            index +
+            1;
+          const marketCapLabel = token.marketCap
+            ? formatMarketCapMetric(token.marketCap)
+            : null;
 
           return (
             <article className={styles.runnerCard} key={token.id}>
@@ -1004,13 +1093,17 @@ export function ExploreView() {
                     fill
                     loading={index < 3 ? "eager" : "lazy"}
                     priority={index < 3}
-                    sizes="(max-width: 700px) calc(100vw - 28px), (max-width: 1040px) 46vw, 31vw"
+                    sizes="(max-width: 480px) 304px, (max-width: 700px) 420px, (max-width: 900px) 46vw, 31vw"
                     unoptimized={!canOptimizeTokenImage(imageSource)}
+                    draggable={false}
                   />
                 </div>
 
                 <div className={styles.runnerBody}>
                   <header className={styles.runnerHeading}>
+                    <span className={styles.runnerIndex} aria-hidden="true">
+                      {String(rank).padStart(2, "0")}
+                    </span>
                     <h3 title={token.name}>{token.name}</h3>
                   </header>
 
@@ -1022,40 +1115,43 @@ export function ExploreView() {
                 </div>
               </Link>
 
-              {token.marketCap || token.links.length > 0 ? (
-                <div className={styles.runnerMeta}>
-                  {token.marketCap ? (
-                    <span className={styles.runnerMarketCap}>
-                      <span className={styles.runnerMarketCapLabel}>MC</span>
-                      {formatMarketCapMetric(token.marketCap)}
+              <div className={styles.runnerMeta}>
+                {marketCapLabel ? (
+                  <span
+                    className={styles.runnerMarketCap}
+                    aria-label={`Market cap ${marketCapLabel}`}
+                  >
+                    <span className={styles.runnerMarketCapLabel}>MC</span>
+                    <span className={styles.runnerMarketCapValue}>
+                      {marketCapLabel}
                     </span>
-                  ) : null}
-                  {token.links.length > 0 ? (
-                    <div
-                      className={styles.runnerSocials}
-                      role="group"
-                      aria-label={`${token.name} links`}
-                    >
-                      {token.links.map((link) => {
-                        const label = getTokenLinkLabel(link.kind);
-                        return (
-                          <a
-                            className={styles.runnerSocialLink}
-                            href={link.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            aria-label={`${token.name} ${label}`}
-                            title={label}
-                            key={`${link.kind}:${link.url}`}
-                          >
-                            <TokenLinkIcon kind={link.kind} />
-                          </a>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
+                  </span>
+                ) : null}
+                {token.links.length > 0 ? (
+                  <div
+                    className={styles.runnerSocials}
+                    role="group"
+                    aria-label={`${token.name} links`}
+                  >
+                    {token.links.map((link) => {
+                      const label = getTokenLinkLabel(link.kind);
+                      return (
+                        <a
+                          className={styles.runnerSocialLink}
+                          href={link.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label={`${token.name} ${label}`}
+                          title={label}
+                          key={`${link.kind}:${link.url}`}
+                        >
+                          <TokenLinkIcon kind={link.kind} />
+                        </a>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
             </article>
           );
         })}
@@ -1067,6 +1163,7 @@ export function ExploreView() {
     <>
       <div className={`${styles.page} explore-page page-width`}>
         <header className={styles.pageHeading}>
+          <p className={styles.pageKicker}>Explore</p>
           <h1>Launch tokens that work the way you imagine.</h1>
         </header>
 
@@ -1080,20 +1177,38 @@ export function ExploreView() {
               <div className="token-section-heading">
                 <h2 className="sr-only">Tokens</h2>
                 <div className="token-toolbar">
-                  <label className="token-search">
+                  <div className="token-search" role="search">
                     <Search aria-hidden="true" size={17} />
-                    <span className="sr-only">
+                    <label className="sr-only" htmlFor="explore-token-search">
                       Search tokens by name, ticker or contract address
-                    </span>
+                    </label>
                     <input
+                      id="explore-token-search"
+                      type="search"
+                      autoComplete="off"
+                      spellCheck={false}
                       value={query}
                       placeholder="Search tokens"
                       onChange={(event) => setQuery(event.target.value)}
                     />
-                  </label>
+                    {query ? (
+                      <button
+                        className={styles.searchClear}
+                        type="button"
+                        aria-label="Clear token search"
+                        onClick={() => {
+                          setQuery("");
+                          setCurrentPage(1);
+                        }}
+                      >
+                        <CloseIcon aria-hidden="true" size={15} />
+                      </button>
+                    ) : null}
+                  </div>
 
                   <details className="token-filter" ref={filterRef}>
                     <summary
+                      aria-controls="explore-filter-panel"
                       aria-label={
                         activeFilterCount === 0
                           ? "Filter and sort tokens"
@@ -1119,6 +1234,7 @@ export function ExploreView() {
                       />
                     </summary>
                     <div
+                      id="explore-filter-panel"
                       className={`token-filter-menu ${styles.filterMenu}`}
                       role="group"
                       aria-label="Filter and sort tokens"
@@ -1291,6 +1407,23 @@ export function ExploreView() {
               </div>
             ) : null}
           </div>
+
+          {hasPublicTokens ? (
+            <div className={styles.indexRail}>
+              <p
+                className={styles.resultCount}
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                {resultLabel}
+              </p>
+              <p className={styles.sortReadout}>
+                <span>Sort</span>
+                {activeSortLabel}
+              </p>
+            </div>
+          ) : null}
 
           {displayState.phase === "ready" &&
           displayState.refreshError ? (

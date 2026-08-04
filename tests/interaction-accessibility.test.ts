@@ -143,6 +143,45 @@ describe("interaction accessibility", () => {
     );
   });
 
+  it("keeps all four primary routes semantic and reflow-safe in mobile navigation", () => {
+    const source = readFileSync(
+      join(root, "components/site-navigation.tsx"),
+      "utf8",
+    );
+    const styleSheets = [
+      readFileSync(join(root, "app/interface.css"), "utf8"),
+      readFileSync(join(root, "app/globals.css"), "utf8"),
+    ];
+    const mobileMediaSegments = styleSheets.flatMap((css) => {
+      const segments: string[] = [];
+      const query = "@media (max-width: 800px)";
+      let start = css.indexOf(query);
+      while (start >= 0) {
+        const next = css.indexOf("\n@media ", start + query.length);
+        segments.push(css.slice(start, next >= 0 ? next : css.length));
+        start = css.indexOf(query, start + query.length);
+      }
+      return segments;
+    });
+
+    expect(source).toContain('const mobileNavItems = desktopNavItems;');
+    expect(source).toContain(
+      '<nav className="mobile-nav" aria-label="Primary navigation">',
+    );
+    expect(source).toContain(
+      'aria-current={current ? "page" : undefined}',
+    );
+    expect(source).toContain('<Icon aria-hidden="true"');
+    expect(mobileMediaSegments).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(
+          /\.mobile-nav\s*\{[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/,
+        ),
+        expect.stringMatching(/\.mobile-nav a\s*\{[^}]*min-width:\s*0/),
+      ]),
+    );
+  });
+
   it("fails the public Classic launch card closed when its verified release is unavailable", () => {
     const source = readFileSync(
       join(root, "components/launch-entry.tsx"),

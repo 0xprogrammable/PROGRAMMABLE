@@ -169,19 +169,30 @@ describe("unreleased launch model gating", () => {
     expect(html).toContain("<h1>Choose your launch model</h1>");
     expect(html).not.toContain("Choose a launch model, then configure");
     expect(html).toContain('data-launch-model-option="classic"');
+    const classicCard = html.match(
+      /<button[^>]*data-launch-model-option="classic"[^>]*>/,
+    )?.[0];
+    expect(classicCard).toContain("data-launch-model-launchable=");
     expect(html).toContain(
       'id="launch-model-classic-title">Classic</strong>',
     );
     expect(html).toContain('data-launch-model-option="custom"');
+    const customCard = html.match(
+      /<a[^>]*href="\/docs\/models\/custom"[^>]*>/,
+    )?.[0];
+    expect(customCard).toContain('data-launch-model-launchable="false"');
     expect(html).toContain(
       'id="launch-model-custom-title">Custom Hook</strong>',
     );
     expect(html).toContain('href="/docs/models/custom"');
     expect(html).toContain("Create a Classic coin");
-    expect(html).toContain("Create a Custom Hook");
+    expect(html).toContain("Review Custom Hook framework");
+    expect(html).not.toContain("Create a Custom Hook");
     expect(html).toContain("evidence required for release");
-    expect(html).toContain("/brand/create/classic-botanical-v4.webp");
-    expect(html).toContain("/brand/create/custom-galaxy-v3.webp");
+    // Next/Image may emit the source as an encoded optimizer URL. Assert the
+    // asset identity without coupling this contract to that transport detail.
+    expect(html).toContain("classic-botanical-v4.webp");
+    expect(html).toContain("custom-galaxy-v3.webp");
     expect(html).not.toContain("In development");
     expect(html).not.toContain("Not available");
     expect(html).not.toContain("launch-model-classic-details");
