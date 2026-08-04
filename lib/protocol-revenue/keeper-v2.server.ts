@@ -399,6 +399,66 @@ function mevEndpoint(keeper: Address) {
   return endpoint.toString();
 }
 
+type SubmissionRejectionCategory =
+  | "fee_rejected"
+  | "insufficient_funds"
+  | "method_unsupported"
+  | "nonce_conflict"
+  | "provider_rejected"
+  | "simulation_rejected"
+  | "transport_failed"
+  | "unknown";
+
+function submissionErrorText(error: unknown) {
+  const fragments: string[] = [];
+  let current = error;
+  for (let depth = 0; depth < 6 && current; depth += 1) {
+    if (current instanceof Error) {
+      fragments.push(current.name, current.message);
+      current = "cause" in current ? current.cause : undefined;
+      continue;
+    }
+    if (typeof current === "object") {
+      const candidate = current as Readonly<Record<string, unknown>>;
+      for (const key of ["name", "message", "details", "shortMessage"]) {
+        if (typeof candidate[key] === "string") fragments.push(candidate[key]);
+      }
+      current = candidate.cause;
+      continue;
+    }
+    break;
+  }
+  return fragments.join(" ").toLowerCase();
+}
+
+export function classifyProtocolRevenueSubmissionError(
+  error: unknown,
+): SubmissionRejectionCategory {
+  const message = submissionErrorText(error);
+  if (/insufficient funds|insufficient balance/u.test(message)) {
+    return "insufficient_funds";
+  }
+  if (/nonce too low|nonce too high|already known|replacement transaction/u.test(message)) {
+    return "nonce_conflict";
+  }
+  if (/max fee per gas|priority fee|underpriced|fee cap|base fee/u.test(message)) {
+    return "fee_rejected";
+  }
+  if (/method not found|method .* not (?:exist|available|supported)/u.test(message)) {
+    return "method_unsupported";
+  }
+  if (/simulation|revert|execution reverted/u.test(message)) {
+    return "simulation_rejected";
+  }
+  if (/fetch failed|network|timeout|timed out|socket|connection/u.test(message)) {
+    return "transport_failed";
+  }
+  if (/rejected|denied|invalid transaction|rpc request/u.test(message)) {
+    return "provider_rejected";
+  }
+  return "unknown";
+}
+
 function maximum(values: readonly bigint[]) {
   return values.reduce((current, value) => value > current ? value : current);
 }
@@ -723,10 +783,11 @@ export async function runConfiguredProtocolRevenueKeeperV2(
     if (transactionHash.toLowerCase() !== keccak256(serializedTransaction)) {
       throw new Error();
     }
-  } catch {
+  } catch (error) {
     console.error("Programmable protocol revenue submission rejected", {
       action,
       stage: submissionStage,
+      category: classifyProtocolRevenueSubmissionError(error),
     });
     throw new ProtocolRevenueKeeperV2Error("submission_failed");
   }

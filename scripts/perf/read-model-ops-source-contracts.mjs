@@ -30,7 +30,7 @@ const APPROVED_OPERATIONS = Object.freeze({
       }),
       runtime: Object.freeze({
         path: "lib/protocol-revenue/keeper-v2.server.ts",
-        sha256: "f2dd4c49e2a9746398e205e0e70c1cdc4cd94ce0fb0191e230fb6076e9b43eb2",
+        sha256: "959985f6f93ed922342cb14b71aca9a49e2438fb2b80a56a9d10bd8397e0513e",
       }),
       policy: Object.freeze({
         path: "lib/protocol-revenue/keeper-policy.ts",
