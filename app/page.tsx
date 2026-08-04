@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 
-import { ExploreView } from "@/components/explore-view";
+import { LandingPage } from "@/components/landing-page";
 
 export const metadata: Metadata = {
-  title: "Explore — Programmable",
-  description: "Explore tokens launched through Programmable.",
+  title: "Programmable — Launch what you imagine",
+  description:
+    "Choose a launch model and make it yours on Ethereum with Programmable.",
 };
 
-export default function ExplorePage() {
-  return <ExploreView />;
+export default function HomePage() {
+  return <LandingPage />;
 }

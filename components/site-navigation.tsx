@@ -41,7 +41,7 @@ function clearThemeReveal(root: HTMLElement) {
 }
 
 const desktopNavItems = [
-  { href: "/", label: "Explore", icon: Compass },
+  { href: "/explore", label: "Explore", icon: Compass },
   { href: "/launch", label: "Create", icon: Plus },
   { href: "/docs/developers", label: "Docs", icon: BookOpen },
   { href: "/profile", label: "Profile", icon: UserRound },
@@ -50,7 +50,7 @@ const desktopNavItems = [
 const mobileNavItems = desktopNavItems;
 
 function isCurrent(pathname: string, href: string) {
-  return href === "/" ? pathname === href : pathname.startsWith(href);
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 function subscribeToTheme(callback: () => void) {
@@ -185,9 +185,12 @@ function ThemeToggle() {
 
 export function SiteHeader() {
   const pathname = usePathname();
+  const isLandingPage = pathname === "/";
 
   return (
-    <header className="site-header">
+    <header
+      className={`site-header${isLandingPage ? " site-header--landing" : ""}`}
+    >
       <div className="header-inner">
         <div className="header-brand">
           <Link className="wordmark" href="/" aria-label="Programmable home">
@@ -247,6 +250,8 @@ export function SiteHeader() {
 
 export function MobileNavigation() {
   const pathname = usePathname();
+
+  if (pathname === "/") return null;
 
   return (
     <nav className="mobile-nav" aria-label="Primary navigation">
