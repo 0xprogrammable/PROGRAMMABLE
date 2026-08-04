@@ -1,57 +1,68 @@
-import { getImageProps } from "next/image";
 import Link from "next/link";
 
 import styles from "@/components/landing-page.module.css";
 
-const desktopBackground = {
-  src: "/brand/landing/programmable-botanical-cosmos-desktop-v1.avif",
-  width: 1672,
-  height: 941,
-};
-
-const mobileBackground = {
-  src: "/brand/landing/programmable-botanical-cosmos-mobile-v1.avif",
-  width: 941,
-  height: 1672,
-};
+const desktopBackground =
+  "/brand/landing/programmable-botanical-cosmos-desktop-v2.avif";
+const desktopBackgroundStandard =
+  "/brand/landing/programmable-botanical-cosmos-desktop-v2-1920.avif";
+const mobileBackground =
+  "/brand/landing/programmable-botanical-cosmos-mobile-v2.avif";
+const mobileBackgroundStandard =
+  "/brand/landing/programmable-botanical-cosmos-mobile-v2-1080.avif";
 
 export function LandingPage() {
-  const {
-    props: { srcSet: desktopSrcSet, ...desktopImageProps },
-  } = getImageProps({
-    ...desktopBackground,
-    alt: "",
-    priority: true,
-    sizes: "100vw",
-  });
-  const {
-    props: { srcSet: mobileSrcSet },
-  } = getImageProps({
-    ...mobileBackground,
-    alt: "",
-    priority: true,
-    sizes: "100vw",
-  });
-
   return (
     <article
       className={`${styles.page} landing-page-root`}
       aria-labelledby="landing-title"
     >
       <picture className={styles.backdrop}>
-        <source media="(max-width: 640px)" srcSet={mobileSrcSet} />
-        <source media="(min-width: 641px)" srcSet={desktopSrcSet} />
-        <img {...desktopImageProps} alt="" />
+        <source
+          media="(max-width: 640px)"
+          srcSet={`${mobileBackgroundStandard} 1080w, ${mobileBackground} 2160w`}
+          sizes="100vw"
+        />
+        <source
+          media="(min-width: 641px)"
+          srcSet={`${desktopBackgroundStandard} 1920w, ${desktopBackground} 3840w`}
+          sizes="100vw"
+        />
+        <img
+          src={desktopBackgroundStandard}
+          srcSet={`${desktopBackgroundStandard} 1920w, ${desktopBackground} 3840w`}
+          sizes="100vw"
+          width={3840}
+          height={2160}
+          fetchPriority="high"
+          decoding="async"
+          alt=""
+        />
       </picture>
+      <div
+        className={`${styles.ambientWindow} ${styles.floraLeft}`}
+        aria-hidden="true"
+      >
+        <div className={styles.ambientArt} />
+      </div>
+      <div
+        className={`${styles.ambientWindow} ${styles.floraRight}`}
+        aria-hidden="true"
+      >
+        <div className={styles.ambientArt} />
+      </div>
+      <div
+        className={`${styles.ambientWindow} ${styles.floraBottom}`}
+        aria-hidden="true"
+      >
+        <div className={styles.ambientArt} />
+      </div>
+      <div className={styles.starField} aria-hidden="true" />
       <div className={styles.veil} aria-hidden="true" />
 
       <section className={styles.hero}>
         <div className={styles.content}>
-          <p className={styles.proof}>Built on Uniswap v4</p>
           <h1 id="landing-title">Launch what you imagine</h1>
-          <p className={styles.summary}>
-            Choose a launch model and make it yours on Ethereum.
-          </p>
           <div className={styles.actions} aria-label="Get started">
             <Link className={styles.primaryAction} href="/launch">
               Create a token
