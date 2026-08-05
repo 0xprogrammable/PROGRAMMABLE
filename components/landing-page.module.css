@@ -6,6 +6,33 @@
   position: relative;
 }
 
+.brandLink {
+  align-items: center;
+  border-radius: 16px;
+  display: inline-flex;
+  height: 56px;
+  justify-content: center;
+  left: max(24px, env(safe-area-inset-left));
+  position: absolute;
+  top: max(24px, env(safe-area-inset-top));
+  transition:
+    opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+  width: 48px;
+  z-index: 2;
+}
+
+.brandLogo {
+  display: block;
+  height: 44px;
+  width: auto;
+}
+
+.brandLink:focus-visible {
+  outline: 3px solid #fffdf9;
+  outline-offset: 4px;
+}
+
 .hero {
   align-items: center;
   display: flex;
@@ -84,6 +111,7 @@
 
 .primaryAction:active,
 .secondaryAction:active,
+.brandLink:active,
 .socialLink:active,
 .docsLink:active {
   transform: scale(0.96);
@@ -150,6 +178,11 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
+  .brandLink:hover {
+    opacity: 0.84;
+    transform: translateY(-1px);
+  }
+
   .primaryAction:hover,
   .secondaryAction:hover {
     background: var(--liquid-glass-control-background-hover);
@@ -190,6 +223,17 @@
 }
 
 @media (max-width: 460px) {
+  .brandLink {
+    height: 48px;
+    left: max(16px, env(safe-area-inset-left));
+    top: max(16px, env(safe-area-inset-top));
+    width: 40px;
+  }
+
+  .brandLogo {
+    height: 38px;
+  }
+
   .hero {
     padding-inline: 16px;
   }
@@ -213,6 +257,7 @@
 @media (prefers-reduced-motion: reduce) {
   .primaryAction,
   .secondaryAction,
+  .brandLink,
   .socialLink,
   .docsLink {
     transition:
