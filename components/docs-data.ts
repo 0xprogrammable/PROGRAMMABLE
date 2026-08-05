@@ -24,46 +24,66 @@ export const docsNavigation = [
   {
     label: "Developers",
     items: [
-      { href: "/docs/developers#quickstart", label: "Quickstart" },
-      { href: "/docs/developers#integrations", label: "Integration guides" },
-      { href: "/docs/developers#response", label: "Response model" },
-      { href: "/docs/developers#sync", label: "Backfill and updates" },
-      { href: "/docs/developers#rendering", label: "Rendering rules" },
-      { href: "/docs/developers#agents", label: "AI agents" },
+      { href: "/docs/developers#paths", label: "Choose a path" },
+      { href: "/docs/developers#terminals", label: "Terminals" },
+      { href: "/docs/developers#providers", label: "Launch providers" },
+      { href: "/docs/developers#detection", label: "Detection" },
+      { href: "/docs/developers#fields", label: "Required fields" },
+      { href: "/docs/developers#verification", label: "Verification" },
+      { href: "/docs/developers#data", label: "Data and indexing" },
       { href: "/docs/developers#reference", label: "API reference" },
+      { href: "/docs/developers#agents", label: "AI agents" },
     ],
   },
 ] as const;
 
 export const docsSearchItems: DocsSearchItem[] = [
   {
-    title: "Developer quickstart",
+    title: "Terminal contract",
     description:
-      "Run the public launch feed for terminals, scanners, wallets, and apps in cURL, TypeScript, or Python.",
-    href: "/docs/developers#quickstart",
+      "Copy a minimal consumer for the public launch feed in cURL, TypeScript, or Python.",
+    href: "/docs/developers#terminals",
   },
   {
-    title: "Integration guides",
+    title: "Classic and Custom labels",
     description:
-      "Implementation paths for terminals, scanners, indexers, wallets, bots, apps, and games.",
-    href: "/docs/developers#integrations",
+      "Map the two stable API categories to Programmable Classic and Programmable Custom.",
+    href: "/docs/developers#terminals",
   },
   {
-    title: "Response model",
+    title: "Launch provider integration",
     description:
-      "Classic and Custom records: token identity, provenance, markets, verification, and fees.",
-    href: "/docs/developers#response",
+      "Register Basebit and future provider templates through authenticated atomic provenance.",
+    href: "/docs/developers#providers",
+  },
+  {
+    title: "Launch detection",
+    description:
+      "Use the public feed or exact Ethereum source addresses, event topics, and start blocks.",
+    href: "/docs/developers#detection",
+  },
+  {
+    title: "Required fields",
+    description:
+      "Store identity, category, provenance, finality, markets, fees, and extensions correctly.",
+    href: "/docs/developers#fields",
+  },
+  {
+    title: "Verification rules",
+    description:
+      "Keep provenance, contract properties, audit scope, and market support as separate facts.",
+    href: "/docs/developers#verification",
   },
   {
     title: "Backfill and updates",
     description: "Traverse pages and persist a durable polling checkpoint.",
-    href: "/docs/developers#sync",
+    href: "/docs/developers#data",
   },
   {
-    title: "Rendering rules",
+    title: "Terminal rendering rules",
     description:
-      "Show every launch without inventing unsupported market features.",
-    href: "/docs/developers#rendering",
+      "Show every recognized launch without inventing unsupported market features.",
+    href: "/docs/developers#verification",
   },
   {
     title: "AI agents",

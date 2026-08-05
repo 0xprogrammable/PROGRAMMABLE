@@ -2,114 +2,233 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import {
   ArrowUpRight,
-  CircleDot,
+  Braces,
+  Bot,
   Database,
-  FileJson,
-  Layers3,
+  Filter,
+  History,
+  Radar,
   ShieldCheck,
+  Tags,
+  Terminal,
   Workflow,
 } from "lucide-react";
 
 import {
   DeveloperAgentPrompt,
-  DeveloperDocsActions,
+  DeveloperCodeSample,
   DeveloperDocsWorkbench,
+  providerRegistryInterface,
 } from "@/components/developer-docs-workbench";
 import styles from "@/components/developer-docs.module.css";
+import { DocsAddress } from "@/components/docs-address";
 import { DocsShell } from "@/components/docs-shell";
 
 export const metadata: Metadata = {
   title: "Programmable",
   description:
-    "Integrate the public Programmable v1 launch feed with copy-ready examples, live responses, cursor guidance, schemas, and AI-agent entry points.",
+    "Integration reference for trading terminals, scanners, indexers and bots consuming Programmable Classic and Custom launches.",
   alternates: { canonical: "/docs/developers" },
   openGraph: {
-    title: "Programmable developer integrations",
+    title: "Programmable terminal integration",
     description:
-      "A practical, read-only integration guide for terminals, scanners, wallets, indexers, apps, and AI agents.",
+      "Public API, category labels, contracts, events, schemas and ingestion rules for Programmable launches.",
     url: "/docs/developers",
   },
 };
 
 const developerSections = [
-  { id: "quickstart", label: "Quickstart" },
-  { id: "integrations", label: "Integration guides" },
-  { id: "response", label: "Response model" },
-  { id: "sync", label: "Backfill and updates" },
-  { id: "rendering", label: "Rendering rules" },
-  { id: "agents", label: "AI agents" },
+  { id: "paths", label: "Choose a path" },
+  { id: "terminals", label: "Terminals" },
+  { id: "providers", label: "Launch providers" },
+  { id: "detection", label: "Detection" },
+  { id: "fields", label: "Required fields" },
+  { id: "verification", label: "Verification" },
+  { id: "data", label: "Data and indexing" },
   { id: "reference", label: "API reference" },
+  { id: "agents", label: "AI agents" },
 ] as const;
 
-const integrationGuides = [
+const developerPaths = [
   {
-    title: "Terminals and scanners",
-    detail:
-      "Detect launches, preserve finality and provenance, and enable market features only when support is declared.",
-    href: "https://github.com/0xprogrammable/developers/blob/main/docs/guides/terminals-and-scanners.md",
+    description: "Detect, classify and render every recognized launch.",
+    href: "#terminals",
+    icon: Terminal,
+    label: "Terminals and scanners",
   },
   {
-    title: "Indexers and data platforms",
-    detail:
-      "Backfill every page, persist durable cursors, and reconcile non-final launches without duplicates.",
-    href: "https://github.com/0xprogrammable/developers/blob/main/docs/guides/indexers.md",
+    description: "Register provider templates as Programmable Custom.",
+    href: "#providers",
+    icon: Workflow,
+    label: "Launch providers",
   },
   {
-    title: "Wallets and explorers",
-    detail:
-      "Key assets by chain and address while keeping creator metadata separate from verified launch origin.",
-    href: "https://github.com/0xprogrammable/developers/blob/main/docs/guides/wallets.md",
+    description: "Backfill once and consume finalized updates safely.",
+    href: "#data",
+    icon: Database,
+    label: "Data platforms",
   },
   {
-    title: "Bots, apps and games",
-    detail:
-      "Consume the read-only feed safely and treat unknown capabilities or extensions as non-executable data.",
-    href: "https://github.com/0xprogrammable/developers/blob/main/docs/guides/apps-and-games.md",
+    description: "Load Markdown, OpenAPI and schemas without scraping UI.",
+    href: "#agents",
+    icon: Bot,
+    label: "AI agents",
   },
 ] as const;
 
-const responseGroups = [
+const providerRequirements = [
+  [
+    "Identity",
+    "Provider ID, supported chain, factory and template registry addresses.",
+  ],
+  [
+    "Source",
+    "Verified source, ABI, deployment transaction, start block and runtime code hashes.",
+  ],
+  [
+    "Template",
+    "Stable template ID, version, configuration hash and upgrade authority.",
+  ],
+  [
+    "Launch output",
+    "How to obtain token, hook, pool or market, creator and external launch ID from the receipt.",
+  ],
+  [
+    "Hook policy",
+    "PoolManager, permission flags, router assumptions, mutable roles and external calls.",
+  ],
+  [
+    "Economics",
+    "Creator fees, protocol fees, recipients, caps and the exact charge basis.",
+  ],
+  [
+    "Market support",
+    "Discovery, chart, quote, simulation and execution support as separate capabilities.",
+  ],
+  [
+    "Evidence",
+    "Audit scope, tests, mainnet example, negative cases and incident contact.",
+  ],
+] as const;
+
+type Deployment = {
+  category: "Programmable Classic" | "Programmable Custom";
+  coordinator?: string;
+  event: string;
+  hook?: string;
+  launcher: string;
+  lifecycle: "current" | "legacy" | "retired";
+  release: string;
+  startBlock: string;
+  topic0: string;
+};
+
+const currentDeployments: readonly Deployment[] = [
   {
-    name: "token",
-    color: "pink",
-    summary: "Identity and display metadata",
-    detail:
-      "Key the asset by chainId and token address. Name, symbol, image, description, and links are creator-supplied display metadata and can be null.",
-    fields: "address · identityStatus · name · symbol · decimals · metadata",
+    category: "Programmable Classic",
+    event: "MemeTokenLaunchedV2",
+    hook: "0x35Fe236EA82F7cF525c9719d7df8F49F94D720CC",
+    launcher: "0xC3bd04aAc2fb2ba58efD7Eb673E544E0B80De770",
+    lifecycle: "current",
+    release: "Classic V3",
+    startBlock: "25639596",
+    topic0:
+      "0xf23bd7fdf96caf9195ba5982de473632f59015abc714915dfbbe06cbd8e255e5",
   },
   {
-    name: "launch",
-    color: "blue",
-    summary: "Original onchain provenance",
-    detail:
-      "Preserve the launch transaction, block position, timestamp, origin, model, and finality. Do not replace the onchain timestamp with first observation time.",
-    fields:
-      "status · transactionHash · blockNumber · logIndex · timestamp · finality",
+    category: "Programmable Custom",
+    coordinator: "0xdDC3ABbAB0df7F1189310a4f70e7e365796B74E2",
+    event: "StockPairedTokenLaunched",
+    hook: "0x90c67C1E866f86526F0e338459cD435E1F23A0cc",
+    launcher: "0x0573879f72d8eE8B0e5a4Ec5E8bcDb2fCab9E51c",
+    lifecycle: "current",
+    release: "Stock Paired V3",
+    startBlock: "25642745",
+    topic0:
+      "0xe33bd69b6e794281bc106d622fbe0c587aeabf86d1ca4d1afcd583cf8a3e8935",
+  },
+] as const;
+
+const historicalDeployments: readonly Deployment[] = [
+  {
+    category: "Programmable Classic",
+    event: "MemeTokenLaunched",
+    launcher: "0x51d702731db281EE223904A4663E05BfCA26C775",
+    lifecycle: "retired",
+    release: "Classic V1",
+    startBlock: "25622048",
+    topic0:
+      "0x54f861f401872200b25acd4a9f53153ac06a7be4562b3e43025a4a85740a5675",
   },
   {
-    name: "verification",
-    color: "mint",
-    summary: "Why this record belongs to Programmable",
-    detail:
-      "Use the source and provenance fields to explain where the record came from. Verified provenance does not make external metadata or market outcomes safe.",
-    fields: "sourceId · launcherAddress · provenanceStatus · sourceUrl",
+    category: "Programmable Classic",
+    event: "MemeTokenLaunched",
+    hook: "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC",
+    launcher: "0xD240D06f8586eB799f20056054e5b527405E6bAd",
+    lifecycle: "legacy",
+    release: "Classic V2",
+    startBlock: "25624131",
+    topic0:
+      "0x54f861f401872200b25acd4a9f53153ac06a7be4562b3e43025a4a85740a5675",
   },
   {
-    name: "markets",
-    color: "violet",
-    summary: "Zero, one, or several markets",
-    detail:
-      "Read support per market. An empty array is valid. Only show a chart, quote, simulation, or trade action when the corresponding verified support is available.",
-    fields: "marketId · kind · status · protocol · support · metrics",
+    category: "Programmable Custom",
+    coordinator: "0xfa5f17389CA28D071781d59750b32C842ab6A54b",
+    event: "StockPairedTokenLaunched",
+    hook: "0x7773D183fe7B60d4F1885047fa42b815a62Fe0Cc",
+    launcher: "0x195750f33caD5eF2DF857a53226B421297A1e79e",
+    lifecycle: "legacy",
+    release: "Stock Paired V1",
+    startBlock: "25637469",
+    topic0:
+      "0xe33bd69b6e794281bc106d622fbe0c587aeabf86d1ca4d1afcd583cf8a3e8935",
   },
   {
-    name: "fees",
-    color: "amber",
-    summary: "Verified fee disclosure",
-    detail:
-      "Read fee behavior from each record. Do not infer the rate or charge mode from Classic or Custom alone.",
-    fields:
-      "kind · ratePpm · rateBps · recipient · chargeMode · verificationStatus",
+    category: "Programmable Custom",
+    coordinator: "0xFb9E1034df6161088E8F358502B19E7515c30fD2",
+    event: "StockPairedTokenLaunched",
+    hook: "0x90c67C1E866f86526F0e338459cD435E1F23A0cc",
+    launcher: "0x5eA6Be24838061bA45dbE8D82DE1b267DC240Daf",
+    lifecycle: "legacy",
+    release: "Stock Paired V2",
+    startBlock: "25640338",
+    topic0:
+      "0xe33bd69b6e794281bc106d622fbe0c587aeabf86d1ca4d1afcd583cf8a3e8935",
+  },
+] as const;
+
+const fields = [
+  {
+    field: "category",
+    use: "Map classic to Programmable Classic and custom to Programmable Custom.",
+  },
+  {
+    field: "chainId + token.address",
+    use: "Canonical asset key. Never identify a token by name or ticker.",
+  },
+  {
+    field: "launchId",
+    use: "Replay safe launch identity for deduplication.",
+  },
+  {
+    field: "launch.finality",
+    use: "Preserve observed, confirmed, finalized and orphaned states.",
+  },
+  {
+    field: "verification",
+    use: "Store source deployment and provenance state with the record.",
+  },
+  {
+    field: "markets[].support",
+    use: "Gate chart, quote, simulation and execution separately.",
+  },
+  {
+    field: "fees",
+    use: "Display verified rates and charge mode. Never infer them from category.",
+  },
+  {
+    field: "extensions",
+    use: "Preserve namespaced data and ignore fields your client does not understand.",
   },
 ] as const;
 
@@ -117,38 +236,38 @@ const endpoints = [
   {
     path: "/.well-known/programmable.json",
     href: "/.well-known/programmable.json",
-    label: "Discover the API",
-    note: "Stable links to the current API, manifest, schemas, and docs.",
+    label: "Discover the interface",
+    note: "Stable URLs for the API, manifest, schemas and documentation.",
   },
   {
     path: "/api/v1/status",
     href: "/api/v1/status",
-    label: "Check availability",
-    note: "Service lifecycle, indexing progress, freshness, and finality.",
+    label: "Check feed health",
+    note: "Lifecycle, indexed block, freshness and finality.",
   },
   {
     path: "/api/v1/manifest",
     href: "/api/v1/manifest",
     label: "Resolve deployments",
-    note: "Current and historical sources, start blocks, and compatibility state.",
+    note: "Current and historical sources, start blocks and compatibility state.",
   },
   {
     path: "/api/v1/launches",
     href: "/api/v1/launches",
-    label: "Read the launch feed",
-    note: "Cursor-paginated Classic and Custom launch records.",
+    label: "Ingest launches",
+    note: "Cursor paginated Classic and Custom records.",
   },
   {
     path: "/api/v1/launches/{chainId}/{tokenAddress}",
     href: "/api/v1/launches/1/0x56a96463ead0c0b9b4e4df9e41805bb8877074a6",
-    label: "Fetch one launch",
-    note: "Opens a real Ethereum record with both required path values.",
+    label: "Fetch one token",
+    note: "One launch record by chain and token contract.",
   },
   {
     path: "/api/v1/token-list",
     href: "/api/v1/token-list",
-    label: "Use the compatibility list",
-    note: "Finalized token identity for wallet-style integrations.",
+    label: "Read the token list",
+    note: "Compatibility projection for finalized token identity.",
   },
 ] as const;
 
@@ -177,146 +296,420 @@ function ExternalResource({
   );
 }
 
+function DeploymentCard({ deployment }: { deployment: Deployment }) {
+  return (
+    <article className={styles.deploymentCard}>
+      <header>
+        <div>
+          <strong>{deployment.release}</strong>
+          <span>{deployment.category}</span>
+        </div>
+        <code>{deployment.lifecycle}</code>
+      </header>
+      <dl>
+        <div>
+          <dt>Launcher</dt>
+          <dd>
+            <DocsAddress
+              address={deployment.launcher}
+              label={`${deployment.release} launcher`}
+            />
+          </dd>
+        </div>
+        {deployment.hook ? (
+          <div>
+            <dt>Hook</dt>
+            <dd>
+              <DocsAddress
+                address={deployment.hook}
+                label={`${deployment.release} hook`}
+              />
+            </dd>
+          </div>
+        ) : null}
+        {deployment.coordinator ? (
+          <div>
+            <dt>Coordinator</dt>
+            <dd>
+              <DocsAddress
+                address={deployment.coordinator}
+                label={`${deployment.release} coordinator`}
+              />
+            </dd>
+          </div>
+        ) : null}
+        <div>
+          <dt>Launch event</dt>
+          <dd>
+            <code>{deployment.event}</code>
+          </dd>
+        </div>
+        <div>
+          <dt>Topic 0</dt>
+          <dd>
+            <code>{deployment.topic0}</code>
+          </dd>
+        </div>
+        <div>
+          <dt>From block</dt>
+          <dd>
+            <code>{deployment.startBlock}</code>
+          </dd>
+        </div>
+      </dl>
+    </article>
+  );
+}
+
 export default function DeveloperDocsPage() {
   return (
     <DocsShell
       currentPath="/docs/developers"
-      description="Discover and verify Programmable launches through one public, versioned feed. Read-only REST, no API key."
-      heroAside={<DeveloperDocsWorkbench />}
-      heroMeta={<DeveloperDocsActions />}
+      description="Choose the integration path for your product. Each path links to the same versioned contracts, evidence rules and machine-readable sources."
+      heroAside={
+        <nav
+          aria-label="Developer integration paths"
+          className={styles.pathList}
+        >
+          {developerPaths.map((path) => {
+            const Icon = path.icon;
+            return (
+              <a href={path.href} key={path.href}>
+                <Icon aria-hidden="true" size={19} strokeWidth={1.8} />
+                <span>
+                  <strong>{path.label}</strong>
+                  <small>{path.description}</small>
+                </span>
+                <ArrowUpRight aria-hidden="true" size={16} strokeWidth={1.8} />
+              </a>
+            );
+          })}
+        </nav>
+      }
+      heroId="paths"
       kicker="Docs / Developers"
       sections={developerSections}
-      title="Developer documentation"
+      title="Developer integration"
     >
-      <section id="integrations">
+      <section className={styles.terminalSection} id="terminals">
         <div className={styles.sectionIntro}>
-          <h2>Choose your integration</h2>
+          <h2>Detect every launch with two stable labels</h2>
           <p>
-            Start with the guide for your product, then use OpenAPI and the
-            published schemas as the field-level contract.
+            The API category is the public classification contract. Internal
+            model names do not create additional terminal categories.
           </p>
         </div>
 
-        <div className={styles.integrationPaths}>
-          {integrationGuides.map((guide) => (
-            <a
-              href={guide.href}
-              key={guide.title}
-              rel="noreferrer"
-              target="_blank"
-            >
-              <span>
-                <strong>{guide.title}</strong>
-                <small>{guide.detail}</small>
-              </span>
-              <ArrowUpRight aria-hidden="true" size={18} strokeWidth={1.8} />
-            </a>
-          ))}
+        <DeveloperDocsWorkbench />
+
+        <div className={styles.labelGrid}>
+          <article>
+            <span className={styles.labelIcon} aria-hidden="true">
+              <Tags size={19} strokeWidth={1.8} />
+            </span>
+            <code>category = classic</code>
+            <h3>Programmable Classic</h3>
+            <p>
+              Current and historical Classic releases. New Classic launches use
+              the current V3 launcher and fee hook from the manifest.
+            </p>
+          </article>
+          <article>
+            <span className={styles.labelIcon} aria-hidden="true">
+              <Filter size={19} strokeWidth={1.8} />
+            </span>
+            <code>category = custom</code>
+            <h3>Programmable Custom</h3>
+            <p>
+              Listed first party Custom launches today and future registered
+              Custom hooks through the same stable category.
+            </p>
+          </article>
         </div>
 
-        <div className={styles.integrationScope}>
-          <div>
-            <span className={styles.scopeLabel}>Available from v1</span>
-            <ul>
-              <li>Classic and listed first-party Custom launch discovery</li>
-              <li>
-                Token identity, provenance, finality, markets and fee disclosure
-              </li>
-              <li>
-                Manifest, individual records, token list, cursors and schemas
-              </li>
-              <li>Public CORS access without an API key</li>
-            </ul>
-          </div>
-          <div>
-            <span className={styles.scopeLabel}>Separate market capability</span>
-            <ul>
-              <li>Price candles and normalized volume</li>
-              <li>Quotes, simulation and transaction execution</li>
-              <li>
-                Any market feature not marked available by a verified adapter
-              </li>
-              <li>Open community Custom intake, which remains prelaunch</li>
-            </ul>
-          </div>
+        <div className={styles.statusNote}>
+          <strong>Current Custom boundary</strong>
+          <p>
+            Existing first party Stock Paired launches are live as Custom.
+            Public Custom submission and the open Custom Registry are still
+            prelaunch. A future Custom hook enters the feed only after
+            recognized onchain launch evidence exists.
+          </p>
+        </div>
+      </section>
+
+      <section id="providers">
+        <div className={styles.sectionIntro}>
+          <h2>Register partner launches once</h2>
+          <p>
+            Basebit and future providers keep their own templates. Programmable
+            supplies the canonical provenance layer that makes every accepted
+            launch appear under the same <code>Programmable Custom</code> label.
+          </p>
         </div>
 
-        <p className={styles.scopeNote}>
-          The feed makes launches integrable; it does not fabricate market data
-          or authorize trades. Check the{" "}
+        <div className={styles.prelaunchNotice}>
+          <strong>Prelaunch specification</strong>
+          <p>
+            The open Custom Registry is not deployed. The interface below is a
+            review contract for partner integrations, not a live address or an
+            instruction to submit transactions today.
+          </p>
+        </div>
+
+        <div className={styles.providerModes}>
+          <article>
+            <h3>Atomic Programmable adapter</h3>
+            <p>
+              An approved adapter calls the provider factory, validates the
+              returned token, hook and market, then registers the launch before
+              the same transaction completes.
+            </p>
+          </article>
+          <article>
+            <h3>Verified factory callback</h3>
+            <p>
+              An allowlisted provider factory calls the registry from inside its
+              launch transaction. The registry binds that factory and runtime
+              code to one provider ID.
+            </p>
+          </article>
+        </div>
+
+        <p className={styles.hardRule}>
+          A frontend request, API response or later metadata submission is not
+          canonical launch provenance. Registration must be authenticated and
+          atomic with the provider launch.
+        </p>
+
+        <div className={styles.subsectionHeader}>
+          <div>
+            <h3>Provider handoff</h3>
+            <p>Every provider supplies the same review package.</p>
+          </div>
           <a
-            href="https://developers.programmable.family/api/v1/status"
+            href="https://github.com/0xprogrammable/developers/blob/main/docs/guides/launch-providers.md"
             rel="noreferrer"
             target="_blank"
           >
-            live API status
-          </a>{" "}
-          and each market&apos;s support fields before enabling product features.
-        </p>
+            Open provider guide
+            <ArrowUpRight aria-hidden="true" size={15} strokeWidth={1.8} />
+          </a>
+        </div>
+
+        <dl className={styles.requirementList}>
+          {providerRequirements.map(([term, description]) => (
+            <div key={term}>
+              <dt>{term}</dt>
+              <dd>{description}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <div className={styles.registryLayout}>
+          <div>
+            <h3>Canonical registration event</h3>
+            <p>
+              The event records immutable launch provenance. Provider status,
+              template review and market support remain separate facts so a
+              later suspension never rewrites launch history.
+            </p>
+            <ul>
+              <li>One launch ID and one token registration per chain</li>
+              <li>Provider and factory authenticated before registration</li>
+              <li>Template version and configuration committed by hash</li>
+              <li>
+                Provider attribution exposed without creating a third category
+              </li>
+            </ul>
+          </div>
+          <DeveloperCodeSample
+            code={providerRegistryInterface}
+            label="Draft Solidity interface"
+          />
+        </div>
+
+        <div
+          className={styles.providerLifecycle}
+          aria-label="Provider launch lifecycle"
+        >
+          <span>Provider review</span>
+          <span aria-hidden="true">→</span>
+          <span>Factory approval</span>
+          <span aria-hidden="true">→</span>
+          <span>Atomic launch</span>
+          <span aria-hidden="true">→</span>
+          <span>Registry event</span>
+          <span aria-hidden="true">→</span>
+          <span>Custom feed</span>
+        </div>
       </section>
 
-      <section id="response">
+      <section id="detection">
         <div className={styles.sectionIntro}>
-          <h2>Response model</h2>
+          <h2>Detect through the feed or directly onchain</h2>
           <p>
-            Preserve the trusted core of every launch. Open a group to inspect
-            its fields and the rules your integration must keep.
+            The public feed is the preferred integration. It normalizes every
+            supported release and keeps historical sources in one manifest.
+            Direct log consumers must follow the same inventory.
           </p>
         </div>
 
-        <div className={styles.responseMap}>
-          <div className={styles.responseRoot}>
-            <FileJson aria-hidden="true" size={19} strokeWidth={1.8} />
-            <span>
-              <strong>Launch feed</strong>
-              <small>status · snapshot · items · page</small>
-            </span>
-          </div>
-          <div className={styles.responseBranches}>
-            {responseGroups.map((group) => (
-              <details
-                className={styles.responseGroup}
-                data-color={group.color}
-                key={group.name}
-              >
-                <summary>
-                  <span
-                    className={styles.responseGroupDot}
-                    aria-hidden="true"
-                  />
-                  <span>
-                    <code>{group.name}</code>
-                    <small>{group.summary}</small>
-                  </span>
-                  <span className={styles.responseChevron} aria-hidden="true">
-                    +
-                  </span>
-                </summary>
-                <div className={styles.responseGroupBody}>
-                  <p>{group.detail}</p>
-                  <code>{group.fields}</code>
-                </div>
-              </details>
-            ))}
-          </div>
+        <div className={styles.detectionFlow}>
+          <article>
+            <Radar aria-hidden="true" size={20} strokeWidth={1.8} />
+            <h3>Public launch feed</h3>
+            <code>GET /api/v1/launches</code>
+            <p>
+              Filter with <code>category=classic</code> or
+              <code>category=custom</code>. Refresh the manifest separately and
+              never hardcode one launcher as the complete source.
+            </p>
+          </article>
+          <article>
+            <Braces aria-hidden="true" size={20} strokeWidth={1.8} />
+            <h3>Ethereum logs</h3>
+            <code>eth_getLogs</code>
+            <p>
+              Filter by the exact source address, event topic and start block.
+              Pair launch and liquidity evidence before enabling market
+              features.
+            </p>
+          </article>
         </div>
 
-        <div className={styles.identityRule}>
-          <Database aria-hidden="true" size={21} strokeWidth={1.8} />
+        <div className={styles.subsectionHeader}>
           <div>
-            <span>Canonical keys</span>
-            <code>asset = chainId + token.address</code>
-            <code>launch = launchId</code>
+            <h3>Current Ethereum sources</h3>
+            <p>
+              Resolve these values from the live manifest in production code.
+            </p>
           </div>
+          <a
+            href="https://developers.programmable.family/api/v1/manifest"
+            rel="noreferrer"
+            target="_blank"
+          >
+            Open live manifest
+            <ArrowUpRight aria-hidden="true" size={15} strokeWidth={1.8} />
+          </a>
+        </div>
+
+        <div className={styles.deploymentGrid}>
+          {currentDeployments.map((deployment) => (
+            <DeploymentCard deployment={deployment} key={deployment.release} />
+          ))}
+        </div>
+
+        <details className={styles.historyDisclosure}>
+          <summary>
+            <span>
+              <History aria-hidden="true" size={18} strokeWidth={1.8} />
+              Historical sources required for a complete backfill
+            </span>
+            <span aria-hidden="true">+</span>
+          </summary>
+          <div className={styles.deploymentGrid}>
+            {historicalDeployments.map((deployment) => (
+              <DeploymentCard
+                deployment={deployment}
+                key={deployment.release}
+              />
+            ))}
+          </div>
+        </details>
+
+        <p className={styles.scopeNote}>
+          Stock Paired coordinators also emit
+          <code>StockPairedEthTokenLaunched</code> with topic
+          <code>
+            0x3cbc0759c7c8dbace314ab27d7865532835458ca67ba12308949012593d5cc36
+          </code>
+          . Treat it as coordinator evidence, not as a third public category.
+        </p>
+      </section>
+
+      <section id="fields">
+        <div className={styles.sectionIntro}>
+          <h2>Store these fields</h2>
+          <p>
+            These values are enough to render a launch, deduplicate updates and
+            decide which product features are available.
+          </p>
+        </div>
+
+        <div
+          aria-label="Required integration fields"
+          className={styles.fieldTable}
+          role="table"
+        >
+          {fields.map((entry) => (
+            <div key={entry.field} role="row">
+              <code role="cell">{entry.field}</code>
+              <span role="cell">{entry.use}</span>
+            </div>
+          ))}
         </div>
       </section>
 
-      <section id="sync">
+      <section id="verification">
         <div className={styles.sectionIntro}>
-          <h2>Backfill and live updates</h2>
+          <h2>Verification is not one safety flag</h2>
           <p>
-            Complete one snapshot, store it, then poll from a durable
-            checkpoint. Treat every cursor as opaque.
+            Preserve each fact independently. Provenance, contract properties,
+            audit scope, market support and liquidity are different claims.
+          </p>
+        </div>
+
+        <div className={styles.verificationGrid}>
+          <article>
+            <ShieldCheck aria-hidden="true" size={21} strokeWidth={1.8} />
+            <h3>Classic V3 contract facts</h3>
+            <ul>
+              <li>Fixed supply of 1,000,000,000 tokens with 18 decimals</li>
+              <li>No owner mint, blacklist, pause or ERC20 transfer tax</li>
+              <li>Permanently held one sided Uniswap v4 position</li>
+              <li>Immutable buy and sell fees selected from 1% through 10%</li>
+              <li>Recorded mainnet buy, sell and claim lifecycle evidence</li>
+            </ul>
+          </article>
+          <article>
+            <Database aria-hidden="true" size={21} strokeWidth={1.8} />
+            <h3>Custom verification</h3>
+            <ul>
+              <li>Custom identifies the launch family, not one mechanic</li>
+              <li>Read provenance and market support from each record</li>
+              <li>Do not infer an audit from category or metadata</li>
+              <li>Keep unsupported chart and trade actions disabled</li>
+              <li>Preserve unknown capabilities without executing them</li>
+            </ul>
+          </article>
+        </div>
+
+        <div className={styles.verificationRule}>
+          <strong>Terminal label rule</strong>
+          <p>
+            A Programmable label means the asset traces to a recognized source
+            deployment. It does not guarantee price, liquidity, metadata truth
+            or the absence of every economic risk. The v1 schema intentionally
+            has no universal <code>safe</code> or <code>audited</code> boolean.
+          </p>
+        </div>
+
+        <p className={styles.scopeNote}>
+          Current Classic V3 has no token level sell restriction and its release
+          evidence includes a successful sell. A terminal should still perform
+          its normal pool state, liquidity, quote and simulation checks before
+          enabling execution.
+        </p>
+      </section>
+
+      <section id="data">
+        <div className={styles.sectionIntro}>
+          <h2>Backfill once, then poll from a checkpoint</h2>
+          <p>
+            Cursors are opaque. Commit every page before advancing the durable
+            checkpoint.
           </p>
         </div>
 
@@ -324,10 +717,10 @@ export default function DeveloperDocsPage() {
           <li>
             <span className={styles.stepNumber}>1</span>
             <div>
-              <strong>Discover and verify availability</strong>
+              <strong>Discover the interface</strong>
               <p>
-                Fetch the well-known document, status, and manifest. Resolve
-                deployment arrays from the manifest at runtime.
+                Fetch the well known document, status and manifest. Reject an
+                unexplained manifest rollback.
               </p>
               <code>GET /.well-known/programmable.json</code>
             </div>
@@ -335,10 +728,10 @@ export default function DeveloperDocsPage() {
           <li>
             <span className={styles.stepNumber}>2</span>
             <div>
-              <strong>Traverse the complete snapshot</strong>
+              <strong>Complete the snapshot</strong>
               <p>
-                Start the launch feed and continue while <code>hasMore</code> is
-                true. The current traversal uses <code>nextCursor</code>.
+                Continue with <code>nextCursor</code> while
+                <code>hasMore</code> is true.
               </p>
               <code>GET /api/v1/launches?cursor={"{nextCursor}"}</code>
             </div>
@@ -348,8 +741,8 @@ export default function DeveloperDocsPage() {
             <div>
               <strong>Commit before advancing</strong>
               <p>
-                Apply every page idempotently. Persist <code>resumeCursor</code>
-                only after the complete traversal is durable.
+                Apply pages idempotently, then persist
+                <code>resumeCursor</code> only after the traversal is durable.
               </p>
               <code>persist(page.resumeCursor)</code>
             </div>
@@ -357,104 +750,23 @@ export default function DeveloperDocsPage() {
           <li>
             <span className={styles.stepNumber}>4</span>
             <div>
-              <strong>Poll for new launches</strong>
+              <strong>Poll for updates</strong>
               <p>
-                Begin the next incremental poll with <code>after</code>. Retries
-                can repeat records, so deduplicate by <code>launchId</code>.
+                Start the next traversal with <code>after</code>. Reconcile
+                repeated and orphaned records by <code>launchId</code>.
               </p>
               <code>GET /api/v1/launches?after={"{resumeCursor}"}</code>
             </div>
           </li>
         </ol>
-
-        <div className={styles.cursorComparison}>
-          <div>
-            <Workflow aria-hidden="true" size={18} strokeWidth={1.8} />
-            <span>
-              <strong>nextCursor</strong>
-              <small>Finish this traversal</small>
-            </span>
-          </div>
-          <span className={styles.cursorArrow} aria-hidden="true">
-            →
-          </span>
-          <div>
-            <Database aria-hidden="true" size={18} strokeWidth={1.8} />
-            <span>
-              <strong>resumeCursor</strong>
-              <small>Start the next poll</small>
-            </span>
-          </div>
-        </div>
-      </section>
-
-      <section id="rendering">
-        <div className={styles.sectionIntro}>
-          <h2>Rendering rules</h2>
-          <p>
-            Keep recognized launches visible. Enable price, chart, quote,
-            simulation, or execution only when a market declares support.
-          </p>
-        </div>
-
-        <div className={styles.renderingRules}>
-          <article>
-            <CircleDot aria-hidden="true" size={20} strokeWidth={1.8} />
-            <h3>Identity and provenance</h3>
-            <p>
-              Chain, contract address, launch ID, category, onchain timestamp,
-              finality, and the evidence that is available.
-            </p>
-          </article>
-          <article>
-            <Layers3 aria-hidden="true" size={20} strokeWidth={1.8} />
-            <h3>Markets and capabilities</h3>
-            <p>
-              Accept zero, one, or several markets. Keep unfamiliar types
-              visible and mark unsupported behavior unavailable.
-            </p>
-          </article>
-          <article>
-            <ShieldCheck aria-hidden="true" size={20} strokeWidth={1.8} />
-            <h3>Price, volume, or actions</h3>
-            <p>
-              Null is not zero. No market is not an error. Discovery never
-              authorizes or constructs a transaction.
-            </p>
-          </article>
-        </div>
-
-        <div className={styles.stateLegend}>
-          <span>Preserve state</span>
-          <code>observed</code>
-          <code>confirmed</code>
-          <code>finalized</code>
-          <code>orphaned</code>
-          <code>degraded</code>
-          <code>unavailable</code>
-        </div>
-      </section>
-
-      <section id="agents">
-        <div className={styles.sectionIntro}>
-          <h2>AI agent integration</h2>
-          <p>
-            Give an agent Markdown, OpenAPI, and schemas instead of a
-            screenshot. Every machine-readable surface points to the same
-            public interface.
-          </p>
-        </div>
-
-        <DeveloperAgentPrompt />
-
       </section>
 
       <section id="reference">
         <div className={styles.sectionIntro}>
           <h2>API reference</h2>
           <p>
-            Successful responses are JSON. Errors use the published problem
-            schema. Honor cache headers, ETags, retry timing, and feed status.
+            All public endpoints are read only, return JSON and support public
+            CORS without an API key.
           </p>
         </div>
 
@@ -480,8 +792,8 @@ export default function DeveloperDocsPage() {
         <div className={styles.endpointGuidance}>
           <p>
             A token detail request needs both path values. Use
-            <code>/api/v1/launches/1/0x…</code>; <code>/token</code> by itself
-            is not an API route.
+            <code>/api/v1/launches/1/0x…</code>. <code>/token</code> alone is
+            not an API route.
           </p>
           <div aria-label="Launch feed query parameters">
             <code>chainId=1</code>
@@ -519,36 +831,46 @@ export default function DeveloperDocsPage() {
           </ExternalResource>
           <ExternalResource
             href="https://github.com/0xprogrammable/developers/tree/main/schemas/v1"
-            meta="Validate every public response"
+            meta="Validate public responses"
           >
             JSON Schemas
           </ExternalResource>
           <ExternalResource
-            href="https://github.com/0xprogrammable/developers/tree/main/examples"
-            meta="Read-only consumer examples"
+            href="https://github.com/0xprogrammable/developers/tree/main/abis/ethereum"
+            meta="Canonical launch event interfaces"
           >
-            Integration examples
+            Ethereum ABIs
           </ExternalResource>
           <ExternalResource
-            href="https://github.com/0xprogrammable/developers"
-            meta="Guides, fixtures, and tests"
+            href="https://github.com/0xprogrammable/developers/blob/main/docs/guides/terminals-and-scanners.md"
+            meta="Terminal implementation contract"
           >
-            Developer repository
+            Terminal guide
           </ExternalResource>
           <ExternalResource
-            href="https://github.com/0xprogrammable/developers/blob/main/CHANGELOG.md"
-            meta="Track additive and versioned changes"
+            href="https://github.com/0xprogrammable/developers/tree/main/fixtures/v1"
+            meta="Conformance and edge cases"
           >
-            API changelog
+            Fixtures
           </ExternalResource>
           <ExternalResource
             href="https://github.com/0xprogrammable/developers/issues"
-            meta="Ask integration questions or report discrepancies"
+            meta="Integration questions and discrepancies"
           >
             Integration support
           </ExternalResource>
         </div>
+      </section>
 
+      <section id="agents">
+        <div className={styles.sectionIntro}>
+          <h2>AI agent entry points</h2>
+          <p>
+            Markdown, OpenAPI, schemas and the terminal guide are the source of
+            truth. The prompt below points an agent to the same contract.
+          </p>
+        </div>
+        <DeveloperAgentPrompt />
       </section>
     </DocsShell>
   );

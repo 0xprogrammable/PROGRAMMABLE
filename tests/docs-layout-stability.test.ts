@@ -8,10 +8,7 @@ const docsCss = readFileSync(
   join(root, "components/docs-experience.module.css"),
   "utf8",
 );
-const docsShell = readFileSync(
-  join(root, "components/docs-shell.tsx"),
-  "utf8",
-);
+const docsShell = readFileSync(join(root, "components/docs-shell.tsx"), "utf8");
 const docsNavigation = readFileSync(
   join(root, "components/docs-navigation.tsx"),
   "utf8",
@@ -25,7 +22,7 @@ const interfaceCss = readFileSync(join(root, "app/interface.css"), "utf8");
 describe("Docs rail layout stability", () => {
   it("keeps the desktop rail sticky beside one bounded reading column", () => {
     expect(docsCss).toMatch(
-      /\.page\s*\{[^}]*--docs-content-width:\s*860px;[^}]*--docs-rail-width:\s*240px;/s,
+      /\.page\s*\{[^}]*--docs-content-width:\s*940px;[^}]*--docs-rail-width:\s*220px;/s,
     );
     expect(docsCss).toMatch(
       /\.page\s*\{[^}]*grid-template-columns:[^}]*var\(--docs-rail-width\)[^}]*minmax\(0,\s*var\(--docs-content-width\)\);/s,
@@ -83,7 +80,7 @@ describe("Docs rail layout stability", () => {
     expect(docsShell).toContain("Public API");
     expect(docsShell).toContain("Soon");
     expect(docsNavigation).toContain(
-      '<p className={styles.navLabel}>Contents</p>',
+      "<p className={styles.navLabel}>Contents</p>",
     );
     expect(docsNavigation).toContain(
       "const navigationGroups = sections.length === 0 ? docsNavigation : [];",
