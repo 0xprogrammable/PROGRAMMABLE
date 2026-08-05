@@ -606,9 +606,11 @@ html[data-theme="dark"] .app-frame::before {
   width: 46px;
 }
 
-.header-social-link svg {
+.header-social-link svg,
+.header-social-link img {
   display: block;
   height: 24px;
+  object-fit: contain;
   width: 24px;
 }
 
