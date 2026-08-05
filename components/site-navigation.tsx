@@ -22,10 +22,6 @@ const desktopNavItems = [
   { href: "/profile", label: "Profile", icon: UserRound },
 ];
 
-const landingNavItems = desktopNavItems.filter(
-  (item) => item.href === "/launch" || item.href === "/docs/developers",
-);
-
 const mobileNavItems = desktopNavItems;
 
 function isCurrent(pathname: string, href: string) {
@@ -34,13 +30,11 @@ function isCurrent(pathname: string, href: string) {
 
 export function SiteHeader() {
   const pathname = usePathname();
-  const isLandingPage = pathname === "/";
-  const visibleNavItems = isLandingPage ? landingNavItems : desktopNavItems;
+
+  if (pathname === "/") return null;
 
   return (
-    <header
-      className={`site-header${isLandingPage ? " site-header--landing" : ""}`}
-    >
+    <header className="site-header">
       <div className="header-inner liquid-glass-surface liquid-glass-distortion">
         <div className="header-brand">
           <Link className="wordmark" href="/" aria-label="Programmable home">
@@ -57,7 +51,7 @@ export function SiteHeader() {
         </div>
 
         <nav className="desktop-nav" aria-label="Primary navigation">
-          {visibleNavItems.map((item) => (
+          {desktopNavItems.map((item) => (
             <Link
               key={item.href}
               className={isCurrent(pathname, item.href) ? "active" : undefined}
@@ -106,7 +100,7 @@ export function SiteHeader() {
               />
             </a>
           </div>
-          {!isLandingPage ? <WalletButton compact /> : null}
+          <WalletButton compact />
         </div>
       </div>
     </header>

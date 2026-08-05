@@ -35,32 +35,33 @@ describe("topbar and Explore hero polish", () => {
     );
   });
 
-  it("keeps one glass topbar and exposes the verified market link", () => {
+  it("keeps app navigation compact and moves landing links below the hero actions", () => {
     const navigation = read("components/site-navigation.tsx");
+    const landing = read("components/landing-page.tsx");
     const landingCss = read("components/landing-page.module.css");
+    const interfaceCss = read("app/interface.css");
 
-    expect(navigation).toContain(
+    expect(landing).toContain(
       "https://dexscreener.com/ethereum/0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0",
     );
-    expect(navigation).toContain(
+    expect(landing).toContain(
       'src="/brand/platforms/dexscreener-mark-white.png"',
     );
-    expect(navigation).toContain('aria-label="Programmable on Dexscreener"');
+    expect(landing).toContain('aria-label="Programmable on X"');
+    expect(landing).toContain('aria-label="Programmable on GitHub"');
+    expect(landing).toContain('aria-label="Programmable on Dexscreener"');
+    expect(landing).toContain('href="/docs/developers"');
     expect(navigation).not.toContain("ThemeToggle");
-    expect(navigation).toContain(
-      "{!isLandingPage ? <WalletButton compact /> : null}",
+    expect(navigation).toContain('if (pathname === "/") return null;');
+    expect(navigation).toContain("<WalletButton compact />");
+    expect(interfaceCss).toMatch(
+      /@media \(min-width: 801px\)[\s\S]*?\.header-inner\s*\{[^}]*grid-template-columns:\s*auto auto auto;[^}]*justify-content:\s*center;[^}]*width:\s*max-content;/s,
     );
-    expect(navigation).toContain("const landingNavItems");
-    expect(navigation).toContain('item.href === "/launch"');
-    expect(navigation).toContain('item.href === "/docs/developers"');
+    expect(interfaceCss).toMatch(
+      /@media \(max-width: 800px\)[\s\S]*?\.header-inner\s*\{[^}]*grid-template-columns:\s*auto auto;[^}]*justify-content:\s*center;[^}]*width:\s*max-content;/s,
+    );
     expect(landingCss).toMatch(
-      /:global\(\.site-header--landing\)\s*\{[^}]*position:\s*fixed;[^}]*width:\s*100%;/s,
-    );
-    expect(landingCss).not.toContain(
-      ":global(.site-header--landing .header-inner)",
-    );
-    expect(landingCss).not.toMatch(
-      /site-header--landing \.header-socials[\s\S]*?display:\s*none/u,
+      /\.socialLink\s*\{[^}]*height:\s*44px;[^}]*width:\s*44px;/s,
     );
   });
 

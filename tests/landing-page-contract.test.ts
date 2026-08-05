@@ -23,6 +23,7 @@ describe("landing page contract", () => {
   it("uses responsive static atmosphere layers without a video", () => {
     const landing = read("components/landing-page.tsx");
     const backdrop = read("components/atmosphere-backdrop.tsx");
+    const navigation = read("components/site-navigation.tsx");
 
     expect(backdrop).toContain(
       "/brand/atmosphere/night-sky-desktop-v1.avif",
@@ -43,6 +44,12 @@ describe("landing page contract", () => {
     expect(landing).toContain('href="/explore"');
     expect(landing).toContain("Create a Token");
     expect(landing).toContain("Explore Tokens");
+    expect(landing).toContain('aria-label="Programmable links"');
+    expect(landing).toContain('aria-label="Programmable on X"');
+    expect(landing).toContain('aria-label="Programmable on GitHub"');
+    expect(landing).toContain('aria-label="Programmable on Dexscreener"');
+    expect(landing).toContain('href="/docs/developers"');
+    expect(navigation).toContain('if (pathname === "/") return null;');
     expect(landing).not.toContain("LandingBackdrop");
     expect(backdrop).not.toContain("<video");
     expect(landing).not.toContain("Built on Uniswap v4");
