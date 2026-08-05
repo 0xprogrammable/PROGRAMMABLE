@@ -1,0 +1,215 @@
+name: Verify hook builder intake feedback
+
+# Non-authoritative default-branch fallback. GitHub requires a
+# pull_request_target workflow to exist on the repository's default branch.
+# This workflow runs only validator code from the default branch, treats the
+# pull-request base and candidate as inert Git data, and can report preflight
+# feedback. It never approves a pull request or issues an admission receipt,
+# launch grant, entitlement, or permit.
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+      - converted_to_draft
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hook-builder-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  public-intake:
+    if: github.event_name == 'pull_request_target'
+    permissions:
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GIT_CONFIG_GLOBAL: /dev/null
+      GIT_CONFIG_NOSYSTEM: "1"
+      GIT_LFS_SKIP_SMUDGE: "1"
+      GIT_TERMINAL_PROMPT: "0"
+
+    steps:
+      - name: Checkout exact default-branch validator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: trusted
+          persist-credentials: false
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+
+      - name: Checkout exact pull-request base as inert data
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+          persist-credentials: false
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+
+      - name: Prove trusted and base revisions are exact
+        shell: bash
+        env:
+          EXPECTED_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          EXPECTED_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+
+          test "$(git -C "$GITHUB_WORKSPACE/trusted" rev-parse HEAD)" = "$EXPECTED_WORKFLOW_SHA"
+          test "$(git -C "$GITHUB_WORKSPACE/base" rev-parse HEAD)" = "$EXPECTED_BASE_SHA"
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.14.0
+
+      - name: Fetch exact candidate merge as blobless data
+        id: candidate_fetch
+        shell: bash
+        env:
+          CANDIDATE_READ_TOKEN: ${{ github.token }}
+          SERVER_URL: ${{ github.server_url }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$SERVER_URL" != "https://github.com" ]]; then
+            echo "::error::The central repository identity is outside the supported GitHub origin."
+            exit 1
+          fi
+
+          fetch_report="$(timeout --signal=KILL 90s node \
+            "$GITHUB_WORKSPACE/trusted/scripts/verify-public-hook-application.mjs" \
+            --fetch-candidate \
+            --repository "${{ github.repository }}" \
+            --pull-request-number "${{ github.event.pull_request.number }}" \
+            --base-root "$GITHUB_WORKSPACE/base" \
+            --candidate-root "$GITHUB_WORKSPACE/candidate.git" \
+            --expected-base-commit "${{ github.event.pull_request.base.sha }}" \
+            --expected-candidate-commit "${{ github.event.pull_request.head.sha }}")"
+          merge_commit="$(node -e '
+            const report = JSON.parse(process.argv[1]);
+            if (report.result !== "exact-blobless-candidate-fetched" || !/^[a-f0-9]{40}$/.test(report.mergeCommit)) process.exit(1);
+            process.stdout.write(report.mergeCommit);
+          ' "$fetch_report")"
+          echo "merge_commit=$merge_commit" >> "$GITHUB_OUTPUT"
+
+      - name: Classify candidate data with trusted default-branch code
+        id: classify
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          validator="$GITHUB_WORKSPACE/trusted/scripts/verify-public-hook-application.mjs"
+          if [[ ! -f "$validator" ]]; then
+            echo "::error::The default branch does not contain the trusted public-intake classifier."
+            exit 1
+          fi
+          mode="$(timeout --signal=KILL 30s node "$validator" --classify \
+            --base-root "$GITHUB_WORKSPACE/base" \
+            --candidate-root "$GITHUB_WORKSPACE/candidate.git" \
+            --expected-base-commit "${{ github.event.pull_request.base.sha }}" \
+            --expected-candidate-commit "${{ github.event.pull_request.head.sha }}" \
+            --expected-merge-commit "${{ steps.candidate_fetch.outputs.merge_commit }}")"
+          case "$mode" in
+            application|builder-maintenance|no-op) ;;
+            *)
+              echo "::error::The trusted classifier returned an unsupported mode."
+              exit 1
+              ;;
+          esac
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+
+      - name: Preflight and hydrate only bounded application blobs
+        if: steps.classify.outputs.mode == 'application'
+        shell: bash
+        env:
+          CANDIDATE_READ_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          timeout --signal=KILL 90s node \
+            "$GITHUB_WORKSPACE/trusted/scripts/verify-public-hook-application.mjs" \
+            --hydrate-candidate \
+            --repository "${{ github.repository }}" \
+            --pull-request-number "${{ github.event.pull_request.number }}" \
+            --base-root "$GITHUB_WORKSPACE/base" \
+            --candidate-root "$GITHUB_WORKSPACE/candidate.git" \
+            --expected-base-commit "${{ github.event.pull_request.base.sha }}" \
+            --expected-candidate-commit "${{ github.event.pull_request.head.sha }}" \
+            --expected-merge-commit "${{ steps.candidate_fetch.outputs.merge_commit }}"
+
+      - name: Remove candidate fetch credential
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          candidate="$GITHUB_WORKSPACE/candidate.git"
+          if [[ ! -f "$candidate/config" ]]; then
+            exit 0
+          fi
+          git -C "$candidate" config --local --unset-all http.https://github.com/.extraheader 2>/dev/null || true
+          if git -C "$candidate" config --local --get-regexp '^(http\..*\.extraheader|credential\.)' >/dev/null; then
+            echo "::error::Candidate object-store credentials were not fully removed."
+            exit 1
+          fi
+
+      - name: Verify closed public application package
+        if: steps.classify.outputs.mode == 'application'
+        shell: bash
+        # Do not pass github.token/GITHUB_TOKEN to the source resolver. GitHub
+        # documents GITHUB_TOKEN as limited to this workflow repository, so it
+        # is not a reliable credential for arbitrary public builder repos:
+        # https://docs.github.com/en/actions/concepts/security/github_token
+        env:
+          GH_TOKEN: ""
+          GITHUB_TOKEN: ""
+          GIT_NO_LAZY_FETCH: "1"
+        run: |
+          set -euo pipefail
+
+          timeout --signal=KILL 120s node \
+            "$GITHUB_WORKSPACE/trusted/scripts/verify-public-hook-application.mjs" \
+            --pull-request-number "${{ github.event.pull_request.number }}" \
+            --base-root "$GITHUB_WORKSPACE/base" \
+            --candidate-root "$GITHUB_WORKSPACE/candidate.git" \
+            --expected-base-commit "${{ github.event.pull_request.base.sha }}" \
+            --expected-builder-login "${{ github.event.pull_request.user.login }}" \
+            --expected-builder-user-id "${{ github.event.pull_request.user.id }}" \
+            --expected-candidate-commit "${{ github.event.pull_request.head.sha }}" \
+            --expected-merge-commit "${{ steps.candidate_fetch.outputs.merge_commit }}"
+
+      - name: Defer executable builder-maintenance checks to read-only pull-request CI
+        if: steps.classify.outputs.mode == 'builder-maintenance'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Builder-maintenance paths are closed by the trusted base classifier."
+          echo "No maintenance blob is hydrated or parsed under pull_request_target."
+          echo "Candidate validators, generators, tests, workflows, and scripts run only in ordinary read-only pull-request CI."
+
+      - name: Preserve legacy pull-request compatibility
+        if: steps.classify.outputs.mode == 'no-op'
+        shell: bash
+        run: echo "No builder-beta intake content changed; existing model CI remains authoritative."
+
+      - name: State feedback-only authority boundary
+        if: always()
+        shell: bash
+        run: |
+          echo "This default-branch fallback provides preflight feedback only."
+          echo "Only the separately installed Programmable GitHub App may issue an admission decision or launch authority."
