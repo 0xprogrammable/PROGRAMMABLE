@@ -62,6 +62,11 @@
   text-wrap: balance;
 }
 
+.content h1 span {
+  display: block;
+  white-space: nowrap;
+}
+
 .actions {
   align-items: center;
   display: flex;
@@ -239,7 +244,7 @@
   }
 
   .content h1 {
-    font-size: clamp(48px, 14.8vw, 64px);
+    font-size: clamp(36px, 11vw, 48px);
   }
 
   .actions {
