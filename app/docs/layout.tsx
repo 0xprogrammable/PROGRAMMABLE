@@ -4,10 +4,7 @@ import { ReactNode } from "react";
 import { SiteFooter } from "@/components/site-footer";
 
 export const metadata: Metadata = {
-  title: {
-    default: "Docs · Programmable",
-    template: "%s · Programmable Docs",
-  },
+  title: "Programmable",
   description:
     "Developer documentation for discovering and building with Programmable launches.",
 };

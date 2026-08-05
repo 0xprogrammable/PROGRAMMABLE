@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { ExploreView } from "@/components/explore-view";
 
 export const metadata: Metadata = {
-  title: "Explore — Programmable",
+  title: "Programmable",
   description: "Explore tokens launched through Programmable.",
   alternates: {
     canonical: "/explore",

@@ -71,10 +71,13 @@
 }
 
 .runnersIntro :global(.token-search) {
-  backdrop-filter: none;
-  background: var(--surface-raised);
-  border-color: var(--border);
-  box-shadow: none;
+  -webkit-backdrop-filter: var(--control-glass-backdrop);
+  backdrop-filter: var(--control-glass-backdrop);
+  background: var(--control-glass-background);
+  border-color: var(--control-glass-border);
+  box-shadow:
+    inset 0 1px 0 var(--control-glass-highlight),
+    0 9px 26px var(--control-glass-shadow-color);
   flex: 0 1 390px;
   max-width: 390px;
   min-height: 44px;
@@ -83,7 +86,7 @@
 }
 
 .runnersIntro :global(.token-search:focus-within) {
-  background: var(--surface-raised);
+  background: var(--control-glass-background-hover);
   border-color: color-mix(
     in srgb,
     var(--explore-pink) 56%,
@@ -102,10 +105,13 @@
 
 .runnersIntro :global(.token-filter summary),
 .runnersIntro :global(.token-pagination) {
-  backdrop-filter: none;
-  background: var(--surface-raised);
-  border-color: var(--border);
-  box-shadow: none;
+  -webkit-backdrop-filter: var(--control-glass-backdrop);
+  backdrop-filter: var(--control-glass-backdrop);
+  background: var(--control-glass-background);
+  border-color: var(--control-glass-border);
+  box-shadow:
+    inset 0 1px 0 var(--control-glass-highlight),
+    0 9px 26px var(--control-glass-shadow-color);
 }
 
 .runnersIntro :global(.token-filter summary) {
@@ -113,7 +119,7 @@
 }
 
 .runnersIntro :global(.token-filter[open] summary) {
-  background: var(--surface-raised);
+  background: var(--control-glass-background-hover);
   border-color: color-mix(
     in srgb,
     var(--explore-pink) 52%,
@@ -157,10 +163,13 @@
 }
 
 .filterMenu {
-  backdrop-filter: none;
-  background: var(--surface-raised);
-  border-color: var(--border);
-  box-shadow: 0 18px 48px var(--popover-shadow);
+  -webkit-backdrop-filter: blur(24px) saturate(1.42);
+  backdrop-filter: blur(24px) saturate(1.42);
+  background: var(--control-glass-background-strong);
+  border-color: var(--control-glass-border);
+  box-shadow:
+    inset 0 1px 0 var(--control-glass-highlight),
+    var(--shadow-floating);
   gap: 0;
   max-width: calc(100vw - 28px);
   min-width: 232px;

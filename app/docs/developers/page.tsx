@@ -19,7 +19,7 @@ import styles from "@/components/developer-docs.module.css";
 import { DocsShell } from "@/components/docs-shell";
 
 export const metadata: Metadata = {
-  title: "Developer integrations",
+  title: "Programmable",
   description:
     "Integrate the public Programmable v1 launch feed with copy-ready examples, live responses, cursor guidance, schemas, and AI-agent entry points.",
   alternates: { canonical: "/docs/developers" },
