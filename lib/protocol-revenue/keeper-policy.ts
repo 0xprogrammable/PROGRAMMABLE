@@ -29,10 +29,10 @@ export function evaluateProtocolRevenueV2Action(input: Readonly<{
   if (input.pendingNonce !== input.latestNonce) {
     return { status: "pending_transaction" };
   }
-  if (input.pendingRevenue >= input.vaultMinimumRevenue) {
-    if (input.finalizedTimestamp < input.vaultNextRunAt) {
-      return { status: "not_due", nextRunAt: input.vaultNextRunAt };
-    }
+  if (
+    input.pendingRevenue >= input.vaultMinimumRevenue &&
+    input.finalizedTimestamp >= input.vaultNextRunAt
+  ) {
     return { status: "process", revenue: input.pendingRevenue };
   }
 
@@ -41,6 +41,10 @@ export function evaluateProtocolRevenueV2Action(input: Readonly<{
     input.claimAccruedRevenue >= input.claimMinimumRevenue
   ) {
     return { status: "claim", accruedRevenue: input.claimAccruedRevenue };
+  }
+
+  if (input.pendingRevenue >= input.vaultMinimumRevenue) {
+    return { status: "not_due", nextRunAt: input.vaultNextRunAt };
   }
 
   const transferable = [

@@ -51,7 +51,7 @@ describe("protocol revenue keeper policy", () => {
     ).toEqual({ status: "claim", accruedRevenue: 200n });
   });
 
-  it("never stacks transactions and waits for cadence or permission recovery", () => {
+  it("keeps the daily claim cadence independent from a waiting vault cycle", () => {
     const base = {
       finalizedTimestamp: 2_000n,
       pendingRevenue: 200n,
@@ -67,9 +67,15 @@ describe("protocol revenue keeper policy", () => {
       pendingNonce: 7,
     } as const;
     expect(evaluateProtocolRevenueV2Action(base)).toEqual({
-      status: "not_due",
-      nextRunAt: 2_100n,
+      status: "claim",
+      accruedRevenue: 300n,
     });
+    expect(
+      evaluateProtocolRevenueV2Action({
+        ...base,
+        claimReady: false,
+      }),
+    ).toEqual({ status: "not_due", nextRunAt: 2_100n });
     expect(
       evaluateProtocolRevenueV2Action({
         ...base,
