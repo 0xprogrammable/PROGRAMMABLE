@@ -3,9 +3,11 @@
 ## Status
 
 The immutable Coordinator and Vault are deployed on Ethereum Mainnet and match their submitted creation and runtime
-bytecode in Sourcify. The bounded ERC-7715 permission has been granted and stored outside the repository. Automation
-remains disabled. No revenue has moved through this system yet, so deployment and source verification must not be
-described as a successful production lifecycle.
+bytecode in Sourcify. The bounded ERC-7715 permission has been granted and stored outside the repository. The first
+Mainnet claim canary succeeded in transaction
+[`0xa84ae391934b6ca9c30ca0de4bcb00a99e0ef14cbacd3d14aa7579751bd39484`](https://etherscan.io/tx/0xa84ae391934b6ca9c30ca0de4bcb00a99e0ef14cbacd3d14aa7579751bd39484),
+claiming `0.785086332824991480 ETH` to the immutable revenue wallet. The transfer and process canaries remain pending,
+and automation remains disabled until both receipts and balance changes match the fixed policy.
 
 The automated claim scope is intentionally limited to Classic V1 and Classic V2. Classic V3, Deep and quote-asset
 hooks still require the revenue wallet as caller and remain manual.
@@ -64,6 +66,11 @@ output, `0.1 ETH` chunks and 32 chunks maximum. Any failed check reverts the com
 
 The runtime also has a server-side transfer ceiling bounded by the signed `5 ETH` daily permission. Releases can use a
 smaller ceiling for a first-cycle canary without changing or expanding the wallet grant.
+
+Revenue execution uses its own independent RPC quorum rather than inheriting user-facing trade RPC configuration.
+The default pair is dRPC and PublicNode, with both endpoint URLs kept non-enumerable at runtime. A failed simulation
+records only the provider vendor and a finite error category; credentials and provider response text never enter logs
+or API responses.
 
 ## Required release gates
 

@@ -308,6 +308,28 @@ export function tradeActionRpcProviders(
   });
 }
 
+/**
+ * Keeps protocol-revenue execution isolated from the RPCs used by user-facing
+ * trade preparation. The selected defaults are independently operated and
+ * have both been verified against the live ERC-7715 delegation path.
+ */
+export function protocolRevenueRpcProviders(
+  env: Environment = process.env,
+) {
+  const primary =
+    env.PROTOCOL_REVENUE_RPC_URL_A ?? "https://eth.drpc.org";
+  const secondary =
+    env.PROTOCOL_REVENUE_RPC_URL_B ??
+    "https://ethereum-rpc.publicnode.com";
+  return createActionRpcQuorum({
+    chainId: 1,
+    primary,
+    secondary,
+    fallbacks: ["https://rpc.mevblocker.io"],
+    maximumProviders: 2,
+  });
+}
+
 export function creatorClaimRpcProviders(
   deployment: Readonly<{
     chainId: number;
