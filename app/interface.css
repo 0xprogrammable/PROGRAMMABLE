@@ -226,7 +226,8 @@ code,
   width: auto;
 }
 
-.header-social-link svg {
+.header-social-link svg,
+.header-social-link img {
   height: 22px;
   width: 22px;
 }
@@ -885,7 +886,8 @@ code,
     width: 44px;
   }
 
-  .header-social-link svg {
+  .header-social-link svg,
+  .header-social-link img {
     height: 19px;
     width: 19px;
   }

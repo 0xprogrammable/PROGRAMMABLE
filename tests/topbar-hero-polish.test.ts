@@ -35,6 +35,28 @@ describe("topbar and Explore hero polish", () => {
     );
   });
 
+  it("keeps one glass topbar and exposes the verified market link", () => {
+    const navigation = read("components/site-navigation.tsx");
+    const landingCss = read("components/landing-page.module.css");
+
+    expect(navigation).toContain(
+      "https://dexscreener.com/ethereum/0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0",
+    );
+    expect(navigation).toContain(
+      'src="/brand/platforms/dexscreener-mark-white.png"',
+    );
+    expect(navigation).toContain('aria-label="Programmable on Dexscreener"');
+    expect(landingCss).toMatch(
+      /:global\(\.site-header--landing\)\s*\{[^}]*position:\s*fixed;[^}]*width:\s*100%;/s,
+    );
+    expect(landingCss).not.toContain(
+      ":global(.site-header--landing .header-inner)",
+    );
+    expect(landingCss).not.toMatch(
+      /site-header--landing \.header-socials[\s\S]*?display:\s*none/u,
+    );
+  });
+
   it("centers the Explore headline and only forces one line on wide screens", () => {
     const css = read("components/explore-experience.module.css");
 

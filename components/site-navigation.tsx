@@ -239,6 +239,22 @@ export function SiteHeader() {
             >
               <GitHubBrandIcon />
             </a>
+            <a
+              className="header-social-link"
+              href="https://dexscreener.com/ethereum/0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Programmable on Dexscreener"
+            >
+              <Image
+                className="header-social-logo"
+                src="/brand/platforms/dexscreener-mark-white.png"
+                alt=""
+                width={256}
+                height={256}
+                sizes="22px"
+              />
+            </a>
           </div>
           <ThemeToggle />
           <WalletButton compact />

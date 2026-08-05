@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { LandingBackdrop } from "@/components/landing-backdrop";
 import styles from "@/components/landing-page.module.css";
 
 const desktopBackground =
@@ -39,25 +40,7 @@ export function LandingPage() {
           alt=""
         />
       </picture>
-      <div
-        className={`${styles.ambientWindow} ${styles.floraLeft}`}
-        aria-hidden="true"
-      >
-        <div className={styles.ambientArt} />
-      </div>
-      <div
-        className={`${styles.ambientWindow} ${styles.floraRight}`}
-        aria-hidden="true"
-      >
-        <div className={styles.ambientArt} />
-      </div>
-      <div
-        className={`${styles.ambientWindow} ${styles.floraBottom}`}
-        aria-hidden="true"
-      >
-        <div className={styles.ambientArt} />
-      </div>
-      <div className={styles.starField} aria-hidden="true" />
+      <LandingBackdrop />
       <div className={styles.veil} aria-hidden="true" />
 
       <section className={styles.hero}>
