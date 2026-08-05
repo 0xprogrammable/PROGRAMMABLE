@@ -30,8 +30,14 @@ const APPROVED_OPERATIONS = Object.freeze({
       }),
       runtime: Object.freeze({
         path: "lib/protocol-revenue/keeper-v2.server.ts",
-        sha256: "a40cea5a06ae3def870b61b35b359fdb05f02f587072956f8f84b58d319f27c7",
+        sha256: "da027cf1f0a565715f921130604df968c63e78907b5829fc548a7619639c0e51",
       }),
+      dependencies: Object.freeze([
+        Object.freeze({
+          path: "lib/server/action-rpc-quorum.server.ts",
+          sha256: "712d4df420068c20e3456606d87062203b89b4674a363109244175d113b2a413",
+        }),
+      ]),
       policy: Object.freeze({
         path: "lib/protocol-revenue/keeper-policy.ts",
         sha256: "ca242872b95141f042656199b39ae4a1636ccdaf5585a97a7eae28a6549f8ab0",
@@ -669,6 +675,9 @@ export function evaluateReadModelOperationsSourceContracts(
       `ops-${approvedCron.id}-source-digests`,
       sourceBindingMatches(source, approvedCron.route, expectedSha256Overrides) &&
         sourceBindingMatches(source, approvedCron.runtime, expectedSha256Overrides) &&
+        (approvedCron.dependencies ?? []).every((binding) =>
+          sourceBindingMatches(source, binding, expectedSha256Overrides)
+        ) &&
         sourceBindingMatches(source, approvedCron.policy, expectedSha256Overrides),
       `${approvedCron.id} route, runtime and policy match reviewed bytes`,
     );
