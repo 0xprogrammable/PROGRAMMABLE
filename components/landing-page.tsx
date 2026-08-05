@@ -30,8 +30,12 @@ export function LandingPage() {
       </Link>
       <section className={styles.hero}>
         <div className={styles.content}>
-          <h1 id="landing-title">
-            Launch tokens that behave exactly how you imagine
+          <h1
+            id="landing-title"
+            aria-label="Tokens that behave how you imagine"
+          >
+            <span aria-hidden="true">Tokens that behave</span>
+            <span aria-hidden="true">how you imagine</span>
           </h1>
           <div className={styles.actions} aria-label="Get started">
             <Link

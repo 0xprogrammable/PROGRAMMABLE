@@ -22,6 +22,7 @@ describe("landing page contract", () => {
 
   it("uses responsive static atmosphere layers without a video", () => {
     const landing = read("components/landing-page.tsx");
+    const styles = read("components/landing-page.module.css");
     const backdrop = read("components/atmosphere-backdrop.tsx");
     const navigation = read("components/site-navigation.tsx");
 
@@ -43,8 +44,11 @@ describe("landing page contract", () => {
     expect(landing).toContain('href="/launch"');
     expect(landing).toContain('href="/explore"');
     expect(landing).toContain(
-      "Launch tokens that behave exactly how you imagine",
+      'aria-label="Tokens that behave how you imagine"',
     );
+    expect(landing).toContain(">Tokens that behave</span>");
+    expect(landing).toContain(">how you imagine</span>");
+    expect(styles).toContain("white-space: nowrap");
     expect(landing).toContain('aria-label="Programmable home"');
     expect(landing).toContain(
       'src="/brand/loop/programmable-loop-mark-header.png"',
