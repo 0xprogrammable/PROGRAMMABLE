@@ -42,9 +42,7 @@ describe("landing page contract", () => {
     expect(backdrop).toContain('fetchPriority="high"');
     expect(landing).toContain('href="/launch"');
     expect(landing).toContain('href="/explore"');
-    expect(landing).toContain(
-      "Launch tokens that behave exactly how you imagine",
-    );
+    expect(landing).toContain("Tokens that behave how you imagine");
     expect(landing).toContain('aria-label="Programmable home"');
     expect(landing).toContain(
       'src="/brand/loop/programmable-loop-mark-header.png"',
