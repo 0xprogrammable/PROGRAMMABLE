@@ -40,7 +40,7 @@ export function SiteFooter() {
       aria-label="Site footer"
     >
       <div
-        className={`${styles.surface} liquid-glass-surface liquid-glass-distortion`}
+        className={`${styles.surface} liquid-glass-surface`}
       >
         <section className={styles.brand}>
           <Link

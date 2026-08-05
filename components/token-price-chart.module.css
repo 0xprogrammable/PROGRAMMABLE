@@ -5,8 +5,11 @@
   border: 1px solid var(--liquid-glass-border);
   border-radius: 24px;
   box-shadow: var(--liquid-glass-shadow);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   margin: 0;
-  min-height: 224px;
+  min-height: 320px;
   overflow: hidden;
   padding: 17px 18px 12px;
 }
@@ -83,8 +86,10 @@
 
 .plot {
   display: block;
-  height: 158px;
+  flex: 1;
+  height: auto;
   margin-top: 9px;
+  min-height: 220px;
   position: relative;
   touch-action: pan-y;
   user-select: none;
@@ -177,7 +182,8 @@
   color: var(--muted);
   display: grid;
   font-size: 13px;
-  min-height: 158px;
+  flex: 1;
+  min-height: 220px;
   place-items: center;
   text-align: center;
 }
@@ -240,7 +246,8 @@
   .shell {
     border-radius: 18px;
     margin: 0;
-    min-height: 212px;
+    height: auto;
+    min-height: 280px;
     padding: 16px 14px 12px;
   }
 
@@ -268,8 +275,8 @@
 
   .plot,
   .placeholder {
-    height: 160px;
-    min-height: 160px;
+    height: 190px;
+    min-height: 190px;
   }
 }
 

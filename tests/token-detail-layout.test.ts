@@ -62,7 +62,7 @@ describe("token detail layout", () => {
 
   it("uses a compact two-column market workspace with community on the right", () => {
     expect(detailStyles).toMatch(
-      /grid-template-areas:\s*"identity identity"\s*"chart trade"\s*"deep community"\s*"details community";/s,
+      /grid-template-areas:\s*"identity identity"\s*"chart trade"\s*"deep community";/s,
     );
     expect(detailSource).toMatch(
       /<div className=\{styles\.marketChart\}>[\s\S]*?<TokenPriceChart[\s\S]*?<MetricGrid metrics=\{metrics\} \/>[\s\S]*?<\/div>/s,
@@ -83,10 +83,9 @@ describe("token detail layout", () => {
     const domMarkers = [
       ["identity", "className={styles.identity}"],
       ["chart", "className={styles.marketChart}"],
-      ["deep", "<DeepLiquiditySummary token={token} />"],
-      ["details", "className={styles.projectInformation}"],
       ["trade", "styles.tradeShell"],
       ["community", "className={styles.communityShell}"],
+      ["deep", "<DeepLiquiditySummary token={token} />"],
     ] as const;
     const domOrder = domMarkers
       .map(([area, marker]) => ({ area, index: contentSource.indexOf(marker) }))
@@ -106,16 +105,32 @@ describe("token detail layout", () => {
     expect(visualOrder).toEqual(domOrder);
   });
 
-  it("removes the redundant detail heading and network row", () => {
+  it("keeps only useful identity metadata", () => {
     expect(detailSource).not.toMatch(/<h2>\s*Token details\s*<\/h2>/i);
     expect(detailSource).not.toMatch(/<dt>\s*Network\s*<\/dt>/i);
     expect(detailSource).toContain("<EthereumMark />");
-    expect(detailSource).toContain('aria-label="Token metadata"');
+    expect(detailSource).not.toContain('aria-label="Token metadata"');
+    expect(detailSource).not.toMatch(/<dt>\s*Published\s*<\/dt>/i);
+    expect(detailSource).not.toMatch(/<dt>\s*Quote asset\s*<\/dt>/i);
+    expect(detailSource).not.toMatch(/<h2>\s*Team\s*<\/h2>/i);
+    expect(detailSource).not.toMatch(/<h2>\s*Trade \$/i);
+  });
+
+  it("lets chart inspection scale token-level market cap fallbacks", () => {
+    expect(detailSource).toContain(
+      "token.indexedMarketCapEthWei ?? token.marketCapEthWei",
+    );
+    expect(detailSource).toContain(
+      "token.indexedMarketCapUsdWad ?? token.fdvUsdWad",
+    );
+    expect(chartSource).toContain(
+      "marketCapUsdWad: payload.marketCapUsdWad ?? marketCapUsdWad",
+    );
   });
 
   it("omits empty team-profile filler copy", () => {
     expect(detailSource).not.toContain("No team profile provided.");
     expect(detailSource).not.toContain("No team information provided.");
-    expect(detailSource).toContain("{previewProject ? (");
+    expect(detailSource).toContain("previewProject?.communityMembers");
   });
 });

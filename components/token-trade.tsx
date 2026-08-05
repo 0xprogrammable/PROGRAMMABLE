@@ -587,10 +587,6 @@ export function TokenTrade({
       aria-label={`Trade ${symbol}`}
       aria-busy={pending}
     >
-      <header className={styles.tradeHeader}>
-        <h2>Trade ${symbol}</h2>
-      </header>
-
       <div className={styles.sideControl} role="group" aria-label="Trade side">
         <span
           aria-hidden="true"

@@ -2000,7 +2000,7 @@ function LaunchBuilderFormView({
       </header>
 
       <form
-        className={`classic-launch-sheet liquid-glass-surface liquid-glass-distortion ${
+        className={`classic-launch-sheet liquid-glass-surface ${
           usesExtendedLayout ? extendedLayout.sheet : ""
         }`}
         aria-busy={!pendingRestoreComplete || launching || submissionBusy}

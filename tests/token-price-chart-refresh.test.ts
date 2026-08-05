@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createSerializedChartRefresh,
+  getChartMarketCapAtPoint,
   nearestChartPointIndex,
 } from "../components/token-price-chart";
 
@@ -19,6 +20,29 @@ describe("token price chart inspection", () => {
     expect(nearestChartPointIndex(400, 100, 0, 7)).toBe(0);
     expect(nearestChartPointIndex(Number.NaN, 100, 600, 7)).toBe(0);
     expect(nearestChartPointIndex(400, 100, 600, 0)).toBe(0);
+  });
+
+  it("updates market cap to the inspected historical price", () => {
+    expect(
+      getChartMarketCapAtPoint(
+        {
+          status: "ready",
+          points: [],
+          swapCount: 2,
+          volumeWei: "0",
+          volumeEth: "0",
+          marketCapEthWei: "1000000000000000000000",
+          marketCapEth: "1000",
+          marketCapUsdWad: "2000000000000000000000000",
+        },
+        { blockNumber: "1", priceEth: "0.5", priceUsd: "1000" },
+        { blockNumber: "2", priceEth: "1", priceUsd: "2000" },
+      ),
+    ).toEqual({
+      marketCapEthWei: "500000000000000000000",
+      marketCapEth: "500",
+      marketCapUsdWad: "1000000000000000000000000",
+    });
   });
 });
 

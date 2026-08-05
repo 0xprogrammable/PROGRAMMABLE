@@ -37,14 +37,13 @@
 }
 
 .layout {
-  align-items: start;
+  align-items: stretch;
   display: grid;
   gap: 12px 20px;
   grid-template-areas:
     "identity identity"
     "chart trade"
-    "deep community"
-    "details community";
+    "deep community";
   grid-template-columns: minmax(0, 1fr) minmax(310px, 340px);
   margin: 0 auto;
   max-width: 1100px;
@@ -250,10 +249,16 @@
 }
 
 .marketChart {
+  align-self: stretch;
   display: grid;
   gap: 4px;
   grid-area: chart;
+  grid-template-rows: minmax(0, 1fr) auto;
   min-width: 0;
+}
+
+.marketChart > :first-child {
+  height: 100%;
 }
 
 .metrics {
@@ -466,7 +471,7 @@
 }
 
 .communityShell {
-  align-self: start;
+  align-self: stretch;
   grid-area: community;
   min-width: 0;
   position: sticky;
@@ -550,7 +555,7 @@
 }
 
 .tradeShell {
-  align-self: start;
+  align-self: stretch;
   -webkit-backdrop-filter: var(--liquid-glass-backdrop);
   backdrop-filter: var(--liquid-glass-backdrop);
   background: var(--liquid-glass-surface-background);
@@ -561,6 +566,7 @@
   grid-area: trade;
   margin: 0;
   min-width: 0;
+  min-height: 390px;
   padding: 16px;
   position: static;
   width: 100%;
@@ -1210,8 +1216,7 @@
       "chart"
       "trade"
       "community"
-      "deep"
-      "details";
+      "deep";
     grid-template-columns: 1fr;
   }
 
