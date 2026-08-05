@@ -83,13 +83,66 @@
 }
 
 .primaryAction:active,
-.secondaryAction:active {
-  transform: scale(0.98);
+.secondaryAction:active,
+.socialLink:active,
+.docsLink:active {
+  transform: scale(0.96);
 }
 
-:global(.site-header--landing) {
-  position: fixed;
-  width: 100%;
+.supportingLinks {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.socialLinks {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.socialLink,
+.docsLink {
+  align-items: center;
+  color: rgba(255, 253, 249, 0.66);
+  display: inline-flex;
+  justify-content: center;
+  transition:
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.socialLink {
+  height: 44px;
+  width: 44px;
+}
+
+.socialLink svg,
+.socialLogo {
+  display: block;
+  height: 20px;
+  width: 20px;
+}
+
+.socialLogo {
+  filter: grayscale(1) brightness(1.18);
+  opacity: 0.82;
+}
+
+.docsLink {
+  font-size: 14px;
+  font-weight: 560;
+  min-height: 44px;
+  padding-inline: 12px;
+}
+
+.socialLink:focus-visible,
+.docsLink:focus-visible {
+  outline: 2px solid #fffdf9;
+  outline-offset: 2px;
 }
 
 :global(.app-frame:has(.landing-page-root) > main) {
@@ -102,6 +155,16 @@
     background: var(--liquid-glass-control-background-hover);
     border-color: rgba(255, 253, 249, 0.3);
     transform: translateY(-2px);
+  }
+
+  .socialLink:hover,
+  .docsLink:hover {
+    color: #fffdf9;
+    transform: translateY(-1px);
+  }
+
+  .socialLink:hover .socialLogo {
+    opacity: 1;
   }
 }
 
@@ -147,22 +210,15 @@
   }
 }
 
-@media (max-width: 600px) {
-  :global(.site-header--landing .header-socials) {
-    display: flex;
-  }
-
-  :global(.site-header--landing .header-social-link) {
-    height: 42px;
-    width: 42px;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .primaryAction,
-  .secondaryAction {
+  .secondaryAction,
+  .socialLink,
+  .docsLink {
     transition:
       background-color 160ms ease,
-      border-color 160ms ease;
+      border-color 160ms ease,
+      color 160ms ease,
+      opacity 160ms ease;
   }
 }

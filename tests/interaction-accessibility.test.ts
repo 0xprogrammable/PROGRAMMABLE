@@ -134,9 +134,13 @@ describe("interaction accessibility", () => {
     );
   });
 
-  it("keeps the landing header wallet-free while retaining its market links", () => {
+  it("removes landing chrome while keeping its supporting links accessible", () => {
     const source = readFileSync(
       join(root, "components/site-navigation.tsx"),
+      "utf8",
+    );
+    const landing = readFileSync(
+      join(root, "components/landing-page.tsx"),
       "utf8",
     );
     const css = readFileSync(
@@ -144,10 +148,15 @@ describe("interaction accessibility", () => {
       "utf8",
     );
 
-    expect(source).toContain("{!isLandingPage ? <WalletButton compact /> : null}");
+    expect(source).toContain('if (pathname === "/") return null;');
+    expect(landing).toContain('aria-label="Programmable links"');
+    expect(landing).toContain('aria-label="Programmable on X"');
+    expect(landing).toContain('aria-label="Programmable on GitHub"');
+    expect(landing).toContain('aria-label="Programmable on Dexscreener"');
     expect(css).toMatch(
-      /@media \(max-width: 600px\)[\s\S]*?site-header--landing \.header-socials[\s\S]*?display:\s*flex/,
+      /\.socialLink\s*\{[^}]*height:\s*44px;[^}]*width:\s*44px;/s,
     );
+    expect(css).toMatch(/\.docsLink\s*\{[^}]*min-height:\s*44px;/s);
   });
 
   it("keeps all four primary routes semantic and reflow-safe in mobile navigation", () => {
