@@ -54,7 +54,7 @@ fee liability increase = ERC-6909 native-currency claim minted = positive hook d
 hook ERC-6909 native-claim balance >= aggregate liability
 ```
 
-The fee is always native ETH and 10 basis points of executed gross quote-side volume rounded down. Exact-output gross-up uses denominator 999,000 so the final gross amount still satisfies the 10-basis-point floor identity.
+The fee is always native ETH and 10 basis points of executed gross quote-side volume. Exact-output gross-up uses denominator 999,000. The hook carries fractional fee remainders in a common 999,000,000 denominator across all four quadrants, charges the accumulated integral floor and keeps the residual, so split micro-swaps cannot avoid the allocation.
 
 Specified-ETH paths reject partial fills after the core swap because a before-swap charge cannot use an unexecuted requested amount. Unspecified-ETH paths use the actual core delta. This difference must be visible in quotes and tests.
 

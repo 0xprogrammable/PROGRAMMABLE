@@ -93,7 +93,9 @@ For an exact-input sale with gross AMM ETH output `G`, the fee is `floor(G * 100
 
 For an exact-output sale requesting net ETH output `N`, the hook uses `fee = floor(N * 1000 / 999,000)`. The AMM outputs `N + fee`; the caller receives exactly `N`.
 
-Specified-ETH paths reject a partial core fill because the pre-swap fee must not be based on an unexecuted request. Unspecified-ETH paths calculate the fee from the actual core result. All fees round down in wei; dust may produce zero.
+The formulas above show the zero-carry case. The hook carries the fractional remainder between swaps in a common `999,000,000` denominator (the least common multiple of the gross and fee-on-top denominators). Each swap adds its exact fractional numerator, charges the integral floor, and stores the remainder, including when gross and fee-on-top modes alternate. This prevents split micro-swaps from avoiding the 10-basis-point allocation; the first dust swap may still charge zero.
+
+Specified-ETH paths reject a partial core fill because the pre-swap fee must not be based on an unexecuted request. Unspecified-ETH paths calculate the fee from the actual core result.
 
 The hook calls `PoolManager.mint` for the native-currency claim, increases the exact `(poolId, native ETH, owner)` liability and returns the equal positive hook delta. Minting the claim creates a hook debt without transferring ETH before the router settles. The returned delta cancels that debt by unlock completion.
 

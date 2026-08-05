@@ -44,6 +44,8 @@ This plan applies to the isolated prototype. A passed local test does not prove 
 
 For buys, test a constant 3,000 hundredths of a basis point at opened counts 0, 1, 20, 39, 40 and 100.
 
+Stateful invariant runs exercise buys, sells, whole-box openings and partial fee claims in arbitrary sequences. They must preserve fee solvency, keep the shared rounding remainder below its common denominator and conserve the openable asset supply after every sequence.
+
 For sells, test:
 
 | Opened | Expected fee |
@@ -69,9 +71,11 @@ Use native ETH as `currency0`. Test zero, 1, 999, 1,000, 999,000, 1,000,000, `ty
 3. One for zero, exact input: for gross ETH output `G`, `F=floor(G*1000/1_000_000)`, final caller output `G-F`.
 4. One for zero, exact output: for requested net ETH output `N`, `F=floor(N*1000/999_000)`, core output `N+F`, final caller output `N`, and `F=floor((N+F)*1000/1_000_000)`.
 
+The displayed formulas are the zero-carry identities. The implementation also carries fractional fee remainders in a common `999,000,000` denominator across gross and fee-on-top paths. Test two split micro-swaps in each mode and an alternating-mode sequence; the first dust swap may charge zero, but the accumulated integral fee must match the combined exact fraction.
+
 For every case, prove:
 
-- the fee is 10 basis points of executed gross ETH volume rounded down
+- the accumulated fee is the integral floor of 10 basis points of executed gross ETH volume, with fractional remainder carried across swaps
 - the project share is zero and the Programmable share is the complete hook fee
 - the hook mints exactly `F` ERC-6909 native-currency claims to itself
 - hook PoolManager delta is zero before unlock ends
