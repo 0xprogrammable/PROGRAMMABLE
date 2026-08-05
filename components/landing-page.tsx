@@ -63,7 +63,7 @@ export function LandingPage() {
                   alt=""
                   width={256}
                   height={256}
-                  sizes="20px"
+                  sizes="30px"
                 />
               </a>
             </div>
