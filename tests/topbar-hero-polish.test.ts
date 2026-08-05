@@ -6,28 +6,32 @@ const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 describe("topbar and Explore hero polish", () => {
-  it("keeps the sticky header on the same visual plane as the page", () => {
+  it("keeps the page plane clean and contains navigation in midnight glass", () => {
     const globalCss = read("app/globals.css");
     const interfaceCss = read("app/interface.css");
 
-    for (const css of [globalCss, interfaceCss]) {
-      expect(css).toMatch(
-        /\.site-header\s*\{[^}]*background:\s*var\(--body-background\);[^}]*border:\s*0;[^}]*box-shadow:\s*none;/s,
-      );
-    }
+    expect(globalCss).toMatch(
+      /\.site-header\s*\{[^}]*background:\s*var\(--body-background\);[^}]*border:\s*0;[^}]*box-shadow:\s*none;/s,
+    );
+    expect(interfaceCss).toMatch(
+      /\.site-header\s*\{[^}]*background:\s*transparent;[^}]*border:\s*0;[^}]*box-shadow:\s*none;/s,
+    );
+    expect(interfaceCss).toMatch(
+      /\.header-inner\s*\{[^}]*backdrop-filter:\s*var\(--navigation-glass-backdrop\);[^}]*background:\s*var\(--navigation-glass-background\);[^}]*border:\s*1px solid var\(--navigation-glass-border\);[^}]*border-radius:\s*var\(--radius-panel\);[^}]*box-shadow:\s*var\(--navigation-glass-shadow\);/s,
+    );
     expect(globalCss).not.toMatch(
       /@media \(max-width:\s*800px\)[\s\S]*?\.site-header\s*\{[^}]*border-bottom:/s,
     );
   });
 
-  it("uses whitespace instead of a plate around desktop navigation", () => {
+  it("uses a restrained glass state for active desktop navigation", () => {
     const interfaceCss = read("app/interface.css");
 
     expect(interfaceCss).toMatch(
       /\.desktop-nav\s*\{[^}]*background:\s*transparent;[^}]*border:\s*0;[^}]*box-shadow:\s*none;[^}]*padding:\s*0;/s,
     );
     expect(interfaceCss).toMatch(
-      /\.desktop-nav a\.active\s*\{[^}]*background:\s*var\(--accent-soft\);[^}]*box-shadow:\s*none;/s,
+      /\.desktop-nav a\.active\s*\{[^}]*background:\s*var\(--navigation-glass-accent\);[^}]*box-shadow:\s*inset 0 1px 0 rgba\(255, 255, 255, 0\.055\);[^}]*color:\s*var\(--navigation-glass-ink\);/s,
     );
   });
 
