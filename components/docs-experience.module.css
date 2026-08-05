@@ -1,9 +1,9 @@
 .page {
-  --docs-content-width: 860px;
-  --docs-layout-gap: clamp(36px, 4vw, 48px);
+  --docs-content-width: 940px;
+  --docs-layout-gap: clamp(32px, 3.5vw, 44px);
   --docs-link: #075fca;
   --docs-link-soft: rgba(7, 95, 202, 0.075);
-  --docs-rail-width: 240px;
+  --docs-rail-width: 220px;
   align-items: start;
   display: grid;
   gap: var(--docs-layout-gap);
@@ -266,7 +266,7 @@
 }
 
 .heroAside {
-  margin-top: 36px;
+  margin-top: 30px;
   width: 100%;
 }
 
@@ -282,19 +282,19 @@
 }
 
 .hero h1 {
-  font-size: clamp(46px, 5vw, 60px);
+  font-size: clamp(38px, 4vw, 48px);
   font-weight: 640;
-  letter-spacing: -0.045em;
-  line-height: 1.02;
+  letter-spacing: -0.038em;
+  line-height: 1.06;
   text-wrap: balance;
 }
 
 .heroCopy > p {
   color: var(--text-soft);
-  font-size: 17px;
-  line-height: 1.6;
-  margin-top: 16px;
-  max-width: 66ch;
+  font-size: 16px;
+  line-height: 1.58;
+  margin-top: 14px;
+  max-width: 64ch;
   text-wrap: pretty;
 }
 
@@ -398,7 +398,7 @@
 }
 
 .layout {
-  margin-top: clamp(68px, 8svh, 84px);
+  margin-top: clamp(60px, 7svh, 72px);
   max-width: var(--docs-content-width);
   width: 100%;
 }
@@ -412,11 +412,11 @@
 }
 
 .content section + section {
-  margin-top: clamp(64px, 7vw, 82px);
+  margin-top: clamp(58px, 6vw, 72px);
 }
 
 .content h2 {
-  font-size: clamp(30px, 3vw, 36px);
+  font-size: clamp(28px, 2.7vw, 34px);
   font-weight: 650;
   letter-spacing: -0.032em;
   line-height: 1.12;

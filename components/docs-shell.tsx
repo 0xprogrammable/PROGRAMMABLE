@@ -14,6 +14,7 @@ export function DocsShell({
   currentPath,
   description,
   heroAside,
+  heroId,
   heroMeta,
   kicker,
   sections,
@@ -23,6 +24,7 @@ export function DocsShell({
   currentPath: string;
   description: string;
   heroAside?: ReactNode;
+  heroId?: string;
   heroMeta?: ReactNode;
   kicker?: string;
   sections?: readonly DocsPageSection[];
@@ -83,7 +85,7 @@ export function DocsShell({
           className={styles.hero}
           data-docs-hero
           data-has-aside={heroAside ? "true" : undefined}
-          id={heroAside ? "quickstart" : undefined}
+          id={heroAside ? (heroId ?? "paths") : undefined}
         >
           <div className={styles.heroHeader}>
             <div className={styles.heroCopy}>
@@ -91,7 +93,9 @@ export function DocsShell({
               <h1>{title}</h1>
               <p>{description}</p>
             </div>
-            {heroMeta ? <div className={styles.heroMeta}>{heroMeta}</div> : null}
+            {heroMeta ? (
+              <div className={styles.heroMeta}>{heroMeta}</div>
+            ) : null}
           </div>
           {heroAside ? (
             <div className={styles.heroAside}>{heroAside}</div>

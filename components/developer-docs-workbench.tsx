@@ -1,15 +1,6 @@
 "use client";
 
-import {
-  Check,
-  CircleAlert,
-  Copy,
-  ExternalLink,
-  FileText,
-  LoaderCircle,
-  Play,
-  Sparkles,
-} from "lucide-react";
+import { Check, CircleAlert, Copy, ExternalLink, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import styles from "@/components/developer-docs.module.css";
@@ -18,7 +9,6 @@ const apiOrigin = "https://developers.programmable.family";
 
 type LanguageId = "curl" | "typescript" | "python";
 type CopyState = "idle" | "copied" | "error";
-type LiveRequestState = "idle" | "loading" | "success" | "error";
 
 type LanguageExample = {
   id: LanguageId;
@@ -27,64 +17,35 @@ type LanguageExample = {
   code: string;
 };
 
-type FeedPreview = {
-  status?: string;
-  snapshot?: {
-    blockNumber?: string;
-    finality?: string;
-  };
-  items?: Array<{
-    launchId?: string;
-    category?: string;
-    chainId?: number;
-    token?: {
-      address?: string;
-      name?: string | null;
-      symbol?: string | null;
-    };
-    launch?: {
-      finality?: string;
-      timestamp?: string | null;
-    };
-    markets?: Array<{
-      kind?: string;
-      status?: string;
-    }>;
-  }>;
-  page?: {
-    hasMore?: boolean;
-    nextCursor?: string | null;
-    resumeCursor?: string | null;
-  };
-};
-
 const languageExamples: readonly LanguageExample[] = [
   {
     id: "curl",
     label: "cURL",
     filename: "terminal",
-    code: ["curl -fsSL \\", `  '${apiOrigin}/api/v1/launches?limit=50'`].join(
-      "\n",
-    ),
+    code: [
+      `curl -fsSL '${apiOrigin}/api/v1/launches?category=classic&limit=100'`,
+      `curl -fsSL '${apiOrigin}/api/v1/launches?category=custom&limit=100'`,
+    ].join("\n"),
   },
   {
     id: "typescript",
     label: "TypeScript",
     filename: "programmable.ts",
     code: [
-      `const url = "${apiOrigin}/api/v1/launches?limit=50"`,
-      "const response = await fetch(url, {",
-      '  headers: { accept: "application/json" },',
-      "})",
-      "",
-      "if (!response.ok) {",
-      "  throw new Error(`Programmable API returned ${response.status}`)",
-      "}",
+      `const response = await fetch("${apiOrigin}/api/v1/launches?limit=100")`,
+      "if (!response.ok) throw new Error(`Programmable API returned ${response.status}`)",
       "",
       "const feed = await response.json()",
-      "for (const launch of feed.items) {",
-      "  console.log(launch.launchId, launch.token, launch.markets)",
-      "}",
+      "const rows = feed.items.map((launch) => ({",
+      "  id: launch.launchId,",
+      "  chainId: launch.chainId,",
+      "  tokenAddress: launch.token.address,",
+      '  label: launch.category === "classic"',
+      '    ? "Programmable Classic"',
+      '    : "Programmable Custom",',
+      "  finality: launch.launch.finality,",
+      "  markets: launch.markets,",
+      "}))",
     ].join("\n"),
   },
   {
@@ -93,16 +54,16 @@ const languageExamples: readonly LanguageExample[] = [
     filename: "programmable.py",
     code: [
       "import json",
-      "from urllib.request import Request, urlopen",
+      "from urllib.request import urlopen",
       "",
-      `url = "${apiOrigin}/api/v1/launches?limit=50"`,
-      'request = Request(url, headers={"Accept": "application/json"})',
-      "",
-      "with urlopen(request, timeout=15) as response:",
+      `url = "${apiOrigin}/api/v1/launches?limit=100"`,
+      "with urlopen(url, timeout=15) as response:",
       "    feed = json.load(response)",
       "",
       'for launch in feed["items"]:',
-      '    print(launch["launchId"], launch["token"], launch["markets"])',
+      '    label = ("Programmable Classic" if launch["category"] == "classic"',
+      '             else "Programmable Custom")',
+      '    print(label, launch["chainId"], launch["token"]["address"])',
     ].join("\n"),
   },
 ] as const;
@@ -110,22 +71,41 @@ const languageExamples: readonly LanguageExample[] = [
 const agentPrompt = [
   "Integrate the Programmable v1 launch feed into this project.",
   "",
-  "Start by reading:",
-  "1. https://programmable.family/llms.txt",
-  "2. https://programmable.family/docs/developers.md",
-  "3. https://developers.programmable.family/.well-known/programmable.json",
-  "4. https://developers.programmable.family/openapi/programmable-v1.yaml",
+  "Read these sources first:",
+  "1. https://programmable.family/docs/developers.md",
+  "2. https://developers.programmable.family/.well-known/programmable.json",
+  "3. https://developers.programmable.family/openapi/programmable-v1.yaml",
+  "4. https://github.com/0xprogrammable/developers/blob/main/docs/guides/terminals-and-scanners.md",
+  "5. https://github.com/0xprogrammable/developers/blob/main/docs/guides/launch-providers.md",
   "",
   "Requirements:",
-  "- Keep the integration read-only.",
-  "- Resolve deployments from the manifest; do not hard-code one launcher.",
-  "- Key assets by chainId + token address and deduplicate by launchId.",
-  "- Complete page traversal with nextCursor, then persist resumeCursor for polling with after.",
-  "- Accept zero, one, or several markets and hide unsupported chart or trade actions.",
-  "- Preserve provenance, finality, null fields, unknown fields, and retry semantics.",
+  "- Map category=classic to Programmable Classic.",
+  "- Map category=custom to Programmable Custom.",
+  "- Resolve current and historical deployments from the manifest.",
+  "- Key assets by chainId plus token address and deduplicate by launchId.",
+  "- Complete each traversal with nextCursor before persisting resumeCursor.",
+  "- Preserve finality, provenance, null values and unknown optional fields.",
+  "- Do not infer audited, safe, chartable or tradable from category alone.",
+  "- Enable market features only when the record declares verified support.",
   "- Validate representative responses against the published JSON Schemas.",
-  "",
-  "Show the files you changed and the checks you ran.",
+  "- Treat the open Custom Registry and provider event as prelaunch until a manifest address is published.",
+].join("\n");
+
+export const providerRegistryInterface = [
+  "interface IProgrammableCustomRegistryV1 {",
+  "  event ProgrammableCustomLaunchRegistered(",
+  "    bytes32 indexed launchId,",
+  "    bytes32 indexed providerId,",
+  "    address indexed token,",
+  "    address factory,",
+  "    address hook,",
+  "    bytes32 marketId,",
+  "    bytes32 templateId,",
+  "    bytes32 templateVersion,",
+  "    bytes32 configurationHash,",
+  "    address creator",
+  "  );",
+  "}",
 ].join("\n");
 
 export function nextLanguageIndex(
@@ -212,52 +192,34 @@ function CopyAction({
   );
 }
 
-export function compactFeedPreview(feed: FeedPreview) {
-  const item = feed.items?.[0];
-  return {
-    status: feed.status,
-    snapshot: {
-      blockNumber: feed.snapshot?.blockNumber,
-      finality: feed.snapshot?.finality,
-    },
-    item: item
-      ? {
-          launchId: item.launchId,
-          category: item.category,
-          chainId: item.chainId,
-          token: item.token,
-          launch: item.launch,
-          markets: item.markets,
-        }
-      : null,
-    page: {
-      hasMore: feed.page?.hasMore,
-      nextCursor: feed.page?.nextCursor ? "<opaque cursor>" : null,
-      resumeCursor: feed.page?.resumeCursor ? "<opaque cursor>" : null,
-    },
-  };
+export function DeveloperCodeSample({
+  code,
+  label,
+}: {
+  code: string;
+  label: string;
+}) {
+  return (
+    <div className={styles.standaloneCode}>
+      <div>
+        <span>{label}</span>
+        <CopyAction label="Copy interface" text={code} />
+      </div>
+      <pre tabIndex={0}>
+        <code>{code}</code>
+      </pre>
+    </div>
+  );
 }
 
 export function DeveloperDocsWorkbench() {
-  const [activeLanguage, setActiveLanguage] = useState<LanguageId>("curl");
-  const [requestState, setRequestState] = useState<LiveRequestState>("idle");
-  const [httpStatus, setHttpStatus] = useState<number | null>(null);
-  const [responseText, setResponseText] = useState(
-    "Run the request to inspect one current launch.",
-  );
+  const [activeLanguage, setActiveLanguage] =
+    useState<LanguageId>("typescript");
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const requestController = useRef<AbortController | null>(null);
   const activeIndex = languageExamples.findIndex(
     (example) => example.id === activeLanguage,
   );
   const activeExample = languageExamples[activeIndex] ?? languageExamples[0];
-
-  useEffect(
-    () => () => {
-      requestController.current?.abort();
-    },
-    [],
-  );
 
   function selectLanguage(index: number, focus = false) {
     const example = languageExamples[index];
@@ -278,59 +240,10 @@ export function DeveloperDocsWorkbench() {
     selectLanguage(nextIndex, true);
   }
 
-  async function runLiveRequest() {
-    requestController.current?.abort();
-    const controller = new AbortController();
-    requestController.current = controller;
-    const timeout = window.setTimeout(() => controller.abort(), 30_000);
-
-    setRequestState("loading");
-    setHttpStatus(null);
-    setResponseText("Requesting the latest public feed snapshot…");
-
-    try {
-      const response = await fetch("/api/developer-docs/launch-preview", {
-        cache: "no-store",
-        headers: { Accept: "application/json" },
-        signal: controller.signal,
-      });
-      setHttpStatus(response.status);
-      const body = (await response.json()) as FeedPreview & {
-        detail?: string;
-      };
-
-      if (!response.ok) {
-        throw new Error(body.detail ?? `Request returned ${response.status}`);
-      }
-
-      setResponseText(JSON.stringify(compactFeedPreview(body), null, 2));
-      setRequestState("success");
-    } catch (error) {
-      if (controller.signal.aborted) {
-        setResponseText("The request timed out. Try again.");
-      } else {
-        setResponseText(
-          error instanceof Error
-            ? error.message
-            : "Unable to reach the public API. Try again.",
-        );
-      }
-      setRequestState("error");
-    } finally {
-      window.clearTimeout(timeout);
-      if (requestController.current === controller) {
-        requestController.current = null;
-      }
-    }
-  }
-
   return (
-    <div
-      className={`${styles.workbench} liquid-glass-surface`}
-      data-request-state={requestState}
-    >
+    <div className={`${styles.workbench} liquid-glass-surface`}>
       <div className={styles.workbenchTopbar}>
-        <span className={styles.workbenchLabel}>Quickstart</span>
+        <span className={styles.workbenchLabel}>Minimal terminal consumer</span>
         <a
           className={styles.openApiLink}
           href={`${apiOrigin}/openapi/programmable-v1.yaml`}
@@ -342,159 +255,58 @@ export function DeveloperDocsWorkbench() {
         </a>
       </div>
 
-      <div className={styles.workbenchGrid}>
-        <div className={styles.codePane}>
-          <div className={styles.codePaneHeader}>
-            <div
-              aria-label="Quickstart language"
-              className={styles.languageTabs}
-              role="tablist"
-            >
-              {languageExamples.map((example, index) => {
-                const active = example.id === activeLanguage;
-                return (
-                  <button
-                    aria-controls="developer-quickstart-code"
-                    aria-selected={active}
-                    id={`developer-language-${example.id}`}
-                    key={example.id}
-                    onClick={() => selectLanguage(index)}
-                    onKeyDown={(event) => handleLanguageKeyDown(event, index)}
-                    ref={(element) => {
-                      tabRefs.current[index] = element;
-                    }}
-                    role="tab"
-                    tabIndex={active ? 0 : -1}
-                    type="button"
-                  >
-                    {example.label}
-                  </button>
-                );
-              })}
-            </div>
-            <CopyAction label="Copy code" text={activeExample.code} />
-          </div>
-
-          <div
-            aria-labelledby={`developer-language-${activeExample.id}`}
-            className={styles.codePanel}
-            id="developer-quickstart-code"
-            role="tabpanel"
-            tabIndex={0}
-          >
-            <span className={styles.filename}>{activeExample.filename}</span>
-            <pre>
-              <code>{activeExample.code}</code>
-            </pre>
-          </div>
+      <div className={styles.codePaneHeader}>
+        <div
+          aria-label="Example language"
+          className={styles.languageTabs}
+          role="tablist"
+        >
+          {languageExamples.map((example, index) => {
+            const active = example.id === activeLanguage;
+            return (
+              <button
+                aria-controls="developer-terminal-code"
+                aria-selected={active}
+                id={`developer-language-${example.id}`}
+                key={example.id}
+                onClick={() => selectLanguage(index)}
+                onKeyDown={(event) => handleLanguageKeyDown(event, index)}
+                ref={(element) => {
+                  tabRefs.current[index] = element;
+                }}
+                role="tab"
+                tabIndex={active ? 0 : -1}
+                type="button"
+              >
+                {example.label}
+              </button>
+            );
+          })}
         </div>
-
-        <div className={styles.responsePane}>
-          <div className={styles.responseHeader}>
-            <div>
-              <span className={styles.responseStatusDot} aria-hidden="true" />
-              <span>
-                {requestState === "success"
-                  ? `${httpStatus ?? 200} live response`
-                  : requestState === "error"
-                    ? "Request failed"
-                    : requestState === "loading"
-                      ? "Request in progress"
-                      : "Live response"}
-              </span>
-            </div>
-            <button
-              className={styles.runButton}
-              disabled={requestState === "loading"}
-              onClick={runLiveRequest}
-              type="button"
-            >
-              {requestState === "loading" ? (
-                <LoaderCircle
-                  aria-hidden="true"
-                  className={styles.loadingIcon}
-                  size={15}
-                  strokeWidth={2}
-                />
-              ) : (
-                <Play aria-hidden="true" size={14} strokeWidth={2} />
-              )}
-              <span>Run request</span>
-            </button>
-          </div>
-          <div className={styles.responseBody}>
-            <pre aria-live="polite">
-              <code>{responseText}</code>
-            </pre>
-          </div>
-        </div>
+        <CopyAction label="Copy code" text={activeExample.code} />
       </div>
-    </div>
-  );
-}
 
-export function DeveloperDocsActions() {
-  const [state, setState] = useState<CopyState>("idle");
-  const resetTimer = useRef<number | null>(null);
-
-  useEffect(
-    () => () => {
-      if (resetTimer.current !== null) window.clearTimeout(resetTimer.current);
-    },
-    [],
-  );
-
-  async function copyMarkdown() {
-    if (resetTimer.current !== null) window.clearTimeout(resetTimer.current);
-    try {
-      const response = await fetch("/docs/developers.md");
-      if (!response.ok) throw new Error(`Markdown returned ${response.status}`);
-      await navigator.clipboard.writeText(await response.text());
-      setState("copied");
-      resetTimer.current = window.setTimeout(() => setState("idle"), 1800);
-    } catch {
-      setState("error");
-      resetTimer.current = window.setTimeout(() => setState("idle"), 2400);
-    }
-  }
-
-  return (
-    <div className={styles.docsActions}>
-      <button data-state={state} onClick={copyMarkdown} type="button">
-        {state === "copied" ? (
-          <Check aria-hidden="true" size={16} strokeWidth={2.1} />
-        ) : state === "error" ? (
-          <CircleAlert aria-hidden="true" size={16} strokeWidth={1.9} />
-        ) : (
-          <FileText aria-hidden="true" size={16} strokeWidth={1.8} />
-        )}
-        <span>
-          {state === "copied"
-            ? "Copied"
-            : state === "error"
-              ? "Retry"
-              : "Copy Markdown"}
-        </span>
-      </button>
-      <a href={apiOrigin} rel="noreferrer" target="_blank">
-        API home
-        <ExternalLink aria-hidden="true" size={15} strokeWidth={1.8} />
-      </a>
-      <a
-        href={`${apiOrigin}/openapi/programmable-v1.yaml`}
-        rel="noreferrer"
-        target="_blank"
+      <div
+        aria-labelledby={`developer-language-${activeExample.id}`}
+        className={styles.codePanel}
+        id="developer-terminal-code"
+        role="tabpanel"
+        tabIndex={0}
       >
-        OpenAPI
-        <ExternalLink aria-hidden="true" size={15} strokeWidth={1.8} />
-      </a>
-      <span className="sr-only" role="status" aria-live="polite">
-        {state === "copied"
-          ? "Developer documentation Markdown copied"
-          : state === "error"
-            ? "Unable to copy developer documentation Markdown"
-            : ""}
-      </span>
+        <span className={styles.filename}>{activeExample.filename}</span>
+        <pre>
+          <code>{activeExample.code}</code>
+        </pre>
+      </div>
+
+      <div className={styles.mappingBar}>
+        <code>classic</code>
+        <span aria-hidden="true">→</span>
+        <strong>Programmable Classic</strong>
+        <code>custom</code>
+        <span aria-hidden="true">→</span>
+        <strong>Programmable Custom</strong>
+      </div>
     </div>
   );
 }
@@ -503,7 +315,7 @@ export function DeveloperAgentPrompt() {
   return (
     <div className={styles.agentPrompt}>
       <div className={styles.agentPromptHeader}>
-        <strong>Give any coding agent the same source of truth</strong>
+        <strong>Agent integration prompt</strong>
         <CopyAction
           label="Copy agent prompt"
           text={agentPrompt}
@@ -523,7 +335,7 @@ export function DeveloperAgentPrompt() {
           <ExternalLink aria-hidden="true" size={14} strokeWidth={1.8} />
         </a>
         <a href="/docs/developers.md" rel="noreferrer" target="_blank">
-          Markdown page
+          Markdown
           <ExternalLink aria-hidden="true" size={14} strokeWidth={1.8} />
         </a>
       </div>

@@ -32,23 +32,17 @@ describe("Classic docs release binding", () => {
     expect(classicDocs).not.toContain("mainnet-classic-v2.json");
   });
 
-  it("keeps launch-model details out of the developer overview", () => {
-    expect(docsOverview).not.toContain(currentLauncher);
-    expect(docsOverview).not.toContain(currentFeeHook);
+  it("publishes source identifiers without turning the integration guide into launch copy", () => {
+    expect(docsOverview).toContain(currentLauncher);
+    expect(docsOverview).toContain(currentFeeHook);
+    expect(docsOverview).toContain(legacyLauncher);
+    expect(docsOverview).toContain(legacyFeeHook);
     expect(docsOverview).not.toContain("Set buy and sell fees");
     expect(classicDocs).toContain("Set separately from 1% to 10%");
-    expect(classicDocs).toContain(
-      "The 0.10% Programmable share is included.",
-    );
+    expect(classicDocs).toContain("The 0.10% Programmable share is included.");
     expect(classicDocs).toContain("between two and five unique wallets");
-    expect(classicDocs).toContain(
-      "future recipients and split percentages",
-    );
-    expect(classicDocs).not.toContain(
-      "1.00% through the canonical pool",
-    );
-    expect(classicDocs).not.toContain(
-      "0.90% accrues as creator rewards",
-    );
+    expect(classicDocs).toContain("future recipients and split percentages");
+    expect(classicDocs).not.toContain("1.00% through the canonical pool");
+    expect(classicDocs).not.toContain("0.90% accrues as creator rewards");
   });
 });

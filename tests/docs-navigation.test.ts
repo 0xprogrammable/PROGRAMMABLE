@@ -37,55 +37,51 @@ describe("Docs navigation state", () => {
   });
 
   it("uses the URL hash instead of keeping Overview active", () => {
-    expect(normalizeDocsHash("#response")).toBe(
-      "/docs/developers#response",
+    expect(normalizeDocsHash("#verification")).toBe(
+      "/docs/developers#verification",
     );
     expect(
       isDocsNavigationItemActive({
-        activeHref: "/docs/developers#response",
+        activeHref: "/docs/developers#verification",
         currentPath: "/docs/developers",
-        itemHref: "/docs/developers#quickstart",
+        itemHref: "/docs/developers#terminal-contract",
       }),
     ).toBe(false);
     expect(
       isDocsNavigationItemActive({
-        activeHref: "/docs/developers#response",
+        activeHref: "/docs/developers#verification",
         currentPath: "/docs/developers",
-        itemHref: "/docs/developers#response",
+        itemHref: "/docs/developers#verification",
       }),
     ).toBe(true);
   });
 
-  it("falls back to Quickstart for missing or unknown hashes", () => {
-    expect(normalizeDocsHash("")).toBe("/docs/developers#quickstart");
-    expect(normalizeDocsHash("#unknown")).toBe(
-      "/docs/developers#quickstart",
-    );
+  it("falls back to the integration paths for missing or unknown hashes", () => {
+    expect(normalizeDocsHash("")).toBe("/docs/developers#paths");
+    expect(normalizeDocsHash("#unknown")).toBe("/docs/developers#paths");
   });
 
   it("canonicalizes a duplicated topic hash", () => {
-    expect(normalizeDocsHash("#quickstart#quickstart")).toBe(
-      "/docs/developers#quickstart",
-    );
-    expect(normalizeDocsHash("#rendering#rendering")).toBe(
-      "/docs/developers#rendering",
+    expect(normalizeDocsHash("#paths#paths")).toBe("/docs/developers#paths");
+    expect(normalizeDocsHash("#verification#verification")).toBe(
+      "/docs/developers#verification",
     );
   });
 
   it("resolves browser Back and Forward hashes to one deterministic scroll target", () => {
-    expect(resolveDocsLocationTarget("#rendering")).toEqual({
-      href: "/docs/developers#rendering",
-      sectionId: "rendering",
+    expect(resolveDocsLocationTarget("#verification")).toEqual({
+      href: "/docs/developers#verification",
+      sectionId: "verification",
       shouldScroll: true,
     });
     expect(resolveDocsLocationTarget("#unknown")).toEqual({
-      href: "/docs/developers#quickstart",
-      sectionId: "quickstart",
+      href: "/docs/developers#paths",
+      sectionId: "paths",
       shouldScroll: true,
     });
     expect(resolveDocsLocationTarget("")).toEqual({
-      href: "/docs/developers#quickstart",
-      sectionId: "quickstart",
+      href: "/docs/developers#paths",
+      sectionId: "paths",
       shouldScroll: false,
     });
   });
@@ -127,7 +123,7 @@ describe("Docs navigation state", () => {
       isDocsNavigationItemActive({
         activeHref: "/docs/models/classic",
         currentPath: "/docs/models/classic",
-        itemHref: "/docs/developers#quickstart",
+        itemHref: "/docs/developers#terminal-contract",
       }),
     ).toBe(false);
   });
@@ -235,7 +231,7 @@ describe("Docs navigation state", () => {
     const schemaResults = getDocsSearchResults("schema");
 
     expect(terminalResults.length).toBeGreaterThan(0);
-    expect(terminalResults[0]?.title).toBe("Developer quickstart");
+    expect(terminalResults[0]?.title).toBe("Terminal contract");
     expect(schemaResults.length).toBeGreaterThan(0);
     expect(schemaResults[0]?.title).toBe("OpenAPI and JSON Schemas");
     expect(schemaResults).not.toEqual(terminalResults);
@@ -250,9 +246,9 @@ describe("Docs navigation state", () => {
 
     expect(deepResults).toEqual([]);
     expect(stockResults).toEqual([]);
-    expect(classicResults[0]?.title).toBe("Response model");
-    expect(customResults[0]?.title).toBe("Response model");
-    expect(customResults[0]?.description).toContain("Classic and Custom");
+    expect(classicResults[0]?.title).toBe("Classic and Custom labels");
+    expect(customResults[0]?.title).toBe("Classic and Custom labels");
+    expect(customResults[0]?.description).toContain("Programmable Classic");
   });
 
   it("opens keyboard navigation on the first or last result", () => {

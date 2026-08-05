@@ -31,7 +31,6 @@ export type DocsPageSection = {
 };
 
 const docsRootPath = "/docs/developers";
-const overviewHref = `${docsRootPath}#quickstart`;
 const docsSectionHrefs = (() => {
   const hrefs: string[] = [];
   for (const group of docsNavigation) {
@@ -41,6 +40,7 @@ const docsSectionHrefs = (() => {
   }
   return hrefs;
 })();
+const overviewHref = docsSectionHrefs[0] ?? `${docsRootPath}#paths`;
 const docsSectionIds = docsSectionHrefs.map((href) =>
   href.slice(docsRootPath.length + 1),
 );
@@ -193,15 +193,9 @@ export function shouldCancelDocsScrollForKey({
 }) {
   return (
     !defaultPrevented &&
-    [
-      " ",
-      "ArrowDown",
-      "ArrowUp",
-      "End",
-      "Home",
-      "PageDown",
-      "PageUp",
-    ].includes(key)
+    [" ", "ArrowDown", "ArrowUp", "End", "Home", "PageDown", "PageUp"].includes(
+      key,
+    )
   );
 }
 
@@ -303,16 +297,9 @@ export function DocsNavigation({
   }, []);
 
   const scrollToDocsSection = useCallback(
-    (
-      section: HTMLElement,
-      animate: boolean,
-      onComplete?: () => void,
-    ) => {
+    (section: HTMLElement, animate: boolean, onComplete?: () => void) => {
       cancelDocsScroll();
-      const targetY = getDocsSectionTop(
-        section,
-        mobileNavigationRef.current,
-      );
+      const targetY = getDocsSectionTop(section, mobileNavigationRef.current);
       const startY = window.scrollY;
       const distance = targetY - startY;
 
@@ -338,7 +325,8 @@ export function DocsNavigation({
         });
 
         if (progress < 1) {
-          scrollAnimationFrameRef.current = window.requestAnimationFrame(update);
+          scrollAnimationFrameRef.current =
+            window.requestAnimationFrame(update);
           return;
         }
         complete();
@@ -401,10 +389,8 @@ export function DocsNavigation({
       }
 
       const scrollToSection = () => {
-        scrollToDocsSection(
-          section,
-          animate && shouldAnimateDocsScroll(),
-          () => setActiveSectionHref(itemHref),
+        scrollToDocsSection(section, animate && shouldAnimateDocsScroll(), () =>
+          setActiveSectionHref(itemHref),
         );
       };
 
@@ -423,9 +409,7 @@ export function DocsNavigation({
     const activeLink = navigation?.querySelector<HTMLElement>(
       "[data-docs-context-link][data-active='true']",
     );
-    const group = activeLink?.closest<HTMLElement>(
-      "[data-docs-context-group]",
-    );
+    const group = activeLink?.closest<HTMLElement>("[data-docs-context-group]");
     if (!activeLink || !group) {
       setChapterIndicator(null);
       return;
@@ -449,8 +433,7 @@ export function DocsNavigation({
   useLayoutEffect(() => {
     measureChapterIndicator();
     window.addEventListener("resize", measureChapterIndicator);
-    return () =>
-      window.removeEventListener("resize", measureChapterIndicator);
+    return () => window.removeEventListener("resize", measureChapterIndicator);
   }, [activeHref, measureChapterIndicator, sections.length]);
 
   useEffect(() => {
@@ -511,13 +494,14 @@ export function DocsNavigation({
         window.getComputedStyle(mobileNavigationRef.current).display !== "none"
           ? (mobileNavigationSummary?.offsetHeight ?? 0)
           : 0;
-      readingMarkerOffset = calculateDocsReadingOffset({
-        mobileNavigationHeight,
-        scrollPaddingTop: Number.isFinite(measuredScrollPadding)
-          ? measuredScrollPadding
-          : siteHeaderHeight + 20,
-        stickyToolsHeight,
-      }) + 2;
+      readingMarkerOffset =
+        calculateDocsReadingOffset({
+          mobileNavigationHeight,
+          scrollPaddingTop: Number.isFinite(measuredScrollPadding)
+            ? measuredScrollPadding
+            : siteHeaderHeight + 20,
+          stickyToolsHeight,
+        }) + 2;
       scheduleScrollUpdate();
     };
 
@@ -544,10 +528,8 @@ export function DocsNavigation({
         if (locationFrame) window.cancelAnimationFrame(locationFrame);
         locationFrame = window.requestAnimationFrame(() => {
           locationFrame = 0;
-          scrollToDocsSection(
-            section,
-            animate,
-            () => setActiveSectionHref(target.href),
+          scrollToDocsSection(section, animate, () =>
+            setActiveSectionHref(target.href),
           );
           scheduleLayoutMeasurement();
         });
