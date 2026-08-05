@@ -78,7 +78,7 @@ describe("Programmable branding assets", () => {
       /\.wordmark-logo\s*{[^}]*height: 34px;[^}]*width: auto;/s,
     );
     expect(css).toMatch(
-      /\.wordmark,\s*\.header-social-link\s*{[^}]*height: 44px;[^}]*width: 44px;/s,
+      /\.wordmark,\s*\.header-social-link\s*{[^}]*height: 40px;[^}]*width: 40px;/s,
     );
   });
 

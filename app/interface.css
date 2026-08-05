@@ -5,11 +5,11 @@
  */
 
 :root {
-  --header-height: 80px;
+  --header-height: 72px;
   --page-width: 1320px;
-  --radius-control: 14px;
-  --radius-control-inner: 10px;
-  --radius-panel: 20px;
+  --radius-control: 18px;
+  --radius-control-inner: 14px;
+  --radius-panel: 28px;
   --navigation-glass-background: rgba(5, 11, 30, 0.68);
   --navigation-glass-background-hover: rgba(18, 33, 60, 0.84);
   --navigation-glass-border: rgba(255, 253, 249, 0.18);
@@ -310,7 +310,7 @@ html[data-theme="dark"] .app-frame::before {
   border: 0;
   box-shadow: none;
   height: var(--header-height);
-  padding: 10px 12px 0;
+  padding: 8px 12px 0;
 }
 
 .header-inner {
@@ -320,10 +320,10 @@ html[data-theme="dark"] .app-frame::before {
   border: 1px solid var(--navigation-glass-border);
   border-radius: var(--radius-panel);
   box-shadow: var(--navigation-glass-shadow);
-  height: 60px;
-  max-width: 1180px;
+  height: 56px;
+  max-width: 1080px;
   min-width: 0;
-  padding-inline: 10px;
+  padding-inline: 8px;
 }
 
 .header-brand {
@@ -333,8 +333,8 @@ html[data-theme="dark"] .app-frame::before {
 
 .wordmark,
 .header-social-link {
-  height: 44px;
-  width: 44px;
+  height: 40px;
+  width: 40px;
 }
 
 .wordmark-logo {
@@ -352,6 +352,7 @@ html[data-theme="dark"] .app-frame::before {
 
 .header-social-link,
 .theme-toggle {
+  border-radius: 14px;
   color: var(--navigation-glass-ink-muted);
 }
 
@@ -368,11 +369,11 @@ html[data-theme="dark"] .app-frame::before {
 }
 
 .desktop-nav a {
-  border-radius: 11px;
+  border-radius: 15px;
   color: var(--navigation-glass-ink-muted);
   font-size: 14px;
   font-weight: 540;
-  min-height: 40px;
+  min-height: 38px;
   padding-inline: 14px;
 }
 
@@ -406,8 +407,8 @@ html[data-theme="dark"] .app-frame::before {
 .theme-toggle,
 .wallet-button {
   border-radius: var(--radius-control);
-  height: 44px;
-  min-height: 44px;
+  height: 42px;
+  min-height: 42px;
 }
 
 .theme-toggle {
@@ -488,6 +489,7 @@ html[data-theme="dark"] .app-frame::before {
   backdrop-filter: blur(24px) saturate(1.42);
   background: var(--control-glass-background-strong);
   border-color: var(--control-glass-border);
+  border-radius: var(--radius-panel);
   box-shadow:
     inset 0 1px 0 var(--control-glass-highlight),
     var(--shadow-floating);
@@ -849,7 +851,7 @@ html[data-theme="dark"] .app-frame::before {
 
 @media (max-width: 800px) {
   :root {
-    --header-height: 74px;
+    --header-height: 70px;
   }
 
   .app-frame :is(input, select, textarea) {
@@ -865,7 +867,7 @@ html[data-theme="dark"] .app-frame::before {
   }
 
   .header-inner {
-    height: 58px;
+    height: 54px;
   }
 
   .mobile-nav {
@@ -887,7 +889,7 @@ html[data-theme="dark"] .app-frame::before {
   }
 
   .mobile-nav a {
-    border-radius: 14px;
+    border-radius: 18px;
     color: var(--navigation-glass-ink-muted);
     max-width: 100%;
     min-width: 0;
@@ -1000,8 +1002,8 @@ html[data-theme="dark"] .app-frame::before {
 
   .wordmark,
   .header-social-link {
-    height: 44px;
-    width: 44px;
+    height: 40px;
+    width: 40px;
   }
 
   .header-social-link svg,

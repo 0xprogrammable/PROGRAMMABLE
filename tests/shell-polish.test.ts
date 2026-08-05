@@ -36,18 +36,14 @@ describe("public shell polish", () => {
     expect(source).not.toContain("key={pathname}");
   });
 
-  it("makes the infrequent theme change a calm, bounded crossfade", () => {
-    const source = read("components/site-navigation.tsx");
-    const css = read("app/globals.css");
+  it("locks the public shell to the night atmosphere without a theme control", () => {
+    const layout = read("app/layout.tsx");
+    const navigation = read("components/site-navigation.tsx");
 
-    expect(source).toContain("activeThemeViewTransition?.skipTransition()");
-    expect(css).toContain(
-      "theme-soft-reveal 380ms cubic-bezier(0.2, 0, 0, 1)",
-    );
-    expect(css).toContain(
-      "theme-soft-fade 380ms cubic-bezier(0.2, 0, 0, 1)",
-    );
-    expect(css).not.toContain("clip-path: circle(");
+    expect(layout).toContain('colorScheme: "dark"');
+    expect(layout).toContain('data-theme="dark"');
+    expect(navigation).not.toContain("ThemeToggle");
+    expect(navigation).not.toContain("activeThemeViewTransition");
   });
 
   it("avoids unbounded transitions in the owned style sheets", () => {
