@@ -12,11 +12,17 @@ export function LandingPage() {
         <div className={styles.content}>
           <h1 id="landing-title">Launch what you imagine</h1>
           <div className={styles.actions} aria-label="Get started">
-            <Link className={styles.primaryAction} href="/launch">
-              Create a token
+            <Link
+              className={`${styles.primaryAction} liquid-glass-control liquid-glass-distortion`}
+              href="/launch"
+            >
+              Create a Token
             </Link>
-            <Link className={styles.secondaryAction} href="/explore">
-              Explore launches
+            <Link
+              className={`${styles.secondaryAction} liquid-glass-control liquid-glass-distortion`}
+              href="/explore"
+            >
+              Explore Tokens
             </Link>
           </div>
         </div>

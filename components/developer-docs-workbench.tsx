@@ -325,7 +325,10 @@ export function DeveloperDocsWorkbench() {
   }
 
   return (
-    <div className={styles.workbench} data-request-state={requestState}>
+    <div
+      className={`${styles.workbench} liquid-glass-surface liquid-glass-distortion`}
+      data-request-state={requestState}
+    >
       <div className={styles.workbenchTopbar}>
         <span className={styles.workbenchLabel}>Quickstart</span>
         <a

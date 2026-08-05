@@ -50,6 +50,9 @@ describe("topbar and Explore hero polish", () => {
     expect(navigation).toContain(
       "{!isLandingPage ? <WalletButton compact /> : null}",
     );
+    expect(navigation).toContain("const landingNavItems");
+    expect(navigation).toContain('item.href === "/launch"');
+    expect(navigation).toContain('item.href === "/docs/developers"');
     expect(landingCss).toMatch(
       /:global\(\.site-header--landing\)\s*\{[^}]*position:\s*fixed;[^}]*width:\s*100%;/s,
     );

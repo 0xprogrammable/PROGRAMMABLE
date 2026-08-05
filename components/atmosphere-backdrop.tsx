@@ -55,6 +55,11 @@ export function AtmosphereBackdrop() {
       />
       <span className="atmosphere-stars atmosphere-stars-primary" />
       <span className="atmosphere-stars atmosphere-stars-secondary" />
+      <span className="atmosphere-sparkles">
+        {Array.from({ length: 8 }, (_, index) => (
+          <i key={index} />
+        ))}
+      </span>
       <span className="atmosphere-veil" />
     </div>
   );

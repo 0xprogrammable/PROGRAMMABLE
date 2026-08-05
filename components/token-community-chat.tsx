@@ -195,7 +195,7 @@ export function TokenCommunityChat({
 
   return (
     <section
-      className={styles.panel}
+      className={`${styles.panel} liquid-glass-surface liquid-glass-distortion`}
       aria-labelledby={`${inputId}-title`}
     >
       <header className={styles.heading}>

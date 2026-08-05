@@ -242,7 +242,7 @@ export function DocsSearch() {
 
   return (
     <form
-      className={styles.search}
+      className={`${styles.search} liquid-glass-control`}
       ref={formRef}
       role="search"
       onBlur={handleBlur}
@@ -303,7 +303,7 @@ export function DocsSearch() {
       </span>
       {isOpen && normalizedQuery ? (
         <div
-          className={styles.searchResults}
+          className={`${styles.searchResults} liquid-glass-surface liquid-glass-distortion`}
           id={listboxId}
           role="listbox"
           aria-label="Documentation search results"

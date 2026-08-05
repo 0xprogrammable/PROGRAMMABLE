@@ -5,47 +5,44 @@
  */
 
 :root {
-  --header-height: 72px;
+  --header-height: 68px;
   --page-width: 1320px;
   --radius-control: 18px;
   --radius-control-inner: 14px;
   --radius-panel: 28px;
-  --navigation-glass-background: rgba(5, 11, 30, 0.68);
-  --navigation-glass-background-hover: rgba(18, 33, 60, 0.84);
+  --liquid-glass-surface-background: rgba(8, 18, 40, 0.34);
+  --liquid-glass-surface-background-strong: rgba(8, 18, 40, 0.52);
+  --liquid-glass-inner-background: rgba(255, 255, 255, 0.055);
+  --liquid-glass-control-background: rgba(255, 255, 255, 0.07);
+  --liquid-glass-control-background-hover: rgba(255, 255, 255, 0.12);
+  --liquid-glass-border: rgba(255, 255, 255, 0.16);
+  --liquid-glass-border-strong: rgba(255, 255, 255, 0.22);
+  --liquid-glass-highlight: rgba(255, 255, 255, 0.1);
+  --liquid-glass-backdrop: blur(18px) saturate(1.34);
+  --liquid-glass-shadow:
+    inset 0 0 6px -3px rgba(255, 255, 255, 0.7),
+    inset 0 0 88px rgba(99, 133, 196, 0.035),
+    0 18px 48px rgba(1, 5, 20, 0.2);
+  --navigation-glass-background: rgba(5, 11, 30, 0.42);
+  --navigation-glass-background-hover: rgba(18, 33, 60, 0.68);
   --navigation-glass-border: rgba(255, 253, 249, 0.18);
   --navigation-glass-highlight: rgba(255, 255, 255, 0.08);
   --navigation-glass-ink: #fffdf9;
   --navigation-glass-ink-muted: rgba(255, 253, 249, 0.68);
   --navigation-glass-accent: rgba(255, 255, 255, 0.085);
-  --navigation-glass-backdrop: blur(22px) saturate(1.48);
+  --navigation-glass-backdrop: var(--liquid-glass-backdrop);
   --navigation-glass-shadow:
     inset 0 1px 0 var(--navigation-glass-highlight),
     inset 0 0 80px rgba(116, 151, 213, 0.04),
     0 18px 48px rgba(1, 5, 20, 0.2);
-  --control-glass-background: color-mix(
-    in srgb,
-    var(--surface-raised) 76%,
-    transparent
-  );
-  --control-glass-background-strong: color-mix(
-    in srgb,
-    var(--surface-raised) 88%,
-    transparent
-  );
-  --control-glass-background-hover: color-mix(
-    in srgb,
-    var(--surface-raised) 90%,
-    transparent
-  );
-  --control-glass-border: color-mix(
-    in srgb,
-    var(--control-border) 78%,
-    var(--glass-98) 22%
-  );
-  --control-glass-backdrop: blur(18px) saturate(1.34);
-  --accent-glass-background: rgba(255, 255, 255, 0.1);
-  --accent-glass-background-hover: rgba(255, 255, 255, 0.16);
-  --accent-glass-border: rgba(255, 255, 255, 0.2);
+  --control-glass-background: var(--liquid-glass-control-background);
+  --control-glass-background-strong: var(--liquid-glass-surface-background-strong);
+  --control-glass-background-hover: var(--liquid-glass-control-background-hover);
+  --control-glass-border: var(--liquid-glass-border);
+  --control-glass-backdrop: var(--liquid-glass-backdrop);
+  --accent-glass-background: rgba(255, 255, 255, 0.11);
+  --accent-glass-background-hover: rgba(255, 255, 255, 0.17);
+  --accent-glass-border: var(--liquid-glass-border-strong);
   --shadow-resting:
     0 1px 0 color-mix(in srgb, var(--text) 4%, transparent),
     0 8px 24px color-mix(in srgb, var(--text) 3.5%, transparent);
@@ -95,9 +92,9 @@ html[data-theme="dark"] {
   --panel-border-soft: rgba(247, 241, 234, 0.11);
   --control-glass-highlight: rgba(255, 255, 255, 0.1);
   --control-glass-shadow-color: rgba(0, 0, 0, 0.25);
-  --control-glass-background: rgba(13, 25, 48, 0.66);
-  --control-glass-background-strong: rgba(13, 25, 48, 0.84);
-  --control-glass-background-hover: rgba(25, 42, 71, 0.82);
+  --control-glass-background: var(--liquid-glass-control-background);
+  --control-glass-background-strong: var(--liquid-glass-surface-background-strong);
+  --control-glass-background-hover: var(--liquid-glass-control-background-hover);
   --shadow-resting:
     0 1px 0 rgba(255, 255, 255, 0.018),
     0 10px 28px rgba(0, 0, 0, 0.16);
@@ -191,6 +188,53 @@ html[data-theme="dark"] .app-frame::before {
   background: transparent;
 }
 
+/* One refractive material shared by navigation, controls and primary panels. */
+
+.liquid-glass-filter-definition {
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  width: 0;
+}
+
+.liquid-glass-surface,
+.liquid-glass-control {
+  isolation: isolate;
+  position: relative;
+}
+
+.liquid-glass-surface {
+  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
+  backdrop-filter: var(--liquid-glass-backdrop);
+  background: var(--liquid-glass-surface-background);
+  border: 1px solid var(--liquid-glass-border);
+  box-shadow: var(--liquid-glass-shadow);
+}
+
+.liquid-glass-control {
+  -webkit-backdrop-filter: var(--control-glass-backdrop);
+  backdrop-filter: var(--control-glass-backdrop);
+  background: var(--liquid-glass-control-background);
+  border-color: var(--liquid-glass-border);
+  box-shadow:
+    inset 0 0 5px -3px rgba(255, 255, 255, 0.72),
+    0 9px 26px rgba(1, 5, 20, 0.16);
+}
+
+.liquid-glass-distortion::after {
+  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
+  -webkit-filter: url("#glass-distortion");
+  backdrop-filter: var(--liquid-glass-backdrop);
+  border-radius: inherit;
+  content: "";
+  filter: url("#glass-distortion");
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: -1;
+}
+
 /* Persistent night atmosphere */
 
 .atmosphere-backdrop {
@@ -205,6 +249,7 @@ html[data-theme="dark"] .app-frame::before {
 .atmosphere-layer,
 .atmosphere-layer img,
 .atmosphere-stars,
+.atmosphere-sparkles,
 .atmosphere-veil {
   height: 100%;
   inset: 0;
@@ -227,7 +272,7 @@ html[data-theme="dark"] .app-frame::before {
 
 .atmosphere-botanical {
   opacity: 0;
-  transition: opacity 760ms cubic-bezier(0.23, 1, 0.32, 1);
+  transition: opacity 2200ms cubic-bezier(0.23, 1, 0.32, 1);
   will-change: opacity;
   z-index: 1;
 }
@@ -250,7 +295,7 @@ html[data-theme="dark"] .app-frame::before {
     radial-gradient(circle at 74% 28%, rgba(255, 253, 249, 0.82) 0 1px, transparent 2px),
     radial-gradient(circle at 88% 15%, rgba(255, 253, 249, 0.9) 0 1.2px, transparent 2.6px),
     radial-gradient(circle at 59% 46%, rgba(255, 253, 249, 0.72) 0 0.9px, transparent 2px);
-  opacity: 0.2;
+  opacity: 0.28;
 }
 
 .atmosphere-stars-secondary {
@@ -261,7 +306,96 @@ html[data-theme="dark"] .app-frame::before {
     radial-gradient(circle at 68% 17%, rgba(255, 253, 249, 0.76) 0 0.9px, transparent 2px),
     radial-gradient(circle at 82% 51%, rgba(255, 253, 249, 0.88) 0 1.1px, transparent 2.4px),
     radial-gradient(circle at 48% 61%, rgba(255, 253, 249, 0.7) 0 0.8px, transparent 1.9px);
-  opacity: 0.16;
+  opacity: 0.24;
+}
+
+.atmosphere-sparkles {
+  mix-blend-mode: screen;
+  z-index: 2;
+}
+
+.atmosphere-sparkles i {
+  --sparkle-rotation: 0deg;
+  --sparkle-size: 12px;
+  color: rgba(255, 253, 249, 0.88);
+  height: 2px;
+  opacity: 0.12;
+  position: absolute;
+  transform: rotate(var(--sparkle-rotation)) scale(0.72);
+  width: 2px;
+}
+
+.atmosphere-sparkles i::before,
+.atmosphere-sparkles i::after {
+  background: currentColor;
+  box-shadow: 0 0 8px rgba(255, 253, 249, 0.48);
+  content: "";
+  inset: 50% auto auto 50%;
+  position: absolute;
+  transform: translate3d(-50%, -50%, 0);
+}
+
+.atmosphere-sparkles i::before {
+  height: 1px;
+  width: var(--sparkle-size);
+}
+
+.atmosphere-sparkles i::after {
+  height: var(--sparkle-size);
+  width: 1px;
+}
+
+.atmosphere-sparkles i:nth-child(1) {
+  left: 12%;
+  top: 18%;
+}
+
+.atmosphere-sparkles i:nth-child(2) {
+  --sparkle-rotation: 18deg;
+  --sparkle-size: 9px;
+  left: 34%;
+  top: 29%;
+}
+
+.atmosphere-sparkles i:nth-child(3) {
+  --sparkle-rotation: -11deg;
+  --sparkle-size: 15px;
+  right: 18%;
+  top: 22%;
+}
+
+.atmosphere-sparkles i:nth-child(4) {
+  --sparkle-rotation: 9deg;
+  right: 8%;
+  top: 44%;
+}
+
+.atmosphere-sparkles i:nth-child(5) {
+  --sparkle-rotation: -17deg;
+  --sparkle-size: 8px;
+  left: 23%;
+  top: 52%;
+}
+
+.atmosphere-sparkles i:nth-child(6) {
+  --sparkle-rotation: 14deg;
+  --sparkle-size: 10px;
+  left: 58%;
+  top: 14%;
+}
+
+.atmosphere-sparkles i:nth-child(7) {
+  --sparkle-rotation: -8deg;
+  --sparkle-size: 14px;
+  right: 31%;
+  top: 58%;
+}
+
+.atmosphere-sparkles i:nth-child(8) {
+  --sparkle-rotation: 22deg;
+  --sparkle-size: 9px;
+  left: 46%;
+  top: 41%;
 }
 
 .atmosphere-veil {
@@ -274,30 +408,90 @@ html[data-theme="dark"] .app-frame::before {
 @keyframes atmosphere-twinkle-primary {
   0%,
   22% {
-    opacity: 0.16;
+    opacity: 0.2;
   }
 
   58% {
-    opacity: 0.68;
+    opacity: 0.9;
   }
 
   100% {
-    opacity: 0.28;
+    opacity: 0.36;
   }
 }
 
 @keyframes atmosphere-twinkle-secondary {
   0%,
   18% {
-    opacity: 0.12;
+    opacity: 0.16;
   }
 
   64% {
-    opacity: 0.58;
+    opacity: 0.82;
   }
 
   100% {
-    opacity: 0.22;
+    opacity: 0.3;
+  }
+}
+
+@keyframes atmosphere-sparkle {
+  0%,
+  68%,
+  100% {
+    opacity: 0.08;
+    transform: rotate(var(--sparkle-rotation)) scale(0.7);
+  }
+
+  76% {
+    opacity: 0.96;
+    transform: rotate(var(--sparkle-rotation)) scale(1.16);
+  }
+
+  84% {
+    opacity: 0.18;
+    transform: rotate(var(--sparkle-rotation)) scale(0.82);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .atmosphere-sparkles i {
+    animation: atmosphere-sparkle 5.8s cubic-bezier(0.23, 1, 0.32, 1) infinite;
+  }
+
+  .atmosphere-sparkles i:nth-child(2) {
+    animation-delay: -3.1s;
+    animation-duration: 7.1s;
+  }
+
+  .atmosphere-sparkles i:nth-child(3) {
+    animation-delay: -4.6s;
+    animation-duration: 6.4s;
+  }
+
+  .atmosphere-sparkles i:nth-child(4) {
+    animation-delay: -1.8s;
+    animation-duration: 7.8s;
+  }
+
+  .atmosphere-sparkles i:nth-child(5) {
+    animation-delay: -5.2s;
+    animation-duration: 6.8s;
+  }
+
+  .atmosphere-sparkles i:nth-child(6) {
+    animation-delay: -2.4s;
+    animation-duration: 7.4s;
+  }
+
+  .atmosphere-sparkles i:nth-child(7) {
+    animation-delay: -4.1s;
+    animation-duration: 8.2s;
+  }
+
+  .atmosphere-sparkles i:nth-child(8) {
+    animation-delay: -1s;
+    animation-duration: 6.6s;
   }
 }
 
@@ -320,10 +514,15 @@ html[data-theme="dark"] .app-frame::before {
   border: 1px solid var(--navigation-glass-border);
   border-radius: var(--radius-panel);
   box-shadow: var(--navigation-glass-shadow);
-  height: 56px;
-  max-width: 1080px;
+  column-gap: 8px;
+  height: 52px;
+  max-width: 940px;
   min-width: 0;
-  padding-inline: 8px;
+  padding-inline: 6px;
+}
+
+.site-header--landing .header-inner {
+  max-width: 720px;
 }
 
 .header-brand {
@@ -333,21 +532,29 @@ html[data-theme="dark"] .app-frame::before {
 
 .wordmark,
 .header-social-link {
-  height: 40px;
-  width: 40px;
+  height: 38px;
+  width: 38px;
 }
 
 .wordmark-logo {
-  height: 34px;
-  transform: scale(1.12);
+  height: 28px;
+  transform: scale(1.04);
   transform-origin: center;
   width: auto;
 }
 
 .header-social-link svg,
 .header-social-link img {
-  height: 22px;
-  width: 22px;
+  height: 19px;
+  width: 19px;
+}
+
+.header-social-logo {
+  filter: grayscale(1) brightness(1.24);
+  opacity: 0.68;
+  transition:
+    filter 140ms ease,
+    opacity 140ms ease;
 }
 
 .header-social-link,
@@ -364,17 +571,17 @@ html[data-theme="dark"] .app-frame::before {
   border: 0;
   border-radius: 0;
   box-shadow: none;
-  gap: 4px;
+  gap: 2px;
   padding: 0;
 }
 
 .desktop-nav a {
-  border-radius: 15px;
+  border-radius: 14px;
   color: var(--navigation-glass-ink-muted);
   font-size: 14px;
   font-weight: 540;
-  min-height: 38px;
-  padding-inline: 14px;
+  min-height: 36px;
+  padding-inline: 12px;
 }
 
 .desktop-nav a::after {
@@ -407,8 +614,8 @@ html[data-theme="dark"] .app-frame::before {
 .theme-toggle,
 .wallet-button {
   border-radius: var(--radius-control);
-  height: 42px;
-  min-height: 42px;
+  height: 38px;
+  min-height: 38px;
 }
 
 .theme-toggle {
@@ -441,18 +648,25 @@ html[data-theme="dark"] .app-frame::before {
 }
 
 .header-actions .wallet-button {
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  background: #fffdf9;
-  border-color: rgba(255, 255, 255, 0.92);
+  -webkit-backdrop-filter: var(--control-glass-backdrop);
+  backdrop-filter: var(--control-glass-backdrop);
+  background: var(--liquid-glass-control-background);
+  border-color: var(--liquid-glass-border);
   box-shadow:
-    inset 0 1px 0 #fff,
-    0 8px 22px rgba(1, 5, 20, 0.2);
-  color: #07112f;
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 8px 22px rgba(1, 5, 20, 0.16);
+  color: var(--navigation-glass-ink);
 }
 
 .header-actions .wallet-button-chevron {
-  color: rgba(7, 17, 47, 0.58);
+  color: var(--navigation-glass-ink-muted);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .header-social-link:hover .header-social-logo {
+    filter: grayscale(1) brightness(1.55);
+    opacity: 1;
+  }
 }
 
 .theme-toggle-icons,
@@ -867,7 +1081,27 @@ html[data-theme="dark"] .app-frame::before {
   }
 
   .header-inner {
-    height: 54px;
+    height: 52px;
+  }
+
+  .site-header--landing .header-inner {
+    column-gap: 2px;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .site-header--landing .desktop-nav {
+    display: flex;
+    grid-column: 2;
+  }
+
+  .site-header--landing .desktop-nav a {
+    font-size: 13px;
+    min-height: 36px;
+    padding-inline: 9px;
+  }
+
+  .site-header--landing .header-actions {
+    grid-column: 3;
   }
 
   .mobile-nav {
@@ -988,8 +1222,8 @@ html[data-theme="dark"] .app-frame::before {
 
 @media (max-width: 470px) {
   .header-inner {
-    column-gap: 8px;
-    padding-inline: 8px;
+    column-gap: 4px;
+    padding-inline: 6px;
   }
 
   .explore-token-address {
@@ -1002,8 +1236,8 @@ html[data-theme="dark"] .app-frame::before {
 
   .wordmark,
   .header-social-link {
-    height: 40px;
-    width: 40px;
+    height: 38px;
+    width: 38px;
   }
 
   .header-social-link svg,
@@ -1013,7 +1247,7 @@ html[data-theme="dark"] .app-frame::before {
   }
 
   .wordmark-logo {
-    height: 34px;
+    height: 27px;
     width: auto;
   }
 
@@ -1099,6 +1333,11 @@ html[data-theme="dark"] .app-frame::before {
     opacity: 0.28;
   }
 
+  .atmosphere-sparkles i {
+    animation: none;
+    opacity: 0.28;
+  }
+
   .theme-toggle-icons,
   .theme-toggle-icon,
   .theme-toggle-icons svg {
@@ -1114,6 +1353,7 @@ html[data-theme="dark"] .app-frame::before {
 
 @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
   .header-inner,
+  .liquid-glass-surface,
   .mobile-nav {
     background: #07112f;
   }
@@ -1125,6 +1365,6 @@ html[data-theme="dark"] .app-frame::before {
   .token-pagination,
   .wallet-menu,
   .token-filter-menu {
-    background: var(--surface-raised);
+    background: #0b1734;
   }
 }

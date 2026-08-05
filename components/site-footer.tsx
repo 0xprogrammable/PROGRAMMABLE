@@ -12,6 +12,11 @@ const productLinks = [
 
 const resourceLinks = [
   {
+    href: "https://dexscreener.com/ethereum/0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0",
+    label: "Token",
+    external: true,
+  },
+  {
     href: "https://github.com/0xprogrammable",
     label: "GitHub",
     external: true,
@@ -34,7 +39,9 @@ export function SiteFooter() {
       className={`${styles.footer} page-width`}
       aria-label="Site footer"
     >
-      <div className={styles.surface}>
+      <div
+        className={`${styles.surface} liquid-glass-surface liquid-glass-distortion`}
+      >
         <section className={styles.brand}>
           <Link
             className={styles.brandLink}

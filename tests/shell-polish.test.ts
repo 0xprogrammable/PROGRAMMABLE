@@ -22,6 +22,7 @@ describe("public shell polish", () => {
     expect(source).toContain("© 2026 Programmable");
     expect(source).toContain('label: "GitHub"');
     expect(source).toContain('label: "X"');
+    expect(source).toContain('label: "Token"');
     expect(source).not.toContain("XBrandIcon");
     expect(source).not.toContain("GitHubBrandIcon");
   });

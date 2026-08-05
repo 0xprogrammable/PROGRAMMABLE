@@ -67,7 +67,7 @@ describe("Programmable branding assets", () => {
     }
   });
 
-  it("uses the tall, transparent loop asset without enlarging the header hit box", () => {
+  it("uses the compact, transparent loop asset without enlarging the header hit box", () => {
     const navigation = read("components/site-navigation.tsx");
     const css = read("app/interface.css");
 
@@ -75,10 +75,10 @@ describe("Programmable branding assets", () => {
       'src="/brand/loop/programmable-loop-mark-header.png"',
     );
     expect(css).toMatch(
-      /\.wordmark-logo\s*{[^}]*height: 34px;[^}]*width: auto;/s,
+      /\.wordmark-logo\s*{[^}]*height: 28px;[^}]*width: auto;/s,
     );
     expect(css).toMatch(
-      /\.wordmark,\s*\.header-social-link\s*{[^}]*height: 40px;[^}]*width: 40px;/s,
+      /\.wordmark,\s*\.header-social-link\s*{[^}]*height: 38px;[^}]*width: 38px;/s,
     );
   });
 

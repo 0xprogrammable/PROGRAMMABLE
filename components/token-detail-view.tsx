@@ -1182,7 +1182,10 @@ function TokenDetailContent({
           </div>
         </section>
 
-        <aside className={styles.tradeShell} aria-label={`${token.name} trade`}>
+        <aside
+          className={`${styles.tradeShell} liquid-glass-surface liquid-glass-distortion`}
+          aria-label={`${token.name} trade`}
+        >
           {preview ? (
             <PreviewTokenTrade token={token} />
           ) : chainId !== 1 && chainId !== 11_155_111 ? (

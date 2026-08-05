@@ -5,10 +5,10 @@
 }
 
 .surface {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
+  background: var(--liquid-glass-surface-background);
+  border: 1px solid var(--liquid-glass-border);
+  border-radius: 28px;
+  box-shadow: var(--liquid-glass-shadow);
   display: grid;
   gap: 0 clamp(32px, 4vw, 58px);
   grid-template-columns:
@@ -16,9 +16,9 @@
     minmax(110px, 0.56fr)
     minmax(128px, 0.68fr)
     minmax(300px, 1.5fr);
-  overflow: visible;
+  overflow: hidden;
   min-width: 0;
-  padding: 36px 0 32px;
+  padding: 32px;
 }
 
 .surface > * {
@@ -94,13 +94,15 @@
 
 .column a {
   align-items: center;
-  border-radius: 0;
+  border-radius: 9px;
   color: var(--text-soft);
   display: inline-flex;
   font-size: 14px;
   font-weight: 560;
-  min-height: 34px;
-  transition: color 120ms ease;
+  min-height: 36px;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
 }
 
 .risk {
@@ -111,6 +113,7 @@
 
 @media (hover: hover) and (pointer: fine) {
   .column a:hover {
+    background: var(--liquid-glass-inner-background);
     color: var(--text);
   }
 }
@@ -141,7 +144,8 @@
     border-radius: 0;
     gap: 28px 22px;
     grid-template-columns: 1fr 1fr;
-    padding: 28px 0 20px;
+    border-radius: 24px;
+    padding: 26px 24px;
   }
 
   .brand,
@@ -158,7 +162,7 @@
   .surface {
     gap: 24px 18px;
     grid-template-columns: 1fr 1fr;
-    padding-inline: 0;
+    padding-inline: 20px;
   }
 
   .brand,
