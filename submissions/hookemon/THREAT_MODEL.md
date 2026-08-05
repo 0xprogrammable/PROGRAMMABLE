@@ -7,7 +7,7 @@ Hookemon is classified high risk by the local rubric because it combines return-
 | Asset/state | Custody or source of truth | Exit/recovery |
 | --- | --- | --- |
 | HOOKEMON supply | Fixed-supply ERC-20 and deployment Safe before final allocation | Ordinary transfer; no pause, blacklist or owner mint. |
-| Canonical LP position | Final owner/lock unresolved | Must be fixed before mainnet; ordinary hook cannot block liquidity removal. |
+| Canonical LP position | Immutable 730-day position timelock, then Governance Safe | Only the reviewed position from the deployment Safe is accepted; ordinary hook behavior cannot block release. |
 | Programmable/project fees | Hook-owned PoolManager ERC-6909 USDC claims and owner liabilities | Each immutable owner claims only its own liability. |
 | Cycle funds | CycleVault, CCTP transit, Solana policy wallet, Collector assets, inbound transit | Pause and reconcile the last confirmed `cycleId`; no arbitrary destination. |
 | Reward funds | AutomaticRewardsDistributor USDC balance | Historic roots remain valid; proof-valid settlement pays only unpaid cumulative delta. |
@@ -30,6 +30,8 @@ derived mask=0x20cc
 
 BaseHook authenticates PoolManager. Every enabled callback also verifies the exact registered PoolKey. `hookData` is ignored. Same-pool swaps, liquidity changes and donations initiated by the hook are forbidden; the only direct PoolManager operations are bounded claim mint/redemption actions.
 
+The central `1.5.0` checker requires its internal-fee projection whenever `directPoolManagerCalls=true`, even when those calls are claim-only. That projection does not add a hidden swap surface: `hook.nestedActions.allowedActions`, the fee-conformance manifest and executable source remain authoritative about the narrower take/settle boundary.
+
 Critical scenarios:
 
 - direct callback from a non-PoolManager must revert;
@@ -50,9 +52,14 @@ The hook never calls CCTP or Collector. The operator is a separate failure domai
 - Standard/Forwarding Service is default. Fast is allowed only by explicit configuration and fee cap.
 - Collector machine data older than 120 seconds, missing odds/floor/price, insufficient stock or malformed API data stops purchases.
 - Every pack has a unique memo. Generate, submit, open, buyback and status calls are reconciled before retry.
+- The Collector signer accepts only legacy transactions whose fee payer, provider signatures, memo, programs, token transfers, mints, decimals, amounts and accounts match the cycle-scoped intent and reviewed allowlists.
+- `getGenesisHash` must match the configured Solana cluster and `isBlockhashValid` must return true at `confirmed` commitment immediately before signing; versioned, malformed, oversized or expired transactions fail closed.
+- Player and temporary NFT recipient are the same policy wallet. Manual buyback must transfer exactly the opened NFT to an allowlisted Collector account and exact USDC to the configured recipient ATA.
+- A durable exclusive intent reservation binds action, `cycleId` and pack identity before the raw signer runs. Restart and provider retry paths reconcile status first and never authorize a second message for that action.
 - A timeout is never proof of failure or success. The operator queries the provider and chain before resubmitting.
 - A crash after provider acceptance but before local save is handled by provider-side `cycleId`/memo reconciliation; the JSON checkpoint alone is insufficient.
 - Collector key, wallet material, serialized signed transactions and email codes must never enter logs, Sentry, the API or Git.
+- The intent store contains only public identifiers and message/intent hashes; raw transaction bytes and signatures are not persisted there.
 
 ## Reward/indexer boundary
 
@@ -79,8 +86,10 @@ The hook never calls CCTP or Collector. The operator is a separate failure domai
 | Threat | Control and remaining risk |
 | --- | --- |
 | Registrar registers hostile pool | Immutable one-time registrar and strict PoolKey checks; exact registrar address remains a predeployment gate. |
-| Safe redirects cycle funds | Typed destinations, amount bounds, cycle replay protection and 48-hour config delay; Safe compromise remains material. |
-| Guardian steals funds | Guardian is pause-only; it cannot sweep or redirect, but can delay automation. |
+| Sole hardware key is lost | The 1-of-1 Safe and immutable pause role can become unusable. Offline recovery-word custody is mandatory, but there is no second signer or onchain recovery path in the approved profile. |
+| Sole hardware key is compromised | The same EOA controls the Safe and guardian pause. Typed destinations, amount bounds, cycle replay protection, 48-hour configuration delay, treasury vesting, LP lock and operator isolation limit immediate loss, but Safe control and future-cycle disruption remain material. |
+| Safe configuration drifts | Threshold, owner, module or guard changes invalidate the reviewed one-device profile; public monitoring must stop mainnet operations until a new review target is accepted. |
+| Guardian abuses pause | Guardian is pause-only at the contract boundary; it cannot sweep or redirect, but it can delay automation. |
 | Root publisher overstates rewards | Cumulative artifacts are public/reproducible, but a valid publisher can still commit a bad root; independent reconstruction, policy signer and funding checks are required. |
 | Operator repeats bridge/pack | Durable checkpoints plus provider reconciliation and one-direction lock; provider idempotency must be verified live. |
 | Collector changes terms | Purchases fail closed on stale/malformed data; written permission and current commercial/API terms are release gates. |
@@ -90,8 +99,8 @@ The hook never calls CCTP or Collector. The operator is a separate failure domai
 
 ## Known limitations
 
-- Slither `0.11.6` was run against source commit `61a66e4562fa69afaf2e07be9122700cace9045d`; its three findings and dispositions are recorded in `evidence/STATIC_ANALYSIS.md`. This is not an independent audit.
-- A pinned Ethereum fork at block `25684536` and a separate current-head smoke at observed block `25684686` pass against the reviewed PoolManager, USDC and Circle TokenMessengerV2 addresses. No deployment receipt, source verification, runtime match or incident drill exists yet.
+- Slither `0.11.6` was run against source/evidence commit `d1f6e8b4be04523626ecf73a97acfe3e3a103d67`; its four findings and dispositions are recorded in `evidence/STATIC_ANALYSIS.md`. This is not an independent audit.
+- A pinned Ethereum fork at block `25684536` and a separate current-head smoke at observed block `25688219` pass against the reviewed PoolManager, USDC and Circle TokenMessengerV2 addresses. No deployment receipt, source verification, runtime match or incident drill exists yet.
 - The deterministic builder closes the declared Foundry and JavaScript source graph without diagnostics. Maintainer dependency review is still required because the project uses a model-specific pinned baseline.
-- Mainnet token allocation, launch/liquidity policy and LP custody remain the open architecture decision. Exact role addresses and Collector permission/key are separate deployment/candidate gates. Hookemon supplies no swap client in this submission; a future platform or third-party routing surface is a separate review boundary.
+- Owner-approved option A fixes the token allocation, 25,000 USDC launch liquidity, treasury vesting and 730-day LP custody. The owner also approved a 1-of-1 Governance Safe whose only hardware owner is the immutable guardian; this deliberate single-key risk remains a mainnet review item. Exact public role/derived contract addresses and Collector permission/key remain separate deployment/candidate gates. Hookemon supplies no swap client in this submission; a future platform or third-party routing surface is a separate review boundary.
 - Third-party uptime, future API semantics, pack outcomes, token price, trading volume and payouts cannot be guaranteed.

@@ -6,9 +6,9 @@ The current prototype has local unit, integration, fuzz and invariant coverage. 
 
 | Area | Executed cases |
 | --- | --- |
-| Hook/contracts | 63 passing Foundry tests: PoolManager authentication, PoolKey admission, mask, all four quadrants, floor and 3% rates, exact-output rounding, partial-fill rejection, fragmentation resistance, liability conservation, claims, cross-pool isolation, vault delay/caps/replay/pause, typed CCTP forwarding, hostile-messenger rollback, automatic cumulative payments, a complete deploy/swap/bridge/return/payout lifecycle and fail-closed unsigned deployment-plan validation. |
+| Hook/contracts | 71 passing Foundry tests: PoolManager authentication, PoolKey admission, mask, all four quadrants, floor and 3% rates, exact-output rounding, partial-fill rejection, fragmentation resistance, liability conservation, complete custom-leg event fields, claims, cross-pool isolation, vault delay/caps/replay/pause, typed CCTP forwarding, hostile-messenger rollback, automatic cumulative payments, option-A allocation and 1-of-1 Safe/guardian role validation, treasury vesting, LP timelock and the complete deploy/swap/bridge/return/payout lifecycle. |
 | Domain | Proportional top-holder allocation, exclusions, largest remainder, cycle transitions, 75/25 pack policy, stale data, pack cap, payout gas threshold and max-40 batches. |
-| Integrations | CCTP route/fee mode and ATA setup; Collector machine normalization, turbo recipients, missing key and secret-free errors; crash-safe source-burn, memo, pack, buyback and completion reconciliation. |
+| Integrations | CCTP route/fee mode and ATA setup; Collector machine normalization, turbo recipients, missing key and secret-free errors; crash-safe source-burn, memo, pack, buyback and completion reconciliation; real legacy Solana transaction parsing with exact domain, signer, program, memo, mint, amount and recipient checks; durable replay rejection and signer-output verification. |
 | Indexer | Block replacement, disconnected branch rejection, time-weight integration, mint/burn, log ordering and window bounds. |
 | Rewards | Deterministic roots, cumulative unpaid accounts, tamper rejection, empty-root rejection, JSON serialization, Solidity/JavaScript golden vector, atomic artifact storage and automatic max-40-recipient publication. |
 | Operator/API | End-to-end simulated cycle, completed-cycle replay, stale fail-close, durable restart at every external boundary, public projections, immutable artifacts, GET-only behavior and secret-free failures. |
@@ -16,22 +16,26 @@ The current prototype has local unit, integration, fuzz and invariant coverage. 
 
 ## Required before a Programmable application
 
-- Resolve the one owner launch-economics decision and rerun repository-aware preflight.
+- Preserve the owner-approved option-A allocation, vesting and LP-lock invariants and rerun repository-aware preflight for the exact revision.
 - Preserve the currently clean deterministic dependency/source closure on the exact candidate revision.
 - Rerun `forge fmt --check`, `forge build`, all tests, bytecode/initcode size and gas reports after the final evidence-origin commit.
 - Rerun Slither and refresh every disposition after any Solidity source change.
 - Rerun the pinned Ethereum fork plus current-head smoke against exact reviewed PoolManager, USDC and CCTP deployments; no router is included in this submission.
 - Mine/reproduce the CREATE2 hook address and prove it has mask `0x20cc` with final constructor arguments.
-- Extend the unsigned deployment-plan tests with the owner-approved allocation, exact LP fee beneficiary/removal policy and final CycleVault caps after the remaining launch-economics decision is recorded.
+- Bind the final public Governance Safe, its exact sole hardware owner/guardian, threshold `1`, the separate operator and Solana destinations in the unsigned deployment plan; verify the Safe has no unreviewed module or guard and recompute every derived address and timestamp before rehearsal.
 - Add malicious ERC-20, failed recipient, claim/remainder and ERC-6909 aggregate solvency adversarial cases if independent review requests them.
 - Preserve operator crash tests at every external boundary, including accepted-but-not-journaled CCTP/Collector/reward publication.
-- Add signer policy tests for wrong chain, recipient, asset, amount, cycle, memo, deadline/blockhash, replay and revocation.
+- Preserve the executed signer-policy cases for wrong chain, recipient, mint, amount, signer, program, memo, blockhash, replay after restart and raw-signer message mutation.
+- Prove allowlist rotation/revocation and actual provider transaction compatibility in a supervised sandbox canary after written Collector permission; do not relax the parser to accommodate an unreviewed payload.
 - Add live sandbox canaries only after written Collector permission; never use production secrets in untrusted test code.
 
 ## Mainnet lifecycle tests
 
 - Token deployment conserves the full allocation table and no balance is silently left with the executor.
+- Treasury vesting releases zero before day 365, 25% at the cliff and 100% at day 1,460 only to the immutable Governance Safe.
+- The canonical position timelock accepts exactly one position from the deployment Safe and cannot release it to anyone before day 730.
 - Canonical PoolKey, sorted currencies, fee, tick spacing, initial price and hook address match the reviewed plan.
+- Governance Safe threshold is exactly one; its only owner equals the immutable guardian; the Safe contract, hardware owner/guardian and Ethereum operator are pairwise distinct; no unreviewed module or guard is active.
 - LP position identity, owner/lock, fee collection and removal/retirement rules match public disclosure.
 - Buy and sell, exact input and exact output quotes match final receipt deltas and disclosed 3%/0.30% components.
 - `0 selected` yields 10 bps Programmable and zero project; `3% selected` yields exactly 10/290 bps.
@@ -47,7 +51,7 @@ The current prototype has local unit, integration, fuzz and invariant coverage. 
 - Website responsive layouts, keyboard focus, reduced motion, screen reader names, stale/error states and truthful simulator/live labels.
 - Indexer full backfill, deep reorg drill, provider disagreement, lag alert and confirmed-read reconciliation.
 - Monitoring alerts for liability deficit, vault cap, stuck bridge, stale catalog, memo mismatch, payout delay, signer gas and root-funding mismatch.
-- Runbook drill for compromised Collector key, Ethereum signer, Solana signer, Safe and guardian.
+- Runbook drill for compromised Collector key, Ethereum signer, Solana signer and the single Safe-owner/guardian hardware key, including loss and recovery-word restoration.
 
 ## Evidence semantics
 
