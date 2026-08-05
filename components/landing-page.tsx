@@ -13,9 +13,26 @@ export function LandingPage() {
       className={`${styles.page} landing-page-root`}
       aria-labelledby="landing-title"
     >
+      <Link
+        className={styles.brandLink}
+        href="/"
+        aria-label="Programmable home"
+      >
+        <Image
+          className={styles.brandLogo}
+          src="/brand/loop/programmable-loop-mark-header.png"
+          alt=""
+          width={146}
+          height={192}
+          sizes="44px"
+          priority
+        />
+      </Link>
       <section className={styles.hero}>
         <div className={styles.content}>
-          <h1 id="landing-title">Launch what you imagine</h1>
+          <h1 id="landing-title">
+            Launch tokens that behave exactly how you imagine
+          </h1>
           <div className={styles.actions} aria-label="Get started">
             <Link
               className={`${styles.primaryAction} liquid-glass-control liquid-glass-distortion`}
