@@ -46,6 +46,10 @@ describe("topbar and Explore hero polish", () => {
       'src="/brand/platforms/dexscreener-mark-white.png"',
     );
     expect(navigation).toContain('aria-label="Programmable on Dexscreener"');
+    expect(navigation).not.toContain("ThemeToggle");
+    expect(navigation).toContain(
+      "{!isLandingPage ? <WalletButton compact /> : null}",
+    );
     expect(landingCss).toMatch(
       /:global\(\.site-header--landing\)\s*\{[^}]*position:\s*fixed;[^}]*width:\s*100%;/s,
     );

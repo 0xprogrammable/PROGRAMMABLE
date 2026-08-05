@@ -201,15 +201,14 @@
 .saveAction,
 .claimButton,
 .connectButton {
-  background: var(--profile-pink-bright);
-  border-color: color-mix(in srgb, var(--profile-pink) 44%, transparent);
-  color: #24131c;
-}
-
-:global(html[data-theme="dark"]) .saveAction,
-:global(html[data-theme="dark"]) .claimButton,
-:global(html[data-theme="dark"]) .connectButton {
-  color: #24131c;
+  -webkit-backdrop-filter: var(--control-glass-backdrop);
+  backdrop-filter: var(--control-glass-backdrop);
+  background: var(--accent-glass-background);
+  border-color: var(--accent-glass-border);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 9px 26px var(--control-glass-shadow-color);
+  color: var(--text);
 }
 
 .formHelp {

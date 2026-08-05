@@ -145,11 +145,14 @@
 }
 
 .composer button {
+  -webkit-backdrop-filter: var(--control-glass-backdrop);
   align-items: center;
-  background: var(--token-accent, var(--accent));
-  border: 0;
+  backdrop-filter: var(--control-glass-backdrop);
+  background: var(--accent-glass-background);
+  border: 1px solid var(--accent-glass-border);
   border-radius: 11px;
-  color: var(--token-accent-ink, var(--accent-ink));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  color: var(--text);
   display: inline-flex;
   font-size: 11.5px;
   font-weight: 680;

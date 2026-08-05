@@ -66,35 +66,34 @@ describe("interaction accessibility", () => {
     expect(css).not.toMatch(/cursor:\s*(?:pointer|not-allowed)\b/);
   });
 
-  it("uses an action label without a conflicting pressed state on the theme toggle", () => {
+  it("keeps the interface dark-only without exposing a theme toggle", () => {
     const source = readFileSync(
       join(root, "components/site-navigation.tsx"),
       "utf8",
     );
+    const layout = readFileSync(join(root, "app/layout.tsx"), "utf8");
 
-    expect(source).toContain('theme === "dark" ? "Switch to light mode"');
-    expect(source).not.toContain('aria-pressed={theme === "dark"}');
+    expect(layout).toContain('data-theme="dark"');
+    expect(layout).toContain('colorScheme: "dark"');
+    expect(layout).not.toContain("themeInitializationScript");
+    expect(source).not.toContain("ThemeToggle");
+    expect(source).not.toContain("programmable-theme");
   });
 
-  it("reveals pointer-triggered theme changes from the toggle without forcing motion", () => {
+  it("stops decorative atmosphere motion for reduced-motion users", () => {
     const source = readFileSync(
-      join(root, "components/site-navigation.tsx"),
+      join(root, "components/atmosphere-backdrop.tsx"),
       "utf8",
     );
-    const css = readFileSync(join(root, "app/globals.css"), "utf8");
+    const css = readFileSync(join(root, "app/interface.css"), "utf8");
 
-    expect(source).toContain("startViewTransition");
-    expect(source).toContain("event.detail === 0");
-    expect(source).toContain('root.dataset.themeInput = "instant"');
-    expect(source).toContain('"(prefers-reduced-motion: reduce)"');
-    expect(css).toContain(
-      'html[data-theme-input="instant"] .theme-toggle-icons svg',
-    );
-    expect(css).toContain("@keyframes theme-soft-reveal");
+    expect(source).toContain('className="atmosphere-stars');
     expect(css).toMatch(
-      /theme-soft-reveal 380ms cubic-bezier\(0\.2, 0, 0, 1\)/,
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.atmosphere-botanical\s*\{[^}]*transition:\s*none;/,
     );
-    expect(css).toContain("@media (prefers-reduced-motion: no-preference)");
+    expect(css).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.atmosphere-stars\s*\{[^}]*animation:\s*none;/,
+    );
   });
 
   it("exposes the wallet actions as a native, labelled disclosure", () => {
@@ -135,11 +134,19 @@ describe("interaction accessibility", () => {
     );
   });
 
-  it("prioritizes theme and wallet controls when the mobile header is narrow", () => {
-    const css = readFileSync(join(root, "app/globals.css"), "utf8");
+  it("keeps the landing header wallet-free while retaining its market links", () => {
+    const source = readFileSync(
+      join(root, "components/site-navigation.tsx"),
+      "utf8",
+    );
+    const css = readFileSync(
+      join(root, "components/landing-page.module.css"),
+      "utf8",
+    );
 
+    expect(source).toContain("{!isLandingPage ? <WalletButton compact /> : null}");
     expect(css).toMatch(
-      /@media \(max-width: 360px\)[\s\S]*?\.header-socials\s*\{\s*display:\s*none;/,
+      /@media \(max-width: 600px\)[\s\S]*?site-header--landing \.header-socials[\s\S]*?display:\s*flex/,
     );
   });
 

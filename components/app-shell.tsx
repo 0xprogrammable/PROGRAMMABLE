@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { AtmosphereBackdrop } from "@/components/atmosphere-backdrop";
 import {
   MobileNavigation,
   SiteHeader,
@@ -10,6 +11,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <WalletProvider>
       <div className="app-frame">
+        <AtmosphereBackdrop />
         <a className="skip-link" href="#main-content">
           Skip to content
         </a>
