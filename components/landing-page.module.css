@@ -173,7 +173,7 @@
 .primaryAction,
 .secondaryAction {
   align-items: center;
-  border-radius: 999px;
+  border-radius: 14px;
   display: inline-flex;
   font-size: 16px;
   font-weight: 640;
@@ -191,6 +191,9 @@
 .primaryAction {
   background: #fffdf9;
   border: 1px solid #fffdf9;
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 10px 28px rgba(1, 5, 20, 0.18);
   color: #07112f;
 }
 
@@ -201,10 +204,13 @@
 }
 
 .secondaryAction {
-  -webkit-backdrop-filter: blur(18px) saturate(1.06);
-  backdrop-filter: blur(18px) saturate(1.06);
-  background: rgba(7, 17, 47, 0.46);
-  border: 1px solid rgba(255, 253, 249, 0.3);
+  -webkit-backdrop-filter: var(--navigation-glass-backdrop);
+  backdrop-filter: var(--navigation-glass-backdrop);
+  background: rgba(7, 17, 47, 0.62);
+  border: 1px solid var(--navigation-glass-border);
+  box-shadow:
+    inset 0 1px 0 var(--navigation-glass-highlight),
+    0 10px 28px rgba(1, 5, 20, 0.16);
   color: #fffdf9;
 }
 
@@ -222,22 +228,21 @@
 :global(.site-header--landing) {
   background: transparent;
   height: 92px;
+  padding: 0;
   position: fixed;
   width: 100%;
 }
 
 :global(.site-header--landing .header-inner) {
-  -webkit-backdrop-filter: blur(22px) saturate(1.08);
-  backdrop-filter: blur(22px) saturate(1.08);
-  background: rgba(7, 17, 47, 0.62);
-  border: 1px solid rgba(255, 253, 249, 0.16);
-  border-radius: 999px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 18px 54px rgba(1, 5, 20, 0.2);
+  -webkit-backdrop-filter: var(--navigation-glass-backdrop);
+  backdrop-filter: var(--navigation-glass-backdrop);
+  background: var(--navigation-glass-background);
+  border: 1px solid var(--navigation-glass-border);
+  border-radius: 20px;
+  box-shadow: var(--navigation-glass-shadow);
   height: 66px;
   margin-top: 16px;
-  max-width: 880px;
+  max-width: 940px;
   padding-inline: 12px;
   width: calc(100% - 32px);
 }
@@ -270,8 +275,10 @@
   backdrop-filter: none;
   background: #fffdf9;
   border-color: #fffdf9;
-  border-radius: 999px;
-  box-shadow: none;
+  border-radius: 14px;
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 8px 22px rgba(1, 5, 20, 0.18);
   color: #07112f;
   min-height: 44px;
 }
@@ -292,7 +299,7 @@
   }
 
   .secondaryAction:hover {
-    background: rgba(16, 40, 64, 0.66);
+    background: var(--navigation-glass-background-hover);
     border-color: rgba(255, 253, 249, 0.48);
     transform: translateY(-2px);
   }
