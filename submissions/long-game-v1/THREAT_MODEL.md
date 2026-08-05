@@ -49,4 +49,3 @@ Residual risks requiring independent review include v4 delta signs and exact-out
 scaled dust, WETH/base assumptions, custody loss from undiscovered logic errors, sybil splitting of holder identity,
 router/provider compatibility, MEV, deployment configuration, and the deliberate inability to recover accidental
 unsupported transfers. Local tests are not an audit or production evidence.
-

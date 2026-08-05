@@ -74,4 +74,3 @@ Builder-stated facts are the v1.1.0 Programmable fee rules and v1.5.0 package se
 prospective PoolKey and product boundaries above. Evidence-backed facts are limited to the local commands recorded in
 `evidence/test-evidence.json`. This prototype is not an audit, acceptance, deployment, runtime match, routing approval,
 or availability proof.
-
