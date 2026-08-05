@@ -7,6 +7,7 @@ import {
   classicV3ActionRpcProviders,
   createActionRpcQuorum,
   creatorClaimRpcProviders,
+  protocolRevenueRpcProviders,
   stockPairedActionRpcProviders,
   tradeActionRpcProviders,
 } from "../lib/server/action-rpc-quorum.server";
@@ -151,6 +152,44 @@ describe("action-route RPC quorums", () => {
         tradeActionRpcProviders(1, {
           ETHEREUM_RPC_URL: ALCHEMY_MAINNET_A,
           ETHEREUM_RPC_URL_B: ALCHEMY_MAINNET_B,
+        }),
+      "alchemy-key-two",
+    );
+  });
+
+  it("isolates protocol revenue from shared trade RPC configuration", () => {
+    const providers = protocolRevenueRpcProviders({
+      ETHEREUM_RPC_URL: ALCHEMY_MAINNET_A,
+      ETHEREUM_RPC_URL_B: QUICKNODE_MAINNET,
+    });
+
+    expectIndependent(providers);
+    expect(providers.map((provider) => provider.vendorGroup)).toEqual([
+      "drpc",
+      "publicnode",
+    ]);
+    expect(providers.map((provider) => provider.endpoint)).toEqual([
+      "https://eth.drpc.org/",
+      "https://ethereum-rpc.publicnode.com/",
+    ]);
+  });
+
+  it("accepts only independent protocol-revenue provider overrides", () => {
+    const providers = protocolRevenueRpcProviders({
+      PROTOCOL_REVENUE_RPC_URL_A: ALCHEMY_MAINNET_A,
+      PROTOCOL_REVENUE_RPC_URL_B: QUICKNODE_MAINNET,
+    });
+    expectIndependent(providers);
+    expect(providers.map((provider) => provider.vendorGroup)).toEqual([
+      "alchemy",
+      "quicknode",
+    ]);
+
+    expectSafeFailure(
+      () =>
+        protocolRevenueRpcProviders({
+          PROTOCOL_REVENUE_RPC_URL_A: ALCHEMY_MAINNET_A,
+          PROTOCOL_REVENUE_RPC_URL_B: ALCHEMY_MAINNET_B,
         }),
       "alchemy-key-two",
     );

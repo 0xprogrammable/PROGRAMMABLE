@@ -30,7 +30,7 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { mainnet } from "viem/chains";
 
-import { tradeActionRpcProviders } from "../server/action-rpc-quorum.server";
+import { protocolRevenueRpcProviders } from "../server/action-rpc-quorum.server";
 import {
   evaluateProtocolRevenueEconomics,
   evaluateProtocolRevenueV2Action,
@@ -514,7 +514,7 @@ export async function runConfiguredProtocolRevenueKeeperV2(
   const configuration = configuredKeeper(env);
   if (!configuration) return { status: "disabled" };
 
-  const providers = tradeActionRpcProviders(1, env);
+  const providers = protocolRevenueRpcProviders(env);
   const clients = [
     client(providers[0].endpoint),
     client(providers[1].endpoint),
@@ -719,18 +719,33 @@ export async function runConfiguredProtocolRevenueKeeperV2(
         economicRevenue: decision.accruedRevenue,
       };
 
-  try {
-    await Promise.all(
-      clients.map((current) =>
-        current.call({
+  const simulationOutcomes = await Promise.all(
+    clients.map(async (current, index) => {
+      try {
+        await current.call({
           account: account.address,
           to: transaction.to,
           data: transaction.data,
           value: transaction.value,
-        }),
-      ),
-    );
-  } catch {
+        });
+        return {
+          provider: providers[index]!.vendorGroup,
+          status: "success",
+        } as const;
+      } catch (error) {
+        return {
+          provider: providers[index]!.vendorGroup,
+          status: "failed",
+          category: classifyProtocolRevenueSubmissionError(error),
+        } as const;
+      }
+    }),
+  );
+  if (simulationOutcomes.some((outcome) => outcome.status === "failed")) {
+    console.error("Programmable protocol revenue simulation rejected", {
+      action,
+      outcomes: simulationOutcomes,
+    });
     throw new ProtocolRevenueKeeperV2Error("simulation_failed");
   }
 
