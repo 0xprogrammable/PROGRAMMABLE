@@ -38,6 +38,35 @@ async function alphaBounds(path: string, threshold = 16) {
 }
 
 describe("Programmable branding assets", () => {
+  it("keeps the browser tab branded only as Programmable on every route", () => {
+    const metadataSources = [
+      "app/layout.tsx",
+      "app/page.tsx",
+      "app/explore/page.tsx",
+      "app/launch/page.tsx",
+      "app/docs/layout.tsx",
+      "app/docs/developers/page.tsx",
+      "app/docs/models/[model]/page.tsx",
+    ].map(read);
+
+    for (const source of metadataSources) {
+      expect(source).toContain('title: "Programmable"');
+    }
+
+    const combinedSources = metadataSources.join("\n");
+    for (const routeSpecificTitle of [
+      'title: "Programmable — Launch what you imagine"',
+      'title: "Explore — Programmable"',
+      'title: "Create · Programmable"',
+      'default: "Docs · Programmable"',
+      'template: "%s · Programmable Docs"',
+      'title: "Developer integrations"',
+      "title: metadata.title",
+    ]) {
+      expect(combinedSources).not.toContain(routeSpecificTitle);
+    }
+  });
+
   it("uses the tall, transparent loop asset without enlarging the header hit box", () => {
     const navigation = read("components/site-navigation.tsx");
     const css = read("app/interface.css");

@@ -78,7 +78,7 @@ export async function generateMetadata({
 
   const metadata = modelMetadata[model];
   return {
-    title: metadata.title,
+    title: "Programmable",
     description: metadata.description,
     alternates: { canonical: `/docs/models/${model}` },
   };

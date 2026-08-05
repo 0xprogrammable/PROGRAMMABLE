@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { LandingPage } from "@/components/landing-page";
 
 export const metadata: Metadata = {
-  title: "Programmable — Launch what you imagine",
+  title: "Programmable",
   description: "Launch what you imagine on Ethereum with Programmable.",
 };
 
