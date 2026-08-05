@@ -30,9 +30,11 @@
 .docsActions button,
 .docsActions a {
   align-items: center;
-  background: var(--surface-raised);
-  border: 1px solid var(--panel-border);
-  border-radius: 10px;
+  -webkit-backdrop-filter: var(--control-glass-backdrop);
+  backdrop-filter: var(--control-glass-backdrop);
+  background: var(--liquid-glass-control-background);
+  border: 1px solid var(--liquid-glass-border);
+  border-radius: 14px;
   color: var(--text);
   display: inline-flex;
   font: inherit;
@@ -126,8 +128,9 @@
 }
 
 .integrationScope {
-  background: color-mix(in srgb, var(--surface-soft) 72%, transparent);
-  border-radius: 14px;
+  background: var(--liquid-glass-inner-background);
+  border: 1px solid var(--liquid-glass-border);
+  border-radius: 18px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-top: 24px;
@@ -191,10 +194,12 @@
 }
 
 .workbench {
-  background: var(--dev-code);
-  border: 1px solid var(--dev-code-border);
-  border-radius: 16px;
-  box-shadow: 0 20px 54px rgba(4, 7, 10, 0.16);
+  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
+  backdrop-filter: var(--liquid-glass-backdrop);
+  background: rgba(8, 12, 22, 0.82);
+  border: 1px solid var(--liquid-glass-border);
+  border-radius: 24px;
+  box-shadow: var(--liquid-glass-shadow);
   color: var(--dev-code-text);
   overflow: hidden;
   position: relative;
@@ -249,7 +254,7 @@
 .codePaneHeader,
 .responseHeader {
   align-items: center;
-  background: var(--dev-code-raised);
+  background: rgba(255, 255, 255, 0.035);
   border-bottom: 1px solid var(--dev-code-border);
   display: flex;
   gap: 8px;
@@ -370,7 +375,7 @@
 }
 
 .responsePane {
-  background: #0e1014;
+  background: rgba(8, 11, 17, 0.68);
 }
 
 .responseHeader > div {
@@ -417,9 +422,10 @@
 }
 
 .runButton {
-  background: #f2f4f6;
-  border-radius: 8px;
-  color: #111419;
+  background: var(--liquid-glass-control-background-hover);
+  border: 1px solid var(--liquid-glass-border-strong);
+  border-radius: 12px;
+  color: var(--dev-code-text);
   flex: 0 0 auto;
   font-size: 12px;
   font-weight: 720;
@@ -687,8 +693,9 @@
 
 .cursorComparison {
   align-items: center;
-  background: color-mix(in srgb, var(--surface-soft) 70%, transparent);
-  border-radius: 12px;
+  background: var(--liquid-glass-inner-background);
+  border: 1px solid var(--liquid-glass-border);
+  border-radius: 16px;
   display: grid;
   gap: 14px;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -1184,7 +1191,7 @@
   }
 
   .workbench {
-    border-radius: 13px;
+    border-radius: 20px;
   }
 
   .workbenchTopbar {

@@ -709,7 +709,7 @@ function ExploreGridSkeleton() {
     >
       {exploreSkeletonItems.map((index) => (
         <article
-          className={`${styles.runnerCard} ${styles.skeletonCard}`}
+          className={`${styles.runnerCard} ${styles.skeletonCard} liquid-glass-surface`}
           key={index}
         >
           <div className={`${styles.runnerArt} ${styles.skeletonArt}`} />
@@ -1006,7 +1006,7 @@ export function ExploreView() {
 
     if (displayState.payload.status === "not-deployed") {
       return (
-        <div className={styles.emptyState}>
+        <div className={`${styles.emptyState} liquid-glass-surface`}>
           <div>
             <h2>Token index unavailable</h2>
             <p>Explore is not available in this environment.</p>
@@ -1048,7 +1048,7 @@ export function ExploreView() {
       }
 
       return (
-        <div className={styles.emptyState}>
+        <div className={`${styles.emptyState} liquid-glass-surface`}>
           <div>
             <h2>No tokens yet</h2>
             <p>Create the first token.</p>
@@ -1070,7 +1070,10 @@ export function ExploreView() {
             : null;
 
           return (
-            <article className={styles.runnerCard} key={token.id}>
+            <article
+              className={`${styles.runnerCard} liquid-glass-surface`}
+              key={token.id}
+            >
               <Link
                 className={styles.runnerHitArea}
                 href={href}
@@ -1166,7 +1169,10 @@ export function ExploreView() {
               <div className="token-section-heading">
                 <h2 className="sr-only">Tokens</h2>
                 <div className="token-toolbar">
-                  <div className="token-search" role="search">
+                  <div
+                    className="token-search liquid-glass-control"
+                    role="search"
+                  >
                     <Search aria-hidden="true" size={17} />
                     <label className="sr-only" htmlFor="explore-token-search">
                       Search tokens by name, ticker or contract address
@@ -1197,6 +1203,7 @@ export function ExploreView() {
 
                   <details className="token-filter" ref={filterRef}>
                     <summary
+                      className="liquid-glass-control"
                       aria-controls="explore-filter-panel"
                       aria-label={
                         activeFilterCount === 0
@@ -1224,7 +1231,7 @@ export function ExploreView() {
                     </summary>
                     <div
                       id="explore-filter-panel"
-                      className={`token-filter-menu ${styles.filterMenu}`}
+                      className={`token-filter-menu ${styles.filterMenu} liquid-glass-surface liquid-glass-distortion`}
                       role="group"
                       aria-label="Filter and sort tokens"
                     >
@@ -1336,7 +1343,10 @@ export function ExploreView() {
                   displayState.payload.status === "ready" &&
                   displayState.payload.total > 0 &&
                   pageCount > 1 ? (
-                    <nav className="token-pagination" aria-label="Token pages">
+                    <nav
+                      className="token-pagination liquid-glass-control"
+                      aria-label="Token pages"
+                    >
                       <button
                         type="button"
                         aria-label="Previous token page"

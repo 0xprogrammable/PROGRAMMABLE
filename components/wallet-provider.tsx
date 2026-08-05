@@ -1243,7 +1243,9 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
     <button
       ref={menuButtonRef}
       className={
-        compact ? "wallet-button wallet-button-compact" : "wallet-button"
+        compact
+          ? "wallet-button wallet-button-compact liquid-glass-control"
+          : "wallet-button liquid-glass-control"
       }
       type="button"
       disabled={connecting || disconnecting}

@@ -77,8 +77,8 @@
 
 .image {
   aspect-ratio: 1;
-  background: var(--surface-soft);
-  border: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
+  background: #07112f;
+  border: 1px solid var(--liquid-glass-border);
   border-radius: 22px;
   isolation: isolate;
   overflow: hidden;
@@ -86,9 +86,12 @@
 }
 
 .image img {
-  background: inherit;
+  background: #07112f;
   display: block;
+  height: calc(100% + 4px) !important;
+  inset: -2px !important;
   object-fit: cover;
+  width: calc(100% + 4px) !important;
 }
 
 .identityCopy {
@@ -282,8 +285,8 @@
 }
 
 .deepSummary {
-  background: color-mix(in srgb, var(--surface-tint) 80%, transparent);
-  border: 1px solid var(--border);
+  background: var(--liquid-glass-inner-background);
+  border: 1px solid var(--liquid-glass-border);
   border-radius: 18px;
   display: grid;
   gap: 11px;
@@ -548,12 +551,12 @@
 
 .tradeShell {
   align-self: start;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  background: color-mix(in srgb, var(--surface-soft) 28%, transparent);
-  border: 1px solid var(--panel-border-soft);
-  border-radius: 20px;
-  box-shadow: none;
+  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
+  backdrop-filter: var(--liquid-glass-backdrop);
+  background: var(--liquid-glass-surface-background);
+  border: 1px solid var(--liquid-glass-border);
+  border-radius: 24px;
+  box-shadow: var(--liquid-glass-shadow);
   display: flex;
   grid-area: trade;
   margin: 0;
@@ -602,9 +605,9 @@
 .sideControl {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-  background: color-mix(in srgb, var(--surface-soft) 58%, transparent);
-  border: 0;
-  border-radius: 14px;
+  background: var(--liquid-glass-inner-background);
+  border: 1px solid var(--liquid-glass-border);
+  border-radius: 16px;
   box-shadow: none;
   display: grid;
   gap: 4px;
@@ -632,7 +635,7 @@
 }
 
 .sideIndicator {
-  background: color-mix(in srgb, var(--surface-raised) 82%, transparent);
+  background: var(--liquid-glass-control-background-hover);
   border: 0;
   border-radius: 11px;
   bottom: 4px;
@@ -653,9 +656,9 @@
 }
 
 .amountCard {
-  background: color-mix(in srgb, var(--surface-soft) 44%, transparent);
-  border: 1px solid var(--border);
-  border-radius: 15px;
+  background: var(--liquid-glass-inner-background);
+  border: 1px solid var(--liquid-glass-border);
+  border-radius: 17px;
   margin-top: 12px;
   min-height: 116px;
   padding: 10px 14px 9px;
@@ -820,9 +823,9 @@
 
 .slippageControl {
   align-items: center;
-  background: var(--control-glass-background);
-  border: 1px solid var(--control-glass-border);
-  border-radius: 13px;
+  background: var(--liquid-glass-control-background);
+  border: 1px solid var(--liquid-glass-border);
+  border-radius: 15px;
   display: inline-flex;
   min-height: 38px;
   overflow: hidden;
@@ -899,7 +902,7 @@
   align-items: center;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-  border-radius: 14px;
+  border-radius: 18px;
   display: inline-flex;
   font-size: 14px;
   font-weight: 690;
@@ -921,16 +924,16 @@
 }
 
 .primaryAction:disabled {
-  background: color-mix(in srgb, var(--surface-soft) 72%, transparent);
-  border-color: var(--border);
+  background: var(--liquid-glass-inner-background);
+  border-color: var(--liquid-glass-border);
   color: var(--muted);
   cursor: default;
   opacity: 1;
 }
 
 .secondaryAction {
-  background: color-mix(in srgb, var(--surface-soft) 58%, transparent);
-  border: 1px solid var(--border);
+  background: var(--liquid-glass-control-background);
+  border: 1px solid var(--liquid-glass-border);
   box-shadow: none;
   color: var(--text);
 }
@@ -946,9 +949,9 @@
 }
 
 .reviewOutput {
-  background: color-mix(in srgb, var(--surface-soft) 44%, transparent);
-  border: 1px solid var(--border);
-  border-radius: 15px;
+  background: var(--liquid-glass-inner-background);
+  border: 1px solid var(--liquid-glass-border);
+  border-radius: 17px;
   padding: 16px;
 }
 

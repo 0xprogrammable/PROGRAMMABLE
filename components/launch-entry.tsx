@@ -46,7 +46,7 @@ function LaunchFormLoading({ onBack }: { onBack: () => void }) {
         </div>
       </header>
       <div
-        className={launchExperience.formLoadingSheet}
+        className={`${launchExperience.formLoadingSheet} liquid-glass-surface liquid-glass-distortion`}
         role="status"
         aria-label="Loading launch form"
       >
@@ -117,7 +117,7 @@ export function LaunchModelPicker({
 
       <div className={`launch-model-grid ${launchExperience.modelGrid}`}>
         <button
-          className={`launch-model-card ${launchExperience.modelCard}`}
+          className={`launch-model-card ${launchExperience.modelCard} liquid-glass-surface liquid-glass-distortion`}
           data-launch-model-option="classic"
           data-launch-model-available={classicV3LaunchAvailable}
           data-launch-model-launchable={classicV3LaunchAvailable}
@@ -185,7 +185,7 @@ export function LaunchModelPicker({
 
         <Link
           href="/docs/models/custom"
-          className={`launch-model-card ${launchExperience.modelCard}`}
+          className={`launch-model-card ${launchExperience.modelCard} liquid-glass-surface liquid-glass-distortion`}
           data-launch-model-option="custom"
           data-launch-model-available="true"
           data-launch-model-launchable="false"

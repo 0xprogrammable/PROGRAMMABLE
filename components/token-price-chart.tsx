@@ -505,7 +505,7 @@ export function TokenPriceChart({
 
   return (
     <section
-      className={styles.shell}
+      className={`${styles.shell} liquid-glass-surface liquid-glass-distortion`}
       aria-busy={loading}
       aria-label={`${tokenName} price history`}
     >

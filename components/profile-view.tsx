@@ -2077,7 +2077,9 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   if (sessionView === "connect" || !account) {
     return (
       <div className={`${styles.page} page-width`}>
-        <section className={styles.connectCard}>
+        <section
+          className={`${styles.connectCard} liquid-glass-surface liquid-glass-distortion`}
+        >
           <Image
             className={styles.connectMark}
             src="/brand/loop/programmable-loop-mark-512.png"
@@ -2969,7 +2971,10 @@ function ProfileSessionLoadingState() {
             <span />
           </span>
         </div>
-        <div className={styles.sessionLoadingWorkspace} aria-hidden="true">
+        <div
+          className={`${styles.sessionLoadingWorkspace} liquid-glass-surface liquid-glass-distortion`}
+          aria-hidden="true"
+        >
           <span />
           <span />
         </div>
@@ -2988,7 +2993,10 @@ function ProfileLoadingState() {
       <span className={styles.visuallyHidden} role="status">
         Loading profile
       </span>
-      <div className={styles.profileWorkspace} aria-hidden="true">
+      <div
+        className={`${styles.profileWorkspace} liquid-glass-surface liquid-glass-distortion`}
+        aria-hidden="true"
+      >
         <div className={styles.loadingPanel}>
           <span className={styles.loadingPanelTitle} />
           <span className={styles.loadingPanelTotal} />
@@ -3241,7 +3249,9 @@ function ProfileAccountWorkspace({
         </div>
       ) : null}
 
-      <div className={styles.profileWorkspace}>
+      <div
+        className={`${styles.profileWorkspace} liquid-glass-surface liquid-glass-distortion`}
+      >
         <FeeEarningsPanel
           nativeClaimable={nativeClaimable}
           nativeClaimed={nativeClaimed}
@@ -3256,9 +3266,11 @@ function ProfileAccountWorkspace({
         >
           <header className={styles.panelHeader}>
             <h2 id="profile-claimable-title">Claimable</h2>
-            <span className={styles.panelStatus} role="status">
-              {loading ? "Refreshing reward sources" : "Highest first"}
-            </span>
+            {loading ? (
+              <span className={styles.visuallyHidden} role="status">
+                Refreshing reward sources
+              </span>
+            ) : null}
             {claimPageData.totalPages > 1 ? (
               <nav
                 className={styles.claimPagination}
@@ -3881,7 +3893,9 @@ function ProfileClaimDialog({
         if (event.currentTarget === event.target) onClose();
       }}
     >
-      <div className={styles.claimDialogSurface}>
+      <div
+        className={`${styles.claimDialogSurface} liquid-glass-surface liquid-glass-distortion`}
+      >
         <header className={styles.claimDialogHeader}>
           <div>
             <span>Choose how to receive</span>

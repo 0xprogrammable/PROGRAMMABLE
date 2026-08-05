@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { AtmosphereBackdrop } from "@/components/atmosphere-backdrop";
+import { LiquidGlassFilter } from "@/components/liquid-glass-filter";
 import {
   MobileNavigation,
   SiteHeader,
@@ -11,6 +12,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <WalletProvider>
       <div className="app-frame">
+        <LiquidGlassFilter />
         <AtmosphereBackdrop />
         <a className="skip-link" href="#main-content">
           Skip to content

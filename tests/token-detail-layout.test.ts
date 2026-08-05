@@ -85,7 +85,7 @@ describe("token detail layout", () => {
       ["chart", "className={styles.marketChart}"],
       ["deep", "<DeepLiquiditySummary token={token} />"],
       ["details", "className={styles.projectInformation}"],
-      ["trade", "className={styles.tradeShell}"],
+      ["trade", "styles.tradeShell"],
       ["community", "className={styles.communityShell}"],
     ] as const;
     const domOrder = domMarkers

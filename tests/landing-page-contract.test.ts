@@ -41,6 +41,8 @@ describe("landing page contract", () => {
     expect(backdrop).toContain('fetchPriority="high"');
     expect(landing).toContain('href="/launch"');
     expect(landing).toContain('href="/explore"');
+    expect(landing).toContain("Create a Token");
+    expect(landing).toContain("Explore Tokens");
     expect(landing).not.toContain("LandingBackdrop");
     expect(backdrop).not.toContain("<video");
     expect(landing).not.toContain("Built on Uniswap v4");
@@ -81,13 +83,14 @@ describe("landing page contract", () => {
     const css = read("app/interface.css");
 
     expect(css).toMatch(
-      /\.atmosphere-botanical\s*\{[^}]*opacity:\s*0;[^}]*transition:\s*opacity 760ms/s,
+      /\.atmosphere-botanical\s*\{[^}]*opacity:\s*0;[^}]*transition:\s*opacity 2200ms/s,
     );
     expect(css).toMatch(
       /\.atmosphere-backdrop\[data-landing="true"\] \.atmosphere-botanical\s*\{[^}]*opacity:\s*1;/s,
     );
     expect(css).toContain("@keyframes atmosphere-twinkle-primary");
     expect(css).toContain("@keyframes atmosphere-twinkle-secondary");
+    expect(css).toContain("@keyframes atmosphere-sparkle");
     expect(css).toMatch(
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.atmosphere-stars\s*\{[^}]*animation:\s*none;/,
     );

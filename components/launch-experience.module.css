@@ -47,22 +47,27 @@
 }
 
 .modelCard.modelCard {
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
+  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
+  backdrop-filter: var(--liquid-glass-backdrop);
+  background: var(--liquid-glass-surface-background);
+  border: 1px solid var(--liquid-glass-border);
+  border-radius: 30px;
+  box-shadow: var(--liquid-glass-shadow);
   color: inherit;
   font: inherit;
   isolation: isolate;
   min-width: 0;
   min-height: 0;
-  overflow: visible;
-  padding: 0;
+  overflow: hidden;
+  padding: 8px;
   position: relative;
   text-align: left;
   text-decoration: none;
+  transition:
+    background-color 180ms var(--ease-out),
+    border-color 180ms var(--ease-out),
+    box-shadow 180ms var(--ease-out),
+    transform 160ms var(--ease-out);
   width: 100%;
 }
 
@@ -76,7 +81,7 @@
   aspect-ratio: 1.54;
   background: #d9dde1;
   border: 0;
-  border-radius: 28px;
+  border-radius: 22px;
   box-shadow: none;
   height: auto;
   isolation: isolate;
@@ -119,12 +124,12 @@
 
 .artImage {
   display: block;
-  height: calc(100% + 2px) !important;
-  inset: -1px !important;
+  height: calc(100% + 4px) !important;
+  inset: -2px !important;
   object-fit: cover;
   object-position: center;
   transform: scale(1.0012);
-  width: calc(100% + 2px) !important;
+  width: calc(100% + 4px) !important;
 }
 
 .classicArt .artImage {
@@ -348,9 +353,9 @@
   background: transparent;
   border: 0;
   box-shadow: none;
-  min-height: 202px;
+  min-height: 210px;
   min-width: 0;
-  padding: 18px 4px 0;
+  padding: 20px 14px 8px;
 }
 
 .modelHeading {
@@ -436,9 +441,10 @@
 
 @media (hover: hover) and (pointer: fine) {
   .modelCard.modelCard:hover {
-    border-color: transparent;
-    box-shadow: none;
-    transform: none;
+    background: var(--liquid-glass-control-background-hover);
+    border-color: var(--liquid-glass-border-strong);
+    box-shadow: var(--liquid-glass-shadow);
+    transform: translate3d(0, -2px, 0);
   }
 
   .modelCard:hover .modelAction svg {
@@ -466,13 +472,12 @@
 }
 
 .formLoadingSheet {
-  backdrop-filter: blur(22px);
-  background: color-mix(in srgb, var(--glass-96) 96%, transparent);
-  border: 1px solid var(--panel-border-soft);
+  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
+  backdrop-filter: var(--liquid-glass-backdrop);
+  background: var(--liquid-glass-surface-background);
+  border: 1px solid var(--liquid-glass-border);
   border-radius: 26px;
-  box-shadow:
-    0 1px 0 var(--card-shadow),
-    0 20px 54px var(--card-shadow-soft);
+  box-shadow: var(--liquid-glass-shadow);
   display: grid;
   gap: 18px;
   margin: 7px auto 0;
@@ -543,10 +548,11 @@
 }
 
 .formPage :global(.classic-launch-sheet) {
-  border-color: var(--panel-border-soft);
-  box-shadow:
-    0 1px 0 var(--card-shadow),
-    0 22px 62px var(--card-shadow-soft);
+  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
+  backdrop-filter: var(--liquid-glass-backdrop);
+  background: var(--liquid-glass-surface-background);
+  border-color: var(--liquid-glass-border);
+  box-shadow: var(--liquid-glass-shadow);
   max-width: 1000px;
   min-width: 0;
   margin-top: 0;
@@ -602,6 +608,10 @@
 .formPage :global(.launch-select-trigger),
 .formPage :global(.classic-v3-address-field input),
 .formPage :global(.classic-v3-split-row input) {
+  -webkit-backdrop-filter: var(--control-glass-backdrop);
+  backdrop-filter: var(--control-glass-backdrop);
+  background: var(--liquid-glass-control-background);
+  border-color: var(--liquid-glass-border);
   transition:
     background-color 160ms ease,
     border-color 160ms ease,
@@ -655,8 +665,8 @@
 
 .formPage :global(.classic-link-disclosure summary) {
   align-items: center;
-  background: color-mix(in srgb, var(--glass-90) 92%, transparent);
-  border: 1px solid var(--control-border);
+  background: var(--liquid-glass-control-background);
+  border: 1px solid var(--liquid-glass-border);
   border-radius: 14px;
   color: var(--text-soft);
   display: flex;
@@ -719,8 +729,8 @@
 }
 
 .formPage :global(.classic-fee-fixed) {
-  background: color-mix(in srgb, var(--glass-90) 94%, transparent);
-  border-color: var(--control-border);
+  background: var(--liquid-glass-inner-background);
+  border-color: var(--liquid-glass-border);
   min-height: 58px;
 }
 
@@ -734,9 +744,10 @@
 }
 
 .formPage :global(.classic-launch-footer) {
-  backdrop-filter: blur(18px);
-  background: color-mix(in srgb, var(--glass-90) 82%, transparent);
-  border-color: var(--panel-border-soft);
+  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
+  backdrop-filter: var(--liquid-glass-backdrop);
+  background: var(--liquid-glass-inner-background);
+  border-color: var(--liquid-glass-border);
   min-height: 70px;
   padding: 10px 28px;
 }
@@ -825,8 +836,8 @@
 .formPage :global(.classic-v3-reward-mode),
 .formPage :global(.classic-v3-initial-buy .meme-dev-buy),
 .formPage :global(.classic-v3-custody) {
-  background: color-mix(in srgb, var(--glass-90) 92%, transparent);
-  border: 1px solid var(--control-border);
+  background: var(--liquid-glass-inner-background);
+  border: 1px solid var(--liquid-glass-border);
   border-radius: 18px;
   box-shadow: inset 0 1px 0 var(--control-glass-highlight);
   padding: 15px;
@@ -996,9 +1007,9 @@
 
 @media (hover: hover) and (pointer: fine) {
   .modelCard.modelCard[data-launch-model-available="true"]:hover {
-    background: transparent;
-    box-shadow: none;
-    transform: none;
+    background: var(--liquid-glass-control-background-hover);
+    box-shadow: var(--liquid-glass-shadow);
+    transform: translate3d(0, -2px, 0);
   }
 
   .formPage :global(.launch-select-trigger:hover) {
@@ -1220,20 +1231,20 @@
   }
 
   .modelCard {
-    border-radius: 0;
+    border-radius: 26px;
     min-height: 0;
   }
 
   .modelArt {
     aspect-ratio: 1.35;
-    border-radius: 24px;
+    border-radius: 19px;
     height: auto;
     min-height: 0;
   }
 
   .modelBody {
     min-height: 0;
-    padding: 15px 2px 0;
+    padding: 17px 11px 8px;
   }
 
   .modelHeading {
