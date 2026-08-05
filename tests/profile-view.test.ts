@@ -185,10 +185,10 @@ describe("profile workspace loading state", () => {
     ).toBe("loading");
   });
 
-  it("shows a partial-ready workspace while optional reward sources finish", () => {
+  it("reveals one complete workspace after optional reward sources finish", () => {
     expect(
       getProfileWorkspacePhase(["error", "ready", "loading"], false),
-    ).toBe("ready");
+    ).toBe("loading");
     expect(
       getProfileWorkspacePhase(
         ["error", "ready", "not-deployed"],
@@ -202,10 +202,7 @@ describe("profile workspace loading state", () => {
       ),
     ).toBe("error");
     expect(profileViewSource).toMatch(
-      /const earningsLabel = sourcesLoading\s*\?\s*"Verified so far"\s*:\s*"Total earned"/,
-    );
-    expect(profileViewSource).toMatch(
-      /\{sourcesLoading\s*\?\s*"Refreshing reward sources"\s*:\s*"Confirmed onchain rewards"\}/,
+      /if \(statuses\.some\(\(status\) => status === "loading"\)\)[\s\S]*?return "loading";[\s\S]*?status === "ready"/,
     );
   });
 

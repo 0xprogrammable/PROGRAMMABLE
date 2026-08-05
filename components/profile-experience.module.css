@@ -312,10 +312,10 @@
   backdrop-filter: var(--liquid-glass-backdrop);
   box-shadow: var(--liquid-glass-shadow);
   display: grid;
-  gap: 8px;
+  gap: 10px;
   grid-template-columns: minmax(0, 1fr) minmax(360px, 0.62fr);
   min-width: 0;
-  padding: 8px;
+  padding: 10px;
 }
 
 .feePanel,
@@ -327,8 +327,8 @@
 .feePanel {
   display: flex;
   flex-direction: column;
-  min-height: 470px;
-  padding: 20px 22px 18px;
+  min-height: 500px;
+  padding: 22px 24px 20px;
 }
 
 .claimablePanel {
@@ -337,9 +337,9 @@
   border-radius: 17px;
   display: flex;
   flex-direction: column;
-  min-height: 470px;
+  min-height: 500px;
   overflow: hidden;
-  padding: 18px;
+  padding: 20px;
 }
 
 .panelHeader,
@@ -353,7 +353,7 @@
 
 .panelHeader h2,
 .feePanelHeader h2 {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 640;
   letter-spacing: -0.026em;
   line-height: 1.1;
@@ -376,7 +376,7 @@
 
 .feePanelHeader p {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 13px;
   margin-block-start: 4px;
   overflow-wrap: anywhere;
 }
@@ -385,16 +385,20 @@
   align-items: center;
   display: inline-flex;
   flex: none;
+  background: var(--profile-subtle);
+  border: 1px solid var(--profile-line);
+  border-radius: 14px;
   gap: 2px;
+  padding: 3px;
 }
 
 .timeframeControls button {
   background: transparent;
   border: 0;
-  border-block-end: 2px solid transparent;
+  border-radius: 11px;
   color: var(--muted);
   font-family: var(--font-plex-mono), monospace;
-  font-size: 10px;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   height: 40px;
@@ -408,7 +412,7 @@
 }
 
 .timeframeControls button[aria-pressed="true"] {
-  border-block-end-color: var(--profile-pink);
+  background: var(--liquid-glass-control-background-hover);
   color: var(--text);
 }
 
@@ -426,7 +430,7 @@
 .feeSummaryLabel {
   color: var(--muted);
   font-family: var(--font-plex-mono), monospace;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.045em;
   line-height: 1.3;
@@ -436,7 +440,7 @@
 .feeSummary > strong {
   color: var(--text);
   font-family: var(--font-plex-mono), monospace;
-  font-size: clamp(38px, 4.5vw, 58px);
+  font-size: clamp(38px, 4vw, 52px);
   font-variant-numeric: tabular-nums;
   font-weight: 500;
   letter-spacing: -0.06em;
@@ -456,7 +460,7 @@
 
 .feeBreakdown span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
   white-space: nowrap;
 }
@@ -471,9 +475,9 @@
 .feeChart {
   display: grid;
   flex: 1;
-  grid-template-rows: minmax(190px, 1fr) auto;
+  grid-template-rows: minmax(210px, 1fr) auto;
   margin: clamp(22px, 3vh, 34px) 0 0;
-  min-height: 220px;
+  min-height: 250px;
   min-width: 0;
   overflow: hidden;
   position: relative;
@@ -497,7 +501,7 @@
   cursor: default;
   grid-column: 1;
   grid-row: 1;
-  min-height: 190px;
+  min-height: 210px;
   min-width: 0;
   outline: 0;
   position: relative;
@@ -507,7 +511,7 @@
 .feePlot {
   display: block;
   height: 100%;
-  min-height: 170px;
+  min-height: 190px;
   overflow: visible;
   width: 100%;
 }
@@ -545,7 +549,7 @@
   color: var(--muted);
   display: flex;
   font-family: var(--font-plex-mono), monospace;
-  font-size: 9px;
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
   grid-column: 1;
   grid-row: 2;
@@ -612,7 +616,7 @@
 .claimPagination > span {
   color: var(--muted);
   font-family: var(--font-plex-mono), monospace;
-  font-size: 10px;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
   min-width: 34px;
   text-align: center;
@@ -632,7 +636,7 @@
   display: grid;
   gap: 8px;
   grid-template-columns: minmax(92px, 1fr) minmax(68px, auto) 112px;
-  min-height: 62px;
+  min-height: 68px;
   min-width: 0;
   padding: 7px 8px;
   transition: background-color 150ms ease;
@@ -654,12 +658,12 @@
   background: var(--surface-soft);
   border-radius: 10px;
   flex: none;
-  height: 38px;
+  height: 42px;
   outline: 1px solid color-mix(in srgb, black 9%, transparent);
   outline-offset: -1px;
   overflow: hidden;
   position: relative;
-  width: 38px;
+  width: 42px;
 }
 
 :global(html[data-theme="dark"]) .claimArt {
@@ -677,7 +681,7 @@
 }
 
 .claimCopy strong {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 640;
   letter-spacing: -0.012em;
   overflow: hidden;
@@ -688,7 +692,7 @@
 .claimCopy span {
   color: var(--muted);
   font-family: var(--font-plex-mono), monospace;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -704,7 +708,7 @@
 .claimAmount > span,
 .claimAmount small {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1.25;
 }
 
@@ -721,7 +725,7 @@
 
 .claimAmount strong {
   font-family: var(--font-plex-mono), monospace;
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   line-height: 1.3;
@@ -739,7 +743,7 @@
 }
 
 .claimRow .claimButton {
-  font-size: 10px;
+  font-size: 11px;
   min-height: 40px;
   min-width: 0;
   padding-inline: 10px;

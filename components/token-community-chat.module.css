@@ -9,7 +9,7 @@
   flex-direction: column;
   margin: 0 0 0 auto;
   max-width: 380px;
-  min-height: 340px;
+  min-height: 390px;
   padding: 18px;
   width: 100%;
 }
@@ -40,8 +40,8 @@
   flex: 1;
   gap: 14px;
   margin-top: 14px;
-  max-height: min(260px, 38svh);
-  min-height: 156px;
+  max-height: min(310px, 42svh);
+  min-height: 206px;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-right: 6px;

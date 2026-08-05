@@ -15,7 +15,7 @@ import { getExplorePreviewChart } from "@/components/explore-preview-data";
 
 import styles from "./token-price-chart.module.css";
 
-type ChartPoint = {
+export type TokenChartPoint = {
   blockNumber: string;
   priceEth: string;
   priceUsd?: string;
@@ -23,7 +23,7 @@ type ChartPoint = {
 
 export type TokenChartPayload = {
   status: "ready" | "insufficient-history" | "not-deployed";
-  points: ChartPoint[];
+  points: TokenChartPoint[];
   swapCount: number;
   volumeWei: string;
   volumeEth: string;
@@ -34,7 +34,7 @@ export type TokenChartPayload = {
 };
 type ChartPayload = TokenChartPayload;
 
-type PlottedPoint = ChartPoint & {
+type PlottedPoint = TokenChartPoint & {
   x: number;
   y: number;
   value: number;
@@ -52,6 +52,104 @@ export type TokenChartMarketCap = {
   marketCapEth?: string;
   marketCapUsdWad?: string;
 };
+
+type PositiveDecimal = {
+  coefficient: bigint;
+  scale: bigint;
+};
+
+function parsePositiveDecimal(value?: string): PositiveDecimal | null {
+  if (!value) return null;
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(value.trim());
+  if (!match) return null;
+  const fraction = match[2] ?? "";
+  const coefficient = BigInt(`${match[1]}${fraction}`);
+  if (coefficient <= 0n) return null;
+  return {
+    coefficient,
+    scale: 10n ** BigInt(fraction.length),
+  };
+}
+
+function scaleIntegerByPriceRatio(
+  value: string | undefined,
+  inspectedPrice: string | undefined,
+  latestPrice: string | undefined,
+) {
+  if (!value || !/^\d+$/.test(value)) return undefined;
+  const inspected = parsePositiveDecimal(inspectedPrice);
+  const latest = parsePositiveDecimal(latestPrice);
+  if (!inspected || !latest) return undefined;
+  return (
+    (BigInt(value) * inspected.coefficient * latest.scale) /
+    (latest.coefficient * inspected.scale)
+  ).toString();
+}
+
+function formatFixedInteger(value: bigint, decimals: number) {
+  const raw = value.toString().padStart(decimals + 1, "0");
+  const whole = raw.slice(0, -decimals);
+  const fraction = raw.slice(-decimals).replace(/0+$/, "");
+  return fraction ? `${whole}.${fraction}` : whole;
+}
+
+function scaleDecimalByPriceRatio(
+  value: string | undefined,
+  inspectedPrice: string | undefined,
+  latestPrice: string | undefined,
+) {
+  const source = parsePositiveDecimal(value);
+  const inspected = parsePositiveDecimal(inspectedPrice);
+  const latest = parsePositiveDecimal(latestPrice);
+  if (!source || !inspected || !latest) return undefined;
+  const precision = 18;
+  const numerator =
+    source.coefficient *
+    inspected.coefficient *
+    latest.scale *
+    10n ** BigInt(precision);
+  const denominator =
+    source.scale * inspected.scale * latest.coefficient;
+  return formatFixedInteger(numerator / denominator, precision);
+}
+
+export function getChartMarketCapAtPoint(
+  payload: TokenChartPayload,
+  inspectedPoint?: TokenChartPoint,
+  latestPoint?: TokenChartPoint,
+): TokenChartMarketCap {
+  if (!inspectedPoint || !latestPoint || inspectedPoint === latestPoint) {
+    return {
+      marketCapEthWei: payload.marketCapEthWei,
+      marketCapEth: payload.marketCapEth,
+      marketCapUsdWad: payload.marketCapUsdWad,
+    };
+  }
+
+  const marketCapEthWei = scaleIntegerByPriceRatio(
+    payload.marketCapEthWei,
+    inspectedPoint.priceEth,
+    latestPoint.priceEth,
+  );
+  const marketCapEth = marketCapEthWei
+    ? formatFixedInteger(BigInt(marketCapEthWei), 18)
+    : scaleDecimalByPriceRatio(
+        payload.marketCapEth,
+        inspectedPoint.priceEth,
+        latestPoint.priceEth,
+      );
+  const marketCapUsdWad = scaleIntegerByPriceRatio(
+    payload.marketCapUsdWad,
+    inspectedPoint.priceUsd ?? inspectedPoint.priceEth,
+    latestPoint.priceUsd ?? latestPoint.priceEth,
+  );
+
+  return {
+    marketCapEthWei: marketCapEthWei ?? payload.marketCapEthWei,
+    marketCapEth: marketCapEth ?? payload.marketCapEth,
+    marketCapUsdWad: marketCapUsdWad ?? payload.marketCapUsdWad,
+  };
+}
 type ChartLaunchModel = "classic" | "adaptive" | "deep" | "stock-paired";
 
 const chartPayloadCache = new Map<
@@ -267,6 +365,9 @@ export function TokenPriceChart({
   tokenName,
   launchModel,
   preview = false,
+  marketCapEthWei,
+  marketCapEth,
+  marketCapUsdWad,
   onVolumeChange,
   onMarketCapChange,
 }: {
@@ -274,6 +375,9 @@ export function TokenPriceChart({
   tokenName: string;
   launchModel?: ChartLaunchModel;
   preview?: boolean;
+  marketCapEthWei?: string;
+  marketCapEth?: string;
+  marketCapUsdWad?: string;
   onVolumeChange?: (volume: TokenChartVolume | null) => void;
   onMarketCapChange?: (marketCap: TokenChartMarketCap | null) => void;
 }) {
@@ -414,6 +518,27 @@ export function TokenPriceChart({
       ? chart.points[Math.min(activePointIndex, chart.points.length - 1)]
       : null;
   const displayedPrice = activePoint?.value ?? chart?.current;
+  const inspectedMarketCap = useMemo(() => {
+    if (!payload) return null;
+    const latestPoint = chart?.points.at(-1);
+    return getChartMarketCapAtPoint(
+      {
+        ...payload,
+        marketCapEthWei: payload.marketCapEthWei ?? marketCapEthWei,
+        marketCapEth: payload.marketCapEth ?? marketCapEth,
+        marketCapUsdWad: payload.marketCapUsdWad ?? marketCapUsdWad,
+      },
+      activePoint ?? latestPoint,
+      latestPoint,
+    );
+  }, [
+    activePoint,
+    chart,
+    marketCapEth,
+    marketCapEthWei,
+    marketCapUsdWad,
+    payload,
+  ]);
   const chartStatus =
     !payload && !failed
       ? "Loading price history"
@@ -444,16 +569,8 @@ export function TokenPriceChart({
   }, [failed, launchModel, onVolumeChange, payload, range]);
 
   useEffect(() => {
-    if (!payload) {
-      onMarketCapChange?.(null);
-      return;
-    }
-    onMarketCapChange?.({
-      marketCapEthWei: payload.marketCapEthWei,
-      marketCapEth: payload.marketCapEth,
-      marketCapUsdWad: payload.marketCapUsdWad,
-    });
-  }, [onMarketCapChange, payload]);
+    onMarketCapChange?.(inspectedMarketCap);
+  }, [inspectedMarketCap, onMarketCapChange]);
 
   function inspectPointer(event: PointerEvent<HTMLDivElement>) {
     if (!chart) return;
@@ -505,7 +622,7 @@ export function TokenPriceChart({
 
   return (
     <section
-      className={`${styles.shell} liquid-glass-surface liquid-glass-distortion`}
+      className={`${styles.shell} liquid-glass-surface`}
       aria-busy={loading}
       aria-label={`${tokenName} price history`}
     >

@@ -197,10 +197,10 @@ export function getProfileWorkspacePhase(
   statuses: readonly ProfileWorkspaceSourceStatus[],
   terminalErrorReady: boolean,
 ): ProfileWorkspacePhase {
-  if (statuses.some((status) => status === "ready")) return "ready";
   if (statuses.some((status) => status === "loading")) {
     return "loading";
   }
+  if (statuses.some((status) => status === "ready")) return "ready";
   if (!terminalErrorReady) return "loading";
   return "error";
 }
@@ -2078,7 +2078,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     return (
       <div className={`${styles.page} page-width`}>
         <section
-          className={`${styles.connectCard} liquid-glass-surface liquid-glass-distortion`}
+          className={`${styles.connectCard} liquid-glass-surface`}
         >
           <Image
             className={styles.connectMark}
@@ -2972,7 +2972,7 @@ function ProfileSessionLoadingState() {
           </span>
         </div>
         <div
-          className={`${styles.sessionLoadingWorkspace} liquid-glass-surface liquid-glass-distortion`}
+          className={`${styles.sessionLoadingWorkspace} liquid-glass-surface`}
           aria-hidden="true"
         >
           <span />
@@ -2994,7 +2994,7 @@ function ProfileLoadingState() {
         Loading profile
       </span>
       <div
-        className={`${styles.profileWorkspace} liquid-glass-surface liquid-glass-distortion`}
+        className={`${styles.profileWorkspace} liquid-glass-surface`}
         aria-hidden="true"
       >
         <div className={styles.loadingPanel}>
@@ -3250,7 +3250,7 @@ function ProfileAccountWorkspace({
       ) : null}
 
       <div
-        className={`${styles.profileWorkspace} liquid-glass-surface liquid-glass-distortion`}
+        className={`${styles.profileWorkspace} liquid-glass-surface`}
       >
         <FeeEarningsPanel
           nativeClaimable={nativeClaimable}
@@ -3894,7 +3894,7 @@ function ProfileClaimDialog({
       }}
     >
       <div
-        className={`${styles.claimDialogSurface} liquid-glass-surface liquid-glass-distortion`}
+        className={`${styles.claimDialogSurface} liquid-glass-surface`}
       >
         <header className={styles.claimDialogHeader}>
           <div>

@@ -170,7 +170,7 @@ export function DocsLaunchInspector() {
 
   return (
     <div
-      className={`${styles.launchInspector} liquid-glass-surface liquid-glass-distortion`}
+      className={`${styles.launchInspector} liquid-glass-surface`}
     >
       <div className={styles.inspectorHeader}>
         <div>
@@ -237,7 +237,7 @@ const quickstartCommand =
 export function DocsQuickstartCommand() {
   return (
     <div
-      className={`${styles.commandPanel} liquid-glass-surface liquid-glass-distortion`}
+      className={`${styles.commandPanel} liquid-glass-surface`}
     >
       <div className={styles.codeWindowBar}>
         <span className={styles.commandMethod}>GET</span>

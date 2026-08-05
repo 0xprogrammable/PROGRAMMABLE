@@ -39,6 +39,23 @@ describe("Liquid Glass interface system", () => {
     }
   });
 
+  it("keeps distortion off large reading and workspace surfaces", () => {
+    const sources = [
+      read("components/profile-view.tsx"),
+      read("components/launch-entry.tsx"),
+      read("components/launch-builder.tsx"),
+      read("components/token-price-chart.tsx"),
+      read("components/token-community-chat.tsx"),
+      read("components/docs-code-preview.tsx"),
+      read("components/developer-docs-workbench.tsx"),
+      read("components/site-footer.tsx"),
+    ];
+
+    for (const source of sources) {
+      expect(source).not.toContain("liquid-glass-distortion");
+    }
+  });
+
   it("keeps motion explicit and preserves a solid fallback", () => {
     const css = [
       read("app/interface.css"),

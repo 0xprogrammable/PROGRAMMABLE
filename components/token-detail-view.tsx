@@ -4,7 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowLeft,
-  ArrowUpRight,
   Check,
   Copy,
   ExternalLink,
@@ -617,21 +616,6 @@ function getNetworkLabel(chainId: number) {
   return `Chain ${chainId}`;
 }
 
-function formatProjectDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Published onchain";
-
-  return new Intl.DateTimeFormat("en", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  }).format(date);
-}
-
-function formatProjectAddress(address: `0x${string}`) {
-  return `${address.slice(0, 8)}…${address.slice(-6)}`;
-}
-
 function XBrandIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -700,10 +684,6 @@ function PreviewTokenTrade({ token }: { token: LauncherToken }) {
       className={styles.tradeForm}
       aria-label={`Trade ${token.symbol} preview`}
     >
-      <header className={styles.tradeHeader}>
-        <h2>Trade ${token.symbol}</h2>
-      </header>
-
       <div className={styles.sideControl} role="group" aria-label="Trade side">
         <span aria-hidden="true" className={styles.sideIndicator} />
         <button
@@ -850,9 +830,6 @@ function TokenDetailContent({
     token.imageUrl?.trim() || getFallbackTokenImage(token.tokenAddress);
   const imageSource = getTokenCardImageSource(imageUrl);
   const projectLinks = token.links ?? [];
-  const creatorAddress = isTokenAddress(token.creatorAddress)
-    ? token.creatorAddress
-    : null;
   const previewProject = preview
     ? getExplorePreviewProject(token.tokenAddress)
     : undefined;
@@ -1175,6 +1152,13 @@ function TokenDetailContent({
               tokenName={token.name}
               launchModel={token.launchModel}
               preview={preview}
+              marketCapEthWei={
+                token.indexedMarketCapEthWei ?? token.marketCapEthWei
+              }
+              marketCapEth={token.indexedMarketCapEth ?? token.marketCapEth}
+              marketCapUsdWad={
+                token.indexedMarketCapUsdWad ?? token.fdvUsdWad
+              }
               onVolumeChange={setChartVolume}
               onMarketCapChange={setChartMarketCap}
             />
@@ -1183,7 +1167,7 @@ function TokenDetailContent({
         </section>
 
         <aside
-          className={`${styles.tradeShell} liquid-glass-surface liquid-glass-distortion`}
+          className={`${styles.tradeShell} liquid-glass-surface`}
           aria-label={`${token.name} trade`}
         >
           {preview ? (
@@ -1336,57 +1320,6 @@ function TokenDetailContent({
           <DeepLiquiditySummary token={token} />
         ) : null}
 
-        <div className={styles.projectInformation}>
-          <section
-            className={`${styles.projectPanel} ${styles.projectPanelMeta}`}
-            aria-label="Token metadata"
-          >
-            <dl className={styles.projectFacts}>
-              <div>
-                <dt>Published</dt>
-                <dd>{formatProjectDate(token.launchedAt)}</dd>
-              </div>
-              <div>
-                <dt>Quote asset</dt>
-                <dd>{token.quoteAssetSymbol ?? "ETH"}</dd>
-              </div>
-            </dl>
-          </section>
-
-          {creatorAddress ? (
-            <section className={styles.projectPanel}>
-              <header className={styles.projectPanelHeading}>
-                <h2>Team</h2>
-              </header>
-              <div className={styles.creatorRecord}>
-                <span className={styles.creatorMark} aria-hidden="true">
-                  {token.name.trim().charAt(0).toUpperCase() || "P"}
-                </span>
-                <div>
-                  <strong>{previewProject?.teamName ?? "Creator wallet"}</strong>
-                  {explorerBase ? (
-                    <a
-                      href={`${explorerBase}/address/${creatorAddress}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <code>{formatProjectAddress(creatorAddress)}</code>
-                      <ArrowUpRight aria-hidden="true" size={13} />
-                    </a>
-                  ) : (
-                    <code>{formatProjectAddress(creatorAddress)}</code>
-                  )}
-                </div>
-              </div>
-              {previewProject ? (
-                <p className={styles.projectNote}>
-                  {previewProject.contributors} contributors ·{" "}
-                  {previewProject.teamSummary}
-                </p>
-              ) : null}
-            </section>
-          ) : null}
-        </div>
       </div>
       {copyError ? (
         <div className="toast-region" aria-live="assertive" aria-atomic="true">
