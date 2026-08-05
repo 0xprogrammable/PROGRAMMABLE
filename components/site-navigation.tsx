@@ -6,39 +6,14 @@ import { usePathname } from "next/navigation";
 import {
   BookOpen,
   Compass,
-  Moon,
   Plus,
-  Sun,
   UserRound,
 } from "lucide-react";
-import { useSyncExternalStore, type MouseEvent } from "react";
 import {
   GitHubBrandIcon,
   XBrandIcon,
 } from "@/components/brand-icons";
 import { WalletButton } from "@/components/wallet-provider";
-
-type ColorTheme = "light" | "dark";
-type ThemeViewTransition = {
-  finished: Promise<void>;
-  skipTransition: () => void;
-};
-type ViewTransitionDocument = Document & {
-  startViewTransition?: (update: () => void) => ThemeViewTransition;
-};
-const themeChangeEvent = "programmable:theme-changed";
-let themeTransitionSequence = 0;
-let themeFallbackTimer: number | null = null;
-let themeInstantCleanupFrame: number | null = null;
-let activeThemeViewTransition: ThemeViewTransition | null = null;
-
-function clearThemeReveal(root: HTMLElement) {
-  if (themeFallbackTimer !== null) {
-    window.clearTimeout(themeFallbackTimer);
-    themeFallbackTimer = null;
-  }
-  delete root.dataset.themeTransition;
-}
 
 const desktopNavItems = [
   { href: "/explore", label: "Explore", icon: Compass },
@@ -51,136 +26,6 @@ const mobileNavItems = desktopNavItems;
 
 function isCurrent(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
-}
-
-function subscribeToTheme(callback: () => void) {
-  window.addEventListener(themeChangeEvent, callback);
-  return () => window.removeEventListener(themeChangeEvent, callback);
-}
-
-function getThemeSnapshot(): ColorTheme {
-  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
-}
-
-function getServerThemeSnapshot(): ColorTheme {
-  return "light";
-}
-
-function ThemeToggle() {
-  const theme = useSyncExternalStore(
-    subscribeToTheme,
-    getThemeSnapshot,
-    getServerThemeSnapshot,
-  );
-
-  function commitTheme(nextTheme: ColorTheme) {
-    const root = document.documentElement;
-    root.dataset.theme = nextTheme;
-    root.style.colorScheme = nextTheme;
-
-    try {
-      window.localStorage.setItem("programmable-theme", nextTheme);
-    } catch {
-      // The theme still changes for the current page when storage is blocked.
-    }
-
-    window.dispatchEvent(new Event(themeChangeEvent));
-  }
-
-  function toggleTheme(event: MouseEvent<HTMLButtonElement>) {
-    const nextTheme: ColorTheme = theme === "dark" ? "light" : "dark";
-    const viewTransitionDocument = document as ViewTransitionDocument;
-    const root = document.documentElement;
-    const transitionSequence = ++themeTransitionSequence;
-    const reduceMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
-
-    activeThemeViewTransition?.skipTransition();
-    activeThemeViewTransition = null;
-    clearThemeReveal(root);
-
-    if (event.detail === 0 || reduceMotion) {
-      if (themeInstantCleanupFrame !== null) {
-        window.cancelAnimationFrame(themeInstantCleanupFrame);
-      }
-      root.dataset.themeInput = "instant";
-      commitTheme(nextTheme);
-      themeInstantCleanupFrame = window.requestAnimationFrame(() => {
-        themeInstantCleanupFrame = window.requestAnimationFrame(() => {
-          delete root.dataset.themeInput;
-          themeInstantCleanupFrame = null;
-        });
-      });
-      return;
-    }
-
-    if (themeInstantCleanupFrame !== null) {
-      window.cancelAnimationFrame(themeInstantCleanupFrame);
-      themeInstantCleanupFrame = null;
-    }
-    delete root.dataset.themeInput;
-
-    const runFallbackReveal = () => {
-      root.dataset.themeTransition = `fallback-${nextTheme}`;
-      root.getBoundingClientRect();
-      commitTheme(nextTheme);
-      themeFallbackTimer = window.setTimeout(() => {
-        if (transitionSequence === themeTransitionSequence) {
-          clearThemeReveal(root);
-        }
-      }, 260);
-    };
-
-    if (!viewTransitionDocument.startViewTransition) {
-      runFallbackReveal();
-      return;
-    }
-
-    root.dataset.themeTransition = "soft";
-
-    try {
-      const transition = viewTransitionDocument.startViewTransition(() => {
-        commitTheme(nextTheme);
-      });
-      activeThemeViewTransition = transition;
-
-      const finishReveal = () => {
-        if (activeThemeViewTransition === transition) {
-          activeThemeViewTransition = null;
-        }
-        if (transitionSequence === themeTransitionSequence) {
-          clearThemeReveal(root);
-        }
-      };
-      void transition.finished.then(finishReveal, finishReveal);
-    } catch {
-      clearThemeReveal(root);
-      runFallbackReveal();
-    }
-  }
-
-  return (
-    <button
-      className="theme-toggle"
-      type="button"
-      aria-label={
-        theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
-      }
-      data-theme={theme}
-      title={theme === "dark" ? "Light mode" : "Dark mode"}
-      onClick={toggleTheme}
-    >
-      <span className="theme-toggle-icons" aria-hidden="true">
-        <span className="theme-toggle-icon theme-toggle-moon">
-          <Moon size={20} strokeWidth={1.9} />
-        </span>
-        <span className="theme-toggle-icon theme-toggle-sun">
-          <Sun size={20} strokeWidth={1.9} />
-        </span>
-      </span>
-    </button>
-  );
 }
 
 export function SiteHeader() {
@@ -256,8 +101,7 @@ export function SiteHeader() {
               />
             </a>
           </div>
-          <ThemeToggle />
-          <WalletButton compact />
+          {!isLandingPage ? <WalletButton compact /> : null}
         </div>
       </div>
     </header>

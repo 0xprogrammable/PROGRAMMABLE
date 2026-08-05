@@ -909,10 +909,14 @@
 }
 
 .primaryAction {
-  background: var(--token-accent);
-  border: 1px solid transparent;
-  box-shadow: none;
-  color: var(--token-accent-ink);
+  -webkit-backdrop-filter: var(--control-glass-backdrop);
+  backdrop-filter: var(--control-glass-backdrop);
+  background: var(--accent-glass-background);
+  border: 1px solid var(--accent-glass-border);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 9px 26px var(--control-glass-shadow-color);
+  color: var(--text);
   width: 100%;
 }
 

@@ -5,22 +5,22 @@
  */
 
 :root {
-  --header-height: 80px;
+  --header-height: 72px;
   --page-width: 1320px;
-  --radius-control: 14px;
-  --radius-control-inner: 10px;
-  --radius-panel: 20px;
-  --navigation-glass-background: rgba(7, 17, 47, 0.88);
-  --navigation-glass-background-hover: rgba(20, 38, 67, 0.94);
-  --navigation-glass-border: rgba(255, 253, 249, 0.15);
+  --radius-control: 18px;
+  --radius-control-inner: 14px;
+  --radius-panel: 28px;
+  --navigation-glass-background: rgba(5, 11, 30, 0.68);
+  --navigation-glass-background-hover: rgba(18, 33, 60, 0.84);
+  --navigation-glass-border: rgba(255, 253, 249, 0.18);
   --navigation-glass-highlight: rgba(255, 255, 255, 0.08);
   --navigation-glass-ink: #fffdf9;
   --navigation-glass-ink-muted: rgba(255, 253, 249, 0.68);
-  --navigation-glass-accent: rgba(235, 127, 179, 0.18);
+  --navigation-glass-accent: rgba(255, 255, 255, 0.085);
   --navigation-glass-backdrop: blur(22px) saturate(1.48);
   --navigation-glass-shadow:
     inset 0 1px 0 var(--navigation-glass-highlight),
-    inset 0 0 80px rgba(235, 127, 179, 0.035),
+    inset 0 0 80px rgba(116, 151, 213, 0.04),
     0 18px 48px rgba(1, 5, 20, 0.2);
   --control-glass-background: color-mix(
     in srgb,
@@ -43,13 +43,9 @@
     var(--glass-98) 22%
   );
   --control-glass-backdrop: blur(18px) saturate(1.34);
-  --accent-glass-background: var(--brand-pink-action);
-  --accent-glass-background-hover: var(--brand-pink-hover);
-  --accent-glass-border: color-mix(
-    in srgb,
-    var(--brand-pink-action) 58%,
-    transparent
-  );
+  --accent-glass-background: rgba(255, 255, 255, 0.1);
+  --accent-glass-background-hover: rgba(255, 255, 255, 0.16);
+  --accent-glass-border: rgba(255, 255, 255, 0.2);
   --shadow-resting:
     0 1px 0 color-mix(in srgb, var(--text) 4%, transparent),
     0 8px 24px color-mix(in srgb, var(--text) 3.5%, transparent);
@@ -79,14 +75,19 @@ html[data-theme="light"] {
 }
 
 html[data-theme="dark"] {
-  --canvas: #0e1923;
-  --surface: #111c26;
-  --surface-raised: #17232f;
-  --surface-soft: #1d2a36;
+  --canvas: rgba(5, 11, 30, 0.2);
+  --surface: rgba(9, 18, 38, 0.68);
+  --surface-raised: rgba(15, 28, 50, 0.72);
+  --surface-soft: rgba(24, 40, 66, 0.58);
   --text: #f7f1ea;
   --text-soft: #d5cec6;
   --muted: #aaa39b;
   --dim: #9b958d;
+  --brand-pink-action: rgba(255, 255, 255, 0.1);
+  --brand-pink-hover: rgba(255, 255, 255, 0.16);
+  --brand-pink-ink: #fffdf9;
+  --accent-ink: #fffdf9;
+  --body-background: #050b1c;
   --header-background: rgba(11, 20, 29, 0.92);
   --header-border: rgba(247, 241, 234, 0.1);
   --control-border: rgba(247, 241, 234, 0.15);
@@ -94,9 +95,9 @@ html[data-theme="dark"] {
   --panel-border-soft: rgba(247, 241, 234, 0.11);
   --control-glass-highlight: rgba(255, 255, 255, 0.1);
   --control-glass-shadow-color: rgba(0, 0, 0, 0.25);
-  --control-glass-background: rgba(23, 35, 47, 0.72);
-  --control-glass-background-strong: rgba(23, 35, 47, 0.88);
-  --control-glass-background-hover: rgba(29, 45, 59, 0.9);
+  --control-glass-background: rgba(13, 25, 48, 0.66);
+  --control-glass-background-strong: rgba(13, 25, 48, 0.84);
+  --control-glass-background-hover: rgba(25, 42, 71, 0.82);
   --shadow-resting:
     0 1px 0 rgba(255, 255, 255, 0.018),
     0 10px 28px rgba(0, 0, 0, 0.16);
@@ -108,9 +109,11 @@ html[data-theme="dark"] {
 html {
   -moz-osx-font-smoothing: grayscale;
   -webkit-font-smoothing: antialiased;
+  background: #050b1c;
 }
 
 body {
+  background: #050b1c;
   font-kerning: normal;
   font-synthesis: style;
   letter-spacing: -0.006em;
@@ -183,6 +186,121 @@ code,
   outline: 0;
 }
 
+.app-frame::before,
+html[data-theme="dark"] .app-frame::before {
+  background: transparent;
+}
+
+/* Persistent night atmosphere */
+
+.atmosphere-backdrop {
+  background: #050b1c;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  position: fixed;
+  z-index: 0;
+}
+
+.atmosphere-layer,
+.atmosphere-layer img,
+.atmosphere-stars,
+.atmosphere-veil {
+  height: 100%;
+  inset: 0;
+  position: absolute;
+  width: 100%;
+}
+
+.atmosphere-layer {
+  display: block;
+}
+
+.atmosphere-layer img {
+  object-fit: cover;
+  object-position: center;
+}
+
+.atmosphere-sky {
+  z-index: 0;
+}
+
+.atmosphere-botanical {
+  opacity: 0;
+  transition: opacity 760ms cubic-bezier(0.23, 1, 0.32, 1);
+  will-change: opacity;
+  z-index: 1;
+}
+
+.atmosphere-backdrop[data-landing="true"] .atmosphere-botanical {
+  opacity: 1;
+}
+
+.atmosphere-stars {
+  background-repeat: no-repeat;
+  mix-blend-mode: screen;
+  z-index: 2;
+}
+
+.atmosphere-stars-primary {
+  animation: atmosphere-twinkle-primary 5.6s ease-in-out infinite alternate;
+  background-image:
+    radial-gradient(circle at 17% 21%, rgba(255, 253, 249, 0.92) 0 1px, transparent 2.2px),
+    radial-gradient(circle at 42% 12%, rgba(255, 253, 249, 0.86) 0 1.2px, transparent 2.4px),
+    radial-gradient(circle at 74% 28%, rgba(255, 253, 249, 0.82) 0 1px, transparent 2px),
+    radial-gradient(circle at 88% 15%, rgba(255, 253, 249, 0.9) 0 1.2px, transparent 2.6px),
+    radial-gradient(circle at 59% 46%, rgba(255, 253, 249, 0.72) 0 0.9px, transparent 2px);
+  opacity: 0.2;
+}
+
+.atmosphere-stars-secondary {
+  animation: atmosphere-twinkle-secondary 7.2s ease-in-out -2.8s infinite alternate;
+  background-image:
+    radial-gradient(circle at 9% 39%, rgba(255, 253, 249, 0.78) 0 1px, transparent 2.1px),
+    radial-gradient(circle at 31% 33%, rgba(255, 253, 249, 0.84) 0 1px, transparent 2.2px),
+    radial-gradient(circle at 68% 17%, rgba(255, 253, 249, 0.76) 0 0.9px, transparent 2px),
+    radial-gradient(circle at 82% 51%, rgba(255, 253, 249, 0.88) 0 1.1px, transparent 2.4px),
+    radial-gradient(circle at 48% 61%, rgba(255, 253, 249, 0.7) 0 0.8px, transparent 1.9px);
+  opacity: 0.16;
+}
+
+.atmosphere-veil {
+  background:
+    linear-gradient(180deg, rgba(2, 7, 23, 0.08), rgba(3, 8, 24, 0.2)),
+    radial-gradient(circle at 50% 32%, transparent 0 34%, rgba(2, 7, 23, 0.16) 100%);
+  z-index: 3;
+}
+
+@keyframes atmosphere-twinkle-primary {
+  0%,
+  22% {
+    opacity: 0.16;
+  }
+
+  58% {
+    opacity: 0.68;
+  }
+
+  100% {
+    opacity: 0.28;
+  }
+}
+
+@keyframes atmosphere-twinkle-secondary {
+  0%,
+  18% {
+    opacity: 0.12;
+  }
+
+  64% {
+    opacity: 0.58;
+  }
+
+  100% {
+    opacity: 0.22;
+  }
+}
+
 /* Header */
 
 .site-header {
@@ -192,7 +310,7 @@ code,
   border: 0;
   box-shadow: none;
   height: var(--header-height);
-  padding: 10px 12px 0;
+  padding: 8px 12px 0;
 }
 
 .header-inner {
@@ -202,10 +320,10 @@ code,
   border: 1px solid var(--navigation-glass-border);
   border-radius: var(--radius-panel);
   box-shadow: var(--navigation-glass-shadow);
-  height: 60px;
-  max-width: 1180px;
+  height: 56px;
+  max-width: 1080px;
   min-width: 0;
-  padding-inline: 10px;
+  padding-inline: 8px;
 }
 
 .header-brand {
@@ -215,8 +333,8 @@ code,
 
 .wordmark,
 .header-social-link {
-  height: 44px;
-  width: 44px;
+  height: 40px;
+  width: 40px;
 }
 
 .wordmark-logo {
@@ -234,6 +352,7 @@ code,
 
 .header-social-link,
 .theme-toggle {
+  border-radius: 14px;
   color: var(--navigation-glass-ink-muted);
 }
 
@@ -250,11 +369,11 @@ code,
 }
 
 .desktop-nav a {
-  border-radius: 11px;
+  border-radius: 15px;
   color: var(--navigation-glass-ink-muted);
   font-size: 14px;
   font-weight: 540;
-  min-height: 40px;
+  min-height: 38px;
   padding-inline: 14px;
 }
 
@@ -288,8 +407,8 @@ code,
 .theme-toggle,
 .wallet-button {
   border-radius: var(--radius-control);
-  height: 44px;
-  min-height: 44px;
+  height: 42px;
+  min-height: 42px;
 }
 
 .theme-toggle {
@@ -370,6 +489,7 @@ code,
   backdrop-filter: blur(24px) saturate(1.42);
   background: var(--control-glass-background-strong);
   border-color: var(--control-glass-border);
+  border-radius: var(--radius-panel);
   box-shadow:
     inset 0 1px 0 var(--control-glass-highlight),
     var(--shadow-floating);
@@ -731,7 +851,7 @@ code,
 
 @media (max-width: 800px) {
   :root {
-    --header-height: 74px;
+    --header-height: 70px;
   }
 
   .app-frame :is(input, select, textarea) {
@@ -747,7 +867,7 @@ code,
   }
 
   .header-inner {
-    height: 58px;
+    height: 54px;
   }
 
   .mobile-nav {
@@ -769,7 +889,7 @@ code,
   }
 
   .mobile-nav a {
-    border-radius: 14px;
+    border-radius: 18px;
     color: var(--navigation-glass-ink-muted);
     max-width: 100%;
     min-width: 0;
@@ -882,8 +1002,8 @@ code,
 
   .wordmark,
   .header-social-link {
-    height: 44px;
-    width: 44px;
+    height: 40px;
+    width: 40px;
   }
 
   .header-social-link svg,
@@ -968,6 +1088,15 @@ code,
 @media (prefers-reduced-motion: reduce) {
   html {
     transition: none;
+  }
+
+  .atmosphere-botanical {
+    transition: none;
+  }
+
+  .atmosphere-stars {
+    animation: none;
+    opacity: 0.28;
   }
 
   .theme-toggle-icons,
