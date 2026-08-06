@@ -1188,6 +1188,7 @@
   .sidebarSearch {
     position: sticky;
     top: 0;
+    z-index: 2;
   }
 
   .mobileNav {
@@ -1201,6 +1202,8 @@
       0 12px 30px var(--control-glass-shadow-color);
     display: block;
     overflow: hidden;
+    position: relative;
+    z-index: 1;
   }
 
   .mobileNav summary {
