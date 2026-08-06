@@ -7,8 +7,10 @@ import {
   parseAbiParameters,
   stringToHex,
 } from "viem";
+import Ajv from "ajv";
 
 import { invalidInput, validationError } from "./errors";
+import customLaunchRegistryRecordSchemaV3 from "../../schemas/custom-launch-registry-record-v3.schema.json";
 
 export const CUSTOM_REGISTRY_DEPLOYMENTS_SCHEMA_V3 =
   "programmable.custom-registry-deployments.v3" as const;
@@ -55,6 +57,14 @@ export const CUSTOM_REGISTRY_FEED_SOURCE_V3 =
 export const PROGRAMMABLE_CUSTOM_LABEL = "Programmable Custom" as const;
 export const PROGRAMMABLE_FEE_RECIPIENT =
   "0x4957f49620aff3adbbe8195a4f633e49cc93376c" as const;
+export const CUSTOM_REGISTRY_ASSET_SET_SCHEMA_V2 =
+  "programmable.discoverable-launch-asset-set.v2" as const;
+export const CUSTOM_REGISTRY_ASSET_SET_HASH_DOMAIN_V2 =
+  "programmable.discoverable-launch-asset-set-hash.v2" as const;
+export const CUSTOM_REGISTRY_MARKET_SET_SCHEMA_V2 =
+  "programmable.discoverable-launch-market-set.v2" as const;
+export const CUSTOM_REGISTRY_MARKET_SET_HASH_DOMAIN_V2 =
+  "programmable.discoverable-launch-market-set-hash.v2" as const;
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
 const ZERO_BYTES32 = `0x${"0".repeat(64)}` as HexBytes32;
 
@@ -85,7 +95,7 @@ export type CustomLaunchStatusV3 =
   | "corrected"
   | "revoked";
 
-const ADDRESS = /^0x[0-9a-f]{40}$/u;
+const ADDRESS = /^0x[0-9a-f]{40}$/iu;
 const BYTES32 = /^0x[0-9a-f]{64}$/u;
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const COMMIT = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/u;
@@ -95,6 +105,10 @@ const CONTROL_OR_BIDI = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/
 const MAX_RECORD_BYTES = 512 * 1024;
 const MAX_COLLECTION_SIZE = 256;
 const CURSOR_DOMAIN = "programmable.custom-registry-cursor.v3\0";
+const validateCustomRegistryProducerSchemaV3 = new Ajv({
+  allErrors: true,
+  strict: true,
+}).compile(customLaunchRegistryRecordSchemaV3);
 
 type JsonPrimitive = string | number | boolean | null;
 type JsonValue = JsonPrimitive | readonly JsonValue[] | JsonObject;
@@ -377,6 +391,169 @@ export type CustomLaunchOnchainFeePolicyV1 = Readonly<{
   verificationEvidenceHash: HexBytes32;
 }>;
 
+export type CustomLaunchProducerModelV3 = Readonly<{
+  id: string;
+  version: string;
+}>;
+
+export type CustomLaunchProducerTemplateV3 = Readonly<{
+  id: string;
+  version: string;
+  partnerId: string | null;
+  repositoryId: string;
+  repositoryUri: string;
+  commitObjectId: string;
+  treeObjectId: string;
+  sourceCommitment: Sha256Digest;
+  buildCommitment: Sha256Digest;
+  artifactSetHash: Sha256Digest;
+  runtimeCodeKeccak256: readonly HexBytes32[];
+  runtimeCodeSha256: readonly Sha256Digest[];
+  verificationEvidenceHash: Sha256Digest;
+}>;
+
+export type CustomLaunchProducerPartnerV3 = Readonly<{
+  id: string;
+  name: string;
+  status: "active" | "paused" | "retired";
+  recipient: NamespacedEvmIdentityV3;
+  chainId: string;
+  templateId: string;
+  templateVersion: string;
+  templateBindingHash: Sha256Digest;
+  recipientVerificationEvidenceHash: Sha256Digest;
+  activationVersion: string;
+  activationBlock: string;
+}>;
+
+export type CustomLaunchProducerApprovalBindingV3 = Readonly<{
+  applicationId: string;
+  projectId: Sha256Digest;
+  approvalId: string;
+  grantId: string;
+  grantBindingHash: Sha256Digest;
+  approvalBindingHash: Sha256Digest;
+  decisionReceiptDigest: Sha256Digest;
+  reviewAuthorityKind: "manual_review" | "autonomous_ai";
+  chainId: string;
+  caip2: string;
+  chainProfileId: string;
+  repositoryId: string;
+  repositoryUri: string;
+  commitObjectId: string;
+  treeObjectId: string;
+  sourceCommitment: Sha256Digest;
+  buildCommitment: Sha256Digest;
+  artifactSetHash: Sha256Digest;
+  configurationCommitment: Sha256Digest;
+  launchWalletBindingHash: Sha256Digest;
+  chainProfileHash: Sha256Digest;
+  policyVersion: string;
+  policyCommitment: Sha256Digest;
+  approvedAt: string;
+}>;
+
+export type CustomLaunchProducerDeployedContractV3 = Readonly<{
+  address: NamespacedEvmIdentityV3;
+  role: string;
+  creationCodeHash: Sha256Digest;
+  runtimeCodeKeccak256: HexBytes32;
+  runtimeCodeSha256: Sha256Digest;
+  artifactHash: Sha256Digest;
+  configurationCommitment: Sha256Digest;
+  runtimeVerificationEvidenceHash: Sha256Digest;
+}>;
+
+export type CustomLaunchProducerDeploymentBindingV3 = Readonly<{
+  chainId: string;
+  caip2: string;
+  launchArtifactCommitmentHash: Sha256Digest;
+  artifactManifestHash: Sha256Digest;
+  artifactOutputSetHash: Sha256Digest;
+  deploymentCalldataHash: Sha256Digest;
+  launchWalletBindingHash: Sha256Digest;
+  chainProfileHash: Sha256Digest;
+  contracts: readonly CustomLaunchProducerDeployedContractV3[];
+  contractSetHash: Sha256Digest;
+  runtimeMatch: "exact";
+  verificationEvidenceHash: Sha256Digest;
+}>;
+
+export type CustomLaunchProducerVerifiedReviewV1 = Readonly<{
+  schemaVersion: "programmable.custom-launch-verified-review.v1";
+  label: "Programmable Verified";
+  definition: "Reviewed against the published Programmable security policy and cryptographically bound to the exact deployed contract revision.";
+  status: "verified" | "superseded" | "revoked";
+  policyVersion: string;
+  policyCommitment: Sha256Digest;
+  repositoryId: string;
+  commitObjectId: string;
+  sourceCommitment: Sha256Digest;
+  buildCommitment: Sha256Digest;
+  artifactSetHash: Sha256Digest;
+  runtimeCodeKeccak256: readonly HexBytes32[];
+  runtimeCodeSha256: readonly Sha256Digest[];
+  configurationCommitment: Sha256Digest;
+  authoritiesEvidenceHash: Sha256Digest;
+  upgradeability: "immutable" | "proxy" | "modular" | "unknown";
+  upgradeabilityEvidenceHash: Sha256Digest;
+  pauseAuthority: "none" | "bounded" | "unbounded" | "unknown";
+  pauseAuthorityEvidenceHash: Sha256Digest;
+  custody: "none" | "bounded" | "unbounded" | "unknown";
+  custodyEvidenceHash: Sha256Digest;
+  dependencies: readonly JsonObject[];
+  dependencySetHash: Sha256Digest;
+  findings: readonly JsonObject[];
+  findingSetHash: Sha256Digest;
+  reviewerType: "programmable-internal" | "external-auditor" | "hybrid";
+  reviewedAt: string;
+  deploymentBindingHash: Sha256Digest;
+  reviewEvidenceHash: Sha256Digest;
+  supersededBy: Sha256Digest | null;
+  revokedAt: string | null;
+  revocationEvidenceHash: Sha256Digest | null;
+}>;
+
+export type CustomLaunchProducerAuthorityInventoryV3 = Readonly<{
+  schemaVersion: "programmable.custom-launch-post-launch-authorities.v3";
+  launchingWallet: NamespacedEvmIdentityV3;
+  authorities: readonly JsonObject[];
+  postLaunchAuthorityInventoryHash: Sha256Digest;
+}>;
+
+export type CustomLaunchProducerFinalityPolicyV1 = Readonly<{
+  schemaVersion: "programmable.custom-launch-finality-policy.v1";
+  confirmationDepth: number;
+  canonicalitySource: "evm-blockhash";
+  reorgHandling: "orphan";
+  verificationAuthorityHash: Sha256Digest;
+}>;
+
+export type CustomLaunchProducerFinalityV3 = Readonly<{
+  status: "observed" | "confirmed" | "finalized" | "orphaned";
+  transactionHash: HexTransactionHash;
+  blockHash: HexBytes32;
+  blockNumber: string;
+  transactionIndex: string;
+  logIndex: string | null;
+  onchainTimestamp: string;
+  observedAt: string;
+  confirmedAt: string | null;
+  finalizedAt: string | null;
+  orphanedAt: string | null;
+  finalityEvidenceHash: Sha256Digest;
+  verificationAuthorityHash: Sha256Digest;
+}>;
+
+export type CustomLaunchProducerLifecycleV3 = Readonly<{
+  status: "pending" | "active" | "orphaned" | "superseded" | "revoked";
+  registryGeneration: string;
+  registeredAt: string;
+  supersededBy: Sha256Digest | null;
+  revokedAt: string | null;
+  revocationEvidenceHash: Sha256Digest | null;
+}>;
+
 export type CustomLaunchRegistryProducerRecordV3 = Readonly<{
   schemaVersion: typeof CUSTOM_REGISTRY_PRODUCER_RECORD_SCHEMA_V3;
   platformId: "programmable";
@@ -386,9 +563,9 @@ export type CustomLaunchRegistryProducerRecordV3 = Readonly<{
   publicLabel: typeof PROGRAMMABLE_CUSTOM_LABEL;
   projectId: Sha256Digest;
   launchId: Sha256Digest;
-  model: JsonValue;
-  template: JsonValue;
-  partner: JsonValue;
+  model: CustomLaunchProducerModelV3;
+  template: CustomLaunchProducerTemplateV3 | null;
+  partner: CustomLaunchProducerPartnerV3 | null;
   registeredRecordPreimage: CustomLaunchRegisteredRecordPreimageV1;
   registeredRecordComponentHashes: CustomLaunchRegisteredRecordComponentHashesV1;
   registeredRecordCommitment: HexBytes32;
@@ -412,46 +589,40 @@ export type CustomLaunchRegistryProducerRecordV3 = Readonly<{
     registeredRecordHash: HexBytes32;
     registrationEvidenceHash: Sha256Digest;
   }>;
-  approvalBinding: Readonly<{
-    chainId: string;
-    caip2: string;
-    chainProfileId: string;
-    approvalBindingHash: Sha256Digest;
-    [key: string]: JsonValue;
-  }>;
-  deploymentBinding: Readonly<{
-    chainId: string;
-    caip2: string;
-    runtimeMatch: "exact";
-    contracts: readonly Readonly<{
-      address: NamespacedEvmIdentityV3;
-      runtimeCodeKeccak256: EvmRuntimeCodeHash;
-      runtimeCodeSha256: Sha256Digest;
-      [key: string]: JsonValue;
-    }>[];
-    [key: string]: JsonValue;
-  }>;
-  verifiedReview: JsonValue;
-  feePolicy: JsonValue;
+  approvalBinding: CustomLaunchProducerApprovalBindingV3;
+  deploymentBinding: CustomLaunchProducerDeploymentBindingV3;
+  verifiedReview: CustomLaunchProducerVerifiedReviewV1;
+  feePolicy: CustomLaunchFeePolicyV3;
   onchainFeePolicy: CustomLaunchOnchainFeePolicyV1;
   launchingWallet: NamespacedEvmIdentityV3;
-  postLaunchAuthorityInventory: JsonValue;
+  postLaunchAuthorityInventory: CustomLaunchProducerAuthorityInventoryV3;
   postLaunchAuthorityInventoryHash: Sha256Digest;
   launchIdentity: NamespacedEvmIdentityV3;
   advertisesToken: boolean;
-  discoverableAssets: JsonValue;
+  discoverableAssets: readonly JsonObject[];
   assetIdentitySetHash: Sha256Digest;
-  discoverableMarkets: JsonValue;
+  discoverableMarkets: readonly JsonObject[];
   marketSetHash: Sha256Digest;
-  mechanisms: JsonValue;
-  capabilities: JsonValue;
-  finalityPolicy: JsonValue;
-  finality: JsonValue;
-  lifecycle: JsonValue;
-  presentationVersion: JsonValue;
+  mechanisms: readonly Readonly<{
+    id: string;
+    version: string;
+    status: "active" | "delayed" | "paused" | "retired" | "unknown";
+    parameters: JsonValue;
+    evidenceHashes: readonly Sha256Digest[];
+  }>[];
+  capabilities: readonly Readonly<{
+    id: string;
+    version: string;
+    status: "supported" | "unsupported" | "unknown" | "not_applicable";
+    parameters: JsonValue;
+  }>[];
+  finalityPolicy: CustomLaunchProducerFinalityPolicyV1;
+  finality: CustomLaunchProducerFinalityV3;
+  lifecycle: CustomLaunchProducerLifecycleV3;
+  presentationVersion: string | null;
   presentationBindingHash: Sha256Digest | null;
-  presentation: JsonValue;
-  extensions: JsonValue;
+  presentation: JsonObject | null;
+  extensions: Readonly<Record<string, JsonValue>>;
   /** Mutable producer envelope digest; never the immutable on-chain record hash. */
   envelopeDigest: Sha256Digest;
 }>;
@@ -835,7 +1006,7 @@ function digest(value: unknown, operation: string): Sha256Digest {
 
 function address(value: unknown, operation: string): HexAddress {
   if (typeof value !== "string" || !ADDRESS.test(value)) return fail(operation);
-  return value as HexAddress;
+  return value.toLowerCase() as HexAddress;
 }
 
 function bytes32(value: unknown, operation: string): HexBytes32 {
@@ -1193,6 +1364,94 @@ export function customRegistryFinalityPolicyHashV1(
   return digestRawBytes32(
     sha256(CUSTOM_REGISTRY_FINALITY_POLICY_DOMAIN_V1, value),
   );
+}
+
+function canonicalProducerSet(
+  value: unknown,
+  idField: "assetId" | "marketId",
+  maximum: number,
+): readonly JsonObject[] {
+  const seen = new Set<string>();
+  const items = array(value, `custom-registry-producer-${idField}-set`, maximum)
+    .map((item) => {
+      const parsed = record(item, `custom-registry-producer-${idField}`);
+      const id = safeId(
+        parsed[idField],
+        `custom-registry-producer-${idField}-id`,
+      );
+      if (seen.has(id)) {
+        return fail(`custom-registry-producer-${idField}-duplicate`);
+      }
+      seen.add(id);
+      assertJsonValue(parsed, `custom-registry-producer-${idField}-json`);
+      return parsed as JsonObject;
+    });
+  return Object.freeze(
+    items.sort((left, right) =>
+      Buffer.compare(
+        Buffer.from(String(left[idField]), "utf8"),
+        Buffer.from(String(right[idField]), "utf8"),
+      )
+    ),
+  );
+}
+
+/** Mirrors createDiscoverableLaunchAssetSetV2's canonical set commitment. */
+export function customRegistryAssetIdentitySetHashV2(input: Readonly<{
+  advertisesToken: boolean;
+  assets: unknown;
+}>): Sha256Digest {
+  const advertisesToken = booleanValue(
+    input.advertisesToken,
+    "custom-registry-producer-advertises-token",
+  );
+  const assets = canonicalProducerSet(input.assets, "assetId", 1_024);
+  return sha256(CUSTOM_REGISTRY_ASSET_SET_HASH_DOMAIN_V2, {
+    schemaVersion: CUSTOM_REGISTRY_ASSET_SET_SCHEMA_V2,
+    advertisesToken,
+    assets,
+  });
+}
+
+/** Mirrors createDiscoverableLaunchMarketSetV2's canonical set commitment. */
+export function customRegistryMarketSetHashV2(input: Readonly<{
+  assetIdentitySetHash: Sha256Digest;
+  markets: unknown;
+}>): Sha256Digest {
+  const assetIdentitySetHash = digest(
+    input.assetIdentitySetHash,
+    "custom-registry-producer-market-asset-set",
+  );
+  const markets = canonicalProducerSet(input.markets, "marketId", 256);
+  return sha256(CUSTOM_REGISTRY_MARKET_SET_HASH_DOMAIN_V2, {
+    schemaVersion: CUSTOM_REGISTRY_MARKET_SET_SCHEMA_V2,
+    assetIdentitySetHash,
+    markets,
+  });
+}
+
+export function customRegistryCapabilitySetHashV1(
+  capabilities: unknown,
+): HexBytes32 {
+  const items = array(
+    capabilities,
+    "custom-registry-producer-capability-set",
+    1_024,
+  );
+  const ids = new Set<string>();
+  for (const item of items) {
+    const capability = record(item, "custom-registry-producer-capability");
+    const id = safeId(
+      capability.id,
+      "custom-registry-producer-capability-id",
+    );
+    if (ids.has(id)) {
+      return fail("custom-registry-producer-capability-duplicate");
+    }
+    ids.add(id);
+    assertJsonValue(capability, "custom-registry-producer-capability-json");
+  }
+  return customRegistryStructuredFieldV1("capabilitySetHash", items);
 }
 
 export function customRegistryProjectionDigestV3(
@@ -2192,6 +2451,9 @@ function validateProducerRecord(
   value: CustomLaunchRegistryProducerRecordV3,
   event: CustomRegistryEventV3,
 ): CustomLaunchRegistryProducerRecordV3 {
+  if (!validateCustomRegistryProducerSchemaV3(value)) {
+    return fail("custom-registry-producer-schema-v3");
+  }
   const source = record(value, "custom-registry-producer-record");
   const envelopeDigest = digest(
     source.envelopeDigest,
@@ -2245,6 +2507,31 @@ function validateProducerRecord(
   );
   const { preimage: registeredRecordPreimage, binding: registeredRecordBinding } =
     validateRegisteredRecordPreimage(source.registeredRecordPreimage, event);
+  safeId(approval.applicationId, "custom-registry-producer-application-id");
+  safeId(approval.approvalId, "custom-registry-producer-approval-id");
+  safeId(approval.grantId, "custom-registry-producer-grant-id");
+  safeId(approval.chainProfileId, "custom-registry-producer-chain-profile-id");
+  decimal(approval.repositoryId, "custom-registry-producer-repository-id", true);
+  exactHttpsUrl(
+    approval.repositoryUri,
+    "custom-registry-producer-repository-uri",
+  );
+  text(approval.commitObjectId, "custom-registry-producer-commit", 64);
+  text(approval.treeObjectId, "custom-registry-producer-tree", 64);
+  instant(approval.approvedAt, "custom-registry-producer-approved-at");
+  for (const field of [
+    "grantBindingHash",
+    "decisionReceiptDigest",
+    "sourceCommitment",
+    "buildCommitment",
+    "artifactSetHash",
+    "configurationCommitment",
+    "launchWalletBindingHash",
+    "chainProfileHash",
+    "policyCommitment",
+  ] as const) {
+    digest(approval[field], `custom-registry-producer-approval-${field}`);
+  }
   const componentHashes = record(
     source.registeredRecordComponentHashes,
     "custom-registry-registered-record-components",
@@ -2394,6 +2681,21 @@ function validateProducerRecord(
       contract.runtimeCodeSha256,
       "custom-registry-producer-runtime-content-sha256",
     );
+    for (const field of [
+      "creationCodeHash",
+      "artifactHash",
+      "configurationCommitment",
+      "runtimeVerificationEvidenceHash",
+    ] as const) {
+      digest(
+        contract[field],
+        `custom-registry-producer-contract-${field}`,
+      );
+    }
+    safeId(contract.role, "custom-registry-producer-contract-role");
+    if (contract.configurationCommitment !== approval.configurationCommitment) {
+      return fail("custom-registry-producer-contract-configuration");
+    }
     if (runtimeByAddress.has(normalizedAddress)) {
       return fail("custom-registry-producer-contract-duplicate");
     }
@@ -2406,6 +2708,31 @@ function validateProducerRecord(
   ] as const) {
     digest(source[field], `custom-registry-producer-${field}`);
   }
+  const canonicalAssetIdentitySetHash = customRegistryAssetIdentitySetHashV2({
+    advertisesToken: booleanValue(
+      source.advertisesToken,
+      "custom-registry-producer-advertises-token",
+    ),
+    assets: source.discoverableAssets,
+  });
+  const canonicalMarketSetHash = customRegistryMarketSetHashV2({
+    assetIdentitySetHash: canonicalAssetIdentitySetHash,
+    markets: source.discoverableMarkets,
+  });
+  const canonicalCapabilitySetHash = customRegistryCapabilitySetHashV1(
+    source.capabilities,
+  );
+  if (
+    source.assetIdentitySetHash !== canonicalAssetIdentitySetHash ||
+    source.marketSetHash !== canonicalMarketSetHash ||
+    registeredRecordPreimage.assetSetHash !==
+      digestRawBytes32(canonicalAssetIdentitySetHash) ||
+    registeredRecordPreimage.marketSetHash !==
+      digestRawBytes32(canonicalMarketSetHash) ||
+    registeredRecordPreimage.capabilitySetHash !== canonicalCapabilitySetHash
+  ) {
+    return fail("custom-registry-producer-public-set-bindings");
+  }
   const launchingWallet = record(
     source.launchingWallet,
     "custom-registry-producer-launching-wallet",
@@ -2417,7 +2744,39 @@ function validateProducerRecord(
     launchingWallet.value,
     "custom-registry-producer-launching-wallet-value",
   );
+  const launchIdentity = record(
+    source.launchIdentity,
+    "custom-registry-producer-launch-identity",
+  );
+  if (launchIdentity.namespace !== "eip155-address") {
+    return fail("custom-registry-producer-launch-identity-namespace");
+  }
+  address(
+    launchIdentity.value,
+    "custom-registry-producer-launch-identity-value",
+  );
+  const expectedLaunchWalletBindingHash = sha256(
+    "programmable.custom-launch-wallet-binding.v3",
+    {
+      chainId: approval.chainId,
+      caip2: approval.caip2,
+      chainProfileId: approval.chainProfileId,
+      launchingWallet: source.launchingWallet,
+    },
+  );
+  const expectedLaunchId = sha256("programmable.custom-launch-id.v2", {
+    launchFamily: "custom",
+    projectId: source.projectId,
+    chainId: registryOrigin.chainId,
+    launchIdentity: source.launchIdentity,
+  });
   if (
+    source.launchId !== expectedLaunchId ||
+    approval.projectId !== source.projectId ||
+    approval.launchWalletBindingHash !== expectedLaunchWalletBindingHash ||
+    approval.launchWalletBindingHash !== deployment.launchWalletBindingHash ||
+    approval.chainProfileHash !== deployment.chainProfileHash ||
+    approval.artifactSetHash !== deployment.artifactOutputSetHash ||
     registeredRecordPreimage.launchWallet !== launchingWallet.value ||
     runtimeByAddress.get(registeredRecordPreimage.primaryContract) !==
       registeredRecordPreimage.primaryRuntimeCodeHash ||
@@ -2548,6 +2907,123 @@ function validateProducerRecord(
   ) {
     return fail("custom-registry-producer-finality-policy-binding");
   }
+  const finalityStatus = String(finality.status);
+  if (
+    !new Set(["observed", "confirmed", "finalized", "orphaned"]).has(
+      finalityStatus,
+    ) ||
+    bytes32(finality.transactionHash, "custom-registry-producer-finality-transaction") !==
+      registryOrigin.registrationTransactionHash ||
+    bytes32(finality.blockHash, "custom-registry-producer-finality-block-hash") !==
+      registryOrigin.registrationBlockHash ||
+    decimal(finality.blockNumber, "custom-registry-producer-finality-block") !==
+      registryOrigin.registrationBlockNumber ||
+    decimal(
+      finality.transactionIndex,
+      "custom-registry-producer-finality-transaction-index",
+    ) !== registryOrigin.registrationTransactionIndex ||
+    nullableDecimal(
+      finality.logIndex,
+      "custom-registry-producer-finality-log-index",
+    ) !== registryOrigin.registrationLogIndex ||
+    instant(
+      finality.onchainTimestamp,
+      "custom-registry-producer-finality-onchain-time",
+    ).length === 0 ||
+    instant(
+      finality.observedAt,
+      "custom-registry-producer-finality-observed-time",
+    ).length === 0
+  ) {
+    return fail("custom-registry-producer-finality-chain-binding");
+  }
+  const confirmedAt = finality.confirmedAt === null
+    ? null
+    : instant(
+        finality.confirmedAt,
+        "custom-registry-producer-finality-confirmed-time",
+      );
+  const finalizedAt = finality.finalizedAt === null
+    ? null
+    : instant(
+        finality.finalizedAt,
+        "custom-registry-producer-finality-finalized-time",
+      );
+  const orphanedAt = finality.orphanedAt === null
+    ? null
+    : instant(
+        finality.orphanedAt,
+        "custom-registry-producer-finality-orphaned-time",
+      );
+  digest(
+    finality.finalityEvidenceHash,
+    "custom-registry-producer-finality-evidence",
+  );
+  if (
+    (finalityStatus === "observed" &&
+      (confirmedAt !== null || finalizedAt !== null || orphanedAt !== null)) ||
+    (finalityStatus === "confirmed" &&
+      (confirmedAt === null || finalizedAt !== null || orphanedAt !== null)) ||
+    (finalityStatus === "finalized" &&
+      (confirmedAt === null || finalizedAt === null || orphanedAt !== null)) ||
+    (finalityStatus === "orphaned" && orphanedAt === null)
+  ) {
+    return fail("custom-registry-producer-finality-transition");
+  }
+  const lifecycle = record(
+    source.lifecycle,
+    "custom-registry-producer-lifecycle",
+  );
+  const lifecycleStatus = String(lifecycle.status);
+  if (
+    !new Set(["pending", "active", "orphaned", "superseded", "revoked"]).has(
+      lifecycleStatus,
+    ) ||
+    lifecycle.registryGeneration !== registryOrigin.registryGeneration ||
+    instant(
+      lifecycle.registeredAt,
+      "custom-registry-producer-lifecycle-registered-at",
+    ).length === 0 ||
+    ((finalityStatus === "observed" || finalityStatus === "confirmed") &&
+      lifecycleStatus !== "pending") ||
+    (finalityStatus === "finalized" &&
+      !new Set(["active", "superseded", "revoked"]).has(lifecycleStatus)) ||
+    (finalityStatus === "orphaned" && lifecycleStatus !== "orphaned")
+  ) {
+    return fail("custom-registry-producer-lifecycle-binding");
+  }
+  const lifecycleSupersededBy = lifecycle.supersededBy === null
+    ? null
+    : digest(
+        lifecycle.supersededBy,
+        "custom-registry-producer-lifecycle-superseded",
+      );
+  const lifecycleRevokedAt = lifecycle.revokedAt === null
+    ? null
+    : instant(
+        lifecycle.revokedAt,
+        "custom-registry-producer-lifecycle-revoked-at",
+      );
+  const lifecycleRevocationEvidence = lifecycle.revocationEvidenceHash === null
+    ? null
+    : digest(
+        lifecycle.revocationEvidenceHash,
+        "custom-registry-producer-lifecycle-revocation-evidence",
+      );
+  if (
+    ((lifecycleStatus === "pending" || lifecycleStatus === "active" ||
+      lifecycleStatus === "orphaned") &&
+      (lifecycleSupersededBy !== null || lifecycleRevokedAt !== null ||
+        lifecycleRevocationEvidence !== null)) ||
+    (lifecycleStatus === "superseded" &&
+      (lifecycleSupersededBy === null || lifecycleRevokedAt !== null ||
+        lifecycleRevocationEvidence !== null)) ||
+    (lifecycleStatus === "revoked" &&
+      (lifecycleSupersededBy !== null || lifecycleRevokedAt === null ||
+        lifecycleRevocationEvidence === null))
+  ) {
+    return fail("custom-registry-producer-lifecycle-transition");
+  }
   const contractSetHash = digest(
     deployment.contractSetHash,
     "custom-registry-producer-contract-set-hash",
@@ -2620,10 +3096,7 @@ function validateProducerRecord(
       category: source.category,
       launchFamily: source.launchFamily,
     }),
-    capabilitySetHash: customRegistryStructuredFieldV1(
-      "capabilitySetHash",
-      source.capabilities,
-    ),
+    capabilitySetHash: canonicalCapabilitySetHash,
     reviewResultId: customRegistryStructuredFieldV1("reviewResultId", {
       label: review.label,
       definition: review.definition,

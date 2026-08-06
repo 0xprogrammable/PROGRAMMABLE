@@ -15,6 +15,9 @@ import {
   CustomRegistryProjectorV3,
   customRegistryFeedPageV3,
   customRegistryFinalityPolicyHashV1,
+  customRegistryAssetIdentitySetHashV2,
+  customRegistryCapabilitySetHashV1,
+  customRegistryMarketSetHashV2,
   customRegistryOnchainFeePolicyHashV1,
   customRegistryPublicFeePolicyBindingV3,
   customRegistryProjectionDigestV3,
@@ -39,6 +42,7 @@ import {
   type HexBytes32,
   type Sha256Digest,
 } from "../../lib/data-pipeline/custom-registry-v3";
+import approval8665Golden from "../fixtures/custom-launch-registry-record-v3-approval-8665.json";
 
 const sha = (seed: string): Sha256Digest =>
   `sha256:${createHash("sha256").update(seed).digest("hex")}`;
@@ -151,15 +155,41 @@ function staticRecord(
   const artifactSetHash = sha(`artifacts:${seed}`);
   const configurationCommitment = sha(`config:${seed}`);
   const partnerRecipient = address(`partner:${seed}`);
+  const chainId = "8453";
+  const caip2 = "eip155:8453";
+  const chainProfileId = "base-mainnet-v1";
+  const launchWallet = address(`wallet:${seed}`);
+  const launchIdentity = address(`contract:${seed}`);
+  const launchId = domainSha("programmable.custom-launch-id.v2", {
+    launchFamily: "custom",
+    projectId,
+    chainId,
+    launchIdentity: {
+      namespace: "eip155-address",
+      value: launchIdentity,
+    },
+  });
+  const launchWalletBindingHash = domainSha(
+    "programmable.custom-launch-wallet-binding.v3",
+    {
+      chainId,
+      caip2,
+      chainProfileId,
+      launchingWallet: {
+        namespace: "eip155-address",
+        value: launchWallet,
+      },
+    },
+  );
   return {
     schemaVersion: CUSTOM_REGISTRY_PROJECTION_RECORD_SCHEMA_V3,
     platformId: "programmable",
     category: "custom",
     publicLabel: PROGRAMMABLE_CUSTOM_LABEL,
-    launchId: sha(`launch:${seed}`),
+    launchId,
     projectId,
-    chainId: "8453",
-    caip2: "eip155:8453",
+    chainId,
+    caip2,
     model: { id: "unknown-future-model", version: "1" },
     template: partner ? { id: `partner-template-${seed}`, version: "1" } : null,
     partner: partner
@@ -175,7 +205,7 @@ function staticRecord(
       applicationId: `application-${seed}`,
       projectId,
       approvalId: `approval-${seed}`,
-      repositoryId: `repository-${seed}`,
+      repositoryId: "123456789",
       repositoryUri,
       commitObjectId,
       treeObjectId: commit(`tree:${seed}`),
@@ -183,7 +213,7 @@ function staticRecord(
       buildCommitment,
       artifactSetHash,
       configurationCommitment,
-      launchWalletBindingHash: sha(`wallet-binding:${seed}`),
+      launchWalletBindingHash,
       chainProfileHash: sha("base-chain-profile"),
       decisionReceiptDigest: sha(`decision:${seed}`),
     },
@@ -194,7 +224,7 @@ function staticRecord(
       deploymentCalldataHash: sha(`calldata:${seed}`),
       contracts: [
         {
-          address: address(`contract:${seed}`),
+          address: launchIdentity,
           runtimeCodeHash,
           role: "controller",
         },
@@ -204,7 +234,7 @@ function staticRecord(
     },
     launch: {
       creator: address(`creator:${seed}`),
-      launchWallet: address(`wallet:${seed}`),
+      launchWallet,
       transactionHash: hex(`launch-transaction:${seed}`),
       blockNumber: "90",
       blockHash: hex(`launch-block:${seed}`),
@@ -521,21 +551,41 @@ function producerRecord(
     "approvalId",
     source.approvalBinding.approvalId,
   );
-  const assetIdentitySetHash = sha(`assets:${seed}`);
-  const marketSetHash = sha(`markets:${seed}`);
+  const producerAssets = source.assets as unknown as
+    CustomLaunchRegistryProducerRecordV3["discoverableAssets"];
+  const producerMarkets = source.markets.map((market) => ({
+    ...market,
+    status: market.lifecycle,
+    verification: { status: "verified" },
+  })) as unknown as CustomLaunchRegistryProducerRecordV3["discoverableMarkets"];
+  const assetIdentitySetHash = customRegistryAssetIdentitySetHashV2({
+    advertisesToken: producerAssets.length > 0,
+    assets: producerAssets,
+  });
+  const marketSetHash = customRegistryMarketSetHashV2({
+    assetIdentitySetHash,
+    markets: producerMarkets,
+  });
   const producerContracts = source.deploymentBinding.contracts.map((contract) => ({
-    ...contract,
     address: {
       namespace: "eip155-address" as const,
       value: contract.address,
     },
+    role: contract.role,
+    creationCodeHash: sha(`creation-code:${seed}:${contract.role}`),
     runtimeCodeKeccak256: contract.runtimeCodeHash,
     runtimeCodeSha256: sha(`runtime-content:${seed}:${contract.role}`),
+    artifactHash: sha(`artifact:${seed}:${contract.role}`),
+    configurationCommitment: source.approvalBinding.configurationCommitment,
+    runtimeVerificationEvidenceHash: sha(
+      `runtime-verification:${seed}:${contract.role}`,
+    ),
   }));
   const producerDeploymentBinding = {
     ...source.deploymentBinding,
     chainId: source.chainId,
     caip2: source.caip2,
+    artifactOutputSetHash: source.approvalBinding.artifactSetHash,
     launchWalletBindingHash: source.approvalBinding.launchWalletBindingHash,
     chainProfileHash: source.approvalBinding.chainProfileHash,
     runtimeMatch: "exact" as const,
@@ -571,6 +621,20 @@ function producerRecord(
     "programmable.custom-launch-post-launch-authorities.v3",
     authorityInventoryCore,
   );
+  const producerCapabilities = source.capabilities.map((capability) => ({
+    id: capability.id,
+    version: capability.version ?? "1",
+    status:
+      capability.status === "active" ? "supported" as const : "unknown" as const,
+    parameters: capability.parameters,
+  }));
+  const producerMechanisms = source.mechanisms.map((mechanism) => ({
+    id: mechanism.id,
+    version: mechanism.version ?? "1",
+    status: "unknown" as const,
+    parameters: mechanism.parameters,
+    evidenceHashes: [sha(`mechanism-evidence:${seed}:${mechanism.id}`)],
+  }));
   const reviewWithoutEvidence = {
     schemaVersion: "programmable.custom-launch-verified-review.v1",
     label: "Programmable Verified",
@@ -591,7 +655,7 @@ function producerRecord(
       ({ runtimeCodeSha256 }) => runtimeCodeSha256,
     ),
     configurationCommitment: source.approvalBinding.configurationCommitment,
-    authoritiesEvidenceHash: sha(`review-authorities:${seed}`),
+    authoritiesEvidenceHash: authorityInventoryHash,
     upgradeability: "immutable",
     upgradeabilityEvidenceHash: sha(`review-upgradeability:${seed}`),
     pauseAuthority: "none",
@@ -599,9 +663,15 @@ function producerRecord(
     custody: "none",
     custodyEvidenceHash: sha(`review-custody:${seed}`),
     dependencies: [],
-    dependencySetHash: sha(`review-dependencies:${seed}`),
+    dependencySetHash: domainSha(
+      "programmable.custom-launch-review-dependency-set.v1",
+      [],
+    ),
     findings: [],
-    findingSetHash: sha(`review-findings:${seed}`),
+    findingSetHash: domainSha(
+      "programmable.custom-launch-review-finding-set.v1",
+      [],
+    ),
     reviewerType: "programmable-internal",
     reviewedAt: source.securityReview.reviewedAt!,
     deploymentBindingHash: domainSha(
@@ -617,6 +687,62 @@ function producerRecord(
     reviewEvidenceHash:
       customRegistryVerifiedReviewEvidenceHashV1(reviewWithoutEvidence),
   };
+  const producerTemplate = source.template === null
+    ? null
+    : {
+        id: source.template.id,
+        version: source.template.version,
+        partnerId: source.partner?.id ?? null,
+        repositoryId: source.approvalBinding.repositoryId,
+        repositoryUri: source.approvalBinding.repositoryUri,
+        commitObjectId: source.approvalBinding.commitObjectId,
+        treeObjectId: source.approvalBinding.treeObjectId,
+        sourceCommitment: source.approvalBinding.sourceCommitment,
+        buildCommitment: source.approvalBinding.buildCommitment,
+        artifactSetHash: source.approvalBinding.artifactSetHash,
+        runtimeCodeKeccak256: producerContracts.map(
+          ({ runtimeCodeKeccak256 }) => runtimeCodeKeccak256,
+        ),
+        runtimeCodeSha256: producerContracts.map(
+          ({ runtimeCodeSha256 }) => runtimeCodeSha256,
+        ),
+        verificationEvidenceHash: sha(`template-verification:${seed}`),
+      };
+  const producerPartner = source.partner === null || producerTemplate === null
+    ? null
+    : {
+        id: source.partner.id,
+        name: source.partner.name,
+        status: source.partner.status,
+        recipient: {
+          namespace: "eip155-address" as const,
+          value: source.partner.recipient,
+        },
+        chainId: source.chainId,
+        templateId: producerTemplate.id,
+        templateVersion: producerTemplate.version,
+        templateBindingHash: domainSha(
+          "programmable.custom-launch-partner-template-binding.v3",
+          {
+            partnerId: source.partner.id,
+            chainId: source.chainId,
+            templateId: producerTemplate.id,
+            templateVersion: producerTemplate.version,
+            repositoryId: producerTemplate.repositoryId,
+            commitObjectId: producerTemplate.commitObjectId,
+            sourceCommitment: producerTemplate.sourceCommitment,
+            buildCommitment: producerTemplate.buildCommitment,
+            artifactSetHash: producerTemplate.artifactSetHash,
+            runtimeCodeKeccak256: producerTemplate.runtimeCodeKeccak256,
+            runtimeCodeSha256: producerTemplate.runtimeCodeSha256,
+          },
+        ),
+        recipientVerificationEvidenceHash: sha(
+          `partner-recipient-verification:${seed}`,
+        ),
+        activationVersion: "1",
+        activationBlock: "90",
+      };
   const registeredRecordPreimage = {
     chainId: source.chainId,
     registryGeneration: "3",
@@ -657,18 +783,18 @@ function producerRecord(
       modelId: source.model.id,
       modelVersion: source.model.version,
     }),
-    templateId: source.template === null
+    templateId: producerTemplate === null
       ? ZERO_BYTES32_TEST
-      : customRegistryStructuredFieldV1("templateId", source.template.id),
-    templateVersion: source.template === null
+      : customRegistryStructuredFieldV1("templateId", producerTemplate.id),
+    templateVersion: producerTemplate === null
       ? ZERO_BYTES32_TEST
       : customRegistryStructuredFieldV1("templateVersion", {
-          templateId: source.template.id,
-          templateVersion: source.template.version,
+          templateId: producerTemplate.id,
+          templateVersion: producerTemplate.version,
         }),
-    partnerId: source.partner === null
+    partnerId: producerPartner === null
       ? ZERO_BYTES32_TEST
-      : customRegistryStructuredFieldV1("partnerId", source.partner.id),
+      : customRegistryStructuredFieldV1("partnerId", producerPartner.id),
     builderAttributionHash: customRegistryStructuredFieldV1(
       "builderAttributionHash",
       {
@@ -684,9 +810,8 @@ function producerRecord(
     }),
     assetSetHash: `0x${assetIdentitySetHash.slice("sha256:".length)}`,
     marketSetHash: `0x${marketSetHash.slice("sha256:".length)}`,
-    capabilitySetHash: customRegistryStructuredFieldV1(
-      "capabilitySetHash",
-      source.capabilities,
+    capabilitySetHash: customRegistryCapabilitySetHashV1(
+      producerCapabilities,
     ),
     reviewPolicyHash:
       `0x${producerVerifiedReview.policyCommitment.slice("sha256:".length)}`,
@@ -711,17 +836,9 @@ function producerRecord(
     publicLabel: PROGRAMMABLE_CUSTOM_LABEL,
     projectId: source.projectId,
     launchId: source.launchId,
-    model: source.model,
-    template: source.template,
-    partner: source.partner === null
-      ? null
-      : {
-          ...source.partner,
-          recipient: {
-            namespace: "eip155-address" as const,
-            value: source.partner.recipient,
-          },
-        },
+    model: { id: source.model.id, version: source.model.version ?? "1" },
+    template: producerTemplate,
+    partner: producerPartner,
     registeredRecordPreimage,
     registeredRecordComponentHashes: binding.componentHashes,
     registeredRecordCommitment: binding.registeredRecordCommitment,
@@ -748,12 +865,16 @@ function producerRecord(
     },
     approvalBinding: {
       ...source.approvalBinding,
+      grantId: `grant-${seed}`,
+      grantBindingHash: sha(`grant-binding:${seed}`),
       chainId: source.chainId,
       caip2: source.caip2,
       chainProfileId: "base-mainnet-v1",
       approvalBindingHash,
+      reviewAuthorityKind: "manual_review" as const,
       policyVersion: source.securityReview.policyVersion,
       policyCommitment: source.securityReview.policyCommitment,
+      approvedAt: "2026-08-06T09:30:00.000Z",
     },
     deploymentBinding: producerDeploymentBinding,
     verifiedReview: producerVerifiedReview,
@@ -773,19 +894,28 @@ function producerRecord(
       value: source.deploymentBinding.contracts[0]!.address,
     },
     advertisesToken: source.assets.length > 0,
-    discoverableAssets: source.assets,
+    discoverableAssets: producerAssets,
     assetIdentitySetHash,
-    discoverableMarkets: source.markets.map((market) => ({
-      ...market,
-      status: market.lifecycle,
-      verification: { status: "verified" },
-    })),
+    discoverableMarkets: producerMarkets,
     marketSetHash,
-    mechanisms: source.mechanisms,
-    capabilities: source.capabilities,
+    mechanisms: producerMechanisms,
+    capabilities: producerCapabilities,
     finalityPolicy,
     finality: {
       status: operation === "registered" ? "observed" : "finalized",
+      transactionHash: hex(`registry-transaction:${seed}:registered`),
+      blockHash: hex(`registry-block:${seed}:registered`),
+      blockNumber: "100",
+      transactionIndex: "2",
+      logIndex: "3",
+      onchainTimestamp: "2026-08-06T10:01:00.000Z",
+      observedAt: "2026-08-06T10:01:01.000Z",
+      confirmedAt:
+        operation === "registered" ? null : "2026-08-06T10:01:10.000Z",
+      finalizedAt:
+        operation === "registered" ? null : "2026-08-06T10:01:30.000Z",
+      orphanedAt: null,
+      finalityEvidenceHash: sha(`registry-finality-evidence:${seed}`),
       verificationAuthorityHash: finalityAuthorityHash,
     },
     lifecycle: {
@@ -795,6 +925,13 @@ function producerRecord(
           : operation === "revoked"
             ? "revoked"
             : "active",
+      registryGeneration: "3",
+      registeredAt: "2026-08-06T10:01:00.000Z",
+      supersededBy: null,
+      revokedAt:
+        operation === "revoked" ? "2026-08-06T10:03:00.000Z" : null,
+      revocationEvidenceHash:
+        operation === "revoked" ? sha(`record-revocation:${seed}`) : null,
     },
     presentationVersion: "1",
     presentationBindingHash: sha(`presentation:${seed}`),
@@ -992,7 +1129,382 @@ function head(
   };
 }
 
+const APPROVAL_8665_PRODUCER =
+  approval8665Golden as unknown as CustomLaunchRegistryProducerRecordV3;
+const APPROVAL_8665_REGISTRY_RUNTIME = hex("approval-8665-registry-runtime");
+
+function approval8665Manifest(): CustomRegistryDeploymentManifestV3 {
+  const origin = APPROVAL_8665_PRODUCER.registryOrigin;
+  return parseCustomRegistryDeploymentManifestV3({
+    schemaVersion: CUSTOM_REGISTRY_DEPLOYMENTS_SCHEMA_V3,
+    platformId: "programmable",
+    category: "custom",
+    publicLabel: PROGRAMMABLE_CUSTOM_LABEL,
+    chains: [{
+      chainId: origin.chainId,
+      caip2: origin.caip2,
+      status: "active",
+      publicSubmissionsEnabled: true,
+      confirmationDepth: "2",
+      finalityDepth: "12",
+      registries: [{
+        registryGeneration: origin.registryGeneration,
+        address: origin.registryAddress,
+        runtimeCodeHash: APPROVAL_8665_REGISTRY_RUNTIME,
+        startBlock: origin.registryStartBlock,
+        status: "active",
+        retiredAtBlock: null,
+        authorizedApprovers: [APPROVER],
+        authorizedWriters: [WRITER],
+        topics: {
+          approvalAuthorized: APPROVAL_AUTHORIZED_TOPIC,
+          registered: REGISTERED_TOPIC,
+          provenance: PROVENANCE_TOPIC,
+          review: REVIEW_TOPIC,
+          attribution: ATTRIBUTION_TOPIC,
+          feePolicy: FEE_POLICY_TOPIC,
+          feeEvidence: FEE_EVIDENCE_TOPIC,
+          finalized: FINALIZED_TOPIC,
+          corrected: CORRECTED_TOPIC,
+          revoked: REVOKED_TOPIC,
+        },
+      }],
+    }],
+  });
+}
+
+function approval8665ProjectionSeed(): StaticRecord {
+  const producer = APPROVAL_8665_PRODUCER;
+  const approval = producer.approvalBinding;
+  const deployment = producer.deploymentBinding;
+  const review = producer.verifiedReview;
+  const finality = producer.finality;
+  return {
+    ...staticRecord("approval-8665"),
+    launchId: producer.launchId,
+    projectId: producer.projectId,
+    chainId: producer.registryOrigin.chainId,
+    caip2: producer.registryOrigin.caip2,
+    model: producer.model,
+    template: null,
+    partner: null,
+    approvalBinding: {
+      applicationId: approval.applicationId,
+      projectId: approval.projectId,
+      approvalId: approval.approvalId,
+      repositoryId: approval.repositoryId,
+      repositoryUri: approval.repositoryUri,
+      commitObjectId: approval.commitObjectId,
+      treeObjectId: approval.treeObjectId,
+      sourceCommitment: approval.sourceCommitment,
+      buildCommitment: approval.buildCommitment,
+      artifactSetHash: approval.artifactSetHash,
+      configurationCommitment: approval.configurationCommitment,
+      launchWalletBindingHash: approval.launchWalletBindingHash,
+      chainProfileHash: approval.chainProfileHash,
+      decisionReceiptDigest: approval.decisionReceiptDigest,
+    },
+    deploymentBinding: {
+      launchArtifactCommitmentHash: deployment.launchArtifactCommitmentHash,
+      artifactManifestHash: deployment.artifactManifestHash,
+      artifactOutputSetHash: deployment.artifactOutputSetHash,
+      deploymentCalldataHash: deployment.deploymentCalldataHash,
+      contracts: deployment.contracts.map((contract) => ({
+        address: contract.address.value,
+        runtimeCodeHash: contract.runtimeCodeKeccak256,
+        role: contract.role,
+      })),
+      runtimeMatch: true,
+      verificationEvidenceHash: deployment.verificationEvidenceHash,
+    },
+    launch: {
+      creator: null,
+      launchWallet: producer.launchingWallet.value,
+      transactionHash: finality.transactionHash,
+      blockNumber: finality.blockNumber,
+      blockHash: finality.blockHash,
+      transactionIndex: Number(finality.transactionIndex),
+      logIndex: finality.logIndex === null ? null : Number(finality.logIndex),
+      onchainTimestamp: finality.onchainTimestamp,
+    },
+    assets: [],
+    markets: [],
+    capabilities: producer.capabilities.map((capability) => ({
+      id: capability.id,
+      version: capability.version,
+      status: capability.status === "supported"
+        ? "active"
+        : capability.status === "not_applicable"
+          ? "unsupported"
+          : capability.status,
+      parameters: capability.parameters as never,
+    })),
+    mechanisms: producer.mechanisms.map((mechanism) => ({
+      id: mechanism.id,
+      version: mechanism.version,
+      status: mechanism.status,
+      parameters: mechanism.parameters as never,
+    })),
+    securityReview: {
+      status: "reviewed",
+      policyVersion: review.policyVersion,
+      policyCommitment: review.policyCommitment,
+      repositoryUri: approval.repositoryUri,
+      commitObjectId: review.commitObjectId,
+      sourceCommitment: review.sourceCommitment,
+      buildCommitment: review.buildCommitment,
+      artifactSetHash: review.artifactSetHash,
+      runtimeCodeHashes: review.runtimeCodeKeccak256,
+      configurationCommitment: review.configurationCommitment,
+      authorities: producer.postLaunchAuthorityInventory.authorities,
+      upgradeability: {
+        kind: review.upgradeability,
+        evidenceHash: review.upgradeabilityEvidenceHash,
+      },
+      pause: {
+        authority: review.pauseAuthority,
+        evidenceHash: review.pauseAuthorityEvidenceHash,
+      },
+      custody: {
+        kind: review.custody,
+        evidenceHash: review.custodyEvidenceHash,
+      },
+      dependencies: review.dependencies,
+      findings: review.findings,
+      reviewedAt: review.reviewedAt,
+      reviewerType: review.reviewerType,
+      deploymentBindingHash: review.deploymentBindingHash,
+      supersededBy: null,
+      revokedAt: null,
+      revocationEvidenceHash: null,
+    },
+    finality: {
+      status: "finalized",
+      transactionHash: finality.transactionHash,
+      blockHash: finality.blockHash,
+      blockNumber: finality.blockNumber,
+      transactionIndex: Number(finality.transactionIndex),
+      logIndex: finality.logIndex === null ? null : Number(finality.logIndex),
+      onchainTimestamp: finality.onchainTimestamp,
+      observedAt: finality.observedAt,
+      confirmedAt: finality.confirmedAt!,
+      finalizedAt: finality.finalizedAt!,
+      orphanedAt: null,
+      finalityEvidenceHash: finality.finalityEvidenceHash,
+      verificationAuthorityHash: finality.verificationAuthorityHash,
+    },
+  };
+}
+
+function approval8665Event(
+  operation: "registered" | "finalized",
+): CustomRegistryEventV3 {
+  const producer = APPROVAL_8665_PRODUCER;
+  const origin = producer.registryOrigin;
+  const registered = operation === "registered";
+  const blockNumber = registered ? origin.registrationBlockNumber : "21000012";
+  const blockHash = registered ? origin.registrationBlockHash : hex("approval-8665-finalized-block");
+  return event("approval-8665", operation, {
+    chainId: origin.chainId,
+    caip2: origin.caip2,
+    registryGeneration: origin.registryGeneration,
+    registryAddress: origin.registryAddress,
+    observedRegistryRuntimeCodeHash: APPROVAL_8665_REGISTRY_RUNTIME,
+    registryWriter: WRITER,
+    transactionHash: registered
+      ? origin.registrationTransactionHash
+      : hex("approval-8665-finalized-transaction"),
+    blockNumber,
+    blockHash,
+    transactionIndex: registered ? Number(origin.registrationTransactionIndex) : 0,
+    logIndex: registered ? Number(origin.registrationLogIndex) : 0,
+    onchainTimestamp: registered
+      ? producer.finality.onchainTimestamp
+      : producer.finality.finalizedAt!,
+    launchId: producer.launchId,
+    projectId: producer.projectId,
+    registryLaunchIdRaw: origin.registryLaunchIdRaw,
+    registryProjectIdRaw: producer.registeredRecordPreimage.projectId,
+    registeredRecordHash: producer.registeredRecordCommitment,
+    latestOnchainRecordHash: producer.registeredRecordCommitment,
+    previousOnchainRecordHash: null,
+    registrationSequence: registered ? "1" : null,
+    transitionSequence: registered ? null : "2",
+    recordRevision: null,
+    primaryContract: registered
+      ? producer.registeredRecordPreimage.primaryContract
+      : null,
+    launchWallet: registered ? producer.launchingWallet.value : null,
+    approvalId: registered ? producer.registeredRecordPreimage.approvalId : null,
+    deploymentId: registered
+      ? producer.registeredRecordPreimage.deploymentId
+      : null,
+    identityHash: registered ? producer.registrationBindingHash : null,
+    observedAtBlock: origin.registrationBlockNumber,
+    observedTransactionHash: registered ? null : origin.registrationTransactionHash,
+    finalityEvidenceHash: registered
+      ? null
+      : `0x${producer.finality.finalityEvidenceHash.slice("sha256:".length)}`,
+    confirmedHeadBlockNumber: registered ? null : "21000011",
+    confirmedHeadBlockHash: registered ? null : hex("approval-8665-confirmed-head"),
+    finalityPolicyHash: registered
+      ? null
+      : producer.registeredRecordPreimage.finalityPolicyHash,
+    finalizedAtBlock: registered ? null : "21000011",
+    finalizedAtTimestamp: registered ? null : "1786010580",
+    approvalAuthorization: registered
+      ? {
+          chainId: origin.chainId,
+          caip2: origin.caip2,
+          registryGeneration: origin.registryGeneration,
+          registryAddress: origin.registryAddress,
+          observedRegistryRuntimeCodeHash: APPROVAL_8665_REGISTRY_RUNTIME,
+          registryApprover: APPROVER,
+          topic0: APPROVAL_AUTHORIZED_TOPIC,
+          transactionHash: hex("approval-8665-authorization-transaction"),
+          blockNumber: origin.registrationBlockNumber,
+          blockHash: origin.registrationBlockHash,
+          transactionIndex: 0,
+          logIndex: 0,
+          onchainTimestamp: "2026-08-06T09:59:59.000Z",
+          approvalId: producer.registeredRecordPreimage.approvalId,
+          registryLaunchIdRaw: origin.registryLaunchIdRaw,
+          registryApprovalBindingHashRaw:
+            origin.registryApprovalBindingHashRaw,
+          registrationBindingHash: producer.registrationBindingHash,
+          transitionSequence: "1",
+          validAfterBlock: origin.registrationBlockNumber,
+          expiresAtBlock: "21000100",
+          evidenceHash: hex("approval-8665-authorization-evidence"),
+        }
+      : null,
+    record: registered ? approval8665ProjectionSeed() : null,
+    producerRecord: producer,
+  });
+}
+
 describe("Custom Registry v3 exact onchain commitments", () => {
+  it("accepts the exact Approval 8665 producer and independently binds its public sets", () => {
+    const producer = APPROVAL_8665_PRODUCER;
+    expect(customRegistryAssetIdentitySetHashV2({
+      advertisesToken: producer.advertisesToken,
+      assets: producer.discoverableAssets,
+    })).toBe(
+      "sha256:63cb8be585bd23f7497449209ce096c1ee216589af619e8db03da859059fb6ad",
+    );
+    expect(customRegistryMarketSetHashV2({
+      assetIdentitySetHash: producer.assetIdentitySetHash,
+      markets: producer.discoverableMarkets,
+    })).toBe(
+      "sha256:b47b5e84e1e26ed2045282486b5cbf7dfc399c71b7e16f8ace7afbb7d1554cac",
+    );
+    expect(customRegistryCapabilitySetHashV1(producer.capabilities)).toBe(
+      producer.registeredRecordPreimage.capabilitySetHash,
+    );
+
+    const projector = new CustomRegistryProjectorV3(approval8665Manifest());
+    const registered = approval8665Event("registered");
+    projector.ingest(registered, head(registered));
+    const finalized = approval8665Event("finalized");
+    const item = projector.ingest(finalized, head(finalized)).item;
+    expect(item).toMatchObject({
+      generation: "2",
+      record: {
+        platformId: "programmable",
+        category: "custom",
+        launchId: producer.launchId,
+        assets: [],
+        markets: [],
+        lifecycle: { status: "finalized" },
+        feePolicy: { mode: "no-qualifying-market", totalFeeBps: 0 },
+        rawProducerRecord: producer,
+      },
+    });
+  });
+
+  it.each(["asset", "market", "capability"] as const)(
+    "rejects a fully rehashed Approval producer with a supplied %s set digest not derived from its public set",
+    (kind) => {
+      const original = APPROVAL_8665_PRODUCER;
+      const suppliedDigest = sha(`substituted-${kind}-set`);
+      const registeredRecordPreimage = {
+        ...original.registeredRecordPreimage,
+        ...(kind === "asset"
+          ? { assetSetHash: `0x${suppliedDigest.slice("sha256:".length)}` }
+          : kind === "market"
+            ? { marketSetHash: `0x${suppliedDigest.slice("sha256:".length)}` }
+            : {
+                capabilitySetHash:
+                  `0x${suppliedDigest.slice("sha256:".length)}`,
+              }),
+      } as CustomLaunchRegisteredRecordPreimageV1;
+      const binding = customRegistryRegisteredRecordBindingV1(
+        registeredRecordPreimage,
+      );
+      const substituted = resealProducerRecord({
+        ...original,
+        ...(kind === "asset" ? { assetIdentitySetHash: suppliedDigest } : {}),
+        ...(kind === "market" ? { marketSetHash: suppliedDigest } : {}),
+        registeredRecordPreimage,
+        registeredRecordComponentHashes: binding.componentHashes,
+        registeredRecordCommitment: binding.registeredRecordCommitment,
+        registrationBindingHash: binding.registrationBindingHash,
+        registryOrigin: {
+          ...original.registryOrigin,
+          registeredRecordHash: binding.registeredRecordCommitment,
+          registrationBindingHashRaw: binding.registrationBindingHash,
+        },
+      });
+      const base = approval8665Event("registered");
+      const attack = {
+        ...base,
+        registeredRecordHash: binding.registeredRecordCommitment,
+        latestOnchainRecordHash: binding.registeredRecordCommitment,
+        identityHash: binding.registrationBindingHash,
+        producerRecord: substituted,
+        approvalAuthorization: {
+          ...base.approvalAuthorization!,
+          registrationBindingHash: binding.registrationBindingHash,
+        },
+      } satisfies CustomRegistryEventV3;
+      expect(() =>
+        new CustomRegistryProjectorV3(approval8665Manifest()).ingest(
+          attack,
+          head(attack),
+        ),
+      ).toThrow();
+    },
+  );
+
+  it.each([
+    ["approval grant", "approvalBinding", "grantId"],
+    ["finality transaction", "finality", "transactionHash"],
+    ["deployment artifact", "deploymentContract", "artifactHash"],
+  ] as const)(
+    "rejects a lossy Producer subset missing its %s field",
+    (_label, section, field) => {
+      const candidate = structuredClone(APPROVAL_8665_PRODUCER);
+      const target = section === "deploymentContract"
+        ? candidate.deploymentBinding.contracts[0]!
+        : candidate[section];
+      delete (target as unknown as Record<string, unknown>)[field];
+      const substituted = resealProducerRecord(
+        candidate as CustomLaunchRegistryProducerRecordV3,
+      );
+      const base = approval8665Event("registered");
+      const attack = {
+        ...base,
+        producerRecord: substituted,
+      } satisfies CustomRegistryEventV3;
+      expect(() =>
+        new CustomRegistryProjectorV3(approval8665Manifest()).ingest(
+          attack,
+          head(attack),
+        ),
+      ).toThrow();
+    },
+  );
+
   it("matches the Registry registered-record and identity golden vector", () => {
     const commitment = customRegistryRegisteredRecordCommitmentFromComponentsV1({
       scopeAndApprovalHash: `0x${"11".repeat(32)}`,
@@ -1630,13 +2142,13 @@ describe("Custom Registry v3 official-origin projection", () => {
     ];
     for (const [index, mutate] of cases.entries()) {
       const source = mutate(structuredClone(staticRecord(`attack-${index}`)));
-      const attack = event(`attack-${index}`, "registered", {
-        record: source,
-        producerRecord: producerRecord(`attack-${index}`, source),
-      });
-      expect(() =>
-        new CustomRegistryProjectorV3(manifest()).ingest(attack, head(attack)),
-      ).toThrow();
+      expect(() => {
+        const attack = event(`attack-${index}`, "registered", {
+          record: source,
+          producerRecord: producerRecord(`attack-${index}`, source),
+        });
+        new CustomRegistryProjectorV3(manifest()).ingest(attack, head(attack));
+      }).toThrow();
     }
   });
 
