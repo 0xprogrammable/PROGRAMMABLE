@@ -144,8 +144,8 @@
   display: inline-flex;
   flex: none;
   font-family: var(--font-plex-mono), monospace;
-  font-size: 9px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 650;
   gap: 4px;
   height: auto;
   justify-content: center;
@@ -165,9 +165,7 @@
   background: var(--control-glass-background);
   border: 1px solid var(--control-glass-border);
   border-radius: var(--radius-control);
-  box-shadow:
-    inset 0 1px 0 var(--control-glass-highlight),
-    0 8px 24px var(--control-glass-shadow-color);
+  box-shadow: var(--liquid-glass-control-shadow);
   color: var(--text-soft);
   display: inline-flex;
   min-height: 44px;
@@ -275,17 +273,21 @@
 
 .metric dt {
   color: var(--muted);
-  font-size: 10px;
-  line-height: 1.2;
+  font-family: var(--font-instrument), Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 540;
+  letter-spacing: -0.005em;
+  line-height: 1.3;
 }
 
 .metric dd {
   color: var(--text);
-  font-size: clamp(16px, 1.55vw, 19px);
+  font-family: var(--font-instrument), Arial, sans-serif;
+  font-size: clamp(17px, 1.55vw, 20px);
   font-variant-numeric: tabular-nums;
-  font-weight: 610;
-  letter-spacing: -0.022em;
-  margin: 3px 0 0;
+  font-weight: 620;
+  letter-spacing: -0.028em;
+  margin: 4px 0 0;
   overflow-wrap: anywhere;
 }
 
@@ -614,7 +616,7 @@
   background: var(--liquid-glass-inner-background);
   border: 1px solid var(--liquid-glass-border);
   border-radius: 16px;
-  box-shadow: none;
+  box-shadow: var(--liquid-glass-inner-shadow);
   display: grid;
   gap: 4px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -665,6 +667,7 @@
   background: var(--liquid-glass-inner-background);
   border: 1px solid var(--liquid-glass-border);
   border-radius: 17px;
+  box-shadow: var(--liquid-glass-inner-shadow);
   margin-top: 12px;
   min-height: 116px;
   padding: 10px 14px 9px;
@@ -832,6 +835,7 @@
   background: var(--liquid-glass-control-background);
   border: 1px solid var(--liquid-glass-border);
   border-radius: 15px;
+  box-shadow: var(--liquid-glass-inner-shadow);
   display: inline-flex;
   min-height: 38px;
   overflow: hidden;
@@ -922,9 +926,7 @@
   backdrop-filter: var(--control-glass-backdrop);
   background: var(--accent-glass-background);
   border: 1px solid var(--accent-glass-border);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 9px 26px var(--control-glass-shadow-color);
+  box-shadow: var(--liquid-glass-control-shadow);
   color: var(--text);
   width: 100%;
 }
@@ -940,7 +942,7 @@
 .secondaryAction {
   background: var(--liquid-glass-control-background);
   border: 1px solid var(--liquid-glass-border);
-  box-shadow: none;
+  box-shadow: var(--liquid-glass-control-shadow);
   color: var(--text);
 }
 
