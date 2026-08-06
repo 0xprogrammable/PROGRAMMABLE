@@ -46,6 +46,14 @@ Anyone can close the game at its deadline or capacity. Anyone can pay the exact 
 
 If nobody requests randomness within the grace period, or an unfulfilled request times out, anyone can expire it. Each open stake becomes a player refund liability. Finalisation never absorbs a player liability into the bankroll.
 
+## Executable launch graph
+
+`submissions/bankroll-hook/launch.json` is the data-only launch specification. It binds the Foundry code-generation profile (`solc 0.8.26`, Cancun, optimiser enabled at 5,000 runs, `viaIR=true`, no CBOR metadata), every first-party source hash and every constructor ABI placeholder.
+
+The release deployment order is `BankrollRouterFactory` → `BankrollHookFactory` → `ChainlinkVrfV25Adapter` → `BankrollLaunchV1`. Typed address locators resolve the selected PoolManager, PositionManager, UERC20Factory, WETH and VRF wrapper plus earlier targets. The launch call then creates four children in one reverting transaction: the fixed-supply token, mined hook, bound router and permanent position locker. The graph records the hook's six permissions, all child constructor address slots, launch-calldata bindings for `BankrollConfig`, salt derivations, pool initialization, position mint and optional initial buy.
+
+`npm run launch:check` compares the specification with `forge config --json`, compiled constructor ABIs, exact source hashes, dependency evidence, the target dependency order, child plans and the complete edge set. It fails when a compiler setting, constructor, address locator, permission, source file, dependency address or deployment edge drifts.
+
 ## Fee collection
 
 The hook charges 10 bps and allocates the complete amount to `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`.

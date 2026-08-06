@@ -24,6 +24,7 @@ The current Foundry suite covers:
 - permanent position ownership, fixed supply, empty launcher custody and initial-buy fee accrual
 - EIP-170 runtime-size checks and lint
 - exact hook and router creation/runtime hash binding, modified-init-code rejection and launch provenance
+- launch artifact binding to the 5,000-run via-IR compiler profile, compiled constructor ABIs, source hashes, five dependency addresses, four release targets, four internal child deployments and 24 graph edges
 
 Run:
 
@@ -31,6 +32,7 @@ Run:
 npm run build
 forge test -vv
 forge lint
+npm run launch:check
 ```
 
 ## Required contract tests
@@ -58,7 +60,7 @@ The fee-liability property also checks that the hook's native PoolManager balanc
 
 ## Further launch tests
 
-The current integration test proves fixed supply, predicted token, hook and router bindings, the canonical PoolId, launch hash, permanent position custody, token custody reconciliation and an optional initial buy with the 10 bps fee.
+The current integration test proves fixed supply, predicted token, hook and router bindings, the canonical PoolId, launch hash, permanent position custody, token custody reconciliation and an optional initial buy with the 10 bps fee. The data-only launch checker separately proves that `submissions/bankroll-hook/launch.json` matches the compiled top-level and child constructors, address placeholders, source hashes, compiler settings and deployment DAG.
 
 Add tests for:
 
