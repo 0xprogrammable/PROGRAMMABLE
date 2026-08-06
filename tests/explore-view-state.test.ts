@@ -17,7 +17,83 @@ import {
   tokenHasSocialLinks,
   tokenLaunchModelGroup,
 } from "../components/explore-view";
-import type { LauncherToken } from "../lib/tokens";
+import type { ExploreEntry, LauncherToken } from "../lib/tokens";
+
+const classicProvenance = {
+  schemaVersion: "programmable.explore-launch-category-provenance.v1",
+  category: "classic",
+  source: "canonical-launch-read-model",
+  recordId: "fixture",
+  modelId: null,
+  modelVersion: null,
+} as const;
+
+const customProvenance = {
+  schemaVersion: "programmable.explore-launch-category-provenance.v1",
+  category: "custom",
+  source: "interface-preview",
+  projectId: `sha256:${"1".repeat(64)}`,
+  launchId: `sha256:${"2".repeat(64)}`,
+  sourceRecordBindingHash: `sha256:${"3".repeat(64)}`,
+  finalizedLaunchBindingHash: `sha256:${"4".repeat(64)}`,
+} as const;
+
+function classicEntry(token: LauncherToken): ExploreEntry {
+  return {
+    ...token,
+    exploreKind: "token",
+    launchCategoryProvenance: {
+      ...classicProvenance,
+      recordId: token.id,
+      modelId: token.launchModel ?? null,
+      modelVersion: token.launchModelVersion ?? token.deepReleaseVersion ?? null,
+    },
+  };
+}
+
+function customEntry(index: number): ExploreEntry {
+  const hash = `sha256:${index.toString(16).padStart(64, "0")}` as const;
+  const wallet = {
+    namespace: "eip155:1",
+    value: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  } as const;
+  return {
+    exploreKind: "custom-project",
+    id: `custom:${index}`,
+    name: `Custom ${index}`,
+    symbol: `C${index}`,
+    links: [],
+    launchedAt: "2026-08-03T00:00:00.000Z",
+    finalizedAt: "2026-08-03T00:01:00.000Z",
+    chainId: "1",
+    modelId: "custom-contract-graph-v2",
+    customProjectId: hash,
+    customLaunchId: hash,
+    launchingWallet: wallet,
+    postLaunchAuthorityInventoryHash: hash,
+    markets: [],
+    postLaunchAuthorityInventory: {
+      schemaVersion: "programmable.post-launch-authority-inventory.v1",
+      launchingWallet: wallet,
+      addressBindings: [],
+      declaredIdentityBindings: [],
+      postLaunchAuthorities: [],
+      confirmation: {
+        mode: "artifact-bound-launching-wallet-intent",
+        confirmingIdentity: wallet,
+        userVisibleDisclosureRequired: true,
+      },
+      postLaunchActionPolicy: "declared-onchain-authority-only",
+      githubAuthority: "provenance-only-never-post-launch-authority",
+      postLaunchAuthorityInventoryHash: hash,
+    },
+    launchCategoryProvenance: {
+      ...customProvenance,
+      projectId: hash,
+      launchId: hash,
+    },
+  };
+}
 
 const payload = {
   status: "ready" as const,
@@ -92,19 +168,25 @@ describe("Explore refresh state", () => {
     };
 
     expect(
-      filterTokensBySocialPresence([baseToken, withSocials], "yes").map(
+      filterTokensBySocialPresence(
+        [classicEntry(baseToken), classicEntry(withSocials)],
+        "yes",
+      ).map(
         (token) => token.id,
       ),
     ).toEqual(["1:social"]);
     expect(
-      filterTokensBySocialPresence([baseToken, withSocials], "no").map(
+      filterTokensBySocialPresence(
+        [classicEntry(baseToken), classicEntry(withSocials)],
+        "no",
+      ).map(
         (token) => token.id,
       ),
     ).toEqual(["1:test"]);
   });
 
   it("filters the complete result set before creating nine-token pages", () => {
-    const tokens = Array.from({ length: 22 }, (_, index) => ({
+    const tokens = Array.from({ length: 22 }, (_, index) => classicEntry({
       id: `1:${index}`,
       name: `Token ${index}`,
       symbol: `T${index}`,
@@ -121,7 +203,7 @@ describe("Explore refresh state", () => {
             ],
           }
         : {}),
-    })) satisfies LauncherToken[];
+    } satisfies LauncherToken));
 
     expect(paginateTokensBySocialPresence(tokens, "yes", 1)).toMatchObject({
       page: 1,
@@ -148,25 +230,23 @@ describe("Explore refresh state", () => {
     });
   });
 
-  it("groups only explicit Classic launches as Classic", () => {
-    expect(tokenLaunchModelGroup({ launchModel: "classic" })).toBe("classic");
-    expect(tokenLaunchModelGroup({ launchModelVersion: "classic-v3" })).toBe(
-      "classic",
-    );
-    expect(tokenLaunchModelGroup({ launchModel: "adaptive" })).toBe(
-      "custom-hook",
-    );
-    expect(tokenLaunchModelGroup({ launchModel: "deep" })).toBe(
-      "custom-hook",
-    );
-    expect(tokenLaunchModelGroup({ launchModel: "stock-paired" })).toBe(
-      "custom-hook",
-    );
-    expect(tokenLaunchModelGroup({})).toBeNull();
+  it("groups only canonical provenance and never infers type from a model or address", () => {
+    expect(tokenLaunchModelGroup({ launchCategoryProvenance: classicProvenance }))
+      .toBe("classic");
+    expect(tokenLaunchModelGroup({ launchCategoryProvenance: customProvenance }))
+      .toBe("custom-hook");
+    expect(tokenLaunchModelGroup({
+      launchCategoryProvenance: {
+        ...classicProvenance,
+        modelId: "deep",
+        recordId: "custom-looking-symbol-and-address",
+      },
+    })).toBe("classic");
   });
 
   it("combines model and social filters before nine-token pagination", () => {
-    const tokens = Array.from({ length: 25 }, (_, index) => ({
+    const tokens = Array.from({ length: 25 }, (_, index) => index < 20
+      ? classicEntry({
       id: `1:model-${index}`,
       name: `Model ${index}`,
       symbol: `M${index}`,
@@ -176,15 +256,10 @@ describe("Explore refresh state", () => {
       launchedAt: "2026-08-03T00:00:00.000Z",
       totalSwapFeeBps: 100,
       liquidityPath: "meme" as const,
-      launchModel: index < 20 ? ("classic" as const) : ("deep" as const),
-      ...(index < 20
-        ? {
-            links: [
-              { kind: "x" as const, url: `https://x.com/model${index}` },
-            ],
-          }
-        : {}),
-    })) satisfies LauncherToken[];
+      launchModel: "classic",
+      links: [{ kind: "x" as const, url: `https://x.com/model${index}` }],
+    } satisfies LauncherToken)
+      : customEntry(index));
 
     expect(filterTokensByLaunchModel(tokens, "classic")).toHaveLength(20);
     expect(filterTokensByLaunchModel(tokens, "custom-hook")).toHaveLength(5);
@@ -203,7 +278,8 @@ describe("Explore refresh state", () => {
   });
 
   it("loads every server page before model filtering and preserves server order", async () => {
-    const tokens = Array.from({ length: 230 }, (_, index) => ({
+    const tokens = Array.from({ length: 230 }, (_, index) => index < 145
+      ? classicEntry({
       id: `1:server-model-${index}`,
       name: `Server model ${index}`,
       symbol: `SM${index}`,
@@ -217,7 +293,8 @@ describe("Explore refresh state", () => {
       links: [
         { kind: "x" as const, url: `https://x.com/server-model-${index}` },
       ],
-    })) satisfies LauncherToken[];
+    } satisfies LauncherToken)
+      : customEntry(index));
     const totalPages = Math.ceil(
       tokens.length / EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE,
     );
@@ -323,7 +400,7 @@ describe("Explore refresh state", () => {
       liquidityPath: "meme",
     } satisfies LauncherToken;
 
-    expect(getMarketCap(token)).toEqual({ kind: "usd", value: 125 });
+    expect(getMarketCap(classicEntry(token))).toEqual({ kind: "usd", value: 125 });
   });
 
   it("keeps the last valid page when a background refresh fails", () => {

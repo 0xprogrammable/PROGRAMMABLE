@@ -3,31 +3,50 @@ import type { ReactNode } from "react";
 import {
   ArrowUpRight,
   Braces,
-  Bot,
   Database,
   Filter,
   History,
   Radar,
   ShieldCheck,
   Tags,
-  Terminal,
-  Workflow,
 } from "lucide-react";
 
 import {
   DeveloperAgentPrompt,
-  DeveloperCodeSample,
   DeveloperDocsWorkbench,
-  providerRegistryInterface,
+  DeveloperEndpointList,
 } from "@/components/developer-docs-workbench";
+import {
+  PROGRAMMABLE_ACTIVE_API_BASE,
+  PROGRAMMABLE_ACTIVE_API_VERSION,
+  PROGRAMMABLE_COMPAT_API_BASE,
+  PROGRAMMABLE_COMPAT_API_VERSION,
+  PROGRAMMABLE_DEVELOPER_REPOSITORY,
+  PROGRAMMABLE_FEE_POLICY,
+  PROGRAMMABLE_FEE_RECIPIENT,
+  PROGRAMMABLE_FINALITY_STATES,
+  PROGRAMMABLE_LABELS,
+  PROGRAMMABLE_OPENAPI_URL,
+  PROGRAMMABLE_PLATFORM_ID,
+  PROGRAMMABLE_RUNTIME_HASH_SEAM,
+  PROGRAMMABLE_SCHEMA_BASE_URL,
+  PROGRAMMABLE_VERIFIED_DEFINITION,
+  PROGRAMMABLE_WELL_KNOWN_URL,
+} from "@/components/developer-docs-contract";
 import styles from "@/components/developer-docs.module.css";
 import { DocsAddress } from "@/components/docs-address";
 import { DocsShell } from "@/components/docs-shell";
+import { CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH } from
+  "@/lib/custom-launch/registry-public-manifest-v1";
+import { resolveCustomRegistryPublicManifestV1 } from
+  "@/lib/server/custom-launch/registry-manifest-v1";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Programmable",
   description:
-    "Integration reference for trading terminals, scanners, indexers and bots consuming Programmable Classic and Custom launches.",
+    "Integrate once to discover every Programmable Classic and Custom launch through canonical provenance, versioned feeds and explicit capabilities.",
   alternates: { canonical: "/docs/developers" },
   openGraph: {
     title: "Programmable terminal integration",
@@ -38,41 +57,46 @@ export const metadata: Metadata = {
 };
 
 const developerSections = [
-  { id: "paths", label: "Choose a path" },
-  { id: "terminals", label: "Terminals" },
-  { id: "providers", label: "Launch providers" },
-  { id: "detection", label: "Detection" },
-  { id: "fields", label: "Required fields" },
-  { id: "verification", label: "Verification" },
-  { id: "data", label: "Data and indexing" },
-  { id: "reference", label: "API reference" },
+  { id: "paths", label: "Start here" },
+  { id: "quickstart", label: "Quickstart" },
+  { id: "identity", label: "Launch identity" },
+  { id: "providers", label: "Custom Registry" },
+  { id: "markets", label: "Assets and markets" },
+  { id: "verification", label: "Verified and fees" },
+  { id: "data", label: "Finality and indexing" },
+  { id: "reference", label: "API and versions" },
+  { id: "checklist", label: "Checklist" },
   { id: "agents", label: "AI agents" },
 ] as const;
 
 const developerPaths = [
   {
-    description: "Detect, classify and render every recognized launch.",
-    href: "#terminals",
-    icon: Terminal,
-    label: "Terminals and scanners",
+    description: "Normative guides, schemas, fixtures and examples.",
+    href: PROGRAMMABLE_DEVELOPER_REPOSITORY,
+    icon: Braces,
+    label: "Open GitHub docs",
+    external: true,
   },
   {
-    description: "Register provider templates as Programmable Custom.",
-    href: "#providers",
-    icon: Workflow,
-    label: "Launch providers",
+    description: "Resolve the active API, chains and compatibility path.",
+    href: PROGRAMMABLE_WELL_KNOWN_URL,
+    icon: Radar,
+    label: "Discover the live API",
+    external: true,
   },
   {
-    description: "Backfill once and consume finalized updates safely.",
-    href: "#data",
+    description: "Copy a minimal consumer for feeds and finality.",
+    href: "#quickstart",
     icon: Database,
-    label: "Data platforms",
+    label: "Start integration",
+    external: false,
   },
   {
-    description: "Load Markdown, OpenAPI and schemas without scraping UI.",
-    href: "#agents",
-    icon: Bot,
-    label: "AI agents",
+    description: "Verify labels, cursors, markets and failure states.",
+    href: "#checklist",
+    icon: ShieldCheck,
+    label: "Review the checklist",
+    external: false,
   },
 ] as const;
 
@@ -83,7 +107,15 @@ const providerRequirements = [
   ],
   [
     "Source",
-    "Verified source, ABI, deployment transaction, start block and runtime code hashes.",
+    "Verified source, ABI, deployment transaction, start block and EVM " +
+      PROGRAMMABLE_RUNTIME_HASH_SEAM.keccakField +
+      " as " +
+      PROGRAMMABLE_RUNTIME_HASH_SEAM.keccakFormat +
+      " " +
+      PROGRAMMABLE_RUNTIME_HASH_SEAM.keccakAlgorithm +
+      "; optional " +
+      PROGRAMMABLE_RUNTIME_HASH_SEAM.sha256Field +
+      " stays separately labeled.",
   ],
   [
     "Template",
@@ -162,75 +194,63 @@ const historicalDeployments: readonly Deployment[] = [
 
 const fields = [
   {
-    field: "category",
-    use: "Map classic to Programmable Classic and custom to Programmable Custom.",
+    field: "schemaVersion · platformId · category",
+    use: "Accept the official platformId programmable, then map classic or custom to the two public labels.",
   },
   {
-    field: "chainId + token.address",
-    use: "Canonical asset key. Never identify a token by name or ticker.",
+    field: "launchId · projectId · chainId · caip2",
+    use: "Keep replay-safe launch and project identity chain-bound. Never identify a token by name or ticker.",
   },
   {
-    field: "launchId",
-    use: "Replay safe launch identity for deduplication.",
+    field: "model · template · partner · builder · origin",
+    use: "Treat attribution and mechanism as additive facts, never as a third public category.",
   },
   {
-    field: "launch.finality",
-    use: "Preserve observed, confirmed, finalized and orphaned states.",
+    field: "token · assets[] · contracts[]",
+    use: "Support no token, one token or several assets with roles, provenance, runtimeCodeKeccak256, optional runtimeCodeSha256 and separate creator metadata.",
   },
   {
-    field: "verification",
-    use: "Store source deployment and provenance state with the record.",
+    field: "launch · verification · finality",
+    use: "Store transaction, block, log position, launch wallet, runtime binding, review and revocation independently.",
   },
   {
-    field: "markets[].support",
-    use: "Gate chart, quote, simulation and execution separately.",
+    field: "markets[] · capabilities[]",
+    use: "Allow zero, one or several markets. Gate chart, quote, simulation and execution separately and preserve unknown IDs.",
   },
   {
     field: "fees",
-    use: "Display verified rates and charge mode. Never infer them from category.",
+    use: "Display verified basis, currency, recipients, shares, accrual and claim evidence. Never infer them from category.",
   },
   {
-    field: "extensions",
-    use: "Preserve namespaced data and ignore fields your client does not understand.",
+    field: "presentation · extensions",
+    use: "Keep creator descriptions and links namespaced. They can never overwrite origin, chain, contract, fee or security facts.",
   },
 ] as const;
 
-const endpoints = [
+const marketCases = [
   {
-    path: "/.well-known/programmable.json",
-    href: "/.well-known/programmable.json",
-    label: "Discover the interface",
-    note: "Stable URLs for the API, manifest, schemas and documentation.",
+    title: "Project only",
+    status: "token = null · markets = []",
+    description:
+      "Keep the project in the launch feed, preserve its contracts and assets, and do not manufacture a coin page.",
   },
   {
-    path: "/api/v2/status",
-    href: "/api/v2/status",
-    label: "Check feed health",
-    note: "Lifecycle, indexed block, freshness and finality.",
+    title: "Token without a market",
+    status: "token = present · markets = []",
+    description:
+      "Show verified token identity while price, liquidity, volume, chart and trade controls remain unavailable.",
   },
   {
-    path: "/api/v2/manifest",
-    href: "/api/v2/manifest",
-    label: "Resolve deployments",
-    note: "Current and historical sources, start blocks and compatibility state.",
+    title: "Several assets and markets",
+    status: "assets > 1 · markets > 1",
+    description:
+      "Render roles and lifecycle per asset and market instead of selecting an arbitrary pool as canonical.",
   },
   {
-    path: "/api/v2/launches",
-    href: "/api/v2/launches",
-    label: "Ingest launches",
-    note: "Cursor paginated Classic and Custom records.",
-  },
-  {
-    path: "/api/v2/launches/{chainId}/{tokenAddress}",
-    href: "/api/v2/launches/1/0x56a96463ead0c0b9b4e4df9e41805bb8877074a6",
-    label: "Fetch one token",
-    note: "One launch record by chain and token contract.",
-  },
-  {
-    path: "/api/v2/token-list",
-    href: "/api/v2/token-list",
-    label: "Read the token list",
-    note: "Compatibility projection for finalized token identity.",
+    title: "Unknown market kind",
+    status: "support = unsupported",
+    description:
+      "Keep the launch visible, preserve the payload and disable chart, quote, simulation and execution until an adapter is verified.",
   },
 ] as const;
 
@@ -314,10 +334,14 @@ function DeploymentCard({ deployment }: { deployment: Deployment }) {
 }
 
 export default function DeveloperDocsPage() {
+  const registryManifest = resolveCustomRegistryPublicManifestV1();
+  const registryAddress = registryManifest.contracts.registry.address ?? "null";
+  const registryStartBlock = registryManifest.startBlock ?? "null";
+  const registryAbiUrl = registryManifest.specifications.abi.url ?? "null";
   return (
     <DocsShell
       currentPath="/docs/developers"
-      description="Choose the integration path for your product. Each path links to the same versioned contracts, evidence rules and machine-readable sources."
+      description="Trading terminals, launch trackers, wallets, scanners, bots and data platforms can discover every recognized launch through one provenance contract, even when the assets, contracts and markets change."
       heroAside={
         <nav
           aria-label="Developer integration paths"
@@ -326,7 +350,12 @@ export default function DeveloperDocsPage() {
           {developerPaths.map((path) => {
             const Icon = path.icon;
             return (
-              <a href={path.href} key={path.href}>
+              <a
+                href={path.href}
+                key={path.href}
+                rel={path.external ? "noreferrer" : undefined}
+                target={path.external ? "_blank" : undefined}
+              >
                 <Icon aria-hidden="true" size={19} strokeWidth={1.8} />
                 <span>
                   <strong>{path.label}</strong>
@@ -339,28 +368,69 @@ export default function DeveloperDocsPage() {
         </nav>
       }
       heroId="paths"
-      kicker="Docs / Developers"
+      kicker="Developer platform"
       sections={developerSections}
-      title="Developer integration"
+      title="Integrate once. Discover every Programmable launch."
     >
-      <section className={styles.terminalSection} id="terminals">
+      <section className={styles.terminalSection} id="quickstart">
         <div className={styles.sectionIntro}>
-          <h2>Detect every launch with two stable labels</h2>
+          <h2>Start with discovery, then ingest one feed</h2>
           <p>
-            The API category is the public classification contract. Internal
-            model names do not create additional terminal categories.
+            Read the well known document instead of hardcoding a major version.
+            It currently advertises API v{PROGRAMMABLE_ACTIVE_API_VERSION}; API v
+            {PROGRAMMABLE_COMPAT_API_VERSION} remains available for pinned
+            compatibility clients.
           </p>
         </div>
 
         <DeveloperDocsWorkbench />
+
+        <div className={styles.compatibilityBand}>
+          <div>
+            <span>Active discovery</span>
+            <strong>API v{PROGRAMMABLE_ACTIVE_API_VERSION}</strong>
+            <code>{PROGRAMMABLE_ACTIVE_API_BASE}</code>
+          </div>
+          <div>
+            <span>Supported compatibility</span>
+            <strong>API v{PROGRAMMABLE_COMPAT_API_VERSION}</strong>
+            <code>{PROGRAMMABLE_COMPAT_API_BASE}</code>
+          </div>
+          <p>
+            Never validate a v{PROGRAMMABLE_ACTIVE_API_VERSION} response with v
+            {PROGRAMMABLE_COMPAT_API_VERSION} schemas. Follow the URLs returned
+            by discovery and pin a major only when your client explicitly owns
+            that compatibility contract.
+          </p>
+        </div>
+
+        <div className={styles.subsectionHeader}>
+          <div>
+            <h3>Two public labels, one platform identity</h3>
+            <p>
+              Model, template and partner attribution stay separate from market
+              availability and fee activation.
+            </p>
+          </div>
+          <a
+            href={`${PROGRAMMABLE_DEVELOPER_REPOSITORY}/blob/main/docs/quickstart.md`}
+            rel="noreferrer"
+            target="_blank"
+          >
+            Open canonical quickstart
+            <ArrowUpRight aria-hidden="true" size={15} strokeWidth={1.8} />
+          </a>
+        </div>
 
         <div className={styles.labelGrid}>
           <article>
             <span className={styles.labelIcon} aria-hidden="true">
               <Tags size={19} strokeWidth={1.8} />
             </span>
-            <code>category = classic</code>
-            <h3>Programmable Classic</h3>
+            <code>
+              {PROGRAMMABLE_PLATFORM_ID} · category = classic
+            </code>
+            <h3>{PROGRAMMABLE_LABELS.classic}</h3>
             <p>
               Current and historical Classic releases. New Classic launches use
               the current V3 launcher and fee hook from the manifest.
@@ -370,11 +440,13 @@ export default function DeveloperDocsPage() {
             <span className={styles.labelIcon} aria-hidden="true">
               <Filter size={19} strokeWidth={1.8} />
             </span>
-            <code>category = custom</code>
-            <h3>Programmable Custom</h3>
+            <code>
+              {PROGRAMMABLE_PLATFORM_ID} · category = custom
+            </code>
+            <h3>{PROGRAMMABLE_LABELS.custom}</h3>
             <p>
-              Approved external hook launches registered through one canonical
-              source, regardless of provider or contract address.
+              Official Custom launches from one canonical registry, regardless
+              of provider, template, mechanic or contract address.
             </p>
           </article>
         </div>
@@ -382,75 +454,146 @@ export default function DeveloperDocsPage() {
         <div className={styles.statusNote}>
           <strong>Current Custom boundary</strong>
           <p>
-            Programmable Custom intake and the open Custom Registry are
-            prelaunch. The v2 Custom feed is empty until an evidenced registry
-            deployment is published. Historical Stock-Paired records are not
-            Programmable Custom and remain only in the v1 compatibility API.
+            Community Custom intake is {registryManifest.status}. Resolve the
+            exact registry generation, contracts, start block and specifications
+            from <a href={CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH}>the public Custom
+            Registry manifest</a>. Existing v{PROGRAMMABLE_COMPAT_API_VERSION}{" "}
+            compatibility records do not prove that open intake is live.
           </p>
         </div>
       </section>
 
+      <section id="identity">
+        <div className={styles.sectionIntro}>
+          <h2>Launch identity comes from proof, not presentation</h2>
+          <p>
+            A name, ticker, logo, creator tag or lookalike event cannot create a
+            Programmable label. Integrators accept identity only from the
+            official chain profile, registry generation and authenticated launch
+            evidence published by the manifest.
+          </p>
+        </div>
+
+        <div className={styles.originFlow} aria-label="Canonical launch origin">
+          <span>Approved repository revision</span>
+          <span aria-hidden="true">→</span>
+          <span>Reproducible build</span>
+          <span aria-hidden="true">→</span>
+          <span>Wallet launch</span>
+          <span aria-hidden="true">→</span>
+          <span>Runtime match</span>
+          <span aria-hidden="true">→</span>
+          <span>Canonical registry</span>
+          <span aria-hidden="true">→</span>
+          <span>Developer feed</span>
+        </div>
+
+        <div className={styles.identityRules}>
+          <article>
+            <strong>Approval is not a launch</strong>
+            <p>
+              Approval binds repository, commit, source commitment, build,
+              artifacts, configuration, chain and launch wallet. The public
+              record appears only after deployed EVM runtimeCodeKeccak256 values
+              and finalization evidence match that approval.
+            </p>
+          </article>
+          <article>
+            <strong>Registration is chain bound</strong>
+            <p>
+              The record binds chainId, CAIP-2, launchId, deployment transaction,
+              block and log position. A copied event on another contract or
+              chain is not Programmable provenance.
+            </p>
+          </article>
+          <article>
+            <strong>Metadata cannot escalate trust</strong>
+            <p>
+              Creator descriptions, images and links remain presentation data.
+              They never overwrite contract, fee, security, origin or authority
+              fields.
+            </p>
+          </article>
+        </div>
+
+        <p className={styles.scopeNote}>
+          For EVM deployments,{" "}
+          <code>{PROGRAMMABLE_RUNTIME_HASH_SEAM.keccakField}</code> is the{" "}
+          <code>{PROGRAMMABLE_RUNTIME_HASH_SEAM.keccakFormat}</code>{" "}
+          <code>{PROGRAMMABLE_RUNTIME_HASH_SEAM.keccakAlgorithm}</code>. Optional{" "}
+          <code>{PROGRAMMABLE_RUNTIME_HASH_SEAM.sha256Field}</code> evidence uses
+          the <code>{PROGRAMMABLE_RUNTIME_HASH_SEAM.sha256Format}</code> prefix
+          and remains a separate field.
+        </p>
+      </section>
+
       <section id="providers">
         <div className={styles.sectionIntro}>
-          <h2>Register partner launches once</h2>
+          <h2>One registry can recognize unfamiliar Custom launches</h2>
           <p>
-            Providers keep their own factories and templates. Programmable
-            supplies one provenance layer so every approved external hook launch
-            appears under the same <code>Programmable Custom</code> label.
+            Token templates, hooks, games, rewards, dynamic supply, burns,
+            oracles, bridges, external contracts and future market types remain
+            extensible. The client contract stays stable because origin,
+            capabilities and evidence are normalized instead of contract
+            addresses.
           </p>
         </div>
 
         <div className={styles.prelaunchNotice}>
-          <strong>Prelaunch specification</strong>
+          <strong>Registry manifest</strong>
           <p>
-            The open Custom Registry is not deployed. The interface below is a
-            review contract for partner integrations, not a live address or an
-            instruction to submit transactions today.
+            The fail-closed public manifest currently reports{" "}
+            <code>{registryManifest.status}</code>, registry address{" "}
+            <code>{registryAddress}</code>, start block{" "}
+            <code>{registryStartBlock}</code>, ABI URL{" "}
+            <code>{registryAbiUrl}</code> and public submissions{" "}
+            <code>{String(registryManifest.publicSubmissionsEnabled)}</code>.
+            Do not subscribe to any address or event outside that manifest.
           </p>
         </div>
 
         <div className={styles.providerModes}>
           <article>
-            <h3>Atomic Programmable adapter</h3>
+            <h3>Atomic launch</h3>
             <p>
-              An approved adapter calls the provider factory, validates the
-              returned token, hook and market, then registers the launch before
-              the same transaction completes.
+              Deployment, initialization and authenticated registration succeed
+              in one transaction or all changes revert. The registry binds the
+              returned assets, contracts and markets to the approved build.
             </p>
           </article>
           <article>
-            <h3>Verified factory callback</h3>
+            <h3>Multistep launch</h3>
             <p>
-              An allowlisted provider factory calls the registry from inside its
-              launch transaction. The registry binds that factory and runtime
-              code to one provider ID.
+              Intermediate deployments remain nonpublic. The record becomes
+              discoverable only after a finalization transaction proves the
+              complete deployment graph and all required runtime matches.
             </p>
           </article>
         </div>
 
         <p className={styles.hardRule}>
-          A frontend request, API response or later metadata submission is not
-          canonical launch provenance. Registration must be authenticated and
-          atomic with the provider launch.
+          A pull request, frontend request, token tag, webhook or later metadata
+          submission is not canonical launch provenance. Only authenticated
+          registry evidence from the published source creates the Custom label.
         </p>
 
         <p className={styles.scopeNote}>
-          Token, hook, factory, provider and market addresses may differ on
-          every launch. Terminals still consume one Custom feed because the
-          registry event, not any individual address, assigns the category.
+          Token, hook, controller, factory, provider and market addresses may
+          differ on every launch. Terminals still consume one Custom feed because
+          the registry event and deployment proof assign the category.
         </p>
 
         <div className={styles.subsectionHeader}>
           <div>
-            <h3>Provider handoff</h3>
-            <p>Every provider supplies the same review package.</p>
+            <h3>Template and provider handoff</h3>
+            <p>Every integration supplies the same verifiable evidence package.</p>
           </div>
           <a
             href="https://github.com/0xprogrammable/developers/blob/main/docs/guides/launch-providers.md"
             rel="noreferrer"
             target="_blank"
           >
-            Open provider guide
+            Open canonical provider guide
             <ArrowUpRight aria-hidden="true" size={15} strokeWidth={1.8} />
           </a>
         </div>
@@ -466,50 +609,88 @@ export default function DeveloperDocsPage() {
 
         <div className={styles.registryLayout}>
           <div>
-            <h3>Canonical registration event</h3>
+            <h3>Canonical registration record</h3>
             <p>
-              The event records immutable launch provenance. Provider status,
-              template review and market support remain separate facts so a
-              later suspension never rewrites launch history.
+              The versioned event records immutable origin. Corrections,
+              revocations, registry generations and provider lifecycle are
+              append only facts, so later changes never rewrite launch history.
             </p>
             <ul>
-              <li>One launch ID and one token registration per chain</li>
-              <li>Provider and factory authenticated before registration</li>
-              <li>Template version and configuration committed by hash</li>
+              <li>Replay protection and one chain bound launch identity</li>
+              <li>Authorized writer and deployment authority authenticated</li>
+              <li>Repository, build, artifacts and configuration committed</li>
               <li>
-                Provider attribution exposed without creating a third category
+                runtimeCodeKeccak256, transaction, block and log position
+                verified
               </li>
             </ul>
           </div>
-          <DeveloperCodeSample
-            code={providerRegistryInterface}
-            label="Draft Solidity interface"
-          />
+          <aside className={styles.statusNote}>
+            <strong>No copyable Custom ABI before deployment</strong>
+            <p>
+              Resolve the registry address, start block, exact event ABI, event
+              set, hash specification and generation from the public Custom
+              Registry manifest. Custom ingestion stays disabled unless its
+              status is live and every binding is non-null.
+            </p>
+            <code>
+              address = {registryAddress} · startBlock = {registryStartBlock}
+            </code>
+          </aside>
         </div>
 
         <div
           className={styles.providerLifecycle}
           aria-label="Provider launch lifecycle"
         >
-          <span>Provider review</span>
+          <span>Revision review</span>
           <span aria-hidden="true">→</span>
-          <span>Factory approval</span>
+          <span>Build binding</span>
           <span aria-hidden="true">→</span>
-          <span>Atomic launch</span>
+          <span>Wallet launch</span>
           <span aria-hidden="true">→</span>
-          <span>Registry event</span>
+          <span>Runtime match</span>
           <span aria-hidden="true">→</span>
-          <span>Custom feed</span>
+          <span>Registry and feed</span>
+        </div>
+
+        <div className={styles.partnerPolicy}>
+          <div>
+            <span>Active fee-bearing partner-template path</span>
+            <strong>
+              {PROGRAMMABLE_FEE_POLICY.partnerTemplate.totalBps} BPS total
+            </strong>
+          </div>
+          <p>
+            Verified partner or template attribution alone does not activate a
+            fee. A project with <code>no-qualifying-market</code> records{" "}
+            {PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket
+              .partnerShareBps}
+            /{PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket
+              .programmableShareBps}
+            /{PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket.totalBps}{" "}
+            BPS for partner, Programmable and total. Only an active fee-bearing
+            partner-template market path must enforce{" "}
+            {PROGRAMMABLE_FEE_POLICY.partnerTemplate.partnerShareBps} BPS for the
+            partner and
+            {" "}{PROGRAMMABLE_FEE_POLICY.partnerTemplate.programmableShareBps}
+            {" "}BPS for Programmable on one clearly defined fee basis. The
+            normal {PROGRAMMABLE_FEE_POLICY.nativeCustom.totalBps} BPS Custom
+            policy is not added again. Named partner attribution requires exact
+            template and deployment provenance; its fee path remains inactive
+            until recipient and onchain fee evidence are published.
+          </p>
         </div>
       </section>
 
-      <section id="detection">
+      <section id="onchain">
         <div className={styles.sectionIntro}>
-          <h2>Detect through the feed or directly onchain</h2>
+          <h2>Consume the feed or verify directly onchain</h2>
           <p>
-            The public feed is the preferred integration. It normalizes every
-            supported release and keeps historical sources in one manifest.
-            Direct log consumers must follow the same inventory.
+            The public feed is the preferred normalized integration. Direct log
+            consumers must still load the same official chain profile, source
+            address, start block, event topic, registry generation and lifecycle
+            from the manifest.
           </p>
         </div>
 
@@ -517,11 +698,12 @@ export default function DeveloperDocsPage() {
           <article>
             <Radar aria-hidden="true" size={20} strokeWidth={1.8} />
             <h3>Public launch feed</h3>
-            <code>GET /api/v2/launches</code>
+            <code>GET /api/v{PROGRAMMABLE_ACTIVE_API_VERSION}/launches</code>
             <p>
               Filter with <code>category=classic</code> or
               <code>category=custom</code>. Refresh the manifest separately and
-              never hardcode one launcher as the complete source.
+              never hardcode one launcher or registry generation as the complete
+              source.
             </p>
           </article>
           <article>
@@ -529,9 +711,9 @@ export default function DeveloperDocsPage() {
             <h3>Ethereum logs</h3>
             <code>eth_getLogs</code>
             <p>
-              Filter by the exact source address, event topic and start block.
-              Pair launch and liquidity evidence before enabling market
-              features.
+              Filter by the exact official source address, event topic and start
+              block. Record transaction, block hash and log position; replay on
+              reorg and apply revocations without trusting lookalike events.
             </p>
           </article>
         </div>
@@ -544,7 +726,7 @@ export default function DeveloperDocsPage() {
             </p>
           </div>
           <a
-            href="https://developers.programmable.family/api/v2/manifest"
+            href={`${PROGRAMMABLE_ACTIVE_API_BASE}/manifest`}
             rel="noreferrer"
             target="_blank"
           >
@@ -578,18 +760,22 @@ export default function DeveloperDocsPage() {
         </details>
 
         <p className={styles.scopeNote}>
-          The v2 manifest lists only Classic sources today. Once the Custom
-          Registry is deployed, its address, start block and evidence will
-          appear there without adding a third public category.
+          The v{PROGRAMMABLE_ACTIVE_API_VERSION} manifest lists only Classic
+          sources today. The Custom source is accepted only after a real registry
+          address, start block, event ABI and generation are published. Ethereum
+          is the sole live chain currently advertised; Base, BNB Chain,
+          Arbitrum and other EVM chains remain architecture targets, not live
+          claims.
         </p>
       </section>
 
-      <section id="fields">
+      <section id="markets">
         <div className={styles.sectionIntro}>
-          <h2>Store these fields</h2>
+          <h2>Preserve the launch even when your client cannot trade it</h2>
           <p>
-            These values are enough to render a launch, deduplicate updates and
-            decide which product features are available.
+            Custom is an open data model, not a promise that every project is an
+            ERC 20 with one pool. Store identity and evidence first, then expose
+            only capabilities your product actually supports.
           </p>
         </div>
 
@@ -605,67 +791,179 @@ export default function DeveloperDocsPage() {
             </div>
           ))}
         </div>
+
+        <div className={styles.marketCases}>
+          {marketCases.map((marketCase) => (
+            <article key={marketCase.title}>
+              <code>{marketCase.status}</code>
+              <h3>{marketCase.title}</h3>
+              <p>{marketCase.description}</p>
+            </article>
+          ))}
+        </div>
+
+        <p className={styles.scopeNote}>
+          Supply may be dynamic; burns, rewards, game state, bridges, oracles and
+          offchain services may affect the project. Record their evidence and
+          authority boundaries without interpreting arbitrary extension fields
+          as executable instructions.
+        </p>
       </section>
 
       <section id="verification">
         <div className={styles.sectionIntro}>
-          <h2>Verification is not one safety flag</h2>
+          <h2>Programmable Verified is exact and bounded</h2>
           <p>
-            Preserve each fact independently. Provenance, contract properties,
-            audit scope, market support and liquidity are different claims.
+            {PROGRAMMABLE_VERIFIED_DEFINITION} It is not a universal safety,
+            audit, liquidity or execution guarantee.
           </p>
         </div>
+
+        <blockquote className={styles.verifiedDefinition}>
+          <span>Published definition</span>
+          <p>{PROGRAMMABLE_VERIFIED_DEFINITION}</p>
+        </blockquote>
 
         <div className={styles.verificationGrid}>
           <article>
             <ShieldCheck aria-hidden="true" size={21} strokeWidth={1.8} />
-            <h3>Classic V3 contract facts</h3>
+            <h3>Review record</h3>
             <ul>
-              <li>Fixed supply of 1,000,000,000 tokens with 18 decimals</li>
-              <li>No owner mint, blacklist, pause or ERC20 transfer tax</li>
-              <li>Permanently held one sided Uniswap v4 position</li>
-              <li>Immutable buy and sell fees selected from 1% through 10%</li>
-              <li>Recorded mainnet buy, sell and claim lifecycle evidence</li>
+              <li>Policy version and commitment</li>
+              <li>Repository, commit, source, build and artifact hashes</li>
+              <li>
+                Optional runtimeCodeSha256 evidence separately named and labeled
+              </li>
+              <li>Configuration, authorities and upgradeability</li>
+              <li>Pause, custody, dependencies, oracles and bridges</li>
+              <li>Findings, reviewer type, review time and scope</li>
             </ul>
           </article>
           <article>
             <Database aria-hidden="true" size={21} strokeWidth={1.8} />
-            <h3>Custom verification</h3>
+            <h3>Deployment record</h3>
             <ul>
-              <li>Custom identifies the launch family, not one mechanic</li>
-              <li>Read provenance and market support from each record</li>
-              <li>Do not infer an audit from category or metadata</li>
-              <li>Keep unsupported chart and trade actions disabled</li>
-              <li>Preserve unknown capabilities without executing them</li>
+              <li>Chain, launch wallet, transaction and block binding</li>
+              <li>
+                EVM <code>{PROGRAMMABLE_RUNTIME_HASH_SEAM.keccakField}</code> as{" "}
+                <code>{PROGRAMMABLE_RUNTIME_HASH_SEAM.keccakAlgorithm}</code> and{" "}
+                deployment configuration match
+              </li>
+              <li>Finality and canonical registry evidence</li>
+              <li>Superseded, revoked and authority change state</li>
+              <li>Market, fee and metadata trust kept separate</li>
             </ul>
           </article>
         </div>
 
         <div className={styles.verificationRule}>
-          <strong>Terminal label rule</strong>
+          <strong>No universal safe flag</strong>
           <p>
-            A Programmable label means the asset traces to a recognized source
-            deployment. It does not guarantee price, liquidity, metadata truth
-            or the absence of every economic risk. The v2 schema intentionally
-            has no universal <code>safe</code> or <code>audited</code> boolean.
+            Preserve provenance, review result, source and runtime match,
+            finality, metadata trust, dependencies, admin rights, market
+            verification, charting, quotes, simulation, execution and fees as
+            independent facts. Do not describe a launch as guaranteed safe,
+            risk free, unruggable or independently audited without exact
+            evidence.
           </p>
         </div>
 
-        <p className={styles.scopeNote}>
-          Current Classic V3 has no token level sell restriction and its release
-          evidence includes a successful sell. A terminal should still perform
-          its normal pool state, liquidity, quote and simulation checks before
-          enabling execution.
-        </p>
+        <div className={styles.subsectionHeader}>
+          <div>
+            <h3>Fee policy</h3>
+            <p>Rates apply only to their verified market path and fee basis.</p>
+          </div>
+          <DocsAddress
+            address={PROGRAMMABLE_FEE_RECIPIENT}
+            label="Programmable fee recipient"
+          />
+        </div>
+
+        <div className={styles.feeGrid}>
+          <article>
+            <span>Native Custom policy</span>
+            <strong>
+              {PROGRAMMABLE_FEE_POLICY.nativeCustom.totalBps} BPS · 0.10%
+            </strong>
+            <p>
+              {PROGRAMMABLE_FEE_POLICY.nativeCustom.programmableShareBps} BPS
+              to Programmable, no partner share, only on the verified official
+              market path. Transfers, mints, burns, rewards, games, refunds,
+              bridges and third party pools are not automatically charged.
+            </p>
+            <small>
+              Community Custom status is {registryManifest.status}; this policy
+              alone is not proof of a live fee path.
+            </small>
+          </article>
+          <article>
+            <span>Active fee-bearing partner-template path</span>
+            <strong>
+              {PROGRAMMABLE_FEE_POLICY.partnerTemplate.totalBps} BPS total
+            </strong>
+            <p>
+              When active, {PROGRAMMABLE_FEE_POLICY.partnerTemplate.partnerShareBps}{" "}
+              BPS partner plus
+              {" "}{PROGRAMMABLE_FEE_POLICY.partnerTemplate.programmableShareBps}
+              {" "}BPS Programmable, enforced by the exact reviewed template on
+              the same fee basis. No additional native
+              {" "}{PROGRAMMABLE_FEE_POLICY.nativeCustom.totalBps} BPS is added.
+            </p>
+            <small>
+              Partner attribution with <code>no-qualifying-market</code> is
+              valid at{" "}
+              {PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket
+                .partnerShareBps}
+              /{PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket
+                .programmableShareBps}
+              /{PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket.totalBps}{" "}
+              BPS. Otherwise recipient, currency, rounding, accrual and claim
+              paths must be proven from code, deployment configuration or
+              onchain state.
+            </small>
+          </article>
+        </div>
       </section>
 
       <section id="data">
         <div className={styles.sectionIntro}>
-          <h2>Backfill once, then poll from a checkpoint</h2>
+          <h2>Follow finality without losing a launch</h2>
           <p>
-            Cursors are opaque. Commit every page before advancing the durable
-            checkpoint.
+            The chain timestamp is original time. The API first exposes a
+            canonical block as observed, then advances confirmation and finality
+            state. Reorged records become orphaned rather than disappearing.
           </p>
+        </div>
+
+        <div className={styles.finalityRail} aria-label="Launch finality states">
+          {PROGRAMMABLE_FINALITY_STATES.map((state, index) => (
+            <div key={state}>
+              <span>{index + 1}</span>
+              <strong>{state}</strong>
+              <small>
+                {state === "observed"
+                  ? "First canonical observation"
+                  : state === "confirmed"
+                    ? "Confirmation policy reached"
+                    : state === "finalized"
+                      ? "Finality policy reached"
+                      : "Removed by canonical reorg"}
+              </small>
+            </div>
+          ))}
+        </div>
+
+        <p className={styles.scopeNote}>
+          A revoked review or launch is a separate trust state, not a fifth block
+          finality state. Measure chain to indexer, API and website latency from
+          observed timestamps; do not assume or promise same second visibility.
+        </p>
+
+        <div className={styles.subsectionHeader}>
+          <div>
+            <h3>Backfill once, then poll from a durable checkpoint</h3>
+            <p>Cursors are opaque. Store and return them unchanged.</p>
+          </div>
         </div>
 
         <ol className={styles.syncSteps}>
@@ -688,7 +986,10 @@ export default function DeveloperDocsPage() {
                 Continue with <code>nextCursor</code> while
                 <code>hasMore</code> is true.
               </p>
-              <code>GET /api/v2/launches?cursor={"{nextCursor}"}</code>
+              <code>
+                GET /api/v{PROGRAMMABLE_ACTIVE_API_VERSION}/launches?cursor=
+                {"{nextCursor}"}
+              </code>
             </div>
           </li>
           <li>
@@ -710,45 +1011,80 @@ export default function DeveloperDocsPage() {
                 Start the next traversal with <code>after</code>. Reconcile
                 repeated and orphaned records by <code>launchId</code>.
               </p>
-              <code>GET /api/v2/launches?after={"{resumeCursor}"}</code>
+              <code>
+                GET /api/v{PROGRAMMABLE_ACTIVE_API_VERSION}/launches?after=
+                {"{resumeCursor}"}
+              </code>
             </div>
           </li>
         </ol>
+
+        <div className={styles.indexingRules}>
+          <p>
+            <strong>Snapshot consistency</strong>
+            Finish every <code>nextCursor</code> page from one traversal before
+            starting from <code>resumeCursor</code>. A launch arriving during the
+            traversal must appear in the next poll, never be skipped between
+            cursors.
+          </p>
+          <p>
+            <strong>Retry semantics</strong>
+            On stale or incomplete coverage, preserve the last good state and
+            honor retry guidance. A retryable <code>503</code> is not an empty
+            feed and an unavailable registry is not a token detail <code>404</code>.
+          </p>
+          <p>
+            <strong>Multi chain readiness</strong>
+            Read the chain list and per chain manifest data from discovery. Key
+            tokens by chain and address, deduplicate by chain bound launchId and
+            never mark a planned chain live before it appears in the official
+            manifest.
+          </p>
+        </div>
       </section>
 
       <section id="reference">
         <div className={styles.sectionIntro}>
-          <h2>API reference</h2>
+          <h2>Discover the active API; pin compatibility deliberately</h2>
           <p>
             All public endpoints are read only, return JSON and support public
-            CORS without an API key.
+            CORS without an API key. The well known document is the global
+            entry point and currently selects v{PROGRAMMABLE_ACTIVE_API_VERSION}.
           </p>
         </div>
 
-        <div className={styles.endpointList}>
-          {endpoints.map((endpoint) => (
-            <a
-              href={`https://developers.programmable.family${endpoint.href}`}
-              key={endpoint.path}
-              rel="noreferrer"
-              target="_blank"
-            >
-              <span className={styles.method}>GET</span>
-              <code>{endpoint.path}</code>
-              <span className={styles.endpointDescription}>
-                <strong>{endpoint.label}</strong>
-                <small>{endpoint.note}</small>
-              </span>
-              <ArrowUpRight aria-hidden="true" size={17} strokeWidth={1.8} />
-            </a>
-          ))}
+        <div className={styles.versionMatrix} aria-label="API version support">
+          <div>
+            <code>v{PROGRAMMABLE_ACTIVE_API_VERSION}</code>
+            <strong>Active discovery</strong>
+            <span>
+              New integrations follow URLs from {PROGRAMMABLE_WELL_KNOWN_URL}.
+            </span>
+          </div>
+          <div>
+            <code>v{PROGRAMMABLE_COMPAT_API_VERSION}</code>
+            <strong>Supported compatibility</strong>
+            <span>
+              Existing clients may stay pinned while they validate and migrate
+              to the active contract.
+            </span>
+          </div>
         </div>
+
+        <DeveloperEndpointList />
 
         <div className={styles.endpointGuidance}>
           <p>
-            A token detail request needs both path values. Use
-            <code>/api/v2/launches/1/0x…</code>. <code>/token</code> alone is
-            not an API route.
+            Use{" "}
+            <code>
+              /api/v{PROGRAMMABLE_ACTIVE_API_VERSION}/launches/{"{launchId}"}
+            </code>{" "}
+            for every launch shape, including project-only and multi-asset
+            records. A token compatibility lookup needs both path values. Use
+            <code>
+              /api/v{PROGRAMMABLE_ACTIVE_API_VERSION}/launches/1/0x…
+            </code>{" "}
+            only when the record has a canonical token address.
           </p>
           <div aria-label="Launch feed query parameters">
             <code>chainId=1</code>
@@ -779,41 +1115,109 @@ export default function DeveloperDocsPage() {
 
         <div className={styles.resourceGrid}>
           <ExternalResource
-            href="https://developers.programmable.family/openapi/programmable-v2.yaml"
-            meta="Normative HTTP contract"
+            href={PROGRAMMABLE_OPENAPI_URL}
+            meta={`Normative v${PROGRAMMABLE_ACTIVE_API_VERSION} HTTP contract`}
           >
-            OpenAPI 3.1
+            Active OpenAPI 3.1
           </ExternalResource>
           <ExternalResource
-            href="https://github.com/0xprogrammable/developers/tree/main/schemas/v2"
-            meta="Validate public responses"
+            href={PROGRAMMABLE_SCHEMA_BASE_URL}
+            meta={`Hosted v${PROGRAMMABLE_ACTIVE_API_VERSION} schemas`}
           >
-            JSON Schemas
+            Active JSON Schemas
           </ExternalResource>
           <ExternalResource
-            href="https://github.com/0xprogrammable/developers/tree/main/abis/ethereum"
+            href={`${PROGRAMMABLE_DEVELOPER_REPOSITORY}/tree/main/abis/ethereum`}
             meta="Canonical launch event interfaces"
           >
             Ethereum ABIs
           </ExternalResource>
           <ExternalResource
-            href="https://github.com/0xprogrammable/developers/blob/main/docs/guides/terminals-and-scanners.md"
+            href={`${PROGRAMMABLE_DEVELOPER_REPOSITORY}/blob/main/docs/guides/terminals-and-scanners.md`}
             meta="Terminal implementation contract"
           >
             Terminal guide
           </ExternalResource>
           <ExternalResource
-            href="https://github.com/0xprogrammable/developers/tree/main/fixtures/v2"
+            href={`${PROGRAMMABLE_DEVELOPER_REPOSITORY}/tree/main/fixtures/v2`}
             meta="Conformance and edge cases"
           >
             Fixtures
           </ExternalResource>
           <ExternalResource
-            href="https://github.com/0xprogrammable/developers/issues"
+            href={`${PROGRAMMABLE_DEVELOPER_REPOSITORY}/issues`}
             meta="Integration questions and discrepancies"
           >
             Integration support
           </ExternalResource>
+        </div>
+
+        <p className={styles.scopeNote}>
+          GitHub is the canonical technical source for guides, schemas, fixtures,
+          clients, compatibility and security policy. The live well known
+          document and manifest are the authority for the currently advertised
+          API version, chains, deployments and runtime status.
+        </p>
+      </section>
+
+      <section id="checklist">
+        <div className={styles.sectionIntro}>
+          <h2>Production integration checklist</h2>
+          <p>
+            Keep one durable ingestion path and let verified capabilities decide
+            what your product can safely show or execute.
+          </p>
+        </div>
+
+        <ol className={styles.integrationChecklist}>
+          <li>Load well known, then status and every advertised chain manifest.</li>
+          <li>
+            Accept <code>platformId={PROGRAMMABLE_PLATFORM_ID}</code> only from
+            the official source and map exactly two public categories.
+          </li>
+          <li>
+            Backfill every page, deduplicate by launchId and persist resumeCursor
+            only after the snapshot is durable.
+          </li>
+          <li>
+            Key tokens by chainId and address; preserve project only and multi
+            asset launches without inventing a primary token.
+          </li>
+          <li>
+            Reconcile observed, confirmed, finalized and orphaned records plus
+            separate revoked or superseded review state.
+          </li>
+          <li>
+            Keep unknown templates, capabilities and market kinds visible while
+            disabling unsupported chart, quote, simulation and execution paths.
+          </li>
+          <li>
+            Read fee basis, currency, recipients, accrual and claim evidence from
+            each record; never infer fees from category or partner name.
+          </li>
+          <li>
+            Validate fixtures and live responses with the matching major version
+            schemas, handle retryable 503, and retain the last good state.
+          </li>
+        </ol>
+
+        <div className={styles.finalCta}>
+          <div>
+            <strong>Build against the canonical contract</strong>
+            <p>
+              Start with GitHub, verify runtime discovery, then test your client
+              against no market, multi market, reorg and unknown capability
+              fixtures.
+            </p>
+          </div>
+          <a
+            href={PROGRAMMABLE_DEVELOPER_REPOSITORY}
+            rel="noreferrer"
+            target="_blank"
+          >
+            Open GitHub developer docs
+            <ArrowUpRight aria-hidden="true" size={16} strokeWidth={1.8} />
+          </a>
         </div>
       </section>
 
@@ -821,11 +1225,12 @@ export default function DeveloperDocsPage() {
         <div className={styles.sectionIntro}>
           <h2>AI agent entry points</h2>
           <p>
-            Markdown, OpenAPI, schemas and the terminal guide are the source of
-            truth. The prompt below points an agent to the same contract.
+            GitHub guides, live discovery, OpenAPI, schemas and fixtures form the
+            technical source set. The prompt below points an agent to that same
+            versioned contract without asking it to scrape this page.
           </p>
         </div>
-        <DeveloperAgentPrompt />
+        <DeveloperAgentPrompt registryManifest={registryManifest} />
       </section>
     </DocsShell>
   );

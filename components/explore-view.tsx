@@ -27,11 +27,14 @@ import {
   useLiveDataRefresh,
 } from "@/components/use-live-data-refresh";
 import { WebsiteLinkIcon } from "@/components/website-link-icon";
+import { parseDiscoverableMarketTradeCapabilityV1 } from
+  "@/lib/custom-launch/trade-capability-v1";
 import {
   canOptimizeTokenImage,
   getTokenCardImageSource,
 } from "@/lib/token-image";
 import {
+  type ExploreEntry,
   type LauncherToken,
   type TokenLink,
 } from "@/lib/tokens";
@@ -42,10 +45,11 @@ type TokenCard = {
   name: string;
   description?: string;
   imageUrl: string;
-  links: TokenLink[];
+  links: readonly TokenLink[];
   marketCap?: MarketCapMetric;
   usesFallbackImage: boolean;
-  tokenAddress: `0x${string}`;
+  tokenAddress?: `0x${string}`;
+  launchCategory: "Classic" | "Custom";
 };
 
 type TokenSort = "newest" | "oldest" | "market-cap" | "market-cap-asc";
@@ -54,7 +58,7 @@ export type ExploreModelFilter = "all" | "classic" | "custom-hook";
 
 type ExplorePayload = {
   status: "ready" | "not-deployed";
-  tokens: LauncherToken[];
+  tokens: ExploreEntry[];
   page: number;
   pageSize: number;
   total: number;
@@ -132,7 +136,7 @@ const modelFilterOptions: {
   label: string;
 }[] = [
   { id: "classic", label: "Classic" },
-  { id: "custom-hook", label: "Custom Hook" },
+  { id: "custom-hook", label: "Custom" },
 ];
 const tokenLinkOrder: Record<TokenLink["kind"], number> = {
   website: 0,
@@ -279,6 +283,208 @@ function parseLauncherToken(value: unknown): LauncherToken | null {
   };
 }
 
+function parseLaunchCategoryProvenance(
+  value: unknown,
+  category: "classic" | "custom",
+) {
+  if (!isRecord(value)
+    || value.schemaVersion !== "programmable.explore-launch-category-provenance.v1"
+    || value.category !== category) return null;
+  if (category === "classic") {
+    return value.source === "canonical-launch-read-model"
+      && typeof value.recordId === "string"
+      && (typeof value.modelId === "string" || value.modelId === null)
+      && (typeof value.modelVersion === "string" || value.modelVersion === null)
+      ? value
+      : null;
+  }
+  const baseValid = isSha256(value.projectId)
+    && isSha256(value.launchId)
+    && isSha256(value.sourceRecordBindingHash)
+    && isSha256(value.finalizedLaunchBindingHash);
+  if (!baseValid) return null;
+  if (value.source === "interface-preview") return value;
+  return value.source === "registry.custom-launched"
+    && isTokenAddress(value.registryAddress)
+    && typeof value.registryStartBlock === "string"
+    && /^[1-9][0-9]*$/u.test(value.registryStartBlock)
+    && isBytes32(value.transactionHash)
+    && isBytes32(value.blockHash)
+    && typeof value.blockNumber === "string"
+    && /^[1-9][0-9]*$/u.test(value.blockNumber)
+    && Number.isSafeInteger(value.transactionIndex)
+    && Number(value.transactionIndex) >= 0
+    && Number.isSafeInteger(value.logIndex)
+    && Number(value.logIndex) >= 0
+    && isBytes32(value.configurationHash)
+    ? value : null;
+}
+
+function isSha256(value: unknown): value is `sha256:${string}` {
+  return typeof value === "string" && /^sha256:[0-9a-f]{64}$/u.test(value);
+}
+
+function parseCustomExploreAsset(value: unknown) {
+  if (!isRecord(value)
+    || typeof value.assetId !== "string"
+    || !isRecord(value.identity)
+    || typeof value.identity.namespace !== "string"
+    || typeof value.identity.value !== "string"
+    || (value.decimals !== undefined && (!Number.isSafeInteger(value.decimals)
+      || Number(value.decimals) < 0 || Number(value.decimals) > 255))) return null;
+  return {
+    assetId: value.assetId,
+    identity: {
+      namespace: value.identity.namespace,
+      value: value.identity.value,
+    },
+    ...(typeof value.name === "string" ? { name: value.name } : {}),
+    ...(typeof value.symbol === "string" ? { symbol: value.symbol } : {}),
+    ...(value.decimals === undefined ? {} : { decimals: Number(value.decimals) }),
+  };
+}
+
+function parseCustomExploreMarkets(value: unknown, chainId: string) {
+  if (!Array.isArray(value) || value.length > 256) return null;
+  type CustomMarket = Extract<ExploreEntry, { exploreKind: "custom-project" }>["markets"][number];
+  const markets: CustomMarket[] = [];
+  for (const candidate of value) {
+    if (!isRecord(candidate)
+      || typeof candidate.marketId !== "string"
+      || typeof candidate.kind !== "string"
+      || !["active", "paused", "closed", "verification_pending"].includes(
+        String(candidate.status),
+      )
+      || (candidate.poolId !== undefined && !isBytes32(candidate.poolId))) return null;
+    const baseAsset = parseCustomExploreAsset(candidate.baseAsset);
+    const quoteAsset = parseCustomExploreAsset(candidate.quoteAsset);
+    if (baseAsset === null || quoteAsset === null) return null;
+    const capability = candidate.tradeCapability === undefined
+      ? undefined
+      : parseDiscoverableMarketTradeCapabilityV1({
+          value: candidate.tradeCapability,
+          chainId,
+          marketId: candidate.marketId,
+          baseAssetId: baseAsset.assetId,
+          quoteAssetId: quoteAsset.assetId,
+          ...(candidate.poolId === undefined ? {} : { poolId: candidate.poolId }),
+        });
+    if (candidate.tradeCapability !== undefined && capability === null) return null;
+    markets.push({
+      marketId: candidate.marketId,
+      kind: candidate.kind,
+      status: candidate.status as CustomMarket["status"],
+      ...(candidate.poolId === undefined ? {} : { poolId: candidate.poolId }),
+      baseAsset,
+      quoteAsset,
+      ...(capability === undefined
+        ? {}
+        : { tradeCapability: capability as CustomMarket["tradeCapability"] }),
+    });
+  }
+  return markets;
+}
+
+function parseCustomExploreEntry(value: unknown): ExploreEntry | null {
+  if (!isRecord(value)
+    || value.exploreKind !== "custom-project"
+    || typeof value.id !== "string"
+    || typeof value.name !== "string"
+    || typeof value.launchedAt !== "string"
+    || typeof value.finalizedAt !== "string"
+    || typeof value.chainId !== "string"
+    || typeof value.modelId !== "string"
+    || !isSha256(value.customProjectId)
+    || !isSha256(value.customLaunchId)
+    || !isRecord(value.launchingWallet)
+    || typeof value.launchingWallet.namespace !== "string"
+    || typeof value.launchingWallet.value !== "string"
+    || !/^eip155:[1-9][0-9]*$/u.test(value.launchingWallet.namespace)
+    || !/^0x[0-9a-f]{40}$/u.test(value.launchingWallet.value)
+    || !isSha256(value.postLaunchAuthorityInventoryHash)
+    || !isRecord(value.postLaunchAuthorityInventory)
+    || value.postLaunchAuthorityInventory.schemaVersion
+      !== "programmable.post-launch-authority-inventory.v1"
+    || value.postLaunchAuthorityInventory.postLaunchAuthorityInventoryHash
+      !== value.postLaunchAuthorityInventoryHash
+    || value.postLaunchAuthorityInventory.githubAuthority
+      !== "provenance-only-never-post-launch-authority"
+    || !Array.isArray(value.postLaunchAuthorityInventory.postLaunchAuthorities)
+    || !Array.isArray(value.markets)
+    || !Array.isArray(value.links)
+    || parseLaunchCategoryProvenance(
+      value.launchCategoryProvenance,
+      "custom",
+    ) === null
+  ) return null;
+  const links = value.links.map(parseTokenLink);
+  if (links.some((link) => link === null)) return null;
+  if (value.tokenAddress !== undefined && !isTokenAddress(value.tokenAddress)) {
+    return null;
+  }
+  if (value.tokenDecimals !== undefined && (
+    !Number.isSafeInteger(value.tokenDecimals)
+    || Number(value.tokenDecimals) < 0
+    || Number(value.tokenDecimals) > 255
+  )) return null;
+  const markets = parseCustomExploreMarkets(value.markets, value.chainId);
+  if (markets === null) return null;
+  return {
+    exploreKind: "custom-project",
+    id: value.id,
+    name: value.name,
+    ...(typeof value.symbol === "string" ? { symbol: value.symbol } : {}),
+    ...(typeof value.description === "string"
+      ? { description: value.description }
+      : {}),
+    ...(safeImageUrl(value.imageUrl) ? { imageUrl: value.imageUrl as string } : {}),
+    links: links as TokenLink[],
+    launchedAt: value.launchedAt,
+    finalizedAt: value.finalizedAt,
+    chainId: value.chainId,
+    modelId: value.modelId,
+    customProjectId: value.customProjectId,
+    customLaunchId: value.customLaunchId,
+    launchingWallet: value.launchingWallet as Extract<
+      ExploreEntry,
+      { exploreKind: "custom-project" }
+    >["launchingWallet"],
+    postLaunchAuthorityInventory: value.postLaunchAuthorityInventory as Extract<
+      ExploreEntry,
+      { exploreKind: "custom-project" }
+    >["postLaunchAuthorityInventory"],
+    postLaunchAuthorityInventoryHash: value.postLaunchAuthorityInventoryHash,
+    markets,
+    ...(value.tokenAddress === undefined ? {} : { tokenAddress: value.tokenAddress }),
+    ...(value.tokenDecimals === undefined ? {} : { tokenDecimals: value.tokenDecimals as number }),
+    launchCategoryProvenance: value.launchCategoryProvenance as Extract<
+      ExploreEntry,
+      { exploreKind: "custom-project" }
+    >["launchCategoryProvenance"],
+  };
+}
+
+function parseExploreEntry(value: unknown): ExploreEntry | null {
+  if (isRecord(value) && value.exploreKind === "custom-project") {
+    return parseCustomExploreEntry(value);
+  }
+  const token = parseLauncherToken(value);
+  if (!token || !isRecord(value)
+    || value.exploreKind !== "token"
+    || parseLaunchCategoryProvenance(
+      value.launchCategoryProvenance,
+      "classic",
+    ) === null) return null;
+  return {
+    ...token,
+    exploreKind: "token",
+    launchCategoryProvenance: value.launchCategoryProvenance as Extract<
+      ExploreEntry,
+      { exploreKind: "token" }
+    >["launchCategoryProvenance"],
+  };
+}
+
 function positiveInteger(value: unknown, fallback: number) {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
     ? value
@@ -296,14 +502,14 @@ function parseExplorePayload(value: unknown): ExplorePayload {
     throw new Error("The token registry returned invalid token data");
   }
 
-  const tokens = value.tokens.map(parseLauncherToken);
+  const tokens = value.tokens.map(parseExploreEntry);
   if (tokens.some((token) => token === null)) {
     throw new Error("The token registry returned an invalid token record");
   }
 
   return {
     status: value.status,
-    tokens: tokens as LauncherToken[],
+    tokens: tokens as ExploreEntry[],
     page: Math.max(1, positiveInteger(value.page, 1)),
     pageSize: Math.max(
       1,
@@ -475,8 +681,10 @@ export async function loadExploreModelDataset(
   };
 }
 
-export function paginateTokensBySocialPresence(
-  tokens: LauncherToken[],
+export function paginateTokensBySocialPresence<
+  T extends Readonly<{ links?: readonly TokenLink[] }>,
+>(
+  tokens: T[],
   socialFilter: ExploreSocialFilter,
   requestedPage: number,
   pageSize = EXPLORE_TOKENS_PER_PAGE,
@@ -496,32 +704,17 @@ export function paginateTokensBySocialPresence(
 }
 
 export function tokenLaunchModelGroup(
-  token: Pick<
-    LauncherToken,
-    | "adaptiveCurveHash"
-    | "deepReleaseVersion"
-    | "launchModel"
-    | "launchModelVersion"
-  >,
+  token: Pick<ExploreEntry, "launchCategoryProvenance">,
 ): Exclude<ExploreModelFilter, "all"> | null {
-  if (
-    token.launchModel === "classic" ||
-    token.launchModelVersion === "classic-v3"
-  ) {
-    return "classic";
-  }
-  if (
-    token.launchModel ||
-    token.deepReleaseVersion ||
-    token.adaptiveCurveHash
-  ) {
-    return "custom-hook";
-  }
-  return null;
+  return token.launchCategoryProvenance.category === "classic"
+    ? "classic"
+    : token.launchCategoryProvenance.category === "custom"
+      ? "custom-hook"
+      : null;
 }
 
 export function filterTokensByLaunchModel(
-  tokens: LauncherToken[],
+  tokens: ExploreEntry[],
   modelFilter: ExploreModelFilter,
 ) {
   if (modelFilter === "all") return tokens;
@@ -531,7 +724,7 @@ export function filterTokensByLaunchModel(
 }
 
 export function paginateTokensByExploreFilters(
-  tokens: LauncherToken[],
+  tokens: ExploreEntry[],
   socialFilter: ExploreSocialFilter,
   modelFilter: ExploreModelFilter,
   requestedPage: number,
@@ -563,8 +756,9 @@ function getFallbackTokenImage(address: string) {
 }
 
 export function getMarketCap(
-  token: LauncherToken,
+  token: ExploreEntry,
 ): MarketCapMetric | undefined {
+  if (token.exploreKind !== "token") return undefined;
   if (
     token.indexedMarketCapUsdWad &&
     /^\d+$/.test(token.indexedMarketCapUsdWad)
@@ -637,7 +831,7 @@ export function getExplorePaginationItems(
 }
 
 export function tokenHasSocialLinks(
-  token: Pick<LauncherToken, "links">,
+  token: Readonly<{ links?: readonly TokenLink[] }>,
 ) {
   return Boolean(
     token.links?.some(
@@ -646,8 +840,10 @@ export function tokenHasSocialLinks(
   );
 }
 
-export function filterTokensBySocialPresence(
-  tokens: LauncherToken[],
+export function filterTokensBySocialPresence<
+  T extends Readonly<{ links?: readonly TokenLink[] }>,
+>(
+  tokens: T[],
   socialFilter: ExploreSocialFilter,
 ) {
   if (socialFilter === "all") return tokens;
@@ -657,19 +853,27 @@ export function filterTokensBySocialPresence(
   );
 }
 
-function getTokenCards(tokens: LauncherToken[]): TokenCard[] {
+function getTokenCards(tokens: ExploreEntry[]): TokenCard[] {
   return tokens.map((token) => ({
     id: token.id,
     name: token.name,
     description: token.description?.trim() || undefined,
     imageUrl:
-      token.imageUrl?.trim() || getFallbackTokenImage(token.tokenAddress),
+      token.imageUrl?.trim() || getFallbackTokenImage(
+        token.tokenAddress ?? token.id,
+      ),
     links: [...(token.links ?? [])].sort(
       (left, right) => tokenLinkOrder[left.kind] - tokenLinkOrder[right.kind],
     ),
     marketCap: getMarketCap(token),
     usesFallbackImage: !token.imageUrl?.trim(),
-    tokenAddress: token.tokenAddress,
+    ...(token.tokenAddress === undefined
+      ? {}
+      : { tokenAddress: token.tokenAddress }),
+    launchCategory:
+      token.launchCategoryProvenance.category === "classic"
+        ? "Classic"
+        : "Custom",
   }));
 }
 
@@ -725,13 +929,13 @@ function ExploreGridSkeleton() {
 }
 
 function resultRangeLabel(payload: ExplorePayload | null) {
-  if (!payload || payload.status !== "ready") return "Loading token index";
-  if (payload.total === 0) return "0 tokens";
+  if (!payload || payload.status !== "ready") return "Loading launch index";
+  if (payload.total === 0) return "0 launches";
 
   const start = (payload.page - 1) * payload.pageSize + 1;
   const end = Math.min(payload.total, start + payload.tokens.length - 1);
   return `${start}–${end} of ${payload.total} ${
-    payload.total === 1 ? "token" : "tokens"
+    payload.total === 1 ? "launch" : "launches"
   }`;
 }
 
@@ -1063,52 +1267,67 @@ export function ExploreView() {
     return (
       <div className={styles.runnerGrid}>
         {cards.map((token, index) => {
-          const href = `/token/${token.tokenAddress}`;
+          const href = token.tokenAddress
+            ? `/token/${token.tokenAddress}`
+            : null;
           const imageSource = getTokenCardImageSource(token.imageUrl);
           const marketCapLabel = token.marketCap
             ? formatMarketCapMetric(token.marketCap)
             : null;
+          const cardContent = (
+            <>
+              <div className={styles.runnerArt}>
+                <Image
+                  className={styles.runnerImage}
+                  src={imageSource}
+                  alt={token.usesFallbackImage ? "" : `${token.name} artwork`}
+                  fill
+                  loading={index < 3 ? "eager" : "lazy"}
+                  priority={index < 3}
+                  sizes="(max-width: 480px) 304px, (max-width: 700px) 420px, (max-width: 900px) 46vw, 31vw"
+                  unoptimized={!canOptimizeTokenImage(imageSource)}
+                  draggable={false}
+                />
+              </div>
+
+              <div className={styles.runnerBody}>
+                <header className={styles.runnerHeading}>
+                  <h3 title={token.name}>{token.name}</h3>
+                </header>
+
+                {token.description ? (
+                  <p className={styles.runnerDescription}>
+                    {token.description}
+                  </p>
+                ) : null}
+              </div>
+            </>
+          );
 
           return (
             <article
               className={`${styles.runnerCard} liquid-glass-surface`}
               key={token.id}
             >
-              <Link
-                className={styles.runnerHitArea}
-                href={href}
-                aria-label={`Open ${token.name}`}
-              >
-                <div className={styles.runnerArt}>
-                  <Image
-                    className={styles.runnerImage}
-                    src={imageSource}
-                    alt={
-                      token.usesFallbackImage ? "" : `${token.name} artwork`
-                    }
-                    fill
-                    loading={index < 3 ? "eager" : "lazy"}
-                    priority={index < 3}
-                    sizes="(max-width: 480px) 304px, (max-width: 700px) 420px, (max-width: 900px) 46vw, 31vw"
-                    unoptimized={!canOptimizeTokenImage(imageSource)}
-                    draggable={false}
-                  />
-                </div>
-
-                <div className={styles.runnerBody}>
-                  <header className={styles.runnerHeading}>
-                    <h3 title={token.name}>{token.name}</h3>
-                  </header>
-
-                  {token.description ? (
-                    <p className={styles.runnerDescription}>
-                      {token.description}
-                    </p>
-                  ) : null}
-                </div>
-              </Link>
+              {href ? (
+                <Link
+                  className={styles.runnerHitArea}
+                  href={href}
+                  aria-label={`Open ${token.name}`}
+                >
+                  {cardContent}
+                </Link>
+              ) : (
+                <div className={styles.runnerHitArea}>{cardContent}</div>
+              )}
 
               <div className={styles.runnerMeta}>
+                <span
+                  className={styles.runnerCategory}
+                  aria-label={`Launch type ${token.launchCategory}`}
+                >
+                  {token.launchCategory}
+                </span>
                 {marketCapLabel ? (
                   <span
                     className={styles.runnerMarketCap}

@@ -1,0 +1,292 @@
+[
+  {
+    "type": "function",
+    "name": "AEON_PROVIDER_ID",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "PARTNER_STATUS_ACTIVE_ID",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "PROGRAMMABLE_FEE_RECIPIENT",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "verify",
+    "inputs": [
+      {
+        "name": "policy",
+        "type": "tuple",
+        "internalType": "struct IProgrammableCustomRegistryV1.FeePolicyV1",
+        "components": [
+          {
+            "name": "kind",
+            "type": "uint8",
+            "internalType": "enum IProgrammableCustomRegistryV1.FeePolicyKind"
+          },
+          {
+            "name": "providerId",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "partnerStatusId",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "modelId",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "modelVersion",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "templateId",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "templateVersion",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "marketPathId",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "partnerRepositoryId",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "partnerCommitId",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "partnerRuntimeCodeSetHash",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "totalFeeBps",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "nativeCustomFeeBps",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "partner",
+            "type": "tuple",
+            "internalType": "struct IProgrammableCustomRegistryV1.FeeLegV1",
+            "components": [
+              {
+                "name": "shareBps",
+                "type": "uint16",
+                "internalType": "uint16"
+              },
+              {
+                "name": "recipient",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "currency",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "chargeModeId",
+                "type": "bytes32",
+                "internalType": "bytes32"
+              },
+              {
+                "name": "basisId",
+                "type": "bytes32",
+                "internalType": "bytes32"
+              },
+              {
+                "name": "roundingId",
+                "type": "bytes32",
+                "internalType": "bytes32"
+              },
+              {
+                "name": "accrualId",
+                "type": "bytes32",
+                "internalType": "bytes32"
+              },
+              {
+                "name": "claimId",
+                "type": "bytes32",
+                "internalType": "bytes32"
+              },
+              {
+                "name": "claimRightId",
+                "type": "bytes32",
+                "internalType": "bytes32"
+              },
+              {
+                "name": "controlEvidenceHash",
+                "type": "bytes32",
+                "internalType": "bytes32"
+              }
+            ]
+          },
+          {
+            "name": "programmable",
+            "type": "tuple",
+            "internalType": "struct IProgrammableCustomRegistryV1.FeeLegV1",
+            "components": [
+              {
+                "name": "shareBps",
+                "type": "uint16",
+                "internalType": "uint16"
+              },
+              {
+                "name": "recipient",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "currency",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "chargeModeId",
+                "type": "bytes32",
+                "internalType": "bytes32"
+              },
+              {
+                "name": "basisId",
+                "type": "bytes32",
+                "internalType": "bytes32"
+              },
+              {
+                "name": "roundingId",
+                "type": "bytes32",
+                "internalType": "bytes32"
+              },
+              {
+                "name": "accrualId",
+                "type": "bytes32",
+                "internalType": "bytes32"
+              },
+              {
+                "name": "claimId",
+                "type": "bytes32",
+                "internalType": "bytes32"
+              },
+              {
+                "name": "claimRightId",
+                "type": "bytes32",
+                "internalType": "bytes32"
+              },
+              {
+                "name": "controlEvidenceHash",
+                "type": "bytes32",
+                "internalType": "bytes32"
+              }
+            ]
+          },
+          {
+            "name": "activationVersion",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "activationBlock",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "paused",
+            "type": "bool",
+            "internalType": "bool"
+          },
+          {
+            "name": "retired",
+            "type": "bool",
+            "internalType": "bool"
+          },
+          {
+            "name": "publicPolicyBindingHash",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "claimIsolationEvidenceHash",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "accountingSafetyEvidenceHash",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "verificationEvidenceHash",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "pure"
+  },
+  {
+    "type": "error",
+    "name": "InvalidFeePolicy",
+    "inputs": [
+      {
+        "name": "reasonCode",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ]
+  }
+]

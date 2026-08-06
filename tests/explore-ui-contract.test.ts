@@ -16,7 +16,7 @@ describe("Explore UI contract", () => {
     expect(source).toContain('id="explore-model-label"');
     expect(source).toContain('{ id: "classic", label: "Classic" }');
     expect(source).toContain(
-      '{ id: "custom-hook", label: "Custom Hook" }',
+      '{ id: "custom-hook", label: "Custom" }',
     );
     expect(source).toContain(
       'Number(socialFilter !== "all") + Number(modelFilter !== "all")',

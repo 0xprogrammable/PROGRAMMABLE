@@ -10,6 +10,7 @@ import launchExperience from "@/components/launch-experience.module.css";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
 import { resolveImplementedLaunchModel } from "@/lib/launch-model-gating";
 import type { LaunchModel } from "@/lib/launch";
+import type { TrustedLaunchPermitSignerV2 } from "@/lib/custom-launch/contract-v2";
 
 const launchEnvironment =
   process.env.NEXT_PUBLIC_PROGRAMMABLE_ONCHAIN_NETWORK === "rehearsal"
@@ -22,9 +23,18 @@ function loadLaunchForm() {
   return import("@/components/launch-builder");
 }
 
+function loadCustomLaunch() {
+  return import("@/components/custom-launch-experience");
+}
+
 const LazyLaunchBuilderForm = lazy(async () => {
   const launchModule = await loadLaunchForm();
   return { default: launchModule.LaunchBuilderForm };
+});
+
+const LazyCustomLaunchExperience = lazy(async () => {
+  const customModule = await loadCustomLaunch();
+  return { default: customModule.CustomLaunchExperience };
 });
 
 function LaunchFormLoading({ onBack }: { onBack: () => void }) {
@@ -59,10 +69,22 @@ function LaunchFormLoading({ onBack }: { onBack: () => void }) {
   );
 }
 
-export function LaunchExperience() {
-  const [selectedModel, setSelectedModel] = useState<LaunchModel | null>(null);
+export function LaunchExperience({
+  customLaunchPublicEnabled,
+  trustedLaunchPermitSigners = [],
+}: {
+  customLaunchPublicEnabled: boolean;
+  trustedLaunchPermitSigners?: readonly TrustedLaunchPermitSignerV2[];
+}) {
+  const [selectedModel, setSelectedModel] = useState<LaunchModel | "custom" | null>(null);
 
-  function chooseModel(candidate: LaunchModel) {
+  function chooseModel(candidate: LaunchModel | "custom") {
+    if (candidate === "custom") {
+      if (!customLaunchPublicEnabled) return;
+      window.scrollTo({ left: 0, top: 0, behavior: "auto" });
+      setSelectedModel("custom");
+      return;
+    }
     const model = resolveImplementedLaunchModel(candidate);
     if (
       !model ||
@@ -83,7 +105,23 @@ export function LaunchExperience() {
   }
 
   if (!selectedModel) {
-    return <LaunchModelPicker onChoose={chooseModel} />;
+    return (
+      <LaunchModelPicker
+        customLaunchPublicEnabled={customLaunchPublicEnabled}
+        onChoose={chooseModel}
+      />
+    );
+  }
+
+  if (selectedModel === "custom") {
+    return (
+      <Suspense fallback={<LaunchFormLoading onBack={returnToModels} />}>
+        <LazyCustomLaunchExperience
+          onBack={returnToModels}
+          trustedLaunchPermitSigners={trustedLaunchPermitSigners}
+        />
+      </Suspense>
+    );
   }
 
   return (
@@ -98,12 +136,17 @@ export function LaunchExperience() {
 }
 
 export function LaunchModelPicker({
+  customLaunchPublicEnabled = false,
   onChoose,
 }: {
-  onChoose: (model: LaunchModel) => void;
+  customLaunchPublicEnabled?: boolean;
+  onChoose: (model: LaunchModel | "custom") => void;
 }) {
   const preloadAvailableForm = () => {
     void loadLaunchForm();
+  };
+  const preloadCustomLaunch = () => {
+    void loadCustomLaunch();
   };
 
   return (
@@ -184,14 +227,18 @@ export function LaunchModelPicker({
           </span>
         </button>
 
-        <Link
-          href="/docs/models/custom"
+        <button
           className={`launch-model-card ${launchExperience.modelCard} liquid-glass-surface`}
           data-launch-model-option="custom"
-          data-launch-model-available="true"
-          data-launch-model-launchable="false"
+          data-launch-model-available={customLaunchPublicEnabled}
+          data-launch-model-launchable={customLaunchPublicEnabled}
+          type="button"
+          disabled={!customLaunchPublicEnabled}
           aria-labelledby="launch-model-custom-title"
           aria-describedby="launch-model-custom-description"
+          onPointerEnter={customLaunchPublicEnabled ? preloadCustomLaunch : undefined}
+          onFocus={customLaunchPublicEnabled ? preloadCustomLaunch : undefined}
+          onClick={() => onChoose("custom")}
         >
           <span
             className={`launch-model-art ${launchExperience.modelArt} ${launchExperience.customArt}`}
@@ -237,6 +284,9 @@ export function LaunchModelPicker({
               className={`launch-model-card-heading ${launchExperience.modelHeading}`}
             >
               <strong id="launch-model-custom-title">Custom Hook</strong>
+              {!customLaunchPublicEnabled ? (
+                <small data-status="pending">Coming soon</small>
+              ) : null}
             </span>
             <span
               className={`launch-model-description ${launchExperience.modelDescription}`}
@@ -246,14 +296,16 @@ export function LaunchModelPicker({
               including permissions, fee behavior, liquidity rules, and the
               evidence required for release.
             </span>
-            <span
-              className={`launch-model-action ${launchExperience.modelAction}`}
-            >
-              Review Custom Hook framework
-              <ArrowRight aria-hidden="true" size={16} />
-            </span>
+            {customLaunchPublicEnabled ? (
+              <span
+                className={`launch-model-action ${launchExperience.modelAction}`}
+              >
+                Build or resume
+                <ArrowRight aria-hidden="true" size={16} />
+              </span>
+            ) : null}
           </span>
-        </Link>
+        </button>
 
         <Link
           href="https://x.com/aeonframework"

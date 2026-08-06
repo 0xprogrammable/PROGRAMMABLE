@@ -7,6 +7,42 @@ export type TokenLink = {
 
 export type TokenTone = "rose" | "violet" | "mint" | "amber" | "sky" | "peach";
 
+export type ExploreLaunchCategoryProvenance =
+  | Readonly<{
+      schemaVersion: "programmable.explore-launch-category-provenance.v1";
+      category: "classic";
+      source: "canonical-launch-read-model";
+      recordId: string;
+      modelId: string | null;
+      modelVersion: string | null;
+    }>
+  | Readonly<{
+      schemaVersion: "programmable.explore-launch-category-provenance.v1";
+      category: "custom";
+      source: "registry.custom-launched";
+      projectId: `sha256:${string}`;
+      launchId: `sha256:${string}`;
+      sourceRecordBindingHash: `sha256:${string}`;
+      finalizedLaunchBindingHash: `sha256:${string}`;
+      registryAddress: `0x${string}`;
+      registryStartBlock: string;
+      transactionHash: `0x${string}`;
+      blockHash: `0x${string}`;
+      blockNumber: string;
+      transactionIndex: number;
+      logIndex: number;
+      configurationHash: `0x${string}`;
+    }>
+  | Readonly<{
+      schemaVersion: "programmable.explore-launch-category-provenance.v1";
+      category: "custom";
+      source: "interface-preview";
+      projectId: `sha256:${string}`;
+      launchId: `sha256:${string}`;
+      sourceRecordBindingHash: `sha256:${string}`;
+      finalizedLaunchBindingHash: `sha256:${string}`;
+    }>;
+
 export type DeepV2IndexedLaunchProvenance = {
   deepReleaseVersion: "deep-full-range-v2";
   launcher: `0x${string}`;
@@ -184,6 +220,62 @@ export type LauncherToken = {
   metadataExtraData?: `0x${string}`;
 };
 
+export type CanonicalTokenExploreEntry = LauncherToken & Readonly<{
+  exploreKind: "token";
+  launchCategoryProvenance: Extract<
+    ExploreLaunchCategoryProvenance,
+    { category: "classic" }
+  >;
+}>;
+
+export type CustomProjectExploreEntry = Readonly<{
+  exploreKind: "custom-project";
+  id: string;
+  name: string;
+  symbol?: string;
+  description?: string;
+  imageUrl?: string;
+  links: readonly TokenLink[];
+  launchedAt: string;
+  finalizedAt: string;
+  chainId: string;
+  modelId: string;
+  customProjectId: `sha256:${string}`;
+  customLaunchId: `sha256:${string}`;
+  launchingWallet: Readonly<{ namespace: string; value: string }>;
+  postLaunchAuthorityInventory: Readonly<PostLaunchAuthorityInventoryV1>;
+  postLaunchAuthorityInventoryHash: `sha256:${string}`;
+  tokenAddress?: `0x${string}`;
+  tokenDecimals?: number;
+  markets: readonly Readonly<{
+    marketId: string;
+    kind: string;
+    status: "active" | "paused" | "closed" | "verification_pending";
+    poolId?: `0x${string}`;
+    baseAsset: Readonly<{
+      assetId: string;
+      identity: Readonly<{ namespace: string; value: string }>;
+      name?: string;
+      symbol?: string;
+      decimals?: number;
+    }>;
+    quoteAsset: Readonly<{
+      assetId: string;
+      identity: Readonly<{ namespace: string; value: string }>;
+      name?: string;
+      symbol?: string;
+      decimals?: number;
+    }>;
+    tradeCapability?: Readonly<DiscoverableMarketTradeCapabilityV1>;
+  }>[];
+  launchCategoryProvenance: Extract<
+    ExploreLaunchCategoryProvenance,
+    { category: "custom" }
+  >;
+}>;
+
+export type ExploreEntry = CanonicalTokenExploreEntry | CustomProjectExploreEntry;
+
 /**
  * Static tokens are deliberately empty. Explore must only render records
  * proven by the configured launcher events through the onchain API.
@@ -207,3 +299,7 @@ export type PreviewToken = {
  * production registry never looks as if tokens already exist.
  */
 export const previewTokens: PreviewToken[] = [];
+import type {
+  DiscoverableMarketTradeCapabilityV1,
+  PostLaunchAuthorityInventoryV1,
+} from "./custom-launch/contract-v2";

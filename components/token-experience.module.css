@@ -115,6 +115,21 @@
   line-height: 1.2;
 }
 
+.categoryBadge {
+  align-items: center;
+  background: color-mix(in srgb, var(--token-accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--token-accent) 28%, transparent);
+  border-radius: 999px;
+  color: var(--token-accent);
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 720;
+  letter-spacing: 0.06em;
+  min-height: 24px;
+  padding: 0 9px;
+  text-transform: uppercase;
+}
+
 .name {
   color: var(--text);
   font-size: clamp(34px, 3.6vw, 46px);
@@ -318,6 +333,248 @@
 .deepSummary p {
   color: var(--muted);
   font-size: 12px;
+}
+
+.customMarketPanel,
+.customAuthorityPanel,
+.customProvenancePanel {
+  background: var(--liquid-glass-inner-background);
+  border: 1px solid var(--liquid-glass-border);
+  border-radius: 22px;
+  padding: 20px;
+}
+
+.customMarketPanel {
+  display: grid;
+  gap: 24px;
+  grid-area: chart;
+}
+
+.customAuthorityPanel {
+  grid-area: deep;
+  margin-top: 4px;
+}
+
+.customProvenancePanel {
+  grid-area: community;
+  margin-top: 4px;
+}
+
+.customPanelHeading {
+  align-items: start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.customPanelHeading > div {
+  display: grid;
+  gap: 6px;
+}
+
+.customPanelHeading span,
+.customTradeState > span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 680;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.customPanelHeading h2,
+.customTradeState h2 {
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 620;
+  letter-spacing: -0.035em;
+  line-height: 1.08;
+  margin: 0;
+}
+
+.customFacts,
+.customTradeFacts {
+  display: grid;
+  gap: 16px 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.customFacts dt,
+.customTradeFacts dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.customFacts dd,
+.customTradeFacts dd {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 620;
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.customFacts code,
+.authorityList code,
+.customProvenancePanel code {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 11px;
+}
+
+.customWideFact {
+  grid-column: 1 / -1;
+}
+
+.customTradeState {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 100%;
+}
+
+.customTradeState p,
+.customProvenancePanel p,
+.customMuted {
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.customTradeFacts {
+  margin-top: auto;
+  padding-top: 18px;
+}
+
+.customMarketSelect {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 12px;
+}
+
+.customMarketSelect > span,
+.customTradeReviewHeader > span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 680;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.customMarketSelect select {
+  appearance: none;
+  background:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%)
+      calc(100% - 17px) 19px / 5px 5px no-repeat,
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%)
+      calc(100% - 12px) 19px / 5px 5px no-repeat,
+    var(--liquid-glass-control-background);
+  border: 1px solid var(--liquid-glass-border);
+  border-radius: 14px;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  min-height: 44px;
+  outline: 0;
+  padding: 0 38px 0 12px;
+  text-overflow: ellipsis;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+  width: 100%;
+}
+
+.customMarketSelect select:focus-visible {
+  border-color: color-mix(in srgb, var(--focus) 58%, var(--control-glass-border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 11%, transparent);
+}
+
+.customSideControl .sideButtonSelected {
+  background: var(--liquid-glass-control-background-hover);
+  box-shadow: 0 2px 8px color-mix(in srgb, black 7%, transparent);
+}
+
+.tradeFooter > span {
+  color: var(--muted);
+  display: block;
+  font-size: 11px;
+  line-height: 1.45;
+  margin-bottom: 9px;
+}
+
+.customTradeReviewHeader {
+  display: grid;
+  gap: 6px;
+}
+
+.customTradeReviewHeader h2 {
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.035em;
+  line-height: 1.08;
+  margin: 0;
+}
+
+.customTradeBinding {
+  color: var(--muted);
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 10px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.customTradeReviewActions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 0.72fr 1.28fr;
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+.authorityList {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+}
+
+.authorityList li {
+  background: var(--surface-soft);
+  border-radius: 16px;
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.authorityList li > div {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  justify-content: space-between;
+}
+
+.authorityList strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.authorityList span,
+.authorityList p {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.customProvenancePanel {
+  align-self: start;
+}
+
+.customProvenancePanel p {
+  margin-top: 16px;
 }
 
 .deepSummaryHeading strong {
@@ -1242,6 +1499,14 @@
 }
 
 @media (max-width: 720px) {
+  .customMarketSelect select {
+    font-size: 16px;
+  }
+
+  .customTradeReviewActions {
+    grid-template-columns: 1fr;
+  }
+
   .page {
     padding-bottom: 96px;
     padding-top: 12px;
@@ -1316,6 +1581,22 @@
     gap: 12px;
     margin-top: 0;
     padding-block: 4px 9px;
+  }
+
+  .customMarketPanel,
+  .customAuthorityPanel,
+  .customProvenancePanel {
+    border-radius: 20px;
+    padding: 17px;
+  }
+
+  .customFacts,
+  .customTradeFacts {
+    grid-template-columns: 1fr;
+  }
+
+  .customWideFact {
+    grid-column: auto;
   }
 
   .metric {

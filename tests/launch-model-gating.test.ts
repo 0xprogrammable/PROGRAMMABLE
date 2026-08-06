@@ -158,9 +158,10 @@ describe("unreleased launch model gating", () => {
     ).toEqual([-1, -1, 0, -1, -1, -1]);
   });
 
-  it("shows Classic, Custom Hook, and the upcoming partner models", () => {
+  it("opens the gated Custom launcher and shows upcoming partner models", () => {
     const html = renderToStaticMarkup(
       createElement(LaunchModelPicker, {
+        customLaunchPublicEnabled: true,
         onChoose: () => undefined,
       }),
     );
@@ -178,15 +179,14 @@ describe("unreleased launch model gating", () => {
     );
     expect(html).toContain('data-launch-model-option="custom"');
     const customCard = html.match(
-      /<a[^>]*href="\/docs\/models\/custom"[^>]*>/,
+      /<button[^>]*data-launch-model-option="custom"[^>]*>/,
     )?.[0];
-    expect(customCard).toContain('data-launch-model-launchable="false"');
+    expect(customCard).toContain('data-launch-model-launchable="true"');
     expect(html).toContain(
       'id="launch-model-custom-title">Custom Hook</strong>',
     );
-    expect(html).toContain('href="/docs/models/custom"');
     expect(html).toContain("Create a Classic coin");
-    expect(html).toContain("Review Custom Hook framework");
+    expect(html).toContain("Build or resume");
     expect(html).not.toContain("Create a Custom Hook");
     expect(html).toContain("evidence required for release");
     expect(html).toContain('data-launch-model-option="aeon"');
@@ -232,6 +232,21 @@ describe("unreleased launch model gating", () => {
     expect(html).not.toMatch(/adaptive/i);
     expect(html).not.toContain("LiquidityGrowth");
     expect(html).not.toContain("Liquidity Growth");
+  });
+
+  it("fails the Custom Hook launcher closed until the server gate is enabled", () => {
+    const html = renderToStaticMarkup(
+      createElement(LaunchModelPicker, {
+        onChoose: () => undefined,
+      }),
+    );
+    const customCard = html.match(
+      /<button[^>]*data-launch-model-option="custom"[^>]*>/,
+    )?.[0];
+    expect(customCard).toContain('data-launch-model-launchable="false"');
+    expect(customCard).toContain("disabled");
+    expect(html).toContain("Coming soon");
+    expect(html).not.toContain("Build or resume");
   });
 
   it("keeps the Deep preset concise while retaining its material limits", () => {

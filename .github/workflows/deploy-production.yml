@@ -5,6 +5,22 @@ on:
     branches:
       - production
   workflow_dispatch:
+    inputs:
+      custom_launch_public_enablement:
+        description: Require the detached Custom Launch release record and stage an enabled candidate
+        required: true
+        default: false
+        type: boolean
+      custom_launch_release_record_commit_sha:
+        description: Exact commit on command-center-release-records containing the detached record
+        required: false
+        default: ""
+        type: string
+      custom_launch_release_record_sha256:
+        description: Canonical detached record SHA-256 printed by the verifier
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -138,6 +154,18 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
 
+      - name: Resolve Custom Launch release-record policy
+        id: custom-launch-policy
+        env:
+          CUSTOM_LAUNCH_PUBLIC_ENABLEMENT_REQUESTED: ${{ inputs.custom_launch_public_enablement }}
+          CUSTOM_LAUNCH_PRODUCTION_MODE: ${{ vars.CUSTOM_LAUNCH_PRODUCTION_MODE }}
+        run: >-
+          node scripts/resolve-custom-launch-staging-policy.mjs
+          --env-file .vercel/.env.production.local
+          --requested "$CUSTOM_LAUNCH_PUBLIC_ENABLEMENT_REQUESTED"
+          --production-mode "$CUSTOM_LAUNCH_PRODUCTION_MODE"
+          --github-output "$GITHUB_OUTPUT"
+
       - name: Capture sensitive production environment metadata
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -154,6 +182,108 @@ jobs:
           --target-url "https://programmable.family"
           --reject-git-head "$GITHUB_SHA"
           --github-output "$GITHUB_OUTPUT"
+
+      - name: Verify detached Custom Launch release record
+        id: custom-launch-record
+        if: steps.custom-launch-policy.outputs.release_record_required == 'true'
+        env:
+          RECORD_COMMIT_SHA: ${{ inputs.custom_launch_release_record_commit_sha }}
+          EXPECTED_RECORD_SHA256: ${{ inputs.custom_launch_release_record_sha256 }}
+          EXPECTED_PACKAGE_ARTIFACT_HASH: ${{ secrets.PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH }}
+          EXPECTED_CROSS_REPOSITORY_ATTESTATION_COMMIT_SHA: ${{ vars.PROGRAMMABLE_BACKEND_CROSS_REPOSITORY_ATTESTATION_COMMIT_SHA }}
+          EXPECTED_CROSS_REPOSITORY_BINDING_DOCUMENT_SHA256: ${{ vars.PROGRAMMABLE_BACKEND_CROSS_REPOSITORY_BINDING_DOCUMENT_SHA256 }}
+          PROGRAMMABLE_BACKEND_RELEASE_READ_TOKEN: ${{ secrets.PROGRAMMABLE_BACKEND_RELEASE_READ_TOKEN }}
+          COMMAND_CENTER_GITHUB_TOKEN: ${{ github.token }}
+          ROLLBACK_DEPLOYMENT_ID: ${{ steps.production-before.outputs.deployment_id }}
+          ROLLBACK_DEPLOYMENT_URL: ${{ steps.production-before.outputs.deployment_url }}
+          ROLLBACK_WEBSITE_COMMIT_SHA: ${{ steps.production-before.outputs.git_head }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RECORD_COMMIT_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Custom Launch requires one exact detached-record commit" >&2
+            exit 1
+          fi
+          if [[ "$RECORD_COMMIT_SHA" == "$GITHUB_SHA" ]]; then
+            echo "The detached record must not be stored in its Website subject commit" >&2
+            exit 1
+          fi
+          record_ref="refs/remotes/origin/command-center-release-records"
+          record_path="release-records/custom-launch-v1/release-record.json"
+          record_file="$RUNNER_TEMP/custom-launch-release-record.json"
+          test ! -e "$record_file"
+          umask 077
+          git fetch --no-tags origin \
+            "+refs/heads/command-center-release-records:$record_ref"
+          git cat-file -e "$RECORD_COMMIT_SHA^{commit}"
+          git merge-base --is-ancestor "$RECORD_COMMIT_SHA" "$record_ref"
+          test "$(git show -s --format=%ae "$RECORD_COMMIT_SHA")" = \
+            "309941960+0xprogrammable@users.noreply.github.com"
+          record_commit_json="$RUNNER_TEMP/custom-launch-release-record-commit.json"
+          test ! -e "$record_commit_json"
+          curl --fail --silent --show-error \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer $COMMAND_CENTER_GITHUB_TOKEN" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --output "$record_commit_json" \
+            "https://api.github.com/repos/0xprogrammable/programmable/commits/$RECORD_COMMIT_SHA"
+          RECORD_COMMIT_JSON="$record_commit_json" node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+          const commit = JSON.parse(readFileSync(process.env.RECORD_COMMIT_JSON, "utf8"));
+          if (
+            commit.sha !== process.env.RECORD_COMMIT_SHA ||
+            commit.author?.login !== "0xprogrammable" ||
+            commit.committer?.login !== "0xprogrammable" ||
+            commit.commit?.verification?.verified !== true
+          ) {
+            throw new Error("detached record commit lacks verified Programmable provenance");
+          }
+          NODE
+          git show "$RECORD_COMMIT_SHA:$record_path" > "$record_file"
+          attestation_summary_file="$RUNNER_TEMP/custom-launch-cross-repository-attestation.json"
+          test ! -e "$attestation_summary_file"
+          node scripts/verify-custom-launch-release-record.mjs "$record_file" \
+            --require staging \
+            --verify-cross-repository-attestation \
+            --cross-repository-attestation-summary "$attestation_summary_file" \
+            --expect-website-commit "$GITHUB_SHA" \
+            --expect-package-artifact-hash "$EXPECTED_PACKAGE_ARTIFACT_HASH" \
+            --expect-cross-repository-attestation-commit "$EXPECTED_CROSS_REPOSITORY_ATTESTATION_COMMIT_SHA" \
+            --expect-cross-repository-binding-document-sha256 "$EXPECTED_CROSS_REPOSITORY_BINDING_DOCUMENT_SHA256" \
+            --expect-rollback-deployment-id "$ROLLBACK_DEPLOYMENT_ID" \
+            --expect-rollback-deployment-url "$ROLLBACK_DEPLOYMENT_URL" \
+            --expect-rollback-website-commit "$ROLLBACK_WEBSITE_COMMIT_SHA" \
+            --expect-detached-record-sha256 "$EXPECTED_RECORD_SHA256" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Preserve detached Custom Launch release record
+        if: steps.custom-launch-policy.outputs.release_record_required == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: custom-launch-release-record-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/custom-launch-release-record.json
+            ${{ runner.temp }}/custom-launch-cross-repository-attestation.json
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Record Custom Launch release gate
+        if: steps.custom-launch-policy.outputs.release_record_required == 'true'
+        env:
+          RECORD_COMMIT_SHA: ${{ inputs.custom_launch_release_record_commit_sha }}
+        run: |
+          {
+            echo "## Custom Launch release record"
+            echo
+            echo "- Record commit: \`$RECORD_COMMIT_SHA\`"
+            echo "- Release subject: \`${{ steps.custom-launch-record.outputs.release_subject_sha256 }}\`"
+            echo "- Detached record: \`${{ steps.custom-launch-record.outputs.detached_record_sha256 }}\`"
+            echo "- Backend cross-repository attestation: \`${{ steps.custom-launch-record.outputs.cross_repository_attestation_commit_sha }}\`"
+            echo "- Backend binding document: \`${{ steps.custom-launch-record.outputs.cross_repository_binding_document_sha256 }}\`"
+            echo "- Review authority: \`${{ steps.custom-launch-record.outputs.review_authority_mode }}\`"
+            echo "- Gate: verified for staging only"
+            echo
+            echo "No promotion is authorized by this staging gate."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Resolve read-model release policy
         id: read-model-policy
@@ -176,7 +306,7 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          deployment_url="$(vercel deploy --prebuilt --prod --skip-domain --archive=tgz --meta githubCommitSha="$GITHUB_SHA" --env VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA" --token="$VERCEL_TOKEN")"
+          deployment_url="$(vercel deploy --prebuilt --prod --skip-domain --archive=tgz --meta githubCommitSha="$GITHUB_SHA" --env VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA" --env PROGRAMMABLE_RELEASE_COMMIT_SHA="$GITHUB_SHA" --token="$VERCEL_TOKEN")"
           case "$deployment_url" in
             https://*) ;;
             *)
@@ -195,6 +325,51 @@ jobs:
           npm run perf:read-model:staged-deployment --
           --target-url "$DEPLOYMENT_URL"
           --github-output "$GITHUB_OUTPUT"
+
+      - name: Gate exact staged Custom Launch candidate
+        id: custom-launch-canary
+        if: steps.custom-launch-policy.outputs.release_record_required == 'true'
+        env:
+          STAGED_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
+          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
+          PROGRAMMABLE_RELEASE_EXPECTED_COMMIT_SHA: ${{ github.sha }}
+          PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH: ${{ secrets.PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH }}
+          PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE: ${{ steps.custom-launch-record.outputs.review_authority_mode }}
+          PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_ACCESS_TOKEN: ${{ secrets.PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_ACCESS_TOKEN }}
+          PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_IDENTITY_TOKEN: ${{ secrets.PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_IDENTITY_TOKEN }}
+          PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_EXPECTED_GITHUB_USER_ID: ${{ secrets.PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_EXPECTED_GITHUB_USER_ID }}
+          PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_OWN_APPLICATION_HANDLE: ${{ secrets.PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_OWN_APPLICATION_HANDLE }}
+          PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_FOREIGN_APPLICATION_HANDLE: ${{ secrets.PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_FOREIGN_APPLICATION_HANDLE }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          deployment_host="$(node --input-type=module -e '
+            const url = new URL(process.env.STAGED_TARGET_URL);
+            if (
+              url.protocol !== "https:" ||
+              url.pathname !== "/" ||
+              url.search !== "" ||
+              url.hash !== "" ||
+              !url.hostname.endsWith(".vercel.app")
+            ) throw new Error("Custom Launch canary target is not an immutable Vercel origin");
+            process.stdout.write(url.host);
+          ')"
+          export PROGRAMMABLE_RELEASE_EXPECTED_DEPLOYMENT_HOST="$deployment_host"
+          npm run probe:custom-launch -- \
+            "--base-url=$STAGED_TARGET_URL" \
+            "--deployment-id=$STAGED_DEPLOYMENT_ID" \
+            "--evidence-output=$RUNNER_TEMP/custom-launch-candidate-canary-evidence.json" \
+            --require-enabled \
+            --authenticated-canary
+          echo "evidence_path=$RUNNER_TEMP/custom-launch-candidate-canary-evidence.json" >> "$GITHUB_OUTPUT"
+
+      - name: Preserve redacted Custom Launch candidate evidence
+        if: steps.custom-launch-policy.outputs.release_record_required == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: custom-launch-candidate-canary-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.custom-launch-canary.outputs.evidence_path }}
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Gate exact staged QuickNode wake route
         if: steps.read-model-policy.outputs.wake_canary_required == 'true'

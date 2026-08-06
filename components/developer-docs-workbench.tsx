@@ -1,14 +1,40 @@
 "use client";
 
 import { Check, CircleAlert, Copy, ExternalLink, Sparkles } from "lucide-react";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+} from "react";
 
+import {
+  PROGRAMMABLE_ACTIVE_API_BASE,
+  PROGRAMMABLE_ACTIVE_API_VERSION,
+  PROGRAMMABLE_COMPAT_API_VERSION,
+  PROGRAMMABLE_DEVELOPER_ORIGIN,
+  PROGRAMMABLE_DEVELOPER_REPOSITORY,
+  PROGRAMMABLE_ENDPOINTS,
+  PROGRAMMABLE_FEE_POLICY,
+  PROGRAMMABLE_FEE_RECIPIENT,
+  PROGRAMMABLE_LABELS,
+  PROGRAMMABLE_OPENAPI_URL,
+  PROGRAMMABLE_PLATFORM_ID,
+  PROGRAMMABLE_RUNTIME_HASH_SEAM,
+  PROGRAMMABLE_VERIFIED_DEFINITION,
+  PROGRAMMABLE_WELL_KNOWN_URL,
+} from "@/components/developer-docs-contract";
+import {
+  CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH,
+  PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1,
+  type CustomRegistryPublicManifestV1,
+} from "@/lib/custom-launch/registry-public-manifest-v1";
 import styles from "@/components/developer-docs.module.css";
-
-const apiOrigin = "https://developers.programmable.family";
 
 type LanguageId = "curl" | "typescript" | "python";
 type CopyState = "idle" | "copied" | "error";
+type CopyMotion = "standard" | "instant";
 
 type LanguageExample = {
   id: LanguageId;
@@ -17,14 +43,14 @@ type LanguageExample = {
   code: string;
 };
 
-const languageExamples: readonly LanguageExample[] = [
+export const languageExamples: readonly LanguageExample[] = [
   {
     id: "curl",
     label: "cURL",
     filename: "terminal",
     code: [
-      `curl -fsSL '${apiOrigin}/api/v2/launches?category=classic&limit=100'`,
-      `curl -fsSL '${apiOrigin}/api/v2/launches?category=custom&limit=100'`,
+      `curl -fsSL '${PROGRAMMABLE_WELL_KNOWN_URL}'`,
+      `curl -fsSL '${PROGRAMMABLE_ACTIVE_API_BASE}/launches?limit=100'`,
     ].join("\n"),
   },
   {
@@ -32,20 +58,27 @@ const languageExamples: readonly LanguageExample[] = [
     label: "TypeScript",
     filename: "programmable.ts",
     code: [
-      `const response = await fetch("${apiOrigin}/api/v2/launches?limit=100")`,
+      `const discovery = await fetch("${PROGRAMMABLE_WELL_KNOWN_URL}").then(requireOk).then((r) => r.json())`,
+      "const response = await fetch(`${discovery.apiBaseUrl}/launches?limit=100`)",
       "if (!response.ok) throw new Error(`Programmable API returned ${response.status}`)",
       "",
       "const feed = await response.json()",
       "const rows = feed.items.map((launch) => ({",
       "  id: launch.launchId,",
+      "  platformId: launch.platformId,",
       "  chainId: launch.chainId,",
-      "  tokenAddress: launch.token.address,",
-      '  label: launch.category === "classic"',
-      '    ? "Programmable Classic"',
-      '    : "Programmable Custom",',
+      "  tokenAddress: launch.token?.address ?? null,",
+      '  label: launch.platformId === "programmable"',
+      '    ? ({ classic: "Programmable Classic", custom: "Programmable Custom" }[launch.category] ?? null)',
+      "    : null,",
       "  finality: launch.launch.finality,",
       "  markets: launch.markets,",
       "}))",
+      "",
+      "function requireOk(response) {",
+      "  if (!response.ok) throw new Error(`Programmable API returned ${response.status}`)",
+      "  return response",
+      "}",
     ].join("\n"),
   },
   {
@@ -56,59 +89,62 @@ const languageExamples: readonly LanguageExample[] = [
       "import json",
       "from urllib.request import urlopen",
       "",
-      `url = "${apiOrigin}/api/v2/launches?limit=100"`,
+      `with urlopen("${PROGRAMMABLE_WELL_KNOWN_URL}", timeout=15) as response:`,
+      "    discovery = json.load(response)",
+      "",
+      'url = discovery["apiBaseUrl"] + "/launches?limit=100"',
       "with urlopen(url, timeout=15) as response:",
       "    feed = json.load(response)",
       "",
       'for launch in feed["items"]:',
-      '    label = ("Programmable Classic" if launch["category"] == "classic"',
-      '             else "Programmable Custom")',
-      '    print(label, launch["chainId"], launch["token"]["address"])',
+      '    labels = {"classic": "Programmable Classic", "custom": "Programmable Custom"}',
+      '    label = labels.get(launch["category"]) if launch.get("platformId") == "programmable" else None',
+      '    token = launch.get("token")',
+      '    print(label, launch["chainId"], token.get("address") if token else None)',
     ].join("\n"),
   },
 ] as const;
 
-const agentPrompt = [
-  "Integrate the Programmable v2 launch feed into this project.",
+export function buildDeveloperAgentPrompt(
+  registryManifest: CustomRegistryPublicManifestV1,
+): string {
+  return [
+  "Integrate the active Programmable launch feed into this project.",
   "",
   "Read these sources first:",
   "1. https://programmable.family/docs/developers.md",
-  "2. https://developers.programmable.family/.well-known/programmable.json",
-  "3. https://developers.programmable.family/openapi/programmable-v2.yaml",
-  "4. https://github.com/0xprogrammable/developers/blob/main/docs/guides/terminals-and-scanners.md",
-  "5. https://github.com/0xprogrammable/developers/blob/main/docs/guides/launch-providers.md",
+  `2. ${PROGRAMMABLE_WELL_KNOWN_URL}`,
+  `3. ${PROGRAMMABLE_OPENAPI_URL}`,
+  `4. ${PROGRAMMABLE_DEVELOPER_REPOSITORY}/blob/main/docs/guides/terminals-and-scanners.md`,
+  `5. ${PROGRAMMABLE_DEVELOPER_REPOSITORY}`,
   "",
   "Requirements:",
-  "- Map category=classic to Programmable Classic.",
-  "- Map category=custom to Programmable Custom.",
-  "- Exclude historical Stock-Paired records from the v2 Custom filter.",
+  `- Require platformId=${PROGRAMMABLE_PLATFORM_ID} from the official source.`,
+  `- Map category=classic to ${PROGRAMMABLE_LABELS.classic}.`,
+  `- Map category=custom to ${PROGRAMMABLE_LABELS.custom}.`,
+  `- Discover API v${PROGRAMMABLE_ACTIVE_API_VERSION} through well-known; keep v${PROGRAMMABLE_COMPAT_API_VERSION} only as a pinned compatibility path.`,
   "- Require the canonical registry event for every Custom classification.",
   "- Resolve current and historical deployments from the manifest.",
   "- Key assets by chainId plus token address and deduplicate by launchId.",
+  `- Fetch any launch shape by /api/v${PROGRAMMABLE_ACTIVE_API_VERSION}/launches/{launchId}; use the token compatibility route only when a canonical token exists.`,
+  `- For EVM, ${PROGRAMMABLE_RUNTIME_HASH_SEAM.keccakField} is ${PROGRAMMABLE_RUNTIME_HASH_SEAM.keccakFormat} ${PROGRAMMABLE_RUNTIME_HASH_SEAM.keccakAlgorithm}; optional ${PROGRAMMABLE_RUNTIME_HASH_SEAM.sha256Field} uses the ${PROGRAMMABLE_RUNTIME_HASH_SEAM.sha256Format} prefix and remains separate.`,
   "- Complete each traversal with nextCursor before persisting resumeCursor.",
   "- Preserve finality, provenance, null values and unknown optional fields.",
   "- Do not infer audited, safe, chartable or tradable from category alone.",
   "- Enable market features only when the record declares verified support.",
   "- Validate representative responses against the published JSON Schemas.",
-  "- Treat the open Custom Registry and provider event as prelaunch until a manifest address is published.",
-].join("\n");
+  `- Read ${CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH}; treat the open Custom Registry as ${registryManifest.status} and ingest it only when every published binding is non-null.`,
+  `- Native Custom policy is ${PROGRAMMABLE_FEE_POLICY.nativeCustom.totalBps} BPS on the verified official market path only.`,
+  `- Partner and template attribution are independent from market and fee state; ${PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket.status} may report ${PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket.partnerShareBps}/${PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket.programmableShareBps}/${PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket.totalBps} BPS.`,
+  `- An active fee-bearing partner-template path must prove ${PROGRAMMABLE_FEE_POLICY.partnerTemplate.totalBps} BPS total: ${PROGRAMMABLE_FEE_POLICY.partnerTemplate.partnerShareBps} partner and ${PROGRAMMABLE_FEE_POLICY.partnerTemplate.programmableShareBps} Programmable, with no added native fee.`,
+  `- Programmable fee recipient: ${PROGRAMMABLE_FEE_RECIPIENT}.`,
+  `- Programmable Verified means: ${PROGRAMMABLE_VERIFIED_DEFINITION}`,
+  ].join("\n");
+}
 
-export const providerRegistryInterface = [
-  "interface IProgrammableCustomRegistryV1 {",
-  "  event ProgrammableCustomLaunchRegistered(",
-  "    bytes32 indexed launchId,",
-  "    bytes32 indexed providerId,",
-  "    address indexed token,",
-  "    address factory,",
-  "    address hook,",
-  "    bytes32 marketId,",
-  "    bytes32 templateId,",
-  "    bytes32 templateVersion,",
-  "    bytes32 configurationHash,",
-  "    address creator",
-  "  );",
-  "}",
-].join("\n");
+export const agentPrompt = buildDeveloperAgentPrompt(
+  PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1,
+);
 
 export function nextLanguageIndex(
   currentIndex: number,
@@ -126,6 +162,10 @@ export function nextLanguageIndex(
   return currentIndex;
 }
 
+export function getDeveloperCopyMotion(detail: number): CopyMotion {
+  return detail === 0 ? "instant" : "standard";
+}
+
 function CopyAction({
   label,
   text,
@@ -136,6 +176,7 @@ function CopyAction({
   variant?: "compact" | "prompt";
 }) {
   const [state, setState] = useState<CopyState>("idle");
+  const [motion, setMotion] = useState<CopyMotion>("standard");
   const resetTimer = useRef<number | null>(null);
 
   useEffect(
@@ -145,8 +186,9 @@ function CopyAction({
     [],
   );
 
-  async function copy() {
+  async function copy(event: MouseEvent<HTMLButtonElement>) {
     if (resetTimer.current !== null) window.clearTimeout(resetTimer.current);
+    setMotion(getDeveloperCopyMotion(event.detail));
     try {
       await navigator.clipboard.writeText(text);
       setState("copied");
@@ -167,6 +209,7 @@ function CopyAction({
           variant === "prompt" ? styles.promptCopyButton : styles.copyButton
         }
         data-state={state}
+        data-motion={motion}
         onClick={copy}
         type="button"
       >
@@ -191,26 +234,6 @@ function CopyAction({
             : ""}
       </span>
     </>
-  );
-}
-
-export function DeveloperCodeSample({
-  code,
-  label,
-}: {
-  code: string;
-  label: string;
-}) {
-  return (
-    <div className={styles.standaloneCode}>
-      <div>
-        <span>{label}</span>
-        <CopyAction label="Copy interface" text={code} />
-      </div>
-      <pre tabIndex={0}>
-        <code>{code}</code>
-      </pre>
-    </div>
   );
 }
 
@@ -248,7 +271,7 @@ export function DeveloperDocsWorkbench() {
         <span className={styles.workbenchLabel}>Minimal terminal consumer</span>
         <a
           className={styles.openApiLink}
-          href={`${apiOrigin}/openapi/programmable-v2.yaml`}
+          href={PROGRAMMABLE_OPENAPI_URL}
           rel="noreferrer"
           target="_blank"
         >
@@ -313,19 +336,48 @@ export function DeveloperDocsWorkbench() {
   );
 }
 
-export function DeveloperAgentPrompt() {
+export function DeveloperEndpointList() {
+  return (
+    <div className={styles.endpointList}>
+      {PROGRAMMABLE_ENDPOINTS.map((endpoint) => {
+        const absoluteUrl = `${PROGRAMMABLE_DEVELOPER_ORIGIN}${endpoint.href}`;
+        return (
+          <div className={styles.endpointRow} key={endpoint.path}>
+            <a href={absoluteUrl} rel="noreferrer" target="_blank">
+              <span className={styles.method}>GET</span>
+              <code>{endpoint.path}</code>
+              <span className={styles.endpointDescription}>
+                <strong>{endpoint.label}</strong>
+                <small>{endpoint.note}</small>
+              </span>
+              <ExternalLink aria-hidden="true" size={17} strokeWidth={1.8} />
+            </a>
+            <CopyAction label={`Copy ${endpoint.path}`} text={absoluteUrl} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export function DeveloperAgentPrompt({
+  registryManifest = PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1,
+}: Readonly<{
+  registryManifest?: CustomRegistryPublicManifestV1;
+}>) {
+  const prompt = buildDeveloperAgentPrompt(registryManifest);
   return (
     <div className={styles.agentPrompt}>
       <div className={styles.agentPromptHeader}>
         <strong>Agent integration prompt</strong>
         <CopyAction
           label="Copy agent prompt"
-          text={agentPrompt}
+          text={prompt}
           variant="prompt"
         />
       </div>
       <pre className={styles.agentPromptCode}>
-        <code>{agentPrompt}</code>
+        <code>{prompt}</code>
       </pre>
       <div className={styles.agentPromptLinks}>
         <a href="/llms.txt" rel="noreferrer" target="_blank">

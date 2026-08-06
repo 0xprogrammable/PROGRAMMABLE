@@ -9,7 +9,7 @@ import {
   parseDetailPayload,
 } from "../components/token-detail-view";
 import type { PreparedTokenTrade } from "../components/token-trade";
-import type { LauncherToken } from "../lib/tokens";
+import type { CanonicalTokenExploreEntry, LauncherToken } from "../lib/tokens";
 
 const token = {
   id: "programmable",
@@ -29,10 +29,24 @@ const token = {
   liquidityPath: "meme",
 } satisfies LauncherToken;
 
+const canonicalToken = {
+  ...token,
+  exploreKind: "token",
+  launchCategoryProvenance: {
+    schemaVersion: "programmable.explore-launch-category-provenance.v1",
+    category: "classic",
+    source: "canonical-launch-read-model",
+    recordId: token.id,
+    modelId: null,
+    modelVersion: null,
+  },
+} satisfies CanonicalTokenExploreEntry;
+
 describe("token detail metrics", () => {
   it("shows only user-facing market stats and converts volume to USD", () => {
     expect(buildTokenDetailMetrics(token)).toEqual([
       { label: "Market cap", value: "$168.56K" },
+      { label: "Type", value: "Classic" },
       { label: "Volume", value: "$900K" },
       { label: "Swap fee", value: "1%" },
     ]);
@@ -76,6 +90,7 @@ describe("token detail metrics", () => {
 
     expect(buildTokenDetailMetrics(token, null, volume)).toEqual([
       { label: "Market cap", value: "$168.56K" },
+      { label: "Type", value: "Classic" },
       { label: "Volume 1H", value: "$43.8K" },
       { label: "Swap fee", value: "1%" },
     ]);
@@ -131,6 +146,7 @@ describe("token detail metrics", () => {
 
     expect(buildTokenDetailMetrics(enriched)).toEqual([
       { label: "Market cap", value: "$168.56K" },
+      { label: "Type", value: "Classic" },
       { label: "Volume", value: "$1.2M" },
       { label: "Liquidity now", value: "$98.8K" },
       { label: "Swap fee", value: "1%" },
@@ -152,7 +168,7 @@ describe("token detail metrics", () => {
     };
     const payload = {
       status: "ready",
-      token: { ...token, uniswapV4Pool: validPool },
+      token: { ...canonicalToken, uniswapV4Pool: validPool },
       snapshot: { chainId: 1 },
     };
 

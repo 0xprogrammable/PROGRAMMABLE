@@ -8,6 +8,8 @@ import {
   safeAlchemyError,
 } from "../../../../lib/alchemy/explore.server";
 import { enrichTokensWithAlchemyPoolState } from "../../../../lib/alchemy/live-market.server";
+import { canonicalTokenExploreEntryV1 } from "../../../../lib/explore-entry-v1";
+import { readProductionCustomExploreDirectoryV1 } from "../../../../lib/server/custom-launch/explore-directory-v1";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -34,13 +36,22 @@ export async function GET(request: NextRequest) {
 
   try {
     const address = getAddress(input);
-    const model = await readAlchemyExploreModel();
+    const [model, customProjects] = await Promise.all([
+      readAlchemyExploreModel(),
+      readProductionCustomExploreDirectoryV1(request.signal),
+    ]);
     const token = model.tokens.find(
       (candidate) =>
         candidate.tokenAddress.toLowerCase() === address.toLowerCase(),
     );
+    const customProject = customProjects.find(
+      (candidate) => candidate.tokenAddress?.toLowerCase() === address.toLowerCase(),
+    );
+    if (token && customProject) {
+      throw new Error("Canonical token detail sources disagree on launch category");
+    }
 
-    if (model.status === "ready" && !token) {
+    if (model.status === "ready" && !token && !customProject) {
       return NextResponse.json(
         {
           status: model.status,
@@ -78,10 +89,14 @@ export async function GET(request: NextRequest) {
             })
           )[0] ?? priced
         : priced;
+    const status = model.status === "ready" || customProject
+      ? "ready" as const
+      : model.status;
     return NextResponse.json(
       {
-        status: model.status,
-        token: enriched,
+        status,
+        token: enriched ? canonicalTokenExploreEntryV1(enriched) : null,
+        customProject: customProject ?? null,
         snapshot: model.snapshot,
         launchDiscoverySnapshot:
           model.status === "ready"
@@ -91,12 +106,16 @@ export async function GET(request: NextRequest) {
       {
         headers: {
           "Cache-Control":
-            model.status === "ready"
+            customProject
+              ? "no-store"
+              : status === "ready"
               ? "public, max-age=0, s-maxage=2, stale-while-revalidate=5"
               : "public, max-age=0, s-maxage=30",
           "X-Programmable-Price-Source": "alchemy",
-          "X-Programmable-Launch-Source": "alchemy",
-          "X-Programmable-Read-Source": "blob",
+          "X-Programmable-Launch-Source": customProject
+            ? "registry.custom-launched"
+            : "alchemy",
+          "X-Programmable-Read-Source": customProject ? "postgres" : "blob",
           "X-Programmable-Rpc-Provider": "alchemy",
         },
       },
