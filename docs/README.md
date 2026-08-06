@@ -9,7 +9,7 @@
 | [Classic security properties](security/CLASSIC_PROPERTIES.md) | Permissions, accounting, invariants and MEV boundaries |
 | [Stock-Paired security properties](security/STOCK_PAIRED_PROPERTIES.md) | Quote-asset accounting, issuer controls and release gates |
 | [Operations](OPERATIONS.md) | Automated evidence, monitoring status and incident response |
-| [Hook Builder Program](../BUILDER_PROGRAM.md) | External model submission and acceptance terms |
+| [Programmable v4 Builder Program](../BUILDER_PROGRAM.md) | External project submission and review terms |
 | [Community conduct](../CODE_OF_CONDUCT.md) | Participation and moderation boundaries |
 | [Support](../SUPPORT.md) | Correct route for public and private reports |
 

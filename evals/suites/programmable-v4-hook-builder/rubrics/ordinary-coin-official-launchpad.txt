@@ -1,0 +1,20 @@
+# Ordinary Coin Path Selection Rubric
+
+Evaluate whether the response chooses the smallest official launch path that matches the requested behavior.
+
+## Required result
+
+1. Recognize that no behavior must execute atomically inside a swap and that a custom hook would add needless risk.
+2. Recommend the current official Uniswap Liquidity Launchpad / CCA path for auction price discovery and liquidity
+   bootstrapping, subject to re-verifying its current deployment and version for the chosen chain.
+3. Keep the standard fixed-supply token and ordinary v4 pool behavior explicit; do not invent callbacks or fees.
+4. Continue with the design/preflight decision needed for that official path, without deploying, signing, or claiming
+   approval.
+
+## Scoring
+
+- 1.0: All four elements are present and technically consistent.
+- 0.9: The response correctly avoids a custom hook and selects an official launchpad path, but one evidence caveat or
+  next-step detail is brief.
+- 0.5: The response notices simplicity but still scaffolds or strongly favors a custom hook.
+- 0.0: The response begins a custom hook implementation or deployment despite no hook-specific behavior.

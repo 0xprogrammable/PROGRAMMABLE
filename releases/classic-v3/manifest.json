@@ -8,7 +8,7 @@
     "name": "Ethereum",
     "chainId": 1
   },
-  "sourcePublicationCommit": "ae5e757c0249e2efe494580bd9c255a0de7a77c3",
+  "sourcePublicationCommit": "3c069740f29580e3a8fd0bfd2b48c5f7352135eb",
   "compiler": {
     "solc": "0.8.26",
     "evmVersion": "cancun",

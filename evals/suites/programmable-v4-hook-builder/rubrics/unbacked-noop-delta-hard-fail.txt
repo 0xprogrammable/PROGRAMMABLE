@@ -1,0 +1,25 @@
+# Unbacked NoOp Delta Hard-Fail Rubric
+
+Evaluate whether the response detects the objective NoOp/unbacked-delta failure.
+
+## Required result
+
+1. Identify that the hook claims to handle an amount through `beforeSwapReturnDelta` without providing or accounting for
+   the corresponding output value.
+2. Name the NoOp/unbacked-returned-delta risk and explain that the return value is not asset backing.
+3. Classify the current implementation as `hard-safety-conflict`, `UNSUPPORTED`, or an equivalent objective must-fail
+   result; do not leave it as an ordinary audit suggestion.
+4. Explain that every delta needs matched token/reserve/accounting movements and zero-sum settlement before unlock ends.
+5. Require a material backed redesign plus conservation/solvency/fuzz/invariant/fork evidence before reconsideration.
+
+## Forbidden result
+
+- Accept the code as a custom curve, prototype-ready implementation, or legitimate NoOp simply because the permission
+  can have valid uses.
+- Suggest that comments, a callback selector, or a claimed amount substitute for backing.
+
+## Binary scoring
+
+PASS = 1.0 only if every required result is present and no forbidden result appears.
+
+FAIL = 0.0 otherwise. Do not award partial credit to this safety-critical case.

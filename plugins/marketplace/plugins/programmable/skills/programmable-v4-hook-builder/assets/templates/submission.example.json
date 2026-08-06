@@ -1,0 +1,691 @@
+{
+  "$schema": "urn:programmable:v4-hook-submission:1.3.0",
+  "schemaVersion": 1,
+  "standardVersion": "1.3.0",
+  "stage": "proposal",
+  "model": {
+    "id": "example-model",
+    "name": "Example Model",
+    "summary": "Describe one specific outcome this launch model creates for token creators and traders.",
+    "userOutcome": null,
+    "category": "other",
+    "whyV4": null
+  },
+  "builder": {
+    "github": null,
+    "contact": null,
+    "beneficiary": null,
+    "licenseDeclaration": null
+  },
+  "publicMetadata": {
+    "project": {
+      "name": "Example Model",
+      "description": "Replace this example with the public project description shown to users and reviewers.",
+      "projectUri": null,
+      "logoUri": null,
+      "logoContentHash": null,
+      "metadataMutable": null,
+      "metadataOwner": null
+    },
+    "token": {
+      "name": "Example Token",
+      "symbol": "EXAMPLE",
+      "metadataUri": null,
+      "metadataContentHash": null,
+      "logoUri": null,
+      "logoContentHash": null,
+      "metadataMutable": null,
+      "metadataOwner": null
+    },
+    "claimedAffiliations": [],
+    "providerPresentations": []
+  },
+  "target": {
+    "chainId": 1,
+    "network": "ethereum",
+    "solidityVersion": "0.8.26",
+    "evmVersion": "cancun",
+    "dependencyBaseline": "programmable-tested",
+    "officialLaunchProfileId": null
+  },
+  "assets": [
+    {
+      "id": "eth",
+      "role": "quote",
+      "origin": "native-eth",
+      "address": null,
+      "decimals": 18,
+      "decimalsSource": "native-eth-protocol",
+      "supplyPolicy": "native",
+      "initialSupply": null,
+      "behaviors": ["standard"],
+      "controls": []
+    },
+    {
+      "id": "launched-token",
+      "role": "launched",
+      "origin": "new-fixed-supply",
+      "address": null,
+      "decimals": 18,
+      "decimalsSource": "implementation-constant",
+      "supplyPolicy": "fixed-at-creation",
+      "initialSupply": null,
+      "behaviors": ["standard"],
+      "controls": []
+    }
+  ],
+  "launchLifecycle": {
+    "tokenCreation": { "applicable": null, "actor": null, "valueFlow": null, "custody": null, "failure": null, "event": null, "notApplicableReason": null },
+    "poolInitialization": { "applicable": null, "actor": null, "valueFlow": null, "custody": null, "failure": null, "event": null, "notApplicableReason": null },
+    "liquidityFormation": { "applicable": null, "actor": null, "valueFlow": null, "custody": null, "failure": null, "event": null, "notApplicableReason": null },
+    "initialTransaction": { "applicable": null, "actor": null, "valueFlow": null, "custody": null, "failure": null, "event": null, "notApplicableReason": null },
+    "trading": { "applicable": null, "actor": null, "valueFlow": null, "custody": null, "failure": null, "event": null, "notApplicableReason": null },
+    "feesAndClaims": { "applicable": null, "actor": null, "valueFlow": null, "custody": null, "failure": null, "event": null, "notApplicableReason": null },
+    "dependencyFailure": { "applicable": null, "actor": null, "valueFlow": null, "custody": null, "failure": null, "event": null, "notApplicableReason": null },
+    "retirement": { "applicable": null, "actor": null, "valueFlow": null, "custody": null, "failure": null, "event": null, "notApplicableReason": null }
+  },
+  "pool": {
+    "currency0": "eth",
+    "currency1": "launched-token",
+    "orderingRule": "Native ETH is currency0 and the launched token is currency1.",
+    "tickSpacing": null,
+    "lpFee": {
+      "classification": "lp-fee",
+      "mode": null,
+      "hundredthsOfBip": null,
+      "initialHundredthsOfBip": null,
+      "initializationPath": null,
+      "applicationMode": null,
+      "overrideFlagPolicy": null,
+      "persistentUpdateActor": null,
+      "persistentUpdateCallSites": [],
+      "rateLimit": null,
+      "updatePath": null,
+      "minimum": null,
+      "maximum": null,
+      "inputMetric": null,
+      "referenceAsset": null,
+      "measurementUnit": null,
+      "observationMode": null,
+      "observationWindow": null,
+      "curve": null,
+      "updateCadence": null,
+      "liquidityDecreaseBehavior": null,
+      "manipulationResistance": null,
+      "failureRule": null,
+      "recipient": "pool-liquidity-providers"
+    },
+    "canonical": true,
+    "alternativePools": "Alternative pools may exist and do not inherit this model's behavior."
+  },
+  "programmableFee": {
+    "policyId": "programmable-volume-fee-v1",
+    "policyVersion": "1.0.0",
+    "poolScope": "canonical-launch-pool-key",
+    "rates": {
+      "unit": "hundredths-of-bip",
+      "selectedHundredthsOfBip": null,
+      "minimumEffectiveHundredthsOfBip": 1000,
+      "effectiveHundredthsOfBip": null,
+      "platformHundredthsOfBip": 1000,
+      "projectHundredthsOfBip": null,
+      "formula": "effective=max(selected,1000);platform=1000;project=effective-1000",
+      "lpFeeExcluded": true
+    },
+    "basis": {
+      "volume": "gross-quote-side-swap-volume",
+      "quoteAsset": "canonical-pool-quote-asset"
+    },
+    "ownership": {
+      "owner": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+      "immutable": true,
+      "claimAuthority": "owner-only",
+      "claimAvailability": "anytime",
+      "claimDestinationPolicy": "owner-or-owner-selected-per-claim",
+      "storedMutableRecipient": false,
+      "builderCanMutate": false,
+      "projectCanMutate": false,
+      "administratorCanMutate": false
+    },
+    "collection": {
+      "status": "pending-hook-integration",
+      "integration": "canonical-pool-hook",
+      "enforcement": "non-bypassable",
+      "hookFeeMechanismBinding": "hook.feeMechanism",
+      "supportedSwapModes": [],
+      "swapModePaths": {
+        "zeroForOneExactInput": null,
+        "zeroForOneExactOutput": null,
+        "oneForZeroExactInput": null,
+        "oneForZeroExactOutput": null
+      },
+      "selfCallPolicy": "same-pool-swap-forbidden"
+    },
+    "accounting": {
+      "accrualMode": "claimable-liability",
+      "liabilityKeyDimensions": ["poolId", "currency", "owner"],
+      "crossPoolNetting": false,
+      "valueFlowId": null,
+      "collectionEvent": null,
+      "claimEvent": null
+    },
+    "evidence": {
+      "sourcePaths": [],
+      "testPaths": []
+    }
+  },
+  "hook": {
+    "used": null,
+    "base": null,
+    "upgradeable": null,
+    "sharedAcrossPools": null,
+    "poolNamespace": null,
+    "poolAdmission": { "enforcement": null, "factoryOrRegistry": null, "alternativePoolBehavior": null, "rejectionRule": null },
+    "permissions": {
+      "beforeInitialize": null,
+      "afterInitialize": null,
+      "beforeAddLiquidity": null,
+      "afterAddLiquidity": null,
+      "beforeRemoveLiquidity": null,
+      "afterRemoveLiquidity": null,
+      "beforeSwap": null,
+      "afterSwap": null,
+      "beforeDonate": null,
+      "afterDonate": null,
+      "beforeSwapReturnDelta": null,
+      "afterSwapReturnDelta": null,
+      "afterAddLiquidityReturnDelta": null,
+      "afterRemoveLiquidityReturnDelta": null
+    },
+    "callbackPolicies": [],
+    "hookData": {
+      "used": null,
+      "schema": null,
+      "identitySource": null,
+      "trustedRouterDeploymentRecordId": null,
+      "callbackSenderRule": null,
+      "validation": null
+    },
+    "feeMechanism": {
+      "used": null,
+      "classification": null,
+      "chargedCurrency": null,
+      "swapQuadrants": {
+        "zeroForOneExactInput": null,
+        "zeroForOneExactOutput": null,
+        "oneForZeroExactInput": null,
+        "oneForZeroExactOutput": null
+      },
+      "maximumHundredthsOfBip": null,
+      "collectionPath": null,
+      "collectionValueFlowId": null,
+      "liabilityKeyDimensions": [],
+      "collectionEvent": null,
+      "recipients": [],
+      "ownership": null,
+      "claimPolicy": null
+    },
+    "customAccounting": {
+      "used": null,
+      "backingSource": null,
+      "conservationEquation": null,
+      "settlement": null,
+      "partialFillBehavior": null,
+      "liabilityNamespace": null,
+      "liabilityKeyDimensions": [],
+      "crossPoolNetting": null,
+      "duplicateCurrencyPolicy": null,
+      "failureIsolation": null,
+      "withdrawalOrdering": null
+    },
+    "returnDeltaAccounting": {
+      "used": null,
+      "quadrants": {
+        "zeroForOneExactInput": { "supported": null, "specifiedCurrency": null, "unspecifiedCurrency": null, "amountSign": null, "specifiedComponent": null, "unspecifiedComponent": null, "residualAmmEquation": null, "finalCallerDeltaEquation": null, "specifiedDeltaCanConsumeEntireAmount": null, "rounding": null, "zeroAmmLeg": null, "partialFillRule": null, "slippageInvariant": null, "failureRule": null },
+        "zeroForOneExactOutput": { "supported": null, "specifiedCurrency": null, "unspecifiedCurrency": null, "amountSign": null, "specifiedComponent": null, "unspecifiedComponent": null, "residualAmmEquation": null, "finalCallerDeltaEquation": null, "specifiedDeltaCanConsumeEntireAmount": null, "rounding": null, "zeroAmmLeg": null, "partialFillRule": null, "slippageInvariant": null, "failureRule": null },
+        "oneForZeroExactInput": { "supported": null, "specifiedCurrency": null, "unspecifiedCurrency": null, "amountSign": null, "specifiedComponent": null, "unspecifiedComponent": null, "residualAmmEquation": null, "finalCallerDeltaEquation": null, "specifiedDeltaCanConsumeEntireAmount": null, "rounding": null, "zeroAmmLeg": null, "partialFillRule": null, "slippageInvariant": null, "failureRule": null },
+        "oneForZeroExactOutput": { "supported": null, "specifiedCurrency": null, "unspecifiedCurrency": null, "amountSign": null, "specifiedComponent": null, "unspecifiedComponent": null, "residualAmmEquation": null, "finalCallerDeltaEquation": null, "specifiedDeltaCanConsumeEntireAmount": null, "rounding": null, "zeroAmmLeg": null, "partialFillRule": null, "slippageInvariant": null, "failureRule": null }
+      },
+      "executionEvent": null
+    },
+    "postReturnDeltaAccounting": {
+      "afterSwap": { "used": null, "returnedDeltaShape": null, "positiveMeaning": null, "negativeMeaning": null, "backingSource": null, "callerDeltaEquation": null, "componentPolicies": { "unspecified": null, "currency0": null, "currency1": null }, "bounds": null, "rounding": null, "slippageOrMinimums": null, "failureRule": null, "executionEvent": null },
+      "afterAddLiquidity": { "used": null, "returnedDeltaShape": null, "positiveMeaning": null, "negativeMeaning": null, "backingSource": null, "callerDeltaEquation": null, "componentPolicies": { "unspecified": null, "currency0": null, "currency1": null }, "bounds": null, "rounding": null, "slippageOrMinimums": null, "failureRule": null, "executionEvent": null },
+      "afterRemoveLiquidity": { "used": null, "returnedDeltaShape": null, "positiveMeaning": null, "negativeMeaning": null, "backingSource": null, "callerDeltaEquation": null, "componentPolicies": { "unspecified": null, "currency0": null, "currency1": null }, "bounds": null, "rounding": null, "slippageOrMinimums": null, "failureRule": null, "executionEvent": null }
+    },
+    "erc6909Claims": { "used": null, "currencyIdDerivation": null, "claimBalanceScope": null, "poolIdIncludedInClaimId": null, "owner": null, "operatorPolicy": null, "mintFlow": null, "burnFlow": null, "takeSettleFlow": null, "liabilityKeys": null, "liabilityKeyDimensions": [], "crossPoolNetting": null, "transferPolicy": null, "redemption": null, "roundingDust": null, "aggregateSolvencyEquation": null },
+    "nestedActions": { "used": null, "directPoolManagerCalls": null, "routerCalls": null, "allowedActions": [], "samePoolPolicy": null, "crossPoolPolicy": null, "callbackSuppression": null, "directCallbackBehavior": null, "routerCallbackBehavior": null, "maximumDepth": null, "stateCommitOrder": null, "transientDeltaOwner": null, "syncInterleaving": null, "slippageAggregation": null, "failureAtomicity": null }
+  },
+  "noHookArchitecture": null,
+  "valueFlows": [
+    {
+      "id": "swap",
+      "action": "swap",
+      "asset": "unresolved",
+      "from": "unresolved",
+      "to": "unresolved",
+      "amountRule": "unresolved",
+      "settlement": "unresolved",
+      "failure": "Revert the complete action until the design defines a different safe behavior."
+    }
+  ],
+  "authorities": [],
+  "dependencies": {
+    "onchain": [],
+    "offchain": []
+  },
+  "operations": {
+    "keeper": {
+      "required": false,
+      "actor": null,
+      "action": null,
+      "cadence": null,
+      "authentication": null,
+      "funding": null,
+      "failure": null,
+      "fallback": null
+    },
+    "oracle": {
+      "required": false,
+      "actor": null,
+      "action": null,
+      "cadence": null,
+      "authentication": null,
+      "funding": null,
+      "failure": null,
+      "fallback": null
+    },
+    "monitoring": null,
+    "incidentResponse": null
+  },
+  "integration": {
+    "routerGeneration": null,
+    "routerDependencyId": null,
+    "permit2DependencyId": null,
+    "stateViewDependencyId": null,
+    "quoterDependencyId": null,
+    "sdkDependencies": [],
+    "routerActionProfile": {
+      "routerVersionExplicit": null,
+      "universalRouterCommand": null,
+      "v4Actions": [],
+      "settlementMode": null,
+      "permit2Mode": null,
+      "finalSwapDeltaValidated": null
+    },
+    "appSourcePaths": [],
+    "integrationTestPaths": [],
+    "quoteExecutionParity": null,
+    "swapModes": [],
+    "partialFills": null,
+    "slippage": null,
+    "deadline": null,
+    "permit2": null,
+    "stateReads": null,
+    "events": [],
+    "routingAndDiscoverability": {
+      "routingMode": null,
+      "allowlistTriggers": {
+        "usesDeltaFlag": null,
+        "addressStartsWith91": null,
+        "targetsMajorPair": null,
+        "permissionedPool": null
+      },
+      "uniswapRoutingStatus": null,
+      "hookRegistryStatus": null,
+      "customHookDataRequired": null,
+      "standardRouterCompatible": null,
+      "permissionedRouting": {
+        "required": null,
+        "minimumRouterGeneration": null,
+        "adapterCurrencyUsed": null,
+        "allowedWrapperBindings": null,
+        "positionManagerBinding": null,
+        "routingAllowlistRequiredPerChain": null
+      },
+      "sourcePaths": [],
+      "testPaths": []
+    },
+    "dataReconstruction": {
+      "mode": null,
+      "eventCoverage": null,
+      "cursor": null,
+      "startBlockPolicy": null,
+      "finalityDepth": null,
+      "reorgPolicy": null,
+      "backfillPolicy": null,
+      "checkpointPolicy": null,
+      "freshnessTargetSeconds": null,
+      "staleAfterSeconds": null,
+      "freshnessMeasurement": null,
+      "reconciliation": null,
+      "reserveReconstruction": {
+        "used": null,
+        "balanceSources": [],
+        "liabilitySources": [],
+        "attributionKeys": [],
+        "solvencyEquation": null,
+        "poolLiquidityTreatment": null,
+        "donationAndDustPolicy": null,
+        "reconciliation": null
+      },
+      "sourcePaths": [],
+      "testPaths": []
+    },
+    "platformHandoff": {
+      "intended": null,
+      "websiteRegistryPath": null,
+      "uiSourcePaths": [],
+      "apiSourcePaths": [],
+      "indexerSourcePaths": [],
+      "testPaths": [],
+      "reviewStatus": null,
+      "maintainerReviewRequired": null,
+      "selfApproval": null,
+      "availabilityClaimed": null,
+      "handoffNotes": null
+    }
+  },
+  "projectSurfaces": [
+    {
+      "id": "canonical-pool-model",
+      "kind": "onchain-contract",
+      "name": "Canonical pool model",
+      "summary": "The canonical launch token, PoolKey and optional hook behavior reviewed as one onchain project boundary.",
+      "executionBoundary": "onchain",
+      "capabilityIds": ["canonical-pool-state"],
+      "authorityRefs": [],
+      "valueFlowRefs": [],
+      "assetRefs": [],
+      "sourcePaths": [],
+      "testPaths": [],
+      "schemaPaths": [],
+      "evidencePaths": [],
+      "exposure": {
+        "movesValue": false,
+        "usesSignatures": false,
+        "makesExternalCalls": false,
+        "holdsCustody": false,
+        "handlesPii": false,
+        "usesGeolocation": false,
+        "usesSecrets": false
+      },
+      "profiles": {
+        "authority": {
+          "status": "applicable",
+          "summary": "PoolManager callback authentication and the declared launch authorities bound in this submission govern the exact onchain boundary.",
+          "controls": ["Authenticate every hook callback through the exact PoolManager and declared pool-admission rule."],
+          "evidenceRefs": []
+        },
+        "valueFlow": {
+          "status": "not-applicable",
+          "summary": "This starter surface declares no additional value movement beyond standard PoolManager settlement until a capability changes that boundary.",
+          "controls": [],
+          "evidenceRefs": []
+        },
+        "sourceOfTruth": {
+          "status": "applicable",
+          "summary": "Confirmed PoolManager and contract state for the exact chain and PoolId is the authoritative source of truth.",
+          "controls": ["Key every state read and emitted event by the exact chain, model revision and PoolId."],
+          "evidenceRefs": []
+        },
+        "signaturesReplay": {
+          "status": "not-applicable",
+          "summary": "The starter surface consumes no model-specific signed message or signed offchain payload.",
+          "controls": [],
+          "evidenceRefs": []
+        },
+        "externalCalls": {
+          "status": "not-applicable",
+          "summary": "The starter surface makes no model-specific external call beyond authenticated protocol execution.",
+          "controls": [],
+          "evidenceRefs": []
+        },
+        "custody": {
+          "status": "not-applicable",
+          "summary": "The starter surface retains no token, liquidity position, PoolManager claim or beneficiary balance.",
+          "controls": [],
+          "evidenceRefs": []
+        },
+        "piiGeolocation": {
+          "status": "not-applicable",
+          "summary": "The onchain starter surface collects no private identity data or precise user geolocation.",
+          "controls": [],
+          "evidenceRefs": []
+        },
+        "secretBoundary": {
+          "status": "not-applicable",
+          "summary": "The onchain starter surface assumes no secret can remain confidential in contract state or calldata.",
+          "controls": [],
+          "evidenceRefs": []
+        },
+        "sourceTestSchema": {
+          "status": "applicable",
+          "summary": "The implementation manifest binds the exact source, tests, compiler input and specification reviewed for this boundary.",
+          "controls": ["Bind prototype source and tests to implementation paths and include every imported executable byte in the review target."],
+          "evidenceRefs": []
+        },
+        "failureRecovery": {
+          "status": "applicable",
+          "summary": "An invalid callback or state transition reverts atomically and does not block the separately declared user exit path.",
+          "controls": ["Test dependency failure, callback revert and recovery without partial settlement or trapped user funds."],
+          "evidenceRefs": []
+        }
+      },
+      "signedDataSource": {
+        "used": false,
+        "signerAuthorityRefs": [],
+        "signatureScheme": null,
+        "payloadSchemaPath": null,
+        "freshnessRule": null,
+        "replayProtection": null,
+        "onchainVerifierSurfaceId": null
+      },
+      "onchainOracleVerifier": {
+        "used": false,
+        "verifiedSourceSurfaceIds": [],
+        "verificationRule": null,
+        "freshnessRule": null,
+        "replayProtection": null,
+        "failureRule": null
+      }
+    }
+  ],
+  "projectCapabilities": [
+    {
+      "id": "canonical-pool-state",
+      "kind": "state-observation",
+      "summary": "Read and update only the declared canonical PoolId state without adding value custody or an offchain trust dependency.",
+      "surfaceIds": ["canonical-pool-model"],
+      "securityTriggers": {
+        "authority": true,
+        "valueFlow": false,
+        "sourceOfTruth": true,
+        "signaturesReplay": false,
+        "externalCalls": false,
+        "custody": false,
+        "piiGeolocation": false,
+        "secretBoundary": false,
+        "sourceTestSchema": true,
+        "failureRecovery": true
+      },
+      "requiredProfiles": ["authority", "failure-recovery", "source-of-truth", "source-test-schema"]
+    }
+  ],
+  "capabilities": {
+    "externalCalls": { "used": null, "targets": [], "callSites": [], "reentrancyPolicy": null, "stateDriftPolicy": null, "returnValuePolicy": null, "failureAtomicity": null },
+    "permissionedAsset": { "used": null, "officialUniswapPermissionedPool": null, "issuer": null, "jurisdiction": null, "legalDocuments": [], "underlyingClaim": null, "custodian": null, "adapter": null, "hooks": null, "positionManager": null, "swapEligibility": null, "liquidityEligibility": null, "positionTransferability": null, "pauseFreezeUnwind": null, "redemption": null, "routingLimitations": null },
+    "oracle": { "used": null, "source": null, "value": null, "deployment": null, "runtimeHash": null, "decimals": null, "heartbeatSeconds": null, "maxAgeSeconds": null, "observationType": null, "windowSeconds": null, "minimumAnswer": null, "maximumAnswer": null, "maximumDeviation": null, "roundChecks": null, "manipulationResistance": null, "governance": null, "fallback": null, "maxFallbackAgeSeconds": null, "failureRule": null },
+    "keeper": { "used": null, "executionMode": null, "minIntervalSeconds": null, "maxDelaySeconds": null, "permissionlessFallbackAfterSeconds": null, "idempotencyKey": null, "duplicateBehavior": null, "lastProcessedState": null, "boundedWork": null, "maxItems": null, "retryPolicy": null, "zeroWorkBehavior": null, "fundingSource": null, "minimumGasRunway": null, "alertThreshold": null, "maximumGas": null, "failureImpact": null, "userExitIndependent": null, "poolBinding": null, "slippage": null, "deadline": null, "mevPolicy": null },
+    "proof": { "used": null, "proofSystem": null, "circuitRevision": null, "verifyingKeyHash": null, "verifierAddress": null, "runtimeHash": null, "setupType": null, "setupProvenance": null, "publicInputs": [], "domainBindings": { "chainId": null, "verifyingContract": null, "modelVersion": null, "pool": null, "action": null, "actorOrRecipient": null, "amountBounds": null, "epochOrDeadline": null }, "replayMode": null, "nullifierScope": null, "nullifierDerivation": null, "nullifierStorage": null, "atomicSpentCheck": null, "resetPolicy": null, "maximumProofBytes": null, "maximumVerificationGas": null, "verifierAuthority": null, "failureRule": null, "privacyClaim": null, "metadataLeakage": null },
+    "crossChain": {
+      "used": null,
+      "bridgeDependencyId": null,
+      "source": {
+        "network": {
+          "namespace": null,
+          "reference": null
+        },
+        "domain": null,
+        "authenticatedSender": {
+          "encoding": null,
+          "value": null,
+          "canonicalizationRule": null
+        }
+      },
+      "destination": {
+        "chainId": null,
+        "domain": null,
+        "receiver": null,
+        "receiverDependencyId": null,
+        "authenticatedBridgeCaller": null
+      },
+      "message": {
+        "identifierDerivation": null,
+        "nonceDerivation": null,
+        "nonceScope": null,
+        "customNonceRule": null,
+        "payloadHashRule": null,
+        "idempotencyKeyRule": null,
+        "idempotencyStorage": null,
+        "atomicConsumption": null,
+        "duplicateBehavior": null,
+        "domainBindings": {
+          "bridgeDependencyId": null,
+          "sourceNetwork": null,
+          "sourceDomain": null,
+          "sourceSender": null,
+          "destinationChainId": null,
+          "destinationDomain": null,
+          "receiver": null,
+          "receiverDependencyId": null,
+          "modelId": null,
+          "poolId": null,
+          "action": null,
+          "payloadHash": null,
+          "timestampOrExpiry": null,
+          "messageId": null,
+          "nonce": null
+        }
+      },
+      "finality": {
+        "mode": null,
+        "minimumSourceConfirmations": null,
+        "challengePeriodSeconds": null,
+        "attestationRule": null,
+        "reorgBehavior": null,
+        "customFinalityRule": null
+      },
+      "ordering": {
+        "mode": null,
+        "sequenceKey": null,
+        "outOfOrderBehavior": null,
+        "maximumPendingMessages": null,
+        "queueOverflowBehavior": null,
+        "pendingMessageExpirySeconds": null,
+        "cleanupRule": null,
+        "releaseRule": null
+      },
+      "staleness": {
+        "timestampSource": null,
+        "customTimestampRule": null,
+        "maximumMessageAgeSeconds": null,
+        "maximumFutureSkewSeconds": null,
+        "staleMessageBehavior": null
+      },
+      "failureBehavior": null,
+      "failureRule": null,
+      "fallback": {
+        "mode": null,
+        "authority": null,
+        "rule": null
+      },
+      "quarantine": {
+        "used": null,
+        "storageRule": null,
+        "maximumEntries": null,
+        "entryExpirySeconds": null,
+        "overflowBehavior": null,
+        "cleanupRule": null,
+        "releaseMode": null,
+        "releaseRule": null,
+        "releaseAuthority": null,
+        "atomicRelease": null
+      }
+    },
+    "externalLiquidity": { "used": null, "custody": null, "ownership": null, "shareAccounting": null, "solvencyEquation": null, "lossAllocation": null, "donationPolicy": null, "exitPath": null, "dependencyFailure": null },
+    "asyncSwap": { "used": null, "supportedExactness": null, "custody": null, "fillRule": null, "partialFillRule": null, "cancellation": null, "expiry": null, "refund": null, "queueBound": null, "liveness": null, "failureRule": null },
+    "customCurve": { "used": null, "invariant": null, "domain": null, "rounding": null, "monotonicity": null, "discontinuities": null, "inverse": null, "differentialReference": null, "failureRule": null }
+  },
+  "capabilityExtensions": [],
+  "tokenBehaviorExtensions": [],
+  "security": {
+    "usesTxOrigin": false,
+    "userControlledDelegatecall": false,
+    "arbitraryExecution": false,
+    "unboundedCriticalLoop": false,
+    "ignoredCallResults": false,
+    "hiddenControls": false,
+    "assumesOnchainSecrecy": false,
+    "bypassesHookAddressValidation": false,
+    "signatureScheme": {
+      "used": false,
+      "standard": null,
+      "nonce": null,
+      "deadline": null,
+      "chain": null,
+      "verifyingContract": null,
+      "action": null,
+      "parameters": null,
+      "erc1271": null
+    }
+  },
+  "implementation": {
+    "sourcePaths": [],
+    "testPaths": [],
+    "compilerBuildInfoPaths": [],
+    "specificationPath": null,
+    "testEvidencePath": null,
+    "dependencyLockPath": null,
+    "gateStatusPath": null,
+    "reviewTargetPath": null,
+    "runtimeAssetManifestPath": null
+  },
+  "risk": {
+    "dimensions": {
+      "complexity": null,
+      "customMath": null,
+      "externalDependencies": null,
+      "externalLiquidity": null,
+      "valueAtRisk": null,
+      "teamMaturity": null,
+      "upgradeability": null,
+      "autonomy": null,
+      "priceImpact": null
+    },
+    "rationales": {
+      "complexity": null,
+      "customMath": null,
+      "externalDependencies": null,
+      "externalLiquidity": null,
+      "valueAtRisk": null,
+      "teamMaturity": null,
+      "upgradeability": null,
+      "autonomy": null,
+      "priceImpact": null
+    },
+    "declaredTotal": null,
+    "declaredTier": null,
+    "featureTriggers": []
+  },
+  "disclosures": [],
+  "unresolved": [
+    "Define the exact hook behavior and required callbacks.",
+    "Complete the value flow for all lifecycle actions.",
+    "Select the PoolKey, fee mode, router generation and swap modes.",
+    "Declare every authority, dependency, failure mode and risk dimension.",
+    "Resolve every published Uniswap routing trigger, custom hookData constraint and permissioned routing dependency.",
+    "Define event ordering, finality, reorg rollback, backfill, freshness, reconciliation and reserve reconstruction.",
+    "Identify the proposed Programmable registry, UI, API, indexer and test paths before prototype review."
+  ]
+}

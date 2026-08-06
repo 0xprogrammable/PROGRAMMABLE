@@ -1,0 +1,173 @@
+{
+  "fixtureVersion": 1,
+  "id": "dynamic-lp-fee",
+  "name": "bounded dynamic LP fee remains blocked until the mandatory volume fee is integrated",
+  "description": "A dynamic LP fee can be structurally reviewable, but it belongs to LPs and cannot replace the mandatory Programmable hook-owned volume fee. This scenario remains changes-required until that fee is integrated into the same hook.",
+  "steps": [
+    {
+      "id": "fully-specified",
+      "patch": {
+        "model": {
+          "id": "bounded-depth-lp-fee",
+          "name": "Bounded Depth LP Fee",
+          "summary": "Lower the pool LP fee when a fixed-size window of finalized prior-block active-liquidity samples becomes deeper.",
+          "userOutcome": "Liquidity providers receive a bounded LP fee that responds to sustained active liquidity without creating creator revenue or scanning initialized ticks.",
+          "whyV4": "A v4 beforeSwap callback can read one PoolId, update a bounded observation ring and apply one bounded LP-fee override atomically."
+        },
+        "pool": {
+          "lpFee": {
+            "mode": "dynamic",
+            "hundredthsOfBip": null,
+            "initialHundredthsOfBip": 3000,
+            "initializationPath": "afterInitialize-updateDynamicLPFee",
+            "applicationMode": "before-swap-override",
+            "overrideFlagPolicy": "Every supported swap returns a fee inside immutable bounds with the dynamic-fee override flag set.",
+            "persistentUpdateActor": null,
+            "persistentUpdateCallSites": [],
+            "rateLimit": null,
+            "updatePath": "afterInitialize records the nonzero initial fee; beforeSwap reads active liquidity once, updates one slot in a fixed eight-slot PoolId ring and applies a fee derived only from prior-block slots.",
+            "minimum": 500,
+            "maximum": 5000,
+            "inputMetric": "The PoolManager active-liquidity value at the current tick from one StateLibrary getLiquidity read for the admitted PoolId; no positions, tick words or initialized ticks are traversed.",
+            "referenceAsset": "No external reference asset; immutable thresholds use this PoolId's raw active-liquidity units.",
+            "measurementUnit": "The uint128 active-liquidity value returned for the exact admitted PoolId.",
+            "observationMode": "delayed",
+            "observationWindow": "Exactly eight finalized prior-block samples in a fixed-size ring; missing slots keep the initial fee.",
+            "curve": "Four immutable raw-liquidity thresholds map the lower median, the fourth value after sorting eight samples, to one bounded fee tier; evaluation uses a fixed eight-input sorting network and four comparisons.",
+            "updateCadence": "At most one stored sample per PoolId per block and one fixed-size evaluation per beforeSwap call.",
+            "liquidityDecreaseBehavior": "A lower median of the fixed prior-block samples selects a higher fee tier inside the immutable bounds.",
+            "manipulationResistance": "The current transaction's sample cannot set its own fee; tests cover same-block add-swap-remove, multi-block temporary liquidity, donations, tick crossings and split routes, and enforce an eighty-thousand-gas beforeSwap ceiling with a full ring.",
+            "failureRule": "Use the initial fee until all eight slots are finalized; later read, cast or bound failures keep the last valid fee and emit a stale-observation event."
+          }
+        },
+        "hook": {
+          "used": true,
+          "permissions": {
+            "afterInitialize": true,
+            "beforeSwap": true,
+            "afterSwap": false
+          },
+          "callbackPolicies": [
+            {
+              "callback": "afterInitialize",
+              "necessity": "The dynamic pool starts at zero, so this callback stores the exact nonzero initial LP fee.",
+              "allowedReverts": "Only invalid PoolId admission or failure to set the bounded initial fee may revert initialization.",
+              "userExitImpact": "Initialization happens once and cannot govern a later liquidity or token exit.",
+              "noSelfCallImpact": "The model initiates no same-hook PoolManager action during initialization."
+            },
+            {
+              "callback": "beforeSwap",
+              "necessity": "Each swap needs one bounded LP-fee override derived from the latest finalized observation.",
+              "allowedReverts": "Only invalid PoolId admission or an out-of-bounds fee calculation may revert the swap.",
+              "userExitImpact": "The callback affects trading only and cannot block standard liquidity removal.",
+              "noSelfCallImpact": "The model initiates no nested swap and does not rely on recursive callbacks."
+            }
+          ]
+        },
+        "valueFlows": [
+          {
+            "id": "dynamic-lp-fee",
+            "action": "apply bounded LP fee",
+            "asset": "both declared pool currencies",
+            "from": "swap proceeds inside PoolManager accounting",
+            "to": "the canonical pool's liquidity providers",
+            "amountRule": "Core applies only the flagged LP fee between 500 and 5000 hundredths of a basis point.",
+            "settlement": "The hook returns no token delta and never takes custody; the standard router settles the complete swap.",
+            "failure": "An invalid or unavailable observation keeps the last valid bounded fee or reverts before settlement."
+          }
+        ],
+        "operations": {
+          "monitoring": "Index fee observations and stale-observation events; alert on bounds violations or callback reverts.",
+          "incidentResponse": "The immutable bounds cannot be changed; a faulty model is retired for new pools without blocking existing liquidity exits."
+        },
+        "integration": {
+          "events": [
+            "DynamicLpFeeObserved(bytes32 indexed poolId,uint24 fee,bool stale)"
+          ]
+        },
+        "risk": {
+          "dimensions": {
+            "complexity": 2,
+            "customMath": 1,
+            "externalDependencies": 0,
+            "externalLiquidity": 0,
+            "valueAtRisk": 0,
+            "teamMaturity": 1,
+            "upgradeability": 0,
+            "autonomy": 1,
+            "priceImpact": 1
+          },
+          "rationales": {
+            "complexity": "Two callbacks coordinate initialization and one bounded per-swap LP-fee override.",
+            "customMath": "A fixed eight-input sorting network and four immutable threshold comparisons select one bounded LP-fee tier.",
+            "externalDependencies": "The model reads only admitted pool state and uses no external oracle or service.",
+            "externalLiquidity": "The hook holds no token, liquidity position, PoolManager claim or beneficiary balance.",
+            "valueAtRisk": "The hook returns no token delta and cannot transfer or custody trader or LP principal.",
+            "teamMaturity": "A conservative nonzero process score remains until independent reviewers complete their work.",
+            "upgradeability": "The hook, fee bounds and observation rules are immutable for the pool.",
+            "autonomy": "The selected LP fee changes automatically from the fixed-size prior-block observation ring.",
+            "priceImpact": "The LP fee changes final execution inside the immutable five-to-fifty-basis-point range."
+          },
+          "declaredTotal": 6,
+          "declaredTier": "high",
+          "featureTriggers": [
+            "autonomous",
+            "custom-math",
+            "price-impact"
+          ]
+        },
+        "disclosures": [
+          "The LP fee belongs to liquidity providers and does not satisfy the mandatory Programmable volume fee.",
+          "The fee input uses exactly eight prior-block active-liquidity samples; it never scans positions, tick words or initialized ticks.",
+          "A low numeric score does not override the high review tier imposed by automatic price-impacting behavior."
+        ]
+      },
+      "expected": {
+        "decision": "REDESIGN_REQUIRED",
+        "hookPermissionMask": "0x1080",
+        "risk": {
+          "score": 6,
+          "baseTier": "low",
+          "effectiveTier": "high",
+          "featureTriggers": [
+            "autonomous",
+            "custom-math",
+            "price-impact"
+          ]
+        },
+        "findingKeys": [
+          "blocker|PROGRAMMABLE_FEE_INTEGRATION_PENDING|$.programmableFee.collection.status",
+          "warning|BUILDER_FIELD_PENDING|$.builder.contact",
+          "warning|BUILDER_FIELD_PENDING|$.builder.github",
+          "warning|BUILDER_FIELD_PENDING|$.builder.licenseDeclaration"
+        ],
+        "gateKeys": [
+          "candidate|human-economic-and-security-review",
+          "candidate|independent-security-review-one",
+          "candidate|independent-specialist-review",
+          "candidate|pinned-fork-and-current-head-smoke",
+          "candidate|programmable-fee-architecture-review",
+          "candidate|programmable-indexer-integration-review",
+          "candidate|programmable-integration-test-review",
+          "candidate|programmable-registry-integration-review",
+          "candidate|programmable-ui-integration-review",
+          "external|independent-routing-provider-approval",
+          "prototype|autonomous-state-transition-invariants",
+          "prototype|callback-authentication-and-permission-mask",
+          "prototype|callback-selector-return-length-and-self-call-tests",
+          "prototype|dynamic-fee-manipulation-tests",
+          "prototype|dynamic-fee-properties",
+          "prototype|event-reorg-backfill-freshness-tests",
+          "prototype|format-build-size-warnings",
+          "prototype|static-analysis",
+          "prototype|unit-integration-fuzz-invariant-tests",
+          "release|independent-security-review-two",
+          "release|monitoring-and-lifecycle-evidence",
+          "release|production-anomaly-monitoring",
+          "release|public-bug-bounty",
+          "release|runtime-source-config-verification"
+        ]
+      }
+    }
+  ]
+}

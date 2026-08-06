@@ -1,0 +1,16 @@
+{
+  "name": "programmable",
+  "displayName": "Programmable v4 Builder",
+  "version": "0.2.1",
+  "description": "Package the Programmable v4 Builder skill for coding agents.",
+  "author": {
+    "name": "Programmable"
+  },
+  "license": "MIT",
+  "keywords": [
+    "uniswap-v4",
+    "smart-contracts",
+    "developer-tools"
+  ],
+  "skills": "./skills/"
+}

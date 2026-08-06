@@ -1,0 +1,402 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:github-public-source-contract-v1",
+  "title": "GitHubPublicSourceContractV1",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/GitHubPublicSourceRequestV1"
+    },
+    {
+      "$ref": "#/$defs/GitHubPublicSourceResultV1"
+    },
+    {
+      "$ref": "#/$defs/GitHubPublicSourceErrorV1"
+    }
+  ],
+  "$defs": {
+    "OpaqueDecimalId": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,63}$"
+    },
+    "GitObjectId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "CanonicalRepositoryUri": {
+      "type": "string",
+      "pattern": "^https://github\\.com/(?![^/]*--)[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?/(?!\\.{1,2}$)(?!.*\\.git$)(?=[a-z0-9._-]*[a-z0-9])[a-z0-9._-]{1,100}$",
+      "maxLength": 159
+    },
+    "RepositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*(?:^|/)\\.git(?:/|$))(?!.*\\\\)(?!.*(?:%2[fF]|%5[cC]))(?!.*\\/$)[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029\\u202a-\\u202e\\u2066-\\u2069]+$"
+    },
+    "GitHubPublicRepositoryRequestV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repositoryUri",
+        "numericRepositoryId",
+        "revisionObjectId",
+        "treeObjectId"
+      ],
+      "properties": {
+        "repositoryUri": {
+          "$ref": "#/$defs/CanonicalRepositoryUri"
+        },
+        "numericRepositoryId": {
+          "$ref": "#/$defs/OpaqueDecimalId"
+        },
+        "revisionObjectId": {
+          "$ref": "#/$defs/GitObjectId"
+        },
+        "treeObjectId": {
+          "$ref": "#/$defs/GitObjectId"
+        },
+        "sourcePaths": {
+          "type": "array",
+          "maxItems": 512,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/RepositoryPath"
+          }
+        },
+        "contractPaths": {
+          "type": "array",
+          "maxItems": 512,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/RepositoryPath"
+          }
+        },
+        "githubActionsRunIds": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/OpaqueDecimalId"
+          }
+        }
+      }
+    },
+    "GitHubPublicSourceRequestV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "primary",
+        "companions"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "primary": {
+          "$ref": "#/$defs/GitHubPublicRepositoryRequestV1"
+        },
+        "companions": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/GitHubPublicRepositoryRequestV1"
+          }
+        }
+      }
+    },
+    "RepositoryAuthorityV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "numericRepositoryId",
+        "revisionObjectId",
+        "treeObjectId"
+      ],
+      "properties": {
+        "numericRepositoryId": {
+          "$ref": "#/$defs/OpaqueDecimalId"
+        },
+        "revisionObjectId": {
+          "$ref": "#/$defs/GitObjectId"
+        },
+        "treeObjectId": {
+          "$ref": "#/$defs/GitObjectId"
+        }
+      }
+    },
+    "RepositoryDisplayV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repositoryUri",
+        "owner",
+        "repository",
+        "defaultBranch"
+      ],
+      "properties": {
+        "repositoryUri": {
+          "$ref": "#/$defs/CanonicalRepositoryUri"
+        },
+        "owner": {
+          "type": "string",
+          "pattern": "^(?!.*--)[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$"
+        },
+        "repository": {
+          "type": "string",
+          "pattern": "^(?!\\.{1,2}$)(?!.*\\.git$)(?=[a-z0-9._-]*[a-z0-9])[a-z0-9._-]{1,100}$"
+        },
+        "defaultBranch": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        }
+      }
+    },
+    "GitHubActionsEvidenceV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runId",
+        "runAttempt",
+        "workflowId",
+        "workflowPath",
+        "headRevision",
+        "headTree",
+        "event",
+        "status",
+        "conclusion",
+        "htmlUrl"
+      ],
+      "properties": {
+        "runId": {
+          "$ref": "#/$defs/OpaqueDecimalId"
+        },
+        "runAttempt": {
+          "$ref": "#/$defs/OpaqueDecimalId"
+        },
+        "workflowId": {
+          "$ref": "#/$defs/OpaqueDecimalId"
+        },
+        "workflowPath": {
+          "$ref": "#/$defs/RepositoryPath"
+        },
+        "headRevision": {
+          "$ref": "#/$defs/GitObjectId"
+        },
+        "headTree": {
+          "$ref": "#/$defs/GitObjectId"
+        },
+        "event": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+        },
+        "status": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+        },
+        "conclusion": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+            }
+          ]
+        },
+        "htmlUrl": {
+          "type": "string",
+          "pattern": "^https://github\\.com/[a-z0-9-]+/[a-z0-9._-]+/actions/runs/[1-9][0-9]{0,63}$"
+        }
+      }
+    },
+    "GitHubPublicRepositoryResultV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "authority",
+        "display",
+        "visibility",
+        "sourcePaths",
+        "contractPaths",
+        "githubActionsEvidence"
+      ],
+      "properties": {
+        "role": {
+          "enum": [
+            "primary",
+            "companion"
+          ]
+        },
+        "authority": {
+          "$ref": "#/$defs/RepositoryAuthorityV1"
+        },
+        "display": {
+          "$ref": "#/$defs/RepositoryDisplayV1"
+        },
+        "visibility": {
+          "const": "public"
+        },
+        "sourcePaths": {
+          "type": "array",
+          "maxItems": 512,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/RepositoryPath"
+          }
+        },
+        "contractPaths": {
+          "type": "array",
+          "maxItems": 512,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/RepositoryPath"
+          }
+        },
+        "githubActionsEvidence": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/GitHubActionsEvidenceV1"
+          }
+        }
+      }
+    },
+    "GitHubPublicSourceResultV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "kind",
+        "canonicalProviderOrigin",
+        "githubApiVersion",
+        "primary",
+        "companions"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "github-public-source"
+        },
+        "canonicalProviderOrigin": {
+          "const": "https://github.com"
+        },
+        "githubApiVersion": {
+          "const": "2026-03-10"
+        },
+        "primary": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/GitHubPublicRepositoryResultV1"
+            },
+            {
+              "properties": {
+                "role": {
+                  "const": "primary"
+                }
+              }
+            }
+          ]
+        },
+        "companions": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/GitHubPublicRepositoryResultV1"
+              },
+              {
+                "properties": {
+                  "role": {
+                    "const": "companion"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "GitHubPublicSourceErrorV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "error",
+        "message",
+        "retryable",
+        "status",
+        "retryAfterSeconds"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "error": {
+          "enum": [
+            "GITHUB_ACTIONS_RUN_MISMATCH",
+            "GITHUB_ACTIONS_RUN_NOT_REACHABLE",
+            "GITHUB_ACTIONS_WORKFLOW_NOT_IN_TREE",
+            "GITHUB_COMMIT_MISMATCH",
+            "GITHUB_COMMIT_NOT_REACHABLE",
+            "GITHUB_DECLARED_PATH_NOT_FOUND",
+            "GITHUB_NETWORK_ERROR",
+            "GITHUB_PROTOCOL_ERROR",
+            "GITHUB_PUBLIC_REPOSITORY_UNAVAILABLE",
+            "GITHUB_RATE_LIMITED",
+            "GITHUB_REDIRECT_REJECTED",
+            "GITHUB_REPOSITORY_ID_MISMATCH",
+            "GITHUB_REPOSITORY_LOCATOR_MISMATCH",
+            "GITHUB_RESPONSE_TOO_LARGE",
+            "GITHUB_TIMEOUT",
+            "GITHUB_TREE_MISMATCH",
+            "GITHUB_TREE_NOT_REACHABLE",
+            "GITHUB_TREE_TRUNCATED",
+            "GITHUB_UNAVAILABLE",
+            "GITHUB_UPSTREAM_REJECTED",
+            "INVALID_OPTIONS",
+            "INVALID_REQUEST"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "status": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 599
+            }
+          ]
+        },
+        "retryAfterSeconds": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]{0,4})$"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

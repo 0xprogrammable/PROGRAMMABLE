@@ -1,0 +1,987 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://programmable.family/schemas/custom-hook-application-api-1.0.0.json",
+  "title": "Programmable Custom Hook application response",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/publicStatus"
+    },
+    {
+      "$ref": "#/$defs/ownerEligibility"
+    }
+  ],
+  "$defs": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "applicationStatus": {
+      "enum": [
+        "draft-unclaimed",
+        "submitted",
+        "in-review",
+        "changes-requested",
+        "approved",
+        "launched",
+        "not-supported",
+        "withdrawn"
+      ]
+    },
+    "eligibilityReason": {
+      "enum": [
+        "WALLET_REQUIRED",
+        "WRONG_WALLET",
+        "GITHUB_REQUIRED",
+        "GITHUB_APPROVAL_REQUIRED",
+        "REPOSITORY_REQUIRED",
+        "NO_REPOSITORIES_AVAILABLE",
+        "REPOSITORY_CLAIMED",
+        "REPOSITORY_ACCESS_REVOKED",
+        "REPOSITORY_NOT_PUBLIC",
+        "APPLICATION_NOT_FOUND",
+        "APPLICATION_UNCLAIMED",
+        "CLAIM_EXPIRED",
+        "CLAIM_CONSUMED",
+        "APPLICATION_PENDING",
+        "CHANGES_REQUESTED",
+        "REVISION_MISMATCH",
+        "NOT_SUPPORTED",
+        "APPROVAL_EXPIRED",
+        "MANIFEST_STALE",
+        "NETWORK_UNSUPPORTED",
+        "REVIEW_TARGET_MISMATCH",
+        "LAUNCH_DETAILS_REQUIRED",
+        "PERMIT_READY",
+        "PERMIT_CONSUMED",
+        "TRANSACTION_PENDING",
+        "TRANSACTION_FAILED",
+        "LAUNCHED"
+      ]
+    },
+    "permitState": {
+      "enum": [
+        "not-issued",
+        "pending",
+        "ready",
+        "expired",
+        "consumed",
+        "invalidated"
+      ]
+    },
+    "installationState": {
+      "enum": [
+        "connected",
+        "approval-required",
+        "revoked",
+        "suspended"
+      ]
+    },
+    "githubAuthorizationState": {
+      "enum": [
+        "not-connected",
+        "connected",
+        "revoked"
+      ]
+    },
+    "claimState": {
+      "enum": [
+        "unclaimed",
+        "claimed",
+        "expired",
+        "consumed"
+      ]
+    },
+    "transactionState": {
+      "enum": [
+        "not-started",
+        "awaiting-signature",
+        "submitted",
+        "confirmed",
+        "failed",
+        "replaced",
+        "dropped"
+      ]
+    },
+    "hex32": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "commitSha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "address": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{40}$"
+    },
+    "repository": {
+      "type": "object",
+      "required": [
+        "id",
+        "owner",
+        "name",
+        "visibility"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "visibility": {
+          "const": "public"
+        }
+      },
+      "additionalProperties": false
+    },
+    "installation": {
+      "type": "object",
+      "required": [
+        "id",
+        "accountId",
+        "accountLogin",
+        "state"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "accountId": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "accountLogin": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "state": {
+          "$ref": "#/$defs/installationState"
+        }
+      },
+      "additionalProperties": false
+    },
+    "githubSession": {
+      "type": "object",
+      "required": [
+        "authorizationState",
+        "userId",
+        "selectedInstallation",
+        "effectivePermission",
+        "installationOptions"
+      ],
+      "properties": {
+        "authorizationState": {
+          "$ref": "#/$defs/githubAuthorizationState"
+        },
+        "userId": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "selectedInstallation": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/installation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "effectivePermission": {
+          "enum": [
+            "ADMIN",
+            null
+          ]
+        },
+        "installationOptions": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/installation"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "finding": {
+      "type": "object",
+      "required": [
+        "code",
+        "summary"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z0-9_]+$"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      },
+      "additionalProperties": false
+    },
+    "launchDraft": {
+      "type": "object",
+      "required": [
+        "state",
+        "tokenName",
+        "symbol",
+        "imageUri",
+        "description",
+        "links",
+        "initialBuyWei",
+        "configurationHash",
+        "metadataHash",
+        "feeDisclosure",
+        "poolPair",
+        "estimatedNetworkCostWei",
+        "validationErrors"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "not-started",
+            "editing",
+            "invalid",
+            "valid",
+            "permit-bound"
+          ]
+        },
+        "tokenName": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "symbol": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Z0-9]{1,12}$"
+        },
+        "imageUri": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri",
+          "maxLength": 2048
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 280
+        },
+        "links": {
+          "type": "object",
+          "required": [
+            "website",
+            "x",
+            "telegram"
+          ],
+          "properties": {
+            "website": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uri",
+              "maxLength": 2048
+            },
+            "x": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uri",
+              "maxLength": 2048
+            },
+            "telegram": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uri",
+              "maxLength": 2048
+            }
+          },
+          "additionalProperties": false
+        },
+        "initialBuyWei": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9]+$"
+        },
+        "configurationHash": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/hex32"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "metadataHash": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/hex32"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "feeDisclosure": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500
+        },
+        "poolPair": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 100
+        },
+        "estimatedNetworkCostWei": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9]+$"
+        },
+        "validationErrors": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/finding"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "launchRecord": {
+      "type": "object",
+      "required": [
+        "chainId",
+        "tokenAddress",
+        "hookAddress",
+        "poolId",
+        "transactionHash",
+        "blockNumber",
+        "permitDigest",
+        "repositoryKey",
+        "repositoryKeyConsumed",
+        "runtimeMatched"
+      ],
+      "properties": {
+        "chainId": {
+          "const": 1
+        },
+        "tokenAddress": {
+          "$ref": "#/$defs/address"
+        },
+        "hookAddress": {
+          "$ref": "#/$defs/address"
+        },
+        "poolId": {
+          "$ref": "#/$defs/hex32"
+        },
+        "transactionHash": {
+          "$ref": "#/$defs/hex32"
+        },
+        "blockNumber": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "permitDigest": {
+          "$ref": "#/$defs/hex32"
+        },
+        "repositoryKey": {
+          "$ref": "#/$defs/hex32"
+        },
+        "repositoryKeyConsumed": {
+          "const": true
+        },
+        "runtimeMatched": {
+          "const": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "repositoryLaunchState": {
+      "type": "object",
+      "required": [
+        "state",
+        "registryAddress",
+        "checkedAtBlock"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "unused",
+            "reserved",
+            "consumed"
+          ]
+        },
+        "registryAddress": {
+          "$ref": "#/$defs/address"
+        },
+        "checkedAtBlock": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "application": {
+      "type": "object",
+      "required": [
+        "id",
+        "revision",
+        "status",
+        "claimState",
+        "repositoryId",
+        "repositoryKey",
+        "commit",
+        "submissionHash",
+        "reviewTargetHash",
+        "updatedAt",
+        "findings",
+        "nextAction"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_-]{12,80}$"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "$ref": "#/$defs/applicationStatus"
+        },
+        "claimState": {
+          "$ref": "#/$defs/claimState"
+        },
+        "repositoryId": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "repositoryKey": {
+          "$ref": "#/$defs/hex32"
+        },
+        "commit": {
+          "$ref": "#/$defs/commitSha"
+        },
+        "submissionHash": {
+          "$ref": "#/$defs/hex32"
+        },
+        "reviewTargetHash": {
+          "$ref": "#/$defs/hex32"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "findings": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/finding"
+          }
+        },
+        "nextAction": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      },
+      "additionalProperties": false
+    },
+    "publicStatus": {
+      "type": "object",
+      "required": [
+        "kind",
+        "schemaVersion",
+        "application"
+      ],
+      "properties": {
+        "kind": {
+          "const": "public-status"
+        },
+        "schemaVersion": {
+          "$ref": "#/$defs/schemaVersion"
+        },
+        "application": {
+          "$ref": "#/$defs/application"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ownerEligibility": {
+      "type": "object",
+      "required": [
+        "kind",
+        "schemaVersion",
+        "wallet",
+        "github",
+        "repositoryOptions",
+        "repository",
+        "application",
+        "eligibility",
+        "repositoryLaunchState",
+        "launchDraft",
+        "transactionState",
+        "launchRecord"
+      ],
+      "properties": {
+        "kind": {
+          "const": "owner-eligibility"
+        },
+        "schemaVersion": {
+          "$ref": "#/$defs/schemaVersion"
+        },
+        "wallet": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/address"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "github": {
+          "$ref": "#/$defs/githubSession"
+        },
+        "repositoryOptions": {
+          "type": "array",
+          "maxItems": 500,
+          "items": {
+            "$ref": "#/$defs/repository"
+          }
+        },
+        "repository": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/repository"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "application": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/application"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "eligibility": {
+          "type": "object",
+          "required": [
+            "eligible",
+            "reason",
+            "permitState",
+            "nextAction"
+          ],
+          "properties": {
+            "eligible": {
+              "type": "boolean"
+            },
+            "reason": {
+              "$ref": "#/$defs/eligibilityReason"
+            },
+            "permitState": {
+              "$ref": "#/$defs/permitState"
+            },
+            "nextAction": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "eligible": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "eligible"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "reason": {
+                    "const": "PERMIT_READY"
+                  },
+                  "permitState": {
+                    "const": "ready"
+                  }
+                }
+              }
+            }
+          ],
+          "additionalProperties": false
+        },
+        "repositoryLaunchState": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/repositoryLaunchState"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "launchDraft": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/launchDraft"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transactionState": {
+          "$ref": "#/$defs/transactionState"
+        },
+        "launchRecord": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/launchRecord"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "application": {
+                "type": "null"
+              }
+            },
+            "required": [
+              "application"
+            ]
+          },
+          "then": {
+            "properties": {
+              "eligibility": {
+                "properties": {
+                  "eligible": {
+                    "const": false
+                  },
+                  "permitState": {
+                    "const": "not-issued"
+                  }
+                }
+              },
+              "launchDraft": {
+                "type": "null"
+              },
+              "launchRecord": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "application": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "const": "launched"
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              }
+            },
+            "required": [
+              "application"
+            ]
+          },
+          "then": {
+            "properties": {
+              "eligibility": {
+                "properties": {
+                  "eligible": {
+                    "const": false
+                  },
+                  "reason": {
+                    "const": "LAUNCHED"
+                  },
+                  "permitState": {
+                    "const": "consumed"
+                  }
+                }
+              },
+              "repositoryLaunchState": {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "const": "consumed"
+                  }
+                },
+                "required": [
+                  "state"
+                ]
+              },
+              "transactionState": {
+                "const": "confirmed"
+              },
+              "launchRecord": {
+                "$ref": "#/$defs/launchRecord"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "eligibility": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "const": "PERMIT_READY"
+                  }
+                },
+                "required": [
+                  "reason"
+                ]
+              }
+            },
+            "required": [
+              "eligibility"
+            ]
+          },
+          "then": {
+            "properties": {
+              "application": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "const": "approved"
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              },
+              "repositoryLaunchState": {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "const": "reserved"
+                  }
+                },
+                "required": [
+                  "state"
+                ]
+              },
+              "launchDraft": {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "const": "permit-bound"
+                  }
+                },
+                "required": [
+                  "state"
+                ]
+              },
+              "launchRecord": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "eligibility": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "const": "LAUNCH_DETAILS_REQUIRED"
+                  }
+                },
+                "required": [
+                  "reason"
+                ]
+              }
+            },
+            "required": [
+              "eligibility"
+            ]
+          },
+          "then": {
+            "properties": {
+              "application": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "const": "approved"
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              },
+              "eligibility": {
+                "properties": {
+                  "eligible": {
+                    "const": false
+                  }
+                }
+              },
+              "launchRecord": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "application": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "const": "changes-requested"
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              }
+            },
+            "required": [
+              "application"
+            ]
+          },
+          "then": {
+            "properties": {
+              "eligibility": {
+                "properties": {
+                  "eligible": {
+                    "const": false
+                  },
+                  "reason": {
+                    "const": "CHANGES_REQUESTED"
+                  },
+                  "permitState": {
+                    "enum": [
+                      "not-issued",
+                      "invalidated"
+                    ]
+                  }
+                }
+              },
+              "launchDraft": {
+                "type": "null"
+              },
+              "launchRecord": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "application": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "enum": [
+                      "submitted",
+                      "in-review"
+                    ]
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              }
+            },
+            "required": [
+              "application"
+            ]
+          },
+          "then": {
+            "properties": {
+              "eligibility": {
+                "properties": {
+                  "eligible": {
+                    "const": false
+                  },
+                  "reason": {
+                    "const": "APPLICATION_PENDING"
+                  },
+                  "permitState": {
+                    "const": "not-issued"
+                  }
+                }
+              },
+              "launchDraft": {
+                "type": "null"
+              },
+              "launchRecord": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "programmable-repo",
+  "interface": {
+    "displayName": "Programmable"
+  },
+  "plugins": [
+    {
+      "name": "programmable",
+      "source": {
+        "source": "local",
+        "path": "./plugins/programmable"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

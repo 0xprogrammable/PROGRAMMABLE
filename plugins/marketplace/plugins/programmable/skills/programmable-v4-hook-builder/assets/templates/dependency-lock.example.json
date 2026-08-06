@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "baseline": "programmable-tested",
+  "compiler": {
+    "solidity": "0.8.26",
+    "sourceRepository": "https://github.com/argotorg/solidity.git",
+    "sourceRevision": "8a97fa7a1db1ec509221ead6fea6802c684ee887",
+    "sourceTree": "4ecc702563263869217d8a42262d09bd6015f597",
+    "evmVersion": "cancun",
+    "optimizer": true,
+    "optimizerRuns": 1000,
+    "viaIR": false,
+    "metadataBytecodeHash": "none",
+    "cborMetadata": false,
+    "ffi": false
+  },
+  "dependencies": [
+    {
+      "name": "Uniswap v4 Core",
+      "repository": "https://github.com/Uniswap/v4-core.git",
+      "revision": "59d3ecf53afa9264a16bba0e38f4c5d2231f80bc",
+      "packageVersion": null,
+      "integrity": null,
+      "sourceTree": "eb2b71f69fae17a743bcdddd54b5fe941236d949",
+      "license": "file-specific MIT or BUSL-1.1",
+      "importPrefixes": ["@uniswap/v4-core/"]
+    },
+    {
+      "name": "Uniswap v4 Periphery",
+      "repository": "https://github.com/Uniswap/v4-periphery.git",
+      "revision": "ad04c9f24a170accf5ea1b2836bbafd514537ca6",
+      "packageVersion": null,
+      "integrity": null,
+      "sourceTree": "be7e2efe29a6d352ed97c5bd9bf02a0c84decf6b",
+      "license": "MIT",
+      "importPrefixes": ["@uniswap/v4-periphery/", "v4-periphery/"]
+    },
+    {
+      "name": "Uniswap Liquidity Launcher",
+      "repository": "https://github.com/Uniswap/liquidity-launcher.git",
+      "revision": "e4660afe4f820f4a39181c7ea1f9bce6c423499f",
+      "packageVersion": null,
+      "integrity": null,
+      "sourceTree": "1f15e52e3e44c75bc3875c74bcb67cc2ae90db47",
+      "license": "MIT",
+      "importPrefixes": ["@uniswap/liquidity-launcher/", "liquidity-launcher/"]
+    },
+    {
+      "name": "Uniswap UERC20 Factory",
+      "repository": "https://github.com/Uniswap/uerc20-factory.git",
+      "revision": "6f18f1cdf80dc173d33d3cd6bbe91ee52c314f68",
+      "packageVersion": null,
+      "integrity": null,
+      "sourceTree": "7211dbd66b44b8aab1ae090ad5cff722b83b0b8c",
+      "license": "MIT",
+      "importPrefixes": ["@uniswap/uerc20-factory/"]
+    },
+    {
+      "name": "OpenZeppelin Uniswap Hooks",
+      "repository": "https://github.com/OpenZeppelin/uniswap-hooks.git",
+      "revision": "26dc8e53f812a1ca390d470342adb6cd8c3286ad",
+      "packageVersion": null,
+      "integrity": null,
+      "sourceTree": "ada96daa76ed8d3b77c9934da4ef356bf7df6a4f",
+      "license": "MIT",
+      "importPrefixes": ["@openzeppelin/uniswap-hooks/"]
+    },
+    {
+      "name": "OpenZeppelin Contracts",
+      "repository": "https://github.com/OpenZeppelin/openzeppelin-contracts.git",
+      "revision": "21c8312b022f495ebe3621d5daeed20552b43ff9",
+      "packageVersion": null,
+      "integrity": null,
+      "sourceTree": "d18c9a1f95b08da49268ae7ec787e71c064b95f8",
+      "license": "MIT",
+      "importPrefixes": ["@openzeppelin/contracts/"]
+    },
+    {
+      "name": "Permit2",
+      "repository": "https://github.com/Uniswap/permit2.git",
+      "revision": "cc56ad0f3439c502c246fc5cfcc3db92bb8b7219",
+      "packageVersion": null,
+      "integrity": null,
+      "sourceTree": "9a2c109c928d5ac805b979167ce8eb613ec37054",
+      "license": "MIT",
+      "importPrefixes": ["permit2/"]
+    },
+    {
+      "name": "Forge Standard Library",
+      "repository": "https://github.com/foundry-rs/forge-std.git",
+      "revision": "3b20d60d14b343ee4f908cb8079495c07f5e8981",
+      "packageVersion": null,
+      "integrity": null,
+      "sourceTree": "12dc77680520b52f871a992281dd8d817e46c4bf",
+      "license": "Apache-2.0",
+      "importPrefixes": ["forge-std/"]
+    }
+  ]
+}

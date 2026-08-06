@@ -1,0 +1,148 @@
+{
+  "fixtureVersion": 1,
+  "id": "unsafe-hidden-curve",
+  "name": "hidden-control custom curve is unsupported",
+  "description": "A return-delta curve with an undisclosed payout redirect is rejected even before its incomplete accounting could be reviewed.",
+  "steps": [
+    {
+      "id": "hard-stop",
+      "patch": {
+        "model": {
+          "id": "hidden-admin-curve",
+          "name": "Hidden Admin Curve",
+          "summary": "Use a custom constant-sum curve while an unlisted operator can redirect the trader's custom-leg output.",
+          "userOutcome": "The submitter asks for custom pricing and asks that the operator control remain absent from trader disclosures.",
+          "category": "market-structure",
+          "whyV4": "The proposal uses beforeSwap return deltas to replace part of the concentrated-liquidity swap with custom pricing."
+        },
+        "hook": {
+          "used": true,
+          "permissions": {
+            "beforeSwap": true,
+            "afterSwap": false,
+            "beforeSwapReturnDelta": true
+          },
+          "callbackPolicies": [
+            {
+              "callback": "beforeSwap",
+              "necessity": "The callback claims a custom-priced leg before the residual AMM swap.",
+              "allowedReverts": "The submitter leaves backing and operator failure behavior incomplete.",
+              "userExitImpact": "The stated callback is swap-only, but the hidden inventory controller can remove backing.",
+              "noSelfCallImpact": "The design declares no nested PoolManager action."
+            }
+          ]
+        },
+        "integration": {
+          "routingAndDiscoverability": {
+            "allowlistTriggers": {
+              "usesDeltaFlag": true
+            }
+          }
+        },
+        "capabilities": {
+          "customCurve": {
+            "used": true,
+            "invariant": "Inside the advertised band, quoted output equals specified input at a constant one-to-one normalized rate.",
+            "domain": "The claimed curve applies only to positive finite inputs below the advertised inventory cap.",
+            "rounding": "The submitter proposes rounding output down to whole token base units.",
+            "monotonicity": "Advertised output is nondecreasing in input while inventory remains available.",
+            "discontinuities": "The design jumps to the residual AMM leg when the hidden operator-controlled inventory is unavailable.",
+            "inverse": "Exact output divides the requested output by the advertised normalized rate.",
+            "differentialReference": "A rational-arithmetic reference model would compare all four swap quadrants.",
+            "failureRule": "The submitter has not made operator withdrawal or payout redirection visible to traders."
+          }
+        },
+        "security": {
+          "hiddenControls": true
+        },
+        "risk": {
+          "dimensions": {
+            "complexity": 3,
+            "customMath": 2,
+            "externalDependencies": 0,
+            "externalLiquidity": 0,
+            "valueAtRisk": 5,
+            "teamMaturity": 1,
+            "upgradeability": 0,
+            "autonomy": 0,
+            "priceImpact": 3
+          },
+          "rationales": {
+            "complexity": "A custom leg, residual AMM leg and operator-controlled backing interact in every swap quadrant.",
+            "customMath": "The proposal replaces core price formation with a custom constant-sum calculation.",
+            "externalDependencies": "No external oracle or service is declared.",
+            "externalLiquidity": "The submitter omits a reviewable custody and liability model for the claimed inventory.",
+            "valueAtRisk": "A return delta can consume the trader's full specified amount while hidden control removes backing.",
+            "teamMaturity": "The request to hide control behavior indicates an immature and unacceptable review process.",
+            "upgradeability": "No proxy is declared; the hard stop is the hidden payout and backing authority.",
+            "autonomy": "No keeper or autonomous parameter is declared.",
+            "priceImpact": "The return delta directly replaces pool pricing and changes the caller's final swap amounts."
+          },
+          "declaredTotal": 14,
+          "declaredTier": "high",
+          "featureTriggers": [
+            "custom-curve",
+            "custom-math",
+            "price-impact",
+            "return-delta"
+          ]
+        },
+        "disclosures": [
+          "The submitter explicitly requested that the operator's payout and backing control not be disclosed."
+        ]
+      },
+      "expected": {
+        "decision": "UNSUPPORTED",
+        "hookPermissionMask": "0x0088",
+        "risk": {
+          "score": 14,
+          "baseTier": "medium",
+          "effectiveTier": "high",
+          "featureTriggers": [
+            "custom-curve",
+            "custom-math",
+            "price-impact",
+            "return-delta"
+          ]
+        },
+        "findingKeys": [
+          "hard|HIDDEN_CONTROLS|$.security.hiddenControls",
+          "blocker|PROGRAMMABLE_FEE_INTEGRATION_PENDING|$.programmableFee.collection.status",
+          "blocker|RETURN_DELTA_USAGE_MISMATCH|$.hook.returnDeltaAccounting.used",
+          "blocker|RETURN_DELTA_WITHOUT_ACCOUNTING_MODEL|$.hook.customAccounting",
+          "warning|BEFORE_SWAP_RETURN_DELTA_CRITICAL|$.hook.permissions.beforeSwapReturnDelta",
+          "warning|BUILDER_FIELD_PENDING|$.builder.contact",
+          "warning|BUILDER_FIELD_PENDING|$.builder.github",
+          "warning|BUILDER_FIELD_PENDING|$.builder.licenseDeclaration"
+        ],
+        "gateKeys": [
+          "candidate|human-economic-and-security-review",
+          "candidate|independent-mathematical-review",
+          "candidate|independent-security-review-one",
+          "candidate|independent-specialist-review",
+          "candidate|pinned-fork-and-current-head-smoke",
+          "candidate|programmable-fee-architecture-review",
+          "candidate|programmable-indexer-integration-review",
+          "candidate|programmable-integration-test-review",
+          "candidate|programmable-registry-integration-review",
+          "candidate|programmable-ui-integration-review",
+          "candidate|tvl5-economic-and-solvency-review",
+          "external|independent-routing-provider-approval",
+          "prototype|before-swap-delta-four-quadrant-proof",
+          "prototype|callback-authentication-and-permission-mask",
+          "prototype|callback-selector-return-length-and-self-call-tests",
+          "prototype|custom-curve-differential-and-invariant-tests",
+          "prototype|event-reorg-backfill-freshness-tests",
+          "prototype|format-build-size-warnings",
+          "prototype|static-analysis",
+          "prototype|unit-integration-fuzz-invariant-tests",
+          "release|independent-security-review-two",
+          "release|monitoring-and-lifecycle-evidence",
+          "release|production-anomaly-monitoring",
+          "release|public-bug-bounty",
+          "release|runtime-source-config-verification"
+        ]
+      }
+    }
+  ]
+}
