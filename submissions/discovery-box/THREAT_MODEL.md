@@ -11,7 +11,7 @@ The design is high risk because one hook changes trader amounts through return d
 | Canonical pool liquidity | PoolManager and each position owner | Defined by the selected position custody; the hook owns none |
 | ERC-6909 native-currency claim backing | `DiscoveryHook`, attributed only to the immutable Programmable owner | Burn inside an authenticated unlock and take equal ETH to an owner-selected destination |
 | Fee liability | `(PoolId, native ETH, owner)` ledger | Reduced only by a successful owner claim |
-| Indexed state | Demo database or browser cache | Discard and rebuild from confirmed chain state |
+| Future indexed state | Integration database or browser cache | Discard and rebuild from confirmed chain state |
 
 The visual box reveal carries no economic, access or redemption difference. No secret, proof, oracle price, keeper key or cross-chain message exists.
 
@@ -54,7 +54,7 @@ fee liability increase = ERC-6909 native-currency claim minted = positive hook d
 hook ERC-6909 native-claim balance >= aggregate liability
 ```
 
-The fee is always native ETH and 10 basis points of executed gross quote-side volume. Exact-output gross-up uses denominator 999,000. The hook carries fractional fee remainders in a common 999,000,000 denominator across all four quadrants, charges the accumulated integral floor and keeps the residual, so split micro-swaps cannot avoid the allocation.
+The fee is always native ETH and 10 basis points of executed gross quote-side volume. The shared remainder is the residual numerator on a 1,000,000-unit fee scale. Gross paths divide by 1,000,000 and fee-on-top paths solve the same cumulative-gross identity with denominator 999,000. Thus `accrued fee * 1,000,000 + remainder = cumulative gross volume * 1000` across mixed quadrants.
 
 Specified-ETH paths reject partial fills after the core swap because a before-swap charge cannot use an unexecuted requested amount. Unspecified-ETH paths use the actual core delta. This difference must be visible in quotes and tests.
 
@@ -66,13 +66,17 @@ Claims follow checks, effects and the claim-specific unlock under a reentrancy g
 | --- | --- |
 | Forged callback | Authenticate exact PoolManager and canonical PoolId in every callback; direct-call tests |
 | Wrong or duplicate initialization | One-shot registration and initialization; wrong-key and repeat tests |
-| Permission-address mismatch | Mine the hook address and assert all 14 flags and `0x10cc` at deployment |
+| Partial or misbound launch | The bound BOX factory, HookMiner factory and launch factory atomically deploy, register, initialize and lock liquidity; invalid salt and callback tests prove rollback |
+| Launch front-running or child predeployment | Derive the BOX salt from caller plus seed, restrict both child factories to the declared launch registrar and prove copied calldata cannot occupy the intended addresses or take the LP-fee entitlement |
+| Initial-position principal withdrawal | The launch factory exposes only a zero-liquidity-delta fee collection for the immutable per-pool launch recipient; tests prove the position liquidity is unchanged |
+| LP-fee redirection | Only the stored launch recipient can collect accrued fees, may choose the destination per call and cannot mutate the recipient |
+| Permission-address mismatch | DiscoveryHookFactory recomputes the CREATE2 address and asserts all 14 flags and `0x10cc` before deployment |
 | Counter manipulation | Only whole irreversible burns increase `openedBoxes`; fuzz supply/count invariant |
 | Malformed token read | Require exact ABI return and bounds; revert the swap |
 | Direction confusion | Bind ETH as currency0 and `BOX` as currency1 in the canonical key; test both directions |
 | Gross-versus-net fee error | Differential tests for all 4 quadrants, dust and gross-up identities |
 | Partial-fill overcharge | Revert partial specified-ETH fills; charge actual unspecified-ETH results |
-| Zero AMM leg or sign crossing | Fee is strictly below gross amount; checked int128 conversion and no-op rejection |
+| Zero AMM leg or sign crossing | The exact 999-wei then 1-wei regression reverts before accrual; every successful specified-gross swap has fee below gross and a positive core leg |
 | Transient delta left open | Ordered mint and returned-delta tests for accrual; ordered burn and take tests for redemption; zero-delta invariants |
 | First buy has no settled ETH yet | Mint ERC-6909 backing during callback instead of taking ETH before router settlement |
 | Reentrancy during claim | Non-reentrant claim, authenticated unlock callback and atomic burn/take path |

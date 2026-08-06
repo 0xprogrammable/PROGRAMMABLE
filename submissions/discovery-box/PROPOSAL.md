@@ -37,11 +37,11 @@ The website is a demonstration and read layer. It is not an authority over membe
 
 ## Lifecycle
 
-1. The selected launch path creates 100 `BOX` with no later mint authority.
-2. A one-shot registrar binds the exact native ETH/`BOX` dynamic-fee PoolKey.
-3. The launcher initializes the pool. `afterInitialize` confirms the registered PoolId and initial price, then sets the stored starting LP fee to 0.30%.
-4. The selected official components form and lock the initial one-sided position. The prototype does not require an Initial Buy.
-5. Users trade through an explicitly versioned v4 Universal Router plan. The hook authenticates PoolManager and the exact PoolId.
+1. `DiscoveryLaunchFactory` hashes the caller and caller-selected seed into a caller-bound BOX salt, then calls the bound `DiscoveryBoxFactory` to CREATE2-deploy 100 `BOX` with no later mint authority. The BOX factory accepts this child deployment only from that launch factory.
+2. It calls `DiscoveryHookFactory` with a HookMiner salt, the pinned PoolManager, the new asset, itself as registrar and the fixed Programmable owner. The hook factory accepts deployment only from that registrar and rejects an address whose permission bits are not `0x10cc`.
+3. The launch factory registers the exact native ETH/`BOX` dynamic-fee PoolKey and initializes it. `afterInitialize` confirms the registered PoolId and initial price, then sets the stored starting LP fee to 0.30%.
+4. During one authenticated PoolManager unlock, the launch factory forms the maximum representable one-sided position over ticks -600 to 0. The raw position remains permanently owned by the factory, which exposes no principal-removal path. The caller-bound launch stores that caller once as the pool's LP-fee recipient and may collect accrued fees without changing liquidity; any base-unit BOX rounding remainder goes to that caller. Copying the public launch calldata derives a different BOX address for a different caller and cannot steal this entitlement. The prototype does not require an Initial Buy.
+5. The contracts support all four swap quadrants through compatible v4 routers. This repository supplies no production router, quote path or trade UI; those remain separate integration work. The hook authenticates PoolManager and the exact PoolId.
 6. A holder calls `open(n)` with whole boxes. The canonical membership asset burns `n * 1e18`, increases `openedCount` by `n` and sets expiry to `max(currentExpiry, block.timestamp) + n * 30 days`.
 7. The immutable Programmable owner may claim no more than its accrued native ETH liability to itself or a destination selected for that claim.
 
@@ -93,7 +93,7 @@ For an exact-input sale with gross AMM ETH output `G`, the fee is `floor(G * 100
 
 For an exact-output sale requesting net ETH output `N`, the hook uses `fee = floor(N * 1000 / 999,000)`. The AMM outputs `N + fee`; the caller receives exactly `N`.
 
-The formulas above show the zero-carry case. The hook carries the fractional remainder between swaps in a common `999,000,000` denominator (the least common multiple of the gross and fee-on-top denominators). Each swap adds its exact fractional numerator, charges the integral floor, and stores the remainder, including when gross and fee-on-top modes alternate. This prevents split micro-swaps from avoiding the 10-basis-point allocation; the first dust swap may still charge zero.
+The formulas above show the zero-carry case. The hook stores the residual of `cumulative gross ETH volume * 1000` on the same 1,000,000-unit scale as the fee. Gross modes divide by 1,000,000; fee-on-top modes divide the net-plus-prior numerator by 999,000, which preserves the same gross-volume identity across alternating modes. After every successful sequence, `accrued fee * 1,000,000 + remainder = cumulative gross volume * 1000`. A specified gross swap reverts before accrual if carried dust would make the fee consume its entire input, so every successful swap retains a positive AMM leg.
 
 Specified-ETH paths reject a partial core fill because the pre-swap fee must not be based on an unexecuted request. Unspecified-ETH paths calculate the fee from the actual core result.
 
@@ -127,13 +127,13 @@ At 0 openings, the sell LP fee is 1.00%. Each opening reduces it by 1.75 basis p
 
 | Surface | Plan | Failure state |
 | --- | --- | --- |
-| UI | Local demo for identity, balances, fees, buy, open, expiry and claim status | Withhold actions on stale, wrong-chain or inconsistent reads |
-| App | One real wallet-gated membership check and 3 membership cards sharing the same expiry | Deny premium access when the confirmed registry read fails |
-| Quote | Stateful local quote that executes the same hook logic at one confirmed block | Withhold when state changes or parity is unavailable |
-| Trade | Explicit Universal Router V2.0 `V4_SWAP` plan with final-delta slippage and a maximum 10-minute deadline | Revert and show the transaction error |
-| Indexer | Confirmed logs plus direct reads, 12-block finality and deterministic reorg rollback | Mark data unavailable after 120 seconds or on reconciliation mismatch |
-| Claim | Owner-only native ETH claim with preview from the exact liability view | Failed transfer leaves liability unchanged |
-| Monitoring | Reconcile opening count, hook ERC-6909 claim balance and liability | Disable demo quote and trade controls and publish the affected PoolId and block |
+| UI | Implemented local simulation plus optional direct mainnet reads of `openedCount` and the sell fee, and an `open(1)` wallet action | Label simulation and withhold the onchain action on missing addresses, wrong chain or failed reads |
+| App | Planned real wallet-gated membership check; not implemented in this repository | Deny premium access when a confirmed membership read fails |
+| Quote | Planned stateful quote using the same PoolKey and hook logic; not implemented | Withhold when state changes or parity is unavailable |
+| Trade | Planned reviewed v4 router path with final-delta slippage and a bounded deadline; not implemented | Revert and show the transaction error |
+| Indexer | Planned confirmed-log reconstruction and direct-read reconciliation; not implemented | Mark data unavailable on stale or inconsistent state |
+| Claim | Onchain owner-only native ETH claim is implemented; no claim UI is supplied | Failed transfer leaves liability unchanged |
+| Monitoring | Planned reconciliation of opening count, hook ERC-6909 claim balance and liability; not implemented | Withhold transactional integration and publish the affected PoolId and block |
 
 No keeper, oracle or service job is required. No third-party router, Hooklist, indexer, scanner or interface support is claimed. Maintainer review remains required; this proposal cannot approve itself.
 
@@ -142,9 +142,9 @@ No keeper, oracle or service job is required. No third-party router, Hooklist, i
 - Builder-stated: a $10 discovery product should unlock a higher-value fixed membership bundle.
 - Agent-derived: 100 boxes, a 40-box maturity target, 0.30% buy LP fee and 1.00% to 0.30% sell LP fee.
 - Local evidence: a fixed-seed 20,000-path reduced-form model reaches 40 openings in 72.9% of balanced paths.
-- Local evidence: 30 Foundry tests pass across token behaviour, all 4 swap modes, fee claims, partial fills and the first buy from a BOX-only pool.
+- Local evidence: 55 Foundry tests pass across token behaviour, all 4 swap modes, fee claims, partial fills, caller-bound atomic launch, non-vacuous exact-output invariants and the first buy from a BOX-only pool.
 - Not yet evidenced: fork execution, deployed addresses, live fee collection, routing support and product availability.
 
 ## Open decisions
 
-There are no architecture-changing decisions left for the isolated prototype. Exact deployment records, runtime hashes, initial price, tick range and production app commitments remain release inputs. Changing the 40-box target or a fee path requires a new preflight revision.
+There are no architecture-changing decisions left for the isolated prototype. Release factory addresses, mined salts, runtime hashes, deployment records and production app commitments remain release inputs. The initial 1:1 price and -600 to 0 initial tick range are fixed in the reviewed source. Changing those values, the 40-box target or a fee path requires a new preflight revision.
