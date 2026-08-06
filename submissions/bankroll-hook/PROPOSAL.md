@@ -28,7 +28,7 @@ An app or ordinary router cannot prove those facts without trusting an offchain 
 | Solvency cap | Reserved exposure is at most 80% of bankroll assets and never more than all assets |
 | Capacity | Up to 64 tickets and up to 16 settlements per batch |
 | Randomness | Chainlink VRF v2.5 direct funding; callback stores only |
-| Programmable fee | 10 bps of executed gross native quote, no project share |
+| Programmable fee | Cumulative 10 bps of executed gross native quote, no project share; numerator remainder carried by PoolId, currency and owner |
 | Authorities | Fixed fee owner only for its claim; no project admin, upgrade, pause or rescue |
 | Exit | Refund on randomness expiry and pro-rata bankroll redemption after finalisation |
 
@@ -36,7 +36,7 @@ An app or ordinary router cannot prove those facts without trusting an offchain 
 
 The launcher predicts the fixed token, validates the reviewed hook creation code and constructor arguments, deploys a mined hook and its bound router, checks their runtime hashes, initializes the canonical PoolKey and creates one-sided liquidity. It records raw and approved bytecode hashes in launch provenance and includes them in the launch hash. It sends the position NFT and token dust to a permanent locker. The locker can collect fees for the creator but cannot transfer or reduce the position. `afterInitialize` opens a fixed Funding window.
 
-The creator may include an initial ETH buy in the same transaction. It uses empty hook data, so it pays the mandatory fee but creates no wager. A failure in any launch step reverts the complete transaction.
+The creator may include an initial ETH buy in the same transaction with a minimum acceptable token output. It uses empty hook data, so it pays the mandatory fee but creates no wager. A failure in any launch step or the minimum-output check reverts the complete transaction.
 
 During Funding, ordinary swaps work and wager mode is disabled. Bankroll providers deposit or withdraw WETH 1:1. After the deadline, anyone can activate a sufficiently funded game or cancel an underfunded game.
 
@@ -50,7 +50,7 @@ If nobody requests randomness within the grace period, or an unfulfilled request
 
 `submissions/bankroll-hook/launch.json` is the data-only launch specification. It binds the Foundry code-generation profile (`solc 0.8.26`, Cancun, optimiser enabled at 5,000 runs, `viaIR=true`, no CBOR metadata), every first-party source hash and every constructor ABI placeholder.
 
-The release deployment order is `BankrollRouterFactory` → `BankrollHookFactory` → `ChainlinkVrfV25Adapter` → `BankrollLaunchV1`. Typed address locators resolve the selected PoolManager, PositionManager, UERC20Factory, WETH and VRF wrapper plus earlier targets. The launch call then creates four children in one reverting transaction: the fixed-supply token, mined hook, bound router and permanent position locker. The graph records the hook's six permissions, all child constructor address slots, launch-calldata bindings for `BankrollConfig`, salt derivations, pool initialization, position mint and optional initial buy.
+The release deployment order is `BankrollRouterFactory` → `BankrollHookFactory` → `ChainlinkVrfV25Adapter` → `BankrollLaunchV1`. Typed address locators resolve the selected PoolManager, PositionManager, UERC20Factory, WETH and VRF wrapper plus earlier targets. The launch call then creates four children in one reverting transaction: the fixed-supply token, mined hook, bound router and permanent position locker. The graph records the exact `launch` signature and selector, the hook's six permissions, all child constructor address slots, launch-calldata bindings for `BankrollConfig` and the initial-buy minimum, salt derivations, pool initialization, position mint and optional initial buy.
 
 `npm run launch:check` compares the specification with `forge config --json`, compiled constructor ABIs, exact source hashes, dependency evidence, the target dependency order, child plans and the complete edge set. It fails when a compiler setting, constructor, address locator, permission, source file, dependency address or deployment edge drifts.
 
@@ -60,7 +60,9 @@ The hook charges 10 bps and allocates the complete amount to `0x4957f49620AFf3Ad
 
 It charges quote-specified paths in `beforeSwap`. This covers ETH-to-token exact input and token-to-ETH exact output. It charges quote-unspecified paths in `afterSwap`. This covers ETH-to-token exact output and token-to-ETH exact input.
 
-The hook holds native ERC-6909 claims and records a liability by PoolId, native currency and owner. Only the immutable owner can claim. It selects the destination for each claim. The builder, token creator and bankroll providers receive no share and cannot redirect it.
+For every successful swap the hook adds the prior numerator remainder before dividing by one million and stores the new remainder by PoolId, native currency and owner. This binds both gross and fee-on-top paths to the cumulative identity; 1,000 successful 999-wei gross swaps accrue 999 wei rather than zero. Claiming whole-unit fees does not clear the remainder.
+
+The hook holds native ERC-6909 claims and records the whole-unit liability by the same PoolId, native currency and owner scope. Only the immutable owner can claim. It selects the destination for each claim. The builder, token creator and bankroll providers receive no share and cannot redirect it.
 
 ## Authorities
 
@@ -84,8 +86,7 @@ No production API, indexer, routing registration, monitoring or deployment exist
 
 ## Remaining work
 
-- Add adversarial failed-launch, token-factory and permanent-locker tests.
-- Preserve the passing pinned Ethereum fork and structured dependency evidence when binding the application package to the final public source commit.
+- Preserve the passing pinned Ethereum fork, current-head smoke and structured dependency evidence through maintainer re-review.
 - Resolve the official PoolManager and PositionManager source refs to immutable commits before claiming reproducible deployed-source matching.
 - Complete independent review, deployment, source verification, routing, indexer, monitoring and legal gates.
 - Request Programmable maintainer review of the public GitHub source.

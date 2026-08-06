@@ -5,7 +5,7 @@
 The current Foundry suite covers:
 
 - payout, exposure, utilisation and redemption arithmetic
-- 10 bps rounding and exact-output gross-up arithmetic with 512-run fuzz tests
+- cumulative 10 bps gross and fee-on-top identities, including 1,000 successful 999-wei swaps, plus exact-output gross-up arithmetic with 512-run fuzz tests
 - versioned hook-data round trips and malformed input
 - the exact six permissions and `0x30cc` mined address mask
 - canonical PoolManager initialization and Funding to Active transition
@@ -13,18 +13,20 @@ The current Foundry suite covers:
 - wagered exact-input swaps in both directions
 - successful randomness request, fulfilment, pull, settlement and finalisation
 - unrequested randomness timeout and WETH refund
-- owner-only Programmable fee claim to an owner-selected destination
+- exact fee amounts and events in all four quadrants, claim-remainder preservation, owner-only claim to a selected destination and recipient-failure rollback
 - callback rejection for a wrong PoolManager, wrong router, alternate pool and malformed hook data
 - wager rejection for replay, stale blocks, exact output, stake bounds, volume limits and bankroll capacity
-- atomic deadline, native-value, minimum-output and volume-cap failures
+- atomic deadline, native-value, price-limit, specified-partial-fill, minimum-output, recipient-transfer and volume-cap failures
 - both randomness timeout paths, fulfilled-request non-expiry and terminal-state finality
 - repeated ticket settlement, ticket claim and Programmable fee claim rejection
-- 5 stateful invariants at 128 runs and depth 48
+- 6 stateful invariants at 128 runs and depth 48
 - deterministic fixed-token, hook and router launch through a real PoolManager and PositionManager
-- permanent position ownership, fixed supply, empty launcher custody and initial-buy fee accrual
+- permanent position ownership and fee collection, fixed supply, empty launcher custody, zero/minimum initial buys and initial-buy fee accrual
 - EIP-170 runtime-size checks and lint
 - exact hook and router creation/runtime hash binding, modified-init-code rejection and launch provenance
-- launch artifact binding to the 5,000-run via-IR compiler profile, compiled constructor ABIs, source hashes, five dependency addresses, four release targets, four internal child deployments and 24 graph edges
+- hostile and non-conforming token factories, invalid mined hooks, repeated salts and token collisions, and complete rollback of token, hook, router, locker, pool, position and launch records
+- VRF exact payment and quote, maximum fee, duplicate request IDs, unknown IDs, wrapper-only fulfilment, duplicate fulfilment and consumer-only one-shot consumption
+- launch artifact binding to the 5,000-run via-IR compiler profile, exact launch signature and selector, compiled constructor ABIs, source hashes, five dependency addresses, four release targets, four internal child deployments and every graph edge
 
 Run:
 
@@ -35,15 +37,11 @@ forge lint
 npm run launch:check
 ```
 
-## Required contract tests
+## Completed regression matrix
 
-Add focused tests for insufficient Funding cancellation, a zero-ticket close, maximum ticket capacity and bounded batch settlement.
+Focused regressions now cover insufficient Funding cancellation, zero-ticket close and finalisation, the 64-ticket boundary, four bounded settlement batches, donation, cross-pool fee-remainder isolation, specified-quote partial-fill rollback, price-limit boundaries, selected refund/output recipients, failed native and token transfers, and both randomness timeout boundaries.
 
-Add the remaining router tests for specified-quote partial fills, price-limit boundaries, refund recipients and failed native or token transfers.
-
-Add fee tests for exact amounts and events in all four quadrants. Cover dust, specified-quote partial fills, a failed recipient, direct donation and cross-pool isolation.
-
-Add VRF adapter tests for exact payment, maximum fee, duplicate request key, unknown request id, wrapper-only fulfilment, duplicate fulfilment, consumer-only consumption, timeout boundaries and fulfilled-request non-expiry.
+The VRF adapter rejects wrapper request-ID reuse before it can overwrite a request key, rejects unknown and duplicate fulfilment, authenticates the wrapper callback, limits consumption to the immutable hook and deletes consumed requests. Hook-level tests bind exact payment to the quoted fee and enforce the caller's maximum.
 
 ## Stateful invariants
 
@@ -58,18 +56,11 @@ reserved exposure ≤ floor(80% × bankroll assets)
 The suite also checks bankroll-share conservation, terminal-state finality and one payment per ticket. Each property runs 128 sequences at depth 48.
 The fee-liability property also checks that the hook's native PoolManager balance equals its recorded Programmable fee liability.
 
-## Further launch tests
+## Launch regressions
 
-The current integration test proves fixed supply, predicted token, hook and router bindings, the canonical PoolId, launch hash, permanent position custody, token custody reconciliation and an optional initial buy with the 10 bps fee. The data-only launch checker separately proves that `submissions/bankroll-hook/launch.json` matches the compiled top-level and child constructors, address placeholders, source hashes, compiler settings and deployment DAG.
+The integration matrix proves fixed supply, predicted token, hook and router bindings, the canonical PoolId, launch hash, permanent position custody and fee collection, token custody reconciliation, and zero, minimum-protected and reverting creator buys. Hostile factories that return the wrong address or no token, invalid mined hooks, wrong init code, repeated launch parameters and token collisions all revert. The failed-launch helper checks that no token, hook, router or locker code, pool slot, position increment or launch record survives.
 
-Add tests for:
-
-- a hostile or non-conforming token factory
-- an invalid mined hook, wrong init code and configuration mismatch
-- zero initial buy, minimum initial buy and slippage failure
-- fee collection from the locked position
-- repeated launch salts and token-address collisions
-- no partial token, pool or position state after a failed launch
+The data-only launch checker separately proves that `submissions/bankroll-hook/launch.json` matches the compiled top-level and child constructors, exact launch calldata, address placeholders, source hashes, compiler settings and deployment DAG.
 
 ## External evidence
 

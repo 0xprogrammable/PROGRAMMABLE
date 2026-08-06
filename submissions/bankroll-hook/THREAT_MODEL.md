@@ -22,7 +22,7 @@ PoolManager is the only accepted hook callback and unlock-callback caller. The h
 
 The immutable registrar is the only accepted pool initializer. The factory must bind the immutable router first.
 
-The launcher trusts its immutable UERC20 factory and Uniswap PositionManager. It checks the fixed supply path and the hook's complete configuration before it initializes the pool. The position locker accepts NFTs only from its immutable PositionManager and exposes no transfer, decrease, rescue or arbitrary-call path.
+The launcher trusts its immutable UERC20 factory and Uniswap PositionManager. It checks the fixed supply path and the hook's complete configuration before it initializes the pool. The initial creator buy has a caller-bound minimum output. The position locker accepts NFTs only from its immutable PositionManager and exposes no transfer, decrease, rescue or arbitrary-call path.
 
 The router is the only accepted source of non-empty hook data. Hook data carries a pending identifier, not a user identity. The immutable router records the player and stake before the swap. The pending record must exist in the same block and the swap must be exact input. The router cannot change hook economics or settle tickets.
 
@@ -56,7 +56,7 @@ A staged stake becomes a ticket only after a successful swap. Reverting the swap
 
 A win decreases bankroll assets by exposure and increases player liability by gross payout. A loss moves the stake from open liability into bankroll assets. A timeout moves open stake liability into player liability without changing bankroll assets.
 
-The native Programmable liability must equal its backing PoolManager claim until claim. Claim clears the liability, burns the claim and transfers native ETH in one atomic unlock.
+The native Programmable liability must equal its backing PoolManager claim until claim. Claim clears the whole-unit liability, burns the claim and transfers native ETH in one atomic unlock. A separate numerator remainder is carried by canonical PoolId, native currency and immutable owner and is not cleared by claims, so split micro-swaps cannot discard fee dust or net it across pools.
 
 ## Main attacks and controls
 
@@ -88,7 +88,6 @@ The selected Ethereum dependency runtimes and full launch lifecycle are verified
 
 ## Missing evidence
 
-- no complete failed-launch or hostile token-factory test matrix
 - no immutable source-commit resolution for the official PoolManager and PositionManager deployment records
 - no independent audit
 - no accepted routing, client, API or indexer integration
