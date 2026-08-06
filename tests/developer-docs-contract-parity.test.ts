@@ -112,7 +112,7 @@ describe("canonical public developer-contract facts", () => {
       custom: "Programmable Custom",
     });
     expect(developerDocsMarkdown).toContain(
-      "Partner, template, model, builder and origin attribution are additional facts. They never create a third public category.",
+      "Partner, template, model, builder and origin attribution are additional facts. They never create a third public category and remain independent from market availability and fee activation.",
     );
     expect(agentPrompt).toContain("platformId=programmable");
   });
@@ -132,7 +132,7 @@ describe("canonical public developer-contract facts", () => {
     expect(agentPrompt).toContain(PROGRAMMABLE_VERIFIED_DEFINITION);
   });
 
-  it("locks native and partner fee math plus the recipient", () => {
+  it("locks native and active partner fee math without coupling attribution", () => {
     expect(PROGRAMMABLE_FEE_RECIPIENT).toBe(
       "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
     );
@@ -142,17 +142,34 @@ describe("canonical public developer-contract facts", () => {
       totalBps: 10,
     });
     expect(PROGRAMMABLE_FEE_POLICY.partnerTemplate).toEqual({
+      applicability: "active fee-bearing partner-template market path",
+      attributionIndependent: true,
       chargeMode: "template enforced",
+      noQualifyingMarket: {
+        partnerShareBps: 0,
+        programmableShareBps: 0,
+        status: "no-qualifying-market",
+        totalBps: 0,
+      },
       partnerShareBps: 15,
       programmableShareBps: 5,
       totalBps: 20,
     });
     expect(developerDocsMarkdown).toContain(PROGRAMMABLE_FEE_RECIPIENT);
     expect(developerDocsMarkdown).toContain(
-      "exactly 20 BPS total: 15 BPS partner plus 5 BPS Programmable",
+      "a verified partner-attributed project may report `no-qualifying-market` with 0/0/0 BPS",
+    );
+    expect(developerDocsMarkdown).toContain(
+      "Active fee-bearing partner-template target policy:** exactly 20 BPS total: 15 BPS partner plus 5 BPS Programmable",
     );
     expect(developerDocsMarkdown).toContain(
       "No additional native 10 BPS is added",
+    );
+    expect(agentPrompt).toContain(
+      "Partner and template attribution are independent from market and fee state",
+    );
+    expect(agentPrompt).toContain(
+      "active fee-bearing partner-template path must prove 20 BPS total: 15 partner and 5 Programmable",
     );
   });
 

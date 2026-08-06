@@ -47,7 +47,15 @@ export const PROGRAMMABLE_FEE_POLICY = {
     totalBps: 10,
   },
   partnerTemplate: {
+    applicability: "active fee-bearing partner-template market path",
+    attributionIndependent: true,
     chargeMode: "template enforced",
+    noQualifyingMarket: {
+      partnerShareBps: 0,
+      programmableShareBps: 0,
+      status: "no-qualifying-market",
+      totalBps: 0,
+    },
     partnerShareBps: 15,
     programmableShareBps: 5,
     totalBps: 20,

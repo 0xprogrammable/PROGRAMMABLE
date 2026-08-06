@@ -398,7 +398,10 @@ export default function DeveloperDocsPage() {
         <div className={styles.subsectionHeader}>
           <div>
             <h3>Two public labels, one platform identity</h3>
-            <p>Model, template and partner attribution stay separate.</p>
+            <p>
+              Model, template and partner attribution stay separate from market
+              availability and fee activation.
+            </p>
           </div>
           <a
             href={`${PROGRAMMABLE_DEVELOPER_REPOSITORY}/blob/main/docs/quickstart.md`}
@@ -638,21 +641,29 @@ export default function DeveloperDocsPage() {
 
         <div className={styles.partnerPolicy}>
           <div>
-            <span>Generic partner template policy</span>
+            <span>Active fee-bearing partner-template path</span>
             <strong>
               {PROGRAMMABLE_FEE_POLICY.partnerTemplate.totalBps} BPS total
             </strong>
           </div>
           <p>
-            A verified partner template enforces
-            {" "}{PROGRAMMABLE_FEE_POLICY.partnerTemplate.partnerShareBps} BPS for
-            the partner and
+            Verified partner or template attribution alone does not activate a
+            fee. A project with <code>no-qualifying-market</code> records{" "}
+            {PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket
+              .partnerShareBps}
+            /{PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket
+              .programmableShareBps}
+            /{PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket.totalBps}{" "}
+            BPS for partner, Programmable and total. Only an active fee-bearing
+            partner-template market path must enforce{" "}
+            {PROGRAMMABLE_FEE_POLICY.partnerTemplate.partnerShareBps} BPS for the
+            partner and
             {" "}{PROGRAMMABLE_FEE_POLICY.partnerTemplate.programmableShareBps}
             {" "}BPS for Programmable on one clearly defined fee basis. The
             normal {PROGRAMMABLE_FEE_POLICY.nativeCustom.totalBps} BPS Custom
-            policy is not added again. Named partner activation remains
-            unverified until exact template, recipient and onchain evidence are
-            published.
+            policy is not added again. Named partner attribution requires exact
+            template and deployment provenance; its fee path remains inactive
+            until recipient and onchain fee evidence are published.
           </p>
         </div>
       </section>
@@ -871,21 +882,29 @@ export default function DeveloperDocsPage() {
             </small>
           </article>
           <article>
-            <span>Partner template policy</span>
+            <span>Active fee-bearing partner-template path</span>
             <strong>
               {PROGRAMMABLE_FEE_POLICY.partnerTemplate.totalBps} BPS total
             </strong>
             <p>
-              {PROGRAMMABLE_FEE_POLICY.partnerTemplate.partnerShareBps} BPS
-              partner plus
+              When active, {PROGRAMMABLE_FEE_POLICY.partnerTemplate.partnerShareBps}{" "}
+              BPS partner plus
               {" "}{PROGRAMMABLE_FEE_POLICY.partnerTemplate.programmableShareBps}
               {" "}BPS Programmable, enforced by the exact reviewed template on
               the same fee basis. No additional native
               {" "}{PROGRAMMABLE_FEE_POLICY.nativeCustom.totalBps} BPS is added.
             </p>
             <small>
-              Recipient, currency, rounding, accrual and claim paths must be
-              proven from code, deployment configuration or onchain state.
+              Partner attribution with <code>no-qualifying-market</code> is
+              valid at{" "}
+              {PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket
+                .partnerShareBps}
+              /{PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket
+                .programmableShareBps}
+              /{PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket.totalBps}{" "}
+              BPS. Otherwise recipient, currency, rounding, accrual and claim
+              paths must be proven from code, deployment configuration or
+              onchain state.
             </small>
           </article>
         </div>
