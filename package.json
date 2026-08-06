@@ -184,8 +184,20 @@
     "@uniswap/universal-router-sdk": {
       "@openzeppelin/contracts@4.7.0": "4.9.6"
     },
+    "@eslint/eslintrc": {
+      "js-yaml": "4.3.1"
+    },
     "adm-zip": "0.6.0",
+    "ajv": {
+      "fast-uri": "3.1.5"
+    },
     "axios": "1.18.1",
+    "minimatch@10.2.5": {
+      "brace-expansion": "5.0.9"
+    },
+    "porto": {
+      "hono": "4.12.34"
+    },
     "cookie": "0.7.2",
     "diff": "8.0.3",
     "postcss": "8.5.23",
