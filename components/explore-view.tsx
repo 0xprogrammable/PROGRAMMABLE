@@ -1437,7 +1437,7 @@ export function ExploreView() {
                     </summary>
                     <div
                       id="explore-filter-panel"
-                      className={`token-filter-menu ${styles.filterMenu} liquid-glass-surface liquid-glass-distortion`}
+                      className={`token-filter-menu ${styles.filterMenu} liquid-glass-surface liquid-glass-distortion liquid-glass-popover`}
                       role="group"
                       aria-label="Filter and sort tokens"
                     >

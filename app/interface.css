@@ -10,31 +10,42 @@
   --radius-control: 18px;
   --radius-control-inner: 14px;
   --radius-panel: 28px;
-  --liquid-glass-surface-background: rgba(8, 18, 40, 0.34);
-  --liquid-glass-surface-background-strong: rgba(8, 18, 40, 0.52);
-  --liquid-glass-inner-background: rgba(255, 255, 255, 0.055);
-  --liquid-glass-control-background: rgba(255, 255, 255, 0.07);
-  --liquid-glass-control-background-hover: rgba(255, 255, 255, 0.12);
-  --liquid-glass-border: rgba(255, 255, 255, 0.16);
-  --liquid-glass-border-strong: rgba(255, 255, 255, 0.22);
-  --liquid-glass-highlight: rgba(255, 255, 255, 0.1);
-  --liquid-glass-backdrop: blur(18px) saturate(1.34);
+  --liquid-glass-surface-background: oklch(0.185 0.028 264 / 0.72);
+  --liquid-glass-surface-background-strong: oklch(0.17 0.024 264 / 0.86);
+  --liquid-glass-inner-background: oklch(0.94 0.008 85 / 0.055);
+  --liquid-glass-control-background: oklch(0.94 0.008 85 / 0.074);
+  --liquid-glass-control-background-hover: oklch(0.94 0.008 85 / 0.12);
+  --liquid-glass-border: oklch(0.95 0.008 85 / 0.105);
+  --liquid-glass-border-strong: oklch(0.96 0.007 85 / 0.17);
+  --liquid-glass-highlight: oklch(0.98 0.006 85 / 0.14);
+  --liquid-glass-backdrop: blur(22px) saturate(1.08);
   --liquid-glass-shadow:
-    inset 0 0 6px -3px rgba(255, 255, 255, 0.7),
-    inset 0 0 88px rgba(99, 133, 196, 0.035),
-    0 18px 48px rgba(1, 5, 20, 0.2);
-  --navigation-glass-background: rgba(5, 11, 30, 0.42);
-  --navigation-glass-background-hover: rgba(18, 33, 60, 0.68);
-  --navigation-glass-border: rgba(255, 253, 249, 0.18);
-  --navigation-glass-highlight: rgba(255, 255, 255, 0.08);
+    inset 0 1px 0 oklch(0.99 0.004 85 / 0.13),
+    inset 0 -1px 0 oklch(0.08 0.018 264 / 0.42),
+    0 0 0 1px oklch(0.08 0.02 264 / 0.18),
+    0 12px 28px oklch(0.07 0.022 264 / 0.2),
+    0 30px 70px oklch(0.07 0.022 264 / 0.12);
+  --liquid-glass-control-shadow:
+    inset 0 1px 0 oklch(0.99 0.004 85 / 0.12),
+    inset 0 -1px 0 oklch(0.08 0.018 264 / 0.28),
+    0 0 0 1px oklch(0.08 0.02 264 / 0.14),
+    0 8px 20px oklch(0.07 0.022 264 / 0.16);
+  --liquid-glass-inner-shadow:
+    inset 0 1px 0 oklch(0.99 0.004 85 / 0.07),
+    0 0 0 1px oklch(0.08 0.02 264 / 0.12);
+  --navigation-glass-background: oklch(0.16 0.025 264 / 0.8);
+  --navigation-glass-background-hover: oklch(0.24 0.027 264 / 0.74);
+  --navigation-glass-border: oklch(0.95 0.008 85 / 0.11);
+  --navigation-glass-highlight: oklch(0.99 0.004 85 / 0.13);
   --navigation-glass-ink: #fffdf9;
   --navigation-glass-ink-muted: rgba(255, 253, 249, 0.68);
   --navigation-glass-accent: rgba(255, 255, 255, 0.085);
   --navigation-glass-backdrop: var(--liquid-glass-backdrop);
   --navigation-glass-shadow:
     inset 0 1px 0 var(--navigation-glass-highlight),
-    inset 0 0 80px rgba(116, 151, 213, 0.04),
-    0 18px 48px rgba(1, 5, 20, 0.2);
+    inset 0 -1px 0 oklch(0.08 0.018 264 / 0.36),
+    0 0 0 1px oklch(0.08 0.02 264 / 0.16),
+    0 12px 30px oklch(0.07 0.022 264 / 0.2);
   --control-glass-background: var(--liquid-glass-control-background);
   --control-glass-background-strong: var(--liquid-glass-surface-background-strong);
   --control-glass-background-hover: var(--liquid-glass-control-background-hover);
@@ -73,9 +84,9 @@ html[data-theme="light"] {
 
 html[data-theme="dark"] {
   --canvas: rgba(5, 11, 30, 0.2);
-  --surface: rgba(9, 18, 38, 0.68);
-  --surface-raised: rgba(15, 28, 50, 0.72);
-  --surface-soft: rgba(24, 40, 66, 0.58);
+  --surface: var(--liquid-glass-surface-background);
+  --surface-raised: var(--liquid-glass-surface-background-strong);
+  --surface-soft: var(--liquid-glass-inner-background);
   --text: #f7f1ea;
   --text-soft: #d5cec6;
   --muted: #aaa39b;
@@ -111,6 +122,7 @@ html {
 
 body {
   background: #050b1c;
+  font-feature-settings: "kern" 1, "liga" 1;
   font-kerning: normal;
   font-synthesis: style;
   letter-spacing: -0.006em;
@@ -217,11 +229,14 @@ html[data-theme="dark"] .app-frame::before {
   backdrop-filter: var(--control-glass-backdrop);
   background: var(--liquid-glass-control-background);
   border-color: var(--liquid-glass-border);
-  box-shadow:
-    inset 0 0 5px -3px rgba(255, 255, 255, 0.72),
-    0 9px 26px rgba(1, 5, 20, 0.16);
+  box-shadow: var(--liquid-glass-control-shadow);
 }
 
+.liquid-glass-popover {
+  position: absolute;
+}
+
+.liquid-glass-surface::after,
 .liquid-glass-distortion::after {
   -webkit-backdrop-filter: var(--liquid-glass-backdrop);
   -webkit-filter: url("#glass-distortion");
@@ -233,6 +248,16 @@ html[data-theme="dark"] .app-frame::before {
   pointer-events: none;
   position: absolute;
   z-index: -1;
+}
+
+/* Keep the refractive layer behind content and disable it where browsers
+ * cannot render the SVG displacement cleanly. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .liquid-glass-surface::after,
+  .liquid-glass-distortion::after {
+    -webkit-filter: none;
+    filter: none;
+  }
 }
 
 /* Persistent night atmosphere */
@@ -657,10 +682,7 @@ html[data-theme="dark"] .app-frame::before {
   backdrop-filter: var(--control-glass-backdrop);
   background: var(--control-glass-background);
   border-color: var(--control-glass-border);
-  box-shadow:
-    inset 0 1px 0 var(--control-glass-highlight),
-    inset 0 0 44px color-mix(in srgb, var(--brand-pink) 2.5%, transparent),
-    0 9px 26px var(--control-glass-shadow-color);
+  box-shadow: var(--liquid-glass-control-shadow);
 }
 
 .header-actions .wallet-button {
@@ -668,9 +690,7 @@ html[data-theme="dark"] .app-frame::before {
   backdrop-filter: var(--control-glass-backdrop);
   background: var(--liquid-glass-control-background);
   border-color: var(--liquid-glass-border);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 8px 22px rgba(1, 5, 20, 0.16);
+  box-shadow: var(--liquid-glass-control-shadow);
   color: var(--navigation-glass-ink);
 }
 
@@ -701,10 +721,7 @@ html[data-theme="dark"] .app-frame::before {
   background: var(--accent-glass-background);
   border: 1px solid var(--accent-glass-border);
   color: var(--brand-pink-ink);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, white 22%, transparent),
-    inset 0 0 42px color-mix(in srgb, white 4%, transparent),
-    0 8px 22px color-mix(in srgb, var(--brand-pink-action) 18%, transparent);
+  box-shadow: var(--liquid-glass-control-shadow);
 }
 
 .wallet-button,
@@ -776,9 +793,7 @@ html[data-theme="dark"] .app-frame::before {
 .token-search,
 .token-filter summary,
 .token-pagination {
-  box-shadow:
-    0 1px 0 color-mix(in srgb, white 6%, transparent),
-    0 8px 24px var(--card-shadow-soft);
+  box-shadow: var(--liquid-glass-control-shadow);
 }
 
 .token-search {
@@ -866,15 +881,12 @@ html[data-theme="dark"] .app-frame::before {
 .token-card,
 .token-card:nth-child(10):last-child {
   animation: interface-card-fade 130ms ease-out both;
-  background:
-    linear-gradient(
-      165deg,
-      color-mix(in srgb, var(--glass-96) 96%, transparent),
-      color-mix(in srgb, var(--glass-82) 88%, transparent)
-    );
-  border-color: var(--panel-border-soft);
+  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
+  backdrop-filter: var(--liquid-glass-backdrop);
+  background: var(--liquid-glass-surface-background);
+  border-color: var(--liquid-glass-border);
   border-radius: 20px;
-  box-shadow: var(--shadow-resting);
+  box-shadow: var(--liquid-glass-shadow);
 }
 
 @keyframes interface-card-fade {
@@ -931,13 +943,17 @@ html[data-theme="dark"] .app-frame::before {
 }
 
 .token-card-market-cap strong {
-  font-size: 13px;
-  letter-spacing: -0.03em;
+  font-family: var(--font-instrument), Arial, sans-serif;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.018em;
 }
 
 .token-card-market-cap span {
+  font-family: var(--font-instrument), Arial, sans-serif;
   font-size: 12px;
-  letter-spacing: 0.04em;
+  font-weight: 540;
+  letter-spacing: 0;
 }
 
 .token-card-footer {
@@ -984,8 +1000,8 @@ html[data-theme="dark"] .app-frame::before {
 }
 
 .launch-model-card {
-  border-color: var(--panel-border-soft);
-  box-shadow: var(--shadow-resting);
+  border-color: var(--liquid-glass-border);
+  box-shadow: var(--liquid-glass-shadow);
 }
 
 .launch-model-art {

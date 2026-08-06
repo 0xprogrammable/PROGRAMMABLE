@@ -303,7 +303,7 @@ export function DocsSearch() {
       </span>
       {isOpen && normalizedQuery ? (
         <div
-          className={`${styles.searchResults} liquid-glass-surface liquid-glass-distortion`}
+          className={`${styles.searchResults} liquid-glass-surface liquid-glass-distortion liquid-glass-popover`}
           id={listboxId}
           role="listbox"
           aria-label="Documentation search results"
