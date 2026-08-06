@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { getAddress } from "viem";
+import {
+  computeOfficialV4PoolId,
+  getOfficialLauncherDependencies,
+} from "../lib/uniswap/liquidity-launcher-sdk";
+import {
+  assertOfficialLauncherRuntimeSnapshot,
+  readOfficialLauncherRuntimeSnapshot,
+} from "../lib/uniswap/liquidity-launcher-sdk-verification";
 
 const MAINNET_LAUNCHER = getAddress(
   "0x00004c4ccc709Ef590F7C81102C0689F0263D4e9",
@@ -15,11 +23,7 @@ const PERMIT2 = getAddress(
 );
 
 describe("official Uniswap Liquidity Launcher SDK boundary", () => {
-  it("resolves the reviewed Ethereum dependencies through the official registry", async () => {
-    const { getOfficialLauncherDependencies } = await import(
-      "../lib/uniswap/liquidity-launcher-sdk"
-    );
-
+  it("resolves the reviewed Ethereum dependencies through the official registry", () => {
     expect(getOfficialLauncherDependencies(1)).toEqual({
       liquidityLauncher: MAINNET_LAUNCHER,
       tokenFactory: MAINNET_TOKEN_FACTORY,
@@ -32,11 +36,7 @@ describe("official Uniswap Liquidity Launcher SDK boundary", () => {
     );
   });
 
-  it("computes the canonical hooked PoolId through the official helper", async () => {
-    const { computeOfficialV4PoolId } = await import(
-      "../lib/uniswap/liquidity-launcher-sdk"
-    );
-
+  it("computes the canonical hooked PoolId through the official helper", () => {
     expect(
       computeOfficialV4PoolId({
         currency0: getAddress(
@@ -56,10 +56,7 @@ describe("official Uniswap Liquidity Launcher SDK boundary", () => {
     );
   });
 
-  it("rejects non-canonical or invalid pool keys before hashing", async () => {
-    const { computeOfficialV4PoolId } = await import(
-      "../lib/uniswap/liquidity-launcher-sdk"
-    );
+  it("rejects non-canonical or invalid pool keys before hashing", () => {
     const native = getAddress(
       "0x0000000000000000000000000000000000000000",
     );
@@ -99,13 +96,7 @@ describe("official Uniswap Liquidity Launcher SDK boundary", () => {
     ).toThrow("tick spacing");
   });
 
-  it("fails closed when reviewed addresses or lock bytecode drift", async () => {
-    const {
-      assertOfficialLauncherRuntimeSnapshot,
-      readOfficialLauncherRuntimeSnapshot,
-    } = await import(
-      "../lib/uniswap/liquidity-launcher-sdk-verification"
-    );
+  it("fails closed when reviewed addresses or lock bytecode drift", () => {
     const current = readOfficialLauncherRuntimeSnapshot();
 
     expect(() => assertOfficialLauncherRuntimeSnapshot(current)).not.toThrow();
