@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://programmable.family/schemas/backend-cross-repository-release-binding-v1.json",
+  "title": "Backend materialized cross-repository release binding V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "recordType",
+    "materializationState",
+    "activationAllowed",
+    "disabledReason",
+    "pendingCandidates",
+    "backend",
+    "website",
+    "builderSkill",
+    "registrySecurityChecker",
+    "productionAuthority",
+    "compatibility",
+    "deploymentEvidence"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "programmable.cross-repository-release-binding.v1" },
+    "recordType": { "const": "candidate_binding" },
+    "materializationState": { "const": "materialized" },
+    "activationAllowed": { "const": false },
+    "disabledReason": { "type": "null" },
+    "pendingCandidates": { "type": "null" },
+    "backend": { "$ref": "#/$defs/backend" },
+    "website": { "$ref": "#/$defs/website" },
+    "builderSkill": { "$ref": "#/$defs/builderSkill" },
+    "registrySecurityChecker": { "$ref": "#/$defs/registrySecurityChecker" },
+    "productionAuthority": { "$ref": "#/$defs/productionAuthority" },
+    "compatibility": { "$ref": "#/$defs/compatibility" },
+    "deploymentEvidence": { "type": "null" }
+  },
+  "$defs": {
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "repositoryUrl": {
+      "type": "string",
+      "pattern": "^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:\\.git)?$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)[A-Za-z0-9._/-]+$"
+    },
+    "backend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repositoryUrl",
+        "candidateCommitSha",
+        "candidateTreeSha",
+        "packedAttestationPath",
+        "packageArtifactHash",
+        "packedTarballSha256"
+      ],
+      "properties": {
+        "repositoryUrl": { "$ref": "#/$defs/repositoryUrl" },
+        "candidateCommitSha": { "$ref": "#/$defs/commit" },
+        "candidateTreeSha": { "$ref": "#/$defs/commit" },
+        "packedAttestationPath": { "$ref": "#/$defs/relativePath" },
+        "packageArtifactHash": { "$ref": "#/$defs/sha256" },
+        "packedTarballSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "website": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repositoryUrl", "candidateCommitSha", "candidateTreeSha"],
+      "properties": {
+        "repositoryUrl": { "$ref": "#/$defs/repositoryUrl" },
+        "candidateCommitSha": { "$ref": "#/$defs/commit" },
+        "candidateTreeSha": { "$ref": "#/$defs/commit" }
+      }
+    },
+    "builderSkill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repositoryUrl",
+        "candidateCommitSha",
+        "candidateTreeSha",
+        "packageRootPath",
+        "packageTreeManifestSha256",
+        "verifierPath",
+        "verifierSha256"
+      ],
+      "properties": {
+        "repositoryUrl": { "$ref": "#/$defs/repositoryUrl" },
+        "candidateCommitSha": { "$ref": "#/$defs/commit" },
+        "candidateTreeSha": { "$ref": "#/$defs/commit" },
+        "packageRootPath": { "$ref": "#/$defs/relativePath" },
+        "packageTreeManifestSha256": { "$ref": "#/$defs/sha256" },
+        "verifierPath": { "$ref": "#/$defs/relativePath" },
+        "verifierSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "registrySecurityChecker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repositoryUrl",
+        "candidateCommitSha",
+        "candidateTreeSha",
+        "verifierRootPath",
+        "verifierTreeManifestSha256",
+        "verifierEntrypointPath",
+        "verifierEntrypointSha256",
+        "builderVendorReceiptPath",
+        "builderVendorReceiptSha256"
+      ],
+      "properties": {
+        "repositoryUrl": { "$ref": "#/$defs/repositoryUrl" },
+        "candidateCommitSha": { "$ref": "#/$defs/commit" },
+        "candidateTreeSha": { "$ref": "#/$defs/commit" },
+        "verifierRootPath": { "$ref": "#/$defs/relativePath" },
+        "verifierTreeManifestSha256": { "$ref": "#/$defs/sha256" },
+        "verifierEntrypointPath": { "$ref": "#/$defs/relativePath" },
+        "verifierEntrypointSha256": { "$ref": "#/$defs/sha256" },
+        "builderVendorReceiptPath": { "$ref": "#/$defs/relativePath" },
+        "builderVendorReceiptSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "productionAuthority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repositoryUrl",
+        "candidateCommitSha",
+        "candidateTreeSha",
+        "subjectAgentPath",
+        "subjectAgentSha256",
+        "vendoredSubjectAgentPath",
+        "vendoredSubjectAgentSha256",
+        "compatibilityArtifactPath",
+        "compatibilityArtifactSha256"
+      ],
+      "properties": {
+        "repositoryUrl": { "$ref": "#/$defs/repositoryUrl" },
+        "candidateCommitSha": { "$ref": "#/$defs/commit" },
+        "candidateTreeSha": { "$ref": "#/$defs/commit" },
+        "subjectAgentPath": { "$ref": "#/$defs/relativePath" },
+        "subjectAgentSha256": { "$ref": "#/$defs/sha256" },
+        "vendoredSubjectAgentPath": { "$ref": "#/$defs/relativePath" },
+        "vendoredSubjectAgentSha256": { "$ref": "#/$defs/sha256" },
+        "compatibilityArtifactPath": { "$ref": "#/$defs/relativePath" },
+        "compatibilityArtifactSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["applicationV3", "evidencePath", "evidenceSha256"],
+      "properties": {
+        "applicationV3": { "const": "verified" },
+        "evidencePath": { "$ref": "#/$defs/relativePath" },
+        "evidenceSha256": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  }
+}

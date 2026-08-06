@@ -1233,6 +1233,8 @@ export function CustomLaunchExperience({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const flowGenerationRef = useRef(0);
   const applicationsRequestGenerationRef = useRef(0);
+  const applicationsAbortControllerRef = useRef<AbortController | null>(null);
+  const flowAbortControllerRef = useRef<AbortController | null>(null);
   const launchInFlightRef = useRef(false);
   const grantReissueSingleFlightRef = useRef(new BrowserWalletGrantReissueSingleFlightV1());
   const launchAuthorityRefreshSingleFlightRef = useRef(
@@ -1245,6 +1247,16 @@ export function CustomLaunchExperience({
   useEffect(() => {
     walletAccountRef.current = wallet?.account ?? null;
   }, [wallet?.account]);
+
+  const beginFlow = useCallback(() => {
+    flowAbortControllerRef.current?.abort();
+    const controller = new AbortController();
+    flowAbortControllerRef.current = controller;
+    return {
+      generation: ++flowGenerationRef.current,
+      signal: controller.signal,
+    };
+  }, []);
 
   const resetApplicationScopedState = useCallback(() => {
     setDescriptor(null);
@@ -1280,12 +1292,17 @@ export function CustomLaunchExperience({
 
   const loadApplications = useCallback(async () => {
     if (!wallet || !githubConnected) return;
+    applicationsAbortControllerRef.current?.abort();
+    const controller = new AbortController();
+    applicationsAbortControllerRef.current = controller;
     const requestGeneration = ++applicationsRequestGenerationRef.current;
     setApplicationsLoading(true);
     setError("");
     try {
       const client = createCustomLaunchWebsiteClientV2({ session: await getSession() });
-      const page = await readAllPrincipalApplicationsV3(client);
+      const page = await readAllPrincipalApplicationsV3(client, {
+        signal: controller.signal,
+      });
       if (requestGeneration !== applicationsRequestGenerationRef.current) return;
       setApplications(page.applications);
       setGithubPrincipalHash(page.githubPrincipalHash);
@@ -1295,6 +1312,9 @@ export function CustomLaunchExperience({
       if (requestGeneration !== applicationsRequestGenerationRef.current) return;
       setError(customLaunchErrorMessage(caught));
     } finally {
+      if (applicationsAbortControllerRef.current === controller) {
+        applicationsAbortControllerRef.current = null;
+      }
       if (requestGeneration === applicationsRequestGenerationRef.current) {
         setApplicationsLoading(false);
       }
@@ -1311,6 +1331,10 @@ export function CustomLaunchExperience({
     const identityChanged = githubIdentityRef.current !== githubUsername;
     githubIdentityRef.current = githubUsername;
     if (githubConnected && !identityChanged) return;
+    applicationsAbortControllerRef.current?.abort();
+    applicationsAbortControllerRef.current = null;
+    flowAbortControllerRef.current?.abort();
+    flowAbortControllerRef.current = null;
     applicationsRequestGenerationRef.current += 1;
     flowGenerationRef.current += 1;
     setApplications([]);
@@ -1324,18 +1348,22 @@ export function CustomLaunchExperience({
 
   useEffect(() => () => {
     flowGenerationRef.current += 1;
+    applicationsAbortControllerRef.current?.abort();
+    flowAbortControllerRef.current?.abort();
   }, []);
 
   const loadVerifiedLaunchSetup = useCallback(async (input: Readonly<{
     client: ReturnType<typeof createCustomLaunchWebsiteClientV2>;
     application: PrincipalCustomLaunchApplicationSummaryV2;
     generation: number;
+    signal: AbortSignal;
     forceFreshObservation?: boolean;
   }>) => {
     if (githubPrincipalHash === null) {
       throw new Error("Sign in again with the GitHub account that opened this submission");
     }
-    const isActive = () => input.generation === flowGenerationRef.current;
+    const isActive = () => !input.signal.aborted
+      && input.generation === flowGenerationRef.current;
     let currentApplication = input.application;
     let refreshCompleted = false;
     let refreshAuthority: PrincipalLaunchAuthorityRefreshViewV1 | null = null;
@@ -1367,7 +1395,9 @@ export function CustomLaunchExperience({
         setStatusMessage("Final source verification complete");
       }
 
-      const principalApplications = await readAllPrincipalApplicationsV3(input.client);
+      const principalApplications = await readAllPrincipalApplicationsV3(input.client, {
+        signal: input.signal,
+      });
       if (!isActive()) throw new LaunchAuthorityRefreshCancelledErrorV1();
       if (principalApplications.githubPrincipalHash !== githubPrincipalHash) {
         throw new LaunchAuthorityRefreshBindingErrorV1(
@@ -1476,7 +1506,7 @@ export function CustomLaunchExperience({
     application: PrincipalCustomLaunchApplicationSummaryV2,
   ) => {
     if (!customApplicationOpensLaunchExperience(application.state)) return;
-    const generation = ++flowGenerationRef.current;
+    const { generation, signal } = beginFlow();
     resetApplicationScopedState();
     setSelected(application);
     setSetupLoading(true);
@@ -1540,7 +1570,12 @@ export function CustomLaunchExperience({
         setStatusMessage("Launch complete");
         return;
       }
-      const setup = await loadVerifiedLaunchSetup({ client, application, generation });
+      const setup = await loadVerifiedLaunchSetup({
+        client,
+        application,
+        generation,
+        signal,
+      });
       if (generation !== flowGenerationRef.current) return;
       setApplications(setup.principalApplications.applications);
       setSelected(setup.application);
@@ -1572,6 +1607,7 @@ export function CustomLaunchExperience({
       if (generation === flowGenerationRef.current) setSetupLoading(false);
     }
   }, [
+    beginFlow,
     getSession,
     githubPrincipalHash,
     loadVerifiedLaunchSetup,
@@ -1632,9 +1668,11 @@ export function CustomLaunchExperience({
     application: PrincipalCustomLaunchApplicationSummaryV2;
     context: PendingGrantReissueV1;
     generation: number;
+    signal: AbortSignal;
     client: ReturnType<typeof createCustomLaunchWebsiteClientV2>;
   }>) => {
-    const isActive = () => input.generation === flowGenerationRef.current;
+    const isActive = () => !input.signal.aborted
+      && input.generation === flowGenerationRef.current;
     if (githubPrincipalHash === null) {
       throw new Error("Sign in again with the GitHub account that opened this submission");
     }
@@ -1676,7 +1714,7 @@ export function CustomLaunchExperience({
     setStatusMessage("Checking the new launch approval");
     const [principalApplications, eligibility, freshDescriptor, currentPresentation] =
       await Promise.all([
-        readAllPrincipalApplicationsV3(input.client),
+        readAllPrincipalApplicationsV3(input.client, { signal: input.signal }),
         input.client.launchEligibility(input.application.applicationHandle),
         input.client.launchDescriptor(input.application.applicationHandle),
         input.client.launchPresentation(input.application.applicationHandle).catch((caught) => {
@@ -1741,7 +1779,7 @@ export function CustomLaunchExperience({
   async function resumeGrantReissue() {
     if (!selected || !pendingGrantReissue || launchInFlightRef.current) return;
     launchInFlightRef.current = true;
-    const generation = ++flowGenerationRef.current;
+    const { generation, signal } = beginFlow();
     try {
       const client = createCustomLaunchWebsiteClientV2({ session: await getSession() });
       if (generation !== flowGenerationRef.current) return;
@@ -1749,6 +1787,7 @@ export function CustomLaunchExperience({
         application: selected,
         context: pendingGrantReissue,
         generation,
+        signal,
         client,
       });
     } catch (caught) {
@@ -1812,11 +1851,12 @@ export function CustomLaunchExperience({
     }
 
     launchInFlightRef.current = true;
-    const generation = ++flowGenerationRef.current;
+    const { generation, signal } = beginFlow();
     const applicationId = selected.applicationId;
     const applicationHandle = selected.applicationHandle;
     const launchGithubPrincipalHash = githubPrincipalHash;
-    const isActive = () => generation === flowGenerationRef.current;
+    const isActive = () => !signal.aborted
+      && generation === flowGenerationRef.current;
     setLaunchProgress("preparing");
     setStatusMessage("Preparing approved launch");
     let activeDescriptor = descriptor;
@@ -1827,6 +1867,7 @@ export function CustomLaunchExperience({
         client,
         application: selected,
         generation,
+        signal,
       });
       if (!isActive()) return;
       activeDescriptor = initialSetup.descriptor;
@@ -1869,6 +1910,7 @@ export function CustomLaunchExperience({
         client,
         application: initialSetup.application,
         generation,
+        signal,
         forceFreshObservation: true,
       });
       if (!isActive()) return;
@@ -2164,6 +2206,7 @@ export function CustomLaunchExperience({
               idempotencyKey: idempotencyKey("grant-reissue"),
             },
             generation,
+            signal,
             client: createCustomLaunchWebsiteClientV2({ session: await getSession() }),
           });
           return;
@@ -2192,6 +2235,8 @@ export function CustomLaunchExperience({
   }
 
   const returnToApplications = () => {
+    flowAbortControllerRef.current?.abort();
+    flowAbortControllerRef.current = null;
     flowGenerationRef.current += 1;
     setSelected(null);
     resetApplicationScopedState();

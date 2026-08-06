@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   computeDetachedRecordSha256,
   computeReleaseSubjectSha256,
-  verifyReleaseRecord,
+  verifyReleaseRecord as verifyReleaseRecordCore,
 } from "../verify-custom-launch-release-record.mjs";
 
 const TEMPLATE_URL = new URL(
@@ -16,6 +20,10 @@ const SCHEMA_URL = new URL(
   "../../docs/operations/releases/custom-launch-v1/release-record.schema.json",
   import.meta.url,
 );
+const VERIFIER_PATH = fileURLToPath(new URL(
+  "../verify-custom-launch-release-record.mjs",
+  import.meta.url,
+));
 
 const commits = {
   website: "1".repeat(40),
@@ -35,6 +43,35 @@ const hashes = Object.freeze({
 
 async function readTemplate() {
   return JSON.parse(await readFile(TEMPLATE_URL, "utf8"));
+}
+
+function crossRepositoryAttestation(record) {
+  return {
+    schemaVersion: "programmable.website-observed-cross-repository-release-binding.v1",
+    repository: "0xprogrammable/programmable-open-hook-v2-internal",
+    attestationCommitSha:
+      record.subject.crossRepositoryReleaseBinding.attestationCommitSha,
+    parentCommitSha: "5".repeat(40),
+    documentPath:
+      "services/autonomous-approval-v1/release/cross-repository-release-binding-v1.json",
+    documentBlobSha: "6".repeat(40),
+    documentSha256: record.subject.crossRepositoryReleaseBinding.documentSha256,
+    backendCandidateCommitSha: "5".repeat(40),
+    backendPackageArtifactHash: record.subject.approvalService.packageArtifactHash,
+    websiteCandidateCommitSha: record.subject.website.commitSha,
+    builderCandidateCommitSha: "7".repeat(40),
+    registryCandidateCommitSha: "8".repeat(40),
+    productionAuthorityCandidateCommitSha: "9".repeat(40),
+    applicationV3CompatibilityEvidenceSha256: hashes.zero,
+    commitSignatureVerified: true,
+  };
+}
+
+function verifyReleaseRecord(record, options = {}) {
+  return verifyReleaseRecordCore(record, {
+    ...options,
+    crossRepositoryAttestation: crossRepositoryAttestation(record),
+  });
 }
 
 function decision(status, subjectHash, suffix) {
@@ -213,6 +250,74 @@ test("template and schema are valid JSON and the template is not clearance", asy
   assert.match(clearance.errors.join("\n"), /freezeClearance/);
 });
 
+test("AJV 2020 rejects unknown nested fields before semantic verification", async () => {
+  const mutations = [
+    (record) => { record.unexpected = true; },
+    (record) => { record.subject.website.unexpected = true; },
+    (record) => { record.subject.crossRepositoryReleaseBinding.unexpected = true; },
+    (record) => { record.commandCenter.freezeClearance.unexpected = true; },
+    (record) => { record.validation.gates[0].unexpected = true; },
+    (record) => { record.productionDependencies.approvalService.unexpected = true; },
+    (record) => { record.deployment.candidate.unexpected = true; },
+    (record) => { record.promotionGate.workflow.unexpected = true; },
+    (record) => { record.canary.unexpected = true; },
+  ];
+  for (const mutate of mutations) {
+    const record = await readTemplate();
+    mutate(record);
+    const result = verifyReleaseRecordCore(record, { require: "template" });
+    assert.equal(result.ok, false);
+    assert.equal(result.releaseSubjectSha256, null);
+    assert.match(result.errors.join("\n"), /schema unexpected field unexpected/);
+  }
+});
+
+test("CLI rejects an invalid schema before reading private GitHub evidence", async () => {
+  const temporaryDirectory = await mkdtemp(join(tmpdir(), "programmable-release-record-"));
+  try {
+    const record = await readTemplate();
+    record.subject.website.unexpected = true;
+    const recordPath = join(temporaryDirectory, "invalid-record.json");
+    await writeFile(recordPath, `${JSON.stringify(record)}\n`, "utf8");
+
+    const execution = spawnSync(process.execPath, [
+      VERIFIER_PATH,
+      recordPath,
+      "--require",
+      "clearance",
+      "--verify-cross-repository-attestation",
+    ], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PROGRAMMABLE_BACKEND_RELEASE_READ_TOKEN: "",
+      },
+    });
+
+    assert.equal(execution.status, 1);
+    assert.match(execution.stderr, /schema unexpected field unexpected/u);
+    assert.doesNotMatch(execution.stderr, /credential is unavailable/u);
+  } finally {
+    await rm(temporaryDirectory, { recursive: true, force: true });
+  }
+});
+
+test("clearance requires the observed GitHub attestation content", async () => {
+  const record = await completeRecord("clearance");
+  const missing = verifyReleaseRecordCore(record, { require: "clearance" });
+  assert.equal(missing.ok, false);
+  assert.match(missing.errors.join("\n"), /crossRepositoryAttestation/);
+
+  const substituted = crossRepositoryAttestation(record);
+  substituted.websiteCandidateCommitSha = commits.other;
+  const mismatch = verifyReleaseRecordCore(record, {
+    require: "clearance",
+    crossRepositoryAttestation: substituted,
+  });
+  assert.equal(mismatch.ok, false);
+  assert.match(mismatch.errors.join("\n"), /websiteCandidateCommitSha/);
+});
+
 test("each release level is independently fail closed", async () => {
   const clearance = await completeRecord("clearance");
   assert.equal(verifyReleaseRecord(clearance, { require: "clearance" }).ok, true);
@@ -349,7 +454,7 @@ test("secret-bearing fields are rejected even when all gates otherwise pass", as
   record.productionDependencies.identity.access_token = "must-not-be-recorded";
   const result = verifyReleaseRecord(record, { require: "live" });
   assert.equal(result.ok, false);
-  assert.match(result.errors.join("\n"), /secret-bearing keys are forbidden/);
+  assert.match(result.errors.join("\n"), /schema unexpected field access_token/);
 });
 
 test("an unfilled release id placeholder is rejected after template stage", async () => {

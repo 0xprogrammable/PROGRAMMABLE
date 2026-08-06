@@ -1,8 +1,14 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
-import { appendFile, readFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
+import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
+
+import Ajv2020 from "ajv/dist/2020.js";
+
+import { verifyCrossRepositoryReleaseBindingFromGitHubV1 } from
+  "./verify-custom-launch-cross-repository-attestation.mjs";
 
 export const SCHEMA_VERSION = "programmable.custom-launch-release-record.v1";
 export const REQUIRED_VALIDATION_GATES = Object.freeze([
@@ -34,6 +40,19 @@ const CROSS_REPOSITORY_BINDING_REPOSITORY =
   "0xprogrammable/programmable-open-hook-v2-internal";
 const CROSS_REPOSITORY_BINDING_DOCUMENT_PATH =
   "services/autonomous-approval-v1/release/cross-repository-release-binding-v1.json";
+const CROSS_REPOSITORY_OBSERVATION_SCHEMA_VERSION =
+  "programmable.website-observed-cross-repository-release-binding.v1";
+const RELEASE_RECORD_SCHEMA = JSON.parse(readFileSync(
+  new URL(
+    "../docs/operations/releases/custom-launch-v1/release-record.schema.json",
+    import.meta.url,
+  ),
+  "utf8",
+));
+const validateReleaseRecordSchema = new Ajv2020({
+  allErrors: true,
+  strict: true,
+}).compile(RELEASE_RECORD_SCHEMA);
 
 function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -98,6 +117,26 @@ export function computeDetachedRecordSha256(record) {
 
 function add(errors, path, message) {
   errors.push(`${path}: ${message}`);
+}
+
+function releaseRecordSchemaErrors() {
+  return (validateReleaseRecordSchema.errors ?? []).map((error) => {
+    const path = error.instancePath.length === 0 ? "$" : `$${error.instancePath}`;
+    const detail = error.keyword === "additionalProperties"
+      ? `unexpected field ${String(error.params.additionalProperty)}`
+      : (error.message ?? `failed ${error.keyword}`);
+    return `${path}: schema ${detail}`;
+  });
+}
+
+function releaseRecordSchemaFailure(record) {
+  if (validateReleaseRecordSchema(record)) return null;
+  return {
+    ok: false,
+    errors: releaseRecordSchemaErrors(),
+    releaseSubjectSha256: null,
+    detachedRecordSha256: null,
+  };
 }
 
 function requireObject(errors, value, path) {
@@ -207,6 +246,54 @@ function validateChronology(errors, earlier, later, path) {
   if (!Number.isNaN(earlierTime) && !Number.isNaN(laterTime) && laterTime < earlierTime) {
     add(errors, path, `must not precede ${earlier}`);
   }
+}
+
+function validateCrossRepositoryObservation(
+  errors,
+  observation,
+  record,
+) {
+  const path = "crossRepositoryAttestation";
+  if (!requireObject(errors, observation, path)) return;
+  requireExactKeys(errors, observation, path, [
+    "schemaVersion",
+    "repository",
+    "attestationCommitSha",
+    "parentCommitSha",
+    "documentPath",
+    "documentBlobSha",
+    "documentSha256",
+    "backendCandidateCommitSha",
+    "backendPackageArtifactHash",
+    "websiteCandidateCommitSha",
+    "builderCandidateCommitSha",
+    "registryCandidateCommitSha",
+    "productionAuthorityCandidateCommitSha",
+    "applicationV3CompatibilityEvidenceSha256",
+    "commitSignatureVerified",
+  ]);
+  requireExact(errors, observation.schemaVersion, `${path}.schemaVersion`, CROSS_REPOSITORY_OBSERVATION_SCHEMA_VERSION);
+  requireExact(errors, observation.repository, `${path}.repository`, CROSS_REPOSITORY_BINDING_REPOSITORY);
+  validateCommit(errors, observation.attestationCommitSha, `${path}.attestationCommitSha`);
+  validateCommit(errors, observation.parentCommitSha, `${path}.parentCommitSha`);
+  requireExact(errors, observation.documentPath, `${path}.documentPath`, CROSS_REPOSITORY_BINDING_DOCUMENT_PATH);
+  validateCommit(errors, observation.documentBlobSha, `${path}.documentBlobSha`);
+  validateSha256(errors, observation.documentSha256, `${path}.documentSha256`);
+  validateCommit(errors, observation.backendCandidateCommitSha, `${path}.backendCandidateCommitSha`);
+  validateSha256(errors, observation.backendPackageArtifactHash, `${path}.backendPackageArtifactHash`);
+  validateCommit(errors, observation.websiteCandidateCommitSha, `${path}.websiteCandidateCommitSha`);
+  validateCommit(errors, observation.builderCandidateCommitSha, `${path}.builderCandidateCommitSha`);
+  validateCommit(errors, observation.registryCandidateCommitSha, `${path}.registryCandidateCommitSha`);
+  validateCommit(errors, observation.productionAuthorityCandidateCommitSha, `${path}.productionAuthorityCandidateCommitSha`);
+  validateSha256(errors, observation.applicationV3CompatibilityEvidenceSha256, `${path}.applicationV3CompatibilityEvidenceSha256`);
+  requireExact(errors, observation.commitSignatureVerified, `${path}.commitSignatureVerified`, true);
+
+  const binding = record.subject?.crossRepositoryReleaseBinding;
+  requireExact(errors, observation.attestationCommitSha, `${path}.attestationCommitSha`, binding?.attestationCommitSha);
+  requireExact(errors, observation.documentSha256, `${path}.documentSha256`, binding?.documentSha256);
+  requireExact(errors, observation.websiteCandidateCommitSha, `${path}.websiteCandidateCommitSha`, record.subject?.website?.commitSha);
+  requireExact(errors, observation.backendPackageArtifactHash, `${path}.backendPackageArtifactHash`, record.subject?.approvalService?.packageArtifactHash);
+  requireExact(errors, observation.parentCommitSha, `${path}.parentCommitSha`, observation.backendCandidateCommitSha);
 }
 
 function validateDecision(errors, decision, path, expectedStatus, subjectHash, candidate = null) {
@@ -396,10 +483,16 @@ function validateWorkflow(errors, workflow, websiteCommitSha, candidate) {
   validateSha256(errors, workflow.verificationEvidenceSha256, "promotionGate.workflow.verificationEvidenceSha256");
 }
 
-export function verifyReleaseRecord(record, { require = "template", expected = {} } = {}) {
+export function verifyReleaseRecord(
+  record,
+  { require = "template", expected = {}, crossRepositoryAttestation = null } = {},
+) {
   if (!REQUIRED_LEVELS.has(require)) throw new Error(`unsupported verification level: ${require}`);
+  const schemaFailure = releaseRecordSchemaFailure(record);
+  if (schemaFailure !== null) return schemaFailure;
   const errors = [];
-  if (!requireObject(errors, record, "$")) return { ok: false, errors, releaseSubjectSha256: null, detachedRecordSha256: null };
+  const levels = ["template", "clearance", "staging", "candidate", "promotion", "live"];
+  const requiredIndex = levels.indexOf(require);
   requireExactKeys(errors, record, "$", ["schemaVersion", "recordStatus", "createdAt", "releaseIntent", "subject", "commandCenter", "validation", "productionDependencies", "deployment", "promotionGate", "canary"]);
   const allowPlaceholders = require === "template";
   walkForSecretsAndPlaceholders(record, "", errors, allowPlaceholders);
@@ -458,9 +551,8 @@ export function verifyReleaseRecord(record, { require = "template", expected = {
   if (requireObject(errors, record.promotionGate, "promotionGate")) requireExactKeys(errors, record.promotionGate, "promotionGate", ["status", "workflow"]);
   if (requireObject(errors, record.canary, "canary")) requireExactKeys(errors, record.canary, "canary", ["status", "evidenceSha256", "evidenceLocator", "completedAt"]);
 
-  const levels = ["template", "clearance", "staging", "candidate", "promotion", "live"];
-  const requiredIndex = levels.indexOf(require);
   if (requiredIndex >= 1) {
+    validateCrossRepositoryObservation(errors, crossRepositoryAttestation, record);
     validateDecision(errors, record.commandCenter?.freezeClearance, "commandCenter.freezeClearance", "cleared", subjectHash);
     validateChronology(errors, record.createdAt, record.commandCenter?.freezeClearance?.decidedAt, "commandCenter.freezeClearance.decidedAt");
     if (!["freeze_cleared", "candidate_verified", "promotion_approved", "promoted", "live"].includes(record.recordStatus)) {
@@ -646,12 +738,16 @@ function parseArguments(argv) {
   let require = "template";
   let json = false;
   let githubOutput = null;
+  let verifyCrossRepositoryAttestation = false;
+  let crossRepositoryAttestationSummary = null;
   const expected = {};
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--require") require = argv[++index];
     else if (argument === "--json") json = true;
     else if (argument === "--github-output") githubOutput = argv[++index];
+    else if (argument === "--verify-cross-repository-attestation") verifyCrossRepositoryAttestation = true;
+    else if (argument === "--cross-repository-attestation-summary") crossRepositoryAttestationSummary = argv[++index];
     else if (argument === "--expect-website-commit") expected.websiteCommitSha = argv[++index];
     else if (argument === "--expect-package-artifact-hash") expected.packageArtifactHash = argv[++index];
     else if (argument === "--expect-cross-repository-attestation-commit") expected.crossRepositoryAttestationCommitSha = argv[++index];
@@ -664,22 +760,50 @@ function parseArguments(argv) {
     else if (file === null) file = argument;
     else throw new Error(`unexpected argument: ${argument}`);
   }
-  if (file === null) throw new Error("usage: verify-custom-launch-release-record.mjs <record.json> [--require template|clearance|staging|candidate|promotion|live] [--json] [--github-output path] [expectation flags, including exact cross-repository attestation commit and document SHA-256]");
-  return { file, require, json, githubOutput, expected };
+  if (file === null) throw new Error("usage: verify-custom-launch-release-record.mjs <record.json> [--require template|clearance|staging|candidate|promotion|live] [--verify-cross-repository-attestation] [--cross-repository-attestation-summary path] [--json] [--github-output path] [expectation flags]");
+  if (crossRepositoryAttestationSummary !== null && !verifyCrossRepositoryAttestation) {
+    throw new Error("cross-repository attestation summary output requires live attestation verification");
+  }
+  return {
+    file,
+    require,
+    json,
+    githubOutput,
+    verifyCrossRepositoryAttestation,
+    crossRepositoryAttestationSummary,
+    expected,
+  };
 }
 
 async function main(argv) {
   const options = parseArguments(argv);
   const record = JSON.parse(await readFile(options.file, "utf8"));
-  const result = verifyReleaseRecord(record, { require: options.require, expected: options.expected });
-  if (options.json) process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-  else {
-    process.stdout.write(`release subject: ${result.releaseSubjectSha256}\n`);
-    process.stdout.write(`detached record: ${result.detachedRecordSha256}\n`);
-    process.stdout.write(`required level: ${options.require}\n`);
-    process.stdout.write(`result: ${result.ok ? "passed" : "blocked"}\n`);
-    for (const error of result.errors) process.stderr.write(`- ${error}\n`);
+  const schemaFailure = releaseRecordSchemaFailure(record);
+  if (schemaFailure !== null) {
+    writeResult(schemaFailure, options);
+    process.exitCode = 1;
+    return;
   }
+  const crossRepositoryAttestation = options.verifyCrossRepositoryAttestation
+    ? await verifyCrossRepositoryReleaseBindingFromGitHubV1({
+      attestationCommitSha:
+        record.subject?.crossRepositoryReleaseBinding?.attestationCommitSha,
+      expectedDocumentSha256:
+        record.subject?.crossRepositoryReleaseBinding?.documentSha256,
+      expectedWebsiteCommitSha:
+        options.expected.websiteCommitSha ?? record.subject?.website?.commitSha,
+      expectedBackendPackageArtifactHash:
+        options.expected.packageArtifactHash
+          ?? record.subject?.approvalService?.packageArtifactHash,
+      githubToken: process.env.PROGRAMMABLE_BACKEND_RELEASE_READ_TOKEN,
+    })
+    : null;
+  const result = verifyReleaseRecord(record, {
+    require: options.require,
+    expected: options.expected,
+    crossRepositoryAttestation,
+  });
+  writeResult(result, options);
   if (result.ok && options.githubOutput !== null) {
     await appendFile(
       options.githubOutput,
@@ -693,7 +817,25 @@ async function main(argv) {
       { encoding: "utf8", mode: 0o600 },
     );
   }
+  if (result.ok && options.crossRepositoryAttestationSummary !== null) {
+    await writeFile(
+      options.crossRepositoryAttestationSummary,
+      `${JSON.stringify(crossRepositoryAttestation, null, 2)}\n`,
+      { encoding: "utf8", flag: "wx", mode: 0o600 },
+    );
+  }
   if (!result.ok) process.exitCode = 1;
+}
+
+function writeResult(result, options) {
+  if (options.json) process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  else {
+    process.stdout.write(`release subject: ${result.releaseSubjectSha256}\n`);
+    process.stdout.write(`detached record: ${result.detachedRecordSha256}\n`);
+    process.stdout.write(`required level: ${options.require}\n`);
+    process.stdout.write(`result: ${result.ok ? "passed" : "blocked"}\n`);
+    for (const error of result.errors) process.stderr.write(`- ${error}\n`);
+  }
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {

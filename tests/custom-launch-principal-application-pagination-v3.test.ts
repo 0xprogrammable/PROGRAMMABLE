@@ -1,11 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { createCustomLaunchWebsiteClientV2 } from "../lib/custom-launch/client-v2";
 import type {
   ApplicationHandleV3,
   PrincipalCustomLaunchApplicationSummaryV2,
 } from "../lib/custom-launch/contract-v2";
 import {
+  MAXIMUM_PRINCIPAL_APPLICATIONS_V3,
   MAXIMUM_PRINCIPAL_APPLICATION_PAGES_V3,
+  PrincipalApplicationPaginationCancelledErrorV3,
+  PrincipalApplicationPaginationTimeoutErrorV3,
   readAllPrincipalApplicationsV3,
 } from "../lib/custom-launch/principal-application-pagination-v3";
 
@@ -43,13 +47,19 @@ function page(
 }
 
 describe("principal Application V3 pagination", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("loads every page beyond the former silent 500-submission cutoff", async () => {
     const all = Array.from({ length: 550 }, (_, index) => application(index));
     const applications = vi.fn(async (input: Readonly<{
       limit?: number;
       cursor?: string;
+      signal?: AbortSignal;
     }>) => {
       expect(input.limit).toBe(50);
+      expect(input.signal).toBeInstanceOf(AbortSignal);
       const pageIndex = input.cursor === undefined
         ? 0
         : Number(input.cursor.slice("cursor-".length));
@@ -88,5 +98,96 @@ describe("principal Application V3 pagination", () => {
       "Submission list exceeds its explicit safety bound",
     );
     expect(applications).toHaveBeenCalledTimes(MAXIMUM_PRINCIPAL_APPLICATION_PAGES_V3);
+    expect(MAXIMUM_PRINCIPAL_APPLICATION_PAGES_V3).toBe(200);
+    expect(MAXIMUM_PRINCIPAL_APPLICATIONS_V3).toBe(100_000);
+  });
+
+  it("applies one aggregate deadline and returns no partial page data", async () => {
+    vi.useFakeTimers();
+    const applications = vi.fn(async (input: Readonly<{
+      cursor?: string;
+      signal?: AbortSignal;
+    }>) => {
+      if (input.cursor === undefined) return page([application(0)], "cursor-next");
+      return await new Promise<ReturnType<typeof page>>((_resolve, reject) => {
+        input.signal?.addEventListener("abort", () => reject(input.signal?.reason), {
+          once: true,
+        });
+      });
+    });
+    const pending = readAllPrincipalApplicationsV3(
+      { applications },
+      { timeoutMs: 250 },
+    );
+    const rejected = expect(pending).rejects.toBeInstanceOf(
+      PrincipalApplicationPaginationTimeoutErrorV3,
+    );
+
+    await vi.advanceTimersByTimeAsync(250);
+    await rejected;
+    expect(applications).toHaveBeenCalledTimes(2);
+  });
+
+  it("propagates caller cancellation to the in-flight page and returns no partial data", async () => {
+    const controller = new AbortController();
+    let pageSignal: AbortSignal | undefined;
+    const applications = vi.fn(async (input: Readonly<{
+      cursor?: string;
+      signal?: AbortSignal;
+    }>) => {
+      if (input.cursor === undefined) return page([application(0)], "cursor-next");
+      pageSignal = input.signal;
+      return await new Promise<ReturnType<typeof page>>((_resolve, reject) => {
+        input.signal?.addEventListener("abort", () => reject(input.signal?.reason), {
+          once: true,
+        });
+      });
+    });
+    const pending = readAllPrincipalApplicationsV3(
+      { applications },
+      { signal: controller.signal },
+    );
+    const rejected = expect(pending).rejects.toBeInstanceOf(
+      PrincipalApplicationPaginationCancelledErrorV3,
+    );
+    await vi.waitFor(() => expect(applications).toHaveBeenCalledTimes(2));
+
+    controller.abort();
+
+    await rejected;
+    expect(pageSignal?.aborted).toBe(true);
+  });
+
+  it("passes the aggregate signal through the API client to fetch", async () => {
+    const controller = new AbortController();
+    const fetchV2 = vi.fn(async (_path: string | URL | Request, init?: RequestInit) => {
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+      expect(init?.signal).not.toBe(controller.signal);
+      return new Response(JSON.stringify({
+        schemaVersion: "programmable.principal-custom-launch-application-list.v3",
+        subject: {
+          provider: "github",
+          githubUserId: "123456789",
+          githubPrincipalHash: GITHUB_PRINCIPAL_HASH,
+        },
+        applications: [application(0)],
+        nextCursor: null,
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+    const client = createCustomLaunchWebsiteClientV2({
+      session: {
+        accessToken: "access-token-value",
+        identityToken: "identity-token-value",
+      },
+      fetch: fetchV2,
+    });
+
+    await expect(readAllPrincipalApplicationsV3(client, {
+      signal: controller.signal,
+    })).resolves.toMatchObject({ applications: [{ applicationId: "application-0" }] });
+    expect(fetchV2).toHaveBeenCalledOnce();
   });
 });

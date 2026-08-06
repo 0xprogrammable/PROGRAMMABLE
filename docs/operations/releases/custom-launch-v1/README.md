@@ -51,7 +51,12 @@ The record has two different hashes:
    exact previous deployment/configuration rollback snapshot.
 7. Commit the staging record to the dedicated record branch, then dispatch the
    reviewed production workflow with its exact record commit and detached
-   digest. The workflow verifies it before build or candidate staging.
+   digest. The workflow reads the exact backend attestation commit through a
+   read-only GitHub credential, requires that it has the backend candidate as
+   its sole parent, requires that it changes only the binding document, hashes
+   the exact Git blob, validates the closed five-component document, and
+   compares its Website commit and backend package hash with this release
+   record before build or candidate staging.
 8. After staging, create the next detached record revision that binds the
    workflow run, exact Website commit, immutable deployment id/URL,
    approval-service package hash, cross-repository attestation commit,
@@ -77,15 +82,20 @@ npm run release:custom-launch:record:verify -- \
 
 # Each later level is fail closed.
 node scripts/verify-custom-launch-release-record.mjs /path/to/record.json \
-  --require clearance
+  --require clearance \
+  --verify-cross-repository-attestation
 node scripts/verify-custom-launch-release-record.mjs /path/to/record.json \
-  --require staging
+  --require staging \
+  --verify-cross-repository-attestation
 node scripts/verify-custom-launch-release-record.mjs /path/to/record.json \
-  --require candidate
+  --require candidate \
+  --verify-cross-repository-attestation
 node scripts/verify-custom-launch-release-record.mjs /path/to/record.json \
-  --require promotion
+  --require promotion \
+  --verify-cross-repository-attestation
 node scripts/verify-custom-launch-release-record.mjs /path/to/record.json \
-  --require live
+  --require live \
+  --verify-cross-repository-attestation
 ```
 
 `staging` requires every validation gate, production dependency and rollback
@@ -95,6 +105,10 @@ then requires the exact protected-workflow and immutable deployment binding.
 decision. `live` additionally requires the promoted identity, canary evidence
 and live declaration.
 
+Every invocation first validates the complete record with the checked-in JSON
+Schema Draft 2020-12 contract through AJV. Unknown properties are rejected at
+the root and in every nested object before any state-specific semantic check.
+
 The protected workflow compares the staging record with its exact Website
 commit, reviewed backend artifact, protected cross-repository attestation
 commit and binding-document SHA-256, current rollback deployment and supplied
@@ -103,5 +117,10 @@ candidate. The protected production environment must set
 `PROGRAMMABLE_BACKEND_CROSS_REPOSITORY_ATTESTATION_COMMIT_SHA` and
 `PROGRAMMABLE_BACKEND_CROSS_REPOSITORY_BINDING_DOCUMENT_SHA256` to the exact
 values independently materialized by the backend release verifier. The
-workflow remains stage-only. Any later promotion needs an updated,
-candidate-bound record and its separate Command Center decision.
+workflow also requires the production-environment secret
+`PROGRAMMABLE_BACKEND_RELEASE_READ_TOKEN` with read-only access to the exact
+private backend commit. The credential is read only from the environment and
+is never written to the record, summary or workflow log. The retained closed
+summary contains only public commit and digest evidence. The workflow remains
+stage-only. Any later promotion needs an updated, candidate-bound record and
+its separate Command Center decision.

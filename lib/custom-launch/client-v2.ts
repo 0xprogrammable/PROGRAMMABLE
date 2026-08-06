@@ -77,16 +77,22 @@ export function createCustomLaunchWebsiteClientV2(input: Readonly<{
     body: JSON.stringify(body),
     signal,
   }, schemaVersion, validateStatus);
-  const read = async <T>(path: string, schemaVersion: string): Promise<T> =>
+  const read = async <T>(
+    path: string,
+    schemaVersion: string,
+    signal?: AbortSignal,
+  ): Promise<T> =>
     requestJsonV2<T>(fetchV2, path, {
       method: "GET",
       headers: headers(),
+      signal,
     }, schemaVersion);
 
   return Object.freeze({
     async applications(input: Readonly<{
       limit?: number;
       cursor?: string;
+      signal?: AbortSignal;
     }> = {}): Promise<PrincipalCustomLaunchApplicationPageV2> {
       const response = await read<PrincipalCustomLaunchApplicationListV2>(
         CUSTOM_LAUNCH_WEBSITE_API_V2.applications({
@@ -94,6 +100,7 @@ export function createCustomLaunchWebsiteClientV2(input: Readonly<{
           ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
         }),
         "programmable.principal-custom-launch-application-list.v3",
+        input.signal,
       );
       return Object.freeze({
         ...response,

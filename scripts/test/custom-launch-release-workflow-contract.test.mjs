@@ -124,6 +124,22 @@ function workflowFailures(source) {
     "EXPECTED_CROSS_REPOSITORY_BINDING_DOCUMENT_SHA256: ${{ vars.PROGRAMMABLE_BACKEND_CROSS_REPOSITORY_BINDING_DOCUMENT_SHA256 }}",
   );
   requireText(
+    "record-private-backend-read-token",
+    "PROGRAMMABLE_BACKEND_RELEASE_READ_TOKEN: ${{ secrets.PROGRAMMABLE_BACKEND_RELEASE_READ_TOKEN }}",
+  );
+  requireText(
+    "record-live-cross-repository-verification",
+    "--verify-cross-repository-attestation",
+  );
+  requireText(
+    "record-closed-attestation-summary",
+    '--cross-repository-attestation-summary "$attestation_summary_file"',
+  );
+  requireText(
+    "record-attestation-summary-retention",
+    "${{ runner.temp }}/custom-launch-cross-repository-attestation.json",
+  );
+  requireText(
     "record-rollback-id-binding",
     '--expect-rollback-deployment-id "$ROLLBACK_DEPLOYMENT_ID"',
   );
@@ -323,6 +339,11 @@ test("workflow contract detects weakened record and stage-only gates", async () 
     source.replace(
       '--expect-cross-repository-binding-document-sha256 "$EXPECTED_CROSS_REPOSITORY_BINDING_DOCUMENT_SHA256"',
       "",
+    ),
+    source.replace("--verify-cross-repository-attestation", ""),
+    source.replace(
+      "PROGRAMMABLE_BACKEND_RELEASE_READ_TOKEN: ${{ secrets.PROGRAMMABLE_BACKEND_RELEASE_READ_TOKEN }}",
+      "PROGRAMMABLE_BACKEND_RELEASE_READ_TOKEN: missing",
     ),
     source.replace(
       'git merge-base --is-ancestor "$RECORD_COMMIT_SHA" "$record_ref"',

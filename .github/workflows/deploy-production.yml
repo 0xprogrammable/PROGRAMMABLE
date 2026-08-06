@@ -192,6 +192,7 @@ jobs:
           EXPECTED_PACKAGE_ARTIFACT_HASH: ${{ secrets.PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH }}
           EXPECTED_CROSS_REPOSITORY_ATTESTATION_COMMIT_SHA: ${{ vars.PROGRAMMABLE_BACKEND_CROSS_REPOSITORY_ATTESTATION_COMMIT_SHA }}
           EXPECTED_CROSS_REPOSITORY_BINDING_DOCUMENT_SHA256: ${{ vars.PROGRAMMABLE_BACKEND_CROSS_REPOSITORY_BINDING_DOCUMENT_SHA256 }}
+          PROGRAMMABLE_BACKEND_RELEASE_READ_TOKEN: ${{ secrets.PROGRAMMABLE_BACKEND_RELEASE_READ_TOKEN }}
           COMMAND_CENTER_GITHUB_TOKEN: ${{ github.token }}
           ROLLBACK_DEPLOYMENT_ID: ${{ steps.production-before.outputs.deployment_id }}
           ROLLBACK_DEPLOYMENT_URL: ${{ steps.production-before.outputs.deployment_url }}
@@ -238,8 +239,12 @@ jobs:
           }
           NODE
           git show "$RECORD_COMMIT_SHA:$record_path" > "$record_file"
+          attestation_summary_file="$RUNNER_TEMP/custom-launch-cross-repository-attestation.json"
+          test ! -e "$attestation_summary_file"
           node scripts/verify-custom-launch-release-record.mjs "$record_file" \
             --require staging \
+            --verify-cross-repository-attestation \
+            --cross-repository-attestation-summary "$attestation_summary_file" \
             --expect-website-commit "$GITHUB_SHA" \
             --expect-package-artifact-hash "$EXPECTED_PACKAGE_ARTIFACT_HASH" \
             --expect-cross-repository-attestation-commit "$EXPECTED_CROSS_REPOSITORY_ATTESTATION_COMMIT_SHA" \
@@ -255,7 +260,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: custom-launch-release-record-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/custom-launch-release-record.json
+          path: |
+            ${{ runner.temp }}/custom-launch-release-record.json
+            ${{ runner.temp }}/custom-launch-cross-repository-attestation.json
           if-no-files-found: error
           retention-days: 90
 
