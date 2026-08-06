@@ -29,6 +29,7 @@ const CHAIN_PROFILE_HASH = "0x30991a4ebef393737148f7986c880a4af602691e059ad428aa
 const REGISTRY_POLICY_HASH = "0x7a814ecb2d2b8be2debb29481f25f06e976559eec41fa7c8d92e030ec69fc9ff";
 const MAX_FEE_PER_GAS_WEI = 500_000_000n;
 const MAX_PRIORITY_FEE_PER_GAS_WEI = 100_000_000n;
+const MAX_REQUEST_BYTES = 10_000;
 const RPC_ENDPOINTS = [
   "https://ethereum-rpc.publicnode.com",
   "https://eth.drpc.org",
@@ -44,6 +45,7 @@ const artifactNames = [
   "ProgrammableCustomRegistryV1",
   "ProgrammableCustomAtomicRegistrarV1",
 ];
+const recordedTransactionHashes = new Map();
 
 const normalizeHex = (value) => String(value ?? "").toLowerCase();
 const roleHash = (value) => keccak256(stringToHex(value));
@@ -359,6 +361,85 @@ async function readReconciledState(plan) {
   };
 }
 
+async function readReceiptEvidence(endpoint, plan, index, hash) {
+  const transaction = plan.transactions[index];
+  if (transaction === undefined || !/^0x[0-9a-f]{64}$/u.test(hash)) {
+    throw new Error("Deployment receipt submission is invalid");
+  }
+  const [chainTransaction, receipt] = await Promise.all([
+    rpc(endpoint, "eth_getTransactionByHash", [hash]),
+    rpc(endpoint, "eth_getTransactionReceipt", [hash]),
+  ]);
+  if (chainTransaction === null || receipt === null) {
+    throw new Error("Deployment transaction is not confirmed");
+  }
+  if (
+    normalizeHex(chainTransaction.hash) !== hash ||
+    normalizeHex(chainTransaction.from) !== transaction.from ||
+    chainTransaction.to !== null ||
+    normalizeHex(chainTransaction.input) !== normalizeHex(transaction.data) ||
+    normalizeHex(chainTransaction.value) !== transaction.value ||
+    Number(BigInt(chainTransaction.nonce)) !== plan.startingNonce + index ||
+    normalizeHex(receipt.status) !== "0x1" ||
+    normalizeHex(receipt.contractAddress) !== transaction.address ||
+    normalizeHex(receipt.transactionHash) !== hash ||
+    normalizeHex(receipt.blockHash) !== normalizeHex(chainTransaction.blockHash) ||
+    normalizeHex(receipt.blockNumber) !== normalizeHex(chainTransaction.blockNumber)
+  ) {
+    throw new Error("Deployment receipt does not match the reviewed transaction");
+  }
+  return {
+    transactionHash: hash,
+    blockNumber: normalizeHex(receipt.blockNumber),
+    blockHash: normalizeHex(receipt.blockHash),
+    contractAddress: normalizeHex(receipt.contractAddress),
+  };
+}
+
+async function recordDeploymentReceipt(plan, index, hash) {
+  const normalizedHash = normalizeHex(hash);
+  const evidence = await Promise.all(
+    RPC_ENDPOINTS.map((endpoint) =>
+      readReceiptEvidence(endpoint, plan, index, normalizedHash),
+    ),
+  );
+  if (JSON.stringify(evidence[0]) !== JSON.stringify(evidence[1])) {
+    throw new Error("Independent Ethereum Mainnet RPCs disagree on the receipt");
+  }
+  recordedTransactionHashes.set(index, normalizedHash);
+  return evidence[0];
+}
+
+async function buildDeploymentReleaseEvidence(plan) {
+  const state = await readReconciledState(plan);
+  assertCustomRegistryCompletedState(plan, state);
+  if (recordedTransactionHashes.size !== plan.transactions.length) {
+    throw new Error("All four reviewed transaction receipts are required");
+  }
+  const receipts = [];
+  for (let index = 0; index < plan.transactions.length; index += 1) {
+    const hash = recordedTransactionHashes.get(index);
+    if (hash === undefined) throw new Error("A reviewed deployment receipt is missing");
+    receipts.push(await recordDeploymentReceipt(plan, index, hash));
+  }
+  return {
+    schemaVersion: "programmable.custom-registry-mainnet-deployment-evidence.v1",
+    chainId: plan.chainId,
+    registryStartBlock: BigInt(receipts[2].blockNumber).toString(10),
+    chainProfileHash: plan.chainProfileHash,
+    registryPolicyHash: plan.registryPolicyHash,
+    contracts: plan.transactions.map((transaction, index) => ({
+      name: transaction.name,
+      address: transaction.address,
+      runtimeCodeHash: state.deployments[index].runtimeCodeHash,
+      transactionHash: receipts[index].transactionHash,
+      blockNumber: BigInt(receipts[index].blockNumber).toString(10),
+      blockHash: receipts[index].blockHash,
+      inputHash: transaction.inputHash,
+    })),
+  };
+}
+
 export function assertCustomRegistryDeploymentSequenceState(plan, state) {
   const confirmedNonce = Number(BigInt(state.confirmedNonce));
   const pendingNonce = Number(BigInt(state.pendingNonce));
@@ -529,7 +610,7 @@ function renderHtml(plan) {
         else rows[index] = { status: "Waiting" };
       }
       render();
-      if (confirmed === config.endingNonce && rows.every((row) => row.done)) { elements.deploy.textContent = "Deployment complete"; notice("All Custom Registry contracts are deployed and independently verified.", "success"); }
+      if (confirmed >= config.endingNonce && rows.every((row) => row.done)) { elements.deploy.textContent = "Deployment complete"; notice("All Custom Registry contracts are independently verified. Release evidence is available at /release.", "success"); }
       else if (pending !== confirmed) { readyIndex = null; elements.deploy.textContent = "Waiting for confirmation"; notice("A deployment transaction is pending."); }
       else { const next = config.transactions[readyIndex]; elements.deploy.textContent = "Prepare " + next.label; notice(next.label + " is ready for simulation and MetaMask review."); }
       buttons();
@@ -543,12 +624,15 @@ function renderHtml(plan) {
         await ensureNetwork(); await ensureAccount(); const state = await serverState();
         if (state.confirmedNonce !== state.pendingNonce) throw new Error("Another transaction is pending");
         const nonce = Number(BigInt(state.confirmedNonce)); if (nonce - config.startingNonce !== readyIndex) throw new Error("Wallet nonce changed. Refresh first");
-        const transaction = config.transactions[readyIndex]; const requestData = { from: account, data: transaction.data, value: transaction.value, nonce: transaction.nonce };
+        const transactionIndex = readyIndex; const transaction = config.transactions[transactionIndex]; const requestData = { from: account, data: transaction.data, value: transaction.value, nonce: transaction.nonce };
         notice("Simulating " + transaction.label + "."); const estimate = BigInt(await request("eth_estimateGas", [requestData])); const reviewedLimit = BigInt(transaction.foundryGasLimit); const padded = (estimate * 120n + 99n) / 100n;
         if (padded > reviewedLimit) throw new Error("Live gas estimate exceeds the reviewed gas limit");
         requestData.gas = "0x" + reviewedLimit.toString(16); requestData.maxFeePerGas = "0x" + BigInt(config.feePolicy.maxFeePerGasWei).toString(16); requestData.maxPriorityFeePerGas = "0x" + BigInt(config.feePolicy.maxPriorityFeePerGasWei).toString(16);
-        notice("Review " + transaction.label + " in MetaMask. ETH value must be zero."); const hash = await request("eth_sendTransaction", [requestData]); rows[readyIndex] = { status: "Pending" }; readyIndex = null; render();
-        const receipt = await waitForReceipt(hash); if (receipt.status !== "0x1") throw new Error(transaction.name + " reverted"); notice(transaction.label + " confirmed. Verifying independent RPCs.", "success");
+        notice("Review " + transaction.label + " in MetaMask. ETH value must be zero."); const hash = await request("eth_sendTransaction", [requestData]); rows[transactionIndex] = { status: "Pending" }; readyIndex = null; render();
+        const receipt = await waitForReceipt(hash); if (receipt.status !== "0x1") throw new Error(transaction.name + " reverted");
+        const evidenceResponse = await fetch("/receipt", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ index: transactionIndex, transactionHash: hash }) });
+        const evidence = await evidenceResponse.json(); if (!evidenceResponse.ok) throw new Error(evidence.error || "Independent receipt verification failed");
+        notice(transaction.label + " confirmed. Receipt and runtime verified by independent RPCs.", "success");
       } catch (error) { failure = error?.message || String(error); notice(failure, "error"); }
       finally { busy = false; if (account) await refreshState().catch((error) => { if (!failure) failure = error?.message || String(error); }); if (failure) notice(failure, "error"); buttons(); }
     }
@@ -556,6 +640,17 @@ function renderHtml(plan) {
   </script>
 </body>
 </html>`;
+}
+
+async function readJsonBody(request) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of request) {
+    size += chunk.length;
+    if (size > MAX_REQUEST_BYTES) throw new Error("Request body too large");
+    chunks.push(chunk);
+  }
+  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
 async function main() {
@@ -595,8 +690,46 @@ async function main() {
       response.writeHead(200, { ...headers, "content-security-policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'", "content-type": "text/html; charset=utf-8" }); response.end(html); return;
     }
     if (request.method === "GET" && request.url === "/state") {
-      try { response.writeHead(200, { ...headers, "content-type": "application/json; charset=utf-8" }); response.end(JSON.stringify(await readVerifiedCustomRegistryState(plan))); }
+      try { const state = await readVerifiedCustomRegistryState(plan); response.writeHead(200, { ...headers, "content-type": "application/json; charset=utf-8" }); response.end(JSON.stringify(state)); }
       catch (error) { response.writeHead(503, { ...headers, "content-type": "application/json; charset=utf-8" }); response.end(JSON.stringify({ error: error?.message ?? String(error) })); }
+      return;
+    }
+    if (request.method === "POST" && request.url === "/receipt") {
+      try {
+        if (request.headers["content-type"]?.split(";", 1)[0] !== "application/json") {
+          throw new Error("Receipt content type is invalid");
+        }
+        const body = await readJsonBody(request);
+        if (
+          body === null ||
+          typeof body !== "object" ||
+          !Number.isInteger(body.index) ||
+          typeof body.transactionHash !== "string"
+        ) {
+          throw new Error("Receipt body is invalid");
+        }
+        const evidence = await recordDeploymentReceipt(
+          plan,
+          body.index,
+          normalizeHex(body.transactionHash),
+        );
+        response.writeHead(200, { ...headers, "content-type": "application/json; charset=utf-8" });
+        response.end(JSON.stringify(evidence));
+      } catch (error) {
+        response.writeHead(400, { ...headers, "content-type": "application/json; charset=utf-8" });
+        response.end(JSON.stringify({ error: error?.message ?? String(error) }));
+      }
+      return;
+    }
+    if (request.method === "GET" && request.url === "/release") {
+      try {
+        const evidence = await buildDeploymentReleaseEvidence(plan);
+        response.writeHead(200, { ...headers, "content-type": "application/json; charset=utf-8" });
+        response.end(JSON.stringify(evidence, null, 2));
+      } catch (error) {
+        response.writeHead(503, { ...headers, "content-type": "application/json; charset=utf-8" });
+        response.end(JSON.stringify({ error: error?.message ?? String(error) }));
+      }
       return;
     }
     response.writeHead(404, { ...headers, "content-type": "text/plain; charset=utf-8" }); response.end("Not found");
