@@ -253,7 +253,8 @@ export async function prepareCustomMarketTradeV1(input: Readonly<{
   }
   const target = getProductionWebsiteProjectionTargetV1();
   await target.assertProductionReadiness();
-  const project = await target.store.findFinalizedCustomLaunchByProjectId({
+  const project = await target.registryCustomPublicStore
+    .findFinalizedCustomLaunchByProjectId({
     projectId: input.request.projectId,
     signal: AbortSignal.timeout(10_000),
   });

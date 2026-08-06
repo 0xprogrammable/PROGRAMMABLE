@@ -396,7 +396,8 @@ function parseCustomProject(value: unknown): CustomProjectExploreEntry | null {
     || value.launchCategoryProvenance.schemaVersion
       !== "programmable.explore-launch-category-provenance.v1"
     || value.launchCategoryProvenance.category !== "custom"
-    || value.launchCategoryProvenance.source !== "website.custom-launched"
+    || (value.launchCategoryProvenance.source !== "registry.custom-launched"
+      && value.launchCategoryProvenance.source !== "interface-preview")
     || value.launchCategoryProvenance.projectId !== value.customProjectId
     || value.launchCategoryProvenance.launchId !== value.customLaunchId
     || typeof value.launchCategoryProvenance.sourceRecordBindingHash !== "string"
@@ -408,6 +409,19 @@ function parseCustomProject(value: unknown): CustomProjectExploreEntry | null {
       value.launchCategoryProvenance.finalizedLaunchBindingHash,
     )
   ) return null;
+  if (value.launchCategoryProvenance.source === "registry.custom-launched"
+    && (!isTokenAddress(value.launchCategoryProvenance.registryAddress)
+      || typeof value.launchCategoryProvenance.registryStartBlock !== "string"
+      || !/^[1-9][0-9]*$/u.test(value.launchCategoryProvenance.registryStartBlock)
+      || !isBytes32(value.launchCategoryProvenance.transactionHash)
+      || !isBytes32(value.launchCategoryProvenance.blockHash)
+      || typeof value.launchCategoryProvenance.blockNumber !== "string"
+      || !/^[1-9][0-9]*$/u.test(value.launchCategoryProvenance.blockNumber)
+      || !Number.isSafeInteger(value.launchCategoryProvenance.transactionIndex)
+      || Number(value.launchCategoryProvenance.transactionIndex) < 0
+      || !Number.isSafeInteger(value.launchCategoryProvenance.logIndex)
+      || Number(value.launchCategoryProvenance.logIndex) < 0
+      || !isBytes32(value.launchCategoryProvenance.configurationHash))) return null;
   const links = value.links.map(parseTokenLink);
   if (links.some((link) => link === null)) return null;
   const launchingWallet = {

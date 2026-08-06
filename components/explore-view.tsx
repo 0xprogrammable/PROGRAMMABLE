@@ -298,13 +298,26 @@ function parseLaunchCategoryProvenance(
       ? value
       : null;
   }
-  return value.source === "website.custom-launched"
-    && isSha256(value.projectId)
+  const baseValid = isSha256(value.projectId)
     && isSha256(value.launchId)
     && isSha256(value.sourceRecordBindingHash)
-    && isSha256(value.finalizedLaunchBindingHash)
-    ? value
-    : null;
+    && isSha256(value.finalizedLaunchBindingHash);
+  if (!baseValid) return null;
+  if (value.source === "interface-preview") return value;
+  return value.source === "registry.custom-launched"
+    && isTokenAddress(value.registryAddress)
+    && typeof value.registryStartBlock === "string"
+    && /^[1-9][0-9]*$/u.test(value.registryStartBlock)
+    && isBytes32(value.transactionHash)
+    && isBytes32(value.blockHash)
+    && typeof value.blockNumber === "string"
+    && /^[1-9][0-9]*$/u.test(value.blockNumber)
+    && Number.isSafeInteger(value.transactionIndex)
+    && Number(value.transactionIndex) >= 0
+    && Number.isSafeInteger(value.logIndex)
+    && Number(value.logIndex) >= 0
+    && isBytes32(value.configurationHash)
+    ? value : null;
 }
 
 function isSha256(value: unknown): value is `sha256:${string}` {

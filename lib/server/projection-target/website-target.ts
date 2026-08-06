@@ -22,6 +22,9 @@ import {
 import {
   createEd25519ProjectionWorkloadCredentialVerifierV1,
 } from "./workload-credential";
+import {
+  PostgresRegistryCustomLaunchPublicStoreV1,
+} from "../custom-launch/registry-public-store-v1";
 
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:@/+~-]{0,255}$/u;
@@ -29,6 +32,7 @@ const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:@/+~-]{0,255}$/u;
 export interface WebsiteProjectionTargetV1 {
   readonly handler: ProjectionTargetReferenceHandlerV1;
   readonly store: PostgresProjectionTargetAtomicStoreV1;
+  readonly registryCustomPublicStore: PostgresRegistryCustomLaunchPublicStoreV1;
   readonly assertProductionReadiness: () => Promise<void>;
 }
 
@@ -49,10 +53,16 @@ extends Record<string, unknown> {
   credentials_select: boolean;
   credentials_insert: boolean;
   credentials_mutate: boolean;
+  registry_custom_select: boolean;
+  registry_custom_insert: boolean;
+  registry_custom_update: boolean;
+  registry_custom_forbidden_mutate: boolean;
   projections_rls: boolean;
   projections_force_rls: boolean;
   credentials_rls: boolean;
   credentials_force_rls: boolean;
+  registry_custom_rls: boolean;
+  registry_custom_force_rls: boolean;
   expected_policies: boolean;
   provider_roles_excluded: boolean;
   ssl: boolean;
@@ -153,6 +163,8 @@ export function createWebsiteProjectionTargetV1(input: Readonly<{
       now: input.now,
     });
   const store = new PostgresProjectionTargetAtomicStoreV1(input.pool);
+  const registryCustomPublicStore =
+    new PostgresRegistryCustomLaunchPublicStoreV1(input.pool);
   const handler = createProjectionTargetReferenceHandlerV1({
     lanes,
     credentialVerifier,
@@ -167,6 +179,7 @@ export function createWebsiteProjectionTargetV1(input: Readonly<{
   return Object.freeze({
     handler,
     store,
+    registryCustomPublicStore,
     assertProductionReadiness:
       input.assertProductionReadiness ?? (async () => {}),
   });
@@ -341,22 +354,79 @@ implements ProductionProjectionTargetPostgresPoolV1 {
                has_table_privilege(current_user,
                  'programmable_website_projection_v1.credential_uses',
                  'UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') AS credentials_mutate,
+               has_table_privilege(current_user,
+                 'programmable_website_projection_v1.registry_custom_launch_records',
+                 'SELECT') AS registry_custom_select,
+               has_table_privilege(current_user,
+                 'programmable_website_projection_v1.registry_custom_launch_records',
+                 'INSERT') AS registry_custom_insert,
+               (
+                 has_column_privilege(current_user,
+                   'programmable_website_projection_v1.registry_custom_launch_records',
+                   'lifecycle_generation', 'UPDATE')
+                 AND has_column_privilege(current_user,
+                   'programmable_website_projection_v1.registry_custom_launch_records',
+                   'lifecycle_state', 'UPDATE')
+                 AND has_column_privilege(current_user,
+                   'programmable_website_projection_v1.registry_custom_launch_records',
+                   'lifecycle_binding_hash', 'UPDATE')
+                 AND has_column_privilege(current_user,
+                   'programmable_website_projection_v1.registry_custom_launch_records',
+                   'observed_at', 'UPDATE')
+                 AND has_column_privilege(current_user,
+                   'programmable_website_projection_v1.registry_custom_launch_records',
+                   'canonical_materialization', 'UPDATE')
+                 AND has_column_privilege(current_user,
+                   'programmable_website_projection_v1.registry_custom_launch_records',
+                   'canonical_public_record', 'UPDATE')
+                 AND has_column_privilege(current_user,
+                   'programmable_website_projection_v1.registry_custom_launch_records',
+                   'record_binding_hash', 'UPDATE')
+                 AND has_column_privilege(current_user,
+                   'programmable_website_projection_v1.registry_custom_launch_records',
+                   'launch_security_binding_hash', 'UPDATE')
+                 AND has_column_privilege(current_user,
+                   'programmable_website_projection_v1.registry_custom_launch_records',
+                   'launching_wallet_namespace', 'UPDATE')
+                 AND has_column_privilege(current_user,
+                   'programmable_website_projection_v1.registry_custom_launch_records',
+                   'launching_wallet_value', 'UPDATE')
+                 AND has_column_privilege(current_user,
+                   'programmable_website_projection_v1.registry_custom_launch_records',
+                   'updated_at', 'UPDATE')
+               ) AS registry_custom_update,
+               (
+                 has_table_privilege(current_user,
+                   'programmable_website_projection_v1.registry_custom_launch_records',
+                   'DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                 OR has_column_privilege(current_user,
+                   'programmable_website_projection_v1.registry_custom_launch_records',
+                   'project_id', 'UPDATE')
+                 OR has_column_privilege(current_user,
+                   'programmable_website_projection_v1.registry_custom_launch_records',
+                   'launch_id', 'UPDATE')
+               ) AS registry_custom_forbidden_mutate,
                projections.relrowsecurity AS projections_rls,
                projections.relforcerowsecurity AS projections_force_rls,
                credentials.relrowsecurity AS credentials_rls,
                credentials.relforcerowsecurity AS credentials_force_rls,
+               registry_custom.relrowsecurity AS registry_custom_rls,
+               registry_custom.relforcerowsecurity AS registry_custom_force_rls,
                (
-                 SELECT count(*) = 4
+                 SELECT count(*) = 7
                     AND bool_and(
                       policies.roles = ARRAY['programmable_website_projection_runtime']::name[]
                     )
                     AND string_agg(
                       policies.policyname || ':' || policies.cmd,
                       ',' ORDER BY policies.policyname
-                    ) = 'credential_uses_runtime_insert:INSERT,credential_uses_runtime_select:SELECT,projection_records_runtime_insert:INSERT,projection_records_runtime_select:SELECT'
+                    ) = 'credential_uses_runtime_insert:INSERT,credential_uses_runtime_select:SELECT,projection_records_runtime_insert:INSERT,projection_records_runtime_select:SELECT,registry_custom_launch_records_runtime_insert:INSERT,registry_custom_launch_records_runtime_select:SELECT,registry_custom_launch_records_runtime_update:UPDATE'
                    FROM pg_policies AS policies
                   WHERE policies.schemaname = 'programmable_website_projection_v1'
-                    AND policies.tablename IN ('projection_records', 'credential_uses')
+                    AND policies.tablename IN (
+                      'projection_records', 'credential_uses',
+                      'registry_custom_launch_records'
+                    )
                ) AS expected_policies,
                NOT EXISTS (
                  SELECT 1
@@ -370,6 +440,9 @@ implements ProductionProjectionTargetPostgresPoolV1 {
                         'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
                       OR has_table_privilege(provider_role.rolname,
                         'programmable_website_projection_v1.credential_uses',
+                        'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                      OR has_table_privilege(provider_role.rolname,
+                        'programmable_website_projection_v1.registry_custom_launch_records',
                         'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
                     )
                ) AS provider_roles_excluded,
@@ -386,11 +459,15 @@ implements ProductionProjectionTargetPostgresPoolV1 {
           JOIN pg_class AS credentials
             ON credentials.relnamespace = schema.oid
            AND credentials.relname = 'credential_uses'
+          JOIN pg_class AS registry_custom
+            ON registry_custom.relnamespace = schema.oid
+           AND registry_custom.relname = 'registry_custom_launch_records'
           LEFT JOIN pg_stat_ssl AS ssl ON ssl.pid = pg_backend_pid()
          WHERE role.rolname = current_user
            AND pg_get_userbyid(schema.nspowner) <> current_user
            AND pg_get_userbyid(projections.relowner) <> current_user
            AND pg_get_userbyid(credentials.relowner) <> current_user
+           AND pg_get_userbyid(registry_custom.relowner) <> current_user
       `);
       const value = result.rows[0];
       if (result.rows.length !== 1 || value === undefined) {
@@ -437,8 +514,11 @@ export function assertProjectionTargetSecurityAttestationV1(
     || value.projections_mutate
     || !value.credentials_select || !value.credentials_insert
     || value.credentials_mutate
+    || !value.registry_custom_select || !value.registry_custom_insert
+    || !value.registry_custom_update || value.registry_custom_forbidden_mutate
     || !value.projections_rls || !value.projections_force_rls
     || !value.credentials_rls || !value.credentials_force_rls
+    || !value.registry_custom_rls || !value.registry_custom_force_rls
     || !value.expected_policies || !value.provider_roles_excluded
     || !value.ssl || value.ssl_version === null
     || value.ssl_cipher === null || (value.ssl_bits ?? 0) < 128

@@ -2,17 +2,23 @@ import "server-only";
 
 import { canonicalizeJson } from "../projection-target/canonical-json";
 import type {
-  PostgresProjectionTargetAtomicStoreV1,
-} from "../projection-target/postgres-store";
+  RegistryCustomLaunchPublicReadStoreV1,
+} from "./registry-public-store-v1";
 import { getProductionWebsiteProjectionTargetV1 } from "../projection-target/website-target";
-import { isCustomLaunchPublicEnabled } from "./public-readiness";
+import { isCustomLaunchRegistryPublicReadEnabled } from "./public-readiness";
 
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 
 export function createCustomLaunchProjectReadHandlersV2(input: Readonly<{
-  store: PostgresProjectionTargetAtomicStoreV1;
+  store: RegistryCustomLaunchPublicReadStoreV1;
 }>) {
-  if (input.store === null || typeof input.store !== "object") {
+  if (input.store === null || typeof input.store !== "object"
+    || input.store.sourceLane !== "registry.custom-launched"
+    || typeof input.store.findFinalizedCustomLaunchesPublic !== "function"
+    || typeof input.store.findFinalizedCustomLaunchByProjectId !== "function"
+    || typeof input.store.findFinalizedCustomLaunchesByWallet !== "function"
+    || typeof input.store.findVerifiedRegistryCustomLaunchesPublic !== "function"
+    || typeof input.store.findVerifiedRegistryCustomLaunchByProjectId !== "function") {
     throw new TypeError("custom launch project read dependencies are invalid");
   }
   return Object.freeze({
@@ -75,7 +81,7 @@ async function production() {
   const target = getProductionWebsiteProjectionTargetV1();
   await target.assertProductionReadiness();
   productionHandlers ??= createCustomLaunchProjectReadHandlersV2({
-    store: target.store,
+    store: target.registryCustomPublicStore,
   });
   return productionHandlers;
 }
@@ -84,7 +90,7 @@ export async function handleProductionCustomLaunchProjectReadV2(
   request: Request,
   projectId: string,
 ): Promise<Response> {
-  if (!isCustomLaunchPublicEnabled()) {
+  if (!isCustomLaunchRegistryPublicReadEnabled()) {
     return errorResponse(503, "custom_launch_not_public");
   }
   try {
@@ -97,7 +103,7 @@ export async function handleProductionCustomLaunchProjectReadV2(
 export async function handleProductionCustomLaunchDirectoryReadV1(
   request: Request,
 ): Promise<Response> {
-  if (!isCustomLaunchPublicEnabled()) {
+  if (!isCustomLaunchRegistryPublicReadEnabled()) {
     return errorResponse(503, "custom_launch_not_public");
   }
   try {
@@ -110,7 +116,7 @@ export async function handleProductionCustomLaunchDirectoryReadV1(
 export async function handleProductionCustomLaunchProfileReadV2(
   request: Request,
 ): Promise<Response> {
-  if (!isCustomLaunchPublicEnabled()) {
+  if (!isCustomLaunchRegistryPublicReadEnabled()) {
     return errorResponse(503, "custom_launch_not_public");
   }
   try {
@@ -171,7 +177,7 @@ function publicJsonResponse(
   return new Response(canonicalizeJson(body), {
     status,
     headers: {
-      "cache-control": "public, max-age=0, s-maxage=5, stale-while-revalidate=15",
+      "cache-control": "no-store",
       "content-type": "application/json; charset=utf-8",
       "x-content-type-options": "nosniff",
     },

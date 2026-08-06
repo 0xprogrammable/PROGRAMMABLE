@@ -19,7 +19,24 @@ export type ExploreLaunchCategoryProvenance =
   | Readonly<{
       schemaVersion: "programmable.explore-launch-category-provenance.v1";
       category: "custom";
-      source: "website.custom-launched";
+      source: "registry.custom-launched";
+      projectId: `sha256:${string}`;
+      launchId: `sha256:${string}`;
+      sourceRecordBindingHash: `sha256:${string}`;
+      finalizedLaunchBindingHash: `sha256:${string}`;
+      registryAddress: `0x${string}`;
+      registryStartBlock: string;
+      transactionHash: `0x${string}`;
+      blockHash: `0x${string}`;
+      blockNumber: string;
+      transactionIndex: number;
+      logIndex: number;
+      configurationHash: `0x${string}`;
+    }>
+  | Readonly<{
+      schemaVersion: "programmable.explore-launch-category-provenance.v1";
+      category: "custom";
+      source: "interface-preview";
       projectId: `sha256:${string}`;
       launchId: `sha256:${string}`;
       sourceRecordBindingHash: `sha256:${string}`;

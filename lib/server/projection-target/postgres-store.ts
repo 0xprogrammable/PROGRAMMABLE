@@ -732,6 +732,40 @@ function validatedCustomLaunchFeePolicyV1(
   }) as CustomLaunchFeePolicyV1;
 }
 
+export function parseAuthenticatedCustomLaunchProjectV2(
+  value: unknown,
+): Readonly<AuthenticatedCustomLaunchProjectV2> {
+  const record = jsonRecord(value as JsonValue, "custom launch website record");
+  const projectId = digest(record.projectId, "custom project id");
+  const launchId = digest(record.launchId, "custom launch id");
+  const registryPublicationBindingHash = digest(
+    record.registryPublicationBindingHash,
+    "registry publication binding",
+  );
+  const canonicalReadback = canonicalizeJson({
+    schemaVersion: "programmable.custom-launch-projection-readback.v2",
+    projectionKind: "website.custom-launched",
+    projectionKey: `custom:${launchId}`,
+    projectId,
+    launchId,
+    sourceAuthorityHash: registryPublicationBindingHash,
+    record,
+  });
+  return parseCustomLaunchProject(Object.freeze({
+    schemaVersion: "programmable.projection-target-stored-record.v1" as const,
+    lane: "website.custom-launched" as const,
+    targetBindingHash: registryPublicationBindingHash,
+    audience: "registry-custom-public-materializer",
+    projectionKey: `custom:${launchId}`,
+    idempotencyKey: registryPublicationBindingHash,
+    requestDigest: registryPublicationBindingHash,
+    canonicalWrite: canonicalReadback,
+    canonicalAcknowledgement: canonicalReadback,
+    canonicalReadback,
+    recordBindingHash: registryPublicationBindingHash,
+  }));
+}
+
 function parseCustomLaunchProject(
   stored: ProjectionTargetStoredRecordV1,
 ): Readonly<AuthenticatedCustomLaunchProjectV2> {

@@ -33,12 +33,14 @@ before starting the runtime, in this exact order:
 
 1. `ops/website-projection-target/migrations/0001_projection_records_v1.sql`
 2. `ops/website-projection-target/migrations/0002_custom_launch_wallet_profile_v2.sql`
+3. `ops/website-projection-target/migrations/0003_registry_custom_public_read_v1.sql`
 
 `0001` creates the private schema, immutable projection and credential-use
 tables, policies and initial indexes. `0002` then upgrades finalized Custom
 Launch records to bind the launching-wallet identity and the complete
 post-launch-authority inventory hash, and replaces the GitHub-derived Custom
-profile index with the wallet-derived profile index. Together they provide:
+profile index with the wallet-derived profile index. `0003` adds the separate
+Registry-current-state materialization. Together they provide:
 
 - a primary key on `(lane, projection_key)`;
 - a global unique index on `idempotency_key`;
@@ -46,6 +48,10 @@ profile index with the wallet-derived profile index. Together they provide:
 - a derived GitHub-principal index only for recognized entitlement projections;
 - a wallet-derived profile index only for finalized Custom Launch projections;
 - a durable request-bound workload-credential replay ledger;
+- a separate current-state materialization for authenticated
+  `registry.custom-launched` observations, including exact Registry/event,
+  finality, provider/model, GitHub revision, approval/launch-plan, runtime, fee,
+  and post-launch-role bindings;
 - lane-specific constraints requiring complete entitlement metadata and forbidding
   that metadata on custom-launch records;
 - enabled and forced RLS on both tables;
@@ -59,7 +65,7 @@ bytes returns `409`.
 The migrations deliberately have no `IF NOT EXISTS` escape hatch: applying
 `0001` over an unexpected pre-existing schema, or applying `0002` without the
 exact `0001` state, fails instead of silently trusting weaker objects. Grant
-only the following runtime privileges after both migrations:
+only the following runtime privileges after all migrations:
 
 ```sql
 GRANT USAGE ON SCHEMA programmable_website_projection_v1
@@ -68,10 +74,23 @@ GRANT SELECT, INSERT
   ON programmable_website_projection_v1.projection_records,
      programmable_website_projection_v1.credential_uses
   TO programmable_website_projection_runtime;
+GRANT SELECT, INSERT
+  ON programmable_website_projection_v1.registry_custom_launch_records
+  TO programmable_website_projection_runtime;
+GRANT UPDATE (
+  lifecycle_generation, lifecycle_state, lifecycle_binding_hash,
+  observed_at, canonical_materialization, canonical_public_record,
+  record_binding_hash, launch_security_binding_hash,
+  launching_wallet_namespace, launching_wallet_value, updated_at
+) ON programmable_website_projection_v1.registry_custom_launch_records
+  TO programmable_website_projection_runtime;
 ```
 
-Do not grant `UPDATE`, `DELETE`, `TRUNCATE`, schema creation, role management, or
-access to approval-service tables. The runtime attests the exact current role,
+Do not grant `UPDATE` on the immutable projection or credential tables. Do not
+grant `DELETE`, `TRUNCATE`, schema creation, role management, or access to
+approval-service tables. The narrowly scoped column-level `UPDATE` grant on the Registry
+materialization is required to hide a record immediately after a correction,
+revocation, or reorg. The runtime attests the exact current role,
 grants, RLS/force-RLS state, policies, provider-role exclusion, table ownership,
 and live `pg_stat_ssl` connection before serving requests.
 
@@ -226,10 +245,11 @@ service error code/message fields into the Website error contract. The service
 request id and any additional envelope field never cross the public Website
 boundary.
 
-The Website also owns two read views that do not grant execution authority:
+The Website also retains two compatibility read views that do not grant
+execution authority:
 
-- `GET /api/custom-launch/v2/profile` returns only finalized projects owned by
-  the current authenticated GitHub principal;
+- `GET /api/custom-launch/v2/profile` returns only finalized projects bound to
+  the exact queried launching-wallet identity;
 - `GET /api/custom-launch/v2/projects/{projectId}` returns one exact finalized
   project or a non-enumerating not-found response.
 
@@ -238,6 +258,42 @@ and market sets. A project advertises a token only when its exact asset set has
 one evidence-bound primary token. A Uniswap v4 market appears only with its full
 verified PoolKey facts and market-set hash. An empty market set means no
 registered market and must never be rendered or exported as an inferred pair.
+
+The public v2 project, profile, Explorer, and discovery reads use only the
+separate Registry materialization. An immutable `website.custom-launched` row
+alone is never public evidence. A Registry observation is readable only when
+its current monotonic lifecycle state is exactly `finalized`, its canonical
+record is present, its launch-security binding is unchanged, and its explicit
+head/block confirmation arithmetic satisfies the bound finality policy. The
+states `pending`, `corrected`, `revoked`, and `reorged` are all non-public;
+stale generations cannot resurrect a prior finalized record, and revocation is
+terminal for that launch identity.
+
+The materializer accepts only an opaque
+`AuthenticatedRegistryCustomLaunchProjectionV1`. That object is minted after a
+trusted Registry transport verifier authenticates the exact canonical
+`registry.custom-launched` materialization and its lifecycle binding. Raw
+Website-v2 records and unverified Registry-shaped JSON cannot call the database
+materializer. After a correction or reorg, the record remains hidden until a
+newer authenticated generation is finalized; an older finalization is stale.
+Refinalization may update canonical block/finality evidence, but a change to the
+launch's security binding (repository revision, approval/launchplan, runtime,
+fee, roles, configuration, or launch transaction) fails closed.
+
+Registry public-read enablement depends only on the existing
+`PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED=true` gate and successful database
+readiness attestation. Privy, approval-service origin, and permit-signer
+configuration remain mandatory for launch-write/authenticated execution
+surfaces, but are not dependencies of finalized public Registry reads.
+
+The proof-bearing public endpoints are:
+
+- `GET /api/custom-launch/registry/v1/projects`;
+- `GET /api/custom-launch/registry/v1/projects/{projectId}`.
+
+Both are `no-store`. They expose the exact verified Registry materialization;
+the existing v2 project/profile shapes remain unchanged for client
+compatibility but are backed by the same Registry-only store.
 
 No Website status or projection is a launch permit. The approval service remains
 the sole authority for route selection, preparation, wallet binding, permit

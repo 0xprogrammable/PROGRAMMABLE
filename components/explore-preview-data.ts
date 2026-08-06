@@ -427,7 +427,7 @@ export const EXPLORE_PREVIEW_CUSTOM_PROJECT: CustomProjectExploreEntry = {
   launchCategoryProvenance: {
     schemaVersion: "programmable.explore-launch-category-provenance.v1",
     category: "custom",
-    source: "website.custom-launched",
+    source: "interface-preview",
     projectId: CUSTOM_PREVIEW_PROJECT_HASH,
     launchId: CUSTOM_PREVIEW_LAUNCH_HASH,
     sourceRecordBindingHash: `sha256:${"5".repeat(64)}`,

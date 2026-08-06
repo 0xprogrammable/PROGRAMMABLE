@@ -31,7 +31,7 @@ const classicProvenance = {
 const customProvenance = {
   schemaVersion: "programmable.explore-launch-category-provenance.v1",
   category: "custom",
-  source: "website.custom-launched",
+  source: "interface-preview",
   projectId: `sha256:${"1".repeat(64)}`,
   launchId: `sha256:${"2".repeat(64)}`,
   sourceRecordBindingHash: `sha256:${"3".repeat(64)}`,

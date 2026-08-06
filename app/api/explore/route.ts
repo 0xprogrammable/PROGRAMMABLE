@@ -327,12 +327,18 @@ export async function GET(request: NextRequest) {
       {
         headers: {
           "Cache-Control":
-            page.status === "ready"
+            customProjects.length > 0
+              ? "no-store"
+              : page.status === "ready"
               ? "public, max-age=0, s-maxage=2, stale-while-revalidate=5"
               : "public, max-age=0, s-maxage=30",
           "X-Programmable-Price-Source": "alchemy",
-          "X-Programmable-Launch-Source": "alchemy",
-          "X-Programmable-Read-Source": "blob",
+          "X-Programmable-Launch-Source": customProjects.length > 0
+            ? "alchemy+registry.custom-launched"
+            : "alchemy",
+          "X-Programmable-Read-Source": customProjects.length > 0
+            ? "blob+postgres"
+            : "blob",
           "X-Programmable-Rpc-Provider": "alchemy",
         },
       },

@@ -106,12 +106,14 @@ export async function GET(request: NextRequest) {
       {
         headers: {
           "Cache-Control":
-            status === "ready"
+            customProject
+              ? "no-store"
+              : status === "ready"
               ? "public, max-age=0, s-maxage=2, stale-while-revalidate=5"
               : "public, max-age=0, s-maxage=30",
           "X-Programmable-Price-Source": "alchemy",
           "X-Programmable-Launch-Source": customProject
-            ? "website.custom-launched"
+            ? "registry.custom-launched"
             : "alchemy",
           "X-Programmable-Read-Source": customProject ? "postgres" : "blob",
           "X-Programmable-Rpc-Provider": "alchemy",

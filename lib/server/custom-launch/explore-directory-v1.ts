@@ -9,14 +9,18 @@ import type {
   TokenLink,
 } from "../../tokens";
 import { getProductionWebsiteProjectionTargetV1 } from "../projection-target/website-target";
-import { isCustomLaunchPublicEnabled } from "./public-readiness";
+import { isCustomLaunchRegistryPublicReadEnabled } from "./public-readiness";
+import type { VerifiedRegistryCustomLaunchPublicV1 } from
+  "./registry-public-store-v1";
 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/u;
 const HASH32 = /^0x[0-9a-fA-F]{64}$/u;
 
 export function customLaunchProjectToExploreEntryV1(
-  project: Readonly<AuthenticatedCustomLaunchProjectV2>,
+  verified: Readonly<VerifiedRegistryCustomLaunchPublicV1>,
 ): CustomProjectExploreEntry {
+  const project: Readonly<AuthenticatedCustomLaunchProjectV2> =
+    verified.record.project;
   const primaryToken = project.discoverableAssets.find(
     (asset) =>
       asset.role === "primary-token"
@@ -80,11 +84,19 @@ export function customLaunchProjectToExploreEntryV1(
     launchCategoryProvenance: Object.freeze({
       schemaVersion: "programmable.explore-launch-category-provenance.v1" as const,
       category: "custom" as const,
-      source: "website.custom-launched" as const,
+      source: "registry.custom-launched" as const,
       projectId: project.projectId,
       launchId: project.launchId,
       sourceRecordBindingHash: project.sourceRecordBindingHash,
       finalizedLaunchBindingHash: project.finalizedLaunchBindingHash,
+      registryAddress: verified.record.registry.registryAddress,
+      registryStartBlock: verified.record.registry.startBlock,
+      transactionHash: verified.record.event.transactionHash,
+      blockHash: verified.record.event.blockHash,
+      blockNumber: verified.record.event.blockNumber,
+      transactionIndex: verified.record.event.transactionIndex,
+      logIndex: verified.record.event.logIndex,
+      configurationHash: verified.record.configurationHash,
     }),
   });
 }
@@ -109,11 +121,12 @@ function publicExploreAsset(asset: Readonly<DiscoverableLaunchAssetV2>) {
 export async function readProductionCustomExploreDirectoryV1(
   signal: AbortSignal,
 ): Promise<readonly CustomProjectExploreEntry[]> {
-  if (!isCustomLaunchPublicEnabled()) return Object.freeze([]);
+  if (!isCustomLaunchRegistryPublicReadEnabled()) return Object.freeze([]);
   const target = getProductionWebsiteProjectionTargetV1();
   await target.assertProductionReadiness();
-  const projects = await target.store.findFinalizedCustomLaunchesPublic({ signal });
-  return Object.freeze(projects.map(customLaunchProjectToExploreEntryV1));
+  const records = await target.registryCustomPublicStore
+    .findVerifiedRegistryCustomLaunchesPublic({ signal });
+  return Object.freeze(records.map(customLaunchProjectToExploreEntryV1));
 }
 
 function primaryTokenAddress(

@@ -7,6 +7,7 @@ vi.mock("server-only", () => ({}));
 import {
   configuredLaunchPermitSignersV2,
   isCustomLaunchPublicEnabled,
+  isCustomLaunchRegistryPublicReadEnabled,
 } from "../lib/server/custom-launch/public-readiness";
 import { handleProductionCustomLaunchBridgeV2 } from "../lib/server/custom-launch/launch-bridge-v2";
 import { GET as legacyEntitlementGET } from "../app/api/custom-launch/entitlements/route";
@@ -69,6 +70,16 @@ describe("Custom launch public readiness", () => {
     expect(isCustomLaunchPublicEnabled({
       ...configured,
       PROGRAMMABLE_LAUNCH_PERMIT_SIGNERS_V2_JSON: "",
+    })).toBe(false);
+  });
+
+  it("separates finalized Registry reads from launch-write service readiness", () => {
+    expect(isCustomLaunchRegistryPublicReadEnabled({
+      PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED: "true",
+    })).toBe(true);
+    expect(isCustomLaunchRegistryPublicReadEnabled({
+      ...configured,
+      PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED: "false",
     })).toBe(false);
   });
 

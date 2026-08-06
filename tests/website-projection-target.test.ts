@@ -14,6 +14,16 @@ import { runProjectionTargetConformanceSuiteV1 } from
   "../lib/server/projection-target/conformance";
 import { createCustomLaunchProjectReadHandlersV2 } from
   "../lib/server/custom-launch/project-read-v2";
+import { createRegistryCustomLaunchPublicReadHandlersV1 } from
+  "../lib/server/custom-launch/registry-public-read-v1";
+import {
+  authenticateRegistryCustomLaunchProjectionV1,
+  createRegistryCustomLaunchProjectionAuthenticatorV1,
+  parseRegistryCustomLaunchPublicRecordV1,
+  registryCustomLaunchSecurityBindingHashV1,
+  type PostgresRegistryCustomLaunchPublicStoreV1,
+} from
+  "../lib/server/custom-launch/registry-public-store-v1";
 import {
   createAuthenticatedWebsiteEntitlementReadHandlerV1,
   createPrivyGitHubPrincipalAuthenticatorFromBoundaryV1,
@@ -23,7 +33,9 @@ import {
   canonicalSha256,
   type Sha256Digest,
 } from "../lib/server/projection-target/hashing";
-import type {
+import {
+  parseAuthenticatedCustomLaunchProjectV2,
+  type
   ProjectionTargetPostgresClientV1,
   ProjectionTargetPostgresPoolV1,
   ProjectionTargetPostgresQueryResultV1,
@@ -659,8 +671,16 @@ describe("Website projection target", () => {
       workloadTokenForWrite(launched, "final-project-read"),
     ))).status).toBe(201);
     const handlers = createCustomLaunchProjectReadHandlersV2({
-      store: target.store,
+      store: target.registryCustomPublicStore,
     });
+    expect((await handlers.project(new Request(
+      `https://website.invalid/api/custom-launch/v2/projects/${encodeURIComponent(launched.projectId)}`,
+      { headers: { accept: "application/json" } },
+    ), launched.projectId)).status).toBe(404);
+    await materializeRegistryCustom(
+      target.registryCustomPublicStore,
+      registryCustomMaterialization(launched, "finalized", "1"),
+    );
     const project = await handlers.project(new Request(
       `https://website.invalid/api/custom-launch/v2/projects/${encodeURIComponent(launched.projectId)}`,
       { headers: { accept: "application/json" } },
@@ -715,6 +735,264 @@ describe("Website projection target", () => {
     });
   });
 
+  it("publishes Custom only from the current finalized Registry materialization", async () => {
+    const pool = await pglitePool();
+    const target = targetFor(pool);
+    const launched = customLaunchWrite("registry-public-lifecycle");
+    expect((await target.handler.handle(writeRequest(
+      launched,
+      workloadTokenForWrite(launched, "registry-public-lifecycle-website"),
+    ))).status).toBe(201);
+
+    const legacyHandlers = createCustomLaunchProjectReadHandlersV2({
+      store: target.registryCustomPublicStore,
+    });
+    const projectRequest = () => new Request(
+      `https://website.invalid/api/custom-launch/v2/projects/${encodeURIComponent(
+        launched.projectId,
+      )}`,
+      { headers: { accept: "application/json" } },
+    );
+    expect((await legacyHandlers.project(
+      projectRequest(),
+      launched.projectId,
+    )).status).toBe(404);
+    expect(() => createCustomLaunchProjectReadHandlersV2({
+      store: target.store as never,
+    })).toThrow("custom launch project read dependencies are invalid");
+    await expect(authenticateRegistryCustomLaunchProjectionV1({
+      materialization: launched,
+      signal: new AbortController().signal,
+      authenticator: registryProjectionAuthenticator(async () => true),
+    })).rejects.toThrow("registry custom launch materialization");
+    await expect(authenticateRegistryCustomLaunchProjectionV1({
+      materialization: registryCustomMaterialization(launched, "pending", "1"),
+      signal: new AbortController().signal,
+      authenticator: registryProjectionAuthenticator(async () => false),
+    })).rejects.toThrow("projection authentication failed");
+
+    expect((await materializeRegistryCustom(
+      target.registryCustomPublicStore,
+      registryCustomMaterialization(launched, "pending", "1"),
+    )).kind).toBe("created");
+    expect((await legacyHandlers.project(
+      projectRequest(),
+      launched.projectId,
+    )).status).toBe(404);
+
+    expect((await materializeRegistryCustom(
+      target.registryCustomPublicStore,
+      registryCustomMaterialization(launched, "finalized", "2"),
+    )).kind).toBe("updated");
+    const visible = await legacyHandlers.project(projectRequest(), launched.projectId);
+    expect(visible.status).toBe(200);
+    await expect(visible.json()).resolves.toMatchObject({
+      schemaVersion: "programmable.custom-launch-project-view.v2",
+      project: { projectId: launched.projectId, launchId: launched.launchId },
+    });
+
+    const registryHandlers = createRegistryCustomLaunchPublicReadHandlersV1({
+      store: target.registryCustomPublicStore,
+    });
+    const feed = await registryHandlers.feed(new Request(
+      "https://website.invalid/api/custom-launch/registry/v1/projects",
+      { headers: { accept: "application/json" } },
+    ));
+    expect(feed.status).toBe(200);
+    await expect(feed.json()).resolves.toMatchObject({
+      schemaVersion: "programmable.registry-custom-launch-public-feed.v1",
+      records: [{
+        sourceLane: "registry.custom-launched",
+        lifecycle: { generation: "2", state: "finalized" },
+        record: {
+          registry: {
+            chainId: "1",
+            registryAddress: "0x1111111111111111111111111111111111111111",
+            startBlock: "100",
+          },
+          event: {
+            transactionHash: launched.record.launchTransactionId,
+            blockNumber: "112",
+            transactionIndex: 0,
+            logIndex: 7,
+          },
+          configurationHash: `0x${"4".repeat(64)}`,
+          provider: {
+            providerId: "programmable-approval-service",
+            modelId: launched.record.modelId,
+            modelVersion: "2.0.0",
+            marketPath: null,
+          },
+          github: {
+            repositoryOwner: "example-owner",
+            repositoryId: "654321",
+            commitObjectId: "a".repeat(40),
+            treeObjectId: "b".repeat(40),
+          },
+          approval: {
+            approvalId: "approval-registry-public-lifecycle",
+            launchPlanPath: "launch/plan.json",
+          },
+          project: { projectId: launched.projectId },
+        },
+      }],
+    });
+    expect(feed.headers.get("cache-control")).toBe("no-store");
+    const detail = await registryHandlers.detail(new Request(
+      `https://website.invalid/api/custom-launch/registry/v1/projects/${encodeURIComponent(
+        launched.projectId,
+      )}`,
+      { headers: { accept: "application/json" } },
+    ), launched.projectId);
+    expect(detail.status).toBe(200);
+    await expect(detail.json()).resolves.toMatchObject({
+      schemaVersion: "programmable.registry-custom-launch-public-view.v1",
+      record: {
+        sourceLane: "registry.custom-launched",
+        record: { projectId: launched.projectId, launchId: launched.launchId },
+      },
+    });
+    const profileRequest = () => new Request(
+      `https://website.invalid/api/custom-launch/v2/profile?namespace=eip155%3A1&wallet=${launched.record.launchingWallet.value}`,
+      { headers: { accept: "application/json" } },
+    );
+    const visibleProfile = await legacyHandlers.profile(profileRequest());
+    await expect(visibleProfile.json()).resolves.toMatchObject({
+      projects: [{ projectId: launched.projectId }],
+    });
+
+    expect((await materializeRegistryCustom(
+      target.registryCustomPublicStore,
+      registryCustomMaterialization(launched, "corrected", "3"),
+    )).kind).toBe("updated");
+    expect((await legacyHandlers.project(
+      projectRequest(),
+      launched.projectId,
+    )).status).toBe(404);
+    await expect((await legacyHandlers.profile(profileRequest())).json())
+      .resolves.toMatchObject({ projects: [] });
+    expect((await materializeRegistryCustom(
+      target.registryCustomPublicStore,
+      registryCustomMaterialization(launched, "finalized", "2"),
+    )).kind).toBe("stale");
+    expect((await legacyHandlers.project(
+      projectRequest(),
+      launched.projectId,
+    )).status).toBe(404);
+
+    expect((await materializeRegistryCustom(
+      target.registryCustomPublicStore,
+      registryCustomMaterialization(launched, "finalized", "4"),
+    )).kind).toBe("updated");
+    expect((await legacyHandlers.project(
+      projectRequest(),
+      launched.projectId,
+    )).status).toBe(200);
+    expect((await materializeRegistryCustom(
+      target.registryCustomPublicStore,
+      registryCustomMaterialization(launched, "reorged", "5"),
+    )).kind).toBe("updated");
+    expect((await legacyHandlers.project(
+      projectRequest(),
+      launched.projectId,
+    )).status).toBe(404);
+
+    expect((await materializeRegistryCustom(
+      target.registryCustomPublicStore,
+      registryCustomMaterialization(launched, "finalized", "6"),
+    )).kind).toBe("updated");
+    expect((await legacyHandlers.project(
+      projectRequest(),
+      launched.projectId,
+    )).status).toBe(200);
+    expect((await materializeRegistryCustom(
+      target.registryCustomPublicStore,
+      registryCustomMaterialization(launched, "revoked", "7"),
+    )).kind).toBe("updated");
+    expect((await materializeRegistryCustom(
+      target.registryCustomPublicStore,
+      registryCustomMaterialization(launched, "finalized", "8"),
+    )).kind).toBe("conflict");
+    expect((await legacyHandlers.project(
+      projectRequest(),
+      launched.projectId,
+    )).status).toBe(404);
+  });
+
+  it("rejects incomplete finality and substituted Registry fee or role facts", async () => {
+    const pool = await pglitePool();
+    const target = targetFor(pool);
+    const launched = customLaunchWrite("registry-public-negative");
+    const finalized = registryCustomMaterialization(launched, "finalized", "1");
+
+    await expect(materializeRegistryCustom(
+      target.registryCustomPublicStore,
+      { ...finalized, record: null },
+    )).rejects.toThrow("public lifecycle is invalid");
+    await expect(materializeRegistryCustom(
+      target.registryCustomPublicStore,
+      {
+        ...finalized,
+        record: {
+          ...finalized.record,
+          configurationHash: "0x1234",
+        },
+      },
+    )).rejects.toThrow("configuration hash is invalid");
+    await expect(materializeRegistryCustom(
+      target.registryCustomPublicStore,
+      {
+        ...finalized,
+        record: {
+          ...finalized.record,
+          finality: {
+            ...finalized.record!.finality,
+            requiredConfirmations: 13,
+          },
+        },
+      },
+    )).rejects.toThrow("public bindings are inconsistent");
+    await expect(materializeRegistryCustom(
+      target.registryCustomPublicStore,
+      {
+        ...finalized,
+        record: {
+          ...finalized.record,
+          fee: {
+            ...finalized.record!.fee,
+            feeObligationHash: digest("substituted-fee"),
+          },
+        },
+      },
+    )).rejects.toThrow("public bindings are inconsistent");
+    expect(await target.registryCustomPublicStore
+      .findVerifiedRegistryCustomLaunchesPublic({
+        signal: new AbortController().signal,
+      })).toEqual([]);
+
+    expect((await materializeRegistryCustom(
+      target.registryCustomPublicStore,
+      finalized,
+    )).kind).toBe("created");
+    const substitutedRecord = {
+      ...finalized.record!,
+      github: {
+        ...finalized.record!.github,
+        repositoryOwner: "different-owner",
+      },
+    } as const;
+    const substituted = {
+      ...registryCustomMaterialization(launched, "finalized", "2"),
+      record: substitutedRecord,
+      launchSecurityBindingHash:
+        registryCustomLaunchSecurityBindingHashV1(substitutedRecord),
+    } as const;
+    expect((await materializeRegistryCustom(
+      target.registryCustomPublicStore,
+      substituted,
+    )).kind).toBe("conflict");
+  });
+
   it("preserves one evidence-bound Uniswap v4 market without inventing a pair", async () => {
     const pool = await pglitePool();
     const target = targetFor(pool);
@@ -724,8 +1002,12 @@ describe("Website projection target", () => {
       workloadTokenForWrite(launched, "verified-v4-market"),
     ))).status).toBe(201);
     const handlers = createCustomLaunchProjectReadHandlersV2({
-      store: target.store,
+      store: target.registryCustomPublicStore,
     });
+    await materializeRegistryCustom(
+      target.registryCustomPublicStore,
+      registryCustomMaterialization(launched, "finalized", "1"),
+    );
     const response = await handlers.project(new Request(
       `https://website.invalid/api/custom-launch/v2/projects/${encodeURIComponent(
         launched.projectId,
@@ -1120,6 +1402,9 @@ describe("Website projection target", () => {
       { provider_roles_excluded: false },
       { expected_policies: false },
       { projections_mutate: true },
+      { registry_custom_update: false },
+      { registry_custom_forbidden_mutate: true },
+      { registry_custom_force_rls: false },
       { rolbypassrls: true },
       { schema_create: true },
     ] satisfies Array<Partial<ProjectionTargetSecurityAttestationRowV1>>) {
@@ -1137,12 +1422,16 @@ describe("Website projection target", () => {
       projection_force: boolean;
       credential_rls: boolean;
       credential_force: boolean;
+      registry_custom_rls: boolean;
+      registry_custom_force: boolean;
       providers_excluded: boolean;
     }>(`
       SELECT projections.relrowsecurity AS projection_rls,
              projections.relforcerowsecurity AS projection_force,
              credentials.relrowsecurity AS credential_rls,
              credentials.relforcerowsecurity AS credential_force,
+             registry_custom.relrowsecurity AS registry_custom_rls,
+             registry_custom.relforcerowsecurity AS registry_custom_force,
              NOT EXISTS (
                SELECT 1 FROM pg_roles AS role
                 WHERE role.rolname IN ('anon', 'authenticated', 'service_role')
@@ -1152,20 +1441,28 @@ describe("Website projection target", () => {
                     OR has_table_privilege(role.rolname,
                       'programmable_website_projection_v1.projection_records',
                       'SELECT,INSERT,UPDATE,DELETE')
+                    OR has_table_privilege(role.rolname,
+                      'programmable_website_projection_v1.registry_custom_launch_records',
+                      'SELECT,INSERT,UPDATE,DELETE')
                   )
              ) AS providers_excluded
         FROM pg_class AS projections
         JOIN pg_namespace AS schema ON schema.oid = projections.relnamespace
         JOIN pg_class AS credentials ON credentials.relnamespace = schema.oid
+        JOIN pg_class AS registry_custom
+          ON registry_custom.relnamespace = schema.oid
        WHERE schema.nspname = 'programmable_website_projection_v1'
          AND projections.relname = 'projection_records'
          AND credentials.relname = 'credential_uses'
+         AND registry_custom.relname = 'registry_custom_launch_records'
     `);
     expect(state.rows[0]).toEqual({
       projection_rls: true,
       projection_force: true,
       credential_rls: true,
       credential_force: true,
+      registry_custom_rls: true,
+      registry_custom_force: true,
       providers_excluded: true,
     });
     await expect(pool.query(`
@@ -1177,6 +1474,13 @@ describe("Website projection target", () => {
         ('website.entitlement', '${digest("sql-target")}', 'audience',
          '${digest("sql-key")}', '${digest("sql-idempotency")}',
          '${digest("sql-request")}', '{}', '{}', '{}', '${digest("sql-record")}')
+    `)).rejects.toThrow();
+    await expect(pool.query(`
+      UPDATE programmable_website_projection_v1.registry_custom_launch_records
+         SET project_id = project_id
+    `)).rejects.toThrow();
+    await expect(pool.query(`
+      DELETE FROM programmable_website_projection_v1.registry_custom_launch_records
     `)).rejects.toThrow();
   });
 });
@@ -1213,14 +1517,29 @@ async function pglitePool(): Promise<ProjectionTargetPostgresPoolV1> {
     "../ops/website-projection-target/migrations/0002_custom_launch_wallet_profile_v2.sql",
     import.meta.url,
   ), "utf8");
+  const migrationV3 = await readFile(new URL(
+    "../ops/website-projection-target/migrations/0003_registry_custom_public_read_v1.sql",
+    import.meta.url,
+  ), "utf8");
   await database.exec(migrationV1);
   await database.exec(migrationV2);
+  await database.exec(migrationV3);
   await database.exec(`
     GRANT USAGE ON SCHEMA programmable_website_projection_v1
       TO programmable_website_projection_runtime;
     GRANT SELECT, INSERT
       ON programmable_website_projection_v1.projection_records,
          programmable_website_projection_v1.credential_uses
+      TO programmable_website_projection_runtime;
+    GRANT SELECT, INSERT
+      ON programmable_website_projection_v1.registry_custom_launch_records
+      TO programmable_website_projection_runtime;
+    GRANT UPDATE (
+      lifecycle_generation, lifecycle_state, lifecycle_binding_hash,
+      observed_at, canonical_materialization, canonical_public_record,
+      record_binding_hash, launch_security_binding_hash,
+      launching_wallet_namespace, launching_wallet_value, updated_at
+    ) ON programmable_website_projection_v1.registry_custom_launch_records
       TO programmable_website_projection_runtime;
     SET ROLE programmable_website_projection_runtime;
   `);
@@ -1540,10 +1859,16 @@ function securityAttestationFixture(): ProjectionTargetSecurityAttestationRowV1 
     credentials_select: true,
     credentials_insert: true,
     credentials_mutate: false,
+    registry_custom_select: true,
+    registry_custom_insert: true,
+    registry_custom_update: true,
+    registry_custom_forbidden_mutate: false,
     projections_rls: true,
     projections_force_rls: true,
     credentials_rls: true,
     credentials_force_rls: true,
+    registry_custom_rls: true,
+    registry_custom_force_rls: true,
     expected_policies: true,
     provider_roles_excluded: true,
     ssl: true,
@@ -1854,6 +2179,128 @@ function customLaunchWrite(label: string) {
       "programmable.custom-launch-projection-write.v2",
       withoutRequestDigest,
     ),
+  });
+}
+
+function registryCustomMaterialization(
+  launched: Readonly<{
+    projectId: Sha256Digest;
+    launchId: Sha256Digest;
+    record: unknown;
+  }>,
+  state: "pending" | "finalized" | "corrected" | "revoked" | "reorged",
+  generation: string,
+) {
+  const project = parseAuthenticatedCustomLaunchProjectV2(launched.record);
+  const publicRecord = parseRegistryCustomLaunchPublicRecordV1({
+    schemaVersion: "programmable.registry-custom-launch-public-record.v1",
+    projectId: launched.projectId,
+    launchId: launched.launchId,
+    registry: {
+      chainId: project.chainId,
+      registryAddress: "0x1111111111111111111111111111111111111111",
+      startBlock: "100",
+    },
+    event: {
+      transactionHash: project.launchTransactionId,
+      blockHash: `0x${"5".repeat(64)}`,
+      blockNumber: "112",
+      transactionIndex: 0,
+      logIndex: 7,
+    },
+    finality: {
+      observedHeadBlockNumber: "123",
+      observedHeadBlockHash: `0x${"6".repeat(64)}`,
+      requiredConfirmations: 12,
+      policyBindingHash: digest("registry-finality-policy"),
+      evidenceBindingHash: digest("registry-finality-evidence"),
+    },
+    configurationHash: `0x${"4".repeat(64)}`,
+    provider: {
+      providerId: "programmable-approval-service",
+      modelId: project.modelId,
+      modelVersion: "2.0.0",
+      marketPath: project.discoverableMarkets.length === 0
+        ? null
+        : "markets/primary.json",
+    },
+    github: {
+      repositoryOwner: "example-owner",
+      repositoryId: "654321",
+      commitObjectId: "a".repeat(40),
+      treeObjectId: "b".repeat(40),
+    },
+    approval: {
+      approvalId: "approval-registry-public-lifecycle",
+      approvalBindingHash: digest("registry-approval"),
+      launchPlanPath: "launch/plan.json",
+      launchPlanBindingHash: digest("registry-launch-plan"),
+    },
+    runtime: {
+      launchRouteId: project.launchRouteId,
+      executionMode: project.executionMode,
+      registryAdapterBindingHash: project.registryAdapterBindingHash,
+      projectionRuntimeBindingHash: project.projectionRuntimeBindingHash,
+      registryTargetBindingHash: project.registryTargetBindingHash,
+    },
+    fee: {
+      feeAssessmentHash: project.feeAssessmentHash,
+      feeObligationHash: project.feeObligationHash,
+      feeAssessmentObligationBindingHash:
+        project.feeAssessmentObligationBindingHash,
+      obligation: project.feeObligation,
+    },
+    roles: {
+      launchingWallet: project.launchingWallet,
+      postLaunchAuthorityInventoryHash:
+        project.postLaunchAuthorityInventoryHash,
+      postLaunchAuthorityInventory: project.postLaunchAuthorityInventory,
+    },
+    project,
+  });
+  const record = state === "finalized" ? publicRecord : null;
+  return Object.freeze({
+    schemaVersion: "programmable.registry-custom-launch-materialization.v1",
+    sourceLane: "registry.custom-launched",
+    generation,
+    observedAt: `2026-08-05T11:${String(Number(generation) + 31).padStart(2, "0")}:00.000Z`,
+    projectId: launched.projectId,
+    launchId: launched.launchId,
+    state,
+    lifecycleBindingHash: digest(`registry-lifecycle-${generation}-${state}`),
+    launchSecurityBindingHash:
+      registryCustomLaunchSecurityBindingHashV1(publicRecord),
+    record,
+  });
+}
+
+async function materializeRegistryCustom(
+  store: PostgresRegistryCustomLaunchPublicStoreV1,
+  materialization: unknown,
+) {
+  const signal = new AbortController().signal;
+  const projection = await authenticateRegistryCustomLaunchProjectionV1({
+    materialization,
+    signal,
+    authenticator: registryProjectionAuthenticator(async (evidence) =>
+      evidence.sourceLane === "registry.custom-launched"
+      && evidence.lifecycleBindingHash.startsWith("sha256:")
+      && evidence.canonicalMaterialization.includes(
+        '"sourceLane":"registry.custom-launched"',
+      ),
+    ),
+  });
+  return store.materializeAuthenticated({ projection, signal });
+}
+
+function registryProjectionAuthenticator(
+  verifyCanonicalMaterialization: Parameters<
+    typeof createRegistryCustomLaunchProjectionAuthenticatorV1
+  >[0]["verifyCanonicalMaterialization"],
+) {
+  return createRegistryCustomLaunchProjectionAuthenticatorV1({
+    verifierBindingHash: digest("registry-projection-authenticator"),
+    verifyCanonicalMaterialization,
   });
 }
 
