@@ -6,12 +6,14 @@ import {
   LaunchAuthorityRefreshFailedErrorV1,
   LaunchAuthorityRefreshSingleFlightV1,
   LaunchAuthorityRefreshTimeoutErrorV1,
+  LAUNCH_AUTHORITY_REFRESH_IDEMPOTENCY_KEY_DOMAIN_V1,
   launchAuthorityNeedsRefreshV1,
   launchAuthorityObservationMatchesSetupV1,
   launchAuthorityRefreshIdempotencyKeyV1,
   launchAuthorityRefreshRequiredV1,
   pollPrincipalLaunchAuthorityRefreshV1,
 } from "../lib/custom-launch/launch-authority-refresh-v1";
+import { canonicalBrowserSha256V2 } from "../lib/custom-launch/browser-authority-v2";
 import { CustomLaunchWebsiteRequestErrorV2 } from "../lib/custom-launch/client-v2";
 import type {
   LaunchDescriptorV2,
@@ -87,7 +89,58 @@ describe("principal launch authority refresh", () => {
     expect(retry).not.toBe(first);
     expect(ttlGeneration).toBe(sameTtlGeneration);
     expect(first.length).toBeGreaterThanOrEqual(16);
-    expect(first.length).toBeLessThanOrEqual(512);
+    expect(first.length).toBeLessThanOrEqual(128);
+    expect(ttlGeneration.length).toBeLessThanOrEqual(128);
+    expect(first).toBe(
+      `launch-authority-refresh:v1:${canonicalBrowserSha256V2(
+        LAUNCH_AUTHORITY_REFRESH_IDEMPOTENCY_KEY_DOMAIN_V1,
+        {
+          applicationHandle: APPLICATION_HANDLE,
+          attempt: 0,
+          generation: "initial:2026-08-05T12:00:00.000Z",
+          launchEntitlementBindingHash: digest("1"),
+        },
+      ).slice("sha256:".length)}`,
+    );
+    expect(first).not.toContain(APPLICATION_HANDLE);
+    expect(first).not.toContain(digest("1"));
+  });
+
+  it("domain-separates every refresh authority generation input", () => {
+    const baseline = launchAuthorityRefreshIdempotencyKeyV1({ application: application() });
+    const inputs = [
+      launchAuthorityRefreshIdempotencyKeyV1({
+        application: application({
+          applicationHandle: `github-${"b".repeat(64)}`,
+        }),
+      }),
+      launchAuthorityRefreshIdempotencyKeyV1({
+        application: application({ launchEntitlementBindingHash: digest("2") }),
+      }),
+      launchAuthorityRefreshIdempotencyKeyV1({
+        application: application({ updatedAt: "2026-08-05T12:00:00.001Z" }),
+      }),
+      launchAuthorityRefreshIdempotencyKeyV1({
+        application: application(),
+        currentValidUntil: "2026-08-05T12:10:00.000Z",
+      }),
+      launchAuthorityRefreshIdempotencyKeyV1({
+        application: application(),
+        attempt: 1,
+      }),
+    ];
+    expect(new Set([baseline, ...inputs]).size).toBe(inputs.length + 1);
+    expect(inputs.every((key) => key.length <= 128)).toBe(true);
+    const samePayloadDifferentDomain = canonicalBrowserSha256V2(
+      "programmable.launch-authority-refresh-idempotency-key-test.v1",
+      {
+        applicationHandle: APPLICATION_HANDLE,
+        attempt: 0,
+        generation: "initial:2026-08-05T12:00:00.000Z",
+        launchEntitlementBindingHash: digest("1"),
+      },
+    );
+    expect(baseline.endsWith(samePayloadDifferentDomain.slice("sha256:".length))).toBe(false);
   });
 
   it("polls the same immutable request until its exact bound observation is current", async () => {

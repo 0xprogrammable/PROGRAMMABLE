@@ -23,6 +23,12 @@
       "productionContentManifestSha256": null,
       "reviewAuthorityMode": "manual_review"
     },
+    "crossRepositoryReleaseBinding": {
+      "repository": "0xprogrammable/programmable-open-hook-v2-internal",
+      "attestationCommitSha": null,
+      "documentPath": "services/autonomous-approval-v1/release/cross-repository-release-binding-v1.json",
+      "documentSha256": null
+    },
     "releaseSubjectSha256": null
   },
   "commandCenter": {
@@ -46,7 +52,9 @@
       "candidateDeploymentId": null,
       "immutableDeploymentUrl": null,
       "websiteCommitSha": null,
-      "approvalServicePackageArtifactHash": null
+      "approvalServicePackageArtifactHash": null,
+      "crossRepositoryAttestationCommitSha": null,
+      "crossRepositoryBindingDocumentSha256": null
     },
     "liveDeclaration": {
       "authority": "command_center",
@@ -59,7 +67,9 @@
       "candidateDeploymentId": null,
       "immutableDeploymentUrl": null,
       "websiteCommitSha": null,
-      "approvalServicePackageArtifactHash": null
+      "approvalServicePackageArtifactHash": null,
+      "crossRepositoryAttestationCommitSha": null,
+      "crossRepositoryBindingDocumentSha256": null
     }
   },
   "validation": {
@@ -120,6 +130,8 @@
       "immutableDeploymentUrl": null,
       "websiteCommitSha": null,
       "approvalServicePackageArtifactHash": null,
+      "crossRepositoryAttestationCommitSha": null,
+      "crossRepositoryBindingDocumentSha256": null,
       "verified": null,
       "verificationEvidenceSha256": null,
       "verifiedAt": null
@@ -149,6 +161,8 @@
       "candidateDeploymentId": null,
       "immutableDeploymentUrl": null,
       "approvalServicePackageArtifactHash": null,
+      "crossRepositoryAttestationCommitSha": null,
+      "crossRepositoryBindingDocumentSha256": null,
       "candidateVerified": null,
       "verificationEvidenceSha256": null
     }

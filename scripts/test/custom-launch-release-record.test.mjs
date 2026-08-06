@@ -21,6 +21,7 @@ const commits = {
   website: "1".repeat(40),
   base: "2".repeat(40),
   other: "3".repeat(40),
+  backendAttestation: "4".repeat(40),
 };
 const hashes = Object.freeze({
   a: `sha256:${"a".repeat(64)}`,
@@ -65,6 +66,9 @@ async function completeRecord(level = "live") {
   record.subject.approvalService.packageArtifactHash = hashes.b;
   record.subject.approvalService.detachedPackedArtifactFileSha256 = hashes.c;
   record.subject.approvalService.productionContentManifestSha256 = hashes.d;
+  record.subject.crossRepositoryReleaseBinding.attestationCommitSha =
+    commits.backendAttestation;
+  record.subject.crossRepositoryReleaseBinding.documentSha256 = hashes.e;
   const subjectHash = computeReleaseSubjectSha256(record);
   record.subject.releaseSubjectSha256 = subjectHash;
   record.commandCenter.freezeClearance = decision("cleared", subjectHash, "freeze");
@@ -127,6 +131,8 @@ async function completeRecord(level = "live") {
     immutableDeploymentUrl: "https://launcher-v4-candidate.vercel.app",
     websiteCommitSha: commits.website,
     approvalServicePackageArtifactHash: hashes.b,
+    crossRepositoryAttestationCommitSha: commits.backendAttestation,
+    crossRepositoryBindingDocumentSha256: hashes.e,
     verified: true,
     verificationEvidenceSha256: hashes.zero,
     verifiedAt: "2026-08-06T13:20:00Z",
@@ -147,6 +153,8 @@ async function completeRecord(level = "live") {
     candidateDeploymentId: "dpl_candidate",
     immutableDeploymentUrl: "https://launcher-v4-candidate.vercel.app",
     approvalServicePackageArtifactHash: hashes.b,
+    crossRepositoryAttestationCommitSha: commits.backendAttestation,
+    crossRepositoryBindingDocumentSha256: hashes.e,
     candidateVerified: true,
     verificationEvidenceSha256: hashes.zero,
   };
@@ -159,6 +167,8 @@ async function completeRecord(level = "live") {
     immutableDeploymentUrl: "https://launcher-v4-candidate.vercel.app",
     websiteCommitSha: commits.website,
     approvalServicePackageArtifactHash: hashes.b,
+    crossRepositoryAttestationCommitSha: commits.backendAttestation,
+    crossRepositoryBindingDocumentSha256: hashes.e,
   };
   record.promotionGate.status = "promotion_authorized";
   record.recordStatus = "promotion_approved";
@@ -184,6 +194,8 @@ async function completeRecord(level = "live") {
     immutableDeploymentUrl: "https://launcher-v4-candidate.vercel.app",
     websiteCommitSha: commits.website,
     approvalServicePackageArtifactHash: hashes.b,
+    crossRepositoryAttestationCommitSha: commits.backendAttestation,
+    crossRepositoryBindingDocumentSha256: hashes.e,
   };
   record.recordStatus = "live";
   return record;
@@ -227,6 +239,8 @@ test("staging expectations bind the exact external workflow observations", async
   const expected = {
     websiteCommitSha: commits.website,
     packageArtifactHash: hashes.b,
+    crossRepositoryAttestationCommitSha: commits.backendAttestation,
+    crossRepositoryBindingDocumentSha256: hashes.e,
     rollbackDeploymentId: "dpl_previous",
     rollbackDeploymentUrl: "https://launcher-v4-previous.vercel.app",
     rollbackWebsiteCommitSha: commits.base,
@@ -255,6 +269,53 @@ test("candidate cannot substitute the approval-service package", async () => {
   const result = verifyReleaseRecord(record, { require: "candidate" });
   assert.equal(result.ok, false);
   assert.match(result.errors.join("\n"), /approvalServicePackageArtifactHash/);
+});
+
+test("clearance is bound to the exact five-component backend release attestation", async () => {
+  const record = await completeRecord("clearance");
+  record.subject.crossRepositoryReleaseBinding.attestationCommitSha = commits.other;
+  const result = verifyReleaseRecord(record, { require: "clearance" });
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join("\n"), /subject\.releaseSubjectSha256/);
+});
+
+test("candidate and workflow cannot substitute the cross-repository binding", async () => {
+  const candidate = await completeRecord("candidate");
+  candidate.deployment.candidate.crossRepositoryBindingDocumentSha256 = hashes.f;
+  let result = verifyReleaseRecord(candidate, { require: "candidate" });
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join("\n"), /deployment\.candidate\.crossRepositoryBindingDocumentSha256/);
+
+  const workflow = await completeRecord("candidate");
+  workflow.promotionGate.workflow.crossRepositoryAttestationCommitSha = commits.other;
+  result = verifyReleaseRecord(workflow, { require: "candidate" });
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join("\n"), /promotionGate\.workflow\.crossRepositoryAttestationCommitSha/);
+});
+
+test("promotion approval must repeat the exact cross-repository binding", async () => {
+  const record = await completeRecord("promotion");
+  record.commandCenter.promotionApproval.crossRepositoryAttestationCommitSha =
+    commits.other;
+  const result = verifyReleaseRecord(record, { require: "promotion" });
+  assert.equal(result.ok, false);
+  assert.match(
+    result.errors.join("\n"),
+    /commandCenter\.promotionApproval\.crossRepositoryAttestationCommitSha/,
+  );
+});
+
+test("staging expectations reject a substituted cross-repository attestation", async () => {
+  const record = await completeRecord("staging");
+  const result = verifyReleaseRecord(record, {
+    require: "staging",
+    expected: {
+      crossRepositoryAttestationCommitSha: commits.other,
+      crossRepositoryBindingDocumentSha256: hashes.f,
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join("\n"), /subject\.crossRepositoryReleaseBinding/);
 });
 
 test("tampering with a bound subject invalidates Command Center clearance", async () => {

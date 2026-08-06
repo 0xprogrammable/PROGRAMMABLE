@@ -108,6 +108,22 @@ function workflowFailures(source) {
     "EXPECTED_PACKAGE_ARTIFACT_HASH: ${{ secrets.PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH }}",
   );
   requireText(
+    "record-cross-repository-attestation-binding",
+    '--expect-cross-repository-attestation-commit "$EXPECTED_CROSS_REPOSITORY_ATTESTATION_COMMIT_SHA"',
+  );
+  requireText(
+    "record-cross-repository-document-binding",
+    '--expect-cross-repository-binding-document-sha256 "$EXPECTED_CROSS_REPOSITORY_BINDING_DOCUMENT_SHA256"',
+  );
+  requireText(
+    "record-protected-cross-repository-attestation",
+    "EXPECTED_CROSS_REPOSITORY_ATTESTATION_COMMIT_SHA: ${{ vars.PROGRAMMABLE_BACKEND_CROSS_REPOSITORY_ATTESTATION_COMMIT_SHA }}",
+  );
+  requireText(
+    "record-protected-cross-repository-document",
+    "EXPECTED_CROSS_REPOSITORY_BINDING_DOCUMENT_SHA256: ${{ vars.PROGRAMMABLE_BACKEND_CROSS_REPOSITORY_BINDING_DOCUMENT_SHA256 }}",
+  );
+  requireText(
     "record-rollback-id-binding",
     '--expect-rollback-deployment-id "$ROLLBACK_DEPLOYMENT_ID"',
   );
@@ -298,6 +314,14 @@ test("workflow contract detects weakened record and stage-only gates", async () 
     source.replace("--require staging", "--require clearance"),
     source.replace(
       '--expect-package-artifact-hash "$EXPECTED_PACKAGE_ARTIFACT_HASH"',
+      "",
+    ),
+    source.replace(
+      '--expect-cross-repository-attestation-commit "$EXPECTED_CROSS_REPOSITORY_ATTESTATION_COMMIT_SHA"',
+      "",
+    ),
+    source.replace(
+      '--expect-cross-repository-binding-document-sha256 "$EXPECTED_CROSS_REPOSITORY_BINDING_DOCUMENT_SHA256"',
       "",
     ),
     source.replace(

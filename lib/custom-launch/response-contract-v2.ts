@@ -60,7 +60,7 @@ function validateApplicationStatusV2(value: unknown): void {
     "updatedAt",
   ]);
   literal(record.schemaVersion, "programmable.application-status-view.v2");
-  applicationId(record.applicationId);
+  applicationV3Id(record.applicationId);
   applicationHandle(record.applicationHandle);
   nullable(record.revisionId, identifier);
   enumValue(record.state, [
@@ -106,7 +106,6 @@ function validateApplicationSummaryV2(value: unknown): void {
   ], [
     "intakeContract", "controlRepositoryId", "grandfatheredAtReleaseBindingDigest",
   ]);
-  applicationId(record.applicationId);
   applicationHandle(record.applicationHandle);
   identifier(record.revisionId);
   positiveDecimal(record.repositoryId);
@@ -132,12 +131,15 @@ function validateApplicationSummaryV2(value: unknown): void {
   const hasCompatibilityField = record.controlRepositoryId !== undefined
     || record.grandfatheredAtReleaseBindingDigest !== undefined;
   if (record.intakeContract === undefined) {
+    legacyV2ApplicationId(record.applicationId);
     if (hasCompatibilityField) mismatch();
   } else if (record.intakeContract === "registry-v3") {
+    applicationV3Id(record.applicationId);
     if (record.controlRepositoryId !== "1320171831"
       || (record.grandfatheredAtReleaseBindingDigest !== undefined
         && record.grandfatheredAtReleaseBindingDigest !== null)) mismatch();
   } else if (record.intakeContract === "legacy-v2") {
+    legacyV2ApplicationId(record.applicationId);
     positiveDecimal(record.controlRepositoryId);
     if (record.controlRepositoryId === "1320171831") mismatch();
     if (record.grandfatheredAtReleaseBindingDigest !== undefined) {
@@ -155,7 +157,7 @@ function validateLaunchEligibilityV2(value: unknown): void {
     "state", "launchAllowed", "receiptDigest", "validFrom", "validUntil",
   ]);
   literal(record.schemaVersion, "programmable.launch-eligibility-view.v3");
-  applicationId(record.applicationId);
+  applicationV3Id(record.applicationId);
   applicationHandle(record.applicationHandle);
   uuid(record.grantId);
   digest(record.grantBindingHash);
@@ -179,7 +181,7 @@ function validateLaunchAuthorityRefreshV1(value: unknown): void {
   enumValue(record.state, ["pending", "current", "failed"]);
   digest(record.requestId);
   digest(record.requestDigest);
-  applicationId(record.applicationId);
+  applicationV3Id(record.applicationId);
   applicationHandle(record.applicationHandle);
   uuid(record.grantId);
   digest(record.grantBindingHash);
@@ -201,7 +203,7 @@ function validateLaunchDescriptorV2(value: unknown): void {
     "validUntil", "configurationSchema", "routes", "defaultChoiceId",
   ]);
   literal(record.schemaVersion, "programmable.launch-route-discovery.v3");
-  applicationId(record.applicationId);
+  applicationV3Id(record.applicationId);
   applicationHandle(record.applicationHandle);
   identifier(record.grantId);
   digest(record.grantBindingHash);
@@ -259,7 +261,7 @@ function validatePresentationResponseV1(value: unknown): void {
     "outcome", "presentationBindingHash", "record", "committedAt",
   ]);
   literal(record.schemaVersion, "programmable.principal-launch-presentation-response.v2");
-  applicationId(record.applicationId);
+  applicationV3Id(record.applicationId);
   applicationHandle(record.applicationHandle);
   identifier(record.grantId);
   digest(record.grantBindingHash);
@@ -272,7 +274,7 @@ function validatePresentationResponseV1(value: unknown): void {
     "presentationBindingHash",
   ]);
   literal(nested.schemaVersion, "programmable.launch-presentation-record.v1");
-  applicationId(nested.applicationId);
+  applicationV3Id(nested.applicationId);
   identifier(nested.grantId);
   digest(nested.grantBindingHash);
   const identity = exactRecord(nested.approvedModelIdentity, [
@@ -353,7 +355,7 @@ function validateExecutionStatusV2(value: unknown): void {
   }
   const record = exactRecord(value, keys);
   literal(record.schemaVersion, "programmable.launch-execution-status-view.v3");
-  applicationId(record.applicationId);
+  applicationV3Id(record.applicationId);
   applicationHandle(record.applicationHandle);
   identifier(record.grantId);
   digest(record.grantBindingHash);
@@ -603,7 +605,7 @@ function validateGrantReissueV1(value: unknown): void {
   identifier(record.requestId);
   digest(record.requestDigest);
   identifier(record.analysisTaskId);
-  applicationId(record.applicationId);
+  applicationV3Id(record.applicationId);
   applicationHandle(record.applicationHandle);
   identifier(record.oldGrantId);
   nullable(record.newGrantId, identifier);
@@ -1167,7 +1169,11 @@ function identifier(value: unknown): void {
   boundedString(value, 1, 512);
 }
 
-function applicationId(value: unknown): void {
+function applicationV3Id(value: unknown): void {
+  regexString(value, APPLICATION_ID_V3, 120);
+}
+
+function legacyV2ApplicationId(value: unknown): void {
   regexString(value, APPLICATION_ID_V3, 80);
 }
 

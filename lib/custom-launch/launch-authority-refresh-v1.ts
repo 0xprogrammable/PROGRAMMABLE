@@ -5,6 +5,7 @@ import type {
   PrincipalCustomLaunchApplicationSummaryV2,
   PrincipalLaunchAuthorityRefreshViewV1,
 } from "./contract-v2";
+import { canonicalBrowserSha256V2 } from "./browser-authority-v2";
 import { CustomLaunchWebsiteRequestErrorV2 } from "./client-v2";
 
 const DEFAULT_POLL_ATTEMPTS = 40;
@@ -14,6 +15,8 @@ const DEFAULT_OVERALL_TIMEOUT_MS = 60_000;
 const DEFAULT_TRANSIENT_BASE_DELAY_MS = 500;
 const DEFAULT_TRANSIENT_MAX_DELAY_MS = 4_000;
 export const LAUNCH_AUTHORITY_MINIMUM_REMAINING_MS_V1 = 30_000;
+export const LAUNCH_AUTHORITY_REFRESH_IDEMPOTENCY_KEY_DOMAIN_V1 =
+  "programmable.launch-authority-refresh-idempotency-key.v1";
 
 type RefreshClientV1 = Readonly<{
   launchAuthorityRefresh(
@@ -82,7 +85,16 @@ export function launchAuthorityRefreshIdempotencyKeyV1(input: Readonly<{
     }
     generation = `ttl:${input.currentValidUntil}`;
   }
-  return `launch-authority-refresh:${input.application.applicationHandle}:${binding}:${generation}:attempt:${attempt}`;
+  const digest = canonicalBrowserSha256V2(
+    LAUNCH_AUTHORITY_REFRESH_IDEMPOTENCY_KEY_DOMAIN_V1,
+    {
+      applicationHandle: input.application.applicationHandle,
+      attempt,
+      generation,
+      launchEntitlementBindingHash: binding,
+    },
+  );
+  return `launch-authority-refresh:v1:${digest.slice("sha256:".length)}`;
 }
 
 export function launchAuthorityNeedsRefreshV1(input: Readonly<{

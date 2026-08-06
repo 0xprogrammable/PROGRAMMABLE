@@ -59,6 +59,7 @@ import {
   launchAuthorityRefreshRequiredV1,
   pollPrincipalLaunchAuthorityRefreshV1,
 } from "@/lib/custom-launch/launch-authority-refresh-v1";
+import { readAllPrincipalApplicationsV3 } from "@/lib/custom-launch/principal-application-pagination-v3";
 import type {
   ApplicationHandleV3,
   AuthorizedLaunchPermitViewV2,
@@ -1191,48 +1192,6 @@ function namespacedIdentity(value: unknown): Readonly<{ namespace: string; value
   return { namespace: record.namespace, value: record.value };
 }
 
-async function readAllPrincipalApplicationsV2(
-  client: Pick<ReturnType<typeof createCustomLaunchWebsiteClientV2>, "applications">,
-): Promise<Readonly<{
-  githubPrincipalHash: `sha256:${string}`;
-  applications: readonly PrincipalCustomLaunchApplicationSummaryV2[];
-}>> {
-  const applications: PrincipalCustomLaunchApplicationSummaryV2[] = [];
-  const observedCursors = new Set<string>();
-  const observedApplicationHandles = new Set<string>();
-  let cursor: string | undefined;
-  let githubPrincipalHash: `sha256:${string}` | null = null;
-  do {
-    const page = await client.applications({
-      limit: 50,
-      ...(cursor === undefined ? {} : { cursor }),
-    });
-    if (
-      !/^sha256:[0-9a-f]{64}$/u.test(page.subject.githubPrincipalHash)
-      || (githubPrincipalHash !== null
-        && page.subject.githubPrincipalHash !== githubPrincipalHash)
-    ) throw new Error("GitHub submission identity changed while loading");
-    githubPrincipalHash ??= page.subject.githubPrincipalHash;
-    for (const application of page.applications) {
-      if (observedApplicationHandles.has(application.applicationHandle)) {
-        throw new Error("Submission list contains a duplicate application handle");
-      }
-      observedApplicationHandles.add(application.applicationHandle);
-    }
-    applications.push(...page.applications);
-    const next = page.nextCursor ?? undefined;
-    if (next !== undefined && observedCursors.has(next)) {
-      throw new Error("Submission list pagination is invalid");
-    }
-    if (next !== undefined) observedCursors.add(next);
-    cursor = next;
-  } while (cursor !== undefined && applications.length < 500);
-  if (githubPrincipalHash === null) {
-    throw new Error("GitHub submission identity is unavailable");
-  }
-  return { githubPrincipalHash, applications };
-}
-
 export function CustomLaunchExperience({
   onBack,
   trustedLaunchPermitSigners,
@@ -1326,7 +1285,7 @@ export function CustomLaunchExperience({
     setError("");
     try {
       const client = createCustomLaunchWebsiteClientV2({ session: await getSession() });
-      const page = await readAllPrincipalApplicationsV2(client);
+      const page = await readAllPrincipalApplicationsV3(client);
       if (requestGeneration !== applicationsRequestGenerationRef.current) return;
       setApplications(page.applications);
       setGithubPrincipalHash(page.githubPrincipalHash);
@@ -1408,7 +1367,7 @@ export function CustomLaunchExperience({
         setStatusMessage("Final source verification complete");
       }
 
-      const principalApplications = await readAllPrincipalApplicationsV2(input.client);
+      const principalApplications = await readAllPrincipalApplicationsV3(input.client);
       if (!isActive()) throw new LaunchAuthorityRefreshCancelledErrorV1();
       if (principalApplications.githubPrincipalHash !== githubPrincipalHash) {
         throw new LaunchAuthorityRefreshBindingErrorV1(
@@ -1717,7 +1676,7 @@ export function CustomLaunchExperience({
     setStatusMessage("Checking the new launch approval");
     const [principalApplications, eligibility, freshDescriptor, currentPresentation] =
       await Promise.all([
-        readAllPrincipalApplicationsV2(input.client),
+        readAllPrincipalApplicationsV3(input.client),
         input.client.launchEligibility(input.application.applicationHandle),
         input.client.launchDescriptor(input.application.applicationHandle),
         input.client.launchPresentation(input.application.applicationHandle).catch((caught) => {

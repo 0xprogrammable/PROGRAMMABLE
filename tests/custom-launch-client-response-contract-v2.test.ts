@@ -212,6 +212,53 @@ describe("custom launch client response contracts", () => {
     });
   });
 
+  it("keeps legacy ids at 80 characters while Application V3 accepts 120", async () => {
+    const registryMaximum = applicationList();
+    registryMaximum.applications[0]!.applicationId = "a".repeat(120);
+    Object.assign(registryMaximum.applications[0]!, {
+      intakeContract: "registry-v3",
+      controlRepositoryId: "1320171831",
+      grandfatheredAtReleaseBindingDigest: null,
+    });
+    await expect(clientFor(registryMaximum).applications()).resolves.toMatchObject({
+      applications: [{ applicationId: "a".repeat(120) }],
+    });
+
+    const registryTooLong = structuredClone(registryMaximum);
+    registryTooLong.applications[0]!.applicationId = "a".repeat(121);
+    await expectContractMismatch(clientFor(registryTooLong).applications());
+
+    for (const tagged of [false, true]) {
+      const legacyMaximum = applicationList();
+      legacyMaximum.applications[0]!.applicationId = "b".repeat(80);
+      if (tagged) {
+        Object.assign(legacyMaximum.applications[0]!, {
+          intakeContract: "legacy-v2",
+          controlRepositoryId: "123456",
+        });
+      }
+      await expect(clientFor(legacyMaximum).applications()).resolves.toMatchObject({
+        applications: [{ applicationId: "b".repeat(80) }],
+      });
+
+      const legacyTooLong = structuredClone(legacyMaximum);
+      legacyTooLong.applications[0]!.applicationId = "b".repeat(81);
+      await expectContractMismatch(clientFor(legacyTooLong).applications());
+    }
+
+    const downstreamV3Maximum = launchDescriptor();
+    downstreamV3Maximum.applicationId = "c".repeat(120);
+    await expect(clientFor(downstreamV3Maximum).launchDescriptor(
+      APPLICATION_HANDLE,
+    )).resolves.toMatchObject({ applicationId: "c".repeat(120) });
+
+    const downstreamV3TooLong = structuredClone(downstreamV3Maximum);
+    downstreamV3TooLong.applicationId = "c".repeat(121);
+    await expectContractMismatch(clientFor(downstreamV3TooLong).launchDescriptor(
+      APPLICATION_HANDLE,
+    ));
+  });
+
   it("rejects partial or cross-wired intake compatibility fields", async () => {
     for (const fields of [
       { controlRepositoryId: "1320171831" },

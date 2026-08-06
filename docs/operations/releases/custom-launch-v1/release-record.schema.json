@@ -38,7 +38,7 @@
     "subject": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["website", "approvalService", "releaseSubjectSha256"],
+      "required": ["website", "approvalService", "crossRepositoryReleaseBinding", "releaseSubjectSha256"],
       "properties": {
         "website": {
           "type": "object",
@@ -61,6 +61,17 @@
             "detachedPackedArtifactFileSha256": { "$ref": "#/$defs/nullableSha256" },
             "productionContentManifestSha256": { "$ref": "#/$defs/nullableSha256" },
             "reviewAuthorityMode": { "const": "manual_review" }
+          }
+        },
+        "crossRepositoryReleaseBinding": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["repository", "attestationCommitSha", "documentPath", "documentSha256"],
+          "properties": {
+            "repository": { "const": "0xprogrammable/programmable-open-hook-v2-internal" },
+            "attestationCommitSha": { "$ref": "#/$defs/nullableCommit" },
+            "documentPath": { "const": "services/autonomous-approval-v1/release/cross-repository-release-binding-v1.json" },
+            "documentSha256": { "$ref": "#/$defs/nullableSha256" }
           }
         },
         "releaseSubjectSha256": { "$ref": "#/$defs/nullableSha256" }
@@ -219,7 +230,7 @@
     "candidateDecision": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["authority", "status", "decisionId", "immutableReference", "decidedAt", "statementSha256", "releaseSubjectSha256", "candidateDeploymentId", "immutableDeploymentUrl", "websiteCommitSha", "approvalServicePackageArtifactHash"],
+      "required": ["authority", "status", "decisionId", "immutableReference", "decidedAt", "statementSha256", "releaseSubjectSha256", "candidateDeploymentId", "immutableDeploymentUrl", "websiteCommitSha", "approvalServicePackageArtifactHash", "crossRepositoryAttestationCommitSha", "crossRepositoryBindingDocumentSha256"],
       "properties": {
         "authority": { "const": "command_center" },
         "status": { "enum": ["pending", "approved", "declared_live"] },
@@ -231,7 +242,9 @@
         "candidateDeploymentId": { "$ref": "#/$defs/nullableString" },
         "immutableDeploymentUrl": { "$ref": "#/$defs/nullableString" },
         "websiteCommitSha": { "$ref": "#/$defs/nullableCommit" },
-        "approvalServicePackageArtifactHash": { "$ref": "#/$defs/nullableSha256" }
+        "approvalServicePackageArtifactHash": { "$ref": "#/$defs/nullableSha256" },
+        "crossRepositoryAttestationCommitSha": { "$ref": "#/$defs/nullableCommit" },
+        "crossRepositoryBindingDocumentSha256": { "$ref": "#/$defs/nullableSha256" }
       }
     },
     "validationGate": {
@@ -262,12 +275,14 @@
     "candidateDeployment": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["deploymentId", "immutableDeploymentUrl", "websiteCommitSha", "approvalServicePackageArtifactHash", "verified", "verificationEvidenceSha256", "verifiedAt"],
+      "required": ["deploymentId", "immutableDeploymentUrl", "websiteCommitSha", "approvalServicePackageArtifactHash", "crossRepositoryAttestationCommitSha", "crossRepositoryBindingDocumentSha256", "verified", "verificationEvidenceSha256", "verifiedAt"],
       "properties": {
         "deploymentId": { "$ref": "#/$defs/nullableString" },
         "immutableDeploymentUrl": { "$ref": "#/$defs/nullableString" },
         "websiteCommitSha": { "$ref": "#/$defs/nullableCommit" },
         "approvalServicePackageArtifactHash": { "$ref": "#/$defs/nullableSha256" },
+        "crossRepositoryAttestationCommitSha": { "$ref": "#/$defs/nullableCommit" },
+        "crossRepositoryBindingDocumentSha256": { "$ref": "#/$defs/nullableSha256" },
         "verified": { "type": ["boolean", "null"] },
         "verificationEvidenceSha256": { "$ref": "#/$defs/nullableSha256" },
         "verifiedAt": { "$ref": "#/$defs/nullableTimestamp" }
@@ -288,7 +303,7 @@
     "workflowBinding": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["repository", "workflowFile", "eventName", "ref", "environment", "runId", "runAttempt", "runUrl", "commitSha", "verifiedCommitSha", "conclusion", "candidateDeploymentId", "immutableDeploymentUrl", "approvalServicePackageArtifactHash", "candidateVerified", "verificationEvidenceSha256"],
+      "required": ["repository", "workflowFile", "eventName", "ref", "environment", "runId", "runAttempt", "runUrl", "commitSha", "verifiedCommitSha", "conclusion", "candidateDeploymentId", "immutableDeploymentUrl", "approvalServicePackageArtifactHash", "crossRepositoryAttestationCommitSha", "crossRepositoryBindingDocumentSha256", "candidateVerified", "verificationEvidenceSha256"],
       "properties": {
         "repository": { "const": "0xprogrammable/programmable" },
         "workflowFile": { "const": ".github/workflows/deploy-production.yml" },
@@ -304,6 +319,8 @@
         "candidateDeploymentId": { "$ref": "#/$defs/nullableString" },
         "immutableDeploymentUrl": { "$ref": "#/$defs/nullableString" },
         "approvalServicePackageArtifactHash": { "$ref": "#/$defs/nullableSha256" },
+        "crossRepositoryAttestationCommitSha": { "$ref": "#/$defs/nullableCommit" },
+        "crossRepositoryBindingDocumentSha256": { "$ref": "#/$defs/nullableSha256" },
         "candidateVerified": { "type": ["boolean", "null"] },
         "verificationEvidenceSha256": { "$ref": "#/$defs/nullableSha256" }
       }

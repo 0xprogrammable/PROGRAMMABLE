@@ -30,6 +30,10 @@ const RECORD_STATUSES = new Set([
 const REQUIRED_LEVELS = new Set(["template", "clearance", "staging", "candidate", "promotion", "live"]);
 const FORBIDDEN_SECRET_KEY = /^(?:access[_-]?token|identity[_-]?token|private[_-]?key|password|secret|database[_-]?url|credential)(?:[_-]?value)?$/i;
 const PLACEHOLDER_PATTERN = /(?:<[^>]+>|example\.invalid|replace[_ -]?me|todo|yyyy|nnn)/i;
+const CROSS_REPOSITORY_BINDING_REPOSITORY =
+  "0xprogrammable/programmable-open-hook-v2-internal";
+const CROSS_REPOSITORY_BINDING_DOCUMENT_PATH =
+  "services/autonomous-approval-v1/release/cross-repository-release-binding-v1.json";
 
 function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -72,6 +76,14 @@ export function releaseSubject(record) {
       productionContentManifestSha256:
         record.subject?.approvalService?.productionContentManifestSha256,
       reviewAuthorityMode: record.subject?.approvalService?.reviewAuthorityMode,
+    },
+    crossRepositoryReleaseBinding: {
+      repository: record.subject?.crossRepositoryReleaseBinding?.repository,
+      attestationCommitSha:
+        record.subject?.crossRepositoryReleaseBinding?.attestationCommitSha,
+      documentPath: record.subject?.crossRepositoryReleaseBinding?.documentPath,
+      documentSha256:
+        record.subject?.crossRepositoryReleaseBinding?.documentSha256,
     },
   };
 }
@@ -200,7 +212,16 @@ function validateChronology(errors, earlier, later, path) {
 function validateDecision(errors, decision, path, expectedStatus, subjectHash, candidate = null) {
   if (!requireObject(errors, decision, path)) return;
   const keys = ["authority", "status", "decisionId", "immutableReference", "decidedAt", "statementSha256", "releaseSubjectSha256"];
-  if (candidate !== null) keys.push("candidateDeploymentId", "immutableDeploymentUrl", "websiteCommitSha", "approvalServicePackageArtifactHash");
+  if (candidate !== null) {
+    keys.push(
+      "candidateDeploymentId",
+      "immutableDeploymentUrl",
+      "websiteCommitSha",
+      "approvalServicePackageArtifactHash",
+      "crossRepositoryAttestationCommitSha",
+      "crossRepositoryBindingDocumentSha256",
+    );
+  }
   requireExactKeys(errors, decision, path, keys);
   requireExact(errors, decision.authority, `${path}.authority`, "command_center");
   requireExact(errors, decision.status, `${path}.status`, expectedStatus);
@@ -217,6 +238,8 @@ function validateDecision(errors, decision, path, expectedStatus, subjectHash, c
     requireExact(errors, decision.immutableDeploymentUrl, `${path}.immutableDeploymentUrl`, candidate.immutableDeploymentUrl);
     requireExact(errors, decision.websiteCommitSha, `${path}.websiteCommitSha`, candidate.websiteCommitSha);
     requireExact(errors, decision.approvalServicePackageArtifactHash, `${path}.approvalServicePackageArtifactHash`, candidate.approvalServicePackageArtifactHash);
+    requireExact(errors, decision.crossRepositoryAttestationCommitSha, `${path}.crossRepositoryAttestationCommitSha`, candidate.crossRepositoryAttestationCommitSha);
+    requireExact(errors, decision.crossRepositoryBindingDocumentSha256, `${path}.crossRepositoryBindingDocumentSha256`, candidate.crossRepositoryBindingDocumentSha256);
   }
 }
 
@@ -324,9 +347,15 @@ function validateRollback(errors, rollback) {
   validateTimestamp(errors, rollback.capturedAt, "deployment.rollback.capturedAt");
 }
 
-function validateCandidate(errors, candidate, websiteCommitSha, packageArtifactHash) {
+function validateCandidate(
+  errors,
+  candidate,
+  websiteCommitSha,
+  packageArtifactHash,
+  crossRepositoryBinding,
+) {
   if (!requireObject(errors, candidate, "deployment.candidate")) return;
-  requireExactKeys(errors, candidate, "deployment.candidate", ["deploymentId", "immutableDeploymentUrl", "websiteCommitSha", "approvalServicePackageArtifactHash", "verified", "verificationEvidenceSha256", "verifiedAt"]);
+  requireExactKeys(errors, candidate, "deployment.candidate", ["deploymentId", "immutableDeploymentUrl", "websiteCommitSha", "approvalServicePackageArtifactHash", "crossRepositoryAttestationCommitSha", "crossRepositoryBindingDocumentSha256", "verified", "verificationEvidenceSha256", "verifiedAt"]);
   requireString(errors, candidate.deploymentId, "deployment.candidate.deploymentId");
   validateImmutableCandidateUrl(errors, candidate.immutableDeploymentUrl, "deployment.candidate.immutableDeploymentUrl");
   if (candidate.immutableDeploymentUrl === "https://programmable.family") {
@@ -334,6 +363,8 @@ function validateCandidate(errors, candidate, websiteCommitSha, packageArtifactH
   }
   requireExact(errors, candidate.websiteCommitSha, "deployment.candidate.websiteCommitSha", websiteCommitSha);
   requireExact(errors, candidate.approvalServicePackageArtifactHash, "deployment.candidate.approvalServicePackageArtifactHash", packageArtifactHash);
+  requireExact(errors, candidate.crossRepositoryAttestationCommitSha, "deployment.candidate.crossRepositoryAttestationCommitSha", crossRepositoryBinding?.attestationCommitSha);
+  requireExact(errors, candidate.crossRepositoryBindingDocumentSha256, "deployment.candidate.crossRepositoryBindingDocumentSha256", crossRepositoryBinding?.documentSha256);
   requireExact(errors, candidate.verified, "deployment.candidate.verified", true);
   validateSha256(errors, candidate.verificationEvidenceSha256, "deployment.candidate.verificationEvidenceSha256");
   validateTimestamp(errors, candidate.verifiedAt, "deployment.candidate.verifiedAt");
@@ -341,7 +372,7 @@ function validateCandidate(errors, candidate, websiteCommitSha, packageArtifactH
 
 function validateWorkflow(errors, workflow, websiteCommitSha, candidate) {
   if (!requireObject(errors, workflow, "promotionGate.workflow")) return;
-  requireExactKeys(errors, workflow, "promotionGate.workflow", ["repository", "workflowFile", "eventName", "ref", "environment", "runId", "runAttempt", "runUrl", "commitSha", "verifiedCommitSha", "conclusion", "candidateDeploymentId", "immutableDeploymentUrl", "approvalServicePackageArtifactHash", "candidateVerified", "verificationEvidenceSha256"]);
+  requireExactKeys(errors, workflow, "promotionGate.workflow", ["repository", "workflowFile", "eventName", "ref", "environment", "runId", "runAttempt", "runUrl", "commitSha", "verifiedCommitSha", "conclusion", "candidateDeploymentId", "immutableDeploymentUrl", "approvalServicePackageArtifactHash", "crossRepositoryAttestationCommitSha", "crossRepositoryBindingDocumentSha256", "candidateVerified", "verificationEvidenceSha256"]);
   requireExact(errors, workflow.repository, "promotionGate.workflow.repository", "0xprogrammable/programmable");
   requireExact(errors, workflow.workflowFile, "promotionGate.workflow.workflowFile", ".github/workflows/deploy-production.yml");
   requireExact(errors, workflow.eventName, "promotionGate.workflow.eventName", "workflow_dispatch");
@@ -359,6 +390,8 @@ function validateWorkflow(errors, workflow, websiteCommitSha, candidate) {
   requireExact(errors, workflow.candidateDeploymentId, "promotionGate.workflow.candidateDeploymentId", candidate.deploymentId);
   requireExact(errors, workflow.immutableDeploymentUrl, "promotionGate.workflow.immutableDeploymentUrl", candidate.immutableDeploymentUrl);
   requireExact(errors, workflow.approvalServicePackageArtifactHash, "promotionGate.workflow.approvalServicePackageArtifactHash", candidate.approvalServicePackageArtifactHash);
+  requireExact(errors, workflow.crossRepositoryAttestationCommitSha, "promotionGate.workflow.crossRepositoryAttestationCommitSha", candidate.crossRepositoryAttestationCommitSha);
+  requireExact(errors, workflow.crossRepositoryBindingDocumentSha256, "promotionGate.workflow.crossRepositoryBindingDocumentSha256", candidate.crossRepositoryBindingDocumentSha256);
   requireExact(errors, workflow.candidateVerified, "promotionGate.workflow.candidateVerified", true);
   validateSha256(errors, workflow.verificationEvidenceSha256, "promotionGate.workflow.verificationEvidenceSha256");
 }
@@ -386,8 +419,9 @@ export function verifyReleaseRecord(record, { require = "template", expected = {
 
   const website = record.subject?.website;
   const service = record.subject?.approvalService;
+  const crossRepositoryBinding = record.subject?.crossRepositoryReleaseBinding;
   if (requireObject(errors, record.subject, "subject")) {
-    requireExactKeys(errors, record.subject, "subject", ["website", "approvalService", "releaseSubjectSha256"]);
+    requireExactKeys(errors, record.subject, "subject", ["website", "approvalService", "crossRepositoryReleaseBinding", "releaseSubjectSha256"]);
     if (requireObject(errors, website, "subject.website")) {
       requireExactKeys(errors, website, "subject.website", ["repository", "commitSha", "reviewedDiffBaseSha", "reviewedDiffHeadSha", "reviewedDiffSha256"]);
       requireExact(errors, website.repository, "subject.website.repository", "0xprogrammable/programmable");
@@ -403,6 +437,13 @@ export function verifyReleaseRecord(record, { require = "template", expected = {
       validateSha256(errors, service.detachedPackedArtifactFileSha256, "subject.approvalService.detachedPackedArtifactFileSha256", { nullable: allowPlaceholders });
       validateSha256(errors, service.productionContentManifestSha256, "subject.approvalService.productionContentManifestSha256", { nullable: allowPlaceholders });
       requireExact(errors, service.reviewAuthorityMode, "subject.approvalService.reviewAuthorityMode", "manual_review");
+    }
+    if (requireObject(errors, crossRepositoryBinding, "subject.crossRepositoryReleaseBinding")) {
+      requireExactKeys(errors, crossRepositoryBinding, "subject.crossRepositoryReleaseBinding", ["repository", "attestationCommitSha", "documentPath", "documentSha256"]);
+      requireExact(errors, crossRepositoryBinding.repository, "subject.crossRepositoryReleaseBinding.repository", CROSS_REPOSITORY_BINDING_REPOSITORY);
+      validateCommit(errors, crossRepositoryBinding.attestationCommitSha, "subject.crossRepositoryReleaseBinding.attestationCommitSha", { nullable: allowPlaceholders });
+      requireExact(errors, crossRepositoryBinding.documentPath, "subject.crossRepositoryReleaseBinding.documentPath", CROSS_REPOSITORY_BINDING_DOCUMENT_PATH);
+      validateSha256(errors, crossRepositoryBinding.documentSha256, "subject.crossRepositoryReleaseBinding.documentSha256", { nullable: allowPlaceholders });
     }
   }
 
@@ -441,6 +482,8 @@ export function verifyReleaseRecord(record, { require = "template", expected = {
       ["deployment.candidate.immutableDeploymentUrl", record.deployment?.candidate?.immutableDeploymentUrl],
       ["deployment.candidate.websiteCommitSha", record.deployment?.candidate?.websiteCommitSha],
       ["deployment.candidate.approvalServicePackageArtifactHash", record.deployment?.candidate?.approvalServicePackageArtifactHash],
+      ["deployment.candidate.crossRepositoryAttestationCommitSha", record.deployment?.candidate?.crossRepositoryAttestationCommitSha],
+      ["deployment.candidate.crossRepositoryBindingDocumentSha256", record.deployment?.candidate?.crossRepositoryBindingDocumentSha256],
       ["deployment.candidate.verified", record.deployment?.candidate?.verified],
       ["deployment.candidate.verificationEvidenceSha256", record.deployment?.candidate?.verificationEvidenceSha256],
       ["deployment.candidate.verifiedAt", record.deployment?.candidate?.verifiedAt],
@@ -453,6 +496,8 @@ export function verifyReleaseRecord(record, { require = "template", expected = {
       ["promotionGate.workflow.candidateDeploymentId", record.promotionGate?.workflow?.candidateDeploymentId],
       ["promotionGate.workflow.immutableDeploymentUrl", record.promotionGate?.workflow?.immutableDeploymentUrl],
       ["promotionGate.workflow.approvalServicePackageArtifactHash", record.promotionGate?.workflow?.approvalServicePackageArtifactHash],
+      ["promotionGate.workflow.crossRepositoryAttestationCommitSha", record.promotionGate?.workflow?.crossRepositoryAttestationCommitSha],
+      ["promotionGate.workflow.crossRepositoryBindingDocumentSha256", record.promotionGate?.workflow?.crossRepositoryBindingDocumentSha256],
       ["promotionGate.workflow.candidateVerified", record.promotionGate?.workflow?.candidateVerified],
       ["promotionGate.workflow.verificationEvidenceSha256", record.promotionGate?.workflow?.verificationEvidenceSha256],
       ["commandCenter.promotionApproval.decisionId", record.commandCenter?.promotionApproval?.decisionId],
@@ -464,6 +509,8 @@ export function verifyReleaseRecord(record, { require = "template", expected = {
       ["commandCenter.promotionApproval.immutableDeploymentUrl", record.commandCenter?.promotionApproval?.immutableDeploymentUrl],
       ["commandCenter.promotionApproval.websiteCommitSha", record.commandCenter?.promotionApproval?.websiteCommitSha],
       ["commandCenter.promotionApproval.approvalServicePackageArtifactHash", record.commandCenter?.promotionApproval?.approvalServicePackageArtifactHash],
+      ["commandCenter.promotionApproval.crossRepositoryAttestationCommitSha", record.commandCenter?.promotionApproval?.crossRepositoryAttestationCommitSha],
+      ["commandCenter.promotionApproval.crossRepositoryBindingDocumentSha256", record.commandCenter?.promotionApproval?.crossRepositoryBindingDocumentSha256],
       ["commandCenter.liveDeclaration.decisionId", record.commandCenter?.liveDeclaration?.decisionId],
       ["commandCenter.liveDeclaration.immutableReference", record.commandCenter?.liveDeclaration?.immutableReference],
       ["commandCenter.liveDeclaration.decidedAt", record.commandCenter?.liveDeclaration?.decidedAt],
@@ -473,6 +520,8 @@ export function verifyReleaseRecord(record, { require = "template", expected = {
       ["commandCenter.liveDeclaration.immutableDeploymentUrl", record.commandCenter?.liveDeclaration?.immutableDeploymentUrl],
       ["commandCenter.liveDeclaration.websiteCommitSha", record.commandCenter?.liveDeclaration?.websiteCommitSha],
       ["commandCenter.liveDeclaration.approvalServicePackageArtifactHash", record.commandCenter?.liveDeclaration?.approvalServicePackageArtifactHash],
+      ["commandCenter.liveDeclaration.crossRepositoryAttestationCommitSha", record.commandCenter?.liveDeclaration?.crossRepositoryAttestationCommitSha],
+      ["commandCenter.liveDeclaration.crossRepositoryBindingDocumentSha256", record.commandCenter?.liveDeclaration?.crossRepositoryBindingDocumentSha256],
       ["deployment.promoted.deploymentId", record.deployment?.promoted?.deploymentId],
       ["deployment.promoted.immutableDeploymentUrl", record.deployment?.promoted?.immutableDeploymentUrl],
       ["deployment.promoted.productionAlias", record.deployment?.promoted?.productionAlias],
@@ -487,7 +536,13 @@ export function verifyReleaseRecord(record, { require = "template", expected = {
     requireExact(errors, record.canary?.status, "canary.status", "pending");
   }
   if (requiredIndex >= 3) {
-    validateCandidate(errors, record.deployment?.candidate, website?.commitSha, service?.packageArtifactHash);
+    validateCandidate(
+      errors,
+      record.deployment?.candidate,
+      website?.commitSha,
+      service?.packageArtifactHash,
+      crossRepositoryBinding,
+    );
     validateWorkflow(errors, record.promotionGate?.workflow, website?.commitSha, record.deployment?.candidate ?? {});
     validateChronology(errors, record.commandCenter?.freezeClearance?.decidedAt, record.deployment?.candidate?.verifiedAt, "deployment.candidate.verifiedAt");
     if (requiredIndex === 3) {
@@ -557,6 +612,12 @@ export function verifyReleaseRecord(record, { require = "template", expected = {
   if (expected.packageArtifactHash !== undefined) {
     requireExact(errors, service?.packageArtifactHash, "subject.approvalService.packageArtifactHash", expected.packageArtifactHash);
   }
+  if (expected.crossRepositoryAttestationCommitSha !== undefined) {
+    requireExact(errors, crossRepositoryBinding?.attestationCommitSha, "subject.crossRepositoryReleaseBinding.attestationCommitSha", expected.crossRepositoryAttestationCommitSha);
+  }
+  if (expected.crossRepositoryBindingDocumentSha256 !== undefined) {
+    requireExact(errors, crossRepositoryBinding?.documentSha256, "subject.crossRepositoryReleaseBinding.documentSha256", expected.crossRepositoryBindingDocumentSha256);
+  }
   if (expected.rollbackDeploymentId !== undefined) {
     requireExact(errors, record.deployment?.rollback?.deploymentId, "deployment.rollback.deploymentId", expected.rollbackDeploymentId);
   }
@@ -593,6 +654,8 @@ function parseArguments(argv) {
     else if (argument === "--github-output") githubOutput = argv[++index];
     else if (argument === "--expect-website-commit") expected.websiteCommitSha = argv[++index];
     else if (argument === "--expect-package-artifact-hash") expected.packageArtifactHash = argv[++index];
+    else if (argument === "--expect-cross-repository-attestation-commit") expected.crossRepositoryAttestationCommitSha = argv[++index];
+    else if (argument === "--expect-cross-repository-binding-document-sha256") expected.crossRepositoryBindingDocumentSha256 = argv[++index];
     else if (argument === "--expect-rollback-deployment-id") expected.rollbackDeploymentId = argv[++index];
     else if (argument === "--expect-rollback-deployment-url") expected.rollbackDeploymentUrl = argv[++index];
     else if (argument === "--expect-rollback-website-commit") expected.rollbackWebsiteCommitSha = argv[++index];
@@ -601,7 +664,7 @@ function parseArguments(argv) {
     else if (file === null) file = argument;
     else throw new Error(`unexpected argument: ${argument}`);
   }
-  if (file === null) throw new Error("usage: verify-custom-launch-release-record.mjs <record.json> [--require template|clearance|staging|candidate|promotion|live] [--json] [--github-output path] [expectation flags]");
+  if (file === null) throw new Error("usage: verify-custom-launch-release-record.mjs <record.json> [--require template|clearance|staging|candidate|promotion|live] [--json] [--github-output path] [expectation flags, including exact cross-repository attestation commit and document SHA-256]");
   return { file, require, json, githubOutput, expected };
 }
 
@@ -623,6 +686,8 @@ async function main(argv) {
       [
         `release_subject_sha256=${result.releaseSubjectSha256}`,
         `detached_record_sha256=${result.detachedRecordSha256}`,
+        `cross_repository_attestation_commit_sha=${record.subject.crossRepositoryReleaseBinding.attestationCommitSha}`,
+        `cross_repository_binding_document_sha256=${record.subject.crossRepositoryReleaseBinding.documentSha256}`,
         "",
       ].join("\n"),
       { encoding: "utf8", mode: 0o600 },

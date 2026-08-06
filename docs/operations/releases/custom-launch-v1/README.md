@@ -19,8 +19,9 @@ the retained object can be identified without mutating it.
 The record has two different hashes:
 
 - `subject.releaseSubjectSha256` binds the exact Website commit, reviewed diff,
-  approval-service package artifact and its two packed-content hashes. Command
-  Center decisions must repeat this hash.
+  approval-service package artifact, its two packed-content hashes, and the
+  exact backend cross-repository attestation commit plus binding-document
+  SHA-256. Command Center decisions must repeat this hash.
 - `detachedRecordSha256` is printed by the verifier and identifies the complete
   record, including later deployment evidence. It is never written back into
   the record.
@@ -29,26 +30,36 @@ The record has two different hashes:
 
 1. Copy `release-record.template.json` to an evidence-only location. Never edit
    the template itself for a release.
-2. Insert the final Website commit, reviewed diff hash and the values from the
-   approval service's generated `release/production-packed-artifact.json`.
-3. Run the template verifier and copy its computed release-subject hash into
+2. Finalize the five-component backend release set first. Its attestation
+   commit must have the exact backend candidate as its sole parent and change
+   only
+   `services/autonomous-approval-v1/release/cross-repository-release-binding-v1.json`.
+   Record that attestation commit and the SHA-256 of the exact binding-document
+   bytes. A branch, tag, backend package hash or deployment alias is not a
+   substitute for this binding.
+3. Insert the final Website commit, reviewed diff hash, the values from the
+   approval service's generated `release/production-packed-artifact.json`, and
+   the exact cross-repository attestation values.
+4. Run the template verifier and copy its computed release-subject hash into
    `subject.releaseSubjectSha256`.
-4. Command Center clears the freeze for that exact subject. Record the decision
+5. Command Center clears the freeze for that exact subject. Record the decision
    id, canonical `command-center://decision/<decision-id>` reference, timestamp
    and SHA-256 of the exact decision text.
    General publishing permission, a request for speed or a green test is not a
    freeze-clearance reference.
-5. Add passed validation evidence, production dependency attestations and the
+6. Add passed validation evidence, production dependency attestations and the
    exact previous deployment/configuration rollback snapshot.
-6. Commit the staging record to the dedicated record branch, then dispatch the
+7. Commit the staging record to the dedicated record branch, then dispatch the
    reviewed production workflow with its exact record commit and detached
    digest. The workflow verifies it before build or candidate staging.
-7. After staging, create the next detached record revision that binds the
-   workflow run, exact commit, immutable deployment id/URL and verification
-   evidence.
-8. Obtain a separate Command Center promotion decision that names the exact
-   candidate. Freeze clearance alone never authorizes promotion.
-9. After promotion, complete the authenticated and bounded Ethereum canaries.
+8. After staging, create the next detached record revision that binds the
+   workflow run, exact Website commit, immutable deployment id/URL,
+   approval-service package hash, cross-repository attestation commit,
+   binding-document SHA-256 and verification evidence.
+9. Obtain a separate Command Center promotion decision that names the exact
+   candidate and repeats both cross-repository binding values. Freeze clearance
+   alone never authorizes promotion.
+10. After promotion, complete the authenticated and bounded Ethereum canaries.
    A separate Command Center live declaration is required before the record can
    verify at `live` level.
 
@@ -85,7 +96,12 @@ decision. `live` additionally requires the promoted identity, canary evidence
 and live declaration.
 
 The protected workflow compares the staging record with its exact Website
-commit, reviewed backend artifact, current rollback deployment and supplied
+commit, reviewed backend artifact, protected cross-repository attestation
+commit and binding-document SHA-256, current rollback deployment and supplied
 detached-record digest before it builds or stages an enabled Custom Launch
-candidate. The workflow remains stage-only. Any later promotion needs an
-updated, candidate-bound record and its separate Command Center decision.
+candidate. The protected production environment must set
+`PROGRAMMABLE_BACKEND_CROSS_REPOSITORY_ATTESTATION_COMMIT_SHA` and
+`PROGRAMMABLE_BACKEND_CROSS_REPOSITORY_BINDING_DOCUMENT_SHA256` to the exact
+values independently materialized by the backend release verifier. The
+workflow remains stage-only. Any later promotion needs an updated,
+candidate-bound record and its separate Command Center decision.

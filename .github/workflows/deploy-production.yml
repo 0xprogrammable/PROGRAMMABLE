@@ -190,6 +190,8 @@ jobs:
           RECORD_COMMIT_SHA: ${{ inputs.custom_launch_release_record_commit_sha }}
           EXPECTED_RECORD_SHA256: ${{ inputs.custom_launch_release_record_sha256 }}
           EXPECTED_PACKAGE_ARTIFACT_HASH: ${{ secrets.PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH }}
+          EXPECTED_CROSS_REPOSITORY_ATTESTATION_COMMIT_SHA: ${{ vars.PROGRAMMABLE_BACKEND_CROSS_REPOSITORY_ATTESTATION_COMMIT_SHA }}
+          EXPECTED_CROSS_REPOSITORY_BINDING_DOCUMENT_SHA256: ${{ vars.PROGRAMMABLE_BACKEND_CROSS_REPOSITORY_BINDING_DOCUMENT_SHA256 }}
           COMMAND_CENTER_GITHUB_TOKEN: ${{ github.token }}
           ROLLBACK_DEPLOYMENT_ID: ${{ steps.production-before.outputs.deployment_id }}
           ROLLBACK_DEPLOYMENT_URL: ${{ steps.production-before.outputs.deployment_url }}
@@ -240,6 +242,8 @@ jobs:
             --require staging \
             --expect-website-commit "$GITHUB_SHA" \
             --expect-package-artifact-hash "$EXPECTED_PACKAGE_ARTIFACT_HASH" \
+            --expect-cross-repository-attestation-commit "$EXPECTED_CROSS_REPOSITORY_ATTESTATION_COMMIT_SHA" \
+            --expect-cross-repository-binding-document-sha256 "$EXPECTED_CROSS_REPOSITORY_BINDING_DOCUMENT_SHA256" \
             --expect-rollback-deployment-id "$ROLLBACK_DEPLOYMENT_ID" \
             --expect-rollback-deployment-url "$ROLLBACK_DEPLOYMENT_URL" \
             --expect-rollback-website-commit "$ROLLBACK_WEBSITE_COMMIT_SHA" \
@@ -266,6 +270,8 @@ jobs:
             echo "- Record commit: \`$RECORD_COMMIT_SHA\`"
             echo "- Release subject: \`${{ steps.custom-launch-record.outputs.release_subject_sha256 }}\`"
             echo "- Detached record: \`${{ steps.custom-launch-record.outputs.detached_record_sha256 }}\`"
+            echo "- Backend cross-repository attestation: \`${{ steps.custom-launch-record.outputs.cross_repository_attestation_commit_sha }}\`"
+            echo "- Backend binding document: \`${{ steps.custom-launch-record.outputs.cross_repository_binding_document_sha256 }}\`"
             echo "- Gate: verified for staging only"
             echo
             echo "No promotion is authorized by this staging gate."
