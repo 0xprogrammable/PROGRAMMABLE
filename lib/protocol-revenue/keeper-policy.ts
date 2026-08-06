@@ -2,6 +2,7 @@ export const PROTOCOL_REVENUE_GAS_LIMIT_BUFFER_BPS = 12_500n;
 export const PROTOCOL_REVENUE_KEEPER_BALANCE_HEADROOM = 2n;
 export const PROTOCOL_REVENUE_MIN_GAS_MULTIPLIER = 250n;
 export const PROTOCOL_REVENUE_MAX_EXECUTION_GAS = 15_000_000n;
+export const PROTOCOL_REVENUE_CLAIM_LEAD_TIME = 5n * 60n;
 
 export type ProtocolRevenueV2ActionDecision =
   | Readonly<{ status: "pending_transaction" }>
@@ -9,14 +10,18 @@ export type ProtocolRevenueV2ActionDecision =
   | Readonly<{ status: "transfer"; amount: bigint }>
   | Readonly<{ status: "claim"; accruedRevenue: bigint }>
   | Readonly<{ status: "not_due"; nextRunAt: bigint }>
+  | Readonly<{ status: "accounting_mismatch" }>
   | Readonly<{ status: "permission_exhausted" }>
   | Readonly<{ status: "below_minimum"; minimumRevenue: bigint }>;
 
 export function evaluateProtocolRevenueV2Action(input: Readonly<{
-  finalizedTimestamp: bigint;
+  stateTimestamp: bigint;
   pendingRevenue: bigint;
   vaultNextRunAt: bigint;
   vaultMinimumRevenue: bigint;
+  vaultMaximumRevenue: bigint;
+  coordinatorTotalClaimed: bigint;
+  vaultTotalRevenueDeposited: bigint;
   rewardWalletBalance: bigint;
   permissionAvailable: bigint;
   maximumTransfer: bigint;
@@ -29,16 +34,38 @@ export function evaluateProtocolRevenueV2Action(input: Readonly<{
   if (input.pendingNonce !== input.latestNonce) {
     return { status: "pending_transaction" };
   }
+  if (input.vaultTotalRevenueDeposited > input.coordinatorTotalClaimed) {
+    return { status: "accounting_mismatch" };
+  }
+  const untransferredClaims =
+    input.coordinatorTotalClaimed - input.vaultTotalRevenueDeposited;
   if (
     input.pendingRevenue >= input.vaultMinimumRevenue &&
-    input.finalizedTimestamp >= input.vaultNextRunAt
+    input.stateTimestamp >= input.vaultNextRunAt
   ) {
     return { status: "process", revenue: input.pendingRevenue };
   }
 
+  if (untransferredClaims >= input.vaultMinimumRevenue) {
+    const remainingVaultCapacity = input.pendingRevenue < input.vaultMaximumRevenue
+      ? input.vaultMaximumRevenue - input.pendingRevenue
+      : 0n;
+    if (
+      input.rewardWalletBalance < untransferredClaims ||
+      input.permissionAvailable < untransferredClaims ||
+      input.maximumTransfer < untransferredClaims ||
+      remainingVaultCapacity < untransferredClaims
+    ) {
+      return { status: "permission_exhausted" };
+    }
+    return { status: "transfer", amount: untransferredClaims };
+  }
+
   if (
     input.claimReady &&
-    input.claimAccruedRevenue >= input.claimMinimumRevenue
+    input.claimAccruedRevenue >= input.claimMinimumRevenue &&
+    input.stateTimestamp + PROTOCOL_REVENUE_CLAIM_LEAD_TIME >=
+      input.vaultNextRunAt
   ) {
     return { status: "claim", accruedRevenue: input.claimAccruedRevenue };
   }
@@ -47,19 +74,11 @@ export function evaluateProtocolRevenueV2Action(input: Readonly<{
     return { status: "not_due", nextRunAt: input.vaultNextRunAt };
   }
 
-  const transferable = [
-    input.rewardWalletBalance,
-    input.permissionAvailable,
-    input.maximumTransfer,
-  ].reduce((current, value) => value < current ? value : current);
-  if (transferable >= input.vaultMinimumRevenue) {
-    return { status: "transfer", amount: transferable };
-  }
-  if (
-    input.rewardWalletBalance >= input.vaultMinimumRevenue &&
-    input.permissionAvailable < input.vaultMinimumRevenue
-  ) {
-    return { status: "permission_exhausted" };
+  if (input.claimReady && input.claimAccruedRevenue >= input.claimMinimumRevenue) {
+    const claimAt = input.vaultNextRunAt > PROTOCOL_REVENUE_CLAIM_LEAD_TIME
+      ? input.vaultNextRunAt - PROTOCOL_REVENUE_CLAIM_LEAD_TIME
+      : 0n;
+    return { status: "not_due", nextRunAt: claimAt };
   }
   return {
     status: "below_minimum",
