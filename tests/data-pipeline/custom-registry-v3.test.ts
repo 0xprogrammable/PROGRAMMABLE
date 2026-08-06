@@ -7,18 +7,21 @@ vi.mock("server-only", () => ({}));
 import prelaunchManifestJson from "../../config/custom-registry-v3.json";
 import {
   CUSTOM_REGISTRY_DEPLOYMENTS_SCHEMA_V3,
-  CUSTOM_REGISTRY_RECORD_SCHEMA_V3,
+  CUSTOM_REGISTRY_PRODUCER_RECORD_SCHEMA_V3,
+  CUSTOM_REGISTRY_PROJECTION_RECORD_SCHEMA_V3,
   PROGRAMMABLE_CUSTOM_LABEL,
   PROGRAMMABLE_FEE_RECIPIENT,
   CustomRegistryProjectorV3,
   customRegistryFeedPageV3,
-  customRegistryRecordHashV3,
+  customRegistryProjectionDigestV3,
+  customRegistryProducerEnvelopeDigestV3,
   officialCustomRegistryAllowlistV3,
   parseCustomRegistryDeploymentManifestV3,
   type CanonicalHeadV3,
   type CustomRegistryDeploymentManifestV3,
   type CustomRegistryEventV3,
   type CustomRegistryFeedItemV3,
+  type CustomLaunchRegistryProducerRecordV3,
   type HexAddress,
   type HexBytes32,
   type Sha256Digest,
@@ -36,10 +39,24 @@ const commit = (seed: string) =>
 const REGISTRY = address("official-registry");
 const REGISTRY_RUNTIME = hex("official-registry-runtime");
 const WRITER = address("official-registry-writer");
-const REGISTERED_TOPIC = hex("CustomLaunchRegisteredV3");
-const FINALIZED_TOPIC = hex("CustomLaunchFinalizedV3");
-const CORRECTED_TOPIC = hex("CustomLaunchCorrectedV3");
-const REVOKED_TOPIC = hex("CustomLaunchRevokedV3");
+const REGISTERED_TOPIC =
+  "0x8ee074138114415a92a0797b4f1f4c6353f8bd15d8031433abf0cc42c2dc274a";
+const PROVENANCE_TOPIC =
+  "0x9593acf43b1c8e03c6742d49b67008f3c05841d3cfa43389d12f98e8b9c66cb9";
+const REVIEW_TOPIC =
+  "0xb5db50dfea0e7ff29b1ddee247a008e857b05d2b4bc2b780de5717b7f1881b63";
+const ATTRIBUTION_TOPIC =
+  "0x708979fdabf381966a12b694977fd8be5a7035aa4e232705e81afacc5bf2af32";
+const FEE_POLICY_TOPIC =
+  "0x660f06c9eec79864aec1ca2f5d4adcae41016fc2bb7f04d230159dae59565780";
+const FEE_EVIDENCE_TOPIC =
+  "0xe647c474a92f722808930d32d310f47d0e3a4faf393255e0dea4b272588babb0";
+const FINALIZED_TOPIC =
+  "0xab930c1c165bba36257b8079ae38b6869f604910f6ffa40c956e31eb1b8ce38f";
+const CORRECTED_TOPIC =
+  "0xa13c4392e0c64159cee078ced2b7157bc99993da4517b87fd0bd26b137600b78";
+const REVOKED_TOPIC =
+  "0x195a188d2c49d5e643afbcfd959edbf2ed1d6cd9216c5d99f3ad08c1010a9744";
 const CURSOR_KEY = Buffer.from("11".repeat(32), "hex");
 
 function manifest(): CustomRegistryDeploymentManifestV3 {
@@ -67,6 +84,11 @@ function manifest(): CustomRegistryDeploymentManifestV3 {
             authorizedWriters: [WRITER],
             topics: {
               registered: REGISTERED_TOPIC,
+              provenance: PROVENANCE_TOPIC,
+              review: REVIEW_TOPIC,
+              attribution: ATTRIBUTION_TOPIC,
+              feePolicy: FEE_POLICY_TOPIC,
+              feeEvidence: FEE_EVIDENCE_TOPIC,
               finalized: FINALIZED_TOPIC,
               corrected: CORRECTED_TOPIC,
               revoked: REVOKED_TOPIC,
@@ -91,7 +113,7 @@ function staticRecord(seed = "one", partner = false): StaticRecord {
   const configurationCommitment = sha(`config:${seed}`);
   const partnerRecipient = address(`partner:${seed}`);
   return {
-    schemaVersion: CUSTOM_REGISTRY_RECORD_SCHEMA_V3,
+    schemaVersion: CUSTOM_REGISTRY_PROJECTION_RECORD_SCHEMA_V3,
     platformId: "programmable",
     category: "custom",
     publicLabel: PROGRAMMABLE_CUSTOM_LABEL,
@@ -255,12 +277,116 @@ function staticRecord(seed = "one", partner = false): StaticRecord {
   };
 }
 
+function producerRecord(
+  seed: string,
+  source = staticRecord(seed),
+  operation: CustomRegistryEventV3["operation"] = "registered",
+): CustomLaunchRegistryProducerRecordV3 {
+  const registeredRecordHash = hex(`onchain-record:${seed}:1`);
+  const approvalBindingHash = sha(`approval-binding:${seed}`);
+  const preimage = {
+    platformId: "programmable",
+    origin: "programmable",
+    category: "custom",
+    launchFamily: "custom",
+    publicLabel: PROGRAMMABLE_CUSTOM_LABEL,
+    projectId: source.projectId,
+    launchId: source.launchId,
+    model: source.model,
+    template: source.template,
+    partner: source.partner,
+    registryOrigin: {
+      chainId: source.chainId,
+      caip2: source.caip2,
+      registryAddress: REGISTRY,
+      registryStartBlock: "100",
+      registryGeneration: "3",
+      registryLaunchIdRaw: `0x${source.launchId.slice("sha256:".length)}`,
+      launchIdEncoding: "sha256-digest-raw-bytes32",
+      registryApprovalBindingHashRaw:
+        `0x${approvalBindingHash.slice("sha256:".length)}`,
+      registryEventSetHash: sha(`registry-events:${seed}`),
+      registrationTransactionHash: hex(`registry-transaction:${seed}:registered`),
+      registrationBlockHash: hex(`registry-block:${seed}:registered`),
+      registrationBlockNumber: "100",
+      registrationTransactionIndex: "2",
+      registrationLogIndex: "3",
+      registeredRecordHash,
+      registrationEvidenceHash: sha(`registration-evidence:${seed}`),
+    },
+    approvalBinding: {
+      ...source.approvalBinding,
+      chainId: source.chainId,
+      caip2: source.caip2,
+      chainProfileId: "base-mainnet-v1",
+      approvalBindingHash,
+    },
+    deploymentBinding: {
+      ...source.deploymentBinding,
+      chainId: source.chainId,
+      caip2: source.caip2,
+      runtimeMatch: "exact",
+      contracts: source.deploymentBinding.contracts.map((contract) => ({
+        ...contract,
+        address: {
+          namespace: "eip155-address" as const,
+          value: contract.address,
+        },
+        runtimeCodeKeccak256: contract.runtimeCodeHash,
+        runtimeCodeSha256: sha(`runtime-content:${seed}:${contract.role}`),
+      })),
+    },
+    verifiedReview: source.securityReview,
+    feePolicy: source.feePolicy,
+    launchingWallet: {
+      namespace: "eip155-address",
+      value: source.launch.launchWallet,
+    },
+    postLaunchAuthorityInventory: [],
+    postLaunchAuthorityInventoryHash: sha(`authorities:${seed}`),
+    launchIdentity: {
+      namespace: "eip155-address",
+      value: source.deploymentBinding.contracts[0]!.address,
+    },
+    advertisesToken: source.assets.length > 0,
+    discoverableAssets: source.assets,
+    assetIdentitySetHash: sha(`assets:${seed}`),
+    discoverableMarkets: source.markets,
+    marketSetHash: sha(`markets:${seed}`),
+    mechanisms: source.mechanisms,
+    capabilities: source.capabilities,
+    finality: {
+      status: operation === "registered" ? "observed" : "finalized",
+    },
+    lifecycle: {
+      status:
+        operation === "registered"
+          ? "pending"
+          : operation === "revoked"
+            ? "revoked"
+            : "active",
+    },
+    presentationVersion: "1",
+    presentationBindingHash: sha(`presentation:${seed}`),
+    presentation: source.presentation,
+    extensions: {},
+  } as const;
+  return {
+    schemaVersion: CUSTOM_REGISTRY_PRODUCER_RECORD_SCHEMA_V3,
+    ...preimage,
+    envelopeDigest: customRegistryProducerEnvelopeDigestV3(preimage),
+  };
+}
+
 function event(
   seed = "one",
   operation: CustomRegistryEventV3["operation"] = "registered",
   overrides: Partial<CustomRegistryEventV3> = {},
 ): CustomRegistryEventV3 {
   const source = staticRecord(seed);
+  const producer = producerRecord(seed, source, operation);
+  const registeredRecordHash = hex(`onchain-record:${seed}:1`);
+  const correctedRecordHash = hex(`onchain-record:${seed}:2`);
   return {
     operation,
     chainId: "8453",
@@ -277,6 +403,16 @@ function event(
         : operation === "corrected"
           ? CORRECTED_TOPIC
           : REVOKED_TOPIC,
+    registrationCompanions:
+      operation === "registered"
+        ? [
+            { kind: "provenance", topic0: PROVENANCE_TOPIC, logIndex: 4 },
+            { kind: "review", topic0: REVIEW_TOPIC, logIndex: 5 },
+            { kind: "attribution", topic0: ATTRIBUTION_TOPIC, logIndex: 6 },
+            { kind: "feePolicy", topic0: FEE_POLICY_TOPIC, logIndex: 7 },
+            { kind: "feeEvidence", topic0: FEE_EVIDENCE_TOPIC, logIndex: 8 },
+          ]
+        : [],
     transactionHash: hex(`registry-transaction:${seed}:${operation}`),
     blockNumber:
       operation === "registered"
@@ -299,16 +435,19 @@ function event(
           : "2026-08-06T10:03:00.000Z",
     launchId: source.launchId,
     projectId: source.projectId,
-    publicationBindingHash: sha(
-      `publication:${seed}:${
-        operation === "finalized"
-          ? "registered"
-          : operation === "revoked"
-            ? "corrected"
-            : operation
-      }`,
-    ),
-    previousRecordHash: null,
+    registryLaunchIdRaw: producer.registryOrigin.registryLaunchIdRaw,
+    registryProjectIdRaw: `0x${source.projectId.slice("sha256:".length)}`,
+    registeredRecordHash,
+    latestOnchainRecordHash:
+      operation === "corrected" || operation === "revoked"
+        ? correctedRecordHash
+        : registeredRecordHash,
+    previousOnchainRecordHash:
+      operation === "corrected"
+        ? registeredRecordHash
+        : operation === "revoked"
+          ? correctedRecordHash
+          : null,
     registrationSequence: operation === "registered" ? "1" : null,
     transitionSequence:
       operation === "registered" ? null : operation === "revoked" ? "3" : "2",
@@ -347,6 +486,7 @@ function event(
         : null,
     record:
       operation === "registered" || operation === "corrected" ? source : null,
+    producerRecord: producer,
     revocationEvidenceHash: operation === "revoked" ? sha(`revoke:${seed}`) : null,
     ...overrides,
   };
@@ -402,6 +542,7 @@ describe("Custom Registry v3 official-origin projection", () => {
     const result = projector.ingest(registryEvent, head(registryEvent));
     expect(result.kind).toBe("inserted");
     expect(result.item.record).toMatchObject({
+      schemaVersion: CUSTOM_REGISTRY_PROJECTION_RECORD_SCHEMA_V3,
       platformId: "programmable",
       category: "custom",
       publicLabel: "Programmable Custom",
@@ -418,7 +559,20 @@ describe("Custom Registry v3 official-origin projection", () => {
       registryRuntimeCodeHash: REGISTRY_RUNTIME,
       registryWriter: WRITER,
       eventTopic0: REGISTERED_TOPIC,
+      registeredRecordHash: registryEvent.registeredRecordHash,
     });
+    expect(result.item.record.rawProducerRecord.schemaVersion).toBe(
+      CUSTOM_REGISTRY_PRODUCER_RECORD_SCHEMA_V3,
+    );
+    expect(result.item.record.producerBinding.envelopeDigest).toBe(
+      registryEvent.producerRecord?.envelopeDigest,
+    );
+    expect(result.item.projectionDigest).not.toBe(
+      result.item.record.producerBinding.envelopeDigest,
+    );
+    expect(result.item.record.origin.registryLaunchIdRaw).toBe(
+      `0x${result.item.record.launchId.slice("sha256:".length)}`,
+    );
     expect(projector.ingest(registryEvent, head(registryEvent))).toEqual({
       kind: "duplicate",
       item: result.item,
@@ -442,6 +596,42 @@ describe("Custom Registry v3 official-origin projection", () => {
     ).toThrow();
   });
 
+  it("rejects incomplete same-receipt bindings and tampered producer envelopes", () => {
+    const incomplete = event("missing-companion", "registered", {
+      registrationCompanions: event("missing-companion").registrationCompanions.slice(1),
+    });
+    expect(() =>
+      new CustomRegistryProjectorV3(manifest()).ingest(
+        incomplete,
+        head(incomplete),
+      ),
+    ).toThrow();
+
+    const valid = event("tampered-envelope");
+    const tampered = {
+      ...valid,
+      producerRecord: {
+        ...valid.producerRecord!,
+        envelopeDigest: sha("tampered-envelope"),
+      },
+    } satisfies CustomRegistryEventV3;
+    expect(() =>
+      new CustomRegistryProjectorV3(manifest()).ingest(tampered, head(tampered)),
+    ).toThrow();
+
+    const mismatchedRawId = {
+      ...valid,
+      transactionHash: hex("mismatched-raw-id-transaction"),
+      registryLaunchIdRaw: hex("not-the-public-launch-id"),
+    } satisfies CustomRegistryEventV3;
+    expect(() =>
+      new CustomRegistryProjectorV3(manifest()).ingest(
+        mismatchedRawId,
+        head(mismatchedRawId),
+      ),
+    ).toThrow();
+  });
+
   it("binds corrections and revocations append-only to the exact previous record", () => {
     const projector = new CustomRegistryProjectorV3(manifest());
     const registered = event();
@@ -456,25 +646,26 @@ describe("Custom Registry v3 official-origin projection", () => {
       ],
     } satisfies StaticRecord;
     const corrected = event("one", "corrected", {
-      previousRecordHash: first.origin.publicationBindingHash,
+      previousOnchainRecordHash: first.origin.latestOnchainRecordHash,
       record: correctedSource,
     });
     const correction = projector.ingest(corrected, head(corrected));
     expect(correction.item.generation).toBe("2");
     expect(correction.item.record.lifecycle).toMatchObject({
       status: "corrected",
-      supersedesRecordHash: customRegistryRecordHashV3(first),
+      supersedesProjectionDigest: customRegistryProjectionDigestV3(first),
     });
 
     const wrongCorrection = event("one", "corrected", {
       transactionHash: hex("different-correction"),
-      previousRecordHash: sha("wrong-previous"),
+      previousOnchainRecordHash: hex("wrong-previous"),
       record: correctedSource,
     });
     expect(() => projector.ingest(wrongCorrection, head(wrongCorrection))).toThrow();
 
     const revoked = event("one", "revoked", {
-      previousRecordHash: correction.item.record.origin.publicationBindingHash,
+      previousOnchainRecordHash:
+        correction.item.record.origin.latestOnchainRecordHash,
     });
     const revocation = projector.ingest(revoked, head(revoked));
     expect(revocation.item.generation).toBe("3");
@@ -490,7 +681,7 @@ describe("Custom Registry v3 official-origin projection", () => {
   it("publishes observed, confirmed, finalized, and orphaned transitions as tombstones", () => {
     const projector = new CustomRegistryProjectorV3(manifest());
     const registered = event();
-    projector.ingest(registered, head(registered));
+    const observed = projector.ingest(registered, head(registered)).item;
     expect(projector.reconcileFinality(registered.launchId, head(registered, "101")))
       .toMatchObject({
         generation: "2",
@@ -506,7 +697,8 @@ describe("Custom Registry v3 official-origin projection", () => {
         },
       });
     const finalized = event("one", "finalized");
-    expect(projector.ingest(finalized, head(finalized))).toMatchObject({
+    const finalizedProjection = projector.ingest(finalized, head(finalized));
+    expect(finalizedProjection).toMatchObject({
       kind: "inserted",
       item: {
         generation: "4",
@@ -524,6 +716,15 @@ describe("Custom Registry v3 official-origin projection", () => {
         },
       },
     });
+    expect(finalizedProjection.item.projectionDigest).not.toBe(
+      observed.projectionDigest,
+    );
+    expect(finalizedProjection.item.record.origin.registeredRecordHash).toBe(
+      observed.record.origin.registeredRecordHash,
+    );
+    expect(finalizedProjection.item.record.producerBinding.envelopeDigest).not.toBe(
+      observed.record.producerBinding.envelopeDigest,
+    );
     const orphan = projector.reconcileFinality(
       registered.launchId,
       head(finalized, "106", hex("different-canonical-block")),
@@ -574,13 +775,13 @@ describe("Custom Registry v3 official-origin projection", () => {
       observedRegistryRuntimeCodeHash: generationFourRuntime,
       blockNumber: "160",
       blockHash: hex("generation-four-correction-block"),
-      previousRecordHash: first.record.origin.publicationBindingHash,
+      previousOnchainRecordHash: first.record.origin.latestOnchainRecordHash,
     });
     const correction = projector.ingest(corrected, head(corrected)).item;
     expect(correction.record.origin).toMatchObject({
       registryGeneration: "4",
       registryAddress: generationFourAddress,
-      previousRecordHash: first.record.origin.publicationBindingHash,
+      previousOnchainRecordHash: first.record.origin.latestOnchainRecordHash,
     });
     const orphan = projector.reconcileFinality(
       corrected.launchId,
@@ -590,16 +791,16 @@ describe("Custom Registry v3 official-origin projection", () => {
       registryFinality: { status: "orphaned" },
       lifecycle: {
         status: "orphaned",
-        supersedesRecordHash: first.recordHash,
+        supersedesProjectionDigest: first.projectionDigest,
       },
     });
   });
 
   it("accepts a future partner only with exact template-native 15/5 evidence and no 10 BPS overlay", () => {
+    const partnerSource = staticRecord("partner", true);
     const partnerEvent = event("partner", "registered", {
-      launchId: staticRecord("partner", true).launchId,
-      projectId: staticRecord("partner", true).projectId,
-      record: staticRecord("partner", true),
+      record: partnerSource,
+      producerRecord: producerRecord("partner", partnerSource),
     });
     const record = new CustomRegistryProjectorV3(manifest()).ingest(
       partnerEvent,
@@ -621,9 +822,8 @@ describe("Custom Registry v3 official-origin projection", () => {
       },
     } as unknown as StaticRecord;
     const invalid = event("bad-partner", "registered", {
-      launchId: invalidRecord.launchId,
-      projectId: invalidRecord.projectId,
       record: invalidRecord,
+      producerRecord: producerRecord("bad-partner", invalidRecord),
     });
     expect(() =>
       new CustomRegistryProjectorV3(manifest()).ingest(invalid, head(invalid)),
@@ -679,9 +879,8 @@ describe("Custom Registry v3 official-origin projection", () => {
     for (const [index, mutate] of cases.entries()) {
       const source = mutate(structuredClone(staticRecord(`attack-${index}`)));
       const attack = event(`attack-${index}`, "registered", {
-        launchId: source.launchId,
-        projectId: source.projectId,
         record: source,
+        producerRecord: producerRecord(`attack-${index}`, source),
       });
       expect(() =>
         new CustomRegistryProjectorV3(manifest()).ingest(attack, head(attack)),
@@ -703,7 +902,7 @@ describe("Custom Registry v3 official-origin projection", () => {
       ...checkpoint,
       entries: checkpoint.entries.map((entry, index) =>
         index === 0
-          ? { ...entry, item: { ...entry.item, recordHash: sha("drift") } }
+          ? { ...entry, item: { ...entry.item, projectionDigest: sha("drift") } }
           : entry,
       ),
     };

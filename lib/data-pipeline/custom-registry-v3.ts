@@ -6,8 +6,12 @@ import { invalidInput, validationError } from "./errors";
 
 export const CUSTOM_REGISTRY_DEPLOYMENTS_SCHEMA_V3 =
   "programmable.custom-registry-deployments.v3" as const;
-export const CUSTOM_REGISTRY_RECORD_SCHEMA_V3 =
+export const CUSTOM_REGISTRY_PRODUCER_RECORD_SCHEMA_V3 =
   "programmable.custom-launch-registry-record.v3" as const;
+export const CUSTOM_REGISTRY_PROJECTION_RECORD_SCHEMA_V3 =
+  "programmable.custom-launch-projection-record.v3" as const;
+export const CUSTOM_REGISTRY_PRODUCER_ENVELOPE_DOMAIN_V3 =
+  "programmable.custom-launch-registry-envelope-digest.v3" as const;
 export const CUSTOM_REGISTRY_FEED_SCHEMA_V1 =
   "programmable.custom-launch-registry-feed.v1" as const;
 export const CUSTOM_REGISTRY_FEED_SOURCE_V3 =
@@ -19,12 +23,20 @@ export const PROGRAMMABLE_FEE_RECIPIENT =
 export type Sha256Digest = `sha256:${string}`;
 export type HexAddress = `0x${string}`;
 export type HexBytes32 = `0x${string}`;
+/** EVM EXTCODEHASH / keccak256(runtime bytecode), never a SHA-256 digest. */
+export type EvmRuntimeCodeHash = HexBytes32;
 export type HexTransactionHash = `0x${string}`;
 export type RegistryOperationV3 =
   | "registered"
   | "finalized"
   | "corrected"
   | "revoked";
+export type RegistryRegistrationCompanionKindV3 =
+  | "provenance"
+  | "review"
+  | "attribution"
+  | "feePolicy"
+  | "feeEvidence";
 export type RegistryFinalityStatusV3 =
   | "observed"
   | "confirmed"
@@ -62,6 +74,11 @@ export type CustomRegistryDeploymentV3 = Readonly<{
   authorizedWriters: readonly HexAddress[];
   topics: Readonly<{
     registered: HexBytes32;
+    provenance: HexBytes32;
+    review: HexBytes32;
+    attribution: HexBytes32;
+    feePolicy: HexBytes32;
+    feeEvidence: HexBytes32;
     finalized: HexBytes32;
     corrected: HexBytes32;
     revoked: HexBytes32;
@@ -196,8 +213,85 @@ export type CustomLaunchSecurityReviewV3 = Readonly<{
   revocationEvidenceHash: Sha256Digest | null;
 }>;
 
-export type CustomLaunchRegistryRecordV3 = Readonly<{
-  schemaVersion: typeof CUSTOM_REGISTRY_RECORD_SCHEMA_V3;
+export type NamespacedEvmIdentityV3 = Readonly<{
+  namespace: "eip155-address";
+  value: HexAddress;
+}>;
+
+export type CustomLaunchRegistryProducerRecordV3 = Readonly<{
+  schemaVersion: typeof CUSTOM_REGISTRY_PRODUCER_RECORD_SCHEMA_V3;
+  platformId: "programmable";
+  origin: "programmable";
+  category: "custom";
+  launchFamily: "custom";
+  publicLabel: typeof PROGRAMMABLE_CUSTOM_LABEL;
+  projectId: Sha256Digest;
+  launchId: Sha256Digest;
+  model: JsonValue;
+  template: JsonValue;
+  partner: JsonValue;
+  registryOrigin: Readonly<{
+    chainId: string;
+    caip2: string;
+    registryAddress: HexAddress;
+    registryStartBlock: string;
+    registryGeneration: string;
+    registryLaunchIdRaw: HexBytes32;
+    launchIdEncoding: "sha256-digest-raw-bytes32";
+    registryApprovalBindingHashRaw: HexBytes32;
+    registryEventSetHash: Sha256Digest;
+    registrationTransactionHash: HexTransactionHash;
+    registrationBlockHash: HexBytes32;
+    registrationBlockNumber: string;
+    registrationTransactionIndex: string;
+    registrationLogIndex: string;
+    registeredRecordHash: HexBytes32;
+    registrationEvidenceHash: Sha256Digest;
+  }>;
+  approvalBinding: Readonly<{
+    chainId: string;
+    caip2: string;
+    chainProfileId: string;
+    approvalBindingHash: Sha256Digest;
+    [key: string]: JsonValue;
+  }>;
+  deploymentBinding: Readonly<{
+    chainId: string;
+    caip2: string;
+    runtimeMatch: "exact";
+    contracts: readonly Readonly<{
+      address: NamespacedEvmIdentityV3;
+      runtimeCodeKeccak256: EvmRuntimeCodeHash;
+      runtimeCodeSha256: Sha256Digest;
+      [key: string]: JsonValue;
+    }>[];
+    [key: string]: JsonValue;
+  }>;
+  verifiedReview: JsonValue;
+  feePolicy: JsonValue;
+  launchingWallet: NamespacedEvmIdentityV3;
+  postLaunchAuthorityInventory: JsonValue;
+  postLaunchAuthorityInventoryHash: Sha256Digest;
+  launchIdentity: NamespacedEvmIdentityV3;
+  advertisesToken: boolean;
+  discoverableAssets: JsonValue;
+  assetIdentitySetHash: Sha256Digest;
+  discoverableMarkets: JsonValue;
+  marketSetHash: Sha256Digest;
+  mechanisms: JsonValue;
+  capabilities: JsonValue;
+  finality: JsonValue;
+  lifecycle: JsonValue;
+  presentationVersion: JsonValue;
+  presentationBindingHash: Sha256Digest | null;
+  presentation: JsonValue;
+  extensions: JsonValue;
+  /** Mutable producer envelope digest; never the immutable on-chain record hash. */
+  envelopeDigest: Sha256Digest;
+}>;
+
+export type CustomLaunchProjectionRecordV3 = Readonly<{
+  schemaVersion: typeof CUSTOM_REGISTRY_PROJECTION_RECORD_SCHEMA_V3;
   platformId: "programmable";
   category: "custom";
   publicLabel: typeof PROGRAMMABLE_CUSTOM_LABEL;
@@ -216,6 +310,8 @@ export type CustomLaunchRegistryRecordV3 = Readonly<{
   builderAttribution: Readonly<Record<string, JsonValue>>;
   origin: Readonly<{
     kind: "programmable-custom-registry-v3";
+    registryLaunchIdRaw: HexBytes32;
+    registryProjectIdRaw: HexBytes32;
     registryGeneration: string;
     registryAddress: HexAddress;
     registryRuntimeCodeHash: HexBytes32;
@@ -228,8 +324,9 @@ export type CustomLaunchRegistryRecordV3 = Readonly<{
     transactionIndex: number;
     logIndex: number;
     onchainTimestamp: string;
-    publicationBindingHash: Sha256Digest;
-    previousRecordHash: Sha256Digest | null;
+    registeredRecordHash: HexBytes32;
+    latestOnchainRecordHash: HexBytes32;
+    previousOnchainRecordHash: HexBytes32 | null;
     eventBinding: Readonly<{
       registrationSequence: string | null;
       transitionSequence: string | null;
@@ -249,6 +346,12 @@ export type CustomLaunchRegistryRecordV3 = Readonly<{
       reasonCode: HexBytes32 | null;
       evidenceHash: HexBytes32 | null;
     }>;
+  }>;
+  rawProducerRecord: CustomLaunchRegistryProducerRecordV3;
+  producerBinding: Readonly<{
+    schemaVersion: typeof CUSTOM_REGISTRY_PRODUCER_RECORD_SCHEMA_V3;
+    envelopeDigest: Sha256Digest;
+    rawRecordHash: Sha256Digest;
   }>;
   approvalBinding: Readonly<{
     applicationId: string;
@@ -348,8 +451,8 @@ export type CustomLaunchRegistryRecordV3 = Readonly<{
     correctedAt: string | null;
     revokedAt: string | null;
     revocationEvidenceHash: Sha256Digest | null;
-    supersedesRecordHash: Sha256Digest | null;
-    supersededBy: Sha256Digest | null;
+    supersedesProjectionDigest: Sha256Digest | null;
+    supersededByProjectionDigest: Sha256Digest | null;
   }>;
 }>;
 
@@ -362,16 +465,27 @@ export type CustomRegistryEventV3 = Readonly<{
   observedRegistryRuntimeCodeHash: HexBytes32;
   registryWriter: HexAddress;
   topic0: HexBytes32;
+  registrationCompanions: readonly Readonly<{
+    kind: RegistryRegistrationCompanionKindV3;
+    topic0: HexBytes32;
+    logIndex: number;
+  }>[];
   transactionHash: HexTransactionHash;
   blockNumber: string;
   blockHash: HexBytes32;
   transactionIndex: number;
   logIndex: number;
   onchainTimestamp: string;
+  /** Public SHA-256 IDs plus their exact raw bytes32 Registry encodings. */
   launchId: Sha256Digest;
   projectId: Sha256Digest;
-  publicationBindingHash: Sha256Digest;
-  previousRecordHash: Sha256Digest | null;
+  registryLaunchIdRaw: HexBytes32;
+  registryProjectIdRaw: HexBytes32;
+  /** Immutable recordHash from CustomLaunchRegisteredV1. */
+  registeredRecordHash: HexBytes32;
+  /** Current Registry record hash; changes only through a correction event. */
+  latestOnchainRecordHash: HexBytes32;
+  previousOnchainRecordHash: HexBytes32 | null;
   registrationSequence: string | null;
   transitionSequence: string | null;
   recordRevision: string | null;
@@ -390,9 +504,15 @@ export type CustomRegistryEventV3 = Readonly<{
   finalizedAtTimestamp: string | null;
   reasonCode: HexBytes32 | null;
   evidenceHash: HexBytes32 | null;
+  producerRecord: CustomLaunchRegistryProducerRecordV3 | null;
   record: Omit<
-    CustomLaunchRegistryRecordV3,
-    "origin" | "registryFinality" | "lifecycle" | "programmableVerified"
+    CustomLaunchProjectionRecordV3,
+    | "origin"
+    | "rawProducerRecord"
+    | "producerBinding"
+    | "registryFinality"
+    | "lifecycle"
+    | "programmableVerified"
   > | null;
   revocationEvidenceHash: Sha256Digest | null;
 }>;
@@ -408,8 +528,8 @@ export type CanonicalHeadV3 = Readonly<{
 export type CustomRegistryFeedItemV3 = Readonly<{
   generation: string;
   projectionKey: string;
-  recordHash: Sha256Digest;
-  record: CustomLaunchRegistryRecordV3;
+  projectionDigest: Sha256Digest;
+  record: CustomLaunchProjectionRecordV3;
 }>;
 
 export type CustomRegistryProjectionCheckpointV3 = Readonly<{
@@ -601,10 +721,29 @@ function sha256(domain: string, value: unknown): Sha256Digest {
   return `sha256:${createHash("sha256").update(preimage).digest("hex")}`;
 }
 
-export function customRegistryRecordHashV3(
-  recordValue: CustomLaunchRegistryRecordV3,
+function digestRawBytes32(value: Sha256Digest): HexBytes32 {
+  return `0x${value.slice("sha256:".length)}`;
+}
+
+export function customRegistryRawProducerHashV3(
+  recordValue: CustomLaunchRegistryProducerRecordV3,
 ): Sha256Digest {
-  return sha256(CUSTOM_REGISTRY_RECORD_SCHEMA_V3, recordValue);
+  return sha256(CUSTOM_REGISTRY_PRODUCER_RECORD_SCHEMA_V3, recordValue);
+}
+
+export function customRegistryProducerEnvelopeDigestV3(
+  recordValue: Omit<
+    CustomLaunchRegistryProducerRecordV3,
+    "schemaVersion" | "envelopeDigest"
+  >,
+): Sha256Digest {
+  return sha256(CUSTOM_REGISTRY_PRODUCER_ENVELOPE_DOMAIN_V3, recordValue);
+}
+
+export function customRegistryProjectionDigestV3(
+  recordValue: CustomLaunchProjectionRecordV3,
+): Sha256Digest {
+  return sha256(CUSTOM_REGISTRY_PROJECTION_RECORD_SCHEMA_V3, recordValue);
 }
 
 function assertJsonValue(
@@ -722,6 +861,26 @@ export function parseCustomRegistryDeploymentManifestV3(
               topicsSource.registered,
               "custom-registry-registered-topic",
             ),
+            provenance: bytes32(
+              topicsSource.provenance,
+              "custom-registry-provenance-topic",
+            ),
+            review: bytes32(
+              topicsSource.review,
+              "custom-registry-review-topic",
+            ),
+            attribution: bytes32(
+              topicsSource.attribution,
+              "custom-registry-attribution-topic",
+            ),
+            feePolicy: bytes32(
+              topicsSource.feePolicy,
+              "custom-registry-fee-policy-topic",
+            ),
+            feeEvidence: bytes32(
+              topicsSource.feeEvidence,
+              "custom-registry-fee-evidence-topic",
+            ),
             finalized: bytes32(
               topicsSource.finalized,
               "custom-registry-finalized-topic",
@@ -735,7 +894,7 @@ export function parseCustomRegistryDeploymentManifestV3(
               "custom-registry-revoked-topic",
             ),
           });
-          if (new Set(Object.values(topics)).size !== 4) {
+          if (new Set(Object.values(topics)).size !== 9) {
             return fail("custom-registry-topic-collision");
           }
           const authorizedWriters = array(
@@ -824,7 +983,7 @@ export function officialCustomRegistryAllowlistV3(
 
 function validateFeePolicy(
   feeValue: unknown,
-  partnerValue: CustomLaunchRegistryRecordV3["partner"],
+  partnerValue: CustomLaunchProjectionRecordV3["partner"],
 ): CustomLaunchFeePolicyV3 {
   const fee = record(feeValue, "custom-registry-fee");
   const evidenceHashes = array(
@@ -899,18 +1058,198 @@ function validateFeePolicy(
   });
 }
 
+function validateProducerRecord(
+  value: CustomLaunchRegistryProducerRecordV3,
+  event: CustomRegistryEventV3,
+): CustomLaunchRegistryProducerRecordV3 {
+  const source = record(value, "custom-registry-producer-record");
+  const envelopeDigest = digest(
+    source.envelopeDigest,
+    "custom-registry-producer-envelope-digest",
+  );
+  const {
+    schemaVersion: _schemaVersion,
+    envelopeDigest: _envelopeDigest,
+    ...producerPreimage
+  } = source;
+  void _schemaVersion;
+  void _envelopeDigest;
+  if (
+    source.schemaVersion !== CUSTOM_REGISTRY_PRODUCER_RECORD_SCHEMA_V3 ||
+    source.platformId !== "programmable" ||
+    source.origin !== "programmable" ||
+    source.category !== "custom" ||
+    source.launchFamily !== "custom" ||
+    source.publicLabel !== PROGRAMMABLE_CUSTOM_LABEL ||
+    digest(source.launchId, "custom-registry-producer-launch-id") !==
+      event.launchId ||
+    digest(source.projectId, "custom-registry-producer-project-id") !==
+      event.projectId ||
+    envelopeDigest !==
+      customRegistryProducerEnvelopeDigestV3(
+        producerPreimage as Omit<
+          CustomLaunchRegistryProducerRecordV3,
+          "schemaVersion" | "envelopeDigest"
+        >,
+      )
+  ) {
+    return fail("custom-registry-producer-identity");
+  }
+  const registryOrigin = record(
+    source.registryOrigin,
+    "custom-registry-producer-origin",
+  );
+  const approval = record(
+    source.approvalBinding,
+    "custom-registry-producer-approval-binding",
+  );
+  const deployment = record(
+    source.deploymentBinding,
+    "custom-registry-producer-deployment-binding",
+  );
+  const approvalBindingHash = digest(
+    approval.approvalBindingHash,
+    "custom-registry-producer-approval-binding-hash",
+  );
+  address(
+    registryOrigin.registryAddress,
+    "custom-registry-producer-origin-address",
+  );
+  decimal(
+    registryOrigin.registryStartBlock,
+    "custom-registry-producer-origin-start-block",
+    true,
+  );
+  bytes32(
+    registryOrigin.registryApprovalBindingHashRaw,
+    "custom-registry-producer-origin-approval-raw",
+  );
+  digest(
+    registryOrigin.registryEventSetHash,
+    "custom-registry-producer-event-set",
+  );
+  bytes32(
+    registryOrigin.registrationTransactionHash,
+    "custom-registry-producer-registration-transaction",
+  );
+  bytes32(
+    registryOrigin.registrationBlockHash,
+    "custom-registry-producer-registration-block-hash",
+  );
+  bytes32(
+    registryOrigin.registeredRecordHash,
+    "custom-registry-producer-registered-record",
+  );
+  digest(
+    registryOrigin.registrationEvidenceHash,
+    "custom-registry-producer-registration-evidence",
+  );
+  if (
+    decimal(registryOrigin.chainId, "custom-registry-producer-origin-chain", true) !==
+      event.chainId ||
+    registryOrigin.caip2 !== event.caip2 ||
+    (event.operation === "registered" &&
+      (registryOrigin.registryAddress !== event.registryAddress ||
+        registryOrigin.registryGeneration !== event.registryGeneration)) ||
+    registryOrigin.registryLaunchIdRaw !== event.registryLaunchIdRaw ||
+    registryOrigin.registryLaunchIdRaw !== digestRawBytes32(event.launchId) ||
+    event.registryProjectIdRaw !== digestRawBytes32(event.projectId) ||
+    registryOrigin.launchIdEncoding !== "sha256-digest-raw-bytes32" ||
+    registryOrigin.registryApprovalBindingHashRaw !==
+      digestRawBytes32(approvalBindingHash) ||
+    (event.operation === "registered" &&
+      (registryOrigin.registrationTransactionHash !== event.transactionHash ||
+        registryOrigin.registrationBlockHash !== event.blockHash ||
+        registryOrigin.registrationBlockNumber !== event.blockNumber ||
+        registryOrigin.registrationTransactionIndex !==
+          String(event.transactionIndex) ||
+        registryOrigin.registrationLogIndex !== String(event.logIndex))) ||
+    registryOrigin.registeredRecordHash !== event.registeredRecordHash ||
+    decimal(approval.chainId, "custom-registry-producer-approval-chain", true) !==
+      event.chainId ||
+    approval.caip2 !== event.caip2 ||
+    typeof approval.chainProfileId !== "string" ||
+    decimal(deployment.chainId, "custom-registry-producer-deployment-chain", true) !==
+      event.chainId ||
+    deployment.caip2 !== event.caip2 ||
+    deployment.runtimeMatch !== "exact"
+  ) {
+    return fail("custom-registry-producer-binding");
+  }
+  const contracts = array(
+    deployment.contracts,
+    "custom-registry-producer-deployment-contracts",
+    MAX_COLLECTION_SIZE,
+  );
+  if (contracts.length < 1) return fail("custom-registry-producer-contracts");
+  for (const item of contracts) {
+    const contract = record(item, "custom-registry-producer-contract");
+    const contractAddress = record(
+      contract.address,
+      "custom-registry-producer-contract-address",
+    );
+    if (contractAddress.namespace !== "eip155-address") {
+      return fail("custom-registry-producer-contract-namespace");
+    }
+    address(contractAddress.value, "custom-registry-producer-contract-address");
+    // This is a raw EVM bytes32 code hash. Do not accept sha256-prefixed commitments.
+    bytes32(
+      contract.runtimeCodeKeccak256,
+      "custom-registry-producer-evm-runtime-code-hash",
+    );
+    digest(
+      contract.runtimeCodeSha256,
+      "custom-registry-producer-runtime-content-sha256",
+    );
+  }
+  for (const field of [
+    "postLaunchAuthorityInventoryHash",
+    "assetIdentitySetHash",
+    "marketSetHash",
+  ] as const) {
+    digest(source[field], `custom-registry-producer-${field}`);
+  }
+  const launchingWallet = record(
+    source.launchingWallet,
+    "custom-registry-producer-launching-wallet",
+  );
+  if (launchingWallet.namespace !== "eip155-address") {
+    return fail("custom-registry-producer-launching-wallet-namespace");
+  }
+  address(
+    launchingWallet.value,
+    "custom-registry-producer-launching-wallet-value",
+  );
+  if ((source.presentation === null) !== (source.presentationBindingHash === null)) {
+    return fail("custom-registry-producer-presentation-binding");
+  }
+  if (source.presentationBindingHash !== null) {
+    digest(
+      source.presentationBindingHash,
+      "custom-registry-producer-presentation-binding",
+    );
+  }
+  assertJsonValue(source, "custom-registry-producer-json");
+  if (Buffer.byteLength(canonicalJson(source), "utf8") > MAX_RECORD_BYTES) {
+    return fail("custom-registry-producer-oversize");
+  }
+  return value;
+}
+
 function validateRecordStatic(
   value: CustomRegistryEventV3["record"],
   event: CustomRegistryEventV3,
 ): NonNullable<CustomRegistryEventV3["record"]> {
   const source = record(value, "custom-registry-record");
   if (
-    source.schemaVersion !== CUSTOM_REGISTRY_RECORD_SCHEMA_V3 ||
+    source.schemaVersion !== CUSTOM_REGISTRY_PROJECTION_RECORD_SCHEMA_V3 ||
     source.platformId !== "programmable" ||
     source.category !== "custom" ||
     source.publicLabel !== PROGRAMMABLE_CUSTOM_LABEL ||
-    digest(source.launchId, "custom-registry-launch-id") !== event.launchId ||
-    digest(source.projectId, "custom-registry-project-id") !== event.projectId ||
+    digest(source.launchId, "custom-registry-launch-id") !==
+      event.launchId ||
+    digest(source.projectId, "custom-registry-project-id") !==
+      event.projectId ||
     decimal(source.chainId, "custom-registry-record-chain", true) !== event.chainId ||
     source.caip2 !== event.caip2
   ) {
@@ -926,7 +1265,7 @@ function validateRecordStatic(
     safeId(template.id, "custom-registry-template-id");
     safeId(template.version, "custom-registry-template-version");
   }
-  let partner: CustomLaunchRegistryRecordV3["partner"] = null;
+  let partner: CustomLaunchProjectionRecordV3["partner"] = null;
   if (source.partner !== null) {
     const partnerSource = record(source.partner, "custom-registry-partner");
     const status = partnerSource.status;
@@ -946,7 +1285,10 @@ function validateRecordStatic(
   }
   assertJsonValue(source.builderAttribution, "custom-registry-builder");
   const approval = record(source.approvalBinding, "custom-registry-approval");
-  if (digest(approval.projectId, "custom-registry-approval-project") !== event.projectId) {
+  if (
+    digest(approval.projectId, "custom-registry-approval-project") !==
+    event.projectId
+  ) {
     return fail("custom-registry-approval-project");
   }
   safeId(approval.applicationId, "custom-registry-application-id");
@@ -1270,9 +1612,21 @@ function validateEvent(
   instant(event.onchainTimestamp, "custom-registry-event-timestamp");
   digest(event.launchId, "custom-registry-event-launch-id");
   digest(event.projectId, "custom-registry-event-project-id");
-  digest(event.publicationBindingHash, "custom-registry-event-publication-binding");
-  if (event.previousRecordHash !== null) {
-    digest(event.previousRecordHash, "custom-registry-event-previous-record");
+  bytes32(event.registryLaunchIdRaw, "custom-registry-event-registry-launch-id");
+  bytes32(event.registryProjectIdRaw, "custom-registry-event-registry-project-id");
+  if (
+    event.registryLaunchIdRaw !== digestRawBytes32(event.launchId) ||
+    event.registryProjectIdRaw !== digestRawBytes32(event.projectId)
+  ) {
+    return fail("custom-registry-event-raw-id-binding");
+  }
+  bytes32(event.registeredRecordHash, "custom-registry-event-registered-record");
+  bytes32(event.latestOnchainRecordHash, "custom-registry-event-latest-record");
+  if (event.previousOnchainRecordHash !== null) {
+    bytes32(
+      event.previousOnchainRecordHash,
+      "custom-registry-event-previous-record",
+    );
   }
   if (event.revocationEvidenceHash !== null) {
     digest(event.revocationEvidenceHash, "custom-registry-event-revocation");
@@ -1396,28 +1750,86 @@ function validateEvent(
   if (
     (event.operation === "registered" &&
       (event.record === null ||
-        event.previousRecordHash !== null ||
+        event.producerRecord === null ||
+        event.previousOnchainRecordHash !== null ||
+        event.registeredRecordHash !== event.latestOnchainRecordHash ||
         event.revocationEvidenceHash !== null ||
         !registrationEvidence)) ||
     (event.operation === "finalized" &&
       (event.record !== null ||
-        event.previousRecordHash !== null ||
+        event.producerRecord === null ||
+        event.previousOnchainRecordHash !== null ||
         event.revocationEvidenceHash !== null ||
         !finalizedEvidence)) ||
     (event.operation === "corrected" &&
       (event.record === null ||
-        event.previousRecordHash === null ||
+        event.producerRecord === null ||
+        event.previousOnchainRecordHash === null ||
         event.revocationEvidenceHash !== null ||
         !mutationEvidence)) ||
     (event.operation === "revoked" &&
       (event.record !== null ||
-        event.previousRecordHash === null ||
+        event.producerRecord === null ||
+        event.previousOnchainRecordHash === null ||
+        event.previousOnchainRecordHash !== event.latestOnchainRecordHash ||
         event.revocationEvidenceHash === null ||
         !mutationEvidence))
   ) {
     return fail("custom-registry-event-shape");
   }
   const { chain, deployment } = deploymentForEvent(manifest, event);
+  const companions = array(
+    event.registrationCompanions,
+    "custom-registry-registration-companions",
+    5,
+  );
+  if (event.operation === "registered") {
+    const expectedKinds: readonly RegistryRegistrationCompanionKindV3[] = [
+      "provenance",
+      "review",
+      "attribution",
+      "feePolicy",
+      "feeEvidence",
+    ];
+    const seenKinds = new Set<string>();
+    const seenLogIndexes = new Set<number>([event.logIndex]);
+    for (const value of companions) {
+      const companion = record(
+        value,
+        "custom-registry-registration-companion",
+      );
+      const kind = companion.kind as RegistryRegistrationCompanionKindV3;
+      const logIndex = safeInteger(
+        companion.logIndex,
+        "custom-registry-registration-companion-log-index",
+      );
+      if (
+        !expectedKinds.includes(kind) ||
+        companion.topic0 !== deployment.topics[kind] ||
+        seenKinds.has(kind) ||
+        seenLogIndexes.has(logIndex)
+      ) {
+        return fail("custom-registry-registration-companion-binding");
+      }
+      seenKinds.add(kind);
+      seenLogIndexes.add(logIndex);
+    }
+    if (companions.length !== expectedKinds.length) {
+      return fail("custom-registry-registration-companion-set");
+    }
+  } else if (companions.length !== 0) {
+    return fail("custom-registry-transition-companions");
+  }
+  if (event.producerRecord !== null) {
+    validateProducerRecord(event.producerRecord, event);
+    if (
+      event.operation === "registered" &&
+      event.producerRecord.registryOrigin.registryStartBlock !==
+      deployment.startBlock
+    ) {
+      return fail("custom-registry-producer-start-block");
+    }
+  }
   if (event.record !== null) validateRecordStatic(event.record, event);
   return Object.freeze({ event, chain, deployment });
 }
@@ -1434,8 +1846,8 @@ function registryFinality(
   event: CustomRegistryEventV3,
   chain: CustomRegistryChainManifestV3,
   head: CanonicalHeadV3,
-  previous?: CustomLaunchRegistryRecordV3["registryFinality"],
-): CustomLaunchRegistryRecordV3["registryFinality"] {
+  previous?: CustomLaunchProjectionRecordV3["registryFinality"],
+): CustomLaunchProjectionRecordV3["registryFinality"] {
   if (head.chainId !== event.chainId) return fail("custom-registry-head-chain");
   const canonical = head.canonicalBlockHash(event.blockNumber);
   if (canonical === null || canonical !== event.blockHash) {
@@ -1505,10 +1917,14 @@ function projectRecord(
   event: CustomRegistryEventV3,
   chain: CustomRegistryChainManifestV3,
   head: CanonicalHeadV3,
-  previous: CustomLaunchRegistryRecordV3 | null,
-): CustomLaunchRegistryRecordV3 {
+  previous: CustomLaunchProjectionRecordV3 | null,
+): CustomLaunchProjectionRecordV3 {
   const source = event.record ?? previous;
   if (source === null) return fail("custom-registry-missing-record");
+  const rawProducerRecord = event.producerRecord ?? previous?.rawProducerRecord;
+  if (rawProducerRecord === null || rawProducerRecord === undefined) {
+    return fail("custom-registry-missing-producer-record");
+  }
   const finality = registryFinality(event, chain, head);
   const registeredAt = previous?.lifecycle.registeredAt ?? event.onchainTimestamp;
   const lifecycleStatus: CustomLaunchStatusV3 =
@@ -1526,6 +1942,8 @@ function projectRecord(
     ...sourceWithoutProjection,
     origin: Object.freeze({
       kind: "programmable-custom-registry-v3",
+      registryLaunchIdRaw: event.registryLaunchIdRaw,
+      registryProjectIdRaw: event.registryProjectIdRaw,
       registryGeneration: event.registryGeneration,
       registryAddress: event.registryAddress,
       registryRuntimeCodeHash: event.observedRegistryRuntimeCodeHash,
@@ -1538,8 +1956,9 @@ function projectRecord(
       transactionIndex: event.transactionIndex,
       logIndex: event.logIndex,
       onchainTimestamp: event.onchainTimestamp,
-      publicationBindingHash: event.publicationBindingHash,
-      previousRecordHash: event.previousRecordHash,
+      registeredRecordHash: event.registeredRecordHash,
+      latestOnchainRecordHash: event.latestOnchainRecordHash,
+      previousOnchainRecordHash: event.previousOnchainRecordHash,
       eventBinding: Object.freeze({
         registrationSequence: event.registrationSequence,
         transitionSequence: event.transitionSequence,
@@ -1560,6 +1979,12 @@ function projectRecord(
         evidenceHash: event.evidenceHash,
       }),
     }),
+    rawProducerRecord,
+    producerBinding: Object.freeze({
+      schemaVersion: CUSTOM_REGISTRY_PRODUCER_RECORD_SCHEMA_V3,
+      envelopeDigest: rawProducerRecord.envelopeDigest,
+      rawRecordHash: customRegistryRawProducerHashV3(rawProducerRecord),
+    }),
     programmableVerified:
       (event.operation === "finalized" ||
         (event.operation === "corrected" &&
@@ -1578,13 +2003,13 @@ function projectRecord(
       revokedAt:
         event.operation === "revoked" ? event.onchainTimestamp : null,
       revocationEvidenceHash: event.revocationEvidenceHash,
-      supersedesRecordHash:
+      supersedesProjectionDigest:
         event.operation === "corrected" || event.operation === "revoked"
           ? previous === null
             ? null
-            : customRegistryRecordHashV3(previous)
+            : customRegistryProjectionDigestV3(previous)
           : null,
-      supersededBy: null,
+      supersededByProjectionDigest: null,
     }),
   });
 }
@@ -1594,7 +2019,7 @@ type ProjectedEvent = Readonly<{
   eventDigest: Sha256Digest;
   event: CustomRegistryEventV3;
   chain: CustomRegistryChainManifestV3;
-  record: CustomLaunchRegistryRecordV3;
+  record: CustomLaunchProjectionRecordV3;
   item: CustomRegistryFeedItemV3;
 }>;
 
@@ -1602,7 +2027,7 @@ export class CustomRegistryProjectorV3 {
   readonly #manifest: CustomRegistryDeploymentManifestV3;
   readonly #occurrences = new Map<string, ProjectedEvent>();
   readonly #history: ProjectedEvent[] = [];
-  readonly #current = new Map<Sha256Digest, CustomLaunchRegistryRecordV3>();
+  readonly #current = new Map<Sha256Digest, CustomLaunchProjectionRecordV3>();
   readonly #eventByLaunch = new Map<Sha256Digest, ProjectedEvent>();
 
   constructor(manifest: CustomRegistryDeploymentManifestV3) {
@@ -1650,10 +2075,13 @@ export class CustomRegistryProjectorV3 {
         entry.occurrenceId !== occurrenceId(event) ||
         entry.eventDigest !== eventFingerprint ||
         item.generation !== String(index + 1) ||
-        item.projectionKey !== `custom:${event.caip2}:${event.launchId}` ||
-        item.recordHash !== customRegistryRecordHashV3(item.record) ||
+        item.projectionKey !==
+          `custom:${event.caip2}:${event.launchId}` ||
+        item.projectionDigest !== customRegistryProjectionDigestV3(item.record) ||
         item.record.launchId !== event.launchId ||
-        item.record.projectId !== event.projectId
+        item.record.projectId !== event.projectId ||
+        item.record.origin.registryLaunchIdRaw !== event.registryLaunchIdRaw ||
+        item.record.origin.registeredRecordHash !== event.registeredRecordHash
       ) {
         return fail("custom-registry-checkpoint-entry-binding");
       }
@@ -1705,13 +2133,18 @@ export class CustomRegistryProjectorV3 {
       (event.operation === "registered" && previous !== null) ||
       (event.operation !== "registered" && previous === null) ||
       ((event.operation === "corrected" || event.operation === "revoked") &&
-        event.previousRecordHash !== previous!.origin.publicationBindingHash) ||
+        event.previousOnchainRecordHash !==
+          previous!.origin.latestOnchainRecordHash) ||
       (event.operation === "finalized" &&
-        (event.previousRecordHash !== null ||
-          event.publicationBindingHash !== previous!.origin.publicationBindingHash ||
+        (event.previousOnchainRecordHash !== null ||
+          event.latestOnchainRecordHash !==
+            previous!.origin.latestOnchainRecordHash ||
           event.observedTransactionHash !== previous!.origin.transactionHash)) ||
       (previous !== null &&
         (previous.projectId !== event.projectId ||
+          previous.origin.registryLaunchIdRaw !== event.registryLaunchIdRaw ||
+          previous.origin.registryProjectIdRaw !== event.registryProjectIdRaw ||
+          previous.origin.registeredRecordHash !== event.registeredRecordHash ||
           previous.lifecycle.status === "revoked" ||
           previous.lifecycle.status === "orphaned")) ||
       (previousSequence !== null &&
@@ -1724,7 +2157,7 @@ export class CustomRegistryProjectorV3 {
     const item = Object.freeze({
       generation,
       projectionKey: `custom:${event.caip2}:${event.launchId}`,
-      recordHash: customRegistryRecordHashV3(projected),
+      projectionDigest: customRegistryProjectionDigestV3(projected),
       record: projected,
     });
     const accepted = Object.freeze({
@@ -1811,7 +2244,7 @@ export class CustomRegistryProjectorV3 {
     const item = Object.freeze({
       generation: String(this.#history.length + 1),
       projectionKey: latest.item.projectionKey,
-      recordHash: customRegistryRecordHashV3(projected),
+      projectionDigest: customRegistryProjectionDigestV3(projected),
       record: projected,
     });
     const transition: ProjectedEvent = Object.freeze({
@@ -1824,7 +2257,7 @@ export class CustomRegistryProjectorV3 {
     return item;
   }
 
-  current(launchId: Sha256Digest): CustomLaunchRegistryRecordV3 | null {
+  current(launchId: Sha256Digest): CustomLaunchProjectionRecordV3 | null {
     return this.#current.get(launchId) ?? null;
   }
 
