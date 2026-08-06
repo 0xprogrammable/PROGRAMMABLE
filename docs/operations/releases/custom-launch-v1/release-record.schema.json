@@ -249,10 +249,11 @@
     "deploymentSnapshot": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["deploymentId", "immutableDeploymentUrl", "productionAlias", "configurationSnapshotSha256", "capturedAt"],
+      "required": ["deploymentId", "immutableDeploymentUrl", "websiteCommitSha", "productionAlias", "configurationSnapshotSha256", "capturedAt"],
       "properties": {
         "deploymentId": { "$ref": "#/$defs/nullableString" },
         "immutableDeploymentUrl": { "$ref": "#/$defs/nullableString" },
+        "websiteCommitSha": { "$ref": "#/$defs/nullableCommit" },
         "productionAlias": { "enum": ["https://programmable.family", null] },
         "configurationSnapshotSha256": { "$ref": "#/$defs/nullableSha256" },
         "capturedAt": { "$ref": "#/$defs/nullableTimestamp" }

@@ -23,7 +23,7 @@
     "brand:favicons": "node scripts/generate-programmable-favicons.mjs",
     "audit:prod": "npm audit --omit=dev --audit-level=moderate",
     "release:custom-launch:record:verify": "node scripts/verify-custom-launch-release-record.mjs",
-    "release:custom-launch:record:test": "node --test scripts/test/custom-launch-release-record.test.mjs",
+    "release:custom-launch:record:test": "node --test scripts/test/custom-launch-release-record.test.mjs scripts/test/custom-launch-release-workflow-contract.test.mjs",
     "verify": "npm run release:custom-launch:record:test && npm run verify:uniswap-launcher-sdk && npm run contracts:bootstrap && npm run contracts:build && npm run lint && npm run typecheck && npm run test && npm run perf:read-model:smoke && npm run perf:read-model:ops-gate && npm run perf:read-model:release-if-present && npm run build",
     "contracts:bootstrap": "cd contracts && ./scripts/bootstrap-deps.sh",
     "contracts:fmt": "cd contracts && forge fmt --check",

@@ -110,6 +110,7 @@
     "rollback": {
       "deploymentId": null,
       "immutableDeploymentUrl": null,
+      "websiteCommitSha": null,
       "productionAlias": null,
       "configurationSnapshotSha256": null,
       "capturedAt": null

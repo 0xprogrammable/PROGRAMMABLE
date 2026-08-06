@@ -116,10 +116,12 @@ async function completeRecord(level = "live") {
   record.deployment.rollback = {
     deploymentId: "dpl_previous",
     immutableDeploymentUrl: "https://launcher-v4-previous.vercel.app",
+    websiteCommitSha: commits.base,
     productionAlias: "https://programmable.family",
     configurationSnapshotSha256: hashes.f,
     capturedAt: "2026-08-06T13:10:00Z",
   };
+  if (level === "staging") return record;
   record.deployment.candidate = {
     deploymentId: "dpl_candidate",
     immutableDeploymentUrl: "https://launcher-v4-candidate.vercel.app",
@@ -202,7 +204,11 @@ test("template and schema are valid JSON and the template is not clearance", asy
 test("each release level is independently fail closed", async () => {
   const clearance = await completeRecord("clearance");
   assert.equal(verifyReleaseRecord(clearance, { require: "clearance" }).ok, true);
-  assert.equal(verifyReleaseRecord(clearance, { require: "candidate" }).ok, false);
+  assert.equal(verifyReleaseRecord(clearance, { require: "staging" }).ok, false);
+
+  const staging = await completeRecord("staging");
+  assert.equal(verifyReleaseRecord(staging, { require: "staging" }).ok, true);
+  assert.equal(verifyReleaseRecord(staging, { require: "candidate" }).ok, false);
 
   const candidate = await completeRecord("candidate");
   assert.equal(verifyReleaseRecord(candidate, { require: "candidate" }).ok, true);
@@ -214,6 +220,25 @@ test("each release level is independently fail closed", async () => {
 
   const live = await completeRecord("live");
   assert.equal(verifyReleaseRecord(live, { require: "live" }).ok, true);
+});
+
+test("staging expectations bind the exact external workflow observations", async () => {
+  const record = await completeRecord("staging");
+  const expected = {
+    websiteCommitSha: commits.website,
+    packageArtifactHash: hashes.b,
+    rollbackDeploymentId: "dpl_previous",
+    rollbackDeploymentUrl: "https://launcher-v4-previous.vercel.app",
+    rollbackWebsiteCommitSha: commits.base,
+    detachedRecordSha256: computeDetachedRecordSha256(record),
+  };
+  assert.equal(verifyReleaseRecord(record, { require: "staging", expected }).ok, true);
+  const substituted = verifyReleaseRecord(record, {
+    require: "staging",
+    expected: { ...expected, websiteCommitSha: commits.other },
+  });
+  assert.equal(substituted.ok, false);
+  assert.match(substituted.errors.join("\n"), /subject\.website\.commitSha/);
 });
 
 test("candidate workflow cannot substitute the Website commit", async () => {

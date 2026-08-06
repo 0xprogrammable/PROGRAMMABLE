@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { appendFile, readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 export const SCHEMA_VERSION = "programmable.custom-launch-release-record.v1";
@@ -27,7 +27,7 @@ const RECORD_STATUSES = new Set([
   "promoted",
   "live",
 ]);
-const REQUIRED_LEVELS = new Set(["template", "clearance", "candidate", "promotion", "live"]);
+const REQUIRED_LEVELS = new Set(["template", "clearance", "staging", "candidate", "promotion", "live"]);
 const FORBIDDEN_SECRET_KEY = /^(?:access[_-]?token|identity[_-]?token|private[_-]?key|password|secret|database[_-]?url|credential)(?:[_-]?value)?$/i;
 const PLACEHOLDER_PATTERN = /(?:<[^>]+>|example\.invalid|replace[_ -]?me|todo|yyyy|nnn)/i;
 
@@ -315,9 +315,10 @@ function validateDependencies(errors, dependencies) {
 
 function validateRollback(errors, rollback) {
   if (!requireObject(errors, rollback, "deployment.rollback")) return;
-  requireExactKeys(errors, rollback, "deployment.rollback", ["deploymentId", "immutableDeploymentUrl", "productionAlias", "configurationSnapshotSha256", "capturedAt"]);
+  requireExactKeys(errors, rollback, "deployment.rollback", ["deploymentId", "immutableDeploymentUrl", "websiteCommitSha", "productionAlias", "configurationSnapshotSha256", "capturedAt"]);
   requireString(errors, rollback.deploymentId, "deployment.rollback.deploymentId");
   validateImmutableCandidateUrl(errors, rollback.immutableDeploymentUrl, "deployment.rollback.immutableDeploymentUrl");
+  validateCommit(errors, rollback.websiteCommitSha, "deployment.rollback.websiteCommitSha");
   requireExact(errors, rollback.productionAlias, "deployment.rollback.productionAlias", "https://programmable.family");
   validateSha256(errors, rollback.configurationSnapshotSha256, "deployment.rollback.configurationSnapshotSha256");
   validateTimestamp(errors, rollback.capturedAt, "deployment.rollback.capturedAt");
@@ -362,7 +363,7 @@ function validateWorkflow(errors, workflow, websiteCommitSha, candidate) {
   validateSha256(errors, workflow.verificationEvidenceSha256, "promotionGate.workflow.verificationEvidenceSha256");
 }
 
-export function verifyReleaseRecord(record, { require = "template" } = {}) {
+export function verifyReleaseRecord(record, { require = "template", expected = {} } = {}) {
   if (!REQUIRED_LEVELS.has(require)) throw new Error(`unsupported verification level: ${require}`);
   const errors = [];
   if (!requireObject(errors, record, "$")) return { ok: false, errors, releaseSubjectSha256: null, detachedRecordSha256: null };
@@ -416,7 +417,7 @@ export function verifyReleaseRecord(record, { require = "template" } = {}) {
   if (requireObject(errors, record.promotionGate, "promotionGate")) requireExactKeys(errors, record.promotionGate, "promotionGate", ["status", "workflow"]);
   if (requireObject(errors, record.canary, "canary")) requireExactKeys(errors, record.canary, "canary", ["status", "evidenceSha256", "evidenceLocator", "completedAt"]);
 
-  const levels = ["template", "clearance", "candidate", "promotion", "live"];
+  const levels = ["template", "clearance", "staging", "candidate", "promotion", "live"];
   const requiredIndex = levels.indexOf(require);
   if (requiredIndex >= 1) {
     validateDecision(errors, record.commandCenter?.freezeClearance, "commandCenter.freezeClearance", "cleared", subjectHash);
@@ -428,10 +429,68 @@ export function verifyReleaseRecord(record, { require = "template" } = {}) {
   if (requiredIndex >= 2) {
     validateDependencies(errors, record.productionDependencies);
     validateRollback(errors, record.deployment?.rollback);
+    requireExact(errors, record.releaseIntent?.targetMode, "releaseIntent.targetMode", "enabled");
+  }
+  if (requiredIndex === 2) {
+    requireExact(errors, record.recordStatus, "recordStatus", "freeze_cleared");
+    requireExact(errors, record.promotionGate?.status, "promotionGate.status", "blocked");
+    requireExact(errors, record.commandCenter?.promotionApproval?.status, "commandCenter.promotionApproval.status", "pending");
+    requireExact(errors, record.commandCenter?.liveDeclaration?.status, "commandCenter.liveDeclaration.status", "pending");
+    for (const [path, value] of [
+      ["deployment.candidate.deploymentId", record.deployment?.candidate?.deploymentId],
+      ["deployment.candidate.immutableDeploymentUrl", record.deployment?.candidate?.immutableDeploymentUrl],
+      ["deployment.candidate.websiteCommitSha", record.deployment?.candidate?.websiteCommitSha],
+      ["deployment.candidate.approvalServicePackageArtifactHash", record.deployment?.candidate?.approvalServicePackageArtifactHash],
+      ["deployment.candidate.verified", record.deployment?.candidate?.verified],
+      ["deployment.candidate.verificationEvidenceSha256", record.deployment?.candidate?.verificationEvidenceSha256],
+      ["deployment.candidate.verifiedAt", record.deployment?.candidate?.verifiedAt],
+      ["promotionGate.workflow.runId", record.promotionGate?.workflow?.runId],
+      ["promotionGate.workflow.runAttempt", record.promotionGate?.workflow?.runAttempt],
+      ["promotionGate.workflow.runUrl", record.promotionGate?.workflow?.runUrl],
+      ["promotionGate.workflow.commitSha", record.promotionGate?.workflow?.commitSha],
+      ["promotionGate.workflow.verifiedCommitSha", record.promotionGate?.workflow?.verifiedCommitSha],
+      ["promotionGate.workflow.conclusion", record.promotionGate?.workflow?.conclusion],
+      ["promotionGate.workflow.candidateDeploymentId", record.promotionGate?.workflow?.candidateDeploymentId],
+      ["promotionGate.workflow.immutableDeploymentUrl", record.promotionGate?.workflow?.immutableDeploymentUrl],
+      ["promotionGate.workflow.approvalServicePackageArtifactHash", record.promotionGate?.workflow?.approvalServicePackageArtifactHash],
+      ["promotionGate.workflow.candidateVerified", record.promotionGate?.workflow?.candidateVerified],
+      ["promotionGate.workflow.verificationEvidenceSha256", record.promotionGate?.workflow?.verificationEvidenceSha256],
+      ["commandCenter.promotionApproval.decisionId", record.commandCenter?.promotionApproval?.decisionId],
+      ["commandCenter.promotionApproval.immutableReference", record.commandCenter?.promotionApproval?.immutableReference],
+      ["commandCenter.promotionApproval.decidedAt", record.commandCenter?.promotionApproval?.decidedAt],
+      ["commandCenter.promotionApproval.statementSha256", record.commandCenter?.promotionApproval?.statementSha256],
+      ["commandCenter.promotionApproval.releaseSubjectSha256", record.commandCenter?.promotionApproval?.releaseSubjectSha256],
+      ["commandCenter.promotionApproval.candidateDeploymentId", record.commandCenter?.promotionApproval?.candidateDeploymentId],
+      ["commandCenter.promotionApproval.immutableDeploymentUrl", record.commandCenter?.promotionApproval?.immutableDeploymentUrl],
+      ["commandCenter.promotionApproval.websiteCommitSha", record.commandCenter?.promotionApproval?.websiteCommitSha],
+      ["commandCenter.promotionApproval.approvalServicePackageArtifactHash", record.commandCenter?.promotionApproval?.approvalServicePackageArtifactHash],
+      ["commandCenter.liveDeclaration.decisionId", record.commandCenter?.liveDeclaration?.decisionId],
+      ["commandCenter.liveDeclaration.immutableReference", record.commandCenter?.liveDeclaration?.immutableReference],
+      ["commandCenter.liveDeclaration.decidedAt", record.commandCenter?.liveDeclaration?.decidedAt],
+      ["commandCenter.liveDeclaration.statementSha256", record.commandCenter?.liveDeclaration?.statementSha256],
+      ["commandCenter.liveDeclaration.releaseSubjectSha256", record.commandCenter?.liveDeclaration?.releaseSubjectSha256],
+      ["commandCenter.liveDeclaration.candidateDeploymentId", record.commandCenter?.liveDeclaration?.candidateDeploymentId],
+      ["commandCenter.liveDeclaration.immutableDeploymentUrl", record.commandCenter?.liveDeclaration?.immutableDeploymentUrl],
+      ["commandCenter.liveDeclaration.websiteCommitSha", record.commandCenter?.liveDeclaration?.websiteCommitSha],
+      ["commandCenter.liveDeclaration.approvalServicePackageArtifactHash", record.commandCenter?.liveDeclaration?.approvalServicePackageArtifactHash],
+      ["deployment.promoted.deploymentId", record.deployment?.promoted?.deploymentId],
+      ["deployment.promoted.immutableDeploymentUrl", record.deployment?.promoted?.immutableDeploymentUrl],
+      ["deployment.promoted.productionAlias", record.deployment?.promoted?.productionAlias],
+      ["deployment.promoted.postPromotionEvidenceSha256", record.deployment?.promoted?.postPromotionEvidenceSha256],
+      ["deployment.promoted.promotedAt", record.deployment?.promoted?.promotedAt],
+      ["canary.evidenceSha256", record.canary?.evidenceSha256],
+      ["canary.evidenceLocator", record.canary?.evidenceLocator],
+      ["canary.completedAt", record.canary?.completedAt],
+    ]) {
+      if (value !== null) add(errors, path, "must remain null before candidate staging");
+    }
+    requireExact(errors, record.canary?.status, "canary.status", "pending");
+  }
+  if (requiredIndex >= 3) {
     validateCandidate(errors, record.deployment?.candidate, website?.commitSha, service?.packageArtifactHash);
     validateWorkflow(errors, record.promotionGate?.workflow, website?.commitSha, record.deployment?.candidate ?? {});
     validateChronology(errors, record.commandCenter?.freezeClearance?.decidedAt, record.deployment?.candidate?.verifiedAt, "deployment.candidate.verifiedAt");
-    if (requiredIndex === 2) {
+    if (requiredIndex === 3) {
       requireExact(errors, record.promotionGate?.status, "promotionGate.status", "candidate_verified");
     } else if (!["promotion_authorized", "promoted"].includes(record.promotionGate?.status)) {
       add(errors, "promotionGate.status", "must preserve or advance the verified candidate gate");
@@ -440,7 +499,7 @@ export function verifyReleaseRecord(record, { require = "template" } = {}) {
       add(errors, "recordStatus", "must reflect candidate verification");
     }
   }
-  if (requiredIndex >= 3) {
+  if (requiredIndex >= 4) {
     validateDecision(
       errors,
       record.commandCenter?.promotionApproval,
@@ -450,14 +509,14 @@ export function verifyReleaseRecord(record, { require = "template" } = {}) {
       record.deployment?.candidate,
     );
     validateChronology(errors, record.deployment?.candidate?.verifiedAt, record.commandCenter?.promotionApproval?.decidedAt, "commandCenter.promotionApproval.decidedAt");
-    if (requiredIndex === 3) {
+    if (requiredIndex === 4) {
       requireExact(errors, record.promotionGate?.status, "promotionGate.status", "promotion_authorized");
     } else if (record.promotionGate?.status !== "promoted") {
       add(errors, "promotionGate.status", "must preserve the promotion authorization in promoted state");
     }
     if (!["promotion_approved", "promoted", "live"].includes(record.recordStatus)) add(errors, "recordStatus", "must reflect promotion approval");
   }
-  if (requiredIndex >= 4) {
+  if (requiredIndex >= 5) {
     const promoted = record.deployment?.promoted;
     if (requireObject(errors, promoted, "deployment.promoted")) {
       requireExactKeys(errors, promoted, "deployment.promoted", ["deploymentId", "immutableDeploymentUrl", "productionAlias", "postPromotionEvidenceSha256", "promotedAt"]);
@@ -492,11 +551,32 @@ export function verifyReleaseRecord(record, { require = "template" } = {}) {
     requireExact(errors, record.commandCenter?.liveDeclaration?.status, "commandCenter.liveDeclaration.status", "pending");
   }
 
+  if (expected.websiteCommitSha !== undefined) {
+    requireExact(errors, website?.commitSha, "subject.website.commitSha", expected.websiteCommitSha);
+  }
+  if (expected.packageArtifactHash !== undefined) {
+    requireExact(errors, service?.packageArtifactHash, "subject.approvalService.packageArtifactHash", expected.packageArtifactHash);
+  }
+  if (expected.rollbackDeploymentId !== undefined) {
+    requireExact(errors, record.deployment?.rollback?.deploymentId, "deployment.rollback.deploymentId", expected.rollbackDeploymentId);
+  }
+  if (expected.rollbackDeploymentUrl !== undefined) {
+    requireExact(errors, record.deployment?.rollback?.immutableDeploymentUrl, "deployment.rollback.immutableDeploymentUrl", expected.rollbackDeploymentUrl);
+  }
+  if (expected.rollbackWebsiteCommitSha !== undefined) {
+    requireExact(errors, record.deployment?.rollback?.websiteCommitSha, "deployment.rollback.websiteCommitSha", expected.rollbackWebsiteCommitSha);
+  }
+
+  const detachedRecordSha256 = computeDetachedRecordSha256(record);
+  if (expected.detachedRecordSha256 !== undefined) {
+    requireExact(errors, detachedRecordSha256, "detachedRecordSha256", expected.detachedRecordSha256);
+  }
+
   return {
     ok: errors.length === 0,
     errors,
     releaseSubjectSha256: subjectHash,
-    detachedRecordSha256: computeDetachedRecordSha256(record),
+    detachedRecordSha256,
   };
 }
 
@@ -504,22 +584,31 @@ function parseArguments(argv) {
   let file = null;
   let require = "template";
   let json = false;
+  let githubOutput = null;
+  const expected = {};
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--require") require = argv[++index];
     else if (argument === "--json") json = true;
+    else if (argument === "--github-output") githubOutput = argv[++index];
+    else if (argument === "--expect-website-commit") expected.websiteCommitSha = argv[++index];
+    else if (argument === "--expect-package-artifact-hash") expected.packageArtifactHash = argv[++index];
+    else if (argument === "--expect-rollback-deployment-id") expected.rollbackDeploymentId = argv[++index];
+    else if (argument === "--expect-rollback-deployment-url") expected.rollbackDeploymentUrl = argv[++index];
+    else if (argument === "--expect-rollback-website-commit") expected.rollbackWebsiteCommitSha = argv[++index];
+    else if (argument === "--expect-detached-record-sha256") expected.detachedRecordSha256 = argv[++index];
     else if (argument.startsWith("-")) throw new Error(`unknown argument: ${argument}`);
     else if (file === null) file = argument;
     else throw new Error(`unexpected argument: ${argument}`);
   }
-  if (file === null) throw new Error("usage: verify-custom-launch-release-record.mjs <record.json> [--require template|clearance|candidate|promotion|live] [--json]");
-  return { file, require, json };
+  if (file === null) throw new Error("usage: verify-custom-launch-release-record.mjs <record.json> [--require template|clearance|staging|candidate|promotion|live] [--json] [--github-output path] [expectation flags]");
+  return { file, require, json, githubOutput, expected };
 }
 
 async function main(argv) {
   const options = parseArguments(argv);
   const record = JSON.parse(await readFile(options.file, "utf8"));
-  const result = verifyReleaseRecord(record, { require: options.require });
+  const result = verifyReleaseRecord(record, { require: options.require, expected: options.expected });
   if (options.json) process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else {
     process.stdout.write(`release subject: ${result.releaseSubjectSha256}\n`);
@@ -527,6 +616,17 @@ async function main(argv) {
     process.stdout.write(`required level: ${options.require}\n`);
     process.stdout.write(`result: ${result.ok ? "passed" : "blocked"}\n`);
     for (const error of result.errors) process.stderr.write(`- ${error}\n`);
+  }
+  if (result.ok && options.githubOutput !== null) {
+    await appendFile(
+      options.githubOutput,
+      [
+        `release_subject_sha256=${result.releaseSubjectSha256}`,
+        `detached_record_sha256=${result.detachedRecordSha256}`,
+        "",
+      ].join("\n"),
+      { encoding: "utf8", mode: 0o600 },
+    );
   }
   if (!result.ok) process.exitCode = 1;
 }
