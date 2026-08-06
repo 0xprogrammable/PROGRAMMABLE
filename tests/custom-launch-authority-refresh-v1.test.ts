@@ -44,7 +44,7 @@ function application(
     launchEntitlementBindingHash: digest("1"),
     updatedAt: "2026-08-05T12:00:00.000Z",
     ...overrides,
-  };
+  } as PrincipalCustomLaunchApplicationSummaryV2;
 }
 
 function refresh(

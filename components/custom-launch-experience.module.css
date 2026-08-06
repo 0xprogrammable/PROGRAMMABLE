@@ -139,6 +139,52 @@
   opacity: 0.62;
 }
 
+.walletGate {
+  display: grid;
+  gap: 12px;
+  margin-top: auto;
+}
+
+.walletGate > div {
+  align-items: center;
+  background: color-mix(in srgb, var(--glass-90) 88%, transparent);
+  border: 1px solid var(--control-border);
+  border-radius: 13px;
+  display: grid;
+  gap: 2px 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 58px;
+  padding: 9px 12px;
+}
+
+.walletGate span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.walletGate code {
+  color: var(--text);
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 12px;
+  grid-column: 1;
+}
+
+.walletGate > div button,
+.reviewWallet button {
+  color: var(--accent-strong);
+  font-size: 11px;
+  font-weight: 650;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  min-height: 44px;
+  padding-inline: 8px;
+}
+
+.walletGate .githubButton {
+  margin-top: 0;
+}
+
 .listToolbar {
   align-items: center;
   display: flex;
@@ -496,6 +542,13 @@
   font-size: 13px;
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+.reviewWallet {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .launchFooter {

@@ -30,7 +30,9 @@ import {
   type TokenChartVolume,
 } from "@/components/token-price-chart";
 import { TokenCommunityChat } from "@/components/token-community-chat";
+import { CustomMarketTrade } from "@/components/custom-market-trade";
 import {
+  getExplorePreviewCustomProject,
   getExplorePreviewProject,
   getExplorePreviewToken,
 } from "@/components/explore-preview-data";
@@ -38,21 +40,26 @@ import { useInterfacePreview } from "@/components/interface-preview";
 import { useLiveDataRefresh } from "@/components/use-live-data-refresh";
 import { WebsiteLinkIcon } from "@/components/website-link-icon";
 import { useWallet } from "@/components/wallet-provider";
+import { parseDiscoverableMarketTradeCapabilityV1 } from
+  "@/lib/custom-launch/trade-capability-v1";
 import {
   canOptimizeTokenImage,
   getTokenCardImageSource,
 } from "@/lib/token-image";
 import { validatePreparedTradeResponse } from "@/lib/trade/client";
 import {
+  type CustomProjectExploreEntry,
   type LauncherToken,
   type TokenLink,
   type TokenLinkKind,
 } from "@/lib/tokens";
+import type { PostLaunchAuthorityInventoryV1 } from "@/lib/custom-launch/contract-v2";
 import styles from "./token-experience.module.css";
 
 type DetailPayload = {
   status: "ready" | "not-deployed";
   token: LauncherToken | null;
+  customProject: CustomProjectExploreEntry | null;
   snapshot: { chainId: number } | null;
 };
 
@@ -64,6 +71,12 @@ type DetailState =
   | {
       phase: "ready";
       token: LauncherToken;
+      chainId: number;
+      requestKey: string;
+    }
+  | {
+      phase: "custom-ready";
+      project: CustomProjectExploreEntry;
       chainId: number;
       requestKey: string;
     };
@@ -249,9 +262,75 @@ function parseTokenLink(value: unknown): TokenLink | null {
   return { kind: value.kind, url: value.url };
 }
 
+function parseCustomAuthorityInventory(
+  value: unknown,
+  expectedWallet: Readonly<{ namespace: string; value: string }>,
+  expectedHash: string,
+): PostLaunchAuthorityInventoryV1 | null {
+  if (!isRecord(value)
+    || !hasOnlyKeys(value, [
+      "schemaVersion", "launchingWallet", "addressBindings",
+      "declaredIdentityBindings", "postLaunchAuthorities", "confirmation",
+      "postLaunchActionPolicy", "githubAuthority",
+      "postLaunchAuthorityInventoryHash",
+    ])
+    || value.schemaVersion !== "programmable.post-launch-authority-inventory.v1"
+    || value.postLaunchActionPolicy !== "declared-onchain-authority-only"
+    || value.githubAuthority !== "provenance-only-never-post-launch-authority"
+    || value.postLaunchAuthorityInventoryHash !== expectedHash
+    || !Array.isArray(value.addressBindings)
+    || !Array.isArray(value.declaredIdentityBindings)
+    || !Array.isArray(value.postLaunchAuthorities)
+    || !isRecord(value.launchingWallet)
+    || value.launchingWallet.namespace !== expectedWallet.namespace
+    || value.launchingWallet.value !== expectedWallet.value
+    || !isRecord(value.confirmation)
+    || value.confirmation.mode !== "artifact-bound-launching-wallet-intent"
+    || value.confirmation.userVisibleDisclosureRequired !== true
+    || !isRecord(value.confirmation.confirmingIdentity)
+    || value.confirmation.confirmingIdentity.namespace !== expectedWallet.namespace
+    || value.confirmation.confirmingIdentity.value !== expectedWallet.value
+  ) return null;
+  let previousAuthorityId = "";
+  for (const candidate of value.postLaunchAuthorities) {
+    if (!isRecord(candidate)
+      || !hasOnlyKeys(candidate, [
+        "authorityId", "role", "authorityKind", "identity", "source",
+        "postLaunchActions", "feeRole", "disclosure", "authorization",
+      ])
+      || typeof candidate.authorityId !== "string"
+      || candidate.authorityId <= previousAuthorityId
+      || typeof candidate.role !== "string"
+      || !["eoa", "multisig", "contract"].includes(String(candidate.authorityKind))
+      || !["none", "creator", "project"].includes(String(candidate.feeRole))
+      || candidate.authorization !== "declared-onchain-authority-only"
+      || !isRecord(candidate.identity)
+      || typeof candidate.identity.namespace !== "string"
+      || typeof candidate.identity.value !== "string"
+      || !/^eip155:[1-9][0-9]*$/u.test(candidate.identity.namespace)
+      || !/^0x[0-9a-f]{40}$/u.test(candidate.identity.value)
+      || !isRecord(candidate.source)
+      || !["launching-wallet", "declared-identity", "launch-produced-contract", "reviewed-external-contract"].includes(String(candidate.source.kind))
+      || !Array.isArray(candidate.postLaunchActions)
+      || candidate.postLaunchActions.some((action) => typeof action !== "string")
+      || !isRecord(candidate.disclosure)
+      || typeof candidate.disclosure.label !== "string"
+      || typeof candidate.disclosure.description !== "string"
+    ) return null;
+    previousAuthorityId = candidate.authorityId;
+  }
+  return value as unknown as PostLaunchAuthorityInventoryV1;
+}
+
 function parseLauncherToken(value: unknown): LauncherToken | null {
   if (!isRecord(value)) return null;
   if (
+    value.exploreKind !== "token" ||
+    !isRecord(value.launchCategoryProvenance) ||
+    value.launchCategoryProvenance.schemaVersion !==
+      "programmable.explore-launch-category-provenance.v1" ||
+    value.launchCategoryProvenance.category !== "classic" ||
+    value.launchCategoryProvenance.source !== "canonical-launch-read-model" ||
     typeof value.id !== "string" ||
     typeof value.name !== "string" ||
     typeof value.symbol !== "string" ||
@@ -290,6 +369,147 @@ function parseLauncherToken(value: unknown): LauncherToken | null {
   };
 }
 
+function parseCustomProject(value: unknown): CustomProjectExploreEntry | null {
+  if (!isRecord(value)
+    || value.exploreKind !== "custom-project"
+    || typeof value.id !== "string"
+    || typeof value.name !== "string"
+    || typeof value.launchedAt !== "string"
+    || typeof value.finalizedAt !== "string"
+    || typeof value.chainId !== "string"
+    || typeof value.modelId !== "string"
+    || typeof value.customProjectId !== "string"
+    || !/^sha256:[0-9a-f]{64}$/u.test(value.customProjectId)
+    || typeof value.customLaunchId !== "string"
+    || !/^sha256:[0-9a-f]{64}$/u.test(value.customLaunchId)
+    || !isRecord(value.launchingWallet)
+    || typeof value.launchingWallet.namespace !== "string"
+    || !/^eip155:[1-9][0-9]*$/u.test(value.launchingWallet.namespace)
+    || typeof value.launchingWallet.value !== "string"
+    || !/^0x[0-9a-f]{40}$/u.test(value.launchingWallet.value)
+    || typeof value.postLaunchAuthorityInventoryHash !== "string"
+    || !/^sha256:[0-9a-f]{64}$/u.test(value.postLaunchAuthorityInventoryHash)
+    || !isTokenAddress(value.tokenAddress)
+    || !Array.isArray(value.markets)
+    || !Array.isArray(value.links)
+    || !isRecord(value.launchCategoryProvenance)
+    || value.launchCategoryProvenance.schemaVersion
+      !== "programmable.explore-launch-category-provenance.v1"
+    || value.launchCategoryProvenance.category !== "custom"
+    || value.launchCategoryProvenance.source !== "website.custom-launched"
+    || value.launchCategoryProvenance.projectId !== value.customProjectId
+    || value.launchCategoryProvenance.launchId !== value.customLaunchId
+    || typeof value.launchCategoryProvenance.sourceRecordBindingHash !== "string"
+    || !/^sha256:[0-9a-f]{64}$/u.test(
+      value.launchCategoryProvenance.sourceRecordBindingHash,
+    )
+    || typeof value.launchCategoryProvenance.finalizedLaunchBindingHash !== "string"
+    || !/^sha256:[0-9a-f]{64}$/u.test(
+      value.launchCategoryProvenance.finalizedLaunchBindingHash,
+    )
+  ) return null;
+  const links = value.links.map(parseTokenLink);
+  if (links.some((link) => link === null)) return null;
+  const launchingWallet = {
+    namespace: value.launchingWallet.namespace as string,
+    value: value.launchingWallet.value as string,
+  };
+  const postLaunchAuthorityInventory = parseCustomAuthorityInventory(
+    value.postLaunchAuthorityInventory,
+    launchingWallet,
+    value.postLaunchAuthorityInventoryHash,
+  );
+  if (postLaunchAuthorityInventory === null) return null;
+  type CustomMarket = CustomProjectExploreEntry["markets"][number];
+  const markets: CustomMarket[] = [];
+  for (const candidate of value.markets) {
+    if (!isRecord(candidate)
+      || typeof candidate.marketId !== "string"
+      || typeof candidate.kind !== "string"
+      || !["active", "paused", "closed", "verification_pending"].includes(
+        String(candidate.status),
+      )
+      || (candidate.poolId !== undefined && !isBytes32(candidate.poolId))) return null;
+    const asset = (assetValue: unknown) => {
+      if (!isRecord(assetValue)
+        || typeof assetValue.assetId !== "string"
+        || !isRecord(assetValue.identity)
+        || typeof assetValue.identity.namespace !== "string"
+        || typeof assetValue.identity.value !== "string"
+        || (assetValue.decimals !== undefined
+          && (!Number.isSafeInteger(assetValue.decimals)
+            || Number(assetValue.decimals) < 0
+            || Number(assetValue.decimals) > 255))) return null;
+      return {
+        assetId: assetValue.assetId,
+        identity: {
+          namespace: assetValue.identity.namespace,
+          value: assetValue.identity.value,
+        },
+        ...(typeof assetValue.name === "string" ? { name: assetValue.name } : {}),
+        ...(typeof assetValue.symbol === "string" ? { symbol: assetValue.symbol } : {}),
+        ...(assetValue.decimals === undefined
+          ? {} : { decimals: Number(assetValue.decimals) }),
+      };
+    };
+    const baseAsset = asset(candidate.baseAsset);
+    const quoteAsset = asset(candidate.quoteAsset);
+    if (baseAsset === null || quoteAsset === null) return null;
+    const capability = candidate.tradeCapability === undefined
+      ? undefined
+      : parseDiscoverableMarketTradeCapabilityV1({
+          value: candidate.tradeCapability,
+          chainId: value.chainId,
+          marketId: candidate.marketId,
+          baseAssetId: baseAsset.assetId,
+          quoteAssetId: quoteAsset.assetId,
+          ...(candidate.poolId === undefined ? {} : { poolId: candidate.poolId }),
+        });
+    if (candidate.tradeCapability !== undefined && capability === null) return null;
+    markets.push({
+      marketId: candidate.marketId,
+      kind: candidate.kind,
+      status: candidate.status as CustomMarket["status"],
+      ...(candidate.poolId === undefined ? {} : { poolId: candidate.poolId }),
+      baseAsset,
+      quoteAsset,
+      ...(capability === undefined
+        ? {}
+        : { tradeCapability: capability as CustomMarket["tradeCapability"] }),
+    });
+  }
+  return {
+    exploreKind: "custom-project",
+    id: value.id,
+    name: value.name,
+    ...(typeof value.symbol === "string" ? { symbol: value.symbol } : {}),
+    ...(typeof value.description === "string"
+      ? { description: value.description }
+      : {}),
+    ...(safeImageUrl(value.imageUrl) ? { imageUrl: value.imageUrl as string } : {}),
+    links: links as TokenLink[],
+    launchedAt: value.launchedAt,
+    finalizedAt: value.finalizedAt,
+    chainId: value.chainId,
+    modelId: value.modelId,
+    customProjectId: value.customProjectId as `sha256:${string}`,
+    customLaunchId: value.customLaunchId as `sha256:${string}`,
+    launchingWallet,
+    postLaunchAuthorityInventory,
+    postLaunchAuthorityInventoryHash:
+      value.postLaunchAuthorityInventoryHash as `sha256:${string}`,
+    markets,
+    tokenAddress: value.tokenAddress,
+    ...(typeof value.tokenDecimals === "number"
+      && Number.isSafeInteger(value.tokenDecimals)
+      && value.tokenDecimals >= 0
+      && value.tokenDecimals <= 255
+      ? { tokenDecimals: value.tokenDecimals }
+      : {}),
+    launchCategoryProvenance: value.launchCategoryProvenance as CustomProjectExploreEntry["launchCategoryProvenance"],
+  };
+}
+
 export function parseDetailPayload(value: unknown): DetailPayload {
   if (!isRecord(value)) {
     throw new Error("The token registry returned an invalid response");
@@ -301,6 +521,18 @@ export function parseDetailPayload(value: unknown): DetailPayload {
   const token = value.token === null ? null : parseLauncherToken(value.token);
   if (value.token !== null && token === null) {
     throw new Error("The token registry returned an invalid token record");
+  }
+  const customProject = value.customProject === null
+    || value.customProject === undefined
+    ? null
+    : parseCustomProject(value.customProject);
+  if (value.customProject !== null
+    && value.customProject !== undefined
+    && customProject === null) {
+    throw new Error("The token registry returned an invalid custom project");
+  }
+  if (token !== null && customProject !== null) {
+    throw new Error("The token registry returned conflicting launch categories");
   }
 
   let snapshot: DetailPayload["snapshot"] = null;
@@ -315,7 +547,7 @@ export function parseDetailPayload(value: unknown): DetailPayload {
     snapshot = { chainId: Number(value.snapshot.chainId) };
   }
 
-  return { status: value.status, token, snapshot };
+  return { status: value.status, token, customProject, snapshot };
 }
 
 function readApiError(value: unknown) {
@@ -525,6 +757,10 @@ export function buildTokenDetailMetrics(
             "",
         }
       : null,
+    {
+      label: "Type",
+      value: "Classic",
+    },
     volumeOverride ??
       (officialVolumeUsd !== null ||
       token.grossVolumeEth ||
@@ -1332,6 +1568,234 @@ function TokenDetailContent({
   );
 }
 
+function customMarketStatus(project: CustomProjectExploreEntry): string {
+  if (project.markets.length === 0) return "No verified market";
+  const statuses = [...new Set(project.markets.map(({ status }) => status))];
+  if (statuses.length > 1) return `${project.markets.length} canonical markets`;
+  const status = statuses[0]!;
+  return status === "verification_pending"
+    ? "Verification pending"
+    : status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function CustomProjectDetailContent({
+  project,
+  chainId,
+}: {
+  project: CustomProjectExploreEntry;
+  chainId: number;
+}) {
+  const {
+    wallet,
+    openWallet,
+    readNativeBalance,
+    readTradeBalances,
+    sendTransaction,
+  } = useWallet();
+  const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState("");
+  const copyResetTimer = useRef<number | null>(null);
+  const imageUrl = project.imageUrl?.trim()
+    || getFallbackTokenImage(project.tokenAddress ?? project.customProjectId);
+  const imageSource = getTokenCardImageSource(imageUrl);
+  const authorities = project.postLaunchAuthorityInventory.postLaunchAuthorities;
+
+  useEffect(() => () => {
+    if (copyResetTimer.current !== null) window.clearTimeout(copyResetTimer.current);
+  }, []);
+
+  async function copyAddress() {
+    if (project.tokenAddress === undefined) return;
+    if (copyResetTimer.current !== null) window.clearTimeout(copyResetTimer.current);
+    setCopyError("");
+    try {
+      await navigator.clipboard.writeText(project.tokenAddress);
+      setCopied(true);
+      copyResetTimer.current = window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      setCopied(false);
+      setCopyError("Could not copy address");
+      copyResetTimer.current = window.setTimeout(() => setCopyError(""), 2400);
+    }
+  }
+
+  return (
+    <div className={`${styles.page} page-width`}>
+      <div className={styles.navigationRow}>
+        <Link className={styles.back} href="/explore">
+          <ArrowLeft aria-hidden="true" size={16} />
+          Explore
+        </Link>
+      </div>
+
+      <div className={styles.layout}>
+        <section className={styles.identity}>
+          <div className={styles.image}>
+            <Image
+              src={imageSource}
+              alt={project.imageUrl?.trim() ? `${project.name} artwork` : ""}
+              fill
+              priority
+              sizes="(max-width: 720px) 88px, 132px"
+              unoptimized={!canOptimizeTokenImage(imageSource)}
+            />
+          </div>
+          <div className={styles.identityCopy}>
+            <div className={styles.tokenSymbolRow}>
+              {project.symbol ? <span className={styles.symbol}>${project.symbol}</span> : null}
+              <span className={styles.categoryBadge}>Custom</span>
+            </div>
+            <h1 className={styles.name}>{project.name}</h1>
+            {project.links.length > 0 ? (
+              <div className={styles.links} aria-label={`${project.name} links`}>
+                {project.links.map((link) => (
+                  <a
+                    className={`${styles.socialLink} ${link.kind === "website" ? styles.websiteLink : ""}`}
+                    href={link.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={`${project.name} on ${getLinkLabel(link.kind)}`}
+                    title={getLinkLabel(link.kind)}
+                    key={`${link.kind}:${link.url}`}
+                  >
+                    <TokenLinkIcon kind={link.kind} />
+                  </a>
+                ))}
+              </div>
+            ) : null}
+            {project.tokenAddress ? (
+              <div className={styles.addressActions}>
+                <button
+                  className={styles.address}
+                  type="button"
+                  aria-label={copied
+                    ? `${project.name} contract address copied`
+                    : `Copy ${project.name} contract address`}
+                  onClick={() => void copyAddress()}
+                >
+                  <span className={styles.networkMark} title={getNetworkLabel(chainId)}>
+                    <EthereumMark />
+                    <span aria-hidden="true">CA</span>
+                  </span>
+                  <code>{project.tokenAddress}</code>
+                  {copied ? <Check aria-hidden="true" size={14} /> : <Copy aria-hidden="true" size={14} />}
+                </button>
+              </div>
+            ) : null}
+            {project.description?.trim() ? (
+              <p className={styles.description}>{project.description.trim()}</p>
+            ) : null}
+          </div>
+        </section>
+
+        <section className={styles.customMarketPanel} aria-labelledby="custom-market-heading">
+          <div className={styles.customPanelHeading}>
+            <div>
+              <span>Canonical market record</span>
+              <h2 id="custom-market-heading">{customMarketStatus(project)}</h2>
+            </div>
+            <span className={styles.categoryBadge}>Custom</span>
+          </div>
+          <dl className={styles.customFacts}>
+            <div><dt>Type</dt><dd>Custom</dd></div>
+            <div><dt>Model</dt><dd>{project.modelId}</dd></div>
+            <div><dt>Chain</dt><dd>{getNetworkLabel(chainId)}</dd></div>
+            <div><dt>Markets</dt><dd>{project.markets.length}</dd></div>
+            {project.markets.map((market) => (
+              <div className={styles.customWideFact} key={market.marketId}>
+                <dt>{market.marketId}</dt>
+                <dd>
+                  {market.kind} · {market.status}
+                  {market.poolId ? <><br /><code>{market.poolId}</code></> : null}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+
+        <aside className={`${styles.tradeShell} liquid-glass-surface`} aria-label={`${project.name} market access`}>
+          {(chainId === 1 || chainId === 11_155_111)
+            && project.markets.some(({ tradeCapability }) =>
+              tradeCapability !== undefined) ? (
+              <CustomMarketTrade
+                project={project}
+                chainId={chainId}
+                owner={wallet ? getAddress(wallet.account) : null}
+                readNativeBalance={readNativeBalance}
+                readBalances={readTradeBalances}
+                onConnect={openWallet}
+                onSubmit={(transaction) => sendTransaction(transaction)}
+              />
+            ) : (
+              <div className={styles.customTradeState} role="status">
+                <span>Programmable trading</span>
+                <h2>Unavailable for this Custom market</h2>
+                <p>
+                  The canonical launch record does not include a reviewed trade
+                  preparation route. Programmable will not infer a router from a
+                  token address or pool.
+                </p>
+                <dl className={styles.customTradeFacts}>
+                  <div><dt>Market state</dt><dd>{customMarketStatus(project)}</dd></div>
+                  <div><dt>Route</dt><dd>Not bound</dd></div>
+                </dl>
+              </div>
+            )}
+        </aside>
+
+        <section className={styles.customAuthorityPanel} aria-labelledby="custom-authorities-heading">
+          <div className={styles.customPanelHeading}>
+            <div>
+              <span>Canonical inventory</span>
+              <h2 id="custom-authorities-heading">Post-launch authorities</h2>
+            </div>
+          </div>
+          {authorities.length === 0 ? (
+            <p className={styles.customMuted}>No post-launch authority is declared.</p>
+          ) : (
+            <ul className={styles.authorityList}>
+              {authorities.map((authority) => (
+                <li key={authority.authorityId}>
+                  <div>
+                    <strong>{authority.disclosure.label}</strong>
+                    <span>{authority.role} · {authority.authorityKind}</span>
+                  </div>
+                  <p>{authority.disclosure.description}</p>
+                  <code>{authority.identity.value}</code>
+                  <span>
+                    {authority.postLaunchActions.length > 0
+                      ? authority.postLaunchActions.join(" · ")
+                      : `${authority.feeRole} fee role`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className={styles.customProvenancePanel} aria-labelledby="custom-provenance-heading">
+          <div className={styles.customPanelHeading}>
+            <div>
+              <span>Launch provenance</span>
+              <h2 id="custom-provenance-heading">Wallet-bound authority</h2>
+            </div>
+          </div>
+          <p>
+            Launched by <code>{project.launchingWallet.value}</code>. GitHub
+            proves the reviewed source revision only; it cannot authorize any
+            post-launch action.
+          </p>
+        </section>
+      </div>
+      {copyError ? (
+        <div className="toast-region" aria-live="assertive" aria-atomic="true">
+          <p className="toast" role="alert">{copyError}</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function TokenDetailView({ address }: { address: string }) {
   const { wallet: activeWallet } = useWallet();
   const preview = useInterfacePreview();
@@ -1339,6 +1803,10 @@ export function TokenDetailView({ address }: { address: string }) {
   const previewToken =
     preview && normalizedAddress
       ? getExplorePreviewToken(normalizedAddress)
+      : undefined;
+  const previewCustomProject =
+    preview && normalizedAddress
+      ? getExplorePreviewCustomProject(normalizedAddress)
       : undefined;
   const [retryKey, setRetryKey] = useState(0);
   const refreshKey = useLiveDataRefresh({
@@ -1382,14 +1850,31 @@ export function TokenDetailView({ address }: { address: string }) {
           setState({ phase: "not-deployed", requestKey });
           return;
         }
-        if (!payload.token) {
+        if (!payload.token && !payload.customProject) {
           setState({ phase: "not-found", requestKey });
           return;
         }
-        if (
+        if (payload.customProject) {
+          if (payload.customProject.tokenAddress?.toLowerCase()
+            !== tokenAddress.toLowerCase()) {
+            throw new Error("The token registry returned the wrong custom project");
+          }
+          const customChainId = Number(payload.customProject.chainId);
+          if (!Number.isSafeInteger(customChainId) || customChainId <= 0) {
+            throw new Error("The custom project returned an invalid network");
+          }
+          setState({
+            phase: "custom-ready",
+            project: payload.customProject,
+            chainId: customChainId,
+            requestKey,
+          });
+          return;
+        }
+        if (payload.token && (
           payload.token.tokenAddress.toLowerCase() !==
           tokenAddress.toLowerCase()
-        ) {
+        )) {
           throw new Error("The token registry returned the wrong token");
         }
         if (!payload.snapshot) {
@@ -1398,7 +1883,7 @@ export function TokenDetailView({ address }: { address: string }) {
 
         setState({
           phase: "ready",
-          token: payload.token,
+          token: payload.token!,
           chainId: payload.snapshot.chainId,
           requestKey,
         });
@@ -1409,7 +1894,8 @@ export function TokenDetailView({ address }: { address: string }) {
             ? error.message
             : "Token data is temporarily unavailable";
         setState((current) =>
-          current.phase === "ready" && current.requestKey === requestKey
+          (current.phase === "ready" || current.phase === "custom-ready")
+            && current.requestKey === requestKey
             ? current
             : { phase: "error", requestKey, message },
         );
@@ -1441,6 +1927,15 @@ export function TokenDetailView({ address }: { address: string }) {
     );
   }
 
+  if (previewCustomProject) {
+    return (
+      <CustomProjectDetailContent
+        project={previewCustomProject}
+        chainId={1}
+      />
+    );
+  }
+
   if (preview) {
     return (
       <TokenDetailMessage message="This token is not in the preview index" />
@@ -1459,6 +1954,15 @@ export function TokenDetailView({ address }: { address: string }) {
         token={activeState.token}
         chainId={activeState.chainId}
         preview={false}
+      />
+    );
+  }
+
+  if (activeState.phase === "custom-ready") {
+    return (
+      <CustomProjectDetailContent
+        project={activeState.project}
+        chainId={activeState.chainId}
       />
     );
   }

@@ -473,6 +473,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
   const [switchingNetwork, setSwitchingNetwork] = useState(false);
   const [error, setError] = useState("");
   const [providerTimedOut, setProviderTimedOut] = useState(false);
+  const [selectedWalletAddress, setSelectedWalletAddress] = useState<string | null>(null);
   const { login } = useLogin({
     onComplete: () => {
       setSessionSuppressed(false);
@@ -505,15 +506,32 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
   const githubAccount = user?.github;
   const githubConnected = Boolean(activeAuthenticated && githubAccount?.subject);
   const githubUsername = githubConnected ? githubAccount?.username ?? "" : "";
-  const connectedWallet = useMemo(
-    () =>
-      selectAuthenticatedWallet(
-        activeAuthenticated,
-        wallets,
-        user?.wallet?.address,
-      ),
-    [activeAuthenticated, user?.wallet?.address, wallets],
-  );
+  const connectedWallet = useMemo(() => {
+    if (!activeAuthenticated) return undefined;
+    const selected = selectedWalletAddress === null
+      ? undefined
+      : wallets.find((candidate) =>
+        isEthereumAddress(candidate.address)
+        && candidate.address.toLowerCase() === selectedWalletAddress.toLowerCase());
+    return selected ?? selectAuthenticatedWallet(
+      activeAuthenticated,
+      wallets,
+      user?.wallet?.address,
+    );
+  }, [activeAuthenticated, selectedWalletAddress, user?.wallet?.address, wallets]);
+  const walletOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return wallets.flatMap((candidate) => {
+      if (!isEthereumAddress(candidate.address)) return [];
+      const normalized = candidate.address.toLowerCase();
+      if (seen.has(normalized)) return [];
+      seen.add(normalized);
+      return [Object.freeze({
+        account: candidate.address,
+        chainId: normalizeChainId(candidate.chainId),
+      })];
+    });
+  }, [wallets]);
 
   const wallet = useMemo<WalletState | null>(() => {
     if (!connectedWallet || !isEthereumAddress(connectedWallet.address)) {
@@ -1038,11 +1056,17 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
           disconnecting={disconnecting}
           error={error}
           switchingNetwork={switchingNetwork}
+          walletOptions={walletOptions}
           onAddWallet={addWallet}
           onClose={() => setDialogOpen(false)}
           onCopyAddress={copyAddress}
           onLogout={disconnect}
           onRetryLogin={startLogin}
+          onSelectWallet={(account) => {
+            setSelectedWalletAddress(account);
+            setError("");
+            setDialogOpen(false);
+          }}
           onSwitchNetwork={switchToEthereum}
         />
       ) : null}
@@ -1122,11 +1146,13 @@ function WalletDialog({
   disconnecting,
   error,
   switchingNetwork,
+  walletOptions,
   onAddWallet,
   onClose,
   onCopyAddress,
   onLogout,
   onRetryLogin,
+  onSelectWallet,
   onSwitchNetwork,
 }: {
   wallet: WalletState | null;
@@ -1136,11 +1162,13 @@ function WalletDialog({
   disconnecting: boolean;
   error: string;
   switchingNetwork: boolean;
+  walletOptions: readonly WalletState[];
   onAddWallet: () => void;
   onClose: () => void;
   onCopyAddress: () => void;
   onLogout: () => Promise<boolean>;
   onRetryLogin: () => void;
+  onSelectWallet: (account: `0x${string}`) => void;
   onSwitchNetwork: () => void;
 }) {
   const title = wallet
@@ -1158,6 +1186,32 @@ function WalletDialog({
           <div className="wallet-account-row">
             <strong>{shortenAddress(wallet.account)}</strong>
           </div>
+
+          {walletOptions.length > 1 ? (
+            <div className="wallet-switcher" aria-label="Connected wallets">
+              <span>Use another wallet</span>
+              <div>
+                {walletOptions.map((candidate) => {
+                  const active = candidate.account.toLowerCase()
+                    === wallet.account.toLowerCase();
+                  return (
+                    <button
+                      key={candidate.account.toLowerCase()}
+                      className="wallet-switch-option"
+                      type="button"
+                      aria-pressed={active}
+                      disabled={active}
+                      onClick={() => onSelectWallet(candidate.account)}
+                    >
+                      <span>{shortenAddress(candidate.account)}</span>
+                      <small>{candidate.chainId === appChainHex ? appNetworkName : candidate.chainId}</small>
+                      {active ? <Check aria-hidden="true" size={15} /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
 
           {wallet.chainId !== appChainHex ? (
             <div className="wallet-network-warning">
@@ -1191,6 +1245,14 @@ function WalletDialog({
           </span>
 
           <div className="dialog-actions">
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={onAddWallet}
+            >
+              <Wallet aria-hidden="true" size={16} />
+              Add wallet
+            </button>
             <button
               className="secondary-button"
               type="button"

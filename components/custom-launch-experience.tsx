@@ -13,6 +13,7 @@ import {
   ImagePlus,
   LoaderCircle,
   RefreshCw,
+  Wallet,
 } from "lucide-react";
 import {
   useCallback,
@@ -1280,6 +1281,11 @@ export function CustomLaunchExperience({
   );
   const launchAuthorityRefreshAttemptRef = useRef(new Map<string, number>());
   const githubIdentityRef = useRef(githubUsername);
+  const walletAccountRef = useRef(wallet?.account ?? null);
+
+  useEffect(() => {
+    walletAccountRef.current = wallet?.account ?? null;
+  }, [wallet?.account]);
 
   const resetApplicationScopedState = useCallback(() => {
     setDescriptor(null);
@@ -1314,7 +1320,7 @@ export function CustomLaunchExperience({
   }, [getAccessToken, getIdentityToken]);
 
   const loadApplications = useCallback(async () => {
-    if (!githubConnected) return;
+    if (!wallet || !githubConnected) return;
     const requestGeneration = ++applicationsRequestGenerationRef.current;
     setApplicationsLoading(true);
     setError("");
@@ -1334,13 +1340,13 @@ export function CustomLaunchExperience({
         setApplicationsLoading(false);
       }
     }
-  }, [getSession, githubConnected]);
+  }, [getSession, githubConnected, wallet]);
 
   useEffect(() => {
-    if (screen !== "intro" || !githubConnected || applicationsLoaded) return;
+    if (screen !== "intro" || !wallet || !githubConnected || applicationsLoaded) return;
     const timeout = window.setTimeout(() => void loadApplications(), 0);
     return () => window.clearTimeout(timeout);
-  }, [applicationsLoaded, githubConnected, loadApplications, screen]);
+  }, [applicationsLoaded, githubConnected, loadApplications, screen, wallet]);
 
   useEffect(() => {
     const identityChanged = githubIdentityRef.current !== githubUsername;
@@ -1815,6 +1821,13 @@ export function CustomLaunchExperience({
       openWallet();
       return;
     }
+    const launchWalletAccount = wallet.account;
+    const assertLaunchWalletCurrent = () => {
+      if (walletAccountRef.current?.toLowerCase()
+        !== launchWalletAccount.toLowerCase()) {
+        throw new Error("The active wallet changed. Review the launch and confirm again");
+      }
+    };
     const configurationError = validateLaunchConfigurationV2(descriptor, configuration);
     if (configurationError) {
       setError(configurationError);
@@ -1919,9 +1932,11 @@ export function CustomLaunchExperience({
       setSelected(challengeSetup.application);
       setDescriptor(activeDescriptor);
 
+      assertLaunchWalletCurrent();
+
       const selection = buildCustomLaunchSelection({
         descriptor: activeDescriptor,
-        wallet: wallet.account,
+        wallet: launchWalletAccount,
         configuration,
         presentationBindingHash: presentationResponse.presentationBindingHash,
       });
@@ -1972,7 +1987,7 @@ export function CustomLaunchExperience({
         || walletMessage.launchArtifactOutputSetHash !== preparation.launchArtifactOutputSetHash
         || walletMessage.deploymentCalldataHash !== preparation.deploymentCalldataHash
         || walletMessage.walletNamespace !== selection.launcherWallet.namespace
-        || walletMessage.walletValue.toLowerCase() !== wallet.account.toLowerCase()
+        || walletMessage.walletValue.toLowerCase() !== launchWalletAccount.toLowerCase()
         || walletMessage.chainId !== route.chainId
         || walletMessage.chainProfileId !== route.chainProfileId
         || walletMessage.routeId !== route.launchRouteId
@@ -1983,10 +1998,12 @@ export function CustomLaunchExperience({
 
       setLaunchProgress("wallet-proof");
       setStatusMessage("Confirm in your wallet");
+      assertLaunchWalletCurrent();
       const signatureBase64Url = await signLaunchMessage(
         preparation.signingMessageBase64Url,
       );
       if (!isActive()) return;
+      assertLaunchWalletCurrent();
       const walletProof = {
         schemaVersion: "programmable.launch-wallet-proof-transport.v2" as const,
         signatureScheme: "eip191:personal-sign" as const,
@@ -2078,7 +2095,7 @@ export function CustomLaunchExperience({
         permit,
         permitRequestHash: authenticatedSession.permitRequestHash,
         selection,
-        wallet: wallet.account,
+        wallet: launchWalletAccount,
         now: Date.parse(trustedNow),
       });
       const reportIdempotencyKey = idempotencyKey("transaction-report");
@@ -2103,6 +2120,7 @@ export function CustomLaunchExperience({
       );
       setLaunchProgress("wallet-transaction");
       setStatusMessage("Submit launch in your wallet");
+      assertLaunchWalletCurrent();
       const transaction = action.params[0];
       const hash = await sendBrowserWalletAction({
         chainId: action.chainId,
@@ -2244,18 +2262,38 @@ export function CustomLaunchExperience({
             </div>
           </section>
           <section className={styles.statusEntry}>
-            <span className={styles.githubMark} aria-hidden="true"><GitHubBrandIcon /></span>
-            <h2>Already submitted?</h2>
-            <p>Sign in with the GitHub account that opened the submission.</p>
-            <button
-              className={styles.githubButton}
-              type="button"
-              disabled={applicationsLoading}
-              onClick={githubConnected ? () => void loadApplications() : connectGithub}
-            >
-              {applicationsLoading ? <LoaderCircle aria-hidden="true" className={styles.spin} size={17} /> : <span className={styles.githubButtonMark} aria-hidden="true"><GitHubBrandIcon /></span>}
-              {githubConnected ? "Check submission status" : authenticated ? "Link GitHub account" : "Sign in with GitHub"}
-            </button>
+            <span className={styles.githubMark} aria-hidden="true">
+              {wallet ? <GitHubBrandIcon /> : <Wallet />}
+            </span>
+            <h2>{wallet ? "Already submitted?" : "Connect your launch wallet"}</h2>
+            <p>
+              {wallet
+                ? "Next, verify the GitHub account that opened the submission. GitHub is source provenance only."
+                : "Choose the wallet that will sign and submit the launch. You can change it before confirmation."}
+            </p>
+            {wallet ? (
+              <div className={styles.walletGate}>
+                <div>
+                  <span>Launch wallet</span>
+                  <code>{shortAddress(wallet.account)}</code>
+                  <button type="button" onClick={openWallet}>Change wallet</button>
+                </div>
+                <button
+                  className={styles.githubButton}
+                  type="button"
+                  disabled={applicationsLoading}
+                  onClick={githubConnected ? () => void loadApplications() : connectGithub}
+                >
+                  {applicationsLoading ? <LoaderCircle aria-hidden="true" className={styles.spin} size={17} /> : <span className={styles.githubButtonMark} aria-hidden="true"><GitHubBrandIcon /></span>}
+                  {githubConnected ? "Check submission status" : authenticated ? "Link GitHub account" : "Verify with GitHub"}
+                </button>
+              </div>
+            ) : (
+              <button className={styles.githubButton} type="button" onClick={openWallet}>
+                <Wallet aria-hidden="true" size={17} />
+                Connect wallet
+              </button>
+            )}
           </section>
         </div>
         <LiveMessage message={error || statusMessage} error={Boolean(error)} />
@@ -2372,7 +2410,7 @@ export function CustomLaunchExperience({
                 <div><dt>Approval valid until</dt><dd>{formatDateTime(descriptor.validUntil)}</dd></div>
                 <div><dt>Platform fee</dt><dd>0.10% of qualifying settled volume</dd></div>
                 <div><dt>Fee recipient</dt><dd><code title={CUSTOM_LAUNCH_PLATFORM_FEE_RECIPIENT}>{CUSTOM_LAUNCH_PLATFORM_FEE_RECIPIENT}</code></dd></div>
-                <div><dt>Wallet</dt><dd>{wallet ? shortAddress(wallet.account) : "Connect an Ethereum wallet"}</dd></div>
+                <div><dt>Wallet</dt><dd className={styles.reviewWallet}>{wallet ? <><span>{shortAddress(wallet.account)}</span><button type="button" onClick={openWallet}>Change wallet</button></> : "Connect an Ethereum wallet"}</dd></div>
               </dl>
             </section>
           </fieldset>

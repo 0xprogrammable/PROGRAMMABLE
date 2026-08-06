@@ -96,7 +96,7 @@ function application(
     launchEntitlementBindingHash: digest("9"),
     updatedAt: "2026-08-05T12:00:00.000Z",
     ...overrides,
-  };
+  } as PrincipalCustomLaunchApplicationSummaryV2;
 }
 
 describe("browser-wallet grant reissue Website flow", () => {

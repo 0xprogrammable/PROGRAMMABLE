@@ -182,6 +182,54 @@ describe("custom launch client response contracts", () => {
     });
   });
 
+  it("accepts only the explicit legacy and registry-v3 compatibility shapes", async () => {
+    const legacyOmitted = applicationList();
+    await expect(clientFor(legacyOmitted).applications()).resolves.toMatchObject({
+      applications: [{ applicationId: "application-1" }],
+    });
+
+    const registryV3 = applicationList();
+    Object.assign(registryV3.applications[0]!, {
+      intakeContract: "registry-v3",
+      controlRepositoryId: "1320171831",
+      grandfatheredAtReleaseBindingDigest: null,
+    });
+    await expect(clientFor(registryV3).applications()).resolves.toMatchObject({
+      applications: [{
+        intakeContract: "registry-v3",
+        controlRepositoryId: "1320171831",
+      }],
+    });
+
+    const legacyV2 = applicationList();
+    Object.assign(legacyV2.applications[0]!, {
+      intakeContract: "legacy-v2",
+      controlRepositoryId: "123456",
+      grandfatheredAtReleaseBindingDigest: DIGEST("d"),
+    });
+    await expect(clientFor(legacyV2).applications()).resolves.toMatchObject({
+      applications: [{ intakeContract: "legacy-v2" }],
+    });
+  });
+
+  it("rejects partial or cross-wired intake compatibility fields", async () => {
+    for (const fields of [
+      { controlRepositoryId: "1320171831" },
+      { intakeContract: "registry-v3" },
+      { intakeContract: "registry-v3", controlRepositoryId: "123456" },
+      {
+        intakeContract: "registry-v3",
+        controlRepositoryId: "1320171831",
+        grandfatheredAtReleaseBindingDigest: DIGEST("d"),
+      },
+      { intakeContract: "legacy-v2", controlRepositoryId: "1320171831" },
+    ] as const) {
+      const value = applicationList();
+      Object.assign(value.applications[0]!, fields);
+      await expectContractMismatch(clientFor(value).applications());
+    }
+  });
+
   it("rejects extra and missing response fields instead of trusting schemaVersion", async () => {
     const extra = { ...applicationList(), internalAuthority: "must-not-cross" };
     await expectContractMismatch(clientFor(extra).applications());
@@ -373,7 +421,10 @@ describe("custom launch client response contracts", () => {
       code: "RESOURCE_NOT_FOUND",
       message: "Not found",
       privateDetail: "must-not-cross",
-    }, 404).profile());
+    }, 404).profile({
+      namespace: "eip155:1",
+      value: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    }));
   });
 
   it("treats malformed success and error bodies as upstream contract failures", async () => {
@@ -394,7 +445,10 @@ describe("custom launch client response contracts", () => {
         },
         fetch: vi.fn(async () => response) as typeof fetch,
       });
-      await expectContractMismatch(client.profile());
+      await expectContractMismatch(client.profile({
+        namespace: "eip155:1",
+        value: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      }));
     }
   });
 });

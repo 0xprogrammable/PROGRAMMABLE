@@ -555,8 +555,9 @@ describe("Website projection target", () => {
       ))).status).toBe(400);
     }
 
-    const projects = await target.store.findFinalizedCustomLaunchesByPrincipal({
-      githubPrincipalHash: browser.record.githubPrincipalHash,
+    const projects = await target.store.findFinalizedCustomLaunchesByWallet({
+      namespace: browser.record.launchingWallet.namespace,
+      value: browser.record.launchingWallet.value,
       signal: new AbortController().signal,
     });
     expect(projects).toHaveLength(2);
@@ -649,7 +650,7 @@ describe("Website projection target", () => {
     }
   });
 
-  it("serves only finalized custom projects and scopes the authenticated profile", async () => {
+  it("serves only finalized custom projects and scopes the profile to the canonical launch wallet", async () => {
     const pool = await pglitePool();
     const target = targetFor(pool);
     const launched = customLaunchWrite("final-project-read");
@@ -658,9 +659,6 @@ describe("Website projection target", () => {
       workloadTokenForWrite(launched, "final-project-read"),
     ))).status).toBe(201);
     const handlers = createCustomLaunchProjectReadHandlersV2({
-      authenticator: {
-        async authenticate() { return githubPrincipal(GITHUB_USER_ID); },
-      },
       store: target.store,
     });
     const project = await handlers.project(new Request(
@@ -682,21 +680,15 @@ describe("Website projection target", () => {
     });
 
     const profile = await handlers.profile(new Request(
-      "https://website.invalid/api/custom-launch/v2/profile",
+      `https://website.invalid/api/custom-launch/v2/profile?namespace=eip155%3A1&wallet=${launched.record.launchingWallet.value}`,
       { headers: { accept: "application/json" } },
     ));
     expect(profile.status).toBe(200);
     const profileBody = await profile.json() as { projects: unknown[] };
     expect(profileBody.projects).toHaveLength(1);
 
-    const other = createCustomLaunchProjectReadHandlersV2({
-      authenticator: {
-        async authenticate() { return githubPrincipal("987654321"); },
-      },
-      store: target.store,
-    });
-    const otherProfile = await other.profile(new Request(
-      "https://website.invalid/api/custom-launch/v2/profile",
+    const otherProfile = await handlers.profile(new Request(
+      "https://website.invalid/api/custom-launch/v2/profile?namespace=eip155%3A1&wallet=0x9999999999999999999999999999999999999999",
       { headers: { accept: "application/json" } },
     ));
     const otherBody = await otherProfile.json() as { projects: unknown[] };
@@ -723,9 +715,6 @@ describe("Website projection target", () => {
       workloadTokenForWrite(launched, "verified-v4-market"),
     ))).status).toBe(201);
     const handlers = createCustomLaunchProjectReadHandlersV2({
-      authenticator: {
-        async authenticate() { return githubPrincipal(GITHUB_USER_ID); },
-      },
       store: target.store,
     });
     const response = await handlers.project(new Request(
@@ -1101,11 +1090,16 @@ async function pglitePool(): Promise<ProjectionTargetPostgresPoolV1> {
     CREATE ROLE authenticated NOLOGIN;
     CREATE ROLE service_role NOLOGIN;
   `);
-  const migration = await readFile(new URL(
+  const migrationV1 = await readFile(new URL(
     "../ops/website-projection-target/migrations/0001_projection_records_v1.sql",
     import.meta.url,
   ), "utf8");
-  await database.exec(migration);
+  const migrationV2 = await readFile(new URL(
+    "../ops/website-projection-target/migrations/0002_custom_launch_wallet_profile_v2.sql",
+    import.meta.url,
+  ), "utf8");
+  await database.exec(migrationV1);
+  await database.exec(migrationV2);
   await database.exec(`
     GRANT USAGE ON SCHEMA programmable_website_projection_v1
       TO programmable_website_projection_runtime;
@@ -1482,6 +1476,60 @@ function customLaunchWrite(label: string) {
     },
   );
   const registryPublicationBindingHash = digest(`${label}:registry-publication`);
+  const launchingWallet = {
+    namespace: "eip155:1",
+    value: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  } as const;
+  const postLaunchAuthorityInventoryPreimage = {
+    schemaVersion: "programmable.post-launch-authority-inventory.v1",
+    launchingWallet,
+    addressBindings: [{
+      bindingId: "launch-wallet-owner",
+      targetId: "primary-token",
+      phase: "constructor",
+      byteOffset: 0,
+      semanticRole: "launch-owner",
+      classification: "post-launch-authority",
+      authorityId: "launch-wallet-owner",
+      rationale: "The reviewed constructor binds the launch wallet as owner.",
+      locator: {
+        kind: "launch-session-wallet",
+        byteOffset: 0,
+        encoding: "abi-address-word",
+      },
+      resolvedIdentity: launchingWallet,
+    }],
+    declaredIdentityBindings: [],
+    postLaunchAuthorities: [{
+      authorityId: "launch-wallet-owner",
+      role: "launch-owner",
+      authorityKind: "eoa",
+      identity: launchingWallet,
+      source: { kind: "launching-wallet" },
+      postLaunchActions: ["update-project-settings"],
+      feeRole: "creator",
+      disclosure: {
+        label: "Launch owner",
+        description: "Can update the project settings declared by the reviewed contract.",
+      },
+      authorization: "declared-onchain-authority-only",
+    }],
+    confirmation: {
+      mode: "artifact-bound-launching-wallet-intent",
+      confirmingIdentity: launchingWallet,
+      userVisibleDisclosureRequired: true,
+    },
+    postLaunchActionPolicy: "declared-onchain-authority-only",
+    githubAuthority: "provenance-only-never-post-launch-authority",
+  } as const;
+  const postLaunchAuthorityInventoryHash = canonicalSha256(
+    "programmable.post-launch-authority-inventory.v1",
+    postLaunchAuthorityInventoryPreimage,
+  );
+  const postLaunchAuthorityInventory = {
+    ...postLaunchAuthorityInventoryPreimage,
+    postLaunchAuthorityInventoryHash,
+  } as const;
   const record = {
     schemaVersion: "programmable.custom-launch-website-record.v2",
     platformId: "programmable",
@@ -1507,6 +1555,9 @@ function customLaunchWrite(label: string) {
       namespace: "eip155:1:erc20",
       value: "0x2222222222222222222222222222222222222222",
     },
+    launchingWallet,
+    postLaunchAuthorityInventory,
+    postLaunchAuthorityInventoryHash,
     launchTransactionId: `0x${"3".repeat(64)}`,
     launchRouteId: "route-1",
     executionMode: "direct",

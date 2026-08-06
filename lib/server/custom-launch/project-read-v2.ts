@@ -1,11 +1,6 @@
 import "server-only";
 
 import { canonicalizeJson } from "../projection-target/canonical-json";
-import {
-  createPrivyGitHubPrincipalAuthenticatorV1,
-  GitHubPrincipalAuthenticationErrorV1,
-  type WebsiteEntitlementReadAuthenticatorV1,
-} from "../projection-target/github-entitlement";
 import type {
   PostgresProjectionTargetAtomicStoreV1,
 } from "../projection-target/postgres-store";
@@ -15,14 +10,26 @@ import { isCustomLaunchPublicEnabled } from "./public-readiness";
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 
 export function createCustomLaunchProjectReadHandlersV2(input: Readonly<{
-  authenticator: WebsiteEntitlementReadAuthenticatorV1;
   store: PostgresProjectionTargetAtomicStoreV1;
 }>) {
-  if (typeof input.authenticator?.authenticate !== "function"
-    || input.store === null || typeof input.store !== "object") {
+  if (input.store === null || typeof input.store !== "object") {
     throw new TypeError("custom launch project read dependencies are invalid");
   }
   return Object.freeze({
+    async directory(request: Request): Promise<Response> {
+      if (!validReadRequest(request)) return errorResponse(400, "invalid_directory_request");
+      try {
+        const projects = await input.store.findFinalizedCustomLaunchesPublic({
+          signal: request.signal,
+        });
+        return publicJsonResponse(200, {
+          schemaVersion: "programmable.public-custom-launch-directory.v1",
+          projects,
+        });
+      } catch {
+        return errorResponse(503, "project_store_unavailable");
+      }
+    },
     async project(request: Request, projectId: string): Promise<Response> {
       if (!validReadRequest(request) || !DIGEST.test(projectId)) {
         return errorResponse(400, "invalid_project_request");
@@ -42,29 +49,17 @@ export function createCustomLaunchProjectReadHandlersV2(input: Readonly<{
       }
     },
     async profile(request: Request): Promise<Response> {
-      if (!validReadRequest(request)) return errorResponse(400, "invalid_profile_request");
-      let principal;
+      const subject = validWalletProfileRequest(request);
+      if (subject === null) return errorResponse(400, "invalid_profile_request");
       try {
-        principal = await input.authenticator.authenticate(request);
-      } catch (error) {
-        if (error instanceof GitHubPrincipalAuthenticationErrorV1) {
-          return errorResponse(error.status, error.code);
-        }
-        return errorResponse(401, "privy_session_rejected");
-      }
-      try {
-        const projects = await input.store.findFinalizedCustomLaunchesByPrincipal({
-          githubPrincipalHash: principal.githubPrincipalHash,
+        const projects = await input.store.findFinalizedCustomLaunchesByWallet({
+          namespace: subject.namespace,
+          value: subject.value,
           signal: request.signal,
         });
-        return jsonResponse(200, {
-          schemaVersion: "programmable.authenticated-custom-launch-profile.v2",
-          subject: {
-            provider: "github",
-            githubUserId: principal.githubUserId,
-            githubUsername: principal.githubUsername,
-            githubPrincipalHash: principal.githubPrincipalHash,
-          },
+        return publicJsonResponse(200, {
+          schemaVersion: "programmable.custom-launch-wallet-profile.v2",
+          subject,
           projects,
         });
       } catch {
@@ -80,7 +75,6 @@ async function production() {
   const target = getProductionWebsiteProjectionTargetV1();
   await target.assertProductionReadiness();
   productionHandlers ??= createCustomLaunchProjectReadHandlersV2({
-    authenticator: createPrivyGitHubPrincipalAuthenticatorV1(),
     store: target.store,
   });
   return productionHandlers;
@@ -95,6 +89,19 @@ export async function handleProductionCustomLaunchProjectReadV2(
   }
   try {
     return await (await production()).project(request, projectId);
+  } catch {
+    return errorResponse(503, "project_service_unavailable");
+  }
+}
+
+export async function handleProductionCustomLaunchDirectoryReadV1(
+  request: Request,
+): Promise<Response> {
+  if (!isCustomLaunchPublicEnabled()) {
+    return errorResponse(503, "custom_launch_not_public");
+  }
+  try {
+    return await (await production()).directory(request);
   } catch {
     return errorResponse(503, "project_service_unavailable");
   }
@@ -125,6 +132,26 @@ function validReadRequest(request: Request): boolean {
     && request.headers.get("accept")?.trim().toLowerCase() === "application/json";
 }
 
+function validWalletProfileRequest(
+  request: Request,
+): Readonly<{ namespace: string; value: string }> | null {
+  if (request.method !== "GET" || request.body !== null
+    || request.headers.has("content-type")
+    || request.headers.get("accept")?.trim().toLowerCase()
+      !== "application/json") return null;
+  const url = new URL(request.url);
+  if (url.username !== "" || url.password !== "" || url.hash !== ""
+    || [...url.searchParams.keys()].some((key) =>
+      key !== "namespace" && key !== "wallet")
+    || url.searchParams.getAll("namespace").length !== 1
+    || url.searchParams.getAll("wallet").length !== 1) return null;
+  const namespace = url.searchParams.get("namespace") ?? "";
+  const value = url.searchParams.get("wallet") ?? "";
+  if (!/^eip155:[1-9][0-9]*$/u.test(namespace)
+    || !/^0x[0-9a-f]{40}$/u.test(value)) return null;
+  return Object.freeze({ namespace, value });
+}
+
 function jsonResponse(status: number, body: Readonly<Record<string, unknown>>): Response {
   return new Response(canonicalizeJson(body), {
     status,
@@ -133,6 +160,20 @@ function jsonResponse(status: number, body: Readonly<Record<string, unknown>>): 
       "content-type": "application/json; charset=utf-8",
       "x-content-type-options": "nosniff",
       vary: "authorization, x-privy-identity-token",
+    },
+  });
+}
+
+function publicJsonResponse(
+  status: number,
+  body: Readonly<Record<string, unknown>>,
+): Response {
+  return new Response(canonicalizeJson(body), {
+    status,
+    headers: {
+      "cache-control": "public, max-age=0, s-maxage=5, stale-while-revalidate=15",
+      "content-type": "application/json; charset=utf-8",
+      "x-content-type-options": "nosniff",
     },
   });
 }

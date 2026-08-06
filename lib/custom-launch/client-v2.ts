@@ -1,7 +1,7 @@
 import type {
   ApplicationHandleV3,
   ApplicationStatusViewV2,
-  AuthenticatedCustomLaunchProfileViewV2,
+  CustomLaunchWalletProfileViewV2,
   AuthenticateLaunchSessionWalletHttpRequestV2,
   AuthenticatedLaunchSessionViewV2,
   AuthorizedLaunchPermitViewV2,
@@ -249,10 +249,13 @@ export function createCustomLaunchWebsiteClientV2(input: Readonly<{
         "programmable.custom-launch-project-view.v2",
       );
     },
-    profile(): Promise<AuthenticatedCustomLaunchProfileViewV2> {
+    profile(input: Readonly<{
+      namespace: string;
+      value: string;
+    }>): Promise<CustomLaunchWalletProfileViewV2> {
       return read(
-        CUSTOM_LAUNCH_WEBSITE_API_V2.profile,
-        "programmable.authenticated-custom-launch-profile.v2",
+        CUSTOM_LAUNCH_WEBSITE_API_V2.profile(input),
+        "programmable.custom-launch-wallet-profile.v2",
       );
     },
   });

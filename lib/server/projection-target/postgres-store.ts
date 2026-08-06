@@ -6,9 +6,14 @@ import type {
   AuthenticatedCustomLaunchProjectV2,
   DiscoverableLaunchAssetV2,
   DiscoverableLaunchMarketV2,
+  DiscoverableMarketTradeCapabilityV1,
   DiscoverableLaunchTokenMetadataV2,
   DiscoverableUniswapV4PoolV2,
   LaunchPresentationDraftV1,
+  MaterializedPostLaunchAuthorityV1,
+  PostLaunchAddressLocatorV1,
+  PostLaunchAuthorityInventoryV1,
+  PostLaunchAuthoritySourceV1,
 } from "../../custom-launch/contract-v2";
 export type {
   AuthenticatedCustomLaunchProjectV2,
@@ -42,6 +47,7 @@ const SAFE_TEXT = /^[^\u0000-\u001f\u007f]{1,512}$/u;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:@/+~-]{0,255}$/u;
 const HASH32 = /^0x[0-9a-f]{64}$/u;
 const ADDRESS = /^0x[0-9a-f]{40}$/u;
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const UNSIGNED_DECIMAL = /^(?:0|[1-9][0-9]*)$/u;
 const SIGNED_DECIMAL = /^(?:0|-?[1-9][0-9]*)$/u;
 const OPEN_IDENTIFIER = /^[a-z0-9][a-z0-9._:-]{0,127}$/u;
@@ -60,6 +66,7 @@ const SECRET_PATTERNS = Object.freeze([
 ] as const);
 const MAXIMUM_ENTITLEMENTS_PER_USER = 100;
 const MAXIMUM_CUSTOM_LAUNCHES_PER_PROFILE = 100;
+export const MAXIMUM_PUBLIC_CUSTOM_LAUNCHES = 100;
 const PLATFORM_FEE_RECIPIENT = "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c";
 const DISCOVERABLE_ASSET_ROLES = new Set([
   "root", "primary-token", "secondary-token", "pool", "hook", "controller",
@@ -121,6 +128,9 @@ interface CustomLaunchProjectionRowV2 extends StoredProjectionRowV1 {
   custom_launch_id: string;
   custom_github_principal_hash: string;
   custom_finalized_at: string | Date;
+  custom_launching_wallet_namespace: string;
+  custom_launching_wallet_value: string;
+  custom_post_launch_authority_inventory_hash: string;
 }
 
 interface WebsiteEntitlementMetadataV1 {
@@ -272,11 +282,14 @@ implements ProjectionTargetAtomicStoreV1 {
            application_id, application_revision, github_repository_id,
            launch_entitlement_binding_hash, valid_from, valid_until,
            custom_project_id, custom_launch_id,
-           custom_github_principal_hash, custom_finalized_at)
+           custom_github_principal_hash, custom_finalized_at,
+           custom_launching_wallet_namespace, custom_launching_wallet_value,
+           custom_post_launch_authority_inventory_hash)
         VALUES
           ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
            $11, $12, $13, $14, $15, $16, $17::timestamptz,
-           $18::timestamptz, $19, $20, $21, $22::timestamptz)
+           $18::timestamptz, $19, $20, $21, $22::timestamptz,
+           $23, $24, $25)
         ON CONFLICT DO NOTHING
         RETURNING lane, target_binding_hash, audience, projection_key,
                   idempotency_key, request_digest, canonical_write,
@@ -305,6 +318,9 @@ implements ProjectionTargetAtomicStoreV1 {
         customLaunch?.launchId ?? null,
         customLaunch?.githubPrincipalHash ?? null,
         customLaunch?.finalizedAt ?? null,
+        customLaunch?.launchingWallet.namespace ?? null,
+        customLaunch?.launchingWallet.value ?? null,
+        customLaunch?.postLaunchAuthorityInventoryHash ?? null,
       ]);
 
       if (inserted.rowCount === 1 && inserted.rows[0] !== undefined) {
@@ -441,7 +457,9 @@ implements ProjectionTargetAtomicStoreV1 {
              idempotency_key, request_digest, canonical_write,
              canonical_acknowledgement, canonical_readback,
              record_binding_hash, custom_project_id, custom_launch_id,
-             custom_github_principal_hash, custom_finalized_at
+             custom_github_principal_hash, custom_finalized_at,
+             custom_launching_wallet_namespace, custom_launching_wallet_value,
+             custom_post_launch_authority_inventory_hash
         FROM programmable_website_projection_v1.projection_records
        WHERE lane = 'website.custom-launched'
          AND custom_project_id = $1
@@ -455,32 +473,63 @@ implements ProjectionTargetAtomicStoreV1 {
     return project;
   }
 
-  async findFinalizedCustomLaunchesByPrincipal(input: Readonly<{
-    githubPrincipalHash: Sha256Digest;
+  async findFinalizedCustomLaunchesPublic(input: Readonly<{
     signal: AbortSignal;
   }>): Promise<readonly Readonly<AuthenticatedCustomLaunchProjectV2>[]> {
     input.signal.throwIfAborted();
-    if (!DIGEST.test(input.githubPrincipalHash)) {
-      throw new TypeError("custom profile principal hash is invalid");
+    const result = await this.#pool.query<CustomLaunchProjectionRowV2>(`
+      SELECT lane, target_binding_hash, audience, projection_key,
+             idempotency_key, request_digest, canonical_write,
+             canonical_acknowledgement, canonical_readback,
+             record_binding_hash, custom_project_id, custom_launch_id,
+             custom_github_principal_hash, custom_finalized_at,
+             custom_launching_wallet_namespace, custom_launching_wallet_value,
+             custom_post_launch_authority_inventory_hash
+        FROM programmable_website_projection_v1.projection_records
+       WHERE lane = 'website.custom-launched'
+       ORDER BY custom_finalized_at DESC, custom_project_id ASC
+       LIMIT ${MAXIMUM_PUBLIC_CUSTOM_LAUNCHES}
+    `);
+    input.signal.throwIfAborted();
+    return Object.freeze(result.rows.map((row) => {
+      const project = parseCustomLaunchProject(storedRecordFromRow(row));
+      assertCustomLaunchIndex(project, row);
+      return project;
+    }));
+  }
+
+  async findFinalizedCustomLaunchesByWallet(input: Readonly<{
+    namespace: string;
+    value: string;
+    signal: AbortSignal;
+  }>): Promise<readonly Readonly<AuthenticatedCustomLaunchProjectV2>[]> {
+    input.signal.throwIfAborted();
+    if (!/^eip155:[1-9][0-9]*$/u.test(input.namespace)
+      || !ADDRESS.test(input.value)) {
+      throw new TypeError("custom profile wallet is invalid");
     }
     const result = await this.#pool.query<CustomLaunchProjectionRowV2>(`
       SELECT lane, target_binding_hash, audience, projection_key,
              idempotency_key, request_digest, canonical_write,
              canonical_acknowledgement, canonical_readback,
              record_binding_hash, custom_project_id, custom_launch_id,
-             custom_github_principal_hash, custom_finalized_at
+             custom_github_principal_hash, custom_finalized_at,
+             custom_launching_wallet_namespace, custom_launching_wallet_value,
+             custom_post_launch_authority_inventory_hash
         FROM programmable_website_projection_v1.projection_records
        WHERE lane = 'website.custom-launched'
-         AND custom_github_principal_hash = $1
+         AND custom_launching_wallet_namespace = $1
+         AND custom_launching_wallet_value = $2
        ORDER BY custom_finalized_at DESC, custom_project_id ASC
        LIMIT ${MAXIMUM_CUSTOM_LAUNCHES_PER_PROFILE}
-    `, [input.githubPrincipalHash]);
+    `, [input.namespace, input.value]);
     input.signal.throwIfAborted();
     return Object.freeze(result.rows.map((row) => {
       const project = parseCustomLaunchProject(storedRecordFromRow(row));
       assertCustomLaunchIndex(project, row);
-      if (project.githubPrincipalHash !== input.githubPrincipalHash) {
-        throw new TypeError("stored custom profile principal is invalid");
+      if (project.launchingWallet.namespace !== input.namespace
+        || project.launchingWallet.value !== input.value) {
+        throw new TypeError("stored custom profile wallet is invalid");
       }
       return project;
     }));
@@ -546,8 +595,10 @@ function parseCustomLaunchProject(
     "feeAssessmentHash", "feeAssessmentObligationBindingHash", "feeObligation",
     "feeObligationHash", "finalizedAt", "finalizedLaunchBindingHash",
     "githubPrincipalHash", "launchFamily", "launchId", "launchIdentity",
+    "launchingWallet",
     "launchRouteId", "launchTransactionId", "launchedAt", "marketSetHash", "modelId",
     "origin", "platformId", "presentation", "presentationBindingHash",
+    "postLaunchAuthorityInventory", "postLaunchAuthorityInventoryHash",
     "presentationVersion", "projectId",
     "projectionRuntimeBindingHash", "registryAdapterBindingHash",
     "registryObservationDigest", "registryPublicationBindingHash",
@@ -557,6 +608,34 @@ function parseCustomLaunchProject(
   ], "custom launch website record");
   const identity = jsonRecord(record.launchIdentity, "custom launch identity");
   exactKeys(identity, ["namespace", "value"], "custom launch identity");
+  const launchingWalletValue = jsonRecord(
+    record.launchingWallet,
+    "custom launch launching wallet",
+  );
+  exactKeys(
+    launchingWalletValue,
+    ["namespace", "value"],
+    "custom launch launching wallet",
+  );
+  const launchingWallet = Object.freeze({
+    namespace: exactPublicText(
+      launchingWalletValue.namespace,
+      256,
+      "custom launch launching wallet namespace",
+    ),
+    value: exactPublicText(
+      launchingWalletValue.value,
+      1_024,
+      "custom launch launching wallet value",
+    ),
+  });
+  const postLaunchAuthorityInventory = validatedPostLaunchAuthorityInventoryV1(
+    record.postLaunchAuthorityInventory,
+  );
+  const postLaunchAuthorityInventoryHash = digest(
+    record.postLaunchAuthorityInventoryHash,
+    "custom launch post-launch authority inventory",
+  );
   if (typeof record.advertisesToken !== "boolean"
     || !Array.isArray(record.discoverableAssets)
     || record.discoverableAssets.length > 1_024) {
@@ -651,6 +730,14 @@ function parseCustomLaunchProject(
     },
   );
   const chainId = safeText(record.chainId, "custom launch chain id");
+  const chainProfileId = safeText(
+    record.chainProfileId,
+    "custom launch chain profile id",
+  );
+  const chainProfileHash = digest(
+    record.chainProfileHash,
+    "custom launch chain profile hash",
+  );
   const { discoverableMarkets, marketSetHash } = validatedDiscoverableMarketsV2({
     value: record.discoverableMarkets,
     marketSetHash: record.marketSetHash,
@@ -658,6 +745,8 @@ function parseCustomLaunchProject(
     advertisesToken: record.advertisesToken,
     assets: discoverableAssets,
     chainId,
+    chainProfileId,
+    chainProfileHash,
   });
   const fee = jsonRecord(record.feeObligation, "custom launch fee obligation");
   exactKeys(fee, [
@@ -675,14 +764,6 @@ function parseCustomLaunchProject(
   const githubPrincipalHash = digest(
     record.githubPrincipalHash,
     "custom launch GitHub principal",
-  );
-  const chainProfileId = safeText(
-    record.chainProfileId,
-    "custom launch chain profile id",
-  );
-  const chainProfileHash = digest(
-    record.chainProfileHash,
-    "custom launch chain profile hash",
   );
   const launchRouteId = safeText(record.launchRouteId, "custom launch route id");
   const sourceRecordBindingHash = digest(
@@ -761,6 +842,22 @@ function parseCustomLaunchProject(
     || readback.sourceAuthorityHash !== record.registryPublicationBindingHash
     || record.status !== "launched"
     || record.action !== "view_live_launch"
+    || launchingWallet.namespace !== `eip155:${chainId}`
+    || !ADDRESS.test(launchingWallet.value)
+    || postLaunchAuthorityInventory.launchingWallet.namespace
+      !== launchingWallet.namespace
+    || postLaunchAuthorityInventory.launchingWallet.value
+      !== launchingWallet.value
+    || postLaunchAuthorityInventory.postLaunchAuthorityInventoryHash
+      !== postLaunchAuthorityInventoryHash
+    || postLaunchAuthorityInventory.postLaunchAuthorities.filter(({ source }) =>
+      source.kind === "launching-wallet").length !== 1
+    || postLaunchAuthorityInventory.postLaunchAuthorities.some(
+      ({ identity: authorityIdentity, source }) =>
+      source.kind === "launching-wallet"
+      && (authorityIdentity.namespace !== launchingWallet.namespace
+        || authorityIdentity.value !== launchingWallet.value),
+    )
     || expectedAssetIdentitySetHash !== assetIdentitySetHash
     || stored.projectionKey !== `custom:${launchId}`
     || !/^[1-9][0-9]*$/u.test(chainId)
@@ -810,6 +907,9 @@ function parseCustomLaunchProject(
       namespace: safeText(identity.namespace, "custom launch identity namespace"),
       value: safeText(identity.value, "custom launch identity value"),
     }),
+    launchingWallet,
+    postLaunchAuthorityInventory,
+    postLaunchAuthorityInventoryHash,
     launchTransactionId: safeText(
       record.launchTransactionId,
       "custom launch transaction id",
@@ -1256,6 +1356,8 @@ function validatedDiscoverableMarketsV2(input: Readonly<{
   advertisesToken: boolean;
   assets: readonly DiscoverableLaunchAssetV2[];
   chainId: string;
+  chainProfileId: string;
+  chainProfileHash: Sha256Digest;
 }>): Readonly<{
   discoverableMarkets: readonly DiscoverableLaunchMarketV2[];
   marketSetHash: Sha256Digest;
@@ -1267,9 +1369,11 @@ function validatedDiscoverableMarketsV2(input: Readonly<{
   const assetsById = new Map(input.assets.map((asset) => [asset.assetId, asset]));
   const discoverableMarkets = Object.freeze(input.value.map((value, index) => {
     const market = jsonRecord(value, `custom launch discoverable market ${index}`);
+    const hasTradeCapability = Object.hasOwn(market, "tradeCapability");
     exactKeys(market, [
       "baseAssetId", "kind", "marketAssetId", "marketEvidenceHash", "marketId",
-      "quoteAssetId", "status", "uniswapV4", "verification",
+      "quoteAssetId", "status", ...(hasTradeCapability ? ["tradeCapability"] : []),
+      "uniswapV4", "verification",
     ], "custom launch discoverable market");
     const marketId = safeIdentifier(market.marketId, "custom launch market id");
     const kind = stringField(market.kind, "custom launch market kind");
@@ -1322,6 +1426,21 @@ function validatedDiscoverableMarketsV2(input: Readonly<{
         || status !== "verification_pending"))) {
       throw new TypeError("custom launch market verification state is invalid");
     }
+    const tradeCapability = hasTradeCapability
+      ? validatedDiscoverableMarketTradeCapabilityV1({
+          value: market.tradeCapability,
+          marketId,
+          status: status as DiscoverableLaunchMarketV2["status"],
+          baseAssetId,
+          quoteAssetId,
+          verification,
+          uniswapV4,
+          assetsById,
+          chainId: input.chainId,
+          chainProfileId: input.chainProfileId,
+          chainProfileHash: input.chainProfileHash,
+        })
+      : undefined;
     return Object.freeze({
       marketId,
       kind,
@@ -1335,6 +1454,7 @@ function validatedDiscoverableMarketsV2(input: Readonly<{
       ),
       verification,
       uniswapV4,
+      ...(tradeCapability === undefined ? {} : { tradeCapability }),
     });
   }));
   const marketIds = discoverableMarkets.map(({ marketId }) => marketId);
@@ -1391,6 +1511,795 @@ function validatedMarketVerificationV2(
       "custom launch market verifier binding",
     ),
   });
+}
+
+function validatedDiscoverableMarketTradeCapabilityV1(input: Readonly<{
+  value: JsonValue | undefined;
+  marketId: string;
+  status: DiscoverableLaunchMarketV2["status"];
+  baseAssetId: string;
+  quoteAssetId: string;
+  verification: DiscoverableLaunchMarketV2["verification"];
+  uniswapV4: Readonly<DiscoverableUniswapV4PoolV2> | null;
+  assetsById: ReadonlyMap<string, DiscoverableLaunchAssetV2>;
+  chainId: string;
+  chainProfileId: string;
+  chainProfileHash: Sha256Digest;
+}>): Readonly<DiscoverableMarketTradeCapabilityV1> {
+  const value = jsonRecord(input.value, "custom launch trade capability");
+  exactKeys(value, [
+    "actionPolicy", "adapterId", "approvalPolicy", "baseAssetId", "capabilityId",
+    "chainId", "chainProfileHash", "chainProfileId", "deadlinePolicy",
+    "dependencies", "exactness", "hookAssetIdentityEvidenceHash", "hookDataPolicy",
+    "marketId", "marketVerificationBindingHash", "planBindingHash", "poolKey",
+    "poolKeyEvidenceHash", "quoteAssetId", "quotePolicy", "recipientPolicy",
+    "routerGeneration", "schemaVersion", "sideBindings", "slippagePolicy", "status",
+    "supportedSides", "tradeCapabilityBindingHash",
+  ], "custom launch trade capability");
+  if (value.schemaVersion !== "programmable.discoverable-market-trade-capability.v1"
+    || value.status !== "verified"
+    || value.adapterId !== "uniswap-v4-universal-router-exact-input:v1"
+    || value.exactness !== "exact-input"
+    || value.recipientPolicy !== "connected-wallet-only"
+    || input.status !== "active"
+    || input.verification.status !== "verified"
+    || input.uniswapV4 === null) {
+    throw new TypeError("custom launch trade capability is not executable");
+  }
+  const capabilityId = safeIdentifier(
+    value.capabilityId,
+    "custom launch trade capability id",
+  );
+  const routerGeneration = stringField(
+    value.routerGeneration,
+    "custom launch trade router generation",
+  );
+  if (!OPEN_IDENTIFIER.test(routerGeneration)
+    || value.chainId !== input.chainId
+    || value.chainProfileId !== input.chainProfileId
+    || value.chainProfileHash !== input.chainProfileHash
+    || value.marketId !== input.marketId
+    || value.baseAssetId !== input.baseAssetId
+    || value.quoteAssetId !== input.quoteAssetId) {
+    throw new TypeError("custom launch trade capability left its market binding");
+  }
+  const poolKey = validatedTradePoolKeyV1({
+    value: value.poolKey,
+    uniswapV4: input.uniswapV4,
+    assetsById: input.assetsById,
+    chainId: input.chainId,
+  });
+  const dependencies = validatedTradeDependenciesV1({
+    value: value.dependencies,
+    chainId: input.chainId,
+    chainProfileId: input.chainProfileId,
+    routerGeneration,
+  });
+  if (!Array.isArray(value.supportedSides)
+    || value.supportedSides.length < 1 || value.supportedSides.length > 2) {
+    throw new TypeError("custom launch trade sides are invalid");
+  }
+  const supportedSides = Object.freeze(value.supportedSides.map((side) => {
+    if (side !== "base-to-quote" && side !== "quote-to-base") {
+      throw new TypeError("custom launch trade side is invalid");
+    }
+    return side;
+  }));
+  if (new Set(supportedSides).size !== supportedSides.length
+    || supportedSides.some((side, index) => index > 0
+      && compareUtf8(supportedSides[index - 1]!, side) >= 0)) {
+    throw new TypeError("custom launch trade sides are noncanonical");
+  }
+  const baseIsCurrency0 = poolKey.currency0AssetId === input.baseAssetId;
+  const expectedSideBindings = supportedSides.map((side) => {
+    const inputAssetId = side === "base-to-quote"
+      ? input.baseAssetId : input.quoteAssetId;
+    const outputAssetId = side === "base-to-quote"
+      ? input.quoteAssetId : input.baseAssetId;
+    const zeroForOne = side === "base-to-quote" ? baseIsCurrency0 : !baseIsCurrency0;
+    const inputCurrency = inputAssetId === poolKey.currency0AssetId
+      ? poolKey.currency0 : poolKey.currency1;
+    return Object.freeze({
+      side,
+      inputAssetId,
+      outputAssetId,
+      zeroForOne,
+      inputCurrencyKind: inputCurrency.value === ZERO_ADDRESS
+        ? "native" as const : "erc20" as const,
+      settlementAction: "SETTLE_ALL" as const,
+      takeAction: "TAKE_ALL" as const,
+    });
+  });
+  if (!Array.isArray(value.sideBindings)
+    || canonicalizeJson(value.sideBindings) !== canonicalizeJson(expectedSideBindings)) {
+    throw new TypeError("custom launch trade side bindings are invalid");
+  }
+  const hookData = jsonRecord(value.hookDataPolicy, "custom launch trade hookData policy");
+  exactKeys(hookData, ["data", "hookDataHash", "kind"],
+    "custom launch trade hookData policy");
+  const hookDataValue = stringField(hookData.data, "custom launch trade hookData");
+  if ((hookData.kind !== "empty" && hookData.kind !== "fixed")
+    || !/^0x(?:[0-9a-f]{2}){0,2048}$/u.test(hookDataValue)
+    || (hookData.kind === "empty") !== (hookDataValue === "0x")
+    || (poolKey.hooksAssetId === null && hookDataValue !== "0x")
+    || hookData.hookDataHash !== canonicalSha256(
+      "programmable.discoverable-market-trade-capability-hook-data.v1",
+      { data: hookDataValue },
+    )) throw new TypeError("custom launch trade hookData policy is invalid");
+  const hookDataPolicy = Object.freeze({
+    kind: hookData.kind,
+    data: hookDataValue,
+    hookDataHash: digest(hookData.hookDataHash, "custom launch trade hookData hash"),
+  }) as DiscoverableMarketTradeCapabilityV1["hookDataPolicy"];
+  const actionPolicy = jsonRecord(value.actionPolicy, "custom launch trade action policy");
+  exactKeys(actionPolicy, ["exactOutput", "multiHop", "settleAction", "swapAction", "takeAction"],
+    "custom launch trade action policy");
+  if (actionPolicy.swapAction !== "SWAP_EXACT_IN_SINGLE"
+    || actionPolicy.settleAction !== "SETTLE_ALL"
+    || actionPolicy.takeAction !== "TAKE_ALL"
+    || actionPolicy.multiHop !== false || actionPolicy.exactOutput !== false) {
+    throw new TypeError("custom launch trade action policy is invalid");
+  }
+  const quotePolicy = jsonRecord(value.quotePolicy, "custom launch trade quote policy");
+  exactKeys(quotePolicy, ["adapterId", "currentStateRequired", "executionMode", "maximumQuoteAgeSeconds"],
+    "custom launch trade quote policy");
+  if (quotePolicy.adapterId !== "uniswap-v4-quoter-exact-input:v1"
+    || quotePolicy.executionMode !== "offchain-static-call-only"
+    || quotePolicy.currentStateRequired !== true
+    || !boundedInteger(quotePolicy.maximumQuoteAgeSeconds, 1, 300)) {
+    throw new TypeError("custom launch trade quote policy is invalid");
+  }
+  const slippagePolicy = jsonRecord(
+    value.slippagePolicy,
+    "custom launch trade slippage policy",
+  );
+  exactKeys(slippagePolicy, ["amountOutMinimumRequired", "kind", "maximumSlippageBps"],
+    "custom launch trade slippage policy");
+  if (slippagePolicy.kind !== "user-bounded-minimum-output"
+    || slippagePolicy.amountOutMinimumRequired !== true
+    || !boundedInteger(slippagePolicy.maximumSlippageBps, 1, 5_000)) {
+    throw new TypeError("custom launch trade slippage policy is invalid");
+  }
+  const deadlinePolicy = jsonRecord(
+    value.deadlinePolicy,
+    "custom launch trade deadline policy",
+  );
+  exactKeys(deadlinePolicy, ["deadlineRequired", "kind", "maximumHorizonSeconds"],
+    "custom launch trade deadline policy");
+  if (deadlinePolicy.kind !== "bounded-user-deadline"
+    || deadlinePolicy.deadlineRequired !== true
+    || !boundedInteger(deadlinePolicy.maximumHorizonSeconds, 1, 3_600)) {
+    throw new TypeError("custom launch trade deadline policy is invalid");
+  }
+  const approvalPolicy = jsonRecord(
+    value.approvalPolicy,
+    "custom launch trade approval policy",
+  );
+  exactKeys(approvalPolicy, ["erc20Input", "nativeInput"],
+    "custom launch trade approval policy");
+  if (approvalPolicy.erc20Input
+      !== "erc20-approve-permit2-then-permit2-approve-router"
+    || approvalPolicy.nativeInput !== "transaction-value") {
+    throw new TypeError("custom launch trade approval policy is invalid");
+  }
+  const poolKeyEvidenceHash = digest(
+    value.poolKeyEvidenceHash,
+    "custom launch trade PoolKey evidence",
+  );
+  const marketVerificationBindingHash = digest(
+    value.marketVerificationBindingHash,
+    "custom launch trade market verification binding",
+  );
+  const hookAssetIdentityEvidenceHash = value.hookAssetIdentityEvidenceHash === null
+    ? null
+    : digest(
+        value.hookAssetIdentityEvidenceHash,
+        "custom launch trade hook identity evidence",
+      );
+  const expectedHookEvidence = poolKey.hooksAssetId === null
+    ? null
+    : input.assetsById.get(poolKey.hooksAssetId)?.identityEvidenceHash ?? null;
+  if (poolKeyEvidenceHash !== input.uniswapV4.poolKeyEvidenceHash
+    || marketVerificationBindingHash !== input.verification.verifierBindingHash
+    || hookAssetIdentityEvidenceHash !== expectedHookEvidence) {
+    throw new TypeError("custom launch trade evidence is substituted");
+  }
+  const planPreimage = Object.freeze({
+    schemaVersion: "programmable.discoverable-market-trade-capability-plan.v1" as const,
+    capabilityId,
+    adapterId: "uniswap-v4-universal-router-exact-input:v1" as const,
+    chainId: input.chainId,
+    chainProfileId: input.chainProfileId,
+    chainProfileHash: input.chainProfileHash,
+    marketId: input.marketId,
+    baseAssetId: input.baseAssetId,
+    quoteAssetId: input.quoteAssetId,
+    poolKey,
+    routerGeneration,
+    dependencies,
+    supportedSides,
+    sideBindings: Object.freeze(expectedSideBindings),
+    exactness: "exact-input" as const,
+    hookDataPolicy,
+    actionPolicy: Object.freeze({ ...actionPolicy }),
+    quotePolicy: Object.freeze({ ...quotePolicy }),
+    slippagePolicy: Object.freeze({ ...slippagePolicy }),
+    deadlinePolicy: Object.freeze({ ...deadlinePolicy }),
+    approvalPolicy: Object.freeze({ ...approvalPolicy }),
+    recipientPolicy: "connected-wallet-only" as const,
+  });
+  const planBindingHash = digest(
+    value.planBindingHash,
+    "custom launch trade plan binding",
+  );
+  if (planBindingHash !== canonicalSha256(
+    "programmable.discoverable-market-trade-capability-plan-binding.v1",
+    planPreimage,
+  )) throw new TypeError("custom launch trade plan binding is invalid");
+  const finalPreimage = Object.freeze({
+    ...planPreimage,
+    schemaVersion: "programmable.discoverable-market-trade-capability.v1" as const,
+    planBindingHash,
+    status: "verified" as const,
+    poolKeyEvidenceHash,
+    marketVerificationBindingHash,
+    hookAssetIdentityEvidenceHash,
+  });
+  const tradeCapabilityBindingHash = digest(
+    value.tradeCapabilityBindingHash,
+    "custom launch trade capability binding",
+  );
+  if (tradeCapabilityBindingHash !== canonicalSha256(
+    "programmable.discoverable-market-trade-capability-binding.v1",
+    finalPreimage,
+  )) throw new TypeError("custom launch trade capability binding is invalid");
+  return Object.freeze({
+    ...finalPreimage,
+    tradeCapabilityBindingHash,
+  }) as Readonly<DiscoverableMarketTradeCapabilityV1>;
+}
+
+function validatedTradePoolKeyV1(input: Readonly<{
+  value: JsonValue | undefined;
+  uniswapV4: Readonly<DiscoverableUniswapV4PoolV2>;
+  assetsById: ReadonlyMap<string, DiscoverableLaunchAssetV2>;
+  chainId: string;
+}>): Readonly<DiscoverableMarketTradeCapabilityV1["poolKey"]> {
+  const value = jsonRecord(input.value, "custom launch trade PoolKey");
+  exactKeys(value, [
+    "currency0", "currency0AssetId", "currency1", "currency1AssetId", "feeRaw",
+    "hooks", "hooksAssetId", "poolId", "tickSpacing",
+  ], "custom launch trade PoolKey");
+  const currency0AssetId = safeIdentifier(value.currency0AssetId, "trade currency0 asset id");
+  const currency1AssetId = safeIdentifier(value.currency1AssetId, "trade currency1 asset id");
+  const hooksAssetId = value.hooksAssetId === null
+    ? null : safeIdentifier(value.hooksAssetId, "trade hook asset id");
+  const identity = (candidate: JsonValue | undefined, label: string) => {
+    const resolved = jsonRecord(candidate, label);
+    exactKeys(resolved, ["namespace", "value"], label);
+    const namespace = stringField(resolved.namespace, `${label} namespace`);
+    const identityValue = stringField(resolved.value, `${label} value`);
+    if (namespace !== `eip155:${input.chainId}` || !ADDRESS.test(identityValue)
+      || identityValue !== identityValue.toLowerCase()) {
+      throw new TypeError(`${label} is invalid`);
+    }
+    return Object.freeze({ namespace, value: identityValue });
+  };
+  const currency0 = identity(value.currency0, "trade currency0 identity");
+  const currency1 = identity(value.currency1, "trade currency1 identity");
+  const hooks = identity(value.hooks, "trade hook identity");
+  const currency0Asset = input.assetsById.get(currency0AssetId);
+  const currency1Asset = input.assetsById.get(currency1AssetId);
+  const hookAsset = hooksAssetId === null ? null : input.assetsById.get(hooksAssetId);
+  if (value.poolId !== input.uniswapV4.poolId
+    || currency0AssetId !== input.uniswapV4.currency0AssetId
+    || currency1AssetId !== input.uniswapV4.currency1AssetId
+    || value.feeRaw !== input.uniswapV4.feeRaw
+    || value.tickSpacing !== input.uniswapV4.tickSpacing
+    || hooksAssetId !== input.uniswapV4.hooksAssetId
+    || currency0Asset?.identity.namespace !== currency0.namespace
+    || currency0Asset.identity.value !== currency0.value
+    || currency1Asset?.identity.namespace !== currency1.namespace
+    || currency1Asset.identity.value !== currency1.value
+    || (hooksAssetId === null
+      ? hooks.value !== ZERO_ADDRESS
+      : hookAsset?.identity.namespace !== hooks.namespace
+        || hookAsset.identity.value !== hooks.value)) {
+    throw new TypeError("custom launch trade PoolKey is substituted");
+  }
+  return Object.freeze({
+    poolId: input.uniswapV4.poolId,
+    currency0AssetId,
+    currency0,
+    currency1AssetId,
+    currency1,
+    feeRaw: input.uniswapV4.feeRaw,
+    tickSpacing: input.uniswapV4.tickSpacing,
+    hooksAssetId,
+    hooks,
+  });
+}
+
+function validatedTradeDependenciesV1(input: Readonly<{
+  value: JsonValue | undefined;
+  chainId: string;
+  chainProfileId: string;
+  routerGeneration: string;
+}>): Readonly<DiscoverableMarketTradeCapabilityV1["dependencies"]> {
+  if (!Array.isArray(input.value) || input.value.length !== 4) {
+    throw new TypeError("custom launch trade dependencies are invalid");
+  }
+  const roles = [
+    "uniswap-permit2",
+    "uniswap-v4-quoter",
+    "uniswap-v4-state-view",
+    "uniswap-v4-universal-router",
+  ] as const;
+  const expectedCapabilities = {
+    "uniswap-permit2": "capability:uniswap-permit2:v1",
+    "uniswap-v4-quoter": "capability:uniswap-v4-quoter:v1",
+    "uniswap-v4-state-view": "capability:uniswap-v4-state-view:v1",
+    "uniswap-v4-universal-router": `capability:uniswap-v4-${input.routerGeneration}`,
+  } as const;
+  const dependencies = input.value.map((candidate) => {
+    const value = jsonRecord(candidate, "custom launch trade dependency");
+    exactKeys(value, [
+      "capabilityId", "chainProfileId", "dependencyId", "identity",
+      "interfaceEvidenceBindingHash", "reviewEvidenceBindingHash", "role",
+      "runtimeCodeKeccak256", "runtimeCodeSha256",
+    ], "custom launch trade dependency");
+    const role = stringField(value.role, "custom launch trade dependency role");
+    const identity = jsonRecord(value.identity, "custom launch trade dependency identity");
+    exactKeys(identity, ["namespace", "value"], "custom launch trade dependency identity");
+    const address = stringField(identity.value, "custom launch trade dependency address");
+    const runtimeCodeKeccak256 = stringField(
+      value.runtimeCodeKeccak256,
+      "custom launch trade dependency runtime Keccak-256",
+    );
+    if (!roles.includes(role as typeof roles[number])
+      || value.capabilityId !== expectedCapabilities[role as typeof roles[number]]
+      || value.chainProfileId !== input.chainProfileId
+      || identity.namespace !== `eip155:${input.chainId}`
+      || !ADDRESS.test(address) || address !== address.toLowerCase()
+      || !HASH32.test(runtimeCodeKeccak256)) {
+      throw new TypeError("custom launch trade dependency is invalid");
+    }
+    return Object.freeze({
+      role: role as typeof roles[number],
+      dependencyId: safeIdentifier(value.dependencyId, "trade dependency id"),
+      capabilityId: value.capabilityId as string,
+      chainProfileId: input.chainProfileId,
+      identity: Object.freeze({
+        namespace: `eip155:${input.chainId}`,
+        value: address,
+      }),
+      runtimeCodeKeccak256,
+      runtimeCodeSha256: digest(value.runtimeCodeSha256, "trade dependency runtime SHA-256"),
+      reviewEvidenceBindingHash: digest(
+        value.reviewEvidenceBindingHash,
+        "trade dependency review evidence",
+      ),
+      interfaceEvidenceBindingHash: digest(
+        value.interfaceEvidenceBindingHash,
+        "trade dependency interface evidence",
+      ),
+    });
+  });
+  const dependencyRoles = dependencies.map(({ role }) => role);
+  const dependencyIds = dependencies.map(({ dependencyId }) => dependencyId);
+  const dependencyAddresses = dependencies.map(({ identity }) => identity.value);
+  if (new Set(dependencyRoles).size !== 4 || new Set(dependencyIds).size !== 4
+    || new Set(dependencyAddresses).size !== 4
+    || dependencyRoles.some((role, index) => index > 0
+      && compareUtf8(dependencyRoles[index - 1]!, role) >= 0)) {
+    throw new TypeError("custom launch trade dependencies are noncanonical");
+  }
+  return Object.freeze(dependencies);
+}
+
+function validatedPostLaunchAuthorityInventoryV1(
+  value: JsonValue | undefined,
+): Readonly<PostLaunchAuthorityInventoryV1> {
+  const inventory = jsonRecord(value, "custom launch post-launch authority inventory");
+  exactKeys(inventory, [
+    "schemaVersion", "launchingWallet", "addressBindings",
+    "declaredIdentityBindings", "postLaunchAuthorities", "confirmation",
+    "postLaunchActionPolicy", "githubAuthority",
+    "postLaunchAuthorityInventoryHash",
+  ], "custom launch post-launch authority inventory");
+  if (
+    inventory.schemaVersion !== "programmable.post-launch-authority-inventory.v1"
+    || inventory.postLaunchActionPolicy !== "declared-onchain-authority-only"
+    || inventory.githubAuthority !== "provenance-only-never-post-launch-authority"
+  ) throw new TypeError("custom launch post-launch authority policy is invalid");
+  const launchingWallet = validatedPostLaunchIdentityV1(
+    inventory.launchingWallet,
+    "custom launch post-launch launching wallet",
+  );
+  const postLaunchAuthorities = validatedPostLaunchAuthoritiesV1(
+    inventory.postLaunchAuthorities,
+  );
+  const authorityIds = new Set(
+    postLaunchAuthorities.map(({ authorityId }) => authorityId),
+  );
+  const addressBindings = validatedPostLaunchAddressBindingsV1(
+    inventory.addressBindings,
+    authorityIds,
+  );
+  const declaredIdentityBindings = validatedPostLaunchDeclaredIdentityBindingsV1(
+    inventory.declaredIdentityBindings,
+    authorityIds,
+  );
+  const referencedAuthorities = new Set([
+    ...addressBindings.flatMap(({ authorityId }) =>
+      authorityId === null ? [] : [authorityId]),
+    ...declaredIdentityBindings.flatMap(({ authorityId }) =>
+      authorityId === null ? [] : [authorityId]),
+  ]);
+  if (postLaunchAuthorities.some(({ authorityId }) =>
+    !referencedAuthorities.has(authorityId))) {
+    throw new TypeError("custom launch post-launch authority is unbound");
+  }
+  const confirmationValue = jsonRecord(
+    inventory.confirmation,
+    "custom launch post-launch authority confirmation",
+  );
+  exactKeys(confirmationValue, [
+    "mode", "confirmingIdentity", "userVisibleDisclosureRequired",
+  ], "custom launch post-launch authority confirmation");
+  const confirmingIdentity = validatedPostLaunchIdentityV1(
+    confirmationValue.confirmingIdentity,
+    "custom launch post-launch confirming identity",
+  );
+  if (
+    confirmationValue.mode !== "artifact-bound-launching-wallet-intent"
+    || confirmationValue.userVisibleDisclosureRequired !== true
+    || confirmingIdentity.namespace !== launchingWallet.namespace
+    || confirmingIdentity.value !== launchingWallet.value
+  ) throw new TypeError("custom launch post-launch confirmation is invalid");
+  const normalizedPreimage = Object.freeze({
+    schemaVersion: "programmable.post-launch-authority-inventory.v1" as const,
+    launchingWallet,
+    addressBindings,
+    declaredIdentityBindings,
+    postLaunchAuthorities,
+    confirmation: Object.freeze({
+      mode: "artifact-bound-launching-wallet-intent" as const,
+      confirmingIdentity,
+      userVisibleDisclosureRequired: true as const,
+    }),
+    postLaunchActionPolicy: "declared-onchain-authority-only" as const,
+    githubAuthority: "provenance-only-never-post-launch-authority" as const,
+  });
+  const expectedHash = canonicalSha256(
+    "programmable.post-launch-authority-inventory.v1",
+    normalizedPreimage,
+  );
+  const postLaunchAuthorityInventoryHash = digest(
+    inventory.postLaunchAuthorityInventoryHash,
+    "custom launch post-launch authority inventory hash",
+  );
+  if (postLaunchAuthorityInventoryHash !== expectedHash) {
+    throw new TypeError("custom launch post-launch authority inventory hash is invalid");
+  }
+  return Object.freeze({
+    ...normalizedPreimage,
+    postLaunchAuthorityInventoryHash,
+  });
+}
+
+function validatedPostLaunchAuthoritiesV1(
+  value: JsonValue | undefined,
+): readonly Readonly<MaterializedPostLaunchAuthorityV1>[] {
+  if (!Array.isArray(value) || value.length > 1_024) {
+    throw new TypeError("custom launch post-launch authorities are invalid");
+  }
+  const authorities = Object.freeze(value.map((candidate, index) => {
+    const authority = jsonRecord(
+      candidate,
+      `custom launch post-launch authority ${index}`,
+    );
+    exactKeys(authority, [
+      "authorityId", "authorityKind", "authorization", "disclosure",
+      "feeRole", "identity", "postLaunchActions", "role", "source",
+    ], "custom launch post-launch authority");
+    if (authority.authorization !== "declared-onchain-authority-only") {
+      throw new TypeError("custom launch post-launch authorization is invalid");
+    }
+    const authorityId = safeIdentifier(
+      authority.authorityId,
+      "custom launch post-launch authority id",
+    );
+    const authorityKind = stringField(
+      authority.authorityKind,
+      "custom launch post-launch authority kind",
+    );
+    const feeRole = stringField(
+      authority.feeRole,
+      "custom launch post-launch authority fee role",
+    );
+    if (!(["eoa", "multisig", "contract"] as const).includes(
+      authorityKind as "eoa" | "multisig" | "contract",
+    ) || !(["none", "creator", "project"] as const).includes(
+      feeRole as "none" | "creator" | "project",
+    )) throw new TypeError("custom launch post-launch authority role is invalid");
+    if (!Array.isArray(authority.postLaunchActions)
+      || authority.postLaunchActions.length > 1_024) {
+      throw new TypeError("custom launch post-launch actions are invalid");
+    }
+    const postLaunchActions = Object.freeze(authority.postLaunchActions.map(
+      (action) => safeIdentifier(action, "custom launch post-launch action"),
+    ));
+    assertPostLaunchOrderedUniqueV1(
+      postLaunchActions,
+      "custom launch post-launch actions",
+    );
+    if (postLaunchActions.length === 0 && feeRole === "none") {
+      throw new TypeError("custom launch post-launch authority is empty");
+    }
+    const disclosure = jsonRecord(
+      authority.disclosure,
+      "custom launch post-launch authority disclosure",
+    );
+    exactKeys(disclosure, ["description", "label"],
+      "custom launch post-launch authority disclosure");
+    return Object.freeze({
+      authorityId,
+      role: safeIdentifier(authority.role, "custom launch post-launch authority role"),
+      authorityKind: authorityKind as "eoa" | "multisig" | "contract",
+      identity: validatedPostLaunchIdentityV1(
+        authority.identity,
+        "custom launch post-launch authority identity",
+      ),
+      source: validatedPostLaunchAuthoritySourceV1(authority.source),
+      postLaunchActions,
+      feeRole: feeRole as "none" | "creator" | "project",
+      disclosure: Object.freeze({
+        label: exactPublicText(
+          disclosure.label,
+          96,
+          "custom launch post-launch authority disclosure label",
+        ),
+        description: exactPublicText(
+          disclosure.description,
+          512,
+          "custom launch post-launch authority disclosure description",
+        ),
+      }),
+      authorization: "declared-onchain-authority-only" as const,
+    });
+  }));
+  assertPostLaunchOrderedUniqueV1(
+    authorities.map(({ authorityId }) => authorityId),
+    "custom launch post-launch authorities",
+  );
+  return authorities;
+}
+
+function validatedPostLaunchAuthoritySourceV1(
+  value: JsonValue | undefined,
+): PostLaunchAuthoritySourceV1 {
+  const source = jsonRecord(value, "custom launch post-launch authority source");
+  const kind = stringField(source.kind, "custom launch post-launch authority source kind");
+  if (kind === "launching-wallet") {
+    exactKeys(source, ["kind"], "custom launch post-launch authority source");
+    return Object.freeze({ kind });
+  }
+  const field = kind === "declared-identity"
+    ? "identityId"
+    : kind === "launch-produced-contract"
+      ? "instanceId"
+      : kind === "reviewed-external-contract"
+        ? "dependencyId"
+        : null;
+  if (field === null) {
+    throw new TypeError("custom launch post-launch authority source is invalid");
+  }
+  exactKeys(source, ["kind", field], "custom launch post-launch authority source");
+  const identifier = safeIdentifier(
+    source[field],
+    "custom launch post-launch authority source identifier",
+  );
+  if (kind === "declared-identity") {
+    return Object.freeze({ kind, identityId: identifier });
+  }
+  if (kind === "launch-produced-contract") {
+    return Object.freeze({ kind, instanceId: identifier });
+  }
+  return Object.freeze({
+    kind: "reviewed-external-contract" as const,
+    dependencyId: identifier,
+  });
+}
+
+function validatedPostLaunchAddressBindingsV1(
+  value: JsonValue | undefined,
+  authorityIds: ReadonlySet<string>,
+): PostLaunchAuthorityInventoryV1["addressBindings"] {
+  if (!Array.isArray(value) || value.length > 4_096) {
+    throw new TypeError("custom launch post-launch address bindings are invalid");
+  }
+  const result = Object.freeze(value.map((candidate, index) => {
+    const binding = jsonRecord(candidate, `custom launch address binding ${index}`);
+    exactKeys(binding, [
+      "authorityId", "bindingId", "byteOffset", "classification", "locator",
+      "phase", "rationale", "resolvedIdentity", "semanticRole", "targetId",
+    ], "custom launch post-launch address binding");
+    const classification = stringField(
+      binding.classification,
+      "custom launch post-launch address classification",
+    );
+    const authorityId = binding.authorityId === null
+      ? null
+      : safeIdentifier(binding.authorityId, "custom launch post-launch address authority");
+    assertPostLaunchClassificationV1(classification, authorityId, authorityIds);
+    const phase = stringField(binding.phase, "custom launch post-launch address phase");
+    if (phase !== "constructor" && phase !== "initializer") {
+      throw new TypeError("custom launch post-launch address phase is invalid");
+    }
+    const byteOffset = validatedPostLaunchIntegerV1(
+      binding.byteOffset,
+      "custom launch post-launch address byte offset",
+    );
+    const locator = validatedPostLaunchLocatorV1(binding.locator);
+    if (locator.byteOffset !== byteOffset) {
+      throw new TypeError("custom launch post-launch address locator is inconsistent");
+    }
+    return Object.freeze({
+      bindingId: safeIdentifier(binding.bindingId, "custom launch address binding id"),
+      targetId: safeIdentifier(binding.targetId, "custom launch address binding target"),
+      phase: phase as "constructor" | "initializer",
+      byteOffset,
+      semanticRole: safeIdentifier(binding.semanticRole, "custom launch address semantic role"),
+      classification: classification as "non-authority" | "post-launch-authority",
+      authorityId,
+      rationale: exactPublicText(binding.rationale, 512, "custom launch address rationale"),
+      locator,
+      resolvedIdentity: binding.resolvedIdentity === null
+        ? null
+        : validatedPostLaunchIdentityV1(
+            binding.resolvedIdentity,
+            "custom launch post-launch resolved identity",
+          ),
+    });
+  }));
+  assertPostLaunchOrderedUniqueV1(
+    result.map(({ targetId, phase, byteOffset }) =>
+      `${targetId}\u0000${phase}\u0000${byteOffset}`),
+    "custom launch post-launch address bindings",
+  );
+  return result;
+}
+
+function validatedPostLaunchDeclaredIdentityBindingsV1(
+  value: JsonValue | undefined,
+  authorityIds: ReadonlySet<string>,
+): PostLaunchAuthorityInventoryV1["declaredIdentityBindings"] {
+  if (!Array.isArray(value) || value.length > 4_096) {
+    throw new TypeError("custom launch declared identity bindings are invalid");
+  }
+  const result = Object.freeze(value.map((candidate, index) => {
+    const binding = jsonRecord(candidate, `custom launch identity binding ${index}`);
+    exactKeys(binding, [
+      "authorityId", "classification", "identityId", "rationale", "semanticRole",
+    ], "custom launch declared identity binding");
+    const classification = stringField(
+      binding.classification,
+      "custom launch declared identity classification",
+    );
+    const authorityId = binding.authorityId === null
+      ? null
+      : safeIdentifier(binding.authorityId, "custom launch declared identity authority");
+    assertPostLaunchClassificationV1(classification, authorityId, authorityIds);
+    return Object.freeze({
+      identityId: safeIdentifier(binding.identityId, "custom launch declared identity id"),
+      semanticRole: safeIdentifier(binding.semanticRole, "custom launch declared identity role"),
+      classification: classification as "non-authority" | "post-launch-authority",
+      authorityId,
+      rationale: exactPublicText(binding.rationale, 512, "custom launch declared identity rationale"),
+    });
+  }));
+  assertPostLaunchOrderedUniqueV1(
+    result.map(({ identityId }) => identityId),
+    "custom launch declared identity bindings",
+  );
+  return result;
+}
+
+function validatedPostLaunchLocatorV1(
+  value: JsonValue | undefined,
+): PostLaunchAddressLocatorV1 {
+  const locator = jsonRecord(value, "custom launch post-launch address locator");
+  const kind = stringField(locator.kind, "custom launch post-launch locator kind");
+  const byteOffset = validatedPostLaunchIntegerV1(
+    locator.byteOffset,
+    "custom launch post-launch locator byte offset",
+  );
+  const encoding = stringField(
+    locator.encoding,
+    "custom launch post-launch locator encoding",
+  );
+  if (encoding !== "abi-address-word" && encoding !== "packed-address-20") {
+    throw new TypeError("custom launch post-launch locator encoding is invalid");
+  }
+  if (kind === "launch-session-wallet") {
+    exactKeys(locator, ["byteOffset", "encoding", "kind"],
+      "custom launch post-launch address locator");
+    return Object.freeze({ kind, byteOffset, encoding });
+  }
+  const field = kind === "target"
+    ? "targetId"
+    : kind === "release-module-selection"
+      ? "selectionId"
+      : kind === "external-onchain-dependency"
+        ? "dependencyId"
+        : kind === "internal-child"
+          ? "childId"
+          : kind === "declared-identity"
+            ? "identityId"
+            : kind === "release-launch-adapter"
+              ? "adapterId"
+              : null;
+  if (field === null) {
+    throw new TypeError("custom launch post-launch locator kind is invalid");
+  }
+  exactKeys(locator, ["byteOffset", "encoding", field, "kind"],
+    "custom launch post-launch address locator");
+  const reference = safeIdentifier(
+    locator[field],
+    "custom launch post-launch locator reference",
+  );
+  if (kind === "target") return Object.freeze({ kind, targetId: reference, byteOffset, encoding });
+  if (kind === "release-module-selection") return Object.freeze({ kind, selectionId: reference, byteOffset, encoding });
+  if (kind === "external-onchain-dependency") return Object.freeze({ kind, dependencyId: reference, byteOffset, encoding });
+  if (kind === "internal-child") return Object.freeze({ kind, childId: reference, byteOffset, encoding });
+  if (kind === "declared-identity") return Object.freeze({ kind, identityId: reference, byteOffset, encoding });
+  return Object.freeze({ kind: "release-launch-adapter" as const, adapterId: reference, byteOffset, encoding });
+}
+
+function validatedPostLaunchIdentityV1(
+  value: JsonValue | undefined,
+  label: string,
+): Readonly<{ namespace: string; value: string }> {
+  const identity = jsonRecord(value, label);
+  exactKeys(identity, ["namespace", "value"], label);
+  const namespace = stringField(identity.namespace, `${label} namespace`);
+  const address = stringField(identity.value, `${label} value`);
+  if (!/^eip155:[1-9][0-9]*$/u.test(namespace) || !ADDRESS.test(address)) {
+    throw new TypeError(`${label} is invalid`);
+  }
+  return Object.freeze({ namespace, value: address });
+}
+
+function validatedPostLaunchIntegerV1(value: JsonValue | undefined, label: string): number {
+  if (!Number.isSafeInteger(value) || Number(value) < 0 || Number(value) > 1_048_576) {
+    throw new TypeError(`${label} is invalid`);
+  }
+  return Number(value);
+}
+
+function assertPostLaunchClassificationV1(
+  classification: string,
+  authorityId: string | null,
+  authorityIds: ReadonlySet<string>,
+): asserts classification is "non-authority" | "post-launch-authority" {
+  if (
+    (classification === "non-authority" && authorityId === null)
+    || (classification === "post-launch-authority"
+      && authorityId !== null
+      && authorityIds.has(authorityId))
+  ) return;
+  throw new TypeError("custom launch post-launch authority classification is invalid");
+}
+
+function assertPostLaunchOrderedUniqueV1(
+  values: readonly string[],
+  label: string,
+): void {
+  if (values.some((value, index) => index > 0
+    && compareUtf8(values[index - 1]!, value) >= 0)) {
+    throw new TypeError(`${label} are unsorted or duplicated`);
+  }
 }
 
 function validatedDiscoverableUniswapV4V2(input: Readonly<{

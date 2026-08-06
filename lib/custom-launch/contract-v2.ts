@@ -443,7 +443,7 @@ export interface PrincipalApplicationCorrectionPreviewV2 {
   readonly summary: string;
 }
 
-export interface PrincipalCustomLaunchApplicationSummaryV2 {
+interface PrincipalCustomLaunchApplicationSummaryBaseV2 {
   readonly applicationId: string;
   readonly applicationHandle: ApplicationHandleV3;
   readonly revisionId: string;
@@ -460,6 +460,23 @@ export interface PrincipalCustomLaunchApplicationSummaryV2 {
   readonly launchEntitlementBindingHash: Sha256DigestV2 | null;
   readonly updatedAt: string;
 }
+
+export type PrincipalCustomLaunchApplicationSummaryV2 =
+  | (PrincipalCustomLaunchApplicationSummaryBaseV2 & Readonly<{
+      intakeContract?: undefined;
+      controlRepositoryId?: undefined;
+      grandfatheredAtReleaseBindingDigest?: undefined;
+    }>)
+  | (PrincipalCustomLaunchApplicationSummaryBaseV2 & Readonly<{
+      intakeContract: "registry-v3";
+      controlRepositoryId: "1320171831";
+      grandfatheredAtReleaseBindingDigest?: null;
+    }>)
+  | (PrincipalCustomLaunchApplicationSummaryBaseV2 & Readonly<{
+      intakeContract: "legacy-v2";
+      controlRepositoryId: string;
+      grandfatheredAtReleaseBindingDigest?: Sha256DigestV2 | null;
+    }>);
 
 export interface PrincipalCustomLaunchApplicationListV2 {
   readonly schemaVersion: "programmable.principal-custom-launch-application-list.v3";
@@ -607,6 +624,116 @@ export interface DiscoverableUniswapV4PoolV2 {
   readonly poolKeyEvidenceHash: Sha256DigestV2;
 }
 
+export type DiscoverableMarketTradeSideV1 =
+  | "base-to-quote"
+  | "quote-to-base";
+
+export type DiscoverableMarketTradeDependencyRoleV1 =
+  | "uniswap-v4-universal-router"
+  | "uniswap-v4-quoter"
+  | "uniswap-v4-state-view"
+  | "uniswap-permit2";
+
+export interface DiscoverableMarketTradeDependencyV1 {
+  readonly role: DiscoverableMarketTradeDependencyRoleV1;
+  readonly dependencyId: string;
+  readonly capabilityId: string;
+  readonly chainProfileId: string;
+  readonly identity: Readonly<{ namespace: string; value: string }>;
+  readonly runtimeCodeKeccak256: string;
+  readonly runtimeCodeSha256: Sha256DigestV2;
+  readonly reviewEvidenceBindingHash: Sha256DigestV2;
+  readonly interfaceEvidenceBindingHash: Sha256DigestV2;
+}
+
+export interface DiscoverableMarketTradePoolKeyV1 {
+  readonly poolId: string;
+  readonly currency0AssetId: string;
+  readonly currency0: Readonly<{ namespace: string; value: string }>;
+  readonly currency1AssetId: string;
+  readonly currency1: Readonly<{ namespace: string; value: string }>;
+  readonly feeRaw: string;
+  readonly tickSpacing: string;
+  readonly hooksAssetId: string | null;
+  readonly hooks: Readonly<{ namespace: string; value: string }>;
+}
+
+export interface DiscoverableMarketTradeSideBindingV1 {
+  readonly side: DiscoverableMarketTradeSideV1;
+  readonly inputAssetId: string;
+  readonly outputAssetId: string;
+  readonly zeroForOne: boolean;
+  readonly inputCurrencyKind: "native" | "erc20";
+  readonly settlementAction: "SETTLE_ALL";
+  readonly takeAction: "TAKE_ALL";
+}
+
+export type DiscoverableMarketTradeHookDataPolicyV1 = Readonly<
+  | {
+      kind: "empty";
+      data: "0x";
+      hookDataHash: Sha256DigestV2;
+    }
+  | {
+      kind: "fixed";
+      data: `0x${string}`;
+      hookDataHash: Sha256DigestV2;
+    }
+>;
+
+export interface DiscoverableMarketTradeCapabilityV1 {
+  readonly schemaVersion: "programmable.discoverable-market-trade-capability.v1";
+  readonly capabilityId: string;
+  readonly adapterId: "uniswap-v4-universal-router-exact-input:v1";
+  readonly chainId: string;
+  readonly chainProfileId: string;
+  readonly chainProfileHash: Sha256DigestV2;
+  readonly marketId: string;
+  readonly baseAssetId: string;
+  readonly quoteAssetId: string;
+  readonly poolKey: DiscoverableMarketTradePoolKeyV1;
+  readonly routerGeneration: string;
+  readonly dependencies: readonly DiscoverableMarketTradeDependencyV1[];
+  readonly supportedSides: readonly DiscoverableMarketTradeSideV1[];
+  readonly sideBindings: readonly DiscoverableMarketTradeSideBindingV1[];
+  readonly exactness: "exact-input";
+  readonly hookDataPolicy: DiscoverableMarketTradeHookDataPolicyV1;
+  readonly actionPolicy: Readonly<{
+    swapAction: "SWAP_EXACT_IN_SINGLE";
+    settleAction: "SETTLE_ALL";
+    takeAction: "TAKE_ALL";
+    multiHop: false;
+    exactOutput: false;
+  }>;
+  readonly quotePolicy: Readonly<{
+    adapterId: "uniswap-v4-quoter-exact-input:v1";
+    executionMode: "offchain-static-call-only";
+    currentStateRequired: true;
+    maximumQuoteAgeSeconds: number;
+  }>;
+  readonly slippagePolicy: Readonly<{
+    kind: "user-bounded-minimum-output";
+    amountOutMinimumRequired: true;
+    maximumSlippageBps: number;
+  }>;
+  readonly deadlinePolicy: Readonly<{
+    kind: "bounded-user-deadline";
+    deadlineRequired: true;
+    maximumHorizonSeconds: number;
+  }>;
+  readonly approvalPolicy: Readonly<{
+    erc20Input: "erc20-approve-permit2-then-permit2-approve-router";
+    nativeInput: "transaction-value";
+  }>;
+  readonly recipientPolicy: "connected-wallet-only";
+  readonly planBindingHash: Sha256DigestV2;
+  readonly status: "verified";
+  readonly poolKeyEvidenceHash: Sha256DigestV2;
+  readonly marketVerificationBindingHash: Sha256DigestV2;
+  readonly hookAssetIdentityEvidenceHash: Sha256DigestV2 | null;
+  readonly tradeCapabilityBindingHash: Sha256DigestV2;
+}
+
 export type DiscoverableLaunchMarketStatusV2 =
   | "active"
   | "paused"
@@ -636,6 +763,7 @@ export interface DiscoverableLaunchMarketV2 {
   readonly marketEvidenceHash: Sha256DigestV2;
   readonly verification: DiscoverableLaunchMarketVerificationV2;
   readonly uniswapV4: Readonly<DiscoverableUniswapV4PoolV2> | null;
+  readonly tradeCapability?: Readonly<DiscoverableMarketTradeCapabilityV1>;
 }
 
 export interface LaunchPresentationDraftV1 {
@@ -699,6 +827,102 @@ export interface PrincipalLaunchPresentationResponseV1 {
   readonly committedAt: string;
 }
 
+export type PostLaunchAddressLocatorV1 = Readonly<
+  | {
+      kind: "target";
+      targetId: string;
+      byteOffset: number;
+      encoding: "abi-address-word" | "packed-address-20";
+    }
+  | {
+      kind: "release-module-selection";
+      selectionId: string;
+      byteOffset: number;
+      encoding: "abi-address-word" | "packed-address-20";
+    }
+  | {
+      kind: "external-onchain-dependency";
+      dependencyId: string;
+      byteOffset: number;
+      encoding: "abi-address-word" | "packed-address-20";
+    }
+  | {
+      kind: "launch-session-wallet";
+      byteOffset: number;
+      encoding: "abi-address-word" | "packed-address-20";
+    }
+  | {
+      kind: "internal-child";
+      childId: string;
+      byteOffset: number;
+      encoding: "abi-address-word" | "packed-address-20";
+    }
+  | {
+      kind: "declared-identity";
+      identityId: string;
+      byteOffset: number;
+      encoding: "abi-address-word" | "packed-address-20";
+    }
+  | {
+      kind: "release-launch-adapter";
+      adapterId: string;
+      byteOffset: number;
+      encoding: "abi-address-word" | "packed-address-20";
+    }
+>;
+
+export type PostLaunchAuthoritySourceV1 = Readonly<
+  | { kind: "launching-wallet" }
+  | { kind: "declared-identity"; identityId: string }
+  | { kind: "launch-produced-contract"; instanceId: string }
+  | { kind: "reviewed-external-contract"; dependencyId: string }
+>;
+
+export interface MaterializedPostLaunchAuthorityV1 {
+  readonly authorityId: string;
+  readonly role: string;
+  readonly authorityKind: "eoa" | "multisig" | "contract";
+  readonly identity: Readonly<{ namespace: string; value: string }>;
+  readonly source: PostLaunchAuthoritySourceV1;
+  readonly postLaunchActions: readonly string[];
+  readonly feeRole: "none" | "creator" | "project";
+  readonly disclosure: Readonly<{ label: string; description: string }>;
+  readonly authorization: "declared-onchain-authority-only";
+}
+
+export interface PostLaunchAuthorityInventoryV1 {
+  readonly schemaVersion: "programmable.post-launch-authority-inventory.v1";
+  readonly launchingWallet: Readonly<{ namespace: string; value: string }>;
+  readonly addressBindings: readonly Readonly<{
+    bindingId: string;
+    targetId: string;
+    phase: "constructor" | "initializer";
+    byteOffset: number;
+    semanticRole: string;
+    classification: "non-authority" | "post-launch-authority";
+    authorityId: string | null;
+    rationale: string;
+    locator: PostLaunchAddressLocatorV1;
+    resolvedIdentity: Readonly<{ namespace: string; value: string }> | null;
+  }>[];
+  readonly declaredIdentityBindings: readonly Readonly<{
+    identityId: string;
+    semanticRole: string;
+    classification: "non-authority" | "post-launch-authority";
+    authorityId: string | null;
+    rationale: string;
+  }>[];
+  readonly postLaunchAuthorities: readonly Readonly<MaterializedPostLaunchAuthorityV1>[];
+  readonly confirmation: Readonly<{
+    mode: "artifact-bound-launching-wallet-intent";
+    confirmingIdentity: Readonly<{ namespace: string; value: string }>;
+    userVisibleDisclosureRequired: true;
+  }>;
+  readonly postLaunchActionPolicy: "declared-onchain-authority-only";
+  readonly githubAuthority: "provenance-only-never-post-launch-authority";
+  readonly postLaunchAuthorityInventoryHash: Sha256DigestV2;
+}
+
 export interface AuthenticatedCustomLaunchProjectV2 {
   readonly schemaVersion: "programmable.custom-launch-website-record.v2";
   readonly platformId: "programmable";
@@ -718,6 +942,9 @@ export interface AuthenticatedCustomLaunchProjectV2 {
   readonly chainProfileId: string;
   readonly chainProfileHash: Sha256DigestV2;
   readonly launchIdentity: Readonly<{ namespace: string; value: string }>;
+  readonly launchingWallet: Readonly<{ namespace: string; value: string }>;
+  readonly postLaunchAuthorityInventory: Readonly<PostLaunchAuthorityInventoryV1>;
+  readonly postLaunchAuthorityInventoryHash: Sha256DigestV2;
   readonly launchTransactionId: string;
   readonly launchRouteId: string;
   readonly executionMode: string;
@@ -748,13 +975,11 @@ export interface CustomLaunchProjectViewV2 {
   readonly project: AuthenticatedCustomLaunchProjectV2;
 }
 
-export interface AuthenticatedCustomLaunchProfileViewV2 {
-  readonly schemaVersion: "programmable.authenticated-custom-launch-profile.v2";
+export interface CustomLaunchWalletProfileViewV2 {
+  readonly schemaVersion: "programmable.custom-launch-wallet-profile.v2";
   readonly subject: Readonly<{
-    provider: "github";
-    githubUserId: string;
-    githubUsername: string | null;
-    githubPrincipalHash: Sha256DigestV2;
+    namespace: string;
+    value: string;
   }>;
   readonly projects: readonly AuthenticatedCustomLaunchProjectV2[];
 }
@@ -798,5 +1023,11 @@ export const CUSTOM_LAUNCH_WEBSITE_API_V2 = Object.freeze({
     `/api/custom-launch/v2/launch-preparations/${encodeURIComponent(executionReservationId)}/report`,
   project: (projectId: Sha256DigestV2) =>
     `/api/custom-launch/v2/projects/${encodeURIComponent(projectId)}`,
-  profile: "/api/custom-launch/v2/profile",
+  profile: (input: Readonly<{ namespace: string; value: string }>) => {
+    const query = new URLSearchParams({
+      namespace: input.namespace,
+      wallet: input.value,
+    });
+    return `/api/custom-launch/v2/profile?${query.toString()}`;
+  },
 });

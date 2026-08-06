@@ -1,4 +1,7 @@
-import type { LauncherToken } from "@/lib/tokens";
+import type {
+  CanonicalTokenExploreEntry,
+  CustomProjectExploreEntry,
+} from "@/lib/tokens";
 
 type PreviewChartRange = "1h" | "1d" | "1w" | "all";
 
@@ -29,7 +32,7 @@ function makePreviewToken(input: {
   volumeEth: string;
   launchModel: "classic" | "adaptive" | "deep";
   totalSwapFeeBps: number;
-}): LauncherToken {
+}): CanonicalTokenExploreEntry {
   const tokenAddress = `0x${input.id.toString(16).padStart(40, "0")}` as const;
   const hookAddress = `0x${(input.id + 100).toString(16).padStart(40, "0")}` as const;
   const creatorAddress = `0x${(input.id + 200).toString(16).padStart(40, "0")}` as const;
@@ -37,6 +40,15 @@ function makePreviewToken(input: {
 
   return {
     id: `interface-preview-${input.id}`,
+    exploreKind: "token",
+    launchCategoryProvenance: {
+      schemaVersion: "programmable.explore-launch-category-provenance.v1",
+      category: "classic",
+      source: "canonical-launch-read-model",
+      recordId: `interface-preview-${input.id}`,
+      modelId: input.launchModel,
+      modelVersion: input.launchModel === "classic" ? "classic-v3" : null,
+    },
     name: input.name,
     symbol: input.symbol,
     description: input.description,
@@ -78,7 +90,7 @@ function makePreviewToken(input: {
   };
 }
 
-export const EXPLORE_PREVIEW_TOKENS: LauncherToken[] = [
+export const EXPLORE_PREVIEW_TOKENS: CanonicalTokenExploreEntry[] = [
   makePreviewToken({
     id: 1,
     name: "Common Ground",
@@ -177,6 +189,280 @@ export const EXPLORE_PREVIEW_TOKENS: LauncherToken[] = [
   }),
 ];
 
+const CUSTOM_PREVIEW_WALLET = {
+  namespace: "eip155:1",
+  value: "0x4000000000000000000000000000000000000000",
+} as const;
+const CUSTOM_PREVIEW_PROJECT_HASH = `sha256:${"1".repeat(64)}` as const;
+const CUSTOM_PREVIEW_LAUNCH_HASH = `sha256:${"2".repeat(64)}` as const;
+const CUSTOM_PREVIEW_AUTHORITY_HASH = `sha256:${"3".repeat(64)}` as const;
+const CUSTOM_PREVIEW_POOL_ID =
+  "0x614e282d9da77773822719f0675fc54e61e17db2a0a00af2cb64dede96ea29b6" as const;
+
+function previewDigest(digit: string): `sha256:${string}` {
+  return `sha256:${digit.repeat(64)}`;
+}
+
+const CUSTOM_PREVIEW_TRADE_CAPABILITY = {
+  schemaVersion: "programmable.discoverable-market-trade-capability.v1",
+  capabilityId: "trade:signal-eth-v4",
+  adapterId: "uniswap-v4-universal-router-exact-input:v1",
+  chainId: "1",
+  chainProfileId: "ethereum-mainnet-v4",
+  chainProfileHash: previewDigest("7"),
+  marketId: "signal-eth-v4",
+  baseAssetId: "signal-token",
+  quoteAssetId: "native-eth",
+  poolKey: {
+    poolId: CUSTOM_PREVIEW_POOL_ID,
+    currency0AssetId: "native-eth",
+    currency0: {
+      namespace: "eip155:1",
+      value: "0x0000000000000000000000000000000000000000",
+    },
+    currency1AssetId: "signal-token",
+    currency1: {
+      namespace: "eip155:1",
+      value: "0x2000000000000000000000000000000000000000",
+    },
+    feeRaw: "500",
+    tickSpacing: "10",
+    hooksAssetId: "signal-hook",
+    hooks: {
+      namespace: "eip155:1",
+      value: "0x3000000000000000000000000000000000000000",
+    },
+  },
+  routerGeneration: "universal-router:v2.2",
+  dependencies: [
+    {
+      role: "uniswap-permit2",
+      dependencyId: "dependency:uniswap-permit2",
+      capabilityId: "capability:uniswap-permit2:v1",
+      chainProfileId: "ethereum-mainnet-v4",
+      identity: {
+        namespace: "eip155:1",
+        value: "0x000000000022d473030f116ddee9f6b43ac78ba3",
+      },
+      runtimeCodeKeccak256: `0x${"1".repeat(64)}`,
+      runtimeCodeSha256: previewDigest("1"),
+      reviewEvidenceBindingHash: previewDigest("1"),
+      interfaceEvidenceBindingHash: previewDigest("1"),
+    },
+    {
+      role: "uniswap-v4-quoter",
+      dependencyId: "dependency:uniswap-v4-quoter",
+      capabilityId: "capability:uniswap-v4-quoter:v1",
+      chainProfileId: "ethereum-mainnet-v4",
+      identity: {
+        namespace: "eip155:1",
+        value: "0x52f0e24d1c21c8a0cb1e5a5dd6198556bd9e1203",
+      },
+      runtimeCodeKeccak256: `0x${"2".repeat(64)}`,
+      runtimeCodeSha256: previewDigest("2"),
+      reviewEvidenceBindingHash: previewDigest("2"),
+      interfaceEvidenceBindingHash: previewDigest("2"),
+    },
+    {
+      role: "uniswap-v4-state-view",
+      dependencyId: "dependency:uniswap-v4-state-view",
+      capabilityId: "capability:uniswap-v4-state-view:v1",
+      chainProfileId: "ethereum-mainnet-v4",
+      identity: {
+        namespace: "eip155:1",
+        value: "0x7ffe42c4a5deea5b0fec41c94c136cf115597227",
+      },
+      runtimeCodeKeccak256: `0x${"3".repeat(64)}`,
+      runtimeCodeSha256: previewDigest("3"),
+      reviewEvidenceBindingHash: previewDigest("3"),
+      interfaceEvidenceBindingHash: previewDigest("3"),
+    },
+    {
+      role: "uniswap-v4-universal-router",
+      dependencyId: "dependency:uniswap-v4-universal-router-v2.2",
+      capabilityId: "capability:uniswap-v4-universal-router:v2.2",
+      chainProfileId: "ethereum-mainnet-v4",
+      identity: {
+        namespace: "eip155:1",
+        value: "0xcb640a86855f1a828c27241ba364348de28abe66",
+      },
+      runtimeCodeKeccak256: `0x${"4".repeat(64)}`,
+      runtimeCodeSha256: previewDigest("4"),
+      reviewEvidenceBindingHash: previewDigest("4"),
+      interfaceEvidenceBindingHash: previewDigest("4"),
+    },
+  ],
+  supportedSides: ["base-to-quote", "quote-to-base"],
+  sideBindings: [{
+    side: "base-to-quote",
+    inputAssetId: "signal-token",
+    outputAssetId: "native-eth",
+    zeroForOne: false,
+    inputCurrencyKind: "erc20",
+    settlementAction: "SETTLE_ALL",
+    takeAction: "TAKE_ALL",
+  }, {
+    side: "quote-to-base",
+    inputAssetId: "native-eth",
+    outputAssetId: "signal-token",
+    zeroForOne: true,
+    inputCurrencyKind: "native",
+    settlementAction: "SETTLE_ALL",
+    takeAction: "TAKE_ALL",
+  }],
+  exactness: "exact-input",
+  hookDataPolicy: {
+    kind: "fixed",
+    data: "0x1234",
+    hookDataHash: previewDigest("8"),
+  },
+  actionPolicy: {
+    swapAction: "SWAP_EXACT_IN_SINGLE",
+    settleAction: "SETTLE_ALL",
+    takeAction: "TAKE_ALL",
+    multiHop: false,
+    exactOutput: false,
+  },
+  quotePolicy: {
+    adapterId: "uniswap-v4-quoter-exact-input:v1",
+    executionMode: "offchain-static-call-only",
+    currentStateRequired: true,
+    maximumQuoteAgeSeconds: 30,
+  },
+  slippagePolicy: {
+    kind: "user-bounded-minimum-output",
+    amountOutMinimumRequired: true,
+    maximumSlippageBps: 500,
+  },
+  deadlinePolicy: {
+    kind: "bounded-user-deadline",
+    deadlineRequired: true,
+    maximumHorizonSeconds: 300,
+  },
+  approvalPolicy: {
+    erc20Input: "erc20-approve-permit2-then-permit2-approve-router",
+    nativeInput: "transaction-value",
+  },
+  recipientPolicy: "connected-wallet-only",
+  planBindingHash: previewDigest("9"),
+  status: "verified",
+  poolKeyEvidenceHash: previewDigest("a"),
+  marketVerificationBindingHash: previewDigest("b"),
+  hookAssetIdentityEvidenceHash: previewDigest("c"),
+  tradeCapabilityBindingHash: previewDigest("d"),
+} as const;
+
+export const EXPLORE_PREVIEW_CUSTOM_PROJECT: CustomProjectExploreEntry = {
+  exploreKind: "custom-project",
+  id: "interface-preview-custom-signal-garden",
+  name: "Signal Garden",
+  symbol: "SIGNAL",
+  description: "A reviewed Custom Hook launch with explicit post-launch authority.",
+  imageUrl: "/brand/projects/common-ground-v1.webp",
+  links: [{ kind: "website", url: "https://programmable.family" }],
+  launchedAt: "2026-08-06T12:00:00.000Z",
+  finalizedAt: "2026-08-06T12:02:00.000Z",
+  chainId: "1",
+  modelId: "custom-hook-v1",
+  customProjectId: CUSTOM_PREVIEW_PROJECT_HASH,
+  customLaunchId: CUSTOM_PREVIEW_LAUNCH_HASH,
+  tokenAddress: "0x2000000000000000000000000000000000000000",
+  launchingWallet: CUSTOM_PREVIEW_WALLET,
+  postLaunchAuthorityInventoryHash: CUSTOM_PREVIEW_AUTHORITY_HASH,
+  postLaunchAuthorityInventory: {
+    schemaVersion: "programmable.post-launch-authority-inventory.v1",
+    launchingWallet: CUSTOM_PREVIEW_WALLET,
+    addressBindings: [],
+    declaredIdentityBindings: [],
+    postLaunchAuthorities: [{
+      authorityId: "launch-wallet",
+      role: "project-owner",
+      authorityKind: "eoa",
+      identity: CUSTOM_PREVIEW_WALLET,
+      source: { kind: "launching-wallet" },
+      postLaunchActions: ["configure-hook"],
+      feeRole: "project",
+      disclosure: {
+        label: "Launch wallet",
+        description: "Can perform the declared post-launch hook action.",
+      },
+      authorization: "declared-onchain-authority-only",
+    }],
+    confirmation: {
+      mode: "artifact-bound-launching-wallet-intent",
+      confirmingIdentity: CUSTOM_PREVIEW_WALLET,
+      userVisibleDisclosureRequired: true,
+    },
+    postLaunchActionPolicy: "declared-onchain-authority-only",
+    githubAuthority: "provenance-only-never-post-launch-authority",
+    postLaunchAuthorityInventoryHash: CUSTOM_PREVIEW_AUTHORITY_HASH,
+  },
+  markets: [{
+    marketId: "signal-eth-v4",
+    kind: "uniswap-v4",
+    status: "active",
+    poolId: CUSTOM_PREVIEW_POOL_ID,
+    baseAsset: {
+      assetId: "signal-token",
+      identity: {
+        namespace: "eip155:1",
+        value: "0x2000000000000000000000000000000000000000",
+      },
+      name: "Signal Garden",
+      symbol: "SIGNAL",
+      decimals: 18,
+    },
+    quoteAsset: {
+      assetId: "native-eth",
+      identity: {
+        namespace: "eip155:1",
+        value: "0x0000000000000000000000000000000000000000",
+      },
+      name: "Ether",
+      symbol: "ETH",
+      decimals: 18,
+    },
+    tradeCapability: CUSTOM_PREVIEW_TRADE_CAPABILITY,
+  }],
+  launchCategoryProvenance: {
+    schemaVersion: "programmable.explore-launch-category-provenance.v1",
+    category: "custom",
+    source: "website.custom-launched",
+    projectId: CUSTOM_PREVIEW_PROJECT_HASH,
+    launchId: CUSTOM_PREVIEW_LAUNCH_HASH,
+    sourceRecordBindingHash: `sha256:${"5".repeat(64)}`,
+    finalizedLaunchBindingHash: `sha256:${"6".repeat(64)}`,
+  },
+};
+
+export const EXPLORE_PREVIEW_CUSTOM_PROJECT_NO_TRADE: CustomProjectExploreEntry = {
+  ...EXPLORE_PREVIEW_CUSTOM_PROJECT,
+  id: "interface-preview-custom-signal-garden-unbound",
+  name: "Signal Garden Unbound",
+  customProjectId: previewDigest("e"),
+  customLaunchId: previewDigest("f"),
+  tokenAddress: "0x2100000000000000000000000000000000000000",
+  markets: EXPLORE_PREVIEW_CUSTOM_PROJECT.markets.map((market) => ({
+    marketId: market.marketId,
+    kind: market.kind,
+    status: market.status,
+    poolId: `0x${"62".repeat(32)}`,
+    baseAsset: {
+      ...market.baseAsset,
+      identity: {
+        ...market.baseAsset.identity,
+        value: "0x2100000000000000000000000000000000000000",
+      },
+    },
+    quoteAsset: market.quoteAsset,
+  })),
+  launchCategoryProvenance: {
+    ...EXPLORE_PREVIEW_CUSTOM_PROJECT.launchCategoryProvenance,
+    projectId: previewDigest("e"),
+    launchId: previewDigest("f"),
+  },
+};
+
 const EXPLORE_PREVIEW_PROJECTS = new Map<string, ExplorePreviewProject>([
   [
     EXPLORE_PREVIEW_TOKENS[0].tokenAddress.toLowerCase(),
@@ -242,6 +528,17 @@ export function getExplorePreviewToken(address: string) {
 
 export function getExplorePreviewProject(address: string) {
   return EXPLORE_PREVIEW_PROJECTS.get(address.toLowerCase());
+}
+
+export function getExplorePreviewCustomProject(address: string) {
+  const normalized = address.toLowerCase();
+  if (normalized === EXPLORE_PREVIEW_CUSTOM_PROJECT.tokenAddress?.toLowerCase()) {
+    return EXPLORE_PREVIEW_CUSTOM_PROJECT;
+  }
+  if (normalized === EXPLORE_PREVIEW_CUSTOM_PROJECT_NO_TRADE.tokenAddress?.toLowerCase()) {
+    return EXPLORE_PREVIEW_CUSTOM_PROJECT_NO_TRADE;
+  }
+  return undefined;
 }
 
 export function getExplorePreviewChart(

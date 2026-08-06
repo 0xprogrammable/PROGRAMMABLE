@@ -328,6 +328,23 @@
   min-width: 0;
 }
 
+.runnerCategory {
+  align-items: center;
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-soft);
+  display: inline-flex;
+  flex: none;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.015em;
+  line-height: 1;
+  min-height: 26px;
+  padding: 0 9px;
+  white-space: nowrap;
+}
+
 .runnerMarketCap {
   align-items: baseline;
   color: var(--text);
@@ -507,7 +524,7 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .runnerHitArea:hover .runnerHeading h3,
+  a.runnerHitArea:hover .runnerHeading h3,
   .runnerSocialLink:hover,
   .searchClear:hover {
     color: var(--explore-pink-strong);

@@ -50,7 +50,7 @@ const RESPONSE_VALIDATORS_V2: Readonly<Record<string, ValidatorV2>> = Object.fre
   "programmable.browser-wallet-grant-reissue.v2": validateGrantReissueV1,
   "programmable.browser-wallet-launch-report-ack.v2": validateLaunchReportAckV2,
   "programmable.custom-launch-project-view.v2": validateProjectViewV2,
-  "programmable.authenticated-custom-launch-profile.v2": validateProfileViewV2,
+  "programmable.custom-launch-wallet-profile.v2": validateProfileViewV2,
 });
 
 function validateApplicationStatusV2(value: unknown): void {
@@ -98,11 +98,13 @@ function validateApplicationListV2(value: unknown): void {
 }
 
 function validateApplicationSummaryV2(value: unknown): void {
-  const record = exactRecord(value, [
+  const record = exactRecordWithOptional(value, [
     "applicationId", "applicationHandle", "revisionId", "repositoryId", "repositoryFullName",
     "pullRequestNumber", "commitOid", "state", "reasonCodes", "actionCodes",
     "correctionCount", "correctionPreview", "receiptDigest",
     "launchEntitlementBindingHash", "updatedAt",
+  ], [
+    "intakeContract", "controlRepositoryId", "grandfatheredAtReleaseBindingDigest",
   ]);
   applicationId(record.applicationId);
   applicationHandle(record.applicationHandle);
@@ -127,6 +129,23 @@ function validateApplicationSummaryV2(value: unknown): void {
   if (corrections.length > Number(record.correctionCount)) mismatch();
   nullable(record.receiptDigest, digest);
   nullable(record.launchEntitlementBindingHash, digest);
+  const hasCompatibilityField = record.controlRepositoryId !== undefined
+    || record.grandfatheredAtReleaseBindingDigest !== undefined;
+  if (record.intakeContract === undefined) {
+    if (hasCompatibilityField) mismatch();
+  } else if (record.intakeContract === "registry-v3") {
+    if (record.controlRepositoryId !== "1320171831"
+      || (record.grandfatheredAtReleaseBindingDigest !== undefined
+        && record.grandfatheredAtReleaseBindingDigest !== null)) mismatch();
+  } else if (record.intakeContract === "legacy-v2") {
+    positiveDecimal(record.controlRepositoryId);
+    if (record.controlRepositoryId === "1320171831") mismatch();
+    if (record.grandfatheredAtReleaseBindingDigest !== undefined) {
+      nullable(record.grandfatheredAtReleaseBindingDigest, digest);
+    }
+  } else {
+    mismatch();
+  }
   instant(record.updatedAt);
 }
 
@@ -619,17 +638,15 @@ function validateProjectViewV2(value: unknown): void {
 
 function validateProfileViewV2(value: unknown): void {
   const record = exactRecord(value, ["schemaVersion", "subject", "projects"]);
-  literal(record.schemaVersion, "programmable.authenticated-custom-launch-profile.v2");
-  const subject = exactRecord(record.subject, [
-    "provider", "githubUserId", "githubUsername", "githubPrincipalHash",
-  ]);
-  literal(subject.provider, "github");
-  positiveDecimal(subject.githubUserId);
-  nullable(subject.githubUsername, (candidate) => boundedString(candidate, 1, 256));
-  digest(subject.githubPrincipalHash);
+  literal(record.schemaVersion, "programmable.custom-launch-wallet-profile.v2");
+  const subject = exactRecord(record.subject, ["namespace", "value"]);
+  namespacedIdentity(subject);
   const projects = arrayOf(record.projects, validateProjectV2, 10_000);
   if (projects.some((project) =>
-    (project as JsonRecordV2).githubPrincipalHash !== subject.githubPrincipalHash)) mismatch();
+    ((project as JsonRecordV2).launchingWallet as JsonRecordV2).namespace
+      !== subject.namespace
+    || ((project as JsonRecordV2).launchingWallet as JsonRecordV2).value
+      !== subject.value)) mismatch();
 }
 
 function validateProjectV2(value: unknown): void {
@@ -637,7 +654,9 @@ function validateProjectV2(value: unknown): void {
     "schemaVersion", "platformId", "origin", "category", "launchFamily", "modelId",
     "sourceKind", "sourceRecordBindingHash", "finalizedLaunchBindingHash", "status",
     "action", "projectId", "launchId", "githubPrincipalHash", "chainId", "chainProfileId",
-    "chainProfileHash", "launchIdentity", "launchTransactionId", "launchRouteId",
+    "chainProfileHash", "launchIdentity", "launchingWallet",
+    "postLaunchAuthorityInventory", "postLaunchAuthorityInventoryHash",
+    "launchTransactionId", "launchRouteId",
     "executionMode", "advertisesToken", "discoverableAssets", "assetIdentitySetHash",
     "discoverableMarkets", "marketSetHash", "feeAssessmentHash", "feeObligationHash",
     "feeAssessmentObligationBindingHash", "feeObligation", "registryPublicationBindingHash",
@@ -662,12 +681,30 @@ function validateProjectV2(value: unknown): void {
   positiveDecimal(record.chainId);
   identifier(record.chainProfileId);
   namespacedIdentity(record.launchIdentity);
+  namespacedIdentity(record.launchingWallet);
+  validatePostLaunchAuthorityInventoryV1(record.postLaunchAuthorityInventory);
+  digest(record.postLaunchAuthorityInventoryHash);
+  if ((record.postLaunchAuthorityInventory as JsonRecordV2)
+    .postLaunchAuthorityInventoryHash !== record.postLaunchAuthorityInventoryHash
+    || ((record.postLaunchAuthorityInventory as JsonRecordV2)
+      .launchingWallet as JsonRecordV2).namespace
+      !== (record.launchingWallet as JsonRecordV2).namespace
+    || ((record.postLaunchAuthorityInventory as JsonRecordV2)
+      .launchingWallet as JsonRecordV2).value
+      !== (record.launchingWallet as JsonRecordV2).value) mismatch();
   boundedString(record.launchTransactionId, 1, 512);
   identifier(record.launchRouteId);
   identifier(record.executionMode);
   booleanValue(record.advertisesToken);
   arrayOf(record.discoverableAssets, validateDiscoverableAssetV2, 10_000);
-  arrayOf(record.discoverableMarkets, validateDiscoverableMarketV2, 10_000);
+  arrayOf(record.discoverableMarkets, (candidate) => validateDiscoverableMarketV2(
+    candidate,
+    {
+      chainId: record.chainId as string,
+      chainProfileId: record.chainProfileId as string,
+      chainProfileHash: record.chainProfileHash as string,
+    },
+  ), 10_000);
   validateFeeObligationV2(record.feeObligation);
   nullable(record.presentationVersion, positiveDecimal);
   nullable(record.presentationBindingHash, digest);
@@ -681,6 +718,49 @@ function validateProjectV2(value: unknown): void {
     || (record.feeObligation as JsonRecordV2).feeObligationHash !== record.feeObligationHash
     || (record.feeObligation as JsonRecordV2).feeAssessmentObligationBindingHash
       !== record.feeAssessmentObligationBindingHash) mismatch();
+}
+
+function validatePostLaunchAuthorityInventoryV1(value: unknown): void {
+  const record = exactRecord(value, [
+    "schemaVersion", "launchingWallet", "addressBindings",
+    "declaredIdentityBindings", "postLaunchAuthorities", "confirmation",
+    "postLaunchActionPolicy", "githubAuthority",
+    "postLaunchAuthorityInventoryHash",
+  ]);
+  literal(record.schemaVersion, "programmable.post-launch-authority-inventory.v1");
+  namespacedIdentity(record.launchingWallet);
+  arrayOf(record.addressBindings, () => undefined, 4_096);
+  arrayOf(record.declaredIdentityBindings, () => undefined, 4_096);
+  arrayOf(record.postLaunchAuthorities, (candidate) => {
+    const authority = exactRecord(candidate, [
+      "authorityId", "role", "authorityKind", "identity", "source",
+      "postLaunchActions", "feeRole", "disclosure", "authorization",
+    ]);
+    identifier(authority.authorityId);
+    identifier(authority.role);
+    enumValue(authority.authorityKind, ["eoa", "multisig", "contract"]);
+    namespacedIdentity(authority.identity);
+    const source = objectValue(authority.source);
+    enumValue(source.kind, [
+      "launching-wallet", "declared-identity", "launch-produced-contract",
+      "reviewed-external-contract",
+    ]);
+    stringArray(authority.postLaunchActions, 1_024, 256);
+    enumValue(authority.feeRole, ["none", "creator", "project"]);
+    const disclosure = exactRecord(authority.disclosure, ["label", "description"]);
+    boundedString(disclosure.label, 1, 96);
+    boundedString(disclosure.description, 1, 512);
+    literal(authority.authorization, "declared-onchain-authority-only");
+  }, 1_024);
+  const confirmation = exactRecord(record.confirmation, [
+    "mode", "confirmingIdentity", "userVisibleDisclosureRequired",
+  ]);
+  literal(confirmation.mode, "artifact-bound-launching-wallet-intent");
+  namespacedIdentity(confirmation.confirmingIdentity);
+  literal(confirmation.userVisibleDisclosureRequired, true);
+  literal(record.postLaunchActionPolicy, "declared-onchain-authority-only");
+  literal(record.githubAuthority, "provenance-only-never-post-launch-authority");
+  digest(record.postLaunchAuthorityInventoryHash);
 }
 
 function validateDiscoverableAssetV2(value: unknown): void {
@@ -749,11 +829,21 @@ function validateTokenMetadataV2(value: unknown): void {
   }
 }
 
-function validateDiscoverableMarketV2(value: unknown): void {
-  const record = exactRecord(value, [
+function validateDiscoverableMarketV2(
+  value: unknown,
+  project: Readonly<{
+    chainId: string;
+    chainProfileId: string;
+    chainProfileHash: string;
+  }>,
+): void {
+  const base = objectValue(value);
+  const keys = [
     "marketId", "kind", "status", "marketAssetId", "baseAssetId", "quoteAssetId",
     "marketEvidenceHash", "verification", "uniswapV4",
-  ]);
+  ];
+  if (Object.hasOwn(base, "tradeCapability")) keys.push("tradeCapability");
+  const record = exactRecord(value, keys);
   for (const field of ["marketId", "kind", "marketAssetId", "baseAssetId", "quoteAssetId"] ) {
     identifier(record[field]);
   }
@@ -761,6 +851,204 @@ function validateDiscoverableMarketV2(value: unknown): void {
   digest(record.marketEvidenceHash);
   validateMarketVerificationV2(record.verification);
   nullable(record.uniswapV4, validateUniswapV4PoolV2);
+  if (Object.hasOwn(record, "tradeCapability")) {
+    validateDiscoverableMarketTradeCapabilityV1(record.tradeCapability, {
+      ...project,
+      marketId: record.marketId as string,
+      baseAssetId: record.baseAssetId as string,
+      quoteAssetId: record.quoteAssetId as string,
+      marketStatus: record.status as string,
+      verification: record.verification as JsonRecordV2,
+      uniswapV4: record.uniswapV4 as JsonRecordV2 | null,
+    });
+  }
+}
+
+function validateTradeIdentityV1(value: unknown, chainId: string): JsonRecordV2 {
+  const identity = exactRecord(value, ["namespace", "value"]);
+  literal(identity.namespace, `eip155:${chainId}`);
+  regexString(identity.value, /^0x[0-9a-f]{40}$/u, 42);
+  return identity;
+}
+
+function validateDiscoverableMarketTradeCapabilityV1(
+  value: unknown,
+  binding: Readonly<{
+    chainId: string;
+    chainProfileId: string;
+    chainProfileHash: string;
+    marketId: string;
+    baseAssetId: string;
+    quoteAssetId: string;
+    marketStatus: string;
+    verification: JsonRecordV2;
+    uniswapV4: JsonRecordV2 | null;
+  }>,
+): void {
+  const record = exactRecord(value, [
+    "actionPolicy", "adapterId", "approvalPolicy", "baseAssetId", "capabilityId",
+    "chainId", "chainProfileHash", "chainProfileId", "deadlinePolicy",
+    "dependencies", "exactness", "hookAssetIdentityEvidenceHash", "hookDataPolicy",
+    "marketId", "marketVerificationBindingHash", "planBindingHash", "poolKey",
+    "poolKeyEvidenceHash", "quoteAssetId", "quotePolicy", "recipientPolicy",
+    "routerGeneration", "schemaVersion", "sideBindings", "slippagePolicy", "status",
+    "supportedSides", "tradeCapabilityBindingHash",
+  ]);
+  literal(record.schemaVersion, "programmable.discoverable-market-trade-capability.v1");
+  literal(record.adapterId, "uniswap-v4-universal-router-exact-input:v1");
+  literal(record.exactness, "exact-input");
+  literal(record.recipientPolicy, "connected-wallet-only");
+  literal(record.status, "verified");
+  identifier(record.capabilityId);
+  identifier(record.routerGeneration);
+  for (const field of [
+    "chainProfileHash", "planBindingHash", "poolKeyEvidenceHash",
+    "marketVerificationBindingHash", "tradeCapabilityBindingHash",
+  ]) digest(record[field]);
+  nullable(record.hookAssetIdentityEvidenceHash, digest);
+  if (binding.marketStatus !== "active"
+    || binding.verification.status !== "verified"
+    || binding.uniswapV4 === null
+    || record.chainId !== binding.chainId
+    || record.chainProfileId !== binding.chainProfileId
+    || record.chainProfileHash !== binding.chainProfileHash
+    || record.marketId !== binding.marketId
+    || record.baseAssetId !== binding.baseAssetId
+    || record.quoteAssetId !== binding.quoteAssetId
+    || record.poolKeyEvidenceHash !== binding.uniswapV4.poolKeyEvidenceHash
+    || record.marketVerificationBindingHash !== binding.verification.verifierBindingHash) mismatch();
+
+  const poolKey = exactRecord(record.poolKey, [
+    "currency0", "currency0AssetId", "currency1", "currency1AssetId", "feeRaw",
+    "hooks", "hooksAssetId", "poolId", "tickSpacing",
+  ]);
+  regexString(poolKey.poolId, /^0x[0-9a-f]{64}$/u, 66);
+  identifier(poolKey.currency0AssetId);
+  identifier(poolKey.currency1AssetId);
+  nullable(poolKey.hooksAssetId, identifier);
+  validateTradeIdentityV1(poolKey.currency0, binding.chainId);
+  validateTradeIdentityV1(poolKey.currency1, binding.chainId);
+  validateTradeIdentityV1(poolKey.hooks, binding.chainId);
+  unsignedDecimal(poolKey.feeRaw);
+  regexString(poolKey.tickSpacing, /^-?(?:0|[1-9][0-9]{0,76})$/u, 78);
+  if (poolKey.poolId !== binding.uniswapV4.poolId
+    || poolKey.currency0AssetId !== binding.uniswapV4.currency0AssetId
+    || poolKey.currency1AssetId !== binding.uniswapV4.currency1AssetId
+    || poolKey.feeRaw !== binding.uniswapV4.feeRaw
+    || poolKey.tickSpacing !== binding.uniswapV4.tickSpacing
+    || poolKey.hooksAssetId !== binding.uniswapV4.hooksAssetId) mismatch();
+
+  const roles = [
+    "uniswap-permit2", "uniswap-v4-quoter", "uniswap-v4-state-view",
+    "uniswap-v4-universal-router",
+  ] as const;
+  const expectedDependencyCapabilities = [
+    "capability:uniswap-permit2:v1",
+    "capability:uniswap-v4-quoter:v1",
+    "capability:uniswap-v4-state-view:v1",
+    `capability:uniswap-v4-${record.routerGeneration as string}`,
+  ];
+  const dependencies = arrayOf(record.dependencies, (candidate) => {
+    const dependency = exactRecord(candidate, [
+      "capabilityId", "chainProfileId", "dependencyId", "identity",
+      "interfaceEvidenceBindingHash", "reviewEvidenceBindingHash", "role",
+      "runtimeCodeKeccak256", "runtimeCodeSha256",
+    ]);
+    enumValue(dependency.role, roles);
+    identifier(dependency.dependencyId);
+    identifier(dependency.capabilityId);
+    literal(dependency.chainProfileId, binding.chainProfileId);
+    validateTradeIdentityV1(dependency.identity, binding.chainId);
+    regexString(dependency.runtimeCodeKeccak256, /^0x[0-9a-f]{64}$/u, 66);
+    digest(dependency.runtimeCodeSha256);
+    digest(dependency.reviewEvidenceBindingHash);
+    digest(dependency.interfaceEvidenceBindingHash);
+    return dependency;
+  }, 4) as JsonRecordV2[];
+  if (dependencies.length !== 4
+    || dependencies.some((dependency, index) => dependency.role !== roles[index]
+      || dependency.capabilityId !== expectedDependencyCapabilities[index])
+    || new Set(dependencies.map(({ dependencyId }) => dependencyId)).size !== 4
+    || new Set(dependencies.map(({ identity }) =>
+      (identity as JsonRecordV2).value)).size !== 4) mismatch();
+
+  const sides = arrayOf(record.supportedSides, (candidate) =>
+    enumValue(candidate, ["base-to-quote", "quote-to-base"]), 2);
+  if (sides.length < 1 || new Set(sides).size !== sides.length
+    || [...sides].sort().some((side, index) => side !== sides[index])) mismatch();
+  const sideBindings = arrayOf(record.sideBindings, (candidate) => {
+    const sideBinding = exactRecord(candidate, [
+      "inputAssetId", "inputCurrencyKind", "outputAssetId", "settlementAction",
+      "side", "takeAction", "zeroForOne",
+    ]);
+    enumValue(sideBinding.side, ["base-to-quote", "quote-to-base"]);
+    identifier(sideBinding.inputAssetId);
+    identifier(sideBinding.outputAssetId);
+    booleanValue(sideBinding.zeroForOne);
+    enumValue(sideBinding.inputCurrencyKind, ["native", "erc20"]);
+    literal(sideBinding.settlementAction, "SETTLE_ALL");
+    literal(sideBinding.takeAction, "TAKE_ALL");
+    return sideBinding;
+  }, 2) as JsonRecordV2[];
+  const baseIsCurrency0 = poolKey.currency0AssetId === binding.baseAssetId;
+  if (sideBindings.length !== sides.length
+    || sideBindings.some((candidate, index) => {
+      const side = sides[index];
+      const inputAssetId = side === "base-to-quote"
+        ? binding.baseAssetId : binding.quoteAssetId;
+      const outputAssetId = side === "base-to-quote"
+        ? binding.quoteAssetId : binding.baseAssetId;
+      const zeroForOne = side === "base-to-quote" ? baseIsCurrency0 : !baseIsCurrency0;
+      const inputIdentity = zeroForOne
+        ? poolKey.currency0 as JsonRecordV2
+        : poolKey.currency1 as JsonRecordV2;
+      return candidate.side !== side
+        || candidate.inputAssetId !== inputAssetId
+        || candidate.outputAssetId !== outputAssetId
+        || candidate.zeroForOne !== zeroForOne
+        || candidate.inputCurrencyKind
+          !== (inputIdentity.value === "0x0000000000000000000000000000000000000000"
+            ? "native" : "erc20");
+    })) mismatch();
+
+  const hookData = exactRecord(record.hookDataPolicy, ["data", "hookDataHash", "kind"]);
+  enumValue(hookData.kind, ["empty", "fixed"]);
+  regexString(hookData.data, /^0x(?:[0-9a-f]{2}){0,2048}$/u, 4_098);
+  digest(hookData.hookDataHash);
+  if ((hookData.kind === "empty") !== (hookData.data === "0x")
+    || (poolKey.hooksAssetId === null && hookData.data !== "0x")
+    || (poolKey.hooksAssetId === null)
+      !== (record.hookAssetIdentityEvidenceHash === null)) mismatch();
+  const action = exactRecord(record.actionPolicy, [
+    "exactOutput", "multiHop", "settleAction", "swapAction", "takeAction",
+  ]);
+  literal(action.swapAction, "SWAP_EXACT_IN_SINGLE");
+  literal(action.settleAction, "SETTLE_ALL");
+  literal(action.takeAction, "TAKE_ALL");
+  literal(action.multiHop, false);
+  literal(action.exactOutput, false);
+  const quote = exactRecord(record.quotePolicy, [
+    "adapterId", "currentStateRequired", "executionMode", "maximumQuoteAgeSeconds",
+  ]);
+  literal(quote.adapterId, "uniswap-v4-quoter-exact-input:v1");
+  literal(quote.executionMode, "offchain-static-call-only");
+  literal(quote.currentStateRequired, true);
+  safeInteger(quote.maximumQuoteAgeSeconds, 1, 300);
+  const slippage = exactRecord(record.slippagePolicy, [
+    "amountOutMinimumRequired", "kind", "maximumSlippageBps",
+  ]);
+  literal(slippage.kind, "user-bounded-minimum-output");
+  literal(slippage.amountOutMinimumRequired, true);
+  safeInteger(slippage.maximumSlippageBps, 1, 5_000);
+  const deadline = exactRecord(record.deadlinePolicy, [
+    "deadlineRequired", "kind", "maximumHorizonSeconds",
+  ]);
+  literal(deadline.kind, "bounded-user-deadline");
+  literal(deadline.deadlineRequired, true);
+  safeInteger(deadline.maximumHorizonSeconds, 1, 3_600);
+  const approval = exactRecord(record.approvalPolicy, ["erc20Input", "nativeInput"]);
+  literal(approval.erc20Input, "erc20-approve-permit2-then-permit2-approve-router");
+  literal(approval.nativeInput, "transaction-value");
 }
 
 function validateMarketVerificationV2(value: unknown): void {
@@ -828,6 +1116,18 @@ function exactRecord(value: unknown, expectedKeys: readonly string[]): JsonRecor
   const expected = [...expectedKeys].sort();
   if (actual.length !== expected.length
     || actual.some((key, index) => key !== expected[index])) mismatch();
+  return record;
+}
+
+function exactRecordWithOptional(
+  value: unknown,
+  expectedKeys: readonly string[],
+  optionalKeys: readonly string[],
+): JsonRecordV2 {
+  const record = objectValue(value);
+  const allowed = new Set([...expectedKeys, ...optionalKeys]);
+  if (expectedKeys.some((key) => !(key in record))
+    || Object.keys(record).some((key) => !allowed.has(key))) mismatch();
   return record;
 }
 

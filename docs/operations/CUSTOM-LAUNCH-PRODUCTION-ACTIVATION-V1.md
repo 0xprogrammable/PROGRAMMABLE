@@ -53,8 +53,9 @@ Before any production action, create one immutable release record containing:
 - Command Center's explicit freeze-clearance reference;
 - Website commit SHA, approval-service artifact digest, workflow run, and reviewed diff;
 - immutable candidate deployment URLs and the production alias observed before activation;
-- Website projection migration digest, database identity, runtime-role attestation, backup id, and
-  restore-drill evidence;
+- Website projection ordered migration inventory and exact digests for
+  `0001_projection_records_v1.sql` followed by `0002_custom_launch_wallet_profile_v2.sql`, database identity,
+  runtime-role attestation, backup id, and restore-drill evidence;
 - approval-service release identity, database migration inventory, signer identity and epoch,
   control-axis generations, and `/readyz` evidence;
 - Privy application identity and confirmation that GitHub OAuth and identity tokens are enabled;
@@ -154,10 +155,16 @@ versioned secret references, never values:
 - `PROGRAMMABLE_PROJECTION_WORKLOAD_KEY_ID`;
 - `PROGRAMMABLE_PROJECTION_WORKLOAD_PUBLIC_KEY_PEM`.
 
-Apply the Website projection migration and least-privilege grants described in
-`docs/operations/WEBSITE-PROJECTION-TARGET-V1.md`. Require forced RLS, the exact runtime role, TLS
-verification, append-only write behavior, backup, and a successful isolated restore. Never grant
-the Website role approval-service authority.
+Apply the Website projection migrations and least-privilege grants described in
+`docs/operations/WEBSITE-PROJECTION-TARGET-V1.md` in this exact order:
+
+1. `0001_projection_records_v1.sql`;
+2. `0002_custom_launch_wallet_profile_v2.sql`.
+
+Retain both exact digests and prove the resulting hosted catalog and grants, including the wallet-identity,
+post-launch-authority, inventory, and index changes from `0002`. Require forced RLS, the exact runtime role, TLS
+verification, append-only write behavior, backup, and a successful isolated restore. Never grant the Website role
+approval-service authority.
 
 ### Approval service and external authorities
 

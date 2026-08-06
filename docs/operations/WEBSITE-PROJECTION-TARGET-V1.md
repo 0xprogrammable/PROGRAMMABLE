@@ -28,15 +28,23 @@ remain separate.
 ## Persistence
 
 Create the fixed runtime role first, without superuser, role/database creation,
-replication, or `BYPASSRLS`, then apply
-`ops/website-projection-target/migrations/0001_projection_records_v1.sql`
-with a database owner before starting the runtime. The migration creates an
-immutable table with:
+replication, or `BYPASSRLS`, then apply these migrations with a database owner
+before starting the runtime, in this exact order:
+
+1. `ops/website-projection-target/migrations/0001_projection_records_v1.sql`
+2. `ops/website-projection-target/migrations/0002_custom_launch_wallet_profile_v2.sql`
+
+`0001` creates the private schema, immutable projection and credential-use
+tables, policies and initial indexes. `0002` then upgrades finalized Custom
+Launch records to bind the launching-wallet identity and the complete
+post-launch-authority inventory hash, and replaces the GitHub-derived Custom
+profile index with the wallet-derived profile index. Together they provide:
 
 - a primary key on `(lane, projection_key)`;
 - a global unique index on `idempotency_key`;
 - the exact canonical write, acknowledgement, and readback bytes;
 - a derived GitHub-principal index only for recognized entitlement projections;
+- a wallet-derived profile index only for finalized Custom Launch projections;
 - a durable request-bound workload-credential replay ledger;
 - lane-specific constraints requiring complete entitlement metadata and forbidding
   that metadata on custom-launch records;
@@ -48,9 +56,10 @@ one PostgreSQL transaction. A first write returns `201`; an exact retry returns
 `200` with the original acknowledgement; either identity reused with different
 bytes returns `409`.
 
-The migration deliberately has no `IF NOT EXISTS` escape hatch: applying it over
-an unexpected pre-existing schema fails instead of silently trusting weaker
-objects. Grant only the following runtime privileges after the migration:
+The migrations deliberately have no `IF NOT EXISTS` escape hatch: applying
+`0001` over an unexpected pre-existing schema, or applying `0002` without the
+exact `0001` state, fails instead of silently trusting weaker objects. Grant
+only the following runtime privileges after both migrations:
 
 ```sql
 GRANT USAGE ON SCHEMA programmable_website_projection_v1
@@ -261,29 +270,34 @@ and checks Privy session/current-link and principal-scoped entitlement reads.
 
 Do not call this live until all of the following are separately evidenced:
 
-1. the migration exists on the intended hosted database and the runtime uses the
-   dedicated least-privilege role;
-2. Supabase Postgres SSL enforcement is enabled, the current Server root
+1. migrations `0001` and `0002` were applied in that order on the intended
+   hosted database, their exact reviewed digests are retained, and live catalog
+   proof confirms the `0002` wallet/profile columns, constraint and index while
+   the superseded GitHub-derived Custom profile index is absent;
+2. the runtime uses the dedicated least-privilege role and its readiness
+   attestation proves the final two-migration schema, grants, forced RLS and
+   provider-role exclusion against that hosted database;
+3. Supabase Postgres SSL enforcement is enabled, the current Server root
    certificate is configured, and the runtime readiness attestation succeeds;
-3. Privy GitHub OAuth and identity tokens are enabled and tested on the intended
+4. Privy GitHub OAuth and identity tokens are enabled and tested on the intended
    application;
-4. the workload token issuer emits only the request-bound v2 schema and its
+5. the workload token issuer emits only the request-bound v2 schema and its
    public key, audience, and subject are reviewed;
-5. both target binding hashes match the exact signed approval-service release;
-6. the approval-service clients point to the exact deployed HTTPS Website origin;
-7. the Website bridge points to the exact deployed HTTPS approval-service v2
+6. both target binding hashes match the exact signed approval-service release;
+7. the approval-service clients point to the exact deployed HTTPS Website origin;
+8. the Website bridge points to the exact deployed HTTPS approval-service v2
    origin and that service exposes the reviewed principal-scoped list,
    preparation, route-selection, execution-recovery, and finality contracts;
-8. the Website keyring exactly matches the reviewed permit-signing release,
+9. the Website keyring exactly matches the reviewed permit-signing release,
    including signer epoch, component binding, raw public key, and SPKI hash;
-9. the trusted-time route is live, dynamic, same-origin, `no-store`, and passes
+10. the trusted-time route is live, dynamic, same-origin, `no-store`, and passes
    its malformed-request and disabled-readiness gates;
-10. the conformance suite passes against the deployed routes, not only locally;
-11. a real test submission proves approval → entitlement → authenticated user
+11. the conformance suite passes against the deployed routes, not only locally;
+12. a real test submission proves approval → entitlement → authenticated user
    read without granting launch authority early;
-12. a real wallet-bound rehearsal proves one idempotent preparation → signature
+13. a real wallet-bound rehearsal proves one idempotent preparation → signature
     → authorization → execution → finality → Registry/Website projection path;
-13. alerts cover 401/403/409/503 rates, delivery backlog, database availability,
+14. alerts cover 401/403/409/503 rates, delivery backlog, database availability,
    credential expiry, and projection readback mismatch.
 
 Registry delivery, onchain finality, public terminal feeds, and provider indexing
