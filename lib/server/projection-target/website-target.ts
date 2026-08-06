@@ -1,0 +1,502 @@
+import "server-only";
+
+import { X509Certificate } from "node:crypto";
+import { Pool, type PoolClient, type QueryResultRow } from "pg";
+
+import {
+  canonicalizeJson,
+} from "./canonical-json";
+import type { Sha256Digest } from "./hashing";
+import {
+  PostgresProjectionTargetAtomicStoreV1,
+  validateWebsiteProjectionRecordV1,
+  type ProjectionTargetPostgresClientV1,
+  type ProjectionTargetPostgresPoolV1,
+  type ProjectionTargetPostgresQueryResultV1,
+} from "./postgres-store";
+import {
+  createProjectionTargetReferenceHandlerV1,
+  type ProjectionTargetLaneConfigurationV1,
+  type ProjectionTargetReferenceHandlerV1,
+} from "./protocol";
+import {
+  createEd25519ProjectionWorkloadCredentialVerifierV1,
+} from "./workload-credential";
+
+const DIGEST = /^sha256:[0-9a-f]{64}$/u;
+const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:@/+~-]{0,255}$/u;
+
+export interface WebsiteProjectionTargetV1 {
+  readonly handler: ProjectionTargetReferenceHandlerV1;
+  readonly store: PostgresProjectionTargetAtomicStoreV1;
+  readonly assertProductionReadiness: () => Promise<void>;
+}
+
+export interface ProjectionTargetSecurityAttestationRowV1
+extends Record<string, unknown> {
+  runtime_role: string;
+  session_role: string;
+  rolsuper: boolean;
+  rolcreaterole: boolean;
+  rolcreatedb: boolean;
+  rolreplication: boolean;
+  rolbypassrls: boolean;
+  schema_usage: boolean;
+  schema_create: boolean;
+  projections_select: boolean;
+  projections_insert: boolean;
+  projections_mutate: boolean;
+  credentials_select: boolean;
+  credentials_insert: boolean;
+  credentials_mutate: boolean;
+  projections_rls: boolean;
+  projections_force_rls: boolean;
+  credentials_rls: boolean;
+  credentials_force_rls: boolean;
+  expected_policies: boolean;
+  provider_roles_excluded: boolean;
+  ssl: boolean;
+  ssl_version: string | null;
+  ssl_cipher: string | null;
+  ssl_bits: number | null;
+}
+
+export interface VerifiedPostgresTlsConfigurationV1 {
+  readonly connectionString: string;
+  readonly servername: string;
+  readonly ca: string;
+  readonly rejectUnauthorized: true;
+}
+
+let productionTarget: WebsiteProjectionTargetV1 | null = null;
+
+export function getProductionWebsiteProjectionTargetV1(): WebsiteProjectionTargetV1 {
+  if (productionTarget !== null) return productionTarget;
+
+  const audience = environmentId(
+    "PROGRAMMABLE_WEBSITE_PROJECTION_AUDIENCE",
+  );
+  const entitlementTargetBindingHash = environmentDigest(
+    "PROGRAMMABLE_WEBSITE_ENTITLEMENT_TARGET_BINDING_HASH",
+  );
+  const customLaunchTargetBindingHash = environmentDigest(
+    "PROGRAMMABLE_WEBSITE_CUSTOM_LAUNCH_TARGET_BINDING_HASH",
+  );
+  const expectedDatabaseRole = environmentId(
+    "PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_ROLE",
+  );
+  const pool = createProductionProjectionTargetPostgresPoolV1(
+    environmentValue("PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_URL"),
+    environmentPem(
+      "PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_CA_PEM",
+      "CERTIFICATE",
+    ),
+    expectedDatabaseRole,
+  );
+  productionTarget = createWebsiteProjectionTargetV1({
+    pool,
+    lanes: Object.freeze([
+      Object.freeze({
+        lane: "website.entitlement" as const,
+        audience,
+        targetBindingHash: entitlementTargetBindingHash,
+      }),
+      Object.freeze({
+        lane: "website.custom-launched" as const,
+        audience,
+        targetBindingHash: customLaunchTargetBindingHash,
+      }),
+    ]),
+    workloadJwt: Object.freeze({
+      issuer: environmentId("PROGRAMMABLE_PROJECTION_WORKLOAD_ISSUER"),
+      subject: environmentId("PROGRAMMABLE_PROJECTION_WORKLOAD_SUBJECT"),
+      audience,
+      keyId: environmentId("PROGRAMMABLE_PROJECTION_WORKLOAD_KEY_ID"),
+      publicKeyPem: environmentPem(
+        "PROGRAMMABLE_PROJECTION_WORKLOAD_PUBLIC_KEY_PEM",
+      ),
+    }),
+    assertProductionReadiness: () => pool.assertProductionReadiness(),
+  });
+  return productionTarget;
+}
+
+export function createWebsiteProjectionTargetV1(input: Readonly<{
+  pool: ProjectionTargetPostgresPoolV1;
+  lanes: readonly ProjectionTargetLaneConfigurationV1[];
+  workloadJwt: Readonly<{
+    issuer: string;
+    subject: string;
+    audience: string;
+    keyId: string;
+    publicKeyPem: string;
+  }>;
+  assertProductionReadiness?: () => Promise<void>;
+  now?: () => Date;
+}>): WebsiteProjectionTargetV1 {
+  const lanes = input.lanes.map((lane) => Object.freeze({ ...lane }));
+  if (
+    lanes.length !== 2
+    || lanes[0]?.lane !== "website.entitlement"
+    || lanes[1]?.lane !== "website.custom-launched"
+    || lanes.some((lane) => lane.audience !== input.workloadJwt.audience)
+  ) {
+    throw new TypeError("website projection target lanes are invalid");
+  }
+  const targetBindings = Object.freeze(Object.fromEntries(
+    lanes.map((lane) => [lane.lane, lane.targetBindingHash]),
+  ));
+  const credentialVerifier =
+    createEd25519ProjectionWorkloadCredentialVerifierV1({
+      ...input.workloadJwt,
+      targetBindings,
+      now: input.now,
+    });
+  const store = new PostgresProjectionTargetAtomicStoreV1(input.pool);
+  const handler = createProjectionTargetReferenceHandlerV1({
+    lanes,
+    credentialVerifier,
+    store,
+    validateStoredRecordSemantics: validateWebsiteProjectionRecordV1,
+    now: input.now,
+  });
+  if (
+    input.assertProductionReadiness !== undefined
+    && typeof input.assertProductionReadiness !== "function"
+  ) throw new TypeError("website projection readiness attestor is invalid");
+  return Object.freeze({
+    handler,
+    store,
+    assertProductionReadiness:
+      input.assertProductionReadiness ?? (async () => {}),
+  });
+}
+
+export async function handleProductionWebsiteProjectionTargetRequestV1(
+  request: Request,
+): Promise<Response> {
+  try {
+    const target = getProductionWebsiteProjectionTargetV1();
+    await target.assertProductionReadiness();
+    return await target.handler.handle(request);
+  } catch {
+    return new Response(canonicalizeJson({
+      schemaVersion: "programmable.projection-target-error.v1",
+      code: "target_unavailable",
+    }), {
+      status: 503,
+      headers: {
+        "cache-control": "no-store",
+        "content-type": "application/json; charset=utf-8",
+        "x-content-type-options": "nosniff",
+      },
+    });
+  }
+}
+
+export function createProductionProjectionTargetPostgresPoolV1(
+  connectionString: string,
+  caPem: string,
+  expectedRuntimeRole: string,
+): ProductionProjectionTargetPostgresPoolV1 {
+  const tls = verifiedPostgresTlsConfigurationV1(connectionString, caPem);
+  if (!SAFE_ID.test(expectedRuntimeRole)) {
+    throw new TypeError("website projection database role is invalid");
+  }
+  let loginRole: string;
+  try {
+    loginRole = decodeURIComponent(new URL(tls.connectionString).username);
+  } catch {
+    throw new TypeError("website projection database login role is invalid");
+  }
+  if (loginRole !== expectedRuntimeRole) {
+    throw new TypeError("website projection database login role is invalid");
+  }
+  const pool = new Pool({
+    connectionString: tls.connectionString,
+    ssl: {
+      ca: tls.ca,
+      rejectUnauthorized: tls.rejectUnauthorized,
+      servername: tls.servername,
+    },
+    max: 5,
+    idleTimeoutMillis: 10_000,
+    connectionTimeoutMillis: 5_000,
+    allowExitOnIdle: true,
+    application_name: "programmable-website-projection-target-v1",
+  });
+  pool.on("error", () => {
+    // Route-level operations surface a bounded 503 without credential or URL data.
+  });
+  return new NodePostgresProjectionTargetPoolV1(pool, expectedRuntimeRole);
+}
+
+export function verifiedPostgresTlsConfigurationV1(
+  connectionString: string,
+  caPem: string,
+): Readonly<VerifiedPostgresTlsConfigurationV1> {
+  let url: URL;
+  try {
+    url = new URL(connectionString);
+  } catch {
+    throw new TypeError("website projection database URL is invalid");
+  }
+  if (
+    (url.protocol !== "postgres:" && url.protocol !== "postgresql:")
+    || url.username === ""
+    || url.hostname === ""
+    || url.hash !== ""
+    || [...url.searchParams.keys()].some((key) =>
+      /^ssl/iu.test(key)
+      || ["options", "role", "session_authorization"].includes(key.toLowerCase()))
+  ) {
+    throw new TypeError("website projection database URL is invalid");
+  }
+  if (typeof caPem !== "string" || caPem.length > 131_072) {
+    throw new TypeError("website projection database CA is invalid");
+  }
+  let certificate: X509Certificate;
+  try {
+    certificate = new X509Certificate(caPem);
+  } catch {
+    throw new TypeError("website projection database CA is invalid");
+  }
+  const now = Date.now();
+  if (
+    !certificate.ca
+    || Date.parse(certificate.validFrom) > now
+    || Date.parse(certificate.validTo) <= now
+  ) throw new TypeError("website projection database CA is invalid");
+  return Object.freeze({
+    connectionString,
+    servername: url.hostname,
+    ca: caPem,
+    rejectUnauthorized: true as const,
+  });
+}
+
+interface ProductionProjectionTargetPostgresPoolV1
+extends ProjectionTargetPostgresPoolV1 {
+  assertProductionReadiness(): Promise<void>;
+}
+
+class NodePostgresProjectionTargetPoolV1
+implements ProductionProjectionTargetPostgresPoolV1 {
+  readonly #pool: Pool;
+  readonly #expectedRuntimeRole: string;
+  #readiness: Promise<void> | null = null;
+  #readinessAttestedAtMs = 0;
+
+  constructor(pool: Pool, expectedRuntimeRole: string) {
+    this.#pool = pool;
+    this.#expectedRuntimeRole = expectedRuntimeRole;
+  }
+
+  async assertProductionReadiness(): Promise<void> {
+    if (
+      this.#readinessAttestedAtMs > 0
+      && Date.now() - this.#readinessAttestedAtMs < 30_000
+    ) return;
+    this.#readiness ??= this.#performReadinessAttestation()
+      .then(() => {
+        this.#readinessAttestedAtMs = Date.now();
+      });
+    try {
+      await this.#readiness;
+    } catch (error) {
+      this.#readinessAttestedAtMs = 0;
+      throw error;
+    } finally {
+      this.#readiness = null;
+    }
+  }
+
+  async #performReadinessAttestation(): Promise<void> {
+    const client = await this.#pool.connect();
+    try {
+      const result = await client.query<ProjectionTargetSecurityAttestationRowV1>(`
+        SELECT current_user::text AS runtime_role,
+               session_user::text AS session_role,
+               role.rolsuper, role.rolcreaterole, role.rolcreatedb,
+               role.rolreplication, role.rolbypassrls,
+               has_schema_privilege(current_user,
+                 'programmable_website_projection_v1', 'USAGE') AS schema_usage,
+               has_schema_privilege(current_user,
+                 'programmable_website_projection_v1', 'CREATE') AS schema_create,
+               has_table_privilege(current_user,
+                 'programmable_website_projection_v1.projection_records',
+                 'SELECT') AS projections_select,
+               has_table_privilege(current_user,
+                 'programmable_website_projection_v1.projection_records',
+                 'INSERT') AS projections_insert,
+               has_table_privilege(current_user,
+                 'programmable_website_projection_v1.projection_records',
+                 'UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') AS projections_mutate,
+               has_table_privilege(current_user,
+                 'programmable_website_projection_v1.credential_uses',
+                 'SELECT') AS credentials_select,
+               has_table_privilege(current_user,
+                 'programmable_website_projection_v1.credential_uses',
+                 'INSERT') AS credentials_insert,
+               has_table_privilege(current_user,
+                 'programmable_website_projection_v1.credential_uses',
+                 'UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') AS credentials_mutate,
+               projections.relrowsecurity AS projections_rls,
+               projections.relforcerowsecurity AS projections_force_rls,
+               credentials.relrowsecurity AS credentials_rls,
+               credentials.relforcerowsecurity AS credentials_force_rls,
+               (
+                 SELECT count(*) = 4
+                    AND bool_and(
+                      policies.roles = ARRAY['programmable_website_projection_runtime']::name[]
+                    )
+                    AND string_agg(
+                      policies.policyname || ':' || policies.cmd,
+                      ',' ORDER BY policies.policyname
+                    ) = 'credential_uses_runtime_insert:INSERT,credential_uses_runtime_select:SELECT,projection_records_runtime_insert:INSERT,projection_records_runtime_select:SELECT'
+                   FROM pg_policies AS policies
+                  WHERE policies.schemaname = 'programmable_website_projection_v1'
+                    AND policies.tablename IN ('projection_records', 'credential_uses')
+               ) AS expected_policies,
+               NOT EXISTS (
+                 SELECT 1
+                   FROM pg_roles AS provider_role
+                  WHERE provider_role.rolname IN ('anon', 'authenticated', 'service_role')
+                    AND (
+                      has_schema_privilege(provider_role.rolname,
+                        'programmable_website_projection_v1', 'USAGE,CREATE')
+                      OR has_table_privilege(provider_role.rolname,
+                        'programmable_website_projection_v1.projection_records',
+                        'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                      OR has_table_privilege(provider_role.rolname,
+                        'programmable_website_projection_v1.credential_uses',
+                        'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                    )
+               ) AS provider_roles_excluded,
+               COALESCE(ssl.ssl, false) AS ssl,
+               ssl.version AS ssl_version,
+               ssl.cipher AS ssl_cipher,
+               ssl.bits AS ssl_bits
+          FROM pg_roles AS role
+          JOIN pg_namespace AS schema
+            ON schema.nspname = 'programmable_website_projection_v1'
+          JOIN pg_class AS projections
+            ON projections.relnamespace = schema.oid
+           AND projections.relname = 'projection_records'
+          JOIN pg_class AS credentials
+            ON credentials.relnamespace = schema.oid
+           AND credentials.relname = 'credential_uses'
+          LEFT JOIN pg_stat_ssl AS ssl ON ssl.pid = pg_backend_pid()
+         WHERE role.rolname = current_user
+           AND pg_get_userbyid(schema.nspowner) <> current_user
+           AND pg_get_userbyid(projections.relowner) <> current_user
+           AND pg_get_userbyid(credentials.relowner) <> current_user
+      `);
+      const value = result.rows[0];
+      if (result.rows.length !== 1 || value === undefined) {
+        throw new TypeError("website projection database attestation failed");
+      }
+      assertProjectionTargetSecurityAttestationV1(
+        value,
+        this.#expectedRuntimeRole,
+      );
+    } finally {
+      client.release();
+    }
+  }
+
+  async connect(): Promise<ProjectionTargetPostgresClientV1> {
+    const client = await this.#pool.connect();
+    return new NodePostgresProjectionTargetClientV1(client);
+  }
+
+  async query<Row extends Record<string, unknown> = Record<string, unknown>>(
+    text: string,
+    values: readonly unknown[] = [],
+  ): Promise<ProjectionTargetPostgresQueryResultV1<Row>> {
+    const result = await this.#pool.query<Row & QueryResultRow>(
+      text,
+      [...values],
+    );
+    return { rows: result.rows, rowCount: result.rowCount };
+  }
+}
+
+export function assertProjectionTargetSecurityAttestationV1(
+  value: Readonly<ProjectionTargetSecurityAttestationRowV1>,
+  expectedRuntimeRole: string,
+): void {
+  if (
+    value.runtime_role !== expectedRuntimeRole
+    || value.runtime_role !== "programmable_website_projection_runtime"
+    || value.session_role !== value.runtime_role
+    || value.rolsuper || value.rolcreaterole || value.rolcreatedb
+    || value.rolreplication || value.rolbypassrls
+    || !value.schema_usage || value.schema_create
+    || !value.projections_select || !value.projections_insert
+    || value.projections_mutate
+    || !value.credentials_select || !value.credentials_insert
+    || value.credentials_mutate
+    || !value.projections_rls || !value.projections_force_rls
+    || !value.credentials_rls || !value.credentials_force_rls
+    || !value.expected_policies || !value.provider_roles_excluded
+    || !value.ssl || value.ssl_version === null
+    || value.ssl_cipher === null || (value.ssl_bits ?? 0) < 128
+  ) throw new TypeError("website projection database attestation failed");
+}
+
+class NodePostgresProjectionTargetClientV1
+implements ProjectionTargetPostgresClientV1 {
+  readonly #client: PoolClient;
+
+  constructor(client: PoolClient) {
+    this.#client = client;
+  }
+
+  async query<Row extends Record<string, unknown> = Record<string, unknown>>(
+    text: string,
+    values: readonly unknown[] = [],
+  ): Promise<ProjectionTargetPostgresQueryResultV1<Row>> {
+    const result = await this.#client.query<Row & QueryResultRow>(
+      text,
+      [...values],
+    );
+    return { rows: result.rows, rowCount: result.rowCount };
+  }
+
+  release(): void {
+    this.#client.release();
+  }
+}
+
+function environmentValue(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) throw new TypeError(`${name} is not configured`);
+  return value;
+}
+
+function environmentId(name: string): string {
+  const value = environmentValue(name);
+  if (!SAFE_ID.test(value)) throw new TypeError(`${name} is invalid`);
+  return value;
+}
+
+function environmentDigest(name: string): Sha256Digest {
+  const value = environmentValue(name);
+  if (!DIGEST.test(value)) throw new TypeError(`${name} is invalid`);
+  return value as Sha256Digest;
+}
+
+function environmentPem(
+  name: string,
+  kind: "PUBLIC KEY" | "CERTIFICATE" = "PUBLIC KEY",
+): string {
+  const value = environmentValue(name).replaceAll("\\n", "\n");
+  if (
+    !value.startsWith(`-----BEGIN ${kind}-----\n`)
+    || !value.endsWith(`\n-----END ${kind}-----`)
+  ) {
+    throw new TypeError(`${name} is invalid`);
+  }
+  return value;
+}

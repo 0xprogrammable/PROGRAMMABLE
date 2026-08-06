@@ -1,0 +1,898 @@
+const DIGEST_V2 = /^sha256:[0-9a-f]{64}$/u;
+const HEX_DATA_V2 = /^0x(?:[0-9a-f]{2})+$/u;
+const ADDRESS_V2 = /^0x[0-9a-f]{40}$/u;
+const UUID_V2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+const POSITIVE_DECIMAL_V2 = /^[1-9][0-9]{0,77}$/u;
+const UNSIGNED_DECIMAL_V2 = /^(?:0|[1-9][0-9]{0,77})$/u;
+const GIT_OID_V2 = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
+const BASE64URL_V2 = /^[A-Za-z0-9_-]+$/u;
+const APPLICATION_ID_V3 = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
+const APPLICATION_HANDLE_V3 = /^github-[0-9a-f]{64}$/u;
+
+type JsonRecordV2 = Record<string, unknown>;
+type ValidatorV2 = (value: unknown) => void;
+
+export function parseCustomLaunchApiResponseV2<T>(
+  value: unknown,
+  schemaVersion: string,
+): T {
+  const validator = RESPONSE_VALIDATORS_V2[schemaVersion];
+  if (validator === undefined) throw new Error("Unsupported custom launch response schema");
+  validator(value);
+  return value as T;
+}
+
+export function parseCustomLaunchApiErrorV2(value: unknown): Readonly<{
+  schemaVersion: "programmable.custom-launch-website-error.v2";
+  code: string;
+  message: string;
+}> {
+  const record = exactRecord(value, ["schemaVersion", "code", "message"]);
+  literal(record.schemaVersion, "programmable.custom-launch-website-error.v2");
+  boundedString(record.code, 1, 128);
+  boundedString(record.message, 1, 2_048);
+  return record as ReturnType<typeof parseCustomLaunchApiErrorV2>;
+}
+
+const RESPONSE_VALIDATORS_V2: Readonly<Record<string, ValidatorV2>> = Object.freeze({
+  "programmable.application-status-view.v2": validateApplicationStatusV2,
+  "programmable.principal-custom-launch-application-list.v3": validateApplicationListV2,
+  "programmable.launch-eligibility-view.v3": validateLaunchEligibilityV2,
+  "programmable.launch-route-discovery.v3": validateLaunchDescriptorV2,
+  "programmable.principal-launch-presentation-response.v2": validatePresentationResponseV1,
+  "programmable.launch-execution-status-view.v3": validateExecutionStatusV2,
+  "programmable.launch-session-challenge-view.v2": validateChallengeV2,
+  "programmable.launch-session-preparation-view.v2": validatePreparationV2,
+  "programmable.authenticated-launch-session-view.v2": validateAuthenticatedSessionV2,
+  "programmable.authorized-launch-permit-view.v2": validateAuthorizedPermitV2,
+  "programmable.browser-wallet-launch-preparation.v2": validateBrowserPreparationV2,
+  "programmable.browser-wallet-grant-reissue.v2": validateGrantReissueV1,
+  "programmable.browser-wallet-launch-report-ack.v2": validateLaunchReportAckV2,
+  "programmable.custom-launch-project-view.v2": validateProjectViewV2,
+  "programmable.authenticated-custom-launch-profile.v2": validateProfileViewV2,
+});
+
+function validateApplicationStatusV2(value: unknown): void {
+  const record = exactRecord(value, [
+    "schemaVersion", "applicationId", "applicationHandle", "revisionId", "state", "decision",
+    "approvalClass", "launchAllowed", "reasonCodes", "actionCodes", "receiptDigest",
+    "updatedAt",
+  ]);
+  literal(record.schemaVersion, "programmable.application-status-view.v2");
+  applicationId(record.applicationId);
+  applicationHandle(record.applicationHandle);
+  nullable(record.revisionId, identifier);
+  enumValue(record.state, [
+    "received", "queued", "analyzing", "action_required", "analysis_pending",
+    "approved", "blocked_unsafe", "withdrawn", "revoked",
+  ]);
+  nullable(record.decision, (candidate) => enumValue(candidate, [
+    "approved", "action_required", "analysis_pending", "blocked_unsafe",
+  ]));
+  nullable(record.approvalClass, (candidate) => enumValue(candidate, [
+    "verified", "conditional", "disclosed",
+  ]));
+  literal(record.launchAllowed, false);
+  stringArray(record.reasonCodes, 512, 128);
+  stringArray(record.actionCodes, 512, 128);
+  nullable(record.receiptDigest, boundedString);
+  instant(record.updatedAt);
+}
+
+function validateApplicationListV2(value: unknown): void {
+  const record = exactRecord(value, [
+    "schemaVersion", "subject", "applications", "nextCursor",
+  ]);
+  literal(record.schemaVersion, "programmable.principal-custom-launch-application-list.v3");
+  const subject = exactRecord(record.subject, [
+    "provider", "githubUserId", "githubPrincipalHash",
+  ]);
+  literal(subject.provider, "github");
+  positiveDecimal(subject.githubUserId);
+  digest(subject.githubPrincipalHash);
+  const applications = arrayOf(record.applications, validateApplicationSummaryV2, 1_000);
+  const handles = applications.map((candidate) => (candidate as JsonRecordV2).applicationHandle);
+  if (new Set(handles).size !== handles.length) mismatch();
+  nullable(record.nextCursor, (candidate) => boundedString(candidate, 1, 4_096));
+}
+
+function validateApplicationSummaryV2(value: unknown): void {
+  const record = exactRecord(value, [
+    "applicationId", "applicationHandle", "revisionId", "repositoryId", "repositoryFullName",
+    "pullRequestNumber", "commitOid", "state", "reasonCodes", "actionCodes",
+    "correctionCount", "correctionPreview", "receiptDigest",
+    "launchEntitlementBindingHash", "updatedAt",
+  ]);
+  applicationId(record.applicationId);
+  applicationHandle(record.applicationHandle);
+  identifier(record.revisionId);
+  positiveDecimal(record.repositoryId);
+  boundedString(record.repositoryFullName, 3, 256);
+  safeInteger(record.pullRequestNumber, 1);
+  regexString(record.commitOid, GIT_OID_V2, 64);
+  enumValue(record.state, [
+    "received", "in_review", "changes_required", "platform_pending",
+    "ready_for_registration", "approved", "superseded", "expired", "revoked",
+    "launching", "launched",
+  ]);
+  stringArray(record.reasonCodes, 512, 128);
+  stringArray(record.actionCodes, 512, 128);
+  safeInteger(record.correctionCount, 0);
+  const corrections = arrayOf(record.correctionPreview, (candidate) => {
+    const correction = exactRecord(candidate, ["correctionId", "summary"]);
+    identifier(correction.correctionId);
+    boundedString(correction.summary, 1, 2_048);
+  }, 100);
+  if (corrections.length > Number(record.correctionCount)) mismatch();
+  nullable(record.receiptDigest, digest);
+  nullable(record.launchEntitlementBindingHash, digest);
+  instant(record.updatedAt);
+}
+
+function validateLaunchEligibilityV2(value: unknown): void {
+  const record = exactRecord(value, [
+    "schemaVersion", "applicationId", "applicationHandle", "state", "launchAllowed", "receiptDigest",
+    "validFrom", "validUntil",
+  ]);
+  literal(record.schemaVersion, "programmable.launch-eligibility-view.v3");
+  applicationId(record.applicationId);
+  applicationHandle(record.applicationHandle);
+  enumValue(record.state, ["pending", "active", "suspended", "revoked", "expired"]);
+  booleanValue(record.launchAllowed);
+  digest(record.receiptDigest);
+  const validFrom = instant(record.validFrom);
+  const validUntil = instant(record.validUntil);
+  if (validFrom >= validUntil || (record.launchAllowed === true) !== (record.state === "active")) {
+    mismatch();
+  }
+}
+
+function validateLaunchDescriptorV2(value: unknown): void {
+  const record = exactRecord(value, [
+    "schemaVersion", "applicationId", "applicationHandle", "grantId", "grantBindingHash", "descriptorHash",
+    "validUntil", "configurationSchema", "routes", "defaultChoiceId",
+  ]);
+  literal(record.schemaVersion, "programmable.launch-route-discovery.v3");
+  applicationId(record.applicationId);
+  applicationHandle(record.applicationHandle);
+  identifier(record.grantId);
+  digest(record.grantBindingHash);
+  digest(record.descriptorHash);
+  instant(record.validUntil);
+  validateConfigurationSchemaV2(record.configurationSchema);
+  const routes = arrayOf(record.routes, validateLaunchRouteV2, 128);
+  boundedString(record.defaultChoiceId, 1, 256);
+  const choices = routes.map((route) => (route as JsonRecordV2).choiceId);
+  if (routes.length === 0 || new Set(choices).size !== choices.length
+    || choices.filter((choice) => choice === record.defaultChoiceId).length !== 1) mismatch();
+}
+
+function validateConfigurationSchemaV2(value: unknown): void {
+  const record = exactRecord(value, ["schemaVersion", "schemaHash", "fields"]);
+  literal(record.schemaVersion, "programmable.launch-configuration-schema.v2");
+  digest(record.schemaHash);
+  const fields = arrayOf(record.fields, (candidate) => {
+    const field = exactRecord(candidate, [
+      "fieldId", "label", "kind", "required", "maxLength",
+    ]);
+    identifier(field.fieldId);
+    boundedString(field.label, 1, 256);
+    enumValue(field.kind, ["text", "long-text", "url", "image-url"]);
+    booleanValue(field.required);
+    safeInteger(field.maxLength, 1, 1_048_576);
+  }, 256);
+  const fieldIds = fields.map((field) => (field as JsonRecordV2).fieldId);
+  if (new Set(fieldIds).size !== fieldIds.length) mismatch();
+}
+
+function validateLaunchRouteV2(value: unknown): void {
+  const record = exactRecord(value, [
+    "choiceId", "chainId", "chainProfileId", "launchRouteId",
+    "launchRouteBindingHash", "routeAdapterId", "executionMode", "walletActionKind",
+    "walletExecutionKind", "transactionValuePolicy",
+  ]);
+  identifier(record.choiceId);
+  positiveDecimal(record.chainId);
+  identifier(record.chainProfileId);
+  identifier(record.launchRouteId);
+  digest(record.launchRouteBindingHash);
+  identifier(record.routeAdapterId);
+  identifier(record.executionMode);
+  literal(record.walletActionKind, "eip1193-send-transaction");
+  literal(record.walletExecutionKind, "eoa-direct");
+  const policy = exactRecord(record.transactionValuePolicy, ["kind", "valueWei"]);
+  literal(policy.kind, "exact");
+  unsignedDecimal(policy.valueWei);
+}
+
+function validatePresentationResponseV1(value: unknown): void {
+  const record = exactRecord(value, [
+    "schemaVersion", "applicationId", "applicationHandle", "grantId", "grantBindingHash", "version",
+    "outcome", "presentationBindingHash", "record", "committedAt",
+  ]);
+  literal(record.schemaVersion, "programmable.principal-launch-presentation-response.v2");
+  applicationId(record.applicationId);
+  applicationHandle(record.applicationHandle);
+  identifier(record.grantId);
+  digest(record.grantBindingHash);
+  safeInteger(record.version, 0);
+  enumValue(record.outcome, ["committed", "unchanged", "conflict", "current"]);
+  digest(record.presentationBindingHash);
+  const nested = exactRecord(record.record, [
+    "schemaVersion", "applicationId", "grantId", "grantBindingHash",
+    "approvedModelIdentity", "approvedModelIdentityHash", "presentation", "provenance",
+    "presentationBindingHash",
+  ]);
+  literal(nested.schemaVersion, "programmable.launch-presentation-record.v1");
+  applicationId(nested.applicationId);
+  identifier(nested.grantId);
+  digest(nested.grantBindingHash);
+  const identity = exactRecord(nested.approvedModelIdentity, [
+    "schemaVersion", "platformId", "category", "launchFamily", "modelId",
+  ]);
+  literal(identity.schemaVersion, "programmable.approved-launch-model-identity.v1");
+  literal(identity.platformId, "programmable");
+  literal(identity.category, "custom");
+  literal(identity.launchFamily, "custom");
+  identifier(identity.modelId);
+  digest(nested.approvedModelIdentityHash);
+  validatePresentationDraftV1(nested.presentation);
+  const provenance = exactRecord(nested.provenance, [
+    "kind", "source", "mutableFields", "protectedFields", "statement",
+  ]);
+  literal(provenance.kind, "presentation-only");
+  literal(provenance.source, "current-grant-bound-builder-input");
+  const mutable = arrayOf(provenance.mutableFields, boundedString, 3);
+  if (JSON.stringify(mutable) !== JSON.stringify(["description", "image", "links"])) mismatch();
+  stringArray(provenance.protectedFields, 256, 256);
+  boundedString(provenance.statement, 1, 4_096);
+  digest(nested.presentationBindingHash);
+  instant(record.committedAt);
+  if (
+    nested.applicationId !== record.applicationId
+    || nested.grantId !== record.grantId
+    || nested.grantBindingHash !== record.grantBindingHash
+    || nested.presentationBindingHash !== record.presentationBindingHash
+  ) mismatch();
+}
+
+function validatePresentationDraftV1(value: unknown): void {
+  const record = exactRecord(value, ["schemaVersion", "description", "image", "links"]);
+  literal(record.schemaVersion, "programmable.launch-presentation-draft.v1");
+  boundedString(record.description, 0, 100_000);
+  nullable(record.image, (candidate) => {
+    const image = exactRecord(candidate, [
+      "uri", "contentSha256", "mediaType", "byteLength", "width", "height",
+    ]);
+    boundedString(image.uri, 1, 8_192);
+    digest(image.contentSha256);
+    enumValue(image.mediaType, ["image/png", "image/jpeg", "image/webp", "image/gif"]);
+    safeInteger(image.byteLength, 1, 100_000_000);
+    safeInteger(image.width, 1, 100_000);
+    safeInteger(image.height, 1, 100_000);
+  });
+  arrayOf(record.links, (candidate) => {
+    const link = exactRecord(candidate, ["kind", "uri"]);
+    enumValue(link.kind, [
+      "website", "documentation", "x", "telegram", "discord", "github", "other",
+    ]);
+    boundedString(link.uri, 1, 8_192);
+  }, 100);
+}
+
+function validateExecutionStatusV2(value: unknown): void {
+  const base = objectValue(value);
+  const state = enumValue(base.state, [
+    "not_started", "submission_pending", "execution_unavailable", "broadcast", "finalized",
+  ]);
+  const keys = [
+    "schemaVersion", "applicationId", "applicationHandle", "grantId", "grantBindingHash", "state",
+  ];
+  if (state === "submission_pending" || state === "execution_unavailable") {
+    keys.push("permitId", "executionReservationId", "reasonCode");
+  } else if (state === "broadcast") {
+    keys.push(
+      "permitId", "executionReservationId", "executionSubmissionHash",
+      "launchTransactionId", "reasonCode",
+    );
+  } else if (state === "finalized") {
+    keys.push(
+      "permitId", "executionReservationId", "executionSubmissionHash",
+      "launchTransactionId", "finalizedLaunchExecutionHash", "finalizedLaunchFactHash",
+      "chainId", "chainProfileId", "launchRouteId", "launchIdentityNamespace",
+      "launchIdentityValue", "launchedAt", "finalizedAt",
+    );
+  }
+  const record = exactRecord(value, keys);
+  literal(record.schemaVersion, "programmable.launch-execution-status-view.v3");
+  applicationId(record.applicationId);
+  applicationHandle(record.applicationHandle);
+  identifier(record.grantId);
+  digest(record.grantBindingHash);
+  if (state !== "not_started") {
+    digest(record.permitId);
+    identifier(record.executionReservationId);
+  }
+  if (state === "submission_pending") enumValue(record.reasonCode, [
+    "EXECUTION_RESERVED", "BROWSER_WALLET_ACTION_READY", "EXECUTION_ATTEMPT_IN_PROGRESS",
+    "EXECUTION_READBACK_PENDING",
+    "EXECUTION_TRANSPORT_INDETERMINATE",
+  ]);
+  if (state === "execution_unavailable") enumValue(record.reasonCode, [
+    "EXECUTION_REVOKED", "BROWSER_WALLET_PREPARATION_REVOKED",
+    "BROWSER_WALLET_ACTION_EXPIRED", "BROWSER_TRANSACTION_REORGED",
+    "BROWSER_TRANSACTION_REVERTED", "BROWSER_TRANSACTION_VERIFICATION_EXHAUSTED",
+  ]);
+  if (state === "broadcast" || state === "finalized") {
+    digest(record.executionSubmissionHash);
+    boundedString(record.launchTransactionId, 1, 512);
+  }
+  if (state === "broadcast") literal(record.reasonCode, "FINALITY_PENDING");
+  if (state === "finalized") {
+    digest(record.finalizedLaunchExecutionHash);
+    digest(record.finalizedLaunchFactHash);
+    positiveDecimal(record.chainId);
+    identifier(record.chainProfileId);
+    identifier(record.launchRouteId);
+    identifier(record.launchIdentityNamespace);
+    boundedString(record.launchIdentityValue, 1, 512);
+    const launchedAt = instant(record.launchedAt);
+    const finalizedAt = instant(record.finalizedAt);
+    if (launchedAt > finalizedAt) mismatch();
+  }
+}
+
+function validateChallengeV2(value: unknown): void {
+  const record = exactRecord(value, [
+    "schemaVersion", "grantId", "challengeId", "challengeBindingHash", "sessionId",
+    "state", "createdAt", "expiresAt",
+  ]);
+  literal(record.schemaVersion, "programmable.launch-session-challenge-view.v2");
+  identifier(record.grantId);
+  uuid(record.challengeId);
+  digest(record.challengeBindingHash);
+  uuid(record.sessionId);
+  enumValue(record.state, ["pending_compilation", "ready_for_wallet"]);
+  if (instant(record.createdAt) >= instant(record.expiresAt)) mismatch();
+}
+
+function validatePreparationV2(value: unknown): void {
+  const record = exactRecord(value, [
+    "schemaVersion", "grantId", "challengeId", "challengeBindingHash", "sessionId",
+    "preparationBindingHash", "launchArtifactCommitmentHash", "launchArtifactManifestHash",
+    "launchArtifactOutputSetHash", "deploymentCalldataHash", "walletMessage",
+    "signingMessageBase64Url", "state", "expiresAt",
+  ]);
+  literal(record.schemaVersion, "programmable.launch-session-preparation-view.v2");
+  identifier(record.grantId);
+  uuid(record.challengeId);
+  digest(record.challengeBindingHash);
+  uuid(record.sessionId);
+  for (const field of [
+    "preparationBindingHash", "launchArtifactCommitmentHash", "launchArtifactManifestHash",
+    "launchArtifactOutputSetHash", "deploymentCalldataHash",
+  ]) digest(record[field]);
+  validateWalletOwnershipMessageV2(record.walletMessage);
+  regexString(record.signingMessageBase64Url, BASE64URL_V2, 1_398_102);
+  literal(record.state, "ready_for_wallet");
+  instant(record.expiresAt);
+  const message = record.walletMessage as JsonRecordV2;
+  if (
+    message.grantId !== record.grantId
+    || message.challengeId !== record.challengeId
+    || message.challengeBindingHash !== record.challengeBindingHash
+    || message.sessionId !== record.sessionId
+    || message.preparationBindingHash !== record.preparationBindingHash
+    || message.launchArtifactCommitmentHash !== record.launchArtifactCommitmentHash
+    || message.launchArtifactManifestHash !== record.launchArtifactManifestHash
+    || message.launchArtifactOutputSetHash !== record.launchArtifactOutputSetHash
+    || message.deploymentCalldataHash !== record.deploymentCalldataHash
+    || message.expiresAt !== record.expiresAt
+  ) mismatch();
+}
+
+function validateWalletOwnershipMessageV2(value: unknown): void {
+  const record = exactRecord(value, [
+    "schemaVersion", "audience", "grantId", "grantBindingHash", "githubPrincipalHash",
+    "challengeId", "challengeBindingHash", "sessionId", "sessionNonce", "walletNonce",
+    "serviceChallengeHash", "walletNamespace", "walletValue", "chainId", "chainProfileId",
+    "chainProfileHash", "routeId", "routeBindingHash", "executionMode", "transactionValueWei",
+    "templateBindingHash", "launchSpecificationHash", "preparationBindingHash",
+    "launchArtifactCommitmentHash", "launchArtifactManifestHash", "launchArtifactOutputSetHash",
+    "deploymentCalldataHash", "feeAssessmentHash", "grantControlGenerationsHash",
+    "permitIssuanceGeneration", "permitConsumptionGeneration", "expiresAt",
+  ]);
+  literal(record.schemaVersion, "programmable.launch-wallet-ownership-message.v2");
+  literal(record.audience, "programmable.launch-wallet-ownership.v2");
+  identifier(record.grantId);
+  uuid(record.challengeId);
+  uuid(record.sessionId);
+  uuid(record.sessionNonce);
+  uuid(record.walletNonce);
+  for (const [key, candidate] of Object.entries(record)) {
+    if (key.endsWith("Hash")) digest(candidate);
+  }
+  identifier(record.walletNamespace);
+  boundedString(record.walletValue, 1, 512);
+  positiveDecimal(record.chainId);
+  identifier(record.chainProfileId);
+  identifier(record.routeId);
+  identifier(record.executionMode);
+  unsignedDecimal(record.transactionValueWei);
+  positiveDecimal(record.permitIssuanceGeneration);
+  positiveDecimal(record.permitConsumptionGeneration);
+  instant(record.expiresAt);
+}
+
+function validateAuthenticatedSessionV2(value: unknown): void {
+  const record = exactRecord(value, [
+    "schemaVersion", "grantId", "challengeId", "challengeBindingHash", "sessionId",
+    "sessionBindingHash", "walletOwnershipBindingHash", "permitRequestHash", "state",
+    "expiresAt",
+  ]);
+  literal(record.schemaVersion, "programmable.authenticated-launch-session-view.v2");
+  identifier(record.grantId);
+  uuid(record.challengeId);
+  digest(record.challengeBindingHash);
+  uuid(record.sessionId);
+  digest(record.sessionBindingHash);
+  digest(record.walletOwnershipBindingHash);
+  digest(record.permitRequestHash);
+  literal(record.state, "active");
+  instant(record.expiresAt);
+}
+
+function validateAuthorizedPermitV2(value: unknown): void {
+  const record = exactRecord(value, [
+    "schemaVersion", "grantId", "sessionId", "sessionBindingHash", "permitId",
+    "permitPayloadHash", "signedPermitArtifactHash", "canonicalSignedPermitBase64Url",
+    "state", "validUntil",
+  ]);
+  literal(record.schemaVersion, "programmable.authorized-launch-permit-view.v2");
+  identifier(record.grantId);
+  uuid(record.sessionId);
+  digest(record.sessionBindingHash);
+  digest(record.permitId);
+  digest(record.permitPayloadHash);
+  digest(record.signedPermitArtifactHash);
+  regexString(record.canonicalSignedPermitBase64Url, BASE64URL_V2, 1_398_102);
+  literal(record.state, "authorized");
+  instant(record.validUntil);
+}
+
+function validateBrowserPreparationV2(value: unknown): void {
+  const record = exactRecord(value, [
+    "schemaVersion", "transport", "walletExecutionKind", "executionReservationId",
+    "grantId", "chainId", "browserWalletAction", "browserWalletActionHash",
+    "actionPermitBinding", "senderBindingPolicyHash", "actionNotBefore", "expiresAt",
+    "authorityBindingHash",
+  ]);
+  literal(record.schemaVersion, "programmable.browser-wallet-launch-preparation.v2");
+  literal(record.transport, "browser-wallet-self-submit");
+  literal(record.walletExecutionKind, "eoa-direct");
+  uuid(record.executionReservationId);
+  identifier(record.grantId);
+  positiveDecimal(record.chainId);
+  validateBrowserWalletActionV2(record.browserWalletAction);
+  digest(record.browserWalletActionHash);
+  validateActionPermitBindingV2(record.actionPermitBinding);
+  digest(record.senderBindingPolicyHash);
+  const actionNotBefore = instant(record.actionNotBefore);
+  const expiresAt = instant(record.expiresAt);
+  digest(record.authorityBindingHash);
+  const action = record.browserWalletAction as JsonRecordV2;
+  const binding = record.actionPermitBinding as JsonRecordV2;
+  const executionValidAfterMs = Number(
+    BigInt(binding.executionValidAfter as string) * 1_000n,
+  );
+  const executionValidUntilMs = Number(
+    BigInt(binding.executionValidUntil as string) * 1_000n,
+  );
+  if (
+    actionNotBefore >= expiresAt
+    || action.chainId !== record.chainId
+    || binding.browserWalletActionHash !== record.browserWalletActionHash
+    || !Number.isSafeInteger(executionValidAfterMs)
+    || !Number.isSafeInteger(executionValidUntilMs)
+    || actionNotBefore < executionValidAfterMs
+    || expiresAt > executionValidUntilMs
+  ) mismatch();
+}
+
+function validateBrowserWalletActionV2(value: unknown): void {
+  const record = exactRecord(value, [
+    "schemaVersion", "walletExecutionKind", "method", "chainId", "params",
+  ]);
+  literal(record.schemaVersion, "programmable.browser-wallet-action.v2");
+  literal(record.walletExecutionKind, "eoa-direct");
+  literal(record.method, "eth_sendTransaction");
+  positiveDecimal(record.chainId);
+  const params = arrayOf(record.params, (candidate) => {
+    const transaction = exactRecord(candidate, ["from", "to", "data", "value"]);
+    regexString(transaction.from, ADDRESS_V2, 42);
+    regexString(transaction.to, ADDRESS_V2, 42);
+    regexString(transaction.data, HEX_DATA_V2, 1_048_576);
+    regexString(transaction.value, /^0x(?:0|[1-9a-f][0-9a-f]*)$/u, 66);
+  }, 1);
+  if (params.length !== 1) mismatch();
+}
+
+function validateActionPermitBindingV2(value: unknown): void {
+  const record = exactRecord(value, [
+    "schemaVersion", "permitId", "permitPayloadHash", "signedPermitArtifactHash",
+    "permitRequestHash", "transactionSender", "transactionTarget", "transactionValueWei",
+    "deploymentCalldataHash", "create2RouteId", "routeNonce", "executionValidAfter",
+    "executionValidUntil", "browserWalletActionHash", "actionPermitBindingHash",
+  ]);
+  literal(record.schemaVersion, "programmable.browser-wallet-action-permit-binding.v2");
+  for (const [key, candidate] of Object.entries(record)) {
+    if (key.endsWith("Hash") || key === "permitId") digest(candidate);
+  }
+  namespacedIdentity(record.transactionSender);
+  namespacedIdentity(record.transactionTarget);
+  unsignedDecimal(record.transactionValueWei);
+  enumValue(record.create2RouteId, [
+    "programmable:create2-deployer:v2", "programmable:create2-graph-deployer:v2",
+  ]);
+  regexString(record.routeNonce, /^0x[0-9a-f]{64}$/u, 66);
+  unsignedDecimal(record.executionValidAfter);
+  unsignedDecimal(record.executionValidUntil);
+  if (
+    BigInt(record.executionValidAfter as string) >= (1n << 64n)
+    || BigInt(record.executionValidUntil as string) >= (1n << 64n)
+    || BigInt(record.executionValidAfter as string)
+      >= BigInt(record.executionValidUntil as string)
+  ) mismatch();
+}
+
+function validateGrantReissueV1(value: unknown): void {
+  const record = exactRecord(value, [
+    "schemaVersion", "state", "requestId", "requestDigest", "analysisTaskId",
+    "applicationId", "applicationHandle", "oldGrantId", "newGrantId", "newGrantBindingHash", "requestedAt",
+  ]);
+  literal(record.schemaVersion, "programmable.browser-wallet-grant-reissue.v2");
+  enumValue(record.state, ["pending", "ready", "failed"]);
+  identifier(record.requestId);
+  digest(record.requestDigest);
+  identifier(record.analysisTaskId);
+  applicationId(record.applicationId);
+  applicationHandle(record.applicationHandle);
+  identifier(record.oldGrantId);
+  nullable(record.newGrantId, identifier);
+  nullable(record.newGrantBindingHash, digest);
+  instant(record.requestedAt);
+  if (record.state === "ready"
+    ? record.newGrantId === null || record.newGrantBindingHash === null
+    : record.newGrantId !== null || record.newGrantBindingHash !== null) mismatch();
+}
+
+function validateLaunchReportAckV2(value: unknown): void {
+  const record = exactRecord(value, [
+    "schemaVersion", "state", "disposition", "reportId", "reportSequence",
+    "executionReservationId", "transactionHash", "reportBindingHash", "reportedAt",
+  ]);
+  literal(record.schemaVersion, "programmable.browser-wallet-launch-report-ack.v2");
+  literal(record.state, "verification_pending");
+  enumValue(record.disposition, ["reported", "idempotent", "canonical_existing"]);
+  identifier(record.reportId);
+  positiveDecimal(record.reportSequence);
+  identifier(record.executionReservationId);
+  regexString(record.transactionHash, /^0x[0-9a-f]{64}$/u, 66);
+  digest(record.reportBindingHash);
+  instant(record.reportedAt);
+}
+
+function validateProjectViewV2(value: unknown): void {
+  const record = exactRecord(value, ["schemaVersion", "project"]);
+  literal(record.schemaVersion, "programmable.custom-launch-project-view.v2");
+  validateProjectV2(record.project);
+}
+
+function validateProfileViewV2(value: unknown): void {
+  const record = exactRecord(value, ["schemaVersion", "subject", "projects"]);
+  literal(record.schemaVersion, "programmable.authenticated-custom-launch-profile.v2");
+  const subject = exactRecord(record.subject, [
+    "provider", "githubUserId", "githubUsername", "githubPrincipalHash",
+  ]);
+  literal(subject.provider, "github");
+  positiveDecimal(subject.githubUserId);
+  nullable(subject.githubUsername, (candidate) => boundedString(candidate, 1, 256));
+  digest(subject.githubPrincipalHash);
+  const projects = arrayOf(record.projects, validateProjectV2, 10_000);
+  if (projects.some((project) =>
+    (project as JsonRecordV2).githubPrincipalHash !== subject.githubPrincipalHash)) mismatch();
+}
+
+function validateProjectV2(value: unknown): void {
+  const record = exactRecord(value, [
+    "schemaVersion", "platformId", "origin", "category", "launchFamily", "modelId",
+    "sourceKind", "sourceRecordBindingHash", "finalizedLaunchBindingHash", "status",
+    "action", "projectId", "launchId", "githubPrincipalHash", "chainId", "chainProfileId",
+    "chainProfileHash", "launchIdentity", "launchTransactionId", "launchRouteId",
+    "executionMode", "advertisesToken", "discoverableAssets", "assetIdentitySetHash",
+    "discoverableMarkets", "marketSetHash", "feeAssessmentHash", "feeObligationHash",
+    "feeAssessmentObligationBindingHash", "feeObligation", "registryPublicationBindingHash",
+    "registryAdapterBindingHash", "projectionRuntimeBindingHash", "registryObservationDigest",
+    "registryTargetBindingHash", "presentationVersion", "presentationBindingHash",
+    "presentation", "websiteProjectionGeneration", "launchedAt", "finalizedAt",
+  ]);
+  literal(record.schemaVersion, "programmable.custom-launch-website-record.v2");
+  literal(record.platformId, "programmable");
+  literal(record.origin, "programmable");
+  literal(record.category, "custom");
+  literal(record.launchFamily, "custom");
+  identifier(record.modelId);
+  enumValue(record.sourceKind, ["browser-wallet-report", "legacy-executor"]);
+  literal(record.status, "launched");
+  literal(record.action, "view_live_launch");
+  for (const [key, candidate] of Object.entries(record)) {
+    if (key.endsWith("Hash") || key.endsWith("Digest") || key === "projectId" || key === "launchId") {
+      if (candidate !== null) digest(candidate);
+    }
+  }
+  positiveDecimal(record.chainId);
+  identifier(record.chainProfileId);
+  namespacedIdentity(record.launchIdentity);
+  boundedString(record.launchTransactionId, 1, 512);
+  identifier(record.launchRouteId);
+  identifier(record.executionMode);
+  booleanValue(record.advertisesToken);
+  arrayOf(record.discoverableAssets, validateDiscoverableAssetV2, 10_000);
+  arrayOf(record.discoverableMarkets, validateDiscoverableMarketV2, 10_000);
+  validateFeeObligationV2(record.feeObligation);
+  nullable(record.presentationVersion, positiveDecimal);
+  nullable(record.presentationBindingHash, digest);
+  nullable(record.presentation, validatePresentationDraftV1);
+  positiveDecimal(record.websiteProjectionGeneration);
+  const launchedAt = instant(record.launchedAt);
+  const finalizedAt = instant(record.finalizedAt);
+  if (launchedAt > finalizedAt
+    || ((record.presentation === null) !== (record.presentationBindingHash === null))
+    || (record.feeObligation as JsonRecordV2).feeAssessmentHash !== record.feeAssessmentHash
+    || (record.feeObligation as JsonRecordV2).feeObligationHash !== record.feeObligationHash
+    || (record.feeObligation as JsonRecordV2).feeAssessmentObligationBindingHash
+      !== record.feeAssessmentObligationBindingHash) mismatch();
+}
+
+function validateDiscoverableAssetV2(value: unknown): void {
+  const record = exactRecord(value, [
+    "assetId", "role", "identity", "provenance", "identityEvidenceHash",
+    "onchainMetadata", "onchainMetadataHash",
+  ]);
+  identifier(record.assetId);
+  enumValue(record.role, [
+    "root", "primary-token", "secondary-token", "pool", "hook", "controller",
+  ]);
+  namespacedIdentity(record.identity);
+  validateAssetProvenanceV2(record.provenance);
+  digest(record.identityEvidenceHash);
+  nullable(record.onchainMetadata, validateTokenMetadataV2);
+  nullable(record.onchainMetadataHash, digest);
+  if ((record.onchainMetadata === null) !== (record.onchainMetadataHash === null)) mismatch();
+}
+
+function validateAssetProvenanceV2(value: unknown): void {
+  const base = objectValue(value);
+  const kind = enumValue(base.kind, ["launch-produced", "protocol-external", "adopted-external"]);
+  if (kind === "launch-produced") {
+    exactRecord(value, ["kind"]);
+    return;
+  }
+  if (kind === "protocol-external") {
+    const record = exactRecord(value, ["kind", "relationship"]);
+    boundedString(record.relationship, 1, 512);
+    return;
+  }
+  const record = exactRecord(value, [
+    "kind", "relationship", "dependencyId", "capabilityId", "reviewedRole",
+    "chainProfileId", "identity", "expectedRuntimeCodeKeccak256",
+    "expectedRuntimeCodeSha256", "reviewEvidenceBindingHash",
+    "interfaceEvidenceBindingHash", "stateObservationIds",
+  ]);
+  for (const field of [
+    "relationship", "dependencyId", "capabilityId", "reviewedRole", "chainProfileId",
+  ]) identifier(record[field]);
+  namespacedIdentity(record.identity);
+  regexString(record.expectedRuntimeCodeKeccak256, /^0x[0-9a-f]{64}$/u, 66);
+  digest(record.expectedRuntimeCodeSha256);
+  digest(record.reviewEvidenceBindingHash);
+  digest(record.interfaceEvidenceBindingHash);
+  stringArray(record.stateObservationIds, 10_000, 512);
+}
+
+function validateTokenMetadataV2(value: unknown): void {
+  const base = objectValue(value);
+  const status = enumValue(base.status, ["available", "unavailable"]);
+  const record = status === "available"
+    ? exactRecord(value, ["schemaVersion", "status", "source", "name", "symbol", "decimals", "evidenceHash"])
+    : exactRecord(value, ["schemaVersion", "status", "source", "reason", "evidenceHash"]);
+  literal(record.schemaVersion, "programmable.discoverable-launch-token-metadata.v2");
+  literal(record.source, "finality-resolved-onchain");
+  digest(record.evidenceHash);
+  if (status === "available") {
+    boundedString(record.name, 0, 1_024);
+    boundedString(record.symbol, 0, 1_024);
+    safeInteger(record.decimals, 0, 255);
+  } else {
+    enumValue(record.reason, [
+      "onchain-read-unavailable", "non-standard-metadata", "invalid-metadata",
+    ]);
+  }
+}
+
+function validateDiscoverableMarketV2(value: unknown): void {
+  const record = exactRecord(value, [
+    "marketId", "kind", "status", "marketAssetId", "baseAssetId", "quoteAssetId",
+    "marketEvidenceHash", "verification", "uniswapV4",
+  ]);
+  for (const field of ["marketId", "kind", "marketAssetId", "baseAssetId", "quoteAssetId"] ) {
+    identifier(record[field]);
+  }
+  enumValue(record.status, ["active", "paused", "closed", "verification_pending"]);
+  digest(record.marketEvidenceHash);
+  validateMarketVerificationV2(record.verification);
+  nullable(record.uniswapV4, validateUniswapV4PoolV2);
+}
+
+function validateMarketVerificationV2(value: unknown): void {
+  const record = exactRecord(value, ["status", "verifierAdapterId", "verifierBindingHash"]);
+  const status = enumValue(record.status, ["verified", "pending"]);
+  if (status === "verified") {
+    identifier(record.verifierAdapterId);
+    digest(record.verifierBindingHash);
+  } else if (record.verifierAdapterId !== null || record.verifierBindingHash !== null) mismatch();
+}
+
+function validateUniswapV4PoolV2(value: unknown): void {
+  const record = exactRecord(value, [
+    "poolId", "poolManager", "poolManagerReviewEvidenceBindingHash",
+    "poolManagerInterfaceEvidenceBindingHash", "poolManagerRuntimeCodeKeccak256",
+    "poolManagerRuntimeCodeSha256", "currency0AssetId", "currency1AssetId", "feeRaw",
+    "dynamicFee", "tickSpacing", "hooksAssetId", "poolKeyEvidenceHash",
+  ]);
+  regexString(record.poolId, /^0x[0-9a-f]{64}$/u, 66);
+  namespacedIdentity(record.poolManager);
+  digest(record.poolManagerReviewEvidenceBindingHash);
+  digest(record.poolManagerInterfaceEvidenceBindingHash);
+  regexString(record.poolManagerRuntimeCodeKeccak256, /^0x[0-9a-f]{64}$/u, 66);
+  digest(record.poolManagerRuntimeCodeSha256);
+  identifier(record.currency0AssetId);
+  identifier(record.currency1AssetId);
+  unsignedDecimal(record.feeRaw);
+  booleanValue(record.dynamicFee);
+  regexString(record.tickSpacing, /^-?(?:0|[1-9][0-9]{0,76})$/u, 78);
+  nullable(record.hooksAssetId, identifier);
+  digest(record.poolKeyEvidenceHash);
+}
+
+function validateFeeObligationV2(value: unknown): void {
+  const record = exactRecord(value, [
+    "schemaVersion", "feeAssessmentHash", "chainId", "chainProfileId", "chainProfileHash",
+    "ratePpm", "recipient", "applicabilityPredicate", "qualifyingFlowBasis",
+    "qualifyingFlowBasisBindingHash", "feeBasis", "enforcementRouteId",
+    "enforcementRouteBindingHash", "enforcementModuleId", "enforcementModuleBindingHash",
+    "claimSemantics", "feeObligationHash", "feeAssessmentObligationBindingHash",
+  ]);
+  literal(record.schemaVersion, "programmable.launch-fee-obligation.v2");
+  digest(record.feeAssessmentHash);
+  positiveDecimal(record.chainId);
+  identifier(record.chainProfileId);
+  digest(record.chainProfileHash);
+  literal(record.ratePpm, 1000);
+  namespacedIdentity(record.recipient);
+  literal(record.applicabilityPredicate, "all-qualifying-launch-flows");
+  boundedString(record.qualifyingFlowBasis, 1, 4_096);
+  digest(record.qualifyingFlowBasisBindingHash);
+  literal(record.feeBasis, "gross-qualifying-flow-volume");
+  identifier(record.enforcementRouteId);
+  digest(record.enforcementRouteBindingHash);
+  identifier(record.enforcementModuleId);
+  digest(record.enforcementModuleBindingHash);
+  literal(record.claimSemantics, "recipient-claimable-accrual");
+  digest(record.feeObligationHash);
+  digest(record.feeAssessmentObligationBindingHash);
+}
+
+function exactRecord(value: unknown, expectedKeys: readonly string[]): JsonRecordV2 {
+  const record = objectValue(value);
+  const actual = Object.keys(record).sort();
+  const expected = [...expectedKeys].sort();
+  if (actual.length !== expected.length
+    || actual.some((key, index) => key !== expected[index])) mismatch();
+  return record;
+}
+
+function objectValue(value: unknown): JsonRecordV2 {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) mismatch();
+  return value as JsonRecordV2;
+}
+
+function arrayOf(
+  value: unknown,
+  validator: ValidatorV2,
+  maxLength: number,
+): unknown[] {
+  if (!Array.isArray(value) || value.length > maxLength) mismatch();
+  value.forEach(validator);
+  return value;
+}
+
+function nullable(value: unknown, validator: ValidatorV2): void {
+  if (value !== null) validator(value);
+}
+
+function literal(value: unknown, expected: string | number | boolean): void {
+  if (value !== expected) mismatch();
+}
+
+function enumValue<const T extends string>(value: unknown, values: readonly T[]): T {
+  if (typeof value !== "string" || !values.includes(value as T)) mismatch();
+  return value as T;
+}
+
+function boundedString(value: unknown, minimum = 0, maximum = 4_096): void {
+  if (typeof value !== "string" || value.length < minimum || value.length > maximum) mismatch();
+}
+
+function identifier(value: unknown): void {
+  boundedString(value, 1, 512);
+}
+
+function applicationId(value: unknown): void {
+  regexString(value, APPLICATION_ID_V3, 80);
+}
+
+function applicationHandle(value: unknown): void {
+  regexString(value, APPLICATION_HANDLE_V3, 71);
+}
+
+function regexString(value: unknown, pattern: RegExp, maximum: number): void {
+  if (typeof value !== "string" || value.length > maximum || !pattern.test(value)) mismatch();
+}
+
+function digest(value: unknown): void {
+  regexString(value, DIGEST_V2, 71);
+}
+
+function uuid(value: unknown): void {
+  regexString(value, UUID_V2, 36);
+}
+
+function positiveDecimal(value: unknown): void {
+  regexString(value, POSITIVE_DECIMAL_V2, 78);
+}
+
+function unsignedDecimal(value: unknown): void {
+  regexString(value, UNSIGNED_DECIMAL_V2, 78);
+}
+
+function safeInteger(value: unknown, minimum: number, maximum = Number.MAX_SAFE_INTEGER): void {
+  if (!Number.isSafeInteger(value) || (value as number) < minimum || (value as number) > maximum) {
+    mismatch();
+  }
+}
+
+function booleanValue(value: unknown): void {
+  if (typeof value !== "boolean") mismatch();
+}
+
+function stringArray(value: unknown, maxLength: number, maxStringLength: number): void {
+  arrayOf(value, (candidate) => boundedString(candidate, 1, maxStringLength), maxLength);
+}
+
+function namespacedIdentity(value: unknown): void {
+  const record = exactRecord(value, ["namespace", "value"]);
+  identifier(record.namespace);
+  boundedString(record.value, 1, 512);
+}
+
+function instant(value: unknown): number {
+  if (typeof value !== "string") mismatch();
+  const milliseconds = Date.parse(value);
+  if (!Number.isFinite(milliseconds) || new Date(milliseconds).toISOString() !== value) mismatch();
+  return milliseconds;
+}
+
+function mismatch(): never {
+  throw new Error("Custom launch response contract mismatch");
+}

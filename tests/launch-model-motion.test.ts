@@ -41,7 +41,8 @@ describe("launch model artwork", () => {
     expect(source).toContain(
       'aria-describedby="launch-model-classic-description"',
     );
-    expect(source).toContain('href="/docs/models/custom"');
+    expect(source).toContain('onClick={() => onChoose("custom")}');
+    expect(source).toContain("disabled={!customLaunchPublicEnabled}");
     expect(source).toContain(
       'aria-labelledby="launch-model-custom-title"',
     );

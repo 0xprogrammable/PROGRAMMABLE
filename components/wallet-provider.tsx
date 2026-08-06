@@ -4,10 +4,12 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   PrivyProvider,
+  useIdentityToken,
   useLinkAccount,
   useLogin,
   usePrivy,
   useSendTransaction as usePrivySendTransaction,
+  useSignMessage as usePrivySignMessage,
   useWallets,
   type PrivyClientConfig,
 } from "@privy-io/react-auth";
@@ -33,7 +35,7 @@ import {
   type ReactNode,
 } from "react";
 import { mainnet, sepolia } from "viem/chains";
-import type { Hex } from "viem";
+import { bytesToHex, hexToBytes, type Hex } from "viem";
 
 import { parseLocalProfile } from "@/lib/profile/local-profile";
 import {
@@ -77,7 +79,19 @@ type WalletContextValue = {
     showDialogOnFailure?: boolean;
   }) => Promise<boolean>;
   getAccessToken: () => Promise<string | null>;
+  getIdentityToken: () => Promise<string | null>;
+  githubConnected: boolean;
+  githubUsername: string;
+  connectGithub: () => void;
   setUsername: (username: string) => void;
+  signLaunchMessage: (signingMessageBase64Url: string) => Promise<string>;
+  sendBrowserWalletAction: (input: Readonly<{
+    chainId: string;
+    from: `0x${string}`;
+    to: `0x${string}`;
+    data: `0x${string}`;
+    value: `0x${string}`;
+  }>) => Promise<Hex>;
   sendTransaction: (transaction: PreparedTransaction) => Promise<Hex>;
   readNativeBalance: () => Promise<WalletNativeBalance>;
   readTradeBalances: (token: `0x${string}`) => Promise<WalletTradeBalances>;
@@ -272,7 +286,7 @@ function getEmptyProfileValue() {
 }
 
 const privyConfig = {
-  loginMethods: ["wallet", "email"],
+  loginMethods: ["wallet", "email", "github"],
   appearance: {
     theme: "light",
     accentColor: "#465a6f",
@@ -317,6 +331,23 @@ function normalizeChainId(chainId: string) {
 
 function isEthereumAddress(address: string): address is `0x${string}` {
   return /^0x[a-fA-F0-9]{40}$/.test(address);
+}
+
+function decodeBase64Url(value: string): Uint8Array {
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) {
+    throw new Error("The launch authorization message is invalid");
+  }
+  const padded = value.replace(/-/g, "+").replace(/_/g, "/")
+    .padEnd(Math.ceil(value.length / 4) * 4, "=");
+  const binary = window.atob(padded);
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
+
+function encodeBase64Url(value: Uint8Array): string {
+  let binary = "";
+  for (const byte of value) binary += String.fromCharCode(byte);
+  return window.btoa(binary).replace(/\+/g, "-").replace(/\//g, "_")
+    .replace(/=+$/u, "");
 }
 
 function parseRpcQuantity(value: unknown, label: string) {
@@ -431,7 +462,9 @@ function ConfiguredWalletProvider({
 
 function PrivyWalletBridge({ children }: { children: ReactNode }) {
   const { authenticated, getAccessToken, logout, ready, user } = usePrivy();
+  const { identityToken } = useIdentityToken();
   const { sendTransaction: sendPrivyTransaction } = usePrivySendTransaction();
+  const { signMessage: signPrivyMessage } = usePrivySignMessage();
   const { ready: walletsReady, wallets } = useWallets();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -454,7 +487,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       setDialogOpen(true);
     },
   });
-  const { linkWallet } = useLinkAccount({
+  const { linkGithub, linkWallet } = useLinkAccount({
     onSuccess: () => {
       setError("");
       setDialogOpen(false);
@@ -469,6 +502,9 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
   });
 
   const activeAuthenticated = authenticated && !sessionSuppressed;
+  const githubAccount = user?.github;
+  const githubConnected = Boolean(activeAuthenticated && githubAccount?.subject);
+  const githubUsername = githubConnected ? githubAccount?.username ?? "" : "";
   const connectedWallet = useMemo(
     () =>
       selectAuthenticatedWallet(
@@ -568,6 +604,28 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       walletChainType: "ethereum-only",
     });
   }, [login, ready]);
+
+  const connectGithub = useCallback(() => {
+    setSessionSuppressed(false);
+    setError("");
+    setDialogOpen(false);
+
+    if (!ready) {
+      setError(
+        "GitHub sign-in is taking longer than expected. Reload the page and try again.",
+      );
+      setDialogOpen(true);
+      return;
+    }
+    if (activeAuthenticated) {
+      if (!githubConnected) linkGithub();
+      return;
+    }
+    login({
+      loginMethods: ["github"],
+      walletChainType: "ethereum-only",
+    });
+  }, [activeAuthenticated, githubConnected, linkGithub, login, ready]);
 
   const openWallet = useCallback(() => {
     setError("");
@@ -730,6 +788,113 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
     [connectedWallet, sendPrivyTransaction, wallet],
   );
 
+  const signLaunchMessage = useCallback(async (
+    signingMessageBase64Url: string,
+  ) => {
+    if (!connectedWallet || !wallet) {
+      throw new Error("Connect an Ethereum wallet before continuing");
+    }
+    const messageBytes = decodeBase64Url(signingMessageBase64Url);
+    let message: string;
+    try {
+      message = new TextDecoder("utf-8", { fatal: true }).decode(messageBytes);
+    } catch {
+      throw new Error("The launch authorization message is invalid");
+    }
+    const isEmbeddedWallet =
+      connectedWallet.walletClientType === "privy" ||
+      connectedWallet.walletClientType === "privy-v2";
+    let signature: unknown;
+    try {
+      if (wallet.chainId !== appChainHex) {
+        await connectedWallet.switchChain(appChain.id);
+      }
+      if (isEmbeddedWallet) {
+        signature = (await signPrivyMessage(
+          { message },
+          {
+            address: wallet.account,
+            uiOptions: {
+              title: "Approve launch",
+              description: "Prove this wallet belongs to you. This does not send a transaction.",
+              buttonText: "Sign approval",
+            },
+          },
+        )).signature;
+      } else {
+        const provider = await connectedWallet.getEthereumProvider();
+        signature = await provider.request({
+          method: "personal_sign",
+          params: [bytesToHex(messageBytes), wallet.account],
+        });
+      }
+    } catch (caught) {
+      throw new Error(getWalletTransactionErrorMessage(caught));
+    }
+    if (typeof signature !== "string" || !/^0x[0-9a-fA-F]+$/.test(signature)) {
+      throw new Error("The wallet returned an invalid signature");
+    }
+    return encodeBase64Url(hexToBytes(signature as Hex));
+  }, [connectedWallet, signPrivyMessage, wallet]);
+
+  const sendBrowserWalletAction = useCallback(async (input: Readonly<{
+    chainId: string;
+    from: `0x${string}`;
+    to: `0x${string}`;
+    data: `0x${string}`;
+    value: `0x${string}`;
+  }>) => {
+    if (!connectedWallet || !wallet) {
+      throw new Error("Connect an Ethereum wallet before continuing");
+    }
+    if (
+      input.chainId !== String(appChain.id)
+      || input.from.toLowerCase() !== wallet.account.toLowerCase()
+      || !isEthereumAddress(input.to)
+      || !/^0x(?:[0-9a-fA-F]{2})*$/.test(input.data)
+      || !/^0x[0-9a-fA-F]+$/.test(input.value)
+    ) {
+      throw new Error(`The prepared launch is not valid for ${appNetworkName}`);
+    }
+    const isEmbeddedWallet =
+      connectedWallet.walletClientType === "privy" ||
+      connectedWallet.walletClientType === "privy-v2";
+    try {
+      if (wallet.chainId !== appChainHex) {
+        await connectedWallet.switchChain(appChain.id);
+      }
+      if (isEmbeddedWallet) {
+        const result = await sendPrivyTransaction({
+          to: input.to,
+          data: input.data,
+          value: BigInt(input.value),
+          chainId: appChain.id,
+        }, {
+          address: wallet.account,
+          uiOptions: {
+            description: "Submit the approved Custom launch on Ethereum",
+            buttonText: "Launch token",
+            successHeader: "Launch submitted",
+          },
+        });
+        return parseSubmittedTransactionHash(result.hash);
+      }
+      const provider = await connectedWallet.getEthereumProvider();
+      const hash = await provider.request({
+        method: "eth_sendTransaction",
+        params: [{
+          from: wallet.account,
+          to: input.to,
+          data: input.data,
+          value: input.value,
+        }],
+      });
+      return parseSubmittedTransactionHash(hash);
+    } catch (caught) {
+      throw new Error(getWalletTransactionErrorMessage(caught));
+    }
+  }, [connectedWallet, sendPrivyTransaction, wallet]);
+
   const readTradeBalances = useCallback(
     async (token: `0x${string}`) => {
       if (!connectedWallet || !wallet) {
@@ -825,7 +990,13 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       openWallet,
       disconnect,
       getAccessToken,
+      getIdentityToken: async () => identityToken,
+      githubConnected,
+      githubUsername,
+      connectGithub,
       setUsername,
+      signLaunchMessage,
+      sendBrowserWalletAction,
       sendTransaction,
       readNativeBalance,
       readTradeBalances,
@@ -833,15 +1004,21 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
     [
       activeAuthenticated,
       avatarDataUrl,
+      connectGithub,
       disconnect,
       disconnecting,
       getAccessToken,
+      githubConnected,
+      githubUsername,
       hasSession,
+      identityToken,
       openWallet,
       providerTimedOut,
       readNativeBalance,
       readTradeBalances,
+      sendBrowserWalletAction,
       sendTransaction,
+      signLaunchMessage,
       providerSettled,
       setUsername,
       username,
@@ -888,7 +1065,17 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
       openWallet: () => setDialogOpen(true),
       disconnect: async () => false,
       getAccessToken: async () => null,
+      getIdentityToken: async () => null,
+      githubConnected: false,
+      githubUsername: "",
+      connectGithub: () => setDialogOpen(true),
       setUsername: () => undefined,
+      signLaunchMessage: async () => {
+        throw new Error("Wallet sign-in is unavailable");
+      },
+      sendBrowserWalletAction: async () => {
+        throw new Error("Wallet sign-in is unavailable");
+      },
       sendTransaction: async () => {
         throw new Error("Wallet sign-in is unavailable");
       },

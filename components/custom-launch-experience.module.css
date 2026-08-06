@@ -1,0 +1,698 @@
+.page {
+  padding-top: 16px;
+}
+
+.introGrid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.8fr);
+  margin: 7px auto 0;
+  max-width: 1000px;
+}
+
+.introPrimary,
+.statusEntry,
+.emptyState,
+.applicationRow,
+.setupSheet,
+.loadingPanel {
+  background: color-mix(in srgb, var(--glass-96) 96%, transparent);
+  border: 1px solid var(--panel-border-soft);
+  box-shadow:
+    0 1px 0 var(--card-shadow),
+    0 20px 54px var(--card-shadow-soft);
+}
+
+.introPrimary {
+  border-radius: 28px;
+  min-height: 390px;
+  padding: clamp(30px, 5vw, 54px);
+}
+
+.kicker {
+  color: var(--accent-strong);
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.introPrimary h2 {
+  font-size: clamp(38px, 5vw, 62px);
+  font-weight: 580;
+  letter-spacing: -0.052em;
+  line-height: 0.98;
+  margin: 19px 0 18px;
+  max-width: 9ch;
+}
+
+.introPrimary p,
+.statusEntry p,
+.emptyState p,
+.listToolbar p {
+  color: var(--text-soft);
+  line-height: 1.58;
+}
+
+.introPrimary p {
+  max-width: 55ch;
+}
+
+.actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 28px;
+}
+
+.actions :global(.primary-button) {
+  gap: 8px;
+  min-height: 48px;
+}
+
+.secondaryButton,
+.githubButton,
+.rowAction,
+.iconButton {
+  align-items: center;
+  background: color-mix(in srgb, var(--glass-90) 88%, transparent);
+  border: 1px solid var(--control-border);
+  color: var(--text);
+  display: inline-flex;
+  font: inherit;
+  font-weight: 650;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.secondaryButton,
+.githubButton {
+  border-radius: 13px;
+  min-height: 48px;
+  padding: 0 17px;
+}
+
+.statusEntry {
+  align-content: start;
+  border-radius: 28px;
+  display: grid;
+  min-height: 390px;
+  padding: 34px 30px;
+}
+
+.githubMark {
+  color: var(--accent-strong);
+  display: inline-flex;
+  height: 25px;
+  width: 25px;
+}
+
+.githubMark svg,
+.githubButtonMark svg {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+.githubButtonMark {
+  display: inline-flex;
+  height: 17px;
+  width: 17px;
+}
+
+.statusEntry h2 {
+  font-size: 26px;
+  letter-spacing: -0.035em;
+  margin: 56px 0 8px;
+}
+
+.githubButton {
+  gap: 9px;
+  margin-top: auto;
+  width: 100%;
+}
+
+.githubButton:disabled,
+.iconButton:disabled {
+  opacity: 0.62;
+}
+
+.listToolbar {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin: 2px auto 16px;
+  max-width: 1000px;
+}
+
+.listToolbar p {
+  font-size: 13px;
+  margin: 0;
+}
+
+.iconButton {
+  border-radius: 12px;
+  height: 44px;
+  width: 44px;
+}
+
+.emptyState {
+  border-radius: 26px;
+  margin: 0 auto;
+  max-width: 1000px;
+  min-height: 320px;
+  padding: clamp(30px, 6vw, 64px);
+}
+
+.emptyState h2 {
+  font-size: clamp(30px, 4vw, 44px);
+  letter-spacing: -0.045em;
+  margin: 0 0 10px;
+}
+
+.applicationList {
+  display: grid;
+  gap: 10px;
+  margin: 0 auto;
+  max-width: 1000px;
+}
+
+.applicationRow {
+  align-items: center;
+  border-radius: 20px;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(190px, 1fr) minmax(210px, 0.8fr) auto;
+  padding: 19px 20px;
+}
+
+.applicationIdentity,
+.applicationStatus,
+.applicationStatus > span {
+  display: flex;
+  min-width: 0;
+}
+
+.applicationIdentity,
+.applicationStatus > span {
+  flex-direction: column;
+}
+
+.applicationIdentity strong,
+.applicationStatus strong {
+  font-size: 14px;
+}
+
+.applicationIdentity span,
+.applicationStatus small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.applicationStatus {
+  align-items: center;
+  gap: 10px;
+}
+
+.applicationStatus[data-tone="ready"],
+.applicationStatus[data-tone="complete"] {
+  color: var(--success, #3e8b67);
+}
+
+.applicationStatus[data-tone="warning"] {
+  color: var(--error, #b24c55);
+}
+
+.applicationStatus small {
+  color: var(--muted);
+  font-weight: 450;
+}
+
+.corrections {
+  color: var(--text-soft);
+  font-size: 12px;
+  grid-column: 1 / 3;
+  margin: -5px 0 0;
+  padding-left: 18px;
+}
+
+.guidance {
+  color: var(--text-soft);
+  font-size: 12px;
+  grid-column: 1 / 3;
+  margin: -5px 0 0;
+}
+
+.rowAction {
+  border-radius: 12px;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 14px;
+  white-space: nowrap;
+}
+
+.loadingPanel {
+  align-items: center;
+  border-radius: 26px;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin: 7px auto 0;
+  max-width: 1000px;
+  min-height: 360px;
+}
+
+.recoveryCopy {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  max-width: 480px;
+}
+
+.recoveryCopy h2,
+.recoveryCopy p {
+  margin: 0;
+}
+
+.recoveryCopy p {
+  color: var(--text-soft);
+  line-height: 1.5;
+}
+
+.recoveryCopy :global(.primary-button),
+.recoveryCopy .secondaryButton {
+  margin-top: 8px;
+}
+
+.setupSheet {
+  border-radius: 26px;
+  margin: 7px auto 0;
+  max-width: 1000px;
+  overflow: clip;
+}
+
+.setupSheet fieldset {
+  border: 0;
+  margin: 0;
+  min-inline-size: 0;
+  padding: 0;
+}
+
+.setupSheet fieldset:disabled {
+  opacity: 0.76;
+}
+
+.formSection {
+  padding: 28px;
+}
+
+.formSection + .formSection {
+  border-top: 1px solid var(--panel-border-soft);
+}
+
+.sectionHeading {
+  align-items: flex-start;
+  display: grid;
+  gap: 13px;
+  grid-template-columns: 30px minmax(0, 1fr);
+}
+
+.sectionHeading > span {
+  color: var(--accent-strong);
+  font-size: 11px;
+  font-weight: 700;
+  padding-top: 5px;
+}
+
+.sectionHeading h2 {
+  font-size: 21px;
+  letter-spacing: -0.03em;
+  margin: 0;
+}
+
+.sectionHeading p {
+  color: var(--text-soft);
+  font-size: 12.5px;
+  line-height: 1.5;
+  margin: 4px 0 0;
+}
+
+.identityGrid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: 150px minmax(0, 1fr);
+  margin-top: 20px;
+}
+
+.imageField,
+.fieldStack,
+.parameterGrid label,
+.linkGrid label,
+.fieldStack > label {
+  display: grid;
+  gap: 7px;
+}
+
+.imageField > span,
+.parameterGrid label > span,
+.linkGrid label > span,
+.fieldStack > label > span {
+  color: color-mix(in srgb, var(--text) 86%, var(--text-soft));
+  font-size: 12px;
+  font-weight: 630;
+}
+
+.imageButton {
+  align-items: center;
+  background: var(--surface-soft);
+  border: 1px dashed var(--control-border);
+  border-radius: 17px;
+  color: var(--text-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 150px;
+  justify-content: center;
+  overflow: hidden;
+  padding: 0;
+  width: 150px;
+}
+
+.imageButton img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.imageButton span {
+  font-size: 11px;
+}
+
+.removeImageButton {
+  background: transparent;
+  border: 0;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 11px;
+  min-height: 44px;
+  padding: 0;
+  text-align: left;
+}
+
+.fieldStack textarea,
+.fieldStack input,
+.parameterGrid input,
+.parameterGrid textarea {
+  background: var(--control-glass-neutral-bg);
+  border: 1px solid var(--control-border);
+  border-radius: 13px;
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  padding: 12px 13px;
+  width: 100%;
+}
+
+.fieldStack textarea {
+  min-height: 92px;
+  resize: vertical;
+}
+
+.parameterGrid textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.linkGrid,
+.parameterGrid {
+  display: grid;
+  gap: 11px;
+}
+
+.moreLinks {
+  border-top: 1px solid var(--panel-border-soft);
+  margin-top: 4px;
+  padding-top: 10px;
+}
+
+.moreLinks summary {
+  color: var(--text-soft);
+  font-size: 12px;
+  min-height: 44px;
+  padding-top: 7px;
+}
+
+.moreLinks .linkGrid {
+  margin-top: 10px;
+}
+
+.linkGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.parameterGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 19px;
+}
+
+.fieldStack textarea:focus-visible,
+.fieldStack input:focus-visible,
+.parameterGrid input:focus-visible,
+.parameterGrid textarea:focus-visible,
+.imageButton:focus-visible,
+.removeImageButton:focus-visible,
+.secondaryButton:focus-visible,
+.githubButton:focus-visible,
+.rowAction:focus-visible,
+.iconButton:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+.reviewList {
+  display: grid;
+  margin: 18px 0 0;
+}
+
+.reviewList > div {
+  align-items: baseline;
+  border-top: 1px solid var(--panel-border-soft);
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(120px, 0.45fr) minmax(0, 1fr);
+  padding: 11px 0;
+}
+
+.reviewList dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.reviewList dd {
+  font-size: 13px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.launchFooter {
+  align-items: center;
+  backdrop-filter: blur(18px);
+  background: color-mix(in srgb, var(--glass-90) 82%, transparent);
+  border-top: 1px solid var(--panel-border-soft);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  min-height: 72px;
+  padding: 11px 28px;
+}
+
+.launchFooter :global(.primary-button) {
+  gap: 8px;
+  min-height: 48px;
+  min-width: 180px;
+}
+
+.progressCopy {
+  align-items: center;
+  color: var(--text-soft);
+  display: flex;
+  font-size: 12.5px;
+  gap: 9px;
+}
+
+.progressCopy svg {
+  color: var(--accent-strong);
+}
+
+.transactionNote {
+  color: var(--muted);
+  font-size: 11px;
+  margin: 0;
+  overflow-wrap: anywhere;
+  padding: 0 28px 12px;
+}
+
+.transactionNote code {
+  overflow-wrap: anywhere;
+}
+
+.transactionNote a {
+  align-items: center;
+  color: var(--accent-strong);
+  display: inline-flex;
+  gap: 4px;
+}
+
+.liveMessage {
+  color: var(--error, #b24c55);
+  font-size: 12.5px;
+  margin: 12px auto 0;
+  max-width: 1000px;
+  min-height: 20px;
+}
+
+.visuallyHidden {
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  width: 1px;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.spin {
+  animation: spin 900ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 760px) {
+  .page {
+    padding-bottom: 102px;
+  }
+
+  .introGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .introPrimary,
+  .statusEntry {
+    min-height: 0;
+  }
+
+  .statusEntry h2 {
+    margin-top: 34px;
+  }
+
+  .githubButton {
+    margin-top: 28px;
+  }
+
+  .applicationRow {
+    grid-template-columns: 1fr auto;
+  }
+
+  .applicationStatus {
+    grid-column: 1;
+  }
+
+  .corrections {
+    grid-column: 1 / -1;
+  }
+
+  .guidance {
+    grid-column: 1 / -1;
+  }
+
+  .rowAction {
+    grid-column: 2;
+    grid-row: 1 / 3;
+  }
+
+  .identityGrid {
+    grid-template-columns: 124px minmax(0, 1fr);
+  }
+
+  .imageButton {
+    height: 124px;
+    width: 124px;
+  }
+
+  .linkGrid,
+  .parameterGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .introPrimary,
+  .statusEntry,
+  .emptyState,
+  .setupSheet,
+  .loadingPanel {
+    border-radius: 22px;
+  }
+
+  .introPrimary,
+  .statusEntry,
+  .emptyState,
+  .formSection {
+    padding: 20px 18px;
+  }
+
+  .introPrimary h2 {
+    font-size: 40px;
+  }
+
+  .actions,
+  .actions > * {
+    width: 100%;
+  }
+
+  .applicationRow {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+    padding: 17px;
+  }
+
+  .rowAction {
+    grid-column: 1;
+    grid-row: auto;
+    width: 100%;
+  }
+
+  .identityGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .reviewList > div {
+    gap: 4px;
+    grid-template-columns: 1fr;
+  }
+
+  .launchFooter {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 15px 18px 18px;
+  }
+
+  .launchFooter :global(.primary-button) {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation-duration: 1.5s;
+  }
+}
