@@ -49,6 +49,12 @@ describe("landing page contract", () => {
     expect(landing).toContain(">Tokens that behave</span>");
     expect(landing).toContain(">how you imagine</span>");
     expect(styles).toContain("white-space: nowrap");
+    expect(styles).toMatch(
+      /\.content h1\s*\{[^}]*align-items:\s*center;[^}]*display:\s*flex;[^}]*flex-direction:\s*column;/s,
+    );
+    expect(styles).toMatch(
+      /\.content h1 span\s*\{[^}]*margin-inline:\s*auto;[^}]*text-align:\s*center;[^}]*width:\s*max-content;/s,
+    );
     expect(landing).toContain('aria-label="Programmable home"');
     expect(landing).toContain(
       'src="/brand/loop/programmable-loop-mark-header.png"',

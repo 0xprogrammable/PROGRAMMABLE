@@ -126,6 +126,14 @@
   background: #f2eddb;
 }
 
+.basedBidArt {
+  background: #080808;
+}
+
+.basedBidArt .artImage {
+  object-fit: contain;
+}
+
 .artImage {
   display: block;
   height: calc(100% + 4px) !important;

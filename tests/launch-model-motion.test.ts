@@ -16,6 +16,7 @@ describe("launch model artwork", () => {
       'src="/brand/loop/programmable-loop-mark-transparent-v1.png"',
     );
     expect(source).toContain('src="/brand/create/aeon-framework-v1.webp"');
+    expect(source).toContain('src="/brand/create/basedbid-v1.png"');
   });
 
   it("keeps model images stable on hover", () => {
@@ -55,6 +56,13 @@ describe("launch model artwork", () => {
     );
     expect(source).toContain(
       'aria-describedby="launch-model-aeon-description"',
+    );
+    expect(source).toContain('href="https://x.com/basedbidx"');
+    expect(source).toContain(
+      'aria-labelledby="launch-model-basedbid-title"',
+    );
+    expect(source).toContain(
+      'aria-describedby="launch-model-basedbid-description"',
     );
     expect(source).toMatch(
       /\$\{launchExperience\.modelArt\}[\s\S]{0,250}aria-hidden="true"[\s\S]{0,300}src="\/brand\/create\/classic-botanical-v4\.webp"[\s\S]{0,120}alt=""/,
