@@ -24,6 +24,8 @@ type RefreshClientV1 = Readonly<{
 export class LaunchAuthorityRefreshCancelledErrorV1 extends Error {}
 export class LaunchAuthorityRefreshBindingErrorV1 extends Error {}
 export class LaunchAuthorityRefreshFailedErrorV1 extends Error {}
+export class LaunchAuthorityRefreshTimeoutErrorV1
+  extends LaunchAuthorityRefreshFailedErrorV1 {}
 
 export class LaunchAuthorityRefreshSingleFlightV1 {
   readonly #active = new Map<string, Promise<PrincipalLaunchAuthorityRefreshViewV1>>();
@@ -203,7 +205,9 @@ export async function pollPrincipalLaunchAuthorityRefreshV1(input: Readonly<{
     }
     await wait(delayMs);
   }
-  throw new Error("Final source verification is still running. Try again shortly");
+  throw new LaunchAuthorityRefreshTimeoutErrorV1(
+    "Final source verification is still running. Try again shortly",
+  );
 }
 
 export function assertLaunchAuthorityRefreshBindingV1(

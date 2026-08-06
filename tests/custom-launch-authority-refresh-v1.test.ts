@@ -4,6 +4,7 @@ import {
   LaunchAuthorityRefreshBindingErrorV1,
   LaunchAuthorityRefreshFailedErrorV1,
   LaunchAuthorityRefreshSingleFlightV1,
+  LaunchAuthorityRefreshTimeoutErrorV1,
   launchAuthorityNeedsRefreshV1,
   launchAuthorityObservationMatchesSetupV1,
   launchAuthorityRefreshIdempotencyKeyV1,
@@ -149,6 +150,30 @@ describe("principal launch authority refresh", () => {
       delay: async () => {},
       now: () => Date.parse("2026-08-05T12:01:00.000Z"),
     })).rejects.toBeInstanceOf(LaunchAuthorityRefreshBindingErrorV1);
+  });
+
+  it("marks a bounded pending timeout as a retryable generation failure", async () => {
+    const timeout = await pollPrincipalLaunchAuthorityRefreshV1({
+      client: { launchAuthorityRefresh: async () => refresh("pending") },
+      application: application(),
+      idempotencyKey: "launch-authority-refresh-request-5",
+      isActive: () => true,
+      attempts: 2,
+      delay: async () => {},
+    }).catch((caught: unknown) => caught);
+    expect(timeout).toBeInstanceOf(LaunchAuthorityRefreshTimeoutErrorV1);
+    expect(timeout).toBeInstanceOf(LaunchAuthorityRefreshFailedErrorV1);
+
+    const currentAttempt = 0;
+    const first = launchAuthorityRefreshIdempotencyKeyV1({
+      application: application(),
+      attempt: currentAttempt,
+    });
+    const retry = launchAuthorityRefreshIdempotencyKeyV1({
+      application: application(),
+      attempt: currentAttempt + 1,
+    });
+    expect(retry).not.toBe(first);
   });
 
   it("requires renewal before a challenge when either authority view is near expiry", () => {

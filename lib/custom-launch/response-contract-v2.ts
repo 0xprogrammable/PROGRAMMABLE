@@ -158,7 +158,7 @@ function validateLaunchAuthorityRefreshV1(value: unknown): void {
   ]);
   literal(record.schemaVersion, "programmable.principal-launch-authority-refresh.v1");
   enumValue(record.state, ["pending", "current", "failed"]);
-  refreshRequestId(record.requestId);
+  digest(record.requestId);
   digest(record.requestDigest);
   applicationId(record.applicationId);
   applicationHandle(record.applicationHandle);
@@ -169,7 +169,8 @@ function validateLaunchAuthorityRefreshV1(value: unknown): void {
   nullable(record.validUntil, instant);
   const isCurrent = record.state === "current";
   if (
-    (record.observationHash !== null) !== isCurrent
+    record.requestId !== record.requestDigest
+    || (record.observationHash !== null) !== isCurrent
     || (record.validUntil !== null) !== isCurrent
     || (isCurrent && Date.parse(record.validUntil as string) <= requestedAt)
   ) mismatch();
@@ -872,13 +873,6 @@ function applicationId(value: unknown): void {
 
 function applicationHandle(value: unknown): void {
   regexString(value, APPLICATION_HANDLE_V3, 71);
-}
-
-function refreshRequestId(value: unknown): void {
-  if (
-    typeof value !== "string"
-    || (!DIGEST_V2.test(value) && !UUID_V2.test(value))
-  ) mismatch();
 }
 
 function regexString(value: unknown, pattern: RegExp, maximum: number): void {

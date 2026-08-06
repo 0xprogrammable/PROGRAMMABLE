@@ -310,6 +310,36 @@ describe("custom launch client response contracts", () => {
       { schemaVersion: "programmable.principal-launch-authority-refresh-request.v1" },
       "launch-authority-refresh-request-1",
     ));
+
+    const uuidRequestId = {
+      ...launchAuthorityRefresh("current"),
+      requestId: "123e4567-e89b-42d3-a456-426614174099",
+    };
+    await expectContractMismatch(clientFor(uuidRequestId).launchAuthorityRefresh(
+      APPLICATION_HANDLE,
+      { schemaVersion: "programmable.principal-launch-authority-refresh-request.v1" },
+      "launch-authority-refresh-request-1",
+    ));
+
+    const mismatchedRequestDigest = {
+      ...launchAuthorityRefresh("current"),
+      requestDigest: DIGEST("9"),
+    };
+    await expectContractMismatch(clientFor(mismatchedRequestDigest).launchAuthorityRefresh(
+      APPLICATION_HANDLE,
+      { schemaVersion: "programmable.principal-launch-authority-refresh-request.v1" },
+      "launch-authority-refresh-request-1",
+    ));
+
+    const nonCanonicalApplicationId = {
+      ...launchAuthorityRefresh("current"),
+      applicationId: "Application-1",
+    };
+    await expectContractMismatch(clientFor(nonCanonicalApplicationId).launchAuthorityRefresh(
+      APPLICATION_HANDLE,
+      { schemaVersion: "programmable.principal-launch-authority-refresh-request.v1" },
+      "launch-authority-refresh-request-1",
+    ));
   });
 
   it("rejects malformed public error envelopes", async () => {

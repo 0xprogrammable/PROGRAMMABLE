@@ -497,7 +497,7 @@ export interface PrincipalLaunchAuthorityRefreshRequestV1 {
 export interface PrincipalLaunchAuthorityRefreshViewV1 {
   readonly schemaVersion: "programmable.principal-launch-authority-refresh.v1";
   readonly state: "pending" | "current" | "failed";
-  readonly requestId: string;
+  readonly requestId: Sha256DigestV2;
   readonly requestDigest: Sha256DigestV2;
   readonly applicationId: string;
   readonly applicationHandle: ApplicationHandleV3;
