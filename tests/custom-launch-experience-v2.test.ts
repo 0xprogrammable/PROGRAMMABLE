@@ -1069,6 +1069,7 @@ describe("custom launch browser authority", () => {
       applicationId: "application-1",
       grantId: "123e4567-e89b-42d3-a456-426614174002",
       grantBindingHash: digest("1"),
+      permitId: digest("2"),
       executionReservationId: "123e4567-e89b-42d3-a456-426614174003",
       chainId: "1",
       launchRouteId: "canonical-create2-graph-v1",
@@ -1119,6 +1120,10 @@ describe("custom launch browser authority", () => {
       finalizedAt: "2026-08-05T12:01:00.000Z",
     };
     expect(() => assertLaunchExecutionStatusBinding(finalized, expected)).not.toThrow();
+    expect(() => assertLaunchExecutionStatusBinding({
+      ...finalized,
+      permitId: digest("8"),
+    }, expected)).toThrow("different approved identity");
     expect(() => assertLaunchExecutionStatusBinding({
       ...finalized,
       chainId: "8453",
@@ -1329,6 +1334,7 @@ describe("custom launch browser authority", () => {
       grantId: "123e4567-e89b-42d3-a456-426614174002",
       grantBindingHash: digest("1"),
       sessionId: "123e4567-e89b-42d3-a456-426614174001",
+      permitId: digest("2"),
       chainId: "1",
       executionReservationId: "123e4567-e89b-42d3-a456-426614174003",
       browserWalletActionHash: digest("6"),
@@ -1340,6 +1346,7 @@ describe("custom launch browser authority", () => {
       stage: "broadcast",
       applicationHandle: APPLICATION_HANDLE,
       githubPrincipalHash: GITHUB_PRINCIPAL_HASH,
+      permitId: digest("2"),
       chainId: "1",
       reportIdempotencyKey: "transaction-report-stable",
     });
@@ -1375,6 +1382,7 @@ describe("custom launch browser authority", () => {
       grantId: "123e4567-e89b-42d3-a456-426614174002",
       grantBindingHash: digest("1"),
       sessionId: "123e4567-e89b-42d3-a456-426614174001",
+      permitId: digest("2"),
       chainId: "1",
       executionReservationId: "123e4567-e89b-42d3-a456-426614174003",
       browserWalletActionHash: digest("6"),
@@ -1401,6 +1409,7 @@ describe("custom launch browser authority", () => {
       grantId: "123e4567-e89b-42d3-a456-426614174002",
       grantBindingHash: digest("1"),
       sessionId: "123e4567-e89b-42d3-a456-426614174001",
+      permitId: digest("2"),
       chainId: "1",
       executionReservationId: "123e4567-e89b-42d3-a456-426614174003",
       browserWalletActionHash: digest("6"),
@@ -1418,6 +1427,9 @@ describe("custom launch browser authority", () => {
       githubPrincipalHash: digest("e"),
       extraAuthority: true,
     }))).toBeNull();
+    const recoveryWithoutPermit = { ...base } as Record<string, unknown>;
+    delete recoveryWithoutPermit.permitId;
+    expect(parsePersistedLaunchRecoveryV2(JSON.stringify(recoveryWithoutPermit))).toBeNull();
     const legacy = { ...base } as Record<string, unknown>;
     delete legacy.applicationHandle;
     delete legacy.githubPrincipalHash;

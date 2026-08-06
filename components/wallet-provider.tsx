@@ -333,6 +333,33 @@ function isEthereumAddress(address: string): address is `0x${string}` {
   return /^0x[a-fA-F0-9]{40}$/.test(address);
 }
 
+export async function assertExternalWalletAuthorityCurrent(input: Readonly<{
+  expectedAccount: `0x${string}`;
+  expectedChainId: string;
+  networkName: string;
+  request: (method: "eth_chainId" | "eth_accounts") => Promise<unknown>;
+}>): Promise<void> {
+  const providerChainId = await input.request("eth_chainId");
+  if (
+    typeof providerChainId !== "string"
+    || normalizeChainId(providerChainId) !== normalizeChainId(input.expectedChainId)
+  ) {
+    throw new Error(`The wallet is not connected to ${input.networkName}`);
+  }
+
+  const providerAccounts = await input.request("eth_accounts");
+  const activeAccount = Array.isArray(providerAccounts)
+    ? providerAccounts[0]
+    : undefined;
+  if (
+    typeof activeAccount !== "string"
+    || !isEthereumAddress(activeAccount)
+    || activeAccount.toLowerCase() !== input.expectedAccount.toLowerCase()
+  ) {
+    throw new Error("The active wallet account changed. Review the launch and try again");
+  }
+}
+
 function decodeBase64Url(value: string): Uint8Array {
   if (!/^[A-Za-z0-9_-]+$/.test(value)) {
     throw new Error("The launch authorization message is invalid");
@@ -841,6 +868,12 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
         )).signature;
       } else {
         const provider = await connectedWallet.getEthereumProvider();
+        await assertExternalWalletAuthorityCurrent({
+          expectedAccount: wallet.account,
+          expectedChainId: appChainHex,
+          networkName: appNetworkName,
+          request: (method) => provider.request({ method }),
+        });
         signature = await provider.request({
           method: "personal_sign",
           params: [bytesToHex(messageBytes), wallet.account],
@@ -898,6 +931,12 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
         return parseSubmittedTransactionHash(result.hash);
       }
       const provider = await connectedWallet.getEthereumProvider();
+      await assertExternalWalletAuthorityCurrent({
+        expectedAccount: wallet.account,
+        expectedChainId: appChainHex,
+        networkName: appNetworkName,
+        request: (method) => provider.request({ method }),
+      });
       const hash = await provider.request({
         method: "eth_sendTransaction",
         params: [{

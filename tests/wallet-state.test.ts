@@ -1,7 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import * as walletProvider from "../components/wallet-provider";
 
 type WalletProviderContract = {
+  assertExternalWalletAuthorityCurrent: (input: Readonly<{
+    expectedAccount: `0x${string}`;
+    expectedChainId: string;
+    networkName: string;
+    request: (method: "eth_chainId" | "eth_accounts") => Promise<unknown>;
+  }>) => Promise<void>;
   getWalletSessionAction: (
     ready: boolean,
     authenticated: boolean,
@@ -50,6 +56,42 @@ type WalletProviderContract = {
 const subject = walletProvider as unknown as WalletProviderContract;
 
 describe("wallet recovery state", () => {
+  it("fails closed when an external provider mutates chain before a wallet action", async () => {
+    const request = vi.fn(async (method: "eth_chainId" | "eth_accounts") =>
+      method === "eth_chainId"
+        ? "0xaa36a7"
+        : [`0x${"a".repeat(40)}`]
+    );
+
+    await expect(subject.assertExternalWalletAuthorityCurrent({
+      expectedAccount: `0x${"a".repeat(40)}`,
+      expectedChainId: "0x1",
+      networkName: "Ethereum",
+      request,
+    })).rejects.toThrow("not connected to Ethereum");
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request).toHaveBeenCalledWith("eth_chainId");
+  });
+
+  it("fails closed when an external provider mutates account before a wallet action", async () => {
+    const request = vi.fn(async (method: "eth_chainId" | "eth_accounts") =>
+      method === "eth_chainId"
+        ? "0x1"
+        : [`0x${"b".repeat(40)}`]
+    );
+
+    await expect(subject.assertExternalWalletAuthorityCurrent({
+      expectedAccount: `0x${"a".repeat(40)}`,
+      expectedChainId: "0x1",
+      networkName: "Ethereum",
+      request,
+    })).rejects.toThrow("active wallet account changed");
+    expect(request.mock.calls.map(([method]) => method)).toEqual([
+      "eth_chainId",
+      "eth_accounts",
+    ]);
+  });
+
   it("does not treat a detected browser wallet as an authenticated app session", () => {
     expect(subject.getWalletSessionAction).toBeTypeOf("function");
     expect(subject.getWalletSessionAction(true, false)).toBe("login");

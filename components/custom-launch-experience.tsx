@@ -170,6 +170,7 @@ type PreparedLaunchRecoveryV2 = Readonly<{
   grantId: string;
   grantBindingHash: `sha256:${string}`;
   sessionId: string;
+  permitId: `sha256:${string}`;
   chainId: string;
   executionReservationId: string;
   browserWalletActionHash: `sha256:${string}`;
@@ -185,6 +186,7 @@ type BroadcastLaunchRecoveryV2 = Readonly<{
   grantId: string;
   grantBindingHash: `sha256:${string}`;
   sessionId: string;
+  permitId: `sha256:${string}`;
   chainId: string;
   executionReservationId: string;
   browserWalletActionHash: `sha256:${string}`;
@@ -1551,6 +1553,7 @@ export function CustomLaunchExperience({
           grantId: recovery.grantId,
           grantBindingHash: recovery.grantBindingHash,
           sessionId: recovery.sessionId,
+          permitId: recovery.permitId,
           executionReservationId: recovery.executionReservationId,
           chainId: recovery.chainId,
           ...(recovery.stage === "broadcast"
@@ -2107,6 +2110,7 @@ export function CustomLaunchExperience({
         grantId: activeDescriptor.grantId,
         grantBindingHash: activeDescriptor.grantBindingHash,
         sessionId: authenticatedSession.sessionId,
+        permitId: permit.permitId,
         chainId: action.chainId,
         executionReservationId: execution.executionReservationId,
         browserWalletActionHash: execution.browserWalletActionHash,
@@ -2137,6 +2141,7 @@ export function CustomLaunchExperience({
         grantId: activeDescriptor.grantId,
         grantBindingHash: activeDescriptor.grantBindingHash,
         sessionId: authenticatedSession.sessionId,
+        permitId: permit.permitId,
         chainId: action.chainId,
         executionReservationId: execution.executionReservationId,
         browserWalletActionHash: execution.browserWalletActionHash,
@@ -2168,6 +2173,7 @@ export function CustomLaunchExperience({
         grantId: activeDescriptor.grantId,
         grantBindingHash: activeDescriptor.grantBindingHash,
         sessionId: authenticatedSession.sessionId,
+        permitId: permit.permitId,
         executionReservationId: execution.executionReservationId,
         chainId: action.chainId,
         launchRouteId: route.launchRouteId,
@@ -2639,6 +2645,7 @@ async function pollLaunchStatus(
     grantId: string;
     grantBindingHash: `sha256:${string}`;
     sessionId: string;
+    permitId: `sha256:${string}`;
     executionReservationId: string;
     chainId?: string;
     launchRouteId?: string;
@@ -2681,6 +2688,7 @@ export function assertLaunchExecutionStatusBinding(
     applicationId: string;
     grantId: string;
     grantBindingHash: `sha256:${string}`;
+    permitId: `sha256:${string}`;
     executionReservationId?: string;
     chainId?: string;
     launchRouteId?: string;
@@ -2692,6 +2700,7 @@ export function assertLaunchExecutionStatusBinding(
     || status.applicationId !== expected.applicationId
     || status.grantId !== expected.grantId
     || status.grantBindingHash !== expected.grantBindingHash
+    || (status.state !== "not_started" && status.permitId !== expected.permitId)
     || (status.state !== "not_started"
       && expected.executionReservationId !== undefined
       && status.executionReservationId !== expected.executionReservationId)
@@ -2863,6 +2872,7 @@ export function parsePersistedLaunchRecoveryV2(value: string | null): PersistedL
     const grantId = record.grantId;
     const grantBindingHash = record.grantBindingHash;
     const sessionId = record.sessionId;
+    const permitId = record.permitId;
     const chainId = record.chainId;
     const executionReservationId = record.executionReservationId;
     const browserWalletActionHash = record.browserWalletActionHash;
@@ -2872,7 +2882,7 @@ export function parsePersistedLaunchRecoveryV2(value: string | null): PersistedL
     const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
     const commonKeys = [
       "stage", "applicationHandle", "githubPrincipalHash", "grantId",
-      "grantBindingHash", "sessionId", "chainId", "executionReservationId",
+      "grantBindingHash", "sessionId", "permitId", "chainId", "executionReservationId",
       "browserWalletActionHash", "reportIdempotencyKey", "expiresAt",
     ];
     const expectedKeys = stage === "prepared"
@@ -2893,6 +2903,7 @@ export function parsePersistedLaunchRecoveryV2(value: string | null): PersistedL
       || typeof grantId !== "string" || !uuid.test(grantId)
       || typeof grantBindingHash !== "string" || !/^sha256:[0-9a-f]{64}$/u.test(grantBindingHash)
       || typeof sessionId !== "string" || !uuid.test(sessionId)
+      || typeof permitId !== "string" || !/^sha256:[0-9a-f]{64}$/u.test(permitId)
       || typeof chainId !== "string" || !/^[1-9][0-9]{0,19}$/u.test(chainId)
       || typeof executionReservationId !== "string" || !uuid.test(executionReservationId)
       || typeof browserWalletActionHash !== "string" || !/^sha256:[0-9a-f]{64}$/u.test(browserWalletActionHash)
@@ -2905,6 +2916,7 @@ export function parsePersistedLaunchRecoveryV2(value: string | null): PersistedL
       grantId,
       grantBindingHash: grantBindingHash as `sha256:${string}`,
       sessionId,
+      permitId: permitId as `sha256:${string}`,
       chainId,
       executionReservationId,
       browserWalletActionHash: browserWalletActionHash as `sha256:${string}`,
