@@ -1,6 +1,12 @@
 import "server-only";
 
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import {
+  encodeAbiParameters,
+  keccak256,
+  parseAbiParameters,
+  stringToHex,
+} from "viem";
 
 import { invalidInput, validationError } from "./errors";
 
@@ -12,6 +18,36 @@ export const CUSTOM_REGISTRY_PROJECTION_RECORD_SCHEMA_V3 =
   "programmable.custom-launch-projection-record.v3" as const;
 export const CUSTOM_REGISTRY_PRODUCER_ENVELOPE_DOMAIN_V3 =
   "programmable.custom-launch-registry-envelope-digest.v3" as const;
+export const CUSTOM_REGISTRY_REGISTERED_RECORD_COMMITMENT_DOMAIN_V1 =
+  "programmable.custom-registered-record.v1" as const;
+export const CUSTOM_REGISTRY_LAUNCH_IDENTITY_DOMAIN_V1 =
+  "programmable.custom-launch-identity.v1" as const;
+export const CUSTOM_REGISTRY_PUBLIC_FEE_POLICY_BINDING_DOMAIN_V3 =
+  "programmable.custom-launch-public-fee-policy-binding.v3" as const;
+export const CUSTOM_REGISTRY_VERIFIED_REVIEW_EVIDENCE_DOMAIN_V1 =
+  "programmable.custom-launch-verified-review-evidence.v1" as const;
+export const CUSTOM_REGISTRY_FINALITY_POLICY_DOMAIN_V1 =
+  "programmable.custom-launch-finality-policy.v1" as const;
+export const CUSTOM_REGISTRY_STRUCTURED_FIELD_DOMAINS_V1 = Object.freeze({
+  approvalId: "programmable.custom-launch-registry-approval-id.v1",
+  repositoryId: "programmable.custom-launch-registry-repository-id.v1",
+  commitId: "programmable.custom-launch-registry-commit-id.v1",
+  deploymentId: "programmable.custom-launch-registry-deployment-id.v1",
+  runtimeCodeSetHash:
+    "programmable.custom-launch-registry-runtime-code-set.v1",
+  modelId: "programmable.custom-launch-registry-model-id.v1",
+  modelVersion: "programmable.custom-launch-registry-model-version.v1",
+  templateId: "programmable.custom-launch-registry-template-id.v1",
+  templateVersion: "programmable.custom-launch-registry-template-version.v1",
+  partnerId: "programmable.custom-launch-registry-partner-id.v1",
+  builderAttributionHash:
+    "programmable.custom-launch-registry-builder-attribution.v1",
+  originHash: "programmable.custom-launch-registry-origin.v1",
+  capabilitySetHash:
+    "programmable.custom-launch-registry-capability-set.v1",
+  reviewResultId:
+    "programmable.custom-launch-registry-review-result-id.v1",
+} as const);
 export const CUSTOM_REGISTRY_FEED_SCHEMA_V1 =
   "programmable.custom-launch-registry-feed.v1" as const;
 export const CUSTOM_REGISTRY_FEED_SOURCE_V3 =
@@ -19,6 +55,8 @@ export const CUSTOM_REGISTRY_FEED_SOURCE_V3 =
 export const PROGRAMMABLE_CUSTOM_LABEL = "Programmable Custom" as const;
 export const PROGRAMMABLE_FEE_RECIPIENT =
   "0x4957f49620aff3adbbe8195a4f633e49cc93376c" as const;
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
+const ZERO_BYTES32 = `0x${"0".repeat(64)}` as HexBytes32;
 
 export type Sha256Digest = `sha256:${string}`;
 export type HexAddress = `0x${string}`;
@@ -71,8 +109,10 @@ export type CustomRegistryDeploymentV3 = Readonly<{
   startBlock: string;
   status: "active" | "paused" | "retired";
   retiredAtBlock: string | null;
+  authorizedApprovers: readonly HexAddress[];
   authorizedWriters: readonly HexAddress[];
   topics: Readonly<{
+    approvalAuthorized: HexBytes32;
     registered: HexBytes32;
     provenance: HexBytes32;
     review: HexBytes32;
@@ -154,39 +194,76 @@ export type CustomLaunchMarketV3 = Readonly<{
   evidenceHash: Sha256Digest;
 }>;
 
+type CustomLaunchFeePolicyCommonV3 = Readonly<{
+  schemaVersion: "programmable.custom-launch-fee-policy.v3";
+  programmableRecipient: NamespacedEvmIdentityV3;
+  totalFeeBps: number;
+  programmableShareBps: number;
+  partnerShareBps: number;
+  partnerRecipient: NamespacedEvmIdentityV3 | null;
+  chargeMode:
+    | "verified-official-market-path-only"
+    | "template-native-verified-market-path"
+    | "none-no-qualifying-market";
+  basis: string | null;
+  currency: string | null;
+  accrual: string | null;
+  claim: string | null;
+  rounding: string | null;
+  claimRights: Readonly<{
+    programmable: string | null;
+    partner: string | null;
+    independentlyClaimable: boolean;
+    crossPartyClaimingProhibited: boolean;
+    evidenceHash: Sha256Digest;
+  }>;
+  verifiedMarketIds: readonly string[];
+  normalProgrammableTenBpsApplied: boolean;
+  verificationStatus: "verified" | "not_applicable";
+  verificationAuthorityHash: Sha256Digest;
+  verificationEvidenceHash: Sha256Digest;
+  recipientControlEvidenceHash: Sha256Digest;
+  claimIsolationEvidenceHash: Sha256Digest;
+  verifiedAt: string;
+  publicPolicyBindingHash: Sha256Digest;
+}>;
+
 export type CustomLaunchFeePolicyV3 =
-  | Readonly<{
-      kind: "native-custom";
-      chargeMode: "verified-official-market-only";
-      basis: string;
-      currency: string;
-      accrual: string;
-      claim: string;
-      totalBps: 10;
-      partnerShareBps: 0;
+  | (CustomLaunchFeePolicyCommonV3 & Readonly<{
+      mode: "native";
+      totalFeeBps: 10;
       programmableShareBps: 10;
+      partnerShareBps: 0;
       partnerRecipient: null;
-      programmableRecipient: typeof PROGRAMMABLE_FEE_RECIPIENT;
-      normalCustomFeeApplied: true;
+      chargeMode: "verified-official-market-path-only";
+      normalProgrammableTenBpsApplied: true;
       verificationStatus: "verified";
-      evidenceHashes: readonly Sha256Digest[];
-    }>
-  | Readonly<{
-      kind: "partner-template";
-      chargeMode: "template-native";
-      basis: string;
-      currency: string;
-      accrual: string;
-      claim: string;
-      totalBps: 20;
-      partnerShareBps: 15;
+    }>)
+  | (CustomLaunchFeePolicyCommonV3 & Readonly<{
+      mode: "partner-template";
+      totalFeeBps: 20;
       programmableShareBps: 5;
-      partnerRecipient: HexAddress;
-      programmableRecipient: typeof PROGRAMMABLE_FEE_RECIPIENT;
-      normalCustomFeeApplied: false;
+      partnerShareBps: 15;
+      partnerRecipient: NamespacedEvmIdentityV3;
+      chargeMode: "template-native-verified-market-path";
+      normalProgrammableTenBpsApplied: false;
       verificationStatus: "verified";
-      evidenceHashes: readonly Sha256Digest[];
-    }>;
+    }>)
+  | (CustomLaunchFeePolicyCommonV3 & Readonly<{
+      mode: "no-qualifying-market";
+      totalFeeBps: 0;
+      programmableShareBps: 0;
+      partnerShareBps: 0;
+      partnerRecipient: null;
+      chargeMode: "none-no-qualifying-market";
+      basis: null;
+      currency: null;
+      accrual: null;
+      claim: null;
+      rounding: null;
+      normalProgrammableTenBpsApplied: false;
+      verificationStatus: "not_applicable";
+    }>);
 
 export type CustomLaunchSecurityReviewV3 = Readonly<{
   status: "not-reviewed" | "reviewed" | "superseded" | "revoked";
@@ -218,6 +295,88 @@ export type NamespacedEvmIdentityV3 = Readonly<{
   value: HexAddress;
 }>;
 
+export type CustomLaunchRegisteredRecordPreimageV1 = Readonly<{
+  chainId: string;
+  registryGeneration: string;
+  launchId: HexBytes32;
+  projectId: HexBytes32;
+  approvalId: HexBytes32;
+  approvalBindingHash: HexBytes32;
+  repositoryId: HexBytes32;
+  commitId: HexBytes32;
+  sourceCommitment: HexBytes32;
+  buildCommitment: HexBytes32;
+  artifactSetHash: HexBytes32;
+  deploymentConfigurationHash: HexBytes32;
+  deploymentId: HexBytes32;
+  deploymentSetHash: HexBytes32;
+  runtimeCodeSetHash: HexBytes32;
+  primaryContract: HexAddress;
+  primaryRuntimeCodeHash: HexBytes32;
+  launchWallet: HexAddress;
+  modelId: HexBytes32;
+  modelVersion: HexBytes32;
+  templateId: HexBytes32;
+  templateVersion: HexBytes32;
+  partnerId: HexBytes32;
+  builderAttributionHash: HexBytes32;
+  originHash: HexBytes32;
+  assetSetHash: HexBytes32;
+  marketSetHash: HexBytes32;
+  capabilitySetHash: HexBytes32;
+  reviewPolicyHash: HexBytes32;
+  securityReviewHash: HexBytes32;
+  reviewResultId: HexBytes32;
+  reviewDeploymentBindingHash: HexBytes32;
+  feePolicyHash: HexBytes32;
+  finalityPolicyHash: HexBytes32;
+}>;
+
+export type CustomLaunchRegisteredRecordComponentHashesV1 = Readonly<{
+  scopeAndApprovalHash: HexBytes32;
+  sourceAndDeploymentHash: HexBytes32;
+  attributionHash: HexBytes32;
+  reviewHash: HexBytes32;
+  feePolicyHash: HexBytes32;
+  finalityPolicyHash: HexBytes32;
+}>;
+
+export type CustomLaunchOnchainFeeLegV1 = Readonly<{
+  shareBps: number;
+  recipient: HexAddress;
+  currency: HexAddress;
+  chargeModeId: HexBytes32;
+  basisId: HexBytes32;
+  roundingId: HexBytes32;
+  accrualId: HexBytes32;
+  claimId: HexBytes32;
+  claimRightId: HexBytes32;
+  controlEvidenceHash: HexBytes32;
+}>;
+
+export type CustomLaunchOnchainFeePolicyV1 = Readonly<{
+  kind: 0 | 1 | 2;
+  partnerId: HexBytes32;
+  partnerStatusId: HexBytes32;
+  templateId: HexBytes32;
+  templateVersion: HexBytes32;
+  partnerRepositoryId: HexBytes32;
+  partnerCommitId: HexBytes32;
+  partnerRuntimeCodeSetHash: HexBytes32;
+  totalFeeBps: number;
+  nativeCustomFeeBps: number;
+  partner: CustomLaunchOnchainFeeLegV1;
+  programmable: CustomLaunchOnchainFeeLegV1;
+  activationVersion: HexBytes32;
+  activationBlock: string;
+  paused: boolean;
+  retired: boolean;
+  publicPolicyBindingHash: HexBytes32;
+  claimIsolationEvidenceHash: HexBytes32;
+  accountingSafetyEvidenceHash: HexBytes32;
+  verificationEvidenceHash: HexBytes32;
+}>;
+
 export type CustomLaunchRegistryProducerRecordV3 = Readonly<{
   schemaVersion: typeof CUSTOM_REGISTRY_PRODUCER_RECORD_SCHEMA_V3;
   platformId: "programmable";
@@ -230,6 +389,10 @@ export type CustomLaunchRegistryProducerRecordV3 = Readonly<{
   model: JsonValue;
   template: JsonValue;
   partner: JsonValue;
+  registeredRecordPreimage: CustomLaunchRegisteredRecordPreimageV1;
+  registeredRecordComponentHashes: CustomLaunchRegisteredRecordComponentHashesV1;
+  registeredRecordCommitment: HexBytes32;
+  registrationBindingHash: HexBytes32;
   registryOrigin: Readonly<{
     chainId: string;
     caip2: string;
@@ -239,6 +402,7 @@ export type CustomLaunchRegistryProducerRecordV3 = Readonly<{
     registryLaunchIdRaw: HexBytes32;
     launchIdEncoding: "sha256-digest-raw-bytes32";
     registryApprovalBindingHashRaw: HexBytes32;
+    registrationBindingHashRaw: HexBytes32;
     registryEventSetHash: Sha256Digest;
     registrationTransactionHash: HexTransactionHash;
     registrationBlockHash: HexBytes32;
@@ -269,6 +433,7 @@ export type CustomLaunchRegistryProducerRecordV3 = Readonly<{
   }>;
   verifiedReview: JsonValue;
   feePolicy: JsonValue;
+  onchainFeePolicy: CustomLaunchOnchainFeePolicyV1;
   launchingWallet: NamespacedEvmIdentityV3;
   postLaunchAuthorityInventory: JsonValue;
   postLaunchAuthorityInventoryHash: Sha256Digest;
@@ -280,6 +445,7 @@ export type CustomLaunchRegistryProducerRecordV3 = Readonly<{
   marketSetHash: Sha256Digest;
   mechanisms: JsonValue;
   capabilities: JsonValue;
+  finalityPolicy: JsonValue;
   finality: JsonValue;
   lifecycle: JsonValue;
   presentationVersion: JsonValue;
@@ -456,6 +622,30 @@ export type CustomLaunchProjectionRecordV3 = Readonly<{
   }>;
 }>;
 
+export type CustomRegistryApprovalAuthorizationV3 = Readonly<{
+  chainId: string;
+  caip2: string;
+  registryGeneration: string;
+  registryAddress: HexAddress;
+  observedRegistryRuntimeCodeHash: EvmRuntimeCodeHash;
+  registryApprover: HexAddress;
+  topic0: HexBytes32;
+  transactionHash: HexTransactionHash;
+  blockNumber: string;
+  blockHash: HexBytes32;
+  transactionIndex: number;
+  logIndex: number;
+  onchainTimestamp: string;
+  approvalId: HexBytes32;
+  registryLaunchIdRaw: HexBytes32;
+  registryApprovalBindingHashRaw: HexBytes32;
+  registrationBindingHash: HexBytes32;
+  transitionSequence: string;
+  validAfterBlock: string;
+  expiresAtBlock: string;
+  evidenceHash: HexBytes32;
+}>;
+
 export type CustomRegistryEventV3 = Readonly<{
   operation: RegistryOperationV3;
   chainId: string;
@@ -504,12 +694,14 @@ export type CustomRegistryEventV3 = Readonly<{
   finalizedAtTimestamp: string | null;
   reasonCode: HexBytes32 | null;
   evidenceHash: HexBytes32 | null;
+  approvalAuthorization: CustomRegistryApprovalAuthorizationV3 | null;
   producerRecord: CustomLaunchRegistryProducerRecordV3 | null;
   record: Omit<
     CustomLaunchProjectionRecordV3,
     | "origin"
     | "rawProducerRecord"
     | "producerBinding"
+    | "feePolicy"
     | "registryFinality"
     | "lifecycle"
     | "programmableVerified"
@@ -656,6 +848,17 @@ function safeInteger(value: unknown, operation: string): number {
   return value as number;
 }
 
+function uintNumber(value: unknown, bits: 8 | 16, operation: string): number {
+  const parsed = safeInteger(value, operation);
+  if (parsed >= 2 ** bits) return fail(operation);
+  return parsed;
+}
+
+function booleanValue(value: unknown, operation: string): boolean {
+  if (typeof value !== "boolean") return fail(operation);
+  return value;
+}
+
 function instant(value: unknown, operation: string): string {
   const parsed = text(value, operation, 128);
   const date = new Date(parsed);
@@ -738,6 +941,258 @@ export function customRegistryProducerEnvelopeDigestV3(
   >,
 ): Sha256Digest {
   return sha256(CUSTOM_REGISTRY_PRODUCER_ENVELOPE_DOMAIN_V3, recordValue);
+}
+
+const REGISTERED_RECORD_DOMAIN_HASH_V1 = keccak256(
+  stringToHex(CUSTOM_REGISTRY_REGISTERED_RECORD_COMMITMENT_DOMAIN_V1),
+) as HexBytes32;
+const LAUNCH_IDENTITY_DOMAIN_HASH_V1 = keccak256(
+  stringToHex(CUSTOM_REGISTRY_LAUNCH_IDENTITY_DOMAIN_V1),
+) as HexBytes32;
+
+function keccakAbi(
+  parameters: string,
+  values: readonly unknown[],
+): HexBytes32 {
+  return keccak256(
+    encodeAbiParameters(
+      parseAbiParameters(parameters),
+      values as never,
+    ),
+  ) as HexBytes32;
+}
+
+/** Independent mirror of ProgrammableCustomRegistryV1's abi.encode commitment. */
+export function customRegistryRegisteredRecordBindingV1(
+  value: CustomLaunchRegisteredRecordPreimageV1,
+): Readonly<{
+  componentHashes: CustomLaunchRegisteredRecordComponentHashesV1;
+  registeredRecordCommitment: HexBytes32;
+  registrationBindingHash: HexBytes32;
+}> {
+  const scopeAndApprovalHash = keccakAbi(
+    "uint256 chainId, uint64 registryGeneration, bytes32 launchId, bytes32 projectId, bytes32 approvalId, bytes32 approvalBindingHash",
+    [
+      BigInt(value.chainId),
+      BigInt(value.registryGeneration),
+      value.launchId,
+      value.projectId,
+      value.approvalId,
+      value.approvalBindingHash,
+    ],
+  );
+  const sourceAndDeploymentHash = keccakAbi(
+    "bytes32 repositoryId, bytes32 commitId, bytes32 sourceCommitment, bytes32 buildCommitment, bytes32 artifactSetHash, bytes32 deploymentConfigurationHash, bytes32 deploymentId, bytes32 deploymentSetHash, bytes32 runtimeCodeSetHash, address primaryContract, bytes32 primaryRuntimeCodeHash, address launchWallet",
+    [
+      value.repositoryId,
+      value.commitId,
+      value.sourceCommitment,
+      value.buildCommitment,
+      value.artifactSetHash,
+      value.deploymentConfigurationHash,
+      value.deploymentId,
+      value.deploymentSetHash,
+      value.runtimeCodeSetHash,
+      value.primaryContract,
+      value.primaryRuntimeCodeHash,
+      value.launchWallet,
+    ],
+  );
+  const attributionHash = keccakAbi(
+    "bytes32 modelId, bytes32 modelVersion, bytes32 templateId, bytes32 templateVersion, bytes32 partnerId, bytes32 builderAttributionHash, bytes32 originHash, bytes32 assetSetHash, bytes32 marketSetHash, bytes32 capabilitySetHash",
+    [
+      value.modelId,
+      value.modelVersion,
+      value.templateId,
+      value.templateVersion,
+      value.partnerId,
+      value.builderAttributionHash,
+      value.originHash,
+      value.assetSetHash,
+      value.marketSetHash,
+      value.capabilitySetHash,
+    ],
+  );
+  const reviewHash = keccakAbi(
+    "bytes32 reviewPolicyHash, bytes32 securityReviewHash, bytes32 reviewResultId, bytes32 reviewDeploymentBindingHash",
+    [
+      value.reviewPolicyHash,
+      value.securityReviewHash,
+      value.reviewResultId,
+      value.reviewDeploymentBindingHash,
+    ],
+  );
+  const componentHashes = Object.freeze({
+    scopeAndApprovalHash,
+    sourceAndDeploymentHash,
+    attributionHash,
+    reviewHash,
+    feePolicyHash: value.feePolicyHash,
+    finalityPolicyHash: value.finalityPolicyHash,
+  });
+  const registeredRecordCommitment =
+    customRegistryRegisteredRecordCommitmentFromComponentsV1(componentHashes);
+  return Object.freeze({
+    componentHashes,
+    registeredRecordCommitment,
+    registrationBindingHash:
+      customRegistryRegistrationBindingHashV1(registeredRecordCommitment),
+  });
+}
+
+export function customRegistryRegistrationBindingHashV1(
+  registeredRecordCommitment: HexBytes32,
+): HexBytes32 {
+  return keccakAbi(
+    "bytes32 identityDomain, bytes32 registeredRecordCommitment",
+    [LAUNCH_IDENTITY_DOMAIN_HASH_V1, registeredRecordCommitment],
+  );
+}
+
+export function customRegistryRegisteredRecordCommitmentFromComponentsV1(
+  value: CustomLaunchRegisteredRecordComponentHashesV1,
+): HexBytes32 {
+  return keccakAbi(
+    "bytes32 recordDomain, bytes32 scopeAndApprovalHash, bytes32 sourceAndDeploymentHash, bytes32 attributionHash, bytes32 reviewHash, bytes32 feePolicyHash, bytes32 finalityPolicyHash",
+    [
+      REGISTERED_RECORD_DOMAIN_HASH_V1,
+      value.scopeAndApprovalHash,
+      value.sourceAndDeploymentHash,
+      value.attributionHash,
+      value.reviewHash,
+      value.feePolicyHash,
+      value.finalityPolicyHash,
+    ],
+  );
+}
+
+function customRegistryFeeLegHashV1(
+  value: CustomLaunchOnchainFeeLegV1,
+): HexBytes32 {
+  return keccakAbi(
+    "uint16 shareBps, address recipient, address currency, bytes32 chargeModeId, bytes32 basisId, bytes32 roundingId, bytes32 accrualId, bytes32 claimId, bytes32 claimRightId, bytes32 controlEvidenceHash",
+    [
+      value.shareBps,
+      value.recipient,
+      value.currency,
+      value.chargeModeId,
+      value.basisId,
+      value.roundingId,
+      value.accrualId,
+      value.claimId,
+      value.claimRightId,
+      value.controlEvidenceHash,
+    ],
+  );
+}
+
+/** Independent mirror of ProgrammableCustomFeePolicyVerifierLibV1._hash. */
+export function customRegistryOnchainFeePolicyHashV1(
+  value: CustomLaunchOnchainFeePolicyV1,
+): HexBytes32 {
+  const attributionHash = keccakAbi(
+    "uint8 kind, bytes32 partnerId, bytes32 partnerStatusId, bytes32 templateId, bytes32 templateVersion, bytes32 partnerRepositoryId, bytes32 partnerCommitId, bytes32 partnerRuntimeCodeSetHash",
+    [
+      value.kind,
+      value.partnerId,
+      value.partnerStatusId,
+      value.templateId,
+      value.templateVersion,
+      value.partnerRepositoryId,
+      value.partnerCommitId,
+      value.partnerRuntimeCodeSetHash,
+    ],
+  );
+  const economicsHash = keccakAbi(
+    "uint16 totalFeeBps, uint16 nativeCustomFeeBps, bytes32 partnerLegHash, bytes32 programmableLegHash",
+    [
+      value.totalFeeBps,
+      value.nativeCustomFeeBps,
+      customRegistryFeeLegHashV1(value.partner),
+      customRegistryFeeLegHashV1(value.programmable),
+    ],
+  );
+  const lifecycleAndEvidenceHash = keccakAbi(
+    "bytes32 activationVersion, uint64 activationBlock, bool paused, bool retired, bytes32 publicPolicyBindingHash, bytes32 claimIsolationEvidenceHash, bytes32 accountingSafetyEvidenceHash, bytes32 verificationEvidenceHash",
+    [
+      value.activationVersion,
+      BigInt(value.activationBlock),
+      value.paused,
+      value.retired,
+      value.publicPolicyBindingHash,
+      value.claimIsolationEvidenceHash,
+      value.accountingSafetyEvidenceHash,
+      value.verificationEvidenceHash,
+    ],
+  );
+  return keccakAbi(
+    "bytes32 feePolicyDomain, bytes32 attributionHash, bytes32 economicsHash, bytes32 lifecycleAndEvidenceHash",
+    [
+      keccak256(stringToHex("programmable.custom-fee-policy.v1")),
+      attributionHash,
+      economicsHash,
+      lifecycleAndEvidenceHash,
+    ],
+  );
+}
+
+export function customRegistryPublicFeePolicyBindingV3(
+  value: unknown,
+): Sha256Digest {
+  const source = record(value, "custom-registry-public-fee-policy-binding");
+  const {
+    publicPolicyBindingHash: _publicPolicyBindingHash,
+    verifiedAt: _verifiedAt,
+    ...semanticPolicy
+  } = source;
+  void _publicPolicyBindingHash;
+  void _verifiedAt;
+  return sha256(
+    CUSTOM_REGISTRY_PUBLIC_FEE_POLICY_BINDING_DOMAIN_V3,
+    semanticPolicy,
+  );
+}
+
+export function customRegistryVerifiedReviewEvidenceHashV1(
+  value: unknown,
+): Sha256Digest {
+  const source = record(value, "custom-registry-verified-review-evidence");
+  const {
+    reviewEvidenceHash: _reviewEvidenceHash,
+    status: _status,
+    supersededBy: _supersededBy,
+    revokedAt: _revokedAt,
+    revocationEvidenceHash: _revocationEvidenceHash,
+    ...immutableReview
+  } = source;
+  void _reviewEvidenceHash;
+  void _status;
+  void _supersededBy;
+  void _revokedAt;
+  void _revocationEvidenceHash;
+  return sha256(
+    CUSTOM_REGISTRY_VERIFIED_REVIEW_EVIDENCE_DOMAIN_V1,
+    immutableReview,
+  );
+}
+
+export function customRegistryStructuredFieldV1(
+  field: keyof typeof CUSTOM_REGISTRY_STRUCTURED_FIELD_DOMAINS_V1,
+  publicValue: unknown,
+): HexBytes32 {
+  assertJsonValue(publicValue, `custom-registry-structured-${field}`);
+  return digestRawBytes32(
+    sha256(CUSTOM_REGISTRY_STRUCTURED_FIELD_DOMAINS_V1[field], publicValue),
+  );
+}
+
+export function customRegistryFinalityPolicyHashV1(
+  value: unknown,
+): HexBytes32 {
+  assertJsonValue(value, "custom-registry-finality-policy-hash");
+  return digestRawBytes32(
+    sha256(CUSTOM_REGISTRY_FINALITY_POLICY_DOMAIN_V1, value),
+  );
 }
 
 export function customRegistryProjectionDigestV3(
@@ -857,6 +1312,10 @@ export function parseCustomRegistryDeploymentManifestV3(
           }
           const topicsSource = record(deployment.topics, "custom-registry-topics");
           const topics = Object.freeze({
+            approvalAuthorized: bytes32(
+              topicsSource.approvalAuthorized,
+              "custom-registry-approval-authorized-topic",
+            ),
             registered: bytes32(
               topicsSource.registered,
               "custom-registry-registered-topic",
@@ -894,9 +1353,15 @@ export function parseCustomRegistryDeploymentManifestV3(
               "custom-registry-revoked-topic",
             ),
           });
-          if (new Set(Object.values(topics)).size !== 9) {
+          if (new Set(Object.values(topics)).size !== 10) {
             return fail("custom-registry-topic-collision");
           }
+          const authorizedApprovers = array(
+            deployment.authorizedApprovers,
+            "custom-registry-authorized-approvers",
+          ).map((approver) =>
+            address(approver, "custom-registry-authorized-approver"),
+          );
           const authorizedWriters = array(
             deployment.authorizedWriters,
             "custom-registry-authorized-writers",
@@ -904,6 +1369,8 @@ export function parseCustomRegistryDeploymentManifestV3(
             address(writer, "custom-registry-authorized-writer"),
           );
           if (
+            authorizedApprovers.length === 0 ||
+            new Set(authorizedApprovers).size !== authorizedApprovers.length ||
             authorizedWriters.length === 0 ||
             new Set(authorizedWriters).size !== authorizedWriters.length
           ) {
@@ -919,6 +1386,7 @@ export function parseCustomRegistryDeploymentManifestV3(
             startBlock,
             status: deployment.status as CustomRegistryDeploymentV3["status"],
             retiredAtBlock,
+            authorizedApprovers: Object.freeze(authorizedApprovers),
             authorizedWriters: Object.freeze(authorizedWriters),
             topics,
           });
@@ -960,6 +1428,7 @@ export function officialCustomRegistryAllowlistV3(
   address: HexAddress;
   runtimeCodeHash: HexBytes32;
   startBlock: string;
+  authorizedApprovers: readonly HexAddress[];
   authorizedWriters: readonly HexAddress[];
   topics: CustomRegistryDeploymentV3["topics"];
 }>[] {
@@ -973,6 +1442,7 @@ export function officialCustomRegistryAllowlistV3(
           address: deployment.address,
           runtimeCodeHash: deployment.runtimeCodeHash,
           startBlock: deployment.startBlock,
+          authorizedApprovers: deployment.authorizedApprovers,
           authorizedWriters: deployment.authorizedWriters,
           topics: deployment.topics,
         }),
@@ -983,79 +1453,739 @@ export function officialCustomRegistryAllowlistV3(
 
 function validateFeePolicy(
   feeValue: unknown,
-  partnerValue: CustomLaunchProjectionRecordV3["partner"],
+  expectedPartnerRecipient: HexAddress | null,
+  marketEvidence: Readonly<{
+    hasDiscoverableMarkets: boolean;
+    verifiedMarketIds: ReadonlySet<string>;
+  }>,
 ): CustomLaunchFeePolicyV3 {
   const fee = record(feeValue, "custom-registry-fee");
-  const evidenceHashes = array(
-    fee.evidenceHashes,
-    "custom-registry-fee-evidence",
-  ).map((value) => digest(value, "custom-registry-fee-evidence-hash"));
-  if (evidenceHashes.length === 0 || fee.verificationStatus !== "verified") {
-    return fail("custom-registry-fee-unverified");
-  }
-  const programmableRecipient = address(
+  const programmableIdentity = record(
     fee.programmableRecipient,
     "custom-registry-programmable-recipient",
   );
+  if (programmableIdentity.namespace !== "eip155-address") {
+    return fail("custom-registry-programmable-recipient-namespace");
+  }
+  const programmableRecipient = address(
+    programmableIdentity.value,
+    "custom-registry-programmable-recipient",
+  );
+  const partnerIdentity = fee.partnerRecipient === null
+    ? null
+    : record(fee.partnerRecipient, "custom-registry-partner-recipient");
+  const partnerRecipient = partnerIdentity === null
+    ? null
+    : partnerIdentity.namespace === "eip155-address"
+      ? address(partnerIdentity.value, "custom-registry-partner-recipient")
+      : fail("custom-registry-partner-recipient-namespace");
+  const claimRights = record(
+    fee.claimRights,
+    "custom-registry-fee-claim-rights",
+  );
+  const verifiedMarketIds = array(
+    fee.verifiedMarketIds,
+    "custom-registry-fee-market-ids",
+  ).map((value) => safeId(value, "custom-registry-fee-market-id"));
+  if (new Set(verifiedMarketIds).size !== verifiedMarketIds.length) {
+    return fail("custom-registry-fee-market-ids-duplicate");
+  }
+  if (
+    verifiedMarketIds.some(
+      (marketId) => !marketEvidence.verifiedMarketIds.has(marketId),
+    )
+  ) {
+    return fail("custom-registry-fee-market-not-verified");
+  }
+  for (const field of [
+    "verificationAuthorityHash",
+    "verificationEvidenceHash",
+    "recipientControlEvidenceHash",
+    "claimIsolationEvidenceHash",
+  ] as const) {
+    digest(fee[field], `custom-registry-fee-${field}`);
+  }
+  const publicPolicyBindingHash = digest(
+    fee.publicPolicyBindingHash,
+    "custom-registry-fee-public-policy-binding",
+  );
+  if (
+    publicPolicyBindingHash !== customRegistryPublicFeePolicyBindingV3(fee)
+  ) {
+    return fail("custom-registry-fee-public-policy-binding");
+  }
+  digest(claimRights.evidenceHash, "custom-registry-fee-claim-right-evidence");
+  instant(fee.verifiedAt, "custom-registry-fee-verified-at");
+  const optionalSemantic = (value: unknown, operation: string): string | null =>
+    value === null ? null : text(value, operation, 2_048);
   const common = {
-    basis: text(fee.basis, "custom-registry-fee-basis", 512),
-    currency: text(fee.currency, "custom-registry-fee-currency", 512),
-    accrual: text(fee.accrual, "custom-registry-fee-accrual", 2_048),
-    claim: text(fee.claim, "custom-registry-fee-claim", 2_048),
-    evidenceHashes: Object.freeze(evidenceHashes),
+    schemaVersion: "programmable.custom-launch-fee-policy.v3" as const,
+    programmableRecipient: Object.freeze({
+      namespace: "eip155-address" as const,
+      value: programmableRecipient,
+    }),
+    basis: optionalSemantic(fee.basis, "custom-registry-fee-basis"),
+    currency: optionalSemantic(fee.currency, "custom-registry-fee-currency"),
+    accrual: optionalSemantic(fee.accrual, "custom-registry-fee-accrual"),
+    claim: optionalSemantic(fee.claim, "custom-registry-fee-claim"),
+    rounding: optionalSemantic(fee.rounding, "custom-registry-fee-rounding"),
+    claimRights: Object.freeze({
+      programmable: optionalSemantic(
+        claimRights.programmable,
+        "custom-registry-programmable-claim-right",
+      ),
+      partner: optionalSemantic(
+        claimRights.partner,
+        "custom-registry-partner-claim-right",
+      ),
+      independentlyClaimable: booleanValue(
+        claimRights.independentlyClaimable,
+        "custom-registry-fee-independent-claim",
+      ),
+      crossPartyClaimingProhibited: booleanValue(
+        claimRights.crossPartyClaimingProhibited,
+        "custom-registry-fee-cross-party-claim",
+      ),
+      evidenceHash: digest(
+        claimRights.evidenceHash,
+        "custom-registry-fee-claim-right-evidence",
+      ),
+    }),
+    verifiedMarketIds: Object.freeze(verifiedMarketIds),
+    verificationAuthorityHash: digest(
+      fee.verificationAuthorityHash,
+      "custom-registry-fee-verification-authority",
+    ),
+    verificationEvidenceHash: digest(
+      fee.verificationEvidenceHash,
+      "custom-registry-fee-verification-evidence",
+    ),
+    recipientControlEvidenceHash: digest(
+      fee.recipientControlEvidenceHash,
+      "custom-registry-fee-recipient-control",
+    ),
+    claimIsolationEvidenceHash: digest(
+      fee.claimIsolationEvidenceHash,
+      "custom-registry-fee-claim-isolation",
+    ),
+    verifiedAt: instant(fee.verifiedAt, "custom-registry-fee-verified-at"),
+    publicPolicyBindingHash,
   };
-  if (programmableRecipient !== PROGRAMMABLE_FEE_RECIPIENT) {
+  if (
+    fee.schemaVersion !== "programmable.custom-launch-fee-policy.v3" ||
+    programmableRecipient !== PROGRAMMABLE_FEE_RECIPIENT
+  ) {
     return fail("custom-registry-programmable-recipient");
   }
-  if (partnerValue === null) {
+  if (fee.mode === "native") {
     if (
-      fee.kind !== "native-custom" ||
-      fee.chargeMode !== "verified-official-market-only" ||
-      fee.totalBps !== 10 ||
+      expectedPartnerRecipient !== null ||
+      partnerRecipient !== null ||
+      fee.chargeMode !== "verified-official-market-path-only" ||
+      fee.totalFeeBps !== 10 ||
       fee.partnerShareBps !== 0 ||
       fee.programmableShareBps !== 10 ||
-      fee.partnerRecipient !== null ||
-      fee.normalCustomFeeApplied !== true
+      fee.normalProgrammableTenBpsApplied !== true ||
+      fee.verificationStatus !== "verified" ||
+      !marketEvidence.hasDiscoverableMarkets ||
+      verifiedMarketIds.length === 0 ||
+      common.basis === null ||
+      common.currency === null ||
+      common.accrual === null ||
+      common.claim === null ||
+      common.rounding === null ||
+      common.claimRights.programmable === null ||
+      common.claimRights.partner !== null ||
+      common.claimRights.independentlyClaimable !== false ||
+      common.claimRights.crossPartyClaimingProhibited !== true
     ) {
       return fail("custom-registry-native-fee");
     }
     return Object.freeze({
-      kind: "native-custom",
-      chargeMode: "verified-official-market-only",
+      mode: "native",
+      chargeMode: "verified-official-market-path-only",
       ...common,
-      totalBps: 10,
+      totalFeeBps: 10,
       partnerShareBps: 0,
       programmableShareBps: 10,
       partnerRecipient: null,
-      programmableRecipient: PROGRAMMABLE_FEE_RECIPIENT,
-      normalCustomFeeApplied: true,
+      normalProgrammableTenBpsApplied: true,
+      verificationStatus: "verified",
+    });
+  }
+  if (fee.mode === "partner-template") {
+    if (
+      expectedPartnerRecipient === null ||
+      partnerRecipient !== expectedPartnerRecipient ||
+      fee.chargeMode !== "template-native-verified-market-path" ||
+      fee.totalFeeBps !== 20 ||
+      fee.partnerShareBps !== 15 ||
+      fee.programmableShareBps !== 5 ||
+      fee.normalProgrammableTenBpsApplied !== false ||
+      fee.verificationStatus !== "verified" ||
+      !marketEvidence.hasDiscoverableMarkets ||
+      verifiedMarketIds.length === 0 ||
+      common.basis === null ||
+      common.currency === null ||
+      common.accrual === null ||
+      common.claim === null ||
+      common.rounding === null ||
+      common.claimRights.programmable === null ||
+      common.claimRights.partner === null ||
+      common.claimRights.independentlyClaimable !== true ||
+      common.claimRights.crossPartyClaimingProhibited !== true
+    ) {
+      return fail("custom-registry-partner-fee");
+    }
+    return Object.freeze({
+      mode: "partner-template",
+      chargeMode: "template-native-verified-market-path",
+      ...common,
+      totalFeeBps: 20,
+      partnerShareBps: 15,
+      programmableShareBps: 5,
+      partnerRecipient: Object.freeze({
+        namespace: "eip155-address" as const,
+        value: partnerRecipient,
+      }),
+      normalProgrammableTenBpsApplied: false,
       verificationStatus: "verified",
     });
   }
   if (
-    fee.kind !== "partner-template" ||
-    fee.chargeMode !== "template-native" ||
-    fee.totalBps !== 20 ||
-    fee.partnerShareBps !== 15 ||
-    fee.programmableShareBps !== 5 ||
-    fee.normalCustomFeeApplied !== false ||
-    address(fee.partnerRecipient, "custom-registry-partner-recipient") !==
-      partnerValue.recipient
+    fee.mode !== "no-qualifying-market" ||
+    partnerRecipient !== null ||
+    fee.chargeMode !== "none-no-qualifying-market" ||
+    fee.totalFeeBps !== 0 ||
+    fee.partnerShareBps !== 0 ||
+    fee.programmableShareBps !== 0 ||
+    fee.normalProgrammableTenBpsApplied !== false ||
+    fee.verificationStatus !== "not_applicable" ||
+    marketEvidence.hasDiscoverableMarkets ||
+    verifiedMarketIds.length !== 0 ||
+    common.basis !== null ||
+    common.currency !== null ||
+    common.accrual !== null ||
+    common.claim !== null ||
+    common.rounding !== null ||
+    common.claimRights.programmable !== null ||
+    common.claimRights.partner !== null ||
+    common.claimRights.independentlyClaimable !== false ||
+    common.claimRights.crossPartyClaimingProhibited !== true
   ) {
-    return fail("custom-registry-partner-fee");
+    return fail("custom-registry-no-market-fee");
   }
   return Object.freeze({
-    kind: "partner-template",
-    chargeMode: "template-native",
+    mode: "no-qualifying-market",
+    chargeMode: "none-no-qualifying-market",
     ...common,
-    totalBps: 20,
-    partnerShareBps: 15,
-    programmableShareBps: 5,
-    partnerRecipient: partnerValue.recipient,
-    programmableRecipient: PROGRAMMABLE_FEE_RECIPIENT,
-    normalCustomFeeApplied: false,
-    verificationStatus: "verified",
+    totalFeeBps: 0,
+    partnerShareBps: 0,
+    programmableShareBps: 0,
+    partnerRecipient: null,
+    basis: null,
+    currency: null,
+    accrual: null,
+    claim: null,
+    rounding: null,
+    normalProgrammableTenBpsApplied: false,
+    verificationStatus: "not_applicable",
   });
+}
+
+function validateRegisteredRecordPreimage(
+  value: unknown,
+  event: CustomRegistryEventV3,
+): Readonly<{
+  preimage: CustomLaunchRegisteredRecordPreimageV1;
+  binding: ReturnType<typeof customRegistryRegisteredRecordBindingV1>;
+}> {
+  const source = record(value, "custom-registry-registered-record-preimage");
+  const preimage = {
+    chainId: decimal(source.chainId, "custom-registry-record-preimage-chain", true),
+    registryGeneration: decimal(
+      source.registryGeneration,
+      "custom-registry-record-preimage-generation",
+      true,
+    ),
+    launchId: bytes32(source.launchId, "custom-registry-record-preimage-launch"),
+    projectId: bytes32(source.projectId, "custom-registry-record-preimage-project"),
+    approvalId: bytes32(source.approvalId, "custom-registry-record-preimage-approval"),
+    approvalBindingHash: bytes32(
+      source.approvalBindingHash,
+      "custom-registry-record-preimage-approval-binding",
+    ),
+    repositoryId: bytes32(source.repositoryId, "custom-registry-record-preimage-repository"),
+    commitId: bytes32(source.commitId, "custom-registry-record-preimage-commit"),
+    sourceCommitment: bytes32(
+      source.sourceCommitment,
+      "custom-registry-record-preimage-source",
+    ),
+    buildCommitment: bytes32(
+      source.buildCommitment,
+      "custom-registry-record-preimage-build",
+    ),
+    artifactSetHash: bytes32(
+      source.artifactSetHash,
+      "custom-registry-record-preimage-artifacts",
+    ),
+    deploymentConfigurationHash: bytes32(
+      source.deploymentConfigurationHash,
+      "custom-registry-record-preimage-configuration",
+    ),
+    deploymentId: bytes32(source.deploymentId, "custom-registry-record-preimage-deployment"),
+    deploymentSetHash: bytes32(
+      source.deploymentSetHash,
+      "custom-registry-record-preimage-deployment-set",
+    ),
+    runtimeCodeSetHash: bytes32(
+      source.runtimeCodeSetHash,
+      "custom-registry-record-preimage-runtime-set",
+    ),
+    primaryContract: address(
+      source.primaryContract,
+      "custom-registry-record-preimage-primary-contract",
+    ),
+    primaryRuntimeCodeHash: bytes32(
+      source.primaryRuntimeCodeHash,
+      "custom-registry-record-preimage-primary-runtime",
+    ),
+    launchWallet: address(
+      source.launchWallet,
+      "custom-registry-record-preimage-launch-wallet",
+    ),
+    modelId: bytes32(source.modelId, "custom-registry-record-preimage-model"),
+    modelVersion: bytes32(
+      source.modelVersion,
+      "custom-registry-record-preimage-model-version",
+    ),
+    templateId: bytes32(source.templateId, "custom-registry-record-preimage-template"),
+    templateVersion: bytes32(
+      source.templateVersion,
+      "custom-registry-record-preimage-template-version",
+    ),
+    partnerId: bytes32(source.partnerId, "custom-registry-record-preimage-partner"),
+    builderAttributionHash: bytes32(
+      source.builderAttributionHash,
+      "custom-registry-record-preimage-builder",
+    ),
+    originHash: bytes32(source.originHash, "custom-registry-record-preimage-origin"),
+    assetSetHash: bytes32(source.assetSetHash, "custom-registry-record-preimage-assets"),
+    marketSetHash: bytes32(source.marketSetHash, "custom-registry-record-preimage-markets"),
+    capabilitySetHash: bytes32(
+      source.capabilitySetHash,
+      "custom-registry-record-preimage-capabilities",
+    ),
+    reviewPolicyHash: bytes32(
+      source.reviewPolicyHash,
+      "custom-registry-record-preimage-review-policy",
+    ),
+    securityReviewHash: bytes32(
+      source.securityReviewHash,
+      "custom-registry-record-preimage-security-review",
+    ),
+    reviewResultId: bytes32(
+      source.reviewResultId,
+      "custom-registry-record-preimage-review-result",
+    ),
+    reviewDeploymentBindingHash: bytes32(
+      source.reviewDeploymentBindingHash,
+      "custom-registry-record-preimage-review-deployment",
+    ),
+    feePolicyHash: bytes32(
+      source.feePolicyHash,
+      "custom-registry-record-preimage-fee-policy",
+    ),
+    finalityPolicyHash: bytes32(
+      source.finalityPolicyHash,
+      "custom-registry-record-preimage-finality-policy",
+    ),
+  } satisfies CustomLaunchRegisteredRecordPreimageV1;
+  if (
+    preimage.chainId !== event.chainId ||
+    preimage.launchId !== event.registryLaunchIdRaw ||
+    preimage.projectId !== event.registryProjectIdRaw ||
+    (event.operation === "registered" &&
+      (preimage.registryGeneration !== event.registryGeneration ||
+        preimage.approvalId !== event.approvalId ||
+        preimage.primaryContract !== event.primaryContract ||
+        preimage.launchWallet !== event.launchWallet ||
+        preimage.deploymentId !== event.deploymentId))
+  ) {
+    return fail("custom-registry-record-preimage-event-binding");
+  }
+  return Object.freeze({
+    preimage: Object.freeze(preimage),
+    binding: customRegistryRegisteredRecordBindingV1(preimage),
+  });
+}
+
+function validateOnchainFeePolicy(
+  value: unknown,
+  normalizedFee: CustomLaunchFeePolicyV3,
+  expectedPartnerRecipient: HexAddress | null,
+): CustomLaunchOnchainFeePolicyV1 {
+  const source = record(value, "custom-registry-onchain-fee-policy");
+  const parseLeg = (
+    legValue: unknown,
+    label: string,
+  ): CustomLaunchOnchainFeeLegV1 => {
+    const leg = record(legValue, `custom-registry-${label}-fee-leg`);
+    return Object.freeze({
+      shareBps: uintNumber(leg.shareBps, 16, `custom-registry-${label}-fee-share`),
+      recipient: address(leg.recipient, `custom-registry-${label}-fee-recipient`),
+      currency: address(leg.currency, `custom-registry-${label}-fee-currency`),
+      chargeModeId: bytes32(leg.chargeModeId, `custom-registry-${label}-fee-charge-mode`),
+      basisId: bytes32(leg.basisId, `custom-registry-${label}-fee-basis`),
+      roundingId: bytes32(leg.roundingId, `custom-registry-${label}-fee-rounding`),
+      accrualId: bytes32(leg.accrualId, `custom-registry-${label}-fee-accrual`),
+      claimId: bytes32(leg.claimId, `custom-registry-${label}-fee-claim`),
+      claimRightId: bytes32(leg.claimRightId, `custom-registry-${label}-fee-claim-right`),
+      controlEvidenceHash: bytes32(
+        leg.controlEvidenceHash,
+        `custom-registry-${label}-fee-control-evidence`,
+      ),
+    });
+  };
+  const kind = uintNumber(source.kind, 8, "custom-registry-onchain-fee-kind");
+  if (kind !== 0 && kind !== 1 && kind !== 2) {
+    return fail("custom-registry-onchain-fee-kind");
+  }
+  const policy = Object.freeze({
+    kind,
+    partnerId: bytes32(source.partnerId, "custom-registry-onchain-fee-partner"),
+    partnerStatusId: bytes32(
+      source.partnerStatusId,
+      "custom-registry-onchain-fee-partner-status",
+    ),
+    templateId: bytes32(source.templateId, "custom-registry-onchain-fee-template"),
+    templateVersion: bytes32(
+      source.templateVersion,
+      "custom-registry-onchain-fee-template-version",
+    ),
+    partnerRepositoryId: bytes32(
+      source.partnerRepositoryId,
+      "custom-registry-onchain-fee-partner-repository",
+    ),
+    partnerCommitId: bytes32(
+      source.partnerCommitId,
+      "custom-registry-onchain-fee-partner-commit",
+    ),
+    partnerRuntimeCodeSetHash: bytes32(
+      source.partnerRuntimeCodeSetHash,
+      "custom-registry-onchain-fee-partner-runtime",
+    ),
+    totalFeeBps: uintNumber(
+      source.totalFeeBps,
+      16,
+      "custom-registry-onchain-fee-total",
+    ),
+    nativeCustomFeeBps: uintNumber(
+      source.nativeCustomFeeBps,
+      16,
+      "custom-registry-onchain-native-fee",
+    ),
+    partner: parseLeg(source.partner, "partner"),
+    programmable: parseLeg(source.programmable, "programmable"),
+    activationVersion: bytes32(
+      source.activationVersion,
+      "custom-registry-onchain-fee-activation-version",
+    ),
+    activationBlock: decimal(
+      source.activationBlock,
+      "custom-registry-onchain-fee-activation-block",
+    ),
+    paused: booleanValue(source.paused, "custom-registry-onchain-fee-paused"),
+    retired: booleanValue(source.retired, "custom-registry-onchain-fee-retired"),
+    publicPolicyBindingHash: bytes32(
+      source.publicPolicyBindingHash,
+      "custom-registry-onchain-fee-public-policy-binding",
+    ),
+    claimIsolationEvidenceHash: bytes32(
+      source.claimIsolationEvidenceHash,
+      "custom-registry-onchain-fee-claim-isolation",
+    ),
+    accountingSafetyEvidenceHash: bytes32(
+      source.accountingSafetyEvidenceHash,
+      "custom-registry-onchain-fee-accounting-safety",
+    ),
+    verificationEvidenceHash: bytes32(
+      source.verificationEvidenceHash,
+      "custom-registry-onchain-fee-verification",
+    ),
+  }) satisfies CustomLaunchOnchainFeePolicyV1;
+  const legIsZero = (leg: CustomLaunchOnchainFeeLegV1): boolean =>
+    leg.shareBps === 0 &&
+    leg.recipient === ZERO_ADDRESS &&
+    leg.currency === ZERO_ADDRESS &&
+    leg.chargeModeId === ZERO_BYTES32 &&
+    leg.basisId === ZERO_BYTES32 &&
+    leg.roundingId === ZERO_BYTES32 &&
+    leg.accrualId === ZERO_BYTES32 &&
+    leg.claimId === ZERO_BYTES32 &&
+    leg.claimRightId === ZERO_BYTES32 &&
+    leg.controlEvidenceHash === ZERO_BYTES32;
+  const attributionIsZero =
+    policy.partnerId === ZERO_BYTES32 &&
+    policy.partnerStatusId === ZERO_BYTES32 &&
+    policy.templateId === ZERO_BYTES32 &&
+    policy.templateVersion === ZERO_BYTES32 &&
+    policy.partnerRepositoryId === ZERO_BYTES32 &&
+    policy.partnerCommitId === ZERO_BYTES32 &&
+    policy.partnerRuntimeCodeSetHash === ZERO_BYTES32;
+  const evidenceIsNonzero =
+    policy.publicPolicyBindingHash !== ZERO_BYTES32 &&
+    policy.claimIsolationEvidenceHash !== ZERO_BYTES32 &&
+    policy.accountingSafetyEvidenceHash !== ZERO_BYTES32 &&
+    policy.verificationEvidenceHash !== ZERO_BYTES32;
+  if (
+    policy.publicPolicyBindingHash !==
+      digestRawBytes32(normalizedFee.publicPolicyBindingHash) ||
+    policy.claimIsolationEvidenceHash !==
+      digestRawBytes32(normalizedFee.claimIsolationEvidenceHash) ||
+    policy.accountingSafetyEvidenceHash !==
+      digestRawBytes32(normalizedFee.recipientControlEvidenceHash) ||
+    policy.verificationEvidenceHash !==
+      digestRawBytes32(normalizedFee.verificationEvidenceHash) ||
+    policy.partner.shareBps + policy.programmable.shareBps !==
+      policy.totalFeeBps
+  ) {
+    return fail("custom-registry-onchain-public-policy-evidence-binding");
+  }
+  if (normalizedFee.mode === "no-qualifying-market") {
+    if (
+      policy.kind !== 2 ||
+      !attributionIsZero ||
+      policy.totalFeeBps !== 0 ||
+      policy.nativeCustomFeeBps !== 0 ||
+      !legIsZero(policy.partner) ||
+      !legIsZero(policy.programmable) ||
+      policy.activationVersion !== ZERO_BYTES32 ||
+      policy.activationBlock !== "0" ||
+      policy.paused ||
+      policy.retired ||
+      !evidenceIsNonzero
+    ) {
+      return fail("custom-registry-onchain-no-market-fee");
+    }
+    return policy;
+  }
+  if (
+    policy.paused ||
+    policy.retired ||
+    !evidenceIsNonzero ||
+    policy.activationVersion === ZERO_BYTES32 ||
+    policy.activationBlock === "0" ||
+    policy.programmable.currency === ZERO_ADDRESS ||
+    policy.programmable.chargeModeId === ZERO_BYTES32 ||
+    policy.programmable.basisId === ZERO_BYTES32 ||
+    policy.programmable.roundingId === ZERO_BYTES32 ||
+    policy.programmable.accrualId === ZERO_BYTES32 ||
+    policy.programmable.claimId === ZERO_BYTES32 ||
+    policy.programmable.claimRightId === ZERO_BYTES32 ||
+    policy.programmable.controlEvidenceHash === ZERO_BYTES32 ||
+    policy.programmable.recipient !== PROGRAMMABLE_FEE_RECIPIENT
+  ) {
+    return fail("custom-registry-onchain-programmable-fee-leg");
+  }
+  if (normalizedFee.mode === "native") {
+    if (
+      policy.kind !== 0 ||
+      !attributionIsZero ||
+      policy.totalFeeBps !== 10 ||
+      policy.nativeCustomFeeBps !== 10 ||
+      !legIsZero(policy.partner) ||
+      policy.programmable.shareBps !== 10
+    ) {
+      return fail("custom-registry-onchain-native-fee-policy");
+    }
+    return policy;
+  }
+  if (
+    policy.kind !== 1 ||
+    attributionIsZero ||
+    expectedPartnerRecipient === null ||
+    policy.totalFeeBps !== 20 ||
+    policy.nativeCustomFeeBps !== 0 ||
+    policy.partner.shareBps !== 15 ||
+    policy.programmable.shareBps !== 5 ||
+    policy.partner.recipient !== expectedPartnerRecipient ||
+    policy.partner.recipient === policy.programmable.recipient ||
+    policy.partner.currency !== policy.programmable.currency ||
+    policy.partner.chargeModeId !== policy.programmable.chargeModeId ||
+    policy.partner.basisId !== policy.programmable.basisId ||
+    policy.partner.roundingId !== policy.programmable.roundingId ||
+    policy.partner.accrualId !== policy.programmable.accrualId ||
+    policy.partner.claimId === policy.programmable.claimId ||
+    policy.partner.claimRightId === policy.programmable.claimRightId ||
+    policy.partner.controlEvidenceHash === ZERO_BYTES32
+  ) {
+    return fail("custom-registry-onchain-partner-fee-policy");
+  }
+  return policy;
+}
+
+function validateProducerFeeBindings(
+  source: Record<string, unknown>,
+): Readonly<{
+  feePolicy: CustomLaunchFeePolicyV3;
+  onchainFeePolicy: CustomLaunchOnchainFeePolicyV1;
+}> {
+  let partnerRecipient: HexAddress | null = null;
+  if (source.partner !== null) {
+    const partner = record(source.partner, "custom-registry-producer-partner");
+    const recipient = record(
+      partner.recipient,
+      "custom-registry-producer-partner-recipient",
+    );
+    if (
+      partner.status !== "active" ||
+      recipient.namespace !== "eip155-address"
+    ) {
+      return fail("custom-registry-producer-partner-fee-eligibility");
+    }
+    partnerRecipient = address(
+      recipient.value,
+      "custom-registry-producer-partner-recipient",
+    );
+  }
+  const markets = array(
+    source.discoverableMarkets,
+    "custom-registry-producer-markets",
+  );
+  const verifiedMarketIds = new Set<string>();
+  const allMarketIds = new Set<string>();
+  for (const value of markets) {
+    const market = record(value, "custom-registry-producer-market");
+    const marketId = safeId(
+      market.marketId,
+      "custom-registry-producer-market-id",
+    );
+    if (allMarketIds.has(marketId)) {
+      return fail("custom-registry-producer-market-duplicate");
+    }
+    allMarketIds.add(marketId);
+    const verification = record(
+      market.verification,
+      "custom-registry-producer-market-verification",
+    );
+    if (market.status === "active" && verification.status === "verified") {
+      verifiedMarketIds.add(marketId);
+    }
+  }
+  const feePolicy = validateFeePolicy(source.feePolicy, partnerRecipient, {
+    hasDiscoverableMarkets: markets.length > 0,
+    verifiedMarketIds,
+  });
+  const onchainFeePolicy = validateOnchainFeePolicy(
+    source.onchainFeePolicy,
+    feePolicy,
+    partnerRecipient,
+  );
+  return Object.freeze({ feePolicy, onchainFeePolicy });
+}
+
+function validateProducerReviewBindings(
+  source: Record<string, unknown>,
+  event: CustomRegistryEventV3,
+): Readonly<{
+  review: Record<string, unknown>;
+  reviewEvidenceHash: Sha256Digest;
+}> {
+  const review = record(
+    source.verifiedReview,
+    "custom-registry-producer-verified-review",
+  );
+  const approval = record(
+    source.approvalBinding,
+    "custom-registry-producer-review-approval",
+  );
+  const deployment = record(
+    source.deploymentBinding,
+    "custom-registry-producer-review-deployment",
+  );
+  const reviewEvidenceHash = digest(
+    review.reviewEvidenceHash,
+    "custom-registry-producer-review-evidence",
+  );
+  if (
+    review.schemaVersion !== "programmable.custom-launch-verified-review.v1" ||
+    review.label !== "Programmable Verified" ||
+    review.definition !==
+      "Reviewed against the published Programmable security policy and cryptographically bound to the exact deployed contract revision." ||
+    !new Set(["verified", "superseded", "revoked"]).has(String(review.status)) ||
+    (event.operation === "registered" && review.status !== "verified") ||
+    review.policyVersion !== approval.policyVersion ||
+    review.policyCommitment !== approval.policyCommitment ||
+    review.repositoryId !== approval.repositoryId ||
+    review.commitObjectId !== approval.commitObjectId ||
+    review.sourceCommitment !== approval.sourceCommitment ||
+    review.buildCommitment !== approval.buildCommitment ||
+    review.artifactSetHash !== approval.artifactSetHash ||
+    review.configurationCommitment !== approval.configurationCommitment ||
+    reviewEvidenceHash !== customRegistryVerifiedReviewEvidenceHashV1(review) ||
+    review.deploymentBindingHash !==
+      sha256("programmable.custom-launch-deployment-binding.v3", deployment)
+  ) {
+    return fail("custom-registry-producer-review-binding");
+  }
+  for (const field of [
+    "authoritiesEvidenceHash",
+    "upgradeabilityEvidenceHash",
+    "pauseAuthorityEvidenceHash",
+    "custodyEvidenceHash",
+    "dependencySetHash",
+    "findingSetHash",
+    "deploymentBindingHash",
+  ] as const) {
+    digest(review[field], `custom-registry-producer-review-${field}`);
+  }
+  safeId(review.upgradeability, "custom-registry-producer-review-upgradeability");
+  safeId(review.pauseAuthority, "custom-registry-producer-review-pause");
+  safeId(review.custody, "custom-registry-producer-review-custody");
+  safeId(review.reviewerType, "custom-registry-producer-review-reviewer");
+  instant(review.reviewedAt, "custom-registry-producer-review-time");
+  const reviewedRuntimeKeccak = array(
+    review.runtimeCodeKeccak256,
+    "custom-registry-producer-review-runtime-keccak",
+  ).map((value) => bytes32(value, "custom-registry-producer-review-runtime-keccak"));
+  const reviewedRuntimeSha = array(
+    review.runtimeCodeSha256,
+    "custom-registry-producer-review-runtime-sha",
+  ).map((value) => digest(value, "custom-registry-producer-review-runtime-sha"));
+  const contracts = array(
+    deployment.contracts,
+    "custom-registry-producer-review-contracts",
+  );
+  const deployedKeccak = contracts.map((value) =>
+    bytes32(
+      record(value, "custom-registry-producer-review-contract").runtimeCodeKeccak256,
+      "custom-registry-producer-review-contract-keccak",
+    )
+  );
+  const deployedSha = contracts.map((value) =>
+    digest(
+      record(value, "custom-registry-producer-review-contract").runtimeCodeSha256,
+      "custom-registry-producer-review-contract-sha",
+    )
+  );
+  const sorted = (values: readonly string[]) => [...values].sort();
+  if (
+    canonicalJson(sorted(reviewedRuntimeKeccak)) !==
+      canonicalJson(sorted(deployedKeccak)) ||
+    canonicalJson(sorted(reviewedRuntimeSha)) !== canonicalJson(sorted(deployedSha))
+  ) {
+    return fail("custom-registry-producer-review-runtime-binding");
+  }
+  for (const field of ["dependencies", "findings"] as const) {
+    for (const item of array(
+      review[field],
+      `custom-registry-producer-review-${field}`,
+    )) {
+      assertJsonValue(item, `custom-registry-producer-review-${field}`);
+    }
+  }
+  return Object.freeze({ review, reviewEvidenceHash });
 }
 
 function validateProducerRecord(
@@ -1107,9 +2237,51 @@ function validateProducerRecord(
     source.deploymentBinding,
     "custom-registry-producer-deployment-binding",
   );
+  const { onchainFeePolicy } = validateProducerFeeBindings(source);
+  const { reviewEvidenceHash } = validateProducerReviewBindings(source, event);
   const approvalBindingHash = digest(
     approval.approvalBindingHash,
     "custom-registry-producer-approval-binding-hash",
+  );
+  const { preimage: registeredRecordPreimage, binding: registeredRecordBinding } =
+    validateRegisteredRecordPreimage(source.registeredRecordPreimage, event);
+  const componentHashes = record(
+    source.registeredRecordComponentHashes,
+    "custom-registry-registered-record-components",
+  );
+  const normalizedComponentHashes = Object.freeze({
+    scopeAndApprovalHash: bytes32(
+      componentHashes.scopeAndApprovalHash,
+      "custom-registry-record-component-scope",
+    ),
+    sourceAndDeploymentHash: bytes32(
+      componentHashes.sourceAndDeploymentHash,
+      "custom-registry-record-component-deployment",
+    ),
+    attributionHash: bytes32(
+      componentHashes.attributionHash,
+      "custom-registry-record-component-attribution",
+    ),
+    reviewHash: bytes32(
+      componentHashes.reviewHash,
+      "custom-registry-record-component-review",
+    ),
+    feePolicyHash: bytes32(
+      componentHashes.feePolicyHash,
+      "custom-registry-record-component-fee",
+    ),
+    finalityPolicyHash: bytes32(
+      componentHashes.finalityPolicyHash,
+      "custom-registry-record-component-finality",
+    ),
+  });
+  const registeredRecordCommitment = bytes32(
+    source.registeredRecordCommitment,
+    "custom-registry-producer-registered-record-commitment",
+  );
+  const registrationBindingHash = bytes32(
+    source.registrationBindingHash,
+    "custom-registry-producer-registration-binding",
   );
   address(
     registryOrigin.registryAddress,
@@ -1123,6 +2295,10 @@ function validateProducerRecord(
   bytes32(
     registryOrigin.registryApprovalBindingHashRaw,
     "custom-registry-producer-origin-approval-raw",
+  );
+  bytes32(
+    registryOrigin.registrationBindingHashRaw,
+    "custom-registry-producer-origin-registration-binding",
   );
   digest(
     registryOrigin.registryEventSetHash,
@@ -1157,6 +2333,19 @@ function validateProducerRecord(
     registryOrigin.launchIdEncoding !== "sha256-digest-raw-bytes32" ||
     registryOrigin.registryApprovalBindingHashRaw !==
       digestRawBytes32(approvalBindingHash) ||
+    registeredRecordPreimage.approvalBindingHash !==
+      registryOrigin.registryApprovalBindingHashRaw ||
+    canonicalJson(normalizedComponentHashes) !==
+      canonicalJson(registeredRecordBinding.componentHashes) ||
+    registeredRecordCommitment !==
+      registeredRecordBinding.registeredRecordCommitment ||
+    registrationBindingHash !== registeredRecordBinding.registrationBindingHash ||
+    registryOrigin.registrationBindingHashRaw !== registrationBindingHash ||
+    (event.operation === "registered" &&
+      event.identityHash !== registrationBindingHash) ||
+    (event.operation === "finalized" &&
+      event.finalityPolicyHash !== registeredRecordPreimage.finalityPolicyHash) ||
+    registryOrigin.registeredRecordHash !== registeredRecordCommitment ||
     (event.operation === "registered" &&
       (registryOrigin.registrationTransactionHash !== event.transactionHash ||
         registryOrigin.registrationBlockHash !== event.blockHash ||
@@ -1182,6 +2371,7 @@ function validateProducerRecord(
     MAX_COLLECTION_SIZE,
   );
   if (contracts.length < 1) return fail("custom-registry-producer-contracts");
+  const runtimeByAddress = new Map<HexAddress, HexBytes32>();
   for (const item of contracts) {
     const contract = record(item, "custom-registry-producer-contract");
     const contractAddress = record(
@@ -1191,9 +2381,12 @@ function validateProducerRecord(
     if (contractAddress.namespace !== "eip155-address") {
       return fail("custom-registry-producer-contract-namespace");
     }
-    address(contractAddress.value, "custom-registry-producer-contract-address");
+    const normalizedAddress = address(
+      contractAddress.value,
+      "custom-registry-producer-contract-address",
+    );
     // This is a raw EVM bytes32 code hash. Do not accept sha256-prefixed commitments.
-    bytes32(
+    const runtimeCodeKeccak256 = bytes32(
       contract.runtimeCodeKeccak256,
       "custom-registry-producer-evm-runtime-code-hash",
     );
@@ -1201,6 +2394,10 @@ function validateProducerRecord(
       contract.runtimeCodeSha256,
       "custom-registry-producer-runtime-content-sha256",
     );
+    if (runtimeByAddress.has(normalizedAddress)) {
+      return fail("custom-registry-producer-contract-duplicate");
+    }
+    runtimeByAddress.set(normalizedAddress, runtimeCodeKeccak256);
   }
   for (const field of [
     "postLaunchAuthorityInventoryHash",
@@ -1220,6 +2417,229 @@ function validateProducerRecord(
     launchingWallet.value,
     "custom-registry-producer-launching-wallet-value",
   );
+  if (
+    registeredRecordPreimage.launchWallet !== launchingWallet.value ||
+    runtimeByAddress.get(registeredRecordPreimage.primaryContract) !==
+      registeredRecordPreimage.primaryRuntimeCodeHash ||
+    registeredRecordPreimage.sourceCommitment !==
+      digestRawBytes32(
+        digest(
+          approval.sourceCommitment,
+          "custom-registry-producer-approval-source",
+        ),
+      ) ||
+    registeredRecordPreimage.buildCommitment !==
+      digestRawBytes32(
+        digest(
+          approval.buildCommitment,
+          "custom-registry-producer-approval-build",
+        ),
+      ) ||
+    registeredRecordPreimage.artifactSetHash !==
+      digestRawBytes32(
+        digest(
+          approval.artifactSetHash,
+          "custom-registry-producer-approval-artifacts",
+        ),
+      ) ||
+    registeredRecordPreimage.deploymentConfigurationHash !==
+      digestRawBytes32(
+        digest(
+          approval.configurationCommitment,
+          "custom-registry-producer-approval-configuration",
+        ),
+      ) ||
+    registeredRecordPreimage.assetSetHash !==
+      digestRawBytes32(
+        digest(source.assetIdentitySetHash, "custom-registry-producer-assets"),
+      ) ||
+    registeredRecordPreimage.marketSetHash !==
+      digestRawBytes32(
+        digest(source.marketSetHash, "custom-registry-producer-markets"),
+      ) ||
+    registeredRecordPreimage.reviewPolicyHash !==
+      digestRawBytes32(
+        digest(
+          record(source.verifiedReview, "custom-registry-producer-review").policyCommitment,
+          "custom-registry-producer-review-policy",
+        ),
+      ) ||
+    registeredRecordPreimage.securityReviewHash !==
+      digestRawBytes32(reviewEvidenceHash) ||
+    registeredRecordPreimage.reviewDeploymentBindingHash !==
+      digestRawBytes32(
+        digest(
+          record(source.verifiedReview, "custom-registry-producer-review").deploymentBindingHash,
+          "custom-registry-producer-review-deployment",
+        ),
+      ) ||
+    registeredRecordPreimage.feePolicyHash !==
+      customRegistryOnchainFeePolicyHashV1(onchainFeePolicy)
+  ) {
+    return fail("custom-registry-producer-record-preimage-cross-binding");
+  }
+  const authorityInventory = record(
+    source.postLaunchAuthorityInventory,
+    "custom-registry-producer-authority-inventory",
+  );
+  const authorityInventoryWallet = record(
+    authorityInventory.launchingWallet,
+    "custom-registry-producer-authority-inventory-wallet",
+  );
+  const authorityInventoryHash = digest(
+    authorityInventory.postLaunchAuthorityInventoryHash,
+    "custom-registry-producer-authority-inventory-hash",
+  );
+  const authorities = array(
+    authorityInventory.authorities,
+    "custom-registry-producer-authorities",
+  );
+  for (const authority of authorities) {
+    assertJsonValue(authority, "custom-registry-producer-authority");
+  }
+  if (
+    authorityInventory.schemaVersion !==
+      "programmable.custom-launch-post-launch-authorities.v3" ||
+    authorityInventoryWallet.namespace !== "eip155-address" ||
+    authorityInventoryWallet.value !== launchingWallet.value ||
+    authorityInventoryHash !== source.postLaunchAuthorityInventoryHash ||
+    authorityInventoryHash !==
+      sha256("programmable.custom-launch-post-launch-authorities.v3", {
+        schemaVersion: authorityInventory.schemaVersion,
+        launchingWallet: authorityInventory.launchingWallet,
+        authorities,
+      })
+  ) {
+    return fail("custom-registry-producer-authority-inventory-binding");
+  }
+  const model = record(source.model, "custom-registry-producer-model");
+  const template = source.template === null
+    ? null
+    : record(source.template, "custom-registry-producer-template");
+  const partner = source.partner === null
+    ? null
+    : record(source.partner, "custom-registry-producer-partner");
+  const review = record(
+    source.verifiedReview,
+    "custom-registry-producer-review-preimage",
+  );
+  const finalityPolicy = record(
+    source.finalityPolicy,
+    "custom-registry-producer-finality-policy",
+  );
+  const finality = record(
+    source.finality,
+    "custom-registry-producer-finality",
+  );
+  const confirmationDepth = safeInteger(
+    finalityPolicy.confirmationDepth,
+    "custom-registry-producer-finality-confirmations",
+  );
+  if (
+    finalityPolicy.schemaVersion !== CUSTOM_REGISTRY_FINALITY_POLICY_DOMAIN_V1 ||
+    confirmationDepth < 1 ||
+    confirmationDepth > 255 ||
+    finalityPolicy.canonicalitySource !== "evm-blockhash" ||
+    finalityPolicy.reorgHandling !== "orphan" ||
+    digest(
+      finalityPolicy.verificationAuthorityHash,
+      "custom-registry-producer-finality-authority",
+    ) !== finality.verificationAuthorityHash
+  ) {
+    return fail("custom-registry-producer-finality-policy-binding");
+  }
+  const contractSetHash = digest(
+    deployment.contractSetHash,
+    "custom-registry-producer-contract-set-hash",
+  );
+  if (
+    contractSetHash !==
+      sha256("programmable.custom-launch-deployed-contract-set.v1", contracts)
+  ) {
+    return fail("custom-registry-producer-contract-set-binding");
+  }
+  const expectedRuntimeSetHash = customRegistryStructuredFieldV1(
+    "runtimeCodeSetHash",
+    contracts.map((value) => {
+      const contract = record(value, "custom-registry-producer-runtime-set-contract");
+      return {
+        address: contract.address,
+        runtimeCodeKeccak256: contract.runtimeCodeKeccak256,
+        runtimeCodeSha256: contract.runtimeCodeSha256,
+      };
+    }),
+  );
+  const expectedImmutableFields = Object.freeze({
+    approvalId: customRegistryStructuredFieldV1(
+      "approvalId",
+      approval.approvalId,
+    ),
+    repositoryId: customRegistryStructuredFieldV1("repositoryId", {
+      repositoryId: approval.repositoryId,
+      repositoryUri: approval.repositoryUri,
+    }),
+    commitId: customRegistryStructuredFieldV1("commitId", {
+      repositoryId: approval.repositoryId,
+      commitObjectId: approval.commitObjectId,
+      treeObjectId: approval.treeObjectId,
+    }),
+    deploymentId: customRegistryStructuredFieldV1("deploymentId", {
+      launchArtifactCommitmentHash: deployment.launchArtifactCommitmentHash,
+      artifactManifestHash: deployment.artifactManifestHash,
+      deploymentCalldataHash: deployment.deploymentCalldataHash,
+    }),
+    deploymentSetHash: digestRawBytes32(contractSetHash),
+    runtimeCodeSetHash: expectedRuntimeSetHash,
+    modelId: customRegistryStructuredFieldV1("modelId", model.id),
+    modelVersion: customRegistryStructuredFieldV1("modelVersion", {
+      modelId: model.id,
+      modelVersion: model.version,
+    }),
+    templateId: template === null
+      ? ZERO_BYTES32
+      : customRegistryStructuredFieldV1("templateId", template.id),
+    templateVersion: template === null
+      ? ZERO_BYTES32
+      : customRegistryStructuredFieldV1("templateVersion", {
+          templateId: template.id,
+          templateVersion: template.version,
+        }),
+    partnerId: partner === null
+      ? ZERO_BYTES32
+      : customRegistryStructuredFieldV1("partnerId", partner.id),
+    builderAttributionHash: customRegistryStructuredFieldV1(
+      "builderAttributionHash",
+      {
+        repositoryId: approval.repositoryId,
+        repositoryUri: approval.repositoryUri,
+      },
+    ),
+    originHash: customRegistryStructuredFieldV1("originHash", {
+      platformId: source.platformId,
+      origin: source.origin,
+      category: source.category,
+      launchFamily: source.launchFamily,
+    }),
+    capabilitySetHash: customRegistryStructuredFieldV1(
+      "capabilitySetHash",
+      source.capabilities,
+    ),
+    reviewResultId: customRegistryStructuredFieldV1("reviewResultId", {
+      label: review.label,
+      definition: review.definition,
+      reviewerType: review.reviewerType,
+    }),
+    finalityPolicyHash: customRegistryFinalityPolicyHashV1(finalityPolicy),
+  });
+  for (const [field, expected] of Object.entries(expectedImmutableFields)) {
+    if (
+      registeredRecordPreimage[
+        field as keyof typeof expectedImmutableFields
+      ] !== expected
+    ) {
+      return fail(`custom-registry-producer-record-preimage-${field}`);
+    }
+  }
   if ((source.presentation === null) !== (source.presentationBindingHash === null)) {
     return fail("custom-registry-producer-presentation-binding");
   }
@@ -1265,22 +2685,15 @@ function validateRecordStatic(
     safeId(template.id, "custom-registry-template-id");
     safeId(template.version, "custom-registry-template-version");
   }
-  let partner: CustomLaunchProjectionRecordV3["partner"] = null;
   if (source.partner !== null) {
     const partnerSource = record(source.partner, "custom-registry-partner");
     const status = partnerSource.status;
     if (!new Set(["active", "paused", "retired"]).has(String(status))) {
       return fail("custom-registry-partner-status");
     }
-    partner = Object.freeze({
-      id: safeId(partnerSource.id, "custom-registry-partner-id"),
-      name: text(partnerSource.name, "custom-registry-partner-name", 256),
-      status: status as "active" | "paused" | "retired",
-      recipient: address(
-        partnerSource.recipient,
-        "custom-registry-partner-recipient",
-      ),
-    });
+    safeId(partnerSource.id, "custom-registry-partner-id");
+    text(partnerSource.name, "custom-registry-partner-name", 256);
+    address(partnerSource.recipient, "custom-registry-partner-recipient");
     if (template === null) return fail("custom-registry-partner-template");
   }
   assertJsonValue(source.builderAttribution, "custom-registry-builder");
@@ -1455,8 +2868,6 @@ function validateRecordStatic(
       assertJsonValue(item.parameters, "custom-registry-extensible-parameters");
     }
   }
-  validateFeePolicy(source.feePolicy, partner);
-
   const review = record(source.securityReview, "custom-registry-security-review");
   if (!new Set(["not-reviewed", "reviewed", "superseded", "revoked"]).has(String(review.status))) {
     return fail("custom-registry-review-status");
@@ -1583,6 +2994,86 @@ function deploymentForEvent(
     return fail("custom-registry-unofficial-event");
   }
   return { chain, deployment };
+}
+
+function validateApprovalAuthorization(
+  value: CustomRegistryApprovalAuthorizationV3,
+  event: CustomRegistryEventV3,
+  deployment: CustomRegistryDeploymentV3,
+): CustomRegistryApprovalAuthorizationV3 {
+  const authorization = record(
+    value,
+    "custom-registry-approval-authorization",
+  ) as unknown as CustomRegistryApprovalAuthorizationV3;
+  decimal(authorization.blockNumber, "custom-registry-approval-block", true);
+  decimal(
+    authorization.transitionSequence,
+    "custom-registry-approval-transition-sequence",
+    true,
+  );
+  decimal(
+    authorization.validAfterBlock,
+    "custom-registry-approval-valid-after",
+    true,
+  );
+  decimal(
+    authorization.expiresAtBlock,
+    "custom-registry-approval-expires",
+    true,
+  );
+  bytes32(authorization.transactionHash, "custom-registry-approval-transaction");
+  bytes32(authorization.blockHash, "custom-registry-approval-block-hash");
+  bytes32(authorization.approvalId, "custom-registry-approval-id");
+  bytes32(authorization.registryLaunchIdRaw, "custom-registry-approval-launch-id");
+  bytes32(
+    authorization.registryApprovalBindingHashRaw,
+    "custom-registry-approval-binding-hash",
+  );
+  bytes32(
+    authorization.registrationBindingHash,
+    "custom-registry-approval-registration-binding",
+  );
+  bytes32(authorization.evidenceHash, "custom-registry-approval-evidence");
+  address(authorization.registryApprover, "custom-registry-approval-approver");
+  address(authorization.registryAddress, "custom-registry-approval-registry");
+  bytes32(
+    authorization.observedRegistryRuntimeCodeHash,
+    "custom-registry-approval-registry-runtime",
+  );
+  bytes32(authorization.topic0, "custom-registry-approval-topic");
+  safeInteger(
+    authorization.transactionIndex,
+    "custom-registry-approval-transaction-index",
+  );
+  safeInteger(authorization.logIndex, "custom-registry-approval-log-index");
+  instant(authorization.onchainTimestamp, "custom-registry-approval-timestamp");
+  if (
+    authorization.chainId !== event.chainId ||
+    authorization.caip2 !== event.caip2 ||
+    authorization.registryGeneration !== event.registryGeneration ||
+    authorization.registryAddress !== event.registryAddress ||
+    authorization.observedRegistryRuntimeCodeHash !==
+      event.observedRegistryRuntimeCodeHash ||
+    !deployment.authorizedApprovers.includes(authorization.registryApprover) ||
+    authorization.topic0 !== deployment.topics.approvalAuthorized ||
+    authorization.approvalId !== event.approvalId ||
+    authorization.registryLaunchIdRaw !== event.registryLaunchIdRaw ||
+    authorization.registrationBindingHash !== event.identityHash ||
+    authorization.transactionHash === event.transactionHash ||
+    BigInt(authorization.blockNumber) > BigInt(event.blockNumber) ||
+    (authorization.blockNumber === event.blockNumber &&
+      authorization.transactionIndex >= event.transactionIndex) ||
+    BigInt(authorization.blockNumber) < BigInt(deployment.startBlock) ||
+    BigInt(authorization.validAfterBlock) > BigInt(event.blockNumber) ||
+    BigInt(authorization.expiresAtBlock) < BigInt(event.blockNumber) ||
+    BigInt(authorization.validAfterBlock) >
+      BigInt(authorization.expiresAtBlock) ||
+    (deployment.retiredAtBlock !== null &&
+      BigInt(authorization.blockNumber) > BigInt(deployment.retiredAtBlock))
+  ) {
+    return fail("custom-registry-approval-authorization-binding");
+  }
+  return authorization;
 }
 
 function validateEvent(
@@ -1751,6 +3242,7 @@ function validateEvent(
     (event.operation === "registered" &&
       (event.record === null ||
         event.producerRecord === null ||
+        event.approvalAuthorization === null ||
         event.previousOnchainRecordHash !== null ||
         event.registeredRecordHash !== event.latestOnchainRecordHash ||
         event.revocationEvidenceHash !== null ||
@@ -1758,18 +3250,21 @@ function validateEvent(
     (event.operation === "finalized" &&
       (event.record !== null ||
         event.producerRecord === null ||
+        event.approvalAuthorization !== null ||
         event.previousOnchainRecordHash !== null ||
         event.revocationEvidenceHash !== null ||
         !finalizedEvidence)) ||
     (event.operation === "corrected" &&
       (event.record === null ||
         event.producerRecord === null ||
+        event.approvalAuthorization !== null ||
         event.previousOnchainRecordHash === null ||
         event.revocationEvidenceHash !== null ||
         !mutationEvidence)) ||
     (event.operation === "revoked" &&
       (event.record !== null ||
         event.producerRecord === null ||
+        event.approvalAuthorization !== null ||
         event.previousOnchainRecordHash === null ||
         event.previousOnchainRecordHash !== event.latestOnchainRecordHash ||
         event.revocationEvidenceHash === null ||
@@ -1820,8 +3315,22 @@ function validateEvent(
   } else if (companions.length !== 0) {
     return fail("custom-registry-transition-companions");
   }
+  const authorization = event.approvalAuthorization === null
+    ? null
+    : validateApprovalAuthorization(
+        event.approvalAuthorization,
+        event,
+        deployment,
+      );
   if (event.producerRecord !== null) {
     validateProducerRecord(event.producerRecord, event);
+    if (
+      authorization !== null &&
+      authorization.registryApprovalBindingHashRaw !==
+        event.producerRecord.registryOrigin.registryApprovalBindingHashRaw
+    ) {
+      return fail("custom-registry-producer-approval-authorization-binding");
+    }
     if (
       event.operation === "registered" &&
       event.producerRecord.registryOrigin.registryStartBlock !==
@@ -1836,6 +3345,12 @@ function validateEvent(
 
 function occurrenceId(event: CustomRegistryEventV3): string {
   return `${event.chainId}:${event.blockHash}:${event.transactionHash}:${event.logIndex}`;
+}
+
+function approvalRegistryKey(
+  authorization: CustomRegistryApprovalAuthorizationV3,
+): string {
+  return `${authorization.chainId}:${authorization.registryGeneration}:${authorization.registryAddress}`;
 }
 
 function eventDigest(event: CustomRegistryEventV3): Sha256Digest {
@@ -1913,6 +3428,154 @@ function programmableVerified(
   );
 }
 
+function normalizeProducerSecurityReview(
+  producer: CustomLaunchRegistryProducerRecordV3,
+): CustomLaunchSecurityReviewV3 {
+  const review = record(
+    producer.verifiedReview,
+    "custom-registry-project-review",
+  );
+  const approval = record(
+    producer.approvalBinding,
+    "custom-registry-project-review-approval",
+  );
+  const inventory = record(
+    producer.postLaunchAuthorityInventory,
+    "custom-registry-project-authority-inventory",
+  );
+  const authorities = array(
+    inventory.authorities,
+    "custom-registry-project-authorities",
+  ).map((value) => {
+    const item = record(value, "custom-registry-project-authority");
+    assertJsonValue(item, "custom-registry-project-authority");
+    return Object.freeze(item as Readonly<Record<string, JsonValue>>);
+  });
+  const dependencies = array(
+    review.dependencies,
+    "custom-registry-project-review-dependencies",
+  ).map((value) => {
+    const item = record(value, "custom-registry-project-review-dependency");
+    assertJsonValue(item, "custom-registry-project-review-dependency");
+    return Object.freeze(item as Readonly<Record<string, JsonValue>>);
+  });
+  const findings = array(
+    review.findings,
+    "custom-registry-project-review-findings",
+  ).map((value) => {
+    const item = record(value, "custom-registry-project-review-finding");
+    assertJsonValue(item, "custom-registry-project-review-finding");
+    return Object.freeze(item as Readonly<Record<string, JsonValue>>);
+  });
+  return Object.freeze({
+    status:
+      review.status === "verified"
+        ? "reviewed"
+        : review.status as "superseded" | "revoked",
+    policyVersion: safeId(
+      review.policyVersion,
+      "custom-registry-project-review-policy-version",
+    ),
+    policyCommitment: digest(
+      review.policyCommitment,
+      "custom-registry-project-review-policy",
+    ),
+    repositoryUri: exactHttpsUrl(
+      approval.repositoryUri,
+      "custom-registry-project-review-repository",
+    ),
+    commitObjectId: text(
+      review.commitObjectId,
+      "custom-registry-project-review-commit",
+      64,
+    ),
+    sourceCommitment: digest(
+      review.sourceCommitment,
+      "custom-registry-project-review-source",
+    ),
+    buildCommitment: digest(
+      review.buildCommitment,
+      "custom-registry-project-review-build",
+    ),
+    artifactSetHash: digest(
+      review.artifactSetHash,
+      "custom-registry-project-review-artifacts",
+    ),
+    runtimeCodeHashes: Object.freeze(
+      array(
+        review.runtimeCodeKeccak256,
+        "custom-registry-project-review-runtimes",
+      ).map((value) =>
+        bytes32(value, "custom-registry-project-review-runtime")
+      ),
+    ),
+    configurationCommitment: digest(
+      review.configurationCommitment,
+      "custom-registry-project-review-configuration",
+    ),
+    authorities: Object.freeze(authorities),
+    upgradeability: Object.freeze({
+      kind: text(
+        review.upgradeability,
+        "custom-registry-project-review-upgradeability",
+      ),
+      evidenceHash: digest(
+        review.upgradeabilityEvidenceHash,
+        "custom-registry-project-review-upgradeability-evidence",
+      ),
+    }),
+    pause: Object.freeze({
+      authority: text(
+        review.pauseAuthority,
+        "custom-registry-project-review-pause",
+      ),
+      evidenceHash: digest(
+        review.pauseAuthorityEvidenceHash,
+        "custom-registry-project-review-pause-evidence",
+      ),
+    }),
+    custody: Object.freeze({
+      kind: text(
+        review.custody,
+        "custom-registry-project-review-custody",
+      ),
+      evidenceHash: digest(
+        review.custodyEvidenceHash,
+        "custom-registry-project-review-custody-evidence",
+      ),
+    }),
+    dependencies: Object.freeze(dependencies),
+    findings: Object.freeze(findings),
+    reviewedAt: instant(
+      review.reviewedAt,
+      "custom-registry-project-review-time",
+    ),
+    reviewerType: safeId(
+      review.reviewerType,
+      "custom-registry-project-review-reviewer",
+    ),
+    deploymentBindingHash: digest(
+      review.deploymentBindingHash,
+      "custom-registry-project-review-deployment",
+    ),
+    supersededBy: review.supersededBy === null
+      ? null
+      : digest(
+          review.supersededBy,
+          "custom-registry-project-review-superseded",
+        ),
+    revokedAt: review.revokedAt === null
+      ? null
+      : instant(review.revokedAt, "custom-registry-project-review-revoked"),
+    revocationEvidenceHash: review.revocationEvidenceHash === null
+      ? null
+      : digest(
+          review.revocationEvidenceHash,
+          "custom-registry-project-review-revocation-evidence",
+        ),
+  });
+}
+
 function projectRecord(
   event: CustomRegistryEventV3,
   chain: CustomRegistryChainManifestV3,
@@ -1925,6 +3588,12 @@ function projectRecord(
   if (rawProducerRecord === null || rawProducerRecord === undefined) {
     return fail("custom-registry-missing-producer-record");
   }
+  const normalizedFeePolicy = validateProducerFeeBindings(
+    record(rawProducerRecord, "custom-registry-project-producer-record"),
+  ).feePolicy;
+  const normalizedSecurityReview = normalizeProducerSecurityReview(
+    rawProducerRecord,
+  );
   const finality = registryFinality(event, chain, head);
   const registeredAt = previous?.lifecycle.registeredAt ?? event.onchainTimestamp;
   const lifecycleStatus: CustomLaunchStatusV3 =
@@ -1940,6 +3609,8 @@ function projectRecord(
   const sourceWithoutProjection = source as NonNullable<CustomRegistryEventV3["record"]>;
   return Object.freeze({
     ...sourceWithoutProjection,
+    feePolicy: normalizedFeePolicy,
+    securityReview: normalizedSecurityReview,
     origin: Object.freeze({
       kind: "programmable-custom-registry-v3",
       registryLaunchIdRaw: event.registryLaunchIdRaw,
@@ -1990,7 +3661,10 @@ function projectRecord(
         (event.operation === "corrected" &&
           previous?.programmableVerified === true)) &&
       finality.status !== "orphaned" &&
-      programmableVerified(sourceWithoutProjection),
+      programmableVerified({
+        ...sourceWithoutProjection,
+        securityReview: normalizedSecurityReview,
+      }),
     registryFinality: finality,
     lifecycle: Object.freeze({
       status: lifecycleStatus,
@@ -2029,6 +3703,9 @@ export class CustomRegistryProjectorV3 {
   readonly #history: ProjectedEvent[] = [];
   readonly #current = new Map<Sha256Digest, CustomLaunchProjectionRecordV3>();
   readonly #eventByLaunch = new Map<Sha256Digest, ProjectedEvent>();
+  readonly #approvalById = new Map<HexBytes32, Sha256Digest>();
+  readonly #approvalEvidence = new Set<HexBytes32>();
+  readonly #approvalTransitionByRegistry = new Map<string, bigint>();
 
   constructor(manifest: CustomRegistryDeploymentManifestV3) {
     this.#manifest = parseCustomRegistryDeploymentManifestV3(manifest);
@@ -2101,6 +3778,38 @@ export class CustomRegistryProjectorV3 {
       projector.#history.push(projected);
       projector.#current.set(event.launchId, item.record);
       projector.#eventByLaunch.set(event.launchId, projected);
+      const authorization = event.approvalAuthorization;
+      if (authorization !== null) {
+        const authorizationDigest = sha256(
+          "programmable.custom-registry-approval-authorization.v1",
+          authorization,
+        );
+        const priorAuthorization = projector.#approvalById.get(
+          authorization.approvalId,
+        );
+        const registryKey = approvalRegistryKey(authorization);
+        const priorTransition =
+          projector.#approvalTransitionByRegistry.get(registryKey);
+        const transition = BigInt(authorization.transitionSequence);
+        if (
+          (priorAuthorization !== undefined &&
+            priorAuthorization !== authorizationDigest) ||
+          (priorAuthorization === undefined &&
+            (projector.#approvalEvidence.has(authorization.evidenceHash) ||
+              (priorTransition !== undefined &&
+                transition <= priorTransition)))
+        ) {
+          return fail("custom-registry-checkpoint-approval-replay");
+        }
+        projector.#approvalById.set(
+          authorization.approvalId,
+          authorizationDigest,
+        );
+        projector.#approvalEvidence.add(authorization.evidenceHash);
+        if (priorAuthorization === undefined) {
+          projector.#approvalTransitionByRegistry.set(registryKey, transition);
+        }
+      }
     }
     return projector;
   }
@@ -2121,6 +3830,21 @@ export class CustomRegistryProjectorV3 {
         return fail("custom-registry-occurrence-conflict");
       }
       return Object.freeze({ kind: "duplicate", item: existingOccurrence.item });
+    }
+    const authorization = event.approvalAuthorization;
+    const priorApprovalTransition = authorization === null
+      ? undefined
+      : this.#approvalTransitionByRegistry.get(approvalRegistryKey(authorization));
+    if (
+      authorization !== null &&
+      (head.canonicalBlockHash(authorization.blockNumber) !==
+        authorization.blockHash ||
+        this.#approvalById.has(authorization.approvalId) ||
+        this.#approvalEvidence.has(authorization.evidenceHash) ||
+        (priorApprovalTransition !== undefined &&
+          BigInt(authorization.transitionSequence) <= priorApprovalTransition))
+    ) {
+      return fail("custom-registry-approval-replay-or-reorg");
     }
     const previous = this.#current.get(event.launchId) ?? null;
     const previousSequence = previous === null
@@ -2172,6 +3896,17 @@ export class CustomRegistryProjectorV3 {
     this.#history.push(accepted);
     this.#current.set(event.launchId, projected);
     this.#eventByLaunch.set(event.launchId, accepted);
+    if (authorization !== null) {
+      this.#approvalById.set(
+        authorization.approvalId,
+        sha256("programmable.custom-registry-approval-authorization.v1", authorization),
+      );
+      this.#approvalEvidence.add(authorization.evidenceHash);
+      this.#approvalTransitionByRegistry.set(
+        approvalRegistryKey(authorization),
+        BigInt(authorization.transitionSequence),
+      );
+    }
     return Object.freeze({ kind: "inserted", item });
   }
 
@@ -2202,6 +3937,18 @@ export class CustomRegistryProjectorV3 {
     this.#eventByLaunch.clear();
     for (const [key, value] of staged.#eventByLaunch) {
       this.#eventByLaunch.set(key, value);
+    }
+    this.#approvalById.clear();
+    for (const [key, value] of staged.#approvalById) {
+      this.#approvalById.set(key, value);
+    }
+    this.#approvalEvidence.clear();
+    for (const value of staged.#approvalEvidence) {
+      this.#approvalEvidence.add(value);
+    }
+    this.#approvalTransitionByRegistry.clear();
+    for (const [key, value] of staged.#approvalTransitionByRegistry) {
+      this.#approvalTransitionByRegistry.set(key, value);
     }
     return Object.freeze(results);
   }
