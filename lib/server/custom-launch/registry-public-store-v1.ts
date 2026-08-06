@@ -2,7 +2,7 @@ import "server-only";
 
 import type {
   AuthenticatedCustomLaunchProjectV2,
-  CustomLaunchFeeObligationV2,
+  CustomLaunchFeeObligationV3,
   PostLaunchAuthorityInventoryV1,
 } from "../../custom-launch/contract-v2";
 import {
@@ -96,7 +96,7 @@ export interface RegistryCustomLaunchPublicRecordV1 {
     feeAssessmentHash: Sha256Digest;
     feeObligationHash: Sha256Digest;
     feeAssessmentObligationBindingHash: Sha256Digest;
-    obligation: Readonly<CustomLaunchFeeObligationV2>;
+    obligation: Readonly<CustomLaunchFeeObligationV3>;
   }>;
   readonly roles: Readonly<{
     launchingWallet: Readonly<{ namespace: string; value: string }>;
