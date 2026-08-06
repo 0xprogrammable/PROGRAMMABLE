@@ -1,0 +1,78 @@
+{
+  "schemaVersion": "programmable.launch-specification.v1",
+  "applicationId": "bankroll-hook",
+  "language": "solidity",
+  "compiler": {
+    "family": "solc",
+    "profileId": "programmable:solidity-solc-0.8.26-v1",
+    "version": "0.8.26",
+    "settings": {
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "evmVersion": "cancun"
+    }
+  },
+  "chain": {
+    "namespace": "eip155",
+    "reference": "1",
+    "profileId": "ethereum-mainnet-v1"
+  },
+  "launcher": {
+    "route": {
+      "kind": "canonical-v4-launchpad-v1",
+      "adapterId": "canonical-v4-launchpad-adapter-v1"
+    }
+  },
+  "rootTargetId": "target:bankroll-hook",
+  "rootComponentId": "component:bankroll-hook",
+  "targets": [
+    {
+      "targetId": "target:bankroll-hook",
+      "componentId": "component:bankroll-hook",
+      "sourceId": "source:primary",
+      "sourceUnitName": "src/bankroll/BankrollHook.sol",
+      "sourceSha256": "sha256:69074b1e4210e7b4cfddae2d6a5ffefbcbf28c68832a84b5c71b67484df1997d",
+      "contractName": "BankrollHook",
+      "deploymentMode": "create2-deterministic",
+      "saltStrategy": "compiler-deterministic-v1",
+      "declaredHookPermissions": [
+        "afterSwap",
+        "afterSwapReturnDelta",
+        "beforeInitialize",
+        "beforeSwap",
+        "beforeSwapReturnDelta"
+      ],
+      "deploymentValueWei": "0",
+      "initializerValueWei": "0",
+      "constructor": {
+        "abiEncodedArguments": "0x",
+        "addressLocators": []
+      },
+      "initializer": null,
+      "libraries": []
+    }
+  ],
+  "components": [
+    {
+      "componentId": "component:bankroll-hook",
+      "kind": "v4-hook",
+      "sourceIds": [
+        "source:primary"
+      ],
+      "targetIds": [
+        "target:bankroll-hook"
+      ],
+      "attributes": {
+        "summary": "Bankroll Hook Uniswap v4 finite wager launch game."
+      }
+    }
+  ],
+  "edges": [],
+  "externalOnchainDependencies": [],
+  "internalChildDeployments": [],
+  "releaseModules": [],
+  "declaredIdentities": [],
+  "extensions": {}
+}
