@@ -123,7 +123,7 @@
     "conservation": "builderCut + launcherCut + holderAmount == fee on every call",
     "launcherFeeRecipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c; an immutable constant in ShardLaunchFactoryV1, not a constructor argument, and the same address Classic v3 uses; the factory cannot route the launcher share elsewhere",
     "outerFeeCarry": "the pool-level 1% fee is cumulative on both bases: the per-swap floor is carried (feeCarryIn for exact-input, feeCarryOut for exact-output) so a stream of tiny swaps accrues the same total as one aggregated swap rather than each flooring to zero; a single swap may still take zero for itself until its sub-wei share accumulates to one wei",
-    "outerFeeResidual": "buyMax clamps the fee to its exact-input reserve at full consumption, shedding at most one wei at that rounding boundary; economically negligible"
+    "buyMaxCarry": "buyMax clamps the fee to its exact-input reserve so the buyer is never overspent, and returns the uncollected wei to feeCarryOut so the entitlement is preserved and collected on a later exact-output swap rather than shed once per qualifying call"
   },
   "rewards": {
     "currency": "native ETH",

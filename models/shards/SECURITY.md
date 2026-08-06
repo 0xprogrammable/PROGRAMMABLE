@@ -145,8 +145,9 @@ explicit bounds rather than any price oracle:
 - **The 1% fee is cumulative on both bases.** The pool-level fee (`_chargeFee` in `src/ShardHookV1.sol`) carries its
   per-swap remainder (`feeCarryIn` for exact-input, `feeCarryOut` for exact-output), so a stream of tiny swaps
   accrues the same total 1% as one aggregated swap instead of each flooring to zero. A single swap may still take
-  zero for itself until its sub-wei share accumulates to one wei. The only residual is `buyMax`, which clamps the fee
-  to its exact-input reserve at full consumption and sheds at most one wei at that rounding boundary — economically
-  negligible. Once charged, the builder and launcher cuts are conserved to the wei and never floored away.
+  zero for itself until its sub-wei share accumulates to one wei. `buyMax` clamps the inclusive fee to its exact-input
+  reserve so the buyer is never overspent, and returns the wei it cannot collect to `feeCarryOut` so that entitlement
+  is preserved and collected on a later exact-output swap — it is not shed per call. Once charged, the builder and
+  launcher cuts are conserved to the wei and never floored away.
 
 This file does not claim an audit.

@@ -60,6 +60,10 @@ contract FeeSplitHarness is ShardHookV1 {
     function chargeFee(uint256 gross, bool exactIn) external returns (uint256) {
         return _chargeFee(gross, exactIn);
     }
+
+    function outFeeCarry() external view returns (uint256) {
+        return feeCarryOut;
+    }
 }
 
 contract SplitSwapRouter is IUnlockCallback {
@@ -326,6 +330,27 @@ contract ShardFeeSplitV1Test is Test {
             charged += hook.chargeFee(gross, exactIn);
         }
         assertEq(charged, (total * FEE_BPS) / denom, "carried fee drifted from the cumulative 1%");
+    }
+
+    /// buyMax clamps the inclusive fee to its exact-input reserve so the buyer is never overspent, but
+    /// the uncollected wei must be CARRIED, not shed once per call. A msg.value of 100_099 wei fully
+    /// consumes its swap and lands the inclusive fee (1001) one wei above the reserve (1000) — the exact
+    /// clamp boundary the reviewer hit. Each boundary call must add a whole carried wei to feeCarryOut
+    /// (>= BPS-FEE_BPS in numerator terms), and Programmable still accrues its share of the collected
+    /// fee. Without the carry-back the remainder is below one whole wei and the entitlement is lost.
+    function test_buyMax_clampCarriesUncollectedWeiAndAccruesToProgrammable() public {
+        hook.initialise();
+        uint256 value = 100_099; // 100*1000 + 99: maxFee 1000, ethForSwap 99_099, inclusive fee 1001
+
+        hook.buyMax{ value: value }(0, block.timestamp + 600);
+        uint256 carryOne = hook.outFeeCarry();
+        uint256 launcherOne = hook.launcherFeesAccrued();
+        assertGe(carryOne, BPS - FEE_BPS, "clamped wei shed instead of carried");
+        assertGt(launcherOne, 0, "Programmable did not accrue from the collected buyMax fee");
+
+        hook.buyMax{ value: value }(0, block.timestamp + 600);
+        assertGt(hook.outFeeCarry(), carryOne, "second boundary call did not carry an additional wei");
+        assertGt(hook.launcherFeesAccrued(), launcherOne, "Programmable accrual did not grow across calls");
     }
 
     /*//////////////////////////////////////////////////////////

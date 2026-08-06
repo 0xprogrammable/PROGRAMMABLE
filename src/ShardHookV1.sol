@@ -423,8 +423,8 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
     ///      a stream of tiny swaps accrues the same total fee as one aggregated swap instead of each
     ///      swap flooring its sub-wei share to zero. Two accumulators because exact-input fees divide
     ///      by BPS_DENOMINATOR and exact-output fees by (BPS_DENOMINATOR - FEE_BPS).
-    uint256 private feeCarryIn;
-    uint256 private feeCarryOut;
+    uint256 internal feeCarryIn;
+    uint256 internal feeCarryOut;
     /// @dev The fee {_beforeSwap} charged, handed to {_afterSwap} so it reconstructs the exact
     ///      requested swap size without recomputing (which would double-consume the carry). Written
     ///      by {_beforeSwap} immediately before {_afterSwap} reads it within the same swap, so it is
@@ -605,14 +605,7 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
 
         uint256 ethSpent = abi.decode(poolManager.unlock(abi.encode(Action.BUY, msg.value)), (uint256));
 
-        // Inclusive: the curve cost is the NET, so total = cost + fee and fee is 1% of total.
-        // `ethSpent * 100 / 10_000` would be 0.990% and quietly cheaper than swap-then-redeem.
-        uint256 fee = _chargeFee(ethSpent, false);
-        uint256 total = ethSpent + fee;
-        if (total > msg.value) revert ShardErrorsV1.InsufficientPayment(total, msg.value);
-        if (total > maxEthIn) revert ShardErrorsV1.SlippageExceeded(maxEthIn, total);
-
-        _distributeFee(fee);
+        (uint256 fee, uint256 total) = _chargeBuy(ethSpent, maxEthIn);
 
         tokenId = nft.acquire(msg.sender, _nextSeed(msg.sender));
         _acquireAccounting(tokenId, msg.sender);
@@ -649,12 +642,7 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
             (uint256)
         );
 
-        uint256 fee = _chargeFee(ethSpent, false); // inclusive: 1% of the TOTAL, not of the cost
-        uint256 total = ethSpent + fee;
-        if (total > msg.value) revert ShardErrorsV1.InsufficientPayment(total, msg.value);
-        if (total > maxEthIn) revert ShardErrorsV1.SlippageExceeded(maxEthIn, total);
-
-        _distributeFee(fee);
+        (uint256 fee, uint256 total) = _chargeBuy(ethSpent, maxEthIn);
 
         tokenIds = new uint256[](count);
         for (uint256 i; i < count; ++i) {
@@ -708,10 +696,19 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
         // `msg.value = 100 * maxFee + 99` the inclusive form lands one wei higher, which would
         // overspend `msg.value` by that wei.
         uint256 fee = _chargeFee(ethConsumed, false);
-        // The inclusive basis can land a wei above the exact-input reserve at full consumption; clamp
-        // so the buyer is never overspent. The clamped wei (at most one, and only at this rounding
-        // edge) is not carried — the same sub-wei rounding the fee has always shed here.
-        if (fee > maxFee) fee = maxFee;
+        // The inclusive basis can land above the exact-input reserve at full consumption; clamp so the
+        // buyer is never overspent, and return the uncollected wei to the carry so the entitlement is
+        // preserved and collected on a later exact-output swap — not shed once per qualifying call.
+        if (fee > maxFee) {
+            // `fee - maxFee` is an exact whole-wei count and its sub-wei remainder is already held in
+            // feeCarryOut, so multiplying by the constant denominator converts those wei back into
+            // carry-numerator units with no precision loss. Slither flags this as divide-before-
+            // multiply; it is an intentional, exact unit conversion, not a rounding hazard.
+            unchecked {
+                feeCarryOut += (fee - maxFee) * (ShardConstantsV1.BPS_DENOMINATOR - ShardConstantsV1.FEE_BPS);
+            }
+            fee = maxFee;
+        }
 
         _distributeFee(fee);
 
@@ -1093,5 +1090,17 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
     function _verifyFeeHeld(uint256 holderEth, uint256 fee) private view {
         uint256 expected = holderEth + fee;
         if (address(this).balance < expected) revert ShardErrorsV1.FeeEthMissing(expected, address(this).balance);
+    }
+
+    /// @dev Shared buy head for {buyNFT} and {buyMany}: charge the inclusive 1% fee (carrying its
+    ///      remainder), bound the total against payment and slippage, then distribute the fee.
+    ///      `ethSpent` is the NET curve cost, so the fee is 1% of the total — `ethSpent * 100 / 10_000`
+    ///      would be 0.990% and quietly cheaper than swap-then-redeem.
+    function _chargeBuy(uint256 ethSpent, uint256 maxEthIn) private returns (uint256 fee, uint256 total) {
+        fee = _chargeFee(ethSpent, false);
+        total = ethSpent + fee;
+        if (total > msg.value) revert ShardErrorsV1.InsufficientPayment(total, msg.value);
+        if (total > maxEthIn) revert ShardErrorsV1.SlippageExceeded(maxEthIn, total);
+        _distributeFee(fee);
     }
 }
