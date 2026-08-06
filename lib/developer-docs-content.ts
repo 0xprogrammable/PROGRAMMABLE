@@ -12,6 +12,7 @@ import {
   PROGRAMMABLE_LABELS,
   PROGRAMMABLE_OPENAPI_URL,
   PROGRAMMABLE_PLATFORM_ID,
+  PROGRAMMABLE_RUNTIME_HASH_SEAM,
   PROGRAMMABLE_SCHEMA_BASE_URL,
   PROGRAMMABLE_VERIFIED_DEFINITION,
   PROGRAMMABLE_WELL_KNOWN_URL,
@@ -89,7 +90,12 @@ export const developerDocsMarkdown = [
   "",
   "Approved repository revision → reproducible build → wallet launch → runtime match → canonical registry → developer feed.",
   "",
-  "Approval is not a launch. A public Custom record binds chainId, CAIP-2, launchId, projectId, approval, repository, commit, source and build commitments, artifact hashes, deployment configuration, launch wallet, transaction, block, log position, runtime code hashes, assets, contracts, markets, fee policy, security review and finality evidence.",
+  "Approval is not a launch. A public Custom record binds chainId, CAIP-2, launchId, projectId, approval, repository, commit, source and build commitments, artifact hashes, deployment configuration, launch wallet, transaction, block, log position, EVM runtimeCodeHash values, assets, contracts, markets, fee policy, security review and finality evidence. For EVM deployments, `runtimeCodeHash` is the `" +
+    PROGRAMMABLE_RUNTIME_HASH_SEAM.evmFormat +
+    "` `" +
+    PROGRAMMABLE_RUNTIME_HASH_SEAM.evmAlgorithm +
+    "`. " +
+    PROGRAMMABLE_RUNTIME_HASH_SEAM.supplementalEvidence,
   "",
   "Atomic launches deploy, initialize and register in one transaction or fully revert. Multistep launches stay nonpublic until a finalization transaction proves the complete deployment graph. Corrections, registry generations, retirements and revocations are append-only facts.",
   "",
@@ -110,7 +116,7 @@ export const developerDocsMarkdown = [
   "",
   "This definition is exact and bounded. Keep provenance, review result, code and runtime match, finality, metadata trust, dependencies, admin and upgrade rights, market verification, charting, quotes, simulation, execution and fees as separate facts. Never expose a universal `safe` or `audited` boolean.",
   "",
-  "The review record includes policy version and commitment, repository, commit, source, build, artifact and runtime hashes, configuration, authorities, upgradeability, pause and custody, dependencies, oracles, bridges, offchain services, findings, review time, reviewer type, deployment binding, superseded and revoked state.",
+  "The review record includes policy version and commitment, repository, commit, source, build and artifact hashes, separately labeled optional SHA-256 evidence, EVM runtimeCodeHash values, configuration, authorities, upgradeability, pause and custody, dependencies, oracles, bridges, offchain services, findings, review time, reviewer type, deployment binding, superseded and revoked state.",
   "",
   "## Fee policy",
   "",
@@ -140,7 +146,9 @@ export const developerDocsMarkdown = [
   "",
   ...endpointReference,
   "",
-  "The token detail path needs both `{chainId}` and `{tokenAddress}`. Project-only and multi-token launches remain available through the general feed and may have no canonical token detail route.",
+  "Use `GET /api/v" +
+    PROGRAMMABLE_ACTIVE_API_VERSION +
+    "/launches/{launchId}` for every launch shape, including project-only and multi-asset records. The token compatibility path needs both `{chainId}` and `{tokenAddress}` and applies only when the record has a canonical token address.",
   "",
   "## Canonical resources",
   "",

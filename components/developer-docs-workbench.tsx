@@ -22,6 +22,7 @@ import {
   PROGRAMMABLE_LABELS,
   PROGRAMMABLE_OPENAPI_URL,
   PROGRAMMABLE_PLATFORM_ID,
+  PROGRAMMABLE_RUNTIME_HASH_SEAM,
   PROGRAMMABLE_VERIFIED_DEFINITION,
   PROGRAMMABLE_WELL_KNOWN_URL,
 } from "@/components/developer-docs-contract";
@@ -118,6 +119,8 @@ export const agentPrompt = [
   "- Require the canonical registry event for every Custom classification.",
   "- Resolve current and historical deployments from the manifest.",
   "- Key assets by chainId plus token address and deduplicate by launchId.",
+  `- Fetch any launch shape by /api/v${PROGRAMMABLE_ACTIVE_API_VERSION}/launches/{launchId}; use the token compatibility route only when a canonical token exists.`,
+  `- For EVM, runtimeCodeHash is ${PROGRAMMABLE_RUNTIME_HASH_SEAM.evmFormat} ${PROGRAMMABLE_RUNTIME_HASH_SEAM.evmAlgorithm}. ${PROGRAMMABLE_RUNTIME_HASH_SEAM.supplementalEvidence}`,
   "- Complete each traversal with nextCursor before persisting resumeCursor.",
   "- Preserve finality, provenance, null values and unknown optional fields.",
   "- Do not infer audited, safe, chartable or tradable from category alone.",

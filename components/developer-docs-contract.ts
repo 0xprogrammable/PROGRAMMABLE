@@ -32,6 +32,13 @@ export const PROGRAMMABLE_FINALITY_STATES = [
   "orphaned",
 ] as const;
 
+export const PROGRAMMABLE_RUNTIME_HASH_SEAM = {
+  evmAlgorithm: "keccak256(runtime bytecode)",
+  evmFormat: "bytes32",
+  supplementalEvidence:
+    "Optional SHA-256 evidence must be separately labeled and is not runtimeCodeHash.",
+} as const;
+
 export const PROGRAMMABLE_FEE_POLICY = {
   nativeCustom: {
     chargeMode: "official market path only",
@@ -70,6 +77,13 @@ export const PROGRAMMABLE_ENDPOINTS = [
     href: "/api/v2/launches",
     label: "Ingest launches",
     note: "Backfill and poll paginated Classic and Custom records.",
+  },
+  {
+    path: "/api/v2/launches/{launchId}",
+    href:
+      "/api/v2/launches/eip155:1:0xf5e25accf0e4d58b01b56eaacd427b68fbe4daa3",
+    label: "Fetch one launch",
+    note: "Resolve any launch, including project-only and multi-asset records.",
   },
   {
     path: "/api/v2/launches/{chainId}/{tokenAddress}",

@@ -29,6 +29,7 @@ import {
   PROGRAMMABLE_LABELS,
   PROGRAMMABLE_OPENAPI_URL,
   PROGRAMMABLE_PLATFORM_ID,
+  PROGRAMMABLE_RUNTIME_HASH_SEAM,
   PROGRAMMABLE_SCHEMA_BASE_URL,
   PROGRAMMABLE_VERIFIED_DEFINITION,
   PROGRAMMABLE_WELL_KNOWN_URL,
@@ -101,7 +102,11 @@ const providerRequirements = [
   ],
   [
     "Source",
-    "Verified source, ABI, deployment transaction, start block and runtime code hashes.",
+    "Verified source, ABI, deployment transaction, start block and EVM runtimeCodeHash as " +
+      PROGRAMMABLE_RUNTIME_HASH_SEAM.evmFormat +
+      " " +
+      PROGRAMMABLE_RUNTIME_HASH_SEAM.evmAlgorithm +
+      ".",
   ],
   [
     "Template",
@@ -473,8 +478,8 @@ export default function DeveloperDocsPage() {
             <p>
               Approval binds repository, commit, source commitment, build,
               artifacts, configuration, chain and launch wallet. The public
-              record appears only after deployed runtime hashes and finalization
-              evidence match that approval.
+              record appears only after deployed EVM runtimeCodeHash values and
+              finalization evidence match that approval.
             </p>
           </article>
           <article>
@@ -494,6 +499,13 @@ export default function DeveloperDocsPage() {
             </p>
           </article>
         </div>
+
+        <p className={styles.scopeNote}>
+          For EVM deployments, <code>runtimeCodeHash</code> is the{" "}
+          <code>{PROGRAMMABLE_RUNTIME_HASH_SEAM.evmFormat}</code>{" "}
+          <code>{PROGRAMMABLE_RUNTIME_HASH_SEAM.evmAlgorithm}</code>.{" "}
+          {PROGRAMMABLE_RUNTIME_HASH_SEAM.supplementalEvidence}
+        </p>
       </section>
 
       <section id="providers">
@@ -785,6 +797,7 @@ export default function DeveloperDocsPage() {
             <ul>
               <li>Policy version and commitment</li>
               <li>Repository, commit, source, build and artifact hashes</li>
+              <li>Optional SHA-256 evidence separately named and labeled</li>
               <li>Configuration, authorities and upgradeability</li>
               <li>Pause, custody, dependencies, oracles and bridges</li>
               <li>Findings, reviewer type, review time and scope</li>
@@ -795,7 +808,11 @@ export default function DeveloperDocsPage() {
             <h3>Deployment record</h3>
             <ul>
               <li>Chain, launch wallet, transaction and block binding</li>
-              <li>Runtime code hash and deployment configuration match</li>
+              <li>
+                EVM runtimeCodeHash as{" "}
+                <code>{PROGRAMMABLE_RUNTIME_HASH_SEAM.evmAlgorithm}</code> and{" "}
+                deployment configuration match
+              </li>
               <li>Finality and canonical registry evidence</li>
               <li>Superseded, revoked and authority change state</li>
               <li>Market, fee and metadata trust kept separate</li>
@@ -1014,13 +1031,16 @@ export default function DeveloperDocsPage() {
 
         <div className={styles.endpointGuidance}>
           <p>
-            A token detail request needs both path values. Use
+            Use{" "}
+            <code>
+              /api/v{PROGRAMMABLE_ACTIVE_API_VERSION}/launches/{"{launchId}"}
+            </code>{" "}
+            for every launch shape, including project-only and multi-asset
+            records. A token compatibility lookup needs both path values. Use
             <code>
               /api/v{PROGRAMMABLE_ACTIVE_API_VERSION}/launches/1/0x…
-            </code>
-            . Project only launches and multi token projects remain available in
-            the general feed because they may have no canonical token detail
-            route.
+            </code>{" "}
+            only when the record has a canonical token address.
           </p>
           <div aria-label="Launch feed query parameters">
             <code>chainId=1</code>

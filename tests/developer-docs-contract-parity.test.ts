@@ -16,6 +16,7 @@ import {
   PROGRAMMABLE_LABELS,
   PROGRAMMABLE_OPENAPI_URL,
   PROGRAMMABLE_PLATFORM_ID,
+  PROGRAMMABLE_RUNTIME_HASH_SEAM,
   PROGRAMMABLE_VERIFIED_DEFINITION,
   PROGRAMMABLE_WELL_KNOWN_URL,
 } from "../components/developer-docs-contract";
@@ -64,6 +65,7 @@ describe("canonical public developer-contract facts", () => {
       "/api/v2/status",
       "/api/v2/manifest",
       "/api/v2/launches",
+      "/api/v2/launches/{launchId}",
       "/api/v2/launches/{chainId}/{tokenAddress}",
       "/api/v2/token-list",
     ]);
@@ -72,6 +74,30 @@ describe("canonical public developer-contract facts", () => {
     }
     expect(languageExamples[0]?.code).toContain(PROGRAMMABLE_WELL_KNOWN_URL);
     expect(languageExamples[1]?.code).toContain("discovery.apiBaseUrl");
+    expect(developerDocsMarkdown).toContain(
+      "including project-only and multi-asset records",
+    );
+  });
+
+  it("locks the EVM runtime hash algorithm without conflating SHA-256 evidence", () => {
+    expect(PROGRAMMABLE_RUNTIME_HASH_SEAM).toEqual({
+      evmAlgorithm: "keccak256(runtime bytecode)",
+      evmFormat: "bytes32",
+      supplementalEvidence:
+        "Optional SHA-256 evidence must be separately labeled and is not runtimeCodeHash.",
+    });
+    expect(developerDocsMarkdown).toContain(
+      "`runtimeCodeHash` is the `bytes32` `keccak256(runtime bytecode)`",
+    );
+    expect(developerDocsMarkdown).toContain(
+      PROGRAMMABLE_RUNTIME_HASH_SEAM.supplementalEvidence,
+    );
+    expect(agentPrompt).toContain(
+      "runtimeCodeHash is bytes32 keccak256(runtime bytecode)",
+    );
+    expect(developerDocsMarkdown).not.toContain(
+      "runtimeCodeHash is SHA-256",
+    );
   });
 
   it("locks platform identity and exactly two public labels", () => {
@@ -151,6 +177,7 @@ describe("canonical public developer-contract facts", () => {
       "PROGRAMMABLE_FEE_RECIPIENT",
       "PROGRAMMABLE_FINALITY_STATES",
       "PROGRAMMABLE_LABELS",
+      "PROGRAMMABLE_RUNTIME_HASH_SEAM",
       "PROGRAMMABLE_VERIFIED_DEFINITION",
     ]) {
       expect(pageSource).toContain(exportName);
