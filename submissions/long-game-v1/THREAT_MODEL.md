@@ -1,37 +1,21 @@
 # Threat model
 
-Protected assets are hook-custodied base tokens and PoolManager WETH claims backing platform fees, rebates, and scaled
-rewards. Valuable state includes immutable-owner positions, remaining cost basis, mature shares, intent nonces,
-cumulative fee remainders, and reward distribution dust.
+Protected assets are hook-custodied V4 positions, PoolManager WETH claims backing Programmable fees, rebates and rewards, and the permanently locked initial V4/WETH liquidity position. Valuable state includes remaining cost basis, mature shares, intent nonces, cumulative fee remainders, reward distribution dust, and the exact canonical PoolKey.
 
-Adversaries include arbitrary routers, forged/replayed/expired intents, position impersonators, fee-fragmenting
-traders, alternate PoolKeys or PoolManagers, donation griefers, claim redirectors, wallet sybils, reentrant recipients,
-MEV actors, and unsupported base tokens. There is no offchain signer, oracle, keeper, secret, upgrade authority, project
-treasury, or admin recovery power.
+Adversaries include arbitrary routers, forged/replayed/expired intents, position impersonators, fee-fragmenting traders, alternate PoolKeys or PoolManagers, permission-mask collisions, malicious deployment salts, donation griefers, claim redirectors, wallet sybils, reentrant recipients, MEV actors, and unsupported token behavior.
 
-The immutable PoolManager is the only callback caller. The canonical PoolId and exact hook address are checked in each
-enabled callback. Verified hook data additionally requires the callback `sender` to be the immutable trusted router;
-the staged hash binds owner, kind, position, direction, exact-input amount, price limit, minimum output, deadline, and
-nonce. Consumption is single-use. Empty data has no identity semantics and remains available to ordinary routers.
+## Trust and authority boundaries
 
-The enabled permission mask is exactly `beforeInitialize`, `beforeSwap`, `afterSwap`,
-`beforeSwapReturnDelta`, and `afterSwapReturnDelta`. CREATE2 factory deployment rejects any other low-bit mask.
-Specified-quote fees are bounded positive before-swap deltas; unspecified-quote fees and verified buy custody are
-bounded positive after-swap deltas. Unsupported fills or sign/amount mismatches revert. The hook never calls a
-same-pool swap. Claim unlocks permit only claim burn/settlement and WETH take.
+- Only canonical PoolManager `0x000000000004444c5dc75cB358380D2e3dE08A90` may call hook and launcher callbacks.
+- Verified hook data additionally requires the immutable trusted router. The staged intent is exact, nonce-bound, and single-use.
+- The hook accepts only its one registered V4/WETH PoolKey. Its exact permission-mined address must encode mask `0x20cc`.
+- The one-shot launcher deploys router before factory before hook, then initializes and funds the pool atomically. A wrong salt, child address, dependency, amount cap, callback delta, or settlement reverts everything.
+- The launcher permanently owns the initial position and exposes no path to remove liquidity, collect position fees, transfer ownership, rescue assets, upgrade code, or make arbitrary calls.
+- Programmable’s 10-bps liability is immutable, segregated, and claimable only by `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`; no mutable stored recipient or project path can redirect it.
 
-Verified sells pre-settle the router's exact base debt with `sync -> ERC20 transfer -> settleFor(router)`. Verified buys
-take only actual base output. Standard non-rebasing, non-fee-on-transfer base behavior is required and the exact paid
-amount is checked. All claims follow checks-effects-interactions and are transient-reentrancy guarded. Position
-withdrawal checkpoints rewards, removes shares, updates token/basis state, deletes a full close, transfers exact base,
-then rechecks custody.
+## Accounting invariants
 
-Independent cumulative platform/project remainders prevent fragmentation evasion. Platform entitlement is immutable,
-claimable anytime only by `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`, and cannot be redirected by a stored mutable
-recipient. Rebate triggers cannot redirect away from the owner; reward callers cannot claim another owner. Claims do
-not reset remainders.
-
-The primary invariants are:
+Specified-quote fees use bounded positive before-swap deltas; unspecified-quote fees and verified-buy custody use actual after-swap deltas. Unsupported fills and sign or amount mismatches revert. Claims reduce recorded liabilities before burning PoolManager claims and taking WETH. Position withdrawals checkpoint rewards, reduce shares/tokens/basis, transfer exact V4, and recheck custody.
 
 ```text
 accountedQuoteClaims * 1e27
@@ -40,12 +24,13 @@ accountedQuoteClaims * 1e27
    + totalRewardScaledLiability
 
 PoolManager WETH claims >= accountedQuoteClaims
-baseToken.balanceOf(hook) >= totalPositionTokens
+V4.balanceOf(hook) >= totalPositionTokens
 initialTokens = sold + withdrawn + remaining
 initialBasis = soldBasis + withdrawnBasis + remainingBasis
 ```
 
-Residual risks requiring independent review include v4 delta signs and exact-output inversion, composite rounding and
-scaled dust, WETH/base assumptions, custody loss from undiscovered logic errors, sybil splitting of holder identity,
-router/provider compatibility, MEV, deployment configuration, and the deliberate inability to recover accidental
-unsupported transfers. Local tests are not an audit or production evidence.
+## Residual risks
+
+Independent review is still required for v4 delta semantics, exact-output behavior on ordinary routes, composite rounding and scaled dust, custody loss from undiscovered logic errors, sybil splitting, router compatibility, MEV, pinned-price staleness, launch funding, dependency-code drift, and the deliberate inability to recover accidental unsupported transfers. The existing V4 token is bound as fixed-supply, non-rebasing, non-fee-on-transfer behavior; any contradictory onchain observation must halt launch.
+
+Platform quoting, indexing, reorg recovery, monitoring, registry, routing-provider approval, and final runtime/source verification are outside the submitted contract system and remain separate maintainer-owned gates. Builder-declared tests are evidence for review, not an audit or production guarantee.

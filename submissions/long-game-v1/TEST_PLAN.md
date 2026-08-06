@@ -1,29 +1,24 @@
 # Test plan
 
-The Foundry suite retains the untouched reference-kernel tests for fee-floor examples, independent cumulative
-remainders, fragmentation resistance, all four ordinary quadrants, both quote orderings, partial fills, dust,
-PoolKey/PoolManager authentication, exact permission bits, ERC6909 claims, claim destinations, and conservation.
+The exact evidence target is source revision `c9163f1947553734393e8e44e558feacc4d4fa4c` and review-target hash `sha256:10d4413cdc656521e8bbdaef1203423933f7c5aca721e7602623467eb2532070`.
 
-Long Game tests cover frozen constants, verified buy custody/basis, partial and full sells, profitable/loss/mature exits,
-no-other-holder full rebate, seller self-reward exclusion, unverified-sell rewards, activation, partial/full withdrawal,
-wrong router/pool/manager, malformed/changed/replayed/expired intents, verified exact-output rejection, ordinary
-exact-output execution, donation isolation, claim redirection, and double claims. Math fuzzing covers proportional basis
-and overflow-safe penalty bounds.
+## Completed local evidence
 
-The stateful invariant handler randomizes exact-input buys, partial sells, withdrawals, and rebate claims across every
-created position. After each sequence it checks base custody, scaled quote conservation, token conservation, basis
-conservation, aggregate position tokens, and zero handler reverts. Exact commands, counts, runs, depth, sizes, gas, and
-tool versions are recorded in `evidence/test-evidence.json` only after execution.
+- Run `forge fmt --check`, `forge build`, `forge test -vv`, and `forge build --sizes --skip test --skip script` with Solidity 0.8.26, Cancun, optimizer 200, and via-IR.
+- Require all 64 unit, integration, fuzz, and invariant tests to pass with no failures or skips. Require all four stateful invariant handlers to complete 64 runs and 2,048 calls per property with zero handler reverts.
+- Cover PoolManager callback authentication, exact `0x20cc` hook permissions, invalid permission-salt rollback, exact PoolKey registration, router-before-hook order, one-shot launch, two-sided PoolManager settlement, and permanent launcher ownership of the initial position.
+- Cover the 10-bps Programmable floor, fixed claim authority, independent cumulative rounding, all four swap quadrants, exact-input and ordinary exact-output behavior, partial-fill rejection, quote-delta conservation, ERC-6909 claim solvency, and claim redirection failures.
+- Cover verified buy custody and basis, partial/full sells, profit/loss/maturity penalties, seller self-exclusion, activation, withdrawal, rebate/reward claims, replay/deadline failures, donation isolation, and public solvency equations.
+- Reproduce the declared launcher, router, factory, hook, runtime hashes, permission mask, market-derived initial price, and liquidity amounts at pinned Ethereum block `25693788` without broadcasting a transaction.
+- Run the React demo’s four unit tests and Vite production build. The recorded large-chunk warning is a demo optimization item, not a contract gate.
+- Validate the exact `launch.json` against the `programmable:production` autonomous launch contract and rebuild the deterministic source/dependency closure.
 
-Reentrancy is bounded structurally by standard ERC20-only assets, immutable PoolManager callbacks, no arbitrary calls,
-checks-effects-interactions, the hook/router transient guards, and the absence of a same-pool self-swap path. A hostile
-callback token is unsupported and should revert or be rejected at deployment review; it is not represented as a
-supported-token pass.
+## Required independent and platform gates
 
-Before release, independently run Slither or an equivalent reviewed analyzer, a pinned Ethereum mainnet-fork lifecycle,
-a current-head smoke test, differential fee/accounting tests, gas and size review, economic/security review, exact
-CREATE2/deployment verification, runtime matching, event replay/reconciliation, and incident-monitoring drills. A
-missing command is marked blocked or not run, never passed.
+- Independently rebuild from the exact commit and dependency lock; rerun Foundry, fork, gas, size, and invariant suites in an isolated environment.
+- Run Slither or an equivalent reviewed Solidity analyzer and disposition every finding. Local Forge lint is not independent static analysis.
+- Review v4 delta signs, exact-output inversion, cumulative rounding, custody, solvency, intent authentication, reentrancy, unsupported tokens, economic manipulation, MEV, and the deliberate absence of recovery powers.
+- Execute the real-token initializer only after approval, funding authorization, fresh dependency-code checks, fresh price review, and final signed deployment verification.
+- Build and test provider-owned quoting, SDK actions, event indexing/reorg recovery, reconciliation, monitoring, registry, routing, and incident-response surfaces separately.
 
-Tests prove only the local source revision and mock PoolManager lifecycle they execute. They do not prove deployment,
-live fee collection, provider approval, routing support, acceptance, or availability.
+No local test proves deployment, acceptance, provider support, routing, or availability.
