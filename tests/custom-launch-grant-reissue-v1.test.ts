@@ -71,6 +71,28 @@ function descriptor(
       walletActionKind: "eip1193-send-transaction",
       walletExecutionKind: "eoa-direct",
       transactionValuePolicy: { kind: "exact", valueWei: "0" },
+      feePolicy: {
+        schemaVersion: "programmable.custom-launch-fee-policy.v1",
+        providerId: "programmable",
+        modelId: "custom-contract-graph",
+        templateId: "standard-custom",
+        semanticVersion: "1.0.0",
+        feeMode: "standard-programmable-custom",
+        marketPathId: "official-market-path-v1",
+        totalRatePpm: 1000,
+        totalRateBps: 10,
+        chargeMode: "added-on-top",
+        normalProgrammableTenBpsApplied: true,
+        legs: [{
+          role: "programmable",
+          ratePpm: 1000,
+          rateBps: 10,
+          recipient: {
+            namespace: "eip155:1",
+            value: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+          },
+        }],
+      },
     }],
     defaultChoiceId: "ethereum",
   };

@@ -140,8 +140,11 @@ Show a plain-language summary of:
 - chain and launch route;
 - token, hook, vault, adapter, or companion contracts that will be created;
 - pool configuration, including an explicit `No pool at launch` state;
-- creator economics and the platform's 0.10% qualifying-volume fee;
-- platform fee recipient commitment;
+- the exact provider, model, template, semantic version, and market path from the approved fee
+  policy;
+- Standard Custom at 10 bps Programmable added on top, AEON at 20 bps total split 15 bps AEON and
+  5 bps Programmable with no additional 10 bps, or 0 bps when no qualifying market path exists;
+- every fee recipient from the approved plan, including the fixed Programmable recipient;
 - launch wallet and any other recipient;
 - external dependencies and material permissions;
 - source commit and review receipt;

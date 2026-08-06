@@ -362,8 +362,11 @@ Do not declare success until two independent Ethereum RPC trust domains agree on
 transaction and launch facts, the Registry write and exact readback succeed, and the Website shows
 the matching project under the canary GitHub identity. A no-pool project must explicitly show no
 market; it must not appear as a trading pair. A pool launch must show only the authenticated PoolKey
-and market facts. Where the route has qualifying volume, verify the exact platform-fee accounting
-from authenticated onchain evidence.
+and market facts. Where the route has a qualifying market path, verify the exact provider, model,
+template, semantic version, market path, total, split, charge mode, and recipient accounting from
+authenticated onchain evidence. Standard Custom is 10 bps Programmable added on top. AEON is 20
+bps total, split 15 bps AEON and 5 bps Programmable with no additional 10 bps. A route without a
+qualifying market path must prove zero fee legs.
 
 Record public hashes and identifiers, redacted service receipts, finality height/hash, Registry
 readback hash, Website projection hash, and screenshots. Do not record secrets.

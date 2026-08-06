@@ -8,6 +8,12 @@ const GIT_OID_V2 = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
 const BASE64URL_V2 = /^[A-Za-z0-9_-]+$/u;
 const APPLICATION_ID_V3 = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const APPLICATION_HANDLE_V3 = /^github-[0-9a-f]{64}$/u;
+const FEE_ID_V1 = /^[a-z0-9][a-z0-9._:-]{0,127}$/u;
+const SEMVER_V1 = /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u;
+const EVM_ADDRESS_V1 = /^0x[0-9A-Fa-f]{40}$/u;
+const ZERO_ADDRESS_V1 = "0x0000000000000000000000000000000000000000";
+const PROGRAMMABLE_FEE_RECIPIENT_V1 =
+  "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c";
 
 type JsonRecordV2 = Record<string, unknown>;
 type ValidatorV2 = (value: unknown) => void;
@@ -258,7 +264,7 @@ function validateLaunchRouteV2(value: unknown): void {
   const record = exactRecord(value, [
     "choiceId", "chainId", "chainProfileId", "launchRouteId",
     "launchRouteBindingHash", "routeAdapterId", "executionMode", "walletActionKind",
-    "walletExecutionKind", "transactionValuePolicy",
+    "walletExecutionKind", "transactionValuePolicy", "feePolicy",
   ]);
   identifier(record.choiceId);
   positiveDecimal(record.chainId);
@@ -267,6 +273,9 @@ function validateLaunchRouteV2(value: unknown): void {
   digest(record.launchRouteBindingHash);
   identifier(record.routeAdapterId);
   identifier(record.executionMode);
+  validateCustomLaunchFeePolicyV1(record.feePolicy, {
+    chainId: record.chainId as string,
+  });
   literal(record.walletActionKind, "eip1193-send-transaction");
   literal(record.walletExecutionKind, "eoa-direct");
   const policy = exactRecord(record.transactionValuePolicy, ["kind", "valueWei"]);
@@ -718,7 +727,7 @@ function validateProjectV2(value: unknown): void {
   identifier(record.executionMode);
   booleanValue(record.advertisesToken);
   arrayOf(record.discoverableAssets, validateDiscoverableAssetV2, 10_000);
-  arrayOf(record.discoverableMarkets, (candidate) => validateDiscoverableMarketV2(
+  const discoverableMarkets = arrayOf(record.discoverableMarkets, (candidate) => validateDiscoverableMarketV2(
     candidate,
     {
       chainId: record.chainId as string,
@@ -726,7 +735,14 @@ function validateProjectV2(value: unknown): void {
       chainProfileHash: record.chainProfileHash as string,
     },
   ), 10_000);
-  validateFeeObligationV2(record.feeObligation);
+  validateFeeObligationV3(record.feeObligation, {
+    chainId: record.chainId as string,
+    launchRouteId: record.launchRouteId as string,
+    modelId: record.modelId as string,
+    marketPathIds: new Set(discoverableMarkets.map(
+      (market) => (market as JsonRecordV2).marketId as string,
+    )),
+  });
   nullable(record.presentationVersion, positiveDecimal);
   nullable(record.presentationBindingHash, digest);
   nullable(record.presentation, validatePresentationDraftV1);
@@ -1103,32 +1119,156 @@ function validateUniswapV4PoolV2(value: unknown): void {
   digest(record.poolKeyEvidenceHash);
 }
 
-function validateFeeObligationV2(value: unknown): void {
+function validateFeeObligationV3(
+  value: unknown,
+  context: Readonly<{
+    chainId: string;
+    launchRouteId: string;
+    modelId: string;
+    marketPathIds: ReadonlySet<string>;
+  }>,
+): void {
   const record = exactRecord(value, [
     "schemaVersion", "feeAssessmentHash", "chainId", "chainProfileId", "chainProfileHash",
-    "ratePpm", "recipient", "applicabilityPredicate", "qualifyingFlowBasis",
+    "policy", "qualifyingFlowBasis",
     "qualifyingFlowBasisBindingHash", "feeBasis", "enforcementRouteId",
     "enforcementRouteBindingHash", "enforcementModuleId", "enforcementModuleBindingHash",
     "claimSemantics", "feeObligationHash", "feeAssessmentObligationBindingHash",
   ]);
-  literal(record.schemaVersion, "programmable.launch-fee-obligation.v2");
+  literal(record.schemaVersion, "programmable.launch-fee-obligation.v3");
   digest(record.feeAssessmentHash);
   positiveDecimal(record.chainId);
   identifier(record.chainProfileId);
   digest(record.chainProfileHash);
-  literal(record.ratePpm, 1000);
-  namespacedIdentity(record.recipient);
-  literal(record.applicabilityPredicate, "all-qualifying-launch-flows");
-  boundedString(record.qualifyingFlowBasis, 1, 4_096);
-  digest(record.qualifyingFlowBasisBindingHash);
-  literal(record.feeBasis, "gross-qualifying-flow-volume");
-  identifier(record.enforcementRouteId);
-  digest(record.enforcementRouteBindingHash);
-  identifier(record.enforcementModuleId);
-  digest(record.enforcementModuleBindingHash);
-  literal(record.claimSemantics, "recipient-claimable-accrual");
+  if (record.chainId !== context.chainId) mismatch();
+  const feeMode = validateCustomLaunchFeePolicyV1(record.policy, {
+    chainId: context.chainId,
+    modelId: context.modelId,
+    marketPathIds: context.marketPathIds,
+  });
+  if (feeMode === "no-qualifying-market") {
+    if (
+      record.qualifyingFlowBasis !== null
+      || record.qualifyingFlowBasisBindingHash !== null
+      || record.feeBasis !== null
+      || record.enforcementRouteId !== null
+      || record.enforcementRouteBindingHash !== null
+      || record.enforcementModuleId !== null
+      || record.enforcementModuleBindingHash !== null
+      || record.claimSemantics !== "not-applicable"
+    ) mismatch();
+  } else {
+    boundedString(record.qualifyingFlowBasis, 1, 4_096);
+    digest(record.qualifyingFlowBasisBindingHash);
+    literal(record.feeBasis, "gross-qualifying-flow-volume");
+    identifier(record.enforcementRouteId);
+    digest(record.enforcementRouteBindingHash);
+    identifier(record.enforcementModuleId);
+    digest(record.enforcementModuleBindingHash);
+    literal(record.claimSemantics, "leg-recipient-claimable-accruals");
+    if (record.enforcementRouteId !== context.launchRouteId) mismatch();
+  }
   digest(record.feeObligationHash);
   digest(record.feeAssessmentObligationBindingHash);
+}
+
+function validateCustomLaunchFeePolicyV1(
+  value: unknown,
+  context: Readonly<{
+    chainId: string;
+    modelId?: string;
+    marketPathIds?: ReadonlySet<string>;
+  }>,
+): "standard-programmable-custom" | "aeon-partner-custom" | "no-qualifying-market" {
+  const policy = exactRecord(value, [
+    "schemaVersion", "providerId", "modelId", "templateId", "semanticVersion",
+    "feeMode", "marketPathId", "totalRatePpm", "totalRateBps", "chargeMode",
+    "normalProgrammableTenBpsApplied", "legs",
+  ]);
+  literal(policy.schemaVersion, "programmable.custom-launch-fee-policy.v1");
+  regexString(policy.providerId, FEE_ID_V1, 128);
+  regexString(policy.modelId, FEE_ID_V1, 128);
+  regexString(policy.templateId, FEE_ID_V1, 128);
+  regexString(policy.semanticVersion, SEMVER_V1, 128);
+  const feeMode = enumValue(policy.feeMode, [
+    "standard-programmable-custom", "aeon-partner-custom", "no-qualifying-market",
+  ]);
+  enumValue(policy.chargeMode, ["added-on-top", "included-in-partner-total", "none"]);
+  safeInteger(policy.totalRatePpm, 0, 2000);
+  safeInteger(policy.totalRateBps, 0, 20);
+  booleanValue(policy.normalProgrammableTenBpsApplied);
+  if (policy.marketPathId !== null) regexString(policy.marketPathId, FEE_ID_V1, 128);
+  if (context.modelId !== undefined && policy.modelId !== context.modelId) mismatch();
+  if (policy.marketPathId !== null && context.marketPathIds !== undefined
+    && !context.marketPathIds.has(policy.marketPathId as string)) mismatch();
+
+  const legs = arrayOf(policy.legs, (candidate) => {
+    const leg = exactRecord(candidate, ["role", "ratePpm", "rateBps", "recipient"]);
+    enumValue(leg.role, ["provider", "programmable"]);
+    safeInteger(leg.ratePpm, 1, 2000);
+    safeInteger(leg.rateBps, 1, 20);
+    if ((leg.ratePpm as number) !== (leg.rateBps as number) * 100) mismatch();
+    const recipient = exactRecord(leg.recipient, ["namespace", "value"]);
+    literal(recipient.namespace, `eip155:${context.chainId}`);
+    regexString(recipient.value, EVM_ADDRESS_V1, 42);
+    if ((recipient.value as string).toLowerCase() === ZERO_ADDRESS_V1) mismatch();
+  }, 2) as JsonRecordV2[];
+  const totalRatePpm = legs.reduce((sum, leg) => sum + Number(leg.ratePpm), 0);
+  const totalRateBps = legs.reduce((sum, leg) => sum + Number(leg.rateBps), 0);
+  if (totalRatePpm !== policy.totalRatePpm || totalRateBps !== policy.totalRateBps) mismatch();
+
+  const programmableLeg = legs.find(({ role }) => role === "programmable");
+  const providerLeg = legs.find(({ role }) => role === "provider");
+  const programmableRecipient = programmableLeg === undefined
+    ? null
+    : (programmableLeg.recipient as JsonRecordV2).value;
+  if (programmableLeg !== undefined
+    && programmableRecipient !== PROGRAMMABLE_FEE_RECIPIENT_V1) mismatch();
+
+  if (feeMode === "standard-programmable-custom") {
+    if (
+      policy.providerId === "aeon"
+      || policy.marketPathId === null
+      || policy.totalRatePpm !== 1000
+      || policy.totalRateBps !== 10
+      || policy.chargeMode !== "added-on-top"
+      || policy.normalProgrammableTenBpsApplied !== true
+      || legs.length !== 1
+      || programmableLeg?.ratePpm !== 1000
+      || programmableLeg?.rateBps !== 10
+      || providerLeg !== undefined
+    ) mismatch();
+  } else if (feeMode === "aeon-partner-custom") {
+    const providerRecipient = providerLeg === undefined
+      ? null
+      : (providerLeg.recipient as JsonRecordV2).value;
+    if (
+      policy.providerId !== "aeon"
+      || policy.marketPathId === null
+      || policy.totalRatePpm !== 2000
+      || policy.totalRateBps !== 20
+      || policy.chargeMode !== "included-in-partner-total"
+      || policy.normalProgrammableTenBpsApplied !== false
+      || legs.length !== 2
+      || legs[0]?.role !== "provider"
+      || legs[1]?.role !== "programmable"
+      || providerLeg?.ratePpm !== 1500
+      || providerLeg?.rateBps !== 15
+      || programmableLeg?.ratePpm !== 500
+      || programmableLeg?.rateBps !== 5
+      || providerRecipient === null
+      || (providerRecipient as string).toLowerCase()
+        === PROGRAMMABLE_FEE_RECIPIENT_V1.toLowerCase()
+    ) mismatch();
+  } else if (
+    policy.marketPathId !== null
+    || policy.totalRatePpm !== 0
+    || policy.totalRateBps !== 0
+    || policy.chargeMode !== "none"
+    || policy.normalProgrammableTenBpsApplied !== false
+    || legs.length !== 0
+  ) mismatch();
+  return feeMode;
 }
 
 function exactRecord(value: unknown, expectedKeys: readonly string[]): JsonRecordV2 {

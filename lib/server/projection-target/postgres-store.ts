@@ -4,6 +4,7 @@ import { isIP } from "node:net";
 
 import type {
   AuthenticatedCustomLaunchProjectV2,
+  CustomLaunchFeePolicyV1,
   DiscoverableLaunchAssetV2,
   DiscoverableLaunchMarketV2,
   DiscoverableMarketTradeCapabilityV1,
@@ -17,7 +18,7 @@ import type {
 } from "../../custom-launch/contract-v2";
 export type {
   AuthenticatedCustomLaunchProjectV2,
-  CustomLaunchFeeObligationV2,
+  CustomLaunchFeeObligationV3,
 } from "../../custom-launch/contract-v2";
 
 import {
@@ -47,10 +48,12 @@ const SAFE_TEXT = /^[^\u0000-\u001f\u007f]{1,512}$/u;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:@/+~-]{0,255}$/u;
 const HASH32 = /^0x[0-9a-f]{64}$/u;
 const ADDRESS = /^0x[0-9a-f]{40}$/u;
+const EVM_ADDRESS = /^0x[0-9A-Fa-f]{40}$/u;
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const UNSIGNED_DECIMAL = /^(?:0|[1-9][0-9]*)$/u;
 const SIGNED_DECIMAL = /^(?:0|-?[1-9][0-9]*)$/u;
 const OPEN_IDENTIFIER = /^[a-z0-9][a-z0-9._:-]{0,127}$/u;
+const SEMVER = /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u;
 const UNSAFE_PUBLIC_TEXT = /[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/u;
 const PRESENTATION_VERSION = /^[1-9][0-9]{0,77}$/u;
 const IPFS_CID = /^(?:Qm[1-9A-HJ-NP-Za-km-z]{44}|[bB][a-zA-Z2-7]{31,127})$/u;
@@ -577,6 +580,158 @@ function storedRecordFromRow(
   });
 }
 
+function validatedCustomLaunchFeePolicyV1(
+  value: JsonValue | undefined,
+  context: Readonly<{
+    chainId: string;
+    modelId?: string;
+    marketPathIds?: ReadonlySet<string>;
+  }>,
+): CustomLaunchFeePolicyV1 {
+  const source = jsonRecord(value, "custom launch fee policy");
+  exactKeys(source, [
+    "chargeMode", "feeMode", "legs", "marketPathId", "modelId",
+    "normalProgrammableTenBpsApplied", "providerId", "schemaVersion",
+    "semanticVersion", "templateId", "totalRateBps", "totalRatePpm",
+  ], "custom launch fee policy");
+  const identifier = (candidate: JsonValue | undefined, label: string): string => {
+    if (typeof candidate !== "string" || !OPEN_IDENTIFIER.test(candidate)) {
+      throw new TypeError(`${label} is invalid`);
+    }
+    return candidate;
+  };
+  const rate = (
+    candidate: JsonValue | undefined,
+    minimum: number,
+    maximum: number,
+    label: string,
+  ): number => {
+    if (!Number.isSafeInteger(candidate) || Number(candidate) < minimum
+      || Number(candidate) > maximum) throw new TypeError(`${label} is invalid`);
+    return Number(candidate);
+  };
+  if (source.schemaVersion !== "programmable.custom-launch-fee-policy.v1") {
+    throw new TypeError("custom launch fee policy schema is invalid");
+  }
+  const providerId = identifier(source.providerId, "custom launch fee provider id");
+  const modelId = identifier(source.modelId, "custom launch fee model id");
+  const templateId = identifier(source.templateId, "custom launch fee template id");
+  const semanticVersion = stringField(
+    source.semanticVersion,
+    "custom launch fee semantic version",
+  );
+  if (!SEMVER.test(semanticVersion)) {
+    throw new TypeError("custom launch fee semantic version is invalid");
+  }
+  if (context.modelId !== undefined && modelId !== context.modelId) {
+    throw new TypeError("custom launch fee model binding is invalid");
+  }
+  const feeMode = stringField(source.feeMode, "custom launch fee mode");
+  if (feeMode !== "standard-programmable-custom"
+    && feeMode !== "aeon-partner-custom"
+    && feeMode !== "no-qualifying-market") {
+    throw new TypeError("custom launch fee mode is invalid");
+  }
+  const marketPathId = source.marketPathId === null
+    ? null
+    : identifier(source.marketPathId, "custom launch fee market path id");
+  if (marketPathId !== null && context.marketPathIds !== undefined
+    && !context.marketPathIds.has(marketPathId)) {
+    throw new TypeError("custom launch fee market path binding is invalid");
+  }
+  const totalRatePpm = rate(source.totalRatePpm, 0, 2000, "custom launch total fee ppm");
+  const totalRateBps = rate(source.totalRateBps, 0, 20, "custom launch total fee bps");
+  const chargeMode = stringField(source.chargeMode, "custom launch fee charge mode");
+  if (chargeMode !== "added-on-top"
+    && chargeMode !== "included-in-partner-total"
+    && chargeMode !== "none") {
+    throw new TypeError("custom launch fee charge mode is invalid");
+  }
+  if (typeof source.normalProgrammableTenBpsApplied !== "boolean") {
+    throw new TypeError("custom launch normal fee indicator is invalid");
+  }
+  if (!Array.isArray(source.legs) || source.legs.length > 2) {
+    throw new TypeError("custom launch fee legs are invalid");
+  }
+  const legs = Object.freeze(source.legs.map((value, index) => {
+    const leg = jsonRecord(value, `custom launch fee leg ${index}`);
+    exactKeys(leg, ["rateBps", "ratePpm", "recipient", "role"],
+      "custom launch fee leg");
+    const role = stringField(leg.role, "custom launch fee leg role");
+    if (role !== "provider" && role !== "programmable") {
+      throw new TypeError("custom launch fee leg role is invalid");
+    }
+    const ratePpm = rate(leg.ratePpm, 1, 2000, "custom launch fee leg ppm");
+    const rateBps = rate(leg.rateBps, 1, 20, "custom launch fee leg bps");
+    if (ratePpm !== rateBps * 100) {
+      throw new TypeError("custom launch fee leg rate is invalid");
+    }
+    const recipient = jsonRecord(leg.recipient, "custom launch fee leg recipient");
+    exactKeys(recipient, ["namespace", "value"], "custom launch fee leg recipient");
+    const namespace = stringField(recipient.namespace, "custom launch fee recipient namespace");
+    const recipientValue = stringField(recipient.value, "custom launch fee recipient value");
+    if (namespace !== `eip155:${context.chainId}`
+      || !EVM_ADDRESS.test(recipientValue)
+      || recipientValue.toLowerCase() === ZERO_ADDRESS) {
+      throw new TypeError("custom launch fee recipient is invalid");
+    }
+    return Object.freeze({
+      role: role as "provider" | "programmable",
+      ratePpm: ratePpm as 500 | 1000 | 1500,
+      rateBps: rateBps as 5 | 10 | 15,
+      recipient: Object.freeze({ namespace, value: recipientValue }),
+    });
+  }));
+  if (legs.reduce((sum, leg) => sum + leg.ratePpm, 0) !== totalRatePpm
+    || legs.reduce((sum, leg) => sum + leg.rateBps, 0) !== totalRateBps) {
+    throw new TypeError("custom launch fee total is invalid");
+  }
+  const providerLeg = legs.find(({ role }) => role === "provider");
+  const programmableLeg = legs.find(({ role }) => role === "programmable");
+  if (programmableLeg !== undefined
+    && programmableLeg.recipient.value !== PLATFORM_FEE_RECIPIENT) {
+    throw new TypeError("custom launch Programmable fee recipient is invalid");
+  }
+  if (feeMode === "standard-programmable-custom") {
+    if (providerId === "aeon" || marketPathId === null || totalRatePpm !== 1000
+      || totalRateBps !== 10 || chargeMode !== "added-on-top"
+      || source.normalProgrammableTenBpsApplied !== true || legs.length !== 1
+      || providerLeg !== undefined || programmableLeg?.ratePpm !== 1000
+      || programmableLeg?.rateBps !== 10) {
+      throw new TypeError("standard Custom fee policy is invalid");
+    }
+  } else if (feeMode === "aeon-partner-custom") {
+    if (providerId !== "aeon" || marketPathId === null || totalRatePpm !== 2000
+      || totalRateBps !== 20 || chargeMode !== "included-in-partner-total"
+      || source.normalProgrammableTenBpsApplied !== false || legs.length !== 2
+      || legs[0]?.role !== "provider" || legs[1]?.role !== "programmable"
+      || providerLeg?.ratePpm !== 1500 || providerLeg?.rateBps !== 15
+      || programmableLeg?.ratePpm !== 500 || programmableLeg?.rateBps !== 5
+      || providerLeg?.recipient.value.toLowerCase()
+        === PLATFORM_FEE_RECIPIENT.toLowerCase()) {
+      throw new TypeError("AEON Custom fee policy is invalid");
+    }
+  } else if (marketPathId !== null || totalRatePpm !== 0 || totalRateBps !== 0
+    || chargeMode !== "none" || source.normalProgrammableTenBpsApplied !== false
+    || legs.length !== 0) {
+    throw new TypeError("no qualifying market fee policy is invalid");
+  }
+  return Object.freeze({
+    schemaVersion: "programmable.custom-launch-fee-policy.v1" as const,
+    providerId,
+    modelId,
+    templateId,
+    semanticVersion,
+    feeMode,
+    marketPathId,
+    totalRatePpm,
+    totalRateBps,
+    chargeMode,
+    normalProgrammableTenBpsApplied: source.normalProgrammableTenBpsApplied,
+    legs,
+  }) as CustomLaunchFeePolicyV1;
+}
+
 function parseCustomLaunchProject(
   stored: ProjectionTargetStoredRecordV1,
 ): Readonly<AuthenticatedCustomLaunchProjectV2> {
@@ -748,17 +903,20 @@ function parseCustomLaunchProject(
     chainProfileId,
     chainProfileHash,
   });
+  const modelId = safeIdentifier(record.modelId, "custom launch model id");
   const fee = jsonRecord(record.feeObligation, "custom launch fee obligation");
   exactKeys(fee, [
-    "applicabilityPredicate", "chainId", "chainProfileHash", "chainProfileId",
+    "chainId", "chainProfileHash", "chainProfileId",
     "claimSemantics", "enforcementModuleBindingHash", "enforcementModuleId",
     "enforcementRouteBindingHash", "enforcementRouteId", "feeAssessmentHash",
     "feeAssessmentObligationBindingHash", "feeBasis", "feeObligationHash",
-    "qualifyingFlowBasis", "qualifyingFlowBasisBindingHash", "ratePpm",
-    "recipient", "schemaVersion",
+    "policy", "qualifyingFlowBasis", "qualifyingFlowBasisBindingHash", "schemaVersion",
   ], "custom launch fee obligation");
-  const recipient = jsonRecord(fee.recipient, "custom launch fee recipient");
-  exactKeys(recipient, ["namespace", "value"], "custom launch fee recipient");
+  const feePolicy = validatedCustomLaunchFeePolicyV1(fee.policy, {
+    chainId,
+    modelId,
+    marketPathIds: new Set(discoverableMarkets.map(({ marketId }) => marketId)),
+  });
   const projectId = digest(record.projectId, "custom project id");
   const launchId = digest(record.launchId, "custom launch id");
   const githubPrincipalHash = digest(
@@ -781,11 +939,16 @@ function parseCustomLaunchProject(
     "fee assessment obligation binding",
   );
   const feeDigestFields = [
-    "chainProfileHash", "feeAssessmentHash", "qualifyingFlowBasisBindingHash",
-    "enforcementRouteBindingHash", "enforcementModuleBindingHash",
-    "feeObligationHash", "feeAssessmentObligationBindingHash",
+    "chainProfileHash", "feeAssessmentHash", "feeObligationHash",
+    "feeAssessmentObligationBindingHash",
   ] as const;
   for (const field of feeDigestFields) digest(fee[field], `fee ${field}`);
+  for (const field of [
+    "qualifyingFlowBasisBindingHash", "enforcementRouteBindingHash",
+    "enforcementModuleBindingHash",
+  ] as const) {
+    if (fee[field] !== null) digest(fee[field], `fee ${field}`);
+  }
   const recordDigestFields = [
     "registryPublicationBindingHash", "registryAdapterBindingHash",
     "projectionRuntimeBindingHash", "registryObservationDigest",
@@ -798,9 +961,7 @@ function parseCustomLaunchProject(
     chainId: fee.chainId,
     chainProfileId: fee.chainProfileId,
     chainProfileHash: fee.chainProfileHash,
-    ratePpm: fee.ratePpm,
-    recipient: fee.recipient,
-    applicabilityPredicate: fee.applicabilityPredicate,
+    policy: feePolicy,
     qualifyingFlowBasis: fee.qualifyingFlowBasis,
     qualifyingFlowBasisBindingHash: fee.qualifyingFlowBasisBindingHash,
     feeBasis: fee.feeBasis,
@@ -811,13 +972,13 @@ function parseCustomLaunchProject(
     claimSemantics: fee.claimSemantics,
   });
   const canonicalFeeObligationHash = canonicalSha256(
-    "programmable.launch-fee-obligation.v2",
+    "programmable.launch-fee-obligation.v3",
     feePreimage,
   );
   const canonicalFeeBindingHash = canonicalSha256(
-    "programmable.launch-fee-assessment-obligation-binding.v2",
+    "programmable.launch-fee-assessment-obligation-binding.v3",
     {
-      schemaVersion: "programmable.launch-fee-assessment-obligation-binding.v2",
+      schemaVersion: "programmable.launch-fee-assessment-obligation-binding.v3",
       feeAssessmentHash,
       feeObligationHash,
     },
@@ -836,7 +997,6 @@ function parseCustomLaunchProject(
     || record.origin !== "programmable"
     || record.category !== "custom"
     || record.launchFamily !== "custom"
-    || !safeIdentifier(record.modelId, "custom launch model id")
     || (record.sourceKind !== "browser-wallet-report"
       && record.sourceKind !== "legacy-executor")
     || readback.sourceAuthorityHash !== record.registryPublicationBindingHash
@@ -861,18 +1021,29 @@ function parseCustomLaunchProject(
     || expectedAssetIdentitySetHash !== assetIdentitySetHash
     || stored.projectionKey !== `custom:${launchId}`
     || !/^[1-9][0-9]*$/u.test(chainId)
-    || fee.schemaVersion !== "programmable.launch-fee-obligation.v2"
+    || fee.schemaVersion !== "programmable.launch-fee-obligation.v3"
     || fee.chainId !== chainId
     || fee.chainProfileId !== chainProfileId
     || fee.chainProfileHash !== chainProfileHash
-    || fee.ratePpm !== 1000
-    || fee.recipient === null
-    || recipient.namespace !== `eip155:${chainId}`
-    || recipient.value !== PLATFORM_FEE_RECIPIENT
-    || fee.applicabilityPredicate !== "all-qualifying-launch-flows"
-    || fee.feeBasis !== "gross-qualifying-flow-volume"
-    || fee.claimSemantics !== "recipient-claimable-accrual"
-    || fee.enforcementRouteId !== launchRouteId
+    || (feePolicy.feeMode === "no-qualifying-market"
+      ? fee.qualifyingFlowBasis !== null
+        || fee.qualifyingFlowBasisBindingHash !== null
+        || fee.feeBasis !== null
+        || fee.enforcementRouteId !== null
+        || fee.enforcementRouteBindingHash !== null
+        || fee.enforcementModuleId !== null
+        || fee.enforcementModuleBindingHash !== null
+        || fee.claimSemantics !== "not-applicable"
+      : typeof fee.qualifyingFlowBasis !== "string"
+        || fee.qualifyingFlowBasis.length === 0
+        || fee.qualifyingFlowBasisBindingHash === null
+        || fee.feeBasis !== "gross-qualifying-flow-volume"
+        || fee.claimSemantics !== "leg-recipient-claimable-accruals"
+        || fee.enforcementRouteId !== launchRouteId
+        || fee.enforcementRouteBindingHash === null
+        || typeof fee.enforcementModuleId !== "string"
+        || fee.enforcementModuleId.length === 0
+        || fee.enforcementModuleBindingHash === null)
     || fee.feeAssessmentHash !== feeAssessmentHash
     || fee.feeObligationHash !== feeObligationHash
     || fee.feeAssessmentObligationBindingHash !== feeAssessmentObligationBindingHash
@@ -891,7 +1062,7 @@ function parseCustomLaunchProject(
     origin: "programmable" as const,
     category: "custom" as const,
     launchFamily: "custom" as const,
-    modelId: safeIdentifier(record.modelId, "custom launch model id"),
+    modelId,
     sourceKind: record.sourceKind as "browser-wallet-report" | "legacy-executor",
     sourceRecordBindingHash,
     finalizedLaunchBindingHash,
@@ -925,34 +1096,32 @@ function parseCustomLaunchProject(
     feeObligationHash,
     feeAssessmentObligationBindingHash,
     feeObligation: Object.freeze({
-      schemaVersion: "programmable.launch-fee-obligation.v2" as const,
+      schemaVersion: "programmable.launch-fee-obligation.v3" as const,
       feeAssessmentHash,
       chainId,
       chainProfileId,
       chainProfileHash,
-      ratePpm: 1000 as const,
-      recipient: Object.freeze({
-        namespace: stringField(recipient.namespace, "fee recipient namespace"),
-        value: stringField(recipient.value, "fee recipient value"),
-      }),
-      applicabilityPredicate: "all-qualifying-launch-flows" as const,
-      qualifyingFlowBasis: safeText(fee.qualifyingFlowBasis, "qualifying flow basis"),
-      qualifyingFlowBasisBindingHash: digest(
-        fee.qualifyingFlowBasisBindingHash,
-        "qualifying flow basis binding",
-      ),
-      feeBasis: "gross-qualifying-flow-volume" as const,
-      enforcementRouteId: launchRouteId,
-      enforcementRouteBindingHash: digest(
-        fee.enforcementRouteBindingHash,
-        "fee route binding",
-      ),
-      enforcementModuleId: safeText(fee.enforcementModuleId, "fee module id"),
-      enforcementModuleBindingHash: digest(
-        fee.enforcementModuleBindingHash,
-        "fee module binding",
-      ),
-      claimSemantics: "recipient-claimable-accrual" as const,
+      policy: feePolicy,
+      qualifyingFlowBasis: fee.qualifyingFlowBasis === null
+        ? null
+        : safeText(fee.qualifyingFlowBasis, "qualifying flow basis"),
+      qualifyingFlowBasisBindingHash: fee.qualifyingFlowBasisBindingHash === null
+        ? null
+        : digest(fee.qualifyingFlowBasisBindingHash, "qualifying flow basis binding"),
+      feeBasis: fee.feeBasis as "gross-qualifying-flow-volume" | null,
+      enforcementRouteId: fee.enforcementRouteId === null ? null : launchRouteId,
+      enforcementRouteBindingHash: fee.enforcementRouteBindingHash === null
+        ? null
+        : digest(fee.enforcementRouteBindingHash, "fee route binding"),
+      enforcementModuleId: fee.enforcementModuleId === null
+        ? null
+        : safeText(fee.enforcementModuleId, "fee module id"),
+      enforcementModuleBindingHash: fee.enforcementModuleBindingHash === null
+        ? null
+        : digest(fee.enforcementModuleBindingHash, "fee module binding"),
+      claimSemantics: fee.claimSemantics as
+        | "leg-recipient-claimable-accruals"
+        | "not-applicable",
       feeObligationHash,
       feeAssessmentObligationBindingHash,
     }),

@@ -2,6 +2,72 @@ export type Sha256DigestV2 = `sha256:${string}`;
 export type HexDataV2 = `0x${string}`;
 export type ApplicationHandleV3 = `github-${string}`;
 
+export type CustomLaunchFeeRecipientV1 = Readonly<{
+  readonly namespace: string;
+  readonly value: string;
+}>;
+
+export type CustomLaunchFeeLegV1 = Readonly<{
+  readonly role: "provider" | "programmable";
+  readonly ratePpm: 500 | 1000 | 1500;
+  readonly rateBps: 5 | 10 | 15;
+  readonly recipient: CustomLaunchFeeRecipientV1;
+}>;
+
+interface CustomLaunchFeePolicyBaseV1 {
+  readonly schemaVersion: "programmable.custom-launch-fee-policy.v1";
+  readonly providerId: string;
+  readonly modelId: string;
+  readonly templateId: string;
+  readonly semanticVersion: string;
+}
+
+export type CustomLaunchFeePolicyV1 = Readonly<
+  | (CustomLaunchFeePolicyBaseV1 & {
+      readonly feeMode: "standard-programmable-custom";
+      readonly marketPathId: string;
+      readonly totalRatePpm: 1000;
+      readonly totalRateBps: 10;
+      readonly chargeMode: "added-on-top";
+      readonly normalProgrammableTenBpsApplied: true;
+      readonly legs: readonly [CustomLaunchFeeLegV1 & {
+        readonly role: "programmable";
+        readonly ratePpm: 1000;
+        readonly rateBps: 10;
+      }];
+    })
+  | (CustomLaunchFeePolicyBaseV1 & {
+      readonly providerId: "aeon";
+      readonly feeMode: "aeon-partner-custom";
+      readonly marketPathId: string;
+      readonly totalRatePpm: 2000;
+      readonly totalRateBps: 20;
+      readonly chargeMode: "included-in-partner-total";
+      readonly normalProgrammableTenBpsApplied: false;
+      readonly legs: readonly [
+        CustomLaunchFeeLegV1 & {
+          readonly role: "provider";
+          readonly ratePpm: 1500;
+          readonly rateBps: 15;
+        },
+        CustomLaunchFeeLegV1 & {
+          readonly role: "programmable";
+          readonly ratePpm: 500;
+          readonly rateBps: 5;
+        },
+      ];
+    })
+  | (CustomLaunchFeePolicyBaseV1 & {
+      readonly feeMode: "no-qualifying-market";
+      readonly marketPathId: null;
+      readonly totalRatePpm: 0;
+      readonly totalRateBps: 0;
+      readonly chargeMode: "none";
+      readonly normalProgrammableTenBpsApplied: false;
+      readonly legs: readonly [];
+    })
+>;
+
 export interface TrustedLaunchPermitSignerV2 {
   readonly keyId: string;
   readonly signerEpoch: string;
@@ -225,6 +291,7 @@ export interface LaunchDescriptorV2 {
       kind: "exact";
       valueWei: string;
     }>;
+    feePolicy: CustomLaunchFeePolicyV1;
   }>[];
   readonly defaultChoiceId: string;
 }
@@ -554,23 +621,21 @@ export interface CustomLaunchWebsiteErrorV2 {
   readonly message: string;
 }
 
-export interface CustomLaunchFeeObligationV2 {
-  readonly schemaVersion: "programmable.launch-fee-obligation.v2";
+export interface CustomLaunchFeeObligationV3 {
+  readonly schemaVersion: "programmable.launch-fee-obligation.v3";
   readonly feeAssessmentHash: Sha256DigestV2;
   readonly chainId: string;
   readonly chainProfileId: string;
   readonly chainProfileHash: Sha256DigestV2;
-  readonly ratePpm: 1000;
-  readonly recipient: Readonly<{ namespace: string; value: string }>;
-  readonly applicabilityPredicate: "all-qualifying-launch-flows";
-  readonly qualifyingFlowBasis: string;
-  readonly qualifyingFlowBasisBindingHash: Sha256DigestV2;
-  readonly feeBasis: "gross-qualifying-flow-volume";
-  readonly enforcementRouteId: string;
-  readonly enforcementRouteBindingHash: Sha256DigestV2;
-  readonly enforcementModuleId: string;
-  readonly enforcementModuleBindingHash: Sha256DigestV2;
-  readonly claimSemantics: "recipient-claimable-accrual";
+  readonly policy: CustomLaunchFeePolicyV1;
+  readonly qualifyingFlowBasis: string | null;
+  readonly qualifyingFlowBasisBindingHash: Sha256DigestV2 | null;
+  readonly feeBasis: "gross-qualifying-flow-volume" | null;
+  readonly enforcementRouteId: string | null;
+  readonly enforcementRouteBindingHash: Sha256DigestV2 | null;
+  readonly enforcementModuleId: string | null;
+  readonly enforcementModuleBindingHash: Sha256DigestV2 | null;
+  readonly claimSemantics: "leg-recipient-claimable-accruals" | "not-applicable";
   readonly feeObligationHash: Sha256DigestV2;
   readonly feeAssessmentObligationBindingHash: Sha256DigestV2;
 }
@@ -979,7 +1044,7 @@ export interface AuthenticatedCustomLaunchProjectV2 {
   readonly feeAssessmentHash: Sha256DigestV2;
   readonly feeObligationHash: Sha256DigestV2;
   readonly feeAssessmentObligationBindingHash: Sha256DigestV2;
-  readonly feeObligation: Readonly<CustomLaunchFeeObligationV2>;
+  readonly feeObligation: Readonly<CustomLaunchFeeObligationV3>;
   readonly registryPublicationBindingHash: Sha256DigestV2;
   readonly registryAdapterBindingHash: Sha256DigestV2;
   readonly projectionRuntimeBindingHash: Sha256DigestV2;

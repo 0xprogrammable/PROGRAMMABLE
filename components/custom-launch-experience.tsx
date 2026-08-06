@@ -68,6 +68,7 @@ import {
   type BrowserWalletActionV2,
   type BrowserWalletLaunchPreparationV2,
   type CustomLaunchApplicationStateV2,
+  type CustomLaunchFeePolicyV1,
   type CustomLaunchWebsiteSessionV2,
   type LaunchDescriptorV2,
   type LaunchEligibilityViewV2,
@@ -288,6 +289,45 @@ export function customApplicationOpensLaunchExperienceV2(
 ): boolean {
   return customApplicationIntakeIsLaunchableV2(application)
     && customApplicationOpensLaunchExperience(application.state);
+}
+
+export type CustomLaunchFeeReviewV1 = Readonly<{
+  summary: string;
+  identity: string;
+  marketPath: string;
+  recipients: readonly Readonly<{ label: string; value: string }>[];
+}>;
+
+export function customLaunchFeeReviewV1(
+  policy: CustomLaunchFeePolicyV1,
+): CustomLaunchFeeReviewV1 {
+  const identity = `${policy.providerId} · ${policy.modelId} / ${policy.templateId} · v${policy.semanticVersion}`;
+  if (policy.feeMode === "no-qualifying-market") {
+    return Object.freeze({
+      summary: "0 bps because this approved plan has no qualifying market path",
+      identity,
+      marketPath: "No qualifying market path",
+      recipients: Object.freeze([]),
+    });
+  }
+  const recipients = Object.freeze(policy.legs.map(({ recipient, role }) => Object.freeze({
+    label: role === "programmable" ? "Programmable" : policy.providerId === "aeon" ? "AEON" : policy.providerId,
+    value: recipient.value,
+  })));
+  if (policy.feeMode === "aeon-partner-custom") {
+    return Object.freeze({
+      summary: "20 bps total: 15 bps AEON and 5 bps Programmable, with no additional 10 bps",
+      identity,
+      marketPath: policy.marketPathId,
+      recipients,
+    });
+  }
+  return Object.freeze({
+    summary: "10 bps Programmable, added on top",
+    identity,
+    marketPath: policy.marketPathId,
+    recipients,
+  });
 }
 
 export function buildCustomLaunchSelection(input: Readonly<{
@@ -2269,6 +2309,9 @@ export function CustomLaunchExperience({
   };
 
   const approvedRoute = descriptor ? defaultLaunchRoute(descriptor) : null;
+  const feeReview = approvedRoute
+    ? customLaunchFeeReviewV1(approvedRoute.feePolicy)
+    : null;
 
   if (screen === "intro") {
     return (
@@ -2437,8 +2480,19 @@ export function CustomLaunchExperience({
                 <div><dt>Approved route</dt><dd>{approvedRoute?.launchRouteId}</dd></div>
                 <div><dt>Native value</dt><dd>{formatNativeValue(approvedRoute?.chainId, approvedRoute?.transactionValuePolicy.valueWei)}</dd></div>
                 <div><dt>Approval valid until</dt><dd>{formatDateTime(descriptor.validUntil)}</dd></div>
-                <div><dt>Platform fee</dt><dd>0.10% of qualifying settled volume</dd></div>
-                <div><dt>Fee recipient</dt><dd><code title={CUSTOM_LAUNCH_PLATFORM_FEE_RECIPIENT}>{CUSTOM_LAUNCH_PLATFORM_FEE_RECIPIENT}</code></dd></div>
+                <div><dt>Fee plan</dt><dd>{feeReview?.summary}</dd></div>
+                <div><dt>Fee identity</dt><dd>{feeReview?.identity}</dd></div>
+                <div><dt>Market path</dt><dd>{feeReview?.marketPath}</dd></div>
+                <div>
+                  <dt>Fee recipients</dt>
+                  <dd>
+                    {feeReview && feeReview.recipients.length > 0
+                      ? feeReview.recipients.map(({ label, value }) => (
+                          <span key={label}>{label}: <code title={value}>{value}</code><br /></span>
+                        ))
+                      : "None"}
+                  </dd>
+                </div>
                 <div><dt>Wallet</dt><dd className={styles.reviewWallet}>{wallet ? <><span>{shortAddress(wallet.account)}</span><button type="button" onClick={openWallet}>Change wallet</button></> : "Connect an Ethereum wallet"}</dd></div>
               </dl>
             </section>

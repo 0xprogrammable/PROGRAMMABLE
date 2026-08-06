@@ -9,6 +9,8 @@ const DIGEST = (digit: string) => `sha256:${digit.repeat(64)}`;
 const SESSION_ID = "123e4567-e89b-42d3-a456-426614174001";
 const GRANT_ID = "123e4567-e89b-42d3-a456-426614174002";
 const APPLICATION_HANDLE = `github-${"a".repeat(64)}` as const;
+const APPROVED_PLAN_PROVIDER_RECIPIENT_FIXTURE =
+  "0x1111111111111111111111111111111111111111";
 
 function clientFor(value: unknown, status = 200) {
   return createCustomLaunchWebsiteClientV2({
@@ -88,6 +90,28 @@ function launchDescriptor() {
       walletActionKind: "eip1193-send-transaction",
       walletExecutionKind: "eoa-direct",
       transactionValuePolicy: { kind: "exact", valueWei: "0" },
+      feePolicy: {
+        schemaVersion: "programmable.custom-launch-fee-policy.v1",
+        providerId: "programmable",
+        modelId: "custom-contract-graph",
+        templateId: "standard-custom",
+        semanticVersion: "1.0.0",
+        feeMode: "standard-programmable-custom",
+        marketPathId: "official-market-path-v1",
+        totalRatePpm: 1000,
+        totalRateBps: 10,
+        chargeMode: "added-on-top",
+        normalProgrammableTenBpsApplied: true,
+        legs: [{
+          role: "programmable",
+          ratePpm: 1000,
+          rateBps: 10,
+          recipient: {
+            namespace: "eip155:1",
+            value: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+          },
+        }],
+      },
     }],
     defaultChoiceId: "ethereum",
   };
@@ -329,6 +353,84 @@ describe("custom launch client response contracts", () => {
     await expectContractMismatch(
       clientFor(malformedDescriptor).launchDescriptor(APPLICATION_HANDLE),
     );
+  });
+
+  it("accepts only exact standard, AEON, and no-market route fee policies", async () => {
+    await expect(clientFor(launchDescriptor()).launchDescriptor(
+      APPLICATION_HANDLE,
+    )).resolves.toMatchObject({
+      routes: [{ feePolicy: { feeMode: "standard-programmable-custom" } }],
+    });
+
+    const aeon = launchDescriptor();
+    Object.assign(aeon.routes[0]!, {
+      feePolicy: {
+        schemaVersion: "programmable.custom-launch-fee-policy.v1",
+        providerId: "aeon",
+        modelId: "aeon-agent-launch",
+        templateId: "aeon-approved-model",
+        semanticVersion: "1.2.3",
+        feeMode: "aeon-partner-custom",
+        marketPathId: "aeon-hook-market-v1",
+        totalRatePpm: 2000,
+        totalRateBps: 20,
+        chargeMode: "included-in-partner-total",
+        normalProgrammableTenBpsApplied: false,
+        legs: [{
+          role: "provider",
+          ratePpm: 1500,
+          rateBps: 15,
+          recipient: {
+            namespace: "eip155:1",
+            value: APPROVED_PLAN_PROVIDER_RECIPIENT_FIXTURE,
+          },
+        }, {
+          role: "programmable",
+          ratePpm: 500,
+          rateBps: 5,
+          recipient: {
+            namespace: "eip155:1",
+            value: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+          },
+        }],
+      },
+    });
+    await expect(clientFor(aeon).launchDescriptor(APPLICATION_HANDLE)).resolves.toMatchObject({
+      routes: [{ feePolicy: { providerId: "aeon", totalRateBps: 20 } }],
+    });
+
+    const noMarket = launchDescriptor();
+    Object.assign(noMarket.routes[0]!, {
+      feePolicy: {
+        schemaVersion: "programmable.custom-launch-fee-policy.v1",
+        providerId: "aeon",
+        modelId: "aeon-agent-launch",
+        templateId: "aeon-approved-model",
+        semanticVersion: "1.2.3",
+        feeMode: "no-qualifying-market",
+        marketPathId: null,
+        totalRatePpm: 0,
+        totalRateBps: 0,
+        chargeMode: "none",
+        normalProgrammableTenBpsApplied: false,
+        legs: [],
+      },
+    });
+    await expect(clientFor(noMarket).launchDescriptor(APPLICATION_HANDLE)).resolves.toMatchObject({
+      routes: [{ feePolicy: { feeMode: "no-qualifying-market", totalRateBps: 0 } }],
+    });
+
+    const invalidMutations = [
+      { normalProgrammableTenBpsApplied: true },
+      { providerId: "other-provider" },
+      { semanticVersion: "1" },
+      { totalRatePpm: 3000, totalRateBps: 30 },
+    ];
+    for (const mutation of invalidMutations) {
+      const invalid = structuredClone(aeon);
+      Object.assign(invalid.routes[0]!.feePolicy, mutation);
+      await expectContractMismatch(clientFor(invalid).launchDescriptor(APPLICATION_HANDLE));
+    }
   });
 
   it("requires grant-native launch eligibility identity", async () => {

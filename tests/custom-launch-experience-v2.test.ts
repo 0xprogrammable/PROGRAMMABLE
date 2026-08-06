@@ -17,6 +17,7 @@ import {
   customApplicationDisplayState,
   customApplicationOpensLaunchExperience,
   customApplicationOpensLaunchExperienceV2,
+  customLaunchFeeReviewV1,
   defaultLaunchRoute,
   assertLaunchPermitFreshnessV2,
   fetchTrustedTimeV1,
@@ -48,6 +49,8 @@ import serviceGoldenPermit from "./fixtures/service-launch-permit-v2-golden.json
 const digest = (digit: string) => `sha256:${digit.repeat(64)}` as const;
 const APPLICATION_HANDLE = `github-${"a".repeat(64)}` as const;
 const GITHUB_PRINCIPAL_HASH = digest("f");
+const APPROVED_PLAN_PROVIDER_RECIPIENT_FIXTURE =
+  "0x1111111111111111111111111111111111111111";
 
 function createPermitSignerFixture(keyId: string): Readonly<{
   privateKey: KeyObject;
@@ -99,6 +102,28 @@ function descriptor(): LaunchDescriptorV2 {
       walletActionKind: "eip1193-send-transaction",
       walletExecutionKind: "eoa-direct",
       transactionValuePolicy: { kind: "exact", valueWei: "0" },
+      feePolicy: {
+        schemaVersion: "programmable.custom-launch-fee-policy.v1",
+        providerId: "programmable",
+        modelId: "custom-contract-graph",
+        templateId: "standard-custom",
+        semanticVersion: "1.0.0",
+        feeMode: "standard-programmable-custom",
+        marketPathId: "official-market-path-v1",
+        totalRatePpm: 1000,
+        totalRateBps: 10,
+        chargeMode: "added-on-top",
+        normalProgrammableTenBpsApplied: true,
+        legs: [{
+          role: "programmable",
+          ratePpm: 1000,
+          rateBps: 10,
+          recipient: {
+            namespace: "eip155:1",
+            value: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+          },
+        }],
+      },
     }],
     defaultChoiceId: "canonical",
   };
@@ -1255,6 +1280,77 @@ describe("custom launch browser authority", () => {
       controlRepositoryOwnerId: "309941960",
       grandfatheredAtReleaseBindingDigest: null,
     })).toBe(false);
+  });
+
+  it("renders route-specific standard, AEON, and no-market fee summaries", () => {
+    const standard = descriptor().routes[0]!.feePolicy;
+    expect(customLaunchFeeReviewV1(standard)).toEqual({
+      summary: "10 bps Programmable, added on top",
+      identity: "programmable · custom-contract-graph / standard-custom · v1.0.0",
+      marketPath: "official-market-path-v1",
+      recipients: [{
+        label: "Programmable",
+        value: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+      }],
+    });
+
+    const aeon = {
+      schemaVersion: "programmable.custom-launch-fee-policy.v1",
+      providerId: "aeon",
+      modelId: "aeon-agent-launch",
+      templateId: "aeon-approved-model",
+      semanticVersion: "1.2.3",
+      feeMode: "aeon-partner-custom",
+      marketPathId: "aeon-hook-market-v1",
+      totalRatePpm: 2000,
+      totalRateBps: 20,
+      chargeMode: "included-in-partner-total",
+      normalProgrammableTenBpsApplied: false,
+      legs: [{
+        role: "provider",
+        ratePpm: 1500,
+        rateBps: 15,
+        recipient: {
+          namespace: "eip155:1",
+          value: APPROVED_PLAN_PROVIDER_RECIPIENT_FIXTURE,
+        },
+      }, {
+        role: "programmable",
+        ratePpm: 500,
+        rateBps: 5,
+        recipient: {
+          namespace: "eip155:1",
+          value: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+        },
+      }],
+    } as const;
+    expect(customLaunchFeeReviewV1(aeon)).toMatchObject({
+      summary: "20 bps total: 15 bps AEON and 5 bps Programmable, with no additional 10 bps",
+      identity: "aeon · aeon-agent-launch / aeon-approved-model · v1.2.3",
+      marketPath: "aeon-hook-market-v1",
+      recipients: [
+        { label: "AEON", value: APPROVED_PLAN_PROVIDER_RECIPIENT_FIXTURE },
+        {
+          label: "Programmable",
+          value: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+        },
+      ],
+    });
+
+    expect(customLaunchFeeReviewV1({
+      ...aeon,
+      feeMode: "no-qualifying-market",
+      marketPathId: null,
+      totalRatePpm: 0,
+      totalRateBps: 0,
+      chargeMode: "none",
+      normalProgrammableTenBpsApplied: false,
+      legs: [],
+    })).toMatchObject({
+      summary: "0 bps because this approved plan has no qualifying market path",
+      marketPath: "No qualifying market path",
+      recipients: [],
+    });
   });
 
   it("turns malformed or non-HTTPS project links into a recoverable form error", () => {

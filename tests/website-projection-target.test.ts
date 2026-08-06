@@ -676,6 +676,15 @@ describe("Website projection target", () => {
         advertisesToken: true,
         discoverableAssets: [{ role: "primary-token" }],
         discoverableMarkets: [],
+        feeObligation: {
+          policy: {
+            feeMode: "no-qualifying-market",
+            totalRateBps: 0,
+            marketPathId: null,
+            legs: [],
+          },
+          claimSemantics: "not-applicable",
+        },
       },
     });
 
@@ -745,6 +754,112 @@ describe("Website projection target", () => {
         }],
       },
     });
+  });
+
+  it("binds the standard Custom 10 bps fee to one provider, model, version, and market path", async () => {
+    const pool = await pglitePool();
+    const target = targetFor(pool);
+    const launched = customLaunchWriteWithV4Market("standard-market-fee");
+    expect((await target.handler.handle(writeRequest(
+      launched,
+      workloadTokenForWrite(launched, "standard-market-fee"),
+    ))).status).toBe(201);
+    const stored = await target.store.findFinalizedCustomLaunchByProjectId({
+      projectId: launched.projectId,
+      signal: new AbortController().signal,
+    });
+    expect(stored?.feeObligation.policy).toEqual({
+      schemaVersion: "programmable.custom-launch-fee-policy.v1",
+      providerId: "programmable",
+      modelId: "custom-contract-graph-v2",
+      templateId: "standard-custom",
+      semanticVersion: "1.0.0",
+      feeMode: "standard-programmable-custom",
+      marketPathId: "uniswap-v4-primary-secondary",
+      totalRatePpm: 1000,
+      totalRateBps: 10,
+      chargeMode: "added-on-top",
+      normalProgrammableTenBpsApplied: true,
+      legs: [{
+        role: "programmable",
+        ratePpm: 1000,
+        rateBps: 10,
+        recipient: {
+          namespace: "eip155:1",
+          value: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+        },
+      }],
+    });
+  });
+
+  it("accepts only AEON 20 bps total with an approved-plan recipient and no extra 10 bps", async () => {
+    const pool = await pglitePool();
+    const target = targetFor(pool);
+    const launched = customLaunchWriteWithV4Market("aeon-market-fee", "aeon");
+    expect((await target.handler.handle(writeRequest(
+      launched,
+      workloadTokenForWrite(launched, "aeon-market-fee"),
+    ))).status).toBe(201);
+    const stored = await target.store.findFinalizedCustomLaunchByProjectId({
+      projectId: launched.projectId,
+      signal: new AbortController().signal,
+    });
+    expect(stored?.feeObligation.policy).toMatchObject({
+      providerId: "aeon",
+      modelId: "aeon-agent-launch",
+      templateId: "aeon-approved-model",
+      semanticVersion: "1.0.0",
+      feeMode: "aeon-partner-custom",
+      marketPathId: "uniswap-v4-primary-secondary",
+      totalRateBps: 20,
+      normalProgrammableTenBpsApplied: false,
+      legs: [
+        { role: "provider", rateBps: 15 },
+        {
+          role: "programmable",
+          rateBps: 5,
+          recipient: {
+            value: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+          },
+        },
+      ],
+    });
+
+    const invalidPolicies = [
+      (policy: Record<string, unknown>) => ({
+        ...policy,
+        normalProgrammableTenBpsApplied: true,
+      }),
+      (policy: Record<string, unknown>) => ({
+        ...policy,
+        legs: [
+          {
+            ...(policy.legs as Array<Record<string, unknown>>)[0],
+            ratePpm: 1400,
+            rateBps: 14,
+          },
+          {
+            ...(policy.legs as Array<Record<string, unknown>>)[1],
+            ratePpm: 600,
+            rateBps: 6,
+          },
+        ],
+      }),
+      (policy: Record<string, unknown>) => ({ ...policy, providerId: "aeon-alt" }),
+      (policy: Record<string, unknown>) => ({ ...policy, semanticVersion: "1" }),
+      (policy: Record<string, unknown>) => ({ ...policy, marketPathId: "unknown-market" }),
+    ];
+    for (const [index, mutation] of invalidPolicies.entries()) {
+      const label = `aeon-invalid-fee-${index}`;
+      const invalid = rebuildCustomLaunchFeePolicy(
+        customLaunchWriteWithV4Market(label, "aeon"),
+        mutation,
+      );
+      expect((await target.handler.handle(writeRequest(
+        invalid,
+        workloadTokenForWrite(invalid, label),
+      ))).status).toBe(400);
+    }
   });
 
   it("rejects an arbitrary stored PoolId even when every transport hash is rebuilt", async () => {
@@ -1331,6 +1446,50 @@ function rebuildCustomLaunchWrite(
   });
 }
 
+function rebuildCustomLaunchFeePolicy(
+  write: ReturnType<typeof customLaunchWriteWithV4Market>,
+  mutatePolicy: (policy: Record<string, unknown>) => Record<string, unknown>,
+) {
+  return rebuildCustomLaunchWrite(write, (record) => {
+    const obligation = structuredClone(
+      record.feeObligation as Record<string, unknown>,
+    );
+    const policy = mutatePolicy(
+      structuredClone(obligation.policy as Record<string, unknown>),
+    );
+    const {
+      feeObligationHash: _feeObligationHash,
+      feeAssessmentObligationBindingHash: _bindingHash,
+      ...obligationWithoutHashes
+    } = obligation;
+    void _feeObligationHash;
+    void _bindingHash;
+    const feePreimage = { ...obligationWithoutHashes, policy };
+    const feeObligationHash = canonicalSha256(
+      "programmable.launch-fee-obligation.v3",
+      feePreimage as never,
+    );
+    const feeAssessmentObligationBindingHash = canonicalSha256(
+      "programmable.launch-fee-assessment-obligation-binding.v3",
+      {
+        schemaVersion: "programmable.launch-fee-assessment-obligation-binding.v3",
+        feeAssessmentHash: record.feeAssessmentHash as Sha256Digest,
+        feeObligationHash,
+      },
+    );
+    return {
+      ...record,
+      feeObligationHash,
+      feeAssessmentObligationBindingHash,
+      feeObligation: {
+        ...feePreimage,
+        feeObligationHash,
+        feeAssessmentObligationBindingHash,
+      },
+    };
+  });
+}
+
 function writeRequest(
   write: Readonly<{
     topic?: string;
@@ -1394,45 +1553,137 @@ function securityAttestationFixture(): ProjectionTargetSecurityAttestationRowV1 
   };
 }
 
-function customLaunchWrite(label: string) {
-  const configuration = lanes[1];
-  const projectId = digest(`${label}:project`);
-  const launchId = digest(`${label}:launch`);
+type CustomLaunchFeeFixtureMode = "no-qualifying-market" | "standard" | "aeon";
+
+const AEON_APPROVED_PLAN_RECIPIENT_FIXTURE =
+  "0x4444444444444444444444444444444444444444";
+
+function customLaunchFeeFixture(
+  label: string,
+  mode: CustomLaunchFeeFixtureMode,
+  marketPathId: string | null,
+) {
+  const modelId = mode === "aeon" ? "aeon-agent-launch" : "custom-contract-graph-v2";
   const feeAssessmentHash = digest(`${label}:fee-assessment`);
-  const chainProfileHash = digest(`${label}:custom-chain-profile`);
+  const commonPolicy = {
+    schemaVersion: "programmable.custom-launch-fee-policy.v1",
+    providerId: mode === "aeon" ? "aeon" : "programmable",
+    modelId,
+    templateId: mode === "aeon" ? "aeon-approved-model" : "standard-custom",
+    semanticVersion: "1.0.0",
+  } as const;
+  const programmableRecipient = {
+    namespace: "eip155:1",
+    value: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+  } as const;
+  const policy = mode === "no-qualifying-market"
+    ? {
+        ...commonPolicy,
+        feeMode: "no-qualifying-market" as const,
+        marketPathId: null,
+        totalRatePpm: 0 as const,
+        totalRateBps: 0 as const,
+        chargeMode: "none" as const,
+        normalProgrammableTenBpsApplied: false as const,
+        legs: [] as const,
+      }
+    : mode === "aeon"
+      ? {
+          ...commonPolicy,
+          providerId: "aeon" as const,
+          feeMode: "aeon-partner-custom" as const,
+          marketPathId: marketPathId!,
+          totalRatePpm: 2000 as const,
+          totalRateBps: 20 as const,
+          chargeMode: "included-in-partner-total" as const,
+          normalProgrammableTenBpsApplied: false as const,
+          legs: [{
+            role: "provider" as const,
+            ratePpm: 1500 as const,
+            rateBps: 15 as const,
+            recipient: {
+              namespace: "eip155:1",
+              value: AEON_APPROVED_PLAN_RECIPIENT_FIXTURE,
+            },
+          }, {
+            role: "programmable" as const,
+            ratePpm: 500 as const,
+            rateBps: 5 as const,
+            recipient: programmableRecipient,
+          }] as const,
+        }
+      : {
+          ...commonPolicy,
+          feeMode: "standard-programmable-custom" as const,
+          marketPathId: marketPathId!,
+          totalRatePpm: 1000 as const,
+          totalRateBps: 10 as const,
+          chargeMode: "added-on-top" as const,
+          normalProgrammableTenBpsApplied: true as const,
+          legs: [{
+            role: "programmable" as const,
+            ratePpm: 1000 as const,
+            rateBps: 10 as const,
+            recipient: programmableRecipient,
+          }] as const,
+        };
+  const hasQualifyingMarket = mode !== "no-qualifying-market";
   const feePreimage = {
-    schemaVersion: "programmable.launch-fee-obligation.v2",
+    schemaVersion: "programmable.launch-fee-obligation.v3",
     feeAssessmentHash,
     chainId: "1",
     chainProfileId: "ethereum-mainnet",
-    chainProfileHash,
-    ratePpm: 1000,
-    recipient: {
-      namespace: "eip155:1",
-      value: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
-    },
-    applicabilityPredicate: "all-qualifying-launch-flows",
-    qualifyingFlowBasis: "qualifying swap volume",
-    qualifyingFlowBasisBindingHash: digest(`${label}:qualifying-flow`),
-    feeBasis: "gross-qualifying-flow-volume",
-    enforcementRouteId: "route-1",
-    enforcementRouteBindingHash: digest(`${label}:fee-route`),
-    enforcementModuleId: "fee-module-1",
-    enforcementModuleBindingHash: digest(`${label}:fee-module`),
-    claimSemantics: "recipient-claimable-accrual",
+    chainProfileHash: digest(`${label}:custom-chain-profile`),
+    policy,
+    qualifyingFlowBasis: hasQualifyingMarket ? "qualifying swap volume" : null,
+    qualifyingFlowBasisBindingHash: hasQualifyingMarket
+      ? digest(`${label}:qualifying-flow`)
+      : null,
+    feeBasis: hasQualifyingMarket ? "gross-qualifying-flow-volume" as const : null,
+    enforcementRouteId: hasQualifyingMarket ? "route-1" : null,
+    enforcementRouteBindingHash: hasQualifyingMarket ? digest(`${label}:fee-route`) : null,
+    enforcementModuleId: hasQualifyingMarket ? "fee-module-1" : null,
+    enforcementModuleBindingHash: hasQualifyingMarket ? digest(`${label}:fee-module`) : null,
+    claimSemantics: hasQualifyingMarket
+      ? "leg-recipient-claimable-accruals" as const
+      : "not-applicable" as const,
   } as const;
   const feeObligationHash = canonicalSha256(
-    "programmable.launch-fee-obligation.v2",
+    "programmable.launch-fee-obligation.v3",
     feePreimage,
   );
   const feeAssessmentObligationBindingHash = canonicalSha256(
-    "programmable.launch-fee-assessment-obligation-binding.v2",
+    "programmable.launch-fee-assessment-obligation-binding.v3",
     {
-      schemaVersion: "programmable.launch-fee-assessment-obligation-binding.v2",
+      schemaVersion: "programmable.launch-fee-assessment-obligation-binding.v3",
       feeAssessmentHash,
       feeObligationHash,
     },
   );
+  return {
+    modelId,
+    feeAssessmentHash,
+    feeObligationHash,
+    feeAssessmentObligationBindingHash,
+    feeObligation: {
+      ...feePreimage,
+      feeObligationHash,
+      feeAssessmentObligationBindingHash,
+    },
+  } as const;
+}
+
+function customLaunchWrite(label: string) {
+  const configuration = lanes[1];
+  const projectId = digest(`${label}:project`);
+  const launchId = digest(`${label}:launch`);
+  const fee = customLaunchFeeFixture(label, "no-qualifying-market", null);
+  const {
+    feeAssessmentHash,
+    feeObligationHash,
+    feeAssessmentObligationBindingHash,
+  } = fee;
+  const chainProfileHash = digest(`${label}:custom-chain-profile`);
   const primaryTokenMetadata = {
     schemaVersion: "programmable.discoverable-launch-token-metadata.v2",
     status: "available",
@@ -1536,7 +1787,7 @@ function customLaunchWrite(label: string) {
     origin: "programmable",
     category: "custom",
     launchFamily: "custom",
-    modelId: "custom-contract-graph-v2",
+    modelId: fee.modelId,
     sourceKind: "browser-wallet-report",
     sourceRecordBindingHash: digest(`${label}:source-record`),
     finalizedLaunchBindingHash: digest(`${label}:finalized-launch`),
@@ -1569,11 +1820,7 @@ function customLaunchWrite(label: string) {
     feeAssessmentHash,
     feeObligationHash,
     feeAssessmentObligationBindingHash,
-    feeObligation: {
-      ...feePreimage,
-      feeObligationHash,
-      feeAssessmentObligationBindingHash,
-    },
+    feeObligation: fee.feeObligation,
     registryPublicationBindingHash,
     registryAdapterBindingHash: digest(`${label}:registry-adapter`),
     projectionRuntimeBindingHash: digest(`${label}:projection-runtime`),
@@ -1610,7 +1857,10 @@ function customLaunchWrite(label: string) {
   });
 }
 
-function customLaunchWriteWithV4Market(label: string) {
+function customLaunchWriteWithV4Market(
+  label: string,
+  feeMode: "standard" | "aeon" = "standard",
+) {
   const base = customLaunchWrite(label);
   return rebuildCustomLaunchWrite(base, (record) => {
     const currency0 = "0x1111111111111111111111111111111111111111";
@@ -1720,13 +1970,24 @@ function customLaunchWriteWithV4Market(label: string) {
         markets: discoverableMarkets,
       },
     );
+    const fee = customLaunchFeeFixture(
+      label,
+      feeMode,
+      "uniswap-v4-primary-secondary",
+    );
     return {
       ...record,
+      modelId: fee.modelId,
       advertisesToken: true,
       discoverableAssets,
       assetIdentitySetHash,
       discoverableMarkets,
       marketSetHash,
+      feeAssessmentHash: fee.feeAssessmentHash,
+      feeObligationHash: fee.feeObligationHash,
+      feeAssessmentObligationBindingHash:
+        fee.feeAssessmentObligationBindingHash,
+      feeObligation: fee.feeObligation,
     };
   });
 }
