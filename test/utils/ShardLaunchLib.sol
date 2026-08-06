@@ -26,11 +26,25 @@ library ShardLaunchLib {
         bytes32 tokenCreationCodeHash = keccak256(type(ShardTokenV1).creationCode);
         bytes memory initCode = _hookInitCodeTemplate(factory, hookCreationCode, params);
         uint256 shardWord = hookCreationCode.length + 64;
+        // Preallocate the effective-token-salt preimage once (the seven abi.encode words) and rewrite
+        // only the hook-salt word in place each iteration, so the search does not allocate — and thus
+        // grow EVM memory — per candidate. The layout matches {ShardLaunchFactoryV1.effectiveTokenSalt}:
+        // word 0 tokenSalt, word 1 hookSalt, then the four tick/price fields and the builder recipient.
+        bytes memory saltPreimage = abi.encode(
+            tokenSalt,
+            bytes32(0),
+            params.tickLower,
+            params.tickBand,
+            params.tickUpper,
+            params.startSqrtPriceX96,
+            params.builderFeeRecipient
+        );
         uint256 candidate = uint256(hookSaltStart);
         while (true) {
             hookSalt = bytes32(candidate);
-            bytes32 effectiveSalt = _effectiveTokenSalt(tokenSalt, hookSalt, params);
-            predictedShard = Create2.computeAddress(effectiveSalt, tokenCreationCodeHash, address(factory));
+            predictedShard = Create2.computeAddress(
+                _effectiveSaltFromPreimage(saltPreimage, hookSalt), tokenCreationCodeHash, address(factory)
+            );
             assembly ("memory-safe") {
                 mstore(add(initCode, shardWord), predictedShard)
             }
@@ -41,6 +55,16 @@ library ShardLaunchLib {
             unchecked {
                 candidate++;
             }
+        }
+    }
+
+    /// @dev Rewrites the hook-salt word of a preallocated effective-token-salt preimage in place and
+    ///      hashes it, so the mining loop never allocates. Equal to
+    ///      {ShardLaunchFactoryV1.effectiveTokenSalt} for the same inputs.
+    function _effectiveSaltFromPreimage(bytes memory preimage, bytes32 hookSalt) private pure returns (bytes32 out) {
+        assembly ("memory-safe") {
+            mstore(add(preimage, 0x40), hookSalt) // second encoded word == hookSalt
+            out := keccak256(add(preimage, 0x20), mload(preimage))
         }
     }
 
@@ -60,24 +84,6 @@ library ShardLaunchLib {
                 params.startSqrtPriceX96,
                 address(factory),
                 factory.launcherFeeRecipient(),
-                params.builderFeeRecipient
-            )
-        );
-    }
-
-    function _effectiveTokenSalt(bytes32 tokenSalt, bytes32 hookSalt, ShardLaunchFactoryV1.LaunchParams memory params)
-        private
-        pure
-        returns (bytes32)
-    {
-        return keccak256(
-            abi.encode(
-                tokenSalt,
-                hookSalt,
-                params.tickLower,
-                params.tickBand,
-                params.tickUpper,
-                params.startSqrtPriceX96,
                 params.builderFeeRecipient
             )
         );

@@ -216,32 +216,68 @@ contract ShardFeeSplitV1Test is Test {
         assertEq(hook.escrowBalance(), 0.8 ether, "holder pool (escrow: nothing circulates)");
     }
 
-    /// Rounding dust goes to holders: 999 wei -> 99 / 99 / 801.
-    function test_split_roundingDustFavorsHolders() public {
+    /// The operator cut is the floor of the combined 20%; the odd wei goes to the launcher.
+    /// 999 wei -> operator floor(1998/10) = 199, split 99 builder / 100 launcher, 800 to holders.
+    function test_split_roundingRemainderGoesToLauncher() public {
         hook.distributeFee(999);
 
-        assertEq(hook.builderFeesAccrued(), 99, "builder cut floors");
-        assertEq(hook.launcherFeesAccrued(), 99, "launcher cut floors");
-        assertEq(hook.escrowBalance(), 801, "holders get the remainder");
+        assertEq(hook.builderFeesAccrued(), 99, "builder cut");
+        assertEq(hook.launcherFeesAccrued(), 100, "launcher takes the odd wei");
+        assertEq(hook.escrowBalance(), 800, "holders get the remainder");
     }
 
-    /// Amounts below 10 wei floor both cuts to zero; holders get everything.
-    function test_split_dustFeeGoesEntirelyToHolders() public {
+    /// A tiny fee no longer floors the entitlement away: 9 wei credits 1 wei to the operator
+    /// (launcher first), 8 to holders — the carried remainder is what makes the cut cumulative.
+    function test_split_tinyFeeStillCreditsOperator() public {
         hook.distributeFee(9);
 
         assertEq(hook.builderFeesAccrued(), 0, "builder cut");
-        assertEq(hook.launcherFeesAccrued(), 0, "launcher cut");
-        assertEq(hook.escrowBalance(), 9, "holder pool");
+        assertEq(hook.launcherFeesAccrued(), 1, "launcher takes the floored operator wei");
+        assertEq(hook.escrowBalance(), 8, "holder pool");
     }
 
-    /// Conservation: cuts + holder pool always equal the fee, for any amount.
+    /// Conservation: cuts + holder pool always equal the fee, for any single amount. The combined
+    /// operator (builder+launcher) cut is the floor of the true 20%; the launcher takes the odd wei.
     function testFuzz_split_conserves(uint256 amount) public {
         amount = bound(amount, 0, 1_000_000 ether);
         hook.distributeFee(amount);
 
-        assertEq(hook.builderFeesAccrued(), amount * 1000 / BPS, "builder = 10%");
-        assertEq(hook.launcherFeesAccrued(), amount * 1000 / BPS, "launcher = 10%");
+        uint256 operator = amount * 2000 / BPS; // floor(20%), taken as one cut then split
+        assertEq(hook.builderFeesAccrued() + hook.launcherFeesAccrued(), operator, "operator = floor(20%)");
+        assertGe(hook.launcherFeesAccrued(), hook.builderFeesAccrued(), "launcher takes the odd wei");
+        assertLe(hook.launcherFeesAccrued() - hook.builderFeesAccrued(), 1, "split balanced within a wei");
         assertEq(hook.builderFeesAccrued() + hook.launcherFeesAccrued() + hook.escrowBalance(), amount, "conservation");
+    }
+
+    /// The Programmable entitlement is cumulative: a stream of sub-threshold fees accrues the same
+    /// launcher/builder total as one aggregated fee, so splitting volume into tiny swaps cannot evade
+    /// the 10 bps cut. Ten 9-wei fees (1% of a 900-wei swap) must match one 90-wei fee (1% of 9,000).
+    function test_tinyFeesAccumulateToTheSameEntitlement() public {
+        for (uint256 i = 0; i < 10; i++) {
+            hook.distributeFee(9);
+        }
+        assertEq(hook.launcherFeesAccrued(), 9, "launcher entitlement evaded by fee splitting");
+        assertEq(hook.builderFeesAccrued(), 9, "builder entitlement evaded by fee splitting");
+    }
+
+    /// Split-invariant across any stream: conservation is exact, and both cuts stay within one wei of
+    /// the ideal cumulative 10%, with the launcher never shorted below the builder.
+    function testFuzz_splitIsConservativeAndCumulative(uint256[] memory rawAmounts) public {
+        vm.assume(rawAmounts.length > 0 && rawAmounts.length <= 64);
+        uint256 total;
+        for (uint256 i = 0; i < rawAmounts.length; i++) {
+            uint256 amount = rawAmounts[i] % 1e18;
+            total += amount;
+            hook.distributeFee(amount);
+        }
+        uint256 launcher = hook.launcherFeesAccrued();
+        uint256 builder = hook.builderFeesAccrued();
+        // No NFTs circulate in this harness, so every holder wei lands in escrow.
+        assertEq(launcher + builder + hook.escrowBalance(), total, "split lost or minted wei");
+        assertApproxEqAbs(launcher, (total * 1000) / BPS, 1, "launcher not cumulative-exact");
+        assertApproxEqAbs(builder, (total * 1000) / BPS, 1, "builder not cumulative-exact");
+        assertGe(launcher, builder, "launcher shorted vs builder");
+        assertLe(launcher - builder, 1, "split drifted beyond one wei");
     }
 
     /*//////////////////////////////////////////////////////////

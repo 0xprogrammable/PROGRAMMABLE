@@ -31,9 +31,11 @@
     ],
     "factoryImmutables": [
       "poolManager",
-      "launcherFeeRecipient",
       "renderer",
       "hookCreationCodeHash"
+    ],
+    "factoryConstants": [
+      "launcherFeeRecipient (0x4957f49620AFf3Adbbe8195a4f633E49cc93376c) is a compile-time constant, not a constructor argument"
     ],
     "rendererScope": "one renderer shared by every collection launched from a factory",
     "rawTokenSalt": "builder-selected bytes32 input",
@@ -116,8 +118,11 @@
     "holderShareBps": 8000,
     "builderShareBps": 1000,
     "programmableShareBps": 1000,
-    "rounding": "builder and launcher cuts round down; remainder to holders",
-    "conservation": "builderCut + launcherCut + holderAmount == fee"
+    "operatorCut": "the combined builder + launcher 20% cut is taken with a carried remainder (operatorFeeRemainder), so the operator entitlement is cumulative and split-invariant: it is not floored per swap, and a stream of tiny swaps accrues the same operator total as one aggregated swap",
+    "operatorSplit": "the operator cut is split evenly between builder and launcher, with the odd wei carried to the launcher (operatorSplitParity), so over any stream both cuts stay within one wei of the ideal cumulative 10% and the launcher is never shorted below the builder in absolute accrual",
+    "conservation": "builderCut + launcherCut + holderAmount == fee on every call",
+    "launcherFeeRecipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c; an immutable constant in ShardLaunchFactoryV1, not a constructor argument, and the same address Classic v3 uses; the factory cannot route the launcher share elsewhere",
+    "feeOnFloor": "the pool-level 1% fee itself (_feeOn in ShardHookV1) still floors: a swap whose gross ETH is below 100 wei produces a zero total fee, because pool claims are integer wei; economically negligible and distinct from the cumulative operator split above"
   },
   "rewards": {
     "currency": "native ETH",

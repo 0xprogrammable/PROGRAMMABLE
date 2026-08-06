@@ -61,7 +61,7 @@ contract ShardSwapRouterV1Test is Test {
     PoolId internal poolId;
     uint160 internal startSqrtPriceX96;
 
-    address internal launcher = makeAddr("launcher");
+    address internal constant launcher = 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c;
     address internal builder = makeAddr("builder");
     address internal alice = address(0xA11CE);
     address internal bob = address(0xB0B);
@@ -71,7 +71,7 @@ contract ShardSwapRouterV1Test is Test {
         startSqrtPriceX96 = TickMath.getSqrtPriceAtTick(TICK_UPPER);
 
         manager = IPoolManager(address(new PoolManager(address(this))));
-        factory = new ShardLaunchFactoryV1(manager, launcher, keccak256(type(ShardHookV1).creationCode));
+        factory = new ShardLaunchFactoryV1(manager, keccak256(type(ShardHookV1).creationCode));
         ShardLaunchFactoryV1.LaunchParams memory params = ShardLaunchFactoryV1.LaunchParams({
             tickLower: TICK_LOWER,
             tickBand: TICK_BAND,

@@ -64,8 +64,11 @@ contract ShardLaunchFactoryV1 {
             | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG
     );
 
+    /// @notice Programmable's fixed 0.10% ("launcher") recipient. Bound immutably to the canonical
+    ///         Programmable address for every launch — the factory cannot route it anywhere else.
+    address public constant launcherFeeRecipient = 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c;
+
     IPoolManager public immutable poolManager;
-    address public immutable launcherFeeRecipient;
     GeometricRendererV1 public immutable renderer;
     bytes32 public immutable hookCreationCodeHash;
 
@@ -82,13 +85,10 @@ contract ShardLaunchFactoryV1 {
         bytes32 configurationHash
     );
 
-    constructor(IPoolManager poolManager_, address launcherFeeRecipient_, bytes32 hookCreationCodeHash_) {
-        if (address(poolManager_) == address(0) || launcherFeeRecipient_ == address(0)) {
-            revert ShardErrorsV1.ZeroAddress();
-        }
+    constructor(IPoolManager poolManager_, bytes32 hookCreationCodeHash_) {
+        if (address(poolManager_) == address(0)) revert ShardErrorsV1.ZeroAddress();
         if (hookCreationCodeHash_ == bytes32(0)) revert ZeroHookCodeHash();
         poolManager = poolManager_;
-        launcherFeeRecipient = launcherFeeRecipient_;
         hookCreationCodeHash = hookCreationCodeHash_;
         renderer = new GeometricRendererV1();
     }

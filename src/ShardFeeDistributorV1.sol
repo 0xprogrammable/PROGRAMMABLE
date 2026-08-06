@@ -30,6 +30,12 @@ abstract contract ShardFeeDistributorV1 is IShardHookV1 {
     uint256 public builderFeesAccrued;
     uint256 public launcherFeesAccrued;
 
+    /// @dev Carried numerator (< BPS_DENOMINATOR) for the combined builder+launcher cut, so a stream
+    ///      of tiny fees cannot floor the entitlement to zero. See {_distributeFee}.
+    uint256 internal operatorFeeRemainder;
+    /// @dev Carried odd wei (0 or 1) from the even builder/launcher split; the launcher takes it.
+    uint256 internal operatorSplitParity;
+
     uint256 public accFeePerNFT; // scaled by ACC_PRECISION
     uint256 public dustScaled; // scaled remainder, < circulating
     uint256 public escrowBalance; // fees accrued while nothing circulated
@@ -66,18 +72,30 @@ abstract contract ShardFeeDistributorV1 is IShardHookV1 {
         builderFeeRecipient = next;
     }
 
-    /// @dev SWAP-FEE entry point: carves the fixed 0.10% builder and 0.10% launcher shares
-    ///      (each 1_000/10_000 of the 1% fee) before the remainder joins the holder pool.
-    ///      Both cuts round DOWN, so the dust lands with holders and
-    ///      `builderCut + launcherCut + holderAmount == amount` holds exactly.
-    ///      Donations bypass this and call {_distribute} directly — a gift to holders is
-    ///      not swap volume and is never split.
+    /// @dev SWAP-FEE entry point: carves the fixed 0.10% builder and 0.10% launcher shares before
+    ///      the remainder joins the holder pool. The combined operator cut (2_000/10_000 of the fee)
+    ///      is taken with a CARRIED remainder so a stream of sub-threshold swaps cannot floor the
+    ///      Programmable or builder entitlement to zero — ten 9-wei fees accrue the same total as one
+    ///      90-wei fee. No underflow: with `operatorFeeRemainder < BPS_DENOMINATOR`,
+    ///      `operatorCut = (amount*2000 + rem)/10000 <= amount` for every `amount >= 0`, so the holder
+    ///      remainder `amount - operatorCut` is always non-negative. The even split carries its odd
+    ///      wei (`operatorSplitParity`) to the launcher, so Programmable is never shorted below the
+    ///      builder and `builderCut + launcherCut + holderAmount == amount` holds every call.
+    ///      Donations bypass this and call {_distribute} directly — a gift to holders is not swap
+    ///      volume and is never split.
     function _distributeFee(uint256 amount) internal {
-        uint256 builderCut = (amount * BUILDER_SHARE_BPS) / BPS_DENOMINATOR;
-        uint256 launcherCut = (amount * LAUNCHER_SHARE_BPS) / BPS_DENOMINATOR;
+        uint256 operatorNum = amount * (BUILDER_SHARE_BPS + LAUNCHER_SHARE_BPS) + operatorFeeRemainder;
+        uint256 operatorCut = operatorNum / BPS_DENOMINATOR;
+        operatorFeeRemainder = operatorNum % BPS_DENOMINATOR;
+
+        uint256 splitNum = operatorCut + operatorSplitParity;
+        uint256 builderCut = splitNum / 2;
+        operatorSplitParity = splitNum % 2;
+        uint256 launcherCut = operatorCut - builderCut; // launcher (Programmable) takes the odd wei
+
         builderFeesAccrued += builderCut;
         launcherFeesAccrued += launcherCut;
-        _distribute(amount - builderCut - launcherCut);
+        _distribute(amount - operatorCut);
     }
 
     /// @dev True while a token has been acquired but has not yet joined the earning

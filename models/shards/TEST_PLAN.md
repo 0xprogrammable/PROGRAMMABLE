@@ -42,11 +42,15 @@ Suites live in [`test/`](../../test/), and each one owns a named area so no cove
   merely that the call reverted. `ShardSwapRouterV1.t.sol` covers the router's own bounds
   (`test_respectsMinAmountOut`, `test_respectsDeadline`, `test_revertsOnZeroAmount`,
   `test_shardForEthRequiresApproval`, `test_rejectsPlainEthTransfers`).
-- **Test fee arithmetic and rounding with exact examples.** `ShardFeeSplitV1.t.sol` pins the split at exact
-  tenths (`test_split_exactTenthsOnRoundAmount`), proves rounding dust favours holders
-  (`test_split_roundingDustFavorsHolders`), proves a dust-sized fee goes entirely to holders
-  (`test_split_dustFeeGoesEntirelyToHolders`) and that donations are never split
-  (`test_donationIsNotSplit`). The inclusive basis is pinned by `test_feeBasisIsInclusiveOnBuy`,
+- **Test fee arithmetic and the cumulative split with exact examples.** `ShardFeeSplitV1.t.sol` pins the split at
+  exact tenths on a round amount, proves that a stream of tiny swaps accrues the same operator entitlement as one
+  aggregated swap rather than flooring per swap (`test_tinyFeesAccumulateToTheSameEntitlement`), fuzzes that the
+  split is conservative and cumulative (`testFuzz_splitIsConservativeAndCumulative`, `testFuzz_split_conserves`),
+  and that donations are never split. The launcher recipient binding is pinned by
+  `test_launcherRecipientIsBoundToTheProgrammableConstant` in `ShardLaunchFactoryV1.t.sol`. The operator cut
+  holding across all four direction × exactness quadrants is pinned by
+  `test_operatorSplitHoldsAcrossAllFourQuadrants` and fuzzed by `testFuzz_theSplitConservesEveryFee` in
+  `ShardHookFeesV1.t.sol`. The inclusive basis is pinned by `test_feeBasisIsInclusiveOnBuy`,
   `test_buyNftAndSwapThenRedeemCostTheSame` and `test_buyThenSellRoundTripCostsAboutTwoPercent` in
   `ShardHookMarketV1.t.sol`, and by `test_buyManyChargesOnePercentInclusiveOnce`,
   `test_buyMaxChargesOnePercentInclusiveOnce` and `test_buyMaxChargesOnlyOnWhatTheCurveConsumed`.

@@ -215,11 +215,12 @@ contract ShardHookFeesV1Test is Test {
         return hook.escrowBalance() + hook.builderFeesAccrued() + hook.launcherFeesAccrued();
     }
 
-    /// @dev The holder pool's exact share of a fee: total minus the two floored 10% cuts, so
-    ///      the rounding dust stays with holders and the three parts sum back to `fee`.
+    /// @dev The holder pool's exact share of a single fee: total minus the combined operator cut,
+    ///      which is the floor of the full 20% (taken together, not floored per side), so the three
+    ///      parts sum back to `fee`.
     function _holderShare(uint256 fee) internal pure returns (uint256) {
-        uint256 cut = (fee * CUT_BPS) / BPS;
-        return fee - 2 * cut;
+        uint256 operator = (fee * 2 * CUT_BPS) / BPS;
+        return fee - operator;
     }
 
     function _swap(bool zeroForOne, int256 amountSpecified, uint256 value) internal returns (BalanceDelta) {
@@ -320,6 +321,52 @@ contract ShardHookFeesV1Test is Test {
         assertEq(
             _feesHeld() - feesAfterBuy, (ethOut * FEE_BPS) / (BPS - FEE_BPS), "fee != inclusive 1% of exact output"
         );
+    }
+
+    /// @dev Drives one real swap in each of the four quadrants (zeroForOne/oneForZero ×
+    ///      exactIn/exactOut, exact-output using the net*100/9900 gross-up) and checks the split, not
+    ///      just the 1% fee: the combined operator cut is the floor of 20% (within a one-wei carry
+    ///      from earlier swaps), the launcher is never shorted below the builder, and the two stay
+    ///      within a wei. Cumulative-from-zero exactness is pinned in
+    ///      {ShardFeeSplitV1Test-testFuzz_splitIsConservativeAndCumulative}.
+    function test_operatorSplitHoldsAcrossAllFourQuadrants() public {
+        hook.initialise();
+        _acquireShards(45 ether); // stock SHARD so the oneForZero sells stay inside the 50 SHARD cap
+
+        uint256 builder0 = hook.builderFeesAccrued();
+        uint256 launcher0 = hook.launcherFeesAccrued();
+
+        uint256 totalFee;
+        totalFee += _assertOperatorSplitOnSwap(true, -int256(UNDER_CAP_ETH), UNDER_CAP_ETH); // zeroForOne exactIn
+        totalFee += _assertOperatorSplitOnSwap(true, int256(1e18), 10 ether); // zeroForOne exactOut
+        totalFee += _assertOperatorSplitOnSwap(false, -int256(shard.balanceOf(address(this)) / 4), 0); // oneForZero
+        // exactIn
+        totalFee += _assertOperatorSplitOnSwap(false, int256(uint256(0.0001 ether)), 0); // oneForZero exactOut
+
+        uint256 builderTotal = hook.builderFeesAccrued() - builder0;
+        uint256 launcherTotal = hook.launcherFeesAccrued() - launcher0;
+        assertApproxEqAbs(builderTotal + launcherTotal, (totalFee * 2 * CUT_BPS) / BPS, 1, "operator != cumulative 20%");
+        // launcher >= builder is a GLOBAL (from-zero) invariant; over a mid-stream window the parity
+        // carry can leave either side up to a wei ahead, so the >= check reads the absolute accrual.
+        assertGe(hook.launcherFeesAccrued(), hook.builderFeesAccrued(), "launcher shorted below builder");
+        assertLe(hook.launcherFeesAccrued() - hook.builderFeesAccrued(), 1, "cuts diverged beyond a wei");
+    }
+
+    /// @dev Swaps once and returns the fee that swap moved, asserting the operator cut it accrued is
+    ///      the floor of 20% up to a one-wei carry, with the two sides within a wei of each other.
+    function _assertOperatorSplitOnSwap(bool zeroForOne, int256 amountSpecified, uint256 value)
+        internal
+        returns (uint256 fee)
+    {
+        uint256 heldBefore = _feesHeld();
+        uint256 builderBefore = hook.builderFeesAccrued();
+        uint256 launcherBefore = hook.launcherFeesAccrued();
+        _swap(zeroForOne, amountSpecified, value);
+        fee = _feesHeld() - heldBefore;
+        uint256 builderDelta = hook.builderFeesAccrued() - builderBefore;
+        uint256 launcherDelta = hook.launcherFeesAccrued() - launcherBefore;
+        assertApproxEqAbs(builderDelta + launcherDelta, (fee * 2 * CUT_BPS) / BPS, 1, "operator cut off for quadrant");
+        assertApproxEqAbs(launcherDelta, builderDelta, 1, "cuts diverged for quadrant");
     }
 
     /*//////////////////////////////////////////////////////////
@@ -735,8 +782,9 @@ contract ShardHookFeesV1Test is Test {
         assertGt(_feesHeld(), 0, "no fee taken");
     }
 
-    /// @dev Whatever the fee turns out to be, the three ledgers must add back up to it and
-    ///      the two cuts must each be exactly 10%, floored.
+    /// @dev Whatever the fee turns out to be, the three ledgers must add back up to it. The combined
+    ///      operator cut is the floor of the full 20%; the launcher takes the odd wei, so the two
+    ///      sides stay within one wei of each other.
     function testFuzz_theSplitConservesEveryFee(uint96 raw) public {
         uint256 ethIn = bound(uint256(raw), 1e12, UNDER_CAP_ETH);
         hook.initialise();
@@ -745,8 +793,10 @@ contract ShardHookFeesV1Test is Test {
         _swap(true, -int256(ethIn), ethIn);
 
         uint256 fee = _feesHeld();
-        assertEq(hook.builderFeesAccrued(), (fee * CUT_BPS) / BPS, "builder = 10%");
-        assertEq(hook.launcherFeesAccrued(), (fee * CUT_BPS) / BPS, "launcher = 10%");
+        uint256 operator = (fee * 2 * CUT_BPS) / BPS;
+        assertEq(hook.builderFeesAccrued() + hook.launcherFeesAccrued(), operator, "operator = floor(20%)");
+        assertGe(hook.launcherFeesAccrued(), hook.builderFeesAccrued(), "launcher takes the odd wei");
+        assertLe(hook.launcherFeesAccrued() - hook.builderFeesAccrued(), 1, "cuts balanced within a wei");
         assertEq(hook.escrowBalance(), _holderShare(fee), "holders get the remainder plus dust");
         assertEq(_feesAccounted(), fee, "the split created or destroyed wei");
     }

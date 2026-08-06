@@ -49,7 +49,7 @@ contract ShardLaunchSequenceV1Test is Test {
 
     address internal buyer = address(0xB0B);
 
-    address internal launcher = makeAddr("launcher");
+    address internal constant launcher = 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c;
     address internal builder = makeAddr("builder");
 
     /// @dev Deploys and funds the hook but stops SHORT of setNFT and initialise — exactly the
@@ -84,7 +84,7 @@ contract ShardLaunchSequenceV1Test is Test {
         uint160 startSqrtPriceX96 = TickMath.getSqrtPriceAtTick(tickUpper);
 
         manager = IPoolManager(address(new PoolManager(address(this))));
-        factory = new ShardLaunchFactoryV1(manager, launcher, keccak256(type(ShardHookV1).creationCode));
+        factory = new ShardLaunchFactoryV1(manager, keccak256(type(ShardHookV1).creationCode));
         ShardLaunchFactoryV1.LaunchParams memory params = ShardLaunchFactoryV1.LaunchParams({
             tickLower: tickLower,
             tickBand: tickBand,
@@ -187,12 +187,13 @@ contract ShardLaunchSequenceV1Test is Test {
         uint256 holderShare = hook.escrowBalance();
 
         assertGt(builderCut, 0, "builder accrued nothing on the launch batch");
-        assertEq(builderCut, launcherCut, "the two cuts are both 10%");
+        assertGe(launcherCut, builderCut, "launcher takes the odd wei");
+        assertLe(launcherCut - builderCut, 1, "the two cuts diverged beyond a wei");
 
         uint256 fee = builderCut + launcherCut + holderShare;
-        assertEq(builderCut, (fee * 1000) / 10_000, "builder != 10% of the fee");
-        assertEq(launcherCut, (fee * 1000) / 10_000, "launcher != 10% of the fee");
-        assertEq(holderShare, fee - 2 * ((fee * 1000) / 10_000), "holders != the remainder");
+        uint256 operator = (fee * 2000) / 10_000; // combined builder+launcher, floored together
+        assertEq(builderCut + launcherCut, operator, "operator != floor(20%) of the fee");
+        assertEq(holderShare, fee - operator, "holders != the remainder");
     }
 
     /// @dev Manual construction retains a one-shot binding power even though the production

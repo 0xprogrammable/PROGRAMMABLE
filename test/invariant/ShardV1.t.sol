@@ -67,7 +67,7 @@ contract ShardV1Invariants is Test {
     PoolId internal poolId;
     uint160 internal startSqrtPriceX96;
 
-    address internal launcher = makeAddr("launcher");
+    address internal constant launcher = 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c;
     address internal builder = makeAddr("builder");
 
     function setUp() public {
@@ -75,7 +75,7 @@ contract ShardV1Invariants is Test {
         startSqrtPriceX96 = TickMath.getSqrtPriceAtTick(TICK_UPPER);
 
         manager = IPoolManager(address(new PoolManager(address(this))));
-        factory = new ShardLaunchFactoryV1(manager, launcher, keccak256(type(ShardHookV1).creationCode));
+        factory = new ShardLaunchFactoryV1(manager, keccak256(type(ShardHookV1).creationCode));
         ShardLaunchFactoryV1.LaunchParams memory params = ShardLaunchFactoryV1.LaunchParams({
             tickLower: TICK_LOWER,
             tickBand: TICK_BAND,
@@ -286,16 +286,16 @@ contract ShardV1Invariants is Test {
         assertGe(handler.feeAssets(), owed, "INSOLVENT: hook cannot cover what it owes");
     }
 
-    /// The builder and launcher take the SAME 10% of the SAME fee stream, on every
-    /// split path, so their lifetime totals (still accrued plus already claimed) can
-    /// never diverge by a single wei. A fee that reached one carve-out but not the
-    /// other — or a claim that paid more than was accrued — breaks this immediately.
+    /// The builder and launcher take the SAME 10% of the SAME fee stream, on every split path. The
+    /// combined operator cut is carried and split evenly with the launcher taking the odd wei, so
+    /// their lifetime totals (still accrued plus already claimed) stay within a single wei of each
+    /// other, launcher never below builder. A fee that reached one carve-out but not the other — or
+    /// a claim that paid more than was accrued — breaks this immediately.
     function invariant_builderAndLauncherCutsMatch() public view {
-        assertEq(
-            hook.builderFeesAccrued() + handler.builderClaimed(),
-            hook.launcherFeesAccrued() + handler.launcherClaimed(),
-            "builder and launcher cuts diverged"
-        );
+        uint256 launcherTotal = hook.launcherFeesAccrued() + handler.launcherClaimed();
+        uint256 builderTotal = hook.builderFeesAccrued() + handler.builderClaimed();
+        assertGe(launcherTotal, builderTotal, "launcher shorted below builder");
+        assertLe(launcherTotal - builderTotal, 1, "builder and launcher cuts diverged beyond a wei");
     }
 
     /// An accrued builder cut must always be payable, right now, by whoever the payout

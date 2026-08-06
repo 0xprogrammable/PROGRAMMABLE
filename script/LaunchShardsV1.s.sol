@@ -40,16 +40,42 @@ contract LaunchShardsV1 is Script {
         return (prediction.hookSalt, prediction.shard, prediction.hook, prediction.nft, prediction.configurationHash);
     }
 
-    function deployFactory(IPoolManager poolManager, address launcherFeeRecipient, bytes32 hookCreationCodeHash)
+    /// @notice The canonical Arachnid deterministic-deployment proxy. Deploying the factory through it
+    ///         makes the factory address depend only on the salt and init-code — not on any deployer
+    ///         nonce — so it is reproducible by any sender and pinnable in advance.
+    address internal constant CREATE2_PROXY = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
+
+    /// @notice Nonce-independent factory/renderer prediction. No broadcast, no network writes.
+    function previewFactory(IPoolManager poolManager, bytes32 hookCreationCodeHash, bytes32 factorySalt)
+        external
+        view
+        returns (address factory, address renderer)
+    {
+        _requireCanonicalHash(hookCreationCodeHash, keccak256(type(ShardHookV1).creationCode));
+        bytes memory initcode =
+            bytes.concat(type(ShardLaunchFactoryV1).creationCode, abi.encode(poolManager, hookCreationCodeHash));
+        factory = Create2.computeAddress(factorySalt, keccak256(initcode), CREATE2_PROXY);
+        renderer = vm.computeCreateAddress(factory, 1); // factory deploys the renderer as its first CREATE
+        console2.log("expected factory", factory);
+        console2.log("expected renderer", renderer);
+    }
+
+    function deployFactory(IPoolManager poolManager, bytes32 hookCreationCodeHash, bytes32 factorySalt)
         external
         returns (address factory)
     {
-        bytes32 canonicalHash = keccak256(type(ShardHookV1).creationCode);
-        _requireCanonicalHash(hookCreationCodeHash, canonicalHash);
+        _requireCanonicalHash(hookCreationCodeHash, keccak256(type(ShardHookV1).creationCode));
+        bytes memory initcode =
+            bytes.concat(type(ShardLaunchFactoryV1).creationCode, abi.encode(poolManager, hookCreationCodeHash));
+        address predicted = Create2.computeAddress(factorySalt, keccak256(initcode), CREATE2_PROXY);
         vm.startBroadcast();
-        factory = address(new ShardLaunchFactoryV1(poolManager, launcherFeeRecipient, hookCreationCodeHash));
+        (bool ok, bytes memory ret) = CREATE2_PROXY.call(bytes.concat(factorySalt, initcode));
         vm.stopBroadcast();
+        require(ok, "factory deploy via CREATE2 proxy failed");
+        factory = address(bytes20(ret));
+        if (factory != predicted) revert PredictionMismatch(predicted, factory);
         console2.log("factory", factory);
+        console2.log("renderer", address(ShardLaunchFactoryV1(factory).renderer()));
     }
 
     function launch(

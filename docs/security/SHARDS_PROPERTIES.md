@@ -46,7 +46,7 @@ Evidence: `invariant_liquidityPositionIsNeverReduced`, `invariant_bandPositionIs
 
 ## P7. Fee accounting is conserved and solvent
 
-Each swap fee is native ETH and splits exactly into builder, launcher, and holder amounts; rounding favors holders. Real ETH plus PoolManager native claims covers holder, builder, launcher, and escrow liabilities. Donations bypass the beneficiary split.
+Each swap fee is native ETH and splits exactly into builder, launcher, and holder amounts. Real ETH plus PoolManager native claims covers holder, builder, launcher, and escrow liabilities. Donations bypass the beneficiary split.
 
 Evidence: `invariant_hookAssetsCoverAllClaims`, `invariant_builderAndLauncherCutsMatch`, `testFuzz_theSplitConservesEveryFee`, `test_hookClaimBalancePlusEthCoversFeesTaken`, and `ShardFeeDonationV1Test`.
 
@@ -85,6 +85,18 @@ Evidence: `test_effectiveTokenSaltBindsHookSaltAndEveryLaunchParameter`, `test_s
 Seeds mix the preceding block hash, timestamp, recipient, and an acquisition nonce. They support deterministic on-chain rendering and practical per-acquisition variation, not unpredictability. Block producers and callers can observe or influence inputs.
 
 Evidence: `test_ethereumArtSeedDoesNotDependOnArbitrumPrecompileAddress`, renderer determinism/difference tests, and `test_ethereumSeedInputsProduceDistinctRenderedArt` on the pinned Mainnet fork.
+
+## P14. Builder and launcher entitlements are cumulative and split-invariant
+
+The builder and launcher entitlements are cumulative and split-invariant: a stream of small swaps accrues the same operator total (±1 wei) as one aggregated swap, because the combined operator cut is taken with a carried remainder rather than flooring each 0.10% cut per swap. Conservation `builderCut + launcherCut + holderAmount == fee` holds every call, and the launcher is never shorted below the builder in absolute accrual. The residual pool-level floor is separate and disclosed: a swap whose gross ETH is below 100 wei produces a zero total fee, because pool claims are integer wei.
+
+Evidence: `testFuzz_splitIsConservativeAndCumulative` in `test/ShardFeeSplitV1.t.sol` and `test_operatorSplitHoldsAcrossAllFourQuadrants` in `test/ShardHookFeesV1.t.sol`.
+
+## P15. The launcher recipient is bound to the Programmable constant
+
+The launcher (Programmable, 0.10%) recipient is an immutable constant `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c` in `ShardLaunchFactoryV1` — the same address Classic v3 uses — not a constructor argument. The factory cannot be constructed with any other launcher recipient, so it cannot route the Programmable share elsewhere. The builder recipient stays per-launch.
+
+Evidence: `test_launcherRecipientIsBoundToTheProgrammableConstant` in `test/ShardLaunchFactoryV1.t.sol`.
 
 ## Remaining release gates
 

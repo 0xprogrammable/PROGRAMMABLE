@@ -47,8 +47,18 @@ transfers its sub-whole leftover to the caller, why `acquire`/`release` never us
 why `_update` rejects direct deposits to the NFT contract or the hook, and why every hook-initiated swap reverts
 `PartialFillNotSupported` rather than mint a piece it cannot back.
 
-**Fee conservation.** For every fee event, `builderCut + launcherCut + holderAmount == fee`, with both cuts
-rounding down and the remainder to holders. Donations bypass the split entirely and reach holders in full.
+**Fee conservation.** For every fee event, `builderCut + launcherCut + holderAmount == fee`. The combined
+builder + launcher operator cut is taken with a carried remainder (`operatorFeeRemainder`), so it is cumulative
+and split-invariant: a stream of tiny swaps accrues the same operator total as one aggregated swap rather than
+flooring to zero per swap. That cut is split evenly between the two payees with the odd wei carried to the
+launcher (`operatorSplitParity`), so over any stream both cuts stay within one wei of the ideal cumulative 10%
+and the launcher is never shorted below the builder in absolute accrual. Donations bypass the split entirely and
+reach holders in full.
+
+The launcher (Programmable, 0.10%) recipient is the immutable constant `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`
+in `ShardLaunchFactoryV1` — the same address Classic v3 uses — and is no longer a constructor argument, so the
+factory cannot route the launcher share to any other address. The builder 0.10% recipient stays per-launch
+(`LaunchParams.builderFeeRecipient`).
 
 **Authorization.** `claimBuilderFees` reverts `NotBuilder` for anyone but the current `builderFeeRecipient`;
 `claimLauncherFees` reverts `NotLauncher` for anyone but the immutable `launcherFeeRecipient`;
@@ -132,7 +142,9 @@ explicit bounds rather than any price oracle:
   a contract that cannot be upgraded. Use `donate()` or `ShardFeeForwarderV1`.
 - **Claims require the holder to act.** Holding accrues value in the accumulator, but `claim` needs the token ids
   passed in — the hook does not track which ids an address holds. It is not a keeper interface.
-- **Fee arithmetic is truncating.** Small fee events lose sub-wei precision to rounding. It is conserved, not
-  eliminated: the remainder always goes to holders, never to the builder or Programmable.
+- **Sub-100-wei swaps pay no pool fee.** The pool-level 1% fee itself (`_feeOn` in `src/ShardHookV1.sol`) still
+  floors: a swap whose gross ETH is below 100 wei produces a zero total fee, because pool claims are integer wei.
+  This is economically negligible and is distinct from the operator split, which is cumulative and does not floor
+  per swap. Once a fee is charged, the builder and launcher cuts are conserved to the wei and never floored away.
 
 This file does not claim an audit.

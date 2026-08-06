@@ -67,7 +67,7 @@ contract ShardV1MainnetForkTest is Test {
     ShardSwapRouterV1 internal swapRouter;
     PoolKey internal key;
 
-    address internal launcher = makeAddr("launcher");
+    address internal constant launcher = 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c;
     address internal builder = makeAddr("builder");
     address internal buyer = makeAddr("buyer");
     address internal trader = makeAddr("trader");
@@ -96,8 +96,10 @@ contract ShardV1MainnetForkTest is Test {
         int24 tickLower = TickMath.minUsableTick(ShardConstantsV1.TICK_SPACING);
         uint160 startSqrtPriceX96 = TickMath.getSqrtPriceAtTick(TICK_UPPER);
 
+        console2.logBytes32(keccak256(type(ShardHookV1).creationCode));
+
         uint256 gasBefore = gasleft();
-        factory = new ShardLaunchFactoryV1(poolManager, launcher, keccak256(type(ShardHookV1).creationCode));
+        factory = new ShardLaunchFactoryV1(poolManager, keccak256(type(ShardHookV1).creationCode));
         console2.log("factory deployment gas", gasBefore - gasleft());
         renderer = factory.renderer();
 
@@ -128,6 +130,12 @@ contract ShardV1MainnetForkTest is Test {
         hook = ShardHookV1(payable(hookAddress));
         shard = ShardTokenV1(shardAddress);
         nft = ShardNFTV1(nftAddress);
+
+        assertEq(
+            hook.launcherFeeRecipient(),
+            0x4957f49620AFf3Adbbe8195a4f633E49cc93376c,
+            "hook launcher recipient is not the immutable constant"
+        );
 
         ShardLaunchFactoryV1.ConfigurationData memory configuration;
         configuration.chainId = block.chainid;
@@ -259,6 +267,20 @@ contract ShardV1MainnetForkTest is Test {
         // Both beneficiaries claim their fixed 0.10% cuts.
         assertGt(hook.builderFeesAccrued(), 0, "builder accrued nothing");
         assertGt(hook.launcherFeesAccrued(), 0, "launcher accrued nothing");
+
+        // The combined builder+launcher 20% cut is split evenly with a carried remainder, the
+        // launcher taking the odd wei. Across the whole lifecycle on real v4 the two accruals stay
+        // within a single wei of each other, and the launcher is never behind.
+        assertGe(
+            hook.launcherFeesAccrued(),
+            hook.builderFeesAccrued(),
+            "launcher fell behind builder on the cumulative split"
+        );
+        assertLe(
+            hook.launcherFeesAccrued() - hook.builderFeesAccrued(),
+            1,
+            "even split drifted by more than the carried odd wei"
+        );
 
         uint256 builderBefore = builder.balance;
         vm.prank(builder);

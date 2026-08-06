@@ -66,14 +66,16 @@ contract ShardLaunchFactoryV1Test is Test {
     bytes32 internal hookSalt;
     address internal predictedShard;
     address internal predictedHook;
-    address internal launcher = makeAddr("factory launcher");
+    /// @dev The launcher recipient is an immutable constant on the factory, so every local
+    ///      configuration-hash reconstruction must use that exact address.
+    address internal constant launcher = 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c;
     address internal builder = makeAddr("factory builder");
 
     function setUp() public {
         manager = IPoolManager(address(new PoolManager(address(this))));
         hookCreationCode = type(ShardHookV1).creationCode;
         hookCreationCodeHash = keccak256(hookCreationCode);
-        factory = new ShardLaunchFactoryV1(manager, launcher, hookCreationCodeHash);
+        factory = new ShardLaunchFactoryV1(manager, hookCreationCodeHash);
         params = ShardLaunchFactoryV1.LaunchParams({
             tickLower: TickMath.minUsableTick(60),
             tickBand: TICK_BAND,
@@ -93,19 +95,20 @@ contract ShardLaunchFactoryV1Test is Test {
         assertGt(address(factory.renderer()).code.length, 0);
     }
 
-    function test_constructorRejectsZeroPoolManager() public {
-        vm.expectRevert(ShardErrorsV1.ZeroAddress.selector);
-        new ShardLaunchFactoryV1(IPoolManager(address(0)), launcher, hookCreationCodeHash);
+    /// @dev The launcher (Programmable 0.10%) recipient is bound to the canonical constant and cannot
+    ///      be set through the constructor; every factory routes the launcher share to the same wallet.
+    function test_launcherRecipientIsBoundToTheProgrammableConstant() public view {
+        assertEq(factory.launcherFeeRecipient(), 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c);
     }
 
-    function test_constructorRejectsZeroLauncher() public {
+    function test_constructorRejectsZeroPoolManager() public {
         vm.expectRevert(ShardErrorsV1.ZeroAddress.selector);
-        new ShardLaunchFactoryV1(manager, address(0), hookCreationCodeHash);
+        new ShardLaunchFactoryV1(IPoolManager(address(0)), hookCreationCodeHash);
     }
 
     function test_constructorRejectsZeroHookCodeHash() public {
         vm.expectRevert(ShardLaunchFactoryV1.ZeroHookCodeHash.selector);
-        new ShardLaunchFactoryV1(manager, launcher, bytes32(0));
+        new ShardLaunchFactoryV1(manager, bytes32(0));
     }
 
     function test_predictionHelpersAreDeterministicAndUseExactInitCode() public view {
@@ -372,7 +375,7 @@ contract ShardLaunchFactoryV1Test is Test {
 
     function test_failureAfterDeploymentsRollsBackTokenHookNftMappingAndEvent() public {
         bytes memory failingCode = type(FalseTransferConfiguringHook).creationCode;
-        ShardLaunchFactoryV1 failingFactory = new ShardLaunchFactoryV1(manager, launcher, keccak256(failingCode));
+        ShardLaunchFactoryV1 failingFactory = new ShardLaunchFactoryV1(manager, keccak256(failingCode));
         (bytes32 failingSalt, address failingShard, address failingHook) =
             ShardLaunchLib.mine(failingFactory, tokenSalt, bytes32(0), failingCode, params);
         address expectedNft = failingFactory.predictNFT(failingHook);
@@ -458,7 +461,7 @@ contract ShardLaunchFactoryV1Test is Test {
 
     function test_logDeploymentAndLaunchGas() public {
         uint256 gasBefore = gasleft();
-        ShardLaunchFactoryV1 measured = new ShardLaunchFactoryV1(manager, launcher, hookCreationCodeHash);
+        ShardLaunchFactoryV1 measured = new ShardLaunchFactoryV1(manager, hookCreationCodeHash);
         uint256 constructorGas = gasBefore - gasleft();
         (bytes32 measuredSalt,,) = ShardLaunchLib.mine(measured, tokenSalt, bytes32(0), hookCreationCode, params);
         gasBefore = gasleft();

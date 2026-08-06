@@ -216,18 +216,24 @@ the refunded remainder.
 
 ### The split
 
-Every fee event runs through `_distributeFee`:
+Every fee event runs through `_distributeFee` in `ShardFeeDistributorV1`. The combined builder + launcher
+operator cut (20% of the fee) is taken with a carried remainder rather than flooring each 0.10% cut
+independently:
 
-```solidity
-builderCut  = fee * 1000 / 10000;
-launcherCut = fee * 1000 / 10000;
-builderFeesAccrued  += builderCut;
-launcherFeesAccrued += launcherCut;
-_distribute(fee - builderCut - launcherCut);   // holders
-```
+- The operator entitlement is computed against the cumulative fee stream and carried in `operatorFeeRemainder`,
+  so it is split-invariant: a run of tiny swaps accrues the same operator total as one aggregated swap. The old
+  independent flooring let a stream of sub-threshold swaps evade the cut (ten 900-wei swaps paid 0; one 9,000-wei
+  swap paid 9). It no longer does.
+- The operator cut is then split evenly between the two payees, with the odd wei carried to the launcher
+  (`operatorSplitParity`). Over any stream both cuts stay within one wei of the ideal cumulative 10%, and the
+  launcher (Programmable) is never shorted below the builder in absolute accrual.
+- `builderCut + launcherCut + holderAmount == fee` holds on every call. Whatever the operator cut does not take
+  goes to holders.
 
-Both cuts round down, so the rounding remainder always lands with holders and
-`builderCut + launcherCut + holderAmount == fee` holds exactly.
+The launcher recipient is the immutable constant `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c` — the same address
+Classic v3 uses — baked into `ShardLaunchFactoryV1`. It is not a constructor argument, so the factory cannot
+route the Programmable share anywhere else. The builder recipient stays per-launch
+(`LaunchParams.builderFeeRecipient`).
 
 **Worked example — a 1 ether fee event.** A trade whose ETH leg is 100 ether pays a 1 ether fee.
 
@@ -237,13 +243,10 @@ Both cuts round down, so the rounding remainder always lands with holders and
 | Builder | `0.1 ether` | 10% | 0.10% |
 | Programmable | `0.1 ether` | 10% | 0.10% |
 
-**Worked example — a 999 wei fee event.** Rounding dust goes to holders.
-
-| Recipient | Amount |
-| --- | ---: |
-| Builder | `99 wei` (`999 * 1000 / 10000 = 99.9`, floored) |
-| Programmable | `99 wei` |
-| Holders | `801 wei` (`999 - 99 - 99`) |
+**Worked example — a stream of tiny fees.** Ten 900-wei fee events, previously worth 0 to the operators under
+independent flooring, now accrue their cumulative 20% cut: `10 * 900 = 9000 wei` of fees yields `1800 wei` to the
+operators, split `900 wei` builder and `900 wei` launcher, with the odd wei on an odd total carried to the
+launcher. The remaining `7200 wei` goes to holders. The operator total matches a single 9,000-wei fee event.
 
 **Donations are not split.** `donate()` calls `_distribute` directly, so all of it goes to holders. A gift to a
 collection is not swap volume.
