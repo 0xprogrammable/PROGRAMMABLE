@@ -12,6 +12,10 @@ const productLinks = [
 
 const resourceLinks = [
   {
+    href: "/analytics",
+    label: "Analytics",
+  },
+  {
     href: "https://dexscreener.com/ethereum/0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0",
     label: "Token",
     external: true,
@@ -77,13 +81,13 @@ export function SiteFooter() {
           <ul>
             {resourceLinks.map((link) => (
               <li key={link.href}>
-                <a
-                  href={link.href}
-                  target={link.external ? "_blank" : undefined}
-                  rel={link.external ? "noreferrer" : undefined}
-                >
-                  {link.label}
-                </a>
+                {link.external ? (
+                  <a href={link.href} target="_blank" rel="noreferrer">
+                    {link.label}
+                  </a>
+                ) : (
+                  <Link href={link.href}>{link.label}</Link>
+                )}
               </li>
             ))}
           </ul>
