@@ -34,8 +34,11 @@ The pinned profile is Solidity 0.8.26, Cancun, optimizer 200, via-IR, metadata h
 Required cases:
 
 - exact permission booleans and address mask `0x20cc`;
-- atomic CREATE2 deployment, canonical PoolKey binding, dynamic-fee flag, explicit stored base, and callback authentication;
-- wrong PoolManager, wrong PoolKey, repeat registration, and external initialization rejection;
+- atomic CREATE2 deployment; identity binding for both currencies, dynamic-fee flag, tick spacing, hook address,
+  PoolManager, quote asset, controller parameters, and initial sqrt price;
+- expected-address mismatch before deployment, canonical PoolKey reconstruction from immutables, explicit stored base,
+  committed-price enforcement, and callback authentication;
+- wrong PoolManager, wrong PoolKey, wrong initialization price, repeat registration, and external initialization rejection;
 - first successful swap starts the window; a reverted swap leaves it unstarted;
 - buy/sell direction is derived from quote position for both currency orderings;
 - same-block directional fee stability and next-block-only feedback;

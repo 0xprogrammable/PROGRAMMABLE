@@ -6,13 +6,13 @@
 
 ## Semantic consistency
 
-This proposal, `submission.json`, `MECHANISM.md`, `SECURITY.md`, and the tests describe the same mechanism: one immutable custom hook, one canonical dynamic-fee PoolKey, independent buy/sell controllers, executed gross quote as the signal, a one-block lag, constant-time decay, irreversible expiry, and Programmable fee policy `programmable-volume-fee-v1@1.0.0`. The project selects no project hook fee. LP fees go to LPs; the mandatory 10 bps quote-volume liability belongs only to the immutable Programmable owner.
+This proposal, `submission.json`, `MECHANISM.md`, `SECURITY.md`, and the tests describe the same mechanism: one immutable custom hook, one canonical dynamic-fee PoolKey, independent buy/sell controllers, executed gross quote as the signal, a one-block lag, constant-time decay, irreversible expiry, and Programmable fee policy `programmable-volume-fee-v1@1.1.0`. The project selects no project hook fee. LP fees go to LPs; the mandatory 10 bps quote-volume liability belongs only to the immutable Programmable owner.
 
 ## Why Uniswap v4
 
 `hook.used` is true. v4 is necessary because the mechanism must atomically choose a directional LP-fee override before each swap, observe the executed result after it, and collect the mandatory quote-volume fee with return deltas. A router-only design could be bypassed and could not guarantee one canonical-pool accounting path. The policy is integrated into the single custom hook rather than a second hook.
 
-The source is `src/SoftLandingHook.sol`, controller math is `src/lib/FlowFeeMath.sol`, and atomic CREATE2 deployment is `src/SoftLandingHookFactory.sol`. There is no app, API, service, keeper, oracle, or project indexer in this repository.
+The source is `src/SoftLandingHook.sol`, controller math is `src/lib/FlowFeeMath.sol`, atomic CREATE2 deployment is `src/SoftLandingHookFactory.sol`, and the autonomous launch plan is `spec/soft-landing.json`. The repository also contains a local, non-transactional mechanism demo; there is no production app, API, service, keeper, oracle, or project indexer.
 
 ## Design card
 
@@ -32,8 +32,8 @@ The source is `src/SoftLandingHook.sol`, controller math is `src/lib/FlowFeeMath
 
 ## Lifecycle
 
-1. Anyone calls the factory with immutable configuration and a mined CREATE2 salt whose address has permission mask `0x20cc`.
-2. The factory deploys the hook, binds one PoolKey, initializes it, and explicitly stores the base dynamic fee in one transaction. A failure reverts the whole operation.
+1. Anyone calls the factory with immutable configuration, the expected hook address, and a mined CREATE2 salt whose address has permission mask `0x20cc`. Both currencies, the dynamic fee flag, tick spacing, initial sqrt price, PoolManager, quote asset, and controller parameters are committed to the deployment identity.
+2. The factory recomputes the expected address, deploys the hook, reconstructs the PoolKey from constructor immutables, initializes only at the committed price, and explicitly stores the base dynamic fee in one transaction. Any identity mismatch or initialization failure reverts the whole operation.
 3. Liquidity is added through ordinary v4 core behavior; this hook has no liquidity callback or custody.
 4. The first successful swap starts the warmup. Every swap in the same direction and block gets the same LP fee.
 5. On the first swap of a later block, the hook applies the completed block once and decays any skipped empty blocks in constant time. The current swap cannot affect its own fee.
@@ -83,7 +83,7 @@ Only `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c` may claim. There is no builder
 
 | Surface | Plan and source of truth | Failure boundary |
 | --- | --- | --- |
-| UI / app / API | Not included; a future Programmable-owned integration must be separately accepted and version-bound. | No availability claim. |
+| UI / app / API | A local mechanism demo is included; any transaction-capable Programmable integration must be separately accepted and version-bound. | No availability claim. |
 | Service / keeper / oracle | Not used; controller advances lazily from block number and onchain flow. | RPC failure affects callers, not controller correctness. |
 | Indexer | Proposed future product integration using hook events plus confirmed chain reads. | Reorg/backfill/freshness review remains open. |
 | Quote | Proposed v4 Quoter integration against the exact PoolKey and block tag; empty `hookData`. | Quote/execution drift and unsupported partial fills must be surfaced. |

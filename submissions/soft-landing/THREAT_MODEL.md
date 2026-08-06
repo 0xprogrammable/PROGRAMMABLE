@@ -15,7 +15,9 @@ The LP-fee override never enters hook custody. Accrual mints exactly the hook cl
 ## Trust boundaries and authority
 
 - `PoolManager`: immutable callback and unlock authority; any other caller is rejected by `BaseHook` or explicit checks.
-- `SoftLandingHookFactory`: permissionless one-shot CREATE2 deployer and registrar. It has no authority after atomic initialization.
+- `SoftLandingHookFactory`: permissionless one-shot CREATE2 deployer and registrar. Every PoolKey member and the initial
+  sqrt price are committed into constructor initcode; an expected-address mismatch fails before deployment. It has no
+  authority after atomic initialization.
 - Canonical PoolKey: the only admitted pool; other keys revert and cannot share liabilities.
 - Programmable owner `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`: immutable sole claim caller and beneficiary; it may choose a nonzero destination per claim.
 - Routers/quoters: untrusted callers that must enforce their own slippage, deadlines, native refunds, and final-delta checks. `hookData` is unused.
@@ -27,7 +29,8 @@ There is no creator, builder, project, administrator, pause, upgrade, rescue, sw
 
 Permissions are `beforeInitialize`, `beforeSwap`, `afterSwap`, `beforeSwapReturnDelta`, and `afterSwapReturnDelta`; the other nine permissions are false. The derived address mask is `0x20cc`.
 
-- `beforeInitialize` accepts only PoolManager calling during the hook's self-initiated initialization of the already-bound key. It returns the exact selector and no delta.
+- `beforeInitialize` accepts only PoolManager calling during the hook's self-initiated initialization of the
+  constructor-bound key at the constructor-bound initial sqrt price. It returns the exact selector and no delta.
 - `beforeSwap` authenticates the canonical key, advances the controller at most once for a new block, returns the directional fee override, and collects only specified-quote quadrants. It returns the exact selector, `BeforeSwapDelta`, and override flag.
 - `afterSwap` authenticates the key, verifies specified-quote full execution, collects unspecified-quote quadrants from executed deltas, records executed gross directional flow, and returns the exact selector plus hook delta.
 
