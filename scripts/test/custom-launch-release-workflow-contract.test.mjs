@@ -34,18 +34,30 @@ function workflowFailures(source) {
     "production-config-input",
     "CUSTOM_LAUNCH_PUBLIC_ENABLEMENT_REQUESTED: ${{ inputs.custom_launch_public_enablement }}",
   );
+  requireText(
+    "protected-production-mode",
+    "CUSTOM_LAUNCH_PRODUCTION_MODE: ${{ vars.CUSTOM_LAUNCH_PRODUCTION_MODE }}",
+  );
+  requireText(
+    "protected-production-mode-input",
+    '--production-mode "$CUSTOM_LAUNCH_PRODUCTION_MODE"',
+  );
   const recordGateStart = source.indexOf(
     "      - name: Verify detached Custom Launch release record",
   );
   const recordGateEnd = source.indexOf(
     "      - name: Preserve detached Custom Launch release record",
   );
-  const recordGateBlock = recordGateStart >= 0 && recordGateEnd > recordGateStart
-    ? source.slice(recordGateStart, recordGateEnd)
-    : "";
-  if (!recordGateBlock.includes(
-    "if: steps.custom-launch-policy.outputs.release_record_required == 'true'",
-  )) failures.push("conditional-record-gate");
+  const recordGateBlock =
+    recordGateStart >= 0 && recordGateEnd > recordGateStart
+      ? source.slice(recordGateStart, recordGateEnd)
+      : "";
+  if (
+    !recordGateBlock.includes(
+      "if: steps.custom-launch-policy.outputs.release_record_required == 'true'",
+    )
+  )
+    failures.push("conditional-record-gate");
   requireText(
     "dedicated-record-ref",
     'record_ref="refs/remotes/origin/command-center-release-records"',
@@ -68,7 +80,7 @@ function workflowFailures(source) {
   );
   requireText(
     "record-github-provenance",
-    'commit.commit?.verification?.verified !== true',
+    "commit.commit?.verification?.verified !== true",
   );
   requireText(
     "record-programmable-author",
@@ -124,6 +136,10 @@ function workflowFailures(source) {
     "Pull production configuration",
     "Resolve Custom Launch release-record policy",
   );
+  requireText(
+    "candidate-runtime-commit-binding",
+    '--env PROGRAMMABLE_RELEASE_COMMIT_SHA="$GITHUB_SHA"',
+  );
   requireOrder(
     "record-after-rollback-capture",
     "Capture current production rollback target",
@@ -139,10 +155,7 @@ function workflowFailures(source) {
     "Verify detached Custom Launch release record",
     "Stage production build without assigning domains",
   );
-  requireText(
-    "candidate-canary",
-    "Gate exact staged Custom Launch candidate",
-  );
+  requireText("candidate-canary", "Gate exact staged Custom Launch candidate");
   requireText(
     "candidate-canary-conditional",
     "id: custom-launch-canary\n        if: steps.custom-launch-policy.outputs.release_record_required == 'true'",
@@ -165,7 +178,8 @@ function workflowFailures(source) {
     "PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_EXPECTED_GITHUB_USER_ID",
     "PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_OWN_APPLICATION_HANDLE",
     "PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_FOREIGN_APPLICATION_HANDLE",
-  ]) requireText(`candidate-canary-${binding.toLowerCase()}`, binding);
+  ])
+    requireText(`candidate-canary-${binding.toLowerCase()}`, binding);
   requireText("candidate-canary-enabled", "--require-enabled");
   requireText("candidate-canary-authenticated", "--authenticated-canary");
   requireText(
@@ -192,6 +206,7 @@ test("generic production staging remains record-free only while Custom Launch is
     resolveCustomLaunchStagingPolicy({
       requested: "false",
       productionEnvSource: "OTHER_FLAG=true\n",
+      productionMode: "disabled",
     }),
     { releaseRecordRequired: false, configuredEnablement: false },
   );
@@ -199,6 +214,7 @@ test("generic production staging remains record-free only while Custom Launch is
     resolveCustomLaunchStagingPolicy({
       requested: false,
       productionEnvSource: `${"PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED"}=\"false\"\n`,
+      productionMode: "disabled",
     }),
     { releaseRecordRequired: false, configuredEnablement: false },
   );
@@ -209,23 +225,51 @@ test("enabled production configuration requires an explicit matching dispatch", 
     resolveCustomLaunchStagingPolicy({
       requested: "true",
       productionEnvSource: "PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED='true'\n",
+      productionMode: "enabled",
     }),
     { releaseRecordRequired: true, configuredEnablement: true },
   );
   assert.throws(
-    () => resolveCustomLaunchStagingPolicy({
-      requested: "false",
-      productionEnvSource: "PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED=true\n",
-    }),
+    () =>
+      resolveCustomLaunchStagingPolicy({
+        requested: "false",
+        productionEnvSource: "PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED=true\n",
+        productionMode: "enabled",
+      }),
     /disagree/,
   );
   assert.throws(
-    () => resolveCustomLaunchStagingPolicy({
-      requested: "true",
-      productionEnvSource: "PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED=false\n",
-    }),
+    () =>
+      resolveCustomLaunchStagingPolicy({
+        requested: "true",
+        productionEnvSource:
+          "PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED=false\n",
+        productionMode: "disabled",
+      }),
     /disagree/,
   );
+});
+
+test("protected production mode rejects drift and invalid values", () => {
+  assert.throws(
+    () =>
+      resolveCustomLaunchStagingPolicy({
+        requested: "true",
+        productionEnvSource: "PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED=true\n",
+        productionMode: "disabled",
+      }),
+    /production mode.*disagree/u,
+  );
+  for (const productionMode of [undefined, "", "true", "Enabled", " enabled"]) {
+    assert.throws(() =>
+      resolveCustomLaunchStagingPolicy({
+        requested: "false",
+        productionEnvSource:
+          "PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED=false\n",
+        productionMode,
+      }),
+    );
+  }
 });
 
 test("production flag parsing rejects duplicates, expansion, casing and whitespace drift", () => {
@@ -252,10 +296,25 @@ test("workflow contract detects weakened record and stage-only gates", async () 
       "if: always()",
     ),
     source.replace("--require staging", "--require clearance"),
-    source.replace('--expect-package-artifact-hash "$EXPECTED_PACKAGE_ARTIFACT_HASH"', ""),
-    source.replace('git merge-base --is-ancestor "$RECORD_COMMIT_SHA" "$record_ref"', ""),
-    source.replace('commit.commit?.verification?.verified !== true', "false"),
-    source.replace('--expect-detached-record-sha256 "$EXPECTED_RECORD_SHA256"', ""),
+    source.replace(
+      '--expect-package-artifact-hash "$EXPECTED_PACKAGE_ARTIFACT_HASH"',
+      "",
+    ),
+    source.replace(
+      'git merge-base --is-ancestor "$RECORD_COMMIT_SHA" "$record_ref"',
+      "",
+    ),
+    source.replace("commit.commit?.verification?.verified !== true", "false"),
+    source.replace(
+      '--expect-detached-record-sha256 "$EXPECTED_RECORD_SHA256"',
+      "",
+    ),
+    source.replace(
+      "CUSTOM_LAUNCH_PRODUCTION_MODE: ${{ vars.CUSTOM_LAUNCH_PRODUCTION_MODE }}",
+      "CUSTOM_LAUNCH_PRODUCTION_MODE: enabled",
+    ),
+    source.replace('--production-mode "$CUSTOM_LAUNCH_PRODUCTION_MODE"', ""),
+    source.replace('--env PROGRAMMABLE_RELEASE_COMMIT_SHA="$GITHUB_SHA"', ""),
     source.replace("--authenticated-canary", ""),
     source.replace('"--deployment-id=$STAGED_DEPLOYMENT_ID"', ""),
     source.replace(

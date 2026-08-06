@@ -158,10 +158,12 @@ jobs:
         id: custom-launch-policy
         env:
           CUSTOM_LAUNCH_PUBLIC_ENABLEMENT_REQUESTED: ${{ inputs.custom_launch_public_enablement }}
+          CUSTOM_LAUNCH_PRODUCTION_MODE: ${{ vars.CUSTOM_LAUNCH_PRODUCTION_MODE }}
         run: >-
           node scripts/resolve-custom-launch-staging-policy.mjs
           --env-file .vercel/.env.production.local
           --requested "$CUSTOM_LAUNCH_PUBLIC_ENABLEMENT_REQUESTED"
+          --production-mode "$CUSTOM_LAUNCH_PRODUCTION_MODE"
           --github-output "$GITHUB_OUTPUT"
 
       - name: Capture sensitive production environment metadata
@@ -290,7 +292,7 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          deployment_url="$(vercel deploy --prebuilt --prod --skip-domain --archive=tgz --meta githubCommitSha="$GITHUB_SHA" --env VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA" --token="$VERCEL_TOKEN")"
+          deployment_url="$(vercel deploy --prebuilt --prod --skip-domain --archive=tgz --meta githubCommitSha="$GITHUB_SHA" --env VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA" --env PROGRAMMABLE_RELEASE_COMMIT_SHA="$GITHUB_SHA" --token="$VERCEL_TOKEN")"
           case "$deployment_url" in
             https://*) ;;
             *)

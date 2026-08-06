@@ -180,11 +180,20 @@ describe("read-model operations source contract", () => {
 
   it("fails closed when the protected staged wake bypass is not bound", () => {
     const workflowPath = ".github/workflows/deploy-production.yml";
-    const unsafeWorkflow = readFileSync(resolve(ROOT, workflowPath), "utf8")
-      .replace(
-        "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n",
-        "",
-      );
+    const secretLine =
+      "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n";
+    const quickNodeStep =
+      "      - name: Gate exact staged QuickNode wake route\n" +
+      "        if: steps.read-model-policy.outputs.wake_canary_required == 'true'\n" +
+      "        env:\n" +
+      "          PROGRAMMABLE_QUICKNODE_STREAM_SECRET: ${{ secrets.PROGRAMMABLE_QUICKNODE_STREAM_SECRET }}\n" +
+      secretLine;
+    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
+    const unsafeWorkflow = workflow.replace(
+      quickNodeStep,
+      quickNodeStep.replace(secretLine, ""),
+    );
+    expect(unsafeWorkflow).not.toBe(workflow);
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: {
         ...integratedOverrides(),
@@ -202,12 +211,26 @@ describe("read-model operations source contract", () => {
     const secretLine =
       "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n";
     const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
-    const unsafeWorkflow = workflow
-      .replace(secretLine, "")
-      .replace(
-        "      - name: Pull production configuration\n        env:\n",
-        `      - name: Pull production configuration\n        env:\n${secretLine}`,
-      );
+    const quickNodeStepStart = workflow.indexOf(
+      "      - name: Gate exact staged QuickNode wake route",
+    );
+    const quickNodeStepEnd = workflow.indexOf(
+      "      - name: Attest exact staged release policy",
+    );
+    expect(quickNodeStepStart).toBeGreaterThanOrEqual(0);
+    expect(quickNodeStepEnd).toBeGreaterThan(quickNodeStepStart);
+    const quickNodeStep = workflow.slice(quickNodeStepStart, quickNodeStepEnd);
+    expect(quickNodeStep).toContain(secretLine);
+    const unsafeQuickNodeStep = quickNodeStep.replace(secretLine, "");
+    const withoutQuickNodeSecret =
+      workflow.slice(0, quickNodeStepStart) +
+      unsafeQuickNodeStep +
+      workflow.slice(quickNodeStepEnd);
+    const unsafeWorkflow = withoutQuickNodeSecret.replace(
+      "      - name: Pull production configuration\n        env:\n",
+      `      - name: Pull production configuration\n        env:\n${secretLine}`,
+    );
+    expect(unsafeWorkflow).not.toBe(withoutQuickNodeSecret);
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: {
         ...integratedOverrides(),
@@ -228,7 +251,10 @@ describe("read-model operations source contract", () => {
       "        env:\n" +
       "          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}\n" +
       "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n";
-    const unsafeWorkflow = readFileSync(resolve(ROOT, workflowPath), "utf8").replace(
+    const unsafeWorkflow = readFileSync(
+      resolve(ROOT, workflowPath),
+      "utf8",
+    ).replace(
       alchemyStep,
       alchemyStep.replace(
         "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n",
@@ -269,10 +295,12 @@ describe("read-model operations source contract", () => {
     const unsafeWorkflow =
       workflow.slice(0, alchemyStepStart) +
       unsafeAlchemyStep +
-      workflow.slice(alchemyStepEnd).replace(
-        "      - name: Record Alchemy-only read path\n",
-        `      - name: Record Alchemy-only read path\n        env:\n${secretLine}`,
-      );
+      workflow
+        .slice(alchemyStepEnd)
+        .replace(
+          "      - name: Record Alchemy-only read path\n",
+          `      - name: Record Alchemy-only read path\n        env:\n${secretLine}`,
+        );
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: {
         ...integratedOverrides(),
@@ -338,7 +366,10 @@ describe("read-model operations source contract", () => {
 
   it("rejects comment-only controls and jointly drifted manifests", () => {
     const operations = JSON.parse(
-      readFileSync(resolve(ROOT, "config/read-model-operations.v1.json"), "utf8"),
+      readFileSync(
+        resolve(ROOT, "config/read-model-operations.v1.json"),
+        "utf8",
+      ),
     );
     operations.legacyIndexer.schedule = "0 0 * * *";
     operations.workers.forEach((worker: { schedule: string }) => {
@@ -387,7 +418,10 @@ describe("read-model operations source contract", () => {
       ROOT,
       "scripts/perf/read-model-projector-wake-canary.mjs",
     );
-    const workflowPath = resolve(ROOT, ".github/workflows/deploy-production.yml");
+    const workflowPath = resolve(
+      ROOT,
+      ".github/workflows/deploy-production.yml",
+    );
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: {
         ...integratedOverrides(),
@@ -395,11 +429,13 @@ describe("read-model operations source contract", () => {
           canaryPath,
           "utf8",
         )}\n// unreviewed drift\n`,
-        ".env.example": readFileSync(resolve(ROOT, ".env.example"), "utf8")
-          .replace(
-            "PROGRAMMABLE_QUICKNODE_STREAM_SECRET=",
-            "NEXT_PUBLIC_PROGRAMMABLE_QUICKNODE_STREAM_SECRET=exposed",
-          ),
+        ".env.example": readFileSync(
+          resolve(ROOT, ".env.example"),
+          "utf8",
+        ).replace(
+          "PROGRAMMABLE_QUICKNODE_STREAM_SECRET=",
+          "NEXT_PUBLIC_PROGRAMMABLE_QUICKNODE_STREAM_SECRET=exposed",
+        ),
         ".github/workflows/deploy-production.yml": readFileSync(
           workflowPath,
           "utf8",
@@ -443,16 +479,20 @@ describe("read-model operations source contract", () => {
   it("binds the bounded exclusive real-block SLA operator before promotion", () => {
     const operatorPath = "scripts/perf/read-model-real-block-sla-operator.mjs";
     const runbookPath = "docs/data-pipeline/PRODUCTION-CUTOVER-OPERATOR.md";
-    const unboundedOperator = readFileSync(resolve(ROOT, operatorPath), "utf8")
-      .replace(
-        "REAL_BLOCK_SLA_OPERATOR_MAXIMUM_WAIT_MS = 5 * 60 * 1_000",
-        "REAL_BLOCK_SLA_OPERATOR_MAXIMUM_WAIT_MS = 10 * 60 * 1_000",
-      );
-    const bypassedRunbook = readFileSync(resolve(ROOT, runbookPath), "utf8")
-      .replace(
-        "npm run perf:read-model:real-block-sla-operator --",
-        "npm run perf:read-model:real-block-sla-operator-skipped --",
-      );
+    const unboundedOperator = readFileSync(
+      resolve(ROOT, operatorPath),
+      "utf8",
+    ).replace(
+      "REAL_BLOCK_SLA_OPERATOR_MAXIMUM_WAIT_MS = 5 * 60 * 1_000",
+      "REAL_BLOCK_SLA_OPERATOR_MAXIMUM_WAIT_MS = 10 * 60 * 1_000",
+    );
+    const bypassedRunbook = readFileSync(
+      resolve(ROOT, runbookPath),
+      "utf8",
+    ).replace(
+      "npm run perf:read-model:real-block-sla-operator --",
+      "npm run perf:read-model:real-block-sla-operator-skipped --",
+    );
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: {
         ...integratedOverrides(),
@@ -476,7 +516,10 @@ describe("read-model operations source contract", () => {
       - name: Unsafe direct promotion
         run: vercel promote "$DEPLOYMENT_ID"
     `;
-    const missingSlaGate = readFileSync(resolve(ROOT, runbookPath), "utf8").replace(
+    const missingSlaGate = readFileSync(
+      resolve(ROOT, runbookPath),
+      "utf8",
+    ).replace(
       "npm run perf:read-model:real-block-sla --",
       "npm run perf:read-model:real-block-sla-skipped --",
     );
@@ -495,7 +538,10 @@ describe("read-model operations source contract", () => {
 
   it("fails when only the scheduler runbook real-block SLA command is missing", () => {
     const runbookPath = "docs/operations/read-model-scheduler-cutover.md";
-    const missingSlaGate = readFileSync(resolve(ROOT, runbookPath), "utf8").replace(
+    const missingSlaGate = readFileSync(
+      resolve(ROOT, runbookPath),
+      "utf8",
+    ).replace(
       "npm run perf:read-model:real-block-sla --",
       "npm run perf:read-model:real-block-sla-skipped --",
     );
@@ -549,9 +595,12 @@ function publicFetch(healthStatus = "healthy") {
       });
     }
     if (url.pathname === "/api/ops/health") {
-      return Response.json({ status: healthStatus }, {
-        status: healthStatus === "healthy" ? 200 : 503,
-      });
+      return Response.json(
+        { status: healthStatus },
+        {
+          status: healthStatus === "healthy" ? 200 : 503,
+        },
+      );
     }
     if (url.pathname === "/api/explore") {
       return Response.json({ status: "ready", tokens: [{}] });
@@ -647,7 +696,10 @@ describe("post-promotion route verification", () => {
       fetchImpl: publicFetch(),
     });
     expect(binding).toEqual(
-      expect.objectContaining({ deploymentId: DEPLOYMENT_ID, gitHead: GIT_HEAD }),
+      expect.objectContaining({
+        deploymentId: DEPLOYMENT_ID,
+        gitHead: GIT_HEAD,
+      }),
     );
     await expect(
       resolveProductionBinding({
