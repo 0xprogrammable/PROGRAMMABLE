@@ -342,6 +342,31 @@ describe("custom launch client response contracts", () => {
     ));
   });
 
+  it("forwards refresh cancellation to the exact request fetch", async () => {
+    const controller = new AbortController();
+    const fetchV2 = vi.fn(async (_input: URL | RequestInfo, init?: RequestInit) => {
+      expect(init?.signal).toBe(controller.signal);
+      return new Response(JSON.stringify(launchAuthorityRefresh("pending")), {
+        status: 202,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    const client = createCustomLaunchWebsiteClientV2({
+      session: {
+        accessToken: "access-token-value",
+        identityToken: "identity-token-value",
+      },
+      fetch: fetchV2 as typeof fetch,
+    });
+    await expect(client.launchAuthorityRefresh(
+      APPLICATION_HANDLE,
+      { schemaVersion: "programmable.principal-launch-authority-refresh-request.v1" },
+      "launch-authority-refresh-request-1",
+      { signal: controller.signal },
+    )).resolves.toMatchObject({ state: "pending" });
+    expect(fetchV2).toHaveBeenCalledOnce();
+  });
+
   it("rejects malformed public error envelopes", async () => {
     await expectContractMismatch(clientFor({
       schemaVersion: "programmable.custom-launch-website-error.v2",

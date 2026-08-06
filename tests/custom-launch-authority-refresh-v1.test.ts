@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   LaunchAuthorityRefreshBindingErrorV1,
+  LaunchAuthorityRefreshDependencyUnavailableErrorV1,
   LaunchAuthorityRefreshFailedErrorV1,
   LaunchAuthorityRefreshSingleFlightV1,
   LaunchAuthorityRefreshTimeoutErrorV1,
@@ -11,6 +12,7 @@ import {
   launchAuthorityRefreshRequiredV1,
   pollPrincipalLaunchAuthorityRefreshV1,
 } from "../lib/custom-launch/launch-authority-refresh-v1";
+import { CustomLaunchWebsiteRequestErrorV2 } from "../lib/custom-launch/client-v2";
 import type {
   LaunchDescriptorV2,
   LaunchEligibilityViewV2,
@@ -73,8 +75,17 @@ describe("principal launch authority refresh", () => {
       application: application(),
       attempt: 1,
     });
+    const ttlGeneration = launchAuthorityRefreshIdempotencyKeyV1({
+      application: application(),
+      currentValidUntil: "2026-08-05T12:10:00.000Z",
+    });
+    const sameTtlGeneration = launchAuthorityRefreshIdempotencyKeyV1({
+      application: application(),
+      currentValidUntil: "2026-08-05T12:10:00.000Z",
+    });
     expect(first).toBe(same);
     expect(retry).not.toBe(first);
+    expect(ttlGeneration).toBe(sameTtlGeneration);
     expect(first.length).toBeGreaterThanOrEqual(16);
     expect(first.length).toBeLessThanOrEqual(512);
   });
@@ -106,6 +117,124 @@ describe("principal launch authority refresh", () => {
     ]);
   });
 
+  it("retries temporary dependency failures with bounded backoff and one generation", async () => {
+    const outcomes: Array<PrincipalLaunchAuthorityRefreshViewV1 | Error> = [
+      new CustomLaunchWebsiteRequestErrorV2(503, "DEPENDENCY_UNAVAILABLE"),
+      new CustomLaunchWebsiteRequestErrorV2(504, "UPSTREAM_TIMEOUT"),
+      refresh("current"),
+    ];
+    const keys: string[] = [];
+    const delays: number[] = [];
+    const notices: Array<Readonly<{ delayMs: number; code: string }>> = [];
+    const launchAuthorityRefresh = vi.fn(async (
+      _applicationHandle: typeof APPLICATION_HANDLE,
+      _request: Readonly<{
+        schemaVersion: "programmable.principal-launch-authority-refresh-request.v1";
+      }>,
+      idempotencyKey: string,
+      options?: Readonly<{ signal?: AbortSignal }>,
+    ) => {
+      expect(options?.signal).toBeInstanceOf(AbortSignal);
+      keys.push(idempotencyKey);
+      const outcome = outcomes.shift()!;
+      if (outcome instanceof Error) throw outcome;
+      return outcome;
+    });
+    await expect(pollPrincipalLaunchAuthorityRefreshV1({
+      client: { launchAuthorityRefresh },
+      application: application(),
+      idempotencyKey: "launch-authority-refresh-transient-1",
+      isActive: () => true,
+      attempts: 3,
+      requestTimeoutMs: 100,
+      overallTimeoutMs: 1_000,
+      transientBaseDelayMs: 100,
+      transientMaxDelayMs: 150,
+      delay: async (milliseconds) => { delays.push(milliseconds); },
+      monotonicNow: () => 0,
+      onTransientRetry: ({ delayMs: retryDelay, code }) => {
+        notices.push({ delayMs: retryDelay, code });
+      },
+    })).resolves.toMatchObject({ state: "current" });
+    expect(keys).toEqual([
+      "launch-authority-refresh-transient-1",
+      "launch-authority-refresh-transient-1",
+      "launch-authority-refresh-transient-1",
+    ]);
+    expect(delays).toEqual([100, 150]);
+    expect(notices).toEqual([
+      { delayMs: 100, code: "DEPENDENCY_UNAVAILABLE" },
+      { delayMs: 150, code: "UPSTREAM_TIMEOUT" },
+    ]);
+  });
+
+  it("keeps an unavailable dependency retry on the same non-terminal generation", async () => {
+    const idempotencyKey = launchAuthorityRefreshIdempotencyKeyV1({
+      application: application(),
+    });
+    const keys: string[] = [];
+    const unavailable = await pollPrincipalLaunchAuthorityRefreshV1({
+      client: {
+        launchAuthorityRefresh: async (_handle, _request, key) => {
+          keys.push(key);
+          throw new CustomLaunchWebsiteRequestErrorV2(
+            502,
+            "DEPENDENCY_UNAVAILABLE",
+          );
+        },
+      },
+      application: application(),
+      idempotencyKey,
+      isActive: () => true,
+      attempts: 2,
+      requestTimeoutMs: 100,
+      overallTimeoutMs: 1_000,
+      transientBaseDelayMs: 0,
+      transientMaxDelayMs: 0,
+      delay: async () => {},
+      monotonicNow: () => 0,
+    }).catch((caught: unknown) => caught);
+    expect(unavailable).toBeInstanceOf(
+      LaunchAuthorityRefreshDependencyUnavailableErrorV1,
+    );
+    expect(unavailable).not.toBeInstanceOf(LaunchAuthorityRefreshFailedErrorV1);
+    expect(keys).toEqual([idempotencyKey, idempotencyKey]);
+    expect(launchAuthorityRefreshIdempotencyKeyV1({
+      application: application(),
+    })).toBe(idempotencyKey);
+  });
+
+  it("aborts a hung refresh request at its exact request timeout", async () => {
+    let observedSignal: AbortSignal | undefined;
+    const unavailable = await pollPrincipalLaunchAuthorityRefreshV1({
+      client: {
+        launchAuthorityRefresh: async (_handle, _request, _key, options) => {
+          observedSignal = options?.signal;
+          return await new Promise<PrincipalLaunchAuthorityRefreshViewV1>(
+            (_resolve, reject) => {
+              options?.signal?.addEventListener("abort", () => {
+                reject(options.signal?.reason);
+              }, { once: true });
+            },
+          );
+        },
+      },
+      application: application(),
+      idempotencyKey: "launch-authority-refresh-hung-1",
+      isActive: () => true,
+      attempts: 1,
+      requestTimeoutMs: 5,
+      overallTimeoutMs: 50,
+      transientBaseDelayMs: 0,
+      transientMaxDelayMs: 0,
+      delay: async () => {},
+    }).catch((caught: unknown) => caught);
+    expect(observedSignal?.aborted).toBe(true);
+    expect(unavailable).toBeInstanceOf(
+      LaunchAuthorityRefreshDependencyUnavailableErrorV1,
+    );
+  });
+
   it("deduplicates a same-tab generation and fails closed on identity mutation", async () => {
     const gate = Promise.withResolvers<PrincipalLaunchAuthorityRefreshViewV1>();
     const singleFlight = new LaunchAuthorityRefreshSingleFlightV1();
@@ -130,13 +259,18 @@ describe("principal launch authority refresh", () => {
   });
 
   it("treats failed and expired current observations as terminal for that key", async () => {
+    const terminalFailure = vi.fn(async () => refresh("failed"));
+    const onTransientRetry = vi.fn();
     await expect(pollPrincipalLaunchAuthorityRefreshV1({
-      client: { launchAuthorityRefresh: async () => refresh("failed") },
+      client: { launchAuthorityRefresh: terminalFailure },
       application: application(),
       idempotencyKey: "launch-authority-refresh-request-3",
       isActive: () => true,
       delay: async () => {},
+      onTransientRetry,
     })).rejects.toBeInstanceOf(LaunchAuthorityRefreshFailedErrorV1);
+    expect(terminalFailure).toHaveBeenCalledOnce();
+    expect(onTransientRetry).not.toHaveBeenCalled();
 
     await expect(pollPrincipalLaunchAuthorityRefreshV1({
       client: {

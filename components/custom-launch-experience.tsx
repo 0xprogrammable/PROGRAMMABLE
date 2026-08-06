@@ -1391,6 +1391,11 @@ export function CustomLaunchExperience({
             application: currentApplication,
             idempotencyKey,
             isActive,
+            onTransientRetry: () => {
+              if (isActive()) {
+                setStatusMessage("Verification service temporarily unavailable. Retrying automatically");
+              }
+            },
           }),
         );
         refreshCompleted = true;
@@ -1481,6 +1486,11 @@ export function CustomLaunchExperience({
             application: currentApplication,
             idempotencyKey,
             isActive,
+            onTransientRetry: () => {
+              if (isActive()) {
+                setStatusMessage("Verification service temporarily unavailable. Retrying automatically");
+              }
+            },
           }),
         );
         refreshCompleted = true;

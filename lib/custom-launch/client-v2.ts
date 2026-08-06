@@ -66,6 +66,7 @@ export function createCustomLaunchWebsiteClientV2(input: Readonly<{
     schemaVersion: string,
     method: "POST" | "PUT" = "POST",
     validateStatus?: (status: number, value: T) => void,
+    signal?: AbortSignal,
   ): Promise<T> => requestJsonV2<T>(fetchV2, path, {
     method,
     headers: {
@@ -74,6 +75,7 @@ export function createCustomLaunchWebsiteClientV2(input: Readonly<{
       "idempotency-key": idempotencyKey,
     },
     body: JSON.stringify(body),
+    signal,
   }, schemaVersion, validateStatus);
   const read = async <T>(path: string, schemaVersion: string): Promise<T> =>
     requestJsonV2<T>(fetchV2, path, {
@@ -114,6 +116,7 @@ export function createCustomLaunchWebsiteClientV2(input: Readonly<{
       applicationHandle: ApplicationHandleV3,
       request: PrincipalLaunchAuthorityRefreshRequestV1,
       idempotencyKey: string,
+      options: Readonly<{ signal?: AbortSignal }> = {},
     ): Promise<PrincipalLaunchAuthorityRefreshViewV1> {
       return write(
         CUSTOM_LAUNCH_WEBSITE_API_V2.launchAuthorityRefresh(applicationHandle),
@@ -126,6 +129,7 @@ export function createCustomLaunchWebsiteClientV2(input: Readonly<{
             || (status === 200 && (value.state === "current" || value.state === "failed"));
           if (!valid) throw new TypeError("launch authority refresh HTTP state mismatch");
         },
+        options.signal,
       );
     },
     launchDescriptor(applicationHandle: ApplicationHandleV3): Promise<LaunchDescriptorV2> {
