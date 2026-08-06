@@ -310,6 +310,51 @@ jobs:
           --target-url "$DEPLOYMENT_URL"
           --github-output "$GITHUB_OUTPUT"
 
+      - name: Gate exact staged Custom Launch candidate
+        id: custom-launch-canary
+        if: steps.custom-launch-policy.outputs.release_record_required == 'true'
+        env:
+          STAGED_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
+          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
+          PROGRAMMABLE_RELEASE_EXPECTED_COMMIT_SHA: ${{ github.sha }}
+          PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH: ${{ secrets.PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH }}
+          PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE: manual_review
+          PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_ACCESS_TOKEN: ${{ secrets.PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_ACCESS_TOKEN }}
+          PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_IDENTITY_TOKEN: ${{ secrets.PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_IDENTITY_TOKEN }}
+          PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_EXPECTED_GITHUB_USER_ID: ${{ secrets.PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_EXPECTED_GITHUB_USER_ID }}
+          PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_OWN_APPLICATION_HANDLE: ${{ secrets.PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_OWN_APPLICATION_HANDLE }}
+          PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_FOREIGN_APPLICATION_HANDLE: ${{ secrets.PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_FOREIGN_APPLICATION_HANDLE }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          deployment_host="$(node --input-type=module -e '
+            const url = new URL(process.env.STAGED_TARGET_URL);
+            if (
+              url.protocol !== "https:" ||
+              url.pathname !== "/" ||
+              url.search !== "" ||
+              url.hash !== "" ||
+              !url.hostname.endsWith(".vercel.app")
+            ) throw new Error("Custom Launch canary target is not an immutable Vercel origin");
+            process.stdout.write(url.host);
+          ')"
+          export PROGRAMMABLE_RELEASE_EXPECTED_DEPLOYMENT_HOST="$deployment_host"
+          npm run probe:custom-launch -- \
+            "--base-url=$STAGED_TARGET_URL" \
+            "--deployment-id=$STAGED_DEPLOYMENT_ID" \
+            "--evidence-output=$RUNNER_TEMP/custom-launch-candidate-canary-evidence.json" \
+            --require-enabled \
+            --authenticated-canary
+          echo "evidence_path=$RUNNER_TEMP/custom-launch-candidate-canary-evidence.json" >> "$GITHUB_OUTPUT"
+
+      - name: Preserve redacted Custom Launch candidate evidence
+        if: steps.custom-launch-policy.outputs.release_record_required == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: custom-launch-candidate-canary-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.custom-launch-canary.outputs.evidence_path }}
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Gate exact staged QuickNode wake route
         if: steps.read-model-policy.outputs.wake_canary_required == 'true'
         env:

@@ -120,7 +120,7 @@ export function createCustomLaunchDeploymentReadinessHandlerV1(
   };
 }
 
-interface ExpectedApprovalServiceReleaseIdentityV1 {
+export interface ExpectedApprovalServiceReleaseIdentityV1 {
   readonly packageArtifactHash: `sha256:${string}`;
   readonly reviewAuthorityMode: "manual_review";
 }
@@ -205,7 +205,7 @@ function exactReleaseIdentity(
   return Object.freeze({ commitSha, deploymentHost });
 }
 
-async function assertApprovalServiceReadiness(
+export async function assertApprovalServiceReadiness(
   origin: URL,
   expectedRelease: Readonly<ExpectedApprovalServiceReleaseIdentityV1>,
   serviceFetch: typeof fetch,

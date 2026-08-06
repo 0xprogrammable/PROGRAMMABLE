@@ -139,6 +139,48 @@ function workflowFailures(source) {
     "Verify detached Custom Launch release record",
     "Stage production build without assigning domains",
   );
+  requireText(
+    "candidate-canary",
+    "Gate exact staged Custom Launch candidate",
+  );
+  requireText(
+    "candidate-canary-conditional",
+    "id: custom-launch-canary\n        if: steps.custom-launch-policy.outputs.release_record_required == 'true'",
+  );
+  requireText(
+    "candidate-canary-immutable-target",
+    "STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
+  );
+  requireText(
+    "candidate-canary-deployment-binding",
+    '"--deployment-id=$STAGED_DEPLOYMENT_ID"',
+  );
+  requireText(
+    "candidate-canary-package-binding",
+    "PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH: ${{ secrets.PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH }}",
+  );
+  for (const binding of [
+    "PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_ACCESS_TOKEN",
+    "PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_IDENTITY_TOKEN",
+    "PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_EXPECTED_GITHUB_USER_ID",
+    "PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_OWN_APPLICATION_HANDLE",
+    "PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_FOREIGN_APPLICATION_HANDLE",
+  ]) requireText(`candidate-canary-${binding.toLowerCase()}`, binding);
+  requireText("candidate-canary-enabled", "--require-enabled");
+  requireText("candidate-canary-authenticated", "--authenticated-canary");
+  requireText(
+    "candidate-canary-redacted-evidence",
+    "custom-launch-candidate-canary-evidence.json",
+  );
+  requireText(
+    "candidate-canary-artifact",
+    "custom-launch-candidate-canary-${{ github.run_id }}-${{ github.run_attempt }}",
+  );
+  requireOrder(
+    "candidate-canary-after-stage-resolution",
+    "Resolve exact staged deployment",
+    "Gate exact staged Custom Launch candidate",
+  );
   if (/\bvercel\s+(?:promote|rollback)(?:\s|$)/mu.test(source)) {
     failures.push("stage-only");
   }
@@ -214,6 +256,12 @@ test("workflow contract detects weakened record and stage-only gates", async () 
     source.replace('git merge-base --is-ancestor "$RECORD_COMMIT_SHA" "$record_ref"', ""),
     source.replace('commit.commit?.verification?.verified !== true', "false"),
     source.replace('--expect-detached-record-sha256 "$EXPECTED_RECORD_SHA256"', ""),
+    source.replace("--authenticated-canary", ""),
+    source.replace('"--deployment-id=$STAGED_DEPLOYMENT_ID"', ""),
+    source.replace(
+      "custom-launch-candidate-canary-${{ github.run_id }}-${{ github.run_attempt }}",
+      "missing-candidate-artifact",
+    ),
     `${source}\n      - run: vercel promote "$DEPLOYMENT_URL"\n`,
   ];
   for (const mutation of mutations) {

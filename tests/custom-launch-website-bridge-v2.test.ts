@@ -5,6 +5,7 @@ vi.mock("server-only", () => ({}));
 import { createCustomLaunchWebsiteClientV2 } from "../lib/custom-launch/client-v2";
 import {
   createCustomLaunchBridgeHandlerV2,
+  type CustomLaunchBridgeDependenciesV2,
 } from "../lib/server/custom-launch/launch-bridge-v2";
 import {
   GitHubPrincipalAuthenticationErrorV1,
@@ -15,6 +16,7 @@ const SESSION_ID = "123e4567-e89b-42d3-a456-426614174001";
 const GRANT_ID = "123e4567-e89b-42d3-a456-426614174002";
 const EXECUTION_RESERVATION_ID = "123e4567-e89b-42d3-a456-426614174003";
 const APPLICATION_HANDLE = `github-${"a".repeat(64)}` as const;
+const PACKAGE_ARTIFACT_HASH = `sha256:${"9".repeat(64)}` as const;
 
 function serviceResponse(data: object, status = 200): Response {
   return new Response(JSON.stringify({
@@ -22,6 +24,70 @@ function serviceResponse(data: object, status = 200): Response {
     requestId: "service-request-1",
     data,
   }), { status, headers: { "content-type": "application/json" } });
+}
+
+function approvalServiceReadyResponse(
+  packageArtifactHash: `sha256:${string}` = PACKAGE_ARTIFACT_HASH,
+): Response {
+  return serviceResponse({
+    status: "ready",
+    reviewAuthorityMode: "manual_review",
+    release: { packageArtifactHash },
+  });
+}
+
+function releaseAttestedServiceFetch(delegate: typeof fetch): typeof fetch {
+  return vi.fn(async (input: URL | RequestInfo, init?: RequestInit) => {
+    if (String(input) === "https://approval.example/readyz") {
+      expect(init?.method).toBe("GET");
+      expect(init?.cache).toBe("no-store");
+      expect(init?.redirect).toBe("error");
+      return approvalServiceReadyResponse();
+    }
+    return delegate(input, init);
+  }) as typeof fetch;
+}
+
+function createReleaseBoundBridge(
+  dependencies: Omit<
+    CustomLaunchBridgeDependenciesV2,
+    "expectedPackageArtifactHash"
+  >,
+) {
+  return createCustomLaunchBridgeHandlerV2({
+    ...dependencies,
+    serviceFetch: releaseAttestedServiceFetch(dependencies.serviceFetch),
+    expectedPackageArtifactHash: PACKAGE_ARTIFACT_HASH,
+  });
+}
+
+function authenticatedPrincipal() {
+  return {
+    privyUserId: "did:privy:user",
+    githubUserId: "123456789",
+    githubUsername: "builder",
+    githubPrincipalHash: `sha256:${"1".repeat(64)}` as const,
+  };
+}
+
+function challengeRequest(idempotencyKey: string): Request {
+  return new Request(
+    "https://website.example/api/custom-launch/v2/launch-sessions/challenges",
+    {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        authorization: "Bearer access-token-value",
+        "x-privy-identity-token": "identity-token-value",
+        "content-type": "application/json",
+        "idempotency-key": idempotencyKey,
+      },
+      body: JSON.stringify({
+        schemaVersion: "programmable.launch-session-challenge-create-request.v2",
+        idempotencyKey,
+      }),
+    },
+  );
 }
 
 describe("custom launch Website bridge V2", () => {
@@ -51,7 +117,7 @@ describe("custom launch Website bridge V2", () => {
         expiresAt: "2026-08-05T12:05:00.000Z",
       }, 201);
     });
-    const handler = createCustomLaunchBridgeHandlerV2({
+    const handler = createReleaseBoundBridge({
       authenticator: { authenticate },
       serviceOrigin: new URL("https://approval.example"),
       serviceFetch: serviceFetch as typeof fetch,
@@ -81,9 +147,112 @@ describe("custom launch Website bridge V2", () => {
     expect(serviceFetch).toHaveBeenCalledOnce();
   });
 
+  it("blocks a mutation before forwarding when the live package hash mismatches", async () => {
+    const serviceFetch = vi.fn(async (input: URL | RequestInfo) => {
+      expect(String(input)).toBe("https://approval.example/readyz");
+      return approvalServiceReadyResponse(`sha256:${"8".repeat(64)}`);
+    });
+    const handler = createCustomLaunchBridgeHandlerV2({
+      authenticator: { authenticate: async () => authenticatedPrincipal() },
+      serviceOrigin: new URL("https://approval.example"),
+      expectedPackageArtifactHash: PACKAGE_ARTIFACT_HASH,
+      serviceFetch: serviceFetch as typeof fetch,
+    });
+
+    const response = await handler(
+      challengeRequest("challenge-mismatch-request-1"),
+      { kind: "challenge-create" },
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "launch_service_release_unverified",
+    });
+    expect(serviceFetch).toHaveBeenCalledOnce();
+  });
+
+  it("blocks a mutation when live release attestation is unavailable", async () => {
+    const serviceFetch = vi.fn(async () => {
+      throw new Error("approval service unavailable");
+    });
+    const handler = createCustomLaunchBridgeHandlerV2({
+      authenticator: { authenticate: async () => authenticatedPrincipal() },
+      serviceOrigin: new URL("https://approval.example"),
+      expectedPackageArtifactHash: PACKAGE_ARTIFACT_HASH,
+      serviceFetch: serviceFetch as typeof fetch,
+    });
+
+    const response = await handler(
+      challengeRequest("challenge-unavailable-request-1"),
+      { kind: "challenge-create" },
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "launch_service_release_unverified",
+    });
+    expect(serviceFetch).toHaveBeenCalledOnce();
+  });
+
+  it("re-attests every mutation and blocks package drift between requests", async () => {
+    const calls: string[] = [];
+    let attestationCount = 0;
+    const mutationFetch = vi.fn(async (
+      input: URL | RequestInfo,
+      init?: RequestInit,
+    ) => {
+      void input;
+      void init;
+      return serviceResponse({
+        schemaVersion: "programmable.launch-session-challenge-view.v2",
+        grantId: "grant-1",
+        challengeId: CHALLENGE_ID,
+        challengeBindingHash: `sha256:${"2".repeat(64)}`,
+        sessionId: SESSION_ID,
+        state: "ready_for_wallet",
+        createdAt: "2026-08-05T12:00:00.000Z",
+        expiresAt: "2026-08-05T12:05:00.000Z",
+      }, 201);
+    });
+    const handler = createCustomLaunchBridgeHandlerV2({
+      authenticator: { authenticate: async () => authenticatedPrincipal() },
+      serviceOrigin: new URL("https://approval.example"),
+      expectedPackageArtifactHash: PACKAGE_ARTIFACT_HASH,
+      serviceFetch: vi.fn(async (input: URL | RequestInfo, init?: RequestInit) => {
+        const url = String(input);
+        calls.push(url);
+        if (url === "https://approval.example/readyz") {
+          attestationCount += 1;
+          return approvalServiceReadyResponse(attestationCount === 1
+            ? PACKAGE_ARTIFACT_HASH
+            : `sha256:${"8".repeat(64)}`);
+        }
+        return mutationFetch(input, init);
+      }) as typeof fetch,
+    });
+
+    const first = await handler(
+      challengeRequest("challenge-drift-request-0001"),
+      { kind: "challenge-create" },
+    );
+    const second = await handler(
+      challengeRequest("challenge-drift-request-0002"),
+      { kind: "challenge-create" },
+    );
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(503);
+    expect(mutationFetch).toHaveBeenCalledOnce();
+    expect(calls).toEqual([
+      "https://approval.example/readyz",
+      "https://approval.example/v2/launch-sessions/challenges",
+      "https://approval.example/readyz",
+    ]);
+  });
+
   it("fails closed before service access when Privy or GitHub authority is absent", async () => {
     const serviceFetch = vi.fn();
-    const handler = createCustomLaunchBridgeHandlerV2({
+    const handler = createReleaseBoundBridge({
       authenticator: {
         async authenticate() {
           throw new GitHubPrincipalAuthenticationErrorV1(403, "github_account_required");
@@ -121,7 +290,7 @@ describe("custom launch Website bridge V2", () => {
       authorization: "Bearer access-token-value",
       "x-privy-identity-token": "identity-token-value",
     };
-    const errorHandler = createCustomLaunchBridgeHandlerV2({
+    const errorHandler = createReleaseBoundBridge({
       authenticator: { authenticate },
       serviceOrigin: new URL("https://approval.example"),
       serviceFetch: vi.fn(async () => new Response(JSON.stringify({
@@ -145,7 +314,7 @@ describe("custom launch Website bridge V2", () => {
       message: "Launch application was not found",
     });
 
-    const malformedHandler = createCustomLaunchBridgeHandlerV2({
+    const malformedHandler = createReleaseBoundBridge({
       authenticator: { authenticate },
       serviceOrigin: new URL("https://approval.example"),
       serviceFetch: vi.fn(async () => new Response(JSON.stringify({
@@ -166,14 +335,14 @@ describe("custom launch Website bridge V2", () => {
   });
 
   it("rejects unsafe service origins, route parameters, and oversized writes", async () => {
-    expect(() => createCustomLaunchBridgeHandlerV2({
+    expect(() => createReleaseBoundBridge({
       authenticator: { async authenticate() { throw new Error("unused"); } },
       serviceOrigin: new URL("http://approval.example"),
       serviceFetch: fetch,
     })).toThrow("origin is invalid");
 
     const serviceFetch = vi.fn();
-    const handler = createCustomLaunchBridgeHandlerV2({
+    const handler = createReleaseBoundBridge({
       authenticator: {
         async authenticate() {
           return {
@@ -233,7 +402,7 @@ describe("custom launch Website bridge V2", () => {
         state: "not_started",
       });
     });
-    const handler = createCustomLaunchBridgeHandlerV2({
+    const handler = createReleaseBoundBridge({
       authenticator: {
         async authenticate() {
           return {
@@ -416,7 +585,7 @@ describe("custom launch Website bridge V2", () => {
         outcome: init?.method === "PUT" ? "committed" : "current",
       });
     });
-    const handler = createCustomLaunchBridgeHandlerV2({
+    const handler = createReleaseBoundBridge({
       authenticator: {
         async authenticate() {
           return {
@@ -556,7 +725,7 @@ describe("custom launch Website bridge V2", () => {
         reportedAt: "2026-08-05T12:00:00.000Z",
       }, 202);
     });
-    const handler = createCustomLaunchBridgeHandlerV2({
+    const handler = createReleaseBoundBridge({
       authenticator: {
         async authenticate() {
           return {
@@ -679,7 +848,7 @@ describe("custom launch Website bridge V2", () => {
         requestedAt: "2026-08-05T12:00:00.000Z",
       }, 202);
     });
-    const handler = createCustomLaunchBridgeHandlerV2({
+    const handler = createReleaseBoundBridge({
       authenticator: {
         async authenticate() {
           return {

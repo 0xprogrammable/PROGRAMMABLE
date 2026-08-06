@@ -329,6 +329,7 @@ describe("custom launch deployment probe", () => {
       const headers = new Headers(init?.headers);
       expect(headers.get("authorization")).toBe("Bearer access-token");
       expect(headers.get("x-privy-identity-token")).toBe("identity-token");
+      expect(headers.get("x-vercel-protection-bypass")).toBe("automation-bypass");
       return json(principalList());
     });
     await expect(probe({
@@ -340,6 +341,7 @@ describe("custom launch deployment probe", () => {
       expectedGithubUserId: "123456789",
       ownApplicationHandle: OWN_APPLICATION_HANDLE,
       foreignApplicationHandle: FOREIGN_APPLICATION_HANDLE,
+      automationBypassSecret: "automation-bypass",
       fetch: fetchMock,
       now: () => NOW,
       attempts: 1,
@@ -528,12 +530,14 @@ describe("custom launch deployment probe", () => {
       PROGRAMMABLE_RELEASE_EXPECTED_DEPLOYMENT_HOST: DEPLOYMENT_HOST,
       PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH: PACKAGE_ARTIFACT_HASH,
       PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE: "manual_review",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "automation-bypass",
     })).toMatchObject({
       accessToken: "access",
       identityToken: "identity",
       expectedGithubUserId: "123456789",
       ownApplicationHandle: OWN_APPLICATION_HANDLE,
       foreignApplicationHandle: FOREIGN_APPLICATION_HANDLE,
+      automationBypassSecret: "automation-bypass",
     });
     expect(() => parseCustomLaunchDeploymentProbeArguments([
       "https://deployment.example/",

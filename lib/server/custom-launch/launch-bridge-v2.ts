@@ -11,11 +11,13 @@ import {
   type JsonValue,
 } from "../projection-target/canonical-json";
 import { isCustomLaunchPublicEnabled } from "./public-readiness";
+import { assertApprovalServiceReadiness } from "./deployment-readiness";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9][A-Za-z0-9._:@/+-]{15,511}$/u;
 const LIST_CURSOR = /^[A-Za-z0-9_-]{16,512}$/u;
 const APPLICATION_HANDLE = /^github-[0-9a-f]{64}$/u;
+const SHA256_DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const MAXIMUM_BODY_BYTES = 1_048_576;
 const MAXIMUM_RESPONSE_BYTES = 1_048_576;
 const UPSTREAM_TIMEOUT_MS = 12_000;
@@ -40,6 +42,7 @@ export interface CustomLaunchBridgeDependenciesV2 {
   readonly authenticator: WebsiteEntitlementReadAuthenticatorV1;
   readonly serviceOrigin: URL;
   readonly serviceFetch: typeof fetch;
+  readonly expectedPackageArtifactHash: `sha256:${string}`;
 }
 
 export function createCustomLaunchBridgeHandlerV2(
@@ -49,6 +52,7 @@ export function createCustomLaunchBridgeHandlerV2(
   if (
     typeof dependencies.authenticator?.authenticate !== "function"
     || typeof dependencies.serviceFetch !== "function"
+    || !SHA256_DIGEST.test(dependencies.expectedPackageArtifactHash)
   ) throw new TypeError("custom launch bridge dependencies are invalid");
 
   return async function customLaunchBridge(
@@ -130,6 +134,15 @@ export function createCustomLaunchBridgeHandlerV2(
       || request.headers.has("content-type")
       || request.headers.has("content-length")
     ) return errorResponse(400, "invalid_read_request");
+
+    try {
+      await assertApprovalServiceReadiness(origin, {
+        packageArtifactHash: dependencies.expectedPackageArtifactHash,
+        reviewAuthorityMode: "manual_review",
+      }, dependencies.serviceFetch);
+    } catch {
+      return errorResponse(503, "launch_service_release_unverified");
+    }
 
     const controller = new AbortController();
     const abortRequest = () => controller.abort(request.signal.reason);
@@ -287,6 +300,9 @@ export function handleProductionCustomLaunchBridgeV2(
       authenticator: createPrivyGitHubPrincipalAuthenticatorV1(),
       serviceOrigin: new URL(requiredEnvironment("PROGRAMMABLE_APPROVAL_SERVICE_V2_ORIGIN")),
       serviceFetch: globalThis.fetch.bind(globalThis),
+      expectedPackageArtifactHash: requiredEnvironment(
+        "PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH",
+      ) as `sha256:${string}`,
     });
     return productionHandler(request, operation);
   } catch {

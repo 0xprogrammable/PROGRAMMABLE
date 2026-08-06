@@ -59,7 +59,15 @@ export async function probeCustomLaunchDeployment(input) {
   const now = input.now ?? (() => new Date());
   if (typeof now !== "function") throw new TypeError("Probe clock is invalid");
   const settings = exactSettings(input);
-  const commonHeaders = Object.freeze({ accept: JSON_CONTENT_TYPE });
+  const automationBypassSecret = input.automationBypassSecret === undefined
+    ? undefined
+    : exactSecret(input.automationBypassSecret, "automation bypass secret");
+  const commonHeaders = Object.freeze({
+    accept: JSON_CONTENT_TYPE,
+    ...(automationBypassSecret === undefined ? {} : {
+      "x-vercel-protection-bypass": automationBypassSecret,
+    }),
+  });
 
   const readinessUrl = new URL(READINESS_PATH, baseUrl);
   const readiness = await requestJsonWithRetries(readinessUrl, {
@@ -119,7 +127,7 @@ export async function probeCustomLaunchDeployment(input) {
       {
         fetchImplementation,
         headers: {
-          accept: JSON_CONTENT_TYPE,
+          ...commonHeaders,
           authorization: `Bearer ${accessToken}`,
           "x-privy-identity-token": identityToken,
         },
@@ -138,7 +146,7 @@ export async function probeCustomLaunchDeployment(input) {
       {
         fetchImplementation,
         headers: {
-          accept: JSON_CONTENT_TYPE,
+          ...commonHeaders,
           authorization: `Bearer ${accessToken}`,
           "x-privy-identity-token": identityToken,
         },
@@ -152,7 +160,7 @@ export async function probeCustomLaunchDeployment(input) {
       {
         fetchImplementation,
         headers: {
-          accept: JSON_CONTENT_TYPE,
+          ...commonHeaders,
           authorization: `Bearer ${accessToken}`,
           "x-privy-identity-token": identityToken,
         },
@@ -169,7 +177,7 @@ export async function probeCustomLaunchDeployment(input) {
       {
         fetchImplementation,
         headers: {
-          accept: JSON_CONTENT_TYPE,
+          ...commonHeaders,
           authorization: `Bearer ${accessToken}`,
           "x-privy-identity-token": identityToken,
         },
@@ -242,6 +250,9 @@ export function parseCustomLaunchDeploymentProbeArguments(
       environment.PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH,
     expectedApprovalServiceReviewAuthorityMode:
       environment.PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE,
+    ...(environment.VERCEL_AUTOMATION_BYPASS_SECRET === undefined ? {} : {
+      automationBypassSecret: environment.VERCEL_AUTOMATION_BYPASS_SECRET,
+    }),
   });
 }
 
