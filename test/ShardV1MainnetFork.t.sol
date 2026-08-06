@@ -6,18 +6,17 @@ import { Currency, CurrencyLibrary } from "@uniswap/v4-core/src/types/Currency.s
 import { PoolId } from "@uniswap/v4-core/src/types/PoolId.sol";
 import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
 import { IHooks } from "@uniswap/v4-core/src/interfaces/IHooks.sol";
-import { Hooks } from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import { TickMath } from "@uniswap/v4-core/src/libraries/TickMath.sol";
-import { HookMiner } from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
-import { Test } from "forge-std/Test.sol";
+import { Test, Vm, console2 } from "forge-std/Test.sol";
 
 import { GeometricRendererV1 } from "../src/GeometricRendererV1.sol";
 import { ShardConstantsV1 } from "../src/ShardConstantsV1.sol";
 import { ShardHookV1 } from "../src/ShardHookV1.sol";
+import { ShardLaunchFactoryV1 } from "../src/ShardLaunchFactoryV1.sol";
 import { ShardNFTV1 } from "../src/ShardNFTV1.sol";
 import { ShardSwapRouterV1 } from "../src/ShardSwapRouterV1.sol";
 import { ShardTokenV1 } from "../src/ShardTokenV1.sol";
-import { IShardNFTV1 } from "../src/interfaces/IShardNFTV1.sol";
+import { ShardLaunchLib } from "./utils/ShardLaunchLib.sol";
 
 /// @notice The Ethereum-Mainnet release gate: the complete Shards lifecycle exercised against the
 ///         pinned canonical Uniswap v4 `PoolManager` deployment on a Mainnet fork.
@@ -25,12 +24,11 @@ import { IShardNFTV1 } from "../src/interfaces/IShardNFTV1.sol";
 /// @dev Every other Shards suite runs against a freshly deployed local `PoolManager`, which proves
 ///      the model's own logic but says nothing about whether it composes with the real v4 contract
 ///      the collection would actually market-make on. This suite closes that gap: it mines the hook
-///      against the live PoolManager, deploys and wires the token, hook, NFT and renderer, seeds and
-///      initialises the locked position, then drives a third-party swap, a redeem, a hook-market buy
-///      and sell, all three claim paths and a donation — asserting the backing invariant survives
+///      against the live PoolManager, atomically deploys and wires the token, hook, NFT and shared
+///      renderer, seeds and initialises the locked position, then drives a third-party swap, a redeem, a hook-market
+/// buy and sell, all three claim paths and a donation — asserting the backing invariant survives
 ///      every step. It also pins that the fork handed us the genuine PoolManager (by runtime code
-///      hash) and that the model's Arbitrum-only entropy source degrades to zero on Mainnet without
-///      breaking art regeneration.
+///      hash), reproduces CREATE2 predictions, and checks Ethereum-native art-seed inputs.
 ///
 ///      It needs an archive RPC and so is excluded from the default `forge test` run in CI, in the
 ///      style of {ClassicV3MainnetForkTest}. Point `ETHEREUM_RPC_URL` at an archive node, or let it
@@ -56,15 +54,11 @@ contract ShardV1MainnetForkTest is Test {
     int24 internal constant TICK_UPPER = 69_060;
     int24 internal constant TICK_BAND = 22_980;
 
-    uint160 internal constant HOOK_FLAGS = uint160(
-        Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
-            | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG
-    );
-
     uint256 internal constant SEED_AMOUNT = ShardConstantsV1.MAX_NFTS * ShardConstantsV1.SHARDS_PER_NFT;
     uint256 internal constant ONE_SHARD = ShardConstantsV1.SHARDS_PER_NFT;
 
     IPoolManager internal poolManager;
+    ShardLaunchFactoryV1 internal factory;
     ShardTokenV1 internal shard;
     GeometricRendererV1 internal renderer;
     ShardHookV1 internal hook;
@@ -78,6 +72,10 @@ contract ShardV1MainnetForkTest is Test {
     address internal trader = makeAddr("trader");
 
     uint256 internal deadline;
+    bytes32 internal tokenSalt;
+    bytes32 internal hookSalt;
+    bytes32 internal expectedConfigurationHash;
+    bool internal launchEventMatched;
 
     function setUp() public {
         string memory rpc = vm.envOr("ETHEREUM_RPC_URL", string("https://eth.drpc.org"));
@@ -89,31 +87,72 @@ contract ShardV1MainnetForkTest is Test {
         int24 tickLower = TickMath.minUsableTick(ShardConstantsV1.TICK_SPACING);
         uint160 startSqrtPriceX96 = TickMath.getSqrtPriceAtTick(TICK_UPPER);
 
-        shard = new ShardTokenV1();
-        renderer = new GeometricRendererV1();
+        uint256 gasBefore = gasleft();
+        factory = new ShardLaunchFactoryV1(poolManager, launcher, keccak256(type(ShardHookV1).creationCode));
+        console2.log("factory deployment gas", gasBefore - gasleft());
+        renderer = factory.renderer();
 
-        (address expected, bytes32 salt) = HookMiner.find(
-            address(this),
-            HOOK_FLAGS,
-            type(ShardHookV1).creationCode,
-            abi.encode(
-                poolManager,
-                shard,
-                tickLower,
-                TICK_BAND,
-                TICK_UPPER,
-                startSqrtPriceX96,
-                address(this),
-                launcher,
-                builder
-            )
-        );
-        hook = new ShardHookV1{ salt: salt }(
-            poolManager, shard, tickLower, TICK_BAND, TICK_UPPER, startSqrtPriceX96, address(this), launcher, builder
-        );
-        assertEq(address(hook), expected, "mined hook address mismatch");
+        ShardLaunchFactoryV1.LaunchParams memory params = ShardLaunchFactoryV1.LaunchParams({
+            tickLower: tickLower,
+            tickBand: TICK_BAND,
+            tickUpper: TICK_UPPER,
+            startSqrtPriceX96: startSqrtPriceX96,
+            builderFeeRecipient: builder
+        });
+        tokenSalt = keccak256("ShardV1MainnetForkTest");
+        address predictedShard;
+        address predictedHook;
+        (hookSalt, predictedShard, predictedHook) = ShardLaunchLib.mineCanonical(factory, tokenSalt, bytes32(0), params);
+        (bytes32 repeatedSalt, address repeatedShard, address repeatedHook) =
+            ShardLaunchLib.mineCanonical(factory, tokenSalt, bytes32(0), params);
+        assertEq(repeatedSalt, hookSalt, "salt mining was not deterministic");
+        assertEq(repeatedShard, predictedShard, "token prediction was not deterministic");
+        assertEq(repeatedHook, predictedHook, "hook prediction was not deterministic");
 
-        nft = new ShardNFTV1(address(hook), address(renderer));
+        vm.recordLogs();
+        gasBefore = gasleft();
+        (address hookAddress, address shardAddress, address nftAddress) =
+            factory.launch(tokenSalt, hookSalt, type(ShardHookV1).creationCode, params);
+        console2.log("atomic launch gas", gasBefore - gasleft());
+        assertEq(shardAddress, predictedShard, "deployed token differs from prediction");
+        assertEq(hookAddress, predictedHook, "deployed hook differs from prediction");
+        hook = ShardHookV1(payable(hookAddress));
+        shard = ShardTokenV1(shardAddress);
+        nft = ShardNFTV1(nftAddress);
+
+        ShardLaunchFactoryV1.ConfigurationData memory configuration;
+        configuration.chainId = block.chainid;
+        configuration.factory = address(factory);
+        configuration.poolManager = address(poolManager);
+        configuration.renderer = address(renderer);
+        configuration.launcherFeeRecipient = launcher;
+        configuration.builderFeeRecipient = builder;
+        configuration.shard = address(shard);
+        configuration.hook = address(hook);
+        configuration.nft = address(nft);
+        configuration.tickLower = tickLower;
+        configuration.tickBand = TICK_BAND;
+        configuration.tickUpper = TICK_UPPER;
+        configuration.startSqrtPriceX96 = startSqrtPriceX96;
+        configuration.tokenSalt = tokenSalt;
+        configuration.effectiveTokenSalt = factory.effectiveTokenSalt(tokenSalt, hookSalt, params);
+        configuration.hookSalt = hookSalt;
+        configuration.hookCreationCodeHash = keccak256(type(ShardHookV1).creationCode);
+        expectedConfigurationHash = keccak256(abi.encode(configuration));
+
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 eventSignature =
+            keccak256("ShardLaunched(address,address,address,bytes32,bytes32,address,address,bytes32)");
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(factory) || logs[i].topics[0] != eventSignature) continue;
+            assertEq(address(uint160(uint256(logs[i].topics[1]))), address(hook), "event hook mismatch");
+            assertEq(address(uint160(uint256(logs[i].topics[2]))), address(shard), "event token mismatch");
+            assertEq(address(uint160(uint256(logs[i].topics[3]))), address(nft), "event NFT mismatch");
+            (bytes32 rawSalt, bytes32 minedSalt, address eventBuilder, address eventRenderer, bytes32 configHash) =
+                abi.decode(logs[i].data, (bytes32, bytes32, address, address, bytes32));
+            launchEventMatched = rawSalt == tokenSalt && minedSalt == hookSalt && eventBuilder == builder
+                && eventRenderer == address(renderer) && configHash == expectedConfigurationHash;
+        }
 
         key = PoolKey({
             currency0: CurrencyLibrary.ADDRESS_ZERO,
@@ -123,11 +162,6 @@ contract ShardV1MainnetForkTest is Test {
             hooks: IHooks(address(hook))
         });
         swapRouter = new ShardSwapRouterV1(poolManager, key);
-
-        // The three-transaction launch, against the real PoolManager.
-        shard.transfer(address(hook), SEED_AMOUNT);
-        hook.setNFT(IShardNFTV1(address(nft)));
-        hook.initialise();
 
         vm.deal(buyer, 100 ether);
         vm.deal(trader, 100 ether);
@@ -149,6 +183,13 @@ contract ShardV1MainnetForkTest is Test {
         assertGt(POOL_MANAGER.code.length, 0, "no PoolManager code on the fork");
         assertEq(POOL_MANAGER.codehash, POOL_MANAGER_CODE_HASH, "PoolManager runtime code is not the pinned v4");
         assertTrue(hook.initialised(), "locked position never initialised on Mainnet v4");
+    }
+
+    function test_factoryPredictionAndConfigurationEvidenceAreReproducible() public view {
+        assertEq(factory.configurationHashOf(address(hook)), expectedConfigurationHash, "configuration hash mismatch");
+        assertTrue(launchEventMatched, "canonical launch event was not emitted");
+        assertEq(hook.deployer(), address(factory), "factory is not hook deployer");
+        assertEq(shard.balanceOf(address(factory)), 0, "factory retained SHARD");
     }
 
     /// @notice Deploy, wire, initialise, then run the whole market — third-party swap, redeem,
@@ -230,30 +271,36 @@ contract ShardV1MainnetForkTest is Test {
         _assertBacking();
     }
 
-    /// @notice The seed mixes an `arbBlockNumber()` staticcall to an Arbitrum-only precompile that
-    ///         does not exist on Ethereum. The load-bearing fact this pins is that the gas-capped
-    ///         staticcall degrades to zero rather than reverting, so a Mainnet acquisition still
-    ///         mints — and that the piece still renders distinct on-chain art. (Seeds always differ
-    ///         via the per-acquisition nonce, so seed inequality alone would prove nothing; the
-    ///         mint succeeding and the rendered art differing are the meaningful checks.)
-    function test_entropyDegradesGracefullyAndArtRendersOnMainnet() public {
-        vm.startPrank(buyer);
+    /// @notice Ethereum art seeds vary across recipients, acquisition nonces, and later blocks.
+    /// @dev This is a uniqueness/regeneration check only. The inputs are public and miner-influenceable;
+    ///      no unpredictability claim is made.
+    function test_ethereumSeedInputsProduceDistinctRenderedArt() public {
+        vm.prank(buyer);
         uint256 first = hook.buyNFT{ value: 1 ether }(type(uint256).max, deadline);
-        vm.roll(block.number + 1);
+
+        vm.prank(trader);
         uint256 second = hook.buyNFT{ value: 1 ether }(type(uint256).max, deadline);
-        vm.stopPrank();
 
-        // The mint itself is the proof: the absent ARB_SYS precompile returned no data and the
-        // gas-capped staticcall degraded to zero instead of reverting the acquisition.
+        vm.roll(block.number + 1);
+        vm.warp(block.timestamp + 12);
+        deadline = block.timestamp + 1 hours;
+        vm.prank(buyer);
+        uint256 third = hook.buyNFT{ value: 1 ether }(type(uint256).max, deadline);
+
         assertEq(nft.ownerOf(first), buyer, "first Mainnet acquisition did not mint");
-        assertEq(nft.ownerOf(second), buyer, "second Mainnet acquisition did not mint");
+        assertEq(nft.ownerOf(second), trader, "second Mainnet acquisition did not mint");
+        assertEq(nft.ownerOf(third), buyer, "later Mainnet acquisition did not mint");
+        assertTrue(nft.tokenSeed(first) != nft.tokenSeed(second), "recipient/nonce did not vary the seed");
+        assertTrue(nft.tokenSeed(second) != nft.tokenSeed(third), "later block/nonce did not vary the seed");
 
-        // Art regenerates per acquisition: two pieces render to different on-chain SVG.
         string memory artFirst = nft.tokenURI(first);
         string memory artSecond = nft.tokenURI(second);
+        string memory artThird = nft.tokenURI(third);
         assertGt(bytes(artFirst).length, 0, "no art rendered for the first piece");
         assertGt(bytes(artSecond).length, 0, "no art rendered for the second piece");
+        assertGt(bytes(artThird).length, 0, "no art rendered for the later piece");
         assertTrue(keccak256(bytes(artFirst)) != keccak256(bytes(artSecond)), "two acquisitions rendered identical art");
+        assertTrue(keccak256(bytes(artSecond)) != keccak256(bytes(artThird)), "later acquisition reused art");
     }
 
     /// @dev ETH held for the hook, whether sitting as a v4 credit or as a plain balance.

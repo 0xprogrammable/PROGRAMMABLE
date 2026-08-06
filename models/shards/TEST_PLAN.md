@@ -8,6 +8,8 @@ Suites live in [`test/`](../../test/), and each one owns a named area so no cove
 | [`ShardNFTV1.t.sol`](../../test/ShardNFTV1.t.sol) | Archive inventory, seeds, transfer guards, `tokenURI` |
 | [`GeometricRendererV1.t.sol`](../../test/GeometricRendererV1.t.sol) | Fully on-chain SVG, determinism, flat traits |
 | [`ShardScaffoldV1.t.sol`](../../test/ShardScaffoldV1.t.sol) | Pinned-dependency import and type surface |
+| [`ShardLaunchFactoryV1.t.sol`](../../test/ShardLaunchFactoryV1.t.sol) | Exact prediction, atomic launch, rollback, configuration evidence, sizes and gas |
+| [`ShardWiringV1.t.sol`](../../test/ShardWiringV1.t.sol) | Bidirectional NFT wiring, normalized getter failures, checked ERC20 returns, Ethereum seed inputs |
 | [`ShardHookLiquidityV1.t.sol`](../../test/ShardHookLiquidityV1.t.sol) | Permissions, `initialise`, seeding, the lock |
 | [`ShardHookMarketV1.t.sol`](../../test/ShardHookMarketV1.t.sol) | `buyNFT`/`sellNFT`, inclusive-fee basis, slippage, deadlines |
 | [`ShardHookBatchV1.t.sol`](../../test/ShardHookBatchV1.t.sol) | `buyMany`, `buyMax`, `sellMany`, `redeemMany`, `MAX_BATCH` |
@@ -17,7 +19,7 @@ Suites live in [`test/`](../../test/), and each one owns a named area so no cove
 | [`ShardFeeSplitV1.t.sol`](../../test/ShardFeeSplitV1.t.sol) | The 80/10/10 split, both claim paths, recipient handover |
 | [`ShardFeeDistributorV1.t.sol`](../../test/ShardFeeDistributorV1.t.sol) | Accumulator, escrow, dust, same-block guard, settlement paths |
 | [`ShardFeeDonationV1.t.sol`](../../test/ShardFeeDonationV1.t.sol) | `donate()`, the forwarder, donations bypassing the split |
-| [`ShardLaunchSequenceV1.t.sol`](../../test/ShardLaunchSequenceV1.t.sol) | Deploy → `setNFT` → `initialise` ordering and its failure modes |
+| [`ShardLaunchSequenceV1.t.sol`](../../test/ShardLaunchSequenceV1.t.sol) | One-transaction factory happy path plus focused manual authorization/one-shot failures |
 | [`ShardSwapRouterV1.t.sol`](../../test/ShardSwapRouterV1.t.sol) | Third-party routing, refunds, approvals, wrong-pool rejection |
 | [`invariant/ShardV1.t.sol`](../../test/invariant/ShardV1.t.sol) | Stateful backing, custody, conservation and lock invariants |
 | [`ShardV1MainnetFork.t.sol`](../../test/ShardV1MainnetFork.t.sol) | Full lifecycle against the pinned Ethereum Uniswap v4 `PoolManager` on a Mainnet fork |
@@ -64,8 +66,9 @@ Suites live in [`test/`](../../test/), and each one owns a named area so no cove
 - **Create the token and pool.** `test_initialiseSeedsAllTenThousandShards`, `test_initialiseRecordsSeedDust`,
   `test_initialiseRequiresNoEth`, `test_initialiseSurvivesFrontRunAtSamePrice` and
   `test_initialiseRerevertsNonAlreadyInitialisedErrors` in `ShardHookLiquidityV1.t.sol` cover the whole
-  deploy-to-seeded path, including the front-run case. `ShardLaunchSequenceV1.t.sol` runs the launch as a
-  creator would (`test_threeStepLaunchMintsTheFirstFiftyIds`, `test_buyingIsClosedUntilInitialise`,
+  deploy-to-seeded path, including the front-run case. `ShardLaunchFactoryV1.t.sol` proves exact code hashing,
+  deterministic CREATE2 prediction, rollback, and configuration evidence. `ShardLaunchSequenceV1.t.sol` runs the launch as a
+  creator would (`test_oneTransactionFactoryLaunchMintsTheFirstFiftyIds`, `test_buyingIsClosedUntilInitialise`,
   `test_launchFeeSplitsWithoutChangingWhatTheBuyerPays`) and pins the shipped tick configurations
   (`test_productionTicksStillLaunchAtAboutAThousandthOfAnEth`,
   `test_cheapCurveIsTheProductionCurveShiftedByAConstant`).
@@ -99,9 +102,11 @@ Suites live in [`test/`](../../test/), and each one owns a named area so no cove
   `test_ATTACK_reentrantClaimFails` and `test_ATTACK_reentrantTransferDuringReleasingFails` in
   `ShardHookAttackV1.t.sol`; the direct-deposit guard by `test_ATTACK_directNftTransferStrandsNothing`; the
   absence of a liquidity exit by `test_noWithdrawalFunctionExists`; and ERC-6909 claim theft by
-  `test_ATTACK_cannotStealErc6909FeeClaims`. **Gap:** no suite yet asserts `EthTransferFailed` for a
-  reverting recipient on a buy refund, a sell payout, a holder claim, `claimBuilderFees` or
-  `claimLauncherFees`. That coverage is required before release.
+  `test_ATTACK_cannotStealErc6909FeeClaims`. `ShardCheckedTransferV1Test` forces false-return ERC20 behavior
+  through liquidity settlement, `buyMax`, redeem, and the router; the factory suite proves the same failure
+  rolls the entire launch back. `ShardFeeSplitV1Test` asserts `EthTransferFailed` and complete
+  state rollback for a reverting recipient on a buy refund, sell payout, holder claim,
+  `claimBuilderFees`, and `claimLauncherFees`.
 
 ## Properties
 
@@ -147,16 +152,16 @@ Suites live in [`test/`](../../test/), and each one owns a named area so no cove
   those libraries expose, so a dependency bump that moves a path or a constant fails the build rather than the
   economics.
 - **Mainnet-fork lifecycle.** [`ShardV1MainnetFork.t.sol`](../../test/ShardV1MainnetFork.t.sol) runs the whole
-  lifecycle — deploy, wire, initialise, third-party swap, redeem, hook-market buy and sell, holder accrual, and all
+  lifecycle — atomic factory launch, third-party swap, redeem, hook-market buy and sell, holder accrual, and all
   three claim paths — against the pinned canonical Uniswap v4 `PoolManager` on an Ethereum fork, in the style of
-  [`test/ClassicV3MainnetFork.t.sol`](../../test/ClassicV3MainnetFork.t.sol). It mines the hook against the live
-  PoolManager and asserts the deployed address equals the mined one, so its low bits match
-  `getHookPermissions()`, and it pins the PoolManager's runtime code hash so the fork cannot silently swap in a
+  [`test/ClassicV3MainnetFork.t.sol`](../../test/ClassicV3MainnetFork.t.sol). It deploys the factory, mines twice,
+  launches once, reproduces the token/hook/NFT CREATE2 predictions and configuration hash, and pins the
+  PoolManager's runtime code hash so the fork cannot silently swap in a
   different contract. It needs an RPC (`ETHEREUM_RPC_URL`, or the public default), so it is excluded from the
   default no-RPC `forge test`, coverage and gas-snapshot runs exactly as the Classic fork suite is. The
   scheduled-and-on-PR `Ethereum Evidence` workflow runs it against a live RPC; run it locally with
   `forge test --match-contract ShardV1MainnetForkTest`.
 - **Record runtime code hashes and source verification after deployment.** For every deployed contract, publish
   the deployment transaction, the runtime code hash and the explorer verification state, and record the hook's
-  runtime size against the 24,576-byte EIP-170 limit — 24,388 bytes at the pinned settings, 188 bytes of
+  runtime size against the 24,576-byte EIP-170 limit — 24,352 bytes at the pinned settings, 224 bytes of
   headroom, which is small enough that any compiler or dependency change must be re-measured before release.

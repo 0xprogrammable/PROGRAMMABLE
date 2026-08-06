@@ -7,16 +7,16 @@ This is a design-stage record for a model with no production deployment and no i
 | Party or contract | Trusted for | Cannot |
 | --- | --- | --- |
 | Uniswap v4 `PoolManager` | Pool accounting, swap execution, ERC-6909 claim balances, unlock/settle semantics | Be replaced; the address is an immutable constructor argument |
-| `deployer` | Calling `setNFT` with the correct NFT, and `initialise` once | Move funds, claim fees, remove liquidity, or act at all after `initialise` |
+| `ShardLaunchFactoryV1` as deployer | Atomic deployment, exact hook-code validation, bidirectional NFT binding and initialization | Change pinned inputs, retain SHARD after launch, or act through consumed one-shot powers |
 | `builderFeeRecipient` | Nothing; it is a payee | Touch holder funds, launcher funds, the pool or the NFT contract |
 | `launcherFeeRecipient` | Nothing; it is a payee | Be changed after deployment |
 | `ShardNFTV1` | Calling `settleOnTransfer` truthfully; enforcing ownership on `release` | Be swapped out after `setNFT` |
 | `ShardTokenV1` | Fixed supply, no mint, no burn, no owner | Change supply |
-| Renderer | Producing SVG and attribute strings for `tokenURI` | Affect accounting, custody or trading |
+| Factory-shared renderer | Producing SVG and attribute strings for `tokenURI` | Affect accounting, custody or trading |
 
-Between deployment and `setNFT` the hook has no NFT bound. That window is the model's sharpest trust assumption:
-a malicious NFT bound there could drain the accumulator through `settleOnTransfer` across all 10,000 ids. It is
-closed by the deployer gate plus the one-shot check, and the factory release gate exists to close it atomically.
+Production launches have no externally reachable unwired window: token, hook and NFT deployment, exact
+`nft.hook()` validation, binding, checked full-supply transfer and initialization share one factory transaction.
+Focused tests retain manual unbound hooks only to exercise authorization and failure states.
 
 There is no oracle, no price feed, no keeper, no relayer, no offchain service, no owner, no pause, no timelock
 and no upgrade path. The only mutable configuration in the whole model is `builderFeeRecipient`, and only the
@@ -57,7 +57,8 @@ credits `nft.ownerOf(id)` and pays only `msg.sender`; `setNFT` and `initialise` 
 `unlockCallback` reverts `NotPoolManager`; `settleOnTransfer` reverts `NotNFT`; `acquire` and `release` revert
 `NotHook`.
 
-**Configuration.** `initialise` and `setNFT` are each one-shot (`AlreadyInitialised`). The three ticks, the
+**Configuration.** `initialise` and `setNFT` are each one-shot (`AlreadyInitialised`) and are consumed by the
+factory. The stored and emitted configuration hash binds every address, parameter, salt, and hook-code hash. The three ticks, the
 start price, the fee constants and the split constants are Solidity `immutable`/`constant`; `poolKey` is a
 storage struct assigned once in the constructor with no write path afterwards. Every swap callback re-checks
 the pool id against `poolKey.toId()` (`WrongPool`), so a foreign pool can never route a fee in the wrong currency
@@ -72,7 +73,8 @@ being lost. `claim` reverts `NothingToClaim` rather than paying zero, and rolls 
 in the same call — settling on another holder's behalf only persists when the caller is also owed something.
 Every ETH send checks its return value and reverts `EthTransferFailed`. All ETH-moving entry points carry a
 reentrancy guard, and refunds are sent after `unlock` returns, never inside the callback, so a contract buyer's
-re-entry cannot self-DoS on `AlreadyUnlocked`.
+re-entry cannot self-DoS on `AlreadyUnlocked`. Every ERC20 `transfer` and `transferFrom` result used by the
+factory, hook, and router is checked and reverts `TokenTransferFailed` on a false return.
 
 ## Ordering and MEV
 
@@ -88,6 +90,10 @@ explicit bounds rather than any price oracle:
   (`SwapTooLarge`). This makes the batch limit a property of the pool, not of the front end used; without it, a
   direct swap plus `redeemMany` bypasses it. It is symmetric on purpose, so a large position cannot be unwound
   in one transaction either. The accepted cost is that large entries and exits take several transactions.
+- **Public launch ordering.** An observer can submit an exact factory configuration first and sponsor the same
+  launch. The effective token salt commits to the hook salt and every launch parameter, so a changed builder,
+  curve, price, or salt cannot consume the intended token address. CREATE2 NFT deployment keeps the complete
+  address/configuration commitment stable across unrelated launches.
 - **Front-run-tolerant initialisation.** `beforeInitialize` always fires for a third party, and validates both
   the pool key and the exact start price (`WrongPool`, `WrongStartPrice`). A front-runner can therefore only
   create the pool the hook was going to create, at the price the hook was going to use, and `initialise` catches
@@ -95,11 +101,9 @@ explicit bounds rather than any price oracle:
   guard in both swap callbacks.
 - **Same-block accrual guard.** A piece joins the earning set only from the block after acquisition, so a trader
   cannot buy into the holder pool, collect from the fee their own trade generated, and leave.
-- **Art entropy.** Seeds come from `blockhash`, `block.timestamp`, the recipient and a nonce, plus an
-  `arbBlockNumber()` staticcall that contributes entropy only on Arbitrum-stack chains — on Ethereum mainnet the
-  precompile does not exist, the gas-capped call fails closed and the term is always zero. Grinding resistance
-  is deliberately not a goal: traits are flat, so there is no jackpot to farm and a reroll only affects the
-  roller's own draw. Do not treat the seed as secure randomness.
+- **Art entropy.** Seeds come from the previous Ethereum `blockhash`, `block.timestamp`, the recipient and an
+  acquisition nonce. Grinding resistance is deliberately not a goal: inputs are public and miner-influenceable,
+  traits are flat, and a reroll affects only the roller's draw. Do not treat the seed as secure randomness.
 
 ## Known limitations
 
@@ -107,12 +111,12 @@ explicit bounds rather than any price oracle:
   network. The only live evidence is for a prior version of this design on the Robinhood chain testnet, which is
   not evidence for the code in this repository.
 - **No audit.** No independent smart-contract audit and no public security contest.
-- **No factory.** v1 has no factory contract. Launches are manual CREATE2 deployments plus a two-call wiring
-  step, and the unwired window described above depends on the deployer behaving.
-- **One collection per deployment.** One hook serves one pool and one 10,000-piece collection. There is no
-  multi-pool, multi-collection or shared-instance mode.
-- **EIP-170 headroom.** The hook's runtime bytecode is 24,388 of the 24,576-byte limit at the pinned compiler
-  settings — 188 bytes of headroom. Almost any addition to the hook will need code moved out of it first.
+- **Public salts and exact-configuration sponsorship.** A public observer can launch the same reviewed
+  configuration first. Duplicate addresses then revert; callers must inspect chain state before retrying.
+- **One collection per hook.** One hook serves one pool and one 10,000-piece collection. A factory can launch
+  multiple collections, all using its one shared renderer.
+- **EIP-170 headroom.** The hook's runtime bytecode is 24,352 of the 24,576-byte limit at the pinned compiler
+  settings — 224 bytes of headroom. Almost any addition to the hook will need code moved out of it first.
 - **Per-swap cap.** Third-party swaps larger than 50 SHARD revert (`SwapTooLarge`). Aggregators that route large
   ETH amounts through this pool in a single hop will fail rather than partially fill.
 - **Partial fills are rejected, not repriced.** When ETH is the specified currency the fee is fixed before

@@ -10,7 +10,9 @@ This document describes a proposed model. It is not available for launch and has
 
 [Fixed parameters](../../spec/shards-v1.json) ·
 [Security properties](SECURITY.md) ·
+[Numbered source properties](../../docs/security/SHARDS_PROPERTIES.md) ·
 [Test plan](TEST_PLAN.md) ·
+[Candidate deployment plan](../../releases/shards-v1/mainnet-manifest.json) ·
 [Model manifest](model.json)
 
 **Builder:** [`jesse-stahl`](https://github.com/jesse-stahl)<br>
@@ -18,33 +20,32 @@ This document describes a proposed model. It is not available for launch and has
 
 ## Behavior
 
-One launch deploys one collection. Each launch has its own `ShardHookV1`, its own `ShardTokenV1`, its own
-`ShardNFTV1` and its own renderer, and those four contracts serve exactly one creator's fixed 10,000-piece
-collection. There is no shared instance and nothing is reused between launches.
+One factory can launch multiple independent collections. Each launch has its own `ShardHookV1`, `ShardTokenV1`
+and `ShardNFTV1`; every collection from that factory uses the factory's one immutable shared renderer.
 
 ```mermaid
 flowchart LR
-    deployer["Deployer"] -->|"setNFT + initialise"| hook["ShardHookV1"]
+    creator["Builder"] -->|"one atomic launch"| factory["ShardLaunchFactoryV1"]
+    factory --> hook["ShardHookV1"]
     hook --> pool["Uniswap v4 ETH/SHARD pool"]
     hook --> position["Permanently locked single-sided position"]
     hook --> nft["ShardNFTV1 (10,000 pieces)"]
-    nft --> renderer["On-chain renderer"]
+    factory --> renderer["Shared on-chain renderer"]
+    nft --> renderer
     hook --> holders["NFT holders 0.80%"]
-    hook --> builder["Builder 0.10%"]
+    hook --> builderFees["Builder 0.10%"]
     hook --> programmable["Programmable 0.10%"]
 ```
 
 The lifecycle:
 
-1. **Deploy.** `ShardTokenV1` mints its whole fixed supply — `10_000 * 1e18` SHARD — to its deployer and has no
-   mint, burn or owner. `ShardHookV1` is CREATE2-deployed at a mined salt so its address carries its permission
-   flags, and takes the pool manager, the SHARD token, the three ticks, the start price, the deployer, the
-   launcher fee recipient and the builder fee recipient as constructor arguments. `ShardNFTV1` is then deployed
-   against the hook address and the renderer address, with all 10,000 ids sitting in its own archive.
-2. **Wire.** The deployer calls `setNFT` once. It is deployer-gated, rejects the zero address and reverts
-   `AlreadyInitialised` on a second call. The NFT address cannot be a constructor argument because the two
-   addresses would depend on each other through CREATE2.
-3. **Initialise.** The deployer calls `initialise` once. It requires the hook to hold exactly `10_000e18` SHARD,
+1. **Predict.** The raw salt, hook salt, curve parameters, start price, and builder recipient commit to SHARD.
+   The exact supplied hook creation bytes plus constructor arguments predict the hook, whose low 14 bits must
+   equal the five required permission flags. The hook and shared renderer then predict the NFT.
+2. **Launch atomically.** `ShardLaunchFactoryV1` validates the pinned hook-code hash, CREATE2-deploys SHARD and
+   the hook, deploys the NFT against its shared renderer, checks `nft.hook() == hook`, binds the NFT, checked-
+   transfers all `10_000e18` SHARD and calls `initialise` in one transaction. Any failure rolls everything back.
+3. **Initialise.** Factory-driven `initialise` requires the hook to hold exactly `10_000e18` SHARD,
    requires the start tick to sit at or above `tickUpper`, initialises the pool at `startSqrtPriceX96` and seeds
    liquidity. It is one-shot, spends no ETH and tolerates a front-run: if the canonical pool already exists the
    `Pool.PoolAlreadyInitialized` revert is caught and seeding continues, and any other revert is re-thrown.
@@ -63,7 +64,8 @@ The lifecycle:
 6. **Regenerate.** `acquire` writes a fresh seed for the id it hands out, which is the art. `release` sets the
    seed to zero and the piece is gone. `_update` deliberately does not touch the seed, so a wallet-to-wallet
    transfer never rerolls the art. There is no NFT-to-SHARD reverse path, which is what makes a free reroll
-   impossible.
+   impossible. V1 does not accept user-supplied artwork or renderer code: every collection launched by a factory
+   uses that factory's immutable `GeometricRendererV1`.
 7. **Accrue.** Every fee is native ETH. Third-party fees are minted as ERC-6909 claims against the pool manager
    and redeemed to real ETH by `_sweepClaims` before any payout. Holder fees run through a scaled accumulator;
    an acquired piece joins the earning set from the block after acquisition, and fees accrued while nothing is
@@ -71,6 +73,15 @@ The lifecycle:
 8. **Claim.** Holders call `claim(tokenIds)` and are paid their settled balance. The builder calls
    `claimBuilderFees`. Programmable calls `claimLauncherFees`. All three are beneficiary-only, and all fees sit
    in the hook until claimed.
+
+The effective token salt commits to the raw token salt, hook salt, all curve parameters, start price, and builder
+recipient. The hook CREATE2 prediction hashes the actual hook creation bytes plus exact constructor arguments;
+the factory does not infer initcode from a code hash alone. The NFT is also CREATE2-predicted from the hook and
+immutable shared renderer, so unrelated factory launches cannot change its address.
+Each launch stores and emits a configuration hash binding chain, factory, PoolManager, shared renderer,
+beneficiaries, deployed addresses, curve parameters, both token salts, hook salt, and hook creation-code hash.
+Because these inputs are public, an observer can sponsor the exact same configuration first. Changing any launch
+parameter or hook salt changes the token prediction and cannot consume the intended configuration.
 
 Anyone may pay outside revenue into the holder pool with `donate()`, or by sending ETH to a `ShardFeeForwarderV1`
 and letting anyone flush it. Donations are not split — they go to holders in full.
@@ -127,7 +138,9 @@ refuse any pool id other than the canonical one (`WrongPool`).
 
 ### Parameters
 
-Immutable from construction: `deployer`, `shard`, `tickLower`, `tickBand`, `tickUpper`, `startSqrtPriceX96`,
+Factory immutables are `poolManager`, `launcherFeeRecipient`, the shared `renderer`, and
+`hookCreationCodeHash`. Hook immutables are `deployer` (the factory), `shard`, `tickLower`, `tickBand`,
+`tickUpper`, `startSqrtPriceX96`,
 `launcherFeeRecipient`, and the constants `FEE_BPS = 100`, `HOLDER_SHARE_BPS = 8000`,
 `BUILDER_SHARE_BPS = 1000`, `LAUNCHER_SHARE_BPS = 1000`, `MAX_BATCH = 50`, `SEED_AMOUNT = 10_000e18`.
 `ShardNFTV1` holds `hook` and `renderer` as immutables. `poolKey` is a storage struct (structs cannot be
@@ -142,9 +155,9 @@ role to the successor. There is no owner, no admin, no pause, no upgrade path an
 ### External calls and dependencies
 
 The hook calls Uniswap v4's `PoolManager` (`initialize`, `unlock`, `modifyLiquidity`, `swap`, `settle`, `take`,
-`mint`, `burn`, `balanceOf`), its own launch's SHARD token and its own launch's NFT contract. It also makes one
-gas-capped `staticcall` to `0x…0064` for `arbBlockNumber()`, used only as extra entropy for the art seed; off an
-Arbitrum-stack chain the call returns nothing and the value is zero. It sends raw ETH for buyer refunds, seller
+`mint`, `burn`, `balanceOf`), its own launch's SHARD token and its own launch's NFT contract. Art seeds use the
+previous Ethereum block hash, block timestamp, recipient, and an acquisition nonce. These public and
+miner-influenceable inputs are non-secure randomness. The hook sends raw ETH for buyer refunds, seller
 payouts and claims. There is no oracle, no price feed, no keeper, no relayer and no offchain service.
 
 Dependencies are pinned in [`foundry.toml`](../../foundry.toml): solc `0.8.26`, `cancun`, optimizer on at
@@ -155,7 +168,7 @@ under `lib/`. Exact revisions are recorded in [`spec/shards-v1.json`](../../spec
 
 | Address | Power | Bound |
 | --- | --- | --- |
-| `deployer` | `setNFT`, `initialise` | One-shot each; moves no funds; both are dead after the launch transaction |
+| factory as `deployer` | `setNFT`, `initialise` | One-shot each; both are consumed inside the atomic launch transaction |
 | `builderFeeRecipient` | `claimBuilderFees`, `setBuilderFeeRecipient` | Only the accrued builder balance; cannot touch holder, launcher or pool funds |
 | `launcherFeeRecipient` | `claimLauncherFees` | Immutable address; only the accrued launcher balance |
 | Any NFT holder | `claim(tokenIds)` | Settlement credits each token's current owner; the ETH transfer pays only the caller's own accrued balance |
@@ -250,18 +263,16 @@ seller payout or a claim.
 
 ## Release gates
 
-This model is not available for launch. The complete lifecycle — deploy, wire, initialise, third-party swap,
+This model is not available for launch. The complete lifecycle — atomic factory launch, third-party swap,
 redeem, hook-market buy and sell, holder accrual and all three claim paths — now runs against the pinned canonical
 Uniswap v4 `PoolManager` on an Ethereum Mainnet fork in
 [`test/ShardV1MainnetFork.t.sol`](../../test/ShardV1MainnetFork.t.sol), confirming the design composes with the
 real v4 contract it would market-make on. Before it can move past `design`:
 
-- **Factory contract.** v1 has no factory. Every launch is a manual CREATE2 deployment plus a two-call wiring
-  step, which is not a shippable creator path. A factory must deploy and wire the token, hook, NFT and renderer
-  atomically, closing the window between deployment and `initialise`.
-- **Independent review.** No independent smart-contract audit or public security contest has been performed.
-- **Deployment and source-verification evidence.** A published Ethereum deployment record with transaction
-  hashes, runtime code hashes and explorer source verification for every contract, plus a release manifest.
+- **Exact-source re-review.** Maintainers must re-review the final source after the factory and checked-transfer changes.
+- **Independent review.** Record independent security-review status for the exact source.
+- **Deployment and source verification.** Complete a user-authorized Ethereum deployment, exact source
+  verification, runtime/lifecycle evidence, and production-interface configuration for that release.
 
 See [`SECURITY.md`](SECURITY.md) and [`TEST_PLAN.md`](TEST_PLAN.md).
 
@@ -270,12 +281,14 @@ See [`SECURITY.md`](SECURITY.md) and [`TEST_PLAN.md`](TEST_PLAN.md).
 | Area | Path |
 | --- | --- |
 | Hook | [`src/ShardHookV1.sol`](../../src/ShardHookV1.sol) |
+| Launch factory | [`src/ShardLaunchFactoryV1.sol`](../../src/ShardLaunchFactoryV1.sol) |
 | Fee distributor | [`src/ShardFeeDistributorV1.sol`](../../src/ShardFeeDistributorV1.sol) |
 | NFT | [`src/ShardNFTV1.sol`](../../src/ShardNFTV1.sol) |
 | Token | [`src/ShardTokenV1.sol`](../../src/ShardTokenV1.sol) |
 | Constants | [`src/ShardConstantsV1.sol`](../../src/ShardConstantsV1.sol) |
 | Errors | [`src/ShardErrorsV1.sol`](../../src/ShardErrorsV1.sol) |
 | Renderer | [`src/GeometricRendererV1.sol`](../../src/GeometricRendererV1.sol) |
-| Router | [`src/ShardSwapRouterV1.sol`](../../src/ShardSwapRouterV1.sol) |
-| Donation forwarder | [`src/ShardFeeForwarderV1.sol`](../../src/ShardFeeForwarderV1.sol) |
+| Optional router helper | [`src/ShardSwapRouterV1.sol`](../../src/ShardSwapRouterV1.sol) |
+| Optional donation-forwarder helper | [`src/ShardFeeForwarderV1.sol`](../../src/ShardFeeForwarderV1.sol) |
 | Tests | [`test/`](../../test/) |
+| Launch runbook | [`docs/SHARDS_LAUNCH_RUNBOOK.md`](../../docs/SHARDS_LAUNCH_RUNBOOK.md) |

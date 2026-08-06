@@ -21,9 +21,11 @@
     "publicContest": false
   },
   "releaseGates": [
-    "Add a factory that deploys and wires the token, hook, NFT and renderer atomically, closing the window between deployment and initialise.",
-    "Complete stateful invariant coverage for backing, ETH custody, fee conservation and the permanent liquidity lock.",
-    "Obtain independent review of the hook, the fee accumulator and the NFT inventory accounting.",
-    "Publish the Ethereum deployment record, runtime code hashes and explorer source verification for every contract."
+    "Obtain maintainer re-review of the exact final source.",
+    "Record independent security-review status for the exact release.",
+    "Complete a user-authorized Ethereum deployment and exact source verification.",
+    "Publish deployment transactions, runtime hashes and version-bound release evidence.",
+    "Pass bytecode and lifecycle checks against the deployed addresses.",
+    "Configure the production interface for the exact published release."
   ]
 }

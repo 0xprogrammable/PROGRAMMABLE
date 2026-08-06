@@ -81,7 +81,8 @@ is reached. It has no deployed contracts and is not available for launch.
 ## Shards
 
 **Design only.** Shards proposes a single-sided bonding-curve market for a fixed 10,000-piece on-chain-art NFT
-collection. Each launch deploys its own hook, token, NFT contract and renderer; the whole supply is locked into a
+collection. Each launch deploys its own hook, token and NFT contract through an atomic factory and uses that
+factory's shared renderer; the whole supply is locked into a
 permanent Uniswap v4 position with no withdrawal path, and art is regenerated on every acquisition from the pool.
 Its 1.00% native-ETH swap fee is split 0.80% to collection holders, 0.10% to the hook builder and 0.10% to
 Programmable. It has no deployed contracts and is not available for launch.

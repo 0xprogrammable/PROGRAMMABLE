@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 1,
+  "model": "shards",
+  "internalContractRelease": "shards-v1",
+  "status": "not-deployed",
+  "chainId": 1,
+  "releaseCommit": null,
+  "sourceCommitment": null,
+  "startingNonce": null,
+  "hookSalt": null,
+  "releaseScope": {
+    "coreContracts": [
+      "ShardLaunchFactoryV1",
+      "GeometricRendererV1",
+      "ShardTokenV1",
+      "ShardHookV1",
+      "ShardNFTV1"
+    ],
+    "optionalHelpers": [
+      "ShardSwapRouterV1",
+      "ShardFeeForwarderV1"
+    ],
+    "policy": "Only deployed and pinned helpers become release evidence; helpers are not core launch contracts."
+  },
+  "candidatePlan": {
+    "status": "inputs-pending-review-and-authorization",
+    "observedAtBlock": 25639000,
+    "factoryDeployer": null,
+    "factoryDeployerNonce": null,
+    "expectedFactory": null,
+    "expectedRenderer": null,
+    "launcherFeeRecipient": null,
+    "builderFeeRecipient": null,
+    "rawTokenSalt": null,
+    "effectiveTokenSalt": null,
+    "hookSalt": null,
+    "predictedShard": null,
+    "predictedHook": null,
+    "predictedNft": null,
+    "expectedConfigurationHash": null,
+    "hookCreationCodeHash": "0x7aada8d126025e8013c5174d18890beca491a66b537a2525bafc1ff1fdf5f95a",
+    "forkFactoryDeploymentGas": "7180480",
+    "forkLaunchGas": "8667331",
+    "unitFactoryDeploymentGas": "7147357",
+    "unitLaunchGas": "9156093"
+  },
+  "addresses": {
+    "factoryDeployer": null,
+    "launcherFeeRecipient": null,
+    "builderFeeRecipient": null,
+    "factory": null,
+    "renderer": null,
+    "hook": null,
+    "shard": null,
+    "nft": null
+  },
+  "transactions": {
+    "factory": null,
+    "launch": null
+  },
+  "runtimeCodeHashes": {
+    "factory": null,
+    "renderer": null,
+    "hook": null,
+    "shard": null,
+    "nft": null
+  },
+  "artifactCode": {
+    "factory": {
+      "runtimeBytes": 18493,
+      "creationCodeBytes": 35738,
+      "deploymentInitcodeBytes": 35834,
+      "runtimeCodeHash": "0xf6a76e6e3eb28745defeb9a7f511f4639be946367f8b5f942f6d03cdc8d8a686",
+      "creationCodeHash": "0x4b38985ee6a51eb84dcdeb65be7ea834f479cae287163cb666abc5168bd9d7c7",
+      "note": "Runtime artifact is unpatched; deployment initcode adds 96 bytes of constructor arguments. Its hash is recorded after beneficiaries are fixed."
+    },
+    "renderer": {
+      "runtimeBytes": 16777,
+      "creationCodeBytes": 16805,
+      "deploymentInitcodeBytes": 16805,
+      "runtimeCodeHash": "0x9b54a61918b2ddf9b7daf41d9bf2d705cbef3a0fd618275762b99e19c53459bf",
+      "creationCodeHash": "0x910d02d740c71d608b1dc3f49e26288b0f8a62abda0c7767e251d53520a6b51e"
+    },
+    "hookTemplate": {
+      "runtimeBytes": 24352,
+      "creationCodeBytes": 26289,
+      "deploymentInitcodeBytes": 26577,
+      "runtimeCodeHash": "0x5133427af5e537e529c21483d04bb97e8203a75f821233191cc7eeb78d89cb3e",
+      "creationCodeHash": "0x7aada8d126025e8013c5174d18890beca491a66b537a2525bafc1ff1fdf5f95a",
+      "note": "Runtime artifact is unpatched; deployment initcode adds 288 bytes of constructor arguments. Its hash is recorded after launch inputs are fixed."
+    },
+    "shard": {
+      "runtimeBytes": 1875,
+      "creationCodeBytes": 2792,
+      "deploymentInitcodeBytes": 2792,
+      "runtimeCodeHash": "0xb2737fd93f2ff31e850e2be773e6e7a92a239b28091be1d4b122ff864cd7aae8",
+      "creationCodeHash": "0x6b55632624f9bb9fab7974eb4c1591d060775fb771862e6bdd4572f84f303d59"
+    },
+    "nftTemplate": {
+      "runtimeBytes": 7258,
+      "creationCodeBytes": 8019,
+      "deploymentInitcodeBytes": 8083,
+      "runtimeCodeHash": "0x2daa6dd619b7f8946b6fbf5a105774d73b6a3d90d3c4689bd4f6743b4c1f81af",
+      "creationCodeHash": "0x2934b883eeb2e0e658e87eeddf3e61842dc44010367c150ceed38e582a2798fe",
+      "note": "Deployment initcode adds 64 bytes for the predicted hook and shared renderer. Its hash is recorded after launch inputs are fixed."
+    }
+  },
+  "officialDependencies": {
+    "poolManager": {
+      "address": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+      "runtimeCodeHash": "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293"
+    }
+  },
+  "sourceVerification": {
+    "status": "not-submitted",
+    "factory": null,
+    "renderer": null,
+    "hook": null,
+    "shard": null,
+    "nft": null
+  },
+  "lifecycleEvidence": {
+    "status": "not-run",
+    "releaseEligible": false
+  }
+}

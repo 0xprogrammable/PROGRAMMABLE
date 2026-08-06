@@ -22,6 +22,8 @@ library ShardErrorsV1 {
     error InvalidTickRange();
     error InvalidStartPrice();
     error WrongShardBalance(uint256 expected, uint256 actual);
+    error WrongNFT(address nft, address expectedHook);
+    error TokenTransferFailed();
     /// @dev A buy consumed ETH that belonged to fee holders rather than to the buyer.
     error FeeEthMissing(uint256 expected, uint256 actual);
     /// @dev A swap stopped at its price limit while ETH was the specified currency. The fee

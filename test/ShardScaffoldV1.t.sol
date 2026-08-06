@@ -8,6 +8,7 @@ import { SwapParams } from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import { TickMath } from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import { Currency } from "@uniswap/v4-core/src/types/Currency.sol";
 import { Base64 } from "solady/utils/Base64.sol";
+import { Create2 } from "@openzeppelin/contracts/utils/Create2.sol";
 
 contract ShardScaffoldV1Test is Test {
     // Reference the BaseHook type so a broken import path is a hard compile
@@ -36,5 +37,10 @@ contract ShardScaffoldV1Test is Test {
 
     function test_base64Encode() public pure {
         assertEq(Base64.encode(bytes("ab")), "YWI=");
+    }
+
+    function test_create2PredictionImportResolves() public pure {
+        address predicted = Create2.computeAddress(bytes32(uint256(1)), keccak256("initcode"), address(0xBEEF));
+        assertTrue(predicted != address(0));
     }
 }

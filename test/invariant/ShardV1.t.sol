@@ -16,11 +16,13 @@ import { Currency, CurrencyLibrary } from "@uniswap/v4-core/src/types/Currency.s
 import { HookMiner } from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
 
 import { ShardHookV1 } from "../../src/ShardHookV1.sol";
+import { ShardLaunchFactoryV1 } from "../../src/ShardLaunchFactoryV1.sol";
 import { ShardTokenV1 } from "../../src/ShardTokenV1.sol";
 import { ShardNFTV1 } from "../../src/ShardNFTV1.sol";
 import { GeometricRendererV1 } from "../../src/GeometricRendererV1.sol";
 import { ShardConstantsV1 } from "../../src/ShardConstantsV1.sol";
 import { IShardNFTV1 } from "../../src/interfaces/IShardNFTV1.sol";
+import { ShardLaunchLib } from "../utils/ShardLaunchLib.sol";
 
 import { ShardHandlerV1 } from "./ShardHandlerV1.sol";
 
@@ -54,6 +56,7 @@ contract ShardV1Invariants is Test {
     );
 
     IPoolManager internal manager;
+    ShardLaunchFactoryV1 internal factory;
     ShardTokenV1 internal shard;
     GeometricRendererV1 internal renderer;
     ShardHookV1 internal hook;
@@ -72,24 +75,16 @@ contract ShardV1Invariants is Test {
         startSqrtPriceX96 = TickMath.getSqrtPriceAtTick(TICK_UPPER);
 
         manager = IPoolManager(address(new PoolManager(address(this))));
-        shard = new ShardTokenV1();
-        renderer = new GeometricRendererV1();
-
-        (address expected, bytes32 salt) = HookMiner.find(
-            address(this),
-            HOOK_FLAGS,
-            type(ShardHookV1).creationCode,
-            abi.encode(
-                manager, shard, TICK_LOWER, TICK_BAND, TICK_UPPER, startSqrtPriceX96, address(this), launcher, builder
-            )
-        );
-        hook = new ShardHookV1{ salt: salt }(
-            manager, shard, TICK_LOWER, TICK_BAND, TICK_UPPER, startSqrtPriceX96, address(this), launcher, builder
-        );
-        require(address(hook) == expected, "hook address mismatch");
-
-        nft = new ShardNFTV1(address(hook), address(renderer));
-        hook.setNFT(IShardNFTV1(address(nft)));
+        factory = new ShardLaunchFactoryV1(manager, launcher, keccak256(type(ShardHookV1).creationCode));
+        ShardLaunchFactoryV1.LaunchParams memory params = ShardLaunchFactoryV1.LaunchParams({
+            tickLower: TICK_LOWER,
+            tickBand: TICK_BAND,
+            tickUpper: TICK_UPPER,
+            startSqrtPriceX96: startSqrtPriceX96,
+            builderFeeRecipient: builder
+        });
+        (hook, shard, nft,) = ShardLaunchLib.mineAndLaunch(factory, keccak256("ShardV1Invariants"), bytes32(0), params);
+        renderer = factory.renderer();
 
         key = PoolKey({
             currency0: CurrencyLibrary.ADDRESS_ZERO,
@@ -99,9 +94,6 @@ contract ShardV1Invariants is Test {
             hooks: IHooks(address(hook))
         });
         poolId = key.toId();
-
-        shard.transfer(address(hook), SEED_AMOUNT);
-        hook.initialise();
 
         handler = new ShardHandlerV1(manager, hook, shard, nft, key, launcher, builder);
 
@@ -137,6 +129,10 @@ contract ShardV1Invariants is Test {
     /*//////////////////////////////////////////////////////////////
                           BACKING AND SUPPLY
     //////////////////////////////////////////////////////////////*/
+
+    function invariant_launchUsesAtomicFactory() public view {
+        assertEq(hook.deployer(), address(factory));
+    }
 
     /// Every circulating NFT is backed by exactly 1 SHARD parked in the hook.
     /// `seedDust` is load-bearing: `LiquidityAmounts.getLiquidityForAmount1`

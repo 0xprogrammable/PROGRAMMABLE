@@ -25,6 +25,7 @@ contract ShardSwapRouterV1 is IUnlockCallback, ReentrancyGuard {
     error ZeroAmount();
     error InsufficientOutput(uint256 minOut, uint256 actual);
     error EthTransferFailed();
+    error TokenTransferFailed();
     /// @dev The supplied PoolKey is not the pool this router was deployed for.
     error WrongPool();
 
@@ -173,7 +174,9 @@ contract ShardSwapRouterV1 is IUnlockCallback, ReentrancyGuard {
                 poolManager.settle{ value: owed }();
             } else {
                 poolManager.sync(currency);
-                IERC20Minimal(Currency.unwrap(currency)).transferFrom(payer, address(poolManager), owed);
+                if (!IERC20Minimal(Currency.unwrap(currency)).transferFrom(payer, address(poolManager), owed)) {
+                    revert TokenTransferFailed();
+                }
                 poolManager.settle();
             }
         } else if (amount > 0) {

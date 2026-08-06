@@ -2,6 +2,7 @@
 pragma solidity 0.8.26;
 
 interface IShardNFTV1 {
+    function hook() external view returns (address);
     function MAX_SUPPLY() external view returns (uint256);
     function lowestAvailableId() external view returns (uint256);
     function isPoolHeld(uint256 tokenId) external view returns (bool);

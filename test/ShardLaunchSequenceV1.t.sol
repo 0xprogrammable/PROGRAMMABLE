@@ -10,14 +10,16 @@ import { TickMath } from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import { HookMiner } from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
 
 import { ShardHookV1 } from "../src/ShardHookV1.sol";
+import { ShardLaunchFactoryV1 } from "../src/ShardLaunchFactoryV1.sol";
 import { ShardTokenV1 } from "../src/ShardTokenV1.sol";
 import { ShardNFTV1 } from "../src/ShardNFTV1.sol";
 import { GeometricRendererV1 } from "../src/GeometricRendererV1.sol";
 import { ShardConstantsV1 } from "../src/ShardConstantsV1.sol";
 import { ShardErrorsV1 } from "../src/ShardErrorsV1.sol";
 import { IShardNFTV1 } from "../src/interfaces/IShardNFTV1.sol";
+import { ShardLaunchLib } from "./utils/ShardLaunchLib.sol";
 
-/// @notice The three-transaction launch: setNFT, initialise, buy the first batch.
+/// @notice Atomic factory launch followed by the first batch purchase.
 ///
 /// @dev These run against the CHEAP TESTNET tick pair, which is the production curve shifted
 ///      by a constant so the SHAPE is identical and only the scale changes. That matters:
@@ -39,6 +41,7 @@ contract ShardLaunchSequenceV1Test is Test {
     );
 
     IPoolManager internal manager;
+    ShardLaunchFactoryV1 internal factory;
     ShardTokenV1 internal shard;
     GeometricRendererV1 internal renderer;
     ShardHookV1 internal hook;
@@ -73,6 +76,25 @@ contract ShardLaunchSequenceV1Test is Test {
         nft = new ShardNFTV1(address(hook), address(renderer));
 
         shard.transfer(address(hook), ShardConstantsV1.MAX_NFTS * ShardConstantsV1.SHARDS_PER_NFT);
+        vm.deal(buyer, 100 ether);
+    }
+
+    function _launchAtomic(int24 tickUpper, int24 tickBand) internal {
+        int24 tickLower = TickMath.minUsableTick(ShardConstantsV1.TICK_SPACING);
+        uint160 startSqrtPriceX96 = TickMath.getSqrtPriceAtTick(tickUpper);
+
+        manager = IPoolManager(address(new PoolManager(address(this))));
+        factory = new ShardLaunchFactoryV1(manager, launcher, keccak256(type(ShardHookV1).creationCode));
+        ShardLaunchFactoryV1.LaunchParams memory params = ShardLaunchFactoryV1.LaunchParams({
+            tickLower: tickLower,
+            tickBand: tickBand,
+            tickUpper: tickUpper,
+            startSqrtPriceX96: startSqrtPriceX96,
+            builderFeeRecipient: builder
+        });
+        (hook, shard, nft,) =
+            ShardLaunchLib.mineAndLaunch(factory, keccak256("ShardLaunchSequenceV1Test"), bytes32(0), params);
+        renderer = factory.renderer();
         vm.deal(buyer, 100 ether);
     }
 
@@ -126,15 +148,15 @@ contract ShardLaunchSequenceV1Test is Test {
         hook.buyMany{ value: 1 ether }(50, 1 ether, block.timestamp + 600);
     }
 
-    function test_threeStepLaunchMintsTheFirstFiftyIds() public {
-        _deployDeferred(TESTNET_TICK_UPPER, TESTNET_TICK_BAND);
+    function test_oneTransactionFactoryLaunchMintsTheFirstFiftyIds() public {
+        _launchAtomic(TESTNET_TICK_UPPER, TESTNET_TICK_BAND);
 
-        hook.setNFT(IShardNFTV1(address(nft))); // tx 1
-        hook.initialise(); // tx 2
+        assertEq(hook.deployer(), address(factory), "factory is not deployer");
+        assertTrue(hook.initialised(), "factory did not initialise atomically");
 
         uint256 before = buyer.balance;
         vm.prank(buyer);
-        uint256[] memory ids = hook.buyMany{ value: 1 ether }(50, 1 ether, block.timestamp + 600); // tx 3
+        uint256[] memory ids = hook.buyMany{ value: 1 ether }(50, 1 ether, block.timestamp + 600);
         uint256 spent = before - buyer.balance;
 
         assertEq(ids.length, 50, "wrong count");
@@ -154,9 +176,7 @@ contract ShardLaunchSequenceV1Test is Test {
     /// @dev The launch fee is charged in full and then routed three ways. The buyer's cost is
     ///      the whole fee; the ledgers must add back up to it exactly.
     function test_launchFeeSplitsWithoutChangingWhatTheBuyerPays() public {
-        _deployDeferred(TESTNET_TICK_UPPER, TESTNET_TICK_BAND);
-        hook.setNFT(IShardNFTV1(address(nft)));
-        hook.initialise();
+        _launchAtomic(TESTNET_TICK_UPPER, TESTNET_TICK_BAND);
 
         vm.prank(buyer);
         hook.buyMany{ value: 1 ether }(50, 1 ether, block.timestamp + 600);
@@ -175,9 +195,8 @@ contract ShardLaunchSequenceV1Test is Test {
         assertEq(holderShare, fee - 2 * ((fee * 1000) / 10_000), "holders != the remainder");
     }
 
-    /// @dev Why a launch script should skip step 1 when the NFT is already bound rather than
-    ///      just running it. If a previous attempt died between transactions 1 and 2, a blind
-    ///      rerun would revert here and the launch could never be completed by the script.
+    /// @dev Manual construction retains a one-shot binding power even though the production
+    ///      factory consumes it atomically.
     function test_setNFTIsOneShotSoABlindRerunWouldBrickTheLaunch() public {
         _deployDeferred(TESTNET_TICK_UPPER, TESTNET_TICK_BAND);
         hook.setNFT(IShardNFTV1(address(nft)));
@@ -185,9 +204,8 @@ contract ShardLaunchSequenceV1Test is Test {
         vm.expectRevert(ShardErrorsV1.AlreadyInitialised.selector);
         hook.setNFT(IShardNFTV1(address(nft)));
 
-        // Skipping it, which is what the script does, leaves the launch completable.
         hook.initialise();
-        assertTrue(hook.initialised(), "launch could not be resumed after step 1 landed");
+        assertTrue(hook.initialised(), "manual launch could not be completed");
     }
 
     function test_launchIsOneShotSoItCannotBeReplayed() public {

@@ -21,12 +21,14 @@ import { IERC20Minimal } from "@uniswap/v4-core/src/interfaces/external/IERC20Mi
 import { HookMiner } from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
 
 import { ShardHookV1 } from "../src/ShardHookV1.sol";
+import { ShardLaunchFactoryV1 } from "../src/ShardLaunchFactoryV1.sol";
 import { ShardTokenV1 } from "../src/ShardTokenV1.sol";
 import { ShardNFTV1 } from "../src/ShardNFTV1.sol";
 import { GeometricRendererV1 } from "../src/GeometricRendererV1.sol";
 import { ShardErrorsV1 } from "../src/ShardErrorsV1.sol";
 import { ShardConstantsV1 } from "../src/ShardConstantsV1.sol";
 import { IShardNFTV1 } from "../src/interfaces/IShardNFTV1.sol";
+import { ShardLaunchLib } from "./utils/ShardLaunchLib.sol";
 
 /*//////////////////////////////////////////////////////////////
                               ROUTER
@@ -127,6 +129,7 @@ contract ShardHookMarketV1Test is Test {
     );
 
     IPoolManager internal manager;
+    ShardLaunchFactoryV1 internal factory;
     ShardTokenV1 internal shard;
     GeometricRendererV1 internal renderer;
     ShardHookV1 internal hook;
@@ -154,25 +157,18 @@ contract ShardHookMarketV1Test is Test {
         startSqrtPriceX96 = TickMath.getSqrtPriceAtTick(TICK_UPPER);
 
         manager = IPoolManager(address(new PoolManager(address(this))));
-        shard = new ShardTokenV1();
-        renderer = new GeometricRendererV1();
+        factory = new ShardLaunchFactoryV1(manager, launcher, keccak256(type(ShardHookV1).creationCode));
         swapRouter = new MarketSwapRouter(manager);
-
-        (address expected, bytes32 salt) = HookMiner.find(
-            address(this),
-            HOOK_FLAGS,
-            type(ShardHookV1).creationCode,
-            abi.encode(
-                manager, shard, TICK_LOWER, TICK_BAND, TICK_UPPER, startSqrtPriceX96, address(this), launcher, builder
-            )
-        );
-        hook = new ShardHookV1{ salt: salt }(
-            manager, shard, TICK_LOWER, TICK_BAND, TICK_UPPER, startSqrtPriceX96, address(this), launcher, builder
-        );
-        assertEq(address(hook), expected, "hook address mismatch");
-
-        nft = new ShardNFTV1(address(hook), address(renderer));
-        hook.setNFT(IShardNFTV1(address(nft)));
+        ShardLaunchFactoryV1.LaunchParams memory params = ShardLaunchFactoryV1.LaunchParams({
+            tickLower: TICK_LOWER,
+            tickBand: TICK_BAND,
+            tickUpper: TICK_UPPER,
+            startSqrtPriceX96: startSqrtPriceX96,
+            builderFeeRecipient: builder
+        });
+        (hook, shard, nft,) =
+            ShardLaunchLib.mineAndLaunch(factory, keccak256("ShardHookMarketV1Test"), bytes32(0), params);
+        renderer = factory.renderer();
 
         key = PoolKey({
             currency0: CurrencyLibrary.ADDRESS_ZERO,
@@ -183,9 +179,6 @@ contract ShardHookMarketV1Test is Test {
         });
         poolId = key.toId();
 
-        shard.transfer(address(hook), SEED_AMOUNT);
-        hook.initialise();
-
         vm.deal(address(this), 10_000 ether);
         vm.deal(alice, 1000 ether);
         vm.deal(bob, 1000 ether);
@@ -194,6 +187,10 @@ contract ShardHookMarketV1Test is Test {
     /*//////////////////////////////////////////////////////////
                               HELPERS
     //////////////////////////////////////////////////////////*/
+
+    function test_setupUsesAtomicFactory() public view {
+        assertEq(hook.deployer(), address(factory));
+    }
 
     function _feesHeld() internal view returns (uint256) {
         return manager.balanceOf(address(hook), CurrencyLibrary.ADDRESS_ZERO.toId()) + address(hook).balance;
@@ -555,6 +552,7 @@ contract ShardHookMarketV1Test is Test {
         vm.expectRevert(ShardErrorsV1.NotDeployer.selector);
         hook.setNFT(IShardNFTV1(address(0xDEAD)));
 
+        vm.prank(address(factory));
         vm.expectRevert(ShardErrorsV1.AlreadyInitialised.selector);
         hook.setNFT(IShardNFTV1(address(0xDEAD)));
     }

@@ -102,6 +102,12 @@ contract SplitSwapRouter is IUnlockCallback {
     }
 }
 
+contract RejectShardEth {
+    receive() external payable {
+        revert("reject ETH");
+    }
+}
+
 contract ShardFeeSplitV1Test is Test {
     int24 internal constant TICK_SPACING = 60;
     int24 internal constant TICK_UPPER = 115_080;
@@ -190,6 +196,11 @@ contract ShardFeeSplitV1Test is Test {
     /// @dev Total ETH the hook has captured, in whatever form it currently holds it.
     function _feesHeld() internal view returns (uint256) {
         return manager.balanceOf(address(hook), CurrencyLibrary.ADDRESS_ZERO.toId()) + address(hook).balance;
+    }
+
+    function _rejectEthAt(address account) internal {
+        RejectShardEth rejector = new RejectShardEth();
+        vm.etch(account, address(rejector).code);
     }
 
     /*//////////////////////////////////////////////////////////
@@ -354,6 +365,80 @@ contract ShardFeeSplitV1Test is Test {
         assertGt(paid, 0, "holder claimed");
         assertEq(hook.builderFeesAccrued(), builderBefore, "builder accrual untouched");
         assertEq(hook.launcherFeesAccrued(), launcherBefore, "launcher accrual untouched");
+    }
+
+    function test_buyRefundRevertsAndRollsBackForRejectingRecipient() public {
+        hook.initialise();
+        vm.deal(alice, 1 ether);
+        _rejectEthAt(alice);
+
+        vm.prank(alice);
+        vm.expectRevert(ShardErrorsV1.EthTransferFailed.selector);
+        hook.buyNFT{ value: 1 ether }(1 ether, FAR);
+
+        assertEq(nft.balanceOf(alice), 0, "acquisition rolled back");
+        assertEq(hook.builderFeesAccrued(), 0, "builder accrual rolled back");
+        assertEq(hook.launcherFeesAccrued(), 0, "launcher accrual rolled back");
+    }
+
+    function test_sellPayoutRevertsAndRollsBackForRejectingRecipient() public {
+        hook.initialise();
+        vm.deal(alice, 1 ether);
+        vm.prank(alice);
+        uint256 tokenId = hook.buyNFT{ value: 1 ether }(1 ether, FAR);
+        uint256 builderBefore = hook.builderFeesAccrued();
+        uint256 launcherBefore = hook.launcherFeesAccrued();
+        _rejectEthAt(alice);
+
+        vm.prank(alice);
+        vm.expectRevert(ShardErrorsV1.EthTransferFailed.selector);
+        hook.sellNFT(tokenId, 0, FAR);
+
+        assertEq(nft.ownerOf(tokenId), alice, "release rolled back");
+        assertEq(hook.builderFeesAccrued(), builderBefore, "builder accrual rolled back");
+        assertEq(hook.launcherFeesAccrued(), launcherBefore, "launcher accrual rolled back");
+    }
+
+    function test_holderClaimRevertsAndRollsBackForRejectingRecipient() public {
+        hook.initialise();
+        vm.deal(alice, 1 ether);
+        vm.prank(alice);
+        uint256 tokenId = hook.buyNFT{ value: 1 ether }(1 ether, FAR);
+        vm.roll(block.number + 1);
+        _swap(true, -int256(UNDER_CAP_ETH), UNDER_CAP_ETH);
+        uint256[] memory ids = new uint256[](1);
+        ids[0] = tokenId;
+        _rejectEthAt(alice);
+
+        vm.prank(alice);
+        vm.expectRevert(ShardErrorsV1.EthTransferFailed.selector);
+        hook.claim(ids);
+
+        assertEq(hook.claimable(alice), 0, "claim materialisation rolled back");
+    }
+
+    function test_builderClaimRevertsAndRestoresAccrualForRejectingRecipient() public {
+        _accrueRealFees();
+        uint256 accrued = hook.builderFeesAccrued();
+        _rejectEthAt(builder);
+
+        vm.prank(builder);
+        vm.expectRevert(ShardErrorsV1.EthTransferFailed.selector);
+        hook.claimBuilderFees();
+
+        assertEq(hook.builderFeesAccrued(), accrued, "builder accrual restored");
+    }
+
+    function test_launcherClaimRevertsAndRestoresAccrualForRejectingRecipient() public {
+        _accrueRealFees();
+        uint256 accrued = hook.launcherFeesAccrued();
+        _rejectEthAt(launcher);
+
+        vm.prank(launcher);
+        vm.expectRevert(ShardErrorsV1.EthTransferFailed.selector);
+        hook.claimLauncherFees();
+
+        assertEq(hook.launcherFeesAccrued(), accrued, "launcher accrual restored");
     }
 
     /*//////////////////////////////////////////////////////////

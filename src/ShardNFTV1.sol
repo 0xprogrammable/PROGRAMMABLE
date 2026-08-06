@@ -22,7 +22,7 @@ contract ShardNFTV1 is ERC721, IShardNFTV1 {
 
     uint256 public constant override MAX_SUPPLY = ShardConstantsV1.MAX_NFTS;
 
-    address public immutable hook;
+    address public immutable override hook;
     IShardRendererV1 public immutable renderer;
 
     /// @dev Bit index == tokenId - 1. Token IDs are 1..10_000, so bit indices

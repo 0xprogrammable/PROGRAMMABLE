@@ -370,7 +370,9 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
             poolManager.settle{ value: amount }();
         } else {
             poolManager.sync(currency);
-            IERC20Minimal(Currency.unwrap(currency)).transfer(address(poolManager), amount);
+            if (!IERC20Minimal(Currency.unwrap(currency)).transfer(address(poolManager), amount)) {
+                revert ShardErrorsV1.TokenTransferFailed();
+            }
             poolManager.settle();
         }
     }
@@ -712,7 +714,7 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
         // Whatever did not become a whole NFT goes to the caller as ERC-20. Keeping it would
         // break `shard.balanceOf(hook) == circulatingSupply * 1e18 + seedDust`.
         uint256 leftover = shardsOut - count * ShardConstantsV1.SHARDS_PER_NFT;
-        if (leftover != 0) shard.transfer(msg.sender, leftover);
+        if (leftover != 0 && !shard.transfer(msg.sender, leftover)) revert ShardErrorsV1.TokenTransferFailed();
 
         _sendEth(msg.sender, unspent); // after unlock returns, never inside it
 
@@ -818,7 +820,9 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
     function _redeemBatch(uint256 count) private returns (uint256[] memory tokenIds) {
         if (count == 0 || count > MAX_BATCH) revert ShardErrorsV1.BatchTooLarge(count, MAX_BATCH);
 
-        shard.transferFrom(msg.sender, address(this), count * ShardConstantsV1.SHARDS_PER_NFT);
+        if (!shard.transferFrom(msg.sender, address(this), count * ShardConstantsV1.SHARDS_PER_NFT)) {
+            revert ShardErrorsV1.TokenTransferFailed();
+        }
 
         tokenIds = new uint256[](count);
         for (uint256 i; i < count; ++i) {
@@ -1024,6 +1028,17 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
         if (msg.sender != deployer) revert ShardErrorsV1.NotDeployer();
         if (address(nft) != address(0)) revert ShardErrorsV1.AlreadyInitialised();
         if (address(nft_) == address(0)) revert ShardErrorsV1.ZeroAddress();
+        bool valid;
+        bytes4 selector = IShardNFTV1.hook.selector;
+        assembly ("memory-safe") {
+            let ptr := mload(0x40)
+            mstore(ptr, selector)
+            let ok := staticcall(10000, nft_, ptr, 4, ptr, 32)
+            valid := and(and(ok, eq(returndatasize(), 32)), eq(mload(ptr), address()))
+        }
+        if (!valid) {
+            revert ShardErrorsV1.WrongNFT(address(nft_), address(this));
+        }
         nft = nft_;
     }
 
@@ -1031,36 +1046,16 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
                                 ENTROPY
     //////////////////////////////////////////////////////////////*/
 
-    address internal constant ARB_SYS = 0x0000000000000000000000000000000000000064;
-
-    /// @dev Only Arbitrum-stack chains expose ArbSys. Off them the call returns no data and
-    ///      this yields 0 rather than reverting, so the contract stays chain-portable.
-    /// @dev The GAS CAP here is not cosmetic. If nothing valid lives at 0x64, the call can fail
-    ///      with an invalid opcode, which consumes EVERY unit of gas forwarded to it — and by
-    ///      the 63/64 rule that is nearly the whole transaction. The caller then runs out of gas
-    ///      immediately afterwards, even though this function "handled" the failure and returned
-    ///      0. Observed exactly that on a forked simulation where the precompile is not emulated:
-    ///      the following `nft.acquire` was left 12,536 gas and reverted OutOfGas. Capping bounds
-    ///      the worst case to a few thousand gas; `arbBlockNumber()` needs far less than this.
-    function _arbBlockNumber() private view returns (uint256 n) {
-        (bool ok, bytes memory data) = ARB_SYS.staticcall{ gas: 5000 }(abi.encodeWithSignature("arbBlockNumber()"));
-        if (ok && data.length >= 32) n = abi.decode(data, (uint256));
-    }
-
-    /// @dev Grinding resistance is deliberately NOT required — traits are flat, so there is
-    ///      no jackpot to farm and a reroll only affects the roller's own draw.
-    ///      `_seedNonce` and `to` already guarantee distinctness; the block data only adds
-    ///      variety. On Ethereum mainnet `_arbBlockNumber()` returns 0 (the precompile does
-    ///      not exist and the gas-capped staticcall fails closed) and the seed rests on
-    ///      `blockhash`/`timestamp`/nonce alone; on Arbitrum-style chains it adds per-L2-block
-    ///      granularity where `block.number` is the slower L1 number.
+    /// @dev This is not secure randomness. Block producers and transaction ordering can
+    ///      influence art seeds, and callers can observe all inputs before inclusion. No
+    ///      security property relies on unpredictability: traits are flat, and a reroll only
+    ///      affects the roller's own draw. The nonce and recipient provide per-acquisition
+    ///      variation while the previous-block hash and timestamp add Ethereum block context.
     function _nextSeed(address to) private returns (uint256) {
         unchecked {
             _seedNonce++;
         }
-        return uint256(
-            keccak256(abi.encodePacked(blockhash(block.number - 1), block.timestamp, _arbBlockNumber(), to, _seedNonce))
-        );
+        return uint256(keccak256(abi.encodePacked(blockhash(block.number - 1), block.timestamp, to, _seedNonce)));
     }
 
     uint256 private _seedNonce;
