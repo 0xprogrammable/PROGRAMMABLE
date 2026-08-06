@@ -229,14 +229,31 @@ export function evaluateAlchemyExploreSourceContracts(
 
   check(
     "alchemy-explore-provenance",
-    routeSources
-      .filter(({ id }) => id !== "token-list")
-      .every(
-        ({ source }) =>
-          source.includes('"X-Programmable-Launch-Source": "alchemy"') &&
-          source.includes('"X-Programmable-Read-Source": "blob"') &&
-          source.includes('"X-Programmable-Rpc-Provider": "alchemy"'),
+    routeSources.find(({ id }) => id === "explore")?.source.includes(
+      '"X-Programmable-Launch-Source": customProjects.length > 0',
+    ) &&
+      routeSources.find(({ id }) => id === "explore")?.source.includes(
+        '"alchemy+registry.custom-launched"',
       ) &&
+      routeSources.find(({ id }) => id === "explore")?.source.includes(
+        '"X-Programmable-Read-Source": customProjects.length > 0',
+      ) &&
+      routeSources.find(({ id }) => id === "explore")?.source.includes(
+        '"blob+postgres"',
+      ) &&
+      routeSources.find(({ id }) => id === "token-detail")?.source.includes(
+        '"X-Programmable-Launch-Source": customProject',
+      ) &&
+      routeSources.find(({ id }) => id === "token-detail")?.source.includes(
+        '"registry.custom-launched"',
+      ) &&
+      routeSources.find(({ id }) => id === "token-detail")?.source.includes(
+        '"X-Programmable-Read-Source": customProject ? "postgres" : "blob"',
+      ) &&
+      routeSources
+        .filter(({ id }) => id !== "token-list")
+        .every(({ source }) =>
+          source.includes('"X-Programmable-Rpc-Provider": "alchemy"')) &&
       responseSource.includes('"X-Programmable-Read-Source": "blob"') &&
       responseSource.includes('"X-Programmable-Rpc-Provider": "alchemy"') &&
       responseSource.includes('"X-Programmable-Launch-Source": "alchemy"') &&
