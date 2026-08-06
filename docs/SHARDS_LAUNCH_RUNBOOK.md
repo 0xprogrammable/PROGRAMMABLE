@@ -13,7 +13,7 @@ Shards remains in `design` status. None of the commands below authorizes a produ
 - builder (0.10%) recipient: `0xceeBB3A6543CeBEB2ED66963897A0abEA52A50cC`
 - factory salt: `0x655a4b5a2b704bef84b4ff94adde0a7ac40ad0366c82ddca5290180fe4c3986d` (`keccak256("programmable.shards-v1.factory.v1")`)
 - raw token salt: `0xca9944c923e24ba5cb3188a29b18c3305158e686e39473e91bbe31fc019816ab` (`keccak256("programmable.shards-v1.token.v1")`)
-- hook creation-code hash: `0x64b555958445829d72434216cb47abe10e94ba4d649ec43b76ac873cd83b1e53`
+- hook creation-code hash: `0x17f5bf7281955ad1859c0bb474ca5d6ac4832459796f5670bceb0c4e29ea1340`
 - tick spacing: `60`
 - production tick lower: `-887220`
 - production tick band: `22980`
@@ -126,18 +126,18 @@ A second launch with the same raw token salt, builder, and hook salt must revert
 The predicted plan was generated deterministically from the reviewed source: the factory address was computed as `CREATE2(0x4e59…4956C, factorySalt, keccak256(initcode))`, the factory was deployed at that address through a CREATE2 deployer to run its constructor (which deploys the shared renderer), and the hook salt was mined against it. Pinned outputs (all recorded in `candidatePlan`):
 
 ```text
-expected factory:            0x3624dd0275A9Bb89E509d4AF90d3b0aE213a9B09
-expected renderer:           0x80c5E72d014874b7f09f61dD30395dB81140Bd5E
+expected factory:            0xaCeeCA2d491B026024AaF9819EEDEf8cc7c2a91a
+expected renderer:           0x6329fA7c3A3932bf958e673812cfE2967954caE3
 launcher fee recipient:      0x4957f49620AFf3Adbbe8195a4f633E49cc93376c
 builder fee recipient:       0xceeBB3A6543CeBEB2ED66963897A0abEA52A50cC
-hook creation-code hash:     0x64b555958445829d72434216cb47abe10e94ba4d649ec43b76ac873cd83b1e53
+hook creation-code hash:     0x17f5bf7281955ad1859c0bb474ca5d6ac4832459796f5670bceb0c4e29ea1340
 raw token salt:              0xca9944c923e24ba5cb3188a29b18c3305158e686e39473e91bbe31fc019816ab
-effective token salt:        0x99a64e9fde372d1810d5216dc0a332d6d6f0e07a1deee9ee90deef56fba55140
-hook salt:                   0x0000000000000000000000000000000000000000000000000000000000005f0a
-predicted SHARD:             0xb9d88AA3809ce54d7e54E7954929f437c222FD58
-predicted hook:              0x5625aEEfcd36093dd62F1b627b9aD1Db441FA0cc
-predicted NFT:               0x2af33A45c8FbD37f02CC6C2C46579e89159907a5
-expected configuration hash: 0x97a77a6ca3dcbab17c3e9b6748c3cc30a8f4557bc53a066242b4a392ce3f0712
+effective token salt:        0x159643aad09abb3057e2485f7153ae0f39551b6fe182c31557133eadded8480a
+hook salt:                   0x0000000000000000000000000000000000000000000000000000000000008348
+predicted SHARD:             0x9b29CbF6a748Bcc5DA2BADdb45763bA906549f93
+predicted hook:              0x42A73c00DAf1c3F4D553B0b62eB40D32087BE0cc
+predicted NFT:               0xbAcd4195EFFCF96a957E2E321BB42cf9BbAc29cA
+expected configuration hash: 0x712cd30f3fc86c9b6f88a43e99d9b0d4dc1c387416c74e6026e1b68f4c718cf7
 ```
 
 The pinned Mainnet-fork suite reproduces the full lifecycle against the canonical v4 PoolManager:

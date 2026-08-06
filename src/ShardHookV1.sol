@@ -419,10 +419,30 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
     ///      amount is the NET the user receives (or the pool must find), so the total is
     ///      `net + fee` and the fee is `net * 100 / 9900` — solving `fee = 1% * (net + fee)`.
     ///      Charging `net * 100 / 10000` there would be 0.990%, quietly cheaper.
-    function _feeOn(uint256 gross, bool exactIn) private pure returns (uint256) {
-        return exactIn
-            ? (gross * ShardConstantsV1.FEE_BPS) / ShardConstantsV1.BPS_DENOMINATOR
-            : (gross * ShardConstantsV1.FEE_BPS) / (ShardConstantsV1.BPS_DENOMINATOR - ShardConstantsV1.FEE_BPS);
+    /// @dev Carried fee numerators so the 1% fee is cumulative and transaction-frequency invariant:
+    ///      a stream of tiny swaps accrues the same total fee as one aggregated swap instead of each
+    ///      swap flooring its sub-wei share to zero. Two accumulators because exact-input fees divide
+    ///      by BPS_DENOMINATOR and exact-output fees by (BPS_DENOMINATOR - FEE_BPS).
+    uint256 private feeCarryIn;
+    uint256 private feeCarryOut;
+    /// @dev The fee {_beforeSwap} charged, handed to {_afterSwap} so it reconstructs the exact
+    ///      requested swap size without recomputing (which would double-consume the carry). Written
+    ///      by {_beforeSwap} immediately before {_afterSwap} reads it within the same swap, so it is
+    ///      pure scratch — any value left between swaps is always overwritten before the next read.
+    uint256 private pendingBeforeSwapFee;
+
+    /// @dev The actual 1% fee taken on a swap, carrying the sub-wei remainder forward so nothing is
+    ///      floored away over a stream of swaps: a run of tiny swaps accrues the same total as one
+    ///      aggregated swap. `exactIn` selects the inclusive basis (fee is 1% of the total moved,
+    ///      divide by BPS_DENOMINATOR) versus the exact-output gross-up (fee is net*100/9900).
+    function _chargeFee(uint256 gross, bool exactIn) internal returns (uint256 fee) {
+        uint256 denom =
+            exactIn ? ShardConstantsV1.BPS_DENOMINATOR : ShardConstantsV1.BPS_DENOMINATOR - ShardConstantsV1.FEE_BPS;
+        uint256 num = gross * ShardConstantsV1.FEE_BPS + (exactIn ? feeCarryIn : feeCarryOut);
+        fee = num / denom;
+        uint256 rem = num % denom;
+        if (exactIn) feeCarryIn = rem;
+        else feeCarryOut = rem;
     }
 
     /// @dev Takes the ETH fee as an ERC-6909 claim rather than `poolManager.take`.
@@ -462,7 +482,11 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
         }
 
         uint256 specified = exactIn ? uint256(-params.amountSpecified) : uint256(params.amountSpecified);
-        uint256 fee = _feeOn(specified, exactIn);
+        uint256 fee = _chargeFee(specified, exactIn);
+        // Hand the exact charged fee to _afterSwap so its partial-fill check reconstructs the
+        // requested size without recomputing (which would double-consume the carry). Recorded even
+        // when zero, so a later swap in the same transaction never reads a stale value.
+        pendingBeforeSwapFee = fee;
         if (fee == 0) return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
 
         _takeEthFee(fee);
@@ -530,9 +554,10 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
         // the specified amount unfilled ONLY when the limit binds.
         if (params.zeroForOne == exactIn) {
             uint256 specified = exactIn ? uint256(-params.amountSpecified) : uint256(params.amountSpecified);
-            // What beforeSwap actually handed the pool, after taking its cut out of the
-            // specified side: exactIn swaps less, exactOut asks for more.
-            uint256 hookFee = _feeOn(specified, exactIn);
+            // What beforeSwap actually handed the pool, after taking its cut out of the specified
+            // side: exactIn swaps less, exactOut asks for more. Read the exact fee beforeSwap charged
+            // (via transient storage) rather than recomputing, since the carry has since moved on.
+            uint256 hookFee = pendingBeforeSwapFee;
             uint256 requested = exactIn ? specified - hookFee : specified + hookFee;
 
             int128 ethDelta = delta.amount0();
@@ -544,7 +569,7 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
         // ETH is unspecified, so its amount is whatever the pool computed: delta.amount0().
         int128 eth0 = delta.amount0();
         uint256 gross = eth0 < 0 ? uint256(uint128(-eth0)) : uint256(uint128(eth0));
-        uint256 fee = _feeOn(gross, exactIn);
+        uint256 fee = _chargeFee(gross, exactIn);
         if (fee == 0) return (BaseHook.afterSwap.selector, int128(0));
 
         _takeEthFee(fee);
@@ -582,7 +607,7 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
 
         // Inclusive: the curve cost is the NET, so total = cost + fee and fee is 1% of total.
         // `ethSpent * 100 / 10_000` would be 0.990% and quietly cheaper than swap-then-redeem.
-        uint256 fee = _feeOn(ethSpent, false);
+        uint256 fee = _chargeFee(ethSpent, false);
         uint256 total = ethSpent + fee;
         if (total > msg.value) revert ShardErrorsV1.InsufficientPayment(total, msg.value);
         if (total > maxEthIn) revert ShardErrorsV1.SlippageExceeded(maxEthIn, total);
@@ -596,10 +621,7 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
         // contract buyer's re-entry hit AlreadyUnlocked and self-DoS.
         _sendEth(msg.sender, msg.value - total);
 
-        uint256 expected = holderEth + fee;
-        if (address(this).balance < expected) {
-            revert ShardErrorsV1.FeeEthMissing(expected, address(this).balance);
-        }
+        _verifyFeeHeld(holderEth, fee);
     }
 
     /// @notice The largest number of NFTs one transaction may mint. Each acquire is a fresh
@@ -627,7 +649,7 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
             (uint256)
         );
 
-        uint256 fee = _feeOn(ethSpent, false); // inclusive: 1% of the TOTAL, not of the cost
+        uint256 fee = _chargeFee(ethSpent, false); // inclusive: 1% of the TOTAL, not of the cost
         uint256 total = ethSpent + fee;
         if (total > msg.value) revert ShardErrorsV1.InsufficientPayment(total, msg.value);
         if (total > maxEthIn) revert ShardErrorsV1.SlippageExceeded(maxEthIn, total);
@@ -643,10 +665,7 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
 
         _sendEth(msg.sender, msg.value - total); // after unlock returns, never inside it
 
-        uint256 expected = holderEth + fee;
-        if (address(this).balance < expected) {
-            revert ShardErrorsV1.FeeEthMissing(expected, address(this).balance);
-        }
+        _verifyFeeHeld(holderEth, fee);
     }
 
     /// @notice Spend as much of `msg.value` as the curve takes and mint as many whole NFTs as
@@ -667,8 +686,10 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
 
         uint256 holderEth = address(this).balance - msg.value;
 
-        // Size the swap against the WORST-CASE fee, so the reserve is always sufficient.
-        uint256 maxFee = _feeOn(msg.value, true); // exact-input basis: 1% of what was sent
+        // Size the swap against the WORST-CASE fee, so the reserve is always sufficient. This is a
+        // pure ceiling used only to size the swap; it must NOT consume the carry, so it does not go
+        // through {_chargeFee}.
+        uint256 maxFee = (msg.value * ShardConstantsV1.FEE_BPS) / ShardConstantsV1.BPS_DENOMINATOR;
         uint256 ethForSwap = msg.value - maxFee;
 
         (uint256 shardsOut, uint256 ethConsumed) =
@@ -686,7 +707,10 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
         // consumption the two bases agree only up to rounding: with
         // `msg.value = 100 * maxFee + 99` the inclusive form lands one wei higher, which would
         // overspend `msg.value` by that wei.
-        uint256 fee = _feeOn(ethConsumed, false);
+        uint256 fee = _chargeFee(ethConsumed, false);
+        // The inclusive basis can land a wei above the exact-input reserve at full consumption; clamp
+        // so the buyer is never overspent. The clamped wei (at most one, and only at this rounding
+        // edge) is not carried — the same sub-wei rounding the fee has always shed here.
         if (fee > maxFee) fee = maxFee;
 
         _distributeFee(fee);
@@ -718,10 +742,7 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
 
         _sendEth(msg.sender, unspent); // after unlock returns, never inside it
 
-        uint256 expected = holderEth + fee;
-        if (address(this).balance < expected) {
-            revert ShardErrorsV1.FeeEthMissing(expected, address(this).balance);
-        }
+        _verifyFeeHeld(holderEth, fee);
     }
 
     /// @notice One NFT in, ETH out. The artwork is destroyed.
@@ -788,7 +809,7 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
             abi.decode(poolManager.unlock(abi.encode(Action.SELL, count * ShardConstantsV1.SHARDS_PER_NFT)), (uint256));
 
         // Inclusive: the pool released `ethOut` in total, so the fee is 1% of that.
-        uint256 fee = _feeOn(ethOut, true);
+        uint256 fee = _chargeFee(ethOut, true);
         payout = ethOut - fee;
         if (payout < minEthOut) revert ShardErrorsV1.SlippageExceeded(minEthOut, payout);
 
@@ -1064,5 +1085,13 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
         if (amount == 0) return;
         (bool ok,) = to.call{ value: amount }("");
         if (!ok) revert ShardErrorsV1.EthTransferFailed();
+    }
+
+    /// @dev Post-condition shared by every buy path: after the refund, the hook must still hold the
+    ///      ETH it owes fee claimants (`holderEth` from before the buy plus this buy's `fee`). A buy
+    ///      that dipped into claimant ETH would fail here.
+    function _verifyFeeHeld(uint256 holderEth, uint256 fee) private view {
+        uint256 expected = holderEth + fee;
+        if (address(this).balance < expected) revert ShardErrorsV1.FeeEthMissing(expected, address(this).balance);
     }
 }

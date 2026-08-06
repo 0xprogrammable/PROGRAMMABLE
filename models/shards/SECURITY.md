@@ -142,9 +142,11 @@ explicit bounds rather than any price oracle:
   a contract that cannot be upgraded. Use `donate()` or `ShardFeeForwarderV1`.
 - **Claims require the holder to act.** Holding accrues value in the accumulator, but `claim` needs the token ids
   passed in — the hook does not track which ids an address holds. It is not a keeper interface.
-- **Sub-100-wei swaps pay no pool fee.** The pool-level 1% fee itself (`_feeOn` in `src/ShardHookV1.sol`) still
-  floors: a swap whose gross ETH is below 100 wei produces a zero total fee, because pool claims are integer wei.
-  This is economically negligible and is distinct from the operator split, which is cumulative and does not floor
-  per swap. Once a fee is charged, the builder and launcher cuts are conserved to the wei and never floored away.
+- **The 1% fee is cumulative on both bases.** The pool-level fee (`_chargeFee` in `src/ShardHookV1.sol`) carries its
+  per-swap remainder (`feeCarryIn` for exact-input, `feeCarryOut` for exact-output), so a stream of tiny swaps
+  accrues the same total 1% as one aggregated swap instead of each flooring to zero. A single swap may still take
+  zero for itself until its sub-wei share accumulates to one wei. The only residual is `buyMax`, which clamps the fee
+  to its exact-input reserve at full consumption and sheds at most one wei at that rounding boundary — economically
+  negligible. Once charged, the builder and launcher cuts are conserved to the wei and never floored away.
 
 This file does not claim an audit.

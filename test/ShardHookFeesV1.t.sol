@@ -55,16 +55,17 @@ contract FeeHookHarness is ShardHookV1 {
         )
     { }
 
-    function sweep() external {
-        _sweepClaims();
-    }
+    uint256 internal constant OP_SWEEP = 0;
+    uint256 internal constant OP_FABRICATE = 1;
+    uint256 internal constant OP_SETTLE = 2;
 
-    function fabricateHolder(uint256 tokenId, address to) external {
-        _acquireAccounting(tokenId, to);
-    }
-
-    function settleFor(uint256 tokenId, address owner) external {
-        _settle(tokenId, owner);
+    /// @dev The three test-only hooks are merged into one entry point: as the production hook grew,
+    ///      three separate external wrappers pushed this harness past EIP-170 and broke
+    ///      `forge build --sizes`. One dispatcher keeps the harness deployable.
+    function harness(uint256 op, uint256 tokenId, address who) external {
+        if (op == OP_SWEEP) _sweepClaims();
+        else if (op == OP_FABRICATE) _acquireAccounting(tokenId, who);
+        else _settle(tokenId, who);
     }
 }
 
@@ -420,12 +421,12 @@ contract ShardHookFeesV1Test is Test {
 
     function test_feeReachesAccumulatorWhenHoldersExist() public {
         hook.initialise();
-        hook.fabricateHolder(1, alice);
+        hook.harness(1, 1, alice); // OP_FABRICATE
         vm.roll(block.number + 1); // the same-block accrual guard
 
         _swap(true, -int256(UNDER_CAP_ETH), UNDER_CAP_ETH); // sized to the 50 SHARD swap cap
 
-        hook.settleFor(1, alice);
+        hook.harness(2, 1, alice); // OP_SETTLE
         // The sole holder receives the holder share of the 4e12 fee, not the whole fee.
         assertEq(hook.claimable(alice), 32e11, "holder did not receive the holder share");
         assertEq(hook.claimable(alice), _holderShare(UNDER_CAP_ETH / 100), "holder share disagrees with the rule");
@@ -445,7 +446,7 @@ contract ShardHookFeesV1Test is Test {
         assertEq(address(hook).balance, 0, "unexpected real ETH before sweep");
         assertEq(_feesHeld(), _feesAccounted(), "claims do not cover accounted fees");
 
-        hook.sweep();
+        hook.harness(0, 0, address(0)); // OP_SWEEP
         assertEq(address(hook).balance, _feesAccounted(), "sweep did not realise ETH");
         assertEq(manager.balanceOf(address(hook), CurrencyLibrary.ADDRESS_ZERO.toId()), 0, "claims not fully burned");
     }

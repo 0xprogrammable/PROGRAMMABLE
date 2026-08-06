@@ -122,7 +122,8 @@
     "operatorSplit": "the operator cut is split evenly between builder and launcher, with the odd wei carried to the launcher (operatorSplitParity), so over any stream both cuts stay within one wei of the ideal cumulative 10% and the launcher is never shorted below the builder in absolute accrual",
     "conservation": "builderCut + launcherCut + holderAmount == fee on every call",
     "launcherFeeRecipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c; an immutable constant in ShardLaunchFactoryV1, not a constructor argument, and the same address Classic v3 uses; the factory cannot route the launcher share elsewhere",
-    "feeOnFloor": "the pool-level 1% fee itself (_feeOn in ShardHookV1) still floors: a swap whose gross ETH is below 100 wei produces a zero total fee, because pool claims are integer wei; economically negligible and distinct from the cumulative operator split above"
+    "outerFeeCarry": "the pool-level 1% fee is cumulative on both bases: the per-swap floor is carried (feeCarryIn for exact-input, feeCarryOut for exact-output) so a stream of tiny swaps accrues the same total as one aggregated swap rather than each flooring to zero; a single swap may still take zero for itself until its sub-wei share accumulates to one wei",
+    "outerFeeResidual": "buyMax clamps the fee to its exact-input reserve at full consumption, shedding at most one wei at that rounding boundary; economically negligible"
   },
   "rewards": {
     "currency": "native ETH",

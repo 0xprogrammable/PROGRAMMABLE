@@ -56,6 +56,10 @@ contract FeeSplitHarness is ShardHookV1 {
     function distributeFee(uint256 amount) external {
         _distributeFee(amount);
     }
+
+    function chargeFee(uint256 gross, bool exactIn) external returns (uint256) {
+        return _chargeFee(gross, exactIn);
+    }
 }
 
 contract SplitSwapRouter is IUnlockCallback {
@@ -278,6 +282,50 @@ contract ShardFeeSplitV1Test is Test {
         assertApproxEqAbs(builder, (total * 1000) / BPS, 1, "builder not cumulative-exact");
         assertGe(launcher, builder, "launcher shorted vs builder");
         assertLe(launcher - builder, 1, "split drifted beyond one wei");
+    }
+
+    /*//////////////////////////////////////////////////////////
+                     OUTER (1%) FEE IS CUMULATIVE
+    //////////////////////////////////////////////////////////*/
+
+    /// The exact-input 1% fee (beforeSwap/afterSwap for zeroForOne-exactIn and oneForZero-exactIn,
+    /// and the sellNFT/sellMany paths) carries its sub-wei remainder: eleven 99-wei swaps accrue the
+    /// same total as one aggregated 1,089-wei swap, instead of each flooring to zero. Regression for
+    /// the reviewer's fragmented-swap evasion. `hook` starts each test with zeroed carries.
+    function test_outerFee_exactInFragmentedMatchesAggregated() public {
+        uint256 fragmented;
+        for (uint256 i = 0; i < 11; i++) {
+            fragmented += hook.chargeFee(99, true);
+        }
+        assertGt(fragmented, 0, "eleven 99-wei exact-input swaps still floored the fee to zero");
+        assertEq(fragmented, (11 * 99 * FEE_BPS) / BPS, "fragmented exact-input fee != cumulative 1%");
+    }
+
+    /// The exact-output 1% gross-up (net*100/9900 — the exactOut quadrants and the buyNFT/buyMany/
+    /// buyMax market paths) carries the same way: eleven 50-wei nets each floor to zero alone but
+    /// accrue the aggregated 1% of 550.
+    function test_outerFee_exactOutFragmentedMatchesAggregated() public {
+        uint256 fragmented;
+        for (uint256 i = 0; i < 11; i++) {
+            fragmented += hook.chargeFee(50, false);
+        }
+        assertGt(fragmented, 0, "eleven 50-wei exact-output swaps still floored the fee to zero");
+        assertEq(fragmented, (11 * 50 * FEE_BPS) / (BPS - FEE_BPS), "fragmented exact-output fee != cumulative 1%");
+    }
+
+    /// Split-invariant across any stream and either basis: the carried fee never over- or
+    /// under-collects beyond the final sub-wei remainder.
+    function testFuzz_outerFeeIsCumulative(uint256[] memory raw, bool exactIn) public {
+        vm.assume(raw.length > 0 && raw.length <= 64);
+        uint256 denom = exactIn ? BPS : BPS - FEE_BPS;
+        uint256 total;
+        uint256 charged;
+        for (uint256 i = 0; i < raw.length; i++) {
+            uint256 gross = raw[i] % 1e18;
+            total += gross;
+            charged += hook.chargeFee(gross, exactIn);
+        }
+        assertEq(charged, (total * FEE_BPS) / denom, "carried fee drifted from the cumulative 1%");
     }
 
     /*//////////////////////////////////////////////////////////
