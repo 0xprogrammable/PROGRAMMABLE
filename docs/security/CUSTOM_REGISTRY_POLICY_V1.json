@@ -1,0 +1,84 @@
+{
+  "schemaVersion": "programmable.custom-registry-policy.v1",
+  "status": "frozen-predeployment",
+  "chainId": "1",
+  "chainProfileId": "ethereum-mainnet-v1",
+  "registryGeneration": "1",
+  "minimumFinalityBlocks": "64",
+  "defaultAdminDelaySeconds": "172800",
+  "soliditySourceCommit": "c988ac29b4e6cbcf9f3b2161bcb2013dce3d5ad2",
+  "publicIdentity": {
+    "platformId": "programmable",
+    "category": "custom",
+    "displayLabel": "Programmable Custom"
+  },
+  "administration": {
+    "defaultAdmin": "0x2bb333d48dfaf1596d9036671d2e43168994249e",
+    "approvalAndWriterRolesMustBeDistinct": true,
+    "programmableFeeRecipient": "0x4957f49620aff3adbbe8195a4f633e49cc93376c",
+    "adminMayRedirectOrClaimProgrammableFees": false
+  },
+  "intake": {
+    "aeon": {
+      "providerId": "aeon",
+      "repositoryUrl": "https://github.com/0xprogrammable/aeon-launch-models",
+      "repositoryId": "1325324453",
+      "repositoryOwnerId": "309941960",
+      "catalogEntryIsLaunchApproval": false
+    },
+    "generic": {
+      "repositoryUrl": "https://github.com/0xprogrammable/programmable-registry/submissions",
+      "repositoryId": "1320171831",
+      "repositoryOwnerId": "309941960",
+      "status": "prelaunch",
+      "publicSubmissionsEnabled": false
+    }
+  },
+  "fees": {
+    "programmableNativeCustom": {
+      "totalFeeBps": 10,
+      "nativeCustomFeeBps": 10,
+      "partnerFeeBps": 0,
+      "programmableFeeBps": 10,
+      "chargeMode": "added-on-top-for-approved-qualifying-market-path"
+    },
+    "aeonPartnerCustom": {
+      "totalFeeBps": 20,
+      "nativeCustomFeeBps": 0,
+      "partnerFeeBps": 15,
+      "programmableFeeBps": 5,
+      "chargeMode": "included-in-approved-hook-fee",
+      "additionalProgrammableNativeFeeBps": 0
+    },
+    "noQualifyingMarket": {
+      "totalFeeBps": 0,
+      "nativeCustomFeeBps": 0,
+      "partnerFeeBps": 0,
+      "programmableFeeBps": 0
+    }
+  },
+  "artifacts": {
+    "hashSpecification": "CUSTOM_REGISTRY_HASH_SPEC_V1.md",
+    "eventSet": "CUSTOM_REGISTRY_EVENT_SET_V1.json",
+    "registryAbi": "abi/ProgrammableCustomRegistryV1.json",
+    "partnerFactoryRegistryAbi": "abi/ProgrammableCustomPartnerFactoryRegistryV1.json",
+    "feePolicyVerifierAbi": "abi/ProgrammableCustomFeePolicyVerifierV1.json",
+    "atomicRegistrarAbi": "abi/ProgrammableCustomAtomicRegistrarV1.json"
+  },
+  "activation": {
+    "registryStatusBeforeDeployment": "prelaunch",
+    "placeholderAddressesAllowed": false,
+    "realAddressAndStartBlockRequired": true,
+    "sameTransactionDeploymentAndRegistrationRequired": true,
+    "oneFinalizedCanaryRequired": true,
+    "publicSurfaceParityRequired": [
+      "registry",
+      "website",
+      "explorer",
+      "profile",
+      "discovery",
+      "api",
+      "developer-manifest"
+    ]
+  }
+}

@@ -15,6 +15,18 @@ const contracts = [
   ["ProgrammableCustomAtomicRegistrarV1", "ProgrammableCustomAtomicRegistrarV1.sol"],
 ];
 
+const expectedChainProfileHash =
+  "sha256:30991a4ebef393737148f7986c880a4af602691e059ad428aa9ca17c6b4066ff";
+const expectedRegistryPolicyHash =
+  "sha256:7a814ecb2d2b8be2debb29481f25f06e976559eec41fa7c8d92e030ec69fc9ff";
+const expectedArtifactFileHashes = new Map([
+  ["CUSTOM_REGISTRY_EVENT_SET_V1.json", "sha256:47323a4162b1429d70b8828f0061d25e386f0808b2e22fd13f0cc2ad661c4898"],
+  ["abi/ProgrammableCustomRegistryV1.json", "sha256:270d186ceb684d2c44f144de6d63a3b278081ca476d537b3a7fcd8952ce8d74e"],
+  ["abi/ProgrammableCustomPartnerFactoryRegistryV1.json", "sha256:0401b53b147d8c9ee6d16578d6a362ed6c88de897bc4c6b341118222299872a3"],
+  ["abi/ProgrammableCustomFeePolicyVerifierV1.json", "sha256:dc3d35c26cb4daeee2d8c61a8fddc91ed981e974312ac29e942ca567eab1debf"],
+  ["abi/ProgrammableCustomAtomicRegistrarV1.json", "sha256:c8822824b4b0956be3cd71cf4d9d2fbe04a703409272a906a2e784d6a9f0d88a"],
+]);
+
 function fail(message) {
   throw new Error(message);
 }
@@ -40,6 +52,51 @@ function topic0(signature) {
   const result = spawnSync("cast", ["sig-event", signature], { encoding: "utf8" });
   if (result.status !== 0) fail(`cast sig-event failed for ${signature}: ${result.stderr.trim()}`);
   return result.stdout.trim();
+}
+
+function domainSeparatedHash(domain, value) {
+  return `sha256:${createHash("sha256")
+    .update(domain, "utf8")
+    .update(Buffer.from([0]))
+    .update(canonical(value), "utf8")
+    .digest("hex")}`;
+}
+
+const securityRoot = join(root, "docs", "security");
+const chainProfile = readJson(join(securityRoot, "CUSTOM_REGISTRY_CHAIN_PROFILE_V1.json"));
+const registryPolicy = readJson(join(securityRoot, "CUSTOM_REGISTRY_POLICY_V1.json"));
+if (domainSeparatedHash("programmable.evm-chain-profile.v1", chainProfile)
+  !== expectedChainProfileHash) fail("chain-profile hash drift");
+if (domainSeparatedHash("programmable.custom-registry-policy.v1", registryPolicy)
+  !== expectedRegistryPolicyHash) fail("registry-policy hash drift");
+if (
+  chainProfile.chainId !== "1"
+  || chainProfile.profileId !== "ethereum-mainnet-v1"
+  || chainProfile.finality?.mode !== "finalized-tag"
+  || registryPolicy.chainId !== chainProfile.chainId
+  || registryPolicy.chainProfileId !== chainProfile.profileId
+  || registryPolicy.registryGeneration !== "1"
+  || registryPolicy.minimumFinalityBlocks !== "64"
+  || registryPolicy.defaultAdminDelaySeconds !== "172800"
+  || registryPolicy.administration?.programmableFeeRecipient
+    !== "0x4957f49620aff3adbbe8195a4f633e49cc93376c"
+  || registryPolicy.administration?.defaultAdmin
+    !== "0x2bb333d48dfaf1596d9036671d2e43168994249e"
+  || registryPolicy.intake?.aeon?.providerId !== "aeon"
+  || registryPolicy.intake?.generic?.status !== "prelaunch"
+  || registryPolicy.intake?.generic?.publicSubmissionsEnabled !== false
+  || registryPolicy.fees?.programmableNativeCustom?.totalFeeBps !== 10
+  || registryPolicy.fees?.aeonPartnerCustom?.totalFeeBps !== 20
+  || registryPolicy.fees?.aeonPartnerCustom?.partnerFeeBps !== 15
+  || registryPolicy.fees?.aeonPartnerCustom?.programmableFeeBps !== 5
+  || registryPolicy.fees?.aeonPartnerCustom?.additionalProgrammableNativeFeeBps !== 0
+) fail("frozen Registry policy is invalid");
+
+for (const [relativePath, expectedHash] of expectedArtifactFileHashes) {
+  const actualHash = `sha256:${createHash("sha256")
+    .update(readFileSync(join(securityRoot, relativePath)))
+    .digest("hex")}`;
+  if (actualHash !== expectedHash) fail(`published artifact file hash drift: ${relativePath}`);
 }
 
 const builtEvents = [];
@@ -87,5 +144,5 @@ for (const event of builtEvents) {
 if (manifestKeys.size !== builtEvents.length) fail("event manifest contains an event absent from the built ABIs");
 
 process.stdout.write(
-  `verified ${contracts.length} published ABIs, ${builtEvents.length} event signatures, and ${eventSet.eventSetHash}\n`,
+  `verified ${contracts.length} published ABIs, ${builtEvents.length} event signatures, ${eventSet.eventSetHash}, ${expectedChainProfileHash}, and ${expectedRegistryPolicyHash}\n`,
 );

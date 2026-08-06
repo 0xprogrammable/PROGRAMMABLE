@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "1.0.0",
+  "profileId": "ethereum-mainnet-v1",
+  "profileVersion": "1.0.0",
+  "family": "evm-json-rpc",
+  "chainId": "1",
+  "finality": {
+    "mode": "finalized-tag"
+  },
+  "stateReadBlockReference": "eip1898-block-hash",
+  "maxResultBytes": 1048576
+}
