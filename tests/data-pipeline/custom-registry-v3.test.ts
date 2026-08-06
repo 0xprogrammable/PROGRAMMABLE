@@ -1518,7 +1518,7 @@ describe("Custom Registry v3 official-origin projection", () => {
     ).toThrow();
   });
 
-  it("normalizes native 10 BPS and preserves partner attribution on a no-market zero-fee launch", () => {
+  it("normalizes native 10 BPS", () => {
     const nativeSource = staticRecord("native-fee", false, true);
     const nativeEvent = event("native-fee", "registered", {
       record: nativeSource,
@@ -1535,7 +1535,9 @@ describe("Custom Registry v3 official-origin projection", () => {
       partnerShareBps: 0,
       normalProgrammableTenBpsApplied: true,
     });
+  });
 
+  it("preserves partner and template origin while a project-only launch has exact zero fee attribution", () => {
     const attributedSource = staticRecord("partner-no-market", true, false);
     const attributedEvent = event("partner-no-market", "registered", {
       record: attributedSource,
@@ -1552,6 +1554,7 @@ describe("Custom Registry v3 official-origin projection", () => {
     ).item.record;
     expect(attributed).toMatchObject({
       partner: { id: "future-partner-partner-no-market" },
+      template: { id: "partner-template-partner-no-market", version: "1" },
       markets: [],
       feePolicy: {
         mode: "no-qualifying-market",
@@ -1559,6 +1562,22 @@ describe("Custom Registry v3 official-origin projection", () => {
         programmableShareBps: 0,
         partnerShareBps: 0,
         partnerRecipient: null,
+      },
+      rawProducerRecord: {
+        onchainFeePolicy: {
+          kind: 2,
+          partnerId: ZERO_BYTES32_TEST,
+          partnerStatusId: ZERO_BYTES32_TEST,
+          templateId: ZERO_BYTES32_TEST,
+          templateVersion: ZERO_BYTES32_TEST,
+          partnerRepositoryId: ZERO_BYTES32_TEST,
+          partnerCommitId: ZERO_BYTES32_TEST,
+          partnerRuntimeCodeSetHash: ZERO_BYTES32_TEST,
+          totalFeeBps: 0,
+          nativeCustomFeeBps: 0,
+          partner: zeroFeeLeg(),
+          programmable: zeroFeeLeg(),
+        },
       },
     });
   });

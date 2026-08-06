@@ -1474,7 +1474,7 @@ function validateFeePolicy(
   const partnerIdentity = fee.partnerRecipient === null
     ? null
     : record(fee.partnerRecipient, "custom-registry-partner-recipient");
-  const partnerRecipient = partnerIdentity === null
+  const feePartnerRecipient = partnerIdentity === null
     ? null
     : partnerIdentity.namespace === "eip155-address"
       ? address(partnerIdentity.value, "custom-registry-partner-recipient")
@@ -1580,7 +1580,7 @@ function validateFeePolicy(
   if (fee.mode === "native") {
     if (
       expectedPartnerRecipient !== null ||
-      partnerRecipient !== null ||
+      feePartnerRecipient !== null ||
       fee.chargeMode !== "verified-official-market-path-only" ||
       fee.totalFeeBps !== 10 ||
       fee.partnerShareBps !== 0 ||
@@ -1616,7 +1616,7 @@ function validateFeePolicy(
   if (fee.mode === "partner-template") {
     if (
       expectedPartnerRecipient === null ||
-      partnerRecipient !== expectedPartnerRecipient ||
+      feePartnerRecipient !== expectedPartnerRecipient ||
       fee.chargeMode !== "template-native-verified-market-path" ||
       fee.totalFeeBps !== 20 ||
       fee.partnerShareBps !== 15 ||
@@ -1646,7 +1646,7 @@ function validateFeePolicy(
       programmableShareBps: 5,
       partnerRecipient: Object.freeze({
         namespace: "eip155-address" as const,
-        value: partnerRecipient,
+        value: feePartnerRecipient,
       }),
       normalProgrammableTenBpsApplied: false,
       verificationStatus: "verified",
@@ -1654,7 +1654,7 @@ function validateFeePolicy(
   }
   if (
     fee.mode !== "no-qualifying-market" ||
-    partnerRecipient !== null ||
+    feePartnerRecipient !== null ||
     fee.chargeMode !== "none-no-qualifying-market" ||
     fee.totalFeeBps !== 0 ||
     fee.partnerShareBps !== 0 ||
