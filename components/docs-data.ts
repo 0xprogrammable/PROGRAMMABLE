@@ -53,7 +53,7 @@ export const docsSearchItems: DocsSearchItem[] = [
   {
     title: "Launch provider integration",
     description:
-      "Register Basebit and future provider templates through authenticated atomic provenance.",
+      "Register approved external hook launches through authenticated atomic provenance in the Custom Registry.",
     href: "/docs/developers#providers",
   },
   {

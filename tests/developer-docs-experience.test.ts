@@ -23,6 +23,7 @@ const docsSearch = readFileSync(
   join(root, "components/docs-search.tsx"),
   "utf8",
 );
+const docsData = readFileSync(join(root, "components/docs-data.ts"), "utf8");
 const workbench = readFileSync(
   join(root, "components/developer-docs-workbench.tsx"),
   "utf8",
@@ -44,6 +45,9 @@ describe("Developer documentation experience", () => {
 
   it("keeps search result keys unique when several terms point to one section", () => {
     expect(docsSearch).toContain("key={`${item.href}:${item.title}`}");
+    expect(docsData).toContain("approved external hook launches");
+    expect(docsData).toContain("Custom Registry");
+    expect(docsData).not.toContain("Basebit");
   });
 
   it("provides copy-ready examples and machine-readable entry points", () => {
