@@ -481,11 +481,31 @@ export interface LaunchEligibilityViewV2 {
   readonly schemaVersion: "programmable.launch-eligibility-view.v3";
   readonly applicationId: string;
   readonly applicationHandle: ApplicationHandleV3;
+  readonly grantId: string;
+  readonly grantBindingHash: Sha256DigestV2;
   readonly state: "pending" | "active" | "suspended" | "revoked" | "expired";
   readonly launchAllowed: boolean;
   readonly receiptDigest: string;
   readonly validFrom: string;
   readonly validUntil: string;
+}
+
+export interface PrincipalLaunchAuthorityRefreshRequestV1 {
+  readonly schemaVersion: "programmable.principal-launch-authority-refresh-request.v1";
+}
+
+export interface PrincipalLaunchAuthorityRefreshViewV1 {
+  readonly schemaVersion: "programmable.principal-launch-authority-refresh.v1";
+  readonly state: "pending" | "current" | "failed";
+  readonly requestId: string;
+  readonly requestDigest: Sha256DigestV2;
+  readonly applicationId: string;
+  readonly applicationHandle: ApplicationHandleV3;
+  readonly grantId: string;
+  readonly grantBindingHash: Sha256DigestV2;
+  readonly requestedAt: string;
+  readonly observationHash: Sha256DigestV2 | null;
+  readonly validUntil: string | null;
 }
 
 export interface CustomLaunchWebsiteErrorV2 {
@@ -749,6 +769,8 @@ export const CUSTOM_LAUNCH_WEBSITE_API_V2 = Object.freeze({
     `/api/custom-launch/v3/applications/${encodeURIComponent(applicationHandle)}`,
   launchEligibility: (applicationHandle: ApplicationHandleV3) =>
     `/api/custom-launch/v3/applications/${encodeURIComponent(applicationHandle)}/launch-eligibility`,
+  launchAuthorityRefresh: (applicationHandle: ApplicationHandleV3) =>
+    `/api/custom-launch/v3/applications/${encodeURIComponent(applicationHandle)}/launch-authority-refresh`,
   launchDescriptor: (applicationHandle: ApplicationHandleV3) =>
     `/api/custom-launch/v3/applications/${encodeURIComponent(applicationHandle)}/launch-descriptor`,
   launchExecutionStatus: (input: Readonly<{

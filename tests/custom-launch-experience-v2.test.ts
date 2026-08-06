@@ -10,6 +10,7 @@ import {
   assertBrowserWalletExecutionBinding,
   assertLaunchExecutionStatusBinding,
   assertLaunchSetupBindings,
+  assertSamePrincipalApplicationRevisionV1,
   buildPresentationDraftFromForm,
   buildCustomLaunchSelection,
   configurationControlForKind,
@@ -117,7 +118,7 @@ function application(): PrincipalCustomLaunchApplicationSummaryV2 {
     correctionCount: 0,
     correctionPreview: [],
     receiptDigest: digest("5"),
-    launchEntitlementBindingHash: digest("6"),
+    launchEntitlementBindingHash: digest("1"),
     updatedAt: "2026-08-05T12:00:00.000Z",
   };
 }
@@ -637,6 +638,8 @@ describe("custom launch browser authority", () => {
       schemaVersion: "programmable.launch-eligibility-view.v3" as const,
       applicationId: "application-1",
       applicationHandle: APPLICATION_HANDLE,
+      grantId: "123e4567-e89b-42d3-a456-426614174002",
+      grantBindingHash: digest("1"),
       state: "active" as const,
       launchAllowed: true,
       receiptDigest: digest("5"),
@@ -668,6 +671,18 @@ describe("custom launch browser authority", () => {
       application: application(),
       eligibility,
       descriptor: { ...descriptor(), applicationId: "application-2" },
+      presentation: presentationResponse(),
+    })).toThrow("binding mismatch");
+    expect(() => assertLaunchSetupBindings({
+      application: application(),
+      eligibility: { ...eligibility, grantId: "123e4567-e89b-42d3-a456-426614174099" },
+      descriptor: descriptor(),
+      presentation: presentationResponse(),
+    })).toThrow("binding mismatch");
+    expect(() => assertLaunchSetupBindings({
+      application: application(),
+      eligibility: { ...eligibility, grantBindingHash: digest("9") },
+      descriptor: descriptor(),
       presentation: presentationResponse(),
     })).toThrow("binding mismatch");
     expect(() => assertLaunchSetupBindings({
@@ -715,6 +730,21 @@ describe("custom launch browser authority", () => {
       descriptor: descriptor(),
       presentation: presentationResponse(),
     })).toThrow("binding mismatch");
+  });
+
+  it("accepts only the same exact GitHub revision across refresh and refetch", () => {
+    expect(() => assertSamePrincipalApplicationRevisionV1(
+      { ...application(), state: "ready_for_registration" },
+      application(),
+    )).not.toThrow();
+    expect(() => assertSamePrincipalApplicationRevisionV1(
+      application(),
+      { ...application(), commitOid: "b".repeat(40) },
+    )).toThrow("different GitHub revision");
+    expect(() => assertSamePrincipalApplicationRevisionV1(
+      application(),
+      { ...application(), launchEntitlementBindingHash: digest("9") },
+    )).toThrow("different GitHub revision");
   });
 
   it("rejects self-consistent wallet actions substituted across grant, chain, value, or sender", () => {
@@ -1175,7 +1205,13 @@ describe("custom launch browser authority", () => {
       action: "View reason",
       tone: "warning",
     });
+    expect(customApplicationDisplayState("ready_for_registration")).toEqual({
+      title: "Ready for final verification",
+      action: "Finish verification",
+      tone: "pending",
+    });
     expect(states.filter(customApplicationOpensLaunchExperience)).toEqual([
+      "ready_for_registration",
       "approved",
       "launching",
       "launched",

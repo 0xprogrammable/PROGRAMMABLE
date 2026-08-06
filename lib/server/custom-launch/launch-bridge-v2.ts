@@ -26,6 +26,7 @@ export type CustomLaunchBridgeOperationV2 =
   | Readonly<{ kind: "application-list" }>
   | Readonly<{ kind: "application-status"; applicationHandle: string }>
   | Readonly<{ kind: "launch-eligibility"; applicationHandle: string }>
+  | Readonly<{ kind: "launch-authority-refresh"; applicationHandle: string }>
   | Readonly<{ kind: "launch-descriptor"; applicationHandle: string }>
   | Readonly<{ kind: "launch-presentation-read"; applicationHandle: string }>
   | Readonly<{ kind: "launch-presentation-commit"; applicationHandle: string }>
@@ -330,6 +331,12 @@ function resolveOperation(operation: CustomLaunchBridgeOperationV2): Readonly<{
     return {
       method: "GET",
       servicePath: `/v3/applications/${applicationHandle(operation.applicationHandle)}/launch-eligibility`,
+    };
+  }
+  if (operation.kind === "launch-authority-refresh") {
+    return {
+      method: "POST",
+      servicePath: `/v3/applications/${applicationHandle(operation.applicationHandle)}/launch-authority-refresh`,
     };
   }
   if (operation.kind === "launch-descriptor") {

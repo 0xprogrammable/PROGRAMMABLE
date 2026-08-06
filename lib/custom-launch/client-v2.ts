@@ -23,6 +23,8 @@ import type {
   LaunchSessionPreparationViewV2,
   PrincipalCustomLaunchApplicationListV2,
   PrincipalCustomLaunchApplicationPageV2,
+  PrincipalLaunchAuthorityRefreshRequestV1,
+  PrincipalLaunchAuthorityRefreshViewV1,
   PrincipalLaunchPresentationCommitRequestV1,
   PrincipalLaunchPresentationResponseV1,
   Sha256DigestV2,
@@ -63,6 +65,7 @@ export function createCustomLaunchWebsiteClientV2(input: Readonly<{
     body: object,
     schemaVersion: string,
     method: "POST" | "PUT" = "POST",
+    validateStatus?: (status: number, value: T) => void,
   ): Promise<T> => requestJsonV2<T>(fetchV2, path, {
     method,
     headers: {
@@ -71,7 +74,7 @@ export function createCustomLaunchWebsiteClientV2(input: Readonly<{
       "idempotency-key": idempotencyKey,
     },
     body: JSON.stringify(body),
-  }, schemaVersion);
+  }, schemaVersion, validateStatus);
   const read = async <T>(path: string, schemaVersion: string): Promise<T> =>
     requestJsonV2<T>(fetchV2, path, {
       method: "GET",
@@ -105,6 +108,24 @@ export function createCustomLaunchWebsiteClientV2(input: Readonly<{
       return read(
         CUSTOM_LAUNCH_WEBSITE_API_V2.launchEligibility(applicationHandle),
         "programmable.launch-eligibility-view.v3",
+      );
+    },
+    launchAuthorityRefresh(
+      applicationHandle: ApplicationHandleV3,
+      request: PrincipalLaunchAuthorityRefreshRequestV1,
+      idempotencyKey: string,
+    ): Promise<PrincipalLaunchAuthorityRefreshViewV1> {
+      return write(
+        CUSTOM_LAUNCH_WEBSITE_API_V2.launchAuthorityRefresh(applicationHandle),
+        idempotencyKey,
+        request,
+        "programmable.principal-launch-authority-refresh.v1",
+        "POST",
+        (status, value) => {
+          const valid = (status === 202 && value.state === "pending")
+            || (status === 200 && (value.state === "current" || value.state === "failed"));
+          if (!valid) throw new TypeError("launch authority refresh HTTP state mismatch");
+        },
       );
     },
     launchDescriptor(applicationHandle: ApplicationHandleV3): Promise<LaunchDescriptorV2> {
@@ -238,6 +259,7 @@ async function requestJsonV2<T>(
   path: string,
   init: RequestInit,
   expectedSchemaVersion: string,
+  validateStatus?: (status: number, value: T) => void,
 ): Promise<T> {
   const response = await fetchV2(path, {
     ...init,
@@ -273,7 +295,9 @@ async function requestJsonV2<T>(
     );
   }
   try {
-    return parseCustomLaunchApiResponseV2<T>(value, expectedSchemaVersion);
+    const parsed = parseCustomLaunchApiResponseV2<T>(value, expectedSchemaVersion);
+    validateStatus?.(response.status, parsed);
+    return parsed;
   } catch {
     throw new CustomLaunchWebsiteRequestErrorV2(502, "response_contract_mismatch");
   }

@@ -48,6 +48,16 @@ import {
   pollBrowserWalletGrantReissueV1,
   type BrowserWalletGrantReissueIdentityV1,
 } from "@/lib/custom-launch/grant-reissue-v1";
+import {
+  LaunchAuthorityRefreshBindingErrorV1,
+  LaunchAuthorityRefreshCancelledErrorV1,
+  LaunchAuthorityRefreshFailedErrorV1,
+  LaunchAuthorityRefreshSingleFlightV1,
+  launchAuthorityObservationMatchesSetupV1,
+  launchAuthorityRefreshIdempotencyKeyV1,
+  launchAuthorityRefreshRequiredV1,
+  pollPrincipalLaunchAuthorityRefreshV1,
+} from "@/lib/custom-launch/launch-authority-refresh-v1";
 import type {
   ApplicationHandleV3,
   AuthorizedLaunchPermitViewV2,
@@ -61,6 +71,7 @@ import type {
   LaunchExecutionStatusViewV2,
   LaunchPresentationDraftV1,
   PrincipalCustomLaunchApplicationSummaryV2,
+  PrincipalLaunchAuthorityRefreshViewV1,
   PrincipalLaunchPresentationResponseV1,
   TrustedLaunchPermitSignerV2,
   UntrustedLaunchWalletSelectionV2,
@@ -245,7 +256,7 @@ export function customApplicationDisplayState(
     in_review: { title: "Review in progress", action: "View review", tone: "pending" },
     changes_required: { title: "Changes needed", action: "Open requested changes", tone: "warning" },
     platform_pending: { title: "Verification still running", action: "View on GitHub", tone: "pending" },
-    ready_for_registration: { title: "Ready for final verification", action: "View on GitHub", tone: "pending" },
+    ready_for_registration: { title: "Ready for final verification", action: "Finish verification", tone: "pending" },
     approved: { title: "Ready to launch", action: "Set up launch", tone: "ready" },
     superseded: { title: "New version submitted", action: "View current version", tone: "muted" },
     expired: { title: "Approval expired", action: "View on GitHub", tone: "warning" },
@@ -259,7 +270,10 @@ export function customApplicationDisplayState(
 export function customApplicationOpensLaunchExperience(
   state: CustomLaunchApplicationStateV2,
 ): boolean {
-  return state === "approved" || state === "launching" || state === "launched";
+  return state === "ready_for_registration"
+    || state === "approved"
+    || state === "launching"
+    || state === "launched";
 }
 
 export function buildCustomLaunchSelection(input: Readonly<{
@@ -323,6 +337,9 @@ export function assertLaunchSetupBindings(input: Readonly<{
     || application.launchEntitlementBindingHash === null
     || eligibility.applicationId !== application.applicationId
     || eligibility.applicationHandle !== application.applicationHandle
+    || eligibility.grantId !== descriptor.grantId
+    || eligibility.grantBindingHash !== descriptor.grantBindingHash
+    || eligibility.grantBindingHash !== application.launchEntitlementBindingHash
     || descriptor.applicationId !== application.applicationId
     || descriptor.applicationHandle !== application.applicationHandle
     || eligibility.receiptDigest !== application.receiptDigest
@@ -333,6 +350,25 @@ export function assertLaunchSetupBindings(input: Readonly<{
     application.applicationHandle,
     descriptor,
     presentation,
+  );
+}
+
+export function assertSamePrincipalApplicationRevisionV1(
+  expected: PrincipalCustomLaunchApplicationSummaryV2,
+  observed: PrincipalCustomLaunchApplicationSummaryV2,
+): void {
+  if (
+    observed.applicationId !== expected.applicationId
+    || observed.applicationHandle !== expected.applicationHandle
+    || observed.revisionId !== expected.revisionId
+    || observed.repositoryId !== expected.repositoryId
+    || observed.repositoryFullName !== expected.repositoryFullName
+    || observed.pullRequestNumber !== expected.pullRequestNumber
+    || observed.commitOid !== expected.commitOid
+    || observed.receiptDigest !== expected.receiptDigest
+    || observed.launchEntitlementBindingHash !== expected.launchEntitlementBindingHash
+  ) throw new LaunchAuthorityRefreshBindingErrorV1(
+    "Launch verification returned a different GitHub revision and was stopped",
   );
 }
 
@@ -1239,6 +1275,10 @@ export function CustomLaunchExperience({
   const applicationsRequestGenerationRef = useRef(0);
   const launchInFlightRef = useRef(false);
   const grantReissueSingleFlightRef = useRef(new BrowserWalletGrantReissueSingleFlightV1());
+  const launchAuthorityRefreshSingleFlightRef = useRef(
+    new LaunchAuthorityRefreshSingleFlightV1(),
+  );
+  const launchAuthorityRefreshAttemptRef = useRef(new Map<string, number>());
   const githubIdentityRef = useRef(githubUsername);
 
   const resetApplicationScopedState = useCallback(() => {
@@ -1321,6 +1361,142 @@ export function CustomLaunchExperience({
     flowGenerationRef.current += 1;
   }, []);
 
+  const loadVerifiedLaunchSetup = useCallback(async (input: Readonly<{
+    client: ReturnType<typeof createCustomLaunchWebsiteClientV2>;
+    application: PrincipalCustomLaunchApplicationSummaryV2;
+    generation: number;
+    forceFreshObservation?: boolean;
+  }>) => {
+    if (githubPrincipalHash === null) {
+      throw new Error("Sign in again with the GitHub account that opened this submission");
+    }
+    const isActive = () => input.generation === flowGenerationRef.current;
+    let currentApplication = input.application;
+    let refreshCompleted = false;
+    let refreshAuthority: PrincipalLaunchAuthorityRefreshViewV1 | null = null;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      if (!isActive()) throw new LaunchAuthorityRefreshCancelledErrorV1();
+      if (currentApplication.state === "ready_for_registration" && !refreshCompleted) {
+        setStatusMessage("Running final source verification");
+        const idempotencyKey = launchAuthorityRefreshIdempotencyKeyV1({
+          application: currentApplication,
+          attempt: launchAuthorityRefreshAttemptRef.current.get(
+            currentApplication.launchEntitlementBindingHash!,
+          ) ?? 0,
+        });
+        refreshAuthority = await launchAuthorityRefreshSingleFlightRef.current.run(
+          `${currentApplication.applicationHandle}:${idempotencyKey}`,
+          () => pollPrincipalLaunchAuthorityRefreshV1({
+            client: input.client,
+            application: currentApplication,
+            idempotencyKey,
+            isActive,
+          }),
+        );
+        refreshCompleted = true;
+        setStatusMessage("Final source verification complete");
+      }
+
+      const principalApplications = await readAllPrincipalApplicationsV2(input.client);
+      if (!isActive()) throw new LaunchAuthorityRefreshCancelledErrorV1();
+      if (principalApplications.githubPrincipalHash !== githubPrincipalHash) {
+        throw new LaunchAuthorityRefreshBindingErrorV1(
+          "The signed-in GitHub account changed during launch verification",
+        );
+      }
+      const freshApplication = principalApplications.applications.find(
+        ({ applicationHandle }) =>
+          applicationHandle === input.application.applicationHandle,
+      );
+      if (freshApplication === undefined) {
+        throw new LaunchAuthorityRefreshBindingErrorV1(
+          "This exact GitHub submission is no longer current",
+        );
+      }
+      assertSamePrincipalApplicationRevisionV1(input.application, freshApplication);
+      currentApplication = freshApplication;
+      if (currentApplication.state === "ready_for_registration") {
+        await delay(750);
+        continue;
+      }
+      if (currentApplication.state !== "approved") {
+        throw new LaunchAuthorityRefreshBindingErrorV1(
+          "This exact GitHub version is no longer approved to launch",
+        );
+      }
+
+      const [eligibility, launchDescriptor, currentPresentation] = await Promise.all([
+        input.client.launchEligibility(currentApplication.applicationHandle),
+        input.client.launchDescriptor(currentApplication.applicationHandle),
+        input.client.launchPresentation(currentApplication.applicationHandle).catch((caught) => {
+          if (caught instanceof CustomLaunchWebsiteRequestErrorV2 && caught.status === 404) {
+            return null;
+          }
+          throw caught;
+        }),
+      ]);
+      if (!isActive()) throw new LaunchAuthorityRefreshCancelledErrorV1();
+      assertLaunchSetupBindings({
+        application: currentApplication,
+        eligibility,
+        descriptor: launchDescriptor,
+        presentation: currentPresentation,
+      });
+      if (refreshAuthority !== null && !launchAuthorityObservationMatchesSetupV1({
+        refresh: refreshAuthority,
+        descriptor: launchDescriptor,
+        eligibility,
+      })) {
+        await delay(250);
+        continue;
+      }
+      if (!eligibility.launchAllowed || eligibility.state !== "active") {
+        throw new LaunchAuthorityRefreshBindingErrorV1(
+          "This exact GitHub version is not currently approved to launch",
+        );
+      }
+      defaultLaunchRoute(launchDescriptor);
+      if (launchAuthorityRefreshRequiredV1({
+        descriptor: launchDescriptor,
+        eligibility,
+        forceFreshObservation: input.forceFreshObservation === true,
+        refreshCompleted,
+      })) {
+        setStatusMessage("Renewing final source verification");
+        const currentValidUntil = Date.parse(launchDescriptor.validUntil)
+          <= Date.parse(eligibility.validUntil)
+          ? launchDescriptor.validUntil
+          : eligibility.validUntil;
+        const idempotencyKey = launchAuthorityRefreshIdempotencyKeyV1({
+          application: currentApplication,
+          currentValidUntil,
+          attempt: launchAuthorityRefreshAttemptRef.current.get(
+            currentApplication.launchEntitlementBindingHash!,
+          ) ?? 0,
+        });
+        refreshAuthority = await launchAuthorityRefreshSingleFlightRef.current.run(
+          `${currentApplication.applicationHandle}:${idempotencyKey}`,
+          () => pollPrincipalLaunchAuthorityRefreshV1({
+            client: input.client,
+            application: currentApplication,
+            idempotencyKey,
+            isActive,
+          }),
+        );
+        refreshCompleted = true;
+        continue;
+      }
+      return {
+        principalApplications,
+        application: currentApplication,
+        eligibility,
+        descriptor: launchDescriptor,
+        presentation: currentPresentation,
+      };
+    }
+    throw new Error("Final source verification is still being published. Try again shortly");
+  }, [githubPrincipalHash]);
+
   const openApplication = useCallback(async (
     application: PrincipalCustomLaunchApplicationSummaryV2,
   ) => {
@@ -1389,35 +1565,28 @@ export function CustomLaunchExperience({
         setStatusMessage("Launch complete");
         return;
       }
-      const [eligibility, launchDescriptor, currentPresentation] = await Promise.all([
-        client.launchEligibility(application.applicationHandle),
-        client.launchDescriptor(application.applicationHandle),
-        client.launchPresentation(application.applicationHandle).catch((caught) => {
-          if (caught instanceof CustomLaunchWebsiteRequestErrorV2 && caught.status === 404) {
-            return null;
-          }
-          throw caught;
-        }),
-      ]);
+      const setup = await loadVerifiedLaunchSetup({ client, application, generation });
       if (generation !== flowGenerationRef.current) return;
-      assertLaunchSetupBindings({
-        application,
-        eligibility,
-        descriptor: launchDescriptor,
-        presentation: currentPresentation,
-      });
-      if (!eligibility.launchAllowed || eligibility.state !== "active") {
-        throw new Error("This exact GitHub version is not currently approved to launch");
-      }
-      defaultLaunchRoute(launchDescriptor);
-      setDescriptor(launchDescriptor);
+      setApplications(setup.principalApplications.applications);
+      setSelected(setup.application);
+      setDescriptor(setup.descriptor);
       setConfiguration(Object.fromEntries(
-        launchDescriptor.configurationSchema.fields.map(({ fieldId }) => [fieldId, ""]),
+        setup.descriptor.configurationSchema.fields.map(({ fieldId }) => [fieldId, ""]),
       ));
-      setPresentation(presentationFormFromResponse(currentPresentation));
-      setPresentationVersion(currentPresentation?.version ?? 0);
+      setPresentation(presentationFormFromResponse(setup.presentation));
+      setPresentationVersion(setup.presentation?.version ?? 0);
     } catch (caught) {
       if (generation !== flowGenerationRef.current || caught instanceof LaunchFlowCancelledError) return;
+      if (
+        caught instanceof LaunchAuthorityRefreshFailedErrorV1
+        && application.launchEntitlementBindingHash !== null
+      ) {
+        const binding = application.launchEntitlementBindingHash;
+        launchAuthorityRefreshAttemptRef.current.set(
+          binding,
+          (launchAuthorityRefreshAttemptRef.current.get(binding) ?? 0) + 1,
+        );
+      }
       if (shouldClearLaunchRecoveryV2(caught)) {
         if (githubPrincipalHash !== null) {
           clearLaunchSession(githubPrincipalHash, application.applicationHandle);
@@ -1427,7 +1596,13 @@ export function CustomLaunchExperience({
     } finally {
       if (generation === flowGenerationRef.current) setSetupLoading(false);
     }
-  }, [getSession, githubPrincipalHash, markApplicationFinalized, resetApplicationScopedState]);
+  }, [
+    getSession,
+    githubPrincipalHash,
+    loadVerifiedLaunchSetup,
+    markApplicationFinalized,
+    resetApplicationScopedState,
+  ]);
 
   async function selectImage(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -1662,16 +1837,32 @@ export function CustomLaunchExperience({
     const isActive = () => generation === flowGenerationRef.current;
     setLaunchProgress("preparing");
     setStatusMessage("Preparing approved launch");
+    let activeDescriptor = descriptor;
     try {
       const client = createCustomLaunchWebsiteClientV2({ session: await getSession() });
       if (!isActive()) return;
+      const initialSetup = await loadVerifiedLaunchSetup({
+        client,
+        application: selected,
+        generation,
+      });
+      if (!isActive()) return;
+      activeDescriptor = initialSetup.descriptor;
+      setApplications(initialSetup.principalApplications.applications);
+      setSelected(initialSetup.application);
+      setDescriptor(activeDescriptor);
+      const currentConfigurationError = validateLaunchConfigurationV2(
+        activeDescriptor,
+        configuration,
+      );
+      if (currentConfigurationError) throw new Error(currentConfigurationError);
       const presentationResponse = await client.commitLaunchPresentation(
         applicationHandle,
         {
           schemaVersion: "programmable.principal-launch-presentation-commit-request.v1",
           applicationId,
-          grantId: descriptor.grantId,
-          grantBindingHash: descriptor.grantBindingHash,
+          grantId: activeDescriptor.grantId,
+          grantBindingHash: activeDescriptor.grantBindingHash,
           expectedVersion: presentationVersion,
           presentation: presentationDraft,
         },
@@ -1681,7 +1872,7 @@ export function CustomLaunchExperience({
       assertLaunchPresentationBinding(
         selected.applicationId,
         applicationHandle,
-        descriptor,
+        activeDescriptor,
         presentationResponse,
       );
       if (presentationResponse.outcome === "conflict") {
@@ -1691,8 +1882,35 @@ export function CustomLaunchExperience({
       }
       setPresentationVersion(presentationResponse.version);
 
+      setStatusMessage("Checking final launch authority");
+      const challengeSetup = await loadVerifiedLaunchSetup({
+        client,
+        application: initialSetup.application,
+        generation,
+        forceFreshObservation: true,
+      });
+      if (!isActive()) return;
+      if (
+        challengeSetup.presentation === null
+        || challengeSetup.presentation.presentationBindingHash
+          !== presentationResponse.presentationBindingHash
+        || challengeSetup.presentation.version !== presentationResponse.version
+      ) throw new LaunchAuthorityRefreshBindingErrorV1(
+        "Project details or launch authority changed in another window. Review and try again",
+      );
+      activeDescriptor = challengeSetup.descriptor;
+      assertLaunchPresentationBinding(
+        challengeSetup.application.applicationId,
+        applicationHandle,
+        activeDescriptor,
+        challengeSetup.presentation,
+      );
+      setApplications(challengeSetup.principalApplications.applications);
+      setSelected(challengeSetup.application);
+      setDescriptor(activeDescriptor);
+
       const selection = buildCustomLaunchSelection({
-        descriptor,
+        descriptor: activeDescriptor,
         wallet: wallet.account,
         configuration,
         presentationBindingHash: presentationResponse.presentationBindingHash,
@@ -1701,14 +1919,14 @@ export function CustomLaunchExperience({
         schemaVersion: "programmable.launch-session-challenge-create-request.v2" as const,
         audience: "programmable.launch-session.v2" as const,
         idempotencyKey: idempotencyKey("challenge"),
-        grantId: descriptor.grantId,
-        grantBindingHash: descriptor.grantBindingHash,
+        grantId: activeDescriptor.grantId,
+        grantBindingHash: activeDescriptor.grantBindingHash,
         selection,
       };
       const challenge = await client.createChallenge(challengeRequest);
       if (!isActive()) return;
       if (
-        challenge.grantId !== descriptor.grantId
+        challenge.grantId !== activeDescriptor.grantId
         || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(challenge.challengeId)
         || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(challenge.sessionId)
         || !/^sha256:[0-9a-f]{64}$/u.test(challenge.challengeBindingHash)
@@ -1719,22 +1937,22 @@ export function CustomLaunchExperience({
         schemaVersion: "programmable.launch-session-preparation-bind-request.v2",
         audience: "programmable.launch-session.v2",
         idempotencyKey: idempotencyKey("preparation"),
-        grantId: descriptor.grantId,
-        grantBindingHash: descriptor.grantBindingHash,
+        grantId: activeDescriptor.grantId,
+        grantBindingHash: activeDescriptor.grantBindingHash,
         selection,
         challengeId: challenge.challengeId,
         challengeBindingHash: challenge.challengeBindingHash,
       }, isActive);
       if (!isActive()) return;
-      const route = defaultLaunchRoute(descriptor);
+      const route = defaultLaunchRoute(activeDescriptor);
       const walletMessage = preparation.walletMessage;
       if (
-        preparation.grantId !== descriptor.grantId
+        preparation.grantId !== activeDescriptor.grantId
         || preparation.challengeId !== challenge.challengeId
         || preparation.challengeBindingHash !== challenge.challengeBindingHash
         || preparation.sessionId !== challenge.sessionId
-        || walletMessage.grantId !== descriptor.grantId
-        || walletMessage.grantBindingHash !== descriptor.grantBindingHash
+        || walletMessage.grantId !== activeDescriptor.grantId
+        || walletMessage.grantBindingHash !== activeDescriptor.grantBindingHash
         || walletMessage.challengeId !== challenge.challengeId
         || walletMessage.challengeBindingHash !== challenge.challengeBindingHash
         || walletMessage.sessionId !== challenge.sessionId
@@ -1768,8 +1986,8 @@ export function CustomLaunchExperience({
         schemaVersion: "programmable.launch-session-wallet-authenticate-request.v2" as const,
         audience: "programmable.launch-session.v2" as const,
         idempotencyKey: idempotencyKey("wallet-proof"),
-        grantId: descriptor.grantId,
-        grantBindingHash: descriptor.grantBindingHash,
+        grantId: activeDescriptor.grantId,
+        grantBindingHash: activeDescriptor.grantBindingHash,
         selection,
         challengeId: challenge.challengeId,
         challengeBindingHash: challenge.challengeBindingHash,
@@ -1794,7 +2012,7 @@ export function CustomLaunchExperience({
       });
       if (!isActive()) return;
       if (
-        authenticatedSession.grantId !== descriptor.grantId
+        authenticatedSession.grantId !== activeDescriptor.grantId
         || authenticatedSession.challengeId !== challenge.challengeId
         || authenticatedSession.challengeBindingHash !== challenge.challengeBindingHash
         || authenticatedSession.sessionId !== challenge.sessionId
@@ -1803,8 +2021,8 @@ export function CustomLaunchExperience({
         schemaVersion: "programmable.launch-session-launch-authorize-request.v2",
         audience: "programmable.launch-session.v2",
         idempotencyKey: idempotencyKey("authorization"),
-        grantId: descriptor.grantId,
-        grantBindingHash: descriptor.grantBindingHash,
+        grantId: activeDescriptor.grantId,
+        grantBindingHash: activeDescriptor.grantBindingHash,
         selection,
         challengeId: challenge.challengeId,
         challengeBindingHash: challenge.challengeBindingHash,
@@ -1820,7 +2038,7 @@ export function CustomLaunchExperience({
       const permit = await client.authorizeLaunch(authorizeRequest);
       if (!isActive()) return;
       if (
-        permit.grantId !== descriptor.grantId
+        permit.grantId !== activeDescriptor.grantId
         || permit.sessionId !== authenticatedSession.sessionId
         || permit.sessionBindingHash !== authenticatedSession.sessionBindingHash
       ) throw new Error("Launch permit does not match the exact approved launch");
@@ -1844,7 +2062,7 @@ export function CustomLaunchExperience({
       });
 
       const action = assertBrowserWalletExecutionBinding({
-        descriptor,
+        descriptor: activeDescriptor,
         execution,
         deploymentCalldataHash: preparation.deploymentCalldataHash,
         permit,
@@ -1858,8 +2076,8 @@ export function CustomLaunchExperience({
         stage: "prepared",
         applicationHandle,
         githubPrincipalHash: launchGithubPrincipalHash,
-        grantId: descriptor.grantId,
-        grantBindingHash: descriptor.grantBindingHash,
+        grantId: activeDescriptor.grantId,
+        grantBindingHash: activeDescriptor.grantBindingHash,
         sessionId: authenticatedSession.sessionId,
         chainId: action.chainId,
         executionReservationId: execution.executionReservationId,
@@ -1887,8 +2105,8 @@ export function CustomLaunchExperience({
         stage: "broadcast",
         applicationHandle,
         githubPrincipalHash: launchGithubPrincipalHash,
-        grantId: descriptor.grantId,
-        grantBindingHash: descriptor.grantBindingHash,
+        grantId: activeDescriptor.grantId,
+        grantBindingHash: activeDescriptor.grantBindingHash,
         sessionId: authenticatedSession.sessionId,
         chainId: action.chainId,
         executionReservationId: execution.executionReservationId,
@@ -1918,8 +2136,8 @@ export function CustomLaunchExperience({
       const finalized = await pollLaunchStatus(client, {
         applicationHandle,
         applicationId,
-        grantId: descriptor.grantId,
-        grantBindingHash: descriptor.grantBindingHash,
+        grantId: activeDescriptor.grantId,
+        grantBindingHash: activeDescriptor.grantBindingHash,
         sessionId: authenticatedSession.sessionId,
         executionReservationId: execution.executionReservationId,
         chainId: action.chainId,
@@ -1939,13 +2157,23 @@ export function CustomLaunchExperience({
       setStatusMessage("Launch complete");
     } catch (caught) {
       if (!isActive() || caught instanceof LaunchFlowCancelledError) return;
+      if (
+        caught instanceof LaunchAuthorityRefreshFailedErrorV1
+        && selected.launchEntitlementBindingHash !== null
+      ) {
+        const binding = selected.launchEntitlementBindingHash;
+        launchAuthorityRefreshAttemptRef.current.set(
+          binding,
+          (launchAuthorityRefreshAttemptRef.current.get(binding) ?? 0) + 1,
+        );
+      }
       let failure = caught;
       if (isLaunchPreparationReissueRequiredV1(caught)) {
         try {
           await refreshExpiredGrant({
             application: selected,
             context: {
-              oldDescriptor: descriptor,
+              oldDescriptor: activeDescriptor,
               idempotencyKey: idempotencyKey("grant-reissue"),
             },
             generation,
@@ -2056,14 +2284,14 @@ export function CustomLaunchExperience({
   }
 
   return (
-    <CustomLaunchFrame onBack={returnToApplications} title={launchProgress === "complete" ? "Launch complete" : launchProgress === "idle" ? "Set up launch" : "Launch status"} eyebrow={selected?.repositoryFullName ?? "Approved project"}>
+    <CustomLaunchFrame onBack={returnToApplications} title={launchProgress === "complete" ? "Launch complete" : setupLoading && selected?.state === "ready_for_registration" ? "Final verification" : launchProgress === "idle" ? "Set up launch" : "Launch status"} eyebrow={selected?.repositoryFullName ?? "Approved project"}>
       {setupLoading || !selected ? (
-        <div className={styles.loadingPanel} role="status"><LoaderCircle aria-hidden="true" className={styles.spin} size={20} /> Loading approved launch</div>
+        <div className={styles.loadingPanel} role="status"><LoaderCircle aria-hidden="true" className={styles.spin} size={20} /> {selected?.state === "ready_for_registration" ? "Completing final source verification" : "Loading approved launch"}</div>
       ) : !descriptor && launchProgress === "idle" ? (
         <section className={styles.loadingPanel}>
           <CircleAlert aria-hidden="true" size={20} />
           <div className={styles.recoveryCopy}>
-            <h2>Approved launch could not load</h2>
+            <h2>Launch setup could not load</h2>
             <p>{error || "The approved launch details are temporarily unavailable. Nothing was submitted."}</p>
             <button className={styles.secondaryButton} type="button" onClick={() => void openApplication(selected)}>Try again</button>
           </div>

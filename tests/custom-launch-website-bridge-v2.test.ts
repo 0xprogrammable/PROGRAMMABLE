@@ -641,6 +641,69 @@ describe("custom launch Website bridge V2", () => {
     expect(serviceFetch).toHaveBeenCalledTimes(2);
   });
 
+  it("forwards the principal-bound launch authority refresh as one exact idempotent POST", async () => {
+    const serviceFetch = vi.fn(async (input: URL | RequestInfo, init?: RequestInit) => {
+      expect(String(input)).toBe(
+        `https://approval.example/v3/applications/${APPLICATION_HANDLE}/launch-authority-refresh`,
+      );
+      expect(init?.method).toBe("POST");
+      const headers = new Headers(init?.headers);
+      expect(headers.get("authorization")).toBe("Bearer access-token-value");
+      expect(headers.get("x-privy-identity-token")).toBeNull();
+      expect(headers.get("idempotency-key")).toBe("launch-authority-refresh-request-1");
+      expect(JSON.parse(new TextDecoder().decode(init?.body as ArrayBuffer))).toEqual({
+        schemaVersion: "programmable.principal-launch-authority-refresh-request.v1",
+      });
+      return serviceResponse({
+        schemaVersion: "programmable.principal-launch-authority-refresh.v1",
+        state: "pending",
+        requestId: `sha256:${"2".repeat(64)}`,
+        requestDigest: `sha256:${"2".repeat(64)}`,
+        applicationId: "application-1",
+        applicationHandle: APPLICATION_HANDLE,
+        grantId: GRANT_ID,
+        grantBindingHash: `sha256:${"1".repeat(64)}`,
+        requestedAt: "2026-08-05T12:00:00.000Z",
+        observationHash: null,
+        validUntil: null,
+      }, 202);
+    });
+    const handler = createReleaseBoundBridge({
+      authenticator: {
+        async authenticate() {
+          return {
+            privyUserId: "did:privy:user",
+            githubUserId: "123456789",
+            githubUsername: "builder",
+            githubPrincipalHash: `sha256:${"4".repeat(64)}` as const,
+          };
+        },
+      },
+      serviceOrigin: new URL("https://approval.example"),
+      serviceFetch: serviceFetch as typeof fetch,
+    });
+    const body = JSON.stringify({
+      schemaVersion: "programmable.principal-launch-authority-refresh-request.v1",
+    });
+    const response = await handler(new Request(
+      `https://website.example/api/custom-launch/v3/applications/${APPLICATION_HANDLE}/launch-authority-refresh`,
+      {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          authorization: "Bearer access-token-value",
+          "x-privy-identity-token": "identity-token-value",
+          "content-type": "application/json",
+          "idempotency-key": "launch-authority-refresh-request-1",
+        },
+        body,
+      },
+    ), { kind: "launch-authority-refresh", applicationHandle: APPLICATION_HANDLE });
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({ state: "pending" });
+    expect(serviceFetch).toHaveBeenCalledOnce();
+  });
+
   it("exposes the frozen descriptor and browser-wallet report routes without service authority", async () => {
     const serviceFetch = vi.fn(async (input: URL | RequestInfo, init?: RequestInit) => {
       const url = String(input);

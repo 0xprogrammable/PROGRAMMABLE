@@ -38,6 +38,7 @@ const RESPONSE_VALIDATORS_V2: Readonly<Record<string, ValidatorV2>> = Object.fre
   "programmable.application-status-view.v2": validateApplicationStatusV2,
   "programmable.principal-custom-launch-application-list.v3": validateApplicationListV2,
   "programmable.launch-eligibility-view.v3": validateLaunchEligibilityV2,
+  "programmable.principal-launch-authority-refresh.v1": validateLaunchAuthorityRefreshV1,
   "programmable.launch-route-discovery.v3": validateLaunchDescriptorV2,
   "programmable.principal-launch-presentation-response.v2": validatePresentationResponseV1,
   "programmable.launch-execution-status-view.v3": validateExecutionStatusV2,
@@ -131,12 +132,14 @@ function validateApplicationSummaryV2(value: unknown): void {
 
 function validateLaunchEligibilityV2(value: unknown): void {
   const record = exactRecord(value, [
-    "schemaVersion", "applicationId", "applicationHandle", "state", "launchAllowed", "receiptDigest",
-    "validFrom", "validUntil",
+    "schemaVersion", "applicationId", "applicationHandle", "grantId", "grantBindingHash",
+    "state", "launchAllowed", "receiptDigest", "validFrom", "validUntil",
   ]);
   literal(record.schemaVersion, "programmable.launch-eligibility-view.v3");
   applicationId(record.applicationId);
   applicationHandle(record.applicationHandle);
+  uuid(record.grantId);
+  digest(record.grantBindingHash);
   enumValue(record.state, ["pending", "active", "suspended", "revoked", "expired"]);
   booleanValue(record.launchAllowed);
   digest(record.receiptDigest);
@@ -145,6 +148,31 @@ function validateLaunchEligibilityV2(value: unknown): void {
   if (validFrom >= validUntil || (record.launchAllowed === true) !== (record.state === "active")) {
     mismatch();
   }
+}
+
+function validateLaunchAuthorityRefreshV1(value: unknown): void {
+  const record = exactRecord(value, [
+    "schemaVersion", "state", "requestId", "requestDigest", "applicationId",
+    "applicationHandle", "grantId", "grantBindingHash", "requestedAt",
+    "observationHash", "validUntil",
+  ]);
+  literal(record.schemaVersion, "programmable.principal-launch-authority-refresh.v1");
+  enumValue(record.state, ["pending", "current", "failed"]);
+  refreshRequestId(record.requestId);
+  digest(record.requestDigest);
+  applicationId(record.applicationId);
+  applicationHandle(record.applicationHandle);
+  uuid(record.grantId);
+  digest(record.grantBindingHash);
+  const requestedAt = instant(record.requestedAt);
+  nullable(record.observationHash, digest);
+  nullable(record.validUntil, instant);
+  const isCurrent = record.state === "current";
+  if (
+    (record.observationHash !== null) !== isCurrent
+    || (record.validUntil !== null) !== isCurrent
+    || (isCurrent && Date.parse(record.validUntil as string) <= requestedAt)
+  ) mismatch();
 }
 
 function validateLaunchDescriptorV2(value: unknown): void {
@@ -844,6 +872,13 @@ function applicationId(value: unknown): void {
 
 function applicationHandle(value: unknown): void {
   regexString(value, APPLICATION_HANDLE_V3, 71);
+}
+
+function refreshRequestId(value: unknown): void {
+  if (
+    typeof value !== "string"
+    || (!DIGEST_V2.test(value) && !UUID_V2.test(value))
+  ) mismatch();
 }
 
 function regexString(value: unknown, pattern: RegExp, maximum: number): void {

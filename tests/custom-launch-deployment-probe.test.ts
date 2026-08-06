@@ -93,6 +93,8 @@ function launchEligibility() {
     schemaVersion: "programmable.launch-eligibility-view.v3",
     applicationId: OWN_APPLICATION_ID,
     applicationHandle: OWN_APPLICATION_HANDLE,
+    grantId: "123e4567-e89b-42d3-a456-426614174002",
+    grantBindingHash: HASH,
     state: "active",
     launchAllowed: true,
     receiptDigest: HASH,

@@ -91,6 +91,37 @@ function launchDescriptor() {
   };
 }
 
+function launchEligibility() {
+  return {
+    schemaVersion: "programmable.launch-eligibility-view.v3",
+    applicationId: "application-1",
+    applicationHandle: APPLICATION_HANDLE,
+    grantId: GRANT_ID,
+    grantBindingHash: DIGEST("1"),
+    state: "active",
+    launchAllowed: true,
+    receiptDigest: DIGEST("5"),
+    validFrom: "2026-08-05T12:00:00.000Z",
+    validUntil: "2026-08-05T12:10:00.000Z",
+  };
+}
+
+function launchAuthorityRefresh(state: "pending" | "current" | "failed") {
+  return {
+    schemaVersion: "programmable.principal-launch-authority-refresh.v1",
+    state,
+    requestId: DIGEST("2"),
+    requestDigest: DIGEST("2"),
+    applicationId: "application-1",
+    applicationHandle: APPLICATION_HANDLE,
+    grantId: GRANT_ID,
+    grantBindingHash: DIGEST("1"),
+    requestedAt: "2026-08-05T12:00:00.000Z",
+    observationHash: state === "current" ? DIGEST("3") : null,
+    validUntil: state === "current" ? "2026-08-05T12:10:00.000Z" : null,
+  };
+}
+
 function browserPreparation() {
   return {
     schemaVersion: "programmable.browser-wallet-launch-preparation.v2",
@@ -176,6 +207,20 @@ describe("custom launch client response contracts", () => {
     );
   });
 
+  it("requires grant-native launch eligibility identity", async () => {
+    await expect(clientFor(launchEligibility()).launchEligibility(
+      APPLICATION_HANDLE,
+    )).resolves.toMatchObject({ grantId: GRANT_ID, grantBindingHash: DIGEST("1") });
+    const missing = launchEligibility();
+    delete (missing as Partial<typeof missing>).grantBindingHash;
+    await expectContractMismatch(clientFor(missing).launchEligibility(APPLICATION_HANDLE));
+
+    const malformedGrant = { ...launchEligibility(), grantId: "grant-1" };
+    await expectContractMismatch(
+      clientFor(malformedGrant).launchEligibility(APPLICATION_HANDLE),
+    );
+  });
+
   it("accepts duplicate public ids only when opaque application handles differ", async () => {
     const value = applicationList();
     value.applications.push({
@@ -225,6 +270,46 @@ describe("custom launch client response contracts", () => {
       request: { sessionId: SESSION_ID, idempotencyKey: "request-1" } as never,
       authorizationArtifactBase64Url: "YXV0aG9yaXphdGlvbg",
     }));
+  });
+
+  it("enforces the launch authority refresh body and HTTP state contract", async () => {
+    await expect(clientFor(
+      launchAuthorityRefresh("pending"),
+      202,
+    ).launchAuthorityRefresh(
+      APPLICATION_HANDLE,
+      { schemaVersion: "programmable.principal-launch-authority-refresh-request.v1" },
+      "launch-authority-refresh-request-1",
+    )).resolves.toMatchObject({ state: "pending" });
+
+    await expectContractMismatch(clientFor(
+      launchAuthorityRefresh("pending"),
+      200,
+    ).launchAuthorityRefresh(
+      APPLICATION_HANDLE,
+      { schemaVersion: "programmable.principal-launch-authority-refresh-request.v1" },
+      "launch-authority-refresh-request-1",
+    ));
+
+    const malformed = {
+      ...launchAuthorityRefresh("current"),
+      observationHash: null,
+    };
+    await expectContractMismatch(clientFor(malformed).launchAuthorityRefresh(
+      APPLICATION_HANDLE,
+      { schemaVersion: "programmable.principal-launch-authority-refresh-request.v1" },
+      "launch-authority-refresh-request-1",
+    ));
+
+    const malformedGrant = {
+      ...launchAuthorityRefresh("current"),
+      grantId: "grant-1",
+    };
+    await expectContractMismatch(clientFor(malformedGrant).launchAuthorityRefresh(
+      APPLICATION_HANDLE,
+      { schemaVersion: "programmable.principal-launch-authority-refresh-request.v1" },
+      "launch-authority-refresh-request-1",
+    ));
   });
 
   it("rejects malformed public error envelopes", async () => {

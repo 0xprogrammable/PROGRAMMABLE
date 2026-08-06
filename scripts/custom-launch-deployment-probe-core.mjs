@@ -168,7 +168,7 @@ export async function probeCustomLaunchDeployment(input) {
         sleep: input.sleep,
       },
     );
-    validateLaunchDescriptor(descriptor, ownApplication, now);
+    validateLaunchDescriptor(descriptor, ownApplication, eligibility, now);
     const foreignRead = await requestJsonWithRetries(
       new URL(
         `/api/custom-launch/v3/applications/${foreignApplicationHandle}`,
@@ -542,6 +542,8 @@ function validateLaunchEligibility(value, application, now) {
   assertExactKeys(value, [
     "applicationId",
     "applicationHandle",
+    "grantBindingHash",
+    "grantId",
     "launchAllowed",
     "receiptDigest",
     "schemaVersion",
@@ -553,6 +555,9 @@ function validateLaunchEligibility(value, application, now) {
     value.schemaVersion !== "programmable.launch-eligibility-view.v3"
     || value.applicationId !== application.applicationId
     || value.applicationHandle !== application.applicationHandle
+    || value.grantBindingHash !== application.launchEntitlementBindingHash
+    || typeof value.grantId !== "string"
+    || !UUID.test(value.grantId)
     || value.state !== "active"
     || value.launchAllowed !== true
     || value.receiptDigest !== application.receiptDigest
@@ -569,7 +574,7 @@ function validateLaunchEligibility(value, application, now) {
   ) throw new TypeError("Authenticated canary launch eligibility is not current");
 }
 
-function validateLaunchDescriptor(value, application, now) {
+function validateLaunchDescriptor(value, application, eligibility, now) {
   assertRecord(value, "Authenticated canary launch descriptor");
   assertExactKeys(value, [
     "applicationId",
@@ -587,6 +592,9 @@ function validateLaunchDescriptor(value, application, now) {
     value.schemaVersion !== "programmable.launch-route-discovery.v3"
     || value.applicationId !== application.applicationId
     || value.applicationHandle !== application.applicationHandle
+    || value.grantId !== eligibility.grantId
+    || value.grantBindingHash !== eligibility.grantBindingHash
+    || value.grantBindingHash !== application.launchEntitlementBindingHash
     || typeof value.grantId !== "string"
     || !UUID.test(value.grantId)
     || typeof value.grantBindingHash !== "string"
