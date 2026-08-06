@@ -3,7 +3,12 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { nextLanguageIndex } from "../components/developer-docs-workbench";
+import {
+  agentPrompt,
+  getDeveloperCopyMotion,
+  languageExamples,
+  nextLanguageIndex,
+} from "../components/developer-docs-workbench";
 import {
   developerDocsMarkdown,
   programmableLlmsIndex,
@@ -34,112 +39,88 @@ const developerDocsCss = readFileSync(
 );
 
 describe("Developer documentation experience", () => {
-  it("uses the shareable Developers route everywhere", () => {
+  it("uses one shareable Developers route with canonical metadata", () => {
     expect(docsIndex).toContain('redirect("/docs/developers")');
     expect(siteNavigation).toContain('href: "/docs/developers"');
-    expect(developerPage).toContain('kicker="Docs / Developers"');
+    expect(developerPage).toContain('title="Integrate once. Discover every Programmable launch."');
     expect(developerPage).toContain(
       'alternates: { canonical: "/docs/developers" }',
     );
   });
 
-  it("keeps search result keys unique when several terms point to one section", () => {
+  it("keeps navigation and search aligned with the rendered sections", () => {
     expect(docsSearch).toContain("key={`${item.href}:${item.title}`}");
-    expect(docsData).toContain("approved external hook launches");
-    expect(docsData).toContain("Custom Registry");
+    for (const id of [
+      "paths",
+      "quickstart",
+      "identity",
+      "providers",
+      "markets",
+      "verification",
+      "data",
+      "reference",
+      "checklist",
+      "agents",
+    ]) {
+      expect(docsData).toContain(`/docs/developers#${id}`);
+    }
     expect(docsData).not.toContain("Basebit");
+    expect(docsData).not.toContain("Aion");
   });
 
-  it("provides copy-ready examples and machine-readable entry points", () => {
+  it("provides copy-ready examples that discover the active API", () => {
     expect(developerPage).toContain("<DeveloperDocsWorkbench />");
+    expect(developerPage).toContain("<DeveloperEndpointList />");
     expect(developerPage).toContain("<DeveloperAgentPrompt />");
+    expect(languageExamples).toHaveLength(3);
+    expect(languageExamples.every((example) =>
+      example.code.includes(".well-known/programmable.json") ||
+      example.code.includes("discovery.apiBaseUrl") ||
+      example.code.includes('discovery["apiBaseUrl"]')
+    )).toBe(true);
+    expect(languageExamples[1]?.code).toContain(
+      "launch.token?.address ?? null",
+    );
     expect(developerDocsMarkdown).toContain("## Minimal terminal consumer");
-    expect(developerDocsMarkdown).toContain("page.nextCursor");
-    expect(developerDocsMarkdown).toContain("page.resumeCursor");
-    expect(programmableLlmsIndex).toContain(
-      "https://programmable.family/docs/developers.md",
-    );
-    expect(programmableLlmsIndex).toContain(
-      "https://developers.programmable.family/.well-known/programmable.json",
-    );
-    expect(workbench).toContain("Minimal terminal consumer");
-    expect(workbench).toContain("Programmable Classic");
-    expect(workbench).toContain("Programmable Custom");
-    expect(workbench).toContain("/api/v2/launches");
-    expect(workbench).not.toContain("/api/v1/launches");
-    expect(workbench).not.toContain("Run request");
-    expect(workbench).not.toContain("launch-preview");
+    expect(programmableLlmsIndex).toContain("Active major: v2");
   });
 
-  it("links integrators to complete guides and a real token-detail response", () => {
-    expect(developerPage).toContain("Terminal guide");
-    expect(developerPage).toContain("JSON Schemas");
-    expect(developerPage).toContain("docs/guides/terminals-and-scanners.md");
+  it("keeps Custom provenance explicitly prelaunch and address-free", () => {
+    expect(developerPage).toContain("Community Custom intake is");
+    expect(developerPage).toContain("address and start block are null");
     expect(developerPage).toContain(
-      "/api/v2/launches/1/0x56a96463ead0c0b9b4e4df9e41805bb8877074a6",
-    );
-    expect(developerPage).not.toContain(
-      'endpoint.path.replace("/{chainId}/{tokenAddress}", "")',
+      "No canonical Custom Registry ABI or event topic is published yet",
     );
     expect(developerDocsMarkdown).toContain(
-      "`/token` alone is not an API route",
-    );
-    expect(programmableLlmsIndex).toContain(
-      "https://github.com/0xprogrammable/developers/tree/main/schemas/v2",
-    );
-  });
-
-  it("states the public discovery and market-data boundary without implying execution", () => {
-    expect(developerPage).toContain("Verification is not one safety flag");
-    expect(developerPage).toContain("no universal");
-    expect(developerPage).toContain("Current Custom boundary");
-    expect(developerDocsMarkdown).toContain("separately verified adapter");
-  });
-
-  it("gives launch providers an atomic, explicitly prelaunch integration path", () => {
-    expect(developerPage).toContain("Register partner launches once");
-    expect(developerPage).toContain("Atomic Programmable adapter");
-    expect(developerPage).toContain("Verified factory callback");
-    expect(developerPage).toContain("The open Custom Registry is not deployed");
-    expect(developerPage).toContain("docs/guides/launch-providers.md");
-    expect(developerDocsMarkdown).toContain("## Launch provider integration");
-    expect(developerDocsMarkdown).toContain(
-      "A frontend request, API response, webhook",
+      "Registry address and start block are `null`",
     );
     expect(developerDocsMarkdown).toContain(
-      "| `custom` | `Programmable Custom` |",
+      "No canonical Custom Registry ABI or event topic is published yet",
     );
     expect(developerDocsMarkdown).toContain(
-      "Token, hook, factory and market addresses may differ on every launch",
+      "No Basebit, Aion or other named partner activation is implied",
     );
-    expect(developerDocsMarkdown).toContain(
-      "Historical Stock-Paired records are excluded from v2",
-    );
-    expect(developerPage).not.toContain("Stock Paired V3");
     expect(developerPage).not.toContain("Basebit");
+    expect(developerPage).not.toContain("Aion");
+    expect(developerPage).not.toContain(
+      "ProgrammableCustomLaunchRegistered",
+    );
+    expect(workbench).not.toContain("IProgrammableCustomRegistryV1");
     expect(developerDocsMarkdown).not.toContain(
       "The Programmable Custom Registry is live",
     );
-    expect(developerPage).not.toContain("For launch providers");
-    expect(developerPage).not.toContain("For terminals and scanners");
   });
 
-  it("supports keyboard navigation across language tabs", () => {
-    expect(nextLanguageIndex(0, "ArrowRight", 3)).toBe(1);
-    expect(nextLanguageIndex(2, "ArrowRight", 3)).toBe(0);
-    expect(nextLanguageIndex(0, "ArrowLeft", 3)).toBe(2);
-    expect(nextLanguageIndex(1, "Home", 3)).toBe(0);
-    expect(nextLanguageIndex(1, "End", 3)).toBe(2);
-  });
-
-  it("collapses the technical layout cleanly on narrow screens", () => {
-    expect(developerDocsCss).toMatch(
-      /@media \(max-width: 820px\)[\s\S]*?\.labelGrid,[\s\S]*?\.deploymentGrid\s*\{[^}]*grid-template-columns:\s*1fr;/,
+  it("documents project-only and unfamiliar market states without invented features", () => {
+    expect(developerPage).toContain('title: "Project only"');
+    expect(developerPage).toContain('status: "token = null · markets = []"');
+    expect(developerPage).toContain('title: "Unknown market kind"');
+    expect(developerDocsMarkdown).toContain(
+      "Never invent a pool, price, liquidity, volume, chart, quote, simulation or trade button",
     );
-    expect(developerDocsCss).not.toContain(".docsActions");
   });
 
-  it("publishes exact current and historical source identifiers", () => {
+  it("publishes current and historical Classic source identifiers", () => {
     expect(developerPage).toContain(
       "0xC3bd04aAc2fb2ba58efD7Eb673E544E0B80De770",
     );
@@ -150,14 +131,46 @@ describe("Developer documentation experience", () => {
       "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC",
     );
     expect(developerPage).toContain("MemeTokenLaunchedV2");
-    expect(developerDocsMarkdown).toContain("Classic V2 uses fee hook");
   });
 
-  it("keeps unpublished product docs visibly separate", () => {
-    expect(developerPage).not.toContain(
-      "Classic and Custom Hook product guides",
+  it("supports keyboard navigation and instant keyboard copy feedback", () => {
+    expect(nextLanguageIndex(0, "ArrowRight", 3)).toBe(1);
+    expect(nextLanguageIndex(2, "ArrowRight", 3)).toBe(0);
+    expect(nextLanguageIndex(0, "ArrowLeft", 3)).toBe(2);
+    expect(nextLanguageIndex(1, "Home", 3)).toBe(0);
+    expect(nextLanguageIndex(1, "End", 3)).toBe(2);
+    expect(getDeveloperCopyMotion(0)).toBe("instant");
+    expect(getDeveloperCopyMotion(1)).toBe("standard");
+  });
+
+  it("makes copy feedback accessible and motion optional", () => {
+    expect(workbench).toContain('role="status"');
+    expect(workbench).toContain('aria-live="polite"');
+    expect(workbench).toContain('data-motion={motion}');
+    expect(developerDocsCss).toContain(
+      '@media (prefers-reduced-motion: reduce)',
     );
-    expect(developerPage).not.toContain("DeveloperDocsActions");
-    expect(workbench).toContain("DeveloperDocsWorkbench");
+    expect(developerDocsCss).toContain(
+      '.copyButton[data-motion="instant"]',
+    );
+    expect(developerDocsCss).not.toContain("transition: all");
+  });
+
+  it("recomposes technical grids and endpoint actions on narrow screens", () => {
+    expect(developerDocsCss).toMatch(
+      /@media \(max-width: 820px\)[\s\S]*?\.feeGrid,[\s\S]*?\.marketCases\s*\{[^}]*grid-template-columns:\s*1fr;/,
+    );
+    expect(developerDocsCss).toMatch(
+      /@media \(max-width: 620px\)[\s\S]*?\.endpointRow\s*\{[^}]*grid-template-columns:\s*1fr;/,
+    );
+    expect(developerDocsCss).toContain("overflow-wrap: anywhere");
+  });
+
+  it("keeps the agent prompt on the same identity, fee and registry contract", () => {
+    expect(agentPrompt).toContain("platformId=programmable");
+    expect(agentPrompt).toContain("Map category=classic to Programmable Classic");
+    expect(agentPrompt).toContain("Map category=custom to Programmable Custom");
+    expect(agentPrompt).toContain("Custom Registry as prelaunch");
+    expect(agentPrompt).toContain("20 BPS total: 15 partner and 5 Programmable");
   });
 });
