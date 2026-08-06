@@ -68,6 +68,7 @@ contract ClassicPerformanceUnlockWalletV1 is Ownable, ReentrancyGuardTransient {
     bool public forfeited;
 
     error AlreadyForfeited();
+    error ExpiryDaysOutOfRange(uint16 expiryDays);
     error ForfeitureDisabled();
     error ForfeitureNotReached(uint64 forfeitTimestamp, uint256 timestamp);
     error ImmutableBeneficiary();
@@ -77,6 +78,7 @@ contract ClassicPerformanceUnlockWalletV1 is Ownable, ReentrancyGuardTransient {
     error NothingToRelease();
     error PoolMismatch(bytes32 expected, bytes32 actual);
     error ShareCountMismatch(uint256 shareCount, uint8 trancheCount);
+    error TrancheShareBelowMinimum(uint8 index, uint16 sharesBps);
     error SharesMustTotalOneHundredPercent(uint16 totalSharesBps);
     error TrancheAlreadyReleased(uint8 index);
     error TrancheIndexOutOfRange(uint8 index, uint8 trancheCount);
@@ -116,12 +118,28 @@ contract ClassicPerformanceUnlockWalletV1 is Ownable, ReentrancyGuardTransient {
         uint8 count = uint8(unlockTicks.length);
         if (sharesBps_.length != count) revert ShareCountMismatch(sharesBps_.length, count);
 
+        // Each tranche must clear the same per-tranche floor the hook enforces at registration. The wallet is a
+        // separate deployment from the hook and receives its own share list as constructor arguments, so this check
+        // cannot be inherited — it has to be repeated here or a wallet could be constructed with a dust tranche the
+        // model's documentation says is impossible.
         uint256 totalSharesBps;
         for (uint8 i = 0; i < count; ++i) {
-            totalSharesBps += sharesBps_[i];
+            uint16 shareBps = sharesBps_[i];
+            if (shareBps < LadderScheduleV1.MIN_TRANCHE_SHARES_BPS) {
+                revert TrancheShareBelowMinimum(i, shareBps);
+            }
+            totalSharesBps += shareBps;
         }
         if (totalSharesBps != LadderScheduleV1.TOTAL_SHARES_BPS) {
             revert SharesMustTotalOneHundredPercent(totalSharesBps.toUint16());
+        }
+        // Same reasoning for expiry: 0 disables forfeiture entirely, and any other value must fall inside the
+        // documented range. The hook has no expiry concept to inherit this from — expiry is wallet-only.
+        if (
+            expiryDays_ != 0
+                && (expiryDays_ < LadderScheduleV1.MIN_EXPIRY_DAYS || expiryDays_ > LadderScheduleV1.MAX_EXPIRY_DAYS)
+        ) {
+            revert ExpiryDaysOutOfRange(expiryDays_);
         }
 
         initialBuyToken = initialBuyToken_;
@@ -136,7 +154,9 @@ contract ClassicPerformanceUnlockWalletV1 is Ownable, ReentrancyGuardTransient {
         _shares3 = count > 3 ? sharesBps_[3] : 0;
         _shares4 = count > 4 ? sharesBps_[4] : 0;
 
-        forfeitTimestamp = expiryDays_ == 0 ? 0 : (uint256(launchTimestamp_) + uint256(expiryDays_) * 1 days).toUint64();
+        forfeitTimestamp = expiryDays_ == 0
+            ? 0
+            : (uint256(launchTimestamp_) + uint256(expiryDays_) * 1 days).toUint64();
 
         configurationHash = keccak256(
             abi.encode(

@@ -6,8 +6,10 @@
     "version": "0.8.26",
     "evmVersion": "cancun",
     "optimizer": true,
-    "runs": 800,
-    "viaIR": false
+    "runs": 1000,
+    "viaIR": false,
+    "bytecodeHash": "none",
+    "cborMetadata": false
   },
   "poolShape": {
     "currency0": "native",
@@ -59,5 +61,6 @@
   "builder": {
     "githubIdentity": null,
     "beneficiaryAddress": null
-  }
+  },
+  "contracts": []
 }

@@ -23,6 +23,12 @@
       "address": null
     },
     {
+      "name": "EthLadderFeeHookFactoryV1",
+      "path": "src/EthLadderFeeHookFactoryV1.sol",
+      "role": "Deterministically deploys the hook at a valid v4 hook address via CREATE2, mirroring Classic's factory shape.",
+      "address": null
+    },
+    {
       "name": "ClassicPerformanceUnlockWalletV1",
       "path": "src/ClassicPerformanceUnlockWalletV1.sol",
       "role": "Holds one launch's Initial Buy and releases tranches the pool has earned.",
