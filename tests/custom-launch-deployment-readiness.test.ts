@@ -206,7 +206,7 @@ describe("Custom launch deployment readiness", () => {
       { ...configured, PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH: undefined },
       { ...configured, PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH: `sha256:${"A".repeat(64)}` },
       { ...configured, PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE: undefined },
-      { ...configured, PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE: "autonomous_ai" },
+      { ...configured, PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE: "unconfigured" },
     ]) {
       const serviceFetch = vi.fn<typeof fetch>().mockResolvedValue(readyServiceResponse());
       const handler = createCustomLaunchDeploymentReadinessHandlerV1({
@@ -218,6 +218,31 @@ describe("Custom launch deployment readiness", () => {
       expect((await handler(request())).status).toBe(503);
       expect(serviceFetch).not.toHaveBeenCalled();
     }
+  });
+
+  it("accepts autonomous AI only when expected and runtime modes match exactly", async () => {
+    const environment = {
+      ...configured,
+      PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE: "autonomous_ai",
+    };
+    const handler = createCustomLaunchDeploymentReadinessHandlerV1({
+      environment,
+      serviceFetch: vi.fn<typeof fetch>().mockResolvedValue(readyServiceResponse({
+        schemaVersion: "2.0.0",
+        requestId: "deployment-probe",
+        data: {
+          status: "ready",
+          release: { packageArtifactHash: PACKAGE_ARTIFACT_HASH },
+          reviewAuthorityMode: "autonomous_ai",
+        },
+      })),
+      assertWebsiteProjectionDatabaseReadiness: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      now: () => NOW,
+    });
+    await expect((await handler(request())).json()).resolves.toMatchObject({
+      status: "ready",
+      approvalServiceRelease: { reviewAuthorityMode: "autonomous_ai" },
+    });
   });
 
   it("rejects a ready backend with a missing, wrong or substituted release identity", async () => {

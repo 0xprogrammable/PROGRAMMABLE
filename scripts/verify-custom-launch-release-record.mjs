@@ -33,6 +33,7 @@ const RECORD_STATUSES = new Set([
   "promoted",
   "live",
 ]);
+const REVIEW_AUTHORITY_MODES = new Set(["manual_review", "autonomous_ai"]);
 const REQUIRED_LEVELS = new Set(["template", "clearance", "staging", "candidate", "promotion", "live"]);
 const FORBIDDEN_SECRET_KEY = /^(?:access[_-]?token|identity[_-]?token|private[_-]?key|password|secret|database[_-]?url|credential)(?:[_-]?value)?$/i;
 const PLACEHOLDER_PATTERN = /(?:<[^>]+>|example\.invalid|replace[_ -]?me|todo|yyyy|nnn)/i;
@@ -506,7 +507,9 @@ export function verifyReleaseRecord(
     requireString(errors, intent.releaseId, "releaseIntent.releaseId");
     requireExact(errors, intent.product, "releaseIntent.product", "custom_launch");
     requireExact(errors, intent.chainId, "releaseIntent.chainId", "1");
-    requireExact(errors, intent.reviewAuthorityMode, "releaseIntent.reviewAuthorityMode", "manual_review");
+    if (!REVIEW_AUTHORITY_MODES.has(intent.reviewAuthorityMode)) {
+      add(errors, "releaseIntent.reviewAuthorityMode", "must be manual_review or autonomous_ai");
+    }
     if (!new Set(["disabled", "enabled"]).has(intent.targetMode)) add(errors, "releaseIntent.targetMode", "must be disabled or enabled");
   }
 
@@ -529,7 +532,15 @@ export function verifyReleaseRecord(
       validateSha256(errors, service.packageArtifactHash, "subject.approvalService.packageArtifactHash", { nullable: allowPlaceholders });
       validateSha256(errors, service.detachedPackedArtifactFileSha256, "subject.approvalService.detachedPackedArtifactFileSha256", { nullable: allowPlaceholders });
       validateSha256(errors, service.productionContentManifestSha256, "subject.approvalService.productionContentManifestSha256", { nullable: allowPlaceholders });
-      requireExact(errors, service.reviewAuthorityMode, "subject.approvalService.reviewAuthorityMode", "manual_review");
+      if (!REVIEW_AUTHORITY_MODES.has(service.reviewAuthorityMode)) {
+        add(errors, "subject.approvalService.reviewAuthorityMode", "must be manual_review or autonomous_ai");
+      }
+      requireExact(
+        errors,
+        service.reviewAuthorityMode,
+        "subject.approvalService.reviewAuthorityMode",
+        intent?.reviewAuthorityMode,
+      );
     }
     if (requireObject(errors, crossRepositoryBinding, "subject.crossRepositoryReleaseBinding")) {
       requireExactKeys(errors, crossRepositoryBinding, "subject.crossRepositoryReleaseBinding", ["repository", "attestationCommitSha", "documentPath", "documentSha256"]);
@@ -812,6 +823,7 @@ async function main(argv) {
         `detached_record_sha256=${result.detachedRecordSha256}`,
         `cross_repository_attestation_commit_sha=${record.subject.crossRepositoryReleaseBinding.attestationCommitSha}`,
         `cross_repository_binding_document_sha256=${record.subject.crossRepositoryReleaseBinding.documentSha256}`,
+        `review_authority_mode=${record.releaseIntent.reviewAuthorityMode}`,
         "",
       ].join("\n"),
       { encoding: "utf8", mode: 0o600 },

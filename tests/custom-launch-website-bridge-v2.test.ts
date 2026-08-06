@@ -28,21 +28,25 @@ function serviceResponse(data: object, status = 200): Response {
 
 function approvalServiceReadyResponse(
   packageArtifactHash: `sha256:${string}` = PACKAGE_ARTIFACT_HASH,
+  reviewAuthorityMode: "manual_review" | "autonomous_ai" = "manual_review",
 ): Response {
   return serviceResponse({
     status: "ready",
-    reviewAuthorityMode: "manual_review",
+    reviewAuthorityMode,
     release: { packageArtifactHash },
   });
 }
 
-function releaseAttestedServiceFetch(delegate: typeof fetch): typeof fetch {
+function releaseAttestedServiceFetch(
+  delegate: typeof fetch,
+  reviewAuthorityMode: "manual_review" | "autonomous_ai" = "manual_review",
+): typeof fetch {
   return vi.fn(async (input: URL | RequestInfo, init?: RequestInit) => {
     if (String(input) === "https://approval.example/readyz") {
       expect(init?.method).toBe("GET");
       expect(init?.cache).toBe("no-store");
       expect(init?.redirect).toBe("error");
-      return approvalServiceReadyResponse();
+      return approvalServiceReadyResponse(PACKAGE_ARTIFACT_HASH, reviewAuthorityMode);
     }
     return delegate(input, init);
   }) as typeof fetch;
@@ -51,13 +55,15 @@ function releaseAttestedServiceFetch(delegate: typeof fetch): typeof fetch {
 function createReleaseBoundBridge(
   dependencies: Omit<
     CustomLaunchBridgeDependenciesV2,
-    "expectedPackageArtifactHash"
+    "expectedPackageArtifactHash" | "expectedReviewAuthorityMode"
   >,
+  reviewAuthorityMode: "manual_review" | "autonomous_ai" = "manual_review",
 ) {
   return createCustomLaunchBridgeHandlerV2({
     ...dependencies,
-    serviceFetch: releaseAttestedServiceFetch(dependencies.serviceFetch),
+    serviceFetch: releaseAttestedServiceFetch(dependencies.serviceFetch, reviewAuthorityMode),
     expectedPackageArtifactHash: PACKAGE_ARTIFACT_HASH,
+    expectedReviewAuthorityMode: reviewAuthorityMode,
   });
 }
 
@@ -91,7 +97,9 @@ function challengeRequest(idempotencyKey: string): Request {
 }
 
 describe("custom launch Website bridge V2", () => {
-  it("authenticates the current principal and forwards only the user credential", async () => {
+  it.each(["manual_review", "autonomous_ai"] as const)(
+    "authenticates the current principal and forwards only the user credential in %s mode",
+    async (reviewAuthorityMode) => {
     const authenticate = vi.fn(async () => ({
       privyUserId: "did:privy:user",
       githubUserId: "123456789",
@@ -121,7 +129,7 @@ describe("custom launch Website bridge V2", () => {
       authenticator: { authenticate },
       serviceOrigin: new URL("https://approval.example"),
       serviceFetch: serviceFetch as typeof fetch,
-    });
+    }, reviewAuthorityMode);
     const body = JSON.stringify({
       schemaVersion: "programmable.launch-session-challenge-create-request.v2",
       idempotencyKey: "challenge-request-1",
@@ -145,7 +153,8 @@ describe("custom launch Website bridge V2", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(authenticate).toHaveBeenCalledOnce();
     expect(serviceFetch).toHaveBeenCalledOnce();
-  });
+    },
+  );
 
   it("blocks a mutation before forwarding when the live package hash mismatches", async () => {
     const serviceFetch = vi.fn(async (input: URL | RequestInfo) => {
@@ -156,6 +165,7 @@ describe("custom launch Website bridge V2", () => {
       authenticator: { authenticate: async () => authenticatedPrincipal() },
       serviceOrigin: new URL("https://approval.example"),
       expectedPackageArtifactHash: PACKAGE_ARTIFACT_HASH,
+      expectedReviewAuthorityMode: "manual_review",
       serviceFetch: serviceFetch as typeof fetch,
     });
 
@@ -179,6 +189,7 @@ describe("custom launch Website bridge V2", () => {
       authenticator: { authenticate: async () => authenticatedPrincipal() },
       serviceOrigin: new URL("https://approval.example"),
       expectedPackageArtifactHash: PACKAGE_ARTIFACT_HASH,
+      expectedReviewAuthorityMode: "manual_review",
       serviceFetch: serviceFetch as typeof fetch,
     });
 
@@ -218,6 +229,7 @@ describe("custom launch Website bridge V2", () => {
       authenticator: { authenticate: async () => authenticatedPrincipal() },
       serviceOrigin: new URL("https://approval.example"),
       expectedPackageArtifactHash: PACKAGE_ARTIFACT_HASH,
+      expectedReviewAuthorityMode: "manual_review",
       serviceFetch: vi.fn(async (input: URL | RequestInfo, init?: RequestInit) => {
         const url = String(input);
         calls.push(url);
@@ -493,9 +505,11 @@ describe("custom launch Website bridge V2", () => {
             applicationHandle: APPLICATION_HANDLE,
             revisionId: "1",
             repositoryId: "2",
+            repositoryOwnerId: "309941960",
             repositoryFullName: "builder/wild-game",
             pullRequestNumber: 7,
             commitOid: "a".repeat(40),
+            treeOid: "b".repeat(40),
             state: "changes_required",
             reasonCodes: ["CORRECTION_REQUIRED"],
             actionCodes: ["UPDATE_SOURCE"],

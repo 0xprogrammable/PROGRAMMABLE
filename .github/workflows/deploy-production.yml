@@ -279,6 +279,7 @@ jobs:
             echo "- Detached record: \`${{ steps.custom-launch-record.outputs.detached_record_sha256 }}\`"
             echo "- Backend cross-repository attestation: \`${{ steps.custom-launch-record.outputs.cross_repository_attestation_commit_sha }}\`"
             echo "- Backend binding document: \`${{ steps.custom-launch-record.outputs.cross_repository_binding_document_sha256 }}\`"
+            echo "- Review authority: \`${{ steps.custom-launch-record.outputs.review_authority_mode }}\`"
             echo "- Gate: verified for staging only"
             echo
             echo "No promotion is authorized by this staging gate."
@@ -333,7 +334,7 @@ jobs:
           STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
           PROGRAMMABLE_RELEASE_EXPECTED_COMMIT_SHA: ${{ github.sha }}
           PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH: ${{ secrets.PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH }}
-          PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE: manual_review
+          PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE: ${{ steps.custom-launch-record.outputs.review_authority_mode }}
           PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_ACCESS_TOKEN: ${{ secrets.PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_ACCESS_TOKEN }}
           PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_IDENTITY_TOKEN: ${{ secrets.PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_IDENTITY_TOKEN }}
           PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_EXPECTED_GITHUB_USER_ID: ${{ secrets.PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_EXPECTED_GITHUB_USER_ID }}

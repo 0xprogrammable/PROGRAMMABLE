@@ -60,23 +60,24 @@ import {
   pollPrincipalLaunchAuthorityRefreshV1,
 } from "@/lib/custom-launch/launch-authority-refresh-v1";
 import { readAllPrincipalApplicationsV3 } from "@/lib/custom-launch/principal-application-pagination-v3";
-import type {
-  ApplicationHandleV3,
-  AuthorizedLaunchPermitViewV2,
-  AuthorizeLaunchSessionRequestV2,
-  BrowserWalletActionV2,
-  BrowserWalletLaunchPreparationV2,
-  CustomLaunchApplicationStateV2,
-  CustomLaunchWebsiteSessionV2,
-  LaunchDescriptorV2,
-  LaunchEligibilityViewV2,
-  LaunchExecutionStatusViewV2,
-  LaunchPresentationDraftV1,
-  PrincipalCustomLaunchApplicationSummaryV2,
-  PrincipalLaunchAuthorityRefreshViewV1,
-  PrincipalLaunchPresentationResponseV1,
-  TrustedLaunchPermitSignerV2,
-  UntrustedLaunchWalletSelectionV2,
+import {
+  customApplicationIntakeIsLaunchableV2,
+  type ApplicationHandleV3,
+  type AuthorizedLaunchPermitViewV2,
+  type AuthorizeLaunchSessionRequestV2,
+  type BrowserWalletActionV2,
+  type BrowserWalletLaunchPreparationV2,
+  type CustomLaunchApplicationStateV2,
+  type CustomLaunchWebsiteSessionV2,
+  type LaunchDescriptorV2,
+  type LaunchEligibilityViewV2,
+  type LaunchExecutionStatusViewV2,
+  type LaunchPresentationDraftV1,
+  type PrincipalCustomLaunchApplicationSummaryV2,
+  type PrincipalLaunchAuthorityRefreshViewV1,
+  type PrincipalLaunchPresentationResponseV1,
+  type TrustedLaunchPermitSignerV2,
+  type UntrustedLaunchWalletSelectionV2,
 } from "@/lib/custom-launch/contract-v2";
 import {
   getTokenCardImageSource,
@@ -262,6 +263,8 @@ export function customApplicationDisplayState(
     platform_pending: { title: "Verification still running", action: "View on GitHub", tone: "pending" },
     ready_for_registration: { title: "Ready for final verification", action: "Finish verification", tone: "pending" },
     approved: { title: "Ready to launch", action: "Set up launch", tone: "ready" },
+    stale: { title: "Source changed", action: "View current source", tone: "warning" },
+    rejected: { title: "Not approved", action: "View decision", tone: "warning" },
     superseded: { title: "New version submitted", action: "View current version", tone: "muted" },
     expired: { title: "Approval expired", action: "View on GitHub", tone: "warning" },
     revoked: { title: "Approval revoked", action: "View reason", tone: "warning" },
@@ -278,6 +281,13 @@ export function customApplicationOpensLaunchExperience(
     || state === "approved"
     || state === "launching"
     || state === "launched";
+}
+
+export function customApplicationOpensLaunchExperienceV2(
+  application: PrincipalCustomLaunchApplicationSummaryV2,
+): boolean {
+  return customApplicationIntakeIsLaunchableV2(application)
+    && customApplicationOpensLaunchExperience(application.state);
 }
 
 export function buildCustomLaunchSelection(input: Readonly<{
@@ -336,7 +346,8 @@ export function assertLaunchSetupBindings(input: Readonly<{
 }>): void {
   const { application, descriptor, eligibility, presentation } = input;
   if (
-    application.state !== "approved"
+    !customApplicationIntakeIsLaunchableV2(application)
+    || application.state !== "approved"
     || application.receiptDigest === null
     || application.launchEntitlementBindingHash === null
     || eligibility.applicationId !== application.applicationId
@@ -366,9 +377,17 @@ export function assertSamePrincipalApplicationRevisionV1(
     || observed.applicationHandle !== expected.applicationHandle
     || observed.revisionId !== expected.revisionId
     || observed.repositoryId !== expected.repositoryId
+    || observed.repositoryOwnerId !== expected.repositoryOwnerId
     || observed.repositoryFullName !== expected.repositoryFullName
     || observed.pullRequestNumber !== expected.pullRequestNumber
     || observed.commitOid !== expected.commitOid
+    || observed.treeOid !== expected.treeOid
+    || observed.intakeContract !== expected.intakeContract
+    || observed.providerId !== expected.providerId
+    || observed.controlRepositoryId !== expected.controlRepositoryId
+    || observed.controlRepositoryOwnerId !== expected.controlRepositoryOwnerId
+    || observed.grandfatheredAtReleaseBindingDigest
+      !== expected.grandfatheredAtReleaseBindingDigest
     || observed.receiptDigest !== expected.receiptDigest
     || observed.launchEntitlementBindingHash !== expected.launchEntitlementBindingHash
   ) throw new LaunchAuthorityRefreshBindingErrorV1(
@@ -1507,7 +1526,7 @@ export function CustomLaunchExperience({
   const openApplication = useCallback(async (
     application: PrincipalCustomLaunchApplicationSummaryV2,
   ) => {
-    if (!customApplicationOpensLaunchExperience(application.state)) return;
+    if (!customApplicationOpensLaunchExperienceV2(application)) return;
     const { generation, signal } = beginFlow();
     resetApplicationScopedState();
     setSelected(application);
@@ -2472,9 +2491,11 @@ function CustomLaunchFrame({ children, eyebrow = "Custom Hook", onBack, title }:
 }
 
 function ApplicationRow({ application, onOpen }: { application: PrincipalCustomLaunchApplicationSummaryV2; onOpen: () => void }) {
-  const display = customApplicationDisplayState(application.state);
+  const display = application.intakeContract === "registry-v3"
+    ? { title: "Catalog entry", action: "View on GitHub", tone: "muted" as const }
+    : customApplicationDisplayState(application.state);
   const githubUrl = `https://github.com/${application.repositoryFullName}/pull/${application.pullRequestNumber}`;
-  const opensSetup = customApplicationOpensLaunchExperience(application.state);
+  const opensSetup = customApplicationOpensLaunchExperienceV2(application);
   const guidance = applicationGuidance(application);
   return (
     <article className={styles.applicationRow}>
@@ -2791,10 +2812,13 @@ function transactionExplorerUrl(chainId: string, transactionHash: string): strin
 }
 
 function applicationGuidance(application: PrincipalCustomLaunchApplicationSummaryV2): string {
+  if (application.intakeContract === "registry-v3") return "This legacy registry intake is catalog-only and cannot open a launch session.";
   if (application.state === "platform_pending") return "Platform verification is still running. Refresh this list shortly.";
   if (application.state === "ready_for_registration") return "The review passed and final registry checks are still completing.";
   if (application.state === "expired") return "This exact approval window ended. Follow the GitHub thread to renew or resubmit it.";
   if (application.state === "revoked") return "This exact version can no longer launch. The GitHub thread contains the recovery path.";
+  if (application.state === "stale") return "The reviewed source tree changed. Submit or select the current exact revision.";
+  if (application.state === "rejected") return "This exact revision was not approved. The GitHub decision contains the reason.";
   if (application.actionCodes.length > 0) return "The GitHub review contains the next required action.";
   if (application.reasonCodes.length > 0) return "The GitHub review contains more detail about this status.";
   return "";

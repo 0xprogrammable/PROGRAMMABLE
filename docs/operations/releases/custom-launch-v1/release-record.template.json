@@ -6,7 +6,7 @@
     "releaseId": "custom-launch-v1-YYYYMMDD-NNN",
     "product": "custom_launch",
     "chainId": "1",
-    "reviewAuthorityMode": "manual_review",
+    "reviewAuthorityMode": "autonomous_ai",
     "targetMode": "disabled"
   },
   "subject": {
@@ -21,7 +21,7 @@
       "packageArtifactHash": null,
       "detachedPackedArtifactFileSha256": null,
       "productionContentManifestSha256": null,
-      "reviewAuthorityMode": "manual_review"
+      "reviewAuthorityMode": "autonomous_ai"
     },
     "crossRepositoryReleaseBinding": {
       "repository": "0xprogrammable/programmable-open-hook-v2-internal",

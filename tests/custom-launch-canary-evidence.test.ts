@@ -17,6 +17,7 @@ function evidence(overrides: Record<string, unknown> = {}) {
     deploymentId: "dpl_12345678AbCd",
     websiteCommitSha: "a".repeat(40),
     approvalServicePackageArtifactHash: `sha256:${"9".repeat(64)}`,
+    reviewAuthorityMode: "manual_review",
     ownApplicationHandle: OWN_APPLICATION_HANDLE,
     foreignApplicationHandle: FOREIGN_APPLICATION_HANDLE,
     ...overrides,
@@ -70,5 +71,7 @@ describe("Custom Launch candidate canary evidence", () => {
     })).toThrow("not release-ready");
     expect(() => evidence({ foreignApplicationHandle: OWN_APPLICATION_HANDLE }))
       .toThrow("must differ");
+    expect(() => evidence({ reviewAuthorityMode: "unconfigured" }))
+      .toThrow("review authority mode");
   });
 });

@@ -15,12 +15,11 @@ bind `chainId="1"`. Any other chain is out of scope and must fail closed.
 This runbook does not approve submissions. It assumes the approval service has already created a
 current signed entitlement for an exact repository revision and GitHub principal.
 
-The initial public release may run **manual-first**: an authorized reviewer checks the submission,
-then the same protected service registration path creates the signed entitlement. In this mode
-`AUTONOMOUS_AI_ENABLED=false`; no Surplus or other AI-provider credential is a Website dependency or
-a launch dependency. A GitHub approval, PR label, chat message, or direct database edit is never
-enough. Enabling autonomous review later is a separate approval-service release and does not change
-the Website contract, GitHub identity binding, signed entitlement, or launch flow.
+Each release selects exactly one review authority mode: `manual_review` or `autonomous_ai`. The
+Website, deployment probe, release record, and approval-service `/readyz` response must all bind the
+same configured value. A GitHub approval, PR label, chat message, or direct database edit is never
+enough. Changing modes is a separate approval-service and Website configuration release; it does not
+weaken the GitHub identity binding, exact-revision entitlement, or launch flow.
 
 ## Evidence words
 
@@ -112,7 +111,7 @@ The release candidate must contain the production probe exposed as:
 PROGRAMMABLE_RELEASE_EXPECTED_COMMIT_SHA=<exact-40-character-commit> \
 PROGRAMMABLE_RELEASE_EXPECTED_DEPLOYMENT_HOST=<immutable-vercel-host> \
 PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH=sha256:<exact-reviewed-package-hash> \
-PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE=manual_review \
+PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE=<manual_review-or-autonomous_ai> \
 npm run probe:custom-launch -- --base-url=https://<immutable-deployment-host>
 ```
 
@@ -138,8 +137,8 @@ versioned secret references, never values:
   fragment, credentials, or redirect;
 - `PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH`, as the exact SHA-256 package
   artifact identity of the reviewed approval-service release;
-- `PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE=manual_review`; this manual-first
-  release must not accept an autonomous or unlabelled backend;
+- `PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE`, set to exactly `manual_review`
+  or `autonomous_ai`; the Website must reject an unlabelled backend or any runtime mismatch;
 - `PROGRAMMABLE_LAUNCH_PERMIT_SIGNERS_V2_JSON`, containing only reviewed Ed25519 public keys and
   their exact key id, positive signer epoch, component binding hash, raw-key encoding, and SPKI
   SHA-256;
@@ -173,7 +172,7 @@ Before Website deployment, require the approval-service operator to prove:
 1. the exact service artifact is deployed with all production control axes paused;
 2. `/readyz` returns the exact V2 ready envelope from the configured HTTPS origin without a
    redirect, including `data.release.packageArtifactHash` equal to the reviewed package and
-   `data.reviewAuthorityMode="manual_review"`;
+   `data.reviewAuthorityMode` exactly equal to the configured release mode;
 3. hosted database migrations, least-privilege roles, backup, and restore drill pass;
 4. GitHub App, remote signer/executor, Registry and Website projection targets, and monitoring use
    reviewed production identities; in manual-first mode autonomous AI is explicitly disabled and
@@ -221,7 +220,7 @@ results and the exact release commit and immutable deployment host:
   "chainId": "1",
   "approvalServiceRelease": {
     "packageArtifactHash": "sha256:<exact-reviewed-package-hash>",
-    "reviewAuthorityMode": "manual_review"
+    "reviewAuthorityMode": "<manual_review-or-autonomous_ai>"
   }
 }
 ```
@@ -269,7 +268,7 @@ immutable URL fails the enabled probe:
 PROGRAMMABLE_RELEASE_EXPECTED_COMMIT_SHA=<exact-40-character-commit> \
 PROGRAMMABLE_RELEASE_EXPECTED_DEPLOYMENT_HOST=<immutable-vercel-host> \
 PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH=sha256:<exact-reviewed-package-hash> \
-PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE=manual_review \
+PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE=<manual_review-or-autonomous_ai> \
 npm run probe:custom-launch -- \
   --base-url=https://<immutable-deployment-host> \
   --require-enabled
@@ -292,7 +291,7 @@ against the production domain:
 PROGRAMMABLE_RELEASE_EXPECTED_COMMIT_SHA=<exact-40-character-commit> \
 PROGRAMMABLE_RELEASE_EXPECTED_DEPLOYMENT_HOST=<immutable-vercel-host> \
 PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH=sha256:<exact-reviewed-package-hash> \
-PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE=manual_review \
+PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE=<manual_review-or-autonomous_ai> \
 npm run probe:custom-launch -- \
   --base-url=https://programmable.family \
   --require-enabled
@@ -317,7 +316,7 @@ Run:
 PROGRAMMABLE_RELEASE_EXPECTED_COMMIT_SHA=<exact-40-character-commit> \
 PROGRAMMABLE_RELEASE_EXPECTED_DEPLOYMENT_HOST=<immutable-vercel-host> \
 PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH=sha256:<exact-reviewed-package-hash> \
-PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE=manual_review \
+PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE=<manual_review-or-autonomous_ai> \
 npm run probe:custom-launch -- \
   --base-url=https://programmable.family \
   --require-enabled \

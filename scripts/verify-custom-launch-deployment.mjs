@@ -25,6 +25,7 @@ try {
       websiteCommitSha: probeInput.expectedCommitSha,
       approvalServicePackageArtifactHash:
         probeInput.expectedApprovalServicePackageArtifactHash,
+      reviewAuthorityMode: probeInput.expectedApprovalServiceReviewAuthorityMode,
       ownApplicationHandle: probeInput.ownApplicationHandle,
       foreignApplicationHandle: probeInput.foreignApplicationHandle,
     });

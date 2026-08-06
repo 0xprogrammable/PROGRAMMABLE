@@ -6,7 +6,7 @@ const APPLICATION_LIST_SCHEMA =
   "programmable.principal-custom-launch-application-list.v3";
 const JSON_CONTENT_TYPE = "application/json";
 const SHA256_DIGEST = /^sha256:[0-9a-f]{64}$/u;
-const MANUAL_REVIEW_AUTHORITY_MODE = "manual_review";
+const REVIEW_AUTHORITY_MODES = new Set(["manual_review", "autonomous_ai"]);
 const GIT_COMMIT_OID = /^[0-9a-f]{40}$/u;
 const DEPLOYMENT_HOST = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u;
 const APPLICATION_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
@@ -32,6 +32,8 @@ const APPLICATION_STATES = new Set([
   "platform_pending",
   "ready_for_registration",
   "approved",
+  "stale",
+  "rejected",
   "superseded",
   "expired",
   "revoked",
@@ -457,7 +459,7 @@ function validateApprovalServiceReleaseIdentity(value) {
   if (
     typeof value.packageArtifactHash !== "string"
     || !SHA256_DIGEST.test(value.packageArtifactHash)
-    || value.reviewAuthorityMode !== MANUAL_REVIEW_AUTHORITY_MODE
+    || !REVIEW_AUTHORITY_MODES.has(value.reviewAuthorityMode)
   ) throw new TypeError("Approval service release identity is invalid");
 }
 
@@ -475,11 +477,11 @@ function validateExpectedApprovalServiceRelease(value, input) {
     );
   }
   if (
-    expectedReviewAuthorityMode !== MANUAL_REVIEW_AUTHORITY_MODE
+    !REVIEW_AUTHORITY_MODES.has(expectedReviewAuthorityMode)
     || value.reviewAuthorityMode !== expectedReviewAuthorityMode
   ) {
     throw new TypeError(
-      "Approval service review authority does not match the manual-first release",
+      "Approval service review authority does not match the configured release",
     );
   }
 }
@@ -526,6 +528,10 @@ function validatePrincipalApplicationList(value, expectedGithubUserId, ownApplic
   }
   if (
     ownApplication.state !== "approved"
+    || ownApplication.intakeContract !== "aeon-v1"
+    || ownApplication.providerId !== "aeon"
+    || ownApplication.controlRepositoryId !== "1325324453"
+    || ownApplication.controlRepositoryOwnerId !== "309941960"
     || !SHA256_DIGEST.test(ownApplication.receiptDigest ?? "")
     || !SHA256_DIGEST.test(ownApplication.launchEntitlementBindingHash ?? "")
   ) {
@@ -698,7 +704,7 @@ function validateForeignApplicationDenial(value) {
 
 function validateApplication(value) {
   assertRecord(value, "Authenticated canary application");
-  assertExactKeys(value, [
+  assertExactKeysWithOptional(value, [
     "actionCodes",
     "applicationHandle",
     "applicationId",
@@ -711,9 +717,17 @@ function validateApplication(value) {
     "receiptDigest",
     "repositoryFullName",
     "repositoryId",
+    "repositoryOwnerId",
     "revisionId",
     "state",
+    "treeOid",
     "updatedAt",
+  ], [
+    "controlRepositoryId",
+    "controlRepositoryOwnerId",
+    "grandfatheredAtReleaseBindingDigest",
+    "intakeContract",
+    "providerId",
   ]);
   if (
     typeof value.applicationId !== "string"
@@ -723,11 +737,14 @@ function validateApplication(value) {
     || !APPLICATION_HANDLE.test(value.applicationHandle)
     || !isBoundedString(value.revisionId, 1, 256)
     || !isBoundedString(value.repositoryId, 1, 64)
+    || !isBoundedString(value.repositoryOwnerId, 1, 64)
     || !isBoundedString(value.repositoryFullName, 3, 256)
     || !Number.isSafeInteger(value.pullRequestNumber)
     || value.pullRequestNumber < 1
     || typeof value.commitOid !== "string"
     || !GIT_COMMIT_OID.test(value.commitOid)
+    || typeof value.treeOid !== "string"
+    || !GIT_COMMIT_OID.test(value.treeOid)
     || !APPLICATION_STATES.has(value.state)
     || !stringArray(value.reasonCodes)
     || !stringArray(value.actionCodes)
@@ -743,6 +760,44 @@ function validateApplication(value) {
       || !SHA256_DIGEST.test(value.launchEntitlementBindingHash)
     ))
   ) throw new TypeError("Authenticated canary application is invalid");
+  if (value.intakeContract === undefined) {
+    if (
+      value.providerId !== undefined
+      || value.controlRepositoryId !== undefined
+      || value.controlRepositoryOwnerId !== undefined
+      || value.grandfatheredAtReleaseBindingDigest !== undefined
+    ) throw new TypeError("Authenticated canary intake identity is invalid");
+  } else if (value.intakeContract === "aeon-v1") {
+    if (
+      value.providerId !== "aeon"
+      || value.controlRepositoryId !== "1325324453"
+      || value.controlRepositoryOwnerId !== "309941960"
+      || (value.grandfatheredAtReleaseBindingDigest !== undefined
+        && value.grandfatheredAtReleaseBindingDigest !== null)
+    ) throw new TypeError("Authenticated canary intake identity is invalid");
+  } else if (value.intakeContract === "registry-v3") {
+    if (
+      (value.providerId !== undefined && value.providerId !== "programmable-registry")
+      || value.controlRepositoryId !== "1320171831"
+      || (value.controlRepositoryOwnerId !== undefined
+        && value.controlRepositoryOwnerId !== "309941960")
+      || (value.grandfatheredAtReleaseBindingDigest !== undefined
+        && value.grandfatheredAtReleaseBindingDigest !== null)
+    ) throw new TypeError("Authenticated canary intake identity is invalid");
+  } else if (value.intakeContract === "legacy-v2") {
+    if (
+      value.providerId !== undefined
+      || !isBoundedString(value.controlRepositoryId, 1, 64)
+      || value.controlRepositoryId === "1320171831"
+      || (value.controlRepositoryOwnerId !== undefined
+        && !isBoundedString(value.controlRepositoryOwnerId, 1, 64))
+      || (value.grandfatheredAtReleaseBindingDigest !== undefined
+        && value.grandfatheredAtReleaseBindingDigest !== null
+        && !SHA256_DIGEST.test(value.grandfatheredAtReleaseBindingDigest))
+    ) throw new TypeError("Authenticated canary intake identity is invalid");
+  } else {
+    throw new TypeError("Authenticated canary intake identity is invalid");
+  }
   assertTimestamp(value.updatedAt, "authenticated canary application time");
   for (const correction of value.correctionPreview) {
     assertRecord(correction, "Authenticated canary correction");
@@ -889,6 +944,15 @@ function assertExactKeys(value, keys) {
   if (Object.keys(value).sort().join("\0") !== [...keys].sort().join("\0")) {
     throw new TypeError("Deployment response has an unexpected shape");
   }
+}
+
+function assertExactKeysWithOptional(value, requiredKeys, optionalKeys) {
+  const actual = Object.keys(value);
+  const allowed = new Set([...requiredKeys, ...optionalKeys]);
+  if (
+    requiredKeys.some((key) => !Object.hasOwn(value, key))
+    || actual.some((key) => !allowed.has(key))
+  ) throw new TypeError("Deployment response has an unexpected shape");
 }
 
 function isBoundedString(value, minimum, maximum) {

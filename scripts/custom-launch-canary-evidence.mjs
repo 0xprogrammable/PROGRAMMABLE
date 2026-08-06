@@ -5,6 +5,7 @@ const SHA256_DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const GIT_COMMIT_OID = /^[0-9a-f]{40}$/u;
 const APPLICATION_HANDLE = /^github-[0-9a-f]{64}$/u;
 const VERCEL_DEPLOYMENT_ID = /^dpl_[A-Za-z0-9]{8,128}$/u;
+const REVIEW_AUTHORITY_MODES = new Set(["manual_review", "autonomous_ai"]);
 
 export function createCustomLaunchCanaryEvidence(input) {
   if (input === null || typeof input !== "object") {
@@ -28,6 +29,9 @@ export function createCustomLaunchCanaryEvidence(input) {
     typeof input.approvalServicePackageArtifactHash !== "string"
     || !SHA256_DIGEST.test(input.approvalServicePackageArtifactHash)
   ) throw new TypeError("Custom Launch approval package identity is invalid");
+  if (!REVIEW_AUTHORITY_MODES.has(input.reviewAuthorityMode)) {
+    throw new TypeError("Custom Launch review authority mode is invalid");
+  }
   const ownApplicationHandle = exactApplicationHandle(
     input.ownApplicationHandle,
     "own application handle",
@@ -50,7 +54,7 @@ export function createCustomLaunchCanaryEvidence(input) {
     }),
     approvalService: Object.freeze({
       packageArtifactHash: input.approvalServicePackageArtifactHash,
-      reviewAuthorityMode: "manual_review",
+      reviewAuthorityMode: input.reviewAuthorityMode,
     }),
     canary: Object.freeze({
       authenticated: true,

@@ -11,6 +11,10 @@ import {
   configuredLaunchPermitSignersV2,
   isCustomLaunchPublicEnabled,
 } from "./public-readiness";
+import {
+  exactReviewAuthorityModeV1,
+  type ReviewAuthorityModeV1,
+} from "@/lib/custom-launch/review-authority-v1";
 
 const ETHEREUM_CHAIN_ID = "1";
 const MAXIMUM_SERVICE_RESPONSE_BYTES = 16_384;
@@ -18,7 +22,6 @@ const SERVICE_TIMEOUT_MS = 5_000;
 const REQUEST_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/u;
 const COMMIT_SHA = /^[0-9a-f]{40}$/u;
 const SHA256_DIGEST = /^sha256:[0-9a-f]{64}$/u;
-const MANUAL_REVIEW_AUTHORITY_MODE = "manual_review";
 const DEPLOYMENT_HOST = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u;
 const RESPONSE_HEADERS = {
   "cache-control": "no-store, max-age=0",
@@ -122,7 +125,7 @@ export function createCustomLaunchDeploymentReadinessHandlerV1(
 
 export interface ExpectedApprovalServiceReleaseIdentityV1 {
   readonly packageArtifactHash: `sha256:${string}`;
-  readonly reviewAuthorityMode: "manual_review";
+  readonly reviewAuthorityMode: ReviewAuthorityModeV1;
 }
 
 function exactExpectedApprovalServiceReleaseIdentity(
@@ -130,12 +133,12 @@ function exactExpectedApprovalServiceReleaseIdentity(
 ): Readonly<ExpectedApprovalServiceReleaseIdentityV1> {
   const packageArtifactHash =
     environment.PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH;
-  const reviewAuthorityMode =
-    environment.PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE;
+  const reviewAuthorityMode = exactReviewAuthorityModeV1(
+    environment.PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE,
+  );
   if (
     typeof packageArtifactHash !== "string"
     || !SHA256_DIGEST.test(packageArtifactHash)
-    || reviewAuthorityMode !== MANUAL_REVIEW_AUTHORITY_MODE
   ) throw new TypeError("Approval service release identity is unavailable");
   return Object.freeze({
     packageArtifactHash: packageArtifactHash as `sha256:${string}`,

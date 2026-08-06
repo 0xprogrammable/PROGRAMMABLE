@@ -59,6 +59,10 @@ describe("Custom launch public readiness", () => {
     expect(isCustomLaunchPublicEnabled({
       ...configured,
       PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE: "autonomous_ai",
+    })).toBe(true);
+    expect(isCustomLaunchPublicEnabled({
+      ...configured,
+      PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE: "unconfigured",
     })).toBe(false);
     expect(isCustomLaunchPublicEnabled({ ...configured, NEXT_PUBLIC_PRIVY_APP_ID: "" })).toBe(false);
     expect(isCustomLaunchPublicEnabled({ ...configured, PRIVY_APP_SECRET: "" })).toBe(false);

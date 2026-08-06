@@ -215,9 +215,18 @@ export function assertFreshReissuedGrantV1(input: Readonly<{
     || freshApplication.applicationHandle !== originalApplication.applicationHandle
     || freshApplication.revisionId !== originalApplication.revisionId
     || freshApplication.repositoryId !== originalApplication.repositoryId
+    || freshApplication.repositoryOwnerId !== originalApplication.repositoryOwnerId
     || freshApplication.repositoryFullName !== originalApplication.repositoryFullName
     || freshApplication.pullRequestNumber !== originalApplication.pullRequestNumber
     || freshApplication.commitOid !== originalApplication.commitOid
+    || freshApplication.treeOid !== originalApplication.treeOid
+    || freshApplication.intakeContract !== originalApplication.intakeContract
+    || freshApplication.providerId !== originalApplication.providerId
+    || freshApplication.controlRepositoryId !== originalApplication.controlRepositoryId
+    || freshApplication.controlRepositoryOwnerId
+      !== originalApplication.controlRepositoryOwnerId
+    || freshApplication.grandfatheredAtReleaseBindingDigest
+      !== originalApplication.grandfatheredAtReleaseBindingDigest
     || freshApplication.state !== "approved"
     || freshApplication.receiptDigest !== originalApplication.receiptDigest
     || freshApplication.launchEntitlementBindingHash === null

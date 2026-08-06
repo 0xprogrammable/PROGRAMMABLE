@@ -36,9 +36,11 @@ function applicationList() {
       applicationHandle: APPLICATION_HANDLE,
       revisionId: "revision-1",
       repositoryId: "123456",
+      repositoryOwnerId: "309941960",
       repositoryFullName: "builder/wild-game",
       pullRequestNumber: 7,
       commitOid: "a".repeat(40),
+      treeOid: "b".repeat(40),
       state: "changes_required",
       reasonCodes: ["CORRECTION_REQUIRED"],
       actionCodes: ["UPDATE_SOURCE"],
@@ -182,7 +184,7 @@ describe("custom launch client response contracts", () => {
     });
   });
 
-  it("accepts only the explicit legacy and registry-v3 compatibility shapes", async () => {
+  it("accepts only the explicit AEON, registry-v3, and legacy compatibility shapes", async () => {
     const legacyOmitted = applicationList();
     await expect(clientFor(legacyOmitted).applications()).resolves.toMatchObject({
       applications: [{ applicationId: "application-1" }],
@@ -201,6 +203,17 @@ describe("custom launch client response contracts", () => {
       }],
     });
 
+    const aeonV1 = applicationList();
+    Object.assign(aeonV1.applications[0]!, {
+      intakeContract: "aeon-v1",
+      providerId: "aeon",
+      controlRepositoryId: "1325324453",
+      controlRepositoryOwnerId: "309941960",
+    });
+    await expect(clientFor(aeonV1).applications()).resolves.toMatchObject({
+      applications: [{ intakeContract: "aeon-v1", providerId: "aeon" }],
+    });
+
     const legacyV2 = applicationList();
     Object.assign(legacyV2.applications[0]!, {
       intakeContract: "legacy-v2",
@@ -217,7 +230,9 @@ describe("custom launch client response contracts", () => {
     registryMaximum.applications[0]!.applicationId = "a".repeat(120);
     Object.assign(registryMaximum.applications[0]!, {
       intakeContract: "registry-v3",
+      providerId: "programmable-registry",
       controlRepositoryId: "1320171831",
+      controlRepositoryOwnerId: "309941960",
       grandfatheredAtReleaseBindingDigest: null,
     });
     await expect(clientFor(registryMaximum).applications()).resolves.toMatchObject({
@@ -265,6 +280,12 @@ describe("custom launch client response contracts", () => {
       { intakeContract: "registry-v3" },
       { intakeContract: "registry-v3", controlRepositoryId: "123456" },
       {
+        intakeContract: "aeon-v1",
+        providerId: "aeon",
+        controlRepositoryId: "1320171831",
+        controlRepositoryOwnerId: "309941960",
+      },
+      {
         intakeContract: "registry-v3",
         controlRepositoryId: "1320171831",
         grandfatheredAtReleaseBindingDigest: DIGEST("d"),
@@ -275,6 +296,14 @@ describe("custom launch client response contracts", () => {
       Object.assign(value.applications[0]!, fields);
       await expectContractMismatch(clientFor(value).applications());
     }
+  });
+
+  it.each(["stale", "rejected"] as const)("accepts the %s process state", async (state) => {
+    const value = applicationList();
+    value.applications[0]!.state = state;
+    await expect(clientFor(value).applications()).resolves.toMatchObject({
+      applications: [{ state }],
+    });
   });
 
   it("rejects extra and missing response fields instead of trusting schemaVersion", async () => {

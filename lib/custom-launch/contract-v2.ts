@@ -432,6 +432,8 @@ export type CustomLaunchApplicationStateV2 =
   | "platform_pending"
   | "ready_for_registration"
   | "approved"
+  | "stale"
+  | "rejected"
   | "superseded"
   | "expired"
   | "revoked"
@@ -448,9 +450,11 @@ interface PrincipalCustomLaunchApplicationSummaryBaseV2 {
   readonly applicationHandle: ApplicationHandleV3;
   readonly revisionId: string;
   readonly repositoryId: string;
+  readonly repositoryOwnerId: string;
   readonly repositoryFullName: string;
   readonly pullRequestNumber: number;
   readonly commitOid: string;
+  readonly treeOid: string;
   readonly state: CustomLaunchApplicationStateV2;
   readonly reasonCodes: readonly string[];
   readonly actionCodes: readonly string[];
@@ -464,19 +468,38 @@ interface PrincipalCustomLaunchApplicationSummaryBaseV2 {
 export type PrincipalCustomLaunchApplicationSummaryV2 =
   | (PrincipalCustomLaunchApplicationSummaryBaseV2 & Readonly<{
       intakeContract?: undefined;
+      providerId?: undefined;
       controlRepositoryId?: undefined;
+      controlRepositoryOwnerId?: undefined;
       grandfatheredAtReleaseBindingDigest?: undefined;
     }>)
   | (PrincipalCustomLaunchApplicationSummaryBaseV2 & Readonly<{
+      intakeContract: "aeon-v1";
+      providerId: "aeon";
+      controlRepositoryId: "1325324453";
+      controlRepositoryOwnerId: "309941960";
+      grandfatheredAtReleaseBindingDigest?: null;
+    }>)
+  | (PrincipalCustomLaunchApplicationSummaryBaseV2 & Readonly<{
       intakeContract: "registry-v3";
+      providerId?: "programmable-registry";
       controlRepositoryId: "1320171831";
+      controlRepositoryOwnerId?: "309941960";
       grandfatheredAtReleaseBindingDigest?: null;
     }>)
   | (PrincipalCustomLaunchApplicationSummaryBaseV2 & Readonly<{
       intakeContract: "legacy-v2";
+      providerId?: undefined;
       controlRepositoryId: string;
+      controlRepositoryOwnerId?: string;
       grandfatheredAtReleaseBindingDigest?: Sha256DigestV2 | null;
     }>);
+
+export function customApplicationIntakeIsLaunchableV2(
+  application: PrincipalCustomLaunchApplicationSummaryV2,
+): boolean {
+  return application.intakeContract !== "registry-v3";
+}
 
 export interface PrincipalCustomLaunchApplicationListV2 {
   readonly schemaVersion: "programmable.principal-custom-launch-application-list.v3";

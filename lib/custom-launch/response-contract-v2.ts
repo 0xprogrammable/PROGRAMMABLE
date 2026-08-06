@@ -99,22 +99,25 @@ function validateApplicationListV2(value: unknown): void {
 
 function validateApplicationSummaryV2(value: unknown): void {
   const record = exactRecordWithOptional(value, [
-    "applicationId", "applicationHandle", "revisionId", "repositoryId", "repositoryFullName",
-    "pullRequestNumber", "commitOid", "state", "reasonCodes", "actionCodes",
+    "applicationId", "applicationHandle", "revisionId", "repositoryId", "repositoryOwnerId",
+    "repositoryFullName", "pullRequestNumber", "commitOid", "treeOid", "state", "reasonCodes", "actionCodes",
     "correctionCount", "correctionPreview", "receiptDigest",
     "launchEntitlementBindingHash", "updatedAt",
   ], [
-    "intakeContract", "controlRepositoryId", "grandfatheredAtReleaseBindingDigest",
+    "intakeContract", "providerId", "controlRepositoryId", "controlRepositoryOwnerId",
+    "grandfatheredAtReleaseBindingDigest",
   ]);
   applicationHandle(record.applicationHandle);
   identifier(record.revisionId);
   positiveDecimal(record.repositoryId);
+  positiveDecimal(record.repositoryOwnerId);
   boundedString(record.repositoryFullName, 3, 256);
   safeInteger(record.pullRequestNumber, 1);
   regexString(record.commitOid, GIT_OID_V2, 64);
+  regexString(record.treeOid, GIT_OID_V2, 64);
   enumValue(record.state, [
     "received", "in_review", "changes_required", "platform_pending",
-    "ready_for_registration", "approved", "superseded", "expired", "revoked",
+    "ready_for_registration", "approved", "stale", "rejected", "superseded", "expired", "revoked",
     "launching", "launched",
   ]);
   stringArray(record.reasonCodes, 512, 128);
@@ -129,19 +132,35 @@ function validateApplicationSummaryV2(value: unknown): void {
   nullable(record.receiptDigest, digest);
   nullable(record.launchEntitlementBindingHash, digest);
   const hasCompatibilityField = record.controlRepositoryId !== undefined
+    || record.controlRepositoryOwnerId !== undefined
+    || record.providerId !== undefined
     || record.grandfatheredAtReleaseBindingDigest !== undefined;
   if (record.intakeContract === undefined) {
     legacyV2ApplicationId(record.applicationId);
     if (hasCompatibilityField) mismatch();
+  } else if (record.intakeContract === "aeon-v1") {
+    applicationV3Id(record.applicationId);
+    if (record.providerId !== "aeon"
+      || record.controlRepositoryId !== "1325324453"
+      || record.controlRepositoryOwnerId !== "309941960"
+      || (record.grandfatheredAtReleaseBindingDigest !== undefined
+        && record.grandfatheredAtReleaseBindingDigest !== null)) mismatch();
   } else if (record.intakeContract === "registry-v3") {
     applicationV3Id(record.applicationId);
-    if (record.controlRepositoryId !== "1320171831"
+    if ((record.providerId !== undefined && record.providerId !== "programmable-registry")
+      || record.controlRepositoryId !== "1320171831"
+      || (record.controlRepositoryOwnerId !== undefined
+        && record.controlRepositoryOwnerId !== "309941960")
       || (record.grandfatheredAtReleaseBindingDigest !== undefined
         && record.grandfatheredAtReleaseBindingDigest !== null)) mismatch();
   } else if (record.intakeContract === "legacy-v2") {
     legacyV2ApplicationId(record.applicationId);
+    if (record.providerId !== undefined) mismatch();
     positiveDecimal(record.controlRepositoryId);
     if (record.controlRepositoryId === "1320171831") mismatch();
+    if (record.controlRepositoryOwnerId !== undefined) {
+      positiveDecimal(record.controlRepositoryOwnerId);
+    }
     if (record.grandfatheredAtReleaseBindingDigest !== undefined) {
       nullable(record.grandfatheredAtReleaseBindingDigest, digest);
     }

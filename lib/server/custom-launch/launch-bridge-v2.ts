@@ -12,6 +12,10 @@ import {
 } from "../projection-target/canonical-json";
 import { isCustomLaunchPublicEnabled } from "./public-readiness";
 import { assertApprovalServiceReadiness } from "./deployment-readiness";
+import {
+  exactReviewAuthorityModeV1,
+  type ReviewAuthorityModeV1,
+} from "@/lib/custom-launch/review-authority-v1";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9][A-Za-z0-9._:@/+-]{15,511}$/u;
@@ -44,6 +48,7 @@ export interface CustomLaunchBridgeDependenciesV2 {
   readonly serviceOrigin: URL;
   readonly serviceFetch: typeof fetch;
   readonly expectedPackageArtifactHash: `sha256:${string}`;
+  readonly expectedReviewAuthorityMode: ReviewAuthorityModeV1;
 }
 
 export function createCustomLaunchBridgeHandlerV2(
@@ -54,6 +59,8 @@ export function createCustomLaunchBridgeHandlerV2(
     typeof dependencies.authenticator?.authenticate !== "function"
     || typeof dependencies.serviceFetch !== "function"
     || !SHA256_DIGEST.test(dependencies.expectedPackageArtifactHash)
+    || exactReviewAuthorityModeV1(dependencies.expectedReviewAuthorityMode)
+      !== dependencies.expectedReviewAuthorityMode
   ) throw new TypeError("custom launch bridge dependencies are invalid");
 
   return async function customLaunchBridge(
@@ -139,7 +146,7 @@ export function createCustomLaunchBridgeHandlerV2(
     try {
       await assertApprovalServiceReadiness(origin, {
         packageArtifactHash: dependencies.expectedPackageArtifactHash,
-        reviewAuthorityMode: "manual_review",
+        reviewAuthorityMode: dependencies.expectedReviewAuthorityMode,
       }, dependencies.serviceFetch);
     } catch {
       return errorResponse(503, "launch_service_release_unverified");
@@ -304,6 +311,9 @@ export function handleProductionCustomLaunchBridgeV2(
       expectedPackageArtifactHash: requiredEnvironment(
         "PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH",
       ) as `sha256:${string}`,
+      expectedReviewAuthorityMode: exactReviewAuthorityModeV1(requiredEnvironment(
+        "PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE",
+      )),
     });
     return productionHandler(request, operation);
   } catch {

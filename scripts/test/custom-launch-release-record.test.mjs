@@ -250,6 +250,22 @@ test("template and schema are valid JSON and the template is not clearance", asy
   assert.match(clearance.errors.join("\n"), /freezeClearance/);
 });
 
+test("release record accepts either configured review mode but requires exact equality", async () => {
+  const autonomous = await readTemplate();
+  assert.equal(autonomous.releaseIntent.reviewAuthorityMode, "autonomous_ai");
+  assert.equal(verifyReleaseRecord(autonomous, { require: "template" }).ok, true);
+
+  const manual = await readTemplate();
+  manual.releaseIntent.reviewAuthorityMode = "manual_review";
+  manual.subject.approvalService.reviewAuthorityMode = "manual_review";
+  assert.equal(verifyReleaseRecord(manual, { require: "template" }).ok, true);
+
+  manual.subject.approvalService.reviewAuthorityMode = "autonomous_ai";
+  const mismatch = verifyReleaseRecord(manual, { require: "template" });
+  assert.equal(mismatch.ok, false);
+  assert.match(mismatch.errors.join("\n"), /reviewAuthorityMode/);
+});
+
 test("AJV 2020 rejects unknown nested fields before semantic verification", async () => {
   const mutations = [
     (record) => { record.unexpected = true; },

@@ -30,6 +30,8 @@ The record has two different hashes:
 
 1. Copy `release-record.template.json` to an evidence-only location. Never edit
    the template itself for a release.
+   Set both `reviewAuthorityMode` fields to the exact configured service mode,
+   either `manual_review` or `autonomous_ai`; the verifier requires them to be equal.
 2. Finalize the five-component backend release set first. Its attestation
    commit must have the exact backend candidate as its sole parent and change
    only

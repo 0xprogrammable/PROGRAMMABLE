@@ -84,9 +84,11 @@ function application(
     applicationHandle: APPLICATION_HANDLE,
     revisionId: "revision-1",
     repositoryId: "42",
+    repositoryOwnerId: "309941960",
     repositoryFullName: "builder/project",
     pullRequestNumber: 7,
     commitOid: "a".repeat(40),
+    treeOid: "b".repeat(40),
     state: "approved",
     reasonCodes: [],
     actionCodes: [],
@@ -163,6 +165,14 @@ describe("browser-wallet grant reissue Website flow", () => {
     expect(() => assertFreshReissuedGrantV1({
       ...common,
       freshApplication: application({ commitOid: "b".repeat(40) }),
+    })).toThrow(BrowserWalletGrantReissueBindingErrorV1);
+    expect(() => assertFreshReissuedGrantV1({
+      ...common,
+      freshApplication: application({ treeOid: "c".repeat(40) }),
+    })).toThrow(BrowserWalletGrantReissueBindingErrorV1);
+    expect(() => assertFreshReissuedGrantV1({
+      ...common,
+      freshApplication: application({ repositoryOwnerId: "1" }),
     })).toThrow(BrowserWalletGrantReissueBindingErrorV1);
     expect(() => assertFreshReissuedGrantV1({
       ...common,

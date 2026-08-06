@@ -16,6 +16,7 @@ import {
   configurationControlForKind,
   customApplicationDisplayState,
   customApplicationOpensLaunchExperience,
+  customApplicationOpensLaunchExperienceV2,
   defaultLaunchRoute,
   assertLaunchPermitFreshnessV2,
   fetchTrustedTimeV1,
@@ -108,10 +109,12 @@ function application(): PrincipalCustomLaunchApplicationSummaryV2 {
     applicationId: "application-1",
     applicationHandle: APPLICATION_HANDLE,
     revisionId: "revision-1",
-    repositoryId: "repository-1",
+    repositoryId: "123",
+    repositoryOwnerId: "309941960",
     repositoryFullName: "builder/wild-game",
     pullRequestNumber: 7,
     commitOid: "a".repeat(40),
+    treeOid: "b".repeat(40),
     state: "approved",
     reasonCodes: [],
     actionCodes: [],
@@ -730,6 +733,19 @@ describe("custom launch browser authority", () => {
       descriptor: descriptor(),
       presentation: presentationResponse(),
     })).toThrow("binding mismatch");
+    expect(() => assertLaunchSetupBindings({
+      application: {
+        ...application(),
+        intakeContract: "registry-v3",
+        providerId: "programmable-registry",
+        controlRepositoryId: "1320171831",
+        controlRepositoryOwnerId: "309941960",
+        grandfatheredAtReleaseBindingDigest: null,
+      },
+      eligibility,
+      descriptor: descriptor(),
+      presentation: presentationResponse(),
+    })).toThrow("binding mismatch");
   });
 
   it("accepts only the same exact GitHub revision across refresh and refetch", () => {
@@ -740,6 +756,14 @@ describe("custom launch browser authority", () => {
     expect(() => assertSamePrincipalApplicationRevisionV1(
       application(),
       { ...application(), commitOid: "b".repeat(40) },
+    )).toThrow("different GitHub revision");
+    expect(() => assertSamePrincipalApplicationRevisionV1(
+      application(),
+      { ...application(), repositoryOwnerId: "1" },
+    )).toThrow("different GitHub revision");
+    expect(() => assertSamePrincipalApplicationRevisionV1(
+      application(),
+      { ...application(), treeOid: "c".repeat(40) },
     )).toThrow("different GitHub revision");
     expect(() => assertSamePrincipalApplicationRevisionV1(
       application(),
@@ -1173,6 +1197,8 @@ describe("custom launch browser authority", () => {
       "platform_pending",
       "ready_for_registration",
       "approved",
+      "stale",
+      "rejected",
       "superseded",
       "expired",
       "revoked",
@@ -1180,7 +1206,7 @@ describe("custom launch browser authority", () => {
       "launched",
     ] as const;
 
-    expect(states.map((state) => customApplicationDisplayState(state))).toHaveLength(11);
+    expect(states.map((state) => customApplicationDisplayState(state))).toHaveLength(13);
     expect(customApplicationDisplayState("approved")).toMatchObject({
       title: "Ready to launch",
       tone: "ready",
@@ -1221,6 +1247,14 @@ describe("custom launch browser authority", () => {
       "launching",
       "launched",
     ]);
+    expect(customApplicationOpensLaunchExperienceV2({
+      ...application(),
+      intakeContract: "registry-v3",
+      providerId: "programmable-registry",
+      controlRepositoryId: "1320171831",
+      controlRepositoryOwnerId: "309941960",
+      grandfatheredAtReleaseBindingDigest: null,
+    })).toBe(false);
   });
 
   it("turns malformed or non-HTTPS project links into a recoverable form error", () => {

@@ -31,7 +31,7 @@
         "releaseId": { "type": "string", "minLength": 1, "maxLength": 128 },
         "product": { "const": "custom_launch" },
         "chainId": { "const": "1" },
-        "reviewAuthorityMode": { "const": "manual_review" },
+        "reviewAuthorityMode": { "enum": ["manual_review", "autonomous_ai"] },
         "targetMode": { "enum": ["disabled", "enabled"] }
       }
     },
@@ -60,7 +60,7 @@
             "packageArtifactHash": { "$ref": "#/$defs/nullableSha256" },
             "detachedPackedArtifactFileSha256": { "$ref": "#/$defs/nullableSha256" },
             "productionContentManifestSha256": { "$ref": "#/$defs/nullableSha256" },
-            "reviewAuthorityMode": { "const": "manual_review" }
+            "reviewAuthorityMode": { "enum": ["manual_review", "autonomous_ai"] }
           }
         },
         "crossRepositoryReleaseBinding": {

@@ -3,6 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 
 import type { TrustedLaunchPermitSignerV2 } from "@/lib/custom-launch/contract-v2";
+import { isReviewAuthorityModeV1 } from "@/lib/custom-launch/review-authority-v1";
 
 const SIGNER_KEYS = [
   "keyId",
@@ -14,7 +15,6 @@ const SIGNER_KEYS = [
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:@/+\-]{0,255}$/u;
 const POSITIVE_EPOCH = /^[1-9][0-9]{0,19}$/u;
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
-const MANUAL_REVIEW_AUTHORITY_MODE = "manual_review";
 const BASE64URL = /^[A-Za-z0-9_-]+$/u;
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 
@@ -30,8 +30,9 @@ export function isCustomLaunchPublicEnabled(
   }
   if (
     !DIGEST.test(environment.PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH ?? "")
-    || environment.PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE
-      !== MANUAL_REVIEW_AUTHORITY_MODE
+    || !isReviewAuthorityModeV1(
+      environment.PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE,
+    )
   ) return false;
   if (configuredLaunchPermitSignersV2(environment).length === 0) return false;
   try {

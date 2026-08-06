@@ -72,9 +72,15 @@ function principalList() {
       applicationHandle: OWN_APPLICATION_HANDLE,
       revisionId: "revision-owned",
       repositoryId: "123",
+      repositoryOwnerId: "309941960",
       repositoryFullName: "programmable/canary",
       pullRequestNumber: 1,
       commitOid: "b".repeat(40),
+      treeOid: "c".repeat(40),
+      intakeContract: "aeon-v1",
+      providerId: "aeon",
+      controlRepositoryId: "1325324453",
+      controlRepositoryOwnerId: "309941960",
       state: "approved",
       reasonCodes: [],
       actionCodes: [],
@@ -253,7 +259,7 @@ describe("custom launch deployment probe", () => {
     })).rejects.toThrow("enabled while disabled");
   });
 
-  it("binds the probe to the exact manual-first backend release identity", async () => {
+  it("binds the probe to the exact configured backend release identity", async () => {
     const run = (readiness: object, overrides: Record<string, unknown> = {}) => {
       const fetchMock = vi.fn(async (input: URL | RequestInfo) => {
         const url = new URL(String(input));
@@ -294,7 +300,7 @@ describe("custom launch deployment probe", () => {
         reviewAuthorityMode: "autonomous_ai",
       },
     });
-    await expect(wrongMode.result).rejects.toThrow("release identity");
+    await expect(wrongMode.result).rejects.toThrow("configured release");
     expect(wrongMode.fetchMock).toHaveBeenCalledOnce();
 
     await expect(run(ready(), {
@@ -302,7 +308,7 @@ describe("custom launch deployment probe", () => {
     }).result).rejects.toThrow("package artifact");
     await expect(run(ready(), {
       expectedApprovalServiceReviewAuthorityMode: "autonomous_ai",
-    }).result).rejects.toThrow("manual-first");
+    }).result).rejects.toThrow("configured release");
   });
 
   it("runs the authenticated canary only with both secrets and validates its principal schema", async () => {
