@@ -89,11 +89,11 @@ jobs:
       - name: Test
         env:
           FOUNDRY_PROFILE: ci
-        run: forge test --no-match-contract '(ClassicV3MainnetForkTest|ShardV1MainnetForkTest)'
+        run: forge test --no-match-contract ClassicV3MainnetForkTest
 
       - name: Check gas snapshot
         run: >-
           forge snapshot
-          --no-match-contract '(ClassicV3MainnetForkTest|ShardV1MainnetForkTest)'
+          --no-match-contract ClassicV3MainnetForkTest
           --fuzz-seed 0x70726f6772616d6d61626c65
           --check .gas-snapshot

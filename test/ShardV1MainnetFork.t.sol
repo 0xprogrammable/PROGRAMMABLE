@@ -30,11 +30,12 @@ import { ShardLaunchLib } from "./utils/ShardLaunchLib.sol";
 ///      every step. It also pins that the fork handed us the genuine PoolManager (by runtime code
 ///      hash), reproduces CREATE2 predictions, and checks Ethereum-native art-seed inputs.
 ///
-///      It needs an archive RPC and so is excluded from the default `forge test` run in CI, in the
-///      style of {ClassicV3MainnetForkTest}. Point `ETHEREUM_RPC_URL` at an archive node, or let it
-///      fall back to the public default, and run it explicitly:
+///      It needs an archive RPC and so is kept out of the default `forge test` run in CI. Unlike
+///      {ClassicV3MainnetForkTest}, which is excluded by `verify.yml`, this suite gates itself on
+///      `ETHEREUM_RPC_URL`: when that variable is unset it skips, so it stays out of normal CI
+///      without editing the shared workflow. Point `ETHEREUM_RPC_URL` at an archive node and run it:
 ///
-///          forge test --match-contract ShardV1MainnetForkTest
+///          ETHEREUM_RPC_URL=<archive-node> forge test --match-contract ShardV1MainnetForkTest
 contract ShardV1MainnetForkTest is Test {
     using CurrencyLibrary for Currency;
 
@@ -78,7 +79,15 @@ contract ShardV1MainnetForkTest is Test {
     bool internal launchEventMatched;
 
     function setUp() public {
-        string memory rpc = vm.envOr("ETHEREUM_RPC_URL", string("https://eth.drpc.org"));
+        // This fork suite runs only in the dedicated Mainnet-evidence workflow, which sets
+        // ETHEREUM_RPC_URL. When it is unset — the default `forge test`/`forge snapshot` run — skip
+        // rather than hit the network, so the suite stays out of normal CI without a
+        // `--no-match-contract` entry in verify.yml.
+        string memory rpc = vm.envOr("ETHEREUM_RPC_URL", string(""));
+        if (bytes(rpc).length == 0) {
+            vm.skip(true);
+            return;
+        }
         vm.createSelectFork(rpc, SNAPSHOT_BLOCK);
 
         deadline = block.timestamp + 1 hours;
