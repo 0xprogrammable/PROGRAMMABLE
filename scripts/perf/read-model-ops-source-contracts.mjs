@@ -22,7 +22,7 @@ const APPROVED_OPERATIONS = Object.freeze({
     Object.freeze({
       id: "protocol-revenue",
       path: "/api/ops/protocol-revenue",
-      schedule: "*/15 * * * *",
+      schedule: "* * * * *",
       activationEnvironment: "PROTOCOL_REVENUE_AUTOMATION_ENABLED",
       route: Object.freeze({
         path: "app/api/ops/protocol-revenue/route.ts",
@@ -30,7 +30,7 @@ const APPROVED_OPERATIONS = Object.freeze({
       }),
       runtime: Object.freeze({
         path: "lib/protocol-revenue/keeper-v2.server.ts",
-        sha256: "da027cf1f0a565715f921130604df968c63e78907b5829fc548a7619639c0e51",
+        sha256: "8a0b48fcc3cf3034c4be422cc6e9f35f5c7c224c2c45589b34b5798a3fd5a0d8",
       }),
       dependencies: Object.freeze([
         Object.freeze({
@@ -40,7 +40,7 @@ const APPROVED_OPERATIONS = Object.freeze({
       ]),
       policy: Object.freeze({
         path: "lib/protocol-revenue/keeper-policy.ts",
-        sha256: "b515502c8ef81b99a3ba8d7867c76e6aeb346d2c9f2b50da4c0407fb54c46090",
+        sha256: "bb39f651c11e49173e5b07e42edd2bfa4a1c0e78e5b0345a47b338751e451787",
       }),
     }),
   ]),

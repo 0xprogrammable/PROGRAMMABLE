@@ -63,6 +63,7 @@ const COORDINATOR_ABI = parseAbi([
   "function CLASSIC_V2_HOOK() view returns (address)",
   "function MIN_ACCRUED_REVENUE() view returns (uint256)",
   "function accruedRevenue() view returns (uint256)",
+  "function totalClaimed() view returns (uint256)",
   "function ready() view returns (bool)",
   "function nextClaimAt() view returns (uint256)",
   "function claim() returns (uint256)",
@@ -80,6 +81,7 @@ const VAULT_ABI = parseAbi([
   "function MIN_NEW_REVENUE() view returns (uint256)",
   "function MAX_OBSERVATION_AGE() view returns (uint64)",
   "function pendingRevenue() view returns (uint256)",
+  "function totalRevenueDeposited() view returns (uint256)",
   "function nextRunAt() view returns (uint256)",
   "function currentMainPoolTick() view returns (int24)",
   "function process(uint64 observedAt,int24 referenceTick)",
@@ -105,6 +107,7 @@ export type ProtocolRevenueKeeperV2Result =
         | "not_due"
         | "below_minimum"
         | "pending_transaction"
+        | "accounting_mismatch"
         | "permission_exhausted"
         | "gas_price_too_high"
         | "gas_estimate_too_high"
@@ -294,6 +297,38 @@ async function finalizedObservation(
   const blockNumber = heads[0].number < heads[1].number
     ? heads[0].number
     : heads[1].number;
+  const blocks = await Promise.all(
+    clients.map((current) => current.getBlock({ blockNumber })),
+  );
+  if (
+    !blocks[0].hash ||
+    !blocks[1].hash ||
+    blocks[0].hash.toLowerCase() !== blocks[1].hash.toLowerCase() ||
+    blocks[0].timestamp !== blocks[1].timestamp
+  ) {
+    throw new ProtocolRevenueKeeperV2Error("rpc_quorum_failed");
+  }
+  return { blockNumber, timestamp: blocks[0].timestamp } as const;
+}
+
+async function confirmedObservation(
+  clients: readonly [PublicClient, PublicClient],
+) {
+  let heads;
+  try {
+    heads = await Promise.all(
+      clients.map((current) => current.getBlock({ blockTag: "latest" })),
+    );
+  } catch {
+    throw new ProtocolRevenueKeeperV2Error("rpc_quorum_failed");
+  }
+  const lowestHead = heads[0].number < heads[1].number
+    ? heads[0].number
+    : heads[1].number;
+  if (lowestHead < 2n) {
+    throw new ProtocolRevenueKeeperV2Error("rpc_quorum_failed");
+  }
+  const blockNumber = lowestHead - 2n;
   const blocks = await Promise.all(
     clients.map((current) => current.getBlock({ blockNumber })),
   );
@@ -519,18 +554,21 @@ export async function runConfiguredProtocolRevenueKeeperV2(
     client(providers[0].endpoint),
     client(providers[1].endpoint),
   ] as const;
-  const observation = await finalizedObservation(clients);
+  const [stateObservation, priceObservation] = await Promise.all([
+    confirmedObservation(clients),
+    finalizedObservation(clients),
+  ]);
   await Promise.all([
     assertCodeBinding({
       clients,
       address: configuration.coordinator,
-      blockNumber: observation.blockNumber,
+      blockNumber: stateObservation.blockNumber,
       expectedCodeHash: configuration.coordinatorCodeHash,
     }),
     assertCodeBinding({
       clients,
       address: configuration.vault,
-      blockNumber: observation.blockNumber,
+      blockNumber: stateObservation.blockNumber,
       expectedCodeHash: configuration.vaultCodeHash,
     }),
   ]);
@@ -547,6 +585,7 @@ export async function runConfiguredProtocolRevenueKeeperV2(
     coordinatorRevenueAuthority,
     claimMinimumRevenue,
     claimAccruedRevenue,
+    coordinatorTotalClaimed,
     claimReady,
     vaultKeeper,
     vaultRevenueAuthority,
@@ -560,31 +599,39 @@ export async function runConfiguredProtocolRevenueKeeperV2(
     vaultMinimumRevenue,
     maximumObservationAge,
     pendingRevenue,
+    vaultTotalRevenueDeposited,
     vaultNextRunAt,
-    referenceTick,
     rewardWalletBalance,
   ] = await Promise.all([
-    readContractAgreement<Address>({ clients, address: configuration.coordinator, abi: COORDINATOR_ABI, functionName: "keeper", blockNumber: observation.blockNumber }),
-    readContractAgreement<Address>({ clients, address: configuration.coordinator, abi: COORDINATOR_ABI, functionName: "REVENUE_AUTHORITY", blockNumber: observation.blockNumber }),
-    readContractAgreement<bigint>({ clients, address: configuration.coordinator, abi: COORDINATOR_ABI, functionName: "MIN_ACCRUED_REVENUE", blockNumber: observation.blockNumber }),
-    readContractAgreement<bigint>({ clients, address: configuration.coordinator, abi: COORDINATOR_ABI, functionName: "accruedRevenue", blockNumber: observation.blockNumber }),
-    readContractAgreement<boolean>({ clients, address: configuration.coordinator, abi: COORDINATOR_ABI, functionName: "ready", blockNumber: observation.blockNumber }),
-    readContractAgreement<Address>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "keeper", blockNumber: observation.blockNumber }),
-    readContractAgreement<Address>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "REVENUE_AUTHORITY", blockNumber: observation.blockNumber }),
-    readContractAgreement<Address>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "TREASURY", blockNumber: observation.blockNumber }),
-    readContractAgreement<Address>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "V4_TOKEN", blockNumber: observation.blockNumber }),
-    readContractAgreement<number>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "TREASURY_SHARE_BPS", blockNumber: observation.blockNumber }),
-    readContractAgreement<number>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "BUY_SHARE_BPS", blockNumber: observation.blockNumber }),
-    readContractAgreement<number>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "KEEPER_GAS_SHARE_BPS", blockNumber: observation.blockNumber }),
-    readContractAgreement<bigint>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "CYCLE_INTERVAL", blockNumber: observation.blockNumber }),
-    readContractAgreement<bigint>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "MAX_DAILY_REVENUE", blockNumber: observation.blockNumber }),
-    readContractAgreement<bigint>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "MIN_NEW_REVENUE", blockNumber: observation.blockNumber }),
-    readContractAgreement<bigint>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "MAX_OBSERVATION_AGE", blockNumber: observation.blockNumber }),
-    readContractAgreement<bigint>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "pendingRevenue", blockNumber: observation.blockNumber }),
-    readContractAgreement<bigint>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "nextRunAt", blockNumber: observation.blockNumber }),
-    readContractAgreement<number>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "currentMainPoolTick", blockNumber: observation.blockNumber }),
-    agreed(clients, (current) => current.getBalance({ address: REVENUE_AUTHORITY, blockNumber: observation.blockNumber })),
+    readContractAgreement<Address>({ clients, address: configuration.coordinator, abi: COORDINATOR_ABI, functionName: "keeper", blockNumber: stateObservation.blockNumber }),
+    readContractAgreement<Address>({ clients, address: configuration.coordinator, abi: COORDINATOR_ABI, functionName: "REVENUE_AUTHORITY", blockNumber: stateObservation.blockNumber }),
+    readContractAgreement<bigint>({ clients, address: configuration.coordinator, abi: COORDINATOR_ABI, functionName: "MIN_ACCRUED_REVENUE", blockNumber: stateObservation.blockNumber }),
+    readContractAgreement<bigint>({ clients, address: configuration.coordinator, abi: COORDINATOR_ABI, functionName: "accruedRevenue", blockNumber: stateObservation.blockNumber }),
+    readContractAgreement<bigint>({ clients, address: configuration.coordinator, abi: COORDINATOR_ABI, functionName: "totalClaimed", blockNumber: stateObservation.blockNumber }),
+    readContractAgreement<boolean>({ clients, address: configuration.coordinator, abi: COORDINATOR_ABI, functionName: "ready", blockNumber: stateObservation.blockNumber }),
+    readContractAgreement<Address>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "keeper", blockNumber: stateObservation.blockNumber }),
+    readContractAgreement<Address>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "REVENUE_AUTHORITY", blockNumber: stateObservation.blockNumber }),
+    readContractAgreement<Address>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "TREASURY", blockNumber: stateObservation.blockNumber }),
+    readContractAgreement<Address>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "V4_TOKEN", blockNumber: stateObservation.blockNumber }),
+    readContractAgreement<number>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "TREASURY_SHARE_BPS", blockNumber: stateObservation.blockNumber }),
+    readContractAgreement<number>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "BUY_SHARE_BPS", blockNumber: stateObservation.blockNumber }),
+    readContractAgreement<number>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "KEEPER_GAS_SHARE_BPS", blockNumber: stateObservation.blockNumber }),
+    readContractAgreement<bigint>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "CYCLE_INTERVAL", blockNumber: stateObservation.blockNumber }),
+    readContractAgreement<bigint>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "MAX_DAILY_REVENUE", blockNumber: stateObservation.blockNumber }),
+    readContractAgreement<bigint>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "MIN_NEW_REVENUE", blockNumber: stateObservation.blockNumber }),
+    readContractAgreement<bigint>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "MAX_OBSERVATION_AGE", blockNumber: stateObservation.blockNumber }),
+    readContractAgreement<bigint>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "pendingRevenue", blockNumber: stateObservation.blockNumber }),
+    readContractAgreement<bigint>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "totalRevenueDeposited", blockNumber: stateObservation.blockNumber }),
+    readContractAgreement<bigint>({ clients, address: configuration.vault, abi: VAULT_ABI, functionName: "nextRunAt", blockNumber: stateObservation.blockNumber }),
+    agreed(clients, (current) => current.getBalance({ address: REVENUE_AUTHORITY, blockNumber: stateObservation.blockNumber })),
   ]);
+  const referenceTick = await readContractAgreement<number>({
+    clients,
+    address: configuration.vault,
+    abi: VAULT_ABI,
+    functionName: "currentMainPoolTick",
+    blockNumber: priceObservation.blockNumber,
+  });
   if (
     getAddress(coordinatorKeeper) !== account.address ||
     getAddress(vaultKeeper) !== account.address ||
@@ -604,9 +651,11 @@ export async function runConfiguredProtocolRevenueKeeperV2(
 
   const wallClock = BigInt(Math.floor(Date.now() / 1_000));
   if (
-    observation.timestamp > wallClock ||
-    wallClock - observation.timestamp > maximumObservationAge - 120n ||
-    observation.timestamp > maxUint64
+    stateObservation.timestamp > wallClock ||
+    wallClock - stateObservation.timestamp > 180n ||
+    priceObservation.timestamp > wallClock ||
+    wallClock - priceObservation.timestamp > maximumObservationAge - 120n ||
+    priceObservation.timestamp > maxUint64
   ) {
     throw new ProtocolRevenueKeeperV2Error("observation_stale");
   }
@@ -654,10 +703,13 @@ export async function runConfiguredProtocolRevenueKeeperV2(
   }
 
   const decision = evaluateProtocolRevenueV2Action({
-    finalizedTimestamp: observation.timestamp,
+    stateTimestamp: stateObservation.timestamp,
     pendingRevenue,
     vaultNextRunAt,
     vaultMinimumRevenue,
+    vaultMaximumRevenue: maximumDailyRevenue,
+    coordinatorTotalClaimed,
+    vaultTotalRevenueDeposited,
     rewardWalletBalance,
     permissionAvailable,
     maximumTransfer: configuration.maximumTransfer < maximumDailyRevenue
@@ -676,9 +728,13 @@ export async function runConfiguredProtocolRevenueKeeperV2(
   ) {
     return {
       status: decision.status,
-      finalizedBlockNumber: observation.blockNumber.toString(),
+      finalizedBlockNumber: priceObservation.blockNumber.toString(),
       availableRevenue: (
-        pendingRevenue + rewardWalletBalance + claimAccruedRevenue
+        pendingRevenue +
+        (coordinatorTotalClaimed >= vaultTotalRevenueDeposited
+          ? coordinatorTotalClaimed - vaultTotalRevenueDeposited
+          : 0n) +
+        claimAccruedRevenue
       ).toString(),
       ...(decision.status === "not_due"
         ? { nextRunAt: decision.nextRunAt.toString() }
@@ -693,7 +749,7 @@ export async function runConfiguredProtocolRevenueKeeperV2(
         data: encodeFunctionData({
           abi: VAULT_ABI,
           functionName: "process",
-          args: [observation.timestamp, referenceTick],
+          args: [priceObservation.timestamp, referenceTick],
         }),
         value: 0n,
         economicRevenue: decision.revenue,
@@ -765,7 +821,7 @@ export async function runConfiguredProtocolRevenueKeeperV2(
         ),
       ),
       Promise.all(clients.map((current) => current.estimateFeesPerGas())),
-      agreed(clients, (current) => current.getBalance({ address: account.address, blockNumber: observation.blockNumber })),
+      agreed(clients, (current) => current.getBalance({ address: account.address, blockNumber: stateObservation.blockNumber })),
     ]);
   } catch {
     throw new ProtocolRevenueKeeperV2Error("rpc_quorum_failed");
@@ -791,7 +847,7 @@ export async function runConfiguredProtocolRevenueKeeperV2(
   if (economics.status !== "ready") {
     return {
       status: economics.status,
-      finalizedBlockNumber: observation.blockNumber.toString(),
+      finalizedBlockNumber: priceObservation.blockNumber.toString(),
       availableRevenue: transaction.economicRevenue.toString(),
     };
   }
@@ -831,7 +887,7 @@ export async function runConfiguredProtocolRevenueKeeperV2(
     status: "submitted",
     action,
     transactionHash,
-    finalizedBlockNumber: observation.blockNumber.toString(),
+    finalizedBlockNumber: priceObservation.blockNumber.toString(),
     availableRevenue: transaction.economicRevenue.toString(),
     maximumGasCost: economics.maximumGasCost.toString(),
     keeperFunding: economics.keeperFunding.toString(),
