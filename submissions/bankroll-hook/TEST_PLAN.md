@@ -23,6 +23,7 @@ The current Foundry suite covers:
 - deterministic fixed-token, hook and router launch through a real PoolManager and PositionManager
 - permanent position ownership, fixed supply, empty launcher custody and initial-buy fee accrual
 - EIP-170 runtime-size checks and lint
+- exact hook and router creation/runtime hash binding, modified-init-code rejection and launch provenance
 
 Run:
 
@@ -44,7 +45,7 @@ Add VRF adapter tests for exact payment, maximum fee, duplicate request key, unk
 
 ## Stateful invariants
 
-The current handler covers Funding deposits and withdrawals, activation or cancellation, wagered buys and sells, close, randomness, settlement, claims, finalisation and redemption. It checks after every action:
+The current handler covers Funding deposits and withdrawals, activation or cancellation, wagered buys and sells, close, randomness, settlement, claims, Programmable fee claims, finalisation and redemption. It checks after every action:
 
 ```text
 WETH balance ≥ bankroll assets + open stake liability + player claim liability
@@ -53,8 +54,7 @@ reserved exposure ≤ floor(80% × bankroll assets)
 ```
 
 The suite also checks bankroll-share conservation, terminal-state finality and one payment per ticket. Each property runs 128 sequences at depth 48.
-
-Extend the handler to cover Programmable fee claims. Add properties for ticket-count conservation and native Programmable claim backing.
+The fee-liability property also checks that the hook's native PoolManager balance equals its recorded Programmable fee liability.
 
 ## Further launch tests
 
@@ -71,4 +71,6 @@ Add tests for:
 
 ## External evidence
 
-Run Slither with dispositions, a clean mainnet fork at a recorded block, gas snapshots, bytecode and deployment verification, and an independent review. Treat each as separate evidence. A local passing test does not prove audit, deployment, routing approval or product availability.
+`test/fork/BankrollEthereum.fork.t.sol` runs at Ethereum block 25,690,000. It checks the exact PoolManager, PositionManager, UERC20Factory, WETH and Chainlink wrapper runtimes and interfaces, then completes the full token, pool, reviewed hook/router and permanently locked position lifecycle against those contracts. Run it with `MAINNET_RPC_URL=ARCHIVE_RPC_URL npm run test:fork`; the normal `npm test` command excludes fork tests explicitly so CI cannot silently depend on an RPC.
+
+The fork and `submissions/bankroll-hook/dependency-evidence.json` are builder-declared compatibility evidence. Complete independent review, source/deployment verification and production monitoring separately. A passing historical fork does not prove audit, deployment, routing approval or product availability.

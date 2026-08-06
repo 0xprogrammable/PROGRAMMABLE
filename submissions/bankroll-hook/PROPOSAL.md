@@ -34,7 +34,7 @@ An app or ordinary router cannot prove those facts without trusting an offchain 
 
 ## Lifecycle
 
-The launcher predicts the fixed token, deploys a mined hook and its bound router, initializes the canonical PoolKey and creates one-sided liquidity. It sends the position NFT and token dust to a permanent locker. The locker can collect fees for the creator but cannot transfer or reduce the position. `afterInitialize` opens a fixed Funding window.
+The launcher predicts the fixed token, validates the reviewed hook creation code and constructor arguments, deploys a mined hook and its bound router, checks their runtime hashes, initializes the canonical PoolKey and creates one-sided liquidity. It records raw and approved bytecode hashes in launch provenance and includes them in the launch hash. It sends the position NFT and token dust to a permanent locker. The locker can collect fees for the creator but cannot transfer or reduce the position. `afterInitialize` opens a fixed Funding window.
 
 The creator may include an initial ETH buy in the same transaction. It uses empty hook data, so it pays the mandatory fee but creates no wager. A failure in any launch step reverts the complete transaction.
 
@@ -76,9 +76,8 @@ No production API, indexer, routing registration, monitoring or deployment exist
 
 ## Remaining work
 
-- Verify the exact Ethereum UERC20 factory, PoolManager, PositionManager, WETH and VRF wrapper deployment records.
 - Add adversarial failed-launch, token-factory and permanent-locker tests.
-- Extend the stateful invariants to Programmable fee claims and native claim backing.
-- Run Slither, mainnet-fork dependency checks and independent review.
-- Resolve the current runtime-unverified official Ethereum launchpad profile before deployment evidence.
+- Preserve the passing pinned Ethereum fork and structured dependency evidence when binding the application package to the final public source commit.
+- Resolve the official PoolManager and PositionManager source refs to immutable commits before claiming reproducible deployed-source matching.
+- Complete independent review, deployment, source verification, routing, indexer, monitoring and legal gates.
 - Request Programmable maintainer review of the public GitHub source.

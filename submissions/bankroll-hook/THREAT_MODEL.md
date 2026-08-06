@@ -74,21 +74,21 @@ The creator cannot recover the launch position or token dust. Anyone may collect
 
 The builder cannot pause, upgrade, change odds, replace the router, replace the randomness adapter, rescue balances or redirect fees.
 
-The factory accepts caller-supplied init code to remain deployable. It checks the CREATE2 mask and deployed hook bindings. A malicious caller can deploy a different contract only for its own launch attempt; the later validation must still pass. Product discovery must bind the audited init-code hash and configuration hash.
+The factory accepts caller-supplied init code so CREATE2 salts remain caller-selectable, but it binds the reviewed implementation. It checks the exact hook creation-code length and hash, the constructor-argument suffix, the CREATE2 mask, the deployed hook bindings and the immutable-slot-normalised runtime hash. The router factory constructs and checks the reviewed router init code and runtime. Both factories publish raw and approved hashes in provenance mappings. The launcher snapshots those approved hashes, checks the returned provenance and includes all values in the launch hash and launch event.
 
 ## Dependency failures
 
 A PoolManager or token-transfer failure reverts the complete call. There is no fallback manager.
 
-An unfulfilled VRF request can expire after the immutable timeout. A fulfilled request cannot expire and must use permissionless consumption. A malicious or broken fulfilled adapter could still stop progress, so its exact deployment and runtime require review.
+An unfulfilled VRF request can expire after the immutable timeout. A fulfilled request cannot expire and must use permissionless consumption. A malicious or broken fulfilled adapter could still stop progress. The selected Ethereum wrapper runtime and interface are pinned at block 25,690,000, but production launch must re-check its current runtime, quote and funding.
 
-The current official Ethereum launcher deployment profile is runtime-unverified. No mainnet launch should proceed until the source and runtime conflict is resolved.
+The request, consume and expiry entry points share one transient reentrancy guard. An adapter cannot expire and then reopen the game during a request or consumption callback; the adversarial lifecycle test exercises both attempted callbacks.
+
+The selected Ethereum dependency runtimes and full launch lifecycle are verified on a pinned historical fork. The aggregate official launcher profile remains runtime-unverified, and the official PoolManager and PositionManager records do not yet resolve to immutable source commits. No production launch should treat the fork as current monitoring or reproducible source verification.
 
 ## Missing evidence
 
-- no failed-launch or hostile token-factory test matrix
-- the stateful invariant suite does not yet cover Programmable fee claims or native claim backing
-- no Slither report
-- no fork test against live PoolManager, WETH or VRF wrapper
+- no complete failed-launch or hostile token-factory test matrix
+- no immutable source-commit resolution for the official PoolManager and PositionManager deployment records
 - no independent audit
 - no accepted routing, client, API or indexer integration
