@@ -141,7 +141,7 @@ export function LaunchModelPicker({
               src="/brand/create/classic-botanical-v4.webp"
               alt=""
               fill
-              sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 112px) / 3), 360px"
+              sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 96px) / 4), 260px"
               priority
             />
             <Image
@@ -204,7 +204,7 @@ export function LaunchModelPicker({
               fill
               loading="lazy"
               fetchPriority="low"
-              sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 112px) / 3), 360px"
+              sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 96px) / 4), 260px"
             />
             <Image
               className={`${launchExperience.classicLogo} ${launchExperience.customLogo}`}
@@ -277,7 +277,7 @@ export function LaunchModelPicker({
               fill
               loading="lazy"
               fetchPriority="low"
-              sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 112px) / 3), 360px"
+              sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 96px) / 4), 260px"
             />
           </span>
 
