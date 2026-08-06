@@ -20,7 +20,7 @@ describe("landing page contract", () => {
     );
   });
 
-  it("uses responsive static atmosphere layers without a video", () => {
+  it("uses one responsive, route-specific static atmosphere image without a video", () => {
     const landing = read("components/landing-page.tsx");
     const styles = read("components/landing-page.module.css");
     const backdrop = read("components/atmosphere-backdrop.tsx");
@@ -33,13 +33,33 @@ describe("landing page contract", () => {
       "/brand/atmosphere/night-sky-mobile-v1.avif",
     );
     expect(backdrop).toContain(
-      "/brand/atmosphere/night-sky-botanical-desktop-v1.avif",
+      "/brand/atmosphere/night-sky-botanical-desktop-v2-1920.avif",
     );
     expect(backdrop).toContain(
-      "/brand/atmosphere/night-sky-botanical-mobile-v1.avif",
+      "/brand/atmosphere/night-sky-botanical-desktop-v2.avif",
     );
-    expect(backdrop).toContain('media="(max-width: 640px)"');
-    expect(backdrop).toContain('data-landing={isLandingPage ? "true" : "false"}');
+    expect(backdrop).toContain(
+      "/brand/atmosphere/night-sky-botanical-mobile-v2-720.avif",
+    );
+    expect(backdrop).toContain(
+      "/brand/atmosphere/night-sky-botanical-mobile-v2-900.avif",
+    );
+    expect(backdrop).toContain(
+      "/brand/atmosphere/night-sky-botanical-mobile-v2.avif",
+    );
+    expect(backdrop).toContain(
+      'media="(orientation: portrait) and (max-width: 1024px)"',
+    );
+    expect(backdrop).toContain("const art = isLandingPage ? landingArt : appSky");
+    expect(backdrop.match(/<picture/g)).toHaveLength(1);
+    expect(backdrop.match(/<img/g)).toHaveLength(1);
+    expect(backdrop).toContain('type="image/avif"');
+    expect(backdrop.match(/sizes="100vw"/g)).toHaveLength(2);
+    expect(backdrop).toContain("1920w");
+    expect(backdrop).toContain("3840w");
+    expect(backdrop).toContain("720w");
+    expect(backdrop).toContain("900w");
+    expect(backdrop).toContain("1440w");
     expect(backdrop).toContain('fetchPriority="high"');
     expect(landing).toContain('href="/launch"');
     expect(landing).toContain('href="/explore"');
@@ -77,12 +97,22 @@ describe("landing page contract", () => {
     for (const asset of [
       "night-sky-desktop-v1.avif",
       "night-sky-mobile-v1.avif",
-      "night-sky-botanical-desktop-v1.avif",
-      "night-sky-botanical-mobile-v1.avif",
     ]) {
       const assetPath = join(root, "public/brand/atmosphere", asset);
       expect(existsSync(assetPath)).toBe(true);
       expect(statSync(assetPath).size).toBeLessThan(300 * 1024);
+    }
+
+    for (const [asset, budget] of [
+      ["night-sky-botanical-desktop-v2.avif", 450 * 1024],
+      ["night-sky-botanical-desktop-v2-1920.avif", 180 * 1024],
+      ["night-sky-botanical-mobile-v2.avif", 275 * 1024],
+      ["night-sky-botanical-mobile-v2-720.avif", 60 * 1024],
+      ["night-sky-botanical-mobile-v2-900.avif", 80 * 1024],
+    ] as const) {
+      const assetPath = join(root, "public/brand/atmosphere", asset);
+      expect(existsSync(assetPath)).toBe(true);
+      expect(statSync(assetPath).size).toBeLessThan(budget);
     }
   });
 
@@ -103,18 +133,19 @@ describe("landing page contract", () => {
     expect(styles).not.toContain("content-arrival");
   });
 
-  it("fades only the static plants while the stars keep twinkling", () => {
+  it("keeps the artwork static while stars twinkle only when motion is allowed", () => {
     const css = read("app/interface.css");
 
-    expect(css).toMatch(
-      /\.atmosphere-botanical\s*\{[^}]*opacity:\s*0;[^}]*transition:\s*opacity 2200ms/s,
-    );
-    expect(css).toMatch(
-      /\.atmosphere-backdrop\[data-landing="true"\] \.atmosphere-botanical\s*\{[^}]*opacity:\s*1;/s,
-    );
+    expect(css).not.toContain(".atmosphere-botanical");
     expect(css).toContain("@keyframes atmosphere-twinkle-primary");
     expect(css).toContain("@keyframes atmosphere-twinkle-secondary");
     expect(css).toContain("@keyframes atmosphere-sparkle");
+    expect(css).toMatch(
+      /@media \(prefers-reduced-motion: no-preference\)[\s\S]*?\.atmosphere-stars-primary\s*\{[^}]*animation:\s*atmosphere-twinkle-primary/,
+    );
+    expect(css).toMatch(
+      /@media \(prefers-reduced-motion: no-preference\)[\s\S]*?\.atmosphere-sparkles i\s*\{[^}]*animation:\s*atmosphere-sparkle/,
+    );
     expect(css).toMatch(
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.atmosphere-stars\s*\{[^}]*animation:\s*none;/,
     );

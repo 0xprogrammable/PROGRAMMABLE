@@ -89,11 +89,15 @@ describe("interaction accessibility", () => {
 
     expect(source).toContain('className="atmosphere-stars');
     expect(css).toMatch(
-      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.atmosphere-botanical\s*\{[^}]*transition:\s*none;/,
+      /@media \(prefers-reduced-motion: no-preference\)[\s\S]*?\.atmosphere-stars-primary\s*\{[^}]*animation:\s*atmosphere-twinkle-primary/,
     );
     expect(css).toMatch(
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.atmosphere-stars\s*\{[^}]*animation:\s*none;/,
     );
+    expect(css).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.atmosphere-sparkles i\s*\{[^}]*animation:\s*none;/,
+    );
+    expect(css).not.toMatch(/\.atmosphere-art[^}]*animation:/s);
   });
 
   it("exposes the wallet actions as a native, labelled disclosure", () => {

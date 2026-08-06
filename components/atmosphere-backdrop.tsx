@@ -2,57 +2,53 @@
 
 import { usePathname } from "next/navigation";
 
-const desktopSky = "/brand/atmosphere/night-sky-desktop-v1.avif";
-const mobileSky = "/brand/atmosphere/night-sky-mobile-v1.avif";
-const desktopBotanical =
-  "/brand/atmosphere/night-sky-botanical-desktop-v1.avif";
-const mobileBotanical =
-  "/brand/atmosphere/night-sky-botanical-mobile-v1.avif";
+const appSky = {
+  desktop: "/brand/atmosphere/night-sky-desktop-v1.avif",
+  desktopSrcSet: undefined,
+  mobile: "/brand/atmosphere/night-sky-mobile-v1.avif",
+  mobileSrcSet: undefined,
+  width: 3200,
+  height: 1800,
+};
 
-function AtmospherePicture({
-  className,
-  desktop,
-  mobile,
-}: {
-  className: string;
-  desktop: string;
-  mobile: string;
-}) {
-  return (
-    <picture className={className}>
-      <source media="(max-width: 640px)" srcSet={mobile} />
-      <img
-        src={desktop}
-        width={3200}
-        height={1800}
-        fetchPriority="high"
-        decoding="async"
-        alt=""
-      />
-    </picture>
-  );
-}
+const landingArt = {
+  desktop:
+    "/brand/atmosphere/night-sky-botanical-desktop-v2-1920.avif",
+  desktopSrcSet:
+    "/brand/atmosphere/night-sky-botanical-desktop-v2-1920.avif 1920w, /brand/atmosphere/night-sky-botanical-desktop-v2.avif 3840w",
+  mobile: "/brand/atmosphere/night-sky-botanical-mobile-v2-720.avif",
+  mobileSrcSet:
+    "/brand/atmosphere/night-sky-botanical-mobile-v2-720.avif 720w, /brand/atmosphere/night-sky-botanical-mobile-v2-900.avif 900w, /brand/atmosphere/night-sky-botanical-mobile-v2.avif 1440w",
+  width: 3840,
+  height: 2160,
+};
 
 export function AtmosphereBackdrop() {
   const pathname = usePathname();
   const isLandingPage = pathname === "/";
+  const art = isLandingPage ? landingArt : appSky;
+  const mobileSrcSet = art.mobileSrcSet ?? art.mobile;
 
   return (
-    <div
-      className="atmosphere-backdrop"
-      data-landing={isLandingPage ? "true" : "false"}
-      aria-hidden="true"
-    >
-      <AtmospherePicture
-        className="atmosphere-layer atmosphere-sky"
-        desktop={desktopSky}
-        mobile={mobileSky}
-      />
-      <AtmospherePicture
-        className="atmosphere-layer atmosphere-botanical"
-        desktop={desktopBotanical}
-        mobile={mobileBotanical}
-      />
+    <div className="atmosphere-backdrop" aria-hidden="true">
+      <picture className="atmosphere-layer atmosphere-art">
+        <source
+          media="(orientation: portrait) and (max-width: 1024px)"
+          srcSet={mobileSrcSet}
+          sizes="100vw"
+          type="image/avif"
+        />
+        <img
+          src={art.desktop}
+          srcSet={art.desktopSrcSet}
+          sizes="100vw"
+          width={art.width}
+          height={art.height}
+          fetchPriority="high"
+          decoding="async"
+          alt=""
+        />
+      </picture>
       <span className="atmosphere-stars atmosphere-stars-primary" />
       <span className="atmosphere-stars atmosphere-stars-secondary" />
       <span className="atmosphere-sparkles">

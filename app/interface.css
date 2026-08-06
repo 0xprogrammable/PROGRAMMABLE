@@ -291,19 +291,8 @@ html[data-theme="dark"] .app-frame::before {
   object-position: center;
 }
 
-.atmosphere-sky {
+.atmosphere-art {
   z-index: 0;
-}
-
-.atmosphere-botanical {
-  opacity: 0;
-  transition: opacity 2200ms cubic-bezier(0.23, 1, 0.32, 1);
-  will-change: opacity;
-  z-index: 1;
-}
-
-.atmosphere-backdrop[data-landing="true"] .atmosphere-botanical {
-  opacity: 1;
 }
 
 .atmosphere-stars {
@@ -313,7 +302,6 @@ html[data-theme="dark"] .app-frame::before {
 }
 
 .atmosphere-stars-primary {
-  animation: atmosphere-twinkle-primary 5.6s ease-in-out infinite alternate;
   background-image:
     radial-gradient(circle at 17% 21%, rgba(255, 253, 249, 0.92) 0 1px, transparent 2.2px),
     radial-gradient(circle at 42% 12%, rgba(255, 253, 249, 0.86) 0 1.2px, transparent 2.4px),
@@ -324,7 +312,6 @@ html[data-theme="dark"] .app-frame::before {
 }
 
 .atmosphere-stars-secondary {
-  animation: atmosphere-twinkle-secondary 7.2s ease-in-out -2.8s infinite alternate;
   background-image:
     radial-gradient(circle at 9% 39%, rgba(255, 253, 249, 0.78) 0 1px, transparent 2.1px),
     radial-gradient(circle at 31% 33%, rgba(255, 253, 249, 0.84) 0 1px, transparent 2.2px),
@@ -480,6 +467,14 @@ html[data-theme="dark"] .app-frame::before {
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  .atmosphere-stars-primary {
+    animation: atmosphere-twinkle-primary 5.6s ease-in-out infinite alternate;
+  }
+
+  .atmosphere-stars-secondary {
+    animation: atmosphere-twinkle-secondary 7.2s ease-in-out -2.8s infinite alternate;
+  }
+
   .atmosphere-sparkles i {
     animation: atmosphere-sparkle 5.8s cubic-bezier(0.23, 1, 0.32, 1) infinite;
   }
@@ -517,6 +512,18 @@ html[data-theme="dark"] .app-frame::before {
   .atmosphere-sparkles i:nth-child(8) {
     animation-delay: -1s;
     animation-duration: 6.6s;
+  }
+}
+
+@media (orientation: portrait) and (max-width: 1024px) {
+  .atmosphere-art img {
+    object-position: 58% center;
+  }
+}
+
+@media (orientation: portrait) and (max-width: 350px) {
+  .atmosphere-art img {
+    object-position: 68% center;
   }
 }
 
@@ -1349,10 +1356,6 @@ html[data-theme="dark"] .app-frame::before {
 
 @media (prefers-reduced-motion: reduce) {
   html {
-    transition: none;
-  }
-
-  .atmosphere-botanical {
     transition: none;
   }
 
