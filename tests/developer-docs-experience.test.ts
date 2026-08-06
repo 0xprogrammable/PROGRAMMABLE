@@ -71,7 +71,9 @@ describe("Developer documentation experience", () => {
   it("provides copy-ready examples that discover the active API", () => {
     expect(developerPage).toContain("<DeveloperDocsWorkbench />");
     expect(developerPage).toContain("<DeveloperEndpointList />");
-    expect(developerPage).toContain("<DeveloperAgentPrompt />");
+    expect(developerPage).toContain(
+      "<DeveloperAgentPrompt registryManifest={registryManifest} />",
+    );
     expect(languageExamples).toHaveLength(3);
     expect(languageExamples.every((example) =>
       example.code.includes(".well-known/programmable.json") ||
@@ -87,15 +89,13 @@ describe("Developer documentation experience", () => {
 
   it("keeps Custom provenance explicitly prelaunch and address-free", () => {
     expect(developerPage).toContain("Community Custom intake is");
-    expect(developerPage).toContain("address and start block are null");
-    expect(developerPage).toContain(
-      "No canonical Custom Registry ABI or event topic is published yet",
+    expect(developerPage).toContain("CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH");
+    expect(developerPage).toContain("registryManifest.contracts.registry.address");
+    expect(developerDocsMarkdown).toContain(
+      "Registry address is `null`, start block is `null`",
     );
     expect(developerDocsMarkdown).toContain(
-      "Registry address and start block are `null`",
-    );
-    expect(developerDocsMarkdown).toContain(
-      "No canonical Custom Registry ABI or event topic is published yet",
+      "public Custom Registry manifest",
     );
     expect(developerDocsMarkdown).toContain(
       "No Basebit, Aion or other named partner activation is implied",

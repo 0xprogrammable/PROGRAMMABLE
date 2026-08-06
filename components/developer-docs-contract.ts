@@ -18,13 +18,6 @@ export const PROGRAMMABLE_VERIFIED_DEFINITION =
 export const PROGRAMMABLE_FEE_RECIPIENT =
   "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c";
 
-export const PROGRAMMABLE_CUSTOM_REGISTRY = {
-  address: null,
-  publicSubmissionsEnabled: false,
-  startBlock: null,
-  status: "prelaunch",
-} as const;
-
 export const PROGRAMMABLE_FINALITY_STATES = [
   "observed",
   "confirmed",

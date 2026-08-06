@@ -8,7 +8,6 @@ import {
   PROGRAMMABLE_ACTIVE_API_VERSION,
   PROGRAMMABLE_COMPAT_API_BASE,
   PROGRAMMABLE_COMPAT_API_VERSION,
-  PROGRAMMABLE_CUSTOM_REGISTRY,
   PROGRAMMABLE_ENDPOINTS,
   PROGRAMMABLE_FEE_POLICY,
   PROGRAMMABLE_FEE_RECIPIENT,
@@ -20,6 +19,10 @@ import {
   PROGRAMMABLE_VERIFIED_DEFINITION,
   PROGRAMMABLE_WELL_KNOWN_URL,
 } from "../components/developer-docs-contract";
+import {
+  CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH,
+  PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1,
+} from "../lib/custom-launch/registry-public-manifest-v1";
 import {
   agentPrompt,
   languageExamples,
@@ -174,17 +177,22 @@ describe("canonical public developer-contract facts", () => {
   });
 
   it("keeps Community Custom fail-closed without placeholders", () => {
-    expect(PROGRAMMABLE_CUSTOM_REGISTRY).toEqual({
-      address: null,
+    expect(PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1).toMatchObject({
+      status: "prelaunch",
       publicSubmissionsEnabled: false,
       startBlock: null,
-      status: "prelaunch",
+      contracts: {
+        registry: { address: null, runtimeCodeKeccak256: null },
+      },
     });
     expect(developerDocsMarkdown).toContain(
-      "Registry address and start block are `null`",
+      "Registry address is `null`, start block is `null`",
     );
     expect(developerDocsMarkdown).toContain(
       "`publicSubmissionsEnabled` is `false`",
+    );
+    expect(developerDocsMarkdown).toContain(
+      CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH,
     );
     expect(developerDocsMarkdown).not.toContain(
       "The Programmable Custom Registry is live",

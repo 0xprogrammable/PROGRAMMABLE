@@ -3,7 +3,6 @@ import {
   PROGRAMMABLE_ACTIVE_API_VERSION,
   PROGRAMMABLE_COMPAT_API_BASE,
   PROGRAMMABLE_COMPAT_API_VERSION,
-  PROGRAMMABLE_CUSTOM_REGISTRY,
   PROGRAMMABLE_DEVELOPER_ORIGIN,
   PROGRAMMABLE_DEVELOPER_REPOSITORY,
   PROGRAMMABLE_ENDPOINTS,
@@ -17,6 +16,11 @@ import {
   PROGRAMMABLE_VERIFIED_DEFINITION,
   PROGRAMMABLE_WELL_KNOWN_URL,
 } from "@/components/developer-docs-contract";
+import {
+  CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH,
+  PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1,
+  type CustomRegistryPublicManifestV1,
+} from "@/lib/custom-launch/registry-public-manifest-v1";
 
 export const developerDocsPath = "/docs/developers";
 export const developerDocsMarkdownPath = "/docs/developers.md";
@@ -26,7 +30,13 @@ const endpointReference = PROGRAMMABLE_ENDPOINTS.map(
     `- \`GET ${endpoint.path}\` — ${endpoint.label}. ${endpoint.note}`,
 );
 
-export const developerDocsMarkdown = [
+export function buildDeveloperDocsMarkdown(
+  registryManifest: CustomRegistryPublicManifestV1,
+): string {
+  const registryAddress = registryManifest.contracts.registry.address ?? "null";
+  const registryStartBlock = registryManifest.startBlock ?? "null";
+  const registryAbiUrl = registryManifest.specifications.abi.url ?? "null";
+  return [
   "# Integrate once. Discover every Programmable launch.",
   "",
   "> Public read-only integration guide for Programmable Classic and Programmable Custom provenance, finality, markets, security review and fee disclosure.",
@@ -55,9 +65,9 @@ export const developerDocsMarkdown = [
   "",
   "## Current Custom boundary",
   "",
-  `Community Custom is **${PROGRAMMABLE_CUSTOM_REGISTRY.status}**. Registry address and start block are \`null\`; \`publicSubmissionsEnabled\` is \`${PROGRAMMABLE_CUSTOM_REGISTRY.publicSubmissionsEnabled}\`. The v2 Custom feed remains empty until an evidenced registry generation is published. Existing v1 compatibility records do not prove that open intake is live.`,
+  `Community Custom is **${registryManifest.status}**. Registry address is \`${registryAddress}\`, start block is \`${registryStartBlock}\`, and \`publicSubmissionsEnabled\` is \`${registryManifest.publicSubmissionsEnabled}\`. Resolve the complete generation and bindings from \`${CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH}\`. Existing v1 compatibility records do not prove that open intake is live.`,
   "",
-  "No canonical Custom Registry ABI or event topic is published yet. Do not subscribe to a candidate event or contract; resolve address, start block, exact ABI, topic and generation from the official chain manifest only after they are non-null.",
+  `The canonical ABI URL currently resolves to \`${registryAbiUrl}\`. Do not subscribe to a candidate event or contract; resolve address, start block, exact ABI, event set, hash specification and generation only from the public Custom Registry manifest, and ingest only when its status is live with every binding non-null.`,
   "",
   "No Basebit, Aion or other named partner activation is implied by this specification. Named partner attribution requires exact template and deployment provenance. Recipient and onchain fee evidence are additionally required only before activating a fee-bearing partner-template market path.",
   "",
@@ -127,7 +137,7 @@ export const developerDocsMarkdown = [
   "",
   `Programmable recipient: \`${PROGRAMMABLE_FEE_RECIPIENT}\``,
   "",
-  `- **Native Custom target policy:** ${PROGRAMMABLE_FEE_POLICY.nativeCustom.totalBps} BPS, or 0.10%, for Programmable. It applies only to the verified official market path. It is not automatically charged on transfers, mints, burns, rewards, games, refunds, bridges or third-party pools. Community Custom remains prelaunch, so this policy is not proof of a live fee path.`,
+  `- **Native Custom target policy:** ${PROGRAMMABLE_FEE_POLICY.nativeCustom.totalBps} BPS, or 0.10%, for Programmable. It applies only to the verified official market path. It is not automatically charged on transfers, mints, burns, rewards, games, refunds, bridges or third-party pools. Community Custom status is ${registryManifest.status}; this policy alone is not proof of a live fee path.`,
   `- **Partner attribution without a qualifying market:** a verified partner-attributed project may report \`${PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket.status}\` with ${PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket.partnerShareBps}/${PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket.programmableShareBps}/${PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket.totalBps} BPS for partner, Programmable and total. Attribution alone does not activate a fee.`,
   `- **Active fee-bearing partner-template target policy:** exactly ${PROGRAMMABLE_FEE_POLICY.partnerTemplate.totalBps} BPS total: ${PROGRAMMABLE_FEE_POLICY.partnerTemplate.partnerShareBps} BPS partner plus ${PROGRAMMABLE_FEE_POLICY.partnerTemplate.programmableShareBps} BPS Programmable. The exact reviewed partner template enforces both shares on the same fee basis. No additional native ${PROGRAMMABLE_FEE_POLICY.nativeCustom.totalBps} BPS is added.`,
   "",
@@ -166,9 +176,17 @@ export const developerDocsMarkdown = [
   `- [Terminal guide](${PROGRAMMABLE_DEVELOPER_REPOSITORY}/blob/main/docs/guides/terminals-and-scanners.md) — terminal integration contract.`,
   `- [Fixtures](${PROGRAMMABLE_DEVELOPER_REPOSITORY}/tree/main/fixtures/v2) — no-market, multi-market and forward-compatibility cases.`,
   `- [Integration support](${PROGRAMMABLE_DEVELOPER_REPOSITORY}/issues) — public documentation and integration issues.`,
-].join("\n");
+  ].join("\n");
+}
 
-export const programmableLlmsIndex = [
+export const developerDocsMarkdown = buildDeveloperDocsMarkdown(
+  PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1,
+);
+
+export function buildProgrammableLlmsIndex(
+  registryManifest: CustomRegistryPublicManifestV1,
+): string {
+  return [
   "# Programmable",
   "",
   "> Versioned integration sources for Programmable Classic and Custom launches.",
@@ -185,7 +203,7 @@ export const programmableLlmsIndex = [
   `- Map \`classic\` to \`${PROGRAMMABLE_LABELS.classic}\`.`,
   `- Map \`custom\` to \`${PROGRAMMABLE_LABELS.custom}\`.`,
   "- Partner, template and model are attribution, not public categories; attribution is independent from market and fee state.",
-  `- Community Custom Registry status is \`${PROGRAMMABLE_CUSTOM_REGISTRY.status}\`; address and start block are null.`,
+  `- Community Custom Registry status is \`${registryManifest.status}\`; resolve address, start block and every binding from \`${CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH}\`.`,
   `- Programmable Verified: ${PROGRAMMABLE_VERIFIED_DEFINITION}`,
   `- Native Custom target policy: ${PROGRAMMABLE_FEE_POLICY.nativeCustom.totalBps} BPS on the verified official market path only.`,
   `- A verified partner-attributed project with \`${PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket.status}\` may report ${PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket.partnerShareBps}/${PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket.programmableShareBps}/${PROGRAMMABLE_FEE_POLICY.partnerTemplate.noQualifyingMarket.totalBps} BPS.`,
@@ -193,15 +211,29 @@ export const programmableLlmsIndex = [
   "- Preserve no-token, no-market, multi-asset, multi-market and unknown capability records.",
   "- Treat chart, quote, simulation and execution as separate verified support states.",
   "- Handle observed, confirmed, finalized and orphaned finality plus separate revoked review state.",
-].join("\n");
+  ].join("\n");
+}
 
-export const programmableLlmsFullFallback = [
-  programmableLlmsIndex,
-  "",
-  "## Complete integration guide",
-  "",
-  developerDocsMarkdown,
-  "",
-  "Canonical full context:",
-  `${PROGRAMMABLE_DEVELOPER_ORIGIN}/llms-full.txt`,
-].join("\n");
+export const programmableLlmsIndex = buildProgrammableLlmsIndex(
+  PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1,
+);
+
+export function buildProgrammableLlmsFullFallback(
+  registryManifest: CustomRegistryPublicManifestV1,
+): string {
+  return [
+    buildProgrammableLlmsIndex(registryManifest),
+    "",
+    "## Complete integration guide",
+    "",
+    buildDeveloperDocsMarkdown(registryManifest),
+    "",
+    "Canonical full context:",
+    `${PROGRAMMABLE_DEVELOPER_ORIGIN}/llms-full.txt`,
+  ].join("\n");
+}
+
+export const programmableLlmsFullFallback =
+  buildProgrammableLlmsFullFallback(
+    PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1,
+  );

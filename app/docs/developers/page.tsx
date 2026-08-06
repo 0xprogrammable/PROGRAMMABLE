@@ -21,7 +21,6 @@ import {
   PROGRAMMABLE_ACTIVE_API_VERSION,
   PROGRAMMABLE_COMPAT_API_BASE,
   PROGRAMMABLE_COMPAT_API_VERSION,
-  PROGRAMMABLE_CUSTOM_REGISTRY,
   PROGRAMMABLE_DEVELOPER_REPOSITORY,
   PROGRAMMABLE_FEE_POLICY,
   PROGRAMMABLE_FEE_RECIPIENT,
@@ -37,6 +36,12 @@ import {
 import styles from "@/components/developer-docs.module.css";
 import { DocsAddress } from "@/components/docs-address";
 import { DocsShell } from "@/components/docs-shell";
+import { CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH } from
+  "@/lib/custom-launch/registry-public-manifest-v1";
+import { resolveCustomRegistryPublicManifestV1 } from
+  "@/lib/server/custom-launch/registry-manifest-v1";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Programmable",
@@ -329,6 +334,10 @@ function DeploymentCard({ deployment }: { deployment: Deployment }) {
 }
 
 export default function DeveloperDocsPage() {
+  const registryManifest = resolveCustomRegistryPublicManifestV1();
+  const registryAddress = registryManifest.contracts.registry.address ?? "null";
+  const registryStartBlock = registryManifest.startBlock ?? "null";
+  const registryAbiUrl = registryManifest.specifications.abi.url ?? "null";
   return (
     <DocsShell
       currentPath="/docs/developers"
@@ -445,11 +454,11 @@ export default function DeveloperDocsPage() {
         <div className={styles.statusNote}>
           <strong>Current Custom boundary</strong>
           <p>
-            Community Custom intake is {PROGRAMMABLE_CUSTOM_REGISTRY.status}.
-            The v{PROGRAMMABLE_ACTIVE_API_VERSION} Custom feed stays empty while
-            the canonical registry address and start block are null and public
-            submissions are disabled. Existing v{PROGRAMMABLE_COMPAT_API_VERSION}
-            {" "}compatibility records do not prove that open intake is live.
+            Community Custom intake is {registryManifest.status}. Resolve the
+            exact registry generation, contracts, start block and specifications
+            from <a href={CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH}>the public Custom
+            Registry manifest</a>. Existing v{PROGRAMMABLE_COMPAT_API_VERSION}{" "}
+            compatibility records do not prove that open intake is live.
           </p>
         </div>
       </section>
@@ -531,12 +540,15 @@ export default function DeveloperDocsPage() {
         </div>
 
         <div className={styles.prelaunchNotice}>
-          <strong>Prelaunch specification</strong>
+          <strong>Registry manifest</strong>
           <p>
-            The open Custom Registry is not deployed. Its address and start
-            block are <code>null</code>, and public submissions are disabled.
-            No canonical Custom Registry ABI or event topic is published yet;
-            do not subscribe to a candidate event or contract.
+            The fail-closed public manifest currently reports{" "}
+            <code>{registryManifest.status}</code>, registry address{" "}
+            <code>{registryAddress}</code>, start block{" "}
+            <code>{registryStartBlock}</code>, ABI URL{" "}
+            <code>{registryAbiUrl}</code> and public submissions{" "}
+            <code>{String(registryManifest.publicSubmissionsEnabled)}</code>.
+            Do not subscribe to any address or event outside that manifest.
           </p>
         </div>
 
@@ -616,11 +628,14 @@ export default function DeveloperDocsPage() {
           <aside className={styles.statusNote}>
             <strong>No copyable Custom ABI before deployment</strong>
             <p>
-              Resolve the registry address, start block, exact event ABI, topic
-              and generation from the published chain manifest only after they
-              are non-null. Until then, Custom ingestion stays disabled.
+              Resolve the registry address, start block, exact event ABI, event
+              set, hash specification and generation from the public Custom
+              Registry manifest. Custom ingestion stays disabled unless its
+              status is live and every binding is non-null.
             </p>
-            <code>address = null · startBlock = null</code>
+            <code>
+              address = {registryAddress} · startBlock = {registryStartBlock}
+            </code>
           </aside>
         </div>
 
@@ -877,8 +892,8 @@ export default function DeveloperDocsPage() {
               bridges and third party pools are not automatically charged.
             </p>
             <small>
-              Community Custom remains prelaunch; this policy is not proof of a
-              live fee path.
+              Community Custom status is {registryManifest.status}; this policy
+              alone is not proof of a live fee path.
             </small>
           </article>
           <article>
@@ -1215,7 +1230,7 @@ export default function DeveloperDocsPage() {
             versioned contract without asking it to scrape this page.
           </p>
         </div>
-        <DeveloperAgentPrompt />
+        <DeveloperAgentPrompt registryManifest={registryManifest} />
       </section>
     </DocsShell>
   );

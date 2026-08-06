@@ -72,7 +72,9 @@ describe("Docs rail layout stability", () => {
   it("uses one concise developer guide with a current-page chapter rail", () => {
     expect(docsPage).toContain("sections={developerSections}");
     expect(docsPage).toContain("<DeveloperDocsWorkbench />");
-    expect(docsPage).toContain("<DeveloperAgentPrompt />");
+    expect(docsPage).toContain(
+      "<DeveloperAgentPrompt registryManifest={registryManifest} />",
+    );
     expect(docsPage).toContain('currentPath="/docs/developers"');
     expect(docsShell).not.toContain("docsGuides");
     expect(docsShell).not.toContain("Documentation guides");

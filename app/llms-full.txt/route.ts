@@ -1,4 +1,7 @@
-import { programmableLlmsFullFallback } from "@/lib/developer-docs-content";
+import { buildProgrammableLlmsFullFallback } from
+  "@/lib/developer-docs-content";
+import { resolveCustomRegistryPublicManifestV1 } from
+  "@/lib/server/custom-launch/registry-manifest-v1";
 
 const canonicalFullContext =
   "https://developers.programmable.family/llms-full.txt";
@@ -6,7 +9,9 @@ const canonicalFullContext =
 export const revalidate = 300;
 
 export async function GET() {
-  let content = programmableLlmsFullFallback;
+  let content = buildProgrammableLlmsFullFallback(
+    resolveCustomRegistryPublicManifestV1(),
+  );
 
   try {
     const response = await fetch(canonicalFullContext, {
