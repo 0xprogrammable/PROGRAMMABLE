@@ -23,8 +23,8 @@ const languageExamples: readonly LanguageExample[] = [
     label: "cURL",
     filename: "terminal",
     code: [
-      `curl -fsSL '${apiOrigin}/api/v1/launches?category=classic&limit=100'`,
-      `curl -fsSL '${apiOrigin}/api/v1/launches?category=custom&limit=100'`,
+      `curl -fsSL '${apiOrigin}/api/v2/launches?category=classic&limit=100'`,
+      `curl -fsSL '${apiOrigin}/api/v2/launches?category=custom&limit=100'`,
     ].join("\n"),
   },
   {
@@ -32,7 +32,7 @@ const languageExamples: readonly LanguageExample[] = [
     label: "TypeScript",
     filename: "programmable.ts",
     code: [
-      `const response = await fetch("${apiOrigin}/api/v1/launches?limit=100")`,
+      `const response = await fetch("${apiOrigin}/api/v2/launches?limit=100")`,
       "if (!response.ok) throw new Error(`Programmable API returned ${response.status}`)",
       "",
       "const feed = await response.json()",
@@ -56,7 +56,7 @@ const languageExamples: readonly LanguageExample[] = [
       "import json",
       "from urllib.request import urlopen",
       "",
-      `url = "${apiOrigin}/api/v1/launches?limit=100"`,
+      `url = "${apiOrigin}/api/v2/launches?limit=100"`,
       "with urlopen(url, timeout=15) as response:",
       "    feed = json.load(response)",
       "",
@@ -69,18 +69,20 @@ const languageExamples: readonly LanguageExample[] = [
 ] as const;
 
 const agentPrompt = [
-  "Integrate the Programmable v1 launch feed into this project.",
+  "Integrate the Programmable v2 launch feed into this project.",
   "",
   "Read these sources first:",
   "1. https://programmable.family/docs/developers.md",
   "2. https://developers.programmable.family/.well-known/programmable.json",
-  "3. https://developers.programmable.family/openapi/programmable-v1.yaml",
+  "3. https://developers.programmable.family/openapi/programmable-v2.yaml",
   "4. https://github.com/0xprogrammable/developers/blob/main/docs/guides/terminals-and-scanners.md",
   "5. https://github.com/0xprogrammable/developers/blob/main/docs/guides/launch-providers.md",
   "",
   "Requirements:",
   "- Map category=classic to Programmable Classic.",
   "- Map category=custom to Programmable Custom.",
+  "- Exclude historical Stock-Paired records from the v2 Custom filter.",
+  "- Require the canonical registry event for every Custom classification.",
   "- Resolve current and historical deployments from the manifest.",
   "- Key assets by chainId plus token address and deduplicate by launchId.",
   "- Complete each traversal with nextCursor before persisting resumeCursor.",
@@ -246,7 +248,7 @@ export function DeveloperDocsWorkbench() {
         <span className={styles.workbenchLabel}>Minimal terminal consumer</span>
         <a
           className={styles.openApiLink}
-          href={`${apiOrigin}/openapi/programmable-v1.yaml`}
+          href={`${apiOrigin}/openapi/programmable-v2.yaml`}
           rel="noreferrer"
           target="_blank"
         >
