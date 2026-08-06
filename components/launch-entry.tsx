@@ -5,6 +5,7 @@ import Link from "next/link";
 import { lazy, Suspense, useState } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 
+import { XBrandIcon } from "@/components/brand-icons";
 import launchExperience from "@/components/launch-experience.module.css";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
 import { resolveImplementedLaunchModel } from "@/lib/launch-model-gating";
@@ -140,7 +141,7 @@ export function LaunchModelPicker({
               src="/brand/create/classic-botanical-v4.webp"
               alt=""
               fill
-              sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 88px) / 2), 560px"
+              sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 112px) / 3), 360px"
               priority
             />
             <Image
@@ -203,7 +204,7 @@ export function LaunchModelPicker({
               fill
               loading="lazy"
               fetchPriority="low"
-              sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 88px) / 2), 560px"
+              sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 112px) / 3), 360px"
             />
             <Image
               className={`${launchExperience.classicLogo} ${launchExperience.customLogo}`}
@@ -250,6 +251,57 @@ export function LaunchModelPicker({
             >
               Review Custom Hook framework
               <ArrowRight aria-hidden="true" size={16} />
+            </span>
+          </span>
+        </Link>
+
+        <Link
+          href="https://x.com/aeonframework"
+          target="_blank"
+          rel="noreferrer"
+          className={`launch-model-card ${launchExperience.modelCard} liquid-glass-surface`}
+          data-launch-model-option="aeon"
+          data-launch-model-available="false"
+          data-launch-model-launchable="false"
+          aria-labelledby="launch-model-aeon-title"
+          aria-describedby="launch-model-aeon-description"
+        >
+          <span
+            className={`launch-model-art ${launchExperience.modelArt} ${launchExperience.aeonArt}`}
+            aria-hidden="true"
+          >
+            <Image
+              className={launchExperience.artImage}
+              src="/brand/create/aeon-framework-v1.webp"
+              alt=""
+              fill
+              loading="lazy"
+              fetchPriority="low"
+              sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 112px) / 3), 360px"
+            />
+          </span>
+
+          <span
+            className={`launch-model-card-body ${launchExperience.modelBody}`}
+          >
+            <span
+              className={`launch-model-card-heading ${launchExperience.modelHeading}`}
+            >
+              <strong id="launch-model-aeon-title">AI and Framework</strong>
+              <small data-status="pending">Available soon</small>
+            </span>
+            <span
+              className={`launch-model-description ${launchExperience.modelDescription}`}
+              id="launch-model-aeon-description"
+            >
+              The most autonomous agent framework. AEON launch models are
+              coming to Programmable Custom.
+            </span>
+            <span
+              className={`launch-model-action ${launchExperience.modelAction}`}
+            >
+              <XBrandIcon />
+              @aeonframework
             </span>
           </span>
         </Link>

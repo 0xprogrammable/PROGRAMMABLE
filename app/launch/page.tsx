@@ -5,7 +5,7 @@ import { LaunchExperience } from "@/components/launch-entry";
 export const metadata: Metadata = {
   title: "Programmable",
   description:
-    "Create a fixed-supply token with locked Uniswap v4 liquidity, or review the Custom Hook framework.",
+    "Create a Classic token, review Custom Hooks, or preview upcoming partner launch models.",
   alternates: {
     canonical: "/launch",
   },
