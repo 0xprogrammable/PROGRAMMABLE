@@ -48,7 +48,7 @@ jobs:
       - name: Measure source coverage
         run: >-
           forge coverage
-          --no-match-contract ClassicV3MainnetForkTest
+          --no-match-contract '(ClassicV3MainnetForkTest|ShardV1MainnetForkTest)'
           --exclude-tests
           --report lcov
           --report-file lcov.info
