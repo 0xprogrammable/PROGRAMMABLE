@@ -61,6 +61,8 @@ describe("Developer documentation experience", () => {
     expect(workbench).toContain("Minimal terminal consumer");
     expect(workbench).toContain("Programmable Classic");
     expect(workbench).toContain("Programmable Custom");
+    expect(workbench).toContain("/api/v2/launches");
+    expect(workbench).not.toContain("/api/v1/launches");
     expect(workbench).not.toContain("Run request");
     expect(workbench).not.toContain("launch-preview");
   });
@@ -70,7 +72,7 @@ describe("Developer documentation experience", () => {
     expect(developerPage).toContain("JSON Schemas");
     expect(developerPage).toContain("docs/guides/terminals-and-scanners.md");
     expect(developerPage).toContain(
-      "/api/v1/launches/1/0x56a96463ead0c0b9b4e4df9e41805bb8877074a6",
+      "/api/v2/launches/1/0x56a96463ead0c0b9b4e4df9e41805bb8877074a6",
     );
     expect(developerPage).not.toContain(
       'endpoint.path.replace("/{chainId}/{tokenAddress}", "")',
@@ -78,8 +80,8 @@ describe("Developer documentation experience", () => {
     expect(developerDocsMarkdown).toContain(
       "`/token` alone is not an API route",
     );
-    expect(programmableLlmsIndex).not.toContain(
-      "https://developers.programmable.family/schemas/v1/",
+    expect(programmableLlmsIndex).toContain(
+      "https://github.com/0xprogrammable/developers/tree/main/schemas/v2",
     );
   });
 
@@ -103,6 +105,14 @@ describe("Developer documentation experience", () => {
     expect(developerDocsMarkdown).toContain(
       "| `custom` | `Programmable Custom` |",
     );
+    expect(developerDocsMarkdown).toContain(
+      "Token, hook, factory and market addresses may differ on every launch",
+    );
+    expect(developerDocsMarkdown).toContain(
+      "Historical Stock-Paired records are excluded from v2",
+    );
+    expect(developerPage).not.toContain("Stock Paired V3");
+    expect(developerPage).not.toContain("Basebit");
     expect(developerDocsMarkdown).not.toContain(
       "The Programmable Custom Registry is live",
     );

@@ -112,8 +112,7 @@ const providerRequirements = [
 ] as const;
 
 type Deployment = {
-  category: "Programmable Classic" | "Programmable Custom";
-  coordinator?: string;
+  category: "Programmable Classic";
   event: string;
   hook?: string;
   launcher: string;
@@ -134,18 +133,6 @@ const currentDeployments: readonly Deployment[] = [
     startBlock: "25639596",
     topic0:
       "0xf23bd7fdf96caf9195ba5982de473632f59015abc714915dfbbe06cbd8e255e5",
-  },
-  {
-    category: "Programmable Custom",
-    coordinator: "0xdDC3ABbAB0df7F1189310a4f70e7e365796B74E2",
-    event: "StockPairedTokenLaunched",
-    hook: "0x90c67C1E866f86526F0e338459cD435E1F23A0cc",
-    launcher: "0x0573879f72d8eE8B0e5a4Ec5E8bcDb2fCab9E51c",
-    lifecycle: "current",
-    release: "Stock Paired V3",
-    startBlock: "25642745",
-    topic0:
-      "0xe33bd69b6e794281bc106d622fbe0c587aeabf86d1ca4d1afcd583cf8a3e8935",
   },
 ] as const;
 
@@ -170,30 +157,6 @@ const historicalDeployments: readonly Deployment[] = [
     startBlock: "25624131",
     topic0:
       "0x54f861f401872200b25acd4a9f53153ac06a7be4562b3e43025a4a85740a5675",
-  },
-  {
-    category: "Programmable Custom",
-    coordinator: "0xfa5f17389CA28D071781d59750b32C842ab6A54b",
-    event: "StockPairedTokenLaunched",
-    hook: "0x7773D183fe7B60d4F1885047fa42b815a62Fe0Cc",
-    launcher: "0x195750f33caD5eF2DF857a53226B421297A1e79e",
-    lifecycle: "legacy",
-    release: "Stock Paired V1",
-    startBlock: "25637469",
-    topic0:
-      "0xe33bd69b6e794281bc106d622fbe0c587aeabf86d1ca4d1afcd583cf8a3e8935",
-  },
-  {
-    category: "Programmable Custom",
-    coordinator: "0xFb9E1034df6161088E8F358502B19E7515c30fD2",
-    event: "StockPairedTokenLaunched",
-    hook: "0x90c67C1E866f86526F0e338459cD435E1F23A0cc",
-    launcher: "0x5eA6Be24838061bA45dbE8D82DE1b267DC240Daf",
-    lifecycle: "legacy",
-    release: "Stock Paired V2",
-    startBlock: "25640338",
-    topic0:
-      "0xe33bd69b6e794281bc106d622fbe0c587aeabf86d1ca4d1afcd583cf8a3e8935",
   },
 ] as const;
 
@@ -240,32 +203,32 @@ const endpoints = [
     note: "Stable URLs for the API, manifest, schemas and documentation.",
   },
   {
-    path: "/api/v1/status",
-    href: "/api/v1/status",
+    path: "/api/v2/status",
+    href: "/api/v2/status",
     label: "Check feed health",
     note: "Lifecycle, indexed block, freshness and finality.",
   },
   {
-    path: "/api/v1/manifest",
-    href: "/api/v1/manifest",
+    path: "/api/v2/manifest",
+    href: "/api/v2/manifest",
     label: "Resolve deployments",
     note: "Current and historical sources, start blocks and compatibility state.",
   },
   {
-    path: "/api/v1/launches",
-    href: "/api/v1/launches",
+    path: "/api/v2/launches",
+    href: "/api/v2/launches",
     label: "Ingest launches",
     note: "Cursor paginated Classic and Custom records.",
   },
   {
-    path: "/api/v1/launches/{chainId}/{tokenAddress}",
-    href: "/api/v1/launches/1/0x56a96463ead0c0b9b4e4df9e41805bb8877074a6",
+    path: "/api/v2/launches/{chainId}/{tokenAddress}",
+    href: "/api/v2/launches/1/0x56a96463ead0c0b9b4e4df9e41805bb8877074a6",
     label: "Fetch one token",
     note: "One launch record by chain and token contract.",
   },
   {
-    path: "/api/v1/token-list",
-    href: "/api/v1/token-list",
+    path: "/api/v2/token-list",
+    href: "/api/v2/token-list",
     label: "Read the token list",
     note: "Compatibility projection for finalized token identity.",
   },
@@ -323,17 +286,6 @@ function DeploymentCard({ deployment }: { deployment: Deployment }) {
               <DocsAddress
                 address={deployment.hook}
                 label={`${deployment.release} hook`}
-              />
-            </dd>
-          </div>
-        ) : null}
-        {deployment.coordinator ? (
-          <div>
-            <dt>Coordinator</dt>
-            <dd>
-              <DocsAddress
-                address={deployment.coordinator}
-                label={`${deployment.release} coordinator`}
               />
             </dd>
           </div>
@@ -421,8 +373,8 @@ export default function DeveloperDocsPage() {
             <code>category = custom</code>
             <h3>Programmable Custom</h3>
             <p>
-              Listed first party Custom launches today and future registered
-              Custom hooks through the same stable category.
+              Approved external hook launches registered through one canonical
+              source, regardless of provider or contract address.
             </p>
           </article>
         </div>
@@ -430,10 +382,10 @@ export default function DeveloperDocsPage() {
         <div className={styles.statusNote}>
           <strong>Current Custom boundary</strong>
           <p>
-            Existing first party Stock Paired launches are live as Custom.
-            Public Custom submission and the open Custom Registry are still
-            prelaunch. A future Custom hook enters the feed only after
-            recognized onchain launch evidence exists.
+            Programmable Custom intake and the open Custom Registry are
+            prelaunch. The v2 Custom feed is empty until an evidenced registry
+            deployment is published. Historical Stock-Paired records are not
+            Programmable Custom and remain only in the v1 compatibility API.
           </p>
         </div>
       </section>
@@ -442,9 +394,9 @@ export default function DeveloperDocsPage() {
         <div className={styles.sectionIntro}>
           <h2>Register partner launches once</h2>
           <p>
-            Basebit and future providers keep their own templates. Programmable
-            supplies the canonical provenance layer that makes every accepted
-            launch appear under the same <code>Programmable Custom</code> label.
+            Providers keep their own factories and templates. Programmable
+            supplies one provenance layer so every approved external hook launch
+            appears under the same <code>Programmable Custom</code> label.
           </p>
         </div>
 
@@ -480,6 +432,12 @@ export default function DeveloperDocsPage() {
           A frontend request, API response or later metadata submission is not
           canonical launch provenance. Registration must be authenticated and
           atomic with the provider launch.
+        </p>
+
+        <p className={styles.scopeNote}>
+          Token, hook, factory, provider and market addresses may differ on
+          every launch. Terminals still consume one Custom feed because the
+          registry event, not any individual address, assigns the category.
         </p>
 
         <div className={styles.subsectionHeader}>
@@ -559,7 +517,7 @@ export default function DeveloperDocsPage() {
           <article>
             <Radar aria-hidden="true" size={20} strokeWidth={1.8} />
             <h3>Public launch feed</h3>
-            <code>GET /api/v1/launches</code>
+            <code>GET /api/v2/launches</code>
             <p>
               Filter with <code>category=classic</code> or
               <code>category=custom</code>. Refresh the manifest separately and
@@ -586,7 +544,7 @@ export default function DeveloperDocsPage() {
             </p>
           </div>
           <a
-            href="https://developers.programmable.family/api/v1/manifest"
+            href="https://developers.programmable.family/api/v2/manifest"
             rel="noreferrer"
             target="_blank"
           >
@@ -620,12 +578,9 @@ export default function DeveloperDocsPage() {
         </details>
 
         <p className={styles.scopeNote}>
-          Stock Paired coordinators also emit
-          <code>StockPairedEthTokenLaunched</code> with topic
-          <code>
-            0x3cbc0759c7c8dbace314ab27d7865532835458ca67ba12308949012593d5cc36
-          </code>
-          . Treat it as coordinator evidence, not as a third public category.
+          The v2 manifest lists only Classic sources today. Once the Custom
+          Registry is deployed, its address, start block and evidence will
+          appear there without adding a third public category.
         </p>
       </section>
 
@@ -691,7 +646,7 @@ export default function DeveloperDocsPage() {
           <p>
             A Programmable label means the asset traces to a recognized source
             deployment. It does not guarantee price, liquidity, metadata truth
-            or the absence of every economic risk. The v1 schema intentionally
+            or the absence of every economic risk. The v2 schema intentionally
             has no universal <code>safe</code> or <code>audited</code> boolean.
           </p>
         </div>
@@ -733,7 +688,7 @@ export default function DeveloperDocsPage() {
                 Continue with <code>nextCursor</code> while
                 <code>hasMore</code> is true.
               </p>
-              <code>GET /api/v1/launches?cursor={"{nextCursor}"}</code>
+              <code>GET /api/v2/launches?cursor={"{nextCursor}"}</code>
             </div>
           </li>
           <li>
@@ -755,7 +710,7 @@ export default function DeveloperDocsPage() {
                 Start the next traversal with <code>after</code>. Reconcile
                 repeated and orphaned records by <code>launchId</code>.
               </p>
-              <code>GET /api/v1/launches?after={"{resumeCursor}"}</code>
+              <code>GET /api/v2/launches?after={"{resumeCursor}"}</code>
             </div>
           </li>
         </ol>
@@ -792,7 +747,7 @@ export default function DeveloperDocsPage() {
         <div className={styles.endpointGuidance}>
           <p>
             A token detail request needs both path values. Use
-            <code>/api/v1/launches/1/0x…</code>. <code>/token</code> alone is
+            <code>/api/v2/launches/1/0x…</code>. <code>/token</code> alone is
             not an API route.
           </p>
           <div aria-label="Launch feed query parameters">
@@ -824,13 +779,13 @@ export default function DeveloperDocsPage() {
 
         <div className={styles.resourceGrid}>
           <ExternalResource
-            href="https://developers.programmable.family/openapi/programmable-v1.yaml"
+            href="https://developers.programmable.family/openapi/programmable-v2.yaml"
             meta="Normative HTTP contract"
           >
             OpenAPI 3.1
           </ExternalResource>
           <ExternalResource
-            href="https://github.com/0xprogrammable/developers/tree/main/schemas/v1"
+            href="https://github.com/0xprogrammable/developers/tree/main/schemas/v2"
             meta="Validate public responses"
           >
             JSON Schemas
@@ -848,7 +803,7 @@ export default function DeveloperDocsPage() {
             Terminal guide
           </ExternalResource>
           <ExternalResource
-            href="https://github.com/0xprogrammable/developers/tree/main/fixtures/v1"
+            href="https://github.com/0xprogrammable/developers/tree/main/fixtures/v2"
             meta="Conformance and edge cases"
           >
             Fixtures

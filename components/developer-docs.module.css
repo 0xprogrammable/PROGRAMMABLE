@@ -671,8 +671,8 @@
 }
 
 .scopeNote {
-  color: var(--muted) !important;
-  font-size: 12.5px !important;
+  color: var(--text-soft) !important;
+  font-size: 13.5px !important;
   line-height: 1.58 !important;
   margin-top: 15px !important;
   max-width: 78ch !important;
