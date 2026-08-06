@@ -81,23 +81,28 @@ describe("canonical public developer-contract facts", () => {
 
   it("locks the EVM runtime hash algorithm without conflating SHA-256 evidence", () => {
     expect(PROGRAMMABLE_RUNTIME_HASH_SEAM).toEqual({
-      evmAlgorithm: "keccak256(runtime bytecode)",
-      evmFormat: "bytes32",
-      supplementalEvidence:
-        "Optional SHA-256 evidence must be separately labeled and is not runtimeCodeHash.",
+      keccakAlgorithm: "keccak256(runtime bytecode)",
+      keccakField: "runtimeCodeKeccak256",
+      keccakFormat: "0x-prefixed bytes32",
+      sha256Field: "runtimeCodeSha256",
+      sha256Format: "sha256:",
     });
     expect(developerDocsMarkdown).toContain(
-      "`runtimeCodeHash` is the `bytes32` `keccak256(runtime bytecode)`",
+      "`runtimeCodeKeccak256` is the `0x-prefixed bytes32` `keccak256(runtime bytecode)`",
     );
     expect(developerDocsMarkdown).toContain(
-      PROGRAMMABLE_RUNTIME_HASH_SEAM.supplementalEvidence,
+      "Optional `runtimeCodeSha256` evidence uses the `sha256:` prefix",
     );
     expect(agentPrompt).toContain(
-      "runtimeCodeHash is bytes32 keccak256(runtime bytecode)",
+      "runtimeCodeKeccak256 is 0x-prefixed bytes32 keccak256(runtime bytecode)",
     );
-    expect(developerDocsMarkdown).not.toContain(
-      "runtimeCodeHash is SHA-256",
-    );
+    for (const publicSurface of [
+      developerDocsMarkdown,
+      agentPrompt,
+      pageSource,
+    ]) {
+      expect(publicSurface).not.toContain("runtimeCodeHash");
+    }
   });
 
   it("locks platform identity and exactly two public labels", () => {

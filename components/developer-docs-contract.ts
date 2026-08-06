@@ -33,10 +33,11 @@ export const PROGRAMMABLE_FINALITY_STATES = [
 ] as const;
 
 export const PROGRAMMABLE_RUNTIME_HASH_SEAM = {
-  evmAlgorithm: "keccak256(runtime bytecode)",
-  evmFormat: "bytes32",
-  supplementalEvidence:
-    "Optional SHA-256 evidence must be separately labeled and is not runtimeCodeHash.",
+  keccakAlgorithm: "keccak256(runtime bytecode)",
+  keccakField: "runtimeCodeKeccak256",
+  keccakFormat: "0x-prefixed bytes32",
+  sha256Field: "runtimeCodeSha256",
+  sha256Format: "sha256:",
 } as const;
 
 export const PROGRAMMABLE_FEE_POLICY = {

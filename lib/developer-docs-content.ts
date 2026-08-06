@@ -90,12 +90,17 @@ export const developerDocsMarkdown = [
   "",
   "Approved repository revision → reproducible build → wallet launch → runtime match → canonical registry → developer feed.",
   "",
-  "Approval is not a launch. A public Custom record binds chainId, CAIP-2, launchId, projectId, approval, repository, commit, source and build commitments, artifact hashes, deployment configuration, launch wallet, transaction, block, log position, EVM runtimeCodeHash values, assets, contracts, markets, fee policy, security review and finality evidence. For EVM deployments, `runtimeCodeHash` is the `" +
-    PROGRAMMABLE_RUNTIME_HASH_SEAM.evmFormat +
+  "Approval is not a launch. A public Custom record binds chainId, CAIP-2, launchId, projectId, approval, repository, commit, source and build commitments, artifact hashes, deployment configuration, launch wallet, transaction, block, log position, EVM runtime code commitments, assets, contracts, markets, fee policy, security review and finality evidence. For EVM deployments, `" +
+    PROGRAMMABLE_RUNTIME_HASH_SEAM.keccakField +
+    "` is the `" +
+    PROGRAMMABLE_RUNTIME_HASH_SEAM.keccakFormat +
     "` `" +
-    PROGRAMMABLE_RUNTIME_HASH_SEAM.evmAlgorithm +
-    "`. " +
-    PROGRAMMABLE_RUNTIME_HASH_SEAM.supplementalEvidence,
+    PROGRAMMABLE_RUNTIME_HASH_SEAM.keccakAlgorithm +
+    "`. Optional `" +
+    PROGRAMMABLE_RUNTIME_HASH_SEAM.sha256Field +
+    "` evidence uses the `" +
+    PROGRAMMABLE_RUNTIME_HASH_SEAM.sha256Format +
+    "` prefix and remains separate.",
   "",
   "Atomic launches deploy, initialize and register in one transaction or fully revert. Multistep launches stay nonpublic until a finalization transaction proves the complete deployment graph. Corrections, registry generations, retirements and revocations are append-only facts.",
   "",
@@ -116,7 +121,7 @@ export const developerDocsMarkdown = [
   "",
   "This definition is exact and bounded. Keep provenance, review result, code and runtime match, finality, metadata trust, dependencies, admin and upgrade rights, market verification, charting, quotes, simulation, execution and fees as separate facts. Never expose a universal `safe` or `audited` boolean.",
   "",
-  "The review record includes policy version and commitment, repository, commit, source, build and artifact hashes, separately labeled optional SHA-256 evidence, EVM runtimeCodeHash values, configuration, authorities, upgradeability, pause and custody, dependencies, oracles, bridges, offchain services, findings, review time, reviewer type, deployment binding, superseded and revoked state.",
+  "The review record includes policy version and commitment, repository, commit, source, build and artifact hashes, separately labeled optional runtimeCodeSha256 evidence, EVM runtimeCodeKeccak256 values, configuration, authorities, upgradeability, pause and custody, dependencies, oracles, bridges, offchain services, findings, review time, reviewer type, deployment binding, superseded and revoked state.",
   "",
   "## Fee policy",
   "",

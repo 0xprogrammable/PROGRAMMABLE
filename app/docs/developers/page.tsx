@@ -102,11 +102,15 @@ const providerRequirements = [
   ],
   [
     "Source",
-    "Verified source, ABI, deployment transaction, start block and EVM runtimeCodeHash as " +
-      PROGRAMMABLE_RUNTIME_HASH_SEAM.evmFormat +
+    "Verified source, ABI, deployment transaction, start block and EVM " +
+      PROGRAMMABLE_RUNTIME_HASH_SEAM.keccakField +
+      " as " +
+      PROGRAMMABLE_RUNTIME_HASH_SEAM.keccakFormat +
       " " +
-      PROGRAMMABLE_RUNTIME_HASH_SEAM.evmAlgorithm +
-      ".",
+      PROGRAMMABLE_RUNTIME_HASH_SEAM.keccakAlgorithm +
+      "; optional " +
+      PROGRAMMABLE_RUNTIME_HASH_SEAM.sha256Field +
+      " stays separately labeled.",
   ],
   [
     "Template",
@@ -198,7 +202,7 @@ const fields = [
   },
   {
     field: "token · assets[] · contracts[]",
-    use: "Support no token, one token or several assets with roles, provenance, runtime hashes and separate creator metadata.",
+    use: "Support no token, one token or several assets with roles, provenance, runtimeCodeKeccak256, optional runtimeCodeSha256 and separate creator metadata.",
   },
   {
     field: "launch · verification · finality",
@@ -478,8 +482,8 @@ export default function DeveloperDocsPage() {
             <p>
               Approval binds repository, commit, source commitment, build,
               artifacts, configuration, chain and launch wallet. The public
-              record appears only after deployed EVM runtimeCodeHash values and
-              finalization evidence match that approval.
+              record appears only after deployed EVM runtimeCodeKeccak256 values
+              and finalization evidence match that approval.
             </p>
           </article>
           <article>
@@ -501,10 +505,13 @@ export default function DeveloperDocsPage() {
         </div>
 
         <p className={styles.scopeNote}>
-          For EVM deployments, <code>runtimeCodeHash</code> is the{" "}
-          <code>{PROGRAMMABLE_RUNTIME_HASH_SEAM.evmFormat}</code>{" "}
-          <code>{PROGRAMMABLE_RUNTIME_HASH_SEAM.evmAlgorithm}</code>.{" "}
-          {PROGRAMMABLE_RUNTIME_HASH_SEAM.supplementalEvidence}
+          For EVM deployments,{" "}
+          <code>{PROGRAMMABLE_RUNTIME_HASH_SEAM.keccakField}</code> is the{" "}
+          <code>{PROGRAMMABLE_RUNTIME_HASH_SEAM.keccakFormat}</code>{" "}
+          <code>{PROGRAMMABLE_RUNTIME_HASH_SEAM.keccakAlgorithm}</code>. Optional{" "}
+          <code>{PROGRAMMABLE_RUNTIME_HASH_SEAM.sha256Field}</code> evidence uses
+          the <code>{PROGRAMMABLE_RUNTIME_HASH_SEAM.sha256Format}</code> prefix
+          and remains a separate field.
         </p>
       </section>
 
@@ -598,7 +605,8 @@ export default function DeveloperDocsPage() {
               <li>Authorized writer and deployment authority authenticated</li>
               <li>Repository, build, artifacts and configuration committed</li>
               <li>
-                Runtime hashes, transaction, block and log position verified
+                runtimeCodeKeccak256, transaction, block and log position
+                verified
               </li>
             </ul>
           </div>
@@ -797,7 +805,9 @@ export default function DeveloperDocsPage() {
             <ul>
               <li>Policy version and commitment</li>
               <li>Repository, commit, source, build and artifact hashes</li>
-              <li>Optional SHA-256 evidence separately named and labeled</li>
+              <li>
+                Optional runtimeCodeSha256 evidence separately named and labeled
+              </li>
               <li>Configuration, authorities and upgradeability</li>
               <li>Pause, custody, dependencies, oracles and bridges</li>
               <li>Findings, reviewer type, review time and scope</li>
@@ -809,8 +819,8 @@ export default function DeveloperDocsPage() {
             <ul>
               <li>Chain, launch wallet, transaction and block binding</li>
               <li>
-                EVM runtimeCodeHash as{" "}
-                <code>{PROGRAMMABLE_RUNTIME_HASH_SEAM.evmAlgorithm}</code> and{" "}
+                EVM <code>{PROGRAMMABLE_RUNTIME_HASH_SEAM.keccakField}</code> as{" "}
+                <code>{PROGRAMMABLE_RUNTIME_HASH_SEAM.keccakAlgorithm}</code> and{" "}
                 deployment configuration match
               </li>
               <li>Finality and canonical registry evidence</li>

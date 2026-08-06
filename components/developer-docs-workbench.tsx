@@ -120,7 +120,7 @@ export const agentPrompt = [
   "- Resolve current and historical deployments from the manifest.",
   "- Key assets by chainId plus token address and deduplicate by launchId.",
   `- Fetch any launch shape by /api/v${PROGRAMMABLE_ACTIVE_API_VERSION}/launches/{launchId}; use the token compatibility route only when a canonical token exists.`,
-  `- For EVM, runtimeCodeHash is ${PROGRAMMABLE_RUNTIME_HASH_SEAM.evmFormat} ${PROGRAMMABLE_RUNTIME_HASH_SEAM.evmAlgorithm}. ${PROGRAMMABLE_RUNTIME_HASH_SEAM.supplementalEvidence}`,
+  `- For EVM, ${PROGRAMMABLE_RUNTIME_HASH_SEAM.keccakField} is ${PROGRAMMABLE_RUNTIME_HASH_SEAM.keccakFormat} ${PROGRAMMABLE_RUNTIME_HASH_SEAM.keccakAlgorithm}; optional ${PROGRAMMABLE_RUNTIME_HASH_SEAM.sha256Field} uses the ${PROGRAMMABLE_RUNTIME_HASH_SEAM.sha256Format} prefix and remains separate.`,
   "- Complete each traversal with nextCursor before persisting resumeCursor.",
   "- Preserve finality, provenance, null values and unknown optional fields.",
   "- Do not infer audited, safe, chartable or tradable from category alone.",
