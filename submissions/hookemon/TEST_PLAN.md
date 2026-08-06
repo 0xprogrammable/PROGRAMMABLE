@@ -6,7 +6,7 @@ The current prototype has local unit, integration, fuzz and invariant coverage. 
 
 | Area | Executed cases |
 | --- | --- |
-| Hook/contracts | 71 passing Foundry tests: PoolManager authentication, PoolKey admission, mask, all four quadrants, floor and 3% rates, exact-output rounding, partial-fill rejection, fragmentation resistance, liability conservation, complete custom-leg event fields, claims, cross-pool isolation, vault delay/caps/replay/pause, typed CCTP forwarding, hostile-messenger rollback, automatic cumulative payments, option-A allocation and 1-of-1 Safe/guardian role validation, treasury vesting, LP timelock and the complete deploy/swap/bridge/return/payout lifecycle. |
+| Hook/contracts | Foundry coverage includes PoolManager authentication, PoolKey admission, mask, all four quadrants, floor and 3% rates, exact-output rounding, partial-fill rejection, fragmentation resistance, liability conservation, complete custom-leg event fields, claims, cross-pool isolation, vault delay/caps/replay/pause, typed CCTP forwarding, hostile-messenger rollback, automatic cumulative payments, option-A allocation and exact one-wallet Ethereum role binding, treasury vesting, exact LP identity/timelock, the real Uniswap PositionManager atomic launch and late-failure rollback, plus the complete deploy/swap/bridge/return/payout lifecycle. |
 | Domain | Proportional top-holder allocation, exclusions, largest remainder, cycle transitions, 75/25 pack policy, stale data, pack cap, payout gas threshold and max-40 batches. |
 | Integrations | CCTP route/fee mode and ATA setup; Collector machine normalization, turbo recipients, missing key and secret-free errors; crash-safe source-burn, memo, pack, buyback and completion reconciliation; real legacy Solana transaction parsing with exact domain, signer, program, memo, mint, amount and recipient checks; durable replay rejection and signer-output verification. |
 | Indexer | Block replacement, disconnected branch rejection, time-weight integration, mint/burn, log ordering and window bounds. |
@@ -21,8 +21,8 @@ The current prototype has local unit, integration, fuzz and invariant coverage. 
 - Rerun `forge fmt --check`, `forge build`, all tests, bytecode/initcode size and gas reports after the final evidence-origin commit.
 - Rerun Slither and refresh every disposition after any Solidity source change.
 - Rerun the pinned Ethereum fork plus current-head smoke against exact reviewed PoolManager, USDC and CCTP deployments; no router is included in this submission.
-- Mine/reproduce the CREATE2 hook address and prove it has mask `0x20cc` with final constructor arguments.
-- Bind the final public Governance Safe, its exact sole hardware owner/guardian, threshold `1`, the separate operator and Solana destinations in the unsigned deployment plan; verify the Safe has no unreviewed module or guard and recompute every derived address and timestamp before rehearsal.
+- Mine/reproduce the CREATE2 launcher, token and hook addresses; bind the final launcher init code; and prove the child hook has mask `0x20cc` with final constructor arguments.
+- Bind exactly one Privy Ethereum wallet to every Ethereum role and one Privy Solana wallet to the Solana destinations; verify exact wallet/policy IDs and hashes, reject legacy Safe/third-wallet fields and recompute every derived address and timestamp before rehearsal.
 - Add malicious ERC-20, failed recipient, claim/remainder and ERC-6909 aggregate solvency adversarial cases if independent review requests them.
 - Preserve operator crash tests at every external boundary, including accepted-but-not-journaled CCTP/Collector/reward publication.
 - Preserve the executed signer-policy cases for wrong chain, recipient, mint, amount, signer, program, memo, blockhash, replay after restart and raw-signer message mutation.
@@ -31,11 +31,14 @@ The current prototype has local unit, integration, fuzz and invariant coverage. 
 
 ## Mainnet lifecycle tests
 
-- Token deployment conserves the full allocation table and no balance is silently left with the executor.
-- Treasury vesting releases zero before day 365, 25% at the cliff and 100% at day 1,460 only to the immutable Governance Safe.
-- The canonical position timelock accepts exactly one position from the deployment Safe and cannot release it to anyone before day 730.
+- Run `pnpm --filter @hookemon/operator preflight:mainnet` with exact public receipts and independently supplied RPC/Privy/PostgreSQL observations; require a secret-free `MAINNET_PREFLIGHT_READY` receipt before any signer adapter is constructed.
+- Reject wrong chain IDs, dependency/runtime code, Privy wallet/policy hash, undisclosed third wallet, Solana ATA/programs, CCTP route, reserve/gas balance or database lock.
+- Keep the Render Blueprint on manual deploy with one readiness worker. Do not treat the readiness monitor as production transaction execution.
+- `HookemonAtomicLauncher` conserves the full allocation table, retains no token or USDC and rolls back all children, registration and transfers after a late mint failure.
+- Treasury vesting releases zero before day 365, 25% at the cliff and 100% at day 1,460 only to the bound Ethereum wallet.
+- The canonical position timelock accepts only the exact reviewed token ID whose PositionManager PoolKey derives the reviewed PoolId; decoy token IDs and decoy pools revert, and release is impossible before day 730.
 - Canonical PoolKey, sorted currencies, fee, tick spacing, initial price and hook address match the reviewed plan.
-- Governance Safe threshold is exactly one; its only owner equals the immutable guardian; the Safe contract, hardware owner/guardian and Ethereum operator are pairwise distinct; no unreviewed module or guard is active.
+- `HookemonDeploymentPlan:v4` requires the same Ethereum wallet for every Ethereum role, derives the canonical PoolId, binds exact LP identity and derives the atomic launcher from its deployer, salt and init-code hash; any second Ethereum authority or mismatched executable identity is rejected.
 - LP position identity, owner/lock, fee collection and removal/retirement rules match public disclosure.
 - Buy and sell, exact input and exact output quotes match final receipt deltas and disclosed 3%/0.30% components.
 - `0 selected` yields 10 bps Programmable and zero project; `3% selected` yields exactly 10/290 bps.
@@ -51,7 +54,7 @@ The current prototype has local unit, integration, fuzz and invariant coverage. 
 - Website responsive layouts, keyboard focus, reduced motion, screen reader names, stale/error states and truthful simulator/live labels.
 - Indexer full backfill, deep reorg drill, provider disagreement, lag alert and confirmed-read reconciliation.
 - Monitoring alerts for liability deficit, vault cap, stuck bridge, stale catalog, memo mismatch, payout delay, signer gas and root-funding mismatch.
-- Runbook drill for compromised Collector key, Ethereum signer, Solana signer and the single Safe-owner/guardian hardware key, including loss and recovery-word restoration.
+- Runbook drill for compromised Collector key, Privy app/authorization credentials, Ethereum policy and Solana policy, including credential revocation and reviewed rotation.
 
 ## Evidence semantics
 

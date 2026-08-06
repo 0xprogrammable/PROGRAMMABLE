@@ -12,17 +12,17 @@ Hookemon binds one immutable Uniswap v4 `HOOKEMON/USDC` pool to an inclusive 3% 
 | --- | --- |
 | Outcome | Hold HOOKEMON; eligible top-200 time-weighted holders accrue proportional USDC and never submit a claim transaction. |
 | Token | `Hookemon` (`HOOKEMON`), 18 decimals, fixed supply `420,690,000,000`, no owner mint, blacklist, freeze, transfer tax or upgrade path. |
-| Launch | No presale. `378,621,000,000 HOOKEMON` plus `25,000 USDC` seed canonical liquidity; `42,069,000,000 HOOKEMON` enter treasury vesting; every other allocation is zero. |
-| Custody | Treasury has a 365-day cliff and linear vesting through day 1,460; the LP position is locked for 730 days; both immutable beneficiaries are the Governance Safe. |
+| Launch | One atomic constructor transaction. No presale. `378,621,000,000 HOOKEMON` plus `25,000 USDC` seed canonical liquidity; `42,069,000,000 HOOKEMON` enter treasury vesting; `500 USDC` enters CycleVault; every other allocation and every launcher terminal balance is zero. |
+| Custody | Treasury has a 365-day cliff and linear vesting through day 1,460; the LP position is locked for 730 days; both immutable beneficiaries are the single bound Ethereum wallet. |
 | Pool | One canonical Ethereum mainnet HOOKEMON/USDC v4 PoolKey; USDC is the quote asset; static 0.30% LP fee; tick spacing 60. |
 | Hook | One non-upgradeable hook, one PoolId, permission mask `0x20cc`; beforeInitialize, beforeSwap and afterSwap plus the two swap return-delta bits. |
 | Hook charge | Inclusive 3% of executed gross USDC-side volume: exactly 0.1% Programmable and 2.9% CycleVault. It is not 3.1%. |
 | Pack cycle | Batch CCTP to Solana, use fresh Collector data, maximum 20 orders, 75% floor lane and 25% showcase lane, accept/reconcile buybacks, batch proceeds back. |
 | Rewards | Close accounting every 20 minutes; top 200 direct eligible holders by time-weighted balance; cumulative Merkle roots; permissionless batches of at most 40. |
 | Dust/gas | Minimum payout `max(5 USDC, estimated recipient gas cost × 20)` and batch gas at most 5% of batch value; unpaid value rolls forward without expiry. |
-| Authorities | Immutable Programmable owner; one-time registrar; 48-hour CycleVault Safe; pause-only guardian; policy-constrained Ethereum/Solana operators. |
+| Authorities | Immutable Programmable owner; exactly one policy-constrained Privy Ethereum wallet for all Ethereum roles and one Privy Solana wallet for all Solana roles. |
 | Failure | Trading remains atomic; the offchain cycle stops at its last confirmed custody checkpoint and reconciles by `cycleId` before retry. |
-| Privy | Optional dashboard login only. Eligibility and automatic payment never depend on Privy. |
+| Privy | Optional holder dashboard login plus exactly one Ethereum and one Solana production wallet in one Privy app. Holder eligibility and automatic payment never depend on a holder having a Privy account. |
 | Not used | Oracle pricing, dynamic LP fees, transfer taxes, permissioned assets, ZK proofs, custom curves and asynchronous Uniswap swaps. |
 
 ## Why Uniswap v4
@@ -33,9 +33,9 @@ The reference source is `packages/contracts/src/ProgrammableVolumeFeeHookV1.sol`
 
 ## Lifecycle and value flow
 
-1. A reviewed executor deploys the immutable token and one hook instance.
-2. The immutable registrar binds and initializes exactly one sorted PoolKey.
-3. The deployment Safe assigns 90% of supply plus 25,000 USDC to canonical liquidity, sends 10% to treasury vesting, locks the LP position for 730 days and leaves no residual token allocation.
+1. The bound Ethereum wallet approves exactly `25,500 USDC` to the predicted `HookemonAtomicLauncher` address.
+2. The reviewed launcher constructor deploys the immutable token, permission-bit-mined hook, vault, bridge, distributor, vesting and position timelock; binds and initializes exactly one sorted PoolKey; assigns 90% of supply plus `25,000 USDC` to canonical liquidity; sends 10% to treasury vesting and `500 USDC` to CycleVault; and locks the exact canonical LP token ID plus bounded rounding dust for 730 days.
+3. Every launch postcondition is checked before construction completes. Any failure, including a late PositionManager failure, reverts every deployment, pool mutation and transfer.
 4. Every supported swap pays the separate LP fee and inclusive 3% hook charge.
 5. Programmable claims only its liability; CycleVault claims only the 2.9% project liability.
 6. The operator batches a capped cycle through CCTP, Collector pack creation/open/buyback and CCTP return.
@@ -99,25 +99,25 @@ Reward allocation uses time-weighted balances, largest-remainder integer conserv
 
 | Role | Controller | Capabilities | Mutable | Delay | User-exit impact |
 | --- | --- | --- | --- | --- | --- |
-| Immutable hook registrar | The Hookemon deployment Safe supplied immutably to the hook constructor; its exact address is a pre-deployment binding. | Register and initialize the one canonical PoolKey exactly once. | No | None | No hook authority remains after registration; it cannot change fees, PoolId, claims or exits. |
+| Immutable hook registrar | `HookemonAtomicLauncher`, supplied immutably to the hook constructor and bound by its init-code hash. | Register and initialize the one canonical PoolKey inside the launch constructor exactly once. | No | None | The launcher has no callable registration path after deployment; no hook authority remains. |
 | Programmable fee owner | `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c` | Claim only the exact Programmable liability to a nonzero per-claim recipient. | No | None | Cannot change the project liability, pool, token, fees or holder rewards. |
-| Governance/CycleVault Safe | One new Hookemon-only 1-of-1 Safe; its exact sole hardware-wallet owner is also the immutable guardian, while the Safe contract remains distinct from that EOA and the operator. | Deploy/register, administer delayed CycleVault configuration and receive only vested treasury tokens and the LP position after its lock. | Safe owner/threshold/module changes are technically possible but invalidate this reviewed profile | 48 hours for CycleVault configuration; vesting/LP schedules immutable | Cannot redirect the Programmable liability; compromise of the single hardware key can control Safe actions and pause automation, so it is a material single point of failure. |
-| Guardian | The exact hardware-wallet EOA that is the Governance Safe's sole owner; it is distinct from the Safe contract and Ethereum operator. | Pause new bridge cycles and pause reward funding/settlement. | The deployed guardian role is immutable; replacing it requires a new reviewed deployment | Immediate pause only | Can delay automation but cannot sweep or forfeit accrued claims and cannot block LP release; key loss removes the pause path. |
-| Ethereum/Solana policy wallets | New low-balance policy-constrained wallets; exact public addresses and Solana ATA are bound and reviewed before deployment. | Submit bounded CCTP/Collector transactions, publish reviewed roots and sponsor settlement gas. | CycleVault operator configuration rotates after 48 hours; other immutable roles require a reviewed replacement | Policy-controlled rotation | Failure delays cycles; contract caps, public proofs and immutable fee liabilities limit redirection. |
+| Ethereum wallet | One Privy Ethereum wallet bound as launch funder, CycleVault admin/guardian/operator, reward-root publisher, treasury beneficiary and LP beneficiary. | Approve the exact predicted launcher, authorize deployment, administer delayed CycleVault configuration, pause automation, publish reviewed roots, sponsor Ethereum actions and receive only vested treasury tokens plus the LP position after its lock. | Policy changes or replacement require a new reviewed binding; immutable roles require a new deployment | 48 hours for CycleVault configuration; immediate pause; vesting/LP schedules immutable | Cannot redirect the Programmable liability, but credential or policy compromise concentrates every Ethereum authority and is a material single point of failure. |
+| Solana wallet | One Privy Solana wallet; its exact public address, policy and derived USDC ATA are bound before deployment. | Submit bounded CCTP/Collector transactions and temporarily hold cycle USDC/NFTs. | Policy changes require a new reviewed binding | Policy-controlled | Failure delays cycles; local decoding, program/account allowlists, amount caps and idempotency limit redirection. |
 
 ## Provenance
 
-- **Builder-stated:** project name Hookemon; memecoin/collectible concept; 3% total; automatic Collector packs; automatic top-holder distribution; option A with no presale, 90% liquidity, 25,000 USDC, 10% vested treasury, 730-day LP lock and separate 500 USDC gacha reserve.
+- **Builder-stated:** project name Hookemon; memecoin/collectible concept; 3% total; automatic Collector packs; automatic top-holder distribution; option A with one atomic launch, no presale, 90% liquidity, 25,000 USDC, 10% vested treasury, 730-day LP lock and separate 500 USDC gacha reserve.
 - **Agent-derived:** fixed supply, static LP fee, 20-minute accounting cadence, 75/25 pack lanes, top 200, gas thresholds, caps, delays and technical architecture.
 - **Evidence-backed locally:** source exists; the recorded local tests and builds passed for their exact revisions. No external acceptance, audit, deployment, runtime, routing or availability claim follows.
 
 ## Closed owner decision
 
-Option A is bound in source and tests: no presale; 90% liquidity allocation; 25,000 USDC initial liquidity; 10% treasury with a 12-month cliff and continued linear vesting through month 48; 730-day LP lock; no residual allocation; and a separately sponsor-funded 500 USDC gacha reserve. The exact launch timestamp, derived contract addresses and public role addresses remain deployment inputs, not open product economics.
+Option A is bound in the executable launcher, deployment-plan hash and tests: no presale; 90% liquidity allocation; 25,000 USDC initial liquidity; 10% treasury with a 12-month cliff and continued linear vesting through month 48; 730-day exact-position LP lock; no residual launcher allocation; and a separately identified 500 USDC gacha reserve funded in the same atomic transaction. The exact launch timestamp, derived contract addresses and public role addresses remain deployment inputs, not open product economics.
 
 ## Deployment and release prerequisites
 
-- Bind the public Governance Safe, exact sole hardware owner/guardian, Ethereum operator, Solana operator, derived Solana USDC ATA and equal NFT recipient listed in `docs/MAINNET_WALLETS.md` before any deployment rehearsal. Verify Safe threshold `1`, the exact one-owner list and no unreviewed module or guard.
+- Bind exactly one public Privy Ethereum wallet and one public Privy Solana wallet, their wallet/policy IDs and hashes, the derived Solana USDC ATA and equal NFT recipient listed in `docs/MAINNET_WALLETS.md` before any deployment rehearsal. Reject legacy Safe fields or an undisclosed third wallet.
+- Bind `HookemonDeploymentPlan:v4` to the final launcher deployer, salt, init-code hash, canonical PoolId and exact next PositionManager token ID, then approve only the derived launcher address.
 - Keep Collector live mode disabled until Collector Crypt supplies written automation permission and the server-only partner key; prototype tests use the fail-closed simulator boundary.
 - Treat both items as candidate/deployment gates, not as evidence that the local prototype is deployed, approved or live.
 
