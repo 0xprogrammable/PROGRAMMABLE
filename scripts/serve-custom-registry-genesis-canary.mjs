@@ -516,11 +516,21 @@ async function finalizationTransaction(plan, registeredLog) {
   const observedBlock = BigInt(registeredLog.blockNumber);
   if (lowestHead <= observedBlock + BigInt(MINIMUM_FINALITY_BLOCKS)) return null;
   const confirmedHead = lowestHead - 1n;
-  const confirmedBlock = await reconciled("eth_getBlockByNumber", [
-    `0x${confirmedHead.toString(16)}`,
-    false,
-  ]);
-  if (confirmedBlock?.hash === undefined) fail("Confirmed head block is unavailable");
+  const confirmedBlocks = await Promise.all(RPC_ENDPOINTS.map((endpoint) => rpc(
+    endpoint,
+    "eth_getBlockByNumber",
+    [`0x${confirmedHead.toString(16)}`, false],
+  )));
+  const confirmedBlock = confirmedBlocks[0];
+  if (confirmedBlock?.hash === undefined || confirmedBlock?.number === undefined) {
+    fail("Confirmed head block is unavailable");
+  }
+  const confirmedIdentity = `${confirmedBlock.number}:${confirmedBlock.hash}`.toLowerCase();
+  if (confirmedBlocks.some((block) =>
+    `${block?.number ?? ""}:${block?.hash ?? ""}`.toLowerCase() !== confirmedIdentity
+  )) {
+    fail("Independent Ethereum Mainnet RPCs disagree on the confirmed head block identity");
+  }
   const finalityEvidence = {
     chainId: "1",
     registry: REGISTRY,

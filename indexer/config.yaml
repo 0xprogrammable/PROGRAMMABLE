@@ -100,6 +100,27 @@ contracts:
     events:
       - event: "PayoutAddressUpdated(address indexed beneficiary, address indexed previousPayoutAddress, address indexed newPayoutAddress)"
       - event: "BeneficiaryFeesClaimed(address indexed beneficiary, address indexed payoutAddress, address indexed quoteAsset, uint256 amount, uint256 beneficiaryTotalClaimed, uint256 vaultTotalReceived)"
+  - name: CustomRegistryV1
+    events:
+      - event: "CustomLaunchApprovalAuthorizedV1(bytes32 indexed approvalId, bytes32 indexed launchId, bytes32 indexed approvalBindingHash, bytes32 registrationBindingHash, uint64 transitionSequence, uint64 validAfterBlock, uint64 expiresAtBlock, bytes32 evidenceHash)"
+      - event: "CustomLaunchRegisteredV1(bytes32 indexed launchId, bytes32 indexed projectId, address indexed primaryContract, uint64 registrationSequence, uint256 chainId, uint64 registryGeneration, bytes32 approvalId, bytes32 deploymentId, address launchWallet, bytes32 identityHash, bytes32 registeredRecordCommitment, uint64 observedAtBlock)"
+      - event: "CustomLaunchProvenanceBoundV1(bytes32 indexed launchId, bytes32 indexed repositoryId, bytes32 indexed commitId, bytes32 sourceCommitment, bytes32 buildCommitment, bytes32 artifactSetHash, bytes32 deploymentConfigurationHash, bytes32 deploymentSetHash, bytes32 runtimeCodeSetHash, bytes32 primaryRuntimeCodeHash)"
+      - event: "CustomLaunchReviewBoundV1(bytes32 indexed launchId, bytes32 indexed approvalBindingHash, bytes32 indexed securityReviewHash, bytes32 reviewPolicyHash, bytes32 reviewResultId, bytes32 reviewDeploymentBindingHash, bytes32 feePolicyHash, bytes32 finalityPolicyHash)"
+      - event: "CustomLaunchAttributionBoundV1(bytes32 indexed launchId, bytes32 indexed modelId, bytes32 indexed templateId, bytes32 modelVersion, bytes32 templateVersion, bytes32 providerId, bytes32 builderAttributionHash, bytes32 originHash, bytes32 assetSetHash, bytes32 marketSetHash, bytes32 marketPathId, bytes32 configurationHash, bytes32 permissionsHash, bytes32 capabilitySetHash)"
+      - event: "CustomLaunchFeePolicyBoundV1(bytes32 indexed launchId, bytes32 indexed feePolicyHash, bytes32 indexed providerId, uint8 kind, uint16 totalFeeBps, uint16 nativeCustomFeeBps, uint16 partnerShareBps, uint16 programmableShareBps, address partnerRecipient, address programmableRecipient)"
+      - event: "CustomLaunchFeeScopeBoundV1(bytes32 indexed launchId, bytes32 indexed feePolicyHash, bytes32 indexed publicPolicyBindingHash, bytes32 modelId, bytes32 modelVersion, bytes32 templateId, bytes32 templateVersion, bytes32 marketPathId)"
+      - event: "CustomLaunchFeeEvidenceBoundV1(bytes32 indexed launchId, bytes32 indexed feePolicyHash, bytes32 indexed verificationEvidenceHash, address currency, bytes32 chargeModeId, bytes32 basisId, bytes32 roundingId, bytes32 partnerAccrualId, bytes32 programmableAccrualId, bytes32 claimIsolationEvidenceHash, bytes32 accountingSafetyEvidenceHash)"
+      - event: "CustomLaunchFinalizedV1(bytes32 indexed launchId, bytes32 indexed observedTransactionHash, bytes32 indexed finalityEvidenceHash, uint64 transitionSequence, uint64 observedBlockNumber, bytes32 observedBlockHash, uint32 observedTransactionIndex, uint32 observedLogIndex, uint64 confirmedHeadBlockNumber, bytes32 confirmedHeadBlockHash, bytes32 finalityPolicyHash, uint64 finalizedAtBlock, uint64 finalizedAtTimestamp)"
+      - event: "CustomLaunchRecordCorrectedV1(bytes32 indexed launchId, uint64 indexed revision, bytes32 indexed correctedRecordHash, uint64 transitionSequence, bytes32 previousRecordHash, bytes32 reasonCode, bytes32 evidenceHash)"
+      - event: "CustomLaunchRevokedV1(bytes32 indexed launchId, bytes32 indexed reasonCode, bytes32 indexed evidenceHash, uint64 transitionSequence, uint64 latestRecordRevision, bytes32 latestRecordHash, uint64 revokedAtBlock, uint64 revokedAtTimestamp)"
+  - name: CustomPartnerFactoryRegistryV1
+    events:
+      - event: "CustomPartnerFactoryAuthorizedV1(bytes32 indexed configurationHash, bytes32 indexed providerId, address indexed factory, bytes32 modelId, bytes32 modelVersion, bytes32 templateId, bytes32 templateVersion, uint64 validAfterBlock, uint64 expiresAtBlock, bytes32 evidenceHash)"
+      - event: "CustomPartnerFactorySourceBoundV1(bytes32 indexed configurationHash, bytes32 indexed modelRepositoryId, bytes32 indexed modelSourceCommitId, bytes32 factorySourceRepositoryId, bytes32 factorySourceCommitId, bytes32 factoryRuntimeCodeHash, bytes32 launchRuntimeCodeSetHash, bytes32 permissionsHash, bytes32 feePolicyHash)"
+      - event: "CustomPartnerFactoryRevokedV1(bytes32 indexed configurationHash, bytes32 indexed providerId, address indexed factory, bytes32 reasonCode, bytes32 evidenceHash)"
+  - name: CustomAtomicRegistrarV1
+    events:
+      - event: "AtomicCustomLaunchExecutedV1(bytes32 indexed launchId, address indexed primaryContract, bytes32 indexed salt, bytes32 creationCodeHash, bytes32 initializationResultHash)"
 chains:
   - id: 1
     start_block: 25624130
@@ -141,3 +162,9 @@ chains:
         address: "0x0573879f72d8ee8b0e5a4ec5e8bcdb2fcab9e51c"
       - name: StockV3EthCoordinator
         address: "0xddc3abbab0df7f1189310a4f70e7e365796b74e2"
+      - name: CustomRegistryV1
+        address: "0x17e18c88bda9bfb73924cdc989c07b0707e72671"
+      - name: CustomPartnerFactoryRegistryV1
+        address: "0xf8aef69201621ad20fa256da595426b7e6192dba"
+      - name: CustomAtomicRegistrarV1
+        address: "0xcc916e5200d2626edfd918dc219bc4296629e997"

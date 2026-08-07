@@ -10,6 +10,8 @@ import type {
 } from "../../tokens";
 import { getProductionWebsiteProjectionTargetV1 } from "../projection-target/website-target";
 import { isCustomLaunchRegistryPublicReadEnabled } from "./public-readiness";
+import { withGenesisCanaryRegistryCustomStoreV1 } from
+  "./genesis-canary-public-v1";
 import type { VerifiedRegistryCustomLaunchPublicV1 } from
   "./registry-public-store-v1";
 
@@ -124,7 +126,9 @@ export async function readProductionCustomExploreDirectoryV1(
   if (!isCustomLaunchRegistryPublicReadEnabled()) return Object.freeze([]);
   const target = getProductionWebsiteProjectionTargetV1();
   await target.assertProductionReadiness();
-  const records = await target.registryCustomPublicStore
+  const records = await withGenesisCanaryRegistryCustomStoreV1(
+    target.registryCustomPublicStore,
+  )
     .findVerifiedRegistryCustomLaunchesPublic({ signal });
   return Object.freeze(records.map(customLaunchProjectToExploreEntryV1));
 }

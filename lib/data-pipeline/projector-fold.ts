@@ -2,7 +2,7 @@ import "server-only";
 
 import type { DualRpcCandidateEvidence } from "./dual-rpc";
 import type { EnvioCandidate } from "./envio";
-import { PROGRAMMABLE_EVENT_SIGNATURES } from "./event-manifest";
+import { PROJECTOR_EVENT_SIGNATURES } from "./event-manifest";
 import { getDataPipelineReleaseBinding } from "./release-binding.server";
 
 type HexAddress = `0x${string}`;
@@ -1030,7 +1030,7 @@ function validateFactInvariants(fact: ProjectorEventFact) {
 }
 
 export function projectorFoldManifestCoverage() {
-  const manifest = Object.entries(PROGRAMMABLE_EVENT_SIGNATURES)
+  const manifest = Object.entries(PROJECTOR_EVENT_SIGNATURES)
     .flatMap(([contractName, signatures]) =>
       signatures.map((signature) => {
         const eventName = /^([A-Za-z][A-Za-z0-9]*)\(/u.exec(signature)?.[1];

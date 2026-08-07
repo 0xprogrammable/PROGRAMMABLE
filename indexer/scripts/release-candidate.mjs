@@ -41,6 +41,9 @@ const EXPECTED_CONTRACTS = Object.freeze([
   "ClassicV3RewardVault",
   "ClassicV3RewardVaultFactory",
   "ClassicV3VestingWalletFactory",
+  "CustomAtomicRegistrarV1",
+  "CustomPartnerFactoryRegistryV1",
+  "CustomRegistryV1",
   "StockV1EthCoordinator",
   "StockV1Hook",
   "StockV1Launcher",
@@ -299,7 +302,7 @@ function exactNames(label, names) {
     new Set(sorted).size !== sorted.length ||
     sorted.some((name, index) => name !== EXPECTED_CONTRACTS[index])
   ) {
-    throw new Error(`${label} must be the exact reviewed 19-contract scope`);
+    throw new Error(`${label} must be the exact reviewed contract scope`);
   }
 }
 

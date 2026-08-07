@@ -104,7 +104,7 @@ describe("Custom Registry V1 public manifest", () => {
       status: "live",
       chainId: "1",
       caip2: "eip155:1",
-      publicSubmissionsEnabled: true,
+      publicSubmissionsEnabled: false,
       generation: "ethereum-mainnet-v1",
       startBlock: "23456789",
       contracts: {

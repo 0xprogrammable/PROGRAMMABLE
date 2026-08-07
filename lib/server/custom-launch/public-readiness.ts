@@ -52,7 +52,7 @@ export function isCustomLaunchPublicEnabled(
 export function isCustomLaunchRegistryPublicReadEnabled(
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): boolean {
-  return environment.PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED === "true";
+  return environment.PROGRAMMABLE_CUSTOM_REGISTRY_PUBLIC_ENABLED === "true";
 }
 
 export function configuredLaunchPermitSignersV2(

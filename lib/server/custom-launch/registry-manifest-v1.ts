@@ -125,7 +125,7 @@ export function resolveCustomRegistryPublicManifestV1(
       status: "live",
       chainId: "1",
       caip2: "eip155:1",
-      publicSubmissionsEnabled: true,
+      publicSubmissionsEnabled: false,
       generation,
       startBlock,
       contracts: Object.freeze(contracts),
