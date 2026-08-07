@@ -170,10 +170,10 @@
   color: var(--muted);
   display: inline-flex;
   flex: 0 0 auto;
-  height: 40px;
+  height: 44px;
   justify-content: center;
   padding: 0;
-  width: 40px;
+  width: 44px;
 }
 
 .searchClear:focus-visible {
@@ -380,7 +380,7 @@
   font-size: 14px;
   font-weight: 510;
   line-height: 1.35;
-  min-height: 36px;
+  min-height: 44px;
   padding: 7px 9px 7px 11px;
   transition:
     background-color 140ms var(--ease-out),

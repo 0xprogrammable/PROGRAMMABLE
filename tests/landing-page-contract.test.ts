@@ -20,18 +20,14 @@ describe("landing page contract", () => {
     );
   });
 
-  it("uses one responsive, route-specific static atmosphere image without a video", () => {
+  it("uses one responsive Night Garden atmosphere across every route without a video", () => {
     const landing = read("components/landing-page.tsx");
     const styles = read("components/landing-page.module.css");
     const backdrop = read("components/atmosphere-backdrop.tsx");
     const navigation = read("components/site-navigation.tsx");
 
-    expect(backdrop).toContain(
-      "/brand/atmosphere/night-sky-desktop-v1.avif",
-    );
-    expect(backdrop).toContain(
-      "/brand/atmosphere/night-sky-mobile-v1.avif",
-    );
+    expect(backdrop).not.toContain("night-sky-desktop-v1.avif");
+    expect(backdrop).not.toContain("night-sky-mobile-v1.avif");
     expect(backdrop).toContain(
       "/brand/atmosphere/night-sky-botanical-desktop-v2-1920.avif",
     );
@@ -50,7 +46,7 @@ describe("landing page contract", () => {
     expect(backdrop).toContain(
       'media="(orientation: portrait) and (max-width: 1024px)"',
     );
-    expect(backdrop).toContain("const art = isLandingPage ? landingArt : appSky");
+    expect(backdrop).toContain('" atmosphere-backdrop-product"');
     expect(backdrop.match(/<picture/g)).toHaveLength(1);
     expect(backdrop.match(/<img/g)).toHaveLength(1);
     expect(backdrop).toContain('type="image/avif"');
@@ -125,7 +121,7 @@ describe("landing page contract", () => {
     expect(styles).toMatch(/\.hero\s*\{[^}]*min-height:\s*100svh;/s);
     expect(styles).toContain("@media (prefers-reduced-motion: reduce)");
     expect(styles).toMatch(
-      /\.primaryAction,[\s\S]*?min-width:\s*188px;/,
+      /\.primaryAction,[\s\S]*?min-width:\s*176px;/,
     );
     expect(styles).toMatch(
       /\.primaryAction:focus-visible,[\s\S]*?outline:\s*2px solid var\(--landing-ivory\);/,

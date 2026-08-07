@@ -5,26 +5,29 @@
  */
 
 :root {
+  --brand-ivory: #f8f0e9;
+  --brand-ivory-soft: rgba(248, 240, 233, 0.76);
+  --brand-ivory-muted: rgba(248, 240, 233, 0.58);
   --header-height: 68px;
   --page-width: 1320px;
   --radius-control: 18px;
   --radius-control-inner: 14px;
   --radius-panel: 28px;
-  --liquid-glass-surface-background: oklch(0.185 0.028 264 / 0.72);
-  --liquid-glass-surface-background-strong: oklch(0.17 0.024 264 / 0.86);
-  --liquid-glass-inner-background: oklch(0.94 0.008 85 / 0.055);
-  --liquid-glass-control-background: oklch(0.94 0.008 85 / 0.074);
-  --liquid-glass-control-background-hover: oklch(0.94 0.008 85 / 0.12);
-  --liquid-glass-border: oklch(0.95 0.008 85 / 0.105);
-  --liquid-glass-border-strong: oklch(0.96 0.007 85 / 0.17);
-  --liquid-glass-highlight: oklch(0.98 0.006 85 / 0.14);
-  --liquid-glass-backdrop: blur(22px) saturate(1.08);
+  --liquid-glass-surface-background: oklch(0.94 0.012 76 / 0.135);
+  --liquid-glass-surface-background-strong: oklch(0.94 0.012 76 / 0.2);
+  --liquid-glass-inner-background: oklch(0.96 0.009 76 / 0.08);
+  --liquid-glass-control-background: oklch(0.96 0.009 76 / 0.11);
+  --liquid-glass-control-background-hover: oklch(0.96 0.009 76 / 0.19);
+  --liquid-glass-border: oklch(0.96 0.009 76 / 0.19);
+  --liquid-glass-border-strong: oklch(0.97 0.007 76 / 0.27);
+  --liquid-glass-highlight: oklch(0.99 0.004 76 / 0.23);
+  --liquid-glass-backdrop: blur(24px) saturate(1.12);
   --liquid-glass-shadow:
-    inset 0 1px 0 oklch(0.99 0.004 85 / 0.13),
-    inset 0 -1px 0 oklch(0.08 0.018 264 / 0.42),
-    0 0 0 1px oklch(0.08 0.02 264 / 0.18),
-    0 12px 28px oklch(0.07 0.022 264 / 0.2),
-    0 30px 70px oklch(0.07 0.022 264 / 0.12);
+    inset 0 1px 0 oklch(0.99 0.004 76 / 0.18),
+    inset 0 -1px 0 oklch(0.08 0.018 264 / 0.24),
+    0 0 0 1px oklch(0.08 0.02 264 / 0.12),
+    0 12px 30px oklch(0.07 0.022 264 / 0.18),
+    0 28px 64px oklch(0.07 0.022 264 / 0.1);
   --liquid-glass-control-shadow:
     inset 0 1px 0 oklch(0.99 0.004 85 / 0.12),
     inset 0 -1px 0 oklch(0.08 0.018 264 / 0.28),
@@ -37,8 +40,8 @@
   --navigation-glass-background-hover: oklch(0.24 0.027 264 / 0.74);
   --navigation-glass-border: oklch(0.95 0.008 85 / 0.11);
   --navigation-glass-highlight: oklch(0.99 0.004 85 / 0.13);
-  --navigation-glass-ink: #fffdf9;
-  --navigation-glass-ink-muted: rgba(255, 253, 249, 0.68);
+  --navigation-glass-ink: var(--brand-ivory);
+  --navigation-glass-ink-muted: var(--brand-ivory-soft);
   --navigation-glass-accent: rgba(255, 255, 255, 0.085);
   --navigation-glass-backdrop: var(--liquid-glass-backdrop);
   --navigation-glass-shadow:
@@ -51,8 +54,8 @@
   --control-glass-background-hover: var(--liquid-glass-control-background-hover);
   --control-glass-border: var(--liquid-glass-border);
   --control-glass-backdrop: var(--liquid-glass-backdrop);
-  --accent-glass-background: rgba(255, 255, 255, 0.11);
-  --accent-glass-background-hover: rgba(255, 255, 255, 0.17);
+  --accent-glass-background: rgba(248, 240, 233, 0.12);
+  --accent-glass-background-hover: rgba(248, 240, 233, 0.2);
   --accent-glass-border: var(--liquid-glass-border-strong);
   --shadow-resting:
     0 1px 0 color-mix(in srgb, var(--text) 4%, transparent),
@@ -87,14 +90,18 @@ html[data-theme="dark"] {
   --surface: var(--liquid-glass-surface-background);
   --surface-raised: var(--liquid-glass-surface-background-strong);
   --surface-soft: var(--liquid-glass-inner-background);
-  --text: #f7f1ea;
-  --text-soft: #d5cec6;
-  --muted: #aaa39b;
-  --dim: #9b958d;
+  --text: var(--brand-ivory);
+  --text-soft: var(--brand-ivory-soft);
+  --muted: var(--brand-ivory-muted);
+  --dim: rgba(248, 240, 233, 0.5);
+  --accent: #e8dfd7;
+  --accent-strong: var(--brand-ivory);
+  --accent-soft: rgba(248, 240, 233, 0.1);
+  --focus: var(--brand-ivory);
   --brand-pink-action: rgba(255, 255, 255, 0.1);
   --brand-pink-hover: rgba(255, 255, 255, 0.16);
-  --brand-pink-ink: #fffdf9;
-  --accent-ink: #fffdf9;
+  --brand-pink-ink: var(--brand-ivory);
+  --accent-ink: var(--brand-ivory);
   --body-background: #050b1c;
   --header-background: rgba(11, 20, 29, 0.92);
   --header-border: rgba(247, 241, 234, 0.1);
@@ -126,6 +133,14 @@ body {
   font-kerning: normal;
   font-synthesis: style;
   letter-spacing: -0.006em;
+}
+
+:is(a[href], button:not(:disabled), summary, select) {
+  cursor: pointer;
+}
+
+:is(button:disabled, [aria-disabled="true"]) {
+  cursor: default;
 }
 
 h1,
@@ -236,7 +251,6 @@ html[data-theme="dark"] .app-frame::before {
   position: absolute;
 }
 
-.liquid-glass-surface::after,
 .liquid-glass-distortion::after {
   -webkit-backdrop-filter: var(--liquid-glass-backdrop);
   -webkit-filter: url("#glass-distortion");
@@ -253,7 +267,6 @@ html[data-theme="dark"] .app-frame::before {
 /* Keep the refractive layer behind content and disable it where browsers
  * cannot render the SVG displacement cleanly. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .liquid-glass-surface::after,
   .liquid-glass-distortion::after {
     -webkit-filter: none;
     filter: none;
@@ -506,12 +519,12 @@ html[data-theme="dark"] .app-frame::before {
   }
 }
 
-.atmosphere-backdrop-explore .atmosphere-art img {
+.atmosphere-backdrop-product .atmosphere-art img {
   filter: brightness(0.78) saturate(0.92);
   object-position: center bottom;
 }
 
-.atmosphere-backdrop-explore .atmosphere-veil {
+.atmosphere-backdrop-product .atmosphere-veil {
   background:
     linear-gradient(
       180deg,
@@ -528,7 +541,7 @@ html[data-theme="dark"] .app-frame::before {
 }
 
 @media (orientation: portrait) and (max-width: 1024px) {
-  .atmosphere-backdrop-explore .atmosphere-art img {
+  .atmosphere-backdrop-product .atmosphere-art img {
     object-position: 52% bottom;
   }
 }
@@ -585,7 +598,7 @@ html[data-theme="dark"] .app-frame::before {
 }
 
 .header-social-logo {
-  filter: grayscale(1) brightness(1.24);
+  filter: none;
   opacity: 0.68;
   transition:
     filter 140ms ease,
@@ -620,7 +633,7 @@ html[data-theme="dark"] .app-frame::before {
 }
 
 .desktop-nav a::after {
-  background: var(--brand-pink);
+  background: var(--brand-ivory);
   border-radius: 999px;
   bottom: 4px;
   content: "";
@@ -720,7 +733,7 @@ html[data-theme="dark"] .app-frame::before {
 
 @media (hover: hover) and (pointer: fine) {
   .header-social-link:hover .header-social-logo {
-    filter: grayscale(1) brightness(1.55);
+    filter: brightness(1.12);
     opacity: 1;
   }
 }
@@ -895,7 +908,8 @@ html[data-theme="dark"] .app-frame::before {
   color: var(--accent-strong);
   font-size: inherit;
   font-weight: 650;
-  padding: 3px;
+  min-height: 44px;
+  padding: 8px 10px;
 }
 
 .token-card,
@@ -1107,7 +1121,7 @@ html[data-theme="dark"] .app-frame::before {
 .header-actions .wallet-button:focus-visible,
 .mobile-nav a:focus-visible {
   box-shadow: 0 0 0 5px rgba(3, 8, 24, 0.86);
-  outline: 2px solid #fffdf9;
+  outline: 2px solid var(--brand-ivory);
   outline-offset: 2px;
 }
 
@@ -1197,7 +1211,7 @@ html[data-theme="dark"] .app-frame::before {
 
   .mobile-nav a {
     border-radius: 10px;
-    color: rgba(255, 253, 249, 0.92);
+    color: var(--brand-ivory-soft);
     font-size: 14px;
     font-weight: 520;
     gap: 0;
@@ -1223,7 +1237,7 @@ html[data-theme="dark"] .app-frame::before {
   }
 
   .mobile-nav a::before {
-    background: #fffdf9;
+    background: var(--brand-ivory);
     border-radius: 999px;
     bottom: 3px;
     box-shadow:
@@ -1287,7 +1301,7 @@ html[data-theme="dark"] .app-frame::before {
   .mobile-nav a {
     align-items: center;
     border-radius: 10px;
-    color: rgba(255, 253, 249, 0.92);
+    color: var(--brand-ivory-soft);
     display: flex;
     font-size: 14px;
     font-weight: 520;
@@ -1316,7 +1330,7 @@ html[data-theme="dark"] .app-frame::before {
   }
 
   .mobile-nav a::before {
-    background: #fffdf9;
+    background: var(--brand-ivory);
     border-radius: 999px;
     bottom: 3px;
     box-shadow:

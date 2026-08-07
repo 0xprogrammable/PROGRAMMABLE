@@ -2,15 +2,6 @@
 
 import { usePathname } from "next/navigation";
 
-const appSky = {
-  desktop: "/brand/atmosphere/night-sky-desktop-v1.avif",
-  desktopSrcSet: undefined,
-  mobile: "/brand/atmosphere/night-sky-mobile-v1.avif",
-  mobileSrcSet: undefined,
-  width: 3200,
-  height: 1800,
-};
-
 const landingArt = {
   desktop:
     "/brand/atmosphere/night-sky-botanical-desktop-v2-1920.avif",
@@ -26,15 +17,9 @@ const landingArt = {
 export function AtmosphereBackdrop() {
   const pathname = usePathname();
   const isLandingPage = pathname === "/";
-  const isExplorePage = pathname === "/explore";
-  const art = isLandingPage ? landingArt : appSky;
-  const selectedArt = isExplorePage ? landingArt : art;
-  const mobileSrcSet = selectedArt.mobileSrcSet ?? selectedArt.mobile;
   const routeClassName = isLandingPage
     ? " atmosphere-backdrop-landing"
-    : isExplorePage
-      ? " atmosphere-backdrop-explore"
-      : "";
+    : " atmosphere-backdrop-product";
 
   return (
     <div
@@ -44,16 +29,16 @@ export function AtmosphereBackdrop() {
       <picture className="atmosphere-layer atmosphere-art">
         <source
           media="(orientation: portrait) and (max-width: 1024px)"
-          srcSet={mobileSrcSet}
+          srcSet={landingArt.mobileSrcSet}
           sizes="100vw"
           type="image/avif"
         />
         <img
-          src={selectedArt.desktop}
-          srcSet={selectedArt.desktopSrcSet}
+          src={landingArt.desktop}
+          srcSet={landingArt.desktopSrcSet}
           sizes="100vw"
-          width={selectedArt.width}
-          height={selectedArt.height}
+          width={landingArt.width}
+          height={landingArt.height}
           fetchPriority="high"
           decoding="async"
           alt=""

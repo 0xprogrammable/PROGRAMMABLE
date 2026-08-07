@@ -35,7 +35,7 @@ export function DocsShell({
       <aside className={styles.sidebar} data-docs-sidebar>
         <Link className={styles.sidebarBrand} href="/docs/developers">
           <span>Programmable</span>
-          <strong>Developer docs</strong>
+          <strong>Documentation</strong>
         </Link>
 
         <div className={styles.sidebarSearch} data-docs-tools>

@@ -37,7 +37,7 @@ export function SiteHeader() {
           <Link className="wordmark" href="/" aria-label="Programmable home">
             <Image
               className="wordmark-logo"
-              src="/brand/loop/programmable-loop-mark-header-white-v1-1536.png"
+              src="/brand/loop/programmable-loop-mark-header-warm-ivory-v1-1536.png"
               alt=""
               width={1168}
               height={1536}
@@ -89,7 +89,7 @@ export function SiteHeader() {
             >
               <Image
                 className="header-social-logo"
-                src="/brand/platforms/dexscreener-mark-white.png"
+                src="/brand/platforms/dexscreener-mark-warm-ivory-v1.png"
                 alt=""
                 width={256}
                 height={256}

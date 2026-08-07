@@ -33,7 +33,7 @@ describe("topbar and Explore hero polish", () => {
       /\.desktop-nav a\.active::after\s*\{[^}]*opacity:\s*1;[^}]*width:\s*18px;/s,
     );
     expect(interfaceCss).toMatch(
-      /\.wordmark:focus-visible,[\s\S]*?\.mobile-nav a:focus-visible\s*\{[^}]*box-shadow:\s*0 0 0 5px rgba\(3, 8, 24, 0\.86\);[^}]*outline:\s*2px solid #fffdf9;/s,
+      /\.wordmark:focus-visible,[\s\S]*?\.mobile-nav a:focus-visible\s*\{[^}]*box-shadow:\s*0 0 0 5px rgba\(3, 8, 24, 0\.86\);[^}]*outline:\s*2px solid var\(--brand-ivory\);/s,
     );
   });
 

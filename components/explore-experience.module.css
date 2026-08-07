@@ -1,13 +1,13 @@
 .page {
-  --explore-ivory: #fffdf9;
-  --explore-ivory-soft: rgba(255, 253, 249, 0.76);
-  --explore-ivory-muted: rgba(255, 253, 249, 0.56);
-  --explore-pink: #eb7fb3;
-  --explore-pink-soft: rgba(235, 127, 179, 0.12);
-  --explore-glass: rgba(239, 232, 242, 0.09);
-  --explore-glass-strong: rgba(239, 232, 242, 0.14);
-  --explore-glass-border: rgba(255, 253, 249, 0.16);
-  --explore-glass-border-strong: rgba(255, 253, 249, 0.26);
+  --explore-ivory: var(--brand-ivory);
+  --explore-ivory-soft: var(--brand-ivory-soft);
+  --explore-ivory-muted: var(--brand-ivory-muted);
+  --explore-pink: var(--brand-ivory);
+  --explore-pink-soft: rgba(248, 240, 233, 0.12);
+  --explore-glass: rgba(248, 240, 233, 0.1);
+  --explore-glass-strong: rgba(248, 240, 233, 0.16);
+  --explore-glass-border: rgba(248, 240, 233, 0.19);
+  --explore-glass-border-strong: rgba(248, 240, 233, 0.29);
   color: var(--explore-ivory);
   display: block;
   height: auto;
@@ -125,7 +125,7 @@
   border-color: rgba(255, 253, 249, 0.34);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.2),
-    0 0 0 3px rgba(235, 127, 179, 0.14),
+    0 0 0 3px rgba(248, 240, 233, 0.12),
     0 14px 34px rgba(1, 5, 20, 0.2);
 }
 
@@ -172,7 +172,7 @@
   border-color: rgba(255, 253, 249, 0.34);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.2),
-    0 0 0 3px rgba(235, 127, 179, 0.14),
+    0 0 0 3px rgba(248, 240, 233, 0.12),
     0 14px 34px rgba(1, 5, 20, 0.2);
   color: var(--explore-ivory);
 }
@@ -211,14 +211,14 @@
   color: var(--explore-ivory-muted);
   display: inline-flex;
   flex: none;
-  height: 36px;
+  height: 44px;
   justify-content: center;
   padding: 0;
   transition:
     background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
     color 160ms cubic-bezier(0.23, 1, 0.32, 1),
     transform 150ms cubic-bezier(0.23, 1, 0.32, 1);
-  width: 36px;
+  width: 44px;
 }
 
 .searchClear:focus-visible {
@@ -233,8 +233,8 @@
 .filterMenu {
   -webkit-backdrop-filter: blur(30px) saturate(1.24);
   backdrop-filter: blur(30px) saturate(1.24);
-  background: rgba(6, 9, 23, 0.9);
-  border-color: rgba(255, 253, 249, 0.18);
+  background: rgba(15, 18, 36, 0.84);
+  border-color: rgba(248, 240, 233, 0.22);
   border-radius: 22px;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
@@ -278,7 +278,7 @@
   align-items: center;
   background: var(--explore-pink-soft);
   border-radius: 6px;
-  color: #f3a8cc;
+  color: var(--explore-ivory);
   display: inline-flex;
   font-family: var(--font-instrument), sans-serif;
   font-size: 11px;
@@ -313,7 +313,9 @@
 .runnerCard {
   -webkit-backdrop-filter: blur(22px) saturate(1.08);
   backdrop-filter: blur(22px) saturate(1.08);
-  background: rgba(7, 10, 23, 0.64);
+  background:
+    linear-gradient(145deg, rgba(248, 240, 233, 0.16), rgba(248, 240, 233, 0.075) 38%, rgba(4, 8, 20, 0.3)),
+    rgba(4, 8, 20, 0.28);
   border: 1px solid var(--explore-glass-border);
   border-radius: 28px;
   box-shadow:
@@ -512,14 +514,14 @@
   border-radius: 50%;
   color: var(--explore-ivory-muted);
   display: inline-flex;
-  height: 40px;
+  height: 44px;
   justify-content: center;
   outline: 0;
   transition:
     background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
     color 160ms cubic-bezier(0.23, 1, 0.32, 1),
     transform 150ms cubic-bezier(0.23, 1, 0.32, 1);
-  width: 40px;
+  width: 44px;
 }
 
 .runnerSocialLink svg {
@@ -576,7 +578,9 @@
   -webkit-backdrop-filter: blur(22px) saturate(1.08);
   align-items: center;
   backdrop-filter: blur(22px) saturate(1.08);
-  background: rgba(7, 10, 23, 0.64);
+  background:
+    linear-gradient(145deg, rgba(248, 240, 233, 0.15), rgba(248, 240, 233, 0.065) 44%, rgba(4, 8, 20, 0.28)),
+    rgba(4, 8, 20, 0.27);
   border: 1px solid var(--explore-glass-border);
   border-radius: 28px;
   box-shadow:
@@ -589,7 +593,7 @@
   gap: 12px 20px;
   justify-content: center;
   margin: 24px auto 0;
-  min-height: 196px;
+  min-height: 156px;
   padding: 32px;
   text-align: center;
   width: min(100%, 1040px);
@@ -603,7 +607,9 @@
   -webkit-backdrop-filter: blur(22px) saturate(1.08);
   align-items: end;
   backdrop-filter: blur(22px) saturate(1.08);
-  background: rgba(7, 10, 23, 0.64);
+  background:
+    linear-gradient(145deg, rgba(248, 240, 233, 0.15), rgba(248, 240, 233, 0.065) 44%, rgba(4, 8, 20, 0.28)),
+    rgba(4, 8, 20, 0.27);
   border: 1px solid var(--explore-glass-border);
   border-radius: 28px;
   box-shadow:
@@ -613,15 +619,15 @@
   gap: 40px;
   grid-template-columns: minmax(0, 1fr) auto;
   margin: 24px auto 30px;
-  min-height: 260px;
-  padding: 48px;
+  min-height: 220px;
+  padding: 40px;
   text-align: start;
   width: min(100%, 1040px);
 }
 
 .emptyState h2 {
   color: var(--explore-ivory);
-  font-size: 48px;
+  font-size: 42px;
   font-weight: 480;
   letter-spacing: -0.05em;
   line-height: 1;
@@ -664,12 +670,13 @@
 
 @media (hover: hover) and (pointer: fine) {
   .runnerCard:has(a.runnerHitArea):hover {
-    background: rgba(11, 14, 29, 0.76);
+    background:
+      linear-gradient(145deg, rgba(248, 240, 233, 0.17), rgba(248, 240, 233, 0.07) 42%, rgba(4, 8, 20, 0.44)),
+      rgba(4, 8, 20, 0.38);
     border-color: var(--explore-glass-border-strong);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.16),
-      0 24px 58px rgba(1, 5, 20, 0.34),
-      0 0 32px rgba(235, 127, 179, 0.06);
+      0 24px 58px rgba(1, 5, 20, 0.3);
     transform: translate3d(0, -3px, 0);
   }
 
@@ -774,11 +781,17 @@
   }
 
   .filterMenu {
-    max-height: max(180px, calc(100svh - 260px));
+    bottom: calc(68px + env(safe-area-inset-bottom));
+    inset-inline: 14px;
+    max-height: calc(100svh - 154px - env(safe-area-inset-bottom));
     min-height: 0;
     overscroll-behavior: contain;
     overflow-y: auto;
+    position: fixed;
     scrollbar-gutter: stable;
+    top: auto;
+    width: auto;
+    z-index: 60;
   }
 
   .runnersIntro :global(.token-toolbar) {
@@ -799,15 +812,19 @@
     width: 104px;
   }
 
+  .runnersIntro :global(.token-filter[open]) {
+    z-index: 60;
+  }
+
   .runnersIntro :global(.token-filter summary) {
     justify-content: center;
     width: 100%;
   }
 
   .runnersIntro .filterMenu {
-    inset-inline: auto 0;
+    inset-inline: 14px;
     min-width: 0;
-    width: 248px;
+    width: auto;
   }
 
   .runnersIntro :global(.token-search input) {

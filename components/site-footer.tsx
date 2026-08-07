@@ -54,10 +54,10 @@ export function SiteFooter() {
           >
             <Image
               className={styles.mark}
-              src="/brand/loop/programmable-loop-mark-512.png"
+              src="/brand/loop/programmable-loop-mark-header-warm-ivory-v1-1536.png"
               alt=""
-              width={512}
-              height={512}
+              width={1168}
+              height={1536}
               sizes="38px"
             />
             <span>Programmable</span>

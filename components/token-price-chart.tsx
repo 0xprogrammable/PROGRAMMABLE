@@ -491,6 +491,9 @@ export function TokenPriceChart({
     const minimum = Math.min(...values);
     const maximum = Math.max(...values);
     const span = maximum - minimum || maximum * 0.02 || 1;
+    const domainMinimum = Math.max(0, minimum - span * 0.1);
+    const domainMaximum = maximum + span * 0.1;
+    const domainSpan = domainMaximum - domainMinimum || 1;
     const points: PlottedPoint[] = validPoints.map((point, index) => ({
       ...point,
       x:
@@ -498,7 +501,8 @@ export function TokenPriceChart({
         (index / (validPoints.length - 1)) * (PLOT_RIGHT - PLOT_LEFT),
       y:
         PLOT_BOTTOM -
-        ((point.value - minimum) / span) * (PLOT_BOTTOM - PLOT_TOP),
+        ((point.value - domainMinimum) / domainSpan) *
+          (PLOT_BOTTOM - PLOT_TOP),
     }));
     const path = linePath(points);
     const last = points.at(-1)?.value ?? points[0].value;
@@ -705,13 +709,17 @@ export function TokenPriceChart({
               <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
                 <stop
                   offset="0%"
-                  stopColor="var(--accent)"
+                  stopColor="var(--brand-ivory)"
                   stopOpacity="0.18"
                 />
-                <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+                <stop
+                  offset="100%"
+                  stopColor="var(--brand-ivory)"
+                  stopOpacity="0"
+                />
               </linearGradient>
             </defs>
-            {[0.34, 0.68, 1].map((position) => {
+            {[0.42, 0.84].map((position) => {
               const y = PLOT_TOP + (PLOT_BOTTOM - PLOT_TOP) * position;
               return (
                 <line

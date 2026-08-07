@@ -1,7 +1,7 @@
 .page {
-  --profile-pink: #b52f6b;
-  --profile-pink-bright: #eb7fb3;
-  --profile-pink-wash: rgba(235, 127, 179, 0.12);
+  --profile-pink: var(--brand-ivory);
+  --profile-pink-bright: var(--brand-ivory);
+  --profile-pink-wash: rgba(248, 240, 233, 0.12);
   --profile-green: #19764d;
   --profile-panel: var(--liquid-glass-surface-background);
   --profile-subtle: var(--liquid-glass-inner-background);
@@ -14,9 +14,9 @@
 }
 
 :global(html[data-theme="dark"]) .page {
-  --profile-pink: #ef91be;
-  --profile-pink-bright: #f2a1c7;
-  --profile-pink-wash: rgba(239, 145, 190, 0.12);
+  --profile-pink: var(--brand-ivory);
+  --profile-pink-bright: var(--brand-ivory);
+  --profile-pink-wash: rgba(248, 240, 233, 0.12);
   --profile-green: #67c99a;
   --profile-panel: var(--liquid-glass-surface-background);
   --profile-subtle: var(--liquid-glass-inner-background);
@@ -608,10 +608,32 @@
   font-weight: 500;
 }
 
+.feeComposition {
+  background: rgba(248, 240, 233, 0.075);
+  border: 1px solid var(--profile-line);
+  border-radius: 999px;
+  display: flex;
+  height: 10px;
+  margin-block-start: 20px;
+  max-width: 420px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.feeCompositionClaimed {
+  background: var(--brand-ivory);
+  min-width: 0;
+}
+
+.feeCompositionClaimable {
+  background: rgba(248, 240, 233, 0.28);
+  min-width: 0;
+}
+
 .feeChart {
   display: grid;
   flex: 1;
-  grid-template-rows: minmax(210px, 1fr) auto;
+  grid-template-rows: auto minmax(190px, 1fr) auto;
   margin: clamp(22px, 3vh, 34px) 0 0;
   min-height: 250px;
   min-width: 0;
@@ -627,17 +649,34 @@
     transparent 1px,
     transparent 25%
   );
-  inset: 0 0 24px;
-  opacity: 0.5;
+  inset: 38px 0 24px;
+  opacity: 0.32;
   pointer-events: none;
   position: absolute;
+}
+
+.chartHeading {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: 12px;
+  gap: 16px;
+  justify-content: space-between;
+  min-height: 32px;
+}
+
+.chartHeading strong {
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+  font-weight: 540;
+  text-align: end;
 }
 
 .feeChartInteraction {
   cursor: default;
   grid-column: 1;
-  grid-row: 1;
-  min-height: 210px;
+  grid-row: 2;
+  min-height: 190px;
   min-width: 0;
   outline: 0;
   position: relative;
@@ -661,7 +700,7 @@
   stroke: var(--profile-pink);
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 2.5;
+  stroke-width: 2.15;
   vector-effect: non-scaling-stroke;
 }
 
@@ -688,7 +727,7 @@
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   grid-column: 1;
-  grid-row: 2;
+  grid-row: 3;
   justify-content: space-between;
   min-height: 24px;
   padding-inline: 8px;
@@ -1441,6 +1480,23 @@
     font-size: 27px;
   }
 
+  .customProjectsHeader {
+    align-items: start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .customProjectList,
+  .customProjectCard {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .customProjectAction {
+    grid-column: 1;
+    justify-self: start;
+    min-height: 44px;
+  }
+
   .editGrid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1470,15 +1526,6 @@
     align-items: flex-start;
     flex-direction: column;
     gap: 11px;
-  }
-
-  .timeframeControls {
-    width: 100%;
-  }
-
-  .timeframeControls button {
-    flex: 1 1 0;
-    height: 44px;
   }
 
   .feeSummary {

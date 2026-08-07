@@ -2264,7 +2264,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         >
           <Image
             className={styles.connectMark}
-            src="/brand/loop/programmable-loop-mark-512.png"
+            src="/brand/loop/programmable-loop-mark-warm-ivory-v1-1536.png"
             alt=""
             width={512}
             height={512}
@@ -2426,8 +2426,6 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         </div>
       </section>
 
-      <CustomProjectsProfileSection account={account} />
-
       <ProfileAccountWorkspace
         key={account.toLowerCase()}
         connected={Boolean(account)}
@@ -2449,6 +2447,8 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         onRetry={retryProfileData}
         terminalErrorReady={terminalErrorReady}
       />
+
+      <CustomProjectsProfileSection account={account} />
     </div>
   );
 }
@@ -3538,7 +3538,6 @@ function FeeEarningsPanel({
   activity: readonly ProfileActivity[];
   sourcesLoading: boolean;
 }) {
-  const [timeframe, setTimeframe] = useState<FeeEarningsRange>("all");
   const [chartNowMs, setChartNowMs] = useState<number | null>(null);
   const initialChartReferenceMs = useMemo(
     () =>
@@ -3557,29 +3556,13 @@ function FeeEarningsPanel({
     return () => window.cancelAnimationFrame(frame);
   }, [activity]);
 
-  const availableRanges: readonly FeeEarningsRange[] = useMemo(
-    () =>
-      chartNowMs === null
-        ? ["all"]
-        : getAvailableFeeEarningsRanges(activity, chartNowMs),
-    [activity, chartNowMs],
-  );
-  const activeTimeframe = availableRanges.includes(timeframe)
-    ? timeframe
-    : "all";
   const chart = useMemo(
     () =>
-      buildFeeEarningsChart(activity, nativeClaimed, nativeClaimable, {
+      buildFeeEarningsChart(activity, nativeClaimed, 0n, {
         nowMs: chartReferenceMs,
-        range: activeTimeframe,
+        range: "all",
       }),
-    [
-      activeTimeframe,
-      activity,
-      chartReferenceMs,
-      nativeClaimable,
-      nativeClaimed,
-    ],
+    [activity, chartReferenceMs, nativeClaimed],
   );
   const [activePointIndex, setActivePointIndex] = useState(-1);
   const activePointIndexRef = useRef(-1);
@@ -3593,13 +3576,15 @@ function FeeEarningsPanel({
   const activePoint = chart
     ? chart.points[resolvedActivePointIndex]
     : undefined;
-  const displayedTotal =
-    activePoint?.valueWei ?? nativeClaimed + nativeClaimable;
-  const displayedMoment =
+  const verifiedTotal = nativeClaimed + nativeClaimable;
+  const displayedHistoryMoment =
     chart && activePoint
       ? formatFeeChartMoment(activePoint.timestampMs, chart.nowMs)
       : "Now";
-  const earningsLabel = sourcesLoading ? "Verified so far" : "Total earned";
+  const claimedShare =
+    verifiedTotal > 0n
+      ? Number((nativeClaimed * 10_000n) / verifiedTotal) / 100
+      : 0;
 
   function resetActivePoint() {
     if (activePointIndexRef.current === -1) return;
@@ -3657,45 +3642,36 @@ function FeeEarningsPanel({
     >
       <header className={styles.feePanelHeader}>
         <div>
-          <h2 id="fee-earnings-title">Fee earnings</h2>
+          <h2 id="fee-earnings-title">Verified ETH fees</h2>
           <p>
             {sourcesLoading
               ? "Refreshing reward sources"
-              : "Confirmed onchain rewards"}
+              : "Claimed and currently claimable onchain"}
           </p>
-        </div>
-        <div className={styles.timeframeControls} aria-label="Earnings period">
-          {feeEarningsRanges.map((range) => (
-            <button
-              aria-label={
-                range.value === "all" || availableRanges.includes(range.value)
-                  ? `Show earnings for ${range.description}`
-                  : `No timestamped claims for ${range.description}`
-              }
-              aria-pressed={activeTimeframe === range.value}
-              disabled={
-                range.value !== "all" &&
-                !availableRanges.includes(range.value)
-              }
-              key={range.value}
-              onClick={() => {
-                activePointIndexRef.current = -1;
-                setActivePointIndex(-1);
-                setTimeframe(range.value);
-              }}
-              type="button"
-            >
-              {range.label}
-            </button>
-          ))}
         </div>
       </header>
 
       <div className={styles.feeSummary}>
         <span className={styles.feeSummaryLabel}>
-          {earningsLabel} · {displayedMoment}
+          {sourcesLoading
+            ? "Verified from available sources"
+            : "All-time verified total"}
         </span>
-        <strong>{formatWei(displayedTotal)}</strong>
+        <strong>{formatWei(verifiedTotal)}</strong>
+        <div
+          className={styles.feeComposition}
+          role="img"
+          aria-label={`${formatWei(nativeClaimed)} claimed and ${formatWei(nativeClaimable)} claimable now`}
+        >
+          <span
+            className={styles.feeCompositionClaimed}
+            style={{ width: `${claimedShare}%` }}
+          />
+          <span
+            className={styles.feeCompositionClaimable}
+            style={{ width: `${100 - claimedShare}%` }}
+          />
+        </div>
         <div className={styles.feeBreakdown}>
           <span>
             <b>{formatWei(nativeClaimable)}</b> claimable now
@@ -3713,8 +3689,16 @@ function FeeEarningsPanel({
 
       <figure
         className={styles.feeChart}
-        aria-label={`Fee earnings for ${feeEarningsRangeLabel(activeTimeframe)}.`}
+        aria-label="Confirmed claim history"
       >
+        <figcaption className={styles.chartHeading}>
+          <span>Confirmed claim history</span>
+          {chart && activePoint ? (
+            <strong>
+              {formatWei(activePoint.valueWei)} · {displayedHistoryMoment}
+            </strong>
+          ) : null}
+        </figcaption>
         <div className={styles.chartGrid} aria-hidden="true" />
         {chart && activePoint ? (
           <>
@@ -3722,7 +3706,7 @@ function FeeEarningsPanel({
               Use the arrow keys to inspect each confirmed earnings point.
             </p>
             <div
-              aria-label="Fee earnings timeline"
+              aria-label="Confirmed claim history"
               aria-describedby={chartHelpId}
               aria-orientation="horizontal"
               aria-valuemax={chart.points.length - 1}
@@ -3748,12 +3732,12 @@ function FeeEarningsPanel({
                   <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
                     <stop
                       offset="0%"
-                      stopColor="var(--accent)"
+                      stopColor="var(--brand-ivory)"
                       stopOpacity="0.24"
                     />
                     <stop
                       offset="100%"
-                      stopColor="var(--accent)"
+                      stopColor="var(--brand-ivory)"
                       stopOpacity="0"
                     />
                   </linearGradient>
@@ -3787,12 +3771,12 @@ function FeeEarningsPanel({
             </div>
           </>
         ) : (
-          <figcaption className={styles.chartEmpty}>
-            <strong>No verified timeline yet</strong>
+          <div className={styles.chartEmpty}>
+            <strong>No confirmed claim history yet</strong>
             <p>
               Confirmed claims with exact timestamps will build this chart.
             </p>
-          </figcaption>
+          </div>
         )}
       </figure>
     </section>
@@ -3824,11 +3808,6 @@ const feeEarningsRangeMs: Record<Exclude<FeeEarningsRange, "all">, number> = {
   "1d": 24 * 60 * 60 * 1_000,
   "1w": 7 * 24 * 60 * 60 * 1_000,
 };
-
-function feeEarningsRangeLabel(range: FeeEarningsRange) {
-  return feeEarningsRanges.find((candidate) => candidate.value === range)
-    ?.description ?? "all time";
-}
 
 function formatFeeChartMoment(timestampMs: number, nowMs: number) {
   if (Math.abs(nowMs - timestampMs) < 1_000) return "Now";
@@ -3882,7 +3861,7 @@ export function getAvailableFeeEarningsRanges(
 export function buildFeeEarningsChart(
   activity: readonly ProfileActivity[],
   nativeClaimed: bigint,
-  nativeClaimable: bigint,
+  _nativeClaimable: bigint,
   options: Readonly<{
     nowMs?: number;
     range?: FeeEarningsRange;
@@ -3921,7 +3900,7 @@ export function buildFeeEarningsChart(
     values.push({ timestampMs: claim.timestampMs, valueWei: cumulative });
   }
 
-  const totalWei = cumulative + nativeClaimable;
+  const totalWei = cumulative;
   values.push({ timestampMs: nowMs, valueWei: totalWei });
   if (totalWei <= 0n || values.length < 2) return null;
 

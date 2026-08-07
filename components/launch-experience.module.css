@@ -23,9 +23,9 @@
 }
 
 .pickerHeading h1 {
-  font-size: clamp(47px, 4.9vw, 66px);
-  font-weight: 580;
-  letter-spacing: -0.035em;
+  font-size: clamp(44px, 4.6vw, 62px);
+  font-weight: 520;
+  letter-spacing: -0.04em;
   line-height: 0.99;
   margin-inline: auto;
   max-width: 100%;
@@ -51,7 +51,7 @@
   backdrop-filter: var(--liquid-glass-backdrop);
   background: var(--liquid-glass-surface-background);
   border: 1px solid var(--liquid-glass-border);
-  border-radius: 30px;
+  border-radius: 26px;
   box-shadow: var(--liquid-glass-shadow);
   color: inherit;
   font: inherit;
@@ -81,7 +81,7 @@
   aspect-ratio: 1.54;
   background: #d9dde1;
   border: 0;
-  border-radius: 22px;
+  border-radius: 19px;
   box-shadow: none;
   height: auto;
   isolation: isolate;

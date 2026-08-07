@@ -923,7 +923,7 @@ function ExploreGridSkeleton() {
     >
       {exploreSkeletonItems.map((index) => (
         <article
-          className={`${styles.runnerCard} ${styles.skeletonCard} liquid-glass-surface`}
+          className={`${styles.runnerCard} ${styles.skeletonCard}`}
           key={index}
         >
           <div className={`${styles.runnerArt} ${styles.skeletonArt}`} />
@@ -1298,7 +1298,7 @@ export function ExploreView() {
                   fill
                   loading={index < 3 ? "eager" : "lazy"}
                   priority={index < 3}
-                  sizes="(max-width: 360px) 96px, (max-width: 420px) 104px, (max-width: 700px) 112px, (max-width: 900px) 46vw, 31vw"
+                  sizes="(max-width: 360px) 96px, (max-width: 420px) 104px, (max-width: 700px) 112px, (max-width: 900px) 46vw, 333px"
                   unoptimized={!canOptimizeTokenImage(imageSource)}
                   draggable={false}
                 />
@@ -1320,7 +1320,7 @@ export function ExploreView() {
 
           return (
             <article
-              className={`${styles.runnerCard} liquid-glass-surface`}
+              className={styles.runnerCard}
               key={token.id}
             >
               {href ? (

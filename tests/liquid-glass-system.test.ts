@@ -53,6 +53,7 @@ describe("Liquid Glass interface system", () => {
   });
 
   it("keeps distortion off large reading and workspace surfaces", () => {
+    const css = read("app/interface.css");
     const sources = [
       read("components/profile-view.tsx"),
       read("components/launch-entry.tsx"),
@@ -67,6 +68,9 @@ describe("Liquid Glass interface system", () => {
     for (const source of sources) {
       expect(source).not.toContain("liquid-glass-distortion");
     }
+
+    expect(css).not.toContain(".liquid-glass-surface::after,");
+    expect(css).toMatch(/\.liquid-glass-distortion::after\s*\{/);
   });
 
   it("keeps motion explicit and preserves a solid fallback", () => {

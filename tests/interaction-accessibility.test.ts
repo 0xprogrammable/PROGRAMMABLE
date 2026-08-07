@@ -1,5 +1,5 @@
-import { readFileSync, readdirSync } from "node:fs";
-import { extname, join } from "node:path";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -8,14 +8,6 @@ import {
 } from "../components/token-price-chart";
 
 const root = process.cwd();
-
-function collectCssFiles(directory: string): string[] {
-  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) return collectCssFiles(path);
-    return extname(entry.name) === ".css" ? [path] : [];
-  });
-}
 
 describe("interaction accessibility", () => {
   it("makes exact chart prices available to pointer and keyboard input", () => {
@@ -55,23 +47,18 @@ describe("interaction accessibility", () => {
     expect(launchCss).not.toMatch(/\.modelArt\s*\{[^}]*outline:/s);
   });
 
-  it("limits the pointer cursor to the explicitly interactive landing links", () => {
-    const landingCssPath = join(
-      root,
-      "components/landing-page.module.css",
-    );
-    const css = [
-      ...collectCssFiles(join(root, "app")),
-      ...collectCssFiles(join(root, "components")),
-    ]
-      .filter((path) => path !== landingCssPath)
-      .map((path) => readFileSync(path, "utf8"))
-      .join("\n");
-    const landingCss = readFileSync(landingCssPath, "utf8");
+  it("uses a pointer only for controls that can be activated", () => {
+    const interfaceCss = readFileSync(join(root, "app/interface.css"), "utf8");
 
-    expect(css).not.toMatch(/cursor:\s*(?:pointer|not-allowed)\b/);
-    expect(landingCss.match(/cursor:\s*pointer\b/g)).toHaveLength(3);
-    expect(landingCss).not.toMatch(/cursor:\s*not-allowed\b/);
+    expect(interfaceCss).toContain(
+      ":is(a[href], button:not(:disabled), summary, select)",
+    );
+    expect(interfaceCss).toMatch(
+      /:is\(a\[href\], button:not\(:disabled\), summary, select\)\s*\{[^}]*cursor:\s*pointer;/s,
+    );
+    expect(interfaceCss).toMatch(
+      /:is\(button:disabled, \[aria-disabled="true"\]\)\s*\{[^}]*cursor:\s*default;/s,
+    );
   });
 
   it("keeps the interface dark-only without exposing a theme toggle", () => {
@@ -230,7 +217,7 @@ describe("interaction accessibility", () => {
       /@media \(max-width: 800px\)[\s\S]*?\.mobile-nav\s*\{[^}]*inset-inline-end:\s*max\(12px, env\(safe-area-inset-right\)\);[^}]*inset-inline-start:\s*max\(12px, env\(safe-area-inset-left\)\);/s,
     );
     expect(interfaceCss).toMatch(
-      /@media \(max-width: 800px\)[\s\S]*?\.mobile-nav a::before\s*\{[^}]*background:\s*#fffdf9;/s,
+      /@media \(max-width: 800px\)[\s\S]*?\.mobile-nav a::before\s*\{[^}]*background:\s*var\(--brand-ivory\);/s,
     );
     expect(
       interfaceCss.match(

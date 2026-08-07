@@ -14,7 +14,7 @@ describe("launch model artwork", () => {
       'src="/brand/create/classic-botanical-v4.webp"',
     );
     expect(source).toContain(
-      'src="/brand/loop/programmable-loop-mark-transparent-v1.png"',
+      'src="/brand/loop/programmable-loop-mark-warm-ivory-v1-1536.png"',
     );
     expect(source).toContain('src="/brand/create/aeon-framework-v1.webp"');
     expect(source).toContain('src="/brand/create/basedbid-v2.png"');

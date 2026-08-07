@@ -220,7 +220,7 @@ describe("profile workspace loading state", () => {
 });
 
 describe("fee earnings chart", () => {
-  it("builds a cumulative chart from confirmed claims and current accrual", () => {
+  it("builds a cumulative chart from confirmed claims without inferred accrual", () => {
     const activity = [
       {
         id: "claim:new",
@@ -253,9 +253,9 @@ describe("fee earnings chart", () => {
       0n,
       200_000_000_000_000_000n,
       500_000_000_000_000_000n,
-      600_000_000_000_000_000n,
+      500_000_000_000_000_000n,
     ]);
-    expect(chart?.totalWei).toBe(600_000_000_000_000_000n);
+    expect(chart?.totalWei).toBe(500_000_000_000_000_000n);
   });
 
   it("uses exact 1H, 1D, 1W and all-time earnings windows", () => {
@@ -320,10 +320,10 @@ describe("fee earnings chart", () => {
       { nowMs, range: "all" },
     );
 
-    expect(hourly?.totalWei).toBe(150_000_000_000_000_000n);
-    expect(daily?.totalWei).toBe(350_000_000_000_000_000n);
-    expect(weekly?.totalWei).toBe(650_000_000_000_000_000n);
-    expect(allTime?.totalWei).toBe(1_050_000_000_000_000_000n);
+    expect(hourly?.totalWei).toBe(100_000_000_000_000_000n);
+    expect(daily?.totalWei).toBe(300_000_000_000_000_000n);
+    expect(weekly?.totalWei).toBe(600_000_000_000_000_000n);
+    expect(allTime?.totalWei).toBe(1_000_000_000_000_000_000n);
     expect(profileViewSource).toContain('role="slider"');
     expect(profileViewSource).not.toContain("styles.claimHistory");
   });

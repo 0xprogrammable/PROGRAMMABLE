@@ -4,8 +4,8 @@
   "description": "Launch tokens that work the way you imagine",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#ffffff",
+  "background_color": "#050b1c",
+  "theme_color": "#050b1c",
   "icons": [
     {
       "src": "/icon-192.png",

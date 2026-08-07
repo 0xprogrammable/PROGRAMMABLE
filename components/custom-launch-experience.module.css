@@ -16,11 +16,11 @@
 .applicationRow,
 .setupSheet,
 .loadingPanel {
-  background: color-mix(in srgb, var(--glass-96) 96%, transparent);
-  border: 1px solid var(--panel-border-soft);
-  box-shadow:
-    0 1px 0 var(--card-shadow),
-    0 20px 54px var(--card-shadow-soft);
+  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
+  backdrop-filter: var(--liquid-glass-backdrop);
+  background: var(--liquid-glass-surface-background-strong);
+  border: 1px solid var(--liquid-glass-border);
+  box-shadow: var(--liquid-glass-shadow);
 }
 
 .introPrimary {
@@ -77,7 +77,7 @@
 .rowAction,
 .iconButton {
   align-items: center;
-  background: color-mix(in srgb, var(--glass-90) 88%, transparent);
+  background: var(--liquid-glass-control-background);
   border: 1px solid var(--control-border);
   color: var(--text);
   display: inline-flex;
@@ -147,7 +147,7 @@
 
 .walletGate > div {
   align-items: center;
-  background: color-mix(in srgb, var(--glass-90) 88%, transparent);
+  background: var(--liquid-glass-control-background);
   border: 1px solid var(--control-border);
   border-radius: 13px;
   display: grid;
@@ -554,7 +554,7 @@
 .launchFooter {
   align-items: center;
   backdrop-filter: blur(18px);
-  background: color-mix(in srgb, var(--glass-90) 82%, transparent);
+  background: var(--liquid-glass-inner-background);
   border-top: 1px solid var(--panel-border-soft);
   display: flex;
   gap: 16px;
