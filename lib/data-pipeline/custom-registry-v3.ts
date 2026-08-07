@@ -106,8 +106,7 @@ const MAX_RECORD_BYTES = 512 * 1024;
 const MAX_COLLECTION_SIZE = 256;
 const CURSOR_DOMAIN = "programmable.custom-registry-cursor.v3\0";
 const ETHEREUM_MAINNET_CHAIN_ID = "1";
-const CUSTOM_REGISTRY_V1_GENERATION = "1";
-const CUSTOM_REGISTRY_V1_MIN_FINALITY_DEPTH = 64n;
+const ETHEREUM_CUSTOM_REGISTRY_MIN_FINALITY_DEPTH = 64n;
 const validateCustomRegistryProducerSchemaV3 = new Ajv({
   allErrors: true,
   strict: true,
@@ -1656,11 +1655,8 @@ export function parseCustomRegistryDeploymentManifestV3(
       );
       if (
         (chainId === ETHEREUM_MAINNET_CHAIN_ID &&
-          registries.some(
-            (deployment) =>
-              deployment.registryGeneration === CUSTOM_REGISTRY_V1_GENERATION,
-          ) &&
-          BigInt(finalityDepth) < CUSTOM_REGISTRY_V1_MIN_FINALITY_DEPTH) ||
+          registries.length !== 0 &&
+          BigInt(finalityDepth) < ETHEREUM_CUSTOM_REGISTRY_MIN_FINALITY_DEPTH) ||
         (chain.status === "prelaunch" && registries.length !== 0) ||
         (chain.status !== "prelaunch" && registries.length === 0) ||
         (chain.publicSubmissionsEnabled === true && chain.status !== "active")

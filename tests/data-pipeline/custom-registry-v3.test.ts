@@ -1595,12 +1595,14 @@ describe("Custom Registry v3 deployment manifest", () => {
     expect(() => parseCustomRegistryDeploymentManifestV3(noApprovers)).toThrow();
   });
 
-  it("rejects Ethereum Registry V1 activation below the frozen 64-block finality minimum", () => {
+  it("rejects every Ethereum Registry generation below the frozen 64-block finality minimum", () => {
     const invalid = structuredClone(approval8665Manifest()) as Record<
       string,
       unknown
     >;
     const chains = invalid.chains as Array<Record<string, unknown>>;
+    const registries = chains[0]!.registries as Array<Record<string, unknown>>;
+    registries[0]!.registryGeneration = "2";
     chains[0]!.finalityDepth = "12";
 
     expect(() => parseCustomRegistryDeploymentManifestV3(invalid)).toThrow();
