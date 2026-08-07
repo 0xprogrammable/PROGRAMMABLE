@@ -35,7 +35,8 @@ The release contains three mandatory contracts:
 - `ProgrammableCustomFeePolicyVerifierV1`: stateless canonical V1 fee-policy verifier.
 
 `ProgrammableCustomAtomicRegistrarV1` is the first-party atomic deployment adapter for compatible native Custom
-launches. It is deployed and authorized separately. It is not an AEON launcher.
+launches. In the canonical V1 four-transaction release its nonce-derived address is bound as the main Registry's only
+initial writer before the registrar is deployed at that exact address. It is not an AEON launcher.
 
 All deployed addresses are immutable release-manifest values. The main Registry binds the exact partner-factory
 registry and fee verifier in its constructor. None of these contracts is a proxy.
@@ -212,11 +213,14 @@ A new implementation requires a new address and Registry generation. V1 history 
 1. Freeze this source revision, ABIs, hash specification, event set, chain profile, Registry policy, generation,
    finality depth, and role addresses.
 2. Run formatting, build/size, unit, fuzz, invariant, static-analysis, and secret-scan gates from that revision.
-3. Deploy the fee verifier and partner-factory registry, then deploy the main Registry bound to both.
-4. Verify all three sources and deployed runtime hashes on the intended chain.
-5. Publish real addresses and start blocks in the Developer Manifest; `address: null` is forbidden after activation.
-6. Deploy the first-party atomic registrar if used, grant only it the required writer role, and remove any bootstrap
-   writer not required by the approved plan.
+3. Freeze the deployer and exact pending nonce, predict the four sequential `CREATE` addresses, and simulate the full
+   nonce-bound deployment without interleaving transactions.
+4. Deploy, in order, the fee verifier, partner-factory registry, main Registry, and first-party atomic registrar. The
+   main Registry constructor must bind the predicted registrar as its only initial writer, and transaction four must
+   deploy the registrar at that exact address. A failure or nonce change stops the sequence and requires a new freeze.
+5. Verify all four sources, constructor bindings, roles, deployed runtime hashes, and per-contract receipt blocks on the
+   intended chain. Do not run the legacy post-deployment registrar grant/revoke script for this canonical path.
+6. Publish real addresses and start blocks in the Developer Manifest; `address: null` is forbidden after activation.
 7. Publish the frozen address/ABI/hash/event bundle before AEON's final factory deployment.
 8. After AEON deploys, verify its exact source/runtime and authorize its exact deterministic configuration.
 9. Execute a real same-transaction launch and registration, finalize it, and reconcile its receipt/log.
