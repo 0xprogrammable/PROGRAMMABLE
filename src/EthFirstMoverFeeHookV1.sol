@@ -69,22 +69,23 @@ contract EthFirstMoverFeeHookV1 is BaseHook, IUnlockCallback, ReentrancyGuardTra
 
     Currency private constant NATIVE = Currency.wrap(address(0));
 
+    /// @dev Deliberately holds no notion of "original" or "derivative": that relationship is not a fact fixed at
+    ///      registration, it is a live property of the ticker registry and can change as claims lapse and are
+    ///      superseded. Every place that needs it -- fee accrual, `isOriginal`, `derivativeOf` -- looks it up fresh
+    ///      from `tickerClaim` rather than trusting a stored snapshot that could go stale.
     struct PoolFeeConfig {
         // slot 0
         address rewardVault;
         uint16 buySwapFeeBps;
         uint16 sellSwapFeeBps;
         bool registered;
-        bool isDerivative;
         // slot 1
         address registrar;
         // slot 2
         bytes32 symbolHash;
         // slot 3
-        bytes32 originalPoolId;
-        // slot 4
         uint256 creatorFeesAccrued;
-        // slot 5
+        // slot 4
         uint256 lifetimeCreatorFees;
     }
 
@@ -221,10 +222,8 @@ contract EthFirstMoverFeeHookV1 is BaseHook, IUnlockCallback, ReentrancyGuardTra
             buySwapFeeBps: buySwapFeeBps,
             sellSwapFeeBps: sellSwapFeeBps,
             registered: true,
-            isDerivative: false,
             registrar: msg.sender,
             symbolHash: symbolHash,
-            originalPoolId: bytes32(0),
             creatorFeesAccrued: 0,
             lifetimeCreatorFees: 0
         });
@@ -233,7 +232,10 @@ contract EthFirstMoverFeeHookV1 is BaseHook, IUnlockCallback, ReentrancyGuardTra
         _emitRegistrationDisclosures(poolId, token, rewardConfigurationHash);
     }
 
-    /// @dev Takes the ticker if it is free, otherwise records this pool as a derivative of its current holder.
+    /// @dev Takes the ticker if it is currently free. Otherwise emits a purely informational record of who held it
+    ///      at registration time -- nothing is written to this pool's own storage, because being a derivative is
+    ///      not a fact about this pool, it is a fact about who currently holds the claim, and that can change after
+    ///      this call returns. `_maybeConfirm` re-derives it fresh every time a pool earns enough to matter.
     function _settleTicker(bytes32 poolId, address token, bytes32 symbolHash) private {
         TickerClaim memory claim = tickerClaim[symbolHash];
 
@@ -244,9 +246,6 @@ contract EthFirstMoverFeeHookV1 is BaseHook, IUnlockCallback, ReentrancyGuardTra
             return;
         }
 
-        PoolFeeConfig storage config = poolFeeConfig[poolId];
-        config.isDerivative = true;
-        config.originalPoolId = claim.poolId;
         emit DerivativeRegistered(symbolHash, poolId, claim.poolId, token);
     }
 
@@ -295,13 +294,15 @@ contract EthFirstMoverFeeHookV1 is BaseHook, IUnlockCallback, ReentrancyGuardTra
         return claim.poolId == poolId && claim.confirmed;
     }
 
-    /// @notice Returns the pool a derivative copies, and whether that original's claim currently stands.
+    /// @notice Returns the pool this one currently owes tribute to, and whether that tribute is presently active.
+    /// @dev Both are live, not historical: if the pool this one was recorded as a derivative of at registration has
+    ///      since lapsed and been superseded (or superseded by this pool itself), this reflects that, not the
+    ///      registration-time snapshot.
     function derivativeOf(bytes32 poolId) external view returns (bytes32 originalPoolId, bool tributeActive) {
         PoolFeeConfig storage config = poolFeeConfig[poolId];
         if (!config.registered) revert PoolNotRegistered(poolId);
 
-        originalPoolId = config.originalPoolId;
-        tributeActive = _tributeActive(config);
+        (tributeActive, originalPoolId) = _tributeActive(poolId, config);
     }
 
     /// @notice Returns the full claim record and derived state for a symbol.
@@ -533,27 +534,56 @@ contract EthFirstMoverFeeHookV1 is BaseHook, IUnlockCallback, ReentrancyGuardTra
 
     // --- Accrual --------------------------------------------------------------------------------------------------
 
-    /// @dev Returns whether this pool currently owes tribute: it must be a derivative, and the pool it copies must
-    ///      still hold a confirmed claim on the same symbol. A provisional original that later lapses releases its
-    ///      derivatives automatically, because the check is made at accrual time rather than recorded at
-    ///      registration.
-    function _tributeActive(PoolFeeConfig storage config) private view returns (bool) {
-        if (!config.isDerivative) return false;
+    /// @dev Returns whether `poolId` currently owes tribute, and to whom. True only when some *other* pool holds a
+    ///      confirmed claim on the same symbol right now. This is computed fresh from the registry on every call
+    ///      rather than read from a stored flag: the pool this one owes tribute to is whichever pool currently and
+    ///      validly holds the claim, which can change if that holder's claim later lapses and a different pool
+    ///      -- including this one -- takes it over. A provisional (unconfirmed) claim never receives tribute.
+    function _tributeActive(bytes32 poolId, PoolFeeConfig storage config)
+        private
+        view
+        returns (bool active, bytes32 recipientPoolId)
+    {
         TickerClaim memory claim = tickerClaim[config.symbolHash];
-        return claim.confirmed && claim.poolId == config.originalPoolId;
+        if (claim.confirmed && claim.poolId != poolId) {
+            return (true, claim.poolId);
+        }
+        return (false, bytes32(0));
     }
 
-    /// @dev Confirms a provisional claim once the pool has earned enough to prove real trading. Runs at most once
-    ///      per pool: after `confirmed` is set the branch is skipped for the life of the contract.
+    /// @dev Attempts to settle the ticker in this pool's favor once it has earned enough to prove real trading.
+    ///
+    ///      Being recorded as a derivative at registration is never a permanent demotion. What matters is the
+    ///      claim's live state each time this runs:
+    ///        - Already confirmed to this pool: nothing to do.
+    ///        - Already confirmed to a *different* pool: that pool won the ticker outright and a confirmed claim
+    ///          never lapses, so this pool cannot take it. It keeps paying tribute via `_tributeActive`.
+    ///        - Provisionally held by this pool: earned it first-hand; confirm it.
+    ///        - Provisionally held by a different pool whose window has lapsed, or genuinely unclaimed: this pool
+    ///          takes the claim outright, regardless of whether it was registered while the ticker was live and
+    ///          marked a derivative at the time. A pool that has done real volume is not permanently second-class
+    ///          just because another pool happened to register first and then never traded.
+    ///        - Provisionally held by a different pool whose window has *not* lapsed: that claim is still live and
+    ///          might yet be earned by its own holder. This pool cannot take over yet, and tries again on its next
+    ///          accrual in case the situation has changed by then.
     function _maybeConfirm(bytes32 poolId, PoolFeeConfig storage config) private {
-        if (config.isDerivative) return;
         if (!TickerClaimV1.isEarned(config.lifetimeCreatorFees, CONFIRMATION_FEE_WEI)) return;
 
         TickerClaim storage claim = tickerClaim[config.symbolHash];
-        if (claim.confirmed || claim.poolId != poolId) return;
+        if (claim.confirmed) return;
 
-        claim.confirmed = true;
-        emit TickerConfirmed(config.symbolHash, poolId, config.lifetimeCreatorFees);
+        if (claim.poolId == poolId) {
+            claim.confirmed = true;
+            emit TickerConfirmed(config.symbolHash, poolId, config.lifetimeCreatorFees);
+            return;
+        }
+
+        if (TickerClaimV1.isAvailable(claim, GRACE_BLOCKS, block.number)) {
+            claim.poolId = poolId;
+            claim.claimBlock = uint64(block.number);
+            claim.confirmed = true;
+            emit TickerConfirmed(config.symbolHash, poolId, config.lifetimeCreatorFees);
+        }
     }
 
     function _accrue(
@@ -570,13 +600,13 @@ contract EthFirstMoverFeeHookV1 is BaseHook, IUnlockCallback, ReentrancyGuardTra
         uint256 totalFee = creatorFee + launcherFee + builderFee;
 
         uint256 retained = creatorFee;
-        if (_tributeActive(config)) {
+        (bool owesTribute, bytes32 currentOriginalPoolId) = _tributeActive(poolId, config);
+        if (owesTribute) {
             uint256 tribute;
             (retained, tribute) = TickerClaimV1.splitTribute(creatorFee, TRIBUTE_SHARE_BPS);
             if (tribute != 0) {
-                bytes32 originalPoolId = config.originalPoolId;
-                poolFeeConfig[originalPoolId].creatorFeesAccrued += tribute;
-                emit TributePaid(poolId, originalPoolId, tribute);
+                poolFeeConfig[currentOriginalPoolId].creatorFeesAccrued += tribute;
+                emit TributePaid(poolId, currentOriginalPoolId, tribute);
             }
         }
 

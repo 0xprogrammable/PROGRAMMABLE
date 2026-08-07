@@ -228,16 +228,60 @@ contract EthFirstMoverFeeHookV1Test is Deployers {
     }
 
     /// @dev A derivative can never confirm the ticker it copies, however much it trades.
-    function test_derivativeCannotTakeTheTicker() public {
+    /// @dev A CONFIRMED original's claim is permanent. No amount of volume on a derivative unseats it, because a
+    ///      confirmed claim never lapses.
+    function test_derivativeCannotTakeAnAlreadyConfirmedTicker() public {
         Launch memory original = _launch("PEPE");
         _buy(original, 2 ether);
+        assertTrue(hook.isOriginal(original.poolId), "setup: the original is confirmed before the copy registers");
 
         Launch memory copycat = _launch("PEPE");
         _buy(copycat, 4 ether);
 
         (bytes32 poolId,,,) = hook.tickerDisclosure(hook.symbolHashOf("PEPE"));
-        assertEq(poolId, original.poolId, "the original keeps the ticker");
+        assertEq(poolId, original.poolId, "the confirmed original keeps the ticker");
         assertFalse(hook.isOriginal(copycat.poolId));
+    }
+
+    /// @dev The bug this guards against: a pool recorded as a derivative at registration is not permanently
+    ///      second-class. If the pool that registered first never earns its claim and the window lapses, a pool
+    ///      that registered later -- and was marked a derivative of it at the time -- can still take the ticker
+    ///      outright once it earns the threshold itself. Being first to register is not the same as being first to
+    ///      matter, for the whole life of the ticker, not just at the moment of registration.
+    function test_derivativeCanTakeOverAfterTheOriginalsClaimLapses() public {
+        Launch memory neverTrades = _launch("PEPE");
+        Launch memory laterEarnsIt = _launch("PEPE");
+
+        (, bool tributeActiveBeforeLapse) = hook.derivativeOf(laterEarnsIt.poolId);
+        assertFalse(tributeActiveBeforeLapse, "the original is only provisional, so no tribute flows yet");
+
+        vm.roll(block.number + hook.GRACE_BLOCKS());
+        assertTrue(hook.claimState(hook.symbolHashOf("PEPE")) == ClaimState.Lapsed);
+
+        _buy(laterEarnsIt, 2 ether);
+
+        assertTrue(
+            hook.isOriginal(laterEarnsIt.poolId),
+            "earning the claim after a lapse succeeds despite having been a derivative"
+        );
+        assertFalse(hook.isOriginal(neverTrades.poolId));
+
+        (bytes32 poolId,,,) = hook.tickerDisclosure(hook.symbolHashOf("PEPE"));
+        assertEq(poolId, laterEarnsIt.poolId, "the ticker now belongs to the pool that actually traded it");
+    }
+
+    /// @dev While the original's claim is still live (provisional, not yet lapsed), a derivative cannot take over
+    ///      even if it has already earned more than the confirmation threshold itself -- the original's window has
+    ///      not yet closed.
+    function test_derivativeCannotTakeOverWhileTheOriginalsClaimIsStillLive() public {
+        Launch memory stillWithinWindow = _launch("PEPE");
+        Launch memory copycat = _launch("PEPE");
+
+        _buy(copycat, 4 ether);
+
+        assertFalse(hook.isOriginal(copycat.poolId), "the original's provisional window has not lapsed yet");
+        (bytes32 poolId,,,) = hook.tickerDisclosure(hook.symbolHashOf("PEPE"));
+        assertEq(poolId, stillWithinWindow.poolId);
     }
 
     // --- Guards ---------------------------------------------------------------------------------------------------
@@ -357,6 +401,6 @@ contract EthFirstMoverFeeHookV1Test is Deployers {
     }
 
     function _creatorAccrued(bytes32 poolId) private view returns (uint256 accrued) {
-        (,,,,,,,, accrued,) = hook.poolFeeConfig(poolId);
+        (,,,,,, accrued,) = hook.poolFeeConfig(poolId);
     }
 }

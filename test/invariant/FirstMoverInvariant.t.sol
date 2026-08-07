@@ -92,6 +92,9 @@ contract FirstMoverInvariantTest is StdInvariant, Deployers {
     bytes32 internal derivativePoolId;
     bytes32[4] internal allPools;
 
+    /// @dev Ghost variable for invariant_confirmedClaimIsNeverReassigned; latches to the first confirmed holder.
+    bytes32 internal _firstConfirmedHolder;
+
     uint16 internal constant FEE_BPS = 1000;
     uint256 internal saltCounter;
 
@@ -145,17 +148,31 @@ contract FirstMoverInvariantTest is StdInvariant, Deployers {
     }
 
     /// @dev A derivative can never hold the ticker it copies, however much it trades.
-    function invariant_derivativeNeverHoldsTheTicker() public view {
-        (bytes32 holder,,,) = hook.tickerDisclosure(sharedSymbol);
-        assertTrue(holder != derivativePoolId, "the copy never takes the ticker");
-        assertFalse(hook.isOriginal(derivativePoolId));
+    /// @dev A derivative can take over the ticker if the pool it was recorded against never earns a confirmed
+    ///      claim -- that is the fix this suite exists to prove. What must never happen is a confirmed claim being
+    ///      reassigned: if the pool the derivative was registered against is CURRENTLY confirmed, that claim is
+    ///      permanent, and the derivative can never hold it instead.
+    function invariant_derivativeNeverHoldsAConfirmedOriginalsTicker() public view {
+        if (hook.isOriginal(originalPoolId)) {
+            assertFalse(hook.isOriginal(derivativePoolId), "a confirmed claim was reassigned to the derivative");
+        }
     }
 
     /// @dev Once a claim is confirmed it is permanent: the holder never changes and it never lapses.
-    function invariant_confirmedClaimIsNeverReassigned() public view {
+    /// @dev The general permanence property: once a claim is confirmed, it never changes hands afterward --
+    ///      regardless of WHICH pool won it. The fixture doesn't assume pool0 wins; a lapse-and-takeover run can
+    ///      legitimately confirm pool1 instead. What must never happen is the confirmed holder changing a second
+    ///      time. `_firstConfirmedHolder` is a ghost variable: it latches onto whichever pool is first observed
+    ///      confirmed, then every later call must see the same one.
+    function invariant_confirmedClaimIsNeverReassigned() public {
         (bytes32 holder,, bool confirmed,) = hook.tickerDisclosure(sharedSymbol);
         if (!confirmed) return;
-        assertEq(holder, originalPoolId, "a confirmed ticker stays with the pool that earned it");
+
+        if (_firstConfirmedHolder == bytes32(0)) {
+            _firstConfirmedHolder = holder;
+            return;
+        }
+        assertEq(holder, _firstConfirmedHolder, "a confirmed ticker changed hands after being granted");
     }
 
     /// @dev Confirmation implies the threshold was actually met. The claim cannot be granted any other way.
@@ -227,10 +244,10 @@ contract FirstMoverInvariantTest is StdInvariant, Deployers {
     }
 
     function _creatorAccrued(bytes32 poolId) private view returns (uint256 accrued) {
-        (,,,,,,,, accrued,) = hook.poolFeeConfig(poolId);
+        (,,,,,, accrued,) = hook.poolFeeConfig(poolId);
     }
 
     function _lifetimeCreatorFees(bytes32 poolId) private view returns (uint256 lifetime) {
-        (,,,,,,,,, lifetime) = hook.poolFeeConfig(poolId);
+        (,,,,,,, lifetime) = hook.poolFeeConfig(poolId);
     }
 }
