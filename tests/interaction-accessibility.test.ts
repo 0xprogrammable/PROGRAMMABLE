@@ -42,6 +42,9 @@ describe("interaction accessibility", () => {
     expect(tokenCss).toMatch(
       /\.slippageControl\s*\{[^}]*min-height:\s*44px;/s,
     );
+    expect(tokenCss).toMatch(
+      /\.slippageControl input\s*\{[^}]*min-height:\s*44px;/s,
+    );
     expect(chartCss).toMatch(
       /\.rangeButton\s*\{[^}]*height:\s*44px;[^}]*min-width:\s*44px;/s,
     );
