@@ -56,12 +56,12 @@ These are byte-level SHA-256 values; the semantic event-set commitment remains t
 ## Role boundary
 
 The canonical V1 release uses the reviewed four-transaction nonce-bound deployment flow in
-`script/DeployProgrammableCustomRegistryReleaseV1.s.sol`. Before transaction one, the deployer and its exact pending
-nonce are frozen. The main Registry constructor receives the deterministic `CREATE` address of the atomic registrar at
-`startingNonce + 3` as its only initial `WRITER_ROLE`; no temporary EOA or bootstrap writer is authorized. Transaction
-four must deploy the registrar at that exact predicted address, and the script must prove that the Registry grants the
-writer role to it. Any failed or interleaved transaction invalidates the address prediction and requires a new freeze
-and full simulation; the remaining transactions must not continue under the old release record.
+`contracts/script/DeployProgrammableCustomRegistryReleaseV1.s.sol`. Before transaction one, the deployer and its exact
+pending nonce are frozen. The main Registry constructor receives the deterministic `CREATE` address of the atomic
+registrar at `startingNonce + 3` as its only initial `WRITER_ROLE`; no temporary EOA or bootstrap writer is authorized.
+Transaction four must deploy the registrar at that exact predicted address, and the script must prove that the Registry
+grants the writer role to it. Any failed or interleaved transaction invalidates the address prediction and requires a
+new freeze and full simulation; the remaining transactions must not continue under the old release record.
 
 The default administrator is not a writer. The approver must be independent of the registrar/writer and must satisfy
 the role-separation checks enforced by both stateful contracts. The legacy
