@@ -486,11 +486,11 @@ async function runtimeHash(address) {
   return code === "0x" ? null : keccak256(code);
 }
 
-async function launchLogs(topic0, launchId) {
+async function launchLogs(topic0, launchId, blockNumber) {
   const filter = {
     address: REGISTRY,
-    fromBlock: `0x${REGISTRY_START_BLOCK.toString(16)}`,
-    toBlock: "latest",
+    fromBlock: `0x${blockNumber.toString(16)}`,
+    toBlock: `0x${blockNumber.toString(16)}`,
     topics: [topic0, launchId],
   };
   const logs = await Promise.all(RPC_ENDPOINTS.map((endpoint) => rpc(endpoint, "eth_getLogs", [filter])));
@@ -566,7 +566,7 @@ async function finalizationTransaction(plan, registeredLog) {
 }
 
 async function readState(plan) {
-  const [chainId, registryHash, registrarHash, targetHash, approval, launch, registeredLogs, finalizedLogs] =
+  const [chainId, registryHash, registrarHash, targetHash, approval, launch] =
     await Promise.all([
       reconciled("eth_chainId"),
       runtimeHash(REGISTRY),
@@ -574,8 +574,6 @@ async function readState(plan) {
       runtimeHash(plan.primaryContract),
       contractCall(REGISTRY, plan.abis.registry, "approvalState", [plan.authorization.approvalId]),
       contractCall(REGISTRY, plan.abis.registry, "launchState", [plan.registration.launchId]),
-      launchLogs(REGISTERED_TOPIC0, plan.registration.launchId),
-      launchLogs(FINALIZED_TOPIC0, plan.registration.launchId),
     ]);
   if (chainId !== CHAIN_ID_HEX || registryHash !== REGISTRY_RUNTIME_HASH
     || registrarHash !== REGISTRAR_RUNTIME_HASH) {
@@ -594,6 +592,20 @@ async function readState(plan) {
   if ((status === 0 && targetHash !== null) || (status > 0 && targetHash !== plan.primaryRuntimeCodeHash)) {
     fail("Genesis target runtime does not match Registry lifecycle state");
   }
+  const registeredLogs = status > 0
+    ? await launchLogs(
+        REGISTERED_TOPIC0,
+        plan.registration.launchId,
+        Number(launch.observedAtBlock),
+      )
+    : [];
+  const finalizedLogs = status === 2
+    ? await launchLogs(
+        FINALIZED_TOPIC0,
+        plan.registration.launchId,
+        Number(launch.finalizedAtBlock),
+      )
+    : [];
   let phase;
   let nextTransaction = null;
   let remainingFinalityBlocks = 0;
