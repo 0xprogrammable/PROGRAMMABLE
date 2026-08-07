@@ -303,37 +303,38 @@ html[data-theme="dark"] .app-frame::before {
 
 .atmosphere-stars-primary {
   background-image:
-    radial-gradient(circle at 17% 21%, rgba(255, 253, 249, 0.92) 0 1px, transparent 2.2px),
-    radial-gradient(circle at 42% 12%, rgba(255, 253, 249, 0.86) 0 1.2px, transparent 2.4px),
-    radial-gradient(circle at 74% 28%, rgba(255, 253, 249, 0.82) 0 1px, transparent 2px),
-    radial-gradient(circle at 88% 15%, rgba(255, 253, 249, 0.9) 0 1.2px, transparent 2.6px),
-    radial-gradient(circle at 59% 46%, rgba(255, 253, 249, 0.72) 0 0.9px, transparent 2px);
+    radial-gradient(circle at 14% 18%, rgba(255, 253, 249, 0.92) 0 1px, transparent 2.2px),
+    radial-gradient(circle at 39% 10%, rgba(255, 253, 249, 0.86) 0 1.2px, transparent 2.4px),
+    radial-gradient(circle at 72% 13%, rgba(255, 253, 249, 0.82) 0 1px, transparent 2px),
+    radial-gradient(circle at 91% 22%, rgba(255, 253, 249, 0.9) 0 1.2px, transparent 2.6px),
+    radial-gradient(circle at 96% 56%, rgba(255, 253, 249, 0.72) 0 0.9px, transparent 2px);
   opacity: 0.28;
 }
 
 .atmosphere-stars-secondary {
   background-image:
-    radial-gradient(circle at 9% 39%, rgba(255, 253, 249, 0.78) 0 1px, transparent 2.1px),
-    radial-gradient(circle at 31% 33%, rgba(255, 253, 249, 0.84) 0 1px, transparent 2.2px),
-    radial-gradient(circle at 68% 17%, rgba(255, 253, 249, 0.76) 0 0.9px, transparent 2px),
-    radial-gradient(circle at 82% 51%, rgba(255, 253, 249, 0.88) 0 1.1px, transparent 2.4px),
-    radial-gradient(circle at 48% 61%, rgba(255, 253, 249, 0.7) 0 0.8px, transparent 1.9px);
+    radial-gradient(circle at 6% 32%, rgba(255, 253, 249, 0.78) 0 1px, transparent 2.1px),
+    radial-gradient(circle at 22% 12%, rgba(255, 253, 249, 0.84) 0 1px, transparent 2.2px),
+    radial-gradient(circle at 80% 8%, rgba(255, 253, 249, 0.76) 0 0.9px, transparent 2px),
+    radial-gradient(circle at 98% 31%, rgba(255, 253, 249, 0.88) 0 1.1px, transparent 2.4px),
+    radial-gradient(circle at 4% 61%, rgba(255, 253, 249, 0.7) 0 0.8px, transparent 1.9px);
   opacity: 0.24;
 }
 
 .atmosphere-sparkles {
-  mix-blend-mode: screen;
   z-index: 2;
 }
 
 .atmosphere-sparkles i {
+  --sparkle-delay: -6.2s;
+  --sparkle-duration: 9.7s;
   --sparkle-rotation: 0deg;
   --sparkle-size: 12px;
-  color: rgba(255, 253, 249, 0.88);
+  color: rgba(255, 253, 249, 0.86);
   height: 2px;
-  opacity: 0.12;
+  opacity: 0.1;
   position: absolute;
-  transform: rotate(var(--sparkle-rotation)) scale(0.72);
+  transform: rotate(var(--sparkle-rotation)) scale(0.78);
   width: 2px;
 }
 
@@ -358,56 +359,107 @@ html[data-theme="dark"] .app-frame::before {
 }
 
 .atmosphere-sparkles i:nth-child(1) {
-  left: 12%;
-  top: 18%;
+  left: 11%;
+  top: 17%;
 }
 
 .atmosphere-sparkles i:nth-child(2) {
+  --sparkle-delay: -2.4s;
+  --sparkle-duration: 11.3s;
   --sparkle-rotation: 18deg;
   --sparkle-size: 9px;
-  left: 34%;
-  top: 29%;
+  left: 31%;
+  top: 9%;
 }
 
 .atmosphere-sparkles i:nth-child(3) {
+  --sparkle-delay: -7.1s;
+  --sparkle-duration: 8.9s;
   --sparkle-rotation: -11deg;
-  --sparkle-size: 15px;
-  right: 18%;
-  top: 22%;
+  --sparkle-size: 14px;
+  right: 15%;
+  top: 19%;
 }
 
 .atmosphere-sparkles i:nth-child(4) {
+  --sparkle-delay: -3.8s;
+  --sparkle-duration: 12.7s;
   --sparkle-rotation: 9deg;
-  right: 8%;
-  top: 44%;
+  --sparkle-size: 11px;
+  right: 5%;
+  top: 24%;
 }
 
 .atmosphere-sparkles i:nth-child(5) {
+  --sparkle-delay: -8.5s;
+  --sparkle-duration: 10.6s;
   --sparkle-rotation: -17deg;
   --sparkle-size: 8px;
-  left: 23%;
-  top: 52%;
+  left: 4%;
+  top: 47%;
 }
 
 .atmosphere-sparkles i:nth-child(6) {
+  --sparkle-delay: -5.4s;
+  --sparkle-duration: 13.3s;
   --sparkle-rotation: 14deg;
   --sparkle-size: 10px;
-  left: 58%;
-  top: 14%;
+  left: 55%;
+  top: 7%;
 }
 
 .atmosphere-sparkles i:nth-child(7) {
+  --sparkle-delay: -1.7s;
+  --sparkle-duration: 9.1s;
   --sparkle-rotation: -8deg;
-  --sparkle-size: 14px;
-  right: 31%;
-  top: 58%;
+  --sparkle-size: 13px;
+  bottom: 23%;
+  right: 7%;
 }
 
 .atmosphere-sparkles i:nth-child(8) {
+  --sparkle-delay: -9.3s;
+  --sparkle-duration: 11.9s;
   --sparkle-rotation: 22deg;
   --sparkle-size: 9px;
-  left: 46%;
-  top: 41%;
+  bottom: 18%;
+  left: 8%;
+}
+
+.atmosphere-sparkles i:nth-child(9) {
+  --sparkle-delay: -4.7s;
+  --sparkle-duration: 8.3s;
+  --sparkle-rotation: -20deg;
+  --sparkle-size: 8px;
+  right: 31%;
+  top: 9%;
+}
+
+.atmosphere-sparkles i:nth-child(10) {
+  --sparkle-delay: -10.6s;
+  --sparkle-duration: 12.1s;
+  --sparkle-rotation: 12deg;
+  --sparkle-size: 11px;
+  bottom: 8%;
+  left: 20%;
+}
+
+.atmosphere-sparkles i:nth-child(11) {
+  --sparkle-delay: -0.8s;
+  --sparkle-duration: 10.1s;
+  --sparkle-rotation: 26deg;
+  --sparkle-size: 8px;
+  right: 3%;
+  top: 55%;
+}
+
+.atmosphere-sparkles i:nth-child(12) {
+  --sparkle-delay: -7.9s;
+  --sparkle-duration: 13.7s;
+  --sparkle-rotation: -13deg;
+  --sparkle-size: 10px;
+  bottom: 5%;
+  right: 39%;
 }
 
 .atmosphere-veil {
@@ -417,101 +469,28 @@ html[data-theme="dark"] .app-frame::before {
   z-index: 3;
 }
 
-@keyframes atmosphere-twinkle-primary {
-  0%,
-  22% {
-    opacity: 0.2;
-  }
-
-  58% {
-    opacity: 0.9;
-  }
-
-  100% {
-    opacity: 0.36;
-  }
-}
-
-@keyframes atmosphere-twinkle-secondary {
-  0%,
-  18% {
-    opacity: 0.16;
-  }
-
-  64% {
-    opacity: 0.82;
-  }
-
-  100% {
-    opacity: 0.3;
-  }
-}
-
 @keyframes atmosphere-sparkle {
   0%,
-  68%,
+  66%,
   100% {
     opacity: 0.08;
-    transform: rotate(var(--sparkle-rotation)) scale(0.7);
+    transform: rotate(var(--sparkle-rotation)) scale(0.78);
   }
 
-  76% {
-    opacity: 0.96;
-    transform: rotate(var(--sparkle-rotation)) scale(1.16);
+  73% {
+    opacity: 0.68;
+    transform: rotate(var(--sparkle-rotation)) scale(1.02);
   }
 
-  84% {
-    opacity: 0.18;
-    transform: rotate(var(--sparkle-rotation)) scale(0.82);
+  80% {
+    opacity: 0.16;
+    transform: rotate(var(--sparkle-rotation)) scale(0.86);
   }
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .atmosphere-stars-primary {
-    animation: atmosphere-twinkle-primary 5.6s ease-in-out infinite alternate;
-  }
-
-  .atmosphere-stars-secondary {
-    animation: atmosphere-twinkle-secondary 7.2s ease-in-out -2.8s infinite alternate;
-  }
-
   .atmosphere-sparkles i {
-    animation: atmosphere-sparkle 5.8s cubic-bezier(0.23, 1, 0.32, 1) infinite;
-  }
-
-  .atmosphere-sparkles i:nth-child(2) {
-    animation-delay: -3.1s;
-    animation-duration: 7.1s;
-  }
-
-  .atmosphere-sparkles i:nth-child(3) {
-    animation-delay: -4.6s;
-    animation-duration: 6.4s;
-  }
-
-  .atmosphere-sparkles i:nth-child(4) {
-    animation-delay: -1.8s;
-    animation-duration: 7.8s;
-  }
-
-  .atmosphere-sparkles i:nth-child(5) {
-    animation-delay: -5.2s;
-    animation-duration: 6.8s;
-  }
-
-  .atmosphere-sparkles i:nth-child(6) {
-    animation-delay: -2.4s;
-    animation-duration: 7.4s;
-  }
-
-  .atmosphere-sparkles i:nth-child(7) {
-    animation-delay: -4.1s;
-    animation-duration: 8.2s;
-  }
-
-  .atmosphere-sparkles i:nth-child(8) {
-    animation-delay: -1s;
-    animation-duration: 6.6s;
+    animation: atmosphere-sparkle var(--sparkle-duration) linear var(--sparkle-delay) infinite;
   }
 }
 
@@ -1366,7 +1345,7 @@ html[data-theme="dark"] .app-frame::before {
 
   .atmosphere-sparkles i {
     animation: none;
-    opacity: 0.28;
+    opacity: 0.12;
   }
 
   .theme-toggle-icons,

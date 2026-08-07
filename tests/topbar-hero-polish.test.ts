@@ -51,6 +51,7 @@ describe("topbar and Explore hero polish", () => {
     expect(landing).toContain('aria-label="Programmable on GitHub"');
     expect(landing).toContain('aria-label="Programmable on Dexscreener"');
     expect(landing).toContain('href="/docs/developers"');
+    expect(landing).toContain("Developer docs");
     expect(navigation).not.toContain("ThemeToggle");
     expect(navigation).toContain('if (pathname === "/") return null;');
     expect(navigation).toContain("<WalletButton compact />");
@@ -64,10 +65,10 @@ describe("topbar and Explore hero polish", () => {
       /\.socialLink\s*\{[^}]*height:\s*44px;[^}]*width:\s*44px;/s,
     );
     expect(landingCss).toMatch(
-      /\.socialLink svg,\s*\.socialLogo\s*\{[^}]*height:\s*30px;[^}]*width:\s*30px;/s,
+      /\.socialLink svg,\s*\.socialLogo\s*\{[^}]*height:\s*24px;[^}]*width:\s*24px;/s,
     );
     expect(landingCss).toMatch(
-      /\.docsLink\s*\{[^}]*font-size:\s*20px;/s,
+      /\.docsLink\s*\{[^}]*font-size:\s*16px;/s,
     );
   });
 

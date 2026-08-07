@@ -375,7 +375,7 @@ export function LaunchModelPicker({
           >
             <Image
               className={launchExperience.artImage}
-              src="/brand/create/basedbid-v1.png"
+              src="/brand/create/basedbid-v2.png"
               alt=""
               fill
               loading="lazy"

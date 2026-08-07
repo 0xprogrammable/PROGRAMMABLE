@@ -88,8 +88,12 @@ describe("interaction accessibility", () => {
     const css = readFileSync(join(root, "app/interface.css"), "utf8");
 
     expect(source).toContain('className="atmosphere-stars');
+    expect(source).toContain("Array.from({ length: 12 }");
+    expect(css).not.toMatch(
+      /\.atmosphere-stars-(?:primary|secondary)\s*\{[^}]*animation:/s,
+    );
     expect(css).toMatch(
-      /@media \(prefers-reduced-motion: no-preference\)[\s\S]*?\.atmosphere-stars-primary\s*\{[^}]*animation:\s*atmosphere-twinkle-primary/,
+      /@media \(prefers-reduced-motion: no-preference\)[\s\S]*?\.atmosphere-sparkles i\s*\{[^}]*animation:\s*atmosphere-sparkle/,
     );
     expect(css).toMatch(
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.atmosphere-stars\s*\{[^}]*animation:\s*none;/,
@@ -157,6 +161,7 @@ describe("interaction accessibility", () => {
     expect(landing).toContain('aria-label="Programmable on X"');
     expect(landing).toContain('aria-label="Programmable on GitHub"');
     expect(landing).toContain('aria-label="Programmable on Dexscreener"');
+    expect(landing).toContain("Developer docs");
     expect(css).toMatch(
       /\.socialLink\s*\{[^}]*height:\s*44px;[^}]*width:\s*44px;/s,
     );

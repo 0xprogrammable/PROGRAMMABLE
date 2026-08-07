@@ -131,7 +131,7 @@
 }
 
 .basedBidArt .artImage {
-  object-fit: contain;
+  object-fit: cover;
 }
 
 .artImage {
@@ -498,6 +498,10 @@
 
 .modelCard[data-launch-model-available="false"] .modelArt img {
   filter: saturate(0.78) contrast(0.92);
+}
+
+.modelCard[data-launch-model-option="basedbid"] .basedBidArt .artImage {
+  filter: none;
 }
 
 .formPage {

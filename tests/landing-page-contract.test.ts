@@ -79,8 +79,10 @@ describe("landing page contract", () => {
     expect(landing).toContain(
       'src="/brand/loop/programmable-loop-mark-header.png"',
     );
-    expect(landing).toContain("Create a Token");
-    expect(landing).toContain("Explore Tokens");
+    expect(landing).toContain("Create a token");
+    expect(landing).toContain("Explore tokens");
+    expect(landing).toContain("Developer docs");
+    expect(landing).not.toContain("liquid-glass-distortion");
     expect(landing).toContain('aria-label="Programmable links"');
     expect(landing).toContain('aria-label="Programmable on X"');
     expect(landing).toContain('aria-label="Programmable on GitHub"');
@@ -123,29 +125,36 @@ describe("landing page contract", () => {
     expect(styles).toMatch(/\.hero\s*\{[^}]*min-height:\s*100svh;/s);
     expect(styles).toContain("@media (prefers-reduced-motion: reduce)");
     expect(styles).toMatch(
-      /\.primaryAction,[\s\S]*?width:\s*188px;/,
+      /\.primaryAction,[\s\S]*?min-width:\s*188px;/,
     );
     expect(styles).toMatch(
-      /\.primaryAction:focus-visible,[\s\S]*?outline:\s*3px solid #fffdf9;/,
+      /\.primaryAction:focus-visible,[\s\S]*?outline:\s*2px solid #fffdf9;/,
     );
+    expect(styles).toMatch(
+      /\.primaryAction,[\s\S]*?backdrop-filter:\s*blur\(16px\) saturate\(1\.08\);/,
+    );
+    expect(styles).toMatch(/border-radius:\s*18px;/);
     expect(styles).not.toContain("motionControl");
     expect(styles).not.toContain("primaryAction span");
     expect(styles).not.toContain("content-arrival");
   });
 
-  it("keeps the artwork static while stars twinkle only when motion is allowed", () => {
+  it("keeps most stars static while independent sparkles twinkle only when motion is allowed", () => {
+    const backdrop = read("components/atmosphere-backdrop.tsx");
     const css = read("app/interface.css");
 
     expect(css).not.toContain(".atmosphere-botanical");
-    expect(css).toContain("@keyframes atmosphere-twinkle-primary");
-    expect(css).toContain("@keyframes atmosphere-twinkle-secondary");
+    expect(backdrop).toContain("Array.from({ length: 12 }");
+    expect(css).not.toContain("@keyframes atmosphere-twinkle-primary");
+    expect(css).not.toContain("@keyframes atmosphere-twinkle-secondary");
     expect(css).toContain("@keyframes atmosphere-sparkle");
-    expect(css).toMatch(
-      /@media \(prefers-reduced-motion: no-preference\)[\s\S]*?\.atmosphere-stars-primary\s*\{[^}]*animation:\s*atmosphere-twinkle-primary/,
+    expect(css).not.toMatch(
+      /\.atmosphere-stars-(?:primary|secondary)\s*\{[^}]*animation:/s,
     );
     expect(css).toMatch(
       /@media \(prefers-reduced-motion: no-preference\)[\s\S]*?\.atmosphere-sparkles i\s*\{[^}]*animation:\s*atmosphere-sparkle/,
     );
+    expect(css).toContain("--sparkle-duration: 13.7s");
     expect(css).toMatch(
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.atmosphere-stars\s*\{[^}]*animation:\s*none;/,
     );
