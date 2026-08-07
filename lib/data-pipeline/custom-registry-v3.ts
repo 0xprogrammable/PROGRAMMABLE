@@ -2456,6 +2456,11 @@ function validateProducerRecord(
   value: CustomLaunchRegistryProducerRecordV3,
   event: CustomRegistryEventV3,
 ): CustomLaunchRegistryProducerRecordV3 {
+  // Producer record v3 is the frozen 34-word contract. Generation 2 uses the
+  // additive record-v4 parity adapter and must never be represented as v3.
+  if (event.registryGeneration === "2") {
+    return fail("custom-registry-producer-v3-generation-2");
+  }
   if (!validateCustomRegistryProducerSchemaV3(value)) {
     return fail("custom-registry-producer-schema-v3");
   }
