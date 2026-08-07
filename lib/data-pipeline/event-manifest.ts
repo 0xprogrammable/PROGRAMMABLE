@@ -52,6 +52,27 @@ export const PROGRAMMABLE_EVENT_SIGNATURES = {
     "PayoutWalletChanged(bytes32 indexed poolId, uint256 indexed allocationIndex, address indexed previousPayoutWallet, address newPayoutWallet, uint16 shareBps, uint64 configurationEpoch, bytes32 activeConfigurationHash, uint256 effectiveTotalCreatorFeesReceived)",
     "CtoRewardConfigurationActivated(bytes32 indexed poolId, bytes32 indexed approvalReference, uint64 indexed configurationEpoch, bytes32 previousConfigurationHash, bytes32 newConfigurationHash, address[] beneficiaries, uint16[] sharesBps, uint256 effectiveTotalCreatorFeesReceived)",
   ],
+  CustomRegistryV1: [
+    "CustomLaunchApprovalAuthorizedV1(bytes32 indexed approvalId, bytes32 indexed launchId, bytes32 indexed approvalBindingHash, bytes32 registrationBindingHash, uint64 transitionSequence, uint64 validAfterBlock, uint64 expiresAtBlock, bytes32 evidenceHash)",
+    "CustomLaunchRegisteredV1(bytes32 indexed launchId, bytes32 indexed projectId, address indexed primaryContract, uint64 registrationSequence, uint256 chainId, uint64 registryGeneration, bytes32 approvalId, bytes32 deploymentId, address launchWallet, bytes32 identityHash, bytes32 registeredRecordCommitment, uint64 observedAtBlock)",
+    "CustomLaunchProvenanceBoundV1(bytes32 indexed launchId, bytes32 indexed repositoryId, bytes32 indexed commitId, bytes32 sourceCommitment, bytes32 buildCommitment, bytes32 artifactSetHash, bytes32 deploymentConfigurationHash, bytes32 deploymentSetHash, bytes32 runtimeCodeSetHash, bytes32 primaryRuntimeCodeHash)",
+    "CustomLaunchReviewBoundV1(bytes32 indexed launchId, bytes32 indexed approvalBindingHash, bytes32 indexed securityReviewHash, bytes32 reviewPolicyHash, bytes32 reviewResultId, bytes32 reviewDeploymentBindingHash, bytes32 feePolicyHash, bytes32 finalityPolicyHash)",
+    "CustomLaunchAttributionBoundV1(bytes32 indexed launchId, bytes32 indexed modelId, bytes32 indexed templateId, bytes32 modelVersion, bytes32 templateVersion, bytes32 providerId, bytes32 builderAttributionHash, bytes32 originHash, bytes32 assetSetHash, bytes32 marketSetHash, bytes32 marketPathId, bytes32 configurationHash, bytes32 permissionsHash, bytes32 capabilitySetHash)",
+    "CustomLaunchFeePolicyBoundV1(bytes32 indexed launchId, bytes32 indexed feePolicyHash, bytes32 indexed providerId, uint8 kind, uint16 totalFeeBps, uint16 nativeCustomFeeBps, uint16 partnerShareBps, uint16 programmableShareBps, address partnerRecipient, address programmableRecipient)",
+    "CustomLaunchFeeScopeBoundV1(bytes32 indexed launchId, bytes32 indexed feePolicyHash, bytes32 indexed publicPolicyBindingHash, bytes32 modelId, bytes32 modelVersion, bytes32 templateId, bytes32 templateVersion, bytes32 marketPathId)",
+    "CustomLaunchFeeEvidenceBoundV1(bytes32 indexed launchId, bytes32 indexed feePolicyHash, bytes32 indexed verificationEvidenceHash, address currency, bytes32 chargeModeId, bytes32 basisId, bytes32 roundingId, bytes32 partnerAccrualId, bytes32 programmableAccrualId, bytes32 claimIsolationEvidenceHash, bytes32 accountingSafetyEvidenceHash)",
+    "CustomLaunchFinalizedV1(bytes32 indexed launchId, bytes32 indexed observedTransactionHash, bytes32 indexed finalityEvidenceHash, uint64 transitionSequence, uint64 observedBlockNumber, bytes32 observedBlockHash, uint32 observedTransactionIndex, uint32 observedLogIndex, uint64 confirmedHeadBlockNumber, bytes32 confirmedHeadBlockHash, bytes32 finalityPolicyHash, uint64 finalizedAtBlock, uint64 finalizedAtTimestamp)",
+    "CustomLaunchRecordCorrectedV1(bytes32 indexed launchId, uint64 indexed revision, bytes32 indexed correctedRecordHash, uint64 transitionSequence, bytes32 previousRecordHash, bytes32 reasonCode, bytes32 evidenceHash)",
+    "CustomLaunchRevokedV1(bytes32 indexed launchId, bytes32 indexed reasonCode, bytes32 indexed evidenceHash, uint64 transitionSequence, uint64 latestRecordRevision, bytes32 latestRecordHash, uint64 revokedAtBlock, uint64 revokedAtTimestamp)",
+  ],
+  CustomPartnerFactoryRegistryV1: [
+    "CustomPartnerFactoryAuthorizedV1(bytes32 indexed configurationHash, bytes32 indexed providerId, address indexed factory, bytes32 modelId, bytes32 modelVersion, bytes32 templateId, bytes32 templateVersion, uint64 validAfterBlock, uint64 expiresAtBlock, bytes32 evidenceHash)",
+    "CustomPartnerFactorySourceBoundV1(bytes32 indexed configurationHash, bytes32 indexed modelRepositoryId, bytes32 indexed modelSourceCommitId, bytes32 factorySourceRepositoryId, bytes32 factorySourceCommitId, bytes32 factoryRuntimeCodeHash, bytes32 launchRuntimeCodeSetHash, bytes32 permissionsHash, bytes32 feePolicyHash)",
+    "CustomPartnerFactoryRevokedV1(bytes32 indexed configurationHash, bytes32 indexed providerId, address indexed factory, bytes32 reasonCode, bytes32 evidenceHash)",
+  ],
+  CustomAtomicRegistrarV1: [
+    "AtomicCustomLaunchExecutedV1(bytes32 indexed launchId, address indexed primaryContract, bytes32 indexed salt, bytes32 creationCodeHash, bytes32 initializationResultHash)",
+  ],
   StockV1Launcher: [
     "StockPairedTokenLaunched(address indexed deployer, address indexed token, address indexed quoteAsset, bytes32 poolId, address rewardVault, address positionRecipient, uint256 positionTokenId, bytes32 launchHash)",
     "StockPairedLiquidityConfigured(address indexed token, address indexed quoteAsset, uint256 totalSupply, uint256 tokenLiquidityAmount, uint256 lockedTokenDust, int24 initialTick, int24 tickLower, int24 tickUpper, uint24 lpFeePips, bytes32 launchHash)",
