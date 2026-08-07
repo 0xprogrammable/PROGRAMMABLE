@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "programmable.custom-registry-release-candidate.v1",
+  "status": "release_candidate",
+  "registryGeneration": 2,
+  "contractIntegrationAbiVersion": 1,
+  "minimumSupportedPublicApiVersion": 2,
+  "registryRecordProducerVersion": 4,
+  "contracts": {
+    "registry": {
+      "name": "ProgrammableCustomRegistryV2",
+      "address": null,
+      "startBlock": null,
+      "deploymentTransactionHash": null,
+      "runtimeCodeHash": null,
+      "sourceVerified": false
+    },
+    "partnerFactoryRegistry": {
+      "name": "ProgrammableCustomPartnerFactoryRegistryV2",
+      "address": null,
+      "startBlock": null,
+      "deploymentTransactionHash": null,
+      "runtimeCodeHash": null,
+      "sourceVerified": false
+    },
+    "feePolicyVerifier": {
+      "name": "ProgrammableCustomFeePolicyVerifierV2",
+      "address": null,
+      "startBlock": null,
+      "deploymentTransactionHash": null,
+      "runtimeCodeHash": null,
+      "sourceVerified": false
+    },
+    "atomicRegistrar": {
+      "name": "ProgrammableCustomAtomicRegistrarV2",
+      "address": null,
+      "startBlock": null,
+      "deploymentTransactionHash": null,
+      "runtimeCodeHash": null,
+      "sourceVerified": false
+    }
+  },
+  "chain": {
+    "chainId": null,
+    "caip2": null,
+    "chainProfileHash": null
+  },
+  "release": {
+    "sourceCommit": null,
+    "artifactSetHash": null,
+    "registryPolicyHash": null,
+    "deployer": null,
+    "startingNonce": null,
+    "releaseApproval": null,
+    "canaryTransactionHash": null,
+    "canaryLaunchId": null,
+    "publicSubmissionsEnabled": false
+  }
+}
