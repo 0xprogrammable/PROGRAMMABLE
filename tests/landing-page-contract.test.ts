@@ -35,7 +35,7 @@ describe("landing page contract", () => {
     expect(backdrop).not.toContain("<picture");
     expect(backdrop).not.toContain(".avif");
     expect(backdrop).toContain('import Image from "next/image"');
-    expect(backdrop).toContain("const TWINKLE_COUNT = 18");
+    expect(backdrop).toContain("const TWINKLE_COUNT = 36");
     expect(backdrop).toContain("const PLANT_SIZES");
     expect(backdrop).toContain('aria-hidden="true"');
     expect(backdrop).toContain('className="atmosphere-ground-glow"');
@@ -50,7 +50,6 @@ describe("landing page contract", () => {
     expect(backdrop.match(/width=\{1024\}/g)).toHaveLength(2);
     expect(backdrop.match(/height=\{1536\}/g)).toHaveLength(2);
     expect(backdrop.match(/sizes=\{PLANT_SIZES\}/g)).toHaveLength(2);
-    expect(backdrop.match(/quality=\{92\}/g)).toHaveLength(2);
     expect(backdrop.match(/priority/g)).toHaveLength(2);
     expect(backdrop.match(/alt=""/g)).toHaveLength(2);
     expect(interfaceStyles).toMatch(
@@ -79,6 +78,9 @@ describe("landing page contract", () => {
     );
     expect(landing).toContain("Create a token");
     expect(landing).toContain("Explore tokens");
+    expect(landing).toContain(
+      '<nav className={styles.actions} aria-label="Get started">',
+    );
     expect(landing).toMatch(/>\s*Docs\s*</);
     expect(landing).not.toContain("liquid-glass-distortion");
     expect(landing).toContain('aria-label="Programmable links"');
@@ -110,8 +112,13 @@ describe("landing page contract", () => {
     expect(styles).toMatch(/\.page\s*\{[^}]*min-height:\s*100svh;/s);
     expect(styles).toMatch(/\.hero\s*\{[^}]*min-height:\s*100svh;/s);
     expect(styles).toContain("@media (prefers-reduced-motion: reduce)");
-    expect(styles).toMatch(
-      /\.primaryAction,[\s\S]*?min-width:\s*176px;/,
+    expect(styles).toContain("background: transparent;");
+    expect(styles).toContain("border: 0;");
+    expect(styles).toContain("min-height: 44px;");
+    expect(styles).not.toContain("--button-shadow");
+    expect(styles).not.toContain("backdrop-filter: blur(16px)");
+    expect(styles).not.toContain(
+      "background-color: rgba(248, 240, 233, 0.18)",
     );
     expect(styles).toMatch(
       /\.primaryAction:focus-visible,[\s\S]*?outline:\s*2px solid var\(--landing-ivory\);/,
@@ -120,10 +127,6 @@ describe("landing page contract", () => {
     expect(styles).toMatch(
       /\.primaryAction,[\s\S]*?cursor:\s*pointer;/,
     );
-    expect(styles).toMatch(
-      /\.primaryAction,[\s\S]*?backdrop-filter:\s*blur\(16px\) saturate\(1\.08\);/,
-    );
-    expect(styles).toMatch(/border-radius:\s*18px;/);
     expect(styles).not.toContain("motionControl");
     expect(styles).not.toContain("primaryAction span");
     expect(styles).not.toContain("content-arrival");
@@ -134,7 +137,7 @@ describe("landing page contract", () => {
     const css = read("app/interface.css");
 
     expect(css).toContain(".atmosphere-botanicals");
-    expect(backdrop).toContain("const TWINKLE_COUNT = 18");
+    expect(backdrop).toContain("const TWINKLE_COUNT = 36");
     expect(backdrop).toContain("Array.from({ length: TWINKLE_COUNT }");
     expect(css).not.toContain("@keyframes atmosphere-twinkle-primary");
     expect(css).not.toContain("@keyframes atmosphere-twinkle-secondary");
@@ -143,9 +146,13 @@ describe("landing page contract", () => {
       /\.atmosphere-stars-(?:primary|secondary)\s*\{[^}]*animation:/s,
     );
     expect(css).toMatch(
-      /@media \(prefers-reduced-motion: no-preference\)[\s\S]*?\.atmosphere-sparkles i\s*\{[^}]*animation:\s*atmosphere-sparkle/,
+      /@media \(prefers-reduced-motion: no-preference\)[\s\S]*?\.atmosphere-sparkles i\s*\{[^}]*animation:\s*var\(--sparkle-animation\)/,
     );
     expect(css).toContain("--sparkle-duration: 13.7s");
+    expect(css).toContain("@keyframes atmosphere-sparkle-soft");
+    expect(css).toContain("@keyframes atmosphere-sparkle-double");
+    expect(css).toContain(".atmosphere-sparkles i:nth-child(36)");
+    expect(css).toContain(".atmosphere-sparkles i:nth-child(n + 25)");
     expect(css).toContain("@keyframes atmosphere-plant-left");
     expect(css).toContain("@keyframes atmosphere-plant-right");
     expect(css).toMatch(

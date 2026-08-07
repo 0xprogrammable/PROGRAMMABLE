@@ -1,6 +1,6 @@
 import Image from "next/image";
 
-const TWINKLE_COUNT = 18;
+const TWINKLE_COUNT = 36;
 const PLANT_SIZES = "(max-width: 520px) 46vw, (max-width: 1500px) 22vw, 330px";
 
 export function AtmosphereBackdrop() {
@@ -21,7 +21,6 @@ export function AtmosphereBackdrop() {
           width={1024}
           height={1536}
           sizes={PLANT_SIZES}
-          quality={92}
           priority
           alt=""
         />
@@ -31,7 +30,6 @@ export function AtmosphereBackdrop() {
           width={1024}
           height={1536}
           sizes={PLANT_SIZES}
-          quality={92}
           priority
           alt=""
         />

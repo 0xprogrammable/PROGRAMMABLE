@@ -319,12 +319,12 @@ html[data-theme="dark"] .app-frame::before {
     radial-gradient(circle at 3% 18%, rgba(248, 240, 233, 0.54) 0 0.7px, transparent 1.4px),
     radial-gradient(circle at 9% 39%, rgba(225, 235, 255, 0.46) 0 0.65px, transparent 1.35px),
     radial-gradient(circle at 14% 8%, rgba(248, 240, 233, 0.4) 0 0.65px, transparent 1.3px),
-    radial-gradient(circle at 19% 57%, rgba(248, 240, 233, 0.52) 0 0.7px, transparent 1.4px),
+    radial-gradient(circle at 19% 24%, rgba(248, 240, 233, 0.52) 0 0.7px, transparent 1.4px),
     radial-gradient(circle at 29% 16%, rgba(229, 238, 255, 0.42) 0 0.65px, transparent 1.3px),
-    radial-gradient(circle at 37% 43%, rgba(248, 240, 233, 0.48) 0 0.7px, transparent 1.4px),
+    radial-gradient(circle at 37% 27%, rgba(248, 240, 233, 0.48) 0 0.7px, transparent 1.4px),
     radial-gradient(circle at 47% 9%, rgba(248, 240, 233, 0.44) 0 0.65px, transparent 1.3px),
     radial-gradient(circle at 61% 19%, rgba(226, 236, 255, 0.44) 0 0.7px, transparent 1.4px),
-    radial-gradient(circle at 69% 48%, rgba(248, 240, 233, 0.5) 0 0.65px, transparent 1.3px),
+    radial-gradient(circle at 69% 29%, rgba(248, 240, 233, 0.5) 0 0.65px, transparent 1.3px),
     radial-gradient(circle at 77% 7%, rgba(248, 240, 233, 0.46) 0 0.7px, transparent 1.4px),
     radial-gradient(circle at 87% 36%, rgba(229, 238, 255, 0.42) 0 0.65px, transparent 1.3px),
     radial-gradient(circle at 96% 17%, rgba(248, 240, 233, 0.52) 0 0.7px, transparent 1.4px);
@@ -338,10 +338,10 @@ html[data-theme="dark"] .app-frame::before {
     radial-gradient(circle at 23% 34%, rgba(225, 235, 255, 0.34) 0 0.6px, transparent 1.2px),
     radial-gradient(circle at 32% 6%, rgba(248, 240, 233, 0.34) 0 0.6px, transparent 1.2px),
     radial-gradient(circle at 43% 29%, rgba(248, 240, 233, 0.38) 0 0.6px, transparent 1.2px),
-    radial-gradient(circle at 52% 52%, rgba(225, 235, 255, 0.34) 0 0.6px, transparent 1.2px),
+    radial-gradient(circle at 52% 20%, rgba(225, 235, 255, 0.34) 0 0.6px, transparent 1.2px),
     radial-gradient(circle at 58% 12%, rgba(248, 240, 233, 0.36) 0 0.6px, transparent 1.2px),
     radial-gradient(circle at 72% 31%, rgba(248, 240, 233, 0.34) 0 0.6px, transparent 1.2px),
-    radial-gradient(circle at 82% 54%, rgba(225, 235, 255, 0.36) 0 0.6px, transparent 1.2px),
+    radial-gradient(circle at 82% 33.5%, rgba(225, 235, 255, 0.36) 0 0.6px, transparent 1.2px),
     radial-gradient(circle at 91% 11%, rgba(248, 240, 233, 0.38) 0 0.6px, transparent 1.2px),
     radial-gradient(circle at 94% 47%, rgba(248, 240, 233, 0.34) 0 0.6px, transparent 1.2px),
     radial-gradient(circle at 99% 29%, rgba(225, 235, 255, 0.36) 0 0.6px, transparent 1.2px);
@@ -353,17 +353,26 @@ html[data-theme="dark"] .app-frame::before {
 }
 
 .atmosphere-sparkles i {
+  --sparkle-animation: atmosphere-sparkle;
   --sparkle-delay: -6.2s;
   --sparkle-duration: 9.7s;
   --sparkle-size: 1px;
-  background: rgba(248, 240, 233, 0.92);
+  background: rgba(255, 255, 255, 0.94);
   border-radius: 50%;
-  box-shadow: 0 0 5px rgba(248, 240, 233, 0.52);
+  box-shadow: 0 0 5px rgba(255, 255, 255, 0.54);
   height: var(--sparkle-size);
-  opacity: 0.14;
+  opacity: 0.12;
   position: absolute;
   transform: scale(0.72);
   width: var(--sparkle-size);
+}
+
+.atmosphere-sparkles i:nth-child(3n + 2) {
+  --sparkle-animation: atmosphere-sparkle-soft;
+}
+
+.atmosphere-sparkles i:nth-child(4n) {
+  --sparkle-animation: atmosphere-sparkle-double;
 }
 
 .atmosphere-sparkles i:nth-child(1) {
@@ -404,7 +413,7 @@ html[data-theme="dark"] .app-frame::before {
 .atmosphere-sparkles i:nth-child(6) {
   --sparkle-delay: -5.4s;
   --sparkle-duration: 13.3s;
-  left: 11.6%;
+  left: 7.5%;
   top: 50.7%;
 }
 
@@ -433,7 +442,7 @@ html[data-theme="dark"] .app-frame::before {
 .atmosphere-sparkles i:nth-child(10) {
   --sparkle-delay: -10.6s;
   --sparkle-duration: 12.1s;
-  left: 85.2%;
+  left: 94.5%;
   top: 52.3%;
 }
 
@@ -456,21 +465,21 @@ html[data-theme="dark"] .app-frame::before {
   --sparkle-delay: -11.2s;
   --sparkle-duration: 14.1s;
   left: 59.8%;
-  top: 36.7%;
+  top: 27.7%;
 }
 
 .atmosphere-sparkles i:nth-child(14) {
   --sparkle-delay: -3.1s;
   --sparkle-duration: 10.8s;
   left: 4.2%;
-  top: 61.4%;
+  top: 55.4%;
 }
 
 .atmosphere-sparkles i:nth-child(15) {
   --sparkle-delay: -6.7s;
   --sparkle-duration: 12.9s;
   left: 96.2%;
-  top: 58.6%;
+  top: 54.6%;
 }
 
 .atmosphere-sparkles i:nth-child(16) {
@@ -478,14 +487,14 @@ html[data-theme="dark"] .app-frame::before {
   --sparkle-duration: 9.4s;
   --sparkle-size: 1.5px;
   left: 34.2%;
-  top: 56.5%;
+  top: 32.5%;
 }
 
 .atmosphere-sparkles i:nth-child(17) {
   --sparkle-delay: -8.8s;
   --sparkle-duration: 11.6s;
   left: 72.2%;
-  top: 49.4%;
+  top: 30.4%;
 }
 
 .atmosphere-sparkles i:nth-child(18) {
@@ -493,6 +502,144 @@ html[data-theme="dark"] .app-frame::before {
   --sparkle-duration: 13.2s;
   left: 50.2%;
   top: 5.5%;
+}
+
+.atmosphere-sparkles i:nth-child(19) {
+  --sparkle-delay: -5.9s;
+  --sparkle-duration: 10.3s;
+  --sparkle-size: 0.8px;
+  left: 2.6%;
+  top: 6.5%;
+}
+
+.atmosphere-sparkles i:nth-child(20) {
+  --sparkle-delay: -2.6s;
+  --sparkle-duration: 7.8s;
+  --sparkle-size: 1.25px;
+  left: 12.9%;
+  top: 19.4%;
+}
+
+.atmosphere-sparkles i:nth-child(21) {
+  --sparkle-delay: -10.8s;
+  --sparkle-duration: 13.5s;
+  --sparkle-size: 0.85px;
+  left: 18.2%;
+  top: 4.6%;
+}
+
+.atmosphere-sparkles i:nth-child(22) {
+  --sparkle-delay: -4.5s;
+  --sparkle-duration: 9.6s;
+  left: 24.7%;
+  top: 24.2%;
+}
+
+.atmosphere-sparkles i:nth-child(23) {
+  --sparkle-delay: -8.1s;
+  --sparkle-duration: 12.2s;
+  --sparkle-size: 1.25px;
+  left: 30.8%;
+  top: 38.6%;
+}
+
+.atmosphere-sparkles i:nth-child(24) {
+  --sparkle-delay: -1.4s;
+  --sparkle-duration: 8.7s;
+  --sparkle-size: 0.8px;
+  left: 36.4%;
+  top: 13.4%;
+}
+
+.atmosphere-sparkles i:nth-child(25) {
+  --sparkle-delay: -12.4s;
+  --sparkle-duration: 14.8s;
+  left: 42.8%;
+  top: 3.9%;
+}
+
+.atmosphere-sparkles i:nth-child(26) {
+  --sparkle-delay: -7.2s;
+  --sparkle-duration: 10.9s;
+  --sparkle-size: 1.25px;
+  left: 48.9%;
+  top: 31.1%;
+}
+
+.atmosphere-sparkles i:nth-child(27) {
+  --sparkle-delay: -3.7s;
+  --sparkle-duration: 7.9s;
+  --sparkle-size: 0.85px;
+  left: 55.7%;
+  top: 22.6%;
+}
+
+.atmosphere-sparkles i:nth-child(28) {
+  --sparkle-delay: -9.6s;
+  --sparkle-duration: 13.8s;
+  left: 62.3%;
+  top: 25.1%;
+}
+
+.atmosphere-sparkles i:nth-child(29) {
+  --sparkle-delay: -6.1s;
+  --sparkle-duration: 9.2s;
+  --sparkle-size: 1.4px;
+  left: 67.8%;
+  top: 16.2%;
+}
+
+.atmosphere-sparkles i:nth-child(30) {
+  --sparkle-delay: -1.9s;
+  --sparkle-duration: 11.7s;
+  left: 73.7%;
+  top: 28.8%;
+}
+
+.atmosphere-sparkles i:nth-child(31) {
+  --sparkle-delay: -5.2s;
+  --sparkle-duration: 8.4s;
+  --sparkle-size: 0.85px;
+  left: 79.4%;
+  top: 45.6%;
+}
+
+.atmosphere-sparkles i:nth-child(32) {
+  --sparkle-delay: -13.5s;
+  --sparkle-duration: 15.1s;
+  --sparkle-size: 1.25px;
+  left: 84.1%;
+  top: 4.7%;
+}
+
+.atmosphere-sparkles i:nth-child(33) {
+  --sparkle-delay: -4.1s;
+  --sparkle-duration: 10.5s;
+  left: 90.8%;
+  top: 27.4%;
+}
+
+.atmosphere-sparkles i:nth-child(34) {
+  --sparkle-delay: -8.9s;
+  --sparkle-duration: 12.6s;
+  --sparkle-size: 0.8px;
+  left: 97.2%;
+  top: 8.8%;
+}
+
+.atmosphere-sparkles i:nth-child(35) {
+  --sparkle-delay: -6.8s;
+  --sparkle-duration: 9.9s;
+  --sparkle-size: 1.25px;
+  left: 44.6%;
+  top: 16.9%;
+}
+
+.atmosphere-sparkles i:nth-child(36) {
+  --sparkle-delay: -2.7s;
+  --sparkle-duration: 14.3s;
+  left: 92.5%;
+  top: 51.8%;
 }
 
 .atmosphere-botanicals {
@@ -547,6 +694,55 @@ html[data-theme="dark"] .app-frame::before {
   }
 }
 
+@keyframes atmosphere-sparkle-soft {
+  0%,
+  38%,
+  100% {
+    opacity: 0.08;
+    transform: scale(0.68);
+  }
+
+  48% {
+    opacity: 0.74;
+    transform: scale(1.18);
+  }
+
+  57% {
+    opacity: 0.18;
+    transform: scale(0.84);
+  }
+}
+
+@keyframes atmosphere-sparkle-double {
+  0%,
+  21%,
+  47%,
+  100% {
+    opacity: 0.1;
+    transform: scale(0.7);
+  }
+
+  28% {
+    opacity: 0.64;
+    transform: scale(1.12);
+  }
+
+  72% {
+    opacity: 0.12;
+    transform: scale(0.76);
+  }
+
+  79% {
+    opacity: 0.9;
+    transform: scale(1.34);
+  }
+
+  88% {
+    opacity: 0.2;
+    transform: scale(0.86);
+  }
+}
+
 @keyframes atmosphere-plant-left {
   0%,
   100% {
@@ -595,7 +791,7 @@ html[data-theme="dark"] .app-frame::before {
 
 @media (prefers-reduced-motion: no-preference) {
   .atmosphere-sparkles i {
-    animation: atmosphere-sparkle var(--sparkle-duration) linear var(--sparkle-delay) infinite;
+    animation: var(--sparkle-animation) var(--sparkle-duration) cubic-bezier(0.37, 0, 0.63, 1) var(--sparkle-delay) infinite;
   }
 
   .atmosphere-plant-left {
@@ -635,7 +831,7 @@ html[data-theme="dark"] .app-frame::before {
 }
 
 @media (max-width: 340px) {
-  .atmosphere-sparkles i:nth-child(n + 13) {
+  .atmosphere-sparkles i:nth-child(n + 25) {
     display: none;
   }
 }

@@ -37,7 +37,7 @@ export function LandingPage() {
             <span aria-hidden="true">Tokens that behave</span>
             <span aria-hidden="true">how you imagine</span>
           </h1>
-          <div className={styles.actions} aria-label="Get started">
+          <nav className={styles.actions} aria-label="Get started">
             <Link
               className={styles.primaryAction}
               href="/launch"
@@ -50,7 +50,7 @@ export function LandingPage() {
             >
               Explore tokens
             </Link>
-          </div>
+          </nav>
           <nav className={styles.supportingLinks} aria-label="Programmable links">
             <a
               className={styles.socialLink}

@@ -83,13 +83,13 @@ describe("interaction accessibility", () => {
     const css = readFileSync(join(root, "app/interface.css"), "utf8");
 
     expect(source).toContain('className="atmosphere-stars');
-    expect(source).toContain("const TWINKLE_COUNT = 18");
+    expect(source).toContain("const TWINKLE_COUNT = 36");
     expect(source).toContain("Array.from({ length: TWINKLE_COUNT }");
     expect(css).not.toMatch(
       /\.atmosphere-stars-(?:primary|secondary)\s*\{[^}]*animation:/s,
     );
     expect(css).toMatch(
-      /@media \(prefers-reduced-motion: no-preference\)[\s\S]*?\.atmosphere-sparkles i\s*\{[^}]*animation:\s*atmosphere-sparkle/,
+      /@media \(prefers-reduced-motion: no-preference\)[\s\S]*?\.atmosphere-sparkles i\s*\{[^}]*animation:\s*var\(--sparkle-animation\)/,
     );
     expect(css).toMatch(
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.atmosphere-sparkles i\s*\{[^}]*animation:\s*none;/,
