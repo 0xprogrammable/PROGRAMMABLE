@@ -18,10 +18,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           Skip to content
         </a>
         <SiteHeader />
+        <MobileNavigation />
         <main id="main-content" tabIndex={-1}>
           <RouteTransition>{children}</RouteTransition>
         </main>
-        <MobileNavigation />
       </div>
     </WalletProvider>
   );

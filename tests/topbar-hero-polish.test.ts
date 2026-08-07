@@ -47,7 +47,7 @@ describe("topbar and Explore hero polish", () => {
       "https://dexscreener.com/ethereum/0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0",
     );
     expect(landing).toContain(
-      'src="/brand/platforms/dexscreener-mark-white.png"',
+      'src="/brand/platforms/dexscreener-mark-warm-ivory-v1.png"',
     );
     expect(landing).toContain('aria-label="Programmable on X"');
     expect(landing).toContain('aria-label="Programmable on GitHub"');

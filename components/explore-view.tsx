@@ -962,6 +962,7 @@ export function ExploreView() {
   const [retryKey, setRetryKey] = useState(0);
   const refreshKey = useLiveDataRefresh({ enabled: !preview });
   const activeExploreContentKey = useRef<string | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const modelDatasetCache = useRef<{
     key: string;
     payload: ExplorePayload;
@@ -1187,7 +1188,9 @@ export function ExploreView() {
   const hasPublicTokens =
     displayState.phase !== "ready" ||
     displayState.payload.total > 0 ||
-    Boolean(debouncedQuery);
+    Boolean(debouncedQuery) ||
+    socialFilter !== "all" ||
+    modelFilter !== "all";
 
   function renderTokenState() {
     if (
@@ -1253,6 +1256,7 @@ export function ExploreView() {
                 setSocialFilter("all");
                 setModelFilter("all");
                 setCurrentPage(1);
+                searchInputRef.current?.focus();
               }}
             >
               Clear filters
@@ -1332,18 +1336,19 @@ export function ExploreView() {
               )}
 
               <div className={styles.runnerMeta}>
-                <span
-                  className={styles.runnerCategory}
-                  aria-label={`Launch type ${token.launchCategory}`}
-                >
+                <span className={styles.runnerCategory}>
+                  <span className="sr-only">Launch type: </span>
                   {token.launchCategory}
                 </span>
                 {marketCapLabel ? (
-                  <span
-                    className={styles.runnerMarketCap}
-                    aria-label={`Market cap ${marketCapLabel}`}
-                  >
-                    <span className={styles.runnerMarketCapLabel}>MC</span>
+                  <span className={styles.runnerMarketCap}>
+                    <span className="sr-only">Market cap: </span>
+                    <span
+                      className={styles.runnerMarketCapLabel}
+                      aria-hidden="true"
+                    >
+                      MC
+                    </span>
                     <span className={styles.runnerMarketCapValue}>
                       {marketCapLabel}
                     </span>
@@ -1393,7 +1398,13 @@ export function ExploreView() {
     <>
       <div className={`${styles.page} explore-page page-width`}>
         <header className={styles.pageHeading}>
-          <h1>Launch tokens that work the way you imagine.</h1>
+          <h1 aria-label="Tokens that behave how you imagine">
+            <span>Tokens that behave</span>
+            <span>how you imagine</span>
+          </h1>
+          <p className={styles.pageDescription}>
+            Browse launches by model, market cap or social presence.
+          </p>
         </header>
 
         <section
@@ -1415,6 +1426,7 @@ export function ExploreView() {
                       Search tokens by name, ticker or contract address
                     </label>
                     <input
+                      ref={searchInputRef}
                       id="explore-token-search"
                       type="search"
                       autoComplete="off"
@@ -1431,6 +1443,7 @@ export function ExploreView() {
                         onClick={() => {
                           setQuery("");
                           setCurrentPage(1);
+                          searchInputRef.current?.focus();
                         }}
                       >
                         <CloseIcon aria-hidden="true" size={15} />
@@ -1587,10 +1600,12 @@ export function ExploreView() {
                       <button
                         type="button"
                         aria-label="Previous token page"
-                        disabled={activePage === 1 || busy}
-                        onClick={() =>
-                          setCurrentPage((page) => Math.max(1, page - 1))
-                        }
+                        aria-disabled={activePage === 1 || busy}
+                        disabled={activePage === 1}
+                        onClick={() => {
+                          if (busy) return;
+                          setCurrentPage((page) => Math.max(1, page - 1));
+                        }}
                       >
                         <ChevronLeft aria-hidden="true" size={15} />
                       </button>
@@ -1608,8 +1623,11 @@ export function ExploreView() {
                               aria-current={
                                 activePage === item ? "page" : undefined
                               }
-                              disabled={busy}
-                              onClick={() => setCurrentPage(item)}
+                              aria-disabled={busy}
+                              onClick={() => {
+                                if (busy) return;
+                                setCurrentPage(item);
+                              }}
                             >
                               {item}
                             </button>
@@ -1624,12 +1642,14 @@ export function ExploreView() {
                       <button
                         type="button"
                         aria-label="Next token page"
-                        disabled={activePage === pageCount || busy}
-                        onClick={() =>
+                        aria-disabled={activePage === pageCount || busy}
+                        disabled={activePage === pageCount}
+                        onClick={() => {
+                          if (busy) return;
                           setCurrentPage((page) =>
                             Math.min(pageCount, page + 1),
                           )
-                        }
+                        }}
                       >
                         <ChevronRight aria-hidden="true" size={15} />
                       </button>
@@ -1646,7 +1666,7 @@ export function ExploreView() {
 
           {hasPublicTokens ? (
             <p
-              className="sr-only"
+              className={styles.resultLabel}
               role="status"
               aria-live="polite"
               aria-atomic="true"

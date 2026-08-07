@@ -1,5 +1,7 @@
 .page {
-  color: #fffdf9;
+  --landing-ivory: #f8f0e9;
+
+  color: var(--landing-ivory);
   isolation: isolate;
   min-height: 100svh;
   overflow: hidden;
@@ -9,6 +11,7 @@
 .brandLink {
   align-items: center;
   border-radius: 16px;
+  cursor: pointer;
   display: inline-flex;
   height: 56px;
   justify-content: center;
@@ -29,7 +32,7 @@
 }
 
 .brandLink:focus-visible {
-  outline: 3px solid #fffdf9;
+  outline: 3px solid var(--landing-ivory);
   outline-offset: 4px;
 }
 
@@ -53,7 +56,7 @@
 
 .content h1 {
   align-items: center;
-  color: #fffdf9;
+  color: var(--landing-ivory);
   display: flex;
   flex-direction: column;
   font-size: clamp(60px, 8vw, 128px);
@@ -90,6 +93,7 @@
   border: 1px solid transparent;
   border-radius: 18px;
   box-sizing: border-box;
+  cursor: pointer;
   display: inline-flex;
   font-size: 16px;
   font-weight: 600;
@@ -113,20 +117,20 @@
 
 .primaryAction {
   --button-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.78),
+    inset 0 1px 0 rgba(248, 240, 233, 0.78),
     inset 0 -1px 0 rgba(144, 133, 181, 0.2),
     inset 12px 0 30px rgba(235, 127, 179, 0.06),
     0 2px 2px rgba(1, 5, 20, 0.26),
     0 10px 24px rgba(1, 5, 20, 0.14);
   background-color: rgba(248, 240, 233, 0.74);
-  border-color: rgba(255, 253, 249, 0.66);
+  border-color: rgba(248, 240, 233, 0.66);
   box-shadow: var(--button-shadow);
   color: #102840;
 }
 
 .secondaryAction {
   --button-shadow:
-    inset 0 1px 0 rgba(255, 253, 249, 0.2),
+    inset 0 1px 0 rgba(248, 240, 233, 0.2),
     inset 0 -1px 0 rgba(1, 5, 20, 0.48),
     inset -12px 0 30px rgba(235, 127, 179, 0.05),
     0 2px 2px rgba(1, 5, 20, 0.32),
@@ -134,7 +138,7 @@
   background-color: rgba(7, 17, 47, 0.62);
   border-color: rgba(244, 180, 210, 0.46);
   box-shadow: var(--button-shadow);
-  color: #fffdf9;
+  color: var(--landing-ivory);
 }
 
 .primaryAction:focus-visible,
@@ -142,7 +146,7 @@
   box-shadow:
     var(--button-shadow),
     0 0 0 6px rgba(7, 17, 47, 0.96);
-  outline: 2px solid #fffdf9;
+  outline: 2px solid var(--landing-ivory);
   outline-offset: 3px;
 }
 
@@ -157,7 +161,8 @@
 .socialLink,
 .docsLink {
   align-items: center;
-  color: rgba(255, 253, 249, 0.76);
+  color: rgba(248, 240, 233, 0.76);
+  cursor: pointer;
   display: inline-flex;
   justify-content: center;
   transition:
@@ -179,12 +184,11 @@
 }
 
 .socialLogo {
-  filter: grayscale(1) brightness(1.18);
   opacity: 0.78;
 }
 
 .utilityDivider {
-  background: rgba(255, 253, 249, 0.22);
+  background: rgba(248, 240, 233, 0.22);
   height: 16px;
   margin-inline: 4px;
   width: 1px;
@@ -203,7 +207,7 @@
 .socialLink:focus-visible,
 .docsLink:focus-visible {
   box-shadow: 0 0 0 5px rgba(7, 17, 47, 0.96);
-  outline: 2px solid #fffdf9;
+  outline: 2px solid var(--landing-ivory);
   outline-offset: 2px;
 }
 
@@ -219,19 +223,19 @@
 
   .primaryAction:hover {
     --button-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.88),
+      inset 0 1px 0 rgba(248, 240, 233, 0.88),
       inset 0 -1px 0 rgba(144, 133, 181, 0.24),
       inset 12px 0 30px rgba(235, 127, 179, 0.08),
       0 2px 2px rgba(1, 5, 20, 0.26),
       0 12px 26px rgba(1, 5, 20, 0.17);
     background-color: rgba(248, 240, 233, 0.82);
-    border-color: rgba(255, 253, 249, 0.82);
+    border-color: rgba(248, 240, 233, 0.82);
     transform: translateY(-1px);
   }
 
   .secondaryAction:hover {
     --button-shadow:
-      inset 0 1px 0 rgba(255, 253, 249, 0.26),
+      inset 0 1px 0 rgba(248, 240, 233, 0.26),
       inset 0 -1px 0 rgba(1, 5, 20, 0.52),
       inset -12px 0 30px rgba(235, 127, 179, 0.08),
       0 2px 2px rgba(1, 5, 20, 0.32),
@@ -243,7 +247,7 @@
 
   .socialLink:hover,
   .docsLink:hover {
-    color: #fffdf9;
+    color: var(--landing-ivory);
     transform: translateY(-1px);
   }
 

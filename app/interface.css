@@ -506,6 +506,33 @@ html[data-theme="dark"] .app-frame::before {
   }
 }
 
+.atmosphere-backdrop-explore .atmosphere-art img {
+  filter: brightness(0.78) saturate(0.92);
+  object-position: center bottom;
+}
+
+.atmosphere-backdrop-explore .atmosphere-veil {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.08) 0%,
+      rgba(1, 4, 16, 0.2) 42%,
+      rgba(1, 4, 16, 0.42) 100%
+    ),
+    radial-gradient(
+      circle at 50% 26%,
+      transparent 0 24%,
+      rgba(1, 4, 16, 0.16) 72%,
+      rgba(1, 4, 16, 0.3) 100%
+    );
+}
+
+@media (orientation: portrait) and (max-width: 1024px) {
+  .atmosphere-backdrop-explore .atmosphere-art img {
+    object-position: 52% bottom;
+  }
+}
+
 /* Header */
 
 .site-header {

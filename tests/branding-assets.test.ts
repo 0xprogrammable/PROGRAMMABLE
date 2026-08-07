@@ -72,7 +72,7 @@ describe("Programmable branding assets", () => {
     const css = read("app/interface.css");
 
     expect(navigation).toContain(
-      'src="/brand/loop/programmable-loop-mark-header.png"',
+      'src="/brand/loop/programmable-loop-mark-header-white-v1-1536.png"',
     );
     expect(css).toMatch(
       /\.wordmark-logo\s*{[^}]*height: 30px;[^}]*width: auto;/s,

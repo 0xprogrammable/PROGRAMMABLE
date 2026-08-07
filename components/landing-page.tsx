@@ -20,10 +20,10 @@ export function LandingPage() {
       >
         <Image
           className={styles.brandLogo}
-          src="/brand/loop/programmable-loop-mark-header.png"
+          src="/brand/loop/programmable-loop-mark-header-warm-ivory-v1-1536.png"
           alt=""
-          width={146}
-          height={192}
+          width={1168}
+          height={1536}
           sizes="44px"
           priority
         />
@@ -79,7 +79,7 @@ export function LandingPage() {
             >
               <Image
                 className={styles.socialLogo}
-                src="/brand/platforms/dexscreener-mark-white.png"
+                src="/brand/platforms/dexscreener-mark-warm-ivory-v1.png"
                 alt=""
                 width={256}
                 height={256}

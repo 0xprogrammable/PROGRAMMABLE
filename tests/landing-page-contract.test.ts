@@ -77,7 +77,7 @@ describe("landing page contract", () => {
     );
     expect(landing).toContain('aria-label="Programmable home"');
     expect(landing).toContain(
-      'src="/brand/loop/programmable-loop-mark-header.png"',
+      'src="/brand/loop/programmable-loop-mark-header-warm-ivory-v1-1536.png"',
     );
     expect(landing).toContain("Create a token");
     expect(landing).toContain("Explore tokens");
@@ -128,7 +128,11 @@ describe("landing page contract", () => {
       /\.primaryAction,[\s\S]*?min-width:\s*188px;/,
     );
     expect(styles).toMatch(
-      /\.primaryAction:focus-visible,[\s\S]*?outline:\s*2px solid #fffdf9;/,
+      /\.primaryAction:focus-visible,[\s\S]*?outline:\s*2px solid var\(--landing-ivory\);/,
+    );
+    expect(styles).toContain("--landing-ivory: #f8f0e9;");
+    expect(styles).toMatch(
+      /\.primaryAction,[\s\S]*?cursor:\s*pointer;/,
     );
     expect(styles).toMatch(
       /\.primaryAction,[\s\S]*?backdrop-filter:\s*blur\(16px\) saturate\(1\.08\);/,

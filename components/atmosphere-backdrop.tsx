@@ -26,11 +26,21 @@ const landingArt = {
 export function AtmosphereBackdrop() {
   const pathname = usePathname();
   const isLandingPage = pathname === "/";
+  const isExplorePage = pathname === "/explore";
   const art = isLandingPage ? landingArt : appSky;
-  const mobileSrcSet = art.mobileSrcSet ?? art.mobile;
+  const selectedArt = isExplorePage ? landingArt : art;
+  const mobileSrcSet = selectedArt.mobileSrcSet ?? selectedArt.mobile;
+  const routeClassName = isLandingPage
+    ? " atmosphere-backdrop-landing"
+    : isExplorePage
+      ? " atmosphere-backdrop-explore"
+      : "";
 
   return (
-    <div className="atmosphere-backdrop" aria-hidden="true">
+    <div
+      className={`atmosphere-backdrop${routeClassName}`}
+      aria-hidden="true"
+    >
       <picture className="atmosphere-layer atmosphere-art">
         <source
           media="(orientation: portrait) and (max-width: 1024px)"
@@ -39,11 +49,11 @@ export function AtmosphereBackdrop() {
           type="image/avif"
         />
         <img
-          src={art.desktop}
-          srcSet={art.desktopSrcSet}
+          src={selectedArt.desktop}
+          srcSet={selectedArt.desktopSrcSet}
           sizes="100vw"
-          width={art.width}
-          height={art.height}
+          width={selectedArt.width}
+          height={selectedArt.height}
           fetchPriority="high"
           decoding="async"
           alt=""

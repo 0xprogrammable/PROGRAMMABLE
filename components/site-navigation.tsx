@@ -37,10 +37,10 @@ export function SiteHeader() {
           <Link className="wordmark" href="/" aria-label="Programmable home">
             <Image
               className="wordmark-logo"
-              src="/brand/loop/programmable-loop-mark-header.png"
+              src="/brand/loop/programmable-loop-mark-header-white-v1-1536.png"
               alt=""
-              width={146}
-              height={192}
+              width={1168}
+              height={1536}
               sizes="32px"
               priority
             />
