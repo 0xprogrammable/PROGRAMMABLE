@@ -17,7 +17,7 @@ Fuzz profile is 1000 runs. The invariant profile is 256 runs, depth 64.
 | Compile | Clean build under the exact pinned settings | `forge build` | pass |
 | Lint | No high- or medium-severity findings in project sources | `forge lint --severity high --severity med` | see disposition table below |
 | Size | Runtime and initcode within the EIP-170 limit, with headroom stated | `forge build --sizes` | pass |
-| Static analysis | No high-severity finding; every other finding carries a technical disposition | `slither . --config-file slither.config.json` | 0 High, 7 Medium, 3 Low, 1 Informational |
+| Static analysis | No high-severity finding; every other finding carries a technical disposition | `slither . --config-file slither.config.json` | 0 High, 10 Medium, 3 Low, 2 Informational |
 | Unit / integration / fuzz / invariant | Full suite green at the declared commit | `forge test` | see counts below |
 | Pinned fork | Reproducible run against an exact mainnet block | `forge test --match-contract ForkPinnedTest` | pass |
 | Current-head fork | Compatibility with today's deployed contracts | `forge test --match-contract ForkHeadTest` | pass |
@@ -31,10 +31,10 @@ Sources under test: `src/PoolRentHook.sol`, `src/PoolRentLauncher.sol`, `src/Poo
 | --- | --: | --- | --- |
 | Launch and admission | 9 | Permission mask on the deployed address, canonical pool identity, dynamic-fee flag, seeded liquidity and default fee, single-use launcher, launcher holds no balance afterwards, rejection of a foreign currency / a foreign tick spacing / a static-fee key / a second initialization | `test/Launch.t.sol` |
 | Lifecycle smoke | 8 | All four quadrants end to end, rent reaching liquidity providers, manager setting the fee, eviction on exhaustion, and that taking the seat is never free | `test/Smoke.t.sol` |
-| Fee policy | 49 | See the mandatory-fee section below | `test/Fee.t.sol` |
+| Fee policy | 69 | See the mandatory-fee section below | `test/Fee.t.sol` |
 | Rent auction and authority | 47 | See the auction section below | `test/Auction.t.sol` |
-| Fuzz | 22 | Fee arithmetic across the full input range, swap magnitudes, bid parameters, block deltas, arbitrary `hookData` and price limits, each at 1000 runs | `test/Fuzz.t.sol` |
-| Stateful invariants | 9 invariants + explicit regressions | Solvency, conservation, liability sums, fee bounds, LP-fee bounds, exit liveness, manager consistency, no stuck value | `test/Invariants.t.sol`, `test/handlers/PoolRentHandler.sol` |
+| Fuzz | 25 | Fee arithmetic across the full input range, swap magnitudes, bid parameters, block deltas, arbitrary `hookData` and price limits, each at 1000 runs | `test/Fuzz.t.sol` |
+| Stateful invariants | 11 invariants + 9 regressions | Solvency, conservation, liability sums, fee bounds, LP-fee bounds, exit liveness, manager consistency, no stuck value | `test/Invariants.t.sol`, `test/handlers/PoolRentHandler.sol` |
 | Adversarial and failure | 28 | Misbehaving quote tokens (returns false, reverts, returns nothing, no code), a reentrant token driven against every value-moving path, foreign-PoolManager callback rejection on all four callbacks, nested-action settlement and depth, per-entry-point authentication, and a full reconstruction of hook state from emitted events alone | `test/Adversarial.t.sol` |
 | Mainnet fork | 2 | The whole lifecycle against the real PoolManager and WETH9, pinned and at head | `test/Fork.t.sol` |
 
@@ -74,6 +74,26 @@ Rounding cases proven explicitly: a charge of three wei splits as platform two /
 charge splits as `ceil(total/2)` / `floor(total/2)`; a swap whose executed quote amount is 499 wei
 accrues nothing and emits nothing; a fuzz asserts `platform + manager == charge` for every input and
 that a charge is always strictly less than the amount it is taken from.
+
+## Carried-remainder conformance
+
+The mandatory charge is accrued on a carried **numerator**, not a per-swap floored quotient, and the
+platform and project entitlements are accrued independently rather than by splitting one rounded
+total. These tests exist because flooring the combined rate once per swap destroys any entitlement
+worth less than a wei — a thousand 499-wei swaps would pay the platform nothing while the identical
+aggregate volume owes it 499 wei, and splitting an already-floored total cannot recover it.
+
+| Area | Cases |
+| --- | --- |
+| Sub-wei aggregation, all four quadrants | 1,000 swaps of 499 wei gross pay the platform exactly 499 wei, with `feeFromGross(499, PLATFORM_RATE) == 0` asserted first as the premise; the same per quadrant with the gross measured from the pool's own `Swap` event |
+| Split versus whole, all four quadrants | 25 slices against one swap of the same volume: the entitlement numerator is conserved on both branches, and where the quote side is the specified currency the payout, gross and remainder match to the wei; where per-swap AMM rounding moves the executed gross, the entitlement is asserted to follow it exactly rather than being papered over |
+| Claims | A claim clears `feeOwed` and leaves both remainders standing; a 200-swap run claimed halfway through totals the same as an uninterrupted one |
+| Partial-fill rollback | On both `beforeSwap` quadrants, a remainder is built up, a partial fill is attempted and reverts, and both remainders and both liabilities are byte-identical to before |
+| Manager turnover | A half-wei project remainder built under one manager matures into the next manager's first payout rather than being forfeited; the same across an eviction; the platform side is bit-identical with and without a manager over a 40-swap run |
+| Vacant-seat routing | With no manager, `pendingRent × DENOMINATOR + projectFeeCarry == volume × PROJECT_RATE`; a full empty → seated → empty cycle conserves both numerators across three changes of destination |
+| Clamp | When the "a charge may never consume the whole executed amount" bound withholds units, they are returned to the remainders — asserted landing on exactly `DENOMINATOR` — and paid out by the next swap, with the numerator conserved throughout |
+| Fuzz | `sum(amounts) × DENOMINATOR + finalCarry == sum(gross × rate)` over random sequences including sub-wei grosses; splitting a volume into k random pieces yields exactly the same entitlement and residual remainder; `_grossForNet` round-trips so the trader receives their exact net |
+| Invariants | `credited × DENOMINATOR + carry == Σ(gross × rate)` per side over every charged swap; the realised charge satisfies `charged × DENOMINATOR + platformCarry + projectCarry == gross × TOTAL_FEE`; every non-swap action asserts both remainders are untouched, which covers claims, handovers, evictions and the vacant path in one check |
 
 ## Rent auction and authority
 
@@ -130,6 +150,8 @@ the partial-fill failure case. The numbers in the proposal are the numbers the t
 | `unsafe-typecast` (forge lint) | Medium | `PoolRentHook._afterSwap`, `PoolRentMath.toInt128` | Twelve narrowing casts, all guarded by the branch they sit in or by an explicit bound. Each `int128 -> uint256` cast runs inside a `quoteDelta > 0` / `quoteDelta < 0` branch, so the sign is known; `PoolRentMath.toInt128` compares against `type(int128).max` and reverts before casting. The fuzz suite drives these paths across the full magnitude range at 1000 runs per property. |
 | `reentrancy-no-eth` | Medium | `PoolRentHook._afterSwap` | The only external callees are the immutable PoolManager, reached from inside its own callback while its lock is held, and the quote ERC-20. `test/Adversarial.t.sol` drives a reentrant quote token against every value-moving path and asserts the final state matches a non-reentrant sequence exactly. |
 | low-level `call` in tests | — | `test/Adversarial.t.sol`, `test/Auction.t.sol`, `test/Fee.t.sol` | Test-only, and the only way to make the assertion at all. Proving that an *absent* function is unreachable cannot be written as a typed call — it would not compile — and proving that a rejected call returned a particular error requires reading the returned selector rather than letting the revert propagate. Every such call is a negative-authorization probe against the hook, carries a one-line reason at the call site, and asserts a revert. No contract under `src/` contains a low-level call. |
+| `divide-before-multiply` | Medium | `PoolRentMath.accrue` | Deliberate and exact: `nextCarry = numerator - (amount * DENOMINATOR)` recovers the remainder from the quotient, which is the whole point of carrying the numerator. No precision is lost — the fuzz suite asserts `amount * DENOMINATOR + nextCarry == gross * rate + carry` for arbitrary inputs. |
+| `unused-return` on `accrue` previews | Medium | `PoolRentHook._previewCharge`, `_grossForNet` | The preview paths need the payable amount but must not commit a remainder; discarding `nextCarry` is what makes them side-effect free. `_commitCharge` is the only writer, and the invariant suite asserts no non-swap action moves either remainder. |
 | `cyclomatic-complexity` | Informational | `PoolRentHook._afterSwap` | The quadrant table is inherently four-way. Splitting it would hide which branch charges which currency, which is the one thing a reviewer most needs to see. |
 
 ## Evidence status

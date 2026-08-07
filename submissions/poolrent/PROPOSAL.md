@@ -197,11 +197,23 @@ and `test/Invariants.t.sol`.
 - **Hook-owned charge.** 20 bps, charged in WETH on every quadrant per the table above. Recipients:
   `programmable-platform` at `sharePpm 500000` bound to the exact immutable address, and
   `pool-manager` at `sharePpm 500000`, derived from hook state at accrual time and rotating only
-  through the permissionless auction. Rounding: exact-input / gross-output legs round **down**, so
-  the trader keeps the remainder; exact-output / gross-input legs are **grossed up** so the realised
-  rate never drifts below the declared one; the platform's half rounds **up** so per-swap rounding
-  can never leave it short, and the manager takes the remainder. A charge can never consume the whole
-  executed amount. Claims are per-beneficiary and self-scoped; there are no historic entitlement
+  through the permissionless auction. **Rounding carries the numerator, not the quotient.** Each
+  entitlement is accrued directly from the executed gross against its own persisted remainder:
+  `numerator = executedGross * rate + carry`, `amount = numerator / 1_000_000`, `carry = numerator -
+  amount * 1_000_000`, at `rate = 1000` for the platform and `1000` for the project, **independently**
+  rather than by splitting one rounded total. That distinction is what makes the entitlement exact:
+  flooring the combined 20 bps once per swap destroys any entitlement worth less than a wei, so a
+  thousand 499-wei swaps would pay the platform nothing while the identical 499,000 wei of aggregate
+  volume owes it 499 wei — and splitting an already-floored total cannot recover what flooring
+  removed. Carrying the numerator makes charging a volume as one swap and as a thousand swaps agree
+  to the wei. The exact-output legs solve for the gross that leaves the trader exactly their net,
+  bounded and failing closed rather than looping. A charge can never consume the whole executed
+  amount; a unit withheld by that bound is returned to the carry — project side first, so the
+  mandatory platform entitlement is the last thing ever reduced — rather than dropped. The remainders
+  are `platformFeeCarry` and `projectFeeCarry`, both public; this hook serves one canonical pool and
+  one quote currency and the platform owner is a compile-time constant, so each is inherently keyed by
+  `(poolId, currency, owner)`. Claiming moves `feeOwed` and never touches either, and the project
+  remainder survives a handover, an eviction and the vacant-seat path. Claims are per-beneficiary and self-scoped; there are no historic entitlement
   changes because a liability, once accrued to an address, is that address's forever. A failed
   transfer to one beneficiary reverts only that claim and blocks no other.
 - **Rent.** Not a fee on trading at all: a per-block payment by the manager, out of its own deposit,
@@ -247,11 +259,15 @@ All figures in WETH wei, at the declared 20 bps total with a 50/50 split.
    `997_004_991_562_331_100` WETH. Charge `= floor(997_004_991_562_331_100 × 2000 / 1_000_000)
    = 1_994_009_983_124_662`. The trader receives the remainder. The basis is what the pool executed,
    never what the trader requested.
-4. **Odd split.** Charge of `3` wei: platform `= ceil(3 × 500000 / 1_000_000) = 2`, manager `= 1`.
-   The platform is never short-changed, and `2 + 1 = 3` exactly — no wei is created or lost.
-5. **Rounding to zero.** A swap whose executed quote amount is `499` wei yields
-   `floor(499 × 2000 / 1_000_000) = 0`. No liability accrues, no event is emitted, and the swap
-   succeeds normally.
+4. **Sub-wei entitlements aggregate exactly.** An executed gross of `499` wei owes the platform
+   `499 × 1000 = 499_000` numerator: `0` whole wei, carry `499_000`. After a third such swap the carry
+   reaches `1_497_000`, so `1` wei is paid and `497_000` carried. Over 1,000 such swaps the platform is
+   paid exactly `499` wei — the same as one swap of `499_000` wei. Flooring each swap separately pays
+   `0`, which is the conformance defect this revision corrects.
+5. **Rounding to zero, and what it leaves behind.** A swap whose executed quote amount is `499` wei
+   pays `0` whole wei now, so no liability is booked and no accrual event is emitted, and the swap
+   succeeds normally — but `499_000` of numerator is retained on each side, so the entitlement is
+   deferred rather than destroyed.
 6. **Value conservation over a rent cycle.** A manager deposits `10e18` and bids `1e15` per block.
    Entry charges one block immediately, so `deposits` is `10e18 - 1e15` and `pendingRent` is `1e15`.
    After 50 further blocks another `50 × 1e15 = 5e16` moves across, for `5.1e16` in total, and on
