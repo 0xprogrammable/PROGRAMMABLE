@@ -21,6 +21,8 @@ import {
   PROGRAMMABLE_ACTIVE_API_VERSION,
   PROGRAMMABLE_COMPAT_API_BASE,
   PROGRAMMABLE_COMPAT_API_VERSION,
+  PROGRAMMABLE_CUSTOM_DISCOVERY_STATUS,
+  PROGRAMMABLE_CUSTOM_PUBLIC_SUBMISSION_STATUS,
   PROGRAMMABLE_DEVELOPER_REPOSITORY,
   PROGRAMMABLE_FEE_POLICY,
   PROGRAMMABLE_FEE_RECIPIENT,
@@ -454,11 +456,11 @@ export default function DeveloperDocsPage() {
         <div className={styles.statusNote}>
           <strong>Current Custom boundary</strong>
           <p>
-            Community Custom intake is {registryManifest.status}. Resolve the
-            exact registry generation, contracts, start block and specifications
-            from <a href={CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH}>the public Custom
-            Registry manifest</a>. Existing v{PROGRAMMABLE_COMPAT_API_VERSION}{" "}
-            compatibility records do not prove that open intake is live.
+            Canonical Custom discovery is {PROGRAMMABLE_CUSTOM_DISCOVERY_STATUS}{" "}
+            for finalized approved Registry launches. General public submissions
+            remain {PROGRAMMABLE_CUSTOM_PUBLIC_SUBMISSION_STATUS}. Resolve the
+            exact generation, contracts, start block and specifications from the
+            Developer API v{PROGRAMMABLE_ACTIVE_API_VERSION} manifest.
           </p>
         </div>
       </section>
@@ -540,15 +542,17 @@ export default function DeveloperDocsPage() {
         </div>
 
         <div className={styles.prelaunchNotice}>
-          <strong>Registry manifest</strong>
+          <strong>Website operations manifest</strong>
           <p>
-            The fail-closed public manifest currently reports{" "}
+            This site&apos;s fail-closed runtime manifest currently reports{" "}
             <code>{registryManifest.status}</code>, registry address{" "}
             <code>{registryAddress}</code>, start block{" "}
             <code>{registryStartBlock}</code>, ABI URL{" "}
             <code>{registryAbiUrl}</code> and public submissions{" "}
             <code>{String(registryManifest.publicSubmissionsEnabled)}</code>.
-            Do not subscribe to any address or event outside that manifest.
+            The canonical Developer API v{PROGRAMMABLE_ACTIVE_API_VERSION}{" "}
+            manifest is the source for public Registry deployments. Do not
+            subscribe to any unknown address or lookalike event.
           </p>
         </div>
 
@@ -760,12 +764,10 @@ export default function DeveloperDocsPage() {
         </details>
 
         <p className={styles.scopeNote}>
-          The v{PROGRAMMABLE_ACTIVE_API_VERSION} manifest lists only Classic
-          sources today. The Custom source is accepted only after a real registry
-          address, start block, event ABI and generation are published. Ethereum
-          is the sole live chain currently advertised; Base, BNB Chain,
-          Arbitrum and other EVM chains remain architecture targets, not live
-          claims.
+          The v{PROGRAMMABLE_ACTIVE_API_VERSION} manifest lists Classic sources
+          and the finalized Ethereum Custom Registry generation. Ethereum is the
+          sole live chain currently advertised; Base, BNB Chain, Arbitrum and
+          other EVM chains remain architecture targets, not live claims.
         </p>
       </section>
 
@@ -892,8 +894,8 @@ export default function DeveloperDocsPage() {
               bridges and third party pools are not automatically charged.
             </p>
             <small>
-              Community Custom status is {registryManifest.status}; this policy
-              alone is not proof of a live fee path.
+              Neither discovery nor intake status proves that a particular
+              fee-bearing path is live.
             </small>
           </article>
           <article>

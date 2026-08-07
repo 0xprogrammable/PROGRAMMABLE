@@ -87,15 +87,22 @@ describe("Developer documentation experience", () => {
     expect(programmableLlmsIndex).toContain("Active major: v2");
   });
 
-  it("keeps Custom provenance explicitly prelaunch and address-free", () => {
-    expect(developerPage).toContain("Community Custom intake is");
+  it("separates live discovery from prelaunch intake and website readiness", () => {
+    expect(developerPage).toContain("Canonical Custom discovery is");
+    expect(developerPage).toContain("PROGRAMMABLE_CUSTOM_DISCOVERY_STATUS");
+    expect(developerPage).toContain(
+      "PROGRAMMABLE_CUSTOM_PUBLIC_SUBMISSION_STATUS",
+    );
     expect(developerPage).toContain("CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH");
     expect(developerPage).toContain("registryManifest.contracts.registry.address");
     expect(developerDocsMarkdown).toContain(
-      "Registry address is `null`, start block is `null`",
+      "Canonical Custom discovery is **live**",
     );
     expect(developerDocsMarkdown).toContain(
-      "public Custom Registry manifest",
+      "General public submissions remain **prelaunch**",
+    );
+    expect(developerDocsMarkdown).toContain(
+      "website operations manifest",
     );
     expect(developerDocsMarkdown).toContain(
       "No Basebit, Aion or other named partner activation is implied",
@@ -106,9 +113,6 @@ describe("Developer documentation experience", () => {
       "ProgrammableCustomLaunchRegistered",
     );
     expect(workbench).not.toContain("IProgrammableCustomRegistryV1");
-    expect(developerDocsMarkdown).not.toContain(
-      "The Programmable Custom Registry is live",
-    );
   });
 
   it("documents project-only and unfamiliar market states without invented features", () => {
@@ -170,7 +174,9 @@ describe("Developer documentation experience", () => {
     expect(agentPrompt).toContain("platformId=programmable");
     expect(agentPrompt).toContain("Map category=classic to Programmable Classic");
     expect(agentPrompt).toContain("Map category=custom to Programmable Custom");
-    expect(agentPrompt).toContain("Custom Registry as prelaunch");
+    expect(agentPrompt).toContain("canonical Custom discovery as live");
+    expect(agentPrompt).toContain("general public submissions as prelaunch");
+    expect(agentPrompt).toContain("separately reports website runtime readiness");
     expect(agentPrompt).toContain("20 BPS total: 15 partner and 5 Programmable");
   });
 });
