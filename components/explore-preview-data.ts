@@ -13,7 +13,7 @@ export type ExplorePreviewProject = {
 };
 
 const PROJECT_LINKS = [
-  { kind: "website" as const, url: "https://programmable.family" },
+  { kind: "website" as const, url: "https://programmable.market" },
   { kind: "x" as const, url: "https://x.com/0xProgrammable" },
   { kind: "telegram" as const, url: "https://t.me/programmable" },
 ];
@@ -359,7 +359,7 @@ export const EXPLORE_PREVIEW_CUSTOM_PROJECT: CustomProjectExploreEntry = {
   symbol: "SIGNAL",
   description: "A reviewed Custom Hook launch with explicit post-launch authority.",
   imageUrl: "/brand/projects/common-ground-v1.webp",
-  links: [{ kind: "website", url: "https://programmable.family" }],
+  links: [{ kind: "website", url: "https://programmable.market" }],
   launchedAt: "2026-08-06T12:00:00.000Z",
   finalizedAt: "2026-08-06T12:02:00.000Z",
   chainId: "1",

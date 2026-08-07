@@ -112,7 +112,7 @@ export function buildDeveloperAgentPrompt(
   "Integrate the active Programmable launch feed into this project.",
   "",
   "Read these sources first:",
-  "1. https://programmable.family/docs/developers.md",
+  "1. https://programmable.market/docs/developers.md",
   `2. ${PROGRAMMABLE_WELL_KNOWN_URL}`,
   `3. ${PROGRAMMABLE_OPENAPI_URL}`,
   `4. ${PROGRAMMABLE_DEVELOPER_REPOSITORY}/blob/main/docs/guides/terminals-and-scanners.md`,
