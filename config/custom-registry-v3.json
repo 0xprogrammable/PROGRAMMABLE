@@ -10,7 +10,7 @@
       "status": "prelaunch",
       "publicSubmissionsEnabled": false,
       "confirmationDepth": "2",
-      "finalityDepth": "12",
+      "finalityDepth": "64",
       "registries": []
     }
   ]

@@ -1146,7 +1146,7 @@ function approval8665Manifest(): CustomRegistryDeploymentManifestV3 {
       status: "active",
       publicSubmissionsEnabled: true,
       confirmationDepth: "2",
-      finalityDepth: "12",
+      finalityDepth: "64",
       registries: [{
         registryGeneration: origin.registryGeneration,
         address: origin.registryAddress,
@@ -1566,6 +1566,8 @@ describe("Custom Registry v3 deployment manifest", () => {
         chainId: "1",
         status: "prelaunch",
         publicSubmissionsEnabled: false,
+        confirmationDepth: "2",
+        finalityDepth: "64",
         registries: [],
       }),
     ]);
@@ -1591,6 +1593,17 @@ describe("Custom Registry v3 deployment manifest", () => {
     >;
     noApproverRegistries[0]!.authorizedApprovers = [];
     expect(() => parseCustomRegistryDeploymentManifestV3(noApprovers)).toThrow();
+  });
+
+  it("rejects Ethereum Registry V1 activation below the frozen 64-block finality minimum", () => {
+    const invalid = structuredClone(approval8665Manifest()) as Record<
+      string,
+      unknown
+    >;
+    const chains = invalid.chains as Array<Record<string, unknown>>;
+    chains[0]!.finalityDepth = "12";
+
+    expect(() => parseCustomRegistryDeploymentManifestV3(invalid)).toThrow();
   });
 });
 
