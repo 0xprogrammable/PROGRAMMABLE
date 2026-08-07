@@ -23,7 +23,6 @@ describe("Liquid Glass interface system", () => {
 
   it("reuses one material across the primary product surfaces", () => {
     const sources = [
-      read("components/site-navigation.tsx"),
       read("components/explore-view.tsx"),
       read("components/profile-view.tsx"),
       read("components/launch-entry.tsx"),
@@ -37,6 +36,20 @@ describe("Liquid Glass interface system", () => {
     for (const source of sources) {
       expect(source).toContain("liquid-glass-");
     }
+  });
+
+  it("keeps global navigation frameless over the shared atmosphere", () => {
+    const navigation = read("components/site-navigation.tsx");
+    const css = read("app/interface.css");
+
+    expect(navigation).not.toContain("liquid-glass-surface");
+    expect(navigation).not.toContain("liquid-glass-distortion");
+    expect(css).toMatch(
+      /\.header-inner\s*\{[^}]*backdrop-filter:\s*none;[^}]*background:\s*transparent;[^}]*border:\s*0;[^}]*box-shadow:\s*none;/s,
+    );
+    expect(css).not.toContain(
+      ".header-inner,\n  .liquid-glass-surface,\n  .mobile-nav",
+    );
   });
 
   it("keeps distortion off large reading and workspace surfaces", () => {

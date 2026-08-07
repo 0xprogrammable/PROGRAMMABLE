@@ -4,27 +4,24 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  BookOpen,
-  Compass,
-  Plus,
-  UserRound,
-} from "lucide-react";
-import {
   GitHubBrandIcon,
   XBrandIcon,
 } from "@/components/brand-icons";
 import { WalletButton } from "@/components/wallet-provider";
 
 const desktopNavItems = [
-  { href: "/explore", label: "Explore", icon: Compass },
-  { href: "/launch", label: "Create", icon: Plus },
-  { href: "/docs/developers", label: "Docs", icon: BookOpen },
-  { href: "/profile", label: "Profile", icon: UserRound },
+  { href: "/explore", label: "Explore" },
+  { href: "/launch", label: "Create" },
+  { href: "/docs/developers", label: "Docs" },
+  { href: "/profile", label: "Profile" },
 ];
 
 const mobileNavItems = desktopNavItems;
 
 function isCurrent(pathname: string, href: string) {
+  if (href === "/docs/developers") {
+    return pathname === "/docs" || pathname.startsWith("/docs/");
+  }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -35,7 +32,7 @@ export function SiteHeader() {
 
   return (
     <header className="site-header">
-      <div className="header-inner liquid-glass-surface liquid-glass-distortion">
+      <div className="header-inner">
         <div className="header-brand">
           <Link className="wordmark" href="/" aria-label="Programmable home">
             <Image
@@ -115,7 +112,6 @@ export function MobileNavigation() {
   return (
     <nav className="mobile-nav" aria-label="Primary navigation">
       {mobileNavItems.map((item) => {
-        const Icon = item.icon;
         const current = isCurrent(pathname, item.href);
         return (
           <Link
@@ -124,7 +120,6 @@ export function MobileNavigation() {
             href={item.href}
             aria-current={current ? "page" : undefined}
           >
-            <Icon aria-hidden="true" size={19} strokeWidth={1.8} />
             <span>{item.label}</span>
           </Link>
         );

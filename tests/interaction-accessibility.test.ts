@@ -177,6 +177,7 @@ describe("interaction accessibility", () => {
       readFileSync(join(root, "app/interface.css"), "utf8"),
       readFileSync(join(root, "app/globals.css"), "utf8"),
     ];
+    const interfaceCss = styleSheets[0];
     const mobileMediaSegments = styleSheets.flatMap((css) => {
       const segments: string[] = [];
       const query = "@media (max-width: 800px)";
@@ -196,14 +197,45 @@ describe("interaction accessibility", () => {
     expect(source).toContain(
       'aria-current={current ? "page" : undefined}',
     );
-    expect(source).toContain('<Icon aria-hidden="true"');
+    expect(source).not.toContain('<Icon aria-hidden="true"');
+    expect(source).toContain("<span>{item.label}</span>");
     expect(mobileMediaSegments).toEqual(
       expect.arrayContaining([
         expect.stringMatching(
           /\.mobile-nav\s*\{[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/,
         ),
-        expect.stringMatching(/\.mobile-nav a\s*\{[^}]*min-width:\s*0/),
+        expect.stringMatching(
+          /\.mobile-nav\s*\{[^}]*background:\s*transparent;[^}]*border:\s*0;[^}]*height:\s*56px/,
+        ),
+        expect.stringMatching(
+          /\.mobile-nav a\s*\{[^}]*min-height:\s*48px;[^}]*min-width:\s*0/,
+        ),
       ]),
+    );
+    expect(interfaceCss).toMatch(
+      /\.wordmark,\s*\.header-social-link\s*\{[^}]*height:\s*44px;[^}]*width:\s*44px;/s,
+    );
+    expect(interfaceCss).toMatch(
+      /@media \(max-width: 800px\)[\s\S]*?\.header-actions \.wallet-button\s*\{[^}]*height:\s*44px;[^}]*min-height:\s*44px;/s,
+    );
+    expect(interfaceCss).toMatch(
+      /@media \(max-width: 800px\)[\s\S]*?\.mobile-nav\s*\{[^}]*inset-inline-end:\s*max\(12px, env\(safe-area-inset-right\)\);[^}]*inset-inline-start:\s*max\(12px, env\(safe-area-inset-left\)\);/s,
+    );
+    expect(interfaceCss).toMatch(
+      /@media \(max-width: 800px\)[\s\S]*?\.mobile-nav a::before\s*\{[^}]*background:\s*#fffdf9;/s,
+    );
+    expect(
+      interfaceCss.match(
+        /text-shadow:\s*-1px -1px 0 rgba\(1, 5, 20, 0\.82\),[\s\S]*?1px 1px 0 rgba\(1, 5, 20, 0\.82\),[\s\S]*?0 2px 12px rgba\(1, 5, 20, 0\.92\);/g,
+      ),
+    ).toHaveLength(2);
+    expect(
+      interfaceCss.match(
+        /box-shadow:\s*0 0 0 1px rgba\(1, 5, 20, 0\.9\),\s*0 2px 8px rgba\(1, 5, 20, 0\.72\);/g,
+      ),
+    ).toHaveLength(2);
+    expect(interfaceCss).toMatch(
+      /@media \(max-width: 370px\)[\s\S]*?\.wallet-button-compact\s*\{[^}]*min-width:\s*44px;[^}]*width:\s*44px;[^}]*\}[\s\S]*?\.wallet-button-compact > span,[\s\S]*?display:\s*none;/s,
     );
   });
 

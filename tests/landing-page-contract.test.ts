@@ -16,7 +16,7 @@ describe("landing page contract", () => {
     expect(explorePage).toContain('import { ExploreView }');
     expect(explorePage).toContain('canonical: "/explore"');
     expect(navigation).toContain(
-      '{ href: "/explore", label: "Explore", icon: Compass }',
+      '{ href: "/explore", label: "Explore" }',
     );
   });
 
