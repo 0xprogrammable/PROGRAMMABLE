@@ -112,6 +112,29 @@ contract ProgrammableCustomRegistryV2Test is Test {
         assertEq(registration.feePolicy.nativeCustomFeeBps, 0);
     }
 
+    function test_providerAttributedProjectOnlyRegistrationUsesZeroNoMarketFeeTuple() public {
+        IProgrammableCustomRegistryV1.LaunchRegistrationV1 memory registration =
+            _partnerRegistration("future-provider-project-only", _hash("provider-project-only"));
+        registration.marketPathId = bytes32(0);
+        registration.feePolicy = _noQualifyingMarketPolicy();
+        _authorizeFactoryAndApproval(registration, address(providerFactory));
+
+        providerFactory.register(registry, registration);
+
+        IProgrammableCustomRegistryV1.LaunchStateV1 memory state = registry.launchState(registration.launchId);
+        IProgrammableCustomRegistryV1.LaunchDetailsV1 memory details = registry.launchDetails(registration.launchId);
+        assertEq(uint8(state.status), uint8(IProgrammableCustomRegistryV1.LaunchStatus.Observed));
+        assertEq(details.providerId, registration.providerId);
+        assertTrue(details.templateId != bytes32(0));
+        assertEq(details.marketPathId, bytes32(0));
+        assertEq(registration.feePolicy.providerId, bytes32(0));
+        assertEq(registration.feePolicy.modelId, bytes32(0));
+        assertEq(registration.feePolicy.templateId, bytes32(0));
+        assertEq(registration.feePolicy.totalFeeBps, 0);
+        assertEq(registration.feePolicy.partner.shareBps, 0);
+        assertEq(registration.feePolicy.programmable.shareBps, 0);
+    }
+
     function test_fakeProviderTagWithoutFactoryAuthorizationFailsClosed() public {
         IProgrammableCustomRegistryV1.LaunchRegistrationV1 memory registration =
             _partnerRegistration("fake-provider-tag", _hash("fabricated-provider"));
@@ -499,6 +522,18 @@ contract ProgrammableCustomRegistryV2Test is Test {
         policy.claimIsolationEvidenceHash = _hash("partner-claim-isolation");
         policy.accountingSafetyEvidenceHash = _hash("partner-accounting-safety");
         policy.verificationEvidenceHash = _hash("partner-verification");
+    }
+
+    function _noQualifyingMarketPolicy()
+        private
+        pure
+        returns (IProgrammableCustomRegistryV1.FeePolicyV1 memory policy)
+    {
+        policy.kind = IProgrammableCustomRegistryV1.FeePolicyKind.NoQualifyingMarket;
+        policy.publicPolicyBindingHash = _hash("no-market-public-policy");
+        policy.claimIsolationEvidenceHash = _hash("no-market-claim-isolation");
+        policy.accountingSafetyEvidenceHash = _hash("no-market-accounting-safety");
+        policy.verificationEvidenceHash = _hash("no-market-verification");
     }
 
     function _activeLeg(uint16 shareBps, address recipient, string memory label)
