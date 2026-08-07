@@ -48,6 +48,8 @@
     "contracts:v2:mainnet:metamask": "PROGRAMMABLE_DEPLOY_NETWORK=mainnet node scripts/serve-v2-metamask-deployer.mjs",
     "contracts:custom-registry:mainnet:check": "node scripts/serve-custom-registry-mainnet-deployer.mjs --check",
     "contracts:custom-registry:mainnet:metamask": "node scripts/serve-custom-registry-mainnet-deployer.mjs",
+    "contracts:custom-registry:genesis:check": "node scripts/serve-custom-registry-genesis-canary.mjs --check",
+    "contracts:custom-registry:genesis:metamask": "node scripts/serve-custom-registry-genesis-canary.mjs",
     "contracts:classic-v3:mainnet:check": "node scripts/serve-classic-v3-metamask-deployer.mjs --check",
     "contracts:classic-v3:mainnet:metamask": "node scripts/serve-classic-v3-metamask-deployer.mjs",
     "contracts:classic-v3:sepolia:check": "CLASSIC_V3_RELEASE_NETWORK=sepolia node scripts/serve-classic-v3-metamask-deployer.mjs --check",
