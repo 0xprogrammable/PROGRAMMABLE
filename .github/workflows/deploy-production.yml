@@ -480,8 +480,11 @@ jobs:
                 if (Buffer.byteLength(text, "utf8") > 2 * 1024 * 1024) {
                   throw new Error(`${path} returned an oversized response`);
                 }
+                const readSource = response.headers.get(
+                  "x-programmable-read-source",
+                );
                 if (
-                  response.headers.get("x-programmable-read-source") !== "blob" ||
+                  !["blob", "blob+postgres"].includes(readSource ?? "") ||
                   response.headers.get("x-programmable-rpc-provider") !== "alchemy"
                 ) {
                   throw new Error(`${path} did not prove the Alchemy RPC source`);

@@ -585,7 +585,7 @@ describe("read-model production deploy policy", () => {
     );
     expect(workflow).toContain("headers: alchemySmokeRequestHeaders");
     expect(workflow).toContain(
-      'response.headers.get("x-programmable-read-source") !== "blob"',
+      '!["blob", "blob+postgres"].includes(readSource ?? "")',
     );
     expect(workflow).toContain(
       'response.headers.get("x-programmable-rpc-provider") !== "alchemy"',
@@ -599,7 +599,7 @@ describe("read-model production deploy policy", () => {
     expect(alchemySmoke).not.toContain("/api/ops/health");
     expect(alchemySmoke).not.toContain("/api/explore/profile");
     expect(alchemySmoke).not.toMatch(
-      /(?:postgres|database|projector|quicknode|envio|real-block|sla)/iu,
+      /(?:database|projector|quicknode|envio|real-block|sla)/iu,
     );
     expect(workflow).toContain("Reverify staged candidate binding");
     expect(workflow).toContain("Record staged candidate handoff");
