@@ -49,6 +49,21 @@ function promotedReleaseEnvironment(
   });
 }
 
+function currentProductionEnvironment(
+  overrides: Record<string, string | undefined> = {},
+) {
+  return {
+    PROGRAMMABLE_PROJECTOR_BINDING_MODE: "release",
+    PROGRAMMABLE_PROJECTOR_ENVIO_MIRROR_COMMIT:
+      "0a064ec0a32a0e48bf6751fa18f025504267c6b7",
+    PROGRAMMABLE_ENVIO_GRAPHQL_URL:
+      "https://indexer.hyperindex.xyz/f6714ef/v1/graphql",
+    PROGRAMMABLE_PROJECTOR_ENVIO_REDACTED_IDENTITY:
+      "envio:production-92f6373",
+    ...overrides,
+  };
+}
+
 function canonicalCandidateBinding() {
   return loadCandidateProjectorRuntimeBinding({
     env: candidateEnvironment(),
@@ -112,7 +127,7 @@ describe("candidate projector runtime binding", () => {
     });
   });
 
-  it("leaves the canonical candidate release binding unchanged", () => {
+  it("leaves the canonical production release binding unchanged", () => {
     const production = getDataPipelineReleaseBinding();
     const before = structuredClone(production);
     loadCandidateProjectorRuntimeBinding({
@@ -121,7 +136,43 @@ describe("candidate projector runtime binding", () => {
     });
 
     expect(production).toEqual(before);
-    expect(production.envio.deploymentLabel).toBe("production-7f24e63");
+    expect(production.envio.deploymentLabel).toBe("production-92f6373");
+  });
+
+  it("selects only the exact current Envio production deployment", () => {
+    const production = getDataPipelineReleaseBinding();
+
+    expect(selectProjectorRuntimeBinding({
+      env: currentProductionEnvironment(),
+      canonicalBinding: production,
+    })).toMatchObject({
+      mode: "release",
+      releaseBinding: {
+        envio: {
+          deploymentLabel: "production-92f6373",
+          graphqlEndpoint:
+            "https://indexer.hyperindex.xyz/f6714ef/v1/graphql",
+          sourceCommit: "92f63731ff0a61601a649cf40ceba3e492f63c62",
+          eventCount: 66,
+        },
+      },
+      candidate: null,
+      promotedDatabase: null,
+    });
+
+    for (const [name, value] of [
+      ["PROGRAMMABLE_ENVIO_GRAPHQL_URL",
+        "https://indexer.hyperindex.xyz/d7a39a2/v1/graphql"],
+      ["PROGRAMMABLE_PROJECTOR_ENVIO_REDACTED_IDENTITY",
+        "envio:production-7f24e63"],
+      ["PROGRAMMABLE_PROJECTOR_ENVIO_MIRROR_COMMIT",
+        "7ffd15c2a28c481a2d3632e30b315262c2471b2e"],
+    ] as const) {
+      expect(() => selectProjectorRuntimeBinding({
+        env: currentProductionEnvironment({ [name]: value }),
+        canonicalBinding: production,
+      })).toThrow();
+    }
   });
 
   it("selects legacy, candidate-backfill, and promoted-release bindings without mutable globals", () => {

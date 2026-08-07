@@ -85,7 +85,7 @@ describe("Envio candidate deployment evidence", () => {
     ).toBe(artifacts.candidateAudit.authenticatedCoordinatorCreatorRepairs);
   });
 
-  it("preserves pre-promotion evidence while the canonical release selects the candidate", async () => {
+  it("preserves historical pre-promotion evidence after the canonical release advances", async () => {
     const evidence = await readJson(evidencePath);
     const prepared = evidence.historicalPreparation as Record<string, unknown>;
     const candidate = evidence.candidate as Record<string, unknown>;
@@ -106,9 +106,16 @@ describe("Envio candidate deployment evidence", () => {
     expect(active.deploymentLabel).toBe(rollback.deployment);
     expect(active.endpoint).toBe(rollback.graphqlEndpoint);
     expect(active.sourceCommit).toBe(rollback.sourceCommit);
-    expect(envio.deploymentLabel).toBe(candidate.deploymentLabel);
-    expect(envio.graphqlEndpoint).toBe(candidate.endpoint);
-    expect(envio).toMatchObject(candidate.identity as Record<string, unknown>);
+    expect(envio).toMatchObject({
+      deploymentLabel: "production-92f6373",
+      graphqlEndpoint: "https://indexer.hyperindex.xyz/f6714ef/v1/graphql",
+      sourceCommit: "92f63731ff0a61601a649cf40ceba3e492f63c62",
+      eventCount: 66,
+    });
+    expect(envio.deploymentLabel).not.toBe(candidate.deploymentLabel);
+    expect(envio.sourceCommit).not.toBe(
+      (candidate.identity as Record<string, unknown>).sourceCommit,
+    );
   });
 
   it("records inventory, repairs and the rejected deployment explicitly", async () => {

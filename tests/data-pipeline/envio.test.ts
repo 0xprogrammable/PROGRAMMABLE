@@ -920,7 +920,7 @@ describe("Envio progress adapter", () => {
       client.readProgress({ requiredBlock: "25650002" }),
     ).resolves.toEqual({
       chainId: 1,
-      deployment: "production-7f24e63",
+      deployment: "production-92f6373",
       schemaVersion: "1",
       progressBlock: "25650010",
       bufferBlock: "25650010",
