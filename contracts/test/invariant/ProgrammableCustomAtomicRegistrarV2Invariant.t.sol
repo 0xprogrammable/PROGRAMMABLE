@@ -7,6 +7,9 @@ import { StdInvariant } from "forge-std/StdInvariant.sol";
 import { ProgrammableCustomAtomicRegistrarV1 } from "../../src/ProgrammableCustomAtomicRegistrarV1.sol";
 import { ProgrammableCustomAtomicRegistrarV2 } from "../../src/ProgrammableCustomAtomicRegistrarV2.sol";
 import { ProgrammableCustomExecutionPolicyRegistryV2 } from "../../src/ProgrammableCustomExecutionPolicyRegistryV2.sol";
+import {
+    ProgrammableCustomExecutionPolicyRevisionRegistryV2
+} from "../../src/ProgrammableCustomExecutionPolicyRevisionRegistryV2.sol";
 import { ProgrammableCustomFeePolicyVerifierV2 } from "../../src/ProgrammableCustomFeePolicyVerifierV2.sol";
 import { ProgrammableCustomPartnerFactoryRegistryV2 } from "../../src/ProgrammableCustomPartnerFactoryRegistryV2.sol";
 import { ProgrammableCustomRegistryV1 } from "../../src/ProgrammableCustomRegistryV1.sol";
@@ -37,6 +40,7 @@ contract ProgrammableCustomAtomicRegistrarV2Handler {
     ProgrammableCustomRegistryV2 public immutable registry;
     ProgrammableCustomFeePolicyVerifierV2 public immutable verifier;
     ProgrammableCustomAtomicRegistrarV2 public immutable registrar;
+    ProgrammableCustomExecutionPolicyRegistryV2 public immutable executionPolicyRegistry;
 
     uint256 public forcedTotal;
     bytes32[] internal launchedIds;
@@ -44,11 +48,13 @@ contract ProgrammableCustomAtomicRegistrarV2Handler {
     constructor(
         ProgrammableCustomRegistryV2 registry_,
         ProgrammableCustomFeePolicyVerifierV2 verifier_,
-        ProgrammableCustomAtomicRegistrarV2 registrar_
+        ProgrammableCustomAtomicRegistrarV2 registrar_,
+        ProgrammableCustomExecutionPolicyRegistryV2 executionPolicyRegistry_
     ) payable {
         registry = registry_;
         verifier = verifier_;
         registrar = registrar_;
+        executionPolicyRegistry = executionPolicyRegistry_;
     }
 
     function forceFund(uint96 rawAmount) external {
@@ -90,7 +96,7 @@ contract ProgrammableCustomAtomicRegistrarV2Handler {
         request.registration.deploymentConfigurationHash = registrar.computeAtomicRequestCommitment(request);
         IProgrammableCustomExecutionPolicyV2.TradeCapabilityV1 memory capability =
             registrar.unsupportedTradeCapabilityV1(request.registration);
-        request.registration.capabilitySetHash = registrar.computeTradeCapabilityHashV1(capability);
+        request.registration.capabilitySetHash = executionPolicyRegistry.computeTradeCapabilityHashV1(capability);
         _rebind(request.registration);
     }
 
@@ -203,13 +209,27 @@ contract ProgrammableCustomAtomicRegistrarV2Invariant is StdInvariant, Test {
         vm.chainId(1);
         vm.roll(100);
         ProgrammableCustomFeePolicyVerifierV2 verifier = new ProgrammableCustomFeePolicyVerifierV2();
-        ProgrammableCustomPartnerFactoryRegistryV2 partnerRegistry =
-            new ProgrammableCustomPartnerFactoryRegistryV2(2 days, address(0xB001), address(0xB002), address(0xB003));
         uint256 currentNonce = vm.getNonce(address(this));
-        address predictedRegistry = vm.computeCreateAddress(address(this), currentNonce + 1);
-        address predictedRegistrar = vm.computeCreateAddress(address(this), currentNonce + 2);
+        address predictedRevisionRegistry = vm.computeCreateAddress(address(this), currentNonce + 2);
+        address predictedRegistry = vm.computeCreateAddress(address(this), currentNonce + 3);
+        address predictedRegistrar = vm.computeCreateAddress(address(this), currentNonce + 4);
+        ProgrammableCustomPartnerFactoryRegistryV2 partnerRegistry = new ProgrammableCustomPartnerFactoryRegistryV2(
+            2 days, address(0xB001), address(0xB002), address(0xB003), predictedRegistrar
+        );
         ProgrammableCustomExecutionPolicyRegistryV2 executionPolicyRegistry = new ProgrammableCustomExecutionPolicyRegistryV2(
-            IProgrammableCustomRegistryV1(predictedRegistry), partnerRegistry, predictedRegistrar
+            IProgrammableCustomRegistryV1(predictedRegistry),
+            partnerRegistry,
+            predictedRegistrar,
+            predictedRevisionRegistry
+        );
+        ProgrammableCustomExecutionPolicyRevisionRegistryV2 revisionRegistry = new ProgrammableCustomExecutionPolicyRevisionRegistryV2(
+            IProgrammableCustomRegistryV1(predictedRegistry),
+            executionPolicyRegistry,
+            2 days,
+            ADMIN,
+            APPROVER,
+            CORRECTOR,
+            REVOKER
         );
         registry = new ProgrammableCustomRegistryV2(
             ProgrammableCustomRegistryV1.RegistryConfigV1({
@@ -218,7 +238,7 @@ contract ProgrammableCustomAtomicRegistrarV2Invariant is StdInvariant, Test {
                 initialApprover: APPROVER,
                 initialWriter: predictedRegistrar,
                 initialFinalizer: FINALIZER,
-                initialCorrector: CORRECTOR,
+                initialCorrector: address(revisionRegistry),
                 initialRevoker: REVOKER,
                 registryGeneration: 2,
                 minimumFinalityBlocks: 3,
@@ -227,12 +247,15 @@ contract ProgrammableCustomAtomicRegistrarV2Invariant is StdInvariant, Test {
             }),
             partnerRegistry,
             verifier,
-            executionPolicyRegistry
+            executionPolicyRegistry,
+            revisionRegistry
         );
-        registrar = new ProgrammableCustomAtomicRegistrarV2(registry, executionPolicyRegistry);
+        registrar = new ProgrammableCustomAtomicRegistrarV2(registry, executionPolicyRegistry, partnerRegistry);
         assertEq(address(registrar), predictedRegistrar);
         vm.deal(address(this), 1000 ether);
-        handler = new ProgrammableCustomAtomicRegistrarV2Handler{ value: 1000 ether }(registry, verifier, registrar);
+        handler = new ProgrammableCustomAtomicRegistrarV2Handler{ value: 1000 ether }(
+            registry, verifier, registrar, executionPolicyRegistry
+        );
 
         bytes32 approverRole = registry.APPROVER_ROLE();
         vm.prank(ADMIN);

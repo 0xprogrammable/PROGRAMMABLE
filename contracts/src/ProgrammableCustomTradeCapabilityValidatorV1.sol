@@ -9,8 +9,6 @@ library ProgrammableCustomTradeCapabilityValidatorV1 {
         keccak256("programmable.trade-capability.runtime-drift-revokes-execution.v1");
     bytes32 internal constant SYNC_TRANSFER_SETTLE_POLICY =
         keccak256("programmable.v4.settlement.sync-transfer-settle.v1");
-    bytes32 internal constant EMPTY_MARKET_DATA_METRIC_SET_HASH =
-        0x7b5384e78f1bd4310c1264ebe06d19b2fc61f8ff2781748daa2e14df0387082a;
     error InvalidMarketDataSource(bytes32 field, uint256 index);
     error InvalidTradeCapability(bytes32 field, uint256 index);
     error RuntimeCodeHashMismatch(address target, bytes32 supplied, bytes32 actual);
@@ -33,7 +31,7 @@ library ProgrammableCustomTradeCapabilityValidatorV1 {
         ) revert InvalidTradeCapability(bytes32("market-set"), type(uint256).max);
 
         capabilityHash = ProgrammableCustomTradeCapabilityLibV1.capabilityHash(capability);
-        bool hasActiveExecutableRoute;
+        bool hasDeclaredExecutableRoute;
         for (uint256 index; index < capability.routes.length; index++) {
             IProgrammableCustomExecutionPolicyV2.TradeRouteV1 memory route = capability.routes[index];
             if (
@@ -44,12 +42,12 @@ library ProgrammableCustomTradeCapabilityValidatorV1 {
                 _validateUnsupportedRoute(route, index);
             } else {
                 _validateExecutableRoute(route, index);
-                if (!route.paused && !route.retired && route.activationBlock <= block.number) {
-                    hasActiveExecutableRoute = true;
+                if (!route.paused && !route.retired) {
+                    hasDeclaredExecutableRoute = true;
                 }
             }
         }
-        if (capability.executionEnabled != hasActiveExecutableRoute) {
+        if (capability.executionEnabled != hasDeclaredExecutableRoute) {
             revert InvalidTradeCapability(bytes32("execution-enabled"), type(uint256).max);
         }
 
@@ -69,19 +67,21 @@ library ProgrammableCustomTradeCapabilityValidatorV1 {
         if (
             route.adapterId != bytes32(0) || route.adapterVersion != bytes32(0) || route.executionTarget != address(0)
                 || route.executionTargetRuntimeCodeHash != bytes32(0) || route.proxy
+                || route.proxyKind != IProgrammableCustomExecutionPolicyV2.ProxyKindV1.None
+                || route.proxyBindingEvidenceHash != bytes32(0) || route.proxyPolicyHash != bytes32(0)
                 || route.implementation != address(0) || route.implementationRuntimeCodeHash != bytes32(0)
-                || route.admin != address(0) || route.adminRuntimeCodeHash != bytes32(0)
-                || route.executionSelector != bytes4(0) || route.interfaceId != bytes4(0)
-                || route.poolManager != address(0) || route.poolManagerRuntimeCodeHash != bytes32(0)
-                || route.permit2 != address(0) || route.permit2RuntimeCodeHash != bytes32(0)
-                || route.beforeSwapReturnDeltaEnabled || route.callerAllowlistHash != bytes32(0)
-                || route.plannerCommandPolicyHash != bytes32(0) || route.hookDataPolicyHash != bytes32(0)
-                || route.calldataPolicyHash != bytes32(0) || route.valuePolicyHash != bytes32(0)
-                || route.recipientPolicyHash != bytes32(0) || route.deadlinePolicyHash != bytes32(0)
-                || route.slippagePolicyHash != bytes32(0) || route.permit2PolicyHash != bytes32(0)
-                || route.deltaAccountingPolicyHash != bytes32(0) || route.settlementPolicyHash != bytes32(0)
-                || route.nonstandardTokenPolicyHash != bytes32(0) || route.dependencyRuntimeCodeSetHash != bytes32(0)
-                || route.configurationHash != bytes32(0)
+                || route.admin != address(0) || route.adminRuntimeCodeHash != bytes32(0) || route.beacon != address(0)
+                || route.beaconRuntimeCodeHash != bytes32(0) || route.executionSelector != bytes4(0)
+                || route.interfaceId != bytes4(0) || route.poolManager != address(0)
+                || route.poolManagerRuntimeCodeHash != bytes32(0) || route.permit2 != address(0)
+                || route.permit2RuntimeCodeHash != bytes32(0) || route.beforeSwapReturnDeltaEnabled
+                || route.callerAllowlistHash != bytes32(0) || route.plannerCommandPolicyHash != bytes32(0)
+                || route.hookDataPolicyHash != bytes32(0) || route.calldataPolicyHash != bytes32(0)
+                || route.valuePolicyHash != bytes32(0) || route.recipientPolicyHash != bytes32(0)
+                || route.deadlinePolicyHash != bytes32(0) || route.slippagePolicyHash != bytes32(0)
+                || route.permit2PolicyHash != bytes32(0) || route.deltaAccountingPolicyHash != bytes32(0)
+                || route.settlementPolicyHash != bytes32(0) || route.nonstandardTokenPolicyHash != bytes32(0)
+                || route.dependencyRuntimeCodeSetHash != bytes32(0) || route.configurationHash != bytes32(0)
         ) revert InvalidTradeCapability(bytes32("unsupported"), index);
 
         _validateReadCapability(
@@ -114,8 +114,11 @@ library ProgrammableCustomTradeCapabilityValidatorV1 {
         if (route.mode == IProgrammableCustomExecutionPolicyV2.TradeExecutionModeV1.Standard) {
             if (
                 route.adapterId != bytes32(0) || route.adapterVersion != bytes32(0) || route.proxy
+                    || route.proxyKind != IProgrammableCustomExecutionPolicyV2.ProxyKindV1.None
+                    || route.proxyBindingEvidenceHash != bytes32(0) || route.proxyPolicyHash != bytes32(0)
                     || route.implementation != address(0) || route.implementationRuntimeCodeHash != bytes32(0)
                     || route.admin != address(0) || route.adminRuntimeCodeHash != bytes32(0)
+                    || route.beacon != address(0) || route.beaconRuntimeCodeHash != bytes32(0)
                     || route.poolManager == address(0) || route.permit2 == address(0)
                     || route.settlementPolicyHash != SYNC_TRANSFER_SETTLE_POLICY
             ) revert InvalidTradeCapability(bytes32("standard"), index);
@@ -146,16 +149,33 @@ library ProgrammableCustomTradeCapabilityValidatorV1 {
         }
         _requireRuntime(route.implementation, route.implementationRuntimeCodeHash, bytes32("implementation"));
         if (route.proxy) {
-            if (route.implementation == route.executionTarget || route.admin == address(0)) {
+            if (
+                route.proxyKind == IProgrammableCustomExecutionPolicyV2.ProxyKindV1.None
+                    || route.proxyBindingEvidenceHash == bytes32(0) || route.proxyPolicyHash == bytes32(0)
+                    || route.implementation == route.executionTarget
+            ) {
                 revert InvalidTradeCapability(bytes32("proxy"), index);
             }
-            if (route.adminRuntimeCodeHash != bytes32(0)) {
-                _requireRuntime(route.admin, route.adminRuntimeCodeHash, bytes32("admin"));
+            if (route.proxyKind == IProgrammableCustomExecutionPolicyV2.ProxyKindV1.Eip1967Admin) {
+                if (
+                    route.admin == address(0) || route.beacon != address(0) || route.beaconRuntimeCodeHash != bytes32(0)
+                ) revert InvalidTradeCapability(bytes32("eip1967-admin"), index);
+                _requireAuthorityRuntime(route.admin, route.adminRuntimeCodeHash, bytes32("admin"));
+            } else if (route.proxyKind == IProgrammableCustomExecutionPolicyV2.ProxyKindV1.Eip1967Beacon) {
+                if (route.admin != address(0) || route.adminRuntimeCodeHash != bytes32(0)) {
+                    revert InvalidTradeCapability(bytes32("eip1967-beacon-admin"), index);
+                }
+                _requireRuntime(route.beacon, route.beaconRuntimeCodeHash, bytes32("beacon"));
+            } else {
+                revert InvalidTradeCapability(bytes32("proxy-kind"), index);
             }
         } else if (
-            route.implementation != route.executionTarget
+            route.proxyKind != IProgrammableCustomExecutionPolicyV2.ProxyKindV1.None
+                || route.proxyBindingEvidenceHash != bytes32(0) || route.proxyPolicyHash != bytes32(0)
+                || route.implementation != route.executionTarget
                 || route.implementationRuntimeCodeHash != route.executionTargetRuntimeCodeHash
-                || route.admin != address(0) || route.adminRuntimeCodeHash != bytes32(0)
+                || route.admin != address(0) || route.adminRuntimeCodeHash != bytes32(0) || route.beacon != address(0)
+                || route.beaconRuntimeCodeHash != bytes32(0)
         ) {
             revert InvalidTradeCapability(bytes32("non-proxy"), index);
         }
@@ -201,10 +221,14 @@ library ProgrammableCustomTradeCapabilityValidatorV1 {
         if (
             source.marketId == bytes32(0) || source.sourceId == bytes32(0) || source.startBlock == 0
                 || source.filterHash == bytes32(0) || source.metricsHash == bytes32(0)
-                || source.metricsHash == EMPTY_MARKET_DATA_METRIC_SET_HASH || source.derivationPolicyHash == bytes32(0)
-                || source.configurationHash == bytes32(0) || source.evidenceHash == bytes32(0)
+                || source.derivationPolicyHash == bytes32(0) || source.configurationHash == bytes32(0)
+                || source.evidenceHash == bytes32(0)
         ) {
             revert InvalidMarketDataSource(bytes32("source-identity"), index);
+        }
+        bytes32 actualMetricsHash = ProgrammableCustomTradeCapabilityLibV1.marketDataMetricSetHash(source.metricIds);
+        if (source.metricsHash != actualMetricsHash) {
+            revert InvalidMarketDataSource(bytes32("metrics"), index);
         }
 
         if (source.kind == IProgrammableCustomExecutionPolicyV2.MarketDataSourceKindV1.Event) {
@@ -237,17 +261,34 @@ library ProgrammableCustomTradeCapabilityValidatorV1 {
             if (
                 source.implementation != address(0) || source.implementationRuntimeCodeHash != bytes32(0)
                     || source.admin != address(0) || source.adminRuntimeCodeHash != bytes32(0)
+                    || source.proxyKind != IProgrammableCustomExecutionPolicyV2.ProxyKindV1.None
+                    || source.proxyBindingEvidenceHash != bytes32(0) || source.proxyPolicyHash != bytes32(0)
+                    || source.beacon != address(0) || source.beaconRuntimeCodeHash != bytes32(0)
             ) revert InvalidMarketDataSource(bytes32("non-proxy"), index);
             return;
         }
 
-        if (source.implementation == address(0) || source.implementation == sourceTarget || source.admin == address(0))
-        {
+        if (
+            source.proxyKind == IProgrammableCustomExecutionPolicyV2.ProxyKindV1.None
+                || source.proxyBindingEvidenceHash == bytes32(0) || source.proxyPolicyHash == bytes32(0)
+                || source.implementation == address(0) || source.implementation == sourceTarget
+        ) {
             revert InvalidMarketDataSource(bytes32("proxy"), index);
         }
         _requireRuntime(source.implementation, source.implementationRuntimeCodeHash, bytes32("source-implementation"));
-        if (source.adminRuntimeCodeHash != bytes32(0)) {
-            _requireRuntime(source.admin, source.adminRuntimeCodeHash, bytes32("source-admin"));
+        if (source.proxyKind == IProgrammableCustomExecutionPolicyV2.ProxyKindV1.Eip1967Admin) {
+            if (source.admin == address(0) || source.beacon != address(0) || source.beaconRuntimeCodeHash != bytes32(0))
+            {
+                revert InvalidMarketDataSource(bytes32("eip1967-admin"), index);
+            }
+            _requireAuthorityRuntime(source.admin, source.adminRuntimeCodeHash, bytes32("source-admin"));
+        } else if (source.proxyKind == IProgrammableCustomExecutionPolicyV2.ProxyKindV1.Eip1967Beacon) {
+            if (source.admin != address(0) || source.adminRuntimeCodeHash != bytes32(0)) {
+                revert InvalidMarketDataSource(bytes32("eip1967-beacon-admin"), index);
+            }
+            _requireRuntime(source.beacon, source.beaconRuntimeCodeHash, bytes32("source-beacon"));
+        } else {
+            revert InvalidMarketDataSource(bytes32("proxy-kind"), index);
         }
 
         // The proxy runtime remains independently bound even when implementation/admin identities are supplied.
@@ -281,5 +322,14 @@ library ProgrammableCustomTradeCapabilityValidatorV1 {
         }
         bytes32 actual = target.codehash;
         if (actual != expected) revert RuntimeCodeHashMismatch(target, expected, actual);
+    }
+
+    function _requireAuthorityRuntime(address target, bytes32 expected, bytes32 field) private view {
+        if (target == address(0)) revert InvalidTradeCapability(field, type(uint256).max);
+        if (target.code.length == 0) {
+            if (expected != bytes32(0)) revert InvalidTradeCapability(field, type(uint256).max);
+            return;
+        }
+        _requireRuntime(target, expected, field);
     }
 }

@@ -52,26 +52,28 @@ const generationTwoContracts = [
   ["ProgrammableCustomFeePolicyVerifierV2", "ProgrammableCustomFeePolicyVerifierV2.sol"],
   ["ProgrammableCustomPartnerFactoryRegistryV2", "ProgrammableCustomPartnerFactoryRegistryV2.sol"],
   ["ProgrammableCustomExecutionPolicyRegistryV2", "ProgrammableCustomExecutionPolicyRegistryV2.sol"],
+  ["ProgrammableCustomExecutionPolicyRevisionRegistryV2", "ProgrammableCustomExecutionPolicyRevisionRegistryV2.sol"],
   ["ProgrammableCustomRegistryV2", "ProgrammableCustomRegistryV2.sol"],
   ["ProgrammableCustomAtomicRegistrarV2", "ProgrammableCustomAtomicRegistrarV2.sol"],
 ];
 const expectedGenerationTwoArtifactFileHashes = new Map([
-  ["CUSTOM_REGISTRY_EVENT_SET_V2.json", "sha256:cc5b78cc4557909aade5df7ffd614c567ac069219ea0fc7db82bfb657bf159c5"],
-  ["CUSTOM_REGISTRY_TRADE_CAPABILITY_V1_GOLDEN_VECTORS.json", "sha256:8a35e3d8b6c597b5d209d8c3c244166d9c1948955ac6ba214c66972980fb7dce"],
-  ["abi/ProgrammableCustomRegistryV2.json", "sha256:4c0330ee055bbd27f395deb7e4c001f27a49a65752a00426840b99f7d6a5dc64"],
-  ["abi/ProgrammableCustomPartnerFactoryRegistryV2.json", "sha256:054b5d2740314335d202e37d405273cbb9d0922398cbc2909e7cb7cee845061e"],
-  ["abi/ProgrammableCustomFeePolicyVerifierV2.json", "sha256:0bc9bdda4a1e78e2c498568ddfa164b35c3cb5c297f563dd4771935e75304f62"],
-  ["abi/ProgrammableCustomExecutionPolicyRegistryV2.json", "sha256:071ee1474a7f78aef9d843e880ae5a19f312ee8a566c5501d3f2a059d8d85116"],
-  ["abi/ProgrammableCustomAtomicRegistrarV2.json", "sha256:a48974ccacc97e3b9fcfafd52cdfac1d187a9183eac1a65d5d26221a75561214"],
+  ["CUSTOM_REGISTRY_EVENT_SET_V2.json", "sha256:20724d1652169d4639ed452f91b43b188ba81da44352236b8ba5c889f527b85c"],
+  ["CUSTOM_REGISTRY_TRADE_CAPABILITY_V1_GOLDEN_VECTORS.json", "sha256:c16bc3a33efbb44d4473d89279d5c28a16a321c946ba6b16933ad0ba64b7e924"],
+  ["abi/ProgrammableCustomRegistryV2.json", "sha256:22da28a286141a7ce2a40f8d0e6df25f3bc8ea1f5b98d171ef3ec72bc29f0cb7"],
+  ["abi/ProgrammableCustomPartnerFactoryRegistryV2.json", "sha256:7b947c6daea5ff7246eaa357f19680719f030cb85d0413e07f41f48c9a994c9e"],
+  ["abi/ProgrammableCustomFeePolicyVerifierV2.json", "sha256:702549e5b400e23ec1fac7f58ade143d205299b41289069879d95c38981f6151"],
+  ["abi/ProgrammableCustomExecutionPolicyRegistryV2.json", "sha256:c4b60026a71fdce20b21201fac2774e48c581bde81c7a16cdec28a654cd2518f"],
+  ["abi/ProgrammableCustomExecutionPolicyRevisionRegistryV2.json", "sha256:3d34770bb729f4afb08d765a9b7faa951da221040d0982d2c768db65f7d3ea22"],
+  ["abi/ProgrammableCustomAtomicRegistrarV2.json", "sha256:f6c2a46a1ca4decf327fb2e47f0f55fb39f6f004bdaf3d7c5525b57b9cfb73e4"],
 ]);
 const expectedGenerationTwoEventSetHash =
-  "sha256:be36b4977143371149695aa8a8702aef56b08ef4b756640d0e0070252c24ee57";
+  "sha256:1fce77eed87ebb4e09838448b282960586bcaab4f441e62e17c9b45b2ae1b46f";
 const expectedGenerationTwoArtifactSetHash =
-  "sha256:fc9d1487c476165675f5d2d12569e33f70b9a3289982c56252607f38849c60b9";
+  "sha256:691c1345becc591fd3020702bd627d3545f371d3fef973d16cf3945941d7ffe7";
 const expectedTradeCapabilityGoldenSemanticHash =
-  "sha256:da03a4562a19f7800933d9657a5ea3895c01a33ca149954850d846f83b202530";
+  "sha256:e34bab905d179337446b1f81a3c45cfc455fd4c63735600fddde04d2dc66a59e";
 const expectedGenerationTwoReleaseCandidateFileHash =
-  "sha256:e8b57809f08747d5971ebe240e1fa78773b4d2c4b7344a5146db76887f13ea29";
+  "sha256:4862d89ed0967a2df56b67810bdb5a61960b875109b46d9d95b4a470e050fd76";
 const expectedGenerationTwoBuilds = new Map([
   [
     "ProgrammableCustomFeePolicyVerifierV2",
@@ -87,47 +89,72 @@ const expectedGenerationTwoBuilds = new Map([
   [
     "ProgrammableCustomPartnerFactoryRegistryV2",
     {
-      sourceSha256: "sha256:e81544a2c30ffb35179f2e701fe54def0b5ac9bac5d4f7086d5b173905f03432",
-      sourceKeccak256: "0x6ea53c4c2a6b57213b857fa0782354ca12fd8cdb156e8d8fdba14de1cb4a8cc2",
-      artifactBindingHash: "sha256:79fda2123cb0bd797df7242cb2d9ecd3f5ab66a6248e1f4b8f7435031a2b3e1d",
-      creationCodeSha256: "sha256:08f2932717866515d80ea1434588a0b2955b5cdcae37316e664fc37a74f09324",
-      runtimeCodeSha256: "sha256:7688773e4d394c0d6c3544a0842adc9b87a5cff2a0a2d437999f6ada59b1b907",
-      runtimeCodeKeccak256: "0x990af413455471779a9a1b76bf75943dabf95fdcc2821889c132f6c363aecde6",
+      sourceSha256: "sha256:92672baef9081e4946c6c9105a2d46236cb6314b62bacb76fc823251f9ee9cc1",
+      sourceKeccak256: "0xb391e5d32d65ba38fe9dca32007651c009ad5e22f406d2d40d427c56af957c0a",
+      artifactBindingHash: "sha256:b3ded6c29b2e22b65719effb399b137311d81da3c366a80f8fe38d1da4d84f80",
+      creationCodeSha256: "sha256:757fb91fc6584950f931f3a70ed351ab7ec3f4b93ee5ecabff9ce6cb5af7715b",
+      runtimeCodeSha256: "sha256:3add0de65416316007b11c19f62d9e68a2707097e5164c3bc6e3c8faf39dacab",
+      runtimeCodeKeccak256: "0x3adea701dc7c5a107c8d9309a5d7f3f97ed5ddd2a248051d59defe3a608938aa",
     },
   ],
   [
     "ProgrammableCustomExecutionPolicyRegistryV2",
     {
-      sourceSha256: "sha256:2df71df700b795c5da57117bba456f626afbb57652bbc4dace21fd3a6da2bb36",
-      sourceKeccak256: "0x3c4eb392ac4b014b9f94681f6e7b77e087c8d07f3f14415cd632534f78b2cf9c",
-      artifactBindingHash: "sha256:605cc165f0daa4169dbe1769c607a4f3685715a5c3fbfbc77700aacacd1d09f0",
-      creationCodeSha256: "sha256:032b13a25c015f13eed364d9dc6df4593c6dfb90c88e0709dd1bc9442154f667",
-      runtimeCodeSha256: "sha256:3c1c7853e5bdc5d06d0a16b6d1dd80400ab0a36014866654148dc528035d3e5d",
-      runtimeCodeKeccak256: "0xbbb8dc3938ebefc3318702ebfcc1e36c667c347eb736a1badf2a26d0ea4cd9dc",
+      sourceSha256: "sha256:ada1c5b8715c45daa4f39370d8e2b68e6c3dae5fd069f0f4fb2ceb49a92597f8",
+      sourceKeccak256: "0x080009e4b26f6f81dbcdff657646470d6124620cdfbfe0cb97444a285268ce25",
+      artifactBindingHash: "sha256:69d5bf8aacd2f8a82eeef90736bffcbf5f6775708ed80b82457d7d693514964e",
+      creationCodeSha256: "sha256:6de116cbf569cfa6609dd1d66208cbf277b3c99f72af518b63251473993db1d0",
+      runtimeCodeSha256: "sha256:034f57f639e09665c3fb3d3cbbf83624f6b4384de1f798a6fb87b0e396023416",
+      runtimeCodeKeccak256: "0xa03007368d4d1a05dccfa6eda78acae2188392cddec62628fc677ae995e8da58",
+    },
+  ],
+  [
+    "ProgrammableCustomExecutionPolicyRevisionRegistryV2",
+    {
+      sourceSha256: "sha256:7162c74f60ace5c375068b8f1094af3b62001a2e7112483e0293ea20d6f71892",
+      sourceKeccak256: "0x3f78151c667db6bc5e7181ffc3d6f1ad8e52bd0a30a3e9d6977d3958748781f2",
+      artifactBindingHash: "sha256:19666d52a7163ede815f50f5ee44cb75c542a859e4ed99ed0222799793767705",
+      creationCodeSha256: "sha256:ebd5b38ad022a096e0b7bf6d540f3ee4794654a17d368166aeafe9d1926a0e3b",
+      runtimeCodeSha256: "sha256:082b38392b55d5a9042a18fcc051376c1de135b5fa91677271423ecabe5b1fc2",
+      runtimeCodeKeccak256: "0xc6a81e8a8befcfb57a7359c5460966b7ae772b0e1bf299a9bcf598304ff3bad4",
     },
   ],
   [
     "ProgrammableCustomRegistryV2",
     {
-      sourceSha256: "sha256:2de88274f88b9819fa3e5f2988dddf8f21d4e6ad202428b884eb67496196df05",
-      sourceKeccak256: "0x19b8751be5a0cf147b4b51a0527705cbc7220651ea29dc06a5e4640aa2501135",
-      artifactBindingHash: "sha256:2cefde29b9beece34370ad9c2b5377d0691059ef08ff9e4c4023584d3bc613f7",
-      creationCodeSha256: "sha256:843f49a3b34cd2dd2769797d2ae899910d32aeab5b3fbcf5484ac9840befacfe",
-      runtimeCodeSha256: "sha256:4284b637af80a0a157a71dc52640a9ce06deb96b3a05c17f7e57e6aed248ea63",
-      runtimeCodeKeccak256: "0x7ff88b8da1d3bdc62608a33b2c2592249d005e802a38284267729274de38d347",
+      sourceSha256: "sha256:9e7e27289fba4fef56be04696ca3d237248f53b37dbc15a8ce0a5771910b57c9",
+      sourceKeccak256: "0x69fca14501b9da7a4735d80a5e0ea61f7daee6a6db741d774fc0a155197c5602",
+      artifactBindingHash: "sha256:35790ee6281dcfc853099fa500566ba951393bbc7a63ab39b9936f87766243d1",
+      creationCodeSha256: "sha256:df0b739f30e2bbe0606d2b28997cc5f6da5935b1eb31ec51333368be3e151ab6",
+      runtimeCodeSha256: "sha256:9eb08b91181b641e054159cc9c8ec6831ae5501d21d90995775b3ac951f902cb",
+      runtimeCodeKeccak256: "0x4ce3f21506e3804e0d544efb2d14074c9ff4cfafa3f814f78f2ffcaa1c10333a",
     },
   ],
   [
     "ProgrammableCustomAtomicRegistrarV2",
     {
-      sourceSha256: "sha256:87dcd6dc88e7638abba093b7e63619dff643a7771ef6395f3b3f78785e73bf14",
-      sourceKeccak256: "0xe3a541fcfa0e17e091efedb3df83494ec61eba5862ff9e982dd0fab86ebac953",
-      artifactBindingHash: "sha256:6bb0a4b63401584ef09a57f74ef052d2ad451a6b7651567673eba0b8766cbcc8",
-      creationCodeSha256: "sha256:e5b740da4ff73640c8d3e18c041849965b386d1d94452e05b7e9822f7f9be7e6",
-      runtimeCodeSha256: "sha256:3a7ae093a3a01338f592081288c0719fc180ef1a5079b372725b705c25b85102",
-      runtimeCodeKeccak256: "0x4b35dd0f02cc34898575d7a028c0d68e96dcfe9d76cbe6660477ea334f28e6af",
+      sourceSha256: "sha256:23b7fb556a24849a2d2be3fbc1f0aa84ec71a17814ce12c53d621e3826e5560c",
+      sourceKeccak256: "0xdf76315936c8a059a0a76671cc0ea51341a8551dc8f0dfd9643f9f5c6fca417d",
+      artifactBindingHash: "sha256:b498806923a0c3f37272e93517e25afb88e444c08c81f733d33c2aeb98b30aa5",
+      creationCodeSha256: "sha256:b92085fa4fd8965d77aad3f852c280b13e51856b7d66928a68882c326be7008f",
+      runtimeCodeSha256: "sha256:b2215c101336aeda180af505508f3582f1e16bbdfb0a36d9259cb62ec6c3c800",
+      runtimeCodeKeccak256: "0x9dffd1b205a490d8db9af4ff15799136d1a2b3f1c40aa43ca1af64976aed5bd5",
     },
   ],
+]);
+const generationTwoEmitterByContract = new Map([
+  ["ProgrammableCustomFeePolicyVerifierV2", null],
+  ["ProgrammableCustomPartnerFactoryRegistryV2", "partnerFactoryRegistry"],
+  ["ProgrammableCustomExecutionPolicyRegistryV2", "executionPolicyRegistry"],
+  ["ProgrammableCustomExecutionPolicyRevisionRegistryV2", "executionPolicyRevisionRegistry"],
+  ["ProgrammableCustomRegistryV2", "registry"],
+  ["ProgrammableCustomAtomicRegistrarV2", "atomicRegistrar"],
+]);
+const revisionInterfaceOnlyEvents = new Set([
+  "CustomLaunchExecutionPolicyBoundV2",
+  "CustomLaunchExecutionRouteBoundV2",
+  "CustomLaunchMarketDataSourceBoundV2",
+  "CustomLaunchMarketDataMetricsBoundV2",
 ]);
 
 function fail(message) {
@@ -375,6 +402,7 @@ for (const [name, source] of generationTwoContracts) {
   const artifact = readJson(join(root, "contracts", "out", source, `${name}.json`));
   const publishedAbi = readJson(join(securityRoot, "abi", `${name}.json`));
   const expectedBuild = expectedGenerationTwoBuilds.get(name);
+  if (expectedBuild === undefined) fail(`Generation 2 expected build binding missing: ${name}`);
   if (canonical(artifact.abi) !== canonical(publishedAbi)) {
     fail(`Generation 2 published ABI drift from Forge output: ${name}`);
   }
@@ -413,21 +441,28 @@ for (const [name, source] of generationTwoContracts) {
     ...actualBuild,
   });
 
-  if (name === "ProgrammableCustomFeePolicyVerifierV2") continue;
-  const emitter =
-    name === "ProgrammableCustomRegistryV2"
-      ? "registry"
-      : name === "ProgrammableCustomPartnerFactoryRegistryV2"
-        ? "partnerFactoryRegistry"
-        : name === "ProgrammableCustomExecutionPolicyRegistryV2"
-          ? "executionPolicyRegistry"
-          : "atomicRegistrar";
+  if (!generationTwoEmitterByContract.has(name)) fail(`Generation 2 emitter mapping missing: ${name}`);
+  const emitter = generationTwoEmitterByContract.get(name);
+  if (emitter === null) continue;
   for (const item of artifact.abi) {
     if (item.type !== "event" || (!item.name.startsWith("Custom") && !item.name.startsWith("Atomic"))) {
       continue;
     }
+    if (
+      name === "ProgrammableCustomExecutionPolicyRevisionRegistryV2"
+      && revisionInterfaceOnlyEvents.has(item.name)
+    ) continue;
     const signature = eventSignature(item);
-    generationTwoBuiltEvents.push({ emitter, signature, topic0: topic0(signature) });
+    generationTwoBuiltEvents.push({
+      emitter,
+      signature,
+      topic0: topic0(signature),
+      inputs: item.inputs.map(({ name: inputName, type, indexed }) => ({
+        name: inputName,
+        type,
+        indexed,
+      })),
+    });
   }
 }
 
@@ -442,6 +477,8 @@ const tradeCapabilityGoldenSemanticValue = {
   domains: tradeCapabilityGoldenVectors.domains,
   ordering: tradeCapabilityGoldenVectors.ordering,
   selectors: tradeCapabilityGoldenVectors.selectors,
+  selectorPreimages: tradeCapabilityGoldenVectors.selectorPreimages,
+  tupleOrder: tradeCapabilityGoldenVectors.tupleOrder,
   preimages: tradeCapabilityGoldenVectors.preimages,
   hashes: tradeCapabilityGoldenVectors.hashes,
   events: tradeCapabilityGoldenVectors.events,
@@ -454,18 +491,29 @@ if (
   tradeCapabilityGoldenVectors.schemaVersion !== "programmable.trade-capability-golden-vectors.v1"
   || tradeCapabilityGoldenVectors.semanticHash !== actualTradeCapabilityGoldenSemanticHash
   || actualTradeCapabilityGoldenSemanticHash !== expectedTradeCapabilityGoldenSemanticHash
-  || tradeCapabilityGoldenVectors.selectors?.deployInitializeRegisterAndBindTradeCapabilityV1 !== "0x0ae882ed"
-  || tradeCapabilityGoldenVectors.selectors?.bindTradeCapabilityV1 !== "0x4eb3cb48"
+  || tradeCapabilityGoldenVectors.selectors?.deployInitializeRegisterAndBindTradeCapabilityV1 !== "0x02562444"
+  || tradeCapabilityGoldenVectors.selectors?.launchPartnerFactoryRegisterAndBindTradeCapabilityV2 !== "0xd3bc499c"
+  || tradeCapabilityGoldenVectors.selectors?.bindTradeCapabilityV1 !== "0x515b4f17"
+  || tradeCapabilityGoldenVectors.selectors?.authorizeTradeCapabilityRevisionV1 !== "0xbabc8b86"
+  || tradeCapabilityGoldenVectors.selectors?.correctAndBindRevisionV1 !== "0x1f2708f5"
   || tradeCapabilityGoldenVectors.hashes?.emptyMarketSetHash
     !== "0xbd6f28a96b79921f21d91177e262ccb903f8cee746201feb41bcd74385ae3eef"
   || tradeCapabilityGoldenVectors.hashes?.capabilityHash
-    !== "0x772dad1715e737c3e8f7390576869606dc6a8608fe0e4b0fd7a46e4a16cc32d8"
+    !== "0x19a4c583304c9a59eb6239f660bd188f88fb9116d87d79e131054a0d8d98340b"
   || tradeCapabilityGoldenVectors.hashes?.directMetricSetHash
     !== "0xf3e9aada876355d21cdbbc03cecd9c9d23f2a8a3ef9644a6d38c21fd05650eaf"
   || tradeCapabilityGoldenVectors.hashes?.proxyMetricSetHash
     !== "0x6e54d472f4b24c9c2c54eb7f582349bca14e21dce5c2ecfe345a75ce1a34dccd"
   || tradeCapabilityGoldenVectors.hashes?.emptyMetricSetHash
     !== "0x7b5384e78f1bd4310c1264ebe06d19b2fc61f8ff2781748daa2e14df0387082a"
+  || tradeCapabilityGoldenVectors.preimages?.marketEventAbi?.topic0
+    !== "0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f"
+  || tradeCapabilityGoldenVectors.preimages?.marketEventAbi?.eventAbiHash
+    !== "0x1f78f08e9f5b4cc333d23763649077ecf88c57fc71d45bc351e5041ecabf7ec7"
+  || tradeCapabilityGoldenVectors.preimages?.marketEventFilter?.filterHash
+    !== "0x0c1fb95e388d80a8e44f4385b55c6a0ca53f81c34fa4339ae3b246dccf6b1887"
+  || tradeCapabilityGoldenVectors.preimages?.marketDataDerivation?.derivationPolicyHash
+    !== "0xafa2d5423e506aa7bfd536bbfd10eb2fec4b23219557a053af7be2a52019c330"
 ) fail("Generation 2 trade-capability golden-vector semantic drift");
 const tradeCapabilityGoldenFileHash = sha256Bytes(tradeCapabilityGoldenVectorsBytes);
 
@@ -488,11 +536,17 @@ if (generationTwoEventSet.domain !== "programmable.custom-registry-event-set.v2"
   fail("Generation 2 event-set domain drift");
 }
 const generationTwoManifestKeys = new Set();
+const generationTwoEmitterTopics = new Set();
 for (const event of generationTwoEventSet.events) {
   const key = `${event.emitter}|${event.signature}`;
   if (generationTwoManifestKeys.has(key)) fail(`duplicate Generation 2 event manifest row: ${key}`);
   generationTwoManifestKeys.add(key);
   if (topic0(event.signature) !== event.topic0) fail(`Generation 2 topic drift: ${event.signature}`);
+  const emitterTopic = `${event.emitter}|${event.topic0}`;
+  if (generationTwoEmitterTopics.has(emitterTopic)) {
+    fail(`duplicate Generation 2 emitter/topic row: ${emitterTopic}`);
+  }
+  generationTwoEmitterTopics.add(emitterTopic);
 }
 for (const event of generationTwoBuiltEvents) {
   const key = `${event.emitter}|${event.signature}`;
@@ -501,6 +555,7 @@ for (const event of generationTwoBuiltEvents) {
   );
   if (row === undefined) fail(`Generation 2 built event missing from manifest: ${key}`);
   if (row.topic0 !== event.topic0) fail(`Generation 2 built topic mismatch: ${key}`);
+  if (canonical(row.inputs) !== canonical(event.inputs)) fail(`Generation 2 event layout mismatch: ${key}`);
 }
 if (generationTwoManifestKeys.size !== generationTwoBuiltEvents.length) {
   fail("Generation 2 event manifest contains an event absent from the built ABIs");
@@ -533,10 +588,11 @@ if (sha256Bytes(readFileSync(generationTwoReleaseCandidatePath)) !== expectedGen
 }
 const generationTwoReleaseCandidate = readJson(generationTwoReleaseCandidatePath);
 const expectedReleaseContractNames = {
-  registry: "ProgrammableCustomRegistryV2",
-  partnerFactoryRegistry: "ProgrammableCustomPartnerFactoryRegistryV2",
   feePolicyVerifier: "ProgrammableCustomFeePolicyVerifierV2",
+  partnerFactoryRegistry: "ProgrammableCustomPartnerFactoryRegistryV2",
   executionPolicyRegistry: "ProgrammableCustomExecutionPolicyRegistryV2",
+  executionPolicyRevisionRegistry: "ProgrammableCustomExecutionPolicyRevisionRegistryV2",
+  registry: "ProgrammableCustomRegistryV2",
   atomicRegistrar: "ProgrammableCustomAtomicRegistrarV2",
 };
 if (
@@ -547,6 +603,10 @@ if (
   || generationTwoReleaseCandidate.minimumSupportedPublicApiVersion !== 2
   || generationTwoReleaseCandidate.registryRecordProducerVersion !== 4
   || generationTwoReleaseCandidate.release?.artifactSetHash !== expectedGenerationTwoArtifactSetHash
+  || generationTwoReleaseCandidate.release?.eventSetFileHash
+    !== expectedGenerationTwoArtifactFileHashes.get("CUSTOM_REGISTRY_EVENT_SET_V2.json")
+  || generationTwoReleaseCandidate.release?.eventSetSemanticHash !== expectedGenerationTwoEventSetHash
+  || generationTwoReleaseCandidate.release?.eventDeclarationCount !== generationTwoBuiltEvents.length
   || generationTwoReleaseCandidate.release?.tradeCapabilityGoldenVectorsFileHash
     !== tradeCapabilityGoldenFileHash
   || generationTwoReleaseCandidate.release?.tradeCapabilityGoldenVectorsSemanticHash
@@ -562,11 +622,33 @@ if (
   || generationTwoReleaseCandidate.chain?.chainId !== null
   || generationTwoReleaseCandidate.chain?.caip2 !== null
   || generationTwoReleaseCandidate.chain?.chainProfileHash !== null
+  || generationTwoReleaseCandidate.compatibility?.generationOneModified !== false
+  || generationTwoReleaseCandidate.compatibility?.closedPublicV2LaunchObjectModified !== false
+  || generationTwoReleaseCandidate.compatibility?.tradeCapabilityExposure !== "linked-versioned-resource"
+  || canonical(generationTwoReleaseCandidate.execution?.providerFactoryExecutionProxyKinds) !== canonical(["none"])
 ) fail("Generation 2 release-candidate manifest drift");
+let releaseDeploymentOrder = 0;
 for (const [key, expectedName] of Object.entries(expectedReleaseContractNames)) {
+  releaseDeploymentOrder += 1;
   const entry = generationTwoReleaseCandidate.contracts?.[key];
+  const expectedBuild = expectedGenerationTwoBuilds.get(expectedName);
+  const source = generationTwoContracts.find(([name]) => name === expectedName)?.[1];
+  const artifact = readJson(join(root, "contracts", "out", source, `${expectedName}.json`));
+  const runtimeSize = exactHexBytes(artifact.deployedBytecode?.object, `${expectedName} runtime code`).length;
+  const initcodeSize = exactHexBytes(artifact.bytecode?.object, `${expectedName} creation code`).length;
   if (
     entry?.name !== expectedName
+    || entry.deploymentOrder !== releaseDeploymentOrder
+    || entry.source !== `src/${source}`
+    || entry.sourceSha256 !== expectedBuild.sourceSha256
+    || entry.sourceKeccak256 !== expectedBuild.sourceKeccak256
+    || entry.artifactBindingHash !== expectedBuild.artifactBindingHash
+    || entry.creationCodeSha256 !== expectedBuild.creationCodeSha256
+    || entry.runtimeCodeSha256 !== expectedBuild.runtimeCodeSha256
+    || entry.candidateRuntimeCodeKeccak256 !== expectedBuild.runtimeCodeKeccak256
+    || entry.runtimeSizeBytes !== runtimeSize
+    || entry.initcodeSizeBytes !== initcodeSize
+    || entry.abiFileSha256 !== expectedGenerationTwoArtifactFileHashes.get(`abi/${expectedName}.json`)
     || entry.address !== null
     || entry.startBlock !== null
     || entry.deploymentTransactionHash !== null

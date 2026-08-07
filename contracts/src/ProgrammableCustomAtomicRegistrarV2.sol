@@ -6,9 +6,12 @@ import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.s
 
 import { ProgrammableCustomAtomicRegistrarV1 } from "./ProgrammableCustomAtomicRegistrarV1.sol";
 import { ProgrammableCustomExecutionPolicyRegistryV2 } from "./ProgrammableCustomExecutionPolicyRegistryV2.sol";
+import { ProgrammableCustomPartnerFactoryRegistryV2 } from "./ProgrammableCustomPartnerFactoryRegistryV2.sol";
 import { ProgrammableCustomTradeCapabilityLibV1 } from "./ProgrammableCustomTradeCapabilityLibV1.sol";
-import { ProgrammableCustomTradeCapabilityValidatorV1 } from "./ProgrammableCustomTradeCapabilityValidatorV1.sol";
 import { IProgrammableCustomExecutionPolicyV2 } from "./interfaces/IProgrammableCustomExecutionPolicyV2.sol";
+import {
+    IProgrammableCustomPartnerFactoryRegistryV2
+} from "./interfaces/IProgrammableCustomPartnerFactoryRegistryV2.sol";
 import { IProgrammableCustomRegistryV1 } from "./interfaces/IProgrammableCustomRegistryV1.sol";
 
 /// @title ProgrammableCustomAtomicRegistrarV2
@@ -17,6 +20,11 @@ import { IProgrammableCustomRegistryV1 } from "./interfaces/IProgrammableCustomR
 ///      preserving the balance that predates a launch. Every successful path also binds the mandatory Generation 2
 ///      execution-policy companion; a binding failure rolls the deployment, initialization and registration back.
 contract ProgrammableCustomAtomicRegistrarV2 is ReentrancyGuard {
+    struct PartnerFactoryLaunchRequestV2 {
+        IProgrammableCustomRegistryV1.LaunchRegistrationV1 registration;
+        bytes factoryCalldata;
+    }
+
     bytes32 public constant ATOMIC_REQUEST_DOMAIN = keccak256("programmable.custom-atomic-request.v1");
     bytes32 public constant UNSUPPORTED_TRADE_EVIDENCE = keccak256("programmable.trade-capability.unsupported.v1");
     /// @notice Canonical hash of an empty ordered `programmable.trade-market-set.v1` vector.
@@ -32,6 +40,8 @@ contract ProgrammableCustomAtomicRegistrarV2 is ReentrancyGuard {
     IProgrammableCustomRegistryV1 public immutable REGISTRY;
     // slither-disable-next-line naming-convention
     ProgrammableCustomExecutionPolicyRegistryV2 public immutable EXECUTION_POLICY_REGISTRY;
+    // slither-disable-next-line naming-convention
+    ProgrammableCustomPartnerFactoryRegistryV2 public immutable PARTNER_FACTORY_REGISTRY;
 
     event AtomicCustomLaunchExecutedV1(
         bytes32 indexed launchId,
@@ -41,9 +51,21 @@ contract ProgrammableCustomAtomicRegistrarV2 is ReentrancyGuard {
         bytes32 initializationResultHash
     );
 
+    event AtomicPartnerCustomLaunchExecutedV2(
+        bytes32 indexed launchId,
+        bytes32 indexed configurationHash,
+        address indexed providerFactory,
+        address primaryContract,
+        bytes4 launchSelector,
+        uint256 launchValue,
+        bytes32 launchCalldataHash,
+        bytes32 launchResultHash
+    );
+
     error AtomicRequestBindingMismatch(bytes32 supplied, bytes32 actual);
     error InitializationFailed(bytes32 returnDataHash);
     error InitializationResultHashMismatch(bytes32 supplied, bytes32 actual);
+    error InvalidPartnerFactoryBinding(bytes32 field);
     error InvalidRegistry();
     error InvalidTradeCapability(bytes32 field, uint256 index);
     error LaunchWalletMismatch(address caller, address launchWallet);
@@ -56,7 +78,8 @@ contract ProgrammableCustomAtomicRegistrarV2 is ReentrancyGuard {
 
     constructor(
         IProgrammableCustomRegistryV1 registry,
-        ProgrammableCustomExecutionPolicyRegistryV2 executionPolicyRegistry
+        ProgrammableCustomExecutionPolicyRegistryV2 executionPolicyRegistry,
+        ProgrammableCustomPartnerFactoryRegistryV2 partnerFactoryRegistry
     ) {
         if (address(registry) == address(0) || address(registry).code.length == 0) revert InvalidRegistry();
         if (
@@ -64,8 +87,14 @@ contract ProgrammableCustomAtomicRegistrarV2 is ReentrancyGuard {
                 || address(executionPolicyRegistry.REGISTRY()) != address(registry)
                 || executionPolicyRegistry.ATOMIC_REGISTRAR() != address(this)
         ) revert InvalidRegistry();
+        if (
+            address(partnerFactoryRegistry) == address(0) || address(partnerFactoryRegistry).code.length == 0
+                || partnerFactoryRegistry.REGISTRAR() != address(this)
+                || address(executionPolicyRegistry.PARTNER_FACTORY_REGISTRY()) != address(partnerFactoryRegistry)
+        ) revert InvalidRegistry();
         REGISTRY = registry;
         EXECUTION_POLICY_REGISTRY = executionPolicyRegistry;
+        PARTNER_FACTORY_REGISTRY = partnerFactoryRegistry;
     }
 
     function predictAddress(bytes32 salt, bytes32 creationCodeHash) external view returns (address) {
@@ -80,14 +109,6 @@ contract ProgrammableCustomAtomicRegistrarV2 is ReentrancyGuard {
         bytes32 creationCodeHash = keccak256(request.creationCode);
         address predicted = Create2.computeAddress(request.salt, creationCodeHash);
         return _atomicRequestCommitment(request, predicted, creationCodeHash);
-    }
-
-    function computeTradeCapabilityHashV1(IProgrammableCustomExecutionPolicyV2.TradeCapabilityV1 calldata capability)
-        external
-        pure
-        returns (bytes32)
-    {
-        return ProgrammableCustomTradeCapabilityLibV1.capabilityHash(capability);
     }
 
     function unsupportedTradeCapabilityV1(IProgrammableCustomRegistryV1.LaunchRegistrationV1 calldata registration)
@@ -118,6 +139,72 @@ contract ProgrammableCustomAtomicRegistrarV2 is ReentrancyGuard {
         primaryContract = _deployInitializeAndRegister(request, capability);
     }
 
+    /// @notice Same-transaction partner-factory launch, Registry registration and initial policy binding.
+    /// @dev The provider factory is an exact approved call target but never a Registry writer.
+    function launchPartnerFactoryRegisterAndBindTradeCapabilityV2(
+        PartnerFactoryLaunchRequestV2 calldata request,
+        IProgrammableCustomExecutionPolicyV2.TradeCapabilityV1 calldata capability
+    ) external payable nonReentrant returns (address primaryContract) {
+        uint256 preexistingBalance = address(this).balance - msg.value;
+        IProgrammableCustomRegistryV1.LaunchRegistrationV1 calldata registration = request.registration;
+        if (msg.sender != registration.launchWallet) {
+            revert LaunchWalletMismatch(msg.sender, registration.launchWallet);
+        }
+        if (registration.providerId == bytes32(0)) {
+            revert InvalidPartnerFactoryBinding(bytes32("provider-id"));
+        }
+        if (registration.feePolicy.kind == IProgrammableCustomRegistryV1.FeePolicyKind.NoQualifyingMarket) {
+            _validateProviderProjectOnly(registration, capability);
+        } else if (registration.feePolicy.kind != IProgrammableCustomRegistryV1.FeePolicyKind.PartnerTemplate) {
+            revert InvalidPartnerFactoryBinding(bytes32("partner-policy"));
+        }
+
+        IProgrammableCustomPartnerFactoryRegistryV2.ProviderFactoryBindingV2 memory binding =
+            PARTNER_FACTORY_REGISTRY.providerFactoryBinding(registration.configurationHash);
+        _validatePartnerBinding(registration, request.factoryCalldata, binding);
+        if (msg.value != binding.launchValue) revert ValueMismatch(msg.value, binding.launchValue);
+        if (registration.primaryContract.code.length != 0) {
+            revert InvalidPartnerFactoryBinding(bytes32("target-already-exists"));
+        }
+
+        bool success;
+        bytes memory result;
+        // The target, value and complete calldata are immutable approval inputs. The guard covers this external call
+        // and all following Registry writes, so callback re-entry cannot consume another approval.
+        // slither-disable-next-line arbitrary-send-eth,low-level-calls
+        (success, result) = binding.providerFactory.call{ value: binding.launchValue }(request.factoryCalldata);
+        if (!success) revert InitializationFailed(keccak256(result));
+        if (result.length != 32 || keccak256(result) != binding.launchResultHash) {
+            revert InitializationResultHashMismatch(binding.launchResultHash, keccak256(result));
+        }
+        primaryContract = abi.decode(result, (address));
+        if (primaryContract != registration.primaryContract) {
+            revert PredictedAddressMismatch(primaryContract, registration.primaryContract);
+        }
+        bytes32 actualRuntimeCodeHash = primaryContract.codehash;
+        if (
+            primaryContract.code.length == 0 || actualRuntimeCodeHash != registration.primaryRuntimeCodeHash
+                || actualRuntimeCodeHash != binding.expectedPrimaryRuntimeCodeHash
+        ) {
+            revert RuntimeCodeHashMismatch(primaryContract, registration.primaryRuntimeCodeHash, actualRuntimeCodeHash);
+        }
+
+        REGISTRY.registerLaunch(registration);
+        EXECUTION_POLICY_REGISTRY.bindTradeCapabilityV1(capability, registration);
+        if (address(this).balance != preexistingBalance) revert ResidualValue(address(this).balance);
+
+        emit AtomicPartnerCustomLaunchExecutedV2(
+            registration.launchId,
+            registration.configurationHash,
+            binding.providerFactory,
+            primaryContract,
+            binding.launchSelector,
+            binding.launchValue,
+            binding.launchCalldataHash,
+            binding.launchResultHash
+        );
+    }
+
     function _deployInitializeAndRegister(
         ProgrammableCustomAtomicRegistrarV1.AtomicLaunchRequestV1 calldata request,
         IProgrammableCustomExecutionPolicyV2.TradeCapabilityV1 memory capability
@@ -126,7 +213,6 @@ contract ProgrammableCustomAtomicRegistrarV2 is ReentrancyGuard {
         // unrelated ETH delivered earlier, including through SELFDESTRUCT without invoking this contract.
         uint256 preexistingBalance = address(this).balance - msg.value;
         (address predicted, bytes32 creationCodeHash) = _validateRequest(request);
-        _validateTradeCapability(request.registration, capability);
 
         primaryContract = Create2.deploy(request.constructorValue, request.salt, request.creationCode);
         if (primaryContract == address(0)) revert PredictedAddressMismatch(address(0), predicted);
@@ -179,19 +265,40 @@ contract ProgrammableCustomAtomicRegistrarV2 is ReentrancyGuard {
         }
     }
 
-    function _validateTradeCapability(
+    function _validatePartnerBinding(
         IProgrammableCustomRegistryV1.LaunchRegistrationV1 calldata registration,
-        IProgrammableCustomExecutionPolicyV2.TradeCapabilityV1 memory capability
+        bytes calldata factoryCalldata,
+        IProgrammableCustomPartnerFactoryRegistryV2.ProviderFactoryBindingV2 memory binding
     ) private view {
-        if (capability.launchId != registration.launchId) {
-            revert InvalidTradeCapability(bytes32("launch-id"), type(uint256).max);
+        if (
+            binding.launchId != registration.launchId || binding.approvalId != registration.approvalId
+                || binding.expectedPrimaryContract != registration.primaryContract
+                || binding.expectedPrimaryRuntimeCodeHash != registration.primaryRuntimeCodeHash
+        ) revert InvalidPartnerFactoryBinding(bytes32("launch-binding"));
+        if (factoryCalldata.length < 4 || bytes4(factoryCalldata[:4]) != binding.launchSelector) {
+            revert InvalidPartnerFactoryBinding(bytes32("selector"));
         }
-        bytes32 actual = ProgrammableCustomTradeCapabilityValidatorV1.validate(
-            capability, registration.chainId, registration.registryGeneration
-        );
-        if (registration.capabilitySetHash != actual) {
-            revert TradeCapabilityBindingMismatch(registration.capabilitySetHash, actual);
+        if (keccak256(factoryCalldata) != binding.launchCalldataHash) {
+            revert InvalidPartnerFactoryBinding(bytes32("calldata"));
         }
+        if (
+            binding.providerFactory == address(0) || binding.providerFactory.code.length == 0
+                || binding.providerFactory.codehash != binding.providerFactoryRuntimeCodeHash
+        ) revert InvalidPartnerFactoryBinding(bytes32("factory-runtime"));
+    }
+
+    function _validateProviderProjectOnly(
+        IProgrammableCustomRegistryV1.LaunchRegistrationV1 calldata registration,
+        IProgrammableCustomExecutionPolicyV2.TradeCapabilityV1 calldata capability
+    ) private pure {
+        if (
+            registration.feePolicy.totalFeeBps != 0 || registration.feePolicy.nativeCustomFeeBps != 0
+                || registration.feePolicy.partner.shareBps != 0 || registration.feePolicy.programmable.shareBps != 0
+                || registration.marketPathId != bytes32(0) || registration.feePolicy.marketPathId != bytes32(0)
+                || registration.marketSetHash != PROJECT_ONLY_MARKET_SET_HASH
+                || capability.marketSetHash != PROJECT_ONLY_MARKET_SET_HASH || capability.executionEnabled
+                || capability.routes.length != 0 || capability.marketDataSources.length != 0
+        ) revert InvalidPartnerFactoryBinding(bytes32("provider-project-only"));
     }
 
     function _initialize(

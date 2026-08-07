@@ -5,26 +5,32 @@ import {
     AccessControlDefaultAdminRules
 } from "@openzeppelin/contracts/access/extensions/AccessControlDefaultAdminRules.sol";
 
+import { IProgrammableCustomExecutionPolicyV2 } from "./interfaces/IProgrammableCustomExecutionPolicyV2.sol";
 import {
-    IProgrammableCustomPartnerFactoryRegistryV1
-} from "./interfaces/IProgrammableCustomPartnerFactoryRegistryV1.sol";
+    IProgrammableCustomPartnerFactoryRegistryV2
+} from "./interfaces/IProgrammableCustomPartnerFactoryRegistryV2.sol";
 
 /// @title ProgrammableCustomPartnerFactoryRegistryV2
-/// @notice Generation 2 approval registry for exact provider-owned Custom factories.
-/// @dev The public V1 tuple/event ABI is retained for existing indexers; the domain and scope are Generation 2.
+/// @notice Exact Gen2 partner launch authorization. Only the immutable Registrar is Registry-authorized.
+/// @dev The provider-owned factory is independently bound as call evidence and never receives Registry authority.
 contract ProgrammableCustomPartnerFactoryRegistryV2 is
     AccessControlDefaultAdminRules,
-    IProgrammableCustomPartnerFactoryRegistryV1
+    IProgrammableCustomPartnerFactoryRegistryV2
 {
     bytes32 public constant CONFIGURATION_DOMAIN = keccak256("programmable.custom-partner-configuration.v2");
+    bytes32 public constant PROVIDER_FACTORY_DOMAIN = keccak256("programmable.custom-provider-factory.v2");
     bytes32 public constant APPROVER_ROLE = keccak256("programmable.custom-partner-factory.approver.v2");
     bytes32 public constant REVOKER_ROLE = keccak256("programmable.custom-partner-factory.revoker.v2");
+    bytes32 public constant ADDRESS_RESULT_POLICY_HASH =
+        keccak256("programmable.custom-provider-factory.result.abi-address.v1");
     uint64 public constant REQUIRED_REGISTRY_GENERATION = 2;
 
     uint256 public immutable CHAIN_ID;
     uint64 public immutable REGISTRY_GENERATION;
+    address public immutable REGISTRAR;
 
     mapping(bytes32 configurationHash => FactoryStateV1 state) private _factoryStates;
+    mapping(bytes32 configurationHash => ProviderFactoryBindingV2 binding) private _providerBindings;
     mapping(bytes32 evidenceHash => bool consumed) public evidenceConsumed;
 
     error ConfigurationAlreadyAuthorized(bytes32 configurationHash);
@@ -37,27 +43,47 @@ contract ProgrammableCustomPartnerFactoryRegistryV2 is
     error FactoryRuntimeMismatch(address factory, bytes32 supplied, bytes32 actual);
     error IncompatibleOperationalRoles(address account);
     error InvalidBinding(bytes32 field);
+    error InvalidProxyBinding(bytes32 field);
     error InvalidWindow(uint64 validAfterBlock, uint64 expiresAtBlock);
     error RegistryScopeMismatch(uint256 suppliedChainId, uint64 suppliedGeneration);
+    error V2CompanionRequired();
 
-    constructor(uint48 initialAdminDelay, address initialAdmin, address initialApprover, address initialRevoker)
-        AccessControlDefaultAdminRules(initialAdminDelay, initialAdmin)
-    {
+    constructor(
+        uint48 initialAdminDelay,
+        address initialAdmin,
+        address initialApprover,
+        address initialRevoker,
+        address registrar
+    ) AccessControlDefaultAdminRules(initialAdminDelay, initialAdmin) {
         if (initialApprover == address(0)) revert InvalidBinding(bytes32("approver"));
         if (initialRevoker == address(0)) revert InvalidBinding(bytes32("revoker"));
+        if (registrar == address(0)) revert InvalidBinding(bytes32("registrar"));
         if (initialApprover == initialRevoker) revert IncompatibleOperationalRoles(initialApprover);
         CHAIN_ID = block.chainid;
         REGISTRY_GENERATION = REQUIRED_REGISTRY_GENERATION;
+        REGISTRAR = registrar;
         _grantRole(APPROVER_ROLE, initialApprover);
         _grantRole(REVOKER_ROLE, initialRevoker);
     }
 
-    function authorizeFactory(FactoryAuthorizationV1 calldata authorization) external onlyRole(APPROVER_ROLE) {
-        _validateAuthorization(authorization);
+    /// @dev Gen2 cannot be authorized from the V1 tuple alone because that would omit the provider call evidence.
+    function authorizeFactory(FactoryAuthorizationV1 calldata) external pure {
+        revert V2CompanionRequired();
+    }
+
+    function authorizeFactoryV2(
+        FactoryAuthorizationV1 calldata authorization,
+        ProviderFactoryBindingV2 calldata providerBinding
+    ) external onlyRole(APPROVER_ROLE) {
+        _validateAuthorization(authorization, providerBinding);
         if (_factoryStates[authorization.configurationHash].factory != address(0)) {
             revert ConfigurationAlreadyAuthorized(authorization.configurationHash);
         }
         if (evidenceConsumed[authorization.evidenceHash]) revert EvidenceAlreadyConsumed(authorization.evidenceHash);
+        if (evidenceConsumed[providerBinding.evidenceHash]) {
+            revert EvidenceAlreadyConsumed(providerBinding.evidenceHash);
+        }
+
         _factoryStates[authorization.configurationHash] = FactoryStateV1({
             providerId: authorization.providerId,
             modelId: authorization.modelId,
@@ -68,7 +94,7 @@ contract ProgrammableCustomPartnerFactoryRegistryV2 is
             modelSourceCommitId: authorization.modelSourceCommitId,
             factorySourceRepositoryId: authorization.factorySourceRepositoryId,
             factorySourceCommitId: authorization.factorySourceCommitId,
-            factory: authorization.factory,
+            factory: REGISTRAR,
             factoryRuntimeCodeHash: authorization.factoryRuntimeCodeHash,
             launchRuntimeCodeSetHash: authorization.launchRuntimeCodeSetHash,
             permissionsHash: authorization.permissionsHash,
@@ -78,8 +104,10 @@ contract ProgrammableCustomPartnerFactoryRegistryV2 is
             evidenceHash: authorization.evidenceHash,
             revoked: false
         });
+        _providerBindings[authorization.configurationHash] = providerBinding;
         evidenceConsumed[authorization.evidenceHash] = true;
-        _emitAuthorization(authorization);
+        evidenceConsumed[providerBinding.evidenceHash] = true;
+        _emitAuthorization(authorization, providerBinding);
     }
 
     function revokeFactory(bytes32 configurationHash, bytes32 reasonCode, bytes32 evidenceHash)
@@ -93,27 +121,38 @@ contract ProgrammableCustomPartnerFactoryRegistryV2 is
         if (evidenceConsumed[evidenceHash]) revert EvidenceAlreadyConsumed(evidenceHash);
         evidenceConsumed[evidenceHash] = true;
         state.revoked = true;
-        emit CustomPartnerFactoryRevokedV1(configurationHash, state.providerId, state.factory, reasonCode, evidenceHash);
+        emit CustomPartnerFactoryRevokedV1(configurationHash, state.providerId, REGISTRAR, reasonCode, evidenceHash);
     }
 
     function factoryState(bytes32 configurationHash) external view returns (FactoryStateV1 memory) {
         return _factoryStates[configurationHash];
     }
 
-    function computeConfigurationHash(FactoryAuthorizationV1 calldata authorization) external pure returns (bytes32) {
-        return _configurationHash(authorization);
+    function providerFactoryBinding(bytes32 configurationHash) external view returns (ProviderFactoryBindingV2 memory) {
+        return _providerBindings[configurationHash];
+    }
+
+    /// @dev Retained only for ABI compatibility. A valid Gen2 configuration requires the companion tuple.
+    function computeConfigurationHash(FactoryAuthorizationV1 calldata) external pure returns (bytes32) {
+        revert V2CompanionRequired();
+    }
+
+    function computeConfigurationHashV2(
+        FactoryAuthorizationV1 calldata authorization,
+        ProviderFactoryBindingV2 calldata providerBinding
+    ) external pure returns (bytes32) {
+        return _configurationHash(authorization, providerBinding);
     }
 
     function validateRegistration(address caller, RegistrationContextV1 calldata context) external view {
         FactoryStateV1 storage state = _factoryStates[context.configurationHash];
+        ProviderFactoryBindingV2 storage provider = _providerBindings[context.configurationHash];
         if (state.factory == address(0) || state.revoked) revert ConfigurationNotActive(context.configurationHash);
         if (block.number < state.validAfterBlock) revert InvalidWindow(state.validAfterBlock, state.expiresAtBlock);
         if (block.number > state.expiresAtBlock) revert ConfigurationExpired(state.expiresAtBlock, block.number);
-        if (caller != state.factory) revert FactoryCallerMismatch(caller, state.factory);
-        bytes32 actual = caller.codehash;
-        if (actual != state.factoryRuntimeCodeHash) {
-            revert FactoryRuntimeMismatch(caller, state.factoryRuntimeCodeHash, actual);
-        }
+        if (caller != REGISTRAR || state.factory != REGISTRAR) revert FactoryCallerMismatch(caller, REGISTRAR);
+        _requireRuntime(REGISTRAR, state.factoryRuntimeCodeHash);
+        _requireRuntime(provider.providerFactory, provider.providerFactoryRuntimeCodeHash);
         if (
             context.providerId != state.providerId || context.modelId != state.modelId
                 || context.modelVersion != state.modelVersion || context.templateId != state.templateId
@@ -125,10 +164,50 @@ contract ProgrammableCustomPartnerFactoryRegistryV2 is
         ) revert ConfigurationMismatch(context.configurationHash, bytes32(0));
     }
 
-    function _validateAuthorization(FactoryAuthorizationV1 calldata authorization) private view {
+    function _validateAuthorization(
+        FactoryAuthorizationV1 calldata authorization,
+        ProviderFactoryBindingV2 calldata provider
+    ) private view {
         if (authorization.chainId != CHAIN_ID || authorization.registryGeneration != REGISTRY_GENERATION) {
             revert RegistryScopeMismatch(authorization.chainId, authorization.registryGeneration);
         }
+        _requireAuthorizationBindings(authorization);
+        _requireProviderBindings(provider);
+        if (authorization.factory != REGISTRAR) revert FactoryCallerMismatch(authorization.factory, REGISTRAR);
+        _requireRuntime(REGISTRAR, authorization.factoryRuntimeCodeHash);
+        _requireRuntime(provider.providerFactory, provider.providerFactoryRuntimeCodeHash);
+        _validateProviderProxy(provider);
+        if (
+            authorization.validAfterBlock == 0 || authorization.expiresAtBlock == 0
+                || authorization.validAfterBlock > authorization.expiresAtBlock
+        ) revert InvalidWindow(authorization.validAfterBlock, authorization.expiresAtBlock);
+        if (authorization.expiresAtBlock < block.number) {
+            revert ConfigurationExpired(authorization.expiresAtBlock, block.number);
+        }
+        bytes32 expected = _configurationHash(authorization, provider);
+        if (authorization.configurationHash != expected) {
+            revert ConfigurationMismatch(authorization.configurationHash, expected);
+        }
+    }
+
+    function _validateProviderProxy(ProviderFactoryBindingV2 calldata provider) private pure {
+        // The EVM cannot read another contract's EIP-1967 storage slots. A shell-code hash plus a claimed
+        // implementation therefore cannot close the approval-to-launch upgrade race. Gen2 factory execution is
+        // deliberately limited to a direct immutable runtime; a future proxy-capable generation needs a frozen,
+        // onchain-introspectable implementation binding before it can be authorized.
+        if (provider.proxyKind != IProgrammableCustomExecutionPolicyV2.ProxyKindV1.None) {
+            revert InvalidProxyBinding(bytes32("factory-proxy-unsupported"));
+        }
+        if (
+            provider.proxyBindingEvidenceHash != bytes32(0) || provider.proxyPolicyHash != bytes32(0)
+                || provider.implementation != provider.providerFactory
+                || provider.implementationRuntimeCodeHash != provider.providerFactoryRuntimeCodeHash
+                || provider.admin != address(0) || provider.adminRuntimeCodeHash != bytes32(0)
+                || provider.beacon != address(0) || provider.beaconRuntimeCodeHash != bytes32(0)
+        ) revert InvalidProxyBinding(bytes32("non-proxy"));
+    }
+
+    function _requireAuthorizationBindings(FactoryAuthorizationV1 calldata authorization) private pure {
         _requireBinding(authorization.configurationHash, bytes32("configuration-hash"));
         _requireBinding(authorization.providerId, bytes32("provider-id"));
         _requireBinding(authorization.modelId, bytes32("model-id"));
@@ -139,30 +218,38 @@ contract ProgrammableCustomPartnerFactoryRegistryV2 is
         _requireBinding(authorization.modelSourceCommitId, bytes32("model-source-commit"));
         _requireBinding(authorization.factorySourceRepositoryId, bytes32("factory-source-repository"));
         _requireBinding(authorization.factorySourceCommitId, bytes32("factory-source-commit"));
-        _requireBinding(authorization.factoryRuntimeCodeHash, bytes32("factory-runtime"));
+        _requireBinding(authorization.factoryRuntimeCodeHash, bytes32("registrar-runtime"));
         _requireBinding(authorization.launchRuntimeCodeSetHash, bytes32("launch-runtimes"));
         _requireBinding(authorization.permissionsHash, bytes32("permissions"));
         _requireBinding(authorization.feePolicyHash, bytes32("fee-policy"));
         _requireBinding(authorization.evidenceHash, bytes32("approval-evidence"));
-        if (authorization.factory.code.length == 0) revert FactoryHasNoCode(authorization.factory);
-        bytes32 actual = authorization.factory.codehash;
-        if (actual != authorization.factoryRuntimeCodeHash) {
-            revert FactoryRuntimeMismatch(authorization.factory, authorization.factoryRuntimeCodeHash, actual);
-        }
-        if (
-            authorization.validAfterBlock == 0 || authorization.expiresAtBlock == 0
-                || authorization.validAfterBlock > authorization.expiresAtBlock
-        ) revert InvalidWindow(authorization.validAfterBlock, authorization.expiresAtBlock);
-        if (authorization.expiresAtBlock < block.number) {
-            revert ConfigurationExpired(authorization.expiresAtBlock, block.number);
-        }
-        bytes32 expected = _configurationHash(authorization);
-        if (authorization.configurationHash != expected) {
-            revert ConfigurationMismatch(authorization.configurationHash, expected);
-        }
     }
 
-    function _configurationHash(FactoryAuthorizationV1 calldata authorization) private pure returns (bytes32) {
+    function _requireProviderBindings(ProviderFactoryBindingV2 calldata provider) private pure {
+        _requireBinding(provider.launchId, bytes32("launch-id"));
+        _requireBinding(provider.approvalId, bytes32("approval-id"));
+        if (provider.expectedPrimaryContract == address(0)) revert InvalidBinding(bytes32("primary-contract"));
+        _requireBinding(provider.expectedPrimaryRuntimeCodeHash, bytes32("primary-runtime"));
+        if (provider.providerFactory == address(0)) revert InvalidBinding(bytes32("provider-factory"));
+        _requireBinding(provider.providerFactoryRuntimeCodeHash, bytes32("provider-factory-runtime"));
+        if (provider.launchSelector == bytes4(0)) revert InvalidBinding(bytes32("launch-selector"));
+        _requireBinding(provider.launchCalldataHash, bytes32("launch-calldata"));
+        _requireBinding(provider.launchResultHash, bytes32("launch-result"));
+        if (provider.resultDecodingPolicyHash != ADDRESS_RESULT_POLICY_HASH) {
+            revert InvalidBinding(bytes32("result-policy"));
+        }
+        _requireBinding(provider.sourceRepositoryId, bytes32("provider-source-repository"));
+        _requireBinding(provider.sourceCommitId, bytes32("provider-source-commit"));
+        _requireBinding(provider.sourceCommitment, bytes32("provider-source"));
+        _requireBinding(provider.buildCommitment, bytes32("provider-build"));
+        _requireBinding(provider.artifactSetHash, bytes32("provider-artifacts"));
+        _requireBinding(provider.evidenceHash, bytes32("provider-evidence"));
+    }
+
+    function _configurationHash(
+        FactoryAuthorizationV1 calldata authorization,
+        ProviderFactoryBindingV2 calldata provider
+    ) private pure returns (bytes32) {
         bytes32 modelHash = keccak256(
             abi.encode(
                 authorization.providerId,
@@ -174,7 +261,7 @@ contract ProgrammableCustomPartnerFactoryRegistryV2 is
                 authorization.modelSourceCommitId
             )
         );
-        bytes32 factoryHash = keccak256(
+        bytes32 registrarHash = keccak256(
             abi.encode(
                 authorization.factorySourceRepositoryId,
                 authorization.factorySourceCommitId,
@@ -187,16 +274,28 @@ contract ProgrammableCustomPartnerFactoryRegistryV2 is
         );
         return keccak256(
             abi.encode(
-                CONFIGURATION_DOMAIN, modelHash, factoryHash, authorization.permissionsHash, authorization.feePolicyHash
+                CONFIGURATION_DOMAIN,
+                modelHash,
+                registrarHash,
+                _providerFactoryHash(provider),
+                authorization.permissionsHash,
+                authorization.feePolicyHash
             )
         );
     }
 
-    function _emitAuthorization(FactoryAuthorizationV1 calldata authorization) private {
+    function _providerFactoryHash(ProviderFactoryBindingV2 calldata provider) private pure returns (bytes32) {
+        return keccak256(abi.encode(PROVIDER_FACTORY_DOMAIN, provider));
+    }
+
+    function _emitAuthorization(
+        FactoryAuthorizationV1 calldata authorization,
+        ProviderFactoryBindingV2 calldata provider
+    ) private {
         emit CustomPartnerFactoryAuthorizedV1(
             authorization.configurationHash,
             authorization.providerId,
-            authorization.factory,
+            REGISTRAR,
             authorization.modelId,
             authorization.modelVersion,
             authorization.templateId,
@@ -216,6 +315,60 @@ contract ProgrammableCustomPartnerFactoryRegistryV2 is
             authorization.permissionsHash,
             authorization.feePolicyHash
         );
+        emit CustomPartnerProviderFactoryBoundV2(
+            authorization.configurationHash,
+            provider.launchId,
+            provider.providerFactory,
+            provider.approvalId,
+            provider.expectedPrimaryContract,
+            provider.expectedPrimaryRuntimeCodeHash,
+            provider.providerFactoryRuntimeCodeHash,
+            uint8(provider.proxyKind),
+            _providerProxyBindingHash(provider),
+            provider.launchSelector,
+            provider.launchValue,
+            provider.launchCalldataHash,
+            provider.launchResultHash,
+            _providerSourceBindingHash(provider),
+            provider.evidenceHash
+        );
+    }
+
+    function _providerProxyBindingHash(ProviderFactoryBindingV2 calldata provider) private pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                provider.proxyKind,
+                provider.proxyBindingEvidenceHash,
+                provider.proxyPolicyHash,
+                provider.implementation,
+                provider.implementationRuntimeCodeHash,
+                provider.admin,
+                provider.adminRuntimeCodeHash,
+                provider.beacon,
+                provider.beaconRuntimeCodeHash
+            )
+        );
+    }
+
+    function _providerSourceBindingHash(ProviderFactoryBindingV2 calldata provider) private pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                provider.sourceRepositoryId,
+                provider.sourceCommitId,
+                provider.sourceCommitment,
+                provider.buildCommitment,
+                provider.artifactSetHash,
+                provider.resultDecodingPolicyHash
+            )
+        );
+    }
+
+    function _requireRuntime(address target, bytes32 expected) private view {
+        if (target == address(0) || target.code.length == 0 || expected == bytes32(0)) {
+            revert FactoryHasNoCode(target);
+        }
+        bytes32 actual = target.codehash;
+        if (actual != expected) revert FactoryRuntimeMismatch(target, expected, actual);
     }
 
     function _requireBinding(bytes32 value, bytes32 field) private pure {

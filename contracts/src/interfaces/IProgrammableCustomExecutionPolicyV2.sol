@@ -18,6 +18,12 @@ interface IProgrammableCustomExecutionPolicyV2 {
         StateRead
     }
 
+    enum ProxyKindV1 {
+        None,
+        Eip1967Admin,
+        Eip1967Beacon
+    }
+
     struct TradeRouteV1 {
         bytes32 marketId;
         bytes32 marketPathId;
@@ -30,10 +36,15 @@ interface IProgrammableCustomExecutionPolicyV2 {
         address executionTarget;
         bytes32 executionTargetRuntimeCodeHash;
         bool proxy;
+        ProxyKindV1 proxyKind;
+        bytes32 proxyBindingEvidenceHash;
+        bytes32 proxyPolicyHash;
         address implementation;
         bytes32 implementationRuntimeCodeHash;
         address admin;
         bytes32 adminRuntimeCodeHash;
+        address beacon;
+        bytes32 beaconRuntimeCodeHash;
         bytes4 executionSelector;
         bytes4 interfaceId;
         address poolManager;
@@ -76,15 +87,21 @@ interface IProgrammableCustomExecutionPolicyV2 {
         address emitter;
         bytes32 emitterRuntimeCodeHash;
         bool proxy;
+        ProxyKindV1 proxyKind;
+        bytes32 proxyBindingEvidenceHash;
+        bytes32 proxyPolicyHash;
         address implementation;
         bytes32 implementationRuntimeCodeHash;
         address admin;
         bytes32 adminRuntimeCodeHash;
+        address beacon;
+        bytes32 beaconRuntimeCodeHash;
         uint64 startBlock;
         bytes32 topic0;
         bytes32 eventAbiHash;
         bytes32 filterHash;
         bytes32 metricsHash;
+        bytes32[] metricIds;
         bytes32 derivationPolicyHash;
         address stateView;
         bytes32 stateViewRuntimeCodeHash;
@@ -147,8 +164,17 @@ interface IProgrammableCustomExecutionPolicyV2 {
         bytes32 sourceRuntimeCodeHash,
         uint64 startBlock,
         bytes32 sourceIdentityHash,
+        bytes32 metricsHash,
         bytes32 configurationHash,
         bytes32 sourceHash
+    );
+
+    event CustomLaunchMarketDataMetricsBoundV2(
+        bytes32 indexed launchId,
+        bytes32 indexed executionPolicyHash,
+        uint32 indexed sourceIndex,
+        bytes32 metricsHash,
+        bytes32[] metricIds
     );
 
     function computeTradeRouteHashV1(TradeRouteV1 calldata route) external pure returns (bytes32);
@@ -156,10 +182,27 @@ interface IProgrammableCustomExecutionPolicyV2 {
     function MARKET_DATA_VOLUME_METRIC_ID() external view returns (bytes32);
     function MARKET_DATA_LIQUIDITY_METRIC_ID() external view returns (bytes32);
     function MARKET_DATA_CHARTING_METRIC_ID() external view returns (bytes32);
-    function EMPTY_MARKET_DATA_METRIC_SET_HASH() external view returns (bytes32);
     function computeTradeRouteSetHashV1(TradeRouteV1[] calldata routes) external pure returns (bytes32);
     function computeMarketSetHashV1(TradeRouteV1[] calldata routes) external pure returns (bytes32);
     function computeMarketDataMetricSetHashV1(bytes32[] calldata metricIds) external pure returns (bytes32);
+    function computeMarketEventAbiHashV1(string calldata eventSignature, bytes32 abiContentHash, bytes32 abiVersionHash)
+        external
+        pure
+        returns (bytes32 topic0, bytes32 eventAbiHash);
+    function computeMarketEventFilterHashV1(
+        bytes32 marketId,
+        bytes32 marketPathId,
+        bytes32 poolId,
+        address poolAddress,
+        bytes32[] calldata indexedValues,
+        bytes32 filterVersionHash
+    ) external pure returns (bytes32 filterHash);
+    function computeMarketDataDerivationHashV1(
+        bytes32 metricsHash,
+        bytes32 formulaHash,
+        bytes32 calldataPolicyHash,
+        bytes32 derivationVersionHash
+    ) external pure returns (bytes32 derivationPolicyHash);
     function computeMarketDataSourceHashV1(MarketDataSourceV1 calldata source) external pure returns (bytes32);
     function computeMarketDataSourceSetHashV1(MarketDataSourceV1[] calldata sources) external pure returns (bytes32);
     function computeTradeCapabilityHashV1(TradeCapabilityV1 calldata capability) external pure returns (bytes32);
@@ -167,5 +210,8 @@ interface IProgrammableCustomExecutionPolicyV2 {
         TradeCapabilityV1 calldata capability,
         IProgrammableCustomRegistryV1.LaunchRegistrationV1 calldata registration
     ) external;
+    function emitTradeCapabilityRevisionV1(TradeCapabilityV1 calldata capability, bytes32 expectedPolicyHash)
+        external
+        returns (bytes32 actualPolicyHash);
     function tradeCapabilityHash(bytes32 launchId) external view returns (bytes32);
 }

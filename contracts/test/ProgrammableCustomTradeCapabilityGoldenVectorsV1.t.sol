@@ -8,14 +8,14 @@ import { ProgrammableCustomTradeCapabilityLibV1 } from "../src/ProgrammableCusto
 import { IProgrammableCustomExecutionPolicyV2 } from "../src/interfaces/IProgrammableCustomExecutionPolicyV2.sol";
 
 contract ProgrammableCustomTradeCapabilityGoldenVectorsV1Test is Test {
-    bytes32 private constant ROUTE_HASH = 0x7a08fd2947d6bc608810c73c394e83fa167f1eb97ef444219c2eeee6af97d8a7;
-    bytes32 private constant ROUTE_SET_HASH = 0xc127cd6895a9ef52b5f08d58df15c8b98611eb6e82f62d7c6c46c14aa0ebf509;
+    bytes32 private constant ROUTE_HASH = 0xdab317aad3c8bf77f43037ec10b87153b0fdf8c07b9155597cf616fb53cd1ff5;
+    bytes32 private constant ROUTE_SET_HASH = 0x673c04857c9dea03a98c34d171cd4939e40dfe7890ed44ca69073acc21793d64;
     bytes32 private constant MARKET_SET_HASH = 0x2979e28b64b2675345eaea3c8f9d799f79debb4c256e333cd0d6bff7b7b923bf;
     bytes32 private constant EMPTY_MARKET_SET_HASH = 0xbd6f28a96b79921f21d91177e262ccb903f8cee746201feb41bcd74385ae3eef;
-    bytes32 private constant DIRECT_SOURCE_HASH = 0x0f999087bd83dfdce9269c6088f5f1963d40bc0794efd9a8167063d9f6eb99d2;
-    bytes32 private constant PROXY_SOURCE_HASH = 0xc0602839191feb9f99d0612184f24a74d99cf944285782bb9dc4d8ca8f1ea463;
-    bytes32 private constant SOURCE_SET_HASH = 0xdeb3a95d17922e5a2e1f7e0ae834415725e5fb6d13bd041a52563cd914405d98;
-    bytes32 private constant CAPABILITY_HASH = 0x772dad1715e737c3e8f7390576869606dc6a8608fe0e4b0fd7a46e4a16cc32d8;
+    bytes32 private constant DIRECT_SOURCE_HASH = 0xad7716fceb70c098f56f95fedcafed340954650f32a4f1b6bcfd518490b487de;
+    bytes32 private constant PROXY_SOURCE_HASH = 0xd2029f210425831d5442bde7f0a37f5968ced7b56e10f4d2a967cc4744a369a3;
+    bytes32 private constant SOURCE_SET_HASH = 0x1049e07a90dd575cd46c1184c77c2feb30118e50ae42f00a8afe6214606dc8df;
+    bytes32 private constant CAPABILITY_HASH = 0x19a4c583304c9a59eb6239f660bd188f88fb9116d87d79e131054a0d8d98340b;
     bytes32 private constant DIRECT_METRIC_SET_HASH =
         0xf3e9aada876355d21cdbbc03cecd9c9d23f2a8a3ef9644a6d38c21fd05650eaf;
     bytes32 private constant PROXY_METRIC_SET_HASH = 0x6e54d472f4b24c9c2c54eb7f582349bca14e21dce5c2ecfe345a75ce1a34dccd;
@@ -82,10 +82,51 @@ contract ProgrammableCustomTradeCapabilityGoldenVectorsV1Test is Test {
 
         assertEq(
             ProgrammableCustomAtomicRegistrarV2.deployInitializeRegisterAndBindTradeCapabilityV1.selector,
-            bytes4(0x0ae882ed)
+            bytes4(0x02562444)
         );
-        assertEq(IProgrammableCustomExecutionPolicyV2.bindTradeCapabilityV1.selector, bytes4(0x4eb3cb48));
+        assertEq(IProgrammableCustomExecutionPolicyV2.bindTradeCapabilityV1.selector, bytes4(0x515b4f17));
         _assertEventVectors(route, directSource, capability);
+    }
+
+    function test_marketEventFilterAndDerivationPreimagesMatchPublishedGoldenVectors() public pure {
+        bytes32 eventAbiDomain = keccak256("programmable.market-event-abi.v1");
+        bytes32 filterDomain = keccak256("programmable.market-event-filter.v1");
+        bytes32 derivationDomain = keccak256("programmable.market-data-derivation.v1");
+        bytes32 topic0 = keccak256("Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)");
+        assertEq(topic0, 0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f);
+        assertEq(
+            keccak256(abi.encode(eventAbiDomain, topic0, bytes32(uint256(500)), bytes32(uint256(501)))),
+            0x1f78f08e9f5b4cc333d23763649077ecf88c57fc71d45bc351e5041ecabf7ec7
+        );
+        bytes32[] memory indexedValues = new bytes32[](2);
+        indexedValues[0] = bytes32(uint256(4));
+        indexedValues[1] = bytes32(uint256(5));
+        assertEq(
+            keccak256(
+                abi.encode(
+                    filterDomain,
+                    bytes32(uint256(1)),
+                    bytes32(uint256(2)),
+                    bytes32(uint256(3)),
+                    address(0x11),
+                    indexedValues,
+                    bytes32(uint256(6))
+                )
+            ),
+            0x0c1fb95e388d80a8e44f4385b55c6a0ca53f81c34fa4339ae3b246dccf6b1887
+        );
+        assertEq(
+            keccak256(
+                abi.encode(
+                    derivationDomain,
+                    DIRECT_METRIC_SET_HASH,
+                    bytes32(uint256(7)),
+                    bytes32(uint256(8)),
+                    bytes32(uint256(9))
+                )
+            ),
+            0xafa2d5423e506aa7bfd536bbfd10eb2fec4b23219557a053af7be2a52019c330
+        );
     }
 
     function _assertEventVectors(
@@ -107,9 +148,13 @@ contract ProgrammableCustomTradeCapabilityGoldenVectorsV1Test is Test {
         );
         assertEq(
             keccak256(
-                "CustomLaunchMarketDataSourceBoundV2(bytes32,bytes32,uint32,bytes32,bytes32,uint8,address,bytes32,uint64,bytes32,bytes32,bytes32)"
+                "CustomLaunchMarketDataSourceBoundV2(bytes32,bytes32,uint32,bytes32,bytes32,uint8,address,bytes32,uint64,bytes32,bytes32,bytes32,bytes32)"
             ),
-            0xe64b9e53b8e5c278f41e9302d9f341e9006bfa3b4c3c919d4983696478d130a0
+            0xb3f02634ec5cdde695d4b565d9498b0aa4aa7522fe160df1b07eb425738c9292
+        );
+        assertEq(
+            keccak256("CustomLaunchMarketDataMetricsBoundV2(bytes32,bytes32,uint32,bytes32,bytes32[])"),
+            0xaf2c4521ed669ee0b31f567d3fe62ea93314a5d0554993310bbe1f9d2a4ca00b
         );
 
         assertEq(
@@ -124,15 +169,20 @@ contract ProgrammableCustomTradeCapabilityGoldenVectorsV1Test is Test {
                     capability.revocationPolicyHash
                 )
             ),
-            0x015cfedc2c4bc5f1a7d4237b2a1f245fd51da8a9797deadabbe482ec3bc6f6cd
+            0x29caa7fe0668f67fc706ac47c11824f16b8a271d3993faf35b38a3c38da21677
         );
         bytes32 proxyBindingHash = keccak256(
             abi.encode(
                 route.proxy,
+                route.proxyKind,
+                route.proxyBindingEvidenceHash,
+                route.proxyPolicyHash,
                 route.implementation,
                 route.implementationRuntimeCodeHash,
                 route.admin,
                 route.adminRuntimeCodeHash,
+                route.beacon,
+                route.beaconRuntimeCodeHash,
                 route.adapterVersion,
                 route.executionSelector,
                 route.interfaceId
@@ -153,7 +203,21 @@ contract ProgrammableCustomTradeCapabilityGoldenVectorsV1Test is Test {
                     ROUTE_HASH
                 )
             ),
-            0xd896fa8e82fe80ea13742d282bfd9e08e135faaca135778bf8e08956a985d577
+            0x330240f50786e2cdc39fad8aaf9e97fa6df4d64f3df124717873266035d7e96d
+        );
+        bytes32 sourceProxyBindingHash = keccak256(
+            abi.encode(
+                source.proxy,
+                source.proxyKind,
+                source.proxyBindingEvidenceHash,
+                source.proxyPolicyHash,
+                source.implementation,
+                source.implementationRuntimeCodeHash,
+                source.admin,
+                source.adminRuntimeCodeHash,
+                source.beacon,
+                source.beaconRuntimeCodeHash
+            )
         );
         bytes32 sourceIdentityHash = keccak256(
             abi.encode(
@@ -163,11 +227,7 @@ contract ProgrammableCustomTradeCapabilityGoldenVectorsV1Test is Test {
                 source.metricsHash,
                 source.derivationPolicyHash,
                 source.readSelector,
-                source.proxy,
-                source.implementation,
-                source.implementationRuntimeCodeHash,
-                source.admin,
-                source.adminRuntimeCodeHash
+                sourceProxyBindingHash
             )
         );
         assertEq(
@@ -180,11 +240,12 @@ contract ProgrammableCustomTradeCapabilityGoldenVectorsV1Test is Test {
                     source.emitterRuntimeCodeHash,
                     source.startBlock,
                     sourceIdentityHash,
+                    source.metricsHash,
                     source.configurationHash,
                     DIRECT_SOURCE_HASH
                 )
             ),
-            0x5e95ade9a11ca18b4a27d34fd102952477a2d755b09da264ac1c36006b49c6be
+            0xfc9f2a5e8e7a70a28beb0de3510bfd824c5dd1ebd396dffd368385a5a40b2f99
         );
     }
 
@@ -240,11 +301,16 @@ contract ProgrammableCustomTradeCapabilityGoldenVectorsV1Test is Test {
         source.emitter = address(0x77);
         source.emitterRuntimeCodeHash = bytes32(uint256(101));
         source.startBlock = 99;
-        source.topic0 = bytes32(uint256(102));
-        source.eventAbiHash = bytes32(uint256(103));
-        source.filterHash = bytes32(uint256(104));
+        source.topic0 = 0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f;
+        source.eventAbiHash = 0x1f78f08e9f5b4cc333d23763649077ecf88c57fc71d45bc351e5041ecabf7ec7;
+        source.filterHash = 0x0c1fb95e388d80a8e44f4385b55c6a0ca53f81c34fa4339ae3b246dccf6b1887;
         source.metricsHash = DIRECT_METRIC_SET_HASH;
-        source.derivationPolicyHash = bytes32(uint256(106));
+        source.metricIds = new bytes32[](4);
+        source.metricIds[0] = keccak256("programmable.market-data-metric.charting.v1");
+        source.metricIds[1] = keccak256("programmable.market-data-metric.price.v1");
+        source.metricIds[2] = keccak256("programmable.market-data-metric.volume.v1");
+        source.metricIds[3] = keccak256("programmable.market-data-metric.liquidity.v1");
+        source.derivationPolicyHash = 0xafa2d5423e506aa7bfd536bbfd10eb2fec4b23219557a053af7be2a52019c330;
         source.configurationHash = bytes32(uint256(107));
         source.evidenceHash = bytes32(uint256(108));
     }
@@ -258,6 +324,9 @@ contract ProgrammableCustomTradeCapabilityGoldenVectorsV1Test is Test {
         source.sourceId = bytes32(uint256(200));
         source.kind = IProgrammableCustomExecutionPolicyV2.MarketDataSourceKindV1.StateRead;
         source.proxy = true;
+        source.proxyKind = IProgrammableCustomExecutionPolicyV2.ProxyKindV1.Eip1967Admin;
+        source.proxyBindingEvidenceHash = bytes32(uint256(209));
+        source.proxyPolicyHash = bytes32(uint256(210));
         source.implementation = address(0x88);
         source.implementationRuntimeCodeHash = bytes32(uint256(201));
         source.admin = address(0x99);
@@ -265,6 +334,9 @@ contract ProgrammableCustomTradeCapabilityGoldenVectorsV1Test is Test {
         source.startBlock = 200;
         source.filterHash = bytes32(uint256(203));
         source.metricsHash = PROXY_METRIC_SET_HASH;
+        source.metricIds = new bytes32[](2);
+        source.metricIds[0] = keccak256("programmable.market-data-metric.price.v1");
+        source.metricIds[1] = keccak256("programmable.market-data-metric.liquidity.v1");
         source.derivationPolicyHash = bytes32(uint256(205));
         source.stateView = address(0xaa);
         source.stateViewRuntimeCodeHash = bytes32(uint256(206));

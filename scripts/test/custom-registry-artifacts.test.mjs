@@ -17,6 +17,7 @@ const contractNames = [
   "ProgrammableCustomPartnerFactoryRegistryV2",
   "ProgrammableCustomFeePolicyVerifierV2",
   "ProgrammableCustomExecutionPolicyRegistryV2",
+  "ProgrammableCustomExecutionPolicyRevisionRegistryV2",
   "ProgrammableCustomAtomicRegistrarV2",
 ];
 
@@ -74,8 +75,8 @@ test("accepts the exact frozen Generation 1 and Generation 2 artifact sets", () 
   withFixture((root) => {
     const result = verify(root);
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /5 Generation 2 Source\/Forge\/ABI bindings/u);
-    assert.match(result.stdout, /18 Generation 2 event declarations/u);
+    assert.match(result.stdout, /6 Generation 2 Source\/Forge\/ABI bindings/u);
+    assert.match(result.stdout, /29 Generation 2 event declarations/u);
   });
 });
 
@@ -130,6 +131,57 @@ test("rejects any Generation 2 event-set byte or semantic declaration mutation",
   });
 });
 
+test("rejects a missing Generation 2 revision artifact", () => {
+  withFixture((root) => {
+    rmSync(
+      join(root, "contracts", "out", "ProgrammableCustomExecutionPolicyRevisionRegistryV2.sol"),
+      { recursive: true, force: true },
+    );
+    assertRejected(verify(root), /ENOENT|RevisionRegistryV2/u);
+  });
+});
+
+test("rejects a revision event mapped to the atomic registrar", () => {
+  withFixture((root) => {
+    const eventSetPath = join(root, "docs", "security", "CUSTOM_REGISTRY_EVENT_SET_V2.json");
+    const eventSet = JSON.parse(readFileSync(eventSetPath, "utf8"));
+    const revisionEvent = eventSet.events.find(
+      (event) => event.emitter === "executionPolicyRevisionRegistry",
+    );
+    revisionEvent.emitter = "atomicRegistrar";
+    writeFileSync(eventSetPath, `${JSON.stringify(eventSet, null, 2)}\n`);
+    assertRejected(verify(root), /published artifact file hash drift|event/u);
+  });
+});
+
+test("rejects duplicate emitter-topic rows", () => {
+  withFixture((root) => {
+    const eventSetPath = join(root, "docs", "security", "CUSTOM_REGISTRY_EVENT_SET_V2.json");
+    const eventSet = JSON.parse(readFileSync(eventSetPath, "utf8"));
+    eventSet.events.push({ ...eventSet.events[0], id: "duplicate" });
+    writeFileSync(eventSetPath, `${JSON.stringify(eventSet, null, 2)}\n`);
+    assertRejected(verify(root), /published artifact file hash drift|duplicate/u);
+  });
+});
+
+test("rejects inherited revision ABI declarations as Revision Registry emitters", () => {
+  withFixture((root) => {
+    const eventSetPath = join(root, "docs", "security", "CUSTOM_REGISTRY_EVENT_SET_V2.json");
+    const eventSet = JSON.parse(readFileSync(eventSetPath, "utf8"));
+    const initialPolicyEvent = eventSet.events.find(
+      (event) => event.emitter === "executionPolicyRegistry"
+        && event.signature.startsWith("CustomLaunchExecutionPolicyBoundV2("),
+    );
+    eventSet.events.push({
+      ...initialPolicyEvent,
+      emitter: "executionPolicyRevisionRegistry",
+      id: "interface-only-non-emitter",
+    });
+    writeFileSync(eventSetPath, `${JSON.stringify(eventSet, null, 2)}\n`);
+    assertRejected(verify(root), /published artifact file hash drift|absent from the built ABIs/u);
+  });
+});
+
 test("rejects a Generation 2 trade-capability golden-vector semantic mutation", () => {
   withFixture((root) => {
     const vectorsPath = join(
@@ -141,6 +193,21 @@ test("rejects a Generation 2 trade-capability golden-vector semantic mutation", 
     const vectors = JSON.parse(readFileSync(vectorsPath, "utf8"));
     vectors.hashes.capabilityHash =
       "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    writeFileSync(vectorsPath, `${JSON.stringify(vectors, null, 2)}\n`);
+    assertRejected(verify(root), /published artifact file hash drift|golden-vector semantic drift/u);
+  });
+});
+
+test("rejects a market-event preimage mutation", () => {
+  withFixture((root) => {
+    const vectorsPath = join(
+      root,
+      "docs",
+      "security",
+      "CUSTOM_REGISTRY_TRADE_CAPABILITY_V1_GOLDEN_VECTORS.json",
+    );
+    const vectors = JSON.parse(readFileSync(vectorsPath, "utf8"));
+    vectors.preimages.marketEventAbi.eventSignature = "Fake(bytes32)";
     writeFileSync(vectorsPath, `${JSON.stringify(vectors, null, 2)}\n`);
     assertRejected(verify(root), /published artifact file hash drift|golden-vector semantic drift/u);
   });

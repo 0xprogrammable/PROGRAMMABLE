@@ -19,8 +19,9 @@ contract ProgrammableCustomExecutionPolicyRegistryV2 is IProgrammableCustomExecu
     bytes32 public constant MARKET_DATA_VOLUME_METRIC_ID = keccak256("programmable.market-data-metric.volume.v1");
     bytes32 public constant MARKET_DATA_LIQUIDITY_METRIC_ID = keccak256("programmable.market-data-metric.liquidity.v1");
     bytes32 public constant MARKET_DATA_CHARTING_METRIC_ID = keccak256("programmable.market-data-metric.charting.v1");
-    bytes32 public constant EMPTY_MARKET_DATA_METRIC_SET_HASH =
-        0x7b5384e78f1bd4310c1264ebe06d19b2fc61f8ff2781748daa2e14df0387082a;
+    bytes32 public constant MARKET_EVENT_ABI_DOMAIN = keccak256("programmable.market-event-abi.v1");
+    bytes32 public constant MARKET_EVENT_FILTER_DOMAIN = keccak256("programmable.market-event-filter.v1");
+    bytes32 public constant MARKET_DATA_DERIVATION_DOMAIN = keccak256("programmable.market-data-derivation.v1");
 
     // Immutable protocol bindings intentionally use the uppercase convention.
     // slither-disable-next-line naming-convention
@@ -29,6 +30,8 @@ contract ProgrammableCustomExecutionPolicyRegistryV2 is IProgrammableCustomExecu
     IProgrammableCustomPartnerFactoryRegistryV1 public immutable PARTNER_FACTORY_REGISTRY;
     // slither-disable-next-line naming-convention
     address public immutable ATOMIC_REGISTRAR;
+    // slither-disable-next-line naming-convention
+    address public immutable POLICY_REVISION_REGISTRY;
     // slither-disable-next-line naming-convention
     uint256 public immutable CHAIN_ID;
 
@@ -44,9 +47,12 @@ contract ProgrammableCustomExecutionPolicyRegistryV2 is IProgrammableCustomExecu
     constructor(
         IProgrammableCustomRegistryV1 predictedRegistry,
         IProgrammableCustomPartnerFactoryRegistryV1 partnerFactoryRegistry,
-        address atomicRegistrar
+        address atomicRegistrar,
+        address policyRevisionRegistry
     ) {
-        if (address(predictedRegistry) == address(0)) revert InvalidBinding(bytes32("registry"));
+        if (address(predictedRegistry) == address(0)) {
+            revert InvalidBinding(bytes32("registry"));
+        }
         if (address(partnerFactoryRegistry) == address(0) || address(partnerFactoryRegistry).code.length == 0) {
             revert InvalidBinding(bytes32("partner-factory-registry"));
         }
@@ -55,9 +61,11 @@ contract ProgrammableCustomExecutionPolicyRegistryV2 is IProgrammableCustomExecu
                 || partnerFactoryRegistry.REGISTRY_GENERATION() != REQUIRED_REGISTRY_GENERATION
         ) revert InvalidBinding(bytes32("partner-factory-scope"));
         if (atomicRegistrar == address(0)) revert InvalidBinding(bytes32("atomic-registrar"));
+        if (policyRevisionRegistry == address(0)) revert InvalidBinding(bytes32("policy-revision-registry"));
         REGISTRY = predictedRegistry;
         PARTNER_FACTORY_REGISTRY = partnerFactoryRegistry;
         ATOMIC_REGISTRAR = atomicRegistrar;
+        POLICY_REVISION_REGISTRY = policyRevisionRegistry;
         CHAIN_ID = block.chainid;
     }
 
@@ -75,6 +83,49 @@ contract ProgrammableCustomExecutionPolicyRegistryV2 is IProgrammableCustomExecu
 
     function computeMarketDataMetricSetHashV1(bytes32[] calldata metricIds) external pure returns (bytes32) {
         return ProgrammableCustomTradeCapabilityLibV1.marketDataMetricSetHash(metricIds);
+    }
+
+    function computeMarketEventAbiHashV1(string calldata eventSignature, bytes32 abiContentHash, bytes32 abiVersionHash)
+        external
+        pure
+        returns (bytes32 topic0, bytes32 eventAbiHash)
+    {
+        topic0 = keccak256(bytes(eventSignature));
+        eventAbiHash = keccak256(abi.encode(MARKET_EVENT_ABI_DOMAIN, topic0, abiContentHash, abiVersionHash));
+    }
+
+    function computeMarketEventFilterHashV1(
+        bytes32 marketId,
+        bytes32 marketPathId,
+        bytes32 poolId,
+        address poolAddress,
+        bytes32[] calldata indexedValues,
+        bytes32 filterVersionHash
+    ) external pure returns (bytes32 filterHash) {
+        filterHash = keccak256(
+            abi.encode(
+                MARKET_EVENT_FILTER_DOMAIN,
+                marketId,
+                marketPathId,
+                poolId,
+                poolAddress,
+                indexedValues,
+                filterVersionHash
+            )
+        );
+    }
+
+    function computeMarketDataDerivationHashV1(
+        bytes32 metricsHash,
+        bytes32 formulaHash,
+        bytes32 calldataPolicyHash,
+        bytes32 derivationVersionHash
+    ) external pure returns (bytes32 derivationPolicyHash) {
+        derivationPolicyHash = keccak256(
+            abi.encode(
+                MARKET_DATA_DERIVATION_DOMAIN, metricsHash, formulaHash, calldataPolicyHash, derivationVersionHash
+            )
+        );
     }
 
     function computeMarketDataSourceHashV1(MarketDataSourceV1 calldata source) external pure returns (bytes32) {
@@ -111,13 +162,34 @@ contract ProgrammableCustomExecutionPolicyRegistryV2 is IProgrammableCustomExecu
             state.status != IProgrammableCustomRegistryV1.LaunchStatus.Observed || state.observedAtBlock != block.number
         ) revert ExecutionPolicyScopeMismatch(capability.launchId);
         _validateRegistrationBinding(registration, state);
-        _validatePolicyBinder(capability.launchId, state);
+        if (msg.sender != ATOMIC_REGISTRAR) {
+            revert ExecutionPolicyUnauthorized(msg.sender, capability.launchId);
+        }
         if (tradeCapabilityHash[capability.launchId] != bytes32(0)) {
             revert ExecutionPolicyAlreadyBound(capability.launchId);
         }
 
         tradeCapabilityHash[capability.launchId] = actual;
+        _emitTradeCapability(capability, actual);
+    }
 
+    /// @dev The sole correction contract calls this only after Registry.correctLaunchRecord. A failure reverts both.
+    function emitTradeCapabilityRevisionV1(TradeCapabilityV1 calldata capability, bytes32 expectedPolicyHash)
+        external
+        returns (bytes32 actualPolicyHash)
+    {
+        if (msg.sender != POLICY_REVISION_REGISTRY) {
+            revert ExecutionPolicyUnauthorized(msg.sender, capability.launchId);
+        }
+        actualPolicyHash =
+            ProgrammableCustomTradeCapabilityValidatorV1.validate(capability, CHAIN_ID, REQUIRED_REGISTRY_GENERATION);
+        if (actualPolicyHash != expectedPolicyHash) {
+            revert ExecutionPolicyBindingMismatch(expectedPolicyHash, actualPolicyHash);
+        }
+        _emitTradeCapability(capability, actualPolicyHash);
+    }
+
+    function _emitTradeCapability(TradeCapabilityV1 calldata capability, bytes32 actual) private {
         emit CustomLaunchExecutionPolicyBoundV2(
             capability.launchId,
             actual,
@@ -175,19 +247,26 @@ contract ProgrammableCustomExecutionPolicyRegistryV2 is IProgrammableCustomExecu
                 : source.stateViewRuntimeCodeHash,
             source.startBlock,
             _sourceIdentityHash(source),
+            source.metricsHash,
             source.configurationHash,
             ProgrammableCustomTradeCapabilityLibV1.marketDataSourceHash(source)
         );
+        emit CustomLaunchMarketDataMetricsBoundV2(launchId, policyHash, index, source.metricsHash, source.metricIds);
     }
 
     function _proxyBindingHash(TradeRouteV1 calldata route) private pure returns (bytes32) {
         return keccak256(
             abi.encode(
                 route.proxy,
+                route.proxyKind,
+                route.proxyBindingEvidenceHash,
+                route.proxyPolicyHash,
                 route.implementation,
                 route.implementationRuntimeCodeHash,
                 route.admin,
                 route.adminRuntimeCodeHash,
+                route.beacon,
+                route.beaconRuntimeCodeHash,
                 route.adapterVersion,
                 route.executionSelector,
                 route.interfaceId
@@ -204,48 +283,25 @@ contract ProgrammableCustomExecutionPolicyRegistryV2 is IProgrammableCustomExecu
                 source.metricsHash,
                 source.derivationPolicyHash,
                 source.readSelector,
-                source.proxy,
-                source.implementation,
-                source.implementationRuntimeCodeHash,
-                source.admin,
-                source.adminRuntimeCodeHash
+                _sourceProxyBindingHash(source)
             )
         );
     }
 
-    function _validatePolicyBinder(bytes32 launchId, IProgrammableCustomRegistryV1.LaunchStateV1 memory state)
-        private
-        view
-    {
-        if (msg.sender == ATOMIC_REGISTRAR) return;
-
-        IProgrammableCustomRegistryV1.LaunchDetailsV1 memory details = REGISTRY.launchDetails(launchId);
-        if (details.providerId == bytes32(0)) revert ExecutionPolicyUnauthorized(msg.sender, launchId);
-        IProgrammableCustomPartnerFactoryRegistryV1.FactoryStateV1 memory factory =
-            PARTNER_FACTORY_REGISTRY.factoryState(details.configurationHash);
-        if (
-            factory.factory != msg.sender || factory.providerId != details.providerId
-                || factory.modelId != details.modelId || factory.modelVersion != details.modelVersion
-                || factory.templateId != details.templateId || factory.templateVersion != details.templateVersion
-                || factory.launchRuntimeCodeSetHash != details.runtimeCodeSetHash
-                || factory.permissionsHash != details.permissionsHash || factory.feePolicyHash != state.feePolicyHash
-        ) revert ExecutionPolicyUnauthorized(msg.sender, launchId);
-
-        PARTNER_FACTORY_REGISTRY.validateRegistration(
-            msg.sender,
-            IProgrammableCustomPartnerFactoryRegistryV1.RegistrationContextV1({
-                configurationHash: details.configurationHash,
-                providerId: details.providerId,
-                modelId: details.modelId,
-                modelVersion: details.modelVersion,
-                templateId: details.templateId,
-                templateVersion: details.templateVersion,
-                modelRepositoryId: factory.modelRepositoryId,
-                modelSourceCommitId: factory.modelSourceCommitId,
-                launchRuntimeCodeSetHash: details.runtimeCodeSetHash,
-                permissionsHash: details.permissionsHash,
-                feePolicyHash: state.feePolicyHash
-            })
+    function _sourceProxyBindingHash(MarketDataSourceV1 calldata source) private pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                source.proxy,
+                source.proxyKind,
+                source.proxyBindingEvidenceHash,
+                source.proxyPolicyHash,
+                source.implementation,
+                source.implementationRuntimeCodeHash,
+                source.admin,
+                source.adminRuntimeCodeHash,
+                source.beacon,
+                source.beaconRuntimeCodeHash
+            )
         );
     }
 

@@ -2,6 +2,8 @@
 pragma solidity 0.8.26;
 
 import { Test } from "forge-std/Test.sol";
+import { Vm } from "forge-std/Vm.sol";
+import { Create2 } from "@openzeppelin/contracts/utils/Create2.sol";
 
 import {
     ProgrammableCustomFeePolicyVerifierLibV2,
@@ -10,6 +12,9 @@ import {
 import { ProgrammableCustomAtomicRegistrarV1 } from "../src/ProgrammableCustomAtomicRegistrarV1.sol";
 import { ProgrammableCustomAtomicRegistrarV2 } from "../src/ProgrammableCustomAtomicRegistrarV2.sol";
 import { ProgrammableCustomExecutionPolicyRegistryV2 } from "../src/ProgrammableCustomExecutionPolicyRegistryV2.sol";
+import {
+    ProgrammableCustomExecutionPolicyRevisionRegistryV2
+} from "../src/ProgrammableCustomExecutionPolicyRevisionRegistryV2.sol";
 import { ProgrammableCustomPartnerFactoryRegistryV2 } from "../src/ProgrammableCustomPartnerFactoryRegistryV2.sol";
 import { ProgrammableCustomRegistryV1 } from "../src/ProgrammableCustomRegistryV1.sol";
 import { ProgrammableCustomRegistryV2 } from "../src/ProgrammableCustomRegistryV2.sol";
@@ -18,7 +23,13 @@ import { ProgrammableCustomTradeCapabilityValidatorV1 } from "../src/Programmabl
 import {
     IProgrammableCustomPartnerFactoryRegistryV1
 } from "../src/interfaces/IProgrammableCustomPartnerFactoryRegistryV1.sol";
+import {
+    IProgrammableCustomPartnerFactoryRegistryV2
+} from "../src/interfaces/IProgrammableCustomPartnerFactoryRegistryV2.sol";
 import { IProgrammableCustomExecutionPolicyV2 } from "../src/interfaces/IProgrammableCustomExecutionPolicyV2.sol";
+import {
+    IProgrammableCustomExecutionPolicyRevisionV2
+} from "../src/interfaces/IProgrammableCustomExecutionPolicyRevisionV2.sol";
 import { IProgrammableCustomRegistryV1 } from "../src/interfaces/IProgrammableCustomRegistryV1.sol";
 
 contract CustomRuntimeTargetV2 {
@@ -44,6 +55,12 @@ contract ForceEtherV2 {
 }
 
 contract FutureProviderFactoryV2 {
+    function deploy(bytes32 salt, uint256 configuredValue) external payable returns (address primaryContract) {
+        require(msg.value == 0, "unexpected value");
+        primaryContract = address(new AtomicLaunchTargetV2{ salt: salt }());
+        AtomicLaunchTargetV2(primaryContract).initialize(configuredValue);
+    }
+
     function register(
         IProgrammableCustomRegistryV1 registry,
         IProgrammableCustomRegistryV1.LaunchRegistrationV1 calldata registration
@@ -80,6 +97,7 @@ contract ProgrammableCustomRegistryV2Test is Test {
     ProgrammableCustomPartnerFactoryRegistryV2 internal factoryRegistry;
     ProgrammableCustomRegistryV2 internal registry;
     ProgrammableCustomExecutionPolicyRegistryV2 internal executionPolicyRegistry;
+    ProgrammableCustomExecutionPolicyRevisionRegistryV2 internal executionPolicyRevisionRegistry;
     ProgrammableCustomAtomicRegistrarV2 internal atomicRegistrar;
     FutureProviderFactoryV2 internal providerFactory;
     FutureProviderFactoryV2 internal wrongFactory;
@@ -89,21 +107,35 @@ contract ProgrammableCustomRegistryV2Test is Test {
         vm.chainId(1);
         vm.roll(100);
         verifier = new ProgrammableCustomFeePolicyVerifierV2();
-        factoryRegistry =
-            new ProgrammableCustomPartnerFactoryRegistryV2(2 days, ADMIN, FACTORY_APPROVER, FACTORY_REVOKER);
         uint256 nextNonce = vm.getNonce(address(this));
-        address predictedRegistry = vm.computeCreateAddress(address(this), nextNonce + 1);
-        address predictedRegistrar = vm.computeCreateAddress(address(this), nextNonce + 2);
+        address predictedRevisionRegistry = vm.computeCreateAddress(address(this), nextNonce + 2);
+        address predictedRegistry = vm.computeCreateAddress(address(this), nextNonce + 3);
+        address predictedRegistrar = vm.computeCreateAddress(address(this), nextNonce + 4);
+        factoryRegistry = new ProgrammableCustomPartnerFactoryRegistryV2(
+            2 days, ADMIN, FACTORY_APPROVER, FACTORY_REVOKER, predictedRegistrar
+        );
         executionPolicyRegistry = new ProgrammableCustomExecutionPolicyRegistryV2(
-            IProgrammableCustomRegistryV1(predictedRegistry), factoryRegistry, predictedRegistrar
+            IProgrammableCustomRegistryV1(predictedRegistry),
+            factoryRegistry,
+            predictedRegistrar,
+            predictedRevisionRegistry
+        );
+        executionPolicyRevisionRegistry = new ProgrammableCustomExecutionPolicyRevisionRegistryV2(
+            IProgrammableCustomRegistryV1(predictedRegistry),
+            executionPolicyRegistry,
+            2 days,
+            ADMIN,
+            REGISTRY_APPROVER,
+            CORRECTOR,
+            REGISTRY_REVOKER
         );
         ProgrammableCustomRegistryV1.RegistryConfigV1 memory config = _registryConfig();
         config.initialWriter = predictedRegistrar;
-        registry = new ProgrammableCustomRegistryV2(config, factoryRegistry, verifier, executionPolicyRegistry);
-        atomicRegistrar = new ProgrammableCustomAtomicRegistrarV2(registry, executionPolicyRegistry);
-        bytes32 writerRole = registry.WRITER_ROLE();
-        vm.prank(ADMIN);
-        registry.grantRole(writerRole, WRITER);
+        config.initialCorrector = predictedRevisionRegistry;
+        registry = new ProgrammableCustomRegistryV2(
+            config, factoryRegistry, verifier, executionPolicyRegistry, executionPolicyRevisionRegistry
+        );
+        atomicRegistrar = new ProgrammableCustomAtomicRegistrarV2(registry, executionPolicyRegistry, factoryRegistry);
         providerFactory = new FutureProviderFactoryV2();
         wrongFactory = new FutureProviderFactoryV2();
         runtimeTarget = new CustomRuntimeTargetV2();
@@ -159,22 +191,21 @@ contract ProgrammableCustomRegistryV2Test is Test {
         assertTrue(verifier.verify(policy) != bytes32(0));
     }
 
-    function test_nativeRegistrationThroughWriterConsumesExactApproval() public {
+    function test_registryEnforcesImmutableSoleWriterAndRejectsDirectBypass() public {
         IProgrammableCustomRegistryV1.LaunchRegistrationV1 memory registration =
             _nativeRegistration("native-generation-two");
         _rebind(registration);
         _authorizeApproval(registration);
 
-        vm.prank(WRITER);
-        registry.registerLaunch(registration);
+        bytes32 writerRole = registry.WRITER_ROLE();
+        vm.prank(ADMIN);
+        vm.expectPartialRevert(ProgrammableCustomRegistryV2.ExecutionPolicyRegistryMismatch.selector);
+        registry.grantRole(writerRole, WRITER);
 
-        assertEq(
-            uint8(registry.launchState(registration.launchId).status),
-            uint8(IProgrammableCustomRegistryV1.LaunchStatus.Observed)
-        );
-        assertTrue(registry.approvalConsumed(registration.approvalId));
-        assertTrue(registry.deploymentConsumed(registration.deploymentId));
-        assertEq(registry.launchState(registration.launchId).feePolicyHash, verifier.verify(registration.feePolicy));
+        vm.prank(WRITER);
+        vm.expectRevert();
+        registry.registerLaunch(registration);
+        assertFalse(registry.approvalConsumed(registration.approvalId));
     }
 
     function test_unknownFutureProviderRegistersOnlyThroughExactAuthorizedFactory() public {
@@ -186,7 +217,7 @@ contract ProgrammableCustomRegistryV2Test is Test {
         registration.capabilitySetHash = executionPolicyRegistry.computeTradeCapabilityHashV1(capability);
         _authorizeFactoryAndApproval(registration, address(providerFactory));
 
-        providerFactory.registerAndBind(registry, executionPolicyRegistry, registration, capability);
+        _launchPartner(registration, capability);
 
         IProgrammableCustomRegistryV1.LaunchStateV1 memory state = registry.launchState(registration.launchId);
         IProgrammableCustomRegistryV1.LaunchDetailsV1 memory details = registry.launchDetails(registration.launchId);
@@ -211,7 +242,7 @@ contract ProgrammableCustomRegistryV2Test is Test {
         registration.capabilitySetHash = executionPolicyRegistry.computeTradeCapabilityHashV1(capability);
         _authorizeFactoryAndApproval(registration, address(providerFactory));
 
-        providerFactory.registerAndBind(registry, executionPolicyRegistry, registration, capability);
+        _launchPartner(registration, capability);
 
         IProgrammableCustomRegistryV1.LaunchStateV1 memory state = registry.launchState(registration.launchId);
         IProgrammableCustomRegistryV1.LaunchDetailsV1 memory details = registry.launchDetails(registration.launchId);
@@ -289,7 +320,7 @@ contract ProgrammableCustomRegistryV2Test is Test {
         _authorizeFactoryAndApproval(registration, address(providerFactory));
 
         vm.expectPartialRevert(ProgrammableCustomExecutionPolicyRegistryV2.ExecutionPolicyBindingMismatch.selector);
-        providerFactory.registerAndBind(registry, executionPolicyRegistry, registration, capability);
+        _launchPartner(registration, capability);
         assertEq(uint8(registry.launchState(registration.launchId).status), 0);
     }
 
@@ -304,7 +335,7 @@ contract ProgrammableCustomRegistryV2Test is Test {
         _authorizeFactoryAndApproval(registration, address(providerFactory));
 
         vm.expectPartialRevert(ProgrammableCustomTradeCapabilityValidatorV1.RuntimeCodeHashMismatch.selector);
-        providerFactory.registerAndBind(registry, executionPolicyRegistry, registration, capability);
+        _launchPartner(registration, capability);
         assertEq(uint8(registry.launchState(registration.launchId).status), 0);
     }
 
@@ -320,7 +351,7 @@ contract ProgrammableCustomRegistryV2Test is Test {
         _authorizeFactoryAndApproval(registration, address(providerFactory));
 
         vm.expectPartialRevert(ProgrammableCustomTradeCapabilityValidatorV1.RuntimeCodeHashMismatch.selector);
-        providerFactory.registerAndBind(registry, executionPolicyRegistry, registration, capability);
+        _launchPartner(registration, capability);
         assertEq(uint8(registry.launchState(registration.launchId).status), 0);
     }
 
@@ -330,14 +361,70 @@ contract ProgrammableCustomRegistryV2Test is Test {
         IProgrammableCustomExecutionPolicyV2.TradeCapabilityV1 memory capability =
             _unsupportedMarketCapability(registration, false);
         registration.marketSetHash = capability.marketSetHash;
-        capability.marketDataSources[0].metricsHash = executionPolicyRegistry.EMPTY_MARKET_DATA_METRIC_SET_HASH();
+        capability.marketDataSources[0].metricIds = new bytes32[](0);
+        capability.marketDataSources[0].metricsHash =
+            keccak256(abi.encode(keccak256("programmable.trade-market-data-metric-set.v1"), new bytes32[](0)));
         _finalizeCapability(capability);
         registration.capabilitySetHash = executionPolicyRegistry.computeTradeCapabilityHashV1(capability);
         _authorizeFactoryAndApproval(registration, address(providerFactory));
 
-        vm.expectPartialRevert(ProgrammableCustomTradeCapabilityValidatorV1.InvalidMarketDataSource.selector);
-        providerFactory.registerAndBind(registry, executionPolicyRegistry, registration, capability);
+        vm.expectPartialRevert(ProgrammableCustomTradeCapabilityLibV1.InvalidMarketDataMetricOrder.selector);
+        _launchPartner(registration, capability);
         assertEq(uint8(registry.launchState(registration.launchId).status), 0);
+    }
+
+    function test_marketEventAbiFilterAndDerivationPreimagesAreCanonicalAndSubstitutionSensitive() public view {
+        string memory signature = "Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)";
+        bytes32 abiContentHash = _hash("canonical-json-abi-content");
+        bytes32 abiVersionHash = _hash("solidity-abi-v2");
+        (bytes32 topic0, bytes32 eventAbiHash) =
+            executionPolicyRegistry.computeMarketEventAbiHashV1(signature, abiContentHash, abiVersionHash);
+        assertEq(topic0, keccak256(bytes(signature)));
+        assertEq(
+            eventAbiHash,
+            keccak256(
+                abi.encode(executionPolicyRegistry.MARKET_EVENT_ABI_DOMAIN(), topic0, abiContentHash, abiVersionHash)
+            )
+        );
+        (, bytes32 substitutedEventAbiHash) = executionPolicyRegistry.computeMarketEventAbiHashV1(
+            signature, _hash("substituted-json-abi-content"), abiVersionHash
+        );
+        assertTrue(substitutedEventAbiHash != eventAbiHash);
+
+        bytes32[] memory indexedValues = new bytes32[](2);
+        indexedValues[0] = _hash("pool-id");
+        indexedValues[1] = _hash("hook-address-indexed-value");
+        bytes32 filterHash = executionPolicyRegistry.computeMarketEventFilterHashV1(
+            _hash("market-id"),
+            _hash("market-path-id"),
+            _hash("pool-id"),
+            address(runtimeTarget),
+            indexedValues,
+            _hash("filter-v1")
+        );
+        indexedValues[1] = _hash("substituted-indexed-value");
+        assertTrue(
+            executionPolicyRegistry.computeMarketEventFilterHashV1(
+                _hash("market-id"),
+                _hash("market-path-id"),
+                _hash("pool-id"),
+                address(runtimeTarget),
+                indexedValues,
+                _hash("filter-v1")
+            ) != filterHash
+        );
+
+        bytes32 derivationHash = executionPolicyRegistry.computeMarketDataDerivationHashV1(
+            _hash("metric-set"), _hash("price-volume-liquidity-formula"), _hash("calldata-policy"), _hash("v1")
+        );
+        assertTrue(
+            executionPolicyRegistry.computeMarketDataDerivationHashV1(
+                _hash("metric-set"),
+                _hash("price-volume-liquidity-formula"),
+                _hash("substituted-calldata-policy"),
+                _hash("v1")
+            ) != derivationHash
+        );
     }
 
     function test_providerFactoryCannotBindDriftedProxyMarketSourceImplementation() public {
@@ -347,6 +434,9 @@ contract ProgrammableCustomRegistryV2Test is Test {
             _unsupportedMarketCapability(registration, false);
         registration.marketSetHash = capability.marketSetHash;
         capability.marketDataSources[0].proxy = true;
+        capability.marketDataSources[0].proxyKind = IProgrammableCustomExecutionPolicyV2.ProxyKindV1.Eip1967Admin;
+        capability.marketDataSources[0].proxyBindingEvidenceHash = _hash("source-proxy-binding-evidence");
+        capability.marketDataSources[0].proxyPolicyHash = _hash("source-proxy-policy");
         capability.marketDataSources[0].implementation = address(wrongFactory);
         capability.marketDataSources[0].implementationRuntimeCodeHash = address(wrongFactory).codehash;
         capability.marketDataSources[0].admin = ADMIN;
@@ -364,7 +454,7 @@ contract ProgrammableCustomRegistryV2Test is Test {
 
         vm.etch(address(wrongFactory), hex"60006000fd");
         vm.expectPartialRevert(ProgrammableCustomTradeCapabilityValidatorV1.RuntimeCodeHashMismatch.selector);
-        providerFactory.registerAndBind(registry, executionPolicyRegistry, registration, capability);
+        _launchPartner(registration, capability);
         assertEq(uint8(registry.launchState(registration.launchId).status), 0);
     }
 
@@ -380,7 +470,7 @@ contract ProgrammableCustomRegistryV2Test is Test {
         _authorizeFactoryAndApproval(registration, address(providerFactory));
 
         vm.expectPartialRevert(ProgrammableCustomTradeCapabilityValidatorV1.RuntimeCodeHashMismatch.selector);
-        providerFactory.registerAndBind(registry, executionPolicyRegistry, registration, capability);
+        _launchPartner(registration, capability);
         assertEq(uint8(registry.launchState(registration.launchId).status), 0);
     }
 
@@ -400,7 +490,7 @@ contract ProgrammableCustomRegistryV2Test is Test {
         _authorizeFactoryAndApproval(registration, address(providerFactory));
 
         vm.expectPartialRevert(ProgrammableCustomTradeCapabilityValidatorV1.InvalidTradeCapability.selector);
-        providerFactory.registerAndBind(registry, executionPolicyRegistry, registration, capability);
+        _launchPartner(registration, capability);
         assertEq(uint8(registry.launchState(registration.launchId).status), 0);
 
         registration = _partnerRegistration("provider-zero-config", _hash("provider-config-guard"));
@@ -411,7 +501,7 @@ contract ProgrammableCustomRegistryV2Test is Test {
         registration.capabilitySetHash = executionPolicyRegistry.computeTradeCapabilityHashV1(capability);
         _authorizeFactoryAndApproval(registration, address(providerFactory));
         vm.expectPartialRevert(ProgrammableCustomTradeCapabilityValidatorV1.InvalidTradeCapability.selector);
-        providerFactory.registerAndBind(registry, executionPolicyRegistry, registration, capability);
+        _launchPartner(registration, capability);
         assertEq(uint8(registry.launchState(registration.launchId).status), 0);
     }
 
@@ -455,7 +545,7 @@ contract ProgrammableCustomRegistryV2Test is Test {
         registration.marketSetHash = capability.marketSetHash;
         registration.capabilitySetHash = executionPolicyRegistry.computeTradeCapabilityHashV1(capability);
         _authorizeFactoryAndApproval(registration, address(providerFactory));
-        providerFactory.registerAndBind(registry, executionPolicyRegistry, registration, capability);
+        _launchPartner(registration, capability);
         assertEq(executionPolicyRegistry.tradeCapabilityHash(registration.launchId), registration.capabilitySetHash);
 
         registration = _partnerRegistration("proxy-adapter", _hash("provider-adapter-proxy"));
@@ -463,7 +553,7 @@ contract ProgrammableCustomRegistryV2Test is Test {
         registration.marketSetHash = capability.marketSetHash;
         registration.capabilitySetHash = executionPolicyRegistry.computeTradeCapabilityHashV1(capability);
         _authorizeFactoryAndApproval(registration, address(providerFactory));
-        providerFactory.registerAndBind(registry, executionPolicyRegistry, registration, capability);
+        _launchPartner(registration, capability);
         assertEq(executionPolicyRegistry.tradeCapabilityHash(registration.launchId), registration.capabilitySetHash);
     }
 
@@ -479,11 +569,11 @@ contract ProgrammableCustomRegistryV2Test is Test {
         _authorizeFactoryAndApproval(registration, address(providerFactory));
 
         vm.expectPartialRevert(ProgrammableCustomTradeCapabilityValidatorV1.InvalidTradeCapability.selector);
-        providerFactory.registerAndBind(registry, executionPolicyRegistry, registration, capability);
+        _launchPartner(registration, capability);
         assertEq(uint8(registry.launchState(registration.launchId).status), 0);
     }
 
-    function test_pausedRetiredAndDelayedExecutableRoutesStayExecutionDisabled() public {
+    function test_pausedRetiredStayDisabledAndDelayedRouteRemainsDeclaredExecutable() public {
         IProgrammableCustomRegistryV1.LaunchRegistrationV1 memory registration =
             _partnerRegistration("paused-execution", _hash("provider-paused"));
         IProgrammableCustomExecutionPolicyV2.TradeCapabilityV1 memory capability = _standardCapability(registration);
@@ -493,7 +583,7 @@ contract ProgrammableCustomRegistryV2Test is Test {
         registration.marketSetHash = capability.marketSetHash;
         registration.capabilitySetHash = executionPolicyRegistry.computeTradeCapabilityHashV1(capability);
         _authorizeFactoryAndApproval(registration, address(providerFactory));
-        providerFactory.registerAndBind(registry, executionPolicyRegistry, registration, capability);
+        _launchPartner(registration, capability);
 
         registration = _partnerRegistration("retired-execution", _hash("provider-retired"));
         capability = _standardCapability(registration);
@@ -503,20 +593,21 @@ contract ProgrammableCustomRegistryV2Test is Test {
         registration.marketSetHash = capability.marketSetHash;
         registration.capabilitySetHash = executionPolicyRegistry.computeTradeCapabilityHashV1(capability);
         _authorizeFactoryAndApproval(registration, address(providerFactory));
-        providerFactory.registerAndBind(registry, executionPolicyRegistry, registration, capability);
+        _launchPartner(registration, capability);
 
         registration = _partnerRegistration("delayed-execution", _hash("provider-delayed-execution"));
         capability = _standardCapability(registration);
         capability.routes[0].activationBlock = uint64(block.number + 20);
-        capability.executionEnabled = false;
         _finalizeCapability(capability);
         registration.marketSetHash = capability.marketSetHash;
         registration.capabilitySetHash = executionPolicyRegistry.computeTradeCapabilityHashV1(capability);
         _authorizeFactoryAndApproval(registration, address(providerFactory));
-        providerFactory.registerAndBind(registry, executionPolicyRegistry, registration, capability);
+        _launchPartner(registration, capability);
+        assertTrue(capability.executionEnabled);
+        assertGt(capability.routes[0].activationBlock, block.number);
     }
 
-    function test_delayedExecutionFlagIsRecheckedAtExactLaunchBlock() public {
+    function test_delayedRouteRejectsFalseDeclarationAndBindsTrueForLaterDynamicActivation() public {
         IProgrammableCustomRegistryV1.LaunchRegistrationV1 memory registration =
             _partnerRegistration("delayed-window", _hash("provider-delayed-window"));
         IProgrammableCustomExecutionPolicyV2.TradeCapabilityV1 memory capability = _standardCapability(registration);
@@ -526,9 +617,8 @@ contract ProgrammableCustomRegistryV2Test is Test {
         registration.marketSetHash = capability.marketSetHash;
         registration.capabilitySetHash = executionPolicyRegistry.computeTradeCapabilityHashV1(capability);
         _authorizeFactoryAndApproval(registration, address(providerFactory));
-        vm.roll(block.number + 20);
         vm.expectPartialRevert(ProgrammableCustomTradeCapabilityValidatorV1.InvalidTradeCapability.selector);
-        providerFactory.registerAndBind(registry, executionPolicyRegistry, registration, capability);
+        _launchPartner(registration, capability);
 
         registration = _partnerRegistration("future-enabled", _hash("provider-future-enabled"));
         capability = _standardCapability(registration);
@@ -537,8 +627,9 @@ contract ProgrammableCustomRegistryV2Test is Test {
         registration.marketSetHash = capability.marketSetHash;
         registration.capabilitySetHash = executionPolicyRegistry.computeTradeCapabilityHashV1(capability);
         _authorizeFactoryAndApproval(registration, address(providerFactory));
-        vm.expectPartialRevert(ProgrammableCustomTradeCapabilityValidatorV1.InvalidTradeCapability.selector);
-        providerFactory.registerAndBind(registry, executionPolicyRegistry, registration, capability);
+        _launchPartner(registration, capability);
+        assertTrue(capability.executionEnabled);
+        assertGt(capability.routes[0].activationBlock, block.number);
     }
 
     function test_stateReadSourceAndReviewedBeforeSwapReturnDeltaBind() public {
@@ -551,7 +642,7 @@ contract ProgrammableCustomRegistryV2Test is Test {
         registration.marketSetHash = capability.marketSetHash;
         registration.capabilitySetHash = executionPolicyRegistry.computeTradeCapabilityHashV1(capability);
         _authorizeFactoryAndApproval(registration, address(providerFactory));
-        providerFactory.registerAndBind(registry, executionPolicyRegistry, registration, capability);
+        _launchPartner(registration, capability);
 
         registration = _partnerRegistration("reviewed-delta", _hash("provider-reviewed-delta"));
         capability = _standardCapability(registration);
@@ -564,7 +655,7 @@ contract ProgrammableCustomRegistryV2Test is Test {
         registration.marketSetHash = capability.marketSetHash;
         registration.capabilitySetHash = executionPolicyRegistry.computeTradeCapabilityHashV1(capability);
         _authorizeFactoryAndApproval(registration, address(providerFactory));
-        providerFactory.registerAndBind(registry, executionPolicyRegistry, registration, capability);
+        _launchPartner(registration, capability);
 
         registration = _partnerRegistration("unreviewed-delta", _hash("provider-unreviewed-delta"));
         capability = _standardCapability(registration);
@@ -577,7 +668,7 @@ contract ProgrammableCustomRegistryV2Test is Test {
         registration.capabilitySetHash = executionPolicyRegistry.computeTradeCapabilityHashV1(capability);
         _authorizeFactoryAndApproval(registration, address(providerFactory));
         vm.expectPartialRevert(ProgrammableCustomTradeCapabilityValidatorV1.InvalidTradeCapability.selector);
-        providerFactory.registerAndBind(registry, executionPolicyRegistry, registration, capability);
+        _launchPartner(registration, capability);
     }
 
     function test_multiMarketMultiSourceOrderingAndMaximumCounts() public {
@@ -604,7 +695,7 @@ contract ProgrammableCustomRegistryV2Test is Test {
         registration.marketSetHash = capability.marketSetHash;
         registration.capabilitySetHash = executionPolicyRegistry.computeTradeCapabilityHashV1(capability);
         _authorizeFactoryAndApproval(registration, address(providerFactory));
-        providerFactory.registerAndBind(registry, executionPolicyRegistry, registration, capability);
+        _launchPartner(registration, capability);
 
         IProgrammableCustomExecutionPolicyV2.TradeRouteV1[] memory tooManyRoutes =
             new IProgrammableCustomExecutionPolicyV2.TradeRouteV1[](257);
@@ -649,7 +740,7 @@ contract ProgrammableCustomRegistryV2Test is Test {
         IProgrammableCustomExecutionPolicyV2.TradeCapabilityV1 memory substitutedCapability = approvedCapability;
         substitutedCapability.evidenceHash = _hash("substituted-policy-evidence");
         vm.expectPartialRevert(ProgrammableCustomExecutionPolicyRegistryV2.ExecutionPolicyBindingMismatch.selector);
-        providerFactory.registerAndBind(registry, executionPolicyRegistry, registration, substitutedCapability);
+        _launchPartner(registration, substitutedCapability);
         assertEq(uint8(registry.launchState(registration.launchId).status), 0);
         assertFalse(registry.approvalConsumed(registration.approvalId));
     }
@@ -665,8 +756,8 @@ contract ProgrammableCustomRegistryV2Test is Test {
         registration.capabilitySetHash = executionPolicyRegistry.computeTradeCapabilityHashV1(capability);
         _authorizeFactoryAndApproval(registration, address(providerFactory));
 
-        vm.expectPartialRevert(ProgrammableCustomTradeCapabilityValidatorV1.InvalidTradeCapability.selector);
-        providerFactory.registerAndBind(registry, executionPolicyRegistry, registration, capability);
+        vm.expectPartialRevert(ProgrammableCustomAtomicRegistrarV2.InvalidPartnerFactoryBinding.selector);
+        _launchPartner(registration, capability);
         assertEq(uint8(registry.launchState(registration.launchId).status), 0);
     }
 
@@ -682,7 +773,7 @@ contract ProgrammableCustomRegistryV2Test is Test {
         registration.capabilitySetHash = executionPolicyRegistry.computeTradeCapabilityHashV1(capability);
         _authorizeFactoryAndApproval(registration, address(providerFactory));
 
-        providerFactory.registerAndBind(registry, executionPolicyRegistry, registration, capability);
+        _launchPartner(registration, capability);
         assertFalse(capability.executionEnabled);
         assertGt(capability.marketDataSources[0].startBlock, block.number);
         assertEq(executionPolicyRegistry.tradeCapabilityHash(registration.launchId), registration.capabilitySetHash);
@@ -718,56 +809,152 @@ contract ProgrammableCustomRegistryV2Test is Test {
             _partnerRegistration("cross-generation", _hash("future-provider-generation"));
         IProgrammableCustomPartnerFactoryRegistryV1.FactoryAuthorizationV1 memory authorization =
             _factoryAuthorization(registration, address(providerFactory));
+        IProgrammableCustomPartnerFactoryRegistryV2.ProviderFactoryBindingV2 memory providerBinding =
+            _providerFactoryBinding(registration, address(providerFactory));
         authorization.registryGeneration = 1;
-        authorization.configurationHash = factoryRegistry.computeConfigurationHash(authorization);
+        authorization.configurationHash = factoryRegistry.computeConfigurationHashV2(authorization, providerBinding);
 
         vm.prank(FACTORY_APPROVER);
         vm.expectPartialRevert(ProgrammableCustomPartnerFactoryRegistryV2.RegistryScopeMismatch.selector);
-        factoryRegistry.authorizeFactory(authorization);
+        factoryRegistry.authorizeFactoryV2(authorization, providerBinding);
     }
 
-    function test_authorizedRecordRejectsWrongFactoryRuntimePermissionsConfigurationAndFee() public {
+    function test_providerFactoryProxyAuthorizationFailsClosed() public {
+        IProgrammableCustomRegistryV1.LaunchRegistrationV1 memory registration =
+            _partnerRegistration("proxy-factory-rejected", _hash("provider-proxy-factory"));
+        IProgrammableCustomPartnerFactoryRegistryV1.FactoryAuthorizationV1 memory authorization =
+            _factoryAuthorization(registration, address(providerFactory));
+        IProgrammableCustomPartnerFactoryRegistryV2.ProviderFactoryBindingV2 memory providerBinding =
+            _providerFactoryBinding(registration, address(providerFactory));
+        providerBinding.proxyKind = IProgrammableCustomExecutionPolicyV2.ProxyKindV1.Eip1967Admin;
+        providerBinding.proxyBindingEvidenceHash = _hash("claimed-eip1967-slot-evidence");
+        providerBinding.proxyPolicyHash = _hash("claimed-eip1967-policy");
+        providerBinding.implementation = address(wrongFactory);
+        providerBinding.implementationRuntimeCodeHash = address(wrongFactory).codehash;
+        providerBinding.admin = ADMIN;
+        authorization.configurationHash = factoryRegistry.computeConfigurationHashV2(authorization, providerBinding);
+
+        vm.prank(FACTORY_APPROVER);
+        vm.expectPartialRevert(ProgrammableCustomPartnerFactoryRegistryV2.InvalidProxyBinding.selector);
+        factoryRegistry.authorizeFactoryV2(authorization, providerBinding);
+    }
+
+    function test_policyRevisionReplacementThenRetainedCorrectionAreAppendOnlyAndCrossEmitterBound() public {
+        (
+            IProgrammableCustomRegistryV1.LaunchRegistrationV1 memory registration,
+            IProgrammableCustomExecutionPolicyV2.TradeCapabilityV1 memory initialCapability
+        ) = _launchAndFinalizeNative("policy-revision-sequence");
+        IProgrammableCustomExecutionPolicyV2.TradeCapabilityV1 memory replacement = _standardCapability(registration);
+        replacement.routes[0].configurationHash = _hash("replacement-route-configuration");
+        replacement.evidenceHash = _hash("replacement-capability-evidence");
+        _finalizeCapability(replacement);
+        bytes32 replacementHash = executionPolicyRegistry.computeTradeCapabilityHashV1(replacement);
+        IProgrammableCustomExecutionPolicyRevisionV2.TradeCapabilityRevisionApprovalV1 memory approval =
+            _revisionApproval(registration, replacementHash, true, "replacement");
+        IProgrammableCustomRegistryV1.RecordCorrectionV1 memory correction = _correction(approval);
+
+        vm.prank(REGISTRY_APPROVER);
+        executionPolicyRevisionRegistry.authorizeTradeCapabilityRevisionV1(approval);
+        vm.recordLogs();
+        vm.prank(CORRECTOR);
+        executionPolicyRevisionRegistry.correctAndBindRevisionV1(correction, replacement, approval.approvalId);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bool initialPolicyEmitterSeen;
+        bool revisionEmitterSeen;
+        bytes32 policyTopic = keccak256(
+            "CustomLaunchExecutionPolicyBoundV2(bytes32,bytes32,bytes32,bytes32,uint32,bytes32,uint32,bool,bytes32,bytes32)"
+        );
+        for (uint256 index; index < logs.length; index++) {
+            if (logs[index].topics[0] == policyTopic) {
+                assertEq(logs[index].emitter, address(executionPolicyRegistry));
+                initialPolicyEmitterSeen = true;
+            }
+            if (logs[index].emitter == address(executionPolicyRevisionRegistry)) revisionEmitterSeen = true;
+        }
+        assertTrue(initialPolicyEmitterSeen);
+        assertTrue(revisionEmitterSeen);
+        assertEq(executionPolicyRevisionRegistry.tradeCapabilityRevision(registration.launchId), 2);
+        assertEq(executionPolicyRevisionRegistry.tradeCapabilityHash(registration.launchId), replacementHash);
+        assertEq(
+            executionPolicyRevisionRegistry.tradeCapabilityHashAtRevision(registration.launchId, 1),
+            executionPolicyRegistry.computeTradeCapabilityHashV1(initialCapability)
+        );
+
+        IProgrammableCustomExecutionPolicyRevisionV2.TradeCapabilityRevisionApprovalV1 memory retainedApproval =
+            _revisionApproval(registration, replacementHash, false, "retained");
+        retainedApproval.previousRecordHash = correction.correctedRecordHash;
+        retainedApproval.revision = 3;
+        IProgrammableCustomRegistryV1.RecordCorrectionV1 memory retainedCorrection = _correction(retainedApproval);
+        vm.prank(REGISTRY_APPROVER);
+        executionPolicyRevisionRegistry.authorizeTradeCapabilityRevisionV1(retainedApproval);
+        IProgrammableCustomExecutionPolicyV2.TradeCapabilityV1 memory emptyCapability;
+        vm.prank(CORRECTOR);
+        executionPolicyRevisionRegistry.correctAndBindRevisionV1(
+            retainedCorrection, emptyCapability, retainedApproval.approvalId
+        );
+        assertEq(executionPolicyRevisionRegistry.tradeCapabilityRevision(registration.launchId), 3);
+        assertEq(executionPolicyRevisionRegistry.tradeCapabilityHash(registration.launchId), replacementHash);
+        assertEq(
+            executionPolicyRevisionRegistry.tradeCapabilityHashAtRevision(registration.launchId, 3), replacementHash
+        );
+
+        vm.prank(CORRECTOR);
+        vm.expectPartialRevert(ProgrammableCustomExecutionPolicyRevisionRegistryV2.ApprovalAlreadyConsumed.selector);
+        executionPolicyRevisionRegistry.correctAndBindRevisionV1(
+            retainedCorrection, emptyCapability, retainedApproval.approvalId
+        );
+    }
+
+    function test_policyRevisionRejectsGapPayloadMutationAndRevokedApproval() public {
+        (IProgrammableCustomRegistryV1.LaunchRegistrationV1 memory registration,) =
+            _launchAndFinalizeNative("policy-revision-negative");
+        bytes32 currentPolicyHash = executionPolicyRevisionRegistry.tradeCapabilityHash(registration.launchId);
+
+        IProgrammableCustomExecutionPolicyRevisionV2.TradeCapabilityRevisionApprovalV1 memory gap =
+            _revisionApproval(registration, currentPolicyHash, false, "gap");
+        gap.revision = 3;
+        vm.prank(REGISTRY_APPROVER);
+        vm.expectPartialRevert(ProgrammableCustomExecutionPolicyRevisionRegistryV2.RevisionMismatch.selector);
+        executionPolicyRevisionRegistry.authorizeTradeCapabilityRevisionV1(gap);
+
+        IProgrammableCustomExecutionPolicyRevisionV2.TradeCapabilityRevisionApprovalV1 memory approval =
+            _revisionApproval(registration, currentPolicyHash, false, "payload");
+        IProgrammableCustomRegistryV1.RecordCorrectionV1 memory correction = _correction(approval);
+        vm.prank(REGISTRY_APPROVER);
+        executionPolicyRevisionRegistry.authorizeTradeCapabilityRevisionV1(approval);
+        IProgrammableCustomExecutionPolicyV2.TradeCapabilityV1 memory emptyCapability;
+        correction.correctedRecordHash = _hash("substituted-corrected-record");
+        vm.prank(CORRECTOR);
+        vm.expectPartialRevert(ProgrammableCustomExecutionPolicyRevisionRegistryV2.CorrectionBindingMismatch.selector);
+        executionPolicyRevisionRegistry.correctAndBindRevisionV1(correction, emptyCapability, approval.approvalId);
+
+        vm.prank(REGISTRY_REVOKER);
+        executionPolicyRevisionRegistry.revokeTradeCapabilityRevisionApprovalV1(
+            approval.approvalId, _hash("revision-revoked"), _hash("revision-revocation-evidence")
+        );
+        correction = _correction(approval);
+        vm.prank(CORRECTOR);
+        vm.expectPartialRevert(ProgrammableCustomExecutionPolicyRevisionRegistryV2.ApprovalRevoked.selector);
+        executionPolicyRevisionRegistry.correctAndBindRevisionV1(correction, emptyCapability, approval.approvalId);
+        assertEq(executionPolicyRevisionRegistry.tradeCapabilityRevision(registration.launchId), 1);
+    }
+
+    function test_authorizedRecordRejectsDirectFactoryBypassAndRuntimeSubstitution() public {
         IProgrammableCustomRegistryV1.LaunchRegistrationV1 memory registration =
             _partnerRegistration("exact-factory-binding", _hash("provider-x"));
+        IProgrammableCustomExecutionPolicyV2.TradeCapabilityV1 memory capability =
+            _unsupportedMarketCapability(registration, false);
+        registration.marketSetHash = capability.marketSetHash;
+        registration.capabilitySetHash = executionPolicyRegistry.computeTradeCapabilityHashV1(capability);
         _authorizeFactoryAndApproval(registration, address(providerFactory));
-        bytes32 canonicalConfigurationHash = registration.configurationHash;
 
         vm.expectPartialRevert(ProgrammableCustomPartnerFactoryRegistryV2.FactoryCallerMismatch.selector);
         wrongFactory.register(registry, registration);
 
-        IProgrammableCustomRegistryV1.LaunchRegistrationV1 memory mutated =
-            _partnerRegistration("exact-factory-binding", _hash("provider-x"));
-        mutated.configurationHash = canonicalConfigurationHash;
-        mutated.permissionsHash = _hash("wrong-permissions");
-        _rebind(mutated);
-        vm.expectPartialRevert(ProgrammableCustomPartnerFactoryRegistryV2.ConfigurationMismatch.selector);
-        providerFactory.register(registry, mutated);
-
-        mutated = _partnerRegistration("exact-factory-binding", _hash("provider-x"));
-        mutated.configurationHash = canonicalConfigurationHash;
-        mutated.runtimeCodeSetHash = _hash("wrong-runtime-set");
-        mutated.feePolicy.partnerRuntimeCodeSetHash = mutated.runtimeCodeSetHash;
-        _rebind(mutated);
-        vm.expectPartialRevert(ProgrammableCustomPartnerFactoryRegistryV2.ConfigurationMismatch.selector);
-        providerFactory.register(registry, mutated);
-
-        mutated = _partnerRegistration("exact-factory-binding", _hash("provider-x"));
-        mutated.configurationHash = _hash("fake-configuration");
-        _rebind(mutated);
-        vm.expectPartialRevert(ProgrammableCustomPartnerFactoryRegistryV2.ConfigurationNotActive.selector);
-        providerFactory.register(registry, mutated);
-
-        mutated = _partnerRegistration("exact-factory-binding", _hash("provider-x"));
-        mutated.configurationHash = canonicalConfigurationHash;
-        mutated.feePolicy.verificationEvidenceHash = _hash("different-fee-evidence");
-        _rebind(mutated);
-        vm.expectPartialRevert(ProgrammableCustomPartnerFactoryRegistryV2.ConfigurationMismatch.selector);
-        providerFactory.register(registry, mutated);
-
         vm.etch(address(providerFactory), hex"60006000fd");
-        vm.prank(address(providerFactory));
-        vm.expectPartialRevert(ProgrammableCustomPartnerFactoryRegistryV2.FactoryRuntimeMismatch.selector);
-        registry.registerLaunch(registration);
+        vm.expectPartialRevert(ProgrammableCustomAtomicRegistrarV2.InvalidPartnerFactoryBinding.selector);
+        _launchPartner(registration, capability);
+        assertFalse(registry.approvalConsumed(registration.approvalId));
     }
 
     function test_nativePolicyIsExactlyTenBpsAndCannotCarryPartnerOverlay() public {
@@ -813,10 +1000,12 @@ contract ProgrammableCustomRegistryV2Test is Test {
             _partnerRegistration("configuration-domain", _hash("provider-z"));
         IProgrammableCustomPartnerFactoryRegistryV1.FactoryAuthorizationV1 memory authorization =
             _factoryAuthorization(registration, address(providerFactory));
-        bytes32 generationTwoHash = factoryRegistry.computeConfigurationHash(authorization);
+        IProgrammableCustomPartnerFactoryRegistryV2.ProviderFactoryBindingV2 memory providerBinding =
+            _providerFactoryBinding(registration, address(providerFactory));
+        bytes32 generationTwoHash = factoryRegistry.computeConfigurationHashV2(authorization, providerBinding);
 
         authorization.registryGeneration = 1;
-        bytes32 generationOneScopedHash = factoryRegistry.computeConfigurationHash(authorization);
+        bytes32 generationOneScopedHash = factoryRegistry.computeConfigurationHashV2(authorization, providerBinding);
         assertTrue(generationTwoHash != generationOneScopedHash);
 
         authorization.registryGeneration = 2;
@@ -847,6 +1036,7 @@ contract ProgrammableCustomRegistryV2Test is Test {
                 keccak256("programmable.custom-partner-configuration.v2"),
                 modelHash,
                 factoryHash,
+                keccak256(abi.encode(keccak256("programmable.custom-provider-factory.v2"), providerBinding)),
                 authorization.permissionsHash,
                 authorization.feePolicyHash
             )
@@ -895,6 +1085,93 @@ contract ProgrammableCustomRegistryV2Test is Test {
             vm.expectPartialRevert(ProgrammableCustomFeePolicyVerifierLibV2.InvalidFeePolicy.selector);
             verifier.verify(policy);
         }
+    }
+
+    function _launchAndFinalizeNative(string memory label)
+        private
+        returns (
+            IProgrammableCustomRegistryV1.LaunchRegistrationV1 memory registration,
+            IProgrammableCustomExecutionPolicyV2.TradeCapabilityV1 memory capability
+        )
+    {
+        ProgrammableCustomAtomicRegistrarV1.AtomicLaunchRequestV1 memory request = _marketAtomicRequest(label, 55);
+        capability = _standardCapability(request.registration);
+        request.registration.marketSetHash = capability.marketSetHash;
+        request.registration.capabilitySetHash = executionPolicyRegistry.computeTradeCapabilityHashV1(capability);
+        _rebind(request.registration);
+        _authorizeApproval(request.registration);
+        atomicRegistrar.deployInitializeRegisterAndBindTradeCapabilityV1(request, capability);
+        registration = request.registration;
+        _finalizeLaunch(registration);
+    }
+
+    function _finalizeLaunch(IProgrammableCustomRegistryV1.LaunchRegistrationV1 memory registration) private {
+        uint64 observedBlock = registry.launchState(registration.launchId).observedAtBlock;
+        uint64 confirmedBlock = observedBlock + registry.MINIMUM_FINALITY_BLOCKS();
+        vm.roll(uint256(confirmedBlock) + 1);
+        bytes32 observedBlockHash = keccak256(abi.encode("observed-block", registration.launchId));
+        bytes32 confirmedBlockHash = keccak256(abi.encode("confirmed-block", registration.launchId));
+        vm.setBlockhash(observedBlock, observedBlockHash);
+        vm.setBlockhash(confirmedBlock, confirmedBlockHash);
+        IProgrammableCustomRegistryV1.FinalityProofV1 memory proof;
+        proof.chainId = registration.chainId;
+        proof.registryGeneration = registration.registryGeneration;
+        proof.launchId = registration.launchId;
+        proof.observedBlockNumber = observedBlock;
+        proof.observedBlockHash = observedBlockHash;
+        proof.observedTransactionHash = keccak256(abi.encode("observed-transaction", registration.launchId));
+        proof.observedTransactionIndex = 1;
+        proof.observedLogIndex = 2;
+        proof.confirmedHeadBlockNumber = confirmedBlock;
+        proof.confirmedHeadBlockHash = confirmedBlockHash;
+        proof.finalityPolicyHash = registration.finalityPolicyHash;
+        proof.finalityEvidenceHash = keccak256(abi.encode("finality-evidence", registration.launchId));
+        vm.prank(FINALIZER);
+        registry.finalizeLaunch(proof);
+    }
+
+    function _revisionApproval(
+        IProgrammableCustomRegistryV1.LaunchRegistrationV1 memory registration,
+        bytes32 newPolicyHash,
+        bool policyReplacement,
+        string memory label
+    )
+        private
+        view
+        returns (IProgrammableCustomExecutionPolicyRevisionV2.TradeCapabilityRevisionApprovalV1 memory approval)
+    {
+        IProgrammableCustomRegistryV1.LaunchStateV1 memory state = registry.launchState(registration.launchId);
+        approval.chainId = registration.chainId;
+        approval.registryGeneration = registration.registryGeneration;
+        approval.approvalId = keccak256(abi.encode("revision-approval", registration.launchId, label));
+        approval.launchId = registration.launchId;
+        approval.revision = state.latestRecordRevision + 1;
+        approval.previousPolicyHash = executionPolicyRevisionRegistry.tradeCapabilityHash(registration.launchId);
+        approval.newPolicyHash = newPolicyHash;
+        approval.policyReplacement = policyReplacement;
+        approval.previousRecordHash = state.latestRecordHash;
+        approval.correctedRecordPayloadHash = keccak256(abi.encode("corrected-record-payload", label));
+        approval.correctionReasonCode = keccak256(abi.encode("correction-reason", label));
+        approval.correctionEvidenceHash = keccak256(abi.encode("correction-evidence", label));
+        approval.validAfterBlock = uint64(block.number);
+        approval.expiresAtBlock = uint64(block.number + 100);
+        approval.approvalEvidenceHash = keccak256(abi.encode("revision-approval-evidence", label));
+    }
+
+    function _correction(IProgrammableCustomExecutionPolicyRevisionV2.TradeCapabilityRevisionApprovalV1 memory approval)
+        private
+        view
+        returns (IProgrammableCustomRegistryV1.RecordCorrectionV1 memory correction)
+    {
+        correction.chainId = approval.chainId;
+        correction.registryGeneration = approval.registryGeneration;
+        correction.launchId = approval.launchId;
+        correction.revision = approval.revision;
+        correction.previousRecordHash = approval.previousRecordHash;
+        correction.correctedRecordHash =
+            executionPolicyRevisionRegistry.computeTradeCapabilityRevisionRecordHashV1(approval);
+        correction.reasonCode = approval.correctionReasonCode;
+        correction.evidenceHash = approval.correctionEvidenceHash;
     }
 
     function _projectOnlyCapability(IProgrammableCustomRegistryV1.LaunchRegistrationV1 memory registration)
@@ -955,6 +1232,9 @@ contract ProgrammableCustomRegistryV2Test is Test {
         route.adapterVersion = _hash("execution-adapter-v1");
         route.proxy = proxy;
         if (proxy) {
+            route.proxyKind = IProgrammableCustomExecutionPolicyV2.ProxyKindV1.Eip1967Admin;
+            route.proxyBindingEvidenceHash = _hash("adapter-proxy-binding-evidence");
+            route.proxyPolicyHash = _hash("adapter-proxy-policy");
             route.implementation = address(wrongFactory);
             route.implementationRuntimeCodeHash = address(wrongFactory).codehash;
             route.admin = ADMIN;
@@ -985,6 +1265,7 @@ contract ProgrammableCustomRegistryV2Test is Test {
         metricIds[1] = executionPolicyRegistry.MARKET_DATA_PRICE_METRIC_ID();
         metricIds[2] = executionPolicyRegistry.MARKET_DATA_VOLUME_METRIC_ID();
         metricIds[3] = executionPolicyRegistry.MARKET_DATA_LIQUIDITY_METRIC_ID();
+        source.metricIds = metricIds;
         source.metricsHash = executionPolicyRegistry.computeMarketDataMetricSetHashV1(metricIds);
         source.derivationPolicyHash = _hash("canonical-event-derivation-v1");
         source.configurationHash = _hash("market-source-configuration");
@@ -1004,6 +1285,7 @@ contract ProgrammableCustomRegistryV2Test is Test {
         bytes32[] memory metricIds = new bytes32[](2);
         metricIds[0] = executionPolicyRegistry.MARKET_DATA_PRICE_METRIC_ID();
         metricIds[1] = executionPolicyRegistry.MARKET_DATA_LIQUIDITY_METRIC_ID();
+        source.metricIds = metricIds;
         source.metricsHash = executionPolicyRegistry.computeMarketDataMetricSetHashV1(metricIds);
         source.derivationPolicyHash = _hash("canonical-state-read-v1");
         source.stateView = address(runtimeTarget);
@@ -1075,12 +1357,26 @@ contract ProgrammableCustomRegistryV2Test is Test {
     ) private {
         IProgrammableCustomPartnerFactoryRegistryV1.FactoryAuthorizationV1 memory
             authorization = _factoryAuthorization(registration, factory);
-        authorization.configurationHash = factoryRegistry.computeConfigurationHash(authorization);
+        IProgrammableCustomPartnerFactoryRegistryV2.ProviderFactoryBindingV2 memory providerBinding =
+            _providerFactoryBinding(registration, factory);
+        authorization.configurationHash = factoryRegistry.computeConfigurationHashV2(authorization, providerBinding);
         registration.configurationHash = authorization.configurationHash;
         vm.prank(FACTORY_APPROVER);
-        factoryRegistry.authorizeFactory(authorization);
+        factoryRegistry.authorizeFactoryV2(authorization, providerBinding);
         _rebind(registration);
         _authorizeApproval(registration);
+    }
+
+    function _launchPartner(
+        IProgrammableCustomRegistryV1.LaunchRegistrationV1 memory registration,
+        IProgrammableCustomExecutionPolicyV2.TradeCapabilityV1 memory capability
+    ) private returns (address primaryContract) {
+        ProgrammableCustomAtomicRegistrarV2.PartnerFactoryLaunchRequestV2 memory request =
+            ProgrammableCustomAtomicRegistrarV2.PartnerFactoryLaunchRequestV2({
+                registration: registration, factoryCalldata: _providerFactoryCalldata(registration)
+            });
+        vm.prank(registration.launchWallet);
+        primaryContract = atomicRegistrar.launchPartnerFactoryRegisterAndBindTradeCapabilityV2(request, capability);
     }
 
     function _authorizeApproval(IProgrammableCustomRegistryV1.LaunchRegistrationV1 memory registration) private {
@@ -1119,8 +1415,8 @@ contract ProgrammableCustomRegistryV2Test is Test {
             modelSourceCommitId: registration.commitId,
             factorySourceRepositoryId: _hash("provider-factory-repository"),
             factorySourceCommitId: _hash("provider-factory-commit"),
-            factory: factory,
-            factoryRuntimeCodeHash: factory.codehash,
+            factory: address(atomicRegistrar),
+            factoryRuntimeCodeHash: address(atomicRegistrar).codehash,
             launchRuntimeCodeSetHash: registration.runtimeCodeSetHash,
             permissionsHash: registration.permissionsHash,
             feePolicyHash: verifier.verify(registration.feePolicy),
@@ -1128,6 +1424,43 @@ contract ProgrammableCustomRegistryV2Test is Test {
             expiresAtBlock: uint64(block.number + 100),
             evidenceHash: keccak256(abi.encode("factory-evidence", registration.launchId))
         });
+    }
+
+    function _providerFactoryBinding(
+        IProgrammableCustomRegistryV1.LaunchRegistrationV1 memory registration,
+        address factory
+    ) private view returns (IProgrammableCustomPartnerFactoryRegistryV2.ProviderFactoryBindingV2 memory binding) {
+        binding.launchId = registration.launchId;
+        binding.approvalId = registration.approvalId;
+        binding.expectedPrimaryContract = registration.primaryContract;
+        binding.expectedPrimaryRuntimeCodeHash = registration.primaryRuntimeCodeHash;
+        binding.providerFactory = factory;
+        binding.providerFactoryRuntimeCodeHash = factory.codehash;
+        binding.proxyKind = IProgrammableCustomExecutionPolicyV2.ProxyKindV1.None;
+        binding.implementation = factory;
+        binding.implementationRuntimeCodeHash = factory.codehash;
+        binding.launchSelector = FutureProviderFactoryV2.deploy.selector;
+        binding.launchCalldataHash = keccak256(_providerFactoryCalldata(registration));
+        binding.launchResultHash = keccak256(abi.encode(registration.primaryContract));
+        binding.resultDecodingPolicyHash = factoryRegistry.ADDRESS_RESULT_POLICY_HASH();
+        binding.sourceRepositoryId = _hash("provider-factory-repository");
+        binding.sourceCommitId = _hash("provider-factory-commit");
+        binding.sourceCommitment = _hash("provider-factory-source");
+        binding.buildCommitment = _hash("provider-factory-build");
+        binding.artifactSetHash = _hash("provider-factory-artifacts");
+        binding.evidenceHash = keccak256(abi.encode("provider-factory-evidence", registration.launchId));
+    }
+
+    function _providerFactoryCalldata(IProgrammableCustomRegistryV1.LaunchRegistrationV1 memory registration)
+        private
+        pure
+        returns (bytes memory)
+    {
+        return abi.encodeCall(FutureProviderFactoryV2.deploy, (_providerSalt(registration.launchId), uint256(77)));
+    }
+
+    function _providerSalt(bytes32 launchId) private pure returns (bytes32) {
+        return keccak256(abi.encode("programmable.provider-factory-salt.v2", launchId));
     }
 
     function _nativeRegistration(string memory label)
@@ -1164,7 +1497,7 @@ contract ProgrammableCustomRegistryV2Test is Test {
         request.registration.deploymentConfigurationHash = atomicRegistrar.computeAtomicRequestCommitment(request);
         IProgrammableCustomExecutionPolicyV2.TradeCapabilityV1 memory capability =
             atomicRegistrar.unsupportedTradeCapabilityV1(request.registration);
-        request.registration.capabilitySetHash = atomicRegistrar.computeTradeCapabilityHashV1(capability);
+        request.registration.capabilitySetHash = executionPolicyRegistry.computeTradeCapabilityHashV1(capability);
         _rebind(request.registration);
     }
 
@@ -1199,6 +1532,13 @@ contract ProgrammableCustomRegistryV2Test is Test {
         registration.feePolicy.partnerRepositoryId = registration.repositoryId;
         registration.feePolicy.partnerCommitId = registration.commitId;
         registration.feePolicy.partnerRuntimeCodeSetHash = registration.runtimeCodeSetHash;
+        registration.launchWallet = address(this);
+        registration.primaryContract = Create2.computeAddress(
+            _providerSalt(registration.launchId),
+            keccak256(type(AtomicLaunchTargetV2).creationCode),
+            address(providerFactory)
+        );
+        registration.primaryRuntimeCodeHash = keccak256(type(AtomicLaunchTargetV2).runtimeCode);
     }
 
     function _baseRegistration(string memory label)

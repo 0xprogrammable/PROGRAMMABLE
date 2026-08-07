@@ -5,6 +5,9 @@ import { Script } from "forge-std/Script.sol";
 
 import { ProgrammableCustomAtomicRegistrarV2 } from "../src/ProgrammableCustomAtomicRegistrarV2.sol";
 import { ProgrammableCustomExecutionPolicyRegistryV2 } from "../src/ProgrammableCustomExecutionPolicyRegistryV2.sol";
+import {
+    ProgrammableCustomExecutionPolicyRevisionRegistryV2
+} from "../src/ProgrammableCustomExecutionPolicyRevisionRegistryV2.sol";
 import { ProgrammableCustomFeePolicyVerifierV2 } from "../src/ProgrammableCustomFeePolicyVerifierV2.sol";
 import { ProgrammableCustomPartnerFactoryRegistryV2 } from "../src/ProgrammableCustomPartnerFactoryRegistryV2.sol";
 import { ProgrammableCustomRegistryV1 } from "../src/ProgrammableCustomRegistryV1.sol";
@@ -14,8 +17,8 @@ import {
 } from "../src/interfaces/IProgrammableCustomPartnerFactoryRegistryV1.sol";
 import { IProgrammableCustomRegistryV1 } from "../src/interfaces/IProgrammableCustomRegistryV1.sol";
 
-/// @notice Five-transaction, nonce-bound Generation 2 release deployment.
-/// @dev This script pins generation=2 and never activates public status or deploys a partner-owned factory.
+/// @notice Six-transaction, nonce-bound Generation 2 release deployment.
+/// @dev This script pins generation=2 and never activates public status or deploys a provider-owned factory.
 contract DeployProgrammableCustomRegistryReleaseV2 is Script {
     uint64 private constant REGISTRY_GENERATION = 2;
 
@@ -41,16 +44,39 @@ contract DeployProgrammableCustomRegistryReleaseV2 is Script {
         bytes32 registryPolicyHash;
     }
 
-    function run()
-        external
-        returns (
-            ProgrammableCustomRegistryV2 registry,
-            ProgrammableCustomPartnerFactoryRegistryV2 partnerFactoryRegistry,
-            ProgrammableCustomFeePolicyVerifierV2 verifier,
-            ProgrammableCustomExecutionPolicyRegistryV2 executionPolicyRegistry,
-            ProgrammableCustomAtomicRegistrarV2 registrar
-        )
-    {
+    struct PredictedAddresses {
+        address verifier;
+        address partnerFactoryRegistry;
+        address initialPolicyRegistry;
+        address policyRevisionRegistry;
+        address registry;
+        address registrar;
+    }
+
+    struct DeploymentResult {
+        ProgrammableCustomFeePolicyVerifierV2 verifier;
+        ProgrammableCustomPartnerFactoryRegistryV2 partnerFactoryRegistry;
+        ProgrammableCustomExecutionPolicyRegistryV2 initialPolicyRegistry;
+        ProgrammableCustomExecutionPolicyRevisionRegistryV2 policyRevisionRegistry;
+        ProgrammableCustomRegistryV2 registry;
+        ProgrammableCustomAtomicRegistrarV2 registrar;
+    }
+
+    function run() external returns (DeploymentResult memory deployed) {
+        DeploymentConfig memory config = _environmentConfig();
+        if (config.chainId != block.chainid) revert DeploymentChainMismatch(config.chainId, block.chainid);
+        uint256 currentNonce = vm.getNonce(config.deployer);
+        if (config.startingNonce != currentNonce) {
+            revert DeploymentNonceMismatch(config.startingNonce, currentNonce);
+        }
+
+        PredictedAddresses memory predicted = _predictedAddresses(config.deployer, currentNonce);
+        _requireAllVacant(predicted);
+        deployed = _deploy(config, predicted);
+        _validateDeployment(config, predicted, deployed, currentNonce);
+    }
+
+    function _environmentConfig() private view returns (DeploymentConfig memory config) {
         uint256 rawAdminDelay = vm.envUint("CUSTOM_REGISTRY_ADMIN_DELAY_SECONDS");
         uint256 rawMinimumFinalityBlocks = vm.envUint("CUSTOM_REGISTRY_MINIMUM_FINALITY_BLOCKS");
         if (rawAdminDelay > type(uint48).max) {
@@ -61,107 +87,158 @@ contract DeployProgrammableCustomRegistryReleaseV2 is Script {
                 bytes32("minimum-finality-blocks"), rawMinimumFinalityBlocks, type(uint64).max
             );
         }
-        DeploymentConfig memory config = DeploymentConfig({
-            chainId: vm.envUint("CUSTOM_REGISTRY_CHAIN_ID"),
-            startingNonce: vm.envUint("CUSTOM_REGISTRY_STARTING_NONCE"),
-            adminDelay: uint48(rawAdminDelay),
-            deployer: vm.envAddress("CUSTOM_REGISTRY_DEPLOYER"),
-            admin: vm.envAddress("CUSTOM_REGISTRY_ADMIN"),
-            approver: vm.envAddress("CUSTOM_REGISTRY_APPROVER"),
-            finalizer: vm.envAddress("CUSTOM_REGISTRY_FINALIZER"),
-            corrector: vm.envAddress("CUSTOM_REGISTRY_CORRECTOR"),
-            revoker: vm.envAddress("CUSTOM_REGISTRY_REVOKER"),
-            minimumFinalityBlocks: uint64(rawMinimumFinalityBlocks),
-            chainProfileHash: vm.envBytes32("CUSTOM_REGISTRY_CHAIN_PROFILE_HASH"),
-            registryPolicyHash: vm.envBytes32("CUSTOM_REGISTRY_POLICY_HASH")
-        });
-        if (config.chainId != block.chainid) revert DeploymentChainMismatch(config.chainId, block.chainid);
-        uint256 currentNonce = vm.getNonce(config.deployer);
-        if (config.startingNonce != currentNonce) {
-            revert DeploymentNonceMismatch(config.startingNonce, currentNonce);
-        }
+        config.chainId = vm.envUint("CUSTOM_REGISTRY_CHAIN_ID");
+        config.startingNonce = vm.envUint("CUSTOM_REGISTRY_STARTING_NONCE");
+        config.adminDelay = uint48(rawAdminDelay);
+        config.deployer = vm.envAddress("CUSTOM_REGISTRY_DEPLOYER");
+        config.admin = vm.envAddress("CUSTOM_REGISTRY_ADMIN");
+        config.approver = vm.envAddress("CUSTOM_REGISTRY_APPROVER");
+        config.finalizer = vm.envAddress("CUSTOM_REGISTRY_FINALIZER");
+        config.corrector = vm.envAddress("CUSTOM_REGISTRY_CORRECTOR");
+        config.revoker = vm.envAddress("CUSTOM_REGISTRY_REVOKER");
+        config.minimumFinalityBlocks = uint64(rawMinimumFinalityBlocks);
+        config.chainProfileHash = vm.envBytes32("CUSTOM_REGISTRY_CHAIN_PROFILE_HASH");
+        config.registryPolicyHash = vm.envBytes32("CUSTOM_REGISTRY_POLICY_HASH");
+    }
 
-        address predictedVerifier = vm.computeCreateAddress(config.deployer, currentNonce);
-        address predictedPartnerFactoryRegistry = vm.computeCreateAddress(config.deployer, currentNonce + 1);
-        address predictedExecutionPolicyRegistry = vm.computeCreateAddress(config.deployer, currentNonce + 2);
-        address predictedRegistry = vm.computeCreateAddress(config.deployer, currentNonce + 3);
-        address predictedRegistrar = vm.computeCreateAddress(config.deployer, currentNonce + 4);
-        _requireVacant(bytes32("fee-verifier"), predictedVerifier);
-        _requireVacant(bytes32("partner-registry"), predictedPartnerFactoryRegistry);
-        _requireVacant(bytes32("execution-policy-registry"), predictedExecutionPolicyRegistry);
-        _requireVacant(bytes32("registry"), predictedRegistry);
-        _requireVacant(bytes32("registrar"), predictedRegistrar);
+    function _predictedAddresses(address deployer, uint256 nonce)
+        private
+        pure
+        returns (PredictedAddresses memory predicted)
+    {
+        predicted.verifier = vm.computeCreateAddress(deployer, nonce);
+        predicted.partnerFactoryRegistry = vm.computeCreateAddress(deployer, nonce + 1);
+        predicted.initialPolicyRegistry = vm.computeCreateAddress(deployer, nonce + 2);
+        predicted.policyRevisionRegistry = vm.computeCreateAddress(deployer, nonce + 3);
+        predicted.registry = vm.computeCreateAddress(deployer, nonce + 4);
+        predicted.registrar = vm.computeCreateAddress(deployer, nonce + 5);
+    }
 
+    function _requireAllVacant(PredictedAddresses memory predicted) private view {
+        _requireVacant(bytes32("fee-verifier"), predicted.verifier);
+        _requireVacant(bytes32("partner-registry"), predicted.partnerFactoryRegistry);
+        _requireVacant(bytes32("initial-policy-registry"), predicted.initialPolicyRegistry);
+        _requireVacant(bytes32("policy-revision-registry"), predicted.policyRevisionRegistry);
+        _requireVacant(bytes32("registry"), predicted.registry);
+        _requireVacant(bytes32("registrar"), predicted.registrar);
+    }
+
+    function _deploy(DeploymentConfig memory config, PredictedAddresses memory predicted)
+        private
+        returns (DeploymentResult memory deployed)
+    {
         vm.startBroadcast(config.deployer);
-        verifier = new ProgrammableCustomFeePolicyVerifierV2();
-        partnerFactoryRegistry = new ProgrammableCustomPartnerFactoryRegistryV2(
-            config.adminDelay, config.admin, config.approver, config.revoker
+        deployed.verifier = new ProgrammableCustomFeePolicyVerifierV2();
+        deployed.partnerFactoryRegistry = new ProgrammableCustomPartnerFactoryRegistryV2(
+            config.adminDelay, config.admin, config.approver, config.revoker, predicted.registrar
         );
-        executionPolicyRegistry = new ProgrammableCustomExecutionPolicyRegistryV2(
-            IProgrammableCustomRegistryV1(predictedRegistry),
-            IProgrammableCustomPartnerFactoryRegistryV1(address(partnerFactoryRegistry)),
-            predictedRegistrar
+        deployed.initialPolicyRegistry = new ProgrammableCustomExecutionPolicyRegistryV2(
+            IProgrammableCustomRegistryV1(predicted.registry),
+            IProgrammableCustomPartnerFactoryRegistryV1(address(deployed.partnerFactoryRegistry)),
+            predicted.registrar,
+            predicted.policyRevisionRegistry
         );
-        registry = new ProgrammableCustomRegistryV2(
-            ProgrammableCustomRegistryV1.RegistryConfigV1({
-                initialAdminDelay: config.adminDelay,
-                initialAdmin: config.admin,
-                initialApprover: config.approver,
-                initialWriter: predictedRegistrar,
-                initialFinalizer: config.finalizer,
-                initialCorrector: config.corrector,
-                initialRevoker: config.revoker,
-                registryGeneration: REGISTRY_GENERATION,
-                minimumFinalityBlocks: config.minimumFinalityBlocks,
-                chainProfileHash: config.chainProfileHash,
-                registryPolicyHash: config.registryPolicyHash
-            }),
-            partnerFactoryRegistry,
-            verifier,
-            executionPolicyRegistry
+        deployed.policyRevisionRegistry = new ProgrammableCustomExecutionPolicyRevisionRegistryV2(
+            IProgrammableCustomRegistryV1(predicted.registry),
+            deployed.initialPolicyRegistry,
+            config.adminDelay,
+            config.admin,
+            config.approver,
+            config.corrector,
+            config.revoker
         );
-        registrar = new ProgrammableCustomAtomicRegistrarV2(registry, executionPolicyRegistry);
+        deployed.registry = new ProgrammableCustomRegistryV2(
+            _registryConfig(config, predicted),
+            deployed.partnerFactoryRegistry,
+            deployed.verifier,
+            deployed.initialPolicyRegistry,
+            deployed.policyRevisionRegistry
+        );
+        deployed.registrar = new ProgrammableCustomAtomicRegistrarV2(
+            deployed.registry, deployed.initialPolicyRegistry, deployed.partnerFactoryRegistry
+        );
         vm.stopBroadcast();
+    }
 
-        if (address(verifier) != predictedVerifier) {
-            revert DeploymentAddressMismatch(bytes32("fee-verifier"), predictedVerifier, address(verifier));
+    function _registryConfig(DeploymentConfig memory config, PredictedAddresses memory predicted)
+        private
+        pure
+        returns (ProgrammableCustomRegistryV1.RegistryConfigV1 memory registryConfig)
+    {
+        registryConfig.initialAdminDelay = config.adminDelay;
+        registryConfig.initialAdmin = config.admin;
+        registryConfig.initialApprover = config.approver;
+        registryConfig.initialWriter = predicted.registrar;
+        registryConfig.initialFinalizer = config.finalizer;
+        registryConfig.initialCorrector = predicted.policyRevisionRegistry;
+        registryConfig.initialRevoker = config.revoker;
+        registryConfig.registryGeneration = REGISTRY_GENERATION;
+        registryConfig.minimumFinalityBlocks = config.minimumFinalityBlocks;
+        registryConfig.chainProfileHash = config.chainProfileHash;
+        registryConfig.registryPolicyHash = config.registryPolicyHash;
+    }
+
+    function _validateDeployment(
+        DeploymentConfig memory config,
+        PredictedAddresses memory predicted,
+        DeploymentResult memory deployed,
+        uint256 startingNonce
+    ) private view {
+        _requireAddress(bytes32("fee-verifier"), predicted.verifier, address(deployed.verifier));
+        _requireAddress(
+            bytes32("partner-registry"), predicted.partnerFactoryRegistry, address(deployed.partnerFactoryRegistry)
+        );
+        _requireAddress(
+            bytes32("initial-policy-registry"), predicted.initialPolicyRegistry, address(deployed.initialPolicyRegistry)
+        );
+        _requireAddress(
+            bytes32("policy-revision-registry"),
+            predicted.policyRevisionRegistry,
+            address(deployed.policyRevisionRegistry)
+        );
+        _requireAddress(bytes32("registry"), predicted.registry, address(deployed.registry));
+        _requireAddress(bytes32("registrar"), predicted.registrar, address(deployed.registrar));
+        if (!deployed.registry.hasRole(deployed.registry.WRITER_ROLE(), address(deployed.registrar))) {
+            revert DeploymentAddressMismatch(bytes32("registrar-writer"), predicted.registrar, address(0));
         }
-        if (address(partnerFactoryRegistry) != predictedPartnerFactoryRegistry) {
+        if (!deployed.registry.hasRole(deployed.registry.CORRECTOR_ROLE(), address(deployed.policyRevisionRegistry))) {
             revert DeploymentAddressMismatch(
-                bytes32("partner-registry"), predictedPartnerFactoryRegistry, address(partnerFactoryRegistry)
+                bytes32("revision-corrector"), predicted.policyRevisionRegistry, address(0)
             );
         }
-        if (address(executionPolicyRegistry) != predictedExecutionPolicyRegistry) {
-            revert DeploymentAddressMismatch(
-                bytes32("execution-policy-registry"), predictedExecutionPolicyRegistry, address(executionPolicyRegistry)
-            );
-        }
-        if (address(registry) != predictedRegistry) {
-            revert DeploymentAddressMismatch(bytes32("registry"), predictedRegistry, address(registry));
-        }
-        if (address(registrar) != predictedRegistrar) {
-            revert DeploymentAddressMismatch(bytes32("registrar"), predictedRegistrar, address(registrar));
-        }
-        if (!registry.hasRole(registry.WRITER_ROLE(), address(registrar))) {
-            revert DeploymentAddressMismatch(bytes32("registrar-writer"), predictedRegistrar, address(0));
-        }
-        if (
-            address(registry.EXECUTION_POLICY_REGISTRY()) != address(executionPolicyRegistry)
-                || address(executionPolicyRegistry.REGISTRY()) != address(registry)
-                || executionPolicyRegistry.ATOMIC_REGISTRAR() != address(registrar)
-        ) {
-            revert DeploymentAddressMismatch(
-                bytes32("execution-policy-binding"), address(executionPolicyRegistry), address(0)
-            );
-        }
-        if (registry.REGISTRY_GENERATION() != REGISTRY_GENERATION) {
-            revert DeploymentGenerationMismatch(registry.REGISTRY_GENERATION(), REGISTRY_GENERATION);
+        _validateCrossBindings(deployed);
+        if (deployed.registry.REGISTRY_GENERATION() != REGISTRY_GENERATION) {
+            revert DeploymentGenerationMismatch(deployed.registry.REGISTRY_GENERATION(), REGISTRY_GENERATION);
         }
         uint256 finalNonce = vm.getNonce(config.deployer);
-        if (finalNonce != currentNonce + 5) revert DeploymentNonceMismatch(currentNonce + 5, finalNonce);
+        if (finalNonce != startingNonce + 6) revert DeploymentNonceMismatch(startingNonce + 6, finalNonce);
+    }
+
+    function _validateCrossBindings(DeploymentResult memory deployed) private view {
+        if (
+            address(deployed.registry.EXECUTION_POLICY_REGISTRY()) != address(deployed.initialPolicyRegistry)
+                || address(deployed.initialPolicyRegistry.REGISTRY()) != address(deployed.registry)
+                || deployed.initialPolicyRegistry.ATOMIC_REGISTRAR() != address(deployed.registrar)
+                || deployed.initialPolicyRegistry.POLICY_REVISION_REGISTRY() != address(deployed.policyRevisionRegistry)
+                || address(deployed.registry.EXECUTION_POLICY_REVISION_REGISTRY())
+                    != address(deployed.policyRevisionRegistry)
+                || address(deployed.policyRevisionRegistry.REGISTRY()) != address(deployed.registry)
+                || address(deployed.policyRevisionRegistry.INITIAL_POLICY_REGISTRY())
+                    != address(deployed.initialPolicyRegistry)
+                || deployed.partnerFactoryRegistry.REGISTRAR() != address(deployed.registrar)
+                || address(deployed.registrar.PARTNER_FACTORY_REGISTRY()) != address(deployed.partnerFactoryRegistry)
+        ) {
+            revert DeploymentAddressMismatch(
+                bytes32("cross-binding"), address(deployed.initialPolicyRegistry), address(0)
+            );
+        }
     }
 
     function _requireVacant(bytes32 component, address target) private view {
         if (target.code.length != 0) revert DeploymentTargetOccupied(component, target);
+    }
+
+    function _requireAddress(bytes32 component, address predicted, address actual) private pure {
+        if (actual != predicted) revert DeploymentAddressMismatch(component, predicted, actual);
     }
 }

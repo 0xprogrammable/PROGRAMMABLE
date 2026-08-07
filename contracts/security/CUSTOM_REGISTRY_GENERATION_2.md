@@ -12,6 +12,7 @@ classDiagram
   class ProgrammableCustomPartnerFactoryRegistryV2
   class ProgrammableCustomFeePolicyVerifierV2
   class ProgrammableCustomExecutionPolicyRegistryV2
+  class ProgrammableCustomExecutionPolicyRevisionRegistryV2
   class ProgrammableCustomAtomicRegistrarV2
   class ProviderOwnedFactory
 
@@ -23,12 +24,14 @@ classDiagram
   ProgrammableCustomRegistryV2 --> ProgrammableCustomFeePolicyVerifierV2 : same verify selector
   ProgrammableCustomRegistryV2 --> ProgrammableCustomPartnerFactoryRegistryV2 : exact caller authorization
   ProgrammableCustomRegistryV2 --> ProgrammableCustomExecutionPolicyRegistryV2 : fixed companion binding
+  ProgrammableCustomRegistryV2 --> ProgrammableCustomExecutionPolicyRevisionRegistryV2 : sole correction authority
   ProgrammableCustomExecutionPolicyRegistryV2 --> ProgrammableCustomRegistryV2 : exact approval and launch identity
   ProgrammableCustomExecutionPolicyRegistryV2 --> ProgrammableCustomPartnerFactoryRegistryV2 : exact provider factory
+  ProgrammableCustomExecutionPolicyRevisionRegistryV2 --> ProgrammableCustomExecutionPolicyRegistryV2 : replacement emission
+  ProgrammableCustomExecutionPolicyRevisionRegistryV2 --> ProgrammableCustomRegistryV2 : contiguous record correction
   ProgrammableCustomAtomicRegistrarV2 --> ProgrammableCustomRegistryV2 : native atomic path
   ProgrammableCustomAtomicRegistrarV2 --> ProgrammableCustomExecutionPolicyRegistryV2 : same-tx capability proof
-  ProviderOwnedFactory --> ProgrammableCustomRegistryV2 : provider registration
-  ProviderOwnedFactory --> ProgrammableCustomExecutionPolicyRegistryV2 : same-tx capability proof
+  ProviderOwnedFactory --> ProgrammableCustomAtomicRegistrarV2 : exact approved launch call
 ```
 
 ## State transitions and authorization
@@ -37,7 +40,7 @@ classDiagram
 flowchart LR
   A["Independent approver"] --> AA["authorizeApproval"]
   W["Atomic registrar writer"] --> R["registerLaunch"]
-  PF["Exact authorized provider factory"] --> R
+  PF["Exact direct-runtime provider factory"] --> W
   PA["Factory approver"] --> AF["authorizeFactory"]
   PR["Factory revoker"] --> RF["revokeFactory"]
   AA --> O["one-use approval"]
@@ -47,7 +50,7 @@ flowchart LR
   R --> OB["Observed"]
   OB --> FN["Finalized"]
   OB --> RV["Revoked"]
-  FN --> CR["Corrected revision"]
+  FN --> CR["Approved contiguous policy/record revision"]
   FN --> RV
   RF --> X["future registrations fail"]
 ```
@@ -57,9 +60,9 @@ flowchart LR
 | Factory authorization | `APPROVER_ROLE` | exact source/runtime/config/permissions/fee/chain/generation |
 | Factory revocation | independent `REVOKER_ROLE` | terminal for future registrations |
 | Approval | independent Registry `APPROVER_ROLE` | exact launch and registration binding, one use |
-| Registration | native writer or exact active factory | live primary runtime match and one-use deployment ID |
+| Registration | immutable atomic registrar only | live primary runtime match and one-use deployment ID |
 | Finality | `FINALIZER_ROLE` | native block hash and configured depth |
-| Correction | `CORRECTOR_ROLE` | contiguous append-only revision |
+| Correction | immutable policy-revision Registry only | exact approved contiguous append-only revision |
 | Revocation | `REVOKER_ROLE` | terminal launch state |
 
 ## Security properties exercised
@@ -78,10 +81,12 @@ flowchart LR
 10. A Generation 2 record is publishable only with same-transaction capability summary and exact ordered route/source
     companions whose hash equals the approval-bound `capabilitySetHash` and whose derived market set equals the
     registration-bound `marketSetHash`.
-11. Standard v4 execution cannot target PoolManager directly; exact router/Permit2/PoolManager, Hook review,
+11. `executionEnabled` is a declared set property independent of activation block. Current execution still requires
+    activation, lifecycle/finality, live runtime/config/dependency, and current proxy evidence; unsupported-only is false.
+12. Standard v4 execution cannot target PoolManager directly; exact router/Permit2/PoolManager, Hook review,
     quote/read identities, policies, and runtime are bound. Adapter and market-source proxies bind implementation and
     admin identities. Later drift disables capabilities, not origin discovery.
-12. Every market source binds a canonical nonempty metric set of no more than 256 strictly ordered, unique, nonzero
+13. Every market source binds a canonical nonempty metric set of no more than 256 strictly ordered, unique, nonzero
     IDs. Price, volume, liquidity, and charting have published standard IDs; unknown future IDs remain valid and are
     preserved rather than guessed. The validator rejects both zero and the canonical empty-set hash.
 
@@ -98,8 +103,9 @@ Informational results were one mixed dependency-pragma group, the inherited V1 c
 configuration-check complexity, and four uppercase immutable/interface naming notices. The constructor branches are
 fail-closed checks; uppercase names are stable manifest-facing protocol fields.
 
-- Upgradeability: the five Generation 2 components are direct deployments and contain no proxy/delegatecall upgrade
-  path. A provider launch may still be upgradeable and must bind implementation/admin/permissions in its runtime set.
+- Upgradeability: the six Generation 2 components are direct deployments and contain no proxy/delegatecall upgrade
+  path. Provider-factory execution is direct-runtime only. Route/source proxy identities may be retained for discovery,
+  but current execution/read remains disabled without current slot/beacon readback.
 - ERC conformance: the Registry continues to expose the frozen `IProgrammableCustomRegistryV1` ERC-165 interface.
   The package is not an ERC-20/721/1155 implementation.
 - Token integration: the Registry and verifier transfer no tokens. The atomic registrar can forward only the exact

@@ -6,6 +6,9 @@ import { Test } from "forge-std/Test.sol";
 import { DeployProgrammableCustomRegistryReleaseV2 } from "../script/DeployProgrammableCustomRegistryReleaseV2.s.sol";
 import { ProgrammableCustomAtomicRegistrarV2 } from "../src/ProgrammableCustomAtomicRegistrarV2.sol";
 import { ProgrammableCustomExecutionPolicyRegistryV2 } from "../src/ProgrammableCustomExecutionPolicyRegistryV2.sol";
+import {
+    ProgrammableCustomExecutionPolicyRevisionRegistryV2
+} from "../src/ProgrammableCustomExecutionPolicyRevisionRegistryV2.sol";
 import { ProgrammableCustomFeePolicyVerifierV2 } from "../src/ProgrammableCustomFeePolicyVerifierV2.sol";
 import { ProgrammableCustomPartnerFactoryRegistryV2 } from "../src/ProgrammableCustomPartnerFactoryRegistryV2.sol";
 import { ProgrammableCustomRegistryV1 } from "../src/ProgrammableCustomRegistryV1.sol";
@@ -20,6 +23,15 @@ contract DeployProgrammableCustomRegistryReleaseV2Test is Test {
     address private constant REVOKER = address(0xA005);
     uint256 private constant STARTING_NONCE = 17;
 
+    struct ExpectedAddresses {
+        address verifier;
+        address partnerRegistry;
+        address policyRegistry;
+        address revisionRegistry;
+        address registry;
+        address registrar;
+    }
+
     DeployProgrammableCustomRegistryReleaseV2 private deployment;
 
     function setUp() public {
@@ -30,81 +42,110 @@ contract DeployProgrammableCustomRegistryReleaseV2Test is Test {
         deployment = new DeployProgrammableCustomRegistryReleaseV2();
     }
 
-    function test_runRejectsInvalidInputsThenDeploysFiveContractsInExactNonceOrderAndCrossBindsThem() public {
+    function test_runRejectsInvalidInputsThenDeploysSixContractsInExactNonceOrderAndCrossBindsThem() public {
         _assertInvalidInputsFailBeforeDeployment();
+        ExpectedAddresses memory expected = _expectedAddresses();
+        DeployProgrammableCustomRegistryReleaseV2.DeploymentResult memory result = deployment.run();
+        _assertAddressesAndBindings(result, expected);
+        _assertRolesAndScope(result);
+        _assertDeploymentSizes(result, expected);
+        assertEq(vm.getNonce(DEPLOYER), STARTING_NONCE + 6);
+    }
 
-        address expectedVerifier = vm.computeCreateAddress(DEPLOYER, STARTING_NONCE);
-        address expectedPartnerRegistry = vm.computeCreateAddress(DEPLOYER, STARTING_NONCE + 1);
-        address expectedPolicyRegistry = vm.computeCreateAddress(DEPLOYER, STARTING_NONCE + 2);
-        address expectedRegistry = vm.computeCreateAddress(DEPLOYER, STARTING_NONCE + 3);
-        address expectedRegistrar = vm.computeCreateAddress(DEPLOYER, STARTING_NONCE + 4);
+    function _expectedAddresses() private pure returns (ExpectedAddresses memory expected) {
+        expected.verifier = vm.computeCreateAddress(DEPLOYER, STARTING_NONCE);
+        expected.partnerRegistry = vm.computeCreateAddress(DEPLOYER, STARTING_NONCE + 1);
+        expected.policyRegistry = vm.computeCreateAddress(DEPLOYER, STARTING_NONCE + 2);
+        expected.revisionRegistry = vm.computeCreateAddress(DEPLOYER, STARTING_NONCE + 3);
+        expected.registry = vm.computeCreateAddress(DEPLOYER, STARTING_NONCE + 4);
+        expected.registrar = vm.computeCreateAddress(DEPLOYER, STARTING_NONCE + 5);
+    }
 
-        (
-            ProgrammableCustomRegistryV2 registry,
-            ProgrammableCustomPartnerFactoryRegistryV2 partnerRegistry,
-            ProgrammableCustomFeePolicyVerifierV2 verifier,
-            ProgrammableCustomExecutionPolicyRegistryV2 policyRegistry,
-            ProgrammableCustomAtomicRegistrarV2 registrar
-        ) = deployment.run();
+    function _assertAddressesAndBindings(
+        DeployProgrammableCustomRegistryReleaseV2.DeploymentResult memory result,
+        ExpectedAddresses memory expected
+    ) private view {
+        assertEq(address(result.verifier), expected.verifier);
+        assertEq(address(result.partnerFactoryRegistry), expected.partnerRegistry);
+        assertEq(address(result.initialPolicyRegistry), expected.policyRegistry);
+        assertEq(address(result.policyRevisionRegistry), expected.revisionRegistry);
+        assertEq(address(result.registry), expected.registry);
+        assertEq(address(result.registrar), expected.registrar);
+        assertEq(address(result.initialPolicyRegistry.REGISTRY()), address(result.registry));
+        assertEq(
+            address(result.initialPolicyRegistry.PARTNER_FACTORY_REGISTRY()), address(result.partnerFactoryRegistry)
+        );
+        assertEq(result.initialPolicyRegistry.ATOMIC_REGISTRAR(), address(result.registrar));
+        assertEq(result.initialPolicyRegistry.POLICY_REVISION_REGISTRY(), address(result.policyRevisionRegistry));
+        assertEq(address(result.registry.EXECUTION_POLICY_REGISTRY()), address(result.initialPolicyRegistry));
+        assertEq(address(result.registry.EXECUTION_POLICY_REVISION_REGISTRY()), address(result.policyRevisionRegistry));
+        assertEq(address(result.registrar.REGISTRY()), address(result.registry));
+        assertEq(address(result.registrar.EXECUTION_POLICY_REGISTRY()), address(result.initialPolicyRegistry));
+        assertEq(address(result.registrar.PARTNER_FACTORY_REGISTRY()), address(result.partnerFactoryRegistry));
+        assertEq(address(result.policyRevisionRegistry.REGISTRY()), address(result.registry));
+        assertEq(
+            address(result.policyRevisionRegistry.INITIAL_POLICY_REGISTRY()), address(result.initialPolicyRegistry)
+        );
+        assertEq(result.partnerFactoryRegistry.REGISTRAR(), address(result.registrar));
+    }
 
-        assertEq(address(verifier), expectedVerifier);
-        assertEq(address(partnerRegistry), expectedPartnerRegistry);
-        assertEq(address(policyRegistry), expectedPolicyRegistry);
-        assertEq(address(registry), expectedRegistry);
-        assertEq(address(registrar), expectedRegistrar);
-        assertEq(vm.getNonce(DEPLOYER), STARTING_NONCE + 5);
-
-        assertEq(address(policyRegistry.REGISTRY()), address(registry));
-        assertEq(address(policyRegistry.PARTNER_FACTORY_REGISTRY()), address(partnerRegistry));
-        assertEq(policyRegistry.ATOMIC_REGISTRAR(), address(registrar));
-        assertEq(address(registry.EXECUTION_POLICY_REGISTRY()), address(policyRegistry));
-        assertEq(address(registrar.REGISTRY()), address(registry));
-        assertEq(address(registrar.EXECUTION_POLICY_REGISTRY()), address(policyRegistry));
-        assertTrue(registry.hasRole(registry.WRITER_ROLE(), address(registrar)));
+    function _assertRolesAndScope(DeployProgrammableCustomRegistryReleaseV2.DeploymentResult memory result)
+        private
+        view
+    {
+        ProgrammableCustomRegistryV2 registry = result.registry;
+        assertTrue(registry.hasRole(registry.WRITER_ROLE(), address(result.registrar)));
         assertFalse(registry.hasRole(registry.WRITER_ROLE(), DEPLOYER));
         assertFalse(registry.hasRole(registry.WRITER_ROLE(), ADMIN));
         assertTrue(registry.hasRole(registry.DEFAULT_ADMIN_ROLE(), ADMIN));
         assertTrue(registry.hasRole(registry.APPROVER_ROLE(), APPROVER));
         assertTrue(registry.hasRole(registry.FINALIZER_ROLE(), FINALIZER));
-        assertTrue(registry.hasRole(registry.CORRECTOR_ROLE(), CORRECTOR));
+        assertTrue(registry.hasRole(registry.CORRECTOR_ROLE(), address(result.policyRevisionRegistry)));
+        assertFalse(registry.hasRole(registry.CORRECTOR_ROLE(), CORRECTOR));
         assertTrue(registry.hasRole(registry.REVOKER_ROLE(), REVOKER));
         assertFalse(registry.hasRole(registry.DEFAULT_ADMIN_ROLE(), DEPLOYER));
         assertFalse(registry.hasRole(registry.APPROVER_ROLE(), DEPLOYER));
         assertFalse(registry.hasRole(registry.FINALIZER_ROLE(), DEPLOYER));
         assertFalse(registry.hasRole(registry.CORRECTOR_ROLE(), DEPLOYER));
         assertFalse(registry.hasRole(registry.REVOKER_ROLE(), DEPLOYER));
-        assertTrue(partnerRegistry.hasRole(partnerRegistry.DEFAULT_ADMIN_ROLE(), ADMIN));
-        assertTrue(partnerRegistry.hasRole(partnerRegistry.APPROVER_ROLE(), APPROVER));
-        assertTrue(partnerRegistry.hasRole(partnerRegistry.REVOKER_ROLE(), REVOKER));
-        assertFalse(partnerRegistry.hasRole(partnerRegistry.DEFAULT_ADMIN_ROLE(), DEPLOYER));
-        assertFalse(partnerRegistry.hasRole(partnerRegistry.APPROVER_ROLE(), DEPLOYER));
-        assertFalse(partnerRegistry.hasRole(partnerRegistry.REVOKER_ROLE(), DEPLOYER));
-
-        assertEq(partnerRegistry.CHAIN_ID(), 1);
-        assertEq(partnerRegistry.REGISTRY_GENERATION(), 2);
-        assertEq(policyRegistry.CHAIN_ID(), 1);
-        assertEq(policyRegistry.REQUIRED_REGISTRY_GENERATION(), 2);
+        assertTrue(result.partnerFactoryRegistry.hasRole(result.partnerFactoryRegistry.DEFAULT_ADMIN_ROLE(), ADMIN));
+        assertTrue(result.partnerFactoryRegistry.hasRole(result.partnerFactoryRegistry.APPROVER_ROLE(), APPROVER));
+        assertTrue(result.partnerFactoryRegistry.hasRole(result.partnerFactoryRegistry.REVOKER_ROLE(), REVOKER));
+        assertTrue(result.policyRevisionRegistry.hasRole(result.policyRevisionRegistry.DEFAULT_ADMIN_ROLE(), ADMIN));
+        assertTrue(result.policyRevisionRegistry.hasRole(result.policyRevisionRegistry.APPROVER_ROLE(), APPROVER));
+        assertTrue(result.policyRevisionRegistry.hasRole(result.policyRevisionRegistry.CORRECTOR_ROLE(), CORRECTOR));
+        assertTrue(result.policyRevisionRegistry.hasRole(result.policyRevisionRegistry.REVOKER_ROLE(), REVOKER));
+        assertEq(result.partnerFactoryRegistry.CHAIN_ID(), 1);
+        assertEq(result.partnerFactoryRegistry.REGISTRY_GENERATION(), 2);
+        assertEq(result.initialPolicyRegistry.CHAIN_ID(), 1);
+        assertEq(result.initialPolicyRegistry.REQUIRED_REGISTRY_GENERATION(), 2);
         assertEq(registry.CHAIN_ID(), 1);
         assertEq(registry.REGISTRY_GENERATION(), 2);
         assertEq(registry.REQUIRED_REGISTRY_GENERATION(), 2);
         assertEq(registry.MINIMUM_FINALITY_BLOCKS(), 64);
         assertEq(registry.CHAIN_PROFILE_HASH(), keccak256("approved-chain-profile"));
         assertEq(registry.REGISTRY_POLICY_HASH(), keccak256("approved-registry-policy"));
+    }
 
-        assertLt(address(verifier).code.length, 24_576);
-        assertLt(address(partnerRegistry).code.length, 24_576);
-        assertLt(address(policyRegistry).code.length, 24_576);
-        assertLt(address(registry).code.length, 24_576);
-        assertLt(address(registrar).code.length, 24_576);
+    function _assertDeploymentSizes(
+        DeployProgrammableCustomRegistryReleaseV2.DeploymentResult memory result,
+        ExpectedAddresses memory expected
+    ) private view {
+        assertLt(address(result.verifier).code.length, 24_576);
+        assertLt(address(result.partnerFactoryRegistry).code.length, 24_576);
+        assertLt(address(result.initialPolicyRegistry).code.length, 24_576);
+        assertLt(address(result.policyRevisionRegistry).code.length, 24_576);
+        assertLt(address(result.registry).code.length, 24_576);
+        assertLt(address(result.registrar).code.length, 24_576);
 
         ProgrammableCustomRegistryV1.RegistryConfigV1 memory registryConfig =
             ProgrammableCustomRegistryV1.RegistryConfigV1({
                 initialAdminDelay: uint48(2 days),
                 initialAdmin: ADMIN,
                 initialApprover: APPROVER,
-                initialWriter: expectedRegistrar,
+                initialWriter: expected.registrar,
                 initialFinalizer: FINALIZER,
-                initialCorrector: CORRECTOR,
+                initialCorrector: expected.revisionRegistry,
                 initialRevoker: REVOKER,
                 registryGeneration: 2,
                 minimumFinalityBlocks: 64,
@@ -115,7 +156,7 @@ contract DeployProgrammableCustomRegistryReleaseV2Test is Test {
         assertLt(
             abi.encodePacked(
                 type(ProgrammableCustomPartnerFactoryRegistryV2).creationCode,
-                abi.encode(uint48(2 days), ADMIN, APPROVER, REVOKER)
+                abi.encode(uint48(2 days), ADMIN, APPROVER, REVOKER, expected.registrar)
             )
             .length,
             49_152
@@ -123,7 +164,17 @@ contract DeployProgrammableCustomRegistryReleaseV2Test is Test {
         assertLt(
             abi.encodePacked(
                 type(ProgrammableCustomExecutionPolicyRegistryV2).creationCode,
-                abi.encode(expectedRegistry, expectedPartnerRegistry, expectedRegistrar)
+                abi.encode(expected.registry, expected.partnerRegistry, expected.registrar, expected.revisionRegistry)
+            )
+            .length,
+            49_152
+        );
+        assertLt(
+            abi.encodePacked(
+                type(ProgrammableCustomExecutionPolicyRevisionRegistryV2).creationCode,
+                abi.encode(
+                    expected.registry, expected.policyRegistry, uint48(2 days), ADMIN, APPROVER, CORRECTOR, REVOKER
+                )
             )
             .length,
             49_152
@@ -131,7 +182,13 @@ contract DeployProgrammableCustomRegistryReleaseV2Test is Test {
         assertLt(
             abi.encodePacked(
                 type(ProgrammableCustomRegistryV2).creationCode,
-                abi.encode(registryConfig, expectedPartnerRegistry, expectedVerifier, expectedPolicyRegistry)
+                abi.encode(
+                    registryConfig,
+                    expected.partnerRegistry,
+                    expected.verifier,
+                    expected.policyRegistry,
+                    expected.revisionRegistry
+                )
             )
             .length,
             49_152
@@ -139,7 +196,7 @@ contract DeployProgrammableCustomRegistryReleaseV2Test is Test {
         assertLt(
             abi.encodePacked(
                 type(ProgrammableCustomAtomicRegistrarV2).creationCode,
-                abi.encode(expectedRegistry, expectedPolicyRegistry)
+                abi.encode(expected.registry, expected.policyRegistry, expected.partnerRegistry)
             )
             .length,
             49_152

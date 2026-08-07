@@ -1,114 +1,1503 @@
 {
   "domain": "programmable.custom-registry-event-set.v2",
-  "eventSetHash": "sha256:be36b4977143371149695aa8a8702aef56b08ef4b756640d0e0070252c24ee57",
+  "eventSetHash": "sha256:1fce77eed87ebb4e09838448b282960586bcaab4f441e62e17c9b45b2ae1b46f",
   "events": [
-    {
-      "emitter": "registry",
-      "id": "approvalAuthorized",
-      "signature": "CustomLaunchApprovalAuthorizedV1(bytes32,bytes32,bytes32,bytes32,uint64,uint64,uint64,bytes32)",
-      "topic0": "0xb4fff32917416e7b84b1f40456921599cddfdcc057c9ad278706c5828b18c50b"
-    },
     {
       "emitter": "partnerFactoryRegistry",
       "id": "partnerFactoryAuthorized",
       "signature": "CustomPartnerFactoryAuthorizedV1(bytes32,bytes32,address,bytes32,bytes32,bytes32,bytes32,uint64,uint64,bytes32)",
-      "topic0": "0xa968119f9132089f6f4d7916a6da989971801f5f68b79eec527cb75cf38e6a02"
-    },
-    {
-      "emitter": "partnerFactoryRegistry",
-      "id": "partnerFactorySourceBound",
-      "signature": "CustomPartnerFactorySourceBoundV1(bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32)",
-      "topic0": "0xa939cc58afcf4fd66ae17957681f0bdd0f80452cde7742b88762bd115536de78"
+      "topic0": "0xa968119f9132089f6f4d7916a6da989971801f5f68b79eec527cb75cf38e6a02",
+      "inputs": [
+        {
+          "name": "configurationHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "providerId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "factory",
+          "type": "address",
+          "indexed": true
+        },
+        {
+          "name": "modelId",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "modelVersion",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "templateId",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "templateVersion",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "validAfterBlock",
+          "type": "uint64",
+          "indexed": false
+        },
+        {
+          "name": "expiresAtBlock",
+          "type": "uint64",
+          "indexed": false
+        },
+        {
+          "name": "evidenceHash",
+          "type": "bytes32",
+          "indexed": false
+        }
+      ]
     },
     {
       "emitter": "partnerFactoryRegistry",
       "id": "partnerFactoryRevoked",
       "signature": "CustomPartnerFactoryRevokedV1(bytes32,bytes32,address,bytes32,bytes32)",
-      "topic0": "0x704a05fde9f9d27fc692382126f225677f07d52ed9394af1b16e61fe4d2bb4ce"
+      "topic0": "0x704a05fde9f9d27fc692382126f225677f07d52ed9394af1b16e61fe4d2bb4ce",
+      "inputs": [
+        {
+          "name": "configurationHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "providerId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "factory",
+          "type": "address",
+          "indexed": true
+        },
+        {
+          "name": "reasonCode",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "evidenceHash",
+          "type": "bytes32",
+          "indexed": false
+        }
+      ]
     },
     {
-      "emitter": "registry",
-      "id": "registered",
-      "signature": "CustomLaunchRegisteredV1(bytes32,bytes32,address,uint64,uint256,uint64,bytes32,bytes32,address,bytes32,bytes32,uint64)",
-      "topic0": "0x8ee074138114415a92a0797b4f1f4c6353f8bd15d8031433abf0cc42c2dc274a"
+      "emitter": "partnerFactoryRegistry",
+      "id": "partnerFactorySourceBound",
+      "signature": "CustomPartnerFactorySourceBoundV1(bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32)",
+      "topic0": "0xa939cc58afcf4fd66ae17957681f0bdd0f80452cde7742b88762bd115536de78",
+      "inputs": [
+        {
+          "name": "configurationHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "modelRepositoryId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "modelSourceCommitId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "factorySourceRepositoryId",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "factorySourceCommitId",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "factoryRuntimeCodeHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "launchRuntimeCodeSetHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "permissionsHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "feePolicyHash",
+          "type": "bytes32",
+          "indexed": false
+        }
+      ]
     },
     {
-      "emitter": "registry",
-      "id": "provenance",
-      "signature": "CustomLaunchProvenanceBoundV1(bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32)",
-      "topic0": "0x9593acf43b1c8e03c6742d49b67008f3c05841d3cfa43389d12f98e8b9c66cb9"
-    },
-    {
-      "emitter": "registry",
-      "id": "review",
-      "signature": "CustomLaunchReviewBoundV1(bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32)",
-      "topic0": "0xb5db50dfea0e7ff29b1ddee247a008e857b05d2b4bc2b780de5717b7f1881b63"
-    },
-    {
-      "emitter": "registry",
-      "id": "attribution",
-      "signature": "CustomLaunchAttributionBoundV1(bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32)",
-      "topic0": "0x3608f2041bbe91aa3792101210bc2e29c23543fb4e0206daa2b1a99e7235c182"
-    },
-    {
-      "emitter": "registry",
-      "id": "feePolicy",
-      "signature": "CustomLaunchFeePolicyBoundV1(bytes32,bytes32,bytes32,uint8,uint16,uint16,uint16,uint16,address,address)",
-      "topic0": "0xb889df8572071d751e87d3e2a46c54093a55a9bc5a4697440cd29c90255dc5bf"
-    },
-    {
-      "emitter": "registry",
-      "id": "feeScope",
-      "signature": "CustomLaunchFeeScopeBoundV1(bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32)",
-      "topic0": "0xfb69ef55bd117e822ea39d795bd1506dc489a1ce2c1ccd3ad4c781ef04598336"
-    },
-    {
-      "emitter": "registry",
-      "id": "feeEvidence",
-      "signature": "CustomLaunchFeeEvidenceBoundV1(bytes32,bytes32,bytes32,address,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32)",
-      "topic0": "0xe647c474a92f722808930d32d310f47d0e3a4faf393255e0dea4b272588babb0"
+      "emitter": "partnerFactoryRegistry",
+      "id": "partnerFactoryRegistry.customPartnerProviderFactoryBoundV2",
+      "signature": "CustomPartnerProviderFactoryBoundV2(bytes32,bytes32,address,bytes32,address,bytes32,bytes32,uint8,bytes32,bytes4,uint256,bytes32,bytes32,bytes32,bytes32)",
+      "topic0": "0x18773f26ce8b44d5ac6c319b6bc26f9d285fad9a371614028e4e5fda2458364f",
+      "inputs": [
+        {
+          "name": "configurationHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "providerFactory",
+          "type": "address",
+          "indexed": true
+        },
+        {
+          "name": "approvalId",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "expectedPrimaryContract",
+          "type": "address",
+          "indexed": false
+        },
+        {
+          "name": "expectedPrimaryRuntimeCodeHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "providerFactoryRuntimeCodeHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "proxyKind",
+          "type": "uint8",
+          "indexed": false
+        },
+        {
+          "name": "proxyBindingHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "launchSelector",
+          "type": "bytes4",
+          "indexed": false
+        },
+        {
+          "name": "launchValue",
+          "type": "uint256",
+          "indexed": false
+        },
+        {
+          "name": "launchCalldataHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "launchResultHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "sourceBindingHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "evidenceHash",
+          "type": "bytes32",
+          "indexed": false
+        }
+      ]
     },
     {
       "emitter": "executionPolicyRegistry",
       "id": "executionPolicyBound",
       "signature": "CustomLaunchExecutionPolicyBoundV2(bytes32,bytes32,bytes32,bytes32,uint32,bytes32,uint32,bool,bytes32,bytes32)",
-      "topic0": "0x9b151aeb52499c57b4f540b411ff14ac2e34ac01334f7e2461a3f2f4e5b5d93f"
+      "topic0": "0x9b151aeb52499c57b4f540b411ff14ac2e34ac01334f7e2461a3f2f4e5b5d93f",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "executionPolicyHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "routeSetHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "marketSetHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "routeCount",
+          "type": "uint32",
+          "indexed": false
+        },
+        {
+          "name": "marketDataSourceSetHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "marketDataSourceCount",
+          "type": "uint32",
+          "indexed": false
+        },
+        {
+          "name": "executionEnabled",
+          "type": "bool",
+          "indexed": false
+        },
+        {
+          "name": "evidenceHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "revocationPolicyHash",
+          "type": "bytes32",
+          "indexed": false
+        }
+      ]
     },
     {
       "emitter": "executionPolicyRegistry",
       "id": "executionRouteBound",
       "signature": "CustomLaunchExecutionRouteBoundV2(bytes32,bytes32,uint32,bytes32,bytes32,uint8,bytes32,address,bytes32,bytes32,bytes32,bytes32,bytes32)",
-      "topic0": "0xf0763dea7eac2631823ece83bf0eceef82bff47840141315afa3d3eb002c8a19"
+      "topic0": "0xf0763dea7eac2631823ece83bf0eceef82bff47840141315afa3d3eb002c8a19",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "executionPolicyHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "routeIndex",
+          "type": "uint32",
+          "indexed": true
+        },
+        {
+          "name": "marketId",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "marketPathId",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "mode",
+          "type": "uint8",
+          "indexed": false
+        },
+        {
+          "name": "executorId",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "executionTarget",
+          "type": "address",
+          "indexed": false
+        },
+        {
+          "name": "executionTargetRuntimeCodeHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "configurationHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "dependencyRuntimeCodeSetHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "proxyBindingHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "routeHash",
+          "type": "bytes32",
+          "indexed": false
+        }
+      ]
     },
     {
       "emitter": "executionPolicyRegistry",
-      "id": "marketDataSourceBound",
-      "signature": "CustomLaunchMarketDataSourceBoundV2(bytes32,bytes32,uint32,bytes32,bytes32,uint8,address,bytes32,uint64,bytes32,bytes32,bytes32)",
-      "topic0": "0xe64b9e53b8e5c278f41e9302d9f341e9006bfa3b4c3c919d4983696478d130a0"
+      "id": "executionPolicyRegistry.customLaunchMarketDataMetricsBoundV2",
+      "signature": "CustomLaunchMarketDataMetricsBoundV2(bytes32,bytes32,uint32,bytes32,bytes32[])",
+      "topic0": "0xaf2c4521ed669ee0b31f567d3fe62ea93314a5d0554993310bbe1f9d2a4ca00b",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "executionPolicyHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "sourceIndex",
+          "type": "uint32",
+          "indexed": true
+        },
+        {
+          "name": "metricsHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "metricIds",
+          "type": "bytes32[]",
+          "indexed": false
+        }
+      ]
     },
     {
-      "emitter": "atomicRegistrar",
-      "id": "atomicExecuted",
-      "signature": "AtomicCustomLaunchExecutedV1(bytes32,address,bytes32,bytes32,bytes32)",
-      "topic0": "0x95c51eef01e507ea45d10fa0c9939e8f78f574f9008ec761ba00c12031433098"
+      "emitter": "executionPolicyRegistry",
+      "id": "executionPolicyRegistry.customLaunchMarketDataSourceBoundV2",
+      "signature": "CustomLaunchMarketDataSourceBoundV2(bytes32,bytes32,uint32,bytes32,bytes32,uint8,address,bytes32,uint64,bytes32,bytes32,bytes32,bytes32)",
+      "topic0": "0xb3f02634ec5cdde695d4b565d9498b0aa4aa7522fe160df1b07eb425738c9292",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "executionPolicyHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "sourceIndex",
+          "type": "uint32",
+          "indexed": true
+        },
+        {
+          "name": "marketId",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "sourceId",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "kind",
+          "type": "uint8",
+          "indexed": false
+        },
+        {
+          "name": "sourceTarget",
+          "type": "address",
+          "indexed": false
+        },
+        {
+          "name": "sourceRuntimeCodeHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "startBlock",
+          "type": "uint64",
+          "indexed": false
+        },
+        {
+          "name": "sourceIdentityHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "metricsHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "configurationHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "sourceHash",
+          "type": "bytes32",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "emitter": "executionPolicyRevisionRegistry",
+      "id": "executionPolicyRevisionRegistry.customLaunchExecutionPolicyCorrectedV2",
+      "signature": "CustomLaunchExecutionPolicyCorrectedV2(bytes32,bytes32,bytes32,uint64,bytes32,bytes32)",
+      "topic0": "0x7f9f1a9e1eeaf8c38efdb0ef8a94485733826ef4c55b8d1169b7715e43c9a3ef",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "newPolicyHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "correctedRecordHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "revision",
+          "type": "uint64",
+          "indexed": false
+        },
+        {
+          "name": "approvalId",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "approvalEvidenceHash",
+          "type": "bytes32",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "emitter": "executionPolicyRevisionRegistry",
+      "id": "executionPolicyRevisionRegistry.customLaunchExecutionPolicyRetainedV2",
+      "signature": "CustomLaunchExecutionPolicyRetainedV2(bytes32,bytes32,bytes32,uint64,bytes32)",
+      "topic0": "0xb77298c0f9132c9f2a6200b62001e310ffc1d8376f6e689d4d0fb2df94d663a5",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "policyHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "correctedRecordHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "revision",
+          "type": "uint64",
+          "indexed": false
+        },
+        {
+          "name": "approvalId",
+          "type": "bytes32",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "emitter": "executionPolicyRevisionRegistry",
+      "id": "executionPolicyRevisionRegistry.customLaunchExecutionPolicyRevisionApprovalRevokedV2",
+      "signature": "CustomLaunchExecutionPolicyRevisionApprovalRevokedV2(bytes32,bytes32,uint64,bytes32,bytes32)",
+      "topic0": "0x0cf84f83b7a52dc4dc193a7521033d3b8db6196c8bea354bd5a7432209ffb709",
+      "inputs": [
+        {
+          "name": "approvalId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "revision",
+          "type": "uint64",
+          "indexed": true
+        },
+        {
+          "name": "reasonCode",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "evidenceHash",
+          "type": "bytes32",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "emitter": "executionPolicyRevisionRegistry",
+      "id": "executionPolicyRevisionRegistry.customLaunchExecutionPolicyRevisionApprovedV2",
+      "signature": "CustomLaunchExecutionPolicyRevisionApprovedV2(bytes32,bytes32,uint64,bytes32,bytes32,bytes32,bytes32,bool)",
+      "topic0": "0x9558df2c59303db48a3039c8739f1e03e72be2a664aa1503a6d0c3d834d8ec91",
+      "inputs": [
+        {
+          "name": "approvalId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "revision",
+          "type": "uint64",
+          "indexed": true
+        },
+        {
+          "name": "previousPolicyHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "newPolicyHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "approvalBindingHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "correctedRecordHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "policyReplacement",
+          "type": "bool",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "emitter": "executionPolicyRevisionRegistry",
+      "id": "executionPolicyRevisionRegistry.customLaunchExecutionPolicyRevisionBoundV2",
+      "signature": "CustomLaunchExecutionPolicyRevisionBoundV2(bytes32,bytes32,uint64,bytes32,bytes32,bytes32,uint256)",
+      "topic0": "0x6cea2809c31d26a1359036b39797bc96ec57384e544b8ecc2cc7831da8e0fe18",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "approvalId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "revision",
+          "type": "uint64",
+          "indexed": true
+        },
+        {
+          "name": "previousPolicyHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "newPolicyHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "correctedRecordHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "boundAtBlock",
+          "type": "uint256",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "emitter": "executionPolicyRevisionRegistry",
+      "id": "executionPolicyRevisionRegistry.customLaunchExecutionPolicyRevisionEvidenceBoundV2",
+      "signature": "CustomLaunchExecutionPolicyRevisionEvidenceBoundV2(bytes32,bytes32,uint64,bytes32,bytes32,bytes32,bytes32,uint64,uint64,bytes32)",
+      "topic0": "0x968bb10330437dd9b901609eba7e202b7d5d19753311f616c29002161787a260",
+      "inputs": [
+        {
+          "name": "approvalId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "revision",
+          "type": "uint64",
+          "indexed": true
+        },
+        {
+          "name": "previousRecordHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "correctedRecordPayloadHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "correctionReasonCode",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "correctionEvidenceHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "validAfterBlock",
+          "type": "uint64",
+          "indexed": false
+        },
+        {
+          "name": "expiresAtBlock",
+          "type": "uint64",
+          "indexed": false
+        },
+        {
+          "name": "approvalEvidenceHash",
+          "type": "bytes32",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "emitter": "executionPolicyRevisionRegistry",
+      "id": "executionPolicyRevisionRegistry.customLaunchExecutionPolicySupersededV2",
+      "signature": "CustomLaunchExecutionPolicySupersededV2(bytes32,bytes32,bytes32,uint64,bytes32,bytes32)",
+      "topic0": "0x0e7dbd71ae965654812bbae665c5bf07ce348311e9aea267fdaec2f2e5d4b997",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "previousPolicyHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "newPolicyHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "revision",
+          "type": "uint64",
+          "indexed": false
+        },
+        {
+          "name": "correctionReasonCode",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "correctionEvidenceHash",
+          "type": "bytes32",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "emitter": "executionPolicyRevisionRegistry",
+      "id": "executionPolicyRevisionRegistry.customLaunchRecordRevisionSupersededV2",
+      "signature": "CustomLaunchRecordRevisionSupersededV2(bytes32,bytes32,bytes32,uint64)",
+      "topic0": "0xabb1c9ebbde1575d458c86f71f294b0593adf020183f1b087566269d0cc9715c",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "previousRecordHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "correctedRecordHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "revision",
+          "type": "uint64",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "emitter": "registry",
+      "id": "approvalAuthorized",
+      "signature": "CustomLaunchApprovalAuthorizedV1(bytes32,bytes32,bytes32,bytes32,uint64,uint64,uint64,bytes32)",
+      "topic0": "0xb4fff32917416e7b84b1f40456921599cddfdcc057c9ad278706c5828b18c50b",
+      "inputs": [
+        {
+          "name": "approvalId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "approvalBindingHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "registrationBindingHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "transitionSequence",
+          "type": "uint64",
+          "indexed": false
+        },
+        {
+          "name": "validAfterBlock",
+          "type": "uint64",
+          "indexed": false
+        },
+        {
+          "name": "expiresAtBlock",
+          "type": "uint64",
+          "indexed": false
+        },
+        {
+          "name": "evidenceHash",
+          "type": "bytes32",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "emitter": "registry",
+      "id": "attribution",
+      "signature": "CustomLaunchAttributionBoundV1(bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32)",
+      "topic0": "0x3608f2041bbe91aa3792101210bc2e29c23543fb4e0206daa2b1a99e7235c182",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "modelId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "templateId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "modelVersion",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "templateVersion",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "providerId",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "builderAttributionHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "originHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "assetSetHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "marketSetHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "marketPathId",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "configurationHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "permissionsHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "capabilitySetHash",
+          "type": "bytes32",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "emitter": "registry",
+      "id": "feeEvidence",
+      "signature": "CustomLaunchFeeEvidenceBoundV1(bytes32,bytes32,bytes32,address,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32)",
+      "topic0": "0xe647c474a92f722808930d32d310f47d0e3a4faf393255e0dea4b272588babb0",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "feePolicyHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "verificationEvidenceHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "currency",
+          "type": "address",
+          "indexed": false
+        },
+        {
+          "name": "chargeModeId",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "basisId",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "roundingId",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "partnerAccrualId",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "programmableAccrualId",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "claimIsolationEvidenceHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "accountingSafetyEvidenceHash",
+          "type": "bytes32",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "emitter": "registry",
+      "id": "feePolicy",
+      "signature": "CustomLaunchFeePolicyBoundV1(bytes32,bytes32,bytes32,uint8,uint16,uint16,uint16,uint16,address,address)",
+      "topic0": "0xb889df8572071d751e87d3e2a46c54093a55a9bc5a4697440cd29c90255dc5bf",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "feePolicyHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "providerId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "kind",
+          "type": "uint8",
+          "indexed": false
+        },
+        {
+          "name": "totalFeeBps",
+          "type": "uint16",
+          "indexed": false
+        },
+        {
+          "name": "nativeCustomFeeBps",
+          "type": "uint16",
+          "indexed": false
+        },
+        {
+          "name": "partnerShareBps",
+          "type": "uint16",
+          "indexed": false
+        },
+        {
+          "name": "programmableShareBps",
+          "type": "uint16",
+          "indexed": false
+        },
+        {
+          "name": "partnerRecipient",
+          "type": "address",
+          "indexed": false
+        },
+        {
+          "name": "programmableRecipient",
+          "type": "address",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "emitter": "registry",
+      "id": "feeScope",
+      "signature": "CustomLaunchFeeScopeBoundV1(bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32)",
+      "topic0": "0xfb69ef55bd117e822ea39d795bd1506dc489a1ce2c1ccd3ad4c781ef04598336",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "feePolicyHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "publicPolicyBindingHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "modelId",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "modelVersion",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "templateId",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "templateVersion",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "marketPathId",
+          "type": "bytes32",
+          "indexed": false
+        }
+      ]
     },
     {
       "emitter": "registry",
       "id": "finalized",
       "signature": "CustomLaunchFinalizedV1(bytes32,bytes32,bytes32,uint64,uint64,bytes32,uint32,uint32,uint64,bytes32,bytes32,uint64,uint64)",
-      "topic0": "0xab930c1c165bba36257b8079ae38b6869f604910f6ffa40c956e31eb1b8ce38f"
+      "topic0": "0xab930c1c165bba36257b8079ae38b6869f604910f6ffa40c956e31eb1b8ce38f",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "observedTransactionHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "finalityEvidenceHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "transitionSequence",
+          "type": "uint64",
+          "indexed": false
+        },
+        {
+          "name": "observedBlockNumber",
+          "type": "uint64",
+          "indexed": false
+        },
+        {
+          "name": "observedBlockHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "observedTransactionIndex",
+          "type": "uint32",
+          "indexed": false
+        },
+        {
+          "name": "observedLogIndex",
+          "type": "uint32",
+          "indexed": false
+        },
+        {
+          "name": "confirmedHeadBlockNumber",
+          "type": "uint64",
+          "indexed": false
+        },
+        {
+          "name": "confirmedHeadBlockHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "finalityPolicyHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "finalizedAtBlock",
+          "type": "uint64",
+          "indexed": false
+        },
+        {
+          "name": "finalizedAtTimestamp",
+          "type": "uint64",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "emitter": "registry",
+      "id": "provenance",
+      "signature": "CustomLaunchProvenanceBoundV1(bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32)",
+      "topic0": "0x9593acf43b1c8e03c6742d49b67008f3c05841d3cfa43389d12f98e8b9c66cb9",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "repositoryId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "commitId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "sourceCommitment",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "buildCommitment",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "artifactSetHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "deploymentConfigurationHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "deploymentSetHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "runtimeCodeSetHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "primaryRuntimeCodeHash",
+          "type": "bytes32",
+          "indexed": false
+        }
+      ]
     },
     {
       "emitter": "registry",
       "id": "corrected",
       "signature": "CustomLaunchRecordCorrectedV1(bytes32,uint64,bytes32,uint64,bytes32,bytes32,bytes32)",
-      "topic0": "0xa13c4392e0c64159cee078ced2b7157bc99993da4517b87fd0bd26b137600b78"
+      "topic0": "0xa13c4392e0c64159cee078ced2b7157bc99993da4517b87fd0bd26b137600b78",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "revision",
+          "type": "uint64",
+          "indexed": true
+        },
+        {
+          "name": "correctedRecordHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "transitionSequence",
+          "type": "uint64",
+          "indexed": false
+        },
+        {
+          "name": "previousRecordHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "reasonCode",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "evidenceHash",
+          "type": "bytes32",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "emitter": "registry",
+      "id": "registered",
+      "signature": "CustomLaunchRegisteredV1(bytes32,bytes32,address,uint64,uint256,uint64,bytes32,bytes32,address,bytes32,bytes32,uint64)",
+      "topic0": "0x8ee074138114415a92a0797b4f1f4c6353f8bd15d8031433abf0cc42c2dc274a",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "projectId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "primaryContract",
+          "type": "address",
+          "indexed": true
+        },
+        {
+          "name": "registrationSequence",
+          "type": "uint64",
+          "indexed": false
+        },
+        {
+          "name": "chainId",
+          "type": "uint256",
+          "indexed": false
+        },
+        {
+          "name": "registryGeneration",
+          "type": "uint64",
+          "indexed": false
+        },
+        {
+          "name": "approvalId",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "deploymentId",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "launchWallet",
+          "type": "address",
+          "indexed": false
+        },
+        {
+          "name": "identityHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "registeredRecordCommitment",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "observedAtBlock",
+          "type": "uint64",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "emitter": "registry",
+      "id": "review",
+      "signature": "CustomLaunchReviewBoundV1(bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32)",
+      "topic0": "0xb5db50dfea0e7ff29b1ddee247a008e857b05d2b4bc2b780de5717b7f1881b63",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "approvalBindingHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "securityReviewHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "reviewPolicyHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "reviewResultId",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "reviewDeploymentBindingHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "feePolicyHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "finalityPolicyHash",
+          "type": "bytes32",
+          "indexed": false
+        }
+      ]
     },
     {
       "emitter": "registry",
       "id": "revoked",
       "signature": "CustomLaunchRevokedV1(bytes32,bytes32,bytes32,uint64,uint64,bytes32,uint64,uint64)",
-      "topic0": "0x195a188d2c49d5e643afbcfd959edbf2ed1d6cd9216c5d99f3ad08c1010a9744"
+      "topic0": "0x195a188d2c49d5e643afbcfd959edbf2ed1d6cd9216c5d99f3ad08c1010a9744",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "reasonCode",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "evidenceHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "transitionSequence",
+          "type": "uint64",
+          "indexed": false
+        },
+        {
+          "name": "latestRecordRevision",
+          "type": "uint64",
+          "indexed": false
+        },
+        {
+          "name": "latestRecordHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "revokedAtBlock",
+          "type": "uint64",
+          "indexed": false
+        },
+        {
+          "name": "revokedAtTimestamp",
+          "type": "uint64",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "emitter": "atomicRegistrar",
+      "id": "atomicExecuted",
+      "signature": "AtomicCustomLaunchExecutedV1(bytes32,address,bytes32,bytes32,bytes32)",
+      "topic0": "0x95c51eef01e507ea45d10fa0c9939e8f78f574f9008ec761ba00c12031433098",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "primaryContract",
+          "type": "address",
+          "indexed": true
+        },
+        {
+          "name": "salt",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "creationCodeHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "initializationResultHash",
+          "type": "bytes32",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "emitter": "atomicRegistrar",
+      "id": "atomicRegistrar.atomicPartnerCustomLaunchExecutedV2",
+      "signature": "AtomicPartnerCustomLaunchExecutedV2(bytes32,bytes32,address,address,bytes4,uint256,bytes32,bytes32)",
+      "topic0": "0xa5401b276a5f9e29803f74d760c8f70f86e9e7e7fee0ff9aefdc3c0065caaa08",
+      "inputs": [
+        {
+          "name": "launchId",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "configurationHash",
+          "type": "bytes32",
+          "indexed": true
+        },
+        {
+          "name": "providerFactory",
+          "type": "address",
+          "indexed": true
+        },
+        {
+          "name": "primaryContract",
+          "type": "address",
+          "indexed": false
+        },
+        {
+          "name": "launchSelector",
+          "type": "bytes4",
+          "indexed": false
+        },
+        {
+          "name": "launchValue",
+          "type": "uint256",
+          "indexed": false
+        },
+        {
+          "name": "launchCalldataHash",
+          "type": "bytes32",
+          "indexed": false
+        },
+        {
+          "name": "launchResultHash",
+          "type": "bytes32",
+          "indexed": false
+        }
+      ]
     }
   ]
 }

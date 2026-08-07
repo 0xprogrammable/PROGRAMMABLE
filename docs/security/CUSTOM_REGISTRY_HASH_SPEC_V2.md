@@ -4,7 +4,7 @@
 
 Generation 2 deliberately keeps `IProgrammableCustomRegistryV1` as the launch-record integration ABI. The
 `LaunchRegistrationV1` tuple contains 37 fixed fields followed by the nested fee policy. Its field order, function
-selectors, and 15 registration/lifecycle event signatures remain frozen. Generation 2 adds three companion events
+selectors, and 15 registration/lifecycle event signatures remain frozen. Generation 2 adds four capability event types
 from a fixed execution-policy Registry. A bare Generation 2 registration without its exact same-transaction summary,
 route rows, and source rows is invalid for public projection. The closed public v2 launch object remains unchanged;
 the proof is exposed as a separately versioned linked trade-capability resource, so unchanged blind clients continue
@@ -13,8 +13,8 @@ to decode launch objects without accepting the new resource as transaction autho
 The Developer record producer is a separate compatibility boundary: record v3 commits only 34 fixed words and
 cannot reproduce this contract commitment. Record v3 remains frozen; contract-parity consumers use additive record
 v4 with `configurationHash`, `permissionsHash`, and `marketPathId`. This producer revision does not change the public
-contract ABI version. Full contract-parity projection is exposed on the extended public API v2 surface; API v1 and
-record v3 remain compatibility-only.
+contract ABI version. Full contract-parity projection is exposed on a linked, versioned API v2 trade-capability
+resource; the previously published closed v2 launch object remains byte-for-byte decodable by unchanged clients.
 
 ## Frozen 37-field tuple order
 
@@ -86,8 +86,11 @@ against contract immutables before authorization, registration, finalization, co
 ```text
 fee policy:            keccak256("programmable.custom-fee-policy.v2")
 partner configuration: keccak256("programmable.custom-partner-configuration.v2")
+provider factory:       keccak256("programmable.custom-provider-factory.v2")
 partner approver role: keccak256("programmable.custom-partner-factory.approver.v2")
 partner revoker role:  keccak256("programmable.custom-partner-factory.revoker.v2")
+revision approval:      keccak256("programmable.custom-execution-policy-revision-approval.v1")
+corrected record:       keccak256("programmable.custom-execution-policy-corrected-record.v1")
 trade capability:      keccak256("programmable.trade-capability.v1")
 trade route:           keccak256("programmable.trade-route.v1")
 trade route set:       keccak256("programmable.trade-route-set.v1")
@@ -96,6 +99,9 @@ market set:            keccak256("programmable.trade-market-set.v1")
 market data source:    keccak256("programmable.market-data-source.v1")
 market source set:     keccak256("programmable.market-data-source-set.v1")
 market metric set:     keccak256("programmable.market-data-metric-set.v1")
+market event ABI:       keccak256("programmable.market-event-abi.v1")
+market event filter:    keccak256("programmable.market-event-filter.v1")
+market derivation:      keccak256("programmable.market-data-derivation.v1")
 ```
 
 The partner configuration preimage is:
@@ -117,8 +123,11 @@ keccak256(abi.encode(
 ))
 ```
 
-Changing provider, model/template, either source revision, chain, generation, factory, live factory runtime,
-authorized launch runtime set, permissions, or fee policy changes the configuration commitment.
+Generation 2 extends that configuration with a companion `ProviderFactoryBindingV2` hash over the launch/approval,
+expected primary address/runtime, provider factory/runtime, launch selector/value/calldata/result, exact source/build/
+artifact revision, result-decoding policy, and evidence. Registry authority remains with the immutable registrar.
+Provider-factory execution accepts only `ProxyKind.None`, `implementation == providerFactory`, the exact direct runtime
+hash, and zero proxy/admin/beacon fields. Runtime substitution fails authorization and launch.
 
 ## Trade-capability composition
 
@@ -132,6 +141,11 @@ then full route hash. Multiple targets for the same market/path are allowed; exa
 market-set preimage deduplicates adjacent `(marketId, marketPathId)` tuples. The canonical project-only empty hash is
 `0xbd6f28a96b79921f21d91177e262ccb903f8cee746201feb41bcd74385ae3eef`. Sources are strictly ordered by
 market ID, source ID, kind, event emitter, StateView, configuration hash, then source hash.
+
+`executionEnabled` declares that at least one non-paused, non-retired `standard` or `adapter` route exists. It does
+not depend on the current block. Current execution is dynamically re-evaluated from activation, lifecycle/finality,
+pause/retirement, runtime/configuration/dependency matches, and current proxy slot/beacon evidence. A delayed route
+can become executable without changing its immutable hash; an unsupported-only set is always false.
 
 Execution modes are `unsupported`, `standard`, and `adapter`. Unsupported disables execution only; exact quote,
 simulation, read, and event-source identities may remain bound. Standard v4 execution binds Universal Router policy,
@@ -175,7 +189,33 @@ of an empty list is nevertheless frozen as
 source so a buggy approval implementation cannot publish a no-metric source. The Golden Vector file includes exact
 ordered arrays and hashes for the four-standard-metric set and the price/liquidity subset.
 
-Exact preimages, hashes, selectors, topics, indexed topics, and event data are frozen in
+### Exact market event, filter, and derivation preimages
+
+```text
+topic0 = keccak256(bytes(eventSignature))
+eventAbiHash = keccak256(abi.encode(
+  keccak256("programmable.market-event-abi.v1"), topic0, abiContentHash, abiVersionHash
+))
+filterHash = keccak256(abi.encode(
+  keccak256("programmable.market-event-filter.v1"),
+  marketId, marketPathId, poolId, poolAddress, indexedValues, filterVersionHash
+))
+derivationPolicyHash = keccak256(abi.encode(
+  keccak256("programmable.market-data-derivation.v1"),
+  metricsHash, formulaHash, calldataPolicyHash, derivationVersionHash
+))
+```
+
+The ABI digest/version, ordered indexed filter values and market/pool scope, formula, calldata policy, and derivation
+version must be published. A metric remains unavailable when any preimage, runtime, configuration, or current proxy
+readback is missing or mismatched; consumers must not infer it.
+
+Revision approval binds previous/new policy hashes, the replacement flag, previous Registry record, typed
+`correctedRecordPayloadHash`, reason/evidence, window, and approval evidence. The corrected Registry record is
+`keccak256(abi.encode(CORRECTED_RECORD_DOMAIN, approvalId, approvalHash, correctedRecordPayloadHash))`. Revisions are
+contiguous, one-use, append-only, revocable before use, and either replace the policy or explicitly retain it.
+
+Exact tuple orders, preimages, hashes, selectors, topics, indexed topics, and event data are frozen in
 `CUSTOM_REGISTRY_TRADE_CAPABILITY_V1_GOLDEN_VECTORS.json` and independently reproduced by Foundry tests.
 
 ## Fee policy
