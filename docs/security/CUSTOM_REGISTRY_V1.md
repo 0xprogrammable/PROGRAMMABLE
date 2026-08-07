@@ -4,10 +4,10 @@
 
 The canonical Registry V1 contracts are deployed on Ethereum Mainnet. The main Registry is
 `0x17e18c88bda9bfb73924cdc989c07b0707e72671` with start block `25701139`; the exact release evidence is published in
-`contracts/deployments/mainnet-custom-registry-v1.json`. Custom product status remains `prelaunch` until the remaining
-activation gates below have real evidence. A deployment alone does not make the complete Launch Gate live.
+`contracts/deployments/mainnet-custom-registry-v1.json`. Registry discovery and the finalized genesis launch are live;
+general public submissions remain prelaunch. Deployment, discovery, and intake are separate public states.
 
-The release becomes active only after:
+The live release remains valid only while:
 
 1. the three registry components are deployed on the intended chain with no placeholder addresses;
 2. source and deployed runtime code are independently verified;

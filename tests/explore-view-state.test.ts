@@ -6,6 +6,7 @@ import {
   EXPLORE_REFRESH_INTERVAL_MS,
   filterTokensByLaunchModel,
   filterTokensBySocialPresence,
+  getTokenCards,
   getExplorePaginationItems,
   getMarketCap,
   loadExploreModelDataset,
@@ -242,6 +243,18 @@ describe("Explore refresh state", () => {
         recordId: "custom-looking-symbol-and-address",
       },
     })).toBe("classic");
+  });
+
+  it("labels a project-only Custom launch as No market without inventing a token", () => {
+    const project = customEntry(1);
+    expect(getTokenCards([project])).toEqual([
+      expect.objectContaining({
+        id: project.id,
+        launchCategory: "Custom",
+        marketStatus: "No market",
+      }),
+    ]);
+    expect(getTokenCards([project])[0]).not.toHaveProperty("tokenAddress");
   });
 
   it("combines model and social filters before nine-token pagination", () => {

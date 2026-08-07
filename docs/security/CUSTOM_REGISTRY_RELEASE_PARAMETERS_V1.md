@@ -1,9 +1,13 @@
 # Programmable Custom Registry V1 release parameters
 
-These values are the frozen constructor and manifest inputs for the deployed Ethereum Mainnet V1 release. The exact
+These values are the frozen constructor and manifest inputs for the live Ethereum Mainnet V1 release. The exact
 receipts, block hashes, input hashes, addresses, and runtime hashes are published in
-`contracts/deployments/mainnet-custom-registry-v1.json`. Public Custom product status remains `prelaunch` until a real
-same-transaction launch has been finalized and reconciled across every required public surface.
+`contracts/deployments/mainnet-custom-registry-v1.json`. Registry discovery is live from block `25701139`; general
+public submissions remain prelaunch.
+
+`CUSTOM_REGISTRY_POLICY_FROZEN_PREDEPLOYMENT_SNAPSHOT_V1.json` is retained byte-for-byte as the historical deployment
+policy preimage because its hash is committed onchain. Its internal `frozen-predeployment` value describes when that
+policy snapshot was sealed; it is not the current Registry or product status.
 
 ## Mainnet deployment
 
@@ -37,7 +41,7 @@ The onchain `CHAIN_PROFILE_HASH` constructor value is the raw 32-byte digest:
 0x30991a4ebef393737148f7986c880a4af602691e059ad428aa9ca17c6b4066ff
 ```
 
-`CUSTOM_REGISTRY_POLICY_V1.json` is hashed as RFC 8785 JSON with the domain
+`CUSTOM_REGISTRY_POLICY_FROZEN_PREDEPLOYMENT_SNAPSHOT_V1.json` is hashed as RFC 8785 JSON with the domain
 `programmable.custom-registry-policy.v1`:
 
 ```text
