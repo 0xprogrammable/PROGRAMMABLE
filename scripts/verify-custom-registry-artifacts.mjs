@@ -64,9 +64,9 @@ const expectedGenerationTwoArtifactFileHashes = new Map([
 const expectedGenerationTwoEventSetHash =
   "sha256:bcff2958529fecaa7ef8c4c654389829bfb7dd61a3246f0d681cf7db0a42a58c";
 const expectedGenerationTwoArtifactSetHash =
-  "sha256:0a82071681ff8d31dee34f3b37498ca2629d939801d927c94af675b85e613524";
+  "sha256:75573593dc957d4511388ee20009ed3002f12f8a148f9cadbe58e0ff73cf97ba";
 const expectedGenerationTwoReleaseCandidateFileHash =
-  "sha256:7521d0ccd0689de7db9e273bdfd80b5653bc1b6016273c72994f0de0a539ff42";
+  "sha256:ce673b6dca09f6e79ebb6bf9a35936282b43b9859b53e1614b278adf69c7c0cc";
 const expectedGenerationTwoBuilds = new Map([
   [
     "ProgrammableCustomRegistryV2",
@@ -104,12 +104,12 @@ const expectedGenerationTwoBuilds = new Map([
   [
     "ProgrammableCustomAtomicRegistrarV2",
     {
-      sourceSha256: "sha256:a289e7bd0b6c5efe813c5acef0c2d9dab449f91fb090f56b46efb4123bfb446a",
-      sourceKeccak256: "0x0e3293a174952b858e035e807baa858fb88a02a8b9b509d39f894346418769cb",
-      artifactBindingHash: "sha256:252b0007d14512ed8ca37163f64fc3c6a16b108c492903558286105cebe2f34f",
-      creationCodeSha256: "sha256:afa8d1b3d9165510d39dc8eeee4819f170cb7dc927f6aeaf980f48e5ac5e084e",
-      runtimeCodeSha256: "sha256:b4d763c27dcd28bb7e788eb9933ec266d528111446fc3ec34be5950bd582f422",
-      runtimeCodeKeccak256: "0xa98592bb24d40bd88cd774d9e9d03aabdc251d01bf00cacc22cbb86fe9339d69",
+      sourceSha256: "sha256:556bd3ec006015b4a995fc930a9abc7388e37ec4bfefed216d9e1b190f2a489b",
+      sourceKeccak256: "0x524546ab24adca6d8a54b4907aa731616691018ce46923664011c3e3f52617c4",
+      artifactBindingHash: "sha256:f4b72b641df01420696430a473e3093476027331581ed6eb3c45d6f60ecb828d",
+      creationCodeSha256: "sha256:e2b3c58dd6516d155bbfdae49866b34344c15c6bd3968614fc020ec4f10f9e39",
+      runtimeCodeSha256: "sha256:ad7efb522b51299d0529ece070b414066d792bd0264be3801c917b8b0ca7fa20",
+      runtimeCodeKeccak256: "0x4969b46b1c540827ebcced06192d7204fc2b5a47eced3c587134b82d3cec3e04",
     },
   ],
 ]);

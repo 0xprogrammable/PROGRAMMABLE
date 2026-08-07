@@ -46,6 +46,11 @@ predicted address, writer binding, chain, starting nonce, and generation. Any in
 the freeze and requires a new predeployment record. The script does not publish a manifest, enable submissions,
 deploy a provider factory, or perform a canary.
 
+The Generation 2 atomic registrar is an ABI-compatible implementation independent from the immutable Generation 1
+registrar. It snapshots ETH that predates each payable launch and requires the launch to preserve that exact balance.
+Forced ETH therefore remains unrelated to the launch and cannot permanently block later atomic registrations. The
+Generation 1 source and deployment remain unchanged.
+
 ## Published ABI hashes
 
 These SHA-256 hashes cover the exact JSON bytes in `docs/security/abi`:
@@ -69,7 +74,7 @@ of `CUSTOM_REGISTRY_EVENT_SET_V2.json` is
 | Registry | `6f013c147a5f1d4aba70aa335a905346bb4011fd266b75ea311e75362002051f` | `0x5b614de34459bb52a89f3ea876d3ea6c7a5e1fbeec688a8d11df9bc29684cb6e` |
 | Partner-factory Registry | `e81544a2c30ffb35179f2e701fe54def0b5ac9bac5d4f7086d5b173905f03432` | `0x990af413455471779a9a1b76bf75943dabf95fdcc2821889c132f6c363aecde6` |
 | Fee-policy verifier | `f18da940392fe45c61982617e6739145112562b251206ba908c69bd773f6cef6` | `0x21a9704c30cbac965d99b1932503ebc786bd9f54026a7d6b8539dd051f454e5f` |
-| Atomic registrar | `a289e7bd0b6c5efe813c5acef0c2d9dab449f91fb090f56b46efb4123bfb446a` | `0xa98592bb24d40bd88cd774d9e9d03aabdc251d01bf00cacc22cbb86fe9339d69` |
+| Atomic registrar | `556bd3ec006015b4a995fc930a9abc7388e37ec4bfefed216d9e1b190f2a489b` | `0x4969b46b1c540827ebcced06192d7204fc2b5a47eced3c587134b82d3cec3e04` |
 
 Candidate bytecode hashes are build artifacts only; they are not live runtime evidence and must be rederived from
 the final committed source before deployment.

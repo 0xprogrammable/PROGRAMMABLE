@@ -7,6 +7,8 @@ import {
     ProgrammableCustomFeePolicyVerifierLibV2,
     ProgrammableCustomFeePolicyVerifierV2
 } from "../src/ProgrammableCustomFeePolicyVerifierV2.sol";
+import { ProgrammableCustomAtomicRegistrarV1 } from "../src/ProgrammableCustomAtomicRegistrarV1.sol";
+import { ProgrammableCustomAtomicRegistrarV2 } from "../src/ProgrammableCustomAtomicRegistrarV2.sol";
 import { ProgrammableCustomPartnerFactoryRegistryV2 } from "../src/ProgrammableCustomPartnerFactoryRegistryV2.sol";
 import { ProgrammableCustomRegistryV1 } from "../src/ProgrammableCustomRegistryV1.sol";
 import { ProgrammableCustomRegistryV2 } from "../src/ProgrammableCustomRegistryV2.sol";
@@ -18,6 +20,22 @@ import { IProgrammableCustomRegistryV1 } from "../src/interfaces/IProgrammableCu
 contract CustomRuntimeTargetV2 {
     function version() external pure returns (uint256) {
         return 2;
+    }
+}
+
+contract AtomicLaunchTargetV2 {
+    uint256 public configuredValue;
+
+    function initialize(uint256 value) external returns (bytes32 result) {
+        require(configuredValue == 0, "already initialized");
+        configuredValue = value;
+        result = keccak256(abi.encode(value));
+    }
+}
+
+contract ForceEtherV2 {
+    constructor(address payable target) payable {
+        selfdestruct(target);
     }
 }
 
@@ -47,6 +65,7 @@ contract ProgrammableCustomRegistryV2Test is Test {
     ProgrammableCustomFeePolicyVerifierV2 internal verifier;
     ProgrammableCustomPartnerFactoryRegistryV2 internal factoryRegistry;
     ProgrammableCustomRegistryV2 internal registry;
+    ProgrammableCustomAtomicRegistrarV2 internal atomicRegistrar;
     FutureProviderFactoryV2 internal providerFactory;
     FutureProviderFactoryV2 internal wrongFactory;
     CustomRuntimeTargetV2 internal runtimeTarget;
@@ -58,6 +77,10 @@ contract ProgrammableCustomRegistryV2Test is Test {
         factoryRegistry =
             new ProgrammableCustomPartnerFactoryRegistryV2(2 days, ADMIN, FACTORY_APPROVER, FACTORY_REVOKER);
         registry = new ProgrammableCustomRegistryV2(_registryConfig(), factoryRegistry, verifier);
+        atomicRegistrar = new ProgrammableCustomAtomicRegistrarV2(registry);
+        bytes32 writerRole = registry.WRITER_ROLE();
+        vm.prank(ADMIN);
+        registry.grantRole(writerRole, address(atomicRegistrar));
         providerFactory = new FutureProviderFactoryV2();
         wrongFactory = new FutureProviderFactoryV2();
         runtimeTarget = new CustomRuntimeTargetV2();
@@ -69,6 +92,36 @@ contract ProgrammableCustomRegistryV2Test is Test {
         assertEq(address(registry.FEE_POLICY_VERIFIER()), address(verifier));
         assertEq(address(registry.PARTNER_FACTORY_REGISTRY()), address(factoryRegistry));
         assertTrue(registry.supportsInterface(type(IProgrammableCustomRegistryV1).interfaceId));
+    }
+
+    function test_atomicRegistrarPreservesPreexistingForcedEtherAndStillLaunches() public {
+        uint256 forcedBalance = 1 wei;
+        new ForceEtherV2{ value: forcedBalance }(payable(address(atomicRegistrar)));
+        ProgrammableCustomAtomicRegistrarV1.AtomicLaunchRequestV1 memory request =
+            _atomicRequest("forced-ether-unit", 42);
+        _authorizeApproval(request.registration);
+
+        address deployed = atomicRegistrar.deployInitializeAndRegister(request);
+
+        assertEq(deployed, request.registration.primaryContract);
+        assertEq(AtomicLaunchTargetV2(deployed).configuredValue(), 42);
+        assertEq(address(atomicRegistrar).balance, forcedBalance);
+        assertTrue(registry.approvalConsumed(request.registration.approvalId));
+    }
+
+    function testFuzz_atomicRegistrarPreservesArbitraryPreexistingForcedEther(uint96 rawForcedBalance) public {
+        uint256 forcedBalance = bound(uint256(rawForcedBalance), 1, 100 ether);
+        vm.deal(address(this), forcedBalance);
+        new ForceEtherV2{ value: forcedBalance }(payable(address(atomicRegistrar)));
+        ProgrammableCustomAtomicRegistrarV1.AtomicLaunchRequestV1 memory request =
+            _atomicRequest("forced-ether-fuzz", forcedBalance);
+        _authorizeApproval(request.registration);
+
+        address deployed = atomicRegistrar.deployInitializeAndRegister(request);
+
+        assertEq(AtomicLaunchTargetV2(deployed).configuredValue(), forcedBalance);
+        assertEq(address(atomicRegistrar).balance, forcedBalance);
+        assertEq(uint8(registry.launchState(request.registration.launchId).status), 1);
     }
 
     function test_providerNeutralVerifierAcceptsUnknownFutureProviderStructure() public view {
@@ -417,6 +470,24 @@ contract ProgrammableCustomRegistryV2Test is Test {
         registration.feePolicy.templateId = registration.templateId;
         registration.feePolicy.templateVersion = registration.templateVersion;
         registration.feePolicy.marketPathId = registration.marketPathId;
+    }
+
+    function _atomicRequest(string memory label, uint256 configuredValue)
+        private
+        view
+        returns (ProgrammableCustomAtomicRegistrarV1.AtomicLaunchRequestV1 memory request)
+    {
+        request.salt = _hash(string.concat(label, "-salt"));
+        request.creationCode = type(AtomicLaunchTargetV2).creationCode;
+        request.initializationCall = abi.encodeCall(AtomicLaunchTargetV2.initialize, (configuredValue));
+        request.initializationResultHash = keccak256(abi.encode(keccak256(abi.encode(configuredValue))));
+        request.registration = _nativeRegistration(label);
+        request.registration.primaryContract =
+            atomicRegistrar.predictAddress(request.salt, keccak256(request.creationCode));
+        request.registration.primaryRuntimeCodeHash = keccak256(type(AtomicLaunchTargetV2).runtimeCode);
+        request.registration.launchWallet = address(this);
+        request.registration.deploymentConfigurationHash = atomicRegistrar.computeAtomicRequestCommitment(request);
+        _rebind(request.registration);
     }
 
     function _partnerRegistration(string memory label, bytes32 providerId)
