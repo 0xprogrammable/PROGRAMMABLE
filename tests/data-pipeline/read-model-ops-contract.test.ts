@@ -712,4 +712,36 @@ describe("post-promotion route verification", () => {
       }),
     ).rejects.toThrow("automatic production-domain assignment");
   });
+
+  it("accepts Vercel built-in Git commit metadata for the rollback binding", async () => {
+    const base = publicFetch();
+    const fetchImpl = async (input: URL | RequestInfo) => {
+      const url = new URL(String(input));
+      if (url.hostname === "api.vercel.com") {
+        return Response.json({
+          id: DEPLOYMENT_ID,
+          url: "programmable-tested.vercel.app",
+          readyState: "READY",
+          projectId: PROJECT_ID,
+          meta: { gitCommitSha: GIT_HEAD },
+        });
+      }
+      return base(input);
+    };
+
+    await expect(
+      resolveProductionBinding({
+        targetUrl: "https://programmable.family",
+        token: "vercel-test-token",
+        teamId: "team_programmable_test",
+        projectId: PROJECT_ID,
+        fetchImpl,
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        deploymentId: DEPLOYMENT_ID,
+        gitHead: GIT_HEAD,
+      }),
+    );
+  });
 });

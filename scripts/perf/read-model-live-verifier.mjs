@@ -22,6 +22,7 @@ async function boundedFetch(fetchImpl, url, init, timeoutMs = 10_000) {
 function deploymentCommit(deployment) {
   const candidates = [
     deployment?.meta?.githubCommitSha,
+    deployment?.meta?.gitCommitSha,
     deployment?.gitSource?.sha,
     deployment?.github?.commitSha,
   ];
