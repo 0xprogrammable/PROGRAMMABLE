@@ -17,7 +17,7 @@ const POSITIVE_BLOCK = /^[1-9][0-9]{0,19}$/u;
 const IDENTIFIER = /^[a-z0-9][a-z0-9._:/+\-]{0,127}$/u;
 const PLACEHOLDER_TEXT = /(?:^|[._:/+\-])(?:example|placeholder|prelaunch|replace|tbd|todo|unknown)(?:$|[._:/+\-])/iu;
 const UINT64_MAX = 18_446_744_073_709_551_615n;
-const MAXIMUM_RPC_RESPONSE_BYTES = 65_536;
+const MAXIMUM_RPC_RESPONSE_BYTES = 131_072;
 const RPC_TIMEOUT_MS = 5_000;
 
 const CONTRACT_ENVIRONMENT = Object.freeze({

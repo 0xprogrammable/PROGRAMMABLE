@@ -288,6 +288,53 @@ describe("Custom Registry V1 readiness", () => {
     ]));
   });
 
+  it("accepts the complete deployed-runtime batch when it exceeds 64 KiB", async () => {
+    const deployedSizeCodes = {
+      registry: `0x${"60".repeat(21_760)}`,
+      partnerFactoryRegistry: `0x${"61".repeat(9_314)}`,
+      feePolicyVerifier: `0x${"62".repeat(4_001)}`,
+      atomicRegistrar: `0x${"63".repeat(3_717)}`,
+    } as const satisfies Record<string, Hex>;
+    const body = JSON.stringify([
+      { jsonrpc: "2.0", id: 1, result: "0x1" },
+      { jsonrpc: "2.0", id: 2, result: deployedSizeCodes.registry },
+      { jsonrpc: "2.0", id: 3, result: deployedSizeCodes.partnerFactoryRegistry },
+      { jsonrpc: "2.0", id: 4, result: deployedSizeCodes.feePolicyVerifier },
+      { jsonrpc: "2.0", id: 5, result: deployedSizeCodes.atomicRegistrar },
+    ]);
+    expect(new TextEncoder().encode(body).byteLength).toBeGreaterThan(65_536);
+
+    const handler = createCustomRegistryReadinessHandlerV1({
+      environment: {
+        ...configured,
+        PROGRAMMABLE_CUSTOM_REGISTRY_RUNTIME_CODE_KECCAK256:
+          keccak256(deployedSizeCodes.registry),
+        PROGRAMMABLE_CUSTOM_PARTNER_FACTORY_REGISTRY_RUNTIME_CODE_KECCAK256:
+          keccak256(deployedSizeCodes.partnerFactoryRegistry),
+        PROGRAMMABLE_CUSTOM_FEE_POLICY_VERIFIER_RUNTIME_CODE_KECCAK256:
+          keccak256(deployedSizeCodes.feePolicyVerifier),
+        PROGRAMMABLE_CUSTOM_ATOMIC_REGISTRAR_RUNTIME_CODE_KECCAK256:
+          keccak256(deployedSizeCodes.atomicRegistrar),
+        PROGRAMMABLE_CUSTOM_REGISTRY_READINESS_RPC_URL:
+          "https://eth-mainnet.public.blastapi.io",
+      },
+      rpcFetch: vi.fn<typeof fetch>().mockResolvedValue(new Response(body, {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })),
+      now: () => NOW,
+    });
+
+    const response = await handler(request(
+      "/api/custom-launch/registry/v1/readiness",
+    ));
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      status: "ready",
+      runtimeBindings: "verified",
+    });
+  });
+
   it("fails readiness on prelaunch, malformed RPC or a runtime mismatch", async () => {
     const prelaunch = createCustomRegistryReadinessHandlerV1({
       environment: {},
