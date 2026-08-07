@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "programmable.custom-registry-deployments.v3",
+  "platformId": "programmable",
+  "category": "custom",
+  "publicLabel": "Programmable Custom",
+  "chains": [
+    {
+      "chainId": "1",
+      "caip2": "eip155:1",
+      "status": "prelaunch",
+      "publicSubmissionsEnabled": false,
+      "confirmationDepth": "2",
+      "finalityDepth": "64",
+      "registries": []
+    }
+  ]
+}

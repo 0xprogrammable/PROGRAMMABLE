@@ -8,6 +8,8 @@ import {
   PROGRAMMABLE_ACTIVE_API_VERSION,
   PROGRAMMABLE_COMPAT_API_BASE,
   PROGRAMMABLE_COMPAT_API_VERSION,
+  PROGRAMMABLE_CUSTOM_DISCOVERY_STATUS,
+  PROGRAMMABLE_CUSTOM_PUBLIC_SUBMISSION_STATUS,
   PROGRAMMABLE_ENDPOINTS,
   PROGRAMMABLE_FEE_POLICY,
   PROGRAMMABLE_FEE_RECIPIENT,
@@ -176,7 +178,9 @@ describe("canonical public developer-contract facts", () => {
     );
   });
 
-  it("keeps Community Custom fail-closed without placeholders", () => {
+  it("separates live canonical discovery from prelaunch intake and website readiness", () => {
+    expect(PROGRAMMABLE_CUSTOM_DISCOVERY_STATUS).toBe("live");
+    expect(PROGRAMMABLE_CUSTOM_PUBLIC_SUBMISSION_STATUS).toBe("prelaunch");
     expect(PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1).toMatchObject({
       status: "prelaunch",
       publicSubmissionsEnabled: false,
@@ -186,16 +190,19 @@ describe("canonical public developer-contract facts", () => {
       },
     });
     expect(developerDocsMarkdown).toContain(
-      "Registry address is `null`, start block is `null`",
+      "Canonical Custom discovery is **live**",
     );
     expect(developerDocsMarkdown).toContain(
-      "`publicSubmissionsEnabled` is `false`",
+      "General public submissions remain **prelaunch**",
+    );
+    expect(developerDocsMarkdown).toContain(
+      "website operations manifest",
+    );
+    expect(developerDocsMarkdown).toContain(
+      "registry address `null`, start block `null`",
     );
     expect(developerDocsMarkdown).toContain(
       CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH,
-    );
-    expect(developerDocsMarkdown).not.toContain(
-      "The Programmable Custom Registry is live",
     );
   });
 
@@ -203,6 +210,8 @@ describe("canonical public developer-contract facts", () => {
     for (const exportName of [
       "PROGRAMMABLE_ACTIVE_API_VERSION",
       "PROGRAMMABLE_COMPAT_API_VERSION",
+      "PROGRAMMABLE_CUSTOM_DISCOVERY_STATUS",
+      "PROGRAMMABLE_CUSTOM_PUBLIC_SUBMISSION_STATUS",
       "PROGRAMMABLE_FEE_POLICY",
       "PROGRAMMABLE_FEE_RECIPIENT",
       "PROGRAMMABLE_FINALITY_STATES",

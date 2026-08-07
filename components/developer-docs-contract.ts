@@ -6,6 +6,8 @@ export const PROGRAMMABLE_DEVELOPER_REPOSITORY =
 export const PROGRAMMABLE_PLATFORM_ID = "programmable";
 export const PROGRAMMABLE_ACTIVE_API_VERSION = "2";
 export const PROGRAMMABLE_COMPAT_API_VERSION = "1";
+export const PROGRAMMABLE_CUSTOM_DISCOVERY_STATUS = "live";
+export const PROGRAMMABLE_CUSTOM_PUBLIC_SUBMISSION_STATUS = "prelaunch";
 
 export const PROGRAMMABLE_LABELS = {
   classic: "Programmable Classic",
