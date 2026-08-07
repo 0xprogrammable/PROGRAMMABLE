@@ -27,12 +27,16 @@ import {
   reflectedConfirmedProfileTransactions,
   preserveInterruptedTransactionStates,
   removePendingProfileTransactionRecord,
+  resolveStockPairedReceiptGate,
   sortProfileTokensByMarketCap,
   sortProfileClaimableEntries,
+  shouldShowStockPairedEthClaimPath,
+  stockPairedCheckpointAfterReceipt,
   upsertPendingProfileTransactionRecords,
   waitForTransaction,
   withoutClosedDeepProfileData,
   type PendingProfileTransactionRecord,
+  type StockPairedPendingStage,
 } from "../components/profile-view";
 import type { ClassicV3Reward } from "../lib/profile/classic-v3-rewards";
 import type { DeepV3CreatorToken } from "../lib/profile/deep-v3-profile";
@@ -364,6 +368,31 @@ describe("profile claim receipt paths", () => {
         firstAddress,
       ),
     ).toEqual(["quote-asset"]);
+  });
+
+  it("keeps a persisted ETH conversion recovery visible after claimable reaches zero", () => {
+    const rewardWithoutEstimate = {
+      ...stockReward,
+      estimatedEth: undefined,
+      estimatedUsd: undefined,
+    };
+
+    expect(
+      shouldShowStockPairedEthClaimPath(
+        rewardWithoutEstimate,
+        firstAddress,
+        {
+          claimTransactionHash: `0x${"ab".repeat(32)}` as const,
+          amountIn: "1000",
+        },
+      ),
+    ).toBe(true);
+    expect(
+      shouldShowStockPairedEthClaimPath(
+        rewardWithoutEstimate,
+        firstAddress,
+      ),
+    ).toBe(false);
   });
 });
 
@@ -796,6 +825,47 @@ describe("profile transaction status", () => {
     expect(wait).not.toHaveBeenCalled();
   });
 
+  it("uses the Stock-Paired receipt policy only when explicitly requested", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      new Response(JSON.stringify({ status: "pending" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(
+      waitForTransaction(transactionHash, 1, {
+        maxAttempts: 1,
+        fetcher,
+        policy: "stock-paired",
+      }),
+    ).resolves.toBe("pending");
+
+    expect(String(fetcher.mock.calls[0]?.[0])).toContain(
+      "policy=stock-paired",
+    );
+  });
+
+  it.each<StockPairedPendingStage>([
+    "claim",
+    "token-to-permit2",
+    "permit2-to-router",
+    "swap",
+  ])("never advances a pending Stock-Paired %s receipt", (pendingStage) => {
+    expect(
+      resolveStockPairedReceiptGate(pendingStage, "pending"),
+    ).toMatchObject({ outcome: "hold" });
+    expect(
+      resolveStockPairedReceiptGate(pendingStage, "unavailable"),
+    ).toMatchObject({ outcome: "hold" });
+    expect(
+      resolveStockPairedReceiptGate(pendingStage, "reverted"),
+    ).toMatchObject({ outcome: "reverted" });
+    expect(
+      resolveStockPairedReceiptGate(pendingStage, "confirmed"),
+    ).toEqual({ outcome: "advance" });
+  });
+
   it("aborts receipt polling before another account can inherit it", async () => {
     const controller = new AbortController();
     const fetcher = vi.fn<typeof fetch>(async () =>
@@ -1040,5 +1110,90 @@ describe("profile transaction status", () => {
         transactionHash,
       }),
     ).toEqual(upserted);
+  });
+
+  it.each<StockPairedPendingStage>([
+    "claim",
+    "token-to-permit2",
+    "permit2-to-router",
+    "swap",
+  ])("round-trips the exact pending Claim-as-ETH %s stage", (pendingStage) => {
+    const stateKey = `${secondAddress.toLowerCase()}:claim-as-eth`;
+    const record = {
+      version: 1,
+      account: firstAddress.toLowerCase(),
+      chainId: 1,
+      source: "stock-paired",
+      stateKey,
+      action: "claim-as-eth",
+      transactionHash,
+      submittedAt: 1_800_000_000_000,
+      pendingStage,
+      claimTransactionHash: secondTransactionHash,
+      amountIn: "1000",
+    } satisfies PendingProfileTransactionRecord;
+
+    expect(
+      parsePendingProfileTransactions(
+        JSON.stringify({ version: 1, transactions: [record] }),
+        firstAddress,
+      ),
+    ).toEqual([record]);
+    expect(
+      groupPendingProfileTransactionStates([record])["stock-paired"][
+        stateKey
+      ],
+    ).toMatchObject({
+      status: "pending",
+      transactionHash,
+      pendingStage,
+      claimTransactionHash: secondTransactionHash,
+      amountIn: "1000",
+    });
+
+    const malformed = {
+      ...record,
+      claimTransactionHash: "0x1234",
+    };
+    expect(
+      parsePendingProfileTransactions(
+        JSON.stringify({ version: 1, transactions: [malformed] }),
+        firstAddress,
+      ),
+    ).toEqual([]);
+  });
+
+  it.each<StockPairedPendingStage>([
+    "claim",
+    "token-to-permit2",
+    "permit2-to-router",
+    "swap",
+  ])("keeps the %s checkpoint until a replacement is durable", (pendingStage) => {
+    const record = {
+      version: 1,
+      account: firstAddress.toLowerCase(),
+      chainId: 1,
+      source: "stock-paired",
+      stateKey: `${secondAddress.toLowerCase()}:claim-as-eth`,
+      action: "claim-as-eth",
+      transactionHash,
+      submittedAt: 1_800_000_000_000,
+      pendingStage,
+      claimTransactionHash: secondTransactionHash,
+      amountIn: "1000",
+    } satisfies PendingProfileTransactionRecord;
+
+    expect(stockPairedCheckpointAfterReceipt(record, "advance")).toEqual(
+      pendingStage === "swap" ? null : record,
+    );
+    expect(stockPairedCheckpointAfterReceipt(record, "reverted")).toEqual(
+      pendingStage === "claim"
+        ? null
+        : {
+            ...record,
+            transactionHash: secondTransactionHash,
+            pendingStage: "claim",
+          },
+    );
   });
 });
