@@ -56,6 +56,21 @@ Required cases:
 
 Fuzz target: at least 512 cases for gross-fee accounting and 512 for exact-output rounding.
 
+## Executable launch integration
+
+`test/integration/SoftLandingLaunch.t.sol` uses the real local v4 PoolManager and must cover:
+
+- exact fixed-supply CREATE2 token address, immutable metadata, creator, and 1-billion-token supply;
+- exact hook CREATE2 address, permission mask `0x20cc`, canonical PoolKey, PoolId, and nonzero configuration hash;
+- one-sided position at ticks `[-887220, 204180]`, liquidity `36856093846670599562186`, launcher ownership,
+  active pool liquidity, and no launcher removal/transfer/approval/rescue surface;
+- exact 0.001 ETH initial buy, minimum output, price limit, combined PoolManager settlement, paid recipient output,
+  supply conservation, and 25,789 wei-token inaccessible rounding dust;
+- directly executable post-launch native buy and approved token sell;
+- impossible position bounds reverting token, hook, pool, and launch record;
+- impossible initial-buy settlement bound reverting every child and state write;
+- direct unlock callback rejection and wrong active-callback hash rejection from the PoolManager address.
+
 ## Adversarial simulations
 
 `simulations/launch-traces.mjs` records calm launch, one-block buy burst, sustained buy pressure, sustained sell pressure, alternating pressure, panic exit, paid griefing, LP-owned wash-flow sensitivity, long inactivity, and expiry. Each trace checks fee bounds, one-block lag, directional isolation, skipped-block decay, and permanent return to base.
@@ -71,9 +86,12 @@ Fuzz target: at least 512 cases for gross-fee accounting and 512 for exact-outpu
 
 - Slither with explicit disposition of every finding.
 - Compiler known-bug review for 0.8.26 and the exact settings.
-- Mainnet-fork tests at a pinned block against the observed PoolManager runtime.
-- Universal Router and Quoter generation parity, including native refunds, slippage, deadlines, and receipts.
-- Independent return-delta/accounting review and independent economic manipulation review.
+- Platform-owned mainnet-fork tests at a pinned block against the observed PoolManager runtime; not run or passed by
+  the applicant.
+- Platform-owned production Universal Router/V4Planner/Permit2/V4Quoter/StateView parity, including native refunds,
+  approvals, slippage, deadlines, final deltas, and receipts; not run or passed by the applicant.
+- Platform-owned attributable independent return-delta/accounting review and independent economic manipulation
+  review; explicitly not passed by applicant evidence.
 - Deterministic deployment rehearsal with salt, initcode hash, constructor values, expected address, runtime hash, and source verification.
 - Product-owned indexer, monitoring, routing, and lifecycle tests after acceptance.
 

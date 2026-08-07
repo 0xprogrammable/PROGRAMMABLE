@@ -4,7 +4,11 @@ Status: contributor prototype; not audited, accepted, deployed, routed, or live.
 
 ## Assets and invariants
 
-The canonical pool contains ordinary v4 liquidity and LP fee value. The hook holds quote-denominated PoolManager ERC-6909 claims backing one liability keyed by `(canonical PoolId, quote currency, immutable Programmable owner)`. It holds no LP position, token treasury, project fee, admin key, oracle key, keeper funds, signature authority, personal data, or offchain secret.
+The canonical pool contains a permanent launcher-owned initial position plus any later ordinary v4 liquidity and LP fee
+value. The launcher retains 25,789 wei-token of unreachable deterministic rounding dust under the specified launch.
+The hook holds quote-denominated PoolManager ERC-6909 claims backing one liability keyed by `(canonical PoolId, quote
+currency, immutable Programmable owner)`. Neither contract has a token treasury claimant, project fee, admin key,
+oracle key, keeper funds, signature authority, personal data, or offchain secret.
 
 Required conservation is:
 
@@ -15,6 +19,9 @@ The LP-fee override never enters hook custody. Accrual mints exactly the hook cl
 ## Trust boundaries and authority
 
 - `PoolManager`: immutable callback and unlock authority; any other caller is rejected by `BaseHook` or explicit checks.
+- `SoftLandingLaunch`: permissionless atomic coordinator and permanent position owner. It accepts only the exact active
+  callback-byte hash from its immutable PoolManager and exposes no position removal, transfer, approval, arbitrary
+  call, rescue, sweep, upgrade, or LP-fee claim path.
 - `SoftLandingHookFactory`: permissionless one-shot CREATE2 deployer and registrar. Every PoolKey member and the initial
   sqrt price are committed into constructor initcode; an expected-address mismatch fails before deployment. It has no
   authority after atomic initialization.
@@ -24,6 +31,19 @@ The LP-fee override never enters hook custody. Accrual mints exactly the hook cl
 - Package dependencies and Ethereum PoolManager runtime: exact source/runtime identities are evidence inputs, not upgrade or availability guarantees.
 
 There is no creator, builder, project, administrator, pause, upgrade, rescue, sweep, mutable recipient, oracle, keeper, app server, API, or indexer authority.
+
+## Launch value flow and rollback
+
+The fixed token mints its full supply to the launcher. A one-sided position at the exact initialized tick commits
+`999999999999999999999974211` units. The same PoolManager unlock executes the caller's exact 0.001 ETH initial buy,
+then settles only the combined native debt and net token debt. The launch wallet receives only bought output; it does
+not receive the unsold supply. Conservation is checked across PoolManager, buyer, and launcher dust, while the
+launcher's native balance must return to its prelaunch forced-balance baseline.
+
+Threats include substituted callback data, wrong sign/order, incomplete settlement, initial-buy partial fill or price
+limit, token-transfer failure, excessive output consuming the position budget, and creator capture of uncommitted
+supply. Exact callback-hash binding, one-sided tick checks, amount bounds, exact native-input equality, minimum token
+output, post-balances, zero-delta unlock enforcement, and transaction-wide reverts cover these paths locally.
 
 ## Hook boundary
 
@@ -71,6 +91,9 @@ No product UI, API, indexer, or monitoring service exists in this repository. A 
 
 ## Recovery and limits
 
-There is deliberately no mutable recovery authority. Bad immutable parameters or a flawed deployment require abandoning that pool and launching a new one; the existing pool cannot be upgraded or paused by this hook. LPs retain ordinary core removal paths. Accrued Programmable rights remain historically claimable only by the fixed owner.
+There is deliberately no mutable recovery authority. Bad immutable parameters or a flawed deployment require
+abandoning that pool and launching a new one; the existing pool cannot be upgraded or paused. The initial
+launcher-owned position has no removal path; only later independent LP positions retain ordinary core removal
+semantics. Accrued Programmable rights remain historically claimable only by the fixed owner.
 
 Independent architecture, security, accounting, economic, fork/router, deployment, source-verification, monitoring, routing, and product reviews remain required. Local closure and tests do not establish safety or availability.

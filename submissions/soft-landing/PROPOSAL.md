@@ -24,24 +24,27 @@ The source is `src/SoftLandingHook.sol`, controller math is `src/lib/FlowFeeMath
 | Value | LP fees remain in the pool for LPs. The hook holds quote-denominated PoolManager claims backing the 10 bps Programmable liability. Project fee is zero. |
 | Creator choices | Base, initial buy/sell, maximum, rise, decay, target quote flow, excess cap, warmup length, currencies, tick spacing, and initial price, all fixed at deployment. |
 | Fixed rules | Maximum LP fee 300 bps; 10 bps Programmable minimum; fixed owner; one pool; no mutable parameter, pause, upgrade, rescue, or redirect. |
-| Authorities | PoolManager alone calls callbacks. The factory only deploys/registers. The immutable Programmable owner alone claims its liability. |
+| Authorities | PoolManager alone calls callbacks. The factory only deploys/registers. The launcher permanently owns the initial position without an exit. The immutable Programmable owner alone claims its separate liability. |
 | Dependencies | Ethereum Uniswap v4 PoolManager plus pinned OpenZeppelin and Uniswap source packages. No oracle or offchain liveness dependency. |
 | Failure | Wrong caller/pool, dust, arithmetic, unsupported partial fill, or settlement mismatch reverts atomically. Expiry fixes both fees at base forever. |
 | Surfaces | Solidity contracts, Foundry tests, deterministic JavaScript simulation, and evidence documents only. |
-| Not used | Transfer tax, creator claim, project hook charge, liquidity callbacks, donation callbacks, wallet scoring, oracle, keeper, app, API, or mutable administration. |
+| Not used | Transfer tax, creator claim, project hook charge, hook liquidity callbacks, donation callbacks, wallet scoring, oracle, keeper, app, API, or mutable administration. |
 
 ## Lifecycle
 
-1. Anyone calls the factory with immutable configuration, the expected hook address, and a mined CREATE2 salt whose address has permission mask `0x20cc`. Both currencies, the dynamic fee flag, tick spacing, initial sqrt price, PoolManager, quote asset, and controller parameters are committed to the deployment identity.
-2. The factory recomputes the expected address, deploys the hook, reconstructs the PoolKey from constructor immutables, initializes only at the committed price, and explicitly stores the base dynamic fee in one transaction. Any identity mismatch or initialization failure reverts the whole operation.
-3. Liquidity is added through ordinary v4 core behavior; this hook has no liquidity callback or custody.
-4. The first successful swap starts the warmup. Every swap in the same direction and block gets the same LP fee.
-5. On the first swap of a later block, the hook applies the completed block once and decays any skipped empty blocks in constant time. The current swap cannot affect its own fee.
-6. Every successful swap accrues 10 bps of executed gross quote, using a persistent lifetime remainder, as an ERC-6909-backed liability.
-7. The fixed Programmable owner may claim anytime to a nonzero destination supplied for that claim. Claims do not reset the rounding remainder.
-8. At the exclusive end block, both directional fees become base permanently and flow writes stop. Swaps and the mandatory 10 bps accounting continue.
+1. The graph deploys the permissionless factory, then the immutable PoolManager/factory-bound launcher.
+2. The launch compiler derives the fixed-supply token CREATE2 identity, mines the exact hook salt/address for mask `0x20cc`, derives the complete dynamic-fee PoolKey and PoolId, and binds all identities into one deadline-limited request.
+3. The launcher mints the fixed 1-billion-token supply to itself, calls the factory to deploy and initialize the exact hook/pool, then opens one PoolManager unlock.
+4. That unlock adds liquidity `36856093846670599562186` over `[-887220, 204180]`, committing `999999999999999999999974211` token units to the direct position permanently owned by the launcher. No removal, transfer, approval, rescue, sweep, arbitrary call, upgrade, or LP-fee claim path exists.
+5. The same unlock executes the exact 0.001 ETH initial buy, settles the combined native/token deltas, and transfers only the bought output to the launch wallet. Exactly 25,789 wei-token of rounding dust remains unreachable. Any failure rolls back token, hook, pool, position, and buy.
+6. The initial buy starts the warmup. Every later swap in the same direction and block gets the same LP fee.
+7. On the first swap of a later block, the hook applies the completed block once and decays any skipped empty blocks in constant time. The current swap cannot affect its own fee.
+8. Every successful swap accrues 10 bps of executed gross quote, using a persistent lifetime remainder, as an ERC-6909-backed liability.
+9. The fixed Programmable owner may claim anytime to a nonzero destination supplied for that claim. Claims do not reset the rounding remainder.
+10. At the exclusive end block, both directional fees become base permanently and flow writes stop. Swaps and the mandatory 10 bps accounting continue.
 
-Liquidity removal, donations, payout mutation, migration, and administrative retirement introduce no custom hook action. Ordinary v4 liquidity exits remain available.
+The initial launcher-owned position is intentionally permanent. Later independent LP positions use ordinary v4 exit
+semantics. Donations, payout mutation, migration, and administrative retirement introduce no custom hook action.
 
 ## Controller examples
 
