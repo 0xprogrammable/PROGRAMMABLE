@@ -373,6 +373,18 @@
   text-overflow: ellipsis;
 }
 
+.runnerMarketStatus {
+  color: var(--text-soft);
+  display: inline-flex;
+  flex: none;
+  font-size: 12px;
+  font-weight: 560;
+  letter-spacing: 0.005em;
+  line-height: 1.35;
+  padding-inline: 7px;
+  white-space: nowrap;
+}
+
 .runnerSocials {
   align-items: center;
   display: flex;
