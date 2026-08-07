@@ -127,6 +127,22 @@ export const PROGRAMMABLE_EVENT_SIGNATURES = {
   ],
 } as const satisfies Readonly<Record<string, readonly string[]>>;
 
+/**
+ * Events consumed by the legacy Classic/Stock read-model projector.
+ *
+ * Custom Registry events have their own projection path and are still part of
+ * PROGRAMMABLE_EVENT_SIGNATURES for strict provider decoding. Keeping this
+ * subset explicit prevents a Registry ABI addition from silently becoming a
+ * Classic/Stock projector rule.
+ */
+export const PROJECTOR_EVENT_SIGNATURES = Object.freeze(
+  Object.fromEntries(
+    Object.entries(PROGRAMMABLE_EVENT_SIGNATURES).filter(
+      ([contractName]) => !contractName.startsWith("Custom"),
+    ),
+  ),
+) as Readonly<Record<string, readonly string[]>>;
+
 type CanonicalValue =
   | null
   | boolean
