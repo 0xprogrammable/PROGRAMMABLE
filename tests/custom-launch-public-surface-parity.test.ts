@@ -90,7 +90,7 @@ describe("live Custom public-surface parity", () => {
     );
     expect(wellKnown.publicCategories.custom).toMatchObject({
       discoveryStatus: "live",
-      registryAddress: manifest.contracts.registry.address,
+      registryAddress: manifest.contracts.registry.address?.toLowerCase() ?? null,
       registryStartBlock: manifest.startBlock,
     });
     expect(explore).toMatchObject({

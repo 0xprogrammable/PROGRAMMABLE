@@ -228,7 +228,7 @@ describe("Custom Registry V1 public manifest", () => {
     expect(wellKnown.publicCategories.custom).toMatchObject({
       discoveryStatus: "live",
       publicSubmissionStatus: "prelaunch",
-      registryAddress: manifest.contracts.registry.address,
+      registryAddress: manifest.contracts.registry.address.toLowerCase(),
       registryStartBlock: manifest.startBlock,
       registryGeneration: "1",
     });

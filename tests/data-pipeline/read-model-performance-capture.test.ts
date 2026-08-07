@@ -42,11 +42,11 @@ function environment(
     VERCEL_URL: "programmable-git-codex.vercel.app",
     VERCEL_DEPLOYMENT_ID: vercelDeploymentId,
     PROGRAMMABLE_ENVIO_GRAPHQL_URL:
-      "https://indexer.hyperindex.xyz/d7a39a2/v1/graphql",
+      "https://indexer.hyperindex.xyz/f6714ef/v1/graphql",
     PROGRAMMABLE_PROJECTOR_ENVIO_MIRROR_COMMIT:
-      "7ffd15c2a28c481a2d3632e30b315262c2471b2e",
+      "0a064ec0a32a0e48bf6751fa18f025504267c6b7",
     PROGRAMMABLE_PROJECTOR_ENVIO_REDACTED_IDENTITY:
-      "envio:production-7f24e63",
+      "envio:production-92f6373",
     ...overrides,
   };
 }
@@ -345,7 +345,7 @@ describe("read-model performance capture binding", () => {
     expect(createEnvio).toHaveBeenCalledWith(expect.objectContaining({
       releaseBinding: expect.objectContaining({
         envio: expect.objectContaining({
-          deploymentLabel: "production-7f24e63",
+          deploymentLabel: "production-92f6373",
         }),
       }),
     }));

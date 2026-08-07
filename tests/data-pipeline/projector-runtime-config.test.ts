@@ -24,8 +24,8 @@ const bytes32 = (byte: string) => `0x${byte.repeat(64)}`;
 const TEST_CA = rootCertificates[0]!;
 const ALCHEMY_URL = "https://eth-mainnet.g.alchemy.com/v2/abcdefgh";
 const QUICKNODE_URL = "https://example.quiknode.pro/abcdefgh/";
-const ENVIO_URL = "https://indexer.hyperindex.xyz/d7a39a2/v1/graphql";
-const ENVIO_IDENTITY = "envio:production-7f24e63";
+const ENVIO_URL = "https://indexer.hyperindex.xyz/f6714ef/v1/graphql";
+const ENVIO_IDENTITY = "envio:production-92f6373";
 const RELEASE_BINDING = getDataPipelineReleaseBinding();
 const RPC_SCHEMA_COMMITMENT = projectorRpcSchemaCommitment();
 const EXPECTED_COMMITMENTS = Object.freeze({
@@ -65,7 +65,7 @@ function environment(
     PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE_URL,
     PROGRAMMABLE_PROJECTOR_ENVIO_REDACTED_IDENTITY: ENVIO_IDENTITY,
     PROGRAMMABLE_PROJECTOR_ENVIO_MIRROR_COMMIT:
-      "7ffd15c2a28c481a2d3632e30b315262c2471b2e",
+      "0a064ec0a32a0e48bf6751fa18f025504267c6b7",
     VERCEL_GIT_COMMIT_SHA: "a".repeat(40),
     VERCEL_DEPLOYMENT_ID: "dpl_12345678901234567890",
     ...overrides,
@@ -196,10 +196,7 @@ describe("configured projector runtime", () => {
       mode: "release",
       releaseBinding: RELEASE_BINDING,
       candidate: null,
-      promotedDatabase: {
-        productCommit: "a".repeat(40),
-        stagedDeploymentId: "dpl_12345678901234567890",
-      },
+      promotedDatabase: null,
     });
     expect(config.database).toEqual({
       projectorConnectionString:
@@ -209,7 +206,7 @@ describe("configured projector runtime", () => {
       sslCaPem: TEST_CA,
     });
     expect(config.envio).toEqual({
-      endpoint: "https://indexer.hyperindex.xyz/d7a39a2/v1/graphql",
+      endpoint: "https://indexer.hyperindex.xyz/f6714ef/v1/graphql",
       token: "envio-token",
       releaseBinding: RELEASE_BINDING,
     });
