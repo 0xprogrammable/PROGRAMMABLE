@@ -182,7 +182,9 @@ export async function inspectUnexposedStagedDeployment(input) {
   ) {
     throw new Error("staged Vercel control-plane input is invalid");
   }
-  const productionDomain = (input.productionDomain ?? "programmable.family").toLowerCase();
+  const productionDomain = (
+    input.productionDomain ?? "programmable.market"
+  ).toLowerCase();
   if (!/^[a-z0-9.-]+$/u.test(productionDomain)) {
     throw new Error("production domain is invalid");
   }

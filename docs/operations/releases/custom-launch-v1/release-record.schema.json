@@ -267,7 +267,7 @@
         "deploymentId": { "$ref": "#/$defs/nullableString" },
         "immutableDeploymentUrl": { "$ref": "#/$defs/nullableString" },
         "websiteCommitSha": { "$ref": "#/$defs/nullableCommit" },
-        "productionAlias": { "enum": ["https://programmable.family", null] },
+        "productionAlias": { "enum": ["https://programmable.market", null] },
         "configurationSnapshotSha256": { "$ref": "#/$defs/nullableSha256" },
         "capturedAt": { "$ref": "#/$defs/nullableTimestamp" }
       }
@@ -295,7 +295,7 @@
       "properties": {
         "deploymentId": { "$ref": "#/$defs/nullableString" },
         "immutableDeploymentUrl": { "$ref": "#/$defs/nullableString" },
-        "productionAlias": { "enum": ["https://programmable.family", null] },
+        "productionAlias": { "enum": ["https://programmable.market", null] },
         "postPromotionEvidenceSha256": { "$ref": "#/$defs/nullableSha256" },
         "promotedAt": { "$ref": "#/$defs/nullableTimestamp" }
       }

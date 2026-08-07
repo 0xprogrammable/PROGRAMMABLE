@@ -828,7 +828,7 @@ async function runCommand(command, flags, environment) {
         vercelProjectId: environment.VERCEL_PROJECT_ID,
         stagedDeploymentId: flags.get("--deployment-id"),
         stagedDeploymentUrl: target.origin,
-        productionOrigin: "https://programmable.family",
+        productionOrigin: "https://programmable.market",
         requireWorkersActive: true,
         requireIndexedRoutesActive: true,
       },

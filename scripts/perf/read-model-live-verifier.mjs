@@ -140,7 +140,7 @@ export async function verifyLiveRollbackTarget(input) {
     );
   }
   const productionDomain = (
-    input.productionDomain ?? "programmable.family"
+    input.productionDomain ?? "programmable.market"
   ).toLowerCase();
   if (!/^[a-z0-9.-]+$/u.test(productionDomain)) {
     throw new Error("production rollback domain is invalid");

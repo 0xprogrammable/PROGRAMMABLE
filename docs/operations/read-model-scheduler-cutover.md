@@ -51,7 +51,7 @@ normal release gate:
    until a reviewed durable nonce store and an exact second-delivery rejection
    test exist.
 4. After production promotion and binding checks, move the destination to
-   `https://programmable.family/api/ops/projector-wake`, capture the stream ID
+   `https://programmable.market/api/ops/projector-wake`, capture the stream ID
    and destination evidence, then verify source and market projector telemetry
    for at least two delivered blocks. Disable the stream on repeated `401`,
    `413` or `5xx` responses; the minute crons keep the read model progressing.
@@ -78,7 +78,7 @@ release family.
 
 Before this workflow is enabled, turn off **Auto-assign Custom Production
 Domains** for the Vercel project. Git-connected production pushes must create
-deployments without moving `programmable.family`. The reviewed workflow is
+deployments without moving `programmable.market`. The reviewed workflow is
 stage-only and must never call `vercel promote`; only the reviewed manual
 operator sequence below may promote after the real-block SLA gate. The workflow
 records the current deployment before staging and fails if Vercel has already
@@ -104,7 +104,7 @@ moved production to the candidate commit.
 8. Capture signed staged-deployment evidence and run the normal read-model gate.
 9. Reverify and promote the exact staged deployment ID with the reviewed manual
    commands below, never a mutable alias.
-10. Verify that `programmable.family` resolves to that deployment ID and commit,
+10. Verify that `programmable.market` resolves to that deployment ID and commit,
    then verify health, populated Explore, the token list, and every indexed
    route using the same release corpus.
 11. Enable indexed read flags only after every check is green, then activate and
@@ -224,7 +224,7 @@ grep -Fx "target_url=$STAGED_TARGET_URL" "$PRE_PROMOTE_BINDING_OUTPUT"
 vercel promote "$STAGED_DEPLOYMENT_ID" --yes --token="$VERCEL_TOKEN"
 
 npm run perf:read-model:post-promotion -- \
-  --target-url "https://programmable.family" \
+  --target-url "https://programmable.market" \
   --deployment-id "$STAGED_DEPLOYMENT_ID" \
   --git-head "$GITHUB_SHA" \
   --evidence "$READ_MODEL_RELEASE_EVIDENCE_PATH"
