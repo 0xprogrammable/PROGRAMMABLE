@@ -1,10 +1,10 @@
 # Proposal
 
-**Stage:** local proposal with implemented prototype source
+**Stage:** prelaunch review input with prototype source
 **Model id:** `hookemon`
-**Authoritative preflight state:** owner launch economics are closed; deterministic readiness is established only by the regenerated compatibility report for the exact revision.
+**Authoritative preflight state:** owner launch economics are closed; the compatibility result is `changes-required`, with typed normal-CREATE preparation and an exact unsigned receipt still missing.
 
-Hookemon binds one immutable Uniswap v4 `HOOKEMON/USDC` pool to an inclusive 3% quote-side hook charge, then uses the project portion for automated Collector Crypt pack/buyback cycles and proportional, gas-sponsored USDC holder payments.
+Hookemon's reviewed source binds one immutable Uniswap v4 `HOOKEMON/USDC` pool to an inclusive 3.0% quote-side hook charge = 0.1% Programmable + 2.9% project. This swap charge is distinct from the 90/10 token allocation. The project portion is intended for automated Collector Crypt pack/buyback cycles and proportional, gas-sponsored USDC holder payments.
 
 ## Design card
 
@@ -12,7 +12,7 @@ Hookemon binds one immutable Uniswap v4 `HOOKEMON/USDC` pool to an inclusive 3% 
 | --- | --- |
 | Outcome | Hold HOOKEMON; eligible top-200 time-weighted holders accrue proportional USDC and never submit a claim transaction. |
 | Token | `Hookemon` (`HOOKEMON`), 18 decimals, fixed supply `420,690,000,000`, no owner mint, blacklist, freeze, transfer tax or upgrade path. |
-| Launch | One atomic constructor transaction. No presale. `378,621,000,000 HOOKEMON` plus `25,000 USDC` seed canonical liquidity; `42,069,000,000 HOOKEMON` enter treasury vesting; `500 USDC` enters CycleVault; every other allocation and every launcher terminal balance is zero. |
+| Launch intent | Fixed supply `420,690,000,000 HOOKEMON`; one normal-CREATE constructor transaction after a separate approval. No presale. The 90/10 allocation sends `378,621,000,000 HOOKEMON` plus `25,000 USDC` to canonical liquidity and `42,069,000,000 HOOKEMON` to treasury vesting; the separate `500 USDC` CycleVault reserve makes `25,000 + 500 = 25,500 USDC` total funding. Every other allocation and every launcher terminal balance is zero. |
 | Custody | Treasury has a 365-day cliff and linear vesting through day 1,460; the LP position is locked for 730 days; both immutable beneficiaries are the single bound Ethereum wallet. |
 | Pool | One canonical Ethereum mainnet HOOKEMON/USDC v4 PoolKey; USDC is the quote asset; static 0.30% LP fee; tick spacing 60. |
 | Hook | One non-upgradeable hook, one PoolId, permission mask `0x20cc`; beforeInitialize, beforeSwap and afterSwap plus the two swap return-delta bits. |
@@ -33,10 +33,10 @@ The reference source is `packages/contracts/src/ProgrammableVolumeFeeHookV1.sol`
 
 ## Lifecycle and value flow
 
-1. The bound Ethereum wallet approves exactly `25,500 USDC` to the predicted `HookemonAtomicLauncher` address.
-2. The reviewed launcher constructor deploys the immutable token, permission-bit-mined hook, vault, bridge, distributor, vesting and position timelock; binds and initializes exactly one sorted PoolKey; assigns 90% of supply plus `25,000 USDC` to canonical liquidity; sends 10% to treasury vesting and `500 USDC` to CycleVault; and locks the exact canonical LP token ID plus bounded rounding dust for 730 days.
-3. Every launch postcondition is checked before construction completes. Any failure, including a late PositionManager failure, reverts every deployment, pool mutation and transfer.
-4. Every supported swap pays the separate LP fee and inclusive 3% hook charge.
+1. The intended normal-CREATE sequence uses the same public Ethereum wallet: its nonce-`N` transaction approves exactly `25,500 USDC` to the launcher address predicted for that wallet's nonce `N + 1`, and its nonce-`N + 1` transaction creates `HookemonAtomicLauncher`.
+2. The reviewed launcher constructor creates the immutable token and permission-bit-mined hook as CREATE2 children only; the root launcher itself is not CREATE2. It also creates the vault, bridge, distributor, vesting and position timelock, binds and initializes exactly one sorted PoolKey, assigns 90% of supply plus `25,000 USDC` to canonical liquidity, sends 10% to treasury vesting and the separate `500 USDC` reserve to CycleVault, and locks the exact canonical LP token ID plus bounded rounding dust for 730 days.
+3. Every constructor postcondition is checked before construction completes. Failure, including a late PositionManager failure, atomically reverts constructor-side child creation, factory registration, pool mutation, transfers and position minting. It cannot revert the earlier nonce-`N` approval transaction: before any later authorized retry, the wallet must revoke that surviving allowance to zero and then prepare a newly reviewed sequence.
+4. Every source-modeled canonical-pool swap pays the separate LP fee and inclusive 3% hook charge.
 5. Programmable claims only its liability; CycleVault claims only the 2.9% project liability.
 6. The operator batches a capped cycle through CCTP, Collector pack creation/open/buyback and CCTP return.
 7. The indexer closes a finalized window, excludes documented protocol/custody addresses and computes the top 200.
@@ -108,7 +108,10 @@ Reward allocation uses time-weighted balances, largest-remainder integer conserv
 
 - **Builder-stated:** project name Hookemon; memecoin/collectible concept; 3% total; automatic Collector packs; automatic top-holder distribution; option A with one atomic launch, no presale, 90% liquidity, 25,000 USDC, 10% vested treasury, 730-day LP lock and separate 500 USDC gacha reserve.
 - **Agent-derived:** fixed supply, static LP fee, 20-minute accounting cadence, 75/25 pack lanes, top 200, gas thresholds, caps, delays and technical architecture.
-- **Evidence-backed locally:** source exists; the recorded local tests and builds passed for their exact revisions. No external acceptance, audit, deployment, runtime, routing or availability claim follows.
+- **Bound application source:** GitHub repository `hookemonv4/hookemon`, numeric repository ID `1324982531`, merge revision `bde2d0e5ac4a060375f6c9e150b5a26d17acb7e2`, tree `e1fc86b3a209b91eb700065464382d63682f9911`.
+- **Runner-backed CI evidence:** Actions run `31128237847`, attempt 2, completed successfully at CI head `1595fb968666f5db81a88592bb88d431dc4e14b6`, which has the same tree `e1fc86b3a209b91eb700065464382d63682f9911`. This is a separate execution fact, not a claim that CI ran at the merge commit.
+- **Artifact origin:** source parent `3c1503bb8520da61b6c4da637afb93f3d6b7dd7f` is recorded only as the origin for regenerated static-analysis, `gate-status.json` and `test-evidence.json` metadata; it is not an alternative application-source binding.
+- **Evidence boundary:** source and recorded tests support only their exact revisions and commands. No adapter support, executable route, end-to-end receipt, deployment, acceptance, approval, audit, launchability, runtime match, listing, routing or availability follows.
 
 ## Closed owner decision
 
@@ -117,7 +120,8 @@ Option A is bound in the executable launcher, deployment-plan hash and tests: no
 ## Deployment and release prerequisites
 
 - Bind exactly one public Privy Ethereum wallet and one public Privy Solana wallet, their wallet/policy IDs and hashes, the derived Solana USDC ATA and equal NFT recipient listed in `docs/MAINNET_WALLETS.md` before any deployment rehearsal. Reject legacy Safe fields or an undisclosed third wallet.
-- Bind `HookemonDeploymentPlan:v4` to the final launcher deployer, salt, init-code hash, canonical PoolId and exact next PositionManager token ID, then approve only the derived launcher address.
+- Implement and independently review a separate trusted typed normal-CREATE adapter/schema that binds the same public wallet, consecutive approval nonce `N` and launcher nonce `N + 1`, Solana USDC ATA, token salt, hook salt, canonical PoolId and exact next PositionManager token ID. Produce the exact end-to-end unsigned receipt before R3/R4 can be considered resolved.
+- Treat the existing constructor and DeploymentPlan fixtures as synthetic evidence only. They do not prove a production same-wallet nonce-`N` approval followed by nonce-`N + 1` launcher creation.
 - Keep Collector live mode disabled until Collector Crypt supplies written automation permission and the server-only partner key; prototype tests use the fail-closed simulator boundary.
 - Treat both items as candidate/deployment gates, not as evidence that the local prototype is deployed, approved or live.
 

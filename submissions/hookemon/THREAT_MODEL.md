@@ -7,6 +7,7 @@ Hookemon is classified high risk by the local rubric because it combines return-
 | Asset/state | Custody or source of truth | Exit/recovery |
 | --- | --- | --- |
 | HOOKEMON supply | Fixed-supply ERC-20 and the atomic launcher during its constructor; canonical liquidity and vesting when the transaction completes | No externally observable intermediate custody survives a failure; no pause, blacklist or owner mint. |
+| Pre-constructor USDC allowance | The same public Ethereum wallet separately approves exactly `25,500 USDC` at nonce `N` to its predicted normal-CREATE launcher address at nonce `N + 1` | Constructor failure rolls back its child creation, factory registration, pool mutations, transfers and position mint, but not the earlier approval transaction. Revoke the surviving allowance to zero before any later authorized retry. |
 | Canonical LP position | Immutable 730-day position timelock, then the bound Ethereum wallet | Only the exact reviewed token ID whose PositionManager PoolKey derives the canonical PoolId is accepted; ordinary hook behavior cannot block release. |
 | Programmable/project fees | Hook-owned PoolManager ERC-6909 USDC claims and owner liabilities | Each immutable owner claims only its own liability. |
 | Cycle funds | CycleVault, CCTP transit, Solana policy wallet, Collector assets, inbound transit | Pause and reconcile the last confirmed `cycleId`; no arbitrary destination. |
@@ -101,8 +102,27 @@ The hook never calls CCTP or Collector. The operator is a separate failure domai
 
 ## Known limitations
 
-- Slither `0.11.6` was run against source/evidence commit `d1f6e8b4be04523626ecf73a97acfe3e3a103d67`; its four findings and dispositions are recorded in `evidence/STATIC_ANALYSIS.md`. This is not an independent audit.
+- The bound application source is GitHub repository ID `1324982531`, merge revision `bde2d0e5ac4a060375f6c9e150b5a26d17acb7e2`, tree `e1fc86b3a209b91eb700065464382d63682f9911`. Actions run `31128237847`, attempt 2, is separate runner-backed evidence at CI head `1595fb968666f5db81a88592bb88d431dc4e14b6` on that same tree. Source parent `3c1503bb8520da61b6c4da637afb93f3d6b7dd7f` is only the recorded origin for regenerated static-analysis, gate-status and test-evidence metadata, not an alternative source binding.
+- The intended root sequence is same-wallet normal CREATE: nonce `N` approval, then nonce `N + 1` launcher creation. CREATE2 is child-only for the token and hook. Existing constructor, DeploymentPlan and decoy-position fixtures are synthetic; they do not prove that production N/N+1 sequence.
+- `NORMAL_CREATE_TYPED_PREPARATION_REQUIRED` remains unresolved. A separate trusted typed normal-CREATE adapter/schema plus the exact end-to-end unsigned receipt must bind the public wallet, consecutive nonces, Solana USDC ATA, token salt, hook salt, canonical PoolId and PositionManager token ID before R3/R4 can be considered resolved.
 - A pinned Ethereum fork at block `25684536` and a separate current-head smoke at observed block `25688219` pass against the reviewed PoolManager, USDC and Circle TokenMessengerV2 addresses. No deployment receipt, source verification, runtime match or incident drill exists yet.
 - The deterministic builder closes the declared Foundry and JavaScript source graph without diagnostics. Maintainer dependency review is still required because the project uses a model-specific pinned baseline.
 - Owner-approved option A fixes the atomic token allocation, 25,000 USDC launch liquidity, 500 USDC CycleVault bootstrap, treasury vesting and exact-position 730-day LP custody. The owner approved exactly one Privy Ethereum wallet for every Ethereum role and one Privy Solana wallet for every Solana role; concentrated application authorization remains a mainnet review item. Exact public bindings and Collector permission remain separate deployment gates. Hookemon supplies no swap client in this submission; a future platform or third-party routing surface is a separate review boundary.
 - Third-party uptime, future API semantics, pack outcomes, token price, trading volume and payouts cannot be guaranteed.
+
+## Static-analysis dispositions
+
+Builder-declared Slither `0.11.6` evidence retains exactly 10 findings. The normalized report digest is `sha256:667ab4743dd744526b8a4d1399fb401ffda8691ad769aacf588ddf669a9b4d6e`. These dispositions are review evidence, not an audit or approval.
+
+| # | Finding | Disposition |
+| --- | --- | --- |
+| 1 | High `reentrancy-balance`, `CctpForwardingBridgeAdapter.sol:95-123` | Reviewed false-positive pattern: `nonReentrant`, once-bound vault access, pre-call cycle marking, cleared allowance, exact USDC decrease and rollback tests are the controls; mainnet dependency and runtime observation remain required. |
+| 2 | Low `timestamp`, `CycleVault.sol:90-104` | Accepted timing dependency for the minimum 48-hour configuration delay. |
+| 3 | Low `timestamp`, `HookemonAtomicLauncher.sol:321-351` | Reviewed taint false positive plus accepted launch clock for constructor-established four-year vesting and 730-day LP schedules; asset and custody postconditions remain exact. |
+| 4 | Low `timestamp`, `HookemonPositionTimelock.sol:119-131` | Accepted timing dependency for the immutable-beneficiary 730-day position lock. |
+| 5 | Informational `cyclomatic-complexity`, `AutomaticRewardsDistributor.sol:81-130` | Accepted bounded max-40-recipient batching; independent review must still inspect the complete payout path. |
+| 6 | Informational `cyclomatic-complexity`, `HookemonDeploymentPlan.sol:217-258` | Accepted bounded, pure, fail-closed one-plan validation complexity; no loop, mutable state or external call. |
+| 7 | Informational `too-many-digits`, `HookemonDeploymentPlan.sol:217-258` | Reviewed hash/numeric false positive for typed hook init-code hashing and CREATE2 identity, not an ambiguous monetary literal. |
+| 8 | Informational `too-many-digits`, `HookemonDeploymentPlan.sol:260-273` | Reviewed hash/numeric false positive for typed token init-code hashing and CREATE2 identity, not a human-entered numeric literal. |
+| 9 | Informational `too-many-digits`, `HookemonDeploymentPlan.sol:308-329` | Reviewed hash/numeric false positive for the compiled launcher init-code hash and typed `LaunchConfig`, not a parsed monetary digit string. |
+| 10 | Informational `too-many-digits`, `HookemonAtomicLauncher.sol:353-369` | Reviewed hash/numeric false positive for the fail-closed identity/code/USDC-decimals guard, not an ambiguous monetary constant. |
