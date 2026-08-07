@@ -20,43 +20,45 @@ describe("landing page contract", () => {
     );
   });
 
-  it("uses one responsive Night Garden atmosphere across every route without a video", () => {
+  it("uses one layered Night Garden atmosphere across every route without a video", () => {
     const landing = read("components/landing-page.tsx");
     const styles = read("components/landing-page.module.css");
     const backdrop = read("components/atmosphere-backdrop.tsx");
+    const interfaceStyles = read("app/interface.css");
+    const layout = read("app/layout.tsx");
+    const manifest = read("public/site.webmanifest");
     const navigation = read("components/site-navigation.tsx");
 
-    expect(backdrop).not.toContain("night-sky-desktop-v1.avif");
-    expect(backdrop).not.toContain("night-sky-mobile-v1.avif");
+    expect(backdrop).not.toContain("night-sky-");
+    expect(backdrop).not.toContain('"use client"');
+    expect(backdrop).not.toContain("usePathname");
+    expect(backdrop).not.toContain("<picture");
+    expect(backdrop).not.toContain(".avif");
+    expect(backdrop).toContain('import Image from "next/image"');
+    expect(backdrop).toContain("const TWINKLE_COUNT = 18");
+    expect(backdrop).toContain("const PLANT_SIZES");
+    expect(backdrop).toContain('aria-hidden="true"');
+    expect(backdrop).toContain('className="atmosphere-ground-glow"');
+    expect(backdrop).toContain('className="atmosphere-botanicals"');
     expect(backdrop).toContain(
-      "/brand/atmosphere/night-sky-botanical-desktop-v2-1920.avif",
+      "/brand/atmosphere/programmable-botanical-left-v2.webp",
     );
     expect(backdrop).toContain(
-      "/brand/atmosphere/night-sky-botanical-desktop-v2.avif",
+      "/brand/atmosphere/programmable-botanical-right-v2.webp",
     );
-    expect(backdrop).toContain(
-      "/brand/atmosphere/night-sky-botanical-mobile-v2-720.avif",
+    expect(backdrop.match(/<Image/g)).toHaveLength(2);
+    expect(backdrop.match(/width=\{1024\}/g)).toHaveLength(2);
+    expect(backdrop.match(/height=\{1536\}/g)).toHaveLength(2);
+    expect(backdrop.match(/sizes=\{PLANT_SIZES\}/g)).toHaveLength(2);
+    expect(backdrop.match(/quality=\{92\}/g)).toHaveLength(2);
+    expect(backdrop.match(/priority/g)).toHaveLength(2);
+    expect(backdrop.match(/alt=""/g)).toHaveLength(2);
+    expect(interfaceStyles).toMatch(
+      /\.atmosphere-backdrop\s*\{[^}]*background:\s*#010103;/s,
     );
-    expect(backdrop).toContain(
-      "/brand/atmosphere/night-sky-botanical-mobile-v2-900.avif",
-    );
-    expect(backdrop).toContain(
-      "/brand/atmosphere/night-sky-botanical-mobile-v2.avif",
-    );
-    expect(backdrop).toContain(
-      'media="(orientation: portrait) and (max-width: 1024px)"',
-    );
-    expect(backdrop).toContain('" atmosphere-backdrop-product"');
-    expect(backdrop.match(/<picture/g)).toHaveLength(1);
-    expect(backdrop.match(/<img/g)).toHaveLength(1);
-    expect(backdrop).toContain('type="image/avif"');
-    expect(backdrop.match(/sizes="100vw"/g)).toHaveLength(2);
-    expect(backdrop).toContain("1920w");
-    expect(backdrop).toContain("3840w");
-    expect(backdrop).toContain("720w");
-    expect(backdrop).toContain("900w");
-    expect(backdrop).toContain("1440w");
-    expect(backdrop).toContain('fetchPriority="high"');
+    expect(layout).toContain('themeColor: "#010103"');
+    expect(manifest).toContain('"background_color": "#010103"');
+    expect(manifest).toContain('"theme_color": "#010103"');
     expect(landing).toContain('href="/launch"');
     expect(landing).toContain('href="/explore"');
     expect(landing).toContain(
@@ -92,21 +94,9 @@ describe("landing page contract", () => {
       "Choose a launch model and make it yours on Ethereum.",
     );
 
-    for (const asset of [
-      "night-sky-desktop-v1.avif",
-      "night-sky-mobile-v1.avif",
-    ]) {
-      const assetPath = join(root, "public/brand/atmosphere", asset);
-      expect(existsSync(assetPath)).toBe(true);
-      expect(statSync(assetPath).size).toBeLessThan(300 * 1024);
-    }
-
     for (const [asset, budget] of [
-      ["night-sky-botanical-desktop-v2.avif", 450 * 1024],
-      ["night-sky-botanical-desktop-v2-1920.avif", 180 * 1024],
-      ["night-sky-botanical-mobile-v2.avif", 275 * 1024],
-      ["night-sky-botanical-mobile-v2-720.avif", 60 * 1024],
-      ["night-sky-botanical-mobile-v2-900.avif", 80 * 1024],
+      ["programmable-botanical-left-v2.webp", 110 * 1024],
+      ["programmable-botanical-right-v2.webp", 95 * 1024],
     ] as const) {
       const assetPath = join(root, "public/brand/atmosphere", asset);
       expect(existsSync(assetPath)).toBe(true);
@@ -139,12 +129,13 @@ describe("landing page contract", () => {
     expect(styles).not.toContain("content-arrival");
   });
 
-  it("keeps most stars static while independent sparkles twinkle only when motion is allowed", () => {
+  it("keeps most stars static while sparkles and plants move independently when motion is allowed", () => {
     const backdrop = read("components/atmosphere-backdrop.tsx");
     const css = read("app/interface.css");
 
-    expect(css).not.toContain(".atmosphere-botanical");
-    expect(backdrop).toContain("Array.from({ length: 12 }");
+    expect(css).toContain(".atmosphere-botanicals");
+    expect(backdrop).toContain("const TWINKLE_COUNT = 18");
+    expect(backdrop).toContain("Array.from({ length: TWINKLE_COUNT }");
     expect(css).not.toContain("@keyframes atmosphere-twinkle-primary");
     expect(css).not.toContain("@keyframes atmosphere-twinkle-secondary");
     expect(css).toContain("@keyframes atmosphere-sparkle");
@@ -155,8 +146,16 @@ describe("landing page contract", () => {
       /@media \(prefers-reduced-motion: no-preference\)[\s\S]*?\.atmosphere-sparkles i\s*\{[^}]*animation:\s*atmosphere-sparkle/,
     );
     expect(css).toContain("--sparkle-duration: 13.7s");
+    expect(css).toContain("@keyframes atmosphere-plant-left");
+    expect(css).toContain("@keyframes atmosphere-plant-right");
     expect(css).toMatch(
-      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.atmosphere-stars\s*\{[^}]*animation:\s*none;/,
+      /\.atmosphere-plant-left\s*\{[^}]*animation:\s*atmosphere-plant-left 13\.6s[^}]*-7\.9s infinite;/s,
+    );
+    expect(css).toMatch(
+      /\.atmosphere-plant-right\s*\{[^}]*animation:\s*atmosphere-plant-right 11\.9s[^}]*-3\.1s infinite;/s,
+    );
+    expect(css).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.atmosphere-plant\s*\{[^}]*animation:\s*none;/,
     );
   });
 });

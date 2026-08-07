@@ -247,8 +247,13 @@ describe("Docs navigation state", () => {
     expect(deepResults).toEqual([]);
     expect(stockResults).toEqual([]);
     expect(classicResults[0]?.title).toBe("Classic and Custom labels");
-    expect(customResults[0]?.title).toBe("Classic and Custom labels");
-    expect(customResults[0]?.description).toContain("Programmable Classic");
+    expect(customResults[0]?.title).toBe("Custom Registry");
+    expect(customResults[0]?.description).toContain(
+      "authenticated Custom provenance",
+    );
+    expect(
+      customResults.some((result) => result.title === "Classic and Custom labels"),
+    ).toBe(true);
   });
 
   it("opens keyboard navigation on the first or last result", () => {

@@ -83,7 +83,8 @@ describe("interaction accessibility", () => {
     const css = readFileSync(join(root, "app/interface.css"), "utf8");
 
     expect(source).toContain('className="atmosphere-stars');
-    expect(source).toContain("Array.from({ length: 12 }");
+    expect(source).toContain("const TWINKLE_COUNT = 18");
+    expect(source).toContain("Array.from({ length: TWINKLE_COUNT }");
     expect(css).not.toMatch(
       /\.atmosphere-stars-(?:primary|secondary)\s*\{[^}]*animation:/s,
     );
@@ -91,12 +92,11 @@ describe("interaction accessibility", () => {
       /@media \(prefers-reduced-motion: no-preference\)[\s\S]*?\.atmosphere-sparkles i\s*\{[^}]*animation:\s*atmosphere-sparkle/,
     );
     expect(css).toMatch(
-      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.atmosphere-stars\s*\{[^}]*animation:\s*none;/,
-    );
-    expect(css).toMatch(
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.atmosphere-sparkles i\s*\{[^}]*animation:\s*none;/,
     );
-    expect(css).not.toMatch(/\.atmosphere-art[^}]*animation:/s);
+    expect(css).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.atmosphere-plant\s*\{[^}]*animation:\s*none;[^}]*transform:\s*none;[^}]*will-change:\s*auto;/,
+    );
   });
 
   it("exposes the wallet actions as a native, labelled disclosure", () => {

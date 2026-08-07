@@ -1,55 +1,40 @@
-"use client";
+import Image from "next/image";
 
-import { usePathname } from "next/navigation";
-
-const landingArt = {
-  desktop:
-    "/brand/atmosphere/night-sky-botanical-desktop-v2-1920.avif",
-  desktopSrcSet:
-    "/brand/atmosphere/night-sky-botanical-desktop-v2-1920.avif 1920w, /brand/atmosphere/night-sky-botanical-desktop-v2.avif 3840w",
-  mobile: "/brand/atmosphere/night-sky-botanical-mobile-v2-720.avif",
-  mobileSrcSet:
-    "/brand/atmosphere/night-sky-botanical-mobile-v2-720.avif 720w, /brand/atmosphere/night-sky-botanical-mobile-v2-900.avif 900w, /brand/atmosphere/night-sky-botanical-mobile-v2.avif 1440w",
-  width: 3840,
-  height: 2160,
-};
+const TWINKLE_COUNT = 18;
+const PLANT_SIZES = "(max-width: 520px) 46vw, (max-width: 1500px) 22vw, 330px";
 
 export function AtmosphereBackdrop() {
-  const pathname = usePathname();
-  const isLandingPage = pathname === "/";
-  const routeClassName = isLandingPage
-    ? " atmosphere-backdrop-landing"
-    : " atmosphere-backdrop-product";
-
   return (
-    <div
-      className={`atmosphere-backdrop${routeClassName}`}
-      aria-hidden="true"
-    >
-      <picture className="atmosphere-layer atmosphere-art">
-        <source
-          media="(orientation: portrait) and (max-width: 1024px)"
-          srcSet={landingArt.mobileSrcSet}
-          sizes="100vw"
-          type="image/avif"
-        />
-        <img
-          src={landingArt.desktop}
-          srcSet={landingArt.desktopSrcSet}
-          sizes="100vw"
-          width={landingArt.width}
-          height={landingArt.height}
-          fetchPriority="high"
-          decoding="async"
-          alt=""
-        />
-      </picture>
+    <div className="atmosphere-backdrop" aria-hidden="true">
+      <span className="atmosphere-ground-glow" />
       <span className="atmosphere-stars atmosphere-stars-primary" />
       <span className="atmosphere-stars atmosphere-stars-secondary" />
       <span className="atmosphere-sparkles">
-        {Array.from({ length: 12 }, (_, index) => (
+        {Array.from({ length: TWINKLE_COUNT }, (_, index) => (
           <i key={index} />
         ))}
+      </span>
+      <span className="atmosphere-botanicals">
+        <Image
+          className="atmosphere-plant atmosphere-plant-left"
+          src="/brand/atmosphere/programmable-botanical-left-v2.webp"
+          width={1024}
+          height={1536}
+          sizes={PLANT_SIZES}
+          quality={92}
+          priority
+          alt=""
+        />
+        <Image
+          className="atmosphere-plant atmosphere-plant-right"
+          src="/brand/atmosphere/programmable-botanical-right-v2.webp"
+          width={1024}
+          height={1536}
+          sizes={PLANT_SIZES}
+          quality={92}
+          priority
+          alt=""
+        />
       </span>
       <span className="atmosphere-veil" />
     </div>
