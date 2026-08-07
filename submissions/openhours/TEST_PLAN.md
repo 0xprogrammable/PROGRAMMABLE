@@ -1,24 +1,44 @@
 # Test plan
 
-## Executed suites
+## Executed contract suites
 
-| Area | Executable evidence |
+| Area | Required evidence |
 | --- | --- |
-| LP curve | Exact 0/25/50/75/100% checkpoints, closed/no-capacity behavior, extreme-value bounds, fuzzed monotonicity. |
-| Fee policy | Selected zero/below/at floor/3%, all four quadrants, exact-output gross-up, partial-fill rollback, dust, fragmentation, claims and zero execution. |
-| Hook safety | PoolManager auth, exact PoolKey, exact five permission bits with no `afterInitialize`, one-shot stored 3,000-pip fee, registration/update atomicity, non-hook update rejection, second-registration rejection, override precedence, ignored hookData, no same-pool swap entrypoint, PoolManager claim backing, owner-only payout and isolation. |
-| Pressure | New epoch and queue N+1 activation, same-block coalescing, no decrease, malformed epoch, closed/full lane and signer outage. |
-| Vault | Binding, authority, duration/band/capacity, ceiling funding, receipts, finalize/expire, replay, claims/cancels, residual withdrawal and overlapping history. |
-| Hostile tokens | Fee-on-transfer quote and RWA, false return, pause, blacklist and reentrant transfer. |
-| Stateful invariants | Configuration immutability, bounded epoch state, bounded LP fee, hook solvency, vault quote/RWA solvency and useful handler calls. |
-| React mechanism lab | Pure-model fee checkpoints, N+1 activation, same-block coalescing, full-capacity swap liveness, buy-fee stability, 10 bps separation, signed settlement and expiry recovery; TypeScript, lint and Vite production build. |
+| Atomic launch | Direct mined-hook target, factory initializer binding, exact dependency code hashes, OPEN and vault child creation, full PoolKey registration, pool initialization, exact USDC pull, full-range mint, permanent NFT custody, refund, zero residual balances, and cleared approvals. |
+| Rollback | Wrong dependency runtime and unauthorized launcher each revert before retaining wallet funds or deployed launcher children. |
+| Trade encoder | Exact-input and exact-output single-hop calldata in both OPEN/USDC directions; Universal Router command, V4Planner actions, full PoolKey, amount bound, recipient, deadline, `minHopPriceX36`, and hook data decoding. |
+| LP curve | Exact 0/25/50/75/100% checkpoints, closed/no-capacity behavior, extreme-value bounds, and fuzzed monotonicity. |
+| Fee policy | Selected zero/below/at floor/3%, all four quadrants, exact-output gross-up, partial-fill rollback, dust, fragmentation, claims, and zero execution. |
+| Hook safety | PoolManager authentication, exact PoolKey, exact five permission bits, one-shot registration/update, alternate-pool rejection, ignored hook data, claim backing, and owner isolation. |
+| Vault | Binding, authority, duration/band/capacity, ceiling funding, receipts, finalize/expire, replay, claims/cancels, and residual withdrawal. |
+| Hostile tokens | Fee-on-transfer, false return, pause, blacklist, and reentrant transfer behavior. |
+| Stateful invariants | Configuration immutability, bounded fee/epoch state, hook solvency, vault quote/OPEN solvency, and useful handler calls. |
 
-## Commands and settings
+## Revision-bound commands
 
-The recorded local commands are `npm ci --ignore-scripts --no-audit --no-fund`, `forge fmt --check`, `forge build --sizes`, `npm run create2:fixture`, `forge test -vvv`, `forge test --match-contract OpenHoursInvariantTest -vvv`, `forge snapshot`, `cd demo && bun install --frozen-lockfile --ignore-scripts`, `cd demo && bun run test`, `cd demo && bun run lint`, `cd demo && bun run build`, and the builder fee create/check commands.
+Run these from a clean checkout of the exact proposed revision using Solidity 0.8.26, Cancun, optimizer 200, via IR, FFI disabled, `bytecode_hash = none`, and CBOR metadata disabled:
 
-Foundry uses Solidity 0.8.26, Cancun, optimizer 200, via IR, FFI disabled, `bytecode_hash = none`, and CBOR metadata disabled. Fuzzing uses 256 runs and seed `0x4f70656e486f757273`. Invariants use 64 runs and depth 32; eight invariant functions each execute 2,048 handler calls.
+```text
+npm ci --ignore-scripts --no-audit --no-fund
+forge fmt --check
+forge build --sizes
+npm run create2:fixture
+forge test -vv
+forge test --match-contract OpenHoursAtomicLauncherTest -vv
+forge test --match-contract OpenHoursTradePlannerTest -vv
+forge test --match-contract OpenHoursInvariantTest -vvv
+forge snapshot --check
+forge lint
+```
 
-## Required later evidence
+The evidence package must retain raw stdout/stderr, exit status, tool versions, command line, exact git revision and dirty-state declaration. Summary JSON alone is insufficient.
 
-Independent static analysis was unavailable locally and remains a review item. A pinned fork/current-head smoke test, independent security and accounting reviews, deployment/source/runtime reconciliation, lifecycle receipts, monitoring drills, indexer recovery and provider routing tests remain outside this local prototype. A future production client must separately test Quoter/execution parity, router generation, Permit2, slippage, deadlines, partial fills, final deltas, receipts and stale/reorg states.
+## Static analysis disposition
+
+Run Slither against the exact compiler configuration in an isolated environment. If Slither cannot lower the via-IR build, retain the raw failure and an attributable finding-by-finding disposition identifying the affected source and function, impact, compensating test or manual review, and whether the item remains open. Tooling failure is never reported as a pass.
+
+## Production gates still outside local tests
+
+Before launch, maintainers must independently rebuild, re-run the manifest validator, verify every dependency runtime through independent RPCs, simulate the complete adapter transaction against the predicted addresses, execute a Mainnet-fork buy and sell through the exact bound V4Quoter/Universal Router/Permit2 path, and confirm no residual approvals or balances.
+
+A real-value NAV lane additionally requires producer authentication, HSM/KMS policy evidence, ledger-source reconciliation, stale-data rejection, relay allowlisting, key-rotation/incident drills, and successful finalize/expiry recovery exercises. No epoch should be opened merely because pool launch succeeds.

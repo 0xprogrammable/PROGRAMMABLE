@@ -1,55 +1,60 @@
 # Proposal
 
-OpenHours is a 24/7 canonical Uniswap v4 AMM plus a separate, fully pre-funded epoch redemption vault for assets whose issuer settlement is periodic.
+OpenHours launches one directly tradable OPEN/USDC Uniswap v4 pool and a separate, fully pre-funded epoch redemption vault. The AMM remains live independently of NAV production.
 
-## Design card
+## Executable launch
 
-| Item | Frozen prototype design |
+`spec/openhours.json` is the data-only launch authority. It targets Ethereum Mainnet and the current `programmable:production` generic CREATE2 adapter. The adapter executes one outer transaction:
+
+1. Mine the hook target salt for exactly `beforeInitialize`, `beforeSwap`, `afterSwap`, `beforeSwapReturnDelta`, and `afterSwapReturnDelta` (`0x20cc`).
+2. Deploy the one-shot registration factory and initialize it with the deterministic launcher address.
+3. Deploy the mined hook with exact PoolManager, factory registrar, and USDC constructor bindings.
+4. Deploy `OpenHoursAtomicLauncher`, which creates OPEN and the vault, registers the full PoolKey, initializes the pool, pulls funding, mints locked full-range liquidity, clears approvals, refunds unused budgets, and asserts the end state.
+
+Every effect above shares the adapter's outer transaction. Any failure reverts the factory initializer, hook and launcher deployments, launcher-created children, registration, initialization, transfers, approvals, and liquidity mint. A failed launch does not consume the wallet's pre-existing exact USDC allowance; the wallet must retry the same deterministic target or revoke it.
+
+## Frozen launch economics
+
+| Item | Executable value |
 | --- | --- |
-| User outcome | Choose an immediate pool sale or irrevocably queue RWA for bounded signed-NAV settlement. |
-| Pool | One address-sorted mock RWA/mock USD PoolKey, dynamic fee flag, tick spacing 60, one hook instance. |
-| LP fee | Registration stores a one-time hardcoded 3,000-pip fallback. Buys override to 3,000; sells override to `3000 + floor(17000*u^2)` while a lane is open and 20,000 otherwise. |
-| Pressure | Vault writes active/pending snapshots; block N changes become eligible in N+1. Swaps call no vault or signer. |
-| Hook-owned fee | Exactly 10 bps of successful canonical-pool gross quote volume accrues to the immutable Programmable owner. |
-| NAV lane | Issuer deposits `ceil(capacityRwa * maxNav / rwaUnit)` quote before opening an epoch. |
-| Report | Immutable signer, EIP-712 domain, exact epoch and asset fields, in-band NAV, bounded report window. |
-| Failure exit | No report by the deadline permits permissionless expiry and holder recovery of exact queued RWA. |
-| Excluded | Upgrade, pause, rescue, sweep, mutable signer, governance, randomness, tokenized receipts, deployment and production client. |
+| Launched token | `OpenHours` / `OPEN`, 18 decimals |
+| Supply | Fixed 1,000,000,000 OPEN; minted once to the launcher; no mint or admin authority |
+| Quote | Ethereum Mainnet USDC at `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48` |
+| Funding actor | Launch-session wallet |
+| Maximum budgets | 900,000,000 OPEN and 100,000 USDC |
+| Pool | Address-sorted OPEN/USDC, dynamic fee flag, tick spacing 60, exact mined hook |
+| Initial tick | `-367020` when OPEN is currency0, otherwise `367020` |
+| Range | Full usable range `[-887220, 887220]` |
+| Liquidity amount | Maximum liquidity supported by both budgets at the initialized price; rounded token debts up |
+| Custody | PositionManager NFT minted directly to `0x000000000000000000000000000000000000dEaD` |
+| Remainders | All unused OPEN and USDC returned to the launch-session wallet |
 
-## Why v4
+The wallet must hold at least 100,000 USDC and approve exactly 100,000 USDC base units to the compiler-predicted launcher before the launch transaction. The launch wallet is also the immutable project fee owner, vault issuer, vault NAV signer, and token-remainder recipient. This is the only launch-session address input.
 
-One custom hook must atomically combine an economic buy/sell classification, a dynamic sell-side LP override, canonical-PoolKey admission, and the mandatory quote-denominated return-delta fee. Router-only enforcement or a token transfer tax could be bypassed and cannot provide the same PoolManager delta accounting.
+## Direct trade path
 
-The hook enables `beforeInitialize`, `beforeSwap`, `afterSwap`, `beforeSwapReturnDelta`, and `afterSwapReturnDelta`, producing permission mask `0x20cc`. `afterInitialize` remains disabled. The CREATE2 factory mines exactly those five address bits. Registration validates the complete PoolKey and vault binding, stores canonical state, binds the vault, self-initializes the pool, and immediately calls `updateDynamicLPFee(key, 3000)` in one atomic transaction. Core suppresses `beforeInitialize` for that hook-initiated initialization; the permission remains solely as the external alternate-pool initialization guard.
+`OpenHoursTradePlanner` encodes both directions and both exact-input-single and exact-output-single swaps for the complete launched PoolKey. It targets the production-bound Universal Router 2.1.1 and uses command `0x10` (`V4_SWAP`), V4Planner action `0x06` or `0x08`, then `SETTLE_ALL` (`0x0c`) and `TAKE_ALL` (`0x0f`). The extended swap struct fixes `minHopPriceX36` to zero and hook data to empty bytes.
 
-The stored write is hardcoded and one-shot. No persistent update actor, call site, cadence or rate limit exists. Every externally initiated canonical swap still returns the bounded buy/sell fee ORed with `LPFeeLibrary.OVERRIDE_FEE_FLAG`; pressure updates never call `updateDynamicLPFee` and never mutate the stored 3,000-pip fallback.
+ERC-20 input uses the exact Permit2 path: token approval to the pinned Permit2 contract and a bounded, expiring Permit2 allowance to the pinned Universal Router. Callers supply amount bounds, recipients, and deadlines. Expired, under-delivering, over-spending, unapproved, or otherwise failed swaps revert.
 
-## Value and lifecycle
+The executable encoder is a contract library and evidence surface, not a hosted wallet UI or route-discovery service. A production client must obtain a V4Quoter result, apply an explicit slippage policy, verify current dependency runtimes, and submit the returned router calldata.
 
-The pool handles instant buys and sells. The hook mints PoolManager ERC-6909 quote claims equal to accrued fees, records liabilities by pool, currency and immutable owner, and burns claims before taking underlying quote to an owner-selected claim destination.
+## Hook and vault behavior
 
-The vault accepts exact-transfer quote funding and exact-transfer RWA queue deposits. A finalized epoch pays `floor(receiptRwa * finalNav / rwaUnit)`. An expired epoch returns the receipt's RWA. Only after every receipt is resolved may the issuer withdraw residual quote and, after finalization, the redeemed RWA.
+The hook's one-shot registration validates the complete PoolKey and vault binding, stores canonical state, self-initializes the pool, and writes the 3,000-pip stored fallback. Canonical swaps use bounded before-swap overrides: buys use 3,000 pips; sells use `3000 + floor(17000*u^2)` while a funded redemption lane is open and 20,000 otherwise.
 
-## Worked fee cases
+Exactly 10 bps of successful canonical-pool gross quote volume belongs to the immutable Programmable fee owner. The effective fee includes that share; it is not added on top. PoolManager ERC-6909 quote claims back the recorded liabilities.
 
-- Selected hook fee 0: effective 10 bps, Programmable 10 bps, project 0.
-- Selected hook fee 3%: effective 3%, Programmable 0.1%, project 2.9%; it is never 3.1%.
-- At gross quote 1,000,000 units and selected zero, the liability is 1,000 units.
-- For exact input with quote specified, `beforeSwap` subtracts the fee from the pool leg and `afterSwap` requires the expected quote execution; a partial fill reverts atomically.
-- For exact output with quote specified, a bounded 17-candidate search finds gross quote such that `gross - cumulativeFee = requestedNet`.
-- When quote is unspecified, `afterSwap` charges the actual executed gross quote delta. Both directions and both exactness modes are tested.
-- Independent platform and project numerator remainders persist for the canonical pool lifetime and claims do not reset them.
+The separate vault accepts exact OPEN queue deposits against a pre-funded USDC reserve. A finalized epoch pays `floor(receiptOpen * finalNav / 1e18)`. If no valid report arrives, expiry permits exact OPEN recovery. The vault is deployed with no open epoch, so NAV unavailability cannot block launch or pool swaps.
 
-## Product surface boundary
+## NAV production boundary
 
-A browser-only React mechanism lab is included for local demonstration. Its pure reducer mirrors the frozen queue, fee, settlement and recovery states; it has no wallet, RPC, API, signer, executable quote, chain read, contract write or transaction path. It is not an execution client and its model estimates omit pool price movement and slippage.
+`docs/NAV_PRODUCER_BOUNDARY.md` specifies the authenticated producer, issuer ledger input, HSM/KMS signing boundary, five-minute observation freshness, fifteen-minute signing horizon, fail-closed behavior, relay allowlist, audit record, and incident handling. No private key, credential, RPC secret, or production endpoint is stored in this repository.
 
-No production UI, router client, indexer, keeper, or monitor is included. Future integrations must derive the exact PoolKey and state from confirmed chain reads; handle slippage, deadlines, reorgs, stale data, partial-fill reverts and recipient failures; and retain the mock/non-affiliation disclosures. Provider discovery and routing are separate external decisions.
+The immutable launch wallet is the prototype signer identity. Before a real-value launch it must be an EIP-1271 wallet controlled by the documented HSM/KMS policy; an ordinary browser EOA is not an acceptable production signer. A producer outage prevents new epoch finalization and leads to the existing onchain expiry/recovery path; it never affects AMM trading.
 
-The signed NAV producer is an external future surface. This repository defines its canonical schema and onchain verifier but contains no signing key or producer implementation. Signer outage is not a swap dependency.
+## Dependency authority and status
 
-## Provenance and limitations
+Every external dependency is bound by chain, exact address, runtime hash, source/runtime identity, and role in `spec/openhours.json`. These bindings come from canonical `programmable:production` commit `c7346ab41046e5a600acc88acb37b73d3bbb80b9`, including its Ethereum Mainnet dependency snapshot and stock-paired-v3 release.
 
-Builder-stated requirements include the immutable 10 bps owner and policy v1.1. Agent-derived design includes the pressure snapshot and epoch state machine. Evidence-backed claims are limited to the recorded local compilation, tests, invariants and structural fee check.
-
-The manifest truthfully declares `external-authorized-updateDynamicLPFee` only for the registrar-authenticated one-time initialization write and retains `before-swap-override` as its application mode. It declares no persistent updater. The package claims no audit, acceptance, deployment, runtime/source match, legal backing, routing support or availability.
+This remains an applicant revision requiring maintainer review. It claims no audit, deployment, runtime observation of the new targets, legal backing, hosted client availability, or production NAV operations.

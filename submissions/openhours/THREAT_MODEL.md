@@ -1,46 +1,50 @@
 # Threat model
 
-## Assets and trust boundaries
+## Launch assets and authority
 
-- Mock RWA and mock quote have no affiliation, backing, legal claim or production value. Test minting is outside the deployed concept.
-- PoolManager holds AMM liquidity and the hook's ERC-6909 quote claims. Core pool liquidity is never hook reserve backing.
-- EpochRedemptionVault holds pre-funded quote reserves and queued RWA. Its accounting must remain solvent by asset.
-- The registrar, issuer, NAV signer, Programmable fee owner and zero-share project fee owner are immutable and have disjoint capabilities.
-- A future real token may pause, blacklist, freeze, confiscate, upgrade, mint or charge transfer fees. OpenHours cannot override those external controls.
+- The launch-session wallet supplies at most 100,000 USDC, receives unused OPEN/USDC, and becomes the immutable project fee owner, vault issuer, and NAV signer.
+- `OpenHoursToken` creates exactly 1,000,000,000 OPEN once. It has no owner, mint, pause, blacklist, tax, rescue, or upgrade path.
+- PoolManager holds AMM balances. PositionManager represents liquidity as an NFT minted directly to `0x000000000000000000000000000000000000dEaD`; liquidity removal is intentionally impossible.
+- EpochRedemptionVault separately holds pre-funded USDC and queued OPEN. Pool liquidity never backs vault redemptions.
 
-## Hook boundary
+The launcher checks code hashes for its four constructor dependencies and cross-checks PositionManager's PoolManager and Permit2 identities. The launch manifest additionally binds StateView, V4Quoter, and Universal Router by chain, address, runtime, source/runtime identity, and exact role. Runtime drift is a fail-closed preflight condition.
 
-Only the immutable PoolManager may enter callbacks, and every callback verifies the exact canonical PoolKey. Hook data is ignored. The hook never calls the vault, signer, API or oracle during a swap and exposes no same-pool swap path. A full or closed queue selects the maximum sell LP fee but does not intentionally reject trading.
+## Atomic graph and CREATE2 threats
 
-The only `updateDynamicLPFee` call site is the registrar-only, one-shot registration path immediately after self-initialization. PoolManager permits the call because the hook itself is the caller; non-hook actors fail Core authorization. If initialization or the hardcoded 3,000-pip update fails, canonical hook state, vault binding and PoolManager initialization all revert. A second registration fails before another write. There is no persistent updater, keeper path, pressure-update write, or arbitrary external fee mutation.
+The canonical compiler mines the direct hook target for exact `0x20cc` permission bits. This avoids a circular dependency between a factory-created hook, launcher address, token address, and vault address. The hook derives and stores OPEN during one-shot canonical registration rather than accepting it in constructor init code.
 
-The exact five-bit permission mask is `0x20cc`; `afterInitialize` is disabled. Core suppresses `beforeInitialize` for canonical hook-self-initialization, so that callback is not treated as registration logic. It remains enabled to reject external alternate-pool initialization. CREATE2 mining and registration reject wrong hook bits, assets, dynamic flag, tick spacing, vault binding, registrar or second registration. All failures revert the parent transaction.
+The factory initializer is intentionally permissionless and one-shot. It is safe only when factory deployment and initializer execution occur in the same generic-adapter transaction. A separately deployed uninitialized factory can be front-run and must never be used. The launch graph binds the initializer's address word to the deterministic launcher target and the factory consumes that authorization during registration.
 
-## Fee accounting threats
+The wallet's exact USDC approval is a pre-launch transaction and is not rolled back by launch failure. Failure retains no wallet funds, but leaves the unused allowance available to the same predicted launcher address. The wallet must retry only the identical reviewed launch or revoke the allowance.
 
-The fee basis is actual gross quote volume across four quadrants. Specified-quote partial fills revert; unspecified quote uses the executed delta. Gross positive amounts below 1,000 quote base units revert to prevent fee fragmentation. Independent cumulative remainder streams prevent repeated accepted small swaps from evading lifetime fees.
+Any dependency mismatch, wrong hook binding/permission bits, child deployment failure, registration failure, pool initialization failure, USDC transfer discrepancy, liquidity mint failure, custody mismatch, uncleared approval, residual PositionManager balance, or post-state mismatch reverts the outer launch transaction.
 
-Liabilities are isolated by PoolId, currency and immutable owner. The hook's total accrual must equal project plus Programmable liability and be covered by its PoolManager quote-claim balance. Only `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c` may claim the Programmable liability, to a nonzero destination selected for that claim. No admin, rescue, sweep, mutable recipient or cross-pool netting path exists. Liability is zeroed before claim unlock; a failed burn or transfer reverts it.
+## Hook and fee boundary
 
-## Epoch threats
+Only the immutable PoolManager may enter callbacks, and every callback verifies the exact canonical PoolKey. Hook data is ignored. The hook never calls the vault, signer, API, or oracle during a swap and exposes no same-pool swap path.
 
-- Underfunding is prevented with ceiling reserve math at maximum NAV and exact incoming balance deltas.
-- Queue overfill, zero/dust receipts, late deposits and early cancellation revert.
-- Reports bind chain, vault, PoolId, epoch, both assets, NAV band and both deadlines under EIP-712; EOA and ERC-1271 signers are accepted through SignatureChecker.
-- A compromised signer can choose only an in-band NAV and cannot withdraw reserve. A missing report expires to exact RWA recovery.
-- A compromised issuer can stop future epochs or choose future bands and capacity, but cannot change a live epoch or withdraw unresolved liabilities.
-- New epochs may open after the prior queue closes; accounting remains per epoch.
+Registration is one-shot. It validates address-sorted OPEN/USDC, the dynamic fee flag, tick spacing 60, vault assets/hook binding, and exact initial price before initializing PoolManager and writing the hardcoded 3,000-pip stored fallback. A second registration cannot reach either write.
 
-## Hostile token and reentrancy behavior
+Specified-quote partial fills revert; unspecified quote uses actual execution delta. Positive gross amounts below the fee quantum revert. Independent cumulative remainder streams prevent accepted small swaps from evading lifetime fees. Liabilities are isolated by PoolId, currency, and immutable owner and must remain covered by hook-owned PoolManager claims.
 
-Fee-on-transfer quote funding and RWA queueing are rejected by exact balance checks. False-return transfers revert through SafeERC20. Paused or blacklisted payout transfers fail without consuming the receipt. Reentrant token callbacks cannot duplicate settlement because state is updated before transfer and guarded transiently. These controls cannot guarantee liveness for a production token whose issuer deliberately blocks transfers.
+## Liquidity, price, and trading risks
 
-## Manipulation, indexing and operations
+The initial tick and 900,000,000 OPEN / 100,000 USDC budgets are policy choices, not an oracle price or valuation guarantee. Full-range locked liquidity cannot be rebalanced or withdrawn. Price impact, arbitrage, MEV, adverse selection, depegging, and loss of all supplied liquidity remain possible.
 
-Next-block pressure activation prevents the same transaction or same block from queueing and receiving the changed LP fee. It does not prevent strategic manipulation by an actor willing to irrevocably lock real RWA. Queue closure remains timestamp-driven and keeper-independent.
+Public trades must use the complete PoolKey and the exact bound Router/V4Planner/Permit2 version. Users provide deadline and amount bounds. A production client must compare the V4Quoter result with current state and fail on runtime drift, stale quote, excessive slippage, missing approval, simulation failure, or reorg uncertainty. Aggregator/provider discovery is outside the launcher and must not silently substitute another router.
 
-An indexer must order logs by block, transaction and log index; handle reorg rollback and full backfill; and reconcile event-derived liabilities with confirmed balances and views. No live indexer or monitoring service is included. The incident response is to stop future epoch construction and publish the exact affected identities while preserving contractual claim and expiry paths; there is no pause or rescue switch.
+## NAV producer and epoch threats
 
-## Residual risk
+No epoch exists at launch, so producer or signer failure cannot block the AMM. The production boundary is specified in `docs/NAV_PRODUCER_BOUNDARY.md`:
 
-Local tests and structural checks are not an audit. Mainnet PoolManager runtime was observed read-only at one block, but source matching is not asserted. MEV, stale quotes, external token controls, signer compromise within the NAV band, integration bugs and unavailable routing remain for independent review.
+- issuer ledger observations are authenticated and must be no older than five minutes;
+- the HSM/KMS signer key never crosses into browsers, the launch adapter, logs, or the relay;
+- the relay accepts only allowlisted vault/chain/function calls and verifies the EIP-712 digest before submission;
+- missing, conflicting, stale, or unauthenticated data produces no signature and no transaction;
+- an outage lets the onchain report deadline pass, after which holders recover exact queued OPEN.
+
+A compromised signer can choose only an in-band NAV for an already pre-funded epoch. A compromised issuer can stop future epochs or choose future capacity and bands but cannot mutate a live epoch or withdraw unresolved liabilities. Production must use an EIP-1271 signing identity with governed recovery; using an ordinary launch EOA concentrates funding, issuer, fee-owner, and signer compromise.
+
+## Residual risk and status
+
+Local tests and structural checks are not an audit. The new launcher and trade planner require independent review, exact-revision rebuild, Mainnet-fork lifecycle evidence, and runtime reconciliation. No claim is made that OPEN represents a share, external asset, legal redemption right, stable value, or issuer-backed instrument.
