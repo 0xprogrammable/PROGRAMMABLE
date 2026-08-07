@@ -1,4 +1,4 @@
-# PoolRent
+# Proposal
 
 **Submission stage:** Prototype
 **Model id:** `poolrent`

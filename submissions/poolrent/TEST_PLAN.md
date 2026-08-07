@@ -1,4 +1,4 @@
-# PoolRent test plan
+# Test plan
 
 Planned checks and actual results are kept separate. Nothing below is marked passed unless the
 command in the Evidence column was executed at the declared commit and its output recorded in

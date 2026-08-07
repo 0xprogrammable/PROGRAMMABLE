@@ -1,4 +1,4 @@
-# PoolRent threat model
+# Threat model
 
 Scope: `src/PoolRentHook.sol`, `src/PoolRentLauncher.sol`, `src/PoolRentToken.sol`,
 `src/libraries/PoolRentMath.sol`, at the exact commit declared in this application. Everything the
