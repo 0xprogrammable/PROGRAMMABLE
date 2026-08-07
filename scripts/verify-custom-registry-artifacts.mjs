@@ -26,6 +26,24 @@ const expectedArtifactFileHashes = new Map([
   ["abi/ProgrammableCustomFeePolicyVerifierV1.json", "sha256:dc3d35c26cb4daeee2d8c61a8fddc91ed981e974312ac29e942ca567eab1debf"],
   ["abi/ProgrammableCustomAtomicRegistrarV1.json", "sha256:c8822824b4b0956be3cd71cf4d9d2fbe04a703409272a906a2e784d6a9f0d88a"],
 ]);
+const expectedMainnetDeployment = new Map([
+  ["ProgrammableCustomFeePolicyVerifierV1", {
+    address: "0x6a57bf3e092626be760d417986e6103c20fdbc3e",
+    runtimeCodeHash: "0x2a4182b580725a156c42061dd58b7ed92b4588682ee1b66b356ceff1ddd90882",
+  }],
+  ["ProgrammableCustomPartnerFactoryRegistryV1", {
+    address: "0xf8aef69201621ad20fa256da595426b7e6192dba",
+    runtimeCodeHash: "0xc059ec5b84a2f4b9a63fe2f4361d92c36e1a0f94af1189f17f70c60844016426",
+  }],
+  ["ProgrammableCustomRegistryV1", {
+    address: "0x17e18c88bda9bfb73924cdc989c07b0707e72671",
+    runtimeCodeHash: "0xa3276868befc509594adea6c5bd81c3c1bd013686f03fd57914fd39c917185f7",
+  }],
+  ["ProgrammableCustomAtomicRegistrarV1", {
+    address: "0xcc916e5200d2626edfd918dc219bc4296629e997",
+    runtimeCodeHash: "0xae00412005beb660afba47767240cf771bf3c65306d68c1a7bfcb8fe2c0450f5",
+  }],
+]);
 
 function fail(message) {
   throw new Error(message);
@@ -65,6 +83,9 @@ function domainSeparatedHash(domain, value) {
 const securityRoot = join(root, "docs", "security");
 const chainProfile = readJson(join(securityRoot, "CUSTOM_REGISTRY_CHAIN_PROFILE_V1.json"));
 const registryPolicy = readJson(join(securityRoot, "CUSTOM_REGISTRY_POLICY_V1.json"));
+const mainnetDeployment = readJson(
+  join(root, "contracts", "deployments", "mainnet-custom-registry-v1.json"),
+);
 if (domainSeparatedHash("programmable.evm-chain-profile.v1", chainProfile)
   !== expectedChainProfileHash) fail("chain-profile hash drift");
 if (domainSeparatedHash("programmable.custom-registry-policy.v1", registryPolicy)
@@ -91,6 +112,43 @@ if (
   || registryPolicy.fees?.aeonPartnerCustom?.programmableFeeBps !== 5
   || registryPolicy.fees?.aeonPartnerCustom?.additionalProgrammableNativeFeeBps !== 0
 ) fail("frozen Registry policy is invalid");
+
+const bytes32Pattern = /^0x[0-9a-f]{64}$/u;
+const addressPattern = /^0x[0-9a-f]{40}$/u;
+if (
+  mainnetDeployment.schemaVersion
+    !== "programmable.custom-registry-mainnet-deployment-evidence.v1"
+  || mainnetDeployment.chainId !== 1
+  || mainnetDeployment.registryStartBlock !== "25701139"
+  || mainnetDeployment.chainProfileHash !== expectedChainProfileHash.replace("sha256:", "0x")
+  || mainnetDeployment.registryPolicyHash !== expectedRegistryPolicyHash.replace("sha256:", "0x")
+  || !Array.isArray(mainnetDeployment.contracts)
+  || mainnetDeployment.contracts.length !== expectedMainnetDeployment.size
+) fail("mainnet deployment evidence envelope is invalid");
+
+const transactionHashes = new Set();
+for (const contract of mainnetDeployment.contracts) {
+  const expected = expectedMainnetDeployment.get(contract.name);
+  if (
+    expected === undefined
+    || contract.address !== expected.address
+    || !addressPattern.test(contract.address)
+    || contract.runtimeCodeHash !== expected.runtimeCodeHash
+    || !bytes32Pattern.test(contract.runtimeCodeHash)
+    || !bytes32Pattern.test(contract.transactionHash)
+    || !bytes32Pattern.test(contract.blockHash)
+    || !bytes32Pattern.test(contract.inputHash)
+    || !/^[1-9][0-9]*$/u.test(contract.blockNumber)
+  ) fail(`mainnet deployment evidence is invalid: ${contract.name ?? "unknown"}`);
+  if (transactionHashes.has(contract.transactionHash)) {
+    fail(`duplicate mainnet deployment transaction: ${contract.transactionHash}`);
+  }
+  transactionHashes.add(contract.transactionHash);
+}
+if (
+  mainnetDeployment.contracts.find((contract) => contract.name === "ProgrammableCustomRegistryV1")
+    ?.blockNumber !== mainnetDeployment.registryStartBlock
+) fail("mainnet Registry start block does not match its deployment receipt");
 
 for (const [relativePath, expectedHash] of expectedArtifactFileHashes) {
   const actualHash = `sha256:${createHash("sha256")
@@ -144,5 +202,5 @@ for (const event of builtEvents) {
 if (manifestKeys.size !== builtEvents.length) fail("event manifest contains an event absent from the built ABIs");
 
 process.stdout.write(
-  `verified ${contracts.length} published ABIs, ${builtEvents.length} event signatures, ${eventSet.eventSetHash}, ${expectedChainProfileHash}, and ${expectedRegistryPolicyHash}\n`,
+  `verified ${contracts.length} published ABIs, ${builtEvents.length} event signatures, ${eventSet.eventSetHash}, ${expectedChainProfileHash}, ${expectedRegistryPolicyHash}, and the four-contract Ethereum Mainnet deployment evidence\n`,
 );

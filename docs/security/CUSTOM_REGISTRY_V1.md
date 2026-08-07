@@ -2,9 +2,10 @@
 
 ## Release status
 
-This source tree is a release candidate, not evidence of a deployment. Custom remains `prelaunch` and every public
-manifest must keep `address` and `startBlock` null until all release gates below have real evidence. A local test,
-simulation, RPC response, preview, or verified source page does not make the Registry live.
+The canonical Registry V1 contracts are deployed on Ethereum Mainnet. The main Registry is
+`0x17e18c88bda9bfb73924cdc989c07b0707e72671` with start block `25701139`; the exact release evidence is published in
+`contracts/deployments/mainnet-custom-registry-v1.json`. Custom product status remains `prelaunch` until the remaining
+activation gates below have real evidence. A deployment alone does not make the complete Launch Gate live.
 
 The release becomes active only after:
 
