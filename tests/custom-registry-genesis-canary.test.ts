@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 // @ts-expect-error Directly executable Node module has no declaration file.
-import {
-  canonicalSha256,
-  createGenesisCanaryPublicIdentities,
-} from "../scripts/serve-custom-registry-genesis-canary.mjs";
+import { canonicalSha256, createGenesisCanaryPublicIdentities } from "../scripts/serve-custom-registry-genesis-canary.mjs";
 
 describe("Custom Registry genesis canary identities", () => {
   it("derives stable Projection V2 project and launch IDs", () => {
