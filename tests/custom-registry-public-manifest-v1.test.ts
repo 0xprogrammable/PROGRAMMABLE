@@ -15,6 +15,10 @@ import {
   CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH,
   PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1,
 } from "../lib/custom-launch/registry-public-manifest-v1";
+import {
+  createProgrammableWellKnownHandlerV1,
+  PROGRAMMABLE_WELL_KNOWN_PATH,
+} from "../lib/server/custom-launch/well-known-v1";
 
 const NOW = new Date("2026-08-07T08:00:00.000Z");
 const runtimeCodes = {
@@ -211,6 +215,23 @@ describe("Custom Registry V1 public manifest", () => {
 
     const invalid = handler(request(`${CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH}?candidate=1`));
     expect(invalid.status).toBe(400);
+  });
+
+  it("keeps Well-known and the live Registry manifest on the same deployment", async () => {
+    const manifestHandler = createCustomRegistryManifestHandlerV1(configured);
+    const wellKnownHandler = createProgrammableWellKnownHandlerV1(configured);
+    const manifest = await manifestHandler(request()).json();
+    const response = wellKnownHandler(request(PROGRAMMABLE_WELL_KNOWN_PATH));
+    const wellKnown = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(wellKnown.publicCategories.custom).toMatchObject({
+      discoveryStatus: "live",
+      publicSubmissionStatus: "prelaunch",
+      registryAddress: manifest.contracts.registry.address,
+      registryStartBlock: manifest.startBlock,
+      registryGeneration: "1",
+    });
   });
 
   it("keeps the production route prelaunch/null when deployment env is absent", async () => {

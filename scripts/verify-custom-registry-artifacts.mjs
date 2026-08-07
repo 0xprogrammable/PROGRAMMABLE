@@ -247,7 +247,12 @@ function domainSeparatedHash(domain, value) {
 
 const securityRoot = join(root, "docs", "security");
 const chainProfile = readJson(join(securityRoot, "CUSTOM_REGISTRY_CHAIN_PROFILE_V1.json"));
-const registryPolicy = readJson(join(securityRoot, "CUSTOM_REGISTRY_POLICY_V1.json"));
+const registryPolicy = readJson(
+  join(
+    securityRoot,
+    "CUSTOM_REGISTRY_POLICY_FROZEN_PREDEPLOYMENT_SNAPSHOT_V1.json",
+  ),
+);
 const mainnetDeployment = readJson(
   join(root, "contracts", "deployments", "mainnet-custom-registry-v1.json"),
 );

@@ -47,10 +47,19 @@ type TokenCard = {
   imageUrl: string;
   links: readonly TokenLink[];
   marketCap?: MarketCapMetric;
+  marketStatus?: "No market";
   usesFallbackImage: boolean;
   tokenAddress?: `0x${string}`;
   launchCategory: "Classic" | "Custom";
 };
+
+export function exploreMarketStatusLabel(
+  entry: ExploreEntry,
+): "No market" | undefined {
+  return entry.exploreKind === "custom-project" && entry.markets.length === 0
+    ? "No market"
+    : undefined;
+}
 
 type TokenSort = "newest" | "oldest" | "market-cap" | "market-cap-asc";
 export type ExploreSocialFilter = "all" | "yes" | "no";
@@ -853,7 +862,7 @@ export function filterTokensBySocialPresence<
   );
 }
 
-function getTokenCards(tokens: ExploreEntry[]): TokenCard[] {
+export function getTokenCards(tokens: ExploreEntry[]): TokenCard[] {
   return tokens.map((token) => ({
     id: token.id,
     name: token.name,
@@ -866,6 +875,7 @@ function getTokenCards(tokens: ExploreEntry[]): TokenCard[] {
       (left, right) => tokenLinkOrder[left.kind] - tokenLinkOrder[right.kind],
     ),
     marketCap: getMarketCap(token),
+    marketStatus: exploreMarketStatusLabel(token),
     usesFallbackImage: !token.imageUrl?.trim(),
     ...(token.tokenAddress === undefined
       ? {}
@@ -1337,6 +1347,14 @@ export function ExploreView() {
                     <span className={styles.runnerMarketCapValue}>
                       {marketCapLabel}
                     </span>
+                  </span>
+                ) : null}
+                {token.marketStatus ? (
+                  <span
+                    className={styles.runnerMarketStatus}
+                    aria-label="Market status No market"
+                  >
+                    {token.marketStatus}
                   </span>
                 ) : null}
                 {token.links.length > 0 ? (
