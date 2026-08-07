@@ -8,7 +8,8 @@ import type {
   CustomProjectExploreEntry,
   TokenLink,
 } from "../../tokens";
-import { getProductionWebsiteProjectionTargetV1 } from "../projection-target/website-target";
+import { getProductionWebsiteRegistryCustomPublicReadTargetV1 } from
+  "../projection-target/website-target";
 import { isCustomLaunchRegistryPublicReadEnabled } from "./public-readiness";
 import { withGenesisCanaryRegistryCustomStoreV1 } from
   "./genesis-canary-public-v1";
@@ -124,10 +125,10 @@ export async function readProductionCustomExploreDirectoryV1(
   signal: AbortSignal,
 ): Promise<readonly CustomProjectExploreEntry[]> {
   if (!isCustomLaunchRegistryPublicReadEnabled()) return Object.freeze([]);
-  const target = getProductionWebsiteProjectionTargetV1();
+  const target = getProductionWebsiteRegistryCustomPublicReadTargetV1();
   await target.assertProductionReadiness();
   const records = await withGenesisCanaryRegistryCustomStoreV1(
-    target.registryCustomPublicStore,
+    target.store,
   )
     .findVerifiedRegistryCustomLaunchesPublic({ signal });
   return Object.freeze(records.map(customLaunchProjectToExploreEntryV1));
