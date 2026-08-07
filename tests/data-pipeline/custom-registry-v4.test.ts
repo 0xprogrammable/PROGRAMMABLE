@@ -37,9 +37,12 @@ import {
   CUSTOM_REGISTRY_GEN2_TOPICS,
   CUSTOM_REGISTRY_PRODUCER_RECORD_SCHEMA_V4,
   customRegistryApprovalBindingHashV2,
+  customRegistryGen2AbiEventProofV4,
+  customRegistryGen2CompanionAbiProofV4,
   customRegistryOnchainFeePolicyHashV2,
   customRegistryPartnerConfigurationHashV2,
   customRegistryProducerEnvelopeDigestV4,
+  customRegistryRawProducerHashV4,
   customRegistryRegisteredRecordBindingV2,
   customRegistryReviewDeploymentBindingHashV2,
   projectCustomRegistryGen2EnvelopeV4,
@@ -50,6 +53,9 @@ import {
   type CustomRegistryGen2EventV4,
   type CustomRegistryGen2ProjectionManifestV4,
   type CustomRegistryGen2PartnerFactoryAuthorizationV4,
+  type CustomRegistryGen2AbiEventPayloadV4,
+  type CustomRegistryGen2ParityProjectionV4,
+  type CustomRegistryGen2TransitionCheckpointV4,
 } from "../../lib/data-pipeline/custom-registry-v4";
 import v3GoldenJson from "../fixtures/custom-launch-registry-record-v3-approval-8665.json";
 import gen2Golden from "../fixtures/custom-launch-registry-record-v4-gen2-golden.json";
@@ -130,6 +136,11 @@ function manifest(): CustomRegistryGen2ProjectionManifestV4 {
     topics: CUSTOM_REGISTRY_GEN2_TOPICS,
     eventBindings: CUSTOM_REGISTRY_GEN2_EVENT_BINDINGS,
     contracts: releaseContracts(),
+    authorizedWriters: {
+      finalizers: [WRITER],
+      correctors: [WRITER],
+      revokers: [WRITER],
+    },
   };
 }
 
@@ -152,7 +163,9 @@ function reseal(
   };
 }
 
-function producer(): CustomLaunchRegistryProducerRecordV4 {
+function producer(
+  finalityStatus: "observed" | "confirmed" | "finalized" = "observed",
+): CustomLaunchRegistryProducerRecordV4 {
   const v3 = structuredClone(v3GoldenJson) as unknown as
     CustomLaunchRegistryProducerRecordV3;
   const v3Preimage = v3.registeredRecordPreimage;
@@ -211,6 +224,7 @@ function producer(): CustomLaunchRegistryProducerRecordV4 {
       registryEventSetBytesSha256:
         CUSTOM_REGISTRY_GEN2_EVENT_SET_BYTES_SHA256,
       feePolicyDomain: CUSTOM_REGISTRY_GEN2_FEE_POLICY_DOMAIN,
+      registrationOnchainTimestamp: v3.finality.onchainTimestamp,
       releaseContracts: releaseContracts(),
       eventBindings: CUSTOM_REGISTRY_GEN2_EVENT_BINDINGS,
     },
@@ -233,6 +247,21 @@ function producer(): CustomLaunchRegistryProducerRecordV4 {
     lifecycle: {
       ...v3.lifecycle,
       registryGeneration: "2",
+      status: "active",
+      supersededBy: null,
+      revokedAt: null,
+      revocationEvidenceHash: null,
+    },
+    finality: {
+      ...v3.finality,
+      status: finalityStatus,
+      confirmedAt: finalityStatus === "observed"
+        ? null
+        : v3.finality.confirmedAt,
+      finalizedAt: finalityStatus === "finalized"
+        ? v3.finality.finalizedAt
+        : null,
+      orphanedAt: null,
     },
   } as const;
   return reseal(recordWithoutEnvelope);
@@ -240,10 +269,34 @@ function producer(): CustomLaunchRegistryProducerRecordV4 {
 
 function event(
   recordValue = producer(),
-  operation: CustomRegistryGen2EventV4["operation"] = "registered",
 ): CustomRegistryGen2EventV4 {
+  const transactionIndex = Number(
+    recordValue.registryOrigin.registrationTransactionIndex,
+  );
+  const logIndex = Number(recordValue.registryOrigin.registrationLogIndex);
+  const transactionHash = recordValue.registryOrigin.registrationTransactionHash;
+  const blockNumber = recordValue.registryOrigin.registrationBlockNumber;
+  const blockHash = recordValue.registryOrigin.registrationBlockHash;
+  const eventPayload = {
+    kind: "registered",
+    registrationSequence: "1",
+    chainId: "1",
+    registryGeneration: "2",
+    approvalId: recordValue.registeredRecordPreimage.approvalId,
+    deploymentId: recordValue.registeredRecordPreimage.deploymentId,
+    primaryContract: recordValue.registeredRecordPreimage.primaryContract,
+    launchWallet: recordValue.registeredRecordPreimage.launchWallet,
+    identityHash: recordValue.registrationBindingHash,
+    registeredRecordCommitment: recordValue.registeredRecordCommitment,
+    observedAtBlock: blockNumber,
+  } as const;
+  const abiProof = customRegistryGen2AbiEventProofV4({
+    registryLaunchIdRaw: recordValue.registryOrigin.registryLaunchIdRaw,
+    registryProjectIdRaw: recordValue.registeredRecordPreimage.projectId,
+    payload: eventPayload,
+  });
   return {
-    operation,
+    operation: "registered",
     chainId: "1",
     caip2: "eip155:1",
     registryGeneration: "2",
@@ -255,26 +308,36 @@ function event(
         : recordValue.partnerFactoryAuthorization!.factory,
     emitterRole: "registry",
     emitterAddress: recordValue.registryOrigin.registryAddress,
-    topic0: CUSTOM_REGISTRY_GEN2_TOPICS[operation],
-    registrationCompanions: operation === "registered"
-      ? ([
-          "provenance",
-          "review",
-          "attribution",
-          "feePolicy",
-          "feeScope",
-          "feeEvidence",
-        ] as const).map((kind) => ({
-          kind,
-          topic0: CUSTOM_REGISTRY_GEN2_TOPICS[kind],
-        }))
-      : [],
-    transactionHash: recordValue.registryOrigin.registrationTransactionHash,
-    blockNumber: recordValue.registryOrigin.registrationBlockNumber,
-    blockHash: recordValue.registryOrigin.registrationBlockHash,
-    transactionIndex: Number(recordValue.registryOrigin.registrationTransactionIndex),
-    logIndex: Number(recordValue.registryOrigin.registrationLogIndex),
-    onchainTimestamp: recordValue.finality.onchainTimestamp,
+    topic0: CUSTOM_REGISTRY_GEN2_TOPICS.registered,
+    indexedTopics: abiProof.indexedTopics,
+    data: abiProof.data,
+    registrationCompanions: ([
+      "provenance",
+      "review",
+      "attribution",
+      "feePolicy",
+      "feeScope",
+      "feeEvidence",
+    ] as const).map((kind, position) => ({
+      ...customRegistryGen2CompanionAbiProofV4(kind, recordValue),
+      kind,
+      emitterRole: "registry" as const,
+      emitterAddress: recordValue.registryOrigin.registryAddress,
+      observedRuntimeCodeHash: REGISTRY_RUNTIME,
+      topic0: CUSTOM_REGISTRY_GEN2_TOPICS[kind],
+      transactionHash,
+      blockNumber,
+      blockHash,
+      transactionIndex,
+      logIndex: logIndex + position + 1,
+    })),
+    eventPayload,
+    transactionHash,
+    blockNumber,
+    blockHash,
+    transactionIndex,
+    logIndex,
+    onchainTimestamp: recordValue.registryOrigin.registrationOnchainTimestamp,
     launchId: recordValue.launchId,
     projectId: recordValue.projectId,
     registryLaunchIdRaw: recordValue.registryOrigin.registryLaunchIdRaw,
@@ -296,13 +359,251 @@ function head(
     blockNumber,
     blockHash: hex(`head:${blockNumber}`),
     observedAt: "2026-08-07T08:00:00.000Z",
-    canonicalBlockHash: (candidate) =>
-      candidate === eventValue.blockNumber
-        ? canonical
-          ? eventValue.blockHash
-          : hex("reorged-block")
-        : hex(`canonical:${candidate}`),
+    canonicalBlockHash: (candidate) => {
+      if (candidate === eventValue.blockNumber) {
+        return canonical ? eventValue.blockHash : hex("reorged-block");
+      }
+      if (candidate === eventValue.producerRecord.registryOrigin.registrationBlockNumber) {
+        return eventValue.producerRecord.registryOrigin.registrationBlockHash;
+      }
+      if (
+        eventValue.eventPayload.kind === "finalized" &&
+        candidate === eventValue.eventPayload.confirmedHeadBlockNumber
+      ) {
+        return eventValue.eventPayload.confirmedHeadBlockHash;
+      }
+      return hex(`canonical:${candidate}`);
+    },
   };
+}
+
+function transitionCheckpoint(
+  lastTransitionSequence: string,
+): CustomRegistryGen2TransitionCheckpointV4 {
+  return {
+    chainId: "1",
+    caip2: "eip155:1",
+    registryGeneration: "2",
+    registryAddress: releaseContracts().registry.address,
+    lastTransitionSequence,
+  };
+}
+
+function unixSeconds(instant: string): string {
+  return String(Date.parse(instant) / 1_000);
+}
+
+function transitionEvent(input: Readonly<{
+  operation: "finalized" | "corrected" | "revoked";
+  record: CustomLaunchRegistryProducerRecordV4;
+  payload: CustomRegistryGen2AbiEventPayloadV4;
+  blockNumber: string;
+  onchainTimestamp: string;
+}>): CustomRegistryGen2EventV4 {
+  const blockHash = hex(`${input.operation}:block:${input.blockNumber}`);
+  const transactionHash = hex(`${input.operation}:transaction:${input.blockNumber}`);
+  const abiProof = customRegistryGen2AbiEventProofV4({
+    registryLaunchIdRaw: input.record.registryOrigin.registryLaunchIdRaw,
+    registryProjectIdRaw: input.record.registeredRecordPreimage.projectId,
+    payload: input.payload,
+  });
+  return {
+    operation: input.operation,
+    chainId: "1",
+    caip2: "eip155:1",
+    registryGeneration: "2",
+    registryAddress: input.record.registryOrigin.registryAddress,
+    observedRegistryRuntimeCodeHash: REGISTRY_RUNTIME,
+    registryWriter: WRITER,
+    emitterRole: "registry",
+    emitterAddress: input.record.registryOrigin.registryAddress,
+    topic0: CUSTOM_REGISTRY_GEN2_TOPICS[input.operation],
+    indexedTopics: abiProof.indexedTopics,
+    data: abiProof.data,
+    registrationCompanions: [],
+    eventPayload: input.payload,
+    transactionHash,
+    blockNumber: input.blockNumber,
+    blockHash,
+    transactionIndex: 3,
+    logIndex: 5,
+    onchainTimestamp: input.onchainTimestamp,
+    launchId: input.record.launchId,
+    projectId: input.record.projectId,
+    registryLaunchIdRaw: input.record.registryOrigin.registryLaunchIdRaw,
+    registryProjectIdRaw: input.record.registeredRecordPreimage.projectId,
+    registeredRecordHash: input.record.registeredRecordCommitment,
+    identityHash: input.record.registrationBindingHash,
+    producerRecord: input.record,
+  } as CustomRegistryGen2EventV4;
+}
+
+function finalizedEvent(
+  record: CustomLaunchRegistryProducerRecordV4,
+  transitionSequence = "2",
+): CustomRegistryGen2EventV4 {
+  const finalizedAt = record.finality.finalizedAt;
+  if (finalizedAt === null) throw new Error("fixture");
+  const confirmedHeadBlockNumber = String(
+    BigInt(record.registryOrigin.registrationBlockNumber) + 63n,
+  );
+  return transitionEvent({
+    operation: "finalized",
+    record,
+    blockNumber: String(BigInt(confirmedHeadBlockNumber) + 1n),
+    onchainTimestamp: finalizedAt,
+    payload: {
+      kind: "finalized",
+      observedTransactionHash:
+        record.registryOrigin.registrationTransactionHash,
+      finalityEvidenceHash: raw(record.finality.finalityEvidenceHash),
+      transitionSequence,
+      observedBlockNumber: record.registryOrigin.registrationBlockNumber,
+      observedBlockHash: record.registryOrigin.registrationBlockHash,
+      observedTransactionIndex: Number(
+        record.registryOrigin.registrationTransactionIndex,
+      ),
+      observedLogIndex: Number(record.registryOrigin.registrationLogIndex),
+      confirmedHeadBlockNumber,
+      confirmedHeadBlockHash: hex(`confirmed-head:${confirmedHeadBlockNumber}`),
+      finalityPolicyHash: record.registeredRecordPreimage.finalityPolicyHash,
+      finalizedAtBlock: String(BigInt(confirmedHeadBlockNumber) + 1n),
+      finalizedAtTimestamp: unixSeconds(finalizedAt),
+    },
+  });
+}
+
+function correctedRecord(
+  revision = "2",
+): CustomLaunchRegistryProducerRecordV4 {
+  const base = producer("finalized");
+  return reseal({
+    ...base,
+    extensions: {
+      ...base.extensions,
+      "fixture:correctionRevision": revision,
+    },
+  });
+}
+
+function correctedEvent(
+  record: CustomLaunchRegistryProducerRecordV4,
+  previous: CustomRegistryGen2ParityProjectionV4,
+  transitionSequence = "3",
+  revision = "2",
+): CustomRegistryGen2EventV4 {
+  return transitionEvent({
+    operation: "corrected",
+    record,
+    blockNumber: String(BigInt(previous.origin.blockNumber) + 1n),
+    onchainTimestamp: "2026-08-06T10:04:00.000Z",
+    payload: {
+      kind: "corrected",
+      revision,
+      correctedRecordHash: raw(customRegistryRawProducerHashV4(record)),
+      transitionSequence,
+      previousRecordHash: previous.origin.latestRecordHash,
+      reasonCode: hex("correction-reason"),
+      evidenceHash: hex("correction-evidence"),
+    },
+  });
+}
+
+function revokedRecord(
+  previous: CustomLaunchRegistryProducerRecordV4,
+): CustomLaunchRegistryProducerRecordV4 {
+  return reseal({
+    ...previous,
+    lifecycle: {
+      ...previous.lifecycle,
+      status: "revoked",
+      supersededBy: null,
+      revokedAt: "2026-08-06T10:05:00.000Z",
+      revocationEvidenceHash: sha("revocation-evidence"),
+    },
+  });
+}
+
+function revokedEvent(
+  record: CustomLaunchRegistryProducerRecordV4,
+  previous: CustomRegistryGen2ParityProjectionV4,
+  transitionSequence = "4",
+): CustomRegistryGen2EventV4 {
+  const revokedAt = record.lifecycle.revokedAt;
+  const evidenceHash = record.lifecycle.revocationEvidenceHash;
+  if (revokedAt === null || evidenceHash === null) throw new Error("fixture");
+  const blockNumber = String(BigInt(previous.origin.blockNumber) + 1n);
+  return transitionEvent({
+    operation: "revoked",
+    record,
+    blockNumber,
+    onchainTimestamp: revokedAt,
+    payload: {
+      kind: "revoked",
+      reasonCode: hex("revocation-reason"),
+      evidenceHash: raw(evidenceHash),
+      transitionSequence,
+      latestRecordRevision: previous.origin.latestRecordRevision,
+      latestRecordHash: previous.origin.latestRecordHash,
+      revokedAtBlock: blockNumber,
+      revokedAtTimestamp: unixSeconds(revokedAt),
+    },
+  });
+}
+
+function withEventPayload(
+  value: CustomRegistryGen2EventV4,
+  payload: CustomRegistryGen2AbiEventPayloadV4,
+): CustomRegistryGen2EventV4 {
+  const abiProof = customRegistryGen2AbiEventProofV4({
+    registryLaunchIdRaw: value.registryLaunchIdRaw,
+    registryProjectIdRaw: value.registryProjectIdRaw,
+    payload,
+  });
+  return {
+    ...value,
+    operation: payload.kind,
+    topic0: CUSTOM_REGISTRY_GEN2_TOPICS[payload.kind],
+    eventPayload: payload,
+    indexedTopics: abiProof.indexedTopics,
+    data: abiProof.data,
+    registrationCompanions: payload.kind === "registered"
+      ? value.registrationCompanions
+      : [],
+  } as CustomRegistryGen2EventV4;
+}
+
+function finalizedTransitionFixture() {
+  const registrationEvent = event(producer("observed"));
+  const registered = projectCustomRegistryGen2RecordV4({
+    manifest: manifest(),
+    event: registrationEvent,
+    head: head(registrationEvent, 1n),
+  });
+  const record = producer("finalized");
+  const registryEvent = finalizedEvent(record);
+  const projection = projectCustomRegistryGen2RecordV4({
+    manifest: manifest(),
+    event: registryEvent,
+    head: head(registryEvent, 1n),
+    previousProjection: registered,
+    transitionCheckpoint: transitionCheckpoint("1"),
+  });
+  return { registered, record, registryEvent, projection };
+}
+
+function correctedTransitionFixture() {
+  const finalized = finalizedTransitionFixture();
+  const record = correctedRecord();
+  const registryEvent = correctedEvent(record, finalized.projection);
+  const projection = projectCustomRegistryGen2RecordV4({
+    manifest: manifest(),
+    event: registryEvent,
+    head: head(registryEvent, 1n),
+    previousProjection: finalized.projection,
+    transitionCheckpoint: transitionCheckpoint("2"),
+  });
+  return { finalized, record, registryEvent, projection };
 }
 
 function rebind(
@@ -499,8 +800,8 @@ describe("Custom Registry record v4 / Generation 2 parity adapter", () => {
       verifiedReview: envelope.rawRecord.verifiedReview,
       postLaunchAuthorityInventory:
         envelope.rawRecord.postLaunchAuthorityInventory,
-      finality: envelope.rawRecord.finality,
-      lifecycle: envelope.rawRecord.lifecycle,
+      finality: envelope.projection.registryFinality,
+      lifecycle: envelope.projection.lifecycle,
       presentationVersion: envelope.rawRecord.presentationVersion,
       presentationBindingHash: envelope.rawRecord.presentationBindingHash,
       presentation: envelope.rawRecord.presentation,
@@ -532,16 +833,14 @@ describe("Custom Registry record v4 / Generation 2 parity adapter", () => {
   });
 
   it.each([
-    ["registered", 1n, true, "observed"],
-    ["registered", 2n, true, "confirmed"],
-    ["registered", 64n, true, "finalized"],
-    ["registered", 1n, false, "orphaned"],
-    ["finalized", 1n, true, "finalized"],
-    ["revoked", 1n, true, "revoked"],
+    ["observed", 1n, true, "observed", "active"],
+    ["confirmed", 2n, true, "confirmed", "active"],
+    ["finalized", 64n, true, "finalized", "active"],
+    ["observed", 1n, false, "orphaned", "orphaned"],
   ] as const)(
-    "projects %s at depth %s with canonical=%s as %s",
-    (operation, depth, canonical, expected) => {
-      const registryEvent = event(producer(), operation);
+    "projects raw %s at depth %s with canonical=%s as %s/%s",
+    (rawStatus, depth, canonical, expectedFinality, expectedLifecycle) => {
+      const registryEvent = event(producer(rawStatus));
       const projection = projectCustomRegistryGen2RecordV4({
         manifest: manifest(),
         event: registryEvent,
@@ -560,17 +859,331 @@ describe("Custom Registry record v4 / Generation 2 parity adapter", () => {
           registryEventSetBytesSha256:
             CUSTOM_REGISTRY_GEN2_EVENT_SET_BYTES_SHA256,
           feePolicyDomain: CUSTOM_REGISTRY_GEN2_FEE_POLICY_DOMAIN,
-          operation,
+          operation: "registered",
           registryWriter: registryEvent.registryWriter,
-          eventTopic0: CUSTOM_REGISTRY_GEN2_TOPICS[operation],
+          eventTopic0: CUSTOM_REGISTRY_GEN2_TOPICS.registered,
           transactionIndex: registryEvent.transactionIndex,
           logIndex: registryEvent.logIndex,
         },
-        lifecycle: { status: expected, registryGeneration: "2" },
+        registryFinality: { status: expectedFinality },
+        lifecycle: { status: expectedLifecycle, registryGeneration: "2" },
+        publicProjection: {
+          finality: { status: expectedFinality },
+          lifecycle: { status: expectedLifecycle },
+        },
       });
       expect(Object.keys(projection.registeredRecordPreimage)).toHaveLength(37);
     },
   );
+
+  it("projects finalized, corrected and revoked ABI transitions without conflating lifecycle", () => {
+    const finalized = finalizedTransitionFixture();
+    expect(finalized.projection).toMatchObject({
+      registryFinality: { status: "finalized" },
+      lifecycle: { status: "active" },
+      origin: {
+        operation: "finalized",
+        transitionSequence: "2",
+        latestRecordRevision: "1",
+        latestRecordHash: finalized.registered.registeredRecordCommitment,
+        eventPayload: { kind: "finalized", transitionSequence: "2" },
+      },
+      publicProjection: {
+        finality: { status: "finalized" },
+        lifecycle: { status: "active" },
+      },
+    });
+
+    const corrected = correctedTransitionFixture();
+    expect(corrected.projection).toMatchObject({
+      registryFinality: { status: "finalized" },
+      lifecycle: { status: "active" },
+      origin: {
+        operation: "corrected",
+        transitionSequence: "3",
+        latestRecordRevision: "2",
+        eventPayload: { kind: "corrected", revision: "2" },
+      },
+      publicProjection: {
+        finality: { status: "finalized" },
+        lifecycle: { status: "active" },
+      },
+    });
+    expect(corrected.projection.origin.latestRecordHash).toBe(
+      raw(customRegistryRawProducerHashV4(corrected.record)),
+    );
+
+    const record = revokedRecord(corrected.record);
+    const registryEvent = revokedEvent(record, corrected.projection);
+    const revoked = projectCustomRegistryGen2RecordV4({
+      manifest: manifest(),
+      event: registryEvent,
+      head: head(registryEvent, 1n),
+      previousProjection: corrected.projection,
+      transitionCheckpoint: transitionCheckpoint("3"),
+    });
+    expect(revoked).toMatchObject({
+      registryFinality: { status: "finalized" },
+      lifecycle: { status: "revoked" },
+      origin: {
+        operation: "revoked",
+        transitionSequence: "4",
+        latestRecordRevision: "2",
+        latestRecordHash: corrected.projection.origin.latestRecordHash,
+        eventPayload: { kind: "revoked", transitionSequence: "4" },
+      },
+      publicProjection: {
+        finality: { status: "finalized" },
+        lifecycle: { status: "revoked" },
+      },
+    });
+  });
+
+  it("rejects finalized raw evidence before canonical depth", () => {
+    const registryEvent = event(producer("finalized"));
+    expect(() =>
+      projectCustomRegistryGen2RecordV4({
+        manifest: manifest(),
+        event: registryEvent,
+        head: head(registryEvent, 1n),
+      })
+    ).toThrow();
+  });
+
+  it.each([
+    "transactionHash",
+    "blockHash",
+    "blockNumber",
+    "transactionIndex",
+    "logIndex",
+    "onchainTimestamp",
+  ] as const)("rejects a mismatched raw finality %s anchor", (field) => {
+    const value = structuredClone(producer("observed"));
+    const replacements = {
+      transactionHash: hex("wrong-finality-transaction"),
+      blockHash: hex("wrong-finality-block-hash"),
+      blockNumber: "21000001",
+      transactionIndex: "9",
+      logIndex: "10",
+      onchainTimestamp: "2026-08-06T09:59:00.000Z",
+    } as const;
+    (value.finality as unknown as Record<string, unknown>)[field] =
+      replacements[field];
+    const attackRecord = reseal(value);
+    const attack = event(attackRecord);
+    expect(() =>
+      projectCustomRegistryGen2RecordV4({
+        manifest: manifest(),
+        event: attack,
+        head: head(attack, 1n),
+      })
+    ).toThrow();
+  });
+
+  it("rejects contradictory and out-of-order raw finality timestamps", () => {
+    const contradictory = structuredClone(producer("observed"));
+    (contradictory.finality as unknown as { confirmedAt: string | null })
+      .confirmedAt = "2026-08-06T10:02:00.000Z";
+    const contradictoryRecord = reseal(contradictory);
+    const contradictoryEvent = event(contradictoryRecord);
+    expect(() =>
+      projectCustomRegistryGen2RecordV4({
+        manifest: manifest(),
+        event: contradictoryEvent,
+        head: head(contradictoryEvent, 2n),
+      })
+    ).toThrow();
+
+    const outOfOrder = structuredClone(producer("confirmed"));
+    (outOfOrder.finality as unknown as { confirmedAt: string | null })
+      .confirmedAt = "2026-08-06T09:59:00.000Z";
+    const outOfOrderRecord = reseal(outOfOrder);
+    const outOfOrderEvent = event(outOfOrderRecord);
+    expect(() =>
+      projectCustomRegistryGen2RecordV4({
+        manifest: manifest(),
+        event: outOfOrderEvent,
+        head: head(outOfOrderEvent, 2n),
+      })
+    ).toThrow();
+  });
+
+  it("rejects a wrong finalized registration anchor and forged ABI bytes", () => {
+    const finalized = finalizedTransitionFixture();
+    if (finalized.registryEvent.eventPayload.kind !== "finalized") {
+      throw new Error("fixture");
+    }
+    const wrongAnchor = withEventPayload(finalized.registryEvent, {
+      ...finalized.registryEvent.eventPayload,
+      observedBlockHash: hex("wrong-finalized-observed-block"),
+    });
+    expect(() =>
+      projectCustomRegistryGen2RecordV4({
+        manifest: manifest(),
+        event: wrongAnchor,
+        head: head(wrongAnchor, 1n),
+        previousProjection: finalized.registered,
+        transitionCheckpoint: transitionCheckpoint("1"),
+      })
+    ).toThrow();
+
+    const forgedData = {
+      ...finalized.registryEvent,
+      data: "0x00" as const,
+    } as CustomRegistryGen2EventV4;
+    expect(() =>
+      projectCustomRegistryGen2RecordV4({
+        manifest: manifest(),
+        event: forgedData,
+        head: head(forgedData, 1n),
+        previousProjection: finalized.registered,
+        transitionCheckpoint: transitionCheckpoint("1"),
+      })
+    ).toThrow();
+  });
+
+  it("rejects correction replay, revision gaps and wrong previous hashes", () => {
+    const corrected = correctedTransitionFixture();
+    const replay = correctedEvent(
+      correctedRecord("2-replay"),
+      corrected.projection,
+      "4",
+      "2",
+    );
+    const gap = correctedEvent(
+      correctedRecord("4-gap"),
+      corrected.finalized.projection,
+      "3",
+      "4",
+    );
+    if (gap.eventPayload.kind !== "corrected") throw new Error("fixture");
+    const wrongPrevious = withEventPayload(gap, {
+      ...gap.eventPayload,
+      revision: "2",
+      previousRecordHash: hex("wrong-previous-record"),
+    });
+    for (const [attack, previous, checkpoint] of [
+      [replay, corrected.projection, "3"],
+      [gap, corrected.finalized.projection, "2"],
+      [wrongPrevious, corrected.finalized.projection, "2"],
+    ] as const) {
+      expect(() =>
+        projectCustomRegistryGen2RecordV4({
+          manifest: manifest(),
+          event: attack,
+          head: head(attack, 1n),
+          previousProjection: previous,
+          transitionCheckpoint: transitionCheckpoint(checkpoint),
+        })
+      ).toThrow();
+    }
+  });
+
+  it("rejects replayed or gapped global transition sequences", () => {
+    const finalized = finalizedTransitionFixture();
+    if (finalized.registryEvent.eventPayload.kind !== "finalized") {
+      throw new Error("fixture");
+    }
+    for (const transitionSequence of ["1", "3"] as const) {
+      const attack = withEventPayload(finalized.registryEvent, {
+        ...finalized.registryEvent.eventPayload,
+        transitionSequence,
+      });
+      expect(() =>
+        projectCustomRegistryGen2RecordV4({
+          manifest: manifest(),
+          event: attack,
+          head: head(attack, 1n),
+          previousProjection: finalized.registered,
+          transitionCheckpoint: transitionCheckpoint("1"),
+        })
+      ).toThrow();
+    }
+  });
+
+  it("rejects a missing or wrong-registry global transition checkpoint", () => {
+    const finalized = finalizedTransitionFixture();
+    expect(() =>
+      projectCustomRegistryGen2RecordV4({
+        manifest: manifest(),
+        event: finalized.registryEvent,
+        head: head(finalized.registryEvent, 1n),
+        previousProjection: finalized.registered,
+      })
+    ).toThrow();
+    expect(() =>
+      projectCustomRegistryGen2RecordV4({
+        manifest: manifest(),
+        event: finalized.registryEvent,
+        head: head(finalized.registryEvent, 1n),
+        previousProjection: finalized.registered,
+        transitionCheckpoint: {
+          ...transitionCheckpoint("1"),
+          registryAddress: PROVIDER_FACTORY,
+        },
+      })
+    ).toThrow();
+  });
+
+  it("rejects forged companion ABI data and an out-of-order correction", () => {
+    const registration = structuredClone(event());
+    const firstCompanion = registration.registrationCompanions[0];
+    if (firstCompanion === undefined) throw new Error("fixture");
+    (firstCompanion as unknown as { data: `0x${string}` }).data = "0x00";
+    expect(() =>
+      projectCustomRegistryGen2RecordV4({
+        manifest: manifest(),
+        event: registration,
+        head: head(registration, 1n),
+      })
+    ).toThrow();
+
+    const corrected = correctedTransitionFixture();
+    const outOfOrder = {
+      ...corrected.registryEvent,
+      blockNumber: corrected.finalized.projection.origin.blockNumber,
+      blockHash: corrected.finalized.projection.origin.blockHash,
+      transactionIndex: corrected.finalized.projection.origin.transactionIndex,
+      logIndex: corrected.finalized.projection.origin.logIndex,
+    } as CustomRegistryGen2EventV4;
+    expect(() =>
+      projectCustomRegistryGen2RecordV4({
+        manifest: manifest(),
+        event: outOfOrder,
+        head: head(outOfOrder, 1n),
+        previousProjection: corrected.finalized.projection,
+        transitionCheckpoint: transitionCheckpoint("2"),
+      })
+    ).toThrow();
+  });
+
+  it("rejects every transition after terminal revocation", () => {
+    const corrected = correctedTransitionFixture();
+    const record = revokedRecord(corrected.record);
+    const revocationEvent = revokedEvent(record, corrected.projection);
+    const revoked = projectCustomRegistryGen2RecordV4({
+      manifest: manifest(),
+      event: revocationEvent,
+      head: head(revocationEvent, 1n),
+      previousProjection: corrected.projection,
+      transitionCheckpoint: transitionCheckpoint("3"),
+    });
+    const postRevocation = correctedEvent(
+      correctedRecord("3-post-revocation"),
+      revoked,
+      "5",
+      "3",
+    );
+    expect(() =>
+      projectCustomRegistryGen2RecordV4({
+        manifest: manifest(),
+        event: postRevocation,
+        head: head(postRevocation, 1n),
+        previousProjection: revoked,
+        transitionCheckpoint: transitionCheckpoint("4"),
+      })
+    ).toThrow();
+  });
 
   it("rejects a frozen v3 producer presented as Generation 2", () => {
     const registryEvent = event();
@@ -609,7 +1222,8 @@ describe("Custom Registry record v4 / Generation 2 parity adapter", () => {
       event: registryEvent,
       head: head(registryEvent, 2n),
     });
-    expect(projection.lifecycle.status).toBe("confirmed");
+    expect(projection.registryFinality.status).toBe("confirmed");
+    expect(projection.lifecycle.status).toBe("active");
     expect(projection.rawProducerRecord.partnerFactoryAuthorization).toMatchObject({
       revoked: false,
       factory: PROVIDER_FACTORY,

@@ -3,8 +3,8 @@
   "sourceId": "programmable-custom-launch-registry-v4",
   "producerSchemaVersion": "programmable.custom-launch-registry-record.v4",
   "projectionSchemaVersion": "programmable.custom-launch-projection-record.v4",
-  "projectionDigest": "sha256:a3a5dd73dace05984494c01a7e92d8984e3e9f4bcd3256b7cce5ad0d43277595",
-  "rawRecordHash": "sha256:5e519273e471d6ed4f910e3fc8841bdffb94467a5b6a865acc5e394f467aff1a",
+  "projectionDigest": "sha256:6e2a0df93b2fbc764b631f9fac7b8288e892d33b5ca8167486698233cb87c9b2",
+  "rawRecordHash": "sha256:6f581863290b23305995768520b43fa497d37f25ee297127ce21e122fd0d6de1",
   "rawRecord": {
     "schemaVersion": "programmable.custom-launch-registry-record.v4",
     "platformId": "programmable",
@@ -94,6 +94,7 @@
       "registryEventSetId": "programmable.custom-registry-event-set.v2",
       "registryEventSetBytesSha256": "sha256:0c6c32e0db5eb55b8e0bd148a6206e0c0ab8605cda75338f3a556e75cd3eff1a",
       "feePolicyDomain": "programmable.custom-fee-policy.v2",
+      "registrationOnchainTimestamp": "2026-08-06T10:00:00.000Z",
       "releaseContracts": {
         "registry": {
           "address": "0x5555555555555555555555555555555555555555",
@@ -441,7 +442,7 @@
       "verificationAuthorityHash": "sha256:e7815ed3910965d2ea0f2f291dd2dc02bddd653aeb06806c57f7cde059e5620e"
     },
     "finality": {
-      "status": "finalized",
+      "status": "observed",
       "transactionHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "blockHash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "blockNumber": "21000000",
@@ -449,8 +450,8 @@
       "logIndex": "2",
       "onchainTimestamp": "2026-08-06T10:00:00.000Z",
       "observedAt": "2026-08-06T10:01:00.000Z",
-      "confirmedAt": "2026-08-06T10:02:00.000Z",
-      "finalizedAt": "2026-08-06T10:03:00.000Z",
+      "confirmedAt": null,
+      "finalizedAt": null,
       "orphanedAt": null,
       "finalityEvidenceHash": "sha256:1b17a0443eac3665f5b0af7f2fb9cab2b754a24086df8de34182651cba2120c1",
       "verificationAuthorityHash": "sha256:e7815ed3910965d2ea0f2f291dd2dc02bddd653aeb06806c57f7cde059e5620e"
@@ -482,7 +483,7 @@
       "registeredRecordCommitment": "0x44e704f00fe0c87deeab08bb36ea2a82ba2ecc74c229a54bde20810c8eefe8b3",
       "registrationBindingHash": "0x4e2a9b6e819f9503a0d556407fbc72377b4aafdfe91cb5c4147e64ad226f8869"
     },
-    "envelopeDigest": "sha256:303182d2eb3c6d0c437f4e625cab0649ebbd1ab59aa93f2afbb5964ce1a6e379"
+    "envelopeDigest": "sha256:713c228388fed7be0ae378e487f14c412d8b387b543fdfd38cb4ff6651b6c9bc"
   },
   "projection": {
     "schemaVersion": "programmable.custom-launch-projection-record.v4",
@@ -628,6 +629,7 @@
         "registryEventSetId": "programmable.custom-registry-event-set.v2",
         "registryEventSetBytesSha256": "sha256:0c6c32e0db5eb55b8e0bd148a6206e0c0ab8605cda75338f3a556e75cd3eff1a",
         "feePolicyDomain": "programmable.custom-fee-policy.v2",
+        "registrationOnchainTimestamp": "2026-08-06T10:00:00.000Z",
         "releaseContracts": {
           "registry": {
             "address": "0x5555555555555555555555555555555555555555",
@@ -975,7 +977,7 @@
         "verificationAuthorityHash": "sha256:e7815ed3910965d2ea0f2f291dd2dc02bddd653aeb06806c57f7cde059e5620e"
       },
       "finality": {
-        "status": "finalized",
+        "status": "observed",
         "transactionHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "blockHash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "blockNumber": "21000000",
@@ -983,8 +985,8 @@
         "logIndex": "2",
         "onchainTimestamp": "2026-08-06T10:00:00.000Z",
         "observedAt": "2026-08-06T10:01:00.000Z",
-        "confirmedAt": "2026-08-06T10:02:00.000Z",
-        "finalizedAt": "2026-08-06T10:03:00.000Z",
+        "confirmedAt": null,
+        "finalizedAt": null,
         "orphanedAt": null,
         "finalityEvidenceHash": "sha256:1b17a0443eac3665f5b0af7f2fb9cab2b754a24086df8de34182651cba2120c1",
         "verificationAuthorityHash": "sha256:e7815ed3910965d2ea0f2f291dd2dc02bddd653aeb06806c57f7cde059e5620e"
@@ -1016,12 +1018,12 @@
         "registeredRecordCommitment": "0x44e704f00fe0c87deeab08bb36ea2a82ba2ecc74c229a54bde20810c8eefe8b3",
         "registrationBindingHash": "0x4e2a9b6e819f9503a0d556407fbc72377b4aafdfe91cb5c4147e64ad226f8869"
       },
-      "envelopeDigest": "sha256:303182d2eb3c6d0c437f4e625cab0649ebbd1ab59aa93f2afbb5964ce1a6e379"
+      "envelopeDigest": "sha256:713c228388fed7be0ae378e487f14c412d8b387b543fdfd38cb4ff6651b6c9bc"
     },
     "producerBinding": {
       "schemaVersion": "programmable.custom-launch-registry-record.v4",
-      "envelopeDigest": "sha256:303182d2eb3c6d0c437f4e625cab0649ebbd1ab59aa93f2afbb5964ce1a6e379",
-      "rawRecordHash": "sha256:5e519273e471d6ed4f910e3fc8841bdffb94467a5b6a865acc5e394f467aff1a"
+      "envelopeDigest": "sha256:713c228388fed7be0ae378e487f14c412d8b387b543fdfd38cb4ff6651b6c9bc",
+      "rawRecordHash": "sha256:6f581863290b23305995768520b43fa497d37f25ee297127ce21e122fd0d6de1"
     },
     "origin": {
       "registryGeneration": "2",
@@ -1066,37 +1068,156 @@
           "abiSha256": "sha256:a053f14e59c3c54a0dad47e6e772ba411c7659a46eab3313a6c124260ebcff1f"
         }
       },
+      "authorizedWriters": {
+        "finalizers": [
+          "0x8888888888888888888888888888888888888888"
+        ],
+        "correctors": [
+          "0x8888888888888888888888888888888888888888"
+        ],
+        "revokers": [
+          "0x8888888888888888888888888888888888888888"
+        ]
+      },
+      "registrationOnchainTimestamp": "2026-08-06T10:00:00.000Z",
       "operation": "registered",
       "registryWriter": "0x3333333333333333333333333333333333333333",
       "eventTopic0": "0x8ee074138114415a92a0797b4f1f4c6353f8bd15d8031433abf0cc42c2dc274a",
+      "eventIndexedTopics": [
+        "0x3f3563a08c039d5e16f01ce4065d2cf5f0158d88ac1014ad83d91caa894f5905",
+        "0x2d746306dd036d49830e246979fb9aa93f6cc20572b90af6ad83f6b282b4dbf3",
+        "0x0000000000000000000000002222222222222222222222222222222222222222"
+      ],
+      "eventData": "0x0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000027cb5999f8d7ef6d31d7067b523a9c3ee04b977b6a4621ea5aa89c28d2a676881ebb7f67508d7412245970468f7af6a2920d2f9e864913d0e5f07f9af895c94e000000000000000000000000011111111111111111111111111111111111111114e2a9b6e819f9503a0d556407fbc72377b4aafdfe91cb5c4147e64ad226f886944e704f00fe0c87deeab08bb36ea2a82ba2ecc74c229a54bde20810c8eefe8b30000000000000000000000000000000000000000000000000000000001406f40",
       "transactionIndex": 1,
       "logIndex": 2,
       "registrationCompanions": [
         {
+          "indexedTopics": [
+            "0x3f3563a08c039d5e16f01ce4065d2cf5f0158d88ac1014ad83d91caa894f5905",
+            "0xcbed0cb7814d275e0344dd225ad56d28c6e205f0abc47d4f9a97ad35bac0e3b0",
+            "0x232613fd0baa1403fe55e9eb9191aaa98a7bdb00b2d0a0f795a26d56b532160d"
+          ],
+          "data": "0xeaba72360c3439591f2ce33322277a79a5e8da228b83416bf2fc9289e7cf5e4f5459fe1b406791bfb6e30d9b3eddefca8769059bde0ff1e06b9680574653f1ccd9cc35a36f5a50dcc9745efc092e53d43b98a1a49f890d77b4fbfbd3bf84225194c2dd186dfb31a9dd326d14be268ec944f279e581dc9476a1cbd1449098b1b480be7e3666bc3f0f22c67154d84135c7228a8ac41f81c02b11a249d179363cb0fd7b2ae61e7320ee4e95513f63e1610896954a6dd787a9094a0dfb4f2bb6a06fdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
           "kind": "provenance",
-          "topic0": "0x9593acf43b1c8e03c6742d49b67008f3c05841d3cfa43389d12f98e8b9c66cb9"
+          "emitterRole": "registry",
+          "emitterAddress": "0x5555555555555555555555555555555555555555",
+          "observedRuntimeCodeHash": "0x7777777777777777777777777777777777777777777777777777777777777777",
+          "topic0": "0x9593acf43b1c8e03c6742d49b67008f3c05841d3cfa43389d12f98e8b9c66cb9",
+          "transactionHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "blockNumber": "21000000",
+          "blockHash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "transactionIndex": 1,
+          "logIndex": 3
         },
         {
+          "indexedTopics": [
+            "0x3f3563a08c039d5e16f01ce4065d2cf5f0158d88ac1014ad83d91caa894f5905",
+            "0x58d650535f56900958008193cde2c528517f6bbb347efdd8e7348d344d2ed9da",
+            "0x884e3926ac6e925757fbfb6e7c453b6247a8df52727275288d74305778550f33"
+          ],
+          "data": "0xf85d63a8e74fa6ae993efb9f16c7287e2d1bee59ce81589339dc0f80bd54c6400ebb91f162398813221b54c44027acbff13d4b537beb3a080f07ae774bc89eb0caeea10a7f8f14df037d8bacda387eef8568cb79e59e212ffa4ea86d7aa992867da8558a35d1dce2ff206ae9bd34443f5e281456a15093f1961f11e5c935b45f34614efb871a4e17a8478a7672ac83a4227ee11073919fbc97bc5ff437dafada",
           "kind": "review",
-          "topic0": "0xb5db50dfea0e7ff29b1ddee247a008e857b05d2b4bc2b780de5717b7f1881b63"
+          "emitterRole": "registry",
+          "emitterAddress": "0x5555555555555555555555555555555555555555",
+          "observedRuntimeCodeHash": "0x7777777777777777777777777777777777777777777777777777777777777777",
+          "topic0": "0xb5db50dfea0e7ff29b1ddee247a008e857b05d2b4bc2b780de5717b7f1881b63",
+          "transactionHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "blockNumber": "21000000",
+          "blockHash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "transactionIndex": 1,
+          "logIndex": 4
         },
         {
+          "indexedTopics": [
+            "0x3f3563a08c039d5e16f01ce4065d2cf5f0158d88ac1014ad83d91caa894f5905",
+            "0x98874f5410dab99a0ad5948c1492926f9084313fa355ff515b1dd70332212283",
+            "0x0000000000000000000000000000000000000000000000000000000000000000"
+          ],
+          "data": "0x107c8621f1908b82d4cb769d2e45d4e7b7c23f48992051f5568d8222fb94457200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000dc94b3b4a63d39ecdb0ea0cb4a02a2b4cb1e193b08fa8f4ba29df32348aee6988c1d94c9a4ea9746589337e1277feeef12c89429d1783c7f3e52cb500c42667c63cb8be585bd23f7497449209ce096c1ee216589af619e8db03da859059fb6adb47b5e84e1e26ed2045282486b5cbf7dfc399c71b7e16f8ace7afbb7d1554cac000000000000000000000000000000000000000000000000000000000000000094c2dd186dfb31a9dd326d14be268ec944f279e581dc9476a1cbd1449098b1b4958b7211f3649795f23a5bcf477832e9aa2f309288bec7c264038f0d9bfcb95f5a0312635f50de085c2ea99b4402504ae9e138d61cfa8d382fff4cf059dea519",
           "kind": "attribution",
-          "topic0": "0x3608f2041bbe91aa3792101210bc2e29c23543fb4e0206daa2b1a99e7235c182"
+          "emitterRole": "registry",
+          "emitterAddress": "0x5555555555555555555555555555555555555555",
+          "observedRuntimeCodeHash": "0x7777777777777777777777777777777777777777777777777777777777777777",
+          "topic0": "0x3608f2041bbe91aa3792101210bc2e29c23543fb4e0206daa2b1a99e7235c182",
+          "transactionHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "blockNumber": "21000000",
+          "blockHash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "transactionIndex": 1,
+          "logIndex": 5
         },
         {
+          "indexedTopics": [
+            "0x3f3563a08c039d5e16f01ce4065d2cf5f0158d88ac1014ad83d91caa894f5905",
+            "0x7da8558a35d1dce2ff206ae9bd34443f5e281456a15093f1961f11e5c935b45f",
+            "0x0000000000000000000000000000000000000000000000000000000000000000"
+          ],
+          "data": "0x0000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
           "kind": "feePolicy",
-          "topic0": "0xb889df8572071d751e87d3e2a46c54093a55a9bc5a4697440cd29c90255dc5bf"
+          "emitterRole": "registry",
+          "emitterAddress": "0x5555555555555555555555555555555555555555",
+          "observedRuntimeCodeHash": "0x7777777777777777777777777777777777777777777777777777777777777777",
+          "topic0": "0xb889df8572071d751e87d3e2a46c54093a55a9bc5a4697440cd29c90255dc5bf",
+          "transactionHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "blockNumber": "21000000",
+          "blockHash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "transactionIndex": 1,
+          "logIndex": 6
         },
         {
+          "indexedTopics": [
+            "0x3f3563a08c039d5e16f01ce4065d2cf5f0158d88ac1014ad83d91caa894f5905",
+            "0x7da8558a35d1dce2ff206ae9bd34443f5e281456a15093f1961f11e5c935b45f",
+            "0x4117521495403a383ef4fabed1008759ce67b4943d080a4d42039b32d4a80078"
+          ],
+          "data": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
           "kind": "feeScope",
-          "topic0": "0xfb69ef55bd117e822ea39d795bd1506dc489a1ce2c1ccd3ad4c781ef04598336"
+          "emitterRole": "registry",
+          "emitterAddress": "0x5555555555555555555555555555555555555555",
+          "observedRuntimeCodeHash": "0x7777777777777777777777777777777777777777777777777777777777777777",
+          "topic0": "0xfb69ef55bd117e822ea39d795bd1506dc489a1ce2c1ccd3ad4c781ef04598336",
+          "transactionHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "blockNumber": "21000000",
+          "blockHash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "transactionIndex": 1,
+          "logIndex": 7
         },
         {
+          "indexedTopics": [
+            "0x3f3563a08c039d5e16f01ce4065d2cf5f0158d88ac1014ad83d91caa894f5905",
+            "0x7da8558a35d1dce2ff206ae9bd34443f5e281456a15093f1961f11e5c935b45f",
+            "0xa20356c38e732dd76863c36113d2dc9b95f31e02fc06128c3bed5289f335a733"
+          ],
+          "data": "0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003f436e7dad12dc9167ceab3555d3ab07a11c78692d1e0b370100b978d5823a40f9e9f4da3ddb0aff13df9a6d5f6f78fb387f62e84850e7ead7a4010d246d2d60",
           "kind": "feeEvidence",
-          "topic0": "0xe647c474a92f722808930d32d310f47d0e3a4faf393255e0dea4b272588babb0"
+          "emitterRole": "registry",
+          "emitterAddress": "0x5555555555555555555555555555555555555555",
+          "observedRuntimeCodeHash": "0x7777777777777777777777777777777777777777777777777777777777777777",
+          "topic0": "0xe647c474a92f722808930d32d310f47d0e3a4faf393255e0dea4b272588babb0",
+          "transactionHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "blockNumber": "21000000",
+          "blockHash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "transactionIndex": 1,
+          "logIndex": 8
         }
       ],
+      "eventPayload": {
+        "kind": "registered",
+        "registrationSequence": "1",
+        "chainId": "1",
+        "registryGeneration": "2",
+        "approvalId": "0x7cb5999f8d7ef6d31d7067b523a9c3ee04b977b6a4621ea5aa89c28d2a676881",
+        "deploymentId": "0xebb7f67508d7412245970468f7af6a2920d2f9e864913d0e5f07f9af895c94e0",
+        "primaryContract": "0x2222222222222222222222222222222222222222",
+        "launchWallet": "0x1111111111111111111111111111111111111111",
+        "identityHash": "0x4e2a9b6e819f9503a0d556407fbc72377b4aafdfe91cb5c4147e64ad226f8869",
+        "registeredRecordCommitment": "0x44e704f00fe0c87deeab08bb36ea2a82ba2ecc74c229a54bde20810c8eefe8b3",
+        "observedAtBlock": "21000000"
+      },
+      "latestRecordRevision": "1",
+      "latestRecordHash": "0x44e704f00fe0c87deeab08bb36ea2a82ba2ecc74c229a54bde20810c8eefe8b3",
+      "transitionSequence": null,
+      "transitionCheckpoint": null,
       "transactionHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "blockNumber": "21000000",
       "blockHash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -1104,13 +1225,28 @@
     },
     "registryFinality": {
       "status": "observed",
+      "transactionHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "blockHash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "blockNumber": "21000000",
+      "transactionIndex": "1",
+      "logIndex": "2",
+      "onchainTimestamp": "2026-08-06T10:00:00.000Z",
+      "observedAt": "2026-08-06T10:01:00.000Z",
+      "confirmedAt": null,
+      "finalizedAt": null,
+      "orphanedAt": null,
+      "finalityEvidenceHash": "sha256:1b17a0443eac3665f5b0af7f2fb9cab2b754a24086df8de34182651cba2120c1",
+      "verificationAuthorityHash": "sha256:e7815ed3910965d2ea0f2f291dd2dc02bddd653aeb06806c57f7cde059e5620e",
       "canonicalHeadBlock": "21000000",
-      "canonicalHeadHash": "0xa5273732c9599e33b75307cb3b300824dc763d9c8ebd81f91b0bac606b0408f8",
-      "observedAt": "2026-08-07T08:00:00.000Z"
+      "canonicalHeadHash": "0xa5273732c9599e33b75307cb3b300824dc763d9c8ebd81f91b0bac606b0408f8"
     },
     "lifecycle": {
-      "status": "observed",
-      "registryGeneration": "2"
+      "status": "active",
+      "registryGeneration": "2",
+      "registeredAt": "2026-08-06T10:01:00.000Z",
+      "supersededBy": null,
+      "revokedAt": null,
+      "revocationEvidenceHash": null
     },
     "publicProjection": {
       "platformId": "programmable",
@@ -1303,7 +1439,7 @@
         "postLaunchAuthorityInventoryHash": "sha256:958b7211f3649795f23a5bcf477832e9aa2f309288bec7c264038f0d9bfcb95f"
       },
       "finality": {
-        "status": "finalized",
+        "status": "observed",
         "transactionHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "blockHash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "blockNumber": "21000000",
@@ -1311,11 +1447,13 @@
         "logIndex": "2",
         "onchainTimestamp": "2026-08-06T10:00:00.000Z",
         "observedAt": "2026-08-06T10:01:00.000Z",
-        "confirmedAt": "2026-08-06T10:02:00.000Z",
-        "finalizedAt": "2026-08-06T10:03:00.000Z",
+        "confirmedAt": null,
+        "finalizedAt": null,
         "orphanedAt": null,
         "finalityEvidenceHash": "sha256:1b17a0443eac3665f5b0af7f2fb9cab2b754a24086df8de34182651cba2120c1",
-        "verificationAuthorityHash": "sha256:e7815ed3910965d2ea0f2f291dd2dc02bddd653aeb06806c57f7cde059e5620e"
+        "verificationAuthorityHash": "sha256:e7815ed3910965d2ea0f2f291dd2dc02bddd653aeb06806c57f7cde059e5620e",
+        "canonicalHeadBlock": "21000000",
+        "canonicalHeadHash": "0xa5273732c9599e33b75307cb3b300824dc763d9c8ebd81f91b0bac606b0408f8"
       },
       "lifecycle": {
         "status": "active",

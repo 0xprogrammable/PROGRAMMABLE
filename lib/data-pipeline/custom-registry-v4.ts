@@ -279,6 +279,7 @@ export type CustomLaunchRegistryProducerRecordV4 = Readonly<
         registryEventSetBytesSha256:
           typeof CUSTOM_REGISTRY_GEN2_EVENT_SET_BYTES_SHA256;
         feePolicyDomain: typeof CUSTOM_REGISTRY_GEN2_FEE_POLICY_DOMAIN;
+        registrationOnchainTimestamp: string;
         releaseContracts: CustomRegistryGen2ReleaseContractsV4;
         eventBindings: typeof CUSTOM_REGISTRY_GEN2_EVENT_BINDINGS;
       }>;
@@ -311,10 +312,92 @@ export type CustomRegistryGen2ProjectionManifestV4 = Readonly<{
   topics: typeof CUSTOM_REGISTRY_GEN2_TOPICS;
   eventBindings: typeof CUSTOM_REGISTRY_GEN2_EVENT_BINDINGS;
   contracts: CustomRegistryGen2ReleaseContractsV4;
+  authorizedWriters: Readonly<{
+    finalizers: readonly HexAddress[];
+    correctors: readonly HexAddress[];
+    revokers: readonly HexAddress[];
+  }>;
 }>;
 
-export type CustomRegistryGen2EventV4 = Readonly<{
-  operation: "registered" | "finalized" | "revoked";
+export type CustomRegistryGen2RegistrationCompanionV4 = Readonly<{
+  kind:
+    | "provenance"
+    | "review"
+    | "attribution"
+    | "feePolicy"
+    | "feeScope"
+    | "feeEvidence";
+  emitterRole: "registry";
+  emitterAddress: HexAddress;
+  observedRuntimeCodeHash: HexBytes32;
+  topic0: HexBytes32;
+  indexedTopics: readonly HexBytes32[];
+  data: `0x${string}`;
+  transactionHash: HexBytes32;
+  blockNumber: string;
+  blockHash: HexBytes32;
+  transactionIndex: number;
+  logIndex: number;
+}>;
+
+export type CustomRegistryGen2RegisteredPayloadV4 = Readonly<{
+  kind: "registered";
+  registrationSequence: string;
+  chainId: string;
+  registryGeneration: "2";
+  approvalId: HexBytes32;
+  deploymentId: HexBytes32;
+  primaryContract: HexAddress;
+  launchWallet: HexAddress;
+  identityHash: HexBytes32;
+  registeredRecordCommitment: HexBytes32;
+  observedAtBlock: string;
+}>;
+
+export type CustomRegistryGen2FinalizedPayloadV4 = Readonly<{
+  kind: "finalized";
+  observedTransactionHash: HexBytes32;
+  finalityEvidenceHash: HexBytes32;
+  transitionSequence: string;
+  observedBlockNumber: string;
+  observedBlockHash: HexBytes32;
+  observedTransactionIndex: number;
+  observedLogIndex: number;
+  confirmedHeadBlockNumber: string;
+  confirmedHeadBlockHash: HexBytes32;
+  finalityPolicyHash: HexBytes32;
+  finalizedAtBlock: string;
+  finalizedAtTimestamp: string;
+}>;
+
+export type CustomRegistryGen2CorrectedPayloadV4 = Readonly<{
+  kind: "corrected";
+  revision: string;
+  correctedRecordHash: HexBytes32;
+  transitionSequence: string;
+  previousRecordHash: HexBytes32;
+  reasonCode: HexBytes32;
+  evidenceHash: HexBytes32;
+}>;
+
+export type CustomRegistryGen2RevokedPayloadV4 = Readonly<{
+  kind: "revoked";
+  reasonCode: HexBytes32;
+  evidenceHash: HexBytes32;
+  transitionSequence: string;
+  latestRecordRevision: string;
+  latestRecordHash: HexBytes32;
+  revokedAtBlock: string;
+  revokedAtTimestamp: string;
+}>;
+
+export type CustomRegistryGen2AbiEventPayloadV4 =
+  | CustomRegistryGen2RegisteredPayloadV4
+  | CustomRegistryGen2FinalizedPayloadV4
+  | CustomRegistryGen2CorrectedPayloadV4
+  | CustomRegistryGen2RevokedPayloadV4;
+
+type CustomRegistryGen2EventCommonV4 = Readonly<{
   chainId: string;
   caip2: string;
   registryGeneration: "2";
@@ -324,16 +407,8 @@ export type CustomRegistryGen2EventV4 = Readonly<{
   emitterRole: "registry";
   emitterAddress: HexAddress;
   topic0: HexBytes32;
-  registrationCompanions: readonly Readonly<{
-    kind:
-      | "provenance"
-      | "review"
-      | "attribution"
-      | "feePolicy"
-      | "feeScope"
-      | "feeEvidence";
-    topic0: HexBytes32;
-  }>[];
+  indexedTopics: readonly HexBytes32[];
+  data: `0x${string}`;
   transactionHash: HexBytes32;
   blockNumber: string;
   blockHash: HexBytes32;
@@ -349,12 +424,73 @@ export type CustomRegistryGen2EventV4 = Readonly<{
   producerRecord: CustomLaunchRegistryProducerRecordV4;
 }>;
 
+export type CustomRegistryGen2EventV4 =
+  CustomRegistryGen2EventCommonV4 &
+  (
+    | Readonly<{
+        operation: "registered";
+        registrationCompanions:
+          readonly CustomRegistryGen2RegistrationCompanionV4[];
+        eventPayload: CustomRegistryGen2RegisteredPayloadV4;
+      }>
+    | Readonly<{
+        operation: "finalized";
+        registrationCompanions: readonly [];
+        eventPayload: CustomRegistryGen2FinalizedPayloadV4;
+      }>
+    | Readonly<{
+        operation: "corrected";
+        registrationCompanions: readonly [];
+        eventPayload: CustomRegistryGen2CorrectedPayloadV4;
+      }>
+    | Readonly<{
+        operation: "revoked";
+        registrationCompanions: readonly [];
+        eventPayload: CustomRegistryGen2RevokedPayloadV4;
+      }>
+  );
+
 export type CanonicalHeadV4 = Readonly<{
   chainId: string;
   blockNumber: string;
   blockHash: HexBytes32;
   observedAt: string;
   canonicalBlockHash(blockNumber: string): HexBytes32 | null;
+}>;
+
+export type CustomRegistryGen2TransitionCheckpointV4 = Readonly<{
+  chainId: string;
+  caip2: string;
+  registryGeneration: "2";
+  registryAddress: HexAddress;
+  lastTransitionSequence: string;
+}>;
+
+export type CustomRegistryGen2FinalityProjectionV4 = Readonly<{
+  status: "observed" | "confirmed" | "finalized" | "orphaned";
+  transactionHash: HexBytes32;
+  blockHash: HexBytes32;
+  blockNumber: string;
+  transactionIndex: string;
+  logIndex: string;
+  onchainTimestamp: string;
+  observedAt: string;
+  confirmedAt: string | null;
+  finalizedAt: string | null;
+  orphanedAt: string | null;
+  finalityEvidenceHash: Sha256Digest;
+  verificationAuthorityHash: Sha256Digest;
+  canonicalHeadBlock: string;
+  canonicalHeadHash: HexBytes32;
+}>;
+
+export type CustomRegistryGen2LifecycleProjectionV4 = Readonly<{
+  status: "active" | "superseded" | "revoked" | "orphaned";
+  registryGeneration: "2";
+  registeredAt: string;
+  supersededBy: Sha256Digest | null;
+  revokedAt: string | null;
+  revocationEvidenceHash: Sha256Digest | null;
 }>;
 
 export type CustomRegistryGen2ParityProjectionV4 = Readonly<{
@@ -390,27 +526,28 @@ export type CustomRegistryGen2ParityProjectionV4 = Readonly<{
       typeof CUSTOM_REGISTRY_GEN2_EVENT_SET_BYTES_SHA256;
     feePolicyDomain: typeof CUSTOM_REGISTRY_GEN2_FEE_POLICY_DOMAIN;
     releaseContracts: CustomRegistryGen2ReleaseContractsV4;
+    authorizedWriters: CustomRegistryGen2ProjectionManifestV4["authorizedWriters"];
+    registrationOnchainTimestamp: string;
     operation: CustomRegistryGen2EventV4["operation"];
     registryWriter: HexAddress;
     eventTopic0: HexBytes32;
+    eventIndexedTopics: readonly HexBytes32[];
+    eventData: `0x${string}`;
     transactionIndex: number;
     logIndex: number;
     registrationCompanions: CustomRegistryGen2EventV4["registrationCompanions"];
+    eventPayload: CustomRegistryGen2AbiEventPayloadV4;
+    latestRecordRevision: string;
+    latestRecordHash: HexBytes32;
+    transitionSequence: string | null;
+    transitionCheckpoint: CustomRegistryGen2TransitionCheckpointV4 | null;
     transactionHash: HexBytes32;
     blockNumber: string;
     blockHash: HexBytes32;
     onchainTimestamp: string;
   }>;
-  registryFinality: Readonly<{
-    status: "observed" | "confirmed" | "finalized" | "orphaned";
-    canonicalHeadBlock: string;
-    canonicalHeadHash: HexBytes32;
-    observedAt: string;
-  }>;
-  lifecycle: Readonly<{
-    status: "observed" | "confirmed" | "finalized" | "orphaned" | "revoked";
-    registryGeneration: "2";
-  }>;
+  registryFinality: CustomRegistryGen2FinalityProjectionV4;
+  lifecycle: CustomRegistryGen2LifecycleProjectionV4;
   publicProjection: Readonly<{
     platformId: "programmable";
     category: "custom";
@@ -436,8 +573,8 @@ export type CustomRegistryGen2ParityProjectionV4 = Readonly<{
     verifiedReview: CustomLaunchRegistryProducerRecordV4["verifiedReview"];
     postLaunchAuthorityInventory:
       CustomLaunchRegistryProducerRecordV4["postLaunchAuthorityInventory"];
-    finality: CustomLaunchRegistryProducerRecordV4["finality"];
-    lifecycle: CustomLaunchRegistryProducerRecordV4["lifecycle"];
+    finality: CustomRegistryGen2FinalityProjectionV4;
+    lifecycle: CustomRegistryGen2LifecycleProjectionV4;
     presentationVersion: string | null;
     presentationBindingHash: Sha256Digest | null;
     presentation: CustomLaunchRegistryProducerRecordV4["presentation"];
@@ -496,6 +633,27 @@ function decimal(value: unknown, operation: string, positive = false): string {
 function index(value: unknown, operation: string): number {
   if (!Number.isSafeInteger(value) || Number(value) < 0) return fail(operation);
   return Number(value);
+}
+
+function instant(value: unknown, operation: string): string {
+  if (typeof value !== "string" || value.length > 128) return fail(operation);
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.valueOf()) || parsed.toISOString() !== value) {
+    return fail(operation);
+  }
+  return value;
+}
+
+function timestampSecondsAsInstant(value: unknown, operation: string): string {
+  const seconds = BigInt(decimal(value, operation));
+  if (seconds > BigInt(Math.floor(Number.MAX_SAFE_INTEGER / 1_000))) {
+    return fail(operation);
+  }
+  return new Date(Number(seconds) * 1_000).toISOString();
+}
+
+function digestFromRawBytes32(value: HexBytes32): Sha256Digest {
+  return `sha256:${value.slice(2)}`;
 }
 
 function canonicalJson(value: unknown): string {
@@ -808,6 +966,246 @@ export function customRegistryPartnerConfigurationHashV2(
   );
 }
 
+function abiData(parameters: string, values: readonly unknown[]): `0x${string}` {
+  return encodeAbiParameters(
+    parseAbiParameters(parameters),
+    values as never,
+  ) as `0x${string}`;
+}
+
+function uint64Topic(value: string): HexBytes32 {
+  return abiData("uint64 value", [BigInt(value)]) as HexBytes32;
+}
+
+export function customRegistryGen2AbiEventProofV4(input: Readonly<{
+  registryLaunchIdRaw: HexBytes32;
+  registryProjectIdRaw: HexBytes32;
+  payload: CustomRegistryGen2AbiEventPayloadV4;
+}>): Readonly<{
+  indexedTopics: readonly HexBytes32[];
+  data: `0x${string}`;
+}> {
+  const payload = input.payload;
+  if (payload.kind === "registered") {
+    return Object.freeze({
+      indexedTopics: Object.freeze([
+        input.registryLaunchIdRaw,
+        input.registryProjectIdRaw,
+        addressWord(payload.primaryContract),
+      ]),
+      data: abiData(
+        "uint64 registrationSequence, uint256 chainId, uint64 registryGeneration, bytes32 approvalId, bytes32 deploymentId, address launchWallet, bytes32 identityHash, bytes32 registeredRecordCommitment, uint64 observedAtBlock",
+        [
+          BigInt(payload.registrationSequence),
+          BigInt(payload.chainId),
+          BigInt(payload.registryGeneration),
+          payload.approvalId,
+          payload.deploymentId,
+          payload.launchWallet,
+          payload.identityHash,
+          payload.registeredRecordCommitment,
+          BigInt(payload.observedAtBlock),
+        ],
+      ),
+    });
+  }
+  if (payload.kind === "finalized") {
+    return Object.freeze({
+      indexedTopics: Object.freeze([
+        input.registryLaunchIdRaw,
+        payload.observedTransactionHash,
+        payload.finalityEvidenceHash,
+      ]),
+      data: abiData(
+        "uint64 transitionSequence, uint64 observedBlockNumber, bytes32 observedBlockHash, uint32 observedTransactionIndex, uint32 observedLogIndex, uint64 confirmedHeadBlockNumber, bytes32 confirmedHeadBlockHash, bytes32 finalityPolicyHash, uint64 finalizedAtBlock, uint64 finalizedAtTimestamp",
+        [
+          BigInt(payload.transitionSequence),
+          BigInt(payload.observedBlockNumber),
+          payload.observedBlockHash,
+          payload.observedTransactionIndex,
+          payload.observedLogIndex,
+          BigInt(payload.confirmedHeadBlockNumber),
+          payload.confirmedHeadBlockHash,
+          payload.finalityPolicyHash,
+          BigInt(payload.finalizedAtBlock),
+          BigInt(payload.finalizedAtTimestamp),
+        ],
+      ),
+    });
+  }
+  if (payload.kind === "corrected") {
+    return Object.freeze({
+      indexedTopics: Object.freeze([
+        input.registryLaunchIdRaw,
+        uint64Topic(payload.revision),
+        payload.correctedRecordHash,
+      ]),
+      data: abiData(
+        "uint64 transitionSequence, bytes32 previousRecordHash, bytes32 reasonCode, bytes32 evidenceHash",
+        [
+          BigInt(payload.transitionSequence),
+          payload.previousRecordHash,
+          payload.reasonCode,
+          payload.evidenceHash,
+        ],
+      ),
+    });
+  }
+  return Object.freeze({
+    indexedTopics: Object.freeze([
+      input.registryLaunchIdRaw,
+      payload.reasonCode,
+      payload.evidenceHash,
+    ]),
+    data: abiData(
+      "uint64 transitionSequence, uint64 latestRecordRevision, bytes32 latestRecordHash, uint64 revokedAtBlock, uint64 revokedAtTimestamp",
+      [
+        BigInt(payload.transitionSequence),
+        BigInt(payload.latestRecordRevision),
+        payload.latestRecordHash,
+        BigInt(payload.revokedAtBlock),
+        BigInt(payload.revokedAtTimestamp),
+      ],
+    ),
+  });
+}
+
+export function customRegistryGen2CompanionAbiProofV4(
+  kind: CustomRegistryGen2RegistrationCompanionV4["kind"],
+  producer: CustomLaunchRegistryProducerRecordV4,
+): Readonly<{
+  indexedTopics: readonly HexBytes32[];
+  data: `0x${string}`;
+}> {
+  const preimage = producer.registeredRecordPreimage;
+  const fee = producer.onchainFeePolicy;
+  if (kind === "provenance") {
+    return Object.freeze({
+      indexedTopics: Object.freeze([
+        preimage.launchId,
+        preimage.repositoryId,
+        preimage.commitId,
+      ]),
+      data: abiData(
+        "bytes32 sourceCommitment, bytes32 buildCommitment, bytes32 artifactSetHash, bytes32 deploymentConfigurationHash, bytes32 deploymentSetHash, bytes32 runtimeCodeSetHash, bytes32 primaryRuntimeCodeHash",
+        [
+          preimage.sourceCommitment,
+          preimage.buildCommitment,
+          preimage.artifactSetHash,
+          preimage.deploymentConfigurationHash,
+          preimage.deploymentSetHash,
+          preimage.runtimeCodeSetHash,
+          preimage.primaryRuntimeCodeHash,
+        ],
+      ),
+    });
+  }
+  if (kind === "review") {
+    return Object.freeze({
+      indexedTopics: Object.freeze([
+        preimage.launchId,
+        preimage.approvalBindingHash,
+        preimage.securityReviewHash,
+      ]),
+      data: abiData(
+        "bytes32 reviewPolicyHash, bytes32 reviewResultId, bytes32 reviewDeploymentBindingHash, bytes32 feePolicyHash, bytes32 finalityPolicyHash",
+        [
+          preimage.reviewPolicyHash,
+          preimage.reviewResultId,
+          preimage.reviewDeploymentBindingHash,
+          preimage.feePolicyHash,
+          preimage.finalityPolicyHash,
+        ],
+      ),
+    });
+  }
+  if (kind === "attribution") {
+    return Object.freeze({
+      indexedTopics: Object.freeze([
+        preimage.launchId,
+        preimage.modelId,
+        preimage.templateId,
+      ]),
+      data: abiData(
+        "bytes32 modelVersion, bytes32 templateVersion, bytes32 providerId, bytes32 builderAttributionHash, bytes32 originHash, bytes32 assetSetHash, bytes32 marketSetHash, bytes32 marketPathId, bytes32 configurationHash, bytes32 permissionsHash, bytes32 capabilitySetHash",
+        [
+          preimage.modelVersion,
+          preimage.templateVersion,
+          preimage.providerId,
+          preimage.builderAttributionHash,
+          preimage.originHash,
+          preimage.assetSetHash,
+          preimage.marketSetHash,
+          preimage.marketPathId,
+          preimage.configurationHash,
+          preimage.permissionsHash,
+          preimage.capabilitySetHash,
+        ],
+      ),
+    });
+  }
+  if (kind === "feePolicy") {
+    return Object.freeze({
+      indexedTopics: Object.freeze([
+        preimage.launchId,
+        preimage.feePolicyHash,
+        fee.providerId,
+      ]),
+      data: abiData(
+        "uint8 kind, uint16 totalFeeBps, uint16 nativeCustomFeeBps, uint16 partnerShareBps, uint16 programmableShareBps, address partnerRecipient, address programmableRecipient",
+        [
+          fee.kind,
+          fee.totalFeeBps,
+          fee.nativeCustomFeeBps,
+          fee.partner.shareBps,
+          fee.programmable.shareBps,
+          fee.partner.recipient,
+          fee.programmable.recipient,
+        ],
+      ),
+    });
+  }
+  if (kind === "feeScope") {
+    return Object.freeze({
+      indexedTopics: Object.freeze([
+        preimage.launchId,
+        preimage.feePolicyHash,
+        fee.publicPolicyBindingHash,
+      ]),
+      data: abiData(
+        "bytes32 modelId, bytes32 modelVersion, bytes32 templateId, bytes32 templateVersion, bytes32 marketPathId",
+        [
+          fee.modelId,
+          fee.modelVersion,
+          fee.templateId,
+          fee.templateVersion,
+          fee.marketPathId,
+        ],
+      ),
+    });
+  }
+  return Object.freeze({
+    indexedTopics: Object.freeze([
+      preimage.launchId,
+      preimage.feePolicyHash,
+      fee.verificationEvidenceHash,
+    ]),
+    data: abiData(
+      "address currency, bytes32 chargeModeId, bytes32 basisId, bytes32 roundingId, bytes32 partnerAccrualId, bytes32 programmableAccrualId, bytes32 claimIsolationEvidenceHash, bytes32 accountingSafetyEvidenceHash",
+      [
+        fee.programmable.currency,
+        fee.programmable.chargeModeId,
+        fee.programmable.basisId,
+        fee.programmable.roundingId,
+        fee.partner.accrualId,
+        fee.programmable.accrualId,
+        fee.claimIsolationEvidenceHash,
+        fee.accountingSafetyEvidenceHash,
+      ],
+    ),
+  });
+}
+
 export function customRegistryProducerEnvelopeDigestV4(
   value: Omit<CustomLaunchRegistryProducerRecordV4, "schemaVersion" | "envelopeDigest">,
 ): Sha256Digest {
@@ -857,6 +1255,7 @@ function validateUnchangedV3Shape(value: CustomLaunchRegistryProducerRecordV4): 
   delete origin.registryEventSetId;
   delete origin.registryEventSetBytesSha256;
   delete origin.feePolicyDomain;
+  delete origin.registrationOnchainTimestamp;
   delete origin.releaseContracts;
   delete origin.eventBindings;
   if (!validateFrozenV3Shape(candidate)) {
@@ -921,6 +1320,14 @@ function validateManifest(
     contractAddresses.add(address(contract.address, `custom-registry-v4-${role}-address`));
     bytes32(contract.runtimeCodeHash, `custom-registry-v4-${role}-runtime`);
     decimal(contract.startBlock, `custom-registry-v4-${role}-start`);
+  }
+  for (const [role, writers] of Object.entries(value.authorizedWriters)) {
+    if (writers.length === 0 || new Set(writers).size !== writers.length) {
+      return fail(`custom-registry-v4-${role}-writers`);
+    }
+    for (const writer of writers) {
+      address(writer, `custom-registry-v4-${role}-writer`);
+    }
   }
   const confirmationDepth = BigInt(
     decimal(value.confirmationDepth, "custom-registry-v4-confirmation", true),
@@ -1024,14 +1431,15 @@ function validateProviderOrAtomicProof(
     if (
       producer.partnerFactoryAuthorization !== null ||
       proof === null ||
-      event.registryWriter !== contract.address ||
+      (event.operation === "registered" &&
+        event.registryWriter !== contract.address) ||
       proof.emitterRole !== "atomicRegistrar" ||
       proof.emitterAddress !== contract.address ||
       proof.observedRuntimeCodeHash !== contract.runtimeCodeHash ||
       proof.topic0 !== manifest.topics.atomicExecuted ||
-      proof.transactionHash !== event.transactionHash ||
-      proof.blockNumber !== event.blockNumber ||
-      proof.blockHash !== event.blockHash ||
+      proof.transactionHash !== producer.registryOrigin.registrationTransactionHash ||
+      proof.blockNumber !== producer.registryOrigin.registrationBlockNumber ||
+      proof.blockHash !== producer.registryOrigin.registrationBlockHash ||
       proof.launchId !== event.registryLaunchIdRaw ||
       proof.deployed !== preimage.primaryContract ||
       proof.registeredRecordCommitment !== producer.registeredRecordCommitment ||
@@ -1047,19 +1455,20 @@ function validateProviderOrAtomicProof(
     return fail("custom-registry-v4-partner-factory-proof");
   }
   const partnerRegistry = manifest.contracts.partnerFactoryRegistry;
+  const registrationBlock = producer.registryOrigin.registrationBlockNumber;
   validateEvidenceEmitter(
     authorization.authorizedEvent,
     partnerRegistry,
     "partnerFactoryRegistry",
     manifest.topics.partnerFactoryAuthorized,
-    event.blockNumber,
+    registrationBlock,
   );
   validateEvidenceEmitter(
     authorization.sourceBoundEvent,
     partnerRegistry,
     "partnerFactoryRegistry",
     manifest.topics.partnerFactorySourceBound,
-    event.blockNumber,
+    registrationBlock,
   );
   const authorizedEvent = authorization.authorizedEvent;
   const sourceBoundEvent = authorization.sourceBoundEvent;
@@ -1076,15 +1485,16 @@ function validateProviderOrAtomicProof(
     authorization.templateVersion !== preimage.templateVersion ||
     authorization.modelRepositoryId !== preimage.repositoryId ||
     authorization.modelSourceCommitId !== preimage.commitId ||
-    authorization.factory !== event.registryWriter ||
+    (event.operation === "registered" &&
+      authorization.factory !== event.registryWriter) ||
     authorization.launchRuntimeCodeSetHash !== preimage.runtimeCodeSetHash ||
     authorization.permissionsHash !== preimage.permissionsHash ||
     authorization.feePolicyHash !== preimage.feePolicyHash ||
     authorization.revoked !== false ||
-    BigInt(authorization.validAfterBlock) > BigInt(event.blockNumber) ||
-    BigInt(authorization.expiresAtBlock) < BigInt(event.blockNumber) ||
+    BigInt(authorization.validAfterBlock) > BigInt(registrationBlock) ||
+    BigInt(authorization.expiresAtBlock) < BigInt(registrationBlock) ||
     BigInt(authorization.stateObservedAtBlock) < BigInt(sourceBoundEvent.blockNumber) ||
-    BigInt(authorization.stateObservedAtBlock) > BigInt(event.blockNumber) ||
+    BigInt(authorization.stateObservedAtBlock) > BigInt(registrationBlock) ||
     authorizedEvent.configurationHash !== authorization.configurationHash ||
     authorizedEvent.providerId !== authorization.providerId ||
     authorizedEvent.factory !== authorization.factory ||
@@ -1121,6 +1531,490 @@ function validateProviderOrAtomicProof(
   );
 }
 
+function eventFollowsProjection(
+  event: CustomRegistryGen2EventV4,
+  previous: CustomRegistryGen2ParityProjectionV4,
+): boolean {
+  const eventBlock = BigInt(event.blockNumber);
+  const previousBlock = BigInt(previous.origin.blockNumber);
+  return eventBlock > previousBlock ||
+    (eventBlock === previousBlock &&
+      (event.transactionIndex > previous.origin.transactionIndex ||
+        (event.transactionIndex === previous.origin.transactionIndex &&
+          event.logIndex > previous.origin.logIndex)));
+}
+
+function validatePreviousProjection(
+  event: CustomRegistryGen2EventV4,
+  previous: CustomRegistryGen2ParityProjectionV4 | null,
+): CustomRegistryGen2ParityProjectionV4 | null {
+  if (event.operation === "registered") {
+    if (previous !== null) return fail("custom-registry-v4-duplicate-registration");
+    return null;
+  }
+  if (
+    previous === null ||
+    previous.launchId !== event.launchId ||
+    previous.projectId !== event.projectId ||
+    previous.origin.registryGeneration !== "2" ||
+    previous.origin.registryAddress !== event.registryAddress ||
+    previous.lifecycle.status === "revoked" ||
+    previous.lifecycle.status === "orphaned" ||
+    !eventFollowsProjection(event, previous)
+  ) {
+    return fail("custom-registry-v4-transition-predecessor");
+  }
+  return previous;
+}
+
+function validateTransitionSequence(
+  value: string,
+  previous: CustomRegistryGen2ParityProjectionV4,
+  checkpoint: CustomRegistryGen2TransitionCheckpointV4 | null,
+  event: CustomRegistryGen2EventV4,
+): string {
+  const sequence = BigInt(decimal(value, "custom-registry-v4-transition-sequence", true));
+  if (
+    checkpoint === null ||
+    checkpoint.chainId !== event.chainId ||
+    checkpoint.caip2 !== event.caip2 ||
+    checkpoint.registryGeneration !== "2" ||
+    checkpoint.registryAddress !== event.registryAddress
+  ) {
+    return fail("custom-registry-v4-transition-checkpoint");
+  }
+  const lastSequence = BigInt(
+    decimal(
+      checkpoint.lastTransitionSequence,
+      "custom-registry-v4-transition-checkpoint-sequence",
+    ),
+  );
+  if (sequence !== lastSequence + 1n) {
+    return fail("custom-registry-v4-transition-sequence-gap");
+  }
+  const previousSequence = previous.origin.transitionSequence;
+  if (
+    previousSequence !== null &&
+    (lastSequence < BigInt(previousSequence) ||
+      sequence <= BigInt(previousSequence))
+  ) {
+    return fail("custom-registry-v4-transition-sequence-order");
+  }
+  return sequence.toString();
+}
+
+function validateAbiEventPayload(
+  event: CustomRegistryGen2EventV4,
+  producer: CustomLaunchRegistryProducerRecordV4,
+  manifest: CustomRegistryGen2ProjectionManifestV4,
+  head: CanonicalHeadV4,
+  previous: CustomRegistryGen2ParityProjectionV4 | null,
+  transitionCheckpoint: CustomRegistryGen2TransitionCheckpointV4 | null,
+): Readonly<{
+  latestRecordRevision: string;
+  latestRecordHash: HexBytes32;
+  transitionSequence: string | null;
+}> {
+  const payload = event.eventPayload;
+  const preimage = producer.registeredRecordPreimage;
+  const exactEventProof = customRegistryGen2AbiEventProofV4({
+    registryLaunchIdRaw: event.registryLaunchIdRaw,
+    registryProjectIdRaw: event.registryProjectIdRaw,
+    payload,
+  });
+  if (payload.kind !== event.operation) {
+    return fail("custom-registry-v4-event-payload-kind");
+  }
+  if (
+    canonicalJson(event.indexedTopics) !==
+      canonicalJson(exactEventProof.indexedTopics) ||
+    event.data !== exactEventProof.data
+  ) {
+    return fail("custom-registry-v4-event-abi-proof");
+  }
+  if (event.operation === "registered") {
+    if (
+      payload.kind !== "registered" ||
+      previous !== null ||
+      payload.chainId !== event.chainId ||
+      payload.registryGeneration !== "2" ||
+      payload.approvalId !== preimage.approvalId ||
+      payload.deploymentId !== preimage.deploymentId ||
+      payload.primaryContract !== preimage.primaryContract ||
+      payload.launchWallet !== preimage.launchWallet ||
+      payload.identityHash !== producer.registrationBindingHash ||
+      payload.registeredRecordCommitment !==
+        producer.registeredRecordCommitment ||
+      payload.observedAtBlock !== event.blockNumber
+    ) {
+      return fail("custom-registry-v4-registered-payload");
+    }
+    decimal(
+      payload.registrationSequence,
+      "custom-registry-v4-registration-sequence",
+      true,
+    );
+    const expectedCompanions = [
+      "provenance",
+      "review",
+      "attribution",
+      "feePolicy",
+      "feeScope",
+      "feeEvidence",
+    ] as const;
+    if (
+      event.registrationCompanions.length !== expectedCompanions.length ||
+      event.registrationCompanions.some((companion, position) => {
+        const kind = expectedCompanions[position];
+        const abiProof = kind === undefined
+          ? null
+          : customRegistryGen2CompanionAbiProofV4(kind, producer);
+        return kind === undefined ||
+          abiProof === null ||
+          companion.kind !== kind ||
+          companion.emitterRole !== "registry" ||
+          companion.emitterAddress !== manifest.contracts.registry.address ||
+          companion.observedRuntimeCodeHash !==
+            manifest.contracts.registry.runtimeCodeHash ||
+          companion.topic0 !== manifest.topics[kind] ||
+          canonicalJson(companion.indexedTopics) !==
+            canonicalJson(abiProof.indexedTopics) ||
+          companion.data !== abiProof.data ||
+          companion.transactionHash !== event.transactionHash ||
+          companion.blockNumber !== event.blockNumber ||
+          companion.blockHash !== event.blockHash ||
+          companion.transactionIndex !== event.transactionIndex ||
+          companion.logIndex !== event.logIndex + position + 1;
+      })
+    ) {
+      return fail("custom-registry-v4-registration-companion-proof");
+    }
+    return Object.freeze({
+      latestRecordRevision: "1",
+      latestRecordHash: producer.registeredRecordCommitment,
+      transitionSequence: null,
+    });
+  }
+  if (previous === null) return fail("custom-registry-v4-transition-predecessor");
+  if (
+    producer.registrationBindingHash !== previous.registrationBindingHash ||
+    producer.registeredRecordCommitment !== previous.registeredRecordCommitment ||
+    event.registeredRecordHash !== previous.registeredRecordCommitment ||
+    event.identityHash !== previous.registrationBindingHash
+  ) {
+    return fail("custom-registry-v4-transition-immutable-binding");
+  }
+  if (event.operation === "finalized") {
+    if (
+      payload.kind !== "finalized" ||
+      previous.origin.operation !== "registered" ||
+      payload.observedTransactionHash !==
+        producer.registryOrigin.registrationTransactionHash ||
+      payload.observedBlockNumber !==
+        producer.registryOrigin.registrationBlockNumber ||
+      payload.observedBlockHash !== producer.registryOrigin.registrationBlockHash ||
+      payload.observedTransactionIndex !==
+        Number(producer.registryOrigin.registrationTransactionIndex) ||
+      payload.observedLogIndex !==
+        Number(producer.registryOrigin.registrationLogIndex) ||
+      payload.finalityPolicyHash !== preimage.finalityPolicyHash ||
+      payload.finalizedAtBlock !== event.blockNumber ||
+      timestampSecondsAsInstant(
+          payload.finalizedAtTimestamp,
+          "custom-registry-v4-finalized-timestamp",
+        ) !== event.onchainTimestamp ||
+      BigInt(payload.confirmedHeadBlockNumber) <
+        BigInt(payload.observedBlockNumber) + BigInt(manifest.finalityDepth) - 1n ||
+      head.canonicalBlockHash(payload.confirmedHeadBlockNumber) !==
+        payload.confirmedHeadBlockHash ||
+      digestFromRawBytes32(payload.finalityEvidenceHash) !==
+        producer.finality.finalityEvidenceHash
+    ) {
+      return fail("custom-registry-v4-finalized-payload");
+    }
+    bytes32(
+      payload.confirmedHeadBlockHash,
+      "custom-registry-v4-finalized-confirmed-head",
+    );
+    const transitionSequence = validateTransitionSequence(
+      payload.transitionSequence,
+      previous,
+      transitionCheckpoint,
+      event,
+    );
+    return Object.freeze({
+      latestRecordRevision: previous.origin.latestRecordRevision,
+      latestRecordHash: previous.origin.latestRecordHash,
+      transitionSequence,
+    });
+  }
+  if (event.operation === "corrected") {
+    if (
+      payload.kind !== "corrected" ||
+      (previous.origin.operation !== "finalized" &&
+        previous.origin.operation !== "corrected") ||
+      previous.registryFinality.status !== "finalized" ||
+      BigInt(decimal(payload.revision, "custom-registry-v4-correction-revision", true)) !==
+        BigInt(previous.origin.latestRecordRevision) + 1n ||
+      payload.previousRecordHash !== previous.origin.latestRecordHash ||
+      payload.correctedRecordHash === payload.previousRecordHash ||
+      payload.correctedRecordHash !==
+        digestRawBytes32(customRegistryRawProducerHashV4(producer)) ||
+      payload.reasonCode === ZERO_BYTES32 ||
+      payload.evidenceHash === ZERO_BYTES32
+    ) {
+      return fail("custom-registry-v4-corrected-payload");
+    }
+    const transitionSequence = validateTransitionSequence(
+      payload.transitionSequence,
+      previous,
+      transitionCheckpoint,
+      event,
+    );
+    return Object.freeze({
+      latestRecordRevision: payload.revision,
+      latestRecordHash: payload.correctedRecordHash,
+      transitionSequence,
+    });
+  }
+  if (
+    payload.kind !== "revoked" ||
+    payload.latestRecordRevision !== previous.origin.latestRecordRevision ||
+    payload.latestRecordHash !== previous.origin.latestRecordHash ||
+    payload.reasonCode === ZERO_BYTES32 ||
+    payload.evidenceHash === ZERO_BYTES32 ||
+    payload.revokedAtBlock !== event.blockNumber ||
+    timestampSecondsAsInstant(
+        payload.revokedAtTimestamp,
+        "custom-registry-v4-revoked-timestamp",
+      ) !== event.onchainTimestamp
+  ) {
+    return fail("custom-registry-v4-revoked-payload");
+  }
+  const transitionSequence = validateTransitionSequence(
+    payload.transitionSequence,
+    previous,
+    transitionCheckpoint,
+    event,
+  );
+  return Object.freeze({
+    latestRecordRevision: payload.latestRecordRevision,
+    latestRecordHash: payload.latestRecordHash,
+    transitionSequence,
+  });
+}
+
+function validateAndProjectFinality(
+  producer: CustomLaunchRegistryProducerRecordV4,
+  event: CustomRegistryGen2EventV4,
+  manifest: CustomRegistryGen2ProjectionManifestV4,
+  head: CanonicalHeadV4,
+): CustomRegistryGen2FinalityProjectionV4 {
+  const origin = producer.registryOrigin;
+  const finality = producer.finality;
+  if (
+    finality.transactionHash !== origin.registrationTransactionHash ||
+    finality.blockHash !== origin.registrationBlockHash ||
+    finality.blockNumber !== origin.registrationBlockNumber ||
+    finality.transactionIndex !== origin.registrationTransactionIndex ||
+    finality.logIndex !== origin.registrationLogIndex ||
+    finality.onchainTimestamp !== origin.registrationOnchainTimestamp
+  ) {
+    return fail("custom-registry-v4-finality-registration-anchor");
+  }
+  const onchainTimestamp = instant(
+    finality.onchainTimestamp,
+    "custom-registry-v4-finality-onchain-time",
+  );
+  const observedAt = instant(
+    finality.observedAt,
+    "custom-registry-v4-finality-observed-time",
+  );
+  const confirmedAt = finality.confirmedAt === null
+    ? null
+    : instant(finality.confirmedAt, "custom-registry-v4-finality-confirmed-time");
+  const finalizedAt = finality.finalizedAt === null
+    ? null
+    : instant(finality.finalizedAt, "custom-registry-v4-finality-finalized-time");
+  const orphanedAt = finality.orphanedAt === null
+    ? null
+    : instant(finality.orphanedAt, "custom-registry-v4-finality-orphaned-time");
+  digest(finality.finalityEvidenceHash, "custom-registry-v4-finality-evidence");
+  digest(
+    finality.verificationAuthorityHash,
+    "custom-registry-v4-finality-authority",
+  );
+  const rawStatus = finality.status;
+  if (
+    !new Set(["observed", "confirmed", "finalized", "orphaned"]).has(rawStatus) ||
+    (rawStatus === "observed" &&
+      (confirmedAt !== null || finalizedAt !== null || orphanedAt !== null)) ||
+    (rawStatus === "confirmed" &&
+      (confirmedAt === null || finalizedAt !== null || orphanedAt !== null)) ||
+    (rawStatus === "finalized" &&
+      (confirmedAt === null || finalizedAt === null || orphanedAt !== null)) ||
+    (rawStatus === "orphaned" && orphanedAt === null)
+  ) {
+    return fail("custom-registry-v4-finality-transition-shape");
+  }
+  const timestamps = [
+    onchainTimestamp,
+    observedAt,
+    confirmedAt,
+    finalizedAt,
+    orphanedAt,
+  ].filter((value): value is string => value !== null);
+  const headObservedAt = instant(head.observedAt, "custom-registry-v4-head-time");
+  if (
+    timestamps.some((value, position) =>
+      position > 0 && value < timestamps[position - 1]!
+    ) ||
+    timestamps.some((value) => value > headObservedAt)
+  ) {
+    return fail("custom-registry-v4-finality-time-order");
+  }
+  const canonicalEventHash = head.canonicalBlockHash(event.blockNumber);
+  const canonicalRegistrationHash = head.canonicalBlockHash(
+    origin.registrationBlockNumber,
+  );
+  const orphaned = canonicalEventHash !== event.blockHash ||
+    canonicalRegistrationHash !== origin.registrationBlockHash;
+  const headBlock = BigInt(head.blockNumber);
+  if (!orphaned && headBlock < BigInt(event.blockNumber)) {
+    return fail("custom-registry-v4-head-before-event");
+  }
+  const depth = headBlock - BigInt(origin.registrationBlockNumber) + 1n;
+  if (!orphaned && depth <= 0n) return fail("custom-registry-v4-head-before-registration");
+  const derivedStatus = orphaned
+    ? "orphaned" as const
+    : depth >= BigInt(manifest.finalityDepth)
+      ? "finalized" as const
+      : depth >= BigInt(manifest.confirmationDepth)
+        ? "confirmed" as const
+        : "observed" as const;
+  const rank = { observed: 0, confirmed: 1, finalized: 2 } as const;
+  if (!orphaned) {
+    if (rawStatus === "orphaned" || derivedStatus === "orphaned") {
+      return fail("custom-registry-v4-finality-outruns-head");
+    }
+    if (rank[rawStatus] > rank[derivedStatus]) {
+      return fail("custom-registry-v4-finality-outruns-head");
+    }
+  }
+  if (
+    event.operation === "finalized" &&
+    (rawStatus !== "finalized" ||
+      finalizedAt !== event.onchainTimestamp ||
+      confirmedAt === null)
+  ) {
+    return fail("custom-registry-v4-finalized-raw-state");
+  }
+  return Object.freeze({
+    status: derivedStatus,
+    transactionHash: finality.transactionHash,
+    blockHash: finality.blockHash,
+    blockNumber: finality.blockNumber,
+    transactionIndex: finality.transactionIndex,
+    logIndex: finality.logIndex,
+    onchainTimestamp,
+    observedAt,
+    confirmedAt: derivedStatus === "confirmed" || derivedStatus === "finalized"
+      ? confirmedAt ?? headObservedAt
+      : null,
+    finalizedAt: derivedStatus === "finalized"
+      ? finalizedAt ?? headObservedAt
+      : null,
+    orphanedAt: derivedStatus === "orphaned"
+      ? orphanedAt ?? headObservedAt
+      : null,
+    finalityEvidenceHash: finality.finalityEvidenceHash,
+    verificationAuthorityHash: finality.verificationAuthorityHash,
+    canonicalHeadBlock: head.blockNumber,
+    canonicalHeadHash: head.blockHash,
+  });
+}
+
+function validateAndProjectLifecycle(
+  producer: CustomLaunchRegistryProducerRecordV4,
+  event: CustomRegistryGen2EventV4,
+  finality: CustomRegistryGen2FinalityProjectionV4,
+  previous: CustomRegistryGen2ParityProjectionV4 | null,
+): CustomRegistryGen2LifecycleProjectionV4 {
+  const lifecycle = producer.lifecycle;
+  const registeredAt = instant(
+    lifecycle.registeredAt,
+    "custom-registry-v4-lifecycle-registered-time",
+  );
+  const supersededBy = lifecycle.supersededBy === null
+    ? null
+    : digest(lifecycle.supersededBy, "custom-registry-v4-lifecycle-superseded");
+  const revokedAt = lifecycle.revokedAt === null
+    ? null
+    : instant(lifecycle.revokedAt, "custom-registry-v4-lifecycle-revoked-time");
+  const revocationEvidenceHash = lifecycle.revocationEvidenceHash === null
+    ? null
+    : digest(
+        lifecycle.revocationEvidenceHash,
+        "custom-registry-v4-lifecycle-revocation-evidence",
+      );
+  if (
+    lifecycle.registryGeneration !== "2" ||
+    !new Set(["active", "superseded", "revoked", "orphaned"]).has(
+      lifecycle.status,
+    ) ||
+    (lifecycle.status === "active" &&
+      (supersededBy !== null || revokedAt !== null ||
+        revocationEvidenceHash !== null)) ||
+    (lifecycle.status === "superseded" &&
+      (supersededBy === null || revokedAt !== null ||
+        revocationEvidenceHash !== null)) ||
+    (lifecycle.status === "revoked" &&
+      (supersededBy !== null || revokedAt === null ||
+        revocationEvidenceHash === null)) ||
+    (lifecycle.status === "orphaned" &&
+      (supersededBy !== null || revokedAt !== null ||
+        revocationEvidenceHash !== null))
+  ) {
+    return fail("custom-registry-v4-lifecycle-shape");
+  }
+  if (finality.status === "orphaned") {
+    const stable = previous?.lifecycle;
+    return Object.freeze({
+      status: "orphaned",
+      registryGeneration: "2",
+      registeredAt: stable?.registeredAt ?? registeredAt,
+      supersededBy: null,
+      revokedAt: null,
+      revocationEvidenceHash: null,
+    });
+  }
+  if (event.operation === "revoked") {
+    const payload = event.eventPayload;
+    if (
+      payload.kind !== "revoked" ||
+      lifecycle.status !== "revoked" ||
+      revokedAt !== event.onchainTimestamp ||
+      revocationEvidenceHash === null ||
+      digestRawBytes32(revocationEvidenceHash) !== payload.evidenceHash
+    ) {
+      return fail("custom-registry-v4-revoked-lifecycle");
+    }
+  } else if (
+    lifecycle.status === "revoked" ||
+    event.operation === "registered" && lifecycle.status !== "active"
+  ) {
+    return fail("custom-registry-v4-lifecycle-operation");
+  }
+  return Object.freeze({
+    status: lifecycle.status as "active" | "superseded" | "revoked",
+    registryGeneration: "2",
+    registeredAt,
+    supersededBy,
+    revokedAt,
+    revocationEvidenceHash,
+  });
+}
+
 /**
  * Contract-parity adapter for Generation 2. It does not activate a deployment;
  * the passed manifest is the canonical allowlist/trust root.
@@ -1129,13 +2023,26 @@ export function projectCustomRegistryGen2RecordV4(input: Readonly<{
   manifest: CustomRegistryGen2ProjectionManifestV4;
   event: CustomRegistryGen2EventV4;
   head: CanonicalHeadV4;
+  previousProjection?: CustomRegistryGen2ParityProjectionV4 | null;
+  transitionCheckpoint?: CustomRegistryGen2TransitionCheckpointV4 | null;
 }>): CustomRegistryGen2ParityProjectionV4 {
   const manifest = validateManifest(input.manifest);
   const event = input.event;
   const producer = normalizeRecord(event.producerRecord);
+  const previous = validatePreviousProjection(
+    event,
+    input.previousProjection ?? null,
+  );
   const origin = producer.registryOrigin;
   const registryContract = manifest.contracts.registry;
   const expectedTopic = manifest.topics[event.operation];
+  const transitionWriterAllowed = event.operation === "registered" ||
+    (event.operation === "finalized" &&
+      manifest.authorizedWriters.finalizers.includes(event.registryWriter)) ||
+    (event.operation === "corrected" &&
+      manifest.authorizedWriters.correctors.includes(event.registryWriter)) ||
+    (event.operation === "revoked" &&
+      manifest.authorizedWriters.revokers.includes(event.registryWriter));
   if (
     event.registryGeneration !== "2" ||
     event.chainId !== manifest.chainId ||
@@ -1145,6 +2052,7 @@ export function projectCustomRegistryGen2RecordV4(input: Readonly<{
     event.emitterRole !== "registry" ||
     event.emitterAddress !== registryContract.address ||
     event.topic0 !== expectedTopic ||
+    !transitionWriterAllowed ||
     BigInt(decimal(event.blockNumber, "custom-registry-v4-event-block", true)) <
       BigInt(registryContract.startBlock) ||
     event.registryLaunchIdRaw !== digestRawBytes32(event.launchId) ||
@@ -1155,6 +2063,7 @@ export function projectCustomRegistryGen2RecordV4(input: Readonly<{
   }
   bytes32(event.transactionHash, "custom-registry-v4-event-transaction");
   bytes32(event.blockHash, "custom-registry-v4-event-block-hash");
+  instant(event.onchainTimestamp, "custom-registry-v4-event-onchain-time");
   index(event.transactionIndex, "custom-registry-v4-event-transaction-index");
   index(event.logIndex, "custom-registry-v4-event-log-index");
   bytes32(input.head.blockHash, "custom-registry-v4-head-hash");
@@ -1196,6 +2105,8 @@ export function projectCustomRegistryGen2RecordV4(input: Readonly<{
     origin.registryEventSetBytesSha256 !==
       manifest.registryEventSetBytesSha256 ||
     origin.feePolicyDomain !== manifest.feePolicyDomain ||
+    (event.operation === "registered" &&
+      origin.registrationOnchainTimestamp !== event.onchainTimestamp) ||
     canonicalJson(origin.releaseContracts) !== canonicalJson(manifest.contracts) ||
     canonicalJson(origin.eventBindings) !== canonicalJson(manifest.eventBindings) ||
     (event.operation === "registered" &&
@@ -1255,24 +2166,26 @@ export function projectCustomRegistryGen2RecordV4(input: Readonly<{
     return fail("custom-registry-v4-record-binding");
   }
   validateProviderOrAtomicProof(producer, event, manifest);
-  const canonicalEventHash = input.head.canonicalBlockHash(event.blockNumber);
-  const orphaned = canonicalEventHash === null || canonicalEventHash !== event.blockHash;
-  const depth = BigInt(input.head.blockNumber) - BigInt(event.blockNumber) + 1n;
-  if (!orphaned && depth <= 0n) return fail("custom-registry-v4-head-before-event");
-  const registryStatus = orphaned
-    ? "orphaned" as const
-    : depth >= BigInt(manifest.finalityDepth)
-      ? "finalized" as const
-      : depth >= BigInt(manifest.confirmationDepth)
-        ? "confirmed" as const
-        : "observed" as const;
-  const lifecycleStatus = registryStatus === "orphaned"
-    ? "orphaned" as const
-    : event.operation === "revoked"
-      ? "revoked" as const
-      : event.operation === "finalized"
-        ? "finalized" as const
-        : registryStatus;
+  const eventState = validateAbiEventPayload(
+    event,
+    producer,
+    manifest,
+    input.head,
+    previous,
+    input.transitionCheckpoint ?? null,
+  );
+  const registryFinality = validateAndProjectFinality(
+    producer,
+    event,
+    manifest,
+    input.head,
+  );
+  const lifecycle = validateAndProjectLifecycle(
+    producer,
+    event,
+    registryFinality,
+    previous,
+  );
   return Object.freeze({
     schemaVersion: CUSTOM_REGISTRY_PROJECTION_RECORD_SCHEMA_V4,
     platformId: "programmable",
@@ -1303,27 +2216,28 @@ export function projectCustomRegistryGen2RecordV4(input: Readonly<{
       registryEventSetBytesSha256: manifest.registryEventSetBytesSha256,
       feePolicyDomain: manifest.feePolicyDomain,
       releaseContracts: manifest.contracts,
+      authorizedWriters: manifest.authorizedWriters,
+      registrationOnchainTimestamp: origin.registrationOnchainTimestamp,
       operation: event.operation,
       registryWriter: event.registryWriter,
       eventTopic0: event.topic0,
+      eventIndexedTopics: event.indexedTopics,
+      eventData: event.data,
       transactionIndex: event.transactionIndex,
       logIndex: event.logIndex,
       registrationCompanions: event.registrationCompanions,
+      eventPayload: event.eventPayload,
+      latestRecordRevision: eventState.latestRecordRevision,
+      latestRecordHash: eventState.latestRecordHash,
+      transitionSequence: eventState.transitionSequence,
+      transitionCheckpoint: input.transitionCheckpoint ?? null,
       transactionHash: event.transactionHash,
       blockNumber: event.blockNumber,
       blockHash: event.blockHash,
       onchainTimestamp: event.onchainTimestamp,
     }),
-    registryFinality: Object.freeze({
-      status: registryStatus,
-      canonicalHeadBlock: input.head.blockNumber,
-      canonicalHeadHash: input.head.blockHash,
-      observedAt: input.head.observedAt,
-    }),
-    lifecycle: Object.freeze({
-      status: lifecycleStatus,
-      registryGeneration: "2",
-    }),
+    registryFinality,
+    lifecycle,
     publicProjection: Object.freeze({
       platformId: "programmable",
       category: "custom",
@@ -1349,8 +2263,8 @@ export function projectCustomRegistryGen2RecordV4(input: Readonly<{
       verifiedReview: producer.verifiedReview,
       postLaunchAuthorityInventory:
         producer.postLaunchAuthorityInventory,
-      finality: producer.finality,
-      lifecycle: producer.lifecycle,
+      finality: registryFinality,
+      lifecycle,
       presentationVersion: producer.presentationVersion,
       presentationBindingHash: producer.presentationBindingHash,
       presentation: producer.presentation,
@@ -1364,6 +2278,8 @@ export function projectCustomRegistryGen2EnvelopeV4(input: Readonly<{
   manifest: CustomRegistryGen2ProjectionManifestV4;
   event: CustomRegistryGen2EventV4;
   head: CanonicalHeadV4;
+  previousProjection?: CustomRegistryGen2ParityProjectionV4 | null;
+  transitionCheckpoint?: CustomRegistryGen2TransitionCheckpointV4 | null;
 }>): CustomRegistryGen2ProjectionEnvelopeV4 {
   const projection = projectCustomRegistryGen2RecordV4(input);
   return Object.freeze({
