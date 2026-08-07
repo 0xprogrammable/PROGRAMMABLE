@@ -38,7 +38,10 @@ import {
   CUSTOM_REGISTRY_PRODUCER_RECORD_SCHEMA_V4,
   customRegistryApprovalBindingHashV2,
   customRegistryGen2AbiEventProofV4,
+  customRegistryGen2AtomicExecutionAbiProofV4,
   customRegistryGen2CompanionAbiProofV4,
+  customRegistryGen2PartnerFactoryAuthorizedAbiProofV4,
+  customRegistryGen2PartnerFactorySourceBoundAbiProofV4,
   customRegistryOnchainFeePolicyHashV2,
   customRegistryPartnerConfigurationHashV2,
   customRegistryProducerEnvelopeDigestV4,
@@ -202,6 +205,16 @@ function producer(
   const binding = customRegistryRegisteredRecordBindingV2(
     registeredRecordPreimage,
   );
+  const atomicExecutionFields = {
+    launchId: v3.registryOrigin.registryLaunchIdRaw,
+    deployed: registeredRecordPreimage.primaryContract,
+    salt: hex("gen2-atomic-salt"),
+    creationCodeHash: hex("gen2-atomic-creation-code"),
+    initializationResultHash: hex("gen2-atomic-initialization-result"),
+  } as const;
+  const atomicExecutionAbi = customRegistryGen2AtomicExecutionAbiProofV4(
+    atomicExecutionFields,
+  );
   const recordWithoutEnvelope = {
     ...v3,
     schemaVersion: CUSTOM_REGISTRY_PRODUCER_RECORD_SCHEMA_V4,
@@ -238,11 +251,13 @@ function producer(
       transactionHash: v3.registryOrigin.registrationTransactionHash,
       blockNumber: v3.registryOrigin.registrationBlockNumber,
       blockHash: v3.registryOrigin.registrationBlockHash,
-      launchId: v3.registryOrigin.registryLaunchIdRaw,
-      deployed: registeredRecordPreimage.primaryContract,
-      requestHash: hex("gen2-atomic-request"),
-      registeredRecordCommitment: binding.registeredRecordCommitment,
-      registrationBindingHash: binding.registrationBindingHash,
+      transactionIndex: Number(
+        v3.registryOrigin.registrationTransactionIndex,
+      ),
+      logIndex: Number(v3.registryOrigin.registrationLogIndex) + 7,
+      ...atomicExecutionFields,
+      indexedTopics: atomicExecutionAbi.indexedTopics,
+      data: atomicExecutionAbi.data,
     },
     lifecycle: {
       ...v3.lifecycle,
@@ -302,10 +317,6 @@ function event(
     registryGeneration: "2",
     registryAddress: recordValue.registryOrigin.registryAddress,
     observedRegistryRuntimeCodeHash: REGISTRY_RUNTIME,
-    registryWriter:
-      recordValue.registeredRecordPreimage.providerId === ZERO_BYTES32
-        ? ATOMIC_REGISTRAR
-        : recordValue.partnerFactoryAuthorization!.factory,
     emitterRole: "registry",
     emitterAddress: recordValue.registryOrigin.registryAddress,
     topic0: CUSTOM_REGISTRY_GEN2_TOPICS.registered,
@@ -353,7 +364,7 @@ function head(
   depth: bigint,
   canonical = true,
 ): CanonicalHeadV4 {
-  const blockNumber = String(BigInt(eventValue.blockNumber) + depth - 1n);
+  const blockNumber = String(BigInt(eventValue.blockNumber) + depth);
   return {
     chainId: eventValue.chainId,
     blockNumber,
@@ -414,7 +425,6 @@ function transitionEvent(input: Readonly<{
     registryGeneration: "2",
     registryAddress: input.record.registryOrigin.registryAddress,
     observedRegistryRuntimeCodeHash: REGISTRY_RUNTIME,
-    registryWriter: WRITER,
     emitterRole: "registry",
     emitterAddress: input.record.registryOrigin.registryAddress,
     topic0: CUSTOM_REGISTRY_GEN2_TOPICS[input.operation],
@@ -445,7 +455,7 @@ function finalizedEvent(
   const finalizedAt = record.finality.finalizedAt;
   if (finalizedAt === null) throw new Error("fixture");
   const confirmedHeadBlockNumber = String(
-    BigInt(record.registryOrigin.registrationBlockNumber) + 63n,
+    BigInt(record.registryOrigin.registrationBlockNumber) + 64n,
   );
   return transitionEvent({
     operation: "finalized",
@@ -636,11 +646,7 @@ function rebind(
     },
     atomicExecutionProof: value.atomicExecutionProof === null
       ? null
-      : {
-          ...value.atomicExecutionProof,
-          registeredRecordCommitment: binding.registeredRecordCommitment,
-          registrationBindingHash: binding.registrationBindingHash,
-        },
+      : value.atomicExecutionProof,
   });
 }
 
@@ -664,17 +670,47 @@ function recommitWithoutDerivedBindingRepair(
     },
     atomicExecutionProof: value.atomicExecutionProof === null
       ? null
-      : {
-          ...value.atomicExecutionProof,
-          registeredRecordCommitment: binding.registeredRecordCommitment,
-          registrationBindingHash: binding.registrationBindingHash,
-        },
+      : value.atomicExecutionProof,
   });
 }
 
 function providerProducer(): CustomLaunchRegistryProducerRecordV4 {
   const base = producer();
   const providerId = hex("future-provider");
+  const authorizationTransactionHash = hex(
+    "provider-factory-authorization-transaction",
+  );
+  const authorizationBlockHash = hex("provider-factory-authorization-block");
+  const authorizedFields = {
+    configurationHash: ZERO_BYTES32,
+    providerId,
+    factory: PROVIDER_FACTORY,
+    modelId: base.registeredRecordPreimage.modelId,
+    modelVersion: base.registeredRecordPreimage.modelVersion,
+    templateId: base.registeredRecordPreimage.templateId,
+    templateVersion: base.registeredRecordPreimage.templateVersion,
+    validAfterBlock: "20999900",
+    expiresAtBlock: "21000100",
+    evidenceHash: hex("provider-factory-evidence"),
+  } as const;
+  const sourceBoundFields = {
+    configurationHash: ZERO_BYTES32,
+    modelRepositoryId: base.registeredRecordPreimage.repositoryId,
+    modelSourceCommitId: base.registeredRecordPreimage.commitId,
+    factorySourceRepositoryId: hex("provider-factory-repository"),
+    factorySourceCommitId: hex("provider-factory-commit"),
+    factoryRuntimeCodeHash: PROVIDER_FACTORY_RUNTIME,
+    launchRuntimeCodeSetHash:
+      base.registeredRecordPreimage.runtimeCodeSetHash,
+    permissionsHash: base.registeredRecordPreimage.permissionsHash,
+    feePolicyHash: base.registeredRecordPreimage.feePolicyHash,
+  } as const;
+  const authorizedAbi = customRegistryGen2PartnerFactoryAuthorizedAbiProofV4(
+    authorizedFields,
+  );
+  const sourceBoundAbi = customRegistryGen2PartnerFactorySourceBoundAbiProofV4(
+    sourceBoundFields,
+  );
   const provisional = {
     chainId: "1",
     registryGeneration: "2",
@@ -704,37 +740,28 @@ function providerProducer(): CustomLaunchRegistryProducerRecordV4 {
       emitterAddress: PARTNER_FACTORY_REGISTRY,
       observedRuntimeCodeHash: PARTNER_FACTORY_REGISTRY_RUNTIME,
       topic0: CUSTOM_REGISTRY_GEN2_TOPICS.partnerFactoryAuthorized,
-      transactionHash: hex("provider-factory-authorized-transaction"),
+      indexedTopics: authorizedAbi.indexedTopics,
+      data: authorizedAbi.data,
+      transactionHash: authorizationTransactionHash,
       blockNumber: "20999900",
-      blockHash: hex("provider-factory-authorized-block"),
-      configurationHash: ZERO_BYTES32,
-      providerId,
-      factory: PROVIDER_FACTORY,
-      modelId: base.registeredRecordPreimage.modelId,
-      modelVersion: base.registeredRecordPreimage.modelVersion,
-      templateId: base.registeredRecordPreimage.templateId,
-      templateVersion: base.registeredRecordPreimage.templateVersion,
-      validAfterBlock: "20999900",
-      expiresAtBlock: "21000100",
-      evidenceHash: hex("provider-factory-evidence"),
+      blockHash: authorizationBlockHash,
+      transactionIndex: 2,
+      logIndex: 4,
+      ...authorizedFields,
     },
     sourceBoundEvent: {
       emitterRole: "partnerFactoryRegistry",
       emitterAddress: PARTNER_FACTORY_REGISTRY,
       observedRuntimeCodeHash: PARTNER_FACTORY_REGISTRY_RUNTIME,
       topic0: CUSTOM_REGISTRY_GEN2_TOPICS.partnerFactorySourceBound,
-      transactionHash: hex("provider-factory-source-transaction"),
+      indexedTopics: sourceBoundAbi.indexedTopics,
+      data: sourceBoundAbi.data,
+      transactionHash: authorizationTransactionHash,
       blockNumber: "20999900",
-      blockHash: hex("provider-factory-source-block"),
-      configurationHash: ZERO_BYTES32,
-      modelRepositoryId: base.registeredRecordPreimage.repositoryId,
-      modelSourceCommitId: base.registeredRecordPreimage.commitId,
-      factorySourceRepositoryId: hex("provider-factory-repository"),
-      factorySourceCommitId: hex("provider-factory-commit"),
-      factoryRuntimeCodeHash: PROVIDER_FACTORY_RUNTIME,
-      launchRuntimeCodeSetHash: base.registeredRecordPreimage.runtimeCodeSetHash,
-      permissionsHash: base.registeredRecordPreimage.permissionsHash,
-      feePolicyHash: base.registeredRecordPreimage.feePolicyHash,
+      blockHash: authorizationBlockHash,
+      transactionIndex: 2,
+      logIndex: 5,
+      ...sourceBoundFields,
     },
   } satisfies CustomRegistryGen2PartnerFactoryAuthorizationV4;
   const configurationHash = customRegistryPartnerConfigurationHashV2(
@@ -743,8 +770,22 @@ function providerProducer(): CustomLaunchRegistryProducerRecordV4 {
   const authorization = {
     ...provisional,
     configurationHash,
-    authorizedEvent: { ...provisional.authorizedEvent, configurationHash },
-    sourceBoundEvent: { ...provisional.sourceBoundEvent, configurationHash },
+    authorizedEvent: {
+      ...provisional.authorizedEvent,
+      configurationHash,
+      ...customRegistryGen2PartnerFactoryAuthorizedAbiProofV4({
+        ...authorizedFields,
+        configurationHash,
+      }),
+    },
+    sourceBoundEvent: {
+      ...provisional.sourceBoundEvent,
+      configurationHash,
+      ...customRegistryGen2PartnerFactorySourceBoundAbiProofV4({
+        ...sourceBoundFields,
+        configurationHash,
+      }),
+    },
   } satisfies CustomRegistryGen2PartnerFactoryAuthorizationV4;
   const rebound = rebind(base, {
     ...base.registeredRecordPreimage,
@@ -860,7 +901,14 @@ describe("Custom Registry record v4 / Generation 2 parity adapter", () => {
             CUSTOM_REGISTRY_GEN2_EVENT_SET_BYTES_SHA256,
           feePolicyDomain: CUSTOM_REGISTRY_GEN2_FEE_POLICY_DOMAIN,
           operation: "registered",
-          registryWriter: registryEvent.registryWriter,
+          authorizedWriterSetEvidence: {
+            operationRole: "atomicRegistrar",
+            authorizedAddresses: [ATOMIC_REGISTRAR],
+            eventCaller: null,
+            callerIdentityStatus: "not-emitted-by-registry-abi",
+            authorizationBasis:
+              "atomic-registrar-runtime-and-same-transaction-event",
+          },
           eventTopic0: CUSTOM_REGISTRY_GEN2_TOPICS.registered,
           transactionIndex: registryEvent.transactionIndex,
           logIndex: registryEvent.logIndex,
@@ -873,6 +921,7 @@ describe("Custom Registry record v4 / Generation 2 parity adapter", () => {
         },
       });
       expect(Object.keys(projection.registeredRecordPreimage)).toHaveLength(37);
+      expect(projection.origin).not.toHaveProperty("registryWriter");
     },
   );
 
@@ -883,6 +932,13 @@ describe("Custom Registry record v4 / Generation 2 parity adapter", () => {
       lifecycle: { status: "active" },
       origin: {
         operation: "finalized",
+        authorizedWriterSetEvidence: {
+          operationRole: "finalizer",
+          authorizedAddresses: [WRITER],
+          eventCaller: null,
+          callerIdentityStatus: "not-emitted-by-registry-abi",
+          authorizationBasis: "registry-role-guard-and-manifest-allowlist",
+        },
         transitionSequence: "2",
         latestRecordRevision: "1",
         latestRecordHash: finalized.registered.registeredRecordCommitment,
@@ -948,6 +1004,25 @@ describe("Custom Registry record v4 / Generation 2 parity adapter", () => {
         head: head(registryEvent, 1n),
       })
     ).toThrow();
+  });
+
+  it("requires head minus observed block to meet the full configured depth", () => {
+    const atSixtyThree = event(producer("finalized"));
+    expect(() =>
+      projectCustomRegistryGen2RecordV4({
+        manifest: manifest(),
+        event: atSixtyThree,
+        head: head(atSixtyThree, 63n),
+      })
+    ).toThrow();
+    const atSixtyFour = event(producer("finalized"));
+    expect(
+      projectCustomRegistryGen2RecordV4({
+        manifest: manifest(),
+        event: atSixtyFour,
+        head: head(atSixtyFour, 64n),
+      }).registryFinality.status,
+    ).toBe("finalized");
   });
 
   it.each([
@@ -1229,6 +1304,13 @@ describe("Custom Registry record v4 / Generation 2 parity adapter", () => {
       factory: PROVIDER_FACTORY,
       factoryRuntimeCodeHash: PROVIDER_FACTORY_RUNTIME,
     });
+    expect(projection.origin.authorizedWriterSetEvidence).toEqual({
+      operationRole: "providerFactory",
+      authorizedAddresses: [PROVIDER_FACTORY],
+      eventCaller: null,
+      callerIdentityStatus: "not-emitted-by-registry-abi",
+      authorizationBasis: "partner-factory-state-and-registry-runtime",
+    });
   });
 
   it("rejects a same-topic event from a false Registry emitter", () => {
@@ -1280,6 +1362,56 @@ describe("Custom Registry record v4 / Generation 2 parity adapter", () => {
       })
     ).toThrow();
   });
+
+  it.each(["indexedTopics", "data", "salt"] as const)(
+    "rejects forged AtomicExecuted %s evidence",
+    (field) => {
+      const value = structuredClone(producer());
+      if (value.atomicExecutionProof === null) throw new Error("fixture");
+      if (field === "indexedTopics") {
+        (value.atomicExecutionProof as unknown as {
+          indexedTopics: HexBytes32[];
+        }).indexedTopics[0] = hex("forged-atomic-topic");
+      } else if (field === "data") {
+        (value.atomicExecutionProof as unknown as { data: `0x${string}` })
+          .data = "0x00";
+      } else {
+        (value.atomicExecutionProof as unknown as { salt: HexBytes32 }).salt =
+          hex("forged-atomic-salt");
+      }
+      const attackRecord = reseal(value);
+      const attack = event(attackRecord);
+      expect(() =>
+        projectCustomRegistryGen2RecordV4({
+          manifest: manifest(),
+          event: attack,
+          head: head(attack, 1n),
+        })
+      ).toThrow();
+    },
+  );
+
+  it.each(["authorized", "source-bound"] as const)(
+    "rejects forged %s partner-factory raw ABI evidence",
+    (kind) => {
+      const value = structuredClone(providerProducer());
+      const authorization = value.partnerFactoryAuthorization;
+      if (authorization === null) throw new Error("fixture");
+      const evidence = kind === "authorized"
+        ? authorization.authorizedEvent
+        : authorization.sourceBoundEvent;
+      (evidence as unknown as { data: `0x${string}` }).data = "0x00";
+      const attackRecord = reseal(value);
+      const attack = event(attackRecord);
+      expect(() =>
+        projectCustomRegistryGen2RecordV4({
+          manifest: manifest(),
+          event: attack,
+          head: head(attack, 1n),
+        })
+      ).toThrow();
+    },
+  );
 
   it.each(["missing", "revoked"] as const)(
     "rejects %s provider factory authorization",

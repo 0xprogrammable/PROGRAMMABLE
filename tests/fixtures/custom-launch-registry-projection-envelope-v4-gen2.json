@@ -3,8 +3,8 @@
   "sourceId": "programmable-custom-launch-registry-v4",
   "producerSchemaVersion": "programmable.custom-launch-registry-record.v4",
   "projectionSchemaVersion": "programmable.custom-launch-projection-record.v4",
-  "projectionDigest": "sha256:6e2a0df93b2fbc764b631f9fac7b8288e892d33b5ca8167486698233cb87c9b2",
-  "rawRecordHash": "sha256:6f581863290b23305995768520b43fa497d37f25ee297127ce21e122fd0d6de1",
+  "projectionDigest": "sha256:0a20b4b7acfa55f2238b3901759a88eee0247346e9597d2e9d71274f918f5172",
+  "rawRecordHash": "sha256:ec5379c7cc828075c2c05c258aebc87c0ac5951205aeb40d8661501c6b901f3f",
   "rawRecord": {
     "schemaVersion": "programmable.custom-launch-registry-record.v4",
     "platformId": "programmable",
@@ -477,13 +477,21 @@
       "transactionHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "blockNumber": "21000000",
       "blockHash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "transactionIndex": 1,
+      "logIndex": 9,
       "launchId": "0x3f3563a08c039d5e16f01ce4065d2cf5f0158d88ac1014ad83d91caa894f5905",
       "deployed": "0x2222222222222222222222222222222222222222",
-      "requestHash": "0xa7ac90af8d716e9f622083581c5a6f79fb9f900a82d6aa773ab610eadb9adf67",
-      "registeredRecordCommitment": "0x44e704f00fe0c87deeab08bb36ea2a82ba2ecc74c229a54bde20810c8eefe8b3",
-      "registrationBindingHash": "0x4e2a9b6e819f9503a0d556407fbc72377b4aafdfe91cb5c4147e64ad226f8869"
+      "salt": "0x24b17717ddf2ecbf299785473457dce8331f31e9749264ad65b0bc5d552eec69",
+      "creationCodeHash": "0x16451353f6f38d25f2ba446438273aeb14d36ad83dfb5c4d4df49d465a19aadf",
+      "initializationResultHash": "0x57eb1cfefccb1b5a75ded2430effae0e98ced1532a55cb587633d956c4580ddf",
+      "indexedTopics": [
+        "0x3f3563a08c039d5e16f01ce4065d2cf5f0158d88ac1014ad83d91caa894f5905",
+        "0x0000000000000000000000002222222222222222222222222222222222222222",
+        "0x24b17717ddf2ecbf299785473457dce8331f31e9749264ad65b0bc5d552eec69"
+      ],
+      "data": "0x16451353f6f38d25f2ba446438273aeb14d36ad83dfb5c4d4df49d465a19aadf57eb1cfefccb1b5a75ded2430effae0e98ced1532a55cb587633d956c4580ddf"
     },
-    "envelopeDigest": "sha256:713c228388fed7be0ae378e487f14c412d8b387b543fdfd38cb4ff6651b6c9bc"
+    "envelopeDigest": "sha256:ce0e40a1d479411bb96a1bc342ac5811f070eeb982def2945b0259a6c0d46534"
   },
   "projection": {
     "schemaVersion": "programmable.custom-launch-projection-record.v4",
@@ -1012,18 +1020,26 @@
         "transactionHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "blockNumber": "21000000",
         "blockHash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "transactionIndex": 1,
+        "logIndex": 9,
         "launchId": "0x3f3563a08c039d5e16f01ce4065d2cf5f0158d88ac1014ad83d91caa894f5905",
         "deployed": "0x2222222222222222222222222222222222222222",
-        "requestHash": "0xa7ac90af8d716e9f622083581c5a6f79fb9f900a82d6aa773ab610eadb9adf67",
-        "registeredRecordCommitment": "0x44e704f00fe0c87deeab08bb36ea2a82ba2ecc74c229a54bde20810c8eefe8b3",
-        "registrationBindingHash": "0x4e2a9b6e819f9503a0d556407fbc72377b4aafdfe91cb5c4147e64ad226f8869"
+        "salt": "0x24b17717ddf2ecbf299785473457dce8331f31e9749264ad65b0bc5d552eec69",
+        "creationCodeHash": "0x16451353f6f38d25f2ba446438273aeb14d36ad83dfb5c4d4df49d465a19aadf",
+        "initializationResultHash": "0x57eb1cfefccb1b5a75ded2430effae0e98ced1532a55cb587633d956c4580ddf",
+        "indexedTopics": [
+          "0x3f3563a08c039d5e16f01ce4065d2cf5f0158d88ac1014ad83d91caa894f5905",
+          "0x0000000000000000000000002222222222222222222222222222222222222222",
+          "0x24b17717ddf2ecbf299785473457dce8331f31e9749264ad65b0bc5d552eec69"
+        ],
+        "data": "0x16451353f6f38d25f2ba446438273aeb14d36ad83dfb5c4d4df49d465a19aadf57eb1cfefccb1b5a75ded2430effae0e98ced1532a55cb587633d956c4580ddf"
       },
-      "envelopeDigest": "sha256:713c228388fed7be0ae378e487f14c412d8b387b543fdfd38cb4ff6651b6c9bc"
+      "envelopeDigest": "sha256:ce0e40a1d479411bb96a1bc342ac5811f070eeb982def2945b0259a6c0d46534"
     },
     "producerBinding": {
       "schemaVersion": "programmable.custom-launch-registry-record.v4",
-      "envelopeDigest": "sha256:713c228388fed7be0ae378e487f14c412d8b387b543fdfd38cb4ff6651b6c9bc",
-      "rawRecordHash": "sha256:6f581863290b23305995768520b43fa497d37f25ee297127ce21e122fd0d6de1"
+      "envelopeDigest": "sha256:ce0e40a1d479411bb96a1bc342ac5811f070eeb982def2945b0259a6c0d46534",
+      "rawRecordHash": "sha256:ec5379c7cc828075c2c05c258aebc87c0ac5951205aeb40d8661501c6b901f3f"
     },
     "origin": {
       "registryGeneration": "2",
@@ -1068,20 +1084,17 @@
           "abiSha256": "sha256:a053f14e59c3c54a0dad47e6e772ba411c7659a46eab3313a6c124260ebcff1f"
         }
       },
-      "authorizedWriters": {
-        "finalizers": [
-          "0x8888888888888888888888888888888888888888"
+      "authorizedWriterSetEvidence": {
+        "operationRole": "atomicRegistrar",
+        "authorizedAddresses": [
+          "0x3333333333333333333333333333333333333333"
         ],
-        "correctors": [
-          "0x8888888888888888888888888888888888888888"
-        ],
-        "revokers": [
-          "0x8888888888888888888888888888888888888888"
-        ]
+        "eventCaller": null,
+        "callerIdentityStatus": "not-emitted-by-registry-abi",
+        "authorizationBasis": "atomic-registrar-runtime-and-same-transaction-event"
       },
       "registrationOnchainTimestamp": "2026-08-06T10:00:00.000Z",
       "operation": "registered",
-      "registryWriter": "0x3333333333333333333333333333333333333333",
       "eventTopic0": "0x8ee074138114415a92a0797b4f1f4c6353f8bd15d8031433abf0cc42c2dc274a",
       "eventIndexedTopics": [
         "0x3f3563a08c039d5e16f01ce4065d2cf5f0158d88ac1014ad83d91caa894f5905",
@@ -1237,8 +1250,8 @@
       "orphanedAt": null,
       "finalityEvidenceHash": "sha256:1b17a0443eac3665f5b0af7f2fb9cab2b754a24086df8de34182651cba2120c1",
       "verificationAuthorityHash": "sha256:e7815ed3910965d2ea0f2f291dd2dc02bddd653aeb06806c57f7cde059e5620e",
-      "canonicalHeadBlock": "21000000",
-      "canonicalHeadHash": "0xa5273732c9599e33b75307cb3b300824dc763d9c8ebd81f91b0bac606b0408f8"
+      "canonicalHeadBlock": "21000001",
+      "canonicalHeadHash": "0x1f7631de98f923c3a14a84bbda7f54fd365c2285125d987f4cf3199e2d263cc0"
     },
     "lifecycle": {
       "status": "active",
@@ -1452,8 +1465,8 @@
         "orphanedAt": null,
         "finalityEvidenceHash": "sha256:1b17a0443eac3665f5b0af7f2fb9cab2b754a24086df8de34182651cba2120c1",
         "verificationAuthorityHash": "sha256:e7815ed3910965d2ea0f2f291dd2dc02bddd653aeb06806c57f7cde059e5620e",
-        "canonicalHeadBlock": "21000000",
-        "canonicalHeadHash": "0xa5273732c9599e33b75307cb3b300824dc763d9c8ebd81f91b0bac606b0408f8"
+        "canonicalHeadBlock": "21000001",
+        "canonicalHeadHash": "0x1f7631de98f923c3a14a84bbda7f54fd365c2285125d987f4cf3199e2d263cc0"
       },
       "lifecycle": {
         "status": "active",

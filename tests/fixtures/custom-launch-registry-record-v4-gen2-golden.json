@@ -10,7 +10,7 @@
   "projectionSchemaVersion": "programmable.custom-launch-projection-record.v4",
   "projectionEnvelopeSchemaVersion": "programmable.custom-launch-projection-envelope.v4",
   "registeredRecordPreimageFieldCount": 37,
-  "producerEnvelopeDigest": "sha256:713c228388fed7be0ae378e487f14c412d8b387b543fdfd38cb4ff6651b6c9bc",
+  "producerEnvelopeDigest": "sha256:ce0e40a1d479411bb96a1bc342ac5811f070eeb982def2945b0259a6c0d46534",
   "feePolicyHash": "0x7da8558a35d1dce2ff206ae9bd34443f5e281456a15093f1961f11e5c935b45f",
   "registeredRecordComponentHashes": {
     "scopeAndApprovalHash": "0x673feb8c556bc19a14ff6fbdc19ef8de7754d9124c0d586aac63ea49e1b3279e",
@@ -22,6 +22,6 @@
   },
   "registeredRecordCommitment": "0x44e704f00fe0c87deeab08bb36ea2a82ba2ecc74c229a54bde20810c8eefe8b3",
   "registrationBindingHash": "0x4e2a9b6e819f9503a0d556407fbc72377b4aafdfe91cb5c4147e64ad226f8869",
-  "rawRecordHash": "sha256:6f581863290b23305995768520b43fa497d37f25ee297127ce21e122fd0d6de1",
-  "projectionDigest": "sha256:6e2a0df93b2fbc764b631f9fac7b8288e892d33b5ca8167486698233cb87c9b2"
+  "rawRecordHash": "sha256:ec5379c7cc828075c2c05c258aebc87c0ac5951205aeb40d8661501c6b901f3f",
+  "projectionDigest": "sha256:0a20b4b7acfa55f2238b3901759a88eee0247346e9597d2e9d71274f918f5172"
 }

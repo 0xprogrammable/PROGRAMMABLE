@@ -183,9 +183,13 @@ export type CustomRegistryGen2EvidenceEventV4 = Readonly<{
   emitterAddress: HexAddress;
   observedRuntimeCodeHash: HexBytes32;
   topic0: HexBytes32;
+  indexedTopics: readonly HexBytes32[];
+  data: `0x${string}`;
   transactionHash: HexBytes32;
   blockNumber: string;
   blockHash: HexBytes32;
+  transactionIndex: number;
+  logIndex: number;
 }>;
 
 export type CustomRegistryGen2PartnerFactoryAuthorizationV4 = Readonly<{
@@ -249,11 +253,15 @@ export type CustomRegistryGen2AtomicExecutionProofV4 = Readonly<{
   transactionHash: HexBytes32;
   blockNumber: string;
   blockHash: HexBytes32;
+  transactionIndex: number;
+  logIndex: number;
   launchId: HexBytes32;
   deployed: HexAddress;
-  requestHash: HexBytes32;
-  registeredRecordCommitment: HexBytes32;
-  registrationBindingHash: HexBytes32;
+  salt: HexBytes32;
+  creationCodeHash: HexBytes32;
+  initializationResultHash: HexBytes32;
+  indexedTopics: readonly HexBytes32[];
+  data: `0x${string}`;
 }>;
 
 export type CustomLaunchRegistryProducerRecordV4 = Readonly<
@@ -403,7 +411,6 @@ type CustomRegistryGen2EventCommonV4 = Readonly<{
   registryGeneration: "2";
   registryAddress: HexAddress;
   observedRegistryRuntimeCodeHash: HexBytes32;
-  registryWriter: HexAddress;
   emitterRole: "registry";
   emitterAddress: HexAddress;
   topic0: HexBytes32;
@@ -526,10 +533,23 @@ export type CustomRegistryGen2ParityProjectionV4 = Readonly<{
       typeof CUSTOM_REGISTRY_GEN2_EVENT_SET_BYTES_SHA256;
     feePolicyDomain: typeof CUSTOM_REGISTRY_GEN2_FEE_POLICY_DOMAIN;
     releaseContracts: CustomRegistryGen2ReleaseContractsV4;
-    authorizedWriters: CustomRegistryGen2ProjectionManifestV4["authorizedWriters"];
+    authorizedWriterSetEvidence: Readonly<{
+      operationRole:
+        | "atomicRegistrar"
+        | "providerFactory"
+        | "finalizer"
+        | "corrector"
+        | "revoker";
+      authorizedAddresses: readonly HexAddress[];
+      eventCaller: null;
+      callerIdentityStatus: "not-emitted-by-registry-abi";
+      authorizationBasis:
+        | "atomic-registrar-runtime-and-same-transaction-event"
+        | "partner-factory-state-and-registry-runtime"
+        | "registry-role-guard-and-manifest-allowlist";
+    }>;
     registrationOnchainTimestamp: string;
     operation: CustomRegistryGen2EventV4["operation"];
-    registryWriter: HexAddress;
     eventTopic0: HexBytes32;
     eventIndexedTopics: readonly HexBytes32[];
     eventData: `0x${string}`;
@@ -977,6 +997,111 @@ function uint64Topic(value: string): HexBytes32 {
   return abiData("uint64 value", [BigInt(value)]) as HexBytes32;
 }
 
+/** Exact inherited AtomicCustomLaunchExecutedV1 log encoding used by Gen2. */
+export function customRegistryGen2AtomicExecutionAbiProofV4(
+  value: Pick<
+    CustomRegistryGen2AtomicExecutionProofV4,
+    | "launchId"
+    | "deployed"
+    | "salt"
+    | "creationCodeHash"
+    | "initializationResultHash"
+  >,
+): Readonly<{
+  indexedTopics: readonly HexBytes32[];
+  data: `0x${string}`;
+}> {
+  return Object.freeze({
+    indexedTopics: Object.freeze([
+      value.launchId,
+      addressWord(value.deployed),
+      value.salt,
+    ]),
+    data: abiData(
+      "bytes32 creationCodeHash, bytes32 initializationResultHash",
+      [value.creationCodeHash, value.initializationResultHash],
+    ),
+  });
+}
+
+/** Exact inherited CustomPartnerFactoryAuthorizedV1 log encoding used by Gen2. */
+export function customRegistryGen2PartnerFactoryAuthorizedAbiProofV4(
+  value: Pick<
+    CustomRegistryGen2PartnerFactoryAuthorizationV4["authorizedEvent"],
+    | "configurationHash"
+    | "providerId"
+    | "factory"
+    | "modelId"
+    | "modelVersion"
+    | "templateId"
+    | "templateVersion"
+    | "validAfterBlock"
+    | "expiresAtBlock"
+    | "evidenceHash"
+  >,
+): Readonly<{
+  indexedTopics: readonly HexBytes32[];
+  data: `0x${string}`;
+}> {
+  return Object.freeze({
+    indexedTopics: Object.freeze([
+      value.configurationHash,
+      value.providerId,
+      addressWord(value.factory),
+    ]),
+    data: abiData(
+      "bytes32 modelId, bytes32 modelVersion, bytes32 templateId, bytes32 templateVersion, uint64 validAfterBlock, uint64 expiresAtBlock, bytes32 evidenceHash",
+      [
+        value.modelId,
+        value.modelVersion,
+        value.templateId,
+        value.templateVersion,
+        BigInt(value.validAfterBlock),
+        BigInt(value.expiresAtBlock),
+        value.evidenceHash,
+      ],
+    ),
+  });
+}
+
+/** Exact inherited CustomPartnerFactorySourceBoundV1 log encoding used by Gen2. */
+export function customRegistryGen2PartnerFactorySourceBoundAbiProofV4(
+  value: Pick<
+    CustomRegistryGen2PartnerFactoryAuthorizationV4["sourceBoundEvent"],
+    | "configurationHash"
+    | "modelRepositoryId"
+    | "modelSourceCommitId"
+    | "factorySourceRepositoryId"
+    | "factorySourceCommitId"
+    | "factoryRuntimeCodeHash"
+    | "launchRuntimeCodeSetHash"
+    | "permissionsHash"
+    | "feePolicyHash"
+  >,
+): Readonly<{
+  indexedTopics: readonly HexBytes32[];
+  data: `0x${string}`;
+}> {
+  return Object.freeze({
+    indexedTopics: Object.freeze([
+      value.configurationHash,
+      value.modelRepositoryId,
+      value.modelSourceCommitId,
+    ]),
+    data: abiData(
+      "bytes32 factorySourceRepositoryId, bytes32 factorySourceCommitId, bytes32 factoryRuntimeCodeHash, bytes32 launchRuntimeCodeSetHash, bytes32 permissionsHash, bytes32 feePolicyHash",
+      [
+        value.factorySourceRepositoryId,
+        value.factorySourceCommitId,
+        value.factoryRuntimeCodeHash,
+        value.launchRuntimeCodeSetHash,
+        value.permissionsHash,
+        value.feePolicyHash,
+      ],
+    ),
+  });
+}
+
 export function customRegistryGen2AbiEventProofV4(input: Readonly<{
   registryLaunchIdRaw: HexBytes32;
   registryProjectIdRaw: HexBytes32;
@@ -1417,6 +1542,8 @@ function validateEvidenceEmitter(
   }
   bytes32(value.transactionHash, "custom-registry-v4-evidence-transaction");
   bytes32(value.blockHash, "custom-registry-v4-evidence-block-hash");
+  index(value.transactionIndex, "custom-registry-v4-evidence-transaction-index");
+  index(value.logIndex, "custom-registry-v4-evidence-log-index");
 }
 
 function validateProviderOrAtomicProof(
@@ -1428,11 +1555,21 @@ function validateProviderOrAtomicProof(
   if (preimage.providerId === ZERO_BYTES32) {
     const proof = producer.atomicExecutionProof;
     const contract = manifest.contracts.atomicRegistrar;
+    const exactAtomicLog = proof === null
+      ? null
+      : customRegistryGen2AtomicExecutionAbiProofV4(proof);
+    if (proof !== null) {
+      validateEvidenceEmitter(
+        proof,
+        contract,
+        "atomicRegistrar",
+        manifest.topics.atomicExecuted,
+        producer.registryOrigin.registrationBlockNumber,
+      );
+    }
     if (
       producer.partnerFactoryAuthorization !== null ||
       proof === null ||
-      (event.operation === "registered" &&
-        event.registryWriter !== contract.address) ||
       proof.emitterRole !== "atomicRegistrar" ||
       proof.emitterAddress !== contract.address ||
       proof.observedRuntimeCodeHash !== contract.runtimeCodeHash ||
@@ -1440,14 +1577,25 @@ function validateProviderOrAtomicProof(
       proof.transactionHash !== producer.registryOrigin.registrationTransactionHash ||
       proof.blockNumber !== producer.registryOrigin.registrationBlockNumber ||
       proof.blockHash !== producer.registryOrigin.registrationBlockHash ||
+      proof.transactionIndex !==
+        Number(producer.registryOrigin.registrationTransactionIndex) ||
+      BigInt(proof.logIndex) !==
+        BigInt(producer.registryOrigin.registrationLogIndex) + 7n ||
       proof.launchId !== event.registryLaunchIdRaw ||
       proof.deployed !== preimage.primaryContract ||
-      proof.registeredRecordCommitment !== producer.registeredRecordCommitment ||
-      proof.registrationBindingHash !== producer.registrationBindingHash
+      exactAtomicLog === null ||
+      canonicalJson(proof.indexedTopics) !==
+        canonicalJson(exactAtomicLog.indexedTopics) ||
+      proof.data !== exactAtomicLog.data
     ) {
       return fail("custom-registry-v4-atomic-proof");
     }
-    bytes32(proof.requestHash, "custom-registry-v4-atomic-request");
+    bytes32(proof.salt, "custom-registry-v4-atomic-salt");
+    bytes32(proof.creationCodeHash, "custom-registry-v4-creation-code-hash");
+    bytes32(
+      proof.initializationResultHash,
+      "custom-registry-v4-initialization-result-hash",
+    );
     return;
   }
   const authorization = producer.partnerFactoryAuthorization;
@@ -1472,6 +1620,10 @@ function validateProviderOrAtomicProof(
   );
   const authorizedEvent = authorization.authorizedEvent;
   const sourceBoundEvent = authorization.sourceBoundEvent;
+  const exactAuthorizedLog =
+    customRegistryGen2PartnerFactoryAuthorizedAbiProofV4(authorizedEvent);
+  const exactSourceBoundLog =
+    customRegistryGen2PartnerFactorySourceBoundAbiProofV4(sourceBoundEvent);
   if (
     authorization.chainId !== event.chainId ||
     authorization.registryGeneration !== "2" ||
@@ -1485,8 +1637,6 @@ function validateProviderOrAtomicProof(
     authorization.templateVersion !== preimage.templateVersion ||
     authorization.modelRepositoryId !== preimage.repositoryId ||
     authorization.modelSourceCommitId !== preimage.commitId ||
-    (event.operation === "registered" &&
-      authorization.factory !== event.registryWriter) ||
     authorization.launchRuntimeCodeSetHash !== preimage.runtimeCodeSetHash ||
     authorization.permissionsHash !== preimage.permissionsHash ||
     authorization.feePolicyHash !== preimage.feePolicyHash ||
@@ -1517,7 +1667,18 @@ function validateProviderOrAtomicProof(
     sourceBoundEvent.launchRuntimeCodeSetHash !==
       authorization.launchRuntimeCodeSetHash ||
     sourceBoundEvent.permissionsHash !== authorization.permissionsHash ||
-    sourceBoundEvent.feePolicyHash !== authorization.feePolicyHash
+    sourceBoundEvent.feePolicyHash !== authorization.feePolicyHash ||
+    canonicalJson(authorizedEvent.indexedTopics) !==
+      canonicalJson(exactAuthorizedLog.indexedTopics) ||
+    authorizedEvent.data !== exactAuthorizedLog.data ||
+    canonicalJson(sourceBoundEvent.indexedTopics) !==
+      canonicalJson(exactSourceBoundLog.indexedTopics) ||
+    sourceBoundEvent.data !== exactSourceBoundLog.data ||
+    sourceBoundEvent.transactionHash !== authorizedEvent.transactionHash ||
+    sourceBoundEvent.blockNumber !== authorizedEvent.blockNumber ||
+    sourceBoundEvent.blockHash !== authorizedEvent.blockHash ||
+    sourceBoundEvent.transactionIndex !== authorizedEvent.transactionIndex ||
+    sourceBoundEvent.logIndex !== authorizedEvent.logIndex + 1
   ) {
     return fail("custom-registry-v4-partner-factory-binding");
   }
@@ -1529,6 +1690,55 @@ function validateProviderOrAtomicProof(
     authorization.stateProofHash,
     "custom-registry-v4-partner-factory-state-proof",
   );
+}
+
+function authorizedWriterSetEvidence(
+  producer: CustomLaunchRegistryProducerRecordV4,
+  event: CustomRegistryGen2EventV4,
+  manifest: CustomRegistryGen2ProjectionManifestV4,
+): CustomRegistryGen2ParityProjectionV4["origin"]["authorizedWriterSetEvidence"] {
+  if (event.operation === "registered") {
+    if (producer.registeredRecordPreimage.providerId === ZERO_BYTES32) {
+      return Object.freeze({
+        operationRole: "atomicRegistrar",
+        authorizedAddresses: Object.freeze([
+          manifest.contracts.atomicRegistrar.address,
+        ]),
+        eventCaller: null,
+        callerIdentityStatus: "not-emitted-by-registry-abi",
+        authorizationBasis:
+          "atomic-registrar-runtime-and-same-transaction-event",
+      });
+    }
+    const authorization = producer.partnerFactoryAuthorization;
+    if (authorization === null) {
+      return fail("custom-registry-v4-partner-writer-evidence");
+    }
+    return Object.freeze({
+      operationRole: "providerFactory",
+      authorizedAddresses: Object.freeze([authorization.factory]),
+      eventCaller: null,
+      callerIdentityStatus: "not-emitted-by-registry-abi",
+      authorizationBasis: "partner-factory-state-and-registry-runtime",
+    });
+  }
+  const operationRole = event.operation === "finalized"
+    ? "finalizer" as const
+    : event.operation === "corrected"
+      ? "corrector" as const
+      : "revoker" as const;
+  const authorizedAddresses = event.operation === "finalized"
+    ? manifest.authorizedWriters.finalizers
+    : event.operation === "corrected"
+      ? manifest.authorizedWriters.correctors
+      : manifest.authorizedWriters.revokers;
+  return Object.freeze({
+    operationRole,
+    authorizedAddresses: Object.freeze([...authorizedAddresses]),
+    eventCaller: null,
+    callerIdentityStatus: "not-emitted-by-registry-abi",
+    authorizationBasis: "registry-role-guard-and-manifest-allowlist",
+  });
 }
 
 function eventFollowsProjection(
@@ -1724,7 +1934,7 @@ function validateAbiEventPayload(
           "custom-registry-v4-finalized-timestamp",
         ) !== event.onchainTimestamp ||
       BigInt(payload.confirmedHeadBlockNumber) <
-        BigInt(payload.observedBlockNumber) + BigInt(manifest.finalityDepth) - 1n ||
+        BigInt(payload.observedBlockNumber) + BigInt(manifest.finalityDepth) ||
       head.canonicalBlockHash(payload.confirmedHeadBlockNumber) !==
         payload.confirmedHeadBlockHash ||
       digestFromRawBytes32(payload.finalityEvidenceHash) !==
@@ -1883,8 +2093,8 @@ function validateAndProjectFinality(
   if (!orphaned && headBlock < BigInt(event.blockNumber)) {
     return fail("custom-registry-v4-head-before-event");
   }
-  const depth = headBlock - BigInt(origin.registrationBlockNumber) + 1n;
-  if (!orphaned && depth <= 0n) return fail("custom-registry-v4-head-before-registration");
+  const depth = headBlock - BigInt(origin.registrationBlockNumber);
+  if (!orphaned && depth < 0n) return fail("custom-registry-v4-head-before-registration");
   const derivedStatus = orphaned
     ? "orphaned" as const
     : depth >= BigInt(manifest.finalityDepth)
@@ -2036,13 +2246,6 @@ export function projectCustomRegistryGen2RecordV4(input: Readonly<{
   const origin = producer.registryOrigin;
   const registryContract = manifest.contracts.registry;
   const expectedTopic = manifest.topics[event.operation];
-  const transitionWriterAllowed = event.operation === "registered" ||
-    (event.operation === "finalized" &&
-      manifest.authorizedWriters.finalizers.includes(event.registryWriter)) ||
-    (event.operation === "corrected" &&
-      manifest.authorizedWriters.correctors.includes(event.registryWriter)) ||
-    (event.operation === "revoked" &&
-      manifest.authorizedWriters.revokers.includes(event.registryWriter));
   if (
     event.registryGeneration !== "2" ||
     event.chainId !== manifest.chainId ||
@@ -2052,7 +2255,6 @@ export function projectCustomRegistryGen2RecordV4(input: Readonly<{
     event.emitterRole !== "registry" ||
     event.emitterAddress !== registryContract.address ||
     event.topic0 !== expectedTopic ||
-    !transitionWriterAllowed ||
     BigInt(decimal(event.blockNumber, "custom-registry-v4-event-block", true)) <
       BigInt(registryContract.startBlock) ||
     event.registryLaunchIdRaw !== digestRawBytes32(event.launchId) ||
@@ -2216,10 +2418,13 @@ export function projectCustomRegistryGen2RecordV4(input: Readonly<{
       registryEventSetBytesSha256: manifest.registryEventSetBytesSha256,
       feePolicyDomain: manifest.feePolicyDomain,
       releaseContracts: manifest.contracts,
-      authorizedWriters: manifest.authorizedWriters,
+      authorizedWriterSetEvidence: authorizedWriterSetEvidence(
+        producer,
+        event,
+        manifest,
+      ),
       registrationOnchainTimestamp: origin.registrationOnchainTimestamp,
       operation: event.operation,
-      registryWriter: event.registryWriter,
       eventTopic0: event.topic0,
       eventIndexedTopics: event.indexedTopics,
       eventData: event.data,
