@@ -160,6 +160,7 @@
     "@uniswap/universal-router-sdk": "5.11.1",
     "@uniswap/v4-sdk": "2.3.1",
     "@vercel/blob": "2.6.1",
+    "ajv": "8.20.0",
     "lucide-react": "1.26.0",
     "next": "16.2.11",
     "pg": "8.22.0",
@@ -175,7 +176,6 @@
     "@types/pg": "8.20.4",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
-    "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "esbuild": "0.28.1",
     "eslint": "9.39.5",
@@ -187,8 +187,20 @@
     "@uniswap/universal-router-sdk": {
       "@openzeppelin/contracts@4.7.0": "4.9.6"
     },
+    "@eslint/eslintrc": {
+      "js-yaml": "4.3.1"
+    },
     "adm-zip": "0.6.0",
+    "ajv": {
+      "fast-uri": "3.1.5"
+    },
     "axios": "1.18.1",
+    "minimatch@10.2.5": {
+      "brace-expansion": "5.0.9"
+    },
+    "porto": {
+      "hono": "4.12.34"
+    },
     "cookie": "0.7.2",
     "diff": "8.0.3",
     "postcss": "8.5.23",
