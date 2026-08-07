@@ -22,8 +22,8 @@
 
 .devBuy {
   align-items: center;
-  background: var(--glass-72);
-  border: 1px solid var(--border);
+  background: var(--liquid-glass-inner-background);
+  border: 1px solid var(--liquid-glass-border);
   border-radius: 15px;
   display: grid;
   gap: 18px;
@@ -63,8 +63,8 @@
 }
 
 .devBuyInput:focus-within {
-  border-color: rgba(213, 111, 165, 0.62);
-  box-shadow: 0 0 0 3px rgba(213, 111, 165, 0.1);
+  border-color: var(--liquid-glass-border-strong);
+  box-shadow: 0 0 0 3px rgba(248, 240, 233, 0.1);
 }
 
 .devBuyInput input {
@@ -107,8 +107,9 @@
 }
 
 .footer {
-  backdrop-filter: blur(16px);
-  background: var(--surface-tint-strong);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: var(--liquid-glass-inner-background);
   position: relative;
   z-index: 4;
 }
@@ -155,7 +156,7 @@
 
 @media (hover: hover) and (pointer: fine) {
   .devBuyInput > button:not(:disabled):hover {
-    background: rgba(213, 111, 165, 0.17);
+    background: var(--liquid-glass-control-background-hover);
   }
 }
 

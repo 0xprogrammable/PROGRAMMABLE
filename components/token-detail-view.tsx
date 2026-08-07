@@ -1641,6 +1641,13 @@ function TokenDetailContent({
           )}
         </aside>
 
+        {token.launchModel === "deep" &&
+        token.growthTargetNativeWei &&
+        token.totalNativeAddedToLiquidityWei &&
+        token.tokenReserveRaw ? (
+          <DeepLiquiditySummary token={token} />
+        ) : null}
+
         <div className={styles.communityShell}>
           <TokenCommunityChat
             memberCount={previewProject?.communityMembers}
@@ -1649,13 +1656,6 @@ function TokenDetailContent({
             tokenName={token.name}
           />
         </div>
-
-        {token.launchModel === "deep" &&
-        token.growthTargetNativeWei &&
-        token.totalNativeAddedToLiquidityWei &&
-        token.tokenReserveRaw ? (
-          <DeepLiquiditySummary token={token} />
-        ) : null}
 
       </div>
       {copyError ? (

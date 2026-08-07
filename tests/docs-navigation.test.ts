@@ -142,7 +142,7 @@ describe("Docs navigation state", () => {
     ).toBe("formats");
   });
 
-  it("places the reading marker below whichever Docs control is fixed", () => {
+  it("places the reading marker below every fixed Docs control", () => {
     expect(
       calculateDocsReadingOffset({
         mobileNavigationHeight: 0,
@@ -157,6 +157,13 @@ describe("Docs navigation state", () => {
         stickyToolsHeight: 0,
       }),
     ).toBe(154);
+    expect(
+      calculateDocsReadingOffset({
+        mobileNavigationHeight: 50,
+        scrollPaddingTop: 84,
+        stickyToolsHeight: 52,
+      }),
+    ).toBe(206);
   });
 
   it("keeps topic scrolling short, smooth and distance-aware", () => {

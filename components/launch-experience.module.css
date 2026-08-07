@@ -47,8 +47,8 @@
 }
 
 .modelCard.modelCard {
-  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
-  backdrop-filter: var(--liquid-glass-backdrop);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   background: var(--liquid-glass-surface-background);
   border: 1px solid var(--liquid-glass-border);
   border-radius: 26px;
@@ -175,34 +175,20 @@
 }
 
 .customSparkles > span {
-  --spark-size: 12px;
-  --twinkle-rotation: 0deg;
-  background: rgb(255 249 231 / 0.92);
-  color: rgb(255 249 231 / 0.78);
-  height: 2px;
+  --spark-size: 5px;
+  background: rgb(248 240 233 / 0.94);
+  border-radius: 50%;
+  box-shadow: 0 0 var(--spark-size) rgb(248 240 233 / 0.56);
+  height: 1.5px;
   opacity: 0.12;
   position: absolute;
-  transform: rotate(var(--twinkle-rotation)) scale(0.76);
-  width: 2px;
+  transform: scale(0.76);
+  width: 1.5px;
 }
 
 .customSparkles > span::before,
 .customSparkles > span::after {
-  background: currentColor;
-  content: "";
-  inset: 50% auto auto 50%;
-  position: absolute;
-  transform: translate3d(-50%, -50%, 0);
-}
-
-.customSparkles > span::before {
-  height: 1px;
-  width: var(--spark-size);
-}
-
-.customSparkles > span::after {
-  height: var(--spark-size);
-  width: 1px;
+  content: none;
 }
 
 .customSparkles > span:nth-child(1) {
@@ -211,63 +197,54 @@
 }
 
 .customSparkles > span:nth-child(2) {
-  --twinkle-rotation: 16deg;
-  --spark-size: 8px;
+  --spark-size: 4px;
   right: 24%;
   top: 20%;
 }
 
 .customSparkles > span:nth-child(3) {
-  --twinkle-rotation: -12deg;
   bottom: 23%;
   left: 27%;
 }
 
 .customSparkles > span:nth-child(4) {
-  --twinkle-rotation: 9deg;
-  --spark-size: 9px;
+  --spark-size: 4px;
   bottom: 29%;
   right: 16%;
 }
 
 .customSparkles > span:nth-child(5) {
-  --twinkle-rotation: -18deg;
-  --spark-size: 7px;
+  --spark-size: 3px;
   left: 39%;
   top: 17%;
 }
 
 .customSparkles > span:nth-child(6) {
-  --twinkle-rotation: 14deg;
-  --spark-size: 8px;
+  --spark-size: 4px;
   bottom: 15%;
   right: 38%;
 }
 
 .customSparkles > span:nth-child(7) {
-  --twinkle-rotation: 21deg;
-  --spark-size: 10px;
+  --spark-size: 5px;
   left: 11%;
   top: 58%;
 }
 
 .customSparkles > span:nth-child(8) {
-  --twinkle-rotation: -8deg;
-  --spark-size: 7px;
+  --spark-size: 3px;
   right: 9%;
   top: 49%;
 }
 
 .customSparkles > span:nth-child(9) {
-  --twinkle-rotation: 12deg;
-  --spark-size: 9px;
+  --spark-size: 4px;
   bottom: 9%;
   left: 49%;
 }
 
 .customSparkles > span:nth-child(10) {
-  --twinkle-rotation: -22deg;
-  --spark-size: 6px;
+  --spark-size: 3px;
   right: 43%;
   top: 8%;
 }
@@ -277,17 +254,17 @@
   70%,
   100% {
     opacity: 0.1;
-    transform: rotate(var(--twinkle-rotation)) scale(0.74);
+    transform: scale(0.74);
   }
 
   78% {
     opacity: 0.82;
-    transform: rotate(var(--twinkle-rotation)) scale(1.08);
+    transform: scale(1.08);
   }
 
   84% {
     opacity: 0.16;
-    transform: rotate(var(--twinkle-rotation)) scale(0.88);
+    transform: scale(0.88);
   }
 }
 
@@ -484,7 +461,8 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .modelCard.modelCard:hover {
+  .modelCard.modelCard[data-launch-model-available="true"]:hover,
+  .modelCard.modelCard[href]:hover {
     background: var(--liquid-glass-control-background-hover);
     border-color: var(--liquid-glass-border-strong);
     box-shadow: var(--liquid-glass-shadow);
@@ -520,8 +498,8 @@
 }
 
 .formLoadingSheet {
-  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
-  backdrop-filter: var(--liquid-glass-backdrop);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   background: var(--liquid-glass-surface-background);
   border: 1px solid var(--liquid-glass-border);
   border-radius: 26px;
@@ -572,6 +550,14 @@
   min-width: 0;
 }
 
+.formModelName {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 620;
+  letter-spacing: 0.025em;
+  line-height: 1.3;
+}
+
 .formPage :global(.launch-page-heading) {
   align-items: center;
   max-width: 1000px;
@@ -596,8 +582,8 @@
 }
 
 .formPage :global(.classic-launch-sheet) {
-  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
-  backdrop-filter: var(--liquid-glass-backdrop);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   background: var(--liquid-glass-surface-background);
   border-color: var(--liquid-glass-border);
   box-shadow: var(--liquid-glass-shadow);
@@ -792,8 +778,8 @@
 }
 
 .formPage :global(.classic-launch-footer) {
-  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
-  backdrop-filter: var(--liquid-glass-backdrop);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   background: var(--liquid-glass-inner-background);
   border-color: var(--liquid-glass-border);
   min-height: 70px;

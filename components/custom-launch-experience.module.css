@@ -16,11 +16,16 @@
 .applicationRow,
 .setupSheet,
 .loadingPanel {
-  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
-  backdrop-filter: var(--liquid-glass-backdrop);
-  background: var(--liquid-glass-surface-background-strong);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: var(--liquid-glass-surface-background);
   border: 1px solid var(--liquid-glass-border);
   box-shadow: var(--liquid-glass-shadow);
+}
+
+.applicationRow {
+  background: var(--liquid-glass-inner-background);
+  box-shadow: var(--liquid-glass-inner-shadow);
 }
 
 .introPrimary {
@@ -453,8 +458,8 @@
 .fieldStack input,
 .parameterGrid input,
 .parameterGrid textarea {
-  background: var(--control-glass-neutral-bg);
-  border: 1px solid var(--control-border);
+  background: var(--liquid-glass-control-background);
+  border: 1px solid var(--liquid-glass-border);
   border-radius: 13px;
   color: var(--text);
   font: inherit;
@@ -553,7 +558,8 @@
 
 .launchFooter {
   align-items: center;
-  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   background: var(--liquid-glass-inner-background);
   border-top: 1px solid var(--panel-border-soft);
   display: flex;
@@ -601,11 +607,15 @@
 }
 
 .liveMessage {
-  color: var(--error, #b24c55);
+  color: var(--text-soft);
   font-size: 12.5px;
   margin: 12px auto 0;
   max-width: 1000px;
   min-height: 20px;
+}
+
+.liveMessage[data-error="true"] {
+  color: var(--danger);
 }
 
 .visuallyHidden {

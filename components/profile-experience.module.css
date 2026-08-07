@@ -50,7 +50,7 @@
 
 .avatar {
   align-items: center;
-  background: var(--avatar-background);
+  background: var(--liquid-glass-control-background-hover);
   border-radius: 15px;
   color: var(--profile-pink);
   display: flex;
@@ -226,27 +226,29 @@
 }
 
 .connectCard {
+  -webkit-backdrop-filter: none;
   align-items: center;
+  backdrop-filter: none;
   display: flex;
   flex-direction: column;
   justify-content: center;
   margin: 0 auto;
-  max-width: 560px;
-  min-height: min(620px, calc(100svh - var(--header-height) - 74px));
-  padding: 48px 18px 76px;
+  max-width: 540px;
+  min-height: min(520px, calc(100svh - var(--header-height) - 88px));
+  padding: 42px 18px 54px;
   border-radius: 28px;
   text-align: center;
 }
 
 .connectMark {
-  height: clamp(68px, 8vw, 88px);
-  margin-block-end: 26px;
+  height: clamp(62px, 7vw, 78px);
+  margin-block-end: 22px;
   object-fit: contain;
-  width: clamp(68px, 8vw, 88px);
+  width: clamp(62px, 7vw, 78px);
 }
 
 .connectCard h1 {
-  font-size: clamp(48px, 6.2vw, 68px);
+  font-size: clamp(46px, 5.4vw, 60px);
   font-weight: 565;
   letter-spacing: -0.052em;
   line-height: 0.94;
@@ -441,8 +443,8 @@
   background: var(--profile-panel);
   border: 1px solid var(--profile-line);
   border-radius: 24px;
-  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
-  backdrop-filter: var(--liquid-glass-backdrop);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   box-shadow: var(--liquid-glass-shadow);
   display: grid;
   gap: 10px;
@@ -537,8 +539,8 @@
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
-  height: 40px;
-  min-width: 40px;
+  height: 44px;
+  min-width: 44px;
   padding-inline: 6px;
   transition:
     border-color 150ms ease,
@@ -772,7 +774,7 @@
   color: var(--text-soft);
   display: inline-flex;
   font-size: 15px;
-  height: 40px;
+  height: 44px;
   justify-content: center;
   transition:
     background-color 150ms ease,
@@ -780,7 +782,7 @@
     color 150ms ease,
     opacity 150ms ease,
     transform 120ms var(--ease-out);
-  width: 40px;
+  width: 44px;
 }
 
 .claimPagination button:disabled {
@@ -1219,8 +1221,8 @@
   background: var(--profile-panel);
   border: 1px solid var(--profile-line);
   border-radius: 24px;
-  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
-  backdrop-filter: var(--liquid-glass-backdrop);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   box-shadow: var(--liquid-glass-shadow);
   display: grid;
   gap: 8px;
@@ -1622,7 +1624,7 @@
   }
 
   .editButton {
-    min-height: 36px;
+    min-height: 44px;
   }
 
   .address {
