@@ -55,10 +55,19 @@ These are byte-level SHA-256 values; the semantic event-set commitment remains t
 
 ## Role boundary
 
-The default administrator is not the bootstrap writer. Deployment must name an independent approver and a temporary
-bootstrap writer. The administrator must authorize the exact deployed atomic registrar and revoke the bootstrap
-writer before public activation. No address is inferred from a display name, a GitHub identity, or an operator label.
+The canonical V1 release uses the reviewed four-transaction nonce-bound deployment flow in
+`contracts/script/DeployProgrammableCustomRegistryReleaseV1.s.sol`. Before transaction one, the deployer and its exact
+pending nonce are frozen. The main Registry constructor receives the deterministic `CREATE` address of the atomic
+registrar at `startingNonce + 3` as its only initial `WRITER_ROLE`; no temporary EOA or bootstrap writer is authorized.
+Transaction four must deploy the registrar at that exact predicted address, and the script must prove that the Registry
+grants the writer role to it. Any failed or interleaved transaction invalidates the address prediction and requires a
+new freeze and full simulation; the remaining transactions must not continue under the old release record.
 
-The finalizer, corrector, revoker, approver, bootstrap writer, deployed addresses, deployment transactions, verified
-runtime hashes, and start block belong in the deployment manifest only after they are real. They are intentionally not
-filled with placeholders in these predeployment artifacts.
+The default administrator is not a writer. The approver must be independent of the registrar/writer and must satisfy
+the role-separation checks enforced by both stateful contracts. The legacy
+`ConfigureProgrammableCustomAtomicRegistrarV1.s.sol` path is not part of this canonical four-transaction deployment
+and must not be executed for it. No address is inferred from a display name, GitHub identity, or operator label.
+
+The finalizer, corrector, revoker, approver, registrar/writer, deployed addresses, deployment transactions, verified
+runtime hashes, and per-contract start blocks belong in the deployment manifest only after they are real. They are
+intentionally not filled with placeholders in these predeployment artifacts.
