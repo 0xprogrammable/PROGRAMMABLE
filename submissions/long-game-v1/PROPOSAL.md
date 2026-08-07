@@ -4,15 +4,15 @@
 
 **Model id:** `long-game-v1`
 
-**Exact source:** `c9163f1947553734393e8e44e558feacc4d4fa4c`
+**Exact source:** `67512e3b7ea1cff4e214d31c209816278b374c5d`
 
 Long Game is an immutable Uniswap v4 hook system for custodied, non-transferable cost-basis positions. Verified exact-input buyers receive withdrawable positions backed by actual V4 output held by the hook. Verified sellers recover the sell-side project fee except for a maturity-decaying share of actual profit; that penalty rewards mature shares owned by other holders.
 
 ## Canonical pool and launch
 
-The launch is bound to Ethereum mainnet, canonical PoolManager `0x000000000004444c5dc75cB358380D2e3dE08A90`, existing Programmable V4 `0x7987f03462200b3D8A072E02C89A8A41dCB124EE` as currency0, and canonical WETH9 `0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2` as currency1. Both assets use 18 decimals. The exact PoolKey uses fee `3000`, tick spacing `60`, and permission-mined hook `0xd5756b8220dA4eB2DB4742f45718CF45c06C20CC`; its PoolId is `0xe0e3538ef2a68bb704cc49e7e339d7480cef0796a418ef804aa6d75562552bb2`.
+The launch is bound to Ethereum mainnet, canonical PoolManager `0x000000000004444c5dc75cB358380D2e3dE08A90`, existing Programmable V4 `0x7987f03462200b3D8A072E02C89A8A41dCB124EE` as currency0, and canonical WETH9 `0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2` as currency1. Both assets use 18 decimals. V1 does not deploy a token, mint supply, define new metadata, or construct a dynamic PoolKey. The exact fixed PoolKey uses fee `3000`, tick spacing `60`, and permission-mined hook `0x5B3158d8aDdEa575827b4d8F2a0C9Db2433120CC`; its PoolId is `0x21046f95cb42b61b492b11d2573f32e79c8d2dd6169a4da14cb1a7adf75faec7`.
 
-The executable `launch.json` uses the canonical deterministic deployment proxy, root salt `0xb2390533357720983da2b44ebeca43bce87e5f5a7b3d5a79fc898b760f7b926a`, and predicted launcher `0x0EB67ce3c0Ab970434D2c8F8d8ccC16586953b27`. The launcher constructor creates the authenticated router first and hook factory second. Its one-shot initializer deploys the hook with the exact permission salt, registers and initializes the canonical pool at `sqrtPriceX96 = 62483982636359169950086397`, pulls capped V4/WETH from the launch-session wallet, adds the declared full-range liquidity, settles both PoolManager deltas, and returns deterministic rounding remainders. Any mismatch reverts the entire transaction.
+The executable `launch.json` uses the canonical deterministic deployment proxy, root salt `0xb2390533357720983da2b44ebeca43bce87e5f5a7b3d5a79fc898b760f7b926a`, and predicted launcher `0x38FD7904d32C7dd227E34bBe2b1A34a0720A4a5E`. The launcher constructor creates the authenticated router first and hook factory second. Its one-shot initializer requires the launch-session wallet to be both caller and payer before any transfer, deploys the hook with the exact permission salt, registers and initializes the canonical pool at `sqrtPriceX96 = 62483982636359169950086397`, pulls capped V4/WETH from that wallet, adds the declared full-range liquidity, settles both PoolManager deltas, and returns deterministic rounding remainders. Any mismatch reverts the entire transaction.
 
 The launcher permanently owns the initial v4 core position. It has no decrease-liquidity, fee-collection, rescue, arbitrary-call, owner, or upgrade surface, so the initial position cannot be removed through project code.
 
@@ -26,6 +26,6 @@ Position owners may withdraw V4 at any time without a fee. A verified sell destr
 
 ## Evidence and boundary
 
-The exact source revision records 64 passing Foundry tests across four suites, stateful invariants with zero handler reverts, passing production contract-size checks, a pinned mainnet-fork deployment-identity reproduction, and four passing React/Vite demo tests plus a production build. The refreshed Programmable v4 Builder reports `PROTOTYPE_READY`, and its static package intake reports `READY` without package errors or warnings.
+The exact source revision records 65 passing Foundry tests across four suites, four stateful invariants with 8,192 calls and zero handler reverts, passing production contract-size checks, a full clean-clone pinned mainnet-fork launch and real PoolManager settlement rehearsal, triaged Slither 0.11.4 findings, and four passing React/Vite demo tests plus a production build. The refreshed Programmable v4 Builder reports `PROTOTYPE_READY`, and its static package intake reports `READY` without package errors or warnings.
 
 These are builder-declared local results, not an audit, acceptance, deployment, source/runtime verification, routing approval, or availability claim. Maintainer architecture review, independent security/economic review, quoting, indexing, monitoring, registry integration, routing-provider work, and final signed verification remain separate gates.
