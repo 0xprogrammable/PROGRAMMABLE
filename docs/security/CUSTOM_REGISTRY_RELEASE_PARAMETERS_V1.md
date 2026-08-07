@@ -1,8 +1,18 @@
 # Programmable Custom Registry V1 release parameters
 
-These values are frozen constructor and manifest inputs. They do not assert that a deployment exists. Public status
-remains `prelaunch` and all address/start-block fields remain `null` until a finalized deployment receipt is bound to
-the release manifest.
+These values are the frozen constructor and manifest inputs for the deployed Ethereum Mainnet V1 release. The exact
+receipts, block hashes, input hashes, addresses, and runtime hashes are published in
+`contracts/deployments/mainnet-custom-registry-v1.json`. Public Custom product status remains `prelaunch` until a real
+same-transaction launch has been finalized and reconciled across every required public surface.
+
+## Mainnet deployment
+
+- Registry address: `0x17e18c88bda9bfb73924cdc989c07b0707e72671`
+- Registry start block: `25701139`
+- fee-policy verifier: `0x6a57bf3e092626be760d417986e6103c20fdbc3e`
+- partner-factory Registry: `0xf8aef69201621ad20fa256da595426b7e6192dba`
+- first-party atomic registrar: `0xcc916e5200d2626edfd918dc219bc4296629e997`
+- deployment evidence: `contracts/deployments/mainnet-custom-registry-v1.json`
 
 ## Constructor policy
 
@@ -69,5 +79,5 @@ the role-separation checks enforced by both stateful contracts. The legacy
 and must not be executed for it. No address is inferred from a display name, GitHub identity, or operator label.
 
 The finalizer, corrector, revoker, approver, registrar/writer, deployed addresses, deployment transactions, verified
-runtime hashes, and per-contract start blocks belong in the deployment manifest only after they are real. They are
-intentionally not filled with placeholders in these predeployment artifacts.
+runtime hashes, and per-contract blocks are recorded only from the real deployment. No placeholder address or block
+is used.

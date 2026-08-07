@@ -11,6 +11,7 @@ import {
 } from "../src/ProgrammableCustomFeePolicyVerifierV1.sol";
 import { ProgrammableCustomAtomicRegistrarV1 } from "../src/ProgrammableCustomAtomicRegistrarV1.sol";
 import { ProgrammableCustomPartnerFactoryRegistryV1 } from "../src/ProgrammableCustomPartnerFactoryRegistryV1.sol";
+import { ProgrammableCustomRegistryGenesisCanaryV1 } from "../src/ProgrammableCustomRegistryGenesisCanaryV1.sol";
 import { ProgrammableCustomRegistryV1 } from "../src/ProgrammableCustomRegistryV1.sol";
 import {
     IProgrammableCustomPartnerFactoryRegistryV1
@@ -354,6 +355,39 @@ contract ProgrammableCustomRegistryV1Test is Test {
         assertEq(registration.feePolicy.totalFeeBps, 0);
         assertTrue(registration.assetSetHash != bytes32(0));
         assertTrue(registration.marketSetHash != bytes32(0));
+    }
+
+    function test_genesisCanaryDeploysAndRegistersAtomicallyWithoutMarketOrInitializer() public {
+        ProgrammableCustomAtomicRegistrarV1.AtomicLaunchRequestV1 memory request;
+        request.salt = _hash("registry-genesis-canary-v1-salt");
+        request.creationCode = type(ProgrammableCustomRegistryGenesisCanaryV1).creationCode;
+        request.initializationResultHash = keccak256("");
+        request.registration = _nativeRegistration("registry-genesis-canary-v1");
+        request.registration.modelId = bytes32(0);
+        request.registration.modelVersion = bytes32(0);
+        request.registration.templateId = bytes32(0);
+        request.registration.templateVersion = bytes32(0);
+        request.registration.marketPathId = bytes32(0);
+        request.registration.assetSetHash = keccak256(abi.encode(new address[](0)));
+        request.registration.marketSetHash = keccak256(abi.encode(new bytes32[](0)));
+        request.registration.feePolicy = _noQualifyingMarketFeePolicy();
+        request.registration.primaryContract =
+            atomicRegistrar.predictAddress(request.salt, keccak256(request.creationCode));
+        request.registration.primaryRuntimeCodeHash =
+            keccak256(type(ProgrammableCustomRegistryGenesisCanaryV1).runtimeCode);
+        request.registration.launchWallet = address(this);
+        request.registration.deploymentConfigurationHash = atomicRegistrar.computeAtomicRequestCommitment(request);
+        _rebind(request.registration);
+        _authorize(request.registration);
+
+        address deployed = atomicRegistrar.deployInitializeAndRegister(request);
+
+        assertEq(deployed, request.registration.primaryContract);
+        assertEq(deployed.codehash, request.registration.primaryRuntimeCodeHash);
+        assertEq(uint8(registry.launchState(request.registration.launchId).status), 1);
+        assertTrue(ProgrammableCustomRegistryGenesisCanaryV1(deployed).PROJECT_ONLY());
+        assertEq(ProgrammableCustomRegistryGenesisCanaryV1(deployed).CHAIN_ID(), 1);
+        assertEq(ProgrammableCustomRegistryGenesisCanaryV1(deployed).REGISTRY_GENERATION(), GENERATION);
     }
 
     function test_partnerAttributionCanRemainWhenProjectOnlyHasNoQualifyingFeeMarket() public {
