@@ -414,6 +414,16 @@ describe("checked-in manifest fixtures", () => {
     }>(
       "contracts/deployments/mainnet-stock-paired-v3.json",
     );
+    const customRegistry = readJson<{
+      contracts: Array<{ name: string; address: string; blockNumber: string }>;
+    }>("contracts/deployments/mainnet-custom-registry-v1.json");
+    const customContract = (name: string) => {
+      const contract = customRegistry.contracts.find((entry) => entry.name === name);
+      if (contract === undefined) {
+        throw new Error(`Missing ${name} in the Custom Registry deployment evidence`);
+      }
+      return contract;
+    };
 
     const expected = [
       ["ClassicV2Hook", classicV2.addresses.feeHook, classicV2.transactions.feeHook.blockNumber],
@@ -432,6 +442,9 @@ describe("checked-in manifest fixtures", () => {
       ["StockV2V3RewardVaultFactory", stockV2.addresses.feeSplitVaultFactory, stockV2.startBlock],
       ["StockV3Launcher", stockV3.addresses.launcher, stockV3.startBlock],
       ["StockV3EthCoordinator", stockV3.addresses.ethLaunchCoordinator, stockV3.startBlock],
+      ["CustomRegistryV1", customContract("ProgrammableCustomRegistryV1").address, customContract("ProgrammableCustomRegistryV1").blockNumber],
+      ["CustomPartnerFactoryRegistryV1", customContract("ProgrammableCustomPartnerFactoryRegistryV1").address, customContract("ProgrammableCustomPartnerFactoryRegistryV1").blockNumber],
+      ["CustomAtomicRegistrarV1", customContract("ProgrammableCustomAtomicRegistrarV1").address, customContract("ProgrammableCustomAtomicRegistrarV1").blockNumber],
     ].map(([contractName, address, startBlock]) => ({
       contractName: String(contractName),
       address: String(address).toLowerCase(),

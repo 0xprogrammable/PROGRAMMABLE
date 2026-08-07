@@ -5,6 +5,8 @@ import type { Sha256Digest } from "../projection-target/hashing";
 import { getProductionWebsiteProjectionTargetV1 } from
   "../projection-target/website-target";
 import { isCustomLaunchRegistryPublicReadEnabled } from "./public-readiness";
+import { withGenesisCanaryRegistryCustomStoreV1 } from
+  "./genesis-canary-public-v1";
 import type { RegistryCustomLaunchPublicReadStoreV1 } from
   "./registry-public-store-v1";
 
@@ -66,7 +68,9 @@ async function production() {
   const target = getProductionWebsiteProjectionTargetV1();
   await target.assertProductionReadiness();
   productionHandlers ??= createRegistryCustomLaunchPublicReadHandlersV1({
-    store: target.registryCustomPublicStore,
+    store: withGenesisCanaryRegistryCustomStoreV1(
+      target.registryCustomPublicStore,
+    ),
   });
   return productionHandlers;
 }

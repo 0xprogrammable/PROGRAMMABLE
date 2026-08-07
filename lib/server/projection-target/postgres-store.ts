@@ -1020,6 +1020,15 @@ function parseCustomLaunchProject(
   const launchedAt = canonicalInstant(record.launchedAt, "custom launch time");
   const finalizedAt = canonicalInstant(record.finalizedAt, "custom finality time");
   const presentation = validatedLaunchPresentationV1(record);
+  const launchingWalletAuthorityCount =
+    postLaunchAuthorityInventory.postLaunchAuthorities.filter(({ source }) =>
+      source.kind === "launching-wallet").length;
+  const isAuthoritylessProjectMarker = record.advertisesToken === false
+    && discoverableAssets.length === 0
+    && discoverableMarkets.length === 0
+    && postLaunchAuthorityInventory.addressBindings.length === 0
+    && postLaunchAuthorityInventory.declaredIdentityBindings.length === 0
+    && postLaunchAuthorityInventory.postLaunchAuthorities.length === 0;
   if (
     readback.schemaVersion !== "programmable.custom-launch-projection-readback.v2"
     || readback.projectionKind !== "website.custom-launched"
@@ -1044,8 +1053,9 @@ function parseCustomLaunchProject(
       !== launchingWallet.value
     || postLaunchAuthorityInventory.postLaunchAuthorityInventoryHash
       !== postLaunchAuthorityInventoryHash
-    || postLaunchAuthorityInventory.postLaunchAuthorities.filter(({ source }) =>
-      source.kind === "launching-wallet").length !== 1
+    || (isAuthoritylessProjectMarker
+      ? launchingWalletAuthorityCount !== 0
+      : launchingWalletAuthorityCount !== 1)
     || postLaunchAuthorityInventory.postLaunchAuthorities.some(
       ({ identity: authorityIdentity, source }) =>
       source.kind === "launching-wallet"
