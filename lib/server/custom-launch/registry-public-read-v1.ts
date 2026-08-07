@@ -2,7 +2,7 @@ import "server-only";
 
 import { canonicalizeJson } from "../projection-target/canonical-json";
 import type { Sha256Digest } from "../projection-target/hashing";
-import { getProductionWebsiteProjectionTargetV1 } from
+import { getProductionWebsiteRegistryCustomPublicReadTargetV1 } from
   "../projection-target/website-target";
 import { isCustomLaunchRegistryPublicReadEnabled } from "./public-readiness";
 import { withGenesisCanaryRegistryCustomStoreV1 } from
@@ -65,11 +65,11 @@ let productionHandlers:
 ReturnType<typeof createRegistryCustomLaunchPublicReadHandlersV1> | null = null;
 
 async function production() {
-  const target = getProductionWebsiteProjectionTargetV1();
+  const target = getProductionWebsiteRegistryCustomPublicReadTargetV1();
   await target.assertProductionReadiness();
   productionHandlers ??= createRegistryCustomLaunchPublicReadHandlersV1({
     store: withGenesisCanaryRegistryCustomStoreV1(
-      target.registryCustomPublicStore,
+      target.store,
     ),
   });
   return productionHandlers;
