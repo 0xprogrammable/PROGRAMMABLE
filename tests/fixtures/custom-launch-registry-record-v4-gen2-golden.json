@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "programmable.custom-registry-generation-2-parity-golden.v1",
+  "registryReleaseSourceCommit": "e01f36a6d69136f674c203f83cca3ebdde0e0ded",
+  "registryAbiSha256": "sha256:7c5fe7d25cc874a319c3621435c31cd8f531a7abfcd7d5073fc163d10d60524f",
+  "registryEventSetHash": "sha256:bcff2958529fecaa7ef8c4c654389829bfb7dd61a3246f0d681cf7db0a42a58c",
+  "registryEventSetBytesSha256": "sha256:0c6c32e0db5eb55b8e0bd148a6206e0c0ab8605cda75338f3a556e75cd3eff1a",
+  "feePolicyDomain": "programmable.custom-fee-policy.v2",
+  "sourceId": "programmable-custom-launch-registry-v4",
+  "producerSchemaVersion": "programmable.custom-launch-registry-record.v4",
+  "projectionSchemaVersion": "programmable.custom-launch-projection-record.v4",
+  "projectionEnvelopeSchemaVersion": "programmable.custom-launch-projection-envelope.v4",
+  "registeredRecordPreimageFieldCount": 37,
+  "producerEnvelopeDigest": "sha256:ce0e40a1d479411bb96a1bc342ac5811f070eeb982def2945b0259a6c0d46534",
+  "feePolicyHash": "0x7da8558a35d1dce2ff206ae9bd34443f5e281456a15093f1961f11e5c935b45f",
+  "registeredRecordComponentHashes": {
+    "scopeAndApprovalHash": "0x673feb8c556bc19a14ff6fbdc19ef8de7754d9124c0d586aac63ea49e1b3279e",
+    "sourceAndDeploymentHash": "0x3fcdc316e3f62acb5fdf2971a0b80824a47b5eb31458b3c4d7e824aa7db1f19a",
+    "attributionHash": "0xa7f78b15dea50e75acd44cc4e93ed513ef15e8e15500479aedc47ed0eb0f9b41",
+    "reviewHash": "0xb8e9ef30a35f0aaaf2fc62e391c9f47577dccfaa8968b4f9c758b0f02d3c6a2e",
+    "feePolicyHash": "0x7da8558a35d1dce2ff206ae9bd34443f5e281456a15093f1961f11e5c935b45f",
+    "finalityPolicyHash": "0x34614efb871a4e17a8478a7672ac83a4227ee11073919fbc97bc5ff437dafada"
+  },
+  "registeredRecordCommitment": "0x44e704f00fe0c87deeab08bb36ea2a82ba2ecc74c229a54bde20810c8eefe8b3",
+  "registrationBindingHash": "0x4e2a9b6e819f9503a0d556407fbc72377b4aafdfe91cb5c4147e64ad226f8869",
+  "rawRecordHash": "sha256:ec5379c7cc828075c2c05c258aebc87c0ac5951205aeb40d8661501c6b901f3f",
+  "projectionDigest": "sha256:0a20b4b7acfa55f2238b3901759a88eee0247346e9597d2e9d71274f918f5172"
+}

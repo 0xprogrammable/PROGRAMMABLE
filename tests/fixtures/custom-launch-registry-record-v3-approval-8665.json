@@ -1,0 +1,344 @@
+{
+  "schemaVersion": "programmable.custom-launch-registry-record.v3",
+  "platformId": "programmable",
+  "origin": "programmable",
+  "category": "custom",
+  "launchFamily": "custom",
+  "publicLabel": "Programmable Custom",
+  "projectId": "sha256:2d746306dd036d49830e246979fb9aa93f6cc20572b90af6ad83f6b282b4dbf3",
+  "launchId": "sha256:3f3563a08c039d5e16f01ce4065d2cf5f0158d88ac1014ad83d91caa894f5905",
+  "model": {
+    "id": "open-world-contract",
+    "version": "1"
+  },
+  "template": null,
+  "partner": null,
+  "registeredRecordPreimage": {
+    "chainId": "1",
+    "registryGeneration": "1",
+    "launchId": "0x3f3563a08c039d5e16f01ce4065d2cf5f0158d88ac1014ad83d91caa894f5905",
+    "projectId": "0x2d746306dd036d49830e246979fb9aa93f6cc20572b90af6ad83f6b282b4dbf3",
+    "approvalId": "0x7cb5999f8d7ef6d31d7067b523a9c3ee04b977b6a4621ea5aa89c28d2a676881",
+    "approvalBindingHash": "0x21ff113d6dbe28d3228672e547622bdbff5bc0f8eb9d97c1a48648e3d4fe4363",
+    "repositoryId": "0xcbed0cb7814d275e0344dd225ad56d28c6e205f0abc47d4f9a97ad35bac0e3b0",
+    "commitId": "0x232613fd0baa1403fe55e9eb9191aaa98a7bdb00b2d0a0f795a26d56b532160d",
+    "sourceCommitment": "0xeaba72360c3439591f2ce33322277a79a5e8da228b83416bf2fc9289e7cf5e4f",
+    "buildCommitment": "0x5459fe1b406791bfb6e30d9b3eddefca8769059bde0ff1e06b9680574653f1cc",
+    "artifactSetHash": "0xd9cc35a36f5a50dcc9745efc092e53d43b98a1a49f890d77b4fbfbd3bf842251",
+    "deploymentConfigurationHash": "0x94c2dd186dfb31a9dd326d14be268ec944f279e581dc9476a1cbd1449098b1b4",
+    "deploymentId": "0xebb7f67508d7412245970468f7af6a2920d2f9e864913d0e5f07f9af895c94e0",
+    "deploymentSetHash": "0x80be7e3666bc3f0f22c67154d84135c7228a8ac41f81c02b11a249d179363cb0",
+    "runtimeCodeSetHash": "0xfd7b2ae61e7320ee4e95513f63e1610896954a6dd787a9094a0dfb4f2bb6a06f",
+    "primaryContract": "0x2222222222222222222222222222222222222222",
+    "primaryRuntimeCodeHash": "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "launchWallet": "0x1111111111111111111111111111111111111111",
+    "modelId": "0x98874f5410dab99a0ad5948c1492926f9084313fa355ff515b1dd70332212283",
+    "modelVersion": "0x107c8621f1908b82d4cb769d2e45d4e7b7c23f48992051f5568d8222fb944572",
+    "templateId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "templateVersion": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "partnerId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "builderAttributionHash": "0xdc94b3b4a63d39ecdb0ea0cb4a02a2b4cb1e193b08fa8f4ba29df32348aee698",
+    "originHash": "0x8c1d94c9a4ea9746589337e1277feeef12c89429d1783c7f3e52cb500c42667c",
+    "assetSetHash": "0x63cb8be585bd23f7497449209ce096c1ee216589af619e8db03da859059fb6ad",
+    "marketSetHash": "0xb47b5e84e1e26ed2045282486b5cbf7dfc399c71b7e16f8ace7afbb7d1554cac",
+    "capabilitySetHash": "0x5a0312635f50de085c2ea99b4402504ae9e138d61cfa8d382fff4cf059dea519",
+    "reviewPolicyHash": "0xf85d63a8e74fa6ae993efb9f16c7287e2d1bee59ce81589339dc0f80bd54c640",
+    "securityReviewHash": "0x884e3926ac6e925757fbfb6e7c453b6247a8df52727275288d74305778550f33",
+    "reviewResultId": "0x0ebb91f162398813221b54c44027acbff13d4b537beb3a080f07ae774bc89eb0",
+    "reviewDeploymentBindingHash": "0x4dfd91c4f66cc84d6ebdafde7f22d726aa1ba1594ba287635ebb9e9344f19964",
+    "feePolicyHash": "0x39d9d4621aba061782c60c691c9335653bcd28a4c594a81cc321eb39aaa5d9da",
+    "finalityPolicyHash": "0x34614efb871a4e17a8478a7672ac83a4227ee11073919fbc97bc5ff437dafada"
+  },
+  "registeredRecordComponentHashes": {
+    "scopeAndApprovalHash": "0x7091a02335f900ce190e45828054952f87c4a697669a33f13f65139b76dbe695",
+    "sourceAndDeploymentHash": "0x5740a0d8ea726a37291c61499149b9fad825d2cfe9bc2d610dfa58a528ec495a",
+    "attributionHash": "0x9ac519ad537747387b984fd215599eaad4c7b82f3bcec25866936e8fca0d33eb",
+    "reviewHash": "0x4f456fc6586c9b7e1f8343447161276af5de74d2290dca2d36818e5fb717b8bc",
+    "feePolicyHash": "0x39d9d4621aba061782c60c691c9335653bcd28a4c594a81cc321eb39aaa5d9da",
+    "finalityPolicyHash": "0x34614efb871a4e17a8478a7672ac83a4227ee11073919fbc97bc5ff437dafada"
+  },
+  "registeredRecordCommitment": "0xb15df26c03a1f8c3f895024c201a1b0faffd1b94b558c6aa1dcb6bea2a71da4c",
+  "registrationBindingHash": "0x92c0ddb17523e8b2596ab979df6c6ddce206208a9b5be4039fdb7c33c2994cac",
+  "registryOrigin": {
+    "chainId": "1",
+    "caip2": "eip155:1",
+    "registryAddress": "0x5555555555555555555555555555555555555555",
+    "registryStartBlock": "20000000",
+    "registryGeneration": "1",
+    "registryLaunchIdRaw": "0x3f3563a08c039d5e16f01ce4065d2cf5f0158d88ac1014ad83d91caa894f5905",
+    "launchIdEncoding": "sha256-digest-raw-bytes32",
+    "registryApprovalBindingHashRaw": "0x21ff113d6dbe28d3228672e547622bdbff5bc0f8eb9d97c1a48648e3d4fe4363",
+    "registrationBindingHashRaw": "0x92c0ddb17523e8b2596ab979df6c6ddce206208a9b5be4039fdb7c33c2994cac",
+    "registryEventSetHash": "sha256:2cfaac0fc3cc5bf0470c1c3e15096d231eb6a26ea07f746a6dfc4761686d5838",
+    "registrationTransactionHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "registrationBlockHash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "registrationBlockNumber": "21000000",
+    "registrationTransactionIndex": "1",
+    "registrationLogIndex": "2",
+    "registeredRecordHash": "0xb15df26c03a1f8c3f895024c201a1b0faffd1b94b558c6aa1dcb6bea2a71da4c",
+    "registrationEvidenceHash": "sha256:282b7cc0fda04634ae10444bc8924d899137a25c25c98895a485cf63e2e1a01e"
+  },
+  "approvalBinding": {
+    "applicationId": "unknown-future-template",
+    "projectId": "sha256:2d746306dd036d49830e246979fb9aa93f6cc20572b90af6ad83f6b282b4dbf3",
+    "approvalId": "approval-1",
+    "grantId": "grant-1",
+    "grantBindingHash": "sha256:c2efd52f24c5142ab04c07e6605d83d37a248fdf29c8194a0638ed4f36d09019",
+    "approvalBindingHash": "sha256:21ff113d6dbe28d3228672e547622bdbff5bc0f8eb9d97c1a48648e3d4fe4363",
+    "decisionReceiptDigest": "sha256:adb59c93e337b7b32e4cd152268c00c524dbdda66097e1be54a30ce34387d972",
+    "reviewAuthorityKind": "manual_review",
+    "chainId": "1",
+    "caip2": "eip155:1",
+    "chainProfileId": "ethereum-mainnet-v1",
+    "repositoryId": "123456789",
+    "repositoryUri": "https://github.com/example/unknown-future-template",
+    "commitObjectId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "treeObjectId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "sourceCommitment": "sha256:eaba72360c3439591f2ce33322277a79a5e8da228b83416bf2fc9289e7cf5e4f",
+    "buildCommitment": "sha256:5459fe1b406791bfb6e30d9b3eddefca8769059bde0ff1e06b9680574653f1cc",
+    "artifactSetHash": "sha256:d9cc35a36f5a50dcc9745efc092e53d43b98a1a49f890d77b4fbfbd3bf842251",
+    "configurationCommitment": "sha256:94c2dd186dfb31a9dd326d14be268ec944f279e581dc9476a1cbd1449098b1b4",
+    "launchWalletBindingHash": "sha256:9da853a738b199a1d862aa08452e065edefe8e596bbc466c92aac5fd063925e7",
+    "chainProfileHash": "sha256:03bb6fe10d9899443b4582341a8ab26c75c913faa0fe6dee5f5fd287b23b1196",
+    "policyVersion": "security-policy-v1",
+    "policyCommitment": "sha256:f85d63a8e74fa6ae993efb9f16c7287e2d1bee59ce81589339dc0f80bd54c640",
+    "approvedAt": "2026-08-06T10:00:00.000Z"
+  },
+  "deploymentBinding": {
+    "chainId": "1",
+    "caip2": "eip155:1",
+    "launchArtifactCommitmentHash": "sha256:45a1605b35bca8736d95eabc2ea35e98f46c3dfd0402ecd7942d0e39829503a9",
+    "artifactManifestHash": "sha256:bf60992f5cc49e94cf7fe29572841bb3434083feb19110fff981fc8f0a1b93fe",
+    "artifactOutputSetHash": "sha256:d9cc35a36f5a50dcc9745efc092e53d43b98a1a49f890d77b4fbfbd3bf842251",
+    "deploymentCalldataHash": "sha256:c600a7501f7bd11702a2c8bb746c76e2899bfd1fd61b243ca5073e6efe04dc5b",
+    "launchWalletBindingHash": "sha256:9da853a738b199a1d862aa08452e065edefe8e596bbc466c92aac5fd063925e7",
+    "chainProfileHash": "sha256:03bb6fe10d9899443b4582341a8ab26c75c913faa0fe6dee5f5fd287b23b1196",
+    "contracts": [
+      {
+        "address": {
+          "namespace": "eip155-address",
+          "value": "0x2222222222222222222222222222222222222222"
+        },
+        "role": "root",
+        "creationCodeHash": "sha256:f55a9f43d831741127ba97b6841464124a59d7b0cf18fdb4e7836b4db50516d1",
+        "runtimeCodeKeccak256": "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "runtimeCodeSha256": "sha256:7f14a8a5f827f1376ba6c0ea26920b6c7e2d4e79277c519f66ed9bb9cd86ebd4",
+        "artifactHash": "sha256:210d270afc96845c384f81aca65fba0ffe42073df9758c77d65fa140073a6937",
+        "configurationCommitment": "sha256:94c2dd186dfb31a9dd326d14be268ec944f279e581dc9476a1cbd1449098b1b4",
+        "runtimeVerificationEvidenceHash": "sha256:0825c95dce41d65a0d7359b2edae66756da72ec0d27c8020663e751b76e8f4d4"
+      }
+    ],
+    "contractSetHash": "sha256:80be7e3666bc3f0f22c67154d84135c7228a8ac41f81c02b11a249d179363cb0",
+    "runtimeMatch": "exact",
+    "verificationEvidenceHash": "sha256:7461fa18097d0b3f37f0d2241812ab4bcfa0dcdc1ea00b9e32ed2cb469ad144d"
+  },
+  "verifiedReview": {
+    "schemaVersion": "programmable.custom-launch-verified-review.v1",
+    "label": "Programmable Verified",
+    "definition": "Reviewed against the published Programmable security policy and cryptographically bound to the exact deployed contract revision.",
+    "status": "verified",
+    "policyVersion": "security-policy-v1",
+    "policyCommitment": "sha256:f85d63a8e74fa6ae993efb9f16c7287e2d1bee59ce81589339dc0f80bd54c640",
+    "repositoryId": "123456789",
+    "commitObjectId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sourceCommitment": "sha256:eaba72360c3439591f2ce33322277a79a5e8da228b83416bf2fc9289e7cf5e4f",
+    "buildCommitment": "sha256:5459fe1b406791bfb6e30d9b3eddefca8769059bde0ff1e06b9680574653f1cc",
+    "artifactSetHash": "sha256:d9cc35a36f5a50dcc9745efc092e53d43b98a1a49f890d77b4fbfbd3bf842251",
+    "runtimeCodeKeccak256": [
+      "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    ],
+    "runtimeCodeSha256": [
+      "sha256:7f14a8a5f827f1376ba6c0ea26920b6c7e2d4e79277c519f66ed9bb9cd86ebd4"
+    ],
+    "configurationCommitment": "sha256:94c2dd186dfb31a9dd326d14be268ec944f279e581dc9476a1cbd1449098b1b4",
+    "authoritiesEvidenceHash": "sha256:958b7211f3649795f23a5bcf477832e9aa2f309288bec7c264038f0d9bfcb95f",
+    "upgradeability": "immutable",
+    "upgradeabilityEvidenceHash": "sha256:1ed0cf8384b6c4a4a2ee3384ec462d2e0e3bdfbdf69fd09e32a09a43e9844f97",
+    "pauseAuthority": "none",
+    "pauseAuthorityEvidenceHash": "sha256:1a62f7cab8458456af47cf12bd29d68fda9dd40fa1481d235944bf94ec133fe2",
+    "custody": "none",
+    "custodyEvidenceHash": "sha256:9683c22b3a77c44192048f1c4b47c0698b61f488c3c151eb6b84b2a5ccfd1294",
+    "dependencies": [],
+    "dependencySetHash": "sha256:d85070d475061dca7367f1d137fe74baced1a5c59168d99388fe31cad416453c",
+    "findings": [],
+    "findingSetHash": "sha256:edb68ab01ba5a27a91363d5d33c23ae2688248d8d4b0eda5d77178f3f71022e4",
+    "reviewerType": "programmable-internal",
+    "reviewedAt": "2026-08-06T10:00:00.000Z",
+    "deploymentBindingHash": "sha256:4dfd91c4f66cc84d6ebdafde7f22d726aa1ba1594ba287635ebb9e9344f19964",
+    "reviewEvidenceHash": "sha256:884e3926ac6e925757fbfb6e7c453b6247a8df52727275288d74305778550f33",
+    "supersededBy": null,
+    "revokedAt": null,
+    "revocationEvidenceHash": null
+  },
+  "feePolicy": {
+    "schemaVersion": "programmable.custom-launch-fee-policy.v3",
+    "programmableRecipient": {
+      "namespace": "eip155-address",
+      "value": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
+    },
+    "verificationAuthorityHash": "sha256:a86fd42e34d0ace3708f526d57a038f4e0466f1a9485e3864dca84a8ed881f1a",
+    "verificationEvidenceHash": "sha256:a20356c38e732dd76863c36113d2dc9b95f31e02fc06128c3bed5289f335a733",
+    "recipientControlEvidenceHash": "sha256:f9e9f4da3ddb0aff13df9a6d5f6f78fb387f62e84850e7ead7a4010d246d2d60",
+    "claimIsolationEvidenceHash": "sha256:3f436e7dad12dc9167ceab3555d3ab07a11c78692d1e0b370100b978d5823a40",
+    "verifiedAt": "2026-08-06T10:00:00.000Z",
+    "mode": "no-qualifying-market",
+    "totalFeeBps": 0,
+    "programmableShareBps": 0,
+    "partnerShareBps": 0,
+    "partnerRecipient": null,
+    "chargeMode": "none-no-qualifying-market",
+    "basis": null,
+    "currency": null,
+    "accrual": null,
+    "claim": null,
+    "rounding": null,
+    "claimRights": {
+      "programmable": null,
+      "partner": null,
+      "independentlyClaimable": false,
+      "crossPartyClaimingProhibited": true,
+      "evidenceHash": "sha256:c48d9a2fc2dead94d207f20dca24e26c8c9c61cdb64621fe0c99c921dca2f297"
+    },
+    "verifiedMarketIds": [],
+    "normalProgrammableTenBpsApplied": false,
+    "verificationStatus": "not_applicable",
+    "publicPolicyBindingHash": "sha256:4117521495403a383ef4fabed1008759ce67b4943d080a4d42039b32d4a80078"
+  },
+  "onchainFeePolicy": {
+    "kind": 2,
+    "partnerId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "partnerStatusId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "templateId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "templateVersion": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "partnerRepositoryId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "partnerCommitId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "partnerRuntimeCodeSetHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "totalFeeBps": 0,
+    "nativeCustomFeeBps": 0,
+    "partner": {
+      "shareBps": 0,
+      "recipient": "0x0000000000000000000000000000000000000000",
+      "currency": "0x0000000000000000000000000000000000000000",
+      "chargeModeId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "basisId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "roundingId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "accrualId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "claimId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "claimRightId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "controlEvidenceHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "programmable": {
+      "shareBps": 0,
+      "recipient": "0x0000000000000000000000000000000000000000",
+      "currency": "0x0000000000000000000000000000000000000000",
+      "chargeModeId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "basisId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "roundingId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "accrualId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "claimId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "claimRightId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "controlEvidenceHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "activationVersion": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "activationBlock": "0",
+    "paused": false,
+    "retired": false,
+    "claimIsolationEvidenceHash": "0x3f436e7dad12dc9167ceab3555d3ab07a11c78692d1e0b370100b978d5823a40",
+    "accountingSafetyEvidenceHash": "0xf9e9f4da3ddb0aff13df9a6d5f6f78fb387f62e84850e7ead7a4010d246d2d60",
+    "verificationEvidenceHash": "0xa20356c38e732dd76863c36113d2dc9b95f31e02fc06128c3bed5289f335a733",
+    "publicPolicyBindingHash": "0x4117521495403a383ef4fabed1008759ce67b4943d080a4d42039b32d4a80078"
+  },
+  "launchingWallet": {
+    "namespace": "eip155-address",
+    "value": "0x1111111111111111111111111111111111111111"
+  },
+  "postLaunchAuthorityInventory": {
+    "schemaVersion": "programmable.custom-launch-post-launch-authorities.v3",
+    "launchingWallet": {
+      "namespace": "eip155-address",
+      "value": "0x1111111111111111111111111111111111111111"
+    },
+    "authorities": [
+      {
+        "authorityId": "root-admin",
+        "kind": "admin",
+        "controller": {
+          "namespace": "eip155-address",
+          "value": "0x2222222222222222222222222222222222222222"
+        },
+        "scope": "configuration",
+        "mutable": false,
+        "evidenceHash": "sha256:444121bec095c15f1fbeb22ce2461c67e4838dbea90a784ebd0dea8dcf028a18"
+      }
+    ],
+    "postLaunchAuthorityInventoryHash": "sha256:958b7211f3649795f23a5bcf477832e9aa2f309288bec7c264038f0d9bfcb95f"
+  },
+  "postLaunchAuthorityInventoryHash": "sha256:958b7211f3649795f23a5bcf477832e9aa2f309288bec7c264038f0d9bfcb95f",
+  "launchIdentity": {
+    "namespace": "eip155-address",
+    "value": "0x2222222222222222222222222222222222222222"
+  },
+  "advertisesToken": false,
+  "discoverableAssets": [],
+  "assetIdentitySetHash": "sha256:63cb8be585bd23f7497449209ce096c1ee216589af619e8db03da859059fb6ad",
+  "discoverableMarkets": [],
+  "marketSetHash": "sha256:b47b5e84e1e26ed2045282486b5cbf7dfc399c71b7e16f8ace7afbb7d1554cac",
+  "mechanisms": [
+    {
+      "id": "unknown:future-mechanic",
+      "version": "1",
+      "status": "unknown",
+      "parameters": {
+        "preserved": true
+      },
+      "evidenceHashes": [
+        "sha256:44c6ca3fdece55467fbb2b999561b34b398d0283ba816b62b03ba14c83e5bb90"
+      ]
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "execution",
+      "version": "1",
+      "status": "unsupported",
+      "parameters": {
+        "reason": "no_verified_market"
+      }
+    }
+  ],
+  "finalityPolicy": {
+    "schemaVersion": "programmable.custom-launch-finality-policy.v1",
+    "confirmationDepth": 12,
+    "canonicalitySource": "evm-blockhash",
+    "reorgHandling": "orphan",
+    "verificationAuthorityHash": "sha256:e7815ed3910965d2ea0f2f291dd2dc02bddd653aeb06806c57f7cde059e5620e"
+  },
+  "finality": {
+    "status": "finalized",
+    "transactionHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "blockHash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "blockNumber": "21000000",
+    "transactionIndex": "1",
+    "logIndex": "2",
+    "onchainTimestamp": "2026-08-06T10:00:00.000Z",
+    "observedAt": "2026-08-06T10:01:00.000Z",
+    "confirmedAt": "2026-08-06T10:02:00.000Z",
+    "finalizedAt": "2026-08-06T10:03:00.000Z",
+    "orphanedAt": null,
+    "finalityEvidenceHash": "sha256:1b17a0443eac3665f5b0af7f2fb9cab2b754a24086df8de34182651cba2120c1",
+    "verificationAuthorityHash": "sha256:e7815ed3910965d2ea0f2f291dd2dc02bddd653aeb06806c57f7cde059e5620e"
+  },
+  "lifecycle": {
+    "status": "active",
+    "registryGeneration": "1",
+    "registeredAt": "2026-08-06T10:01:00.000Z",
+    "supersededBy": null,
+    "revokedAt": null,
+    "revocationEvidenceHash": null
+  },
+  "presentationVersion": null,
+  "presentationBindingHash": null,
+  "presentation": null,
+  "extensions": {},
+  "envelopeDigest": "sha256:689c8da90d9ffaf663436ea3a1a109707e1f7a9194622978720578ac6b785c83"
+}
