@@ -939,7 +939,8 @@ function ExploreGridSkeleton() {
 }
 
 function resultRangeLabel(payload: ExplorePayload | null) {
-  if (!payload || payload.status !== "ready") return "Loading launch index";
+  if (!payload) return "Loading launch index";
+  if (payload.status === "not-deployed") return "Explore unavailable";
   if (payload.total === 0) return "0 launches";
 
   const start = (payload.page - 1) * payload.pageSize + 1;
@@ -963,6 +964,7 @@ export function ExploreView() {
   const refreshKey = useLiveDataRefresh({ enabled: !preview });
   const activeExploreContentKey = useRef<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const resultStatusRef = useRef<HTMLParagraphElement>(null);
   const modelDatasetCache = useRef<{
     key: string;
     payload: ExplorePayload;
@@ -1178,7 +1180,8 @@ export function ExploreView() {
   const pageCount = Math.max(1, payload?.totalPages ?? 0);
   const activePage = Math.min(payload?.page ?? currentPage, pageCount);
   const paginationItems = getExplorePaginationItems(activePage, pageCount);
-  const resultLabel = resultRangeLabel(payload);
+  const resultLabel =
+    displayState.phase === "error" ? "" : resultRangeLabel(payload);
   const busy =
     !preview &&
     (displayState.phase === "loading" ||
@@ -1192,6 +1195,11 @@ export function ExploreView() {
     socialFilter !== "all" ||
     modelFilter !== "all";
 
+  function retryTokens() {
+    resultStatusRef.current?.focus({ preventScroll: true });
+    setRetryKey((value) => value + 1);
+  }
+
   function renderTokenState() {
     if (
       displayState.phase === "loading" ||
@@ -1199,8 +1207,7 @@ export function ExploreView() {
         displayState.requestKey !== requestKey)
     ) {
       return (
-        <div className={styles.loadingState} role="status">
-          <span className="sr-only">Loading tokens</span>
+        <div className={styles.loadingState}>
           <ExploreGridSkeleton />
         </div>
       );
@@ -1213,7 +1220,7 @@ export function ExploreView() {
           <button
             className="text-button"
             type="button"
-            onClick={() => setRetryKey((value) => value + 1)}
+            onClick={retryTokens}
           >
             Try again
           </button>
@@ -1298,7 +1305,7 @@ export function ExploreView() {
                   fill
                   loading={index < 3 ? "eager" : "lazy"}
                   priority={index < 3}
-                  sizes="(max-width: 360px) 96px, (max-width: 420px) 104px, (max-width: 700px) 112px, (max-width: 900px) 46vw, 333px"
+                  sizes="(max-width: 360px) 96px, (max-width: 420px) 104px, (max-width: 700px) 112px, (max-width: 768px) calc(50vw - 54px), (max-width: 900px) 330px, 313px"
                   unoptimized={!canOptimizeTokenImage(imageSource)}
                   draggable={false}
                 />
@@ -1451,7 +1458,19 @@ export function ExploreView() {
                     ) : null}
                   </div>
 
-                  <details className="token-filter" ref={filterRef}>
+                  <details
+                    className="token-filter"
+                    ref={filterRef}
+                    onBlur={(event) => {
+                      const nextTarget = event.relatedTarget;
+                      if (
+                        !(nextTarget instanceof Node) ||
+                        !event.currentTarget.contains(nextTarget)
+                      ) {
+                        event.currentTarget.removeAttribute("open");
+                      }
+                    }}
+                  >
                     <summary
                       className="liquid-glass-control"
                       aria-controls="explore-filter-panel"
@@ -1481,7 +1500,7 @@ export function ExploreView() {
                     </summary>
                     <div
                       id="explore-filter-panel"
-                      className={`token-filter-menu ${styles.filterMenu} liquid-glass-surface liquid-glass-distortion liquid-glass-popover`}
+                      className={`token-filter-menu ${styles.filterMenu} liquid-glass-surface liquid-glass-popover`}
                       role="group"
                       aria-label="Filter and sort tokens"
                     >
@@ -1653,10 +1672,6 @@ export function ExploreView() {
                       >
                         <ChevronRight aria-hidden="true" size={15} />
                       </button>
-
-                      <span className="sr-only" aria-live="polite">
-                        Page {activePage} of {pageCount}
-                      </span>
                     </nav>
                   ) : null}
                 </div>
@@ -1664,16 +1679,20 @@ export function ExploreView() {
             ) : null}
           </div>
 
-          {hasPublicTokens ? (
-            <p
-              className={styles.resultLabel}
-              role="status"
-              aria-live="polite"
-              aria-atomic="true"
-            >
-              {resultLabel}
-            </p>
-          ) : null}
+          <p
+            ref={resultStatusRef}
+            className={
+              hasPublicTokens && displayState.phase !== "error"
+                ? styles.resultLabel
+                : "sr-only"
+            }
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            tabIndex={-1}
+          >
+            {resultLabel}
+          </p>
 
           {displayState.phase === "ready" &&
           displayState.refreshError ? (
@@ -1681,18 +1700,13 @@ export function ExploreView() {
               <span>Prices may be out of date</span>
               <button
                 type="button"
-                onClick={() => setRetryKey((value) => value + 1)}
+                onClick={retryTokens}
               >
                 Refresh
               </button>
             </div>
           ) : null}
 
-          {displayState.phase === "ready" && busy ? (
-            <span className="sr-only" role="status">
-              Updating tokens
-            </span>
-          ) : null}
           {renderTokenState()}
         </section>
       </div>

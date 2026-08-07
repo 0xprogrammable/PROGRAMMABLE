@@ -55,6 +55,7 @@ describe("Liquid Glass interface system", () => {
   it("keeps distortion off large reading and workspace surfaces", () => {
     const css = read("app/interface.css");
     const sources = [
+      read("components/explore-view.tsx"),
       read("components/profile-view.tsx"),
       read("components/launch-entry.tsx"),
       read("components/launch-builder.tsx"),
