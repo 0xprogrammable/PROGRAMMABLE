@@ -590,6 +590,23 @@ describe("read-model production deploy policy", () => {
     expect(workflow).toContain(
       'response.headers.get("x-programmable-rpc-provider") !== "alchemy"',
     );
+    expect(workflow).toContain("entry.launchCategoryProvenance.blockNumber");
+    expect(workflow).toContain(
+      "entry.launchCategoryProvenance.transactionIndex",
+    );
+    expect(workflow).toContain("entry.launchCategoryProvenance.logIndex");
+    expect(workflow).toContain(
+      "staged Alchemy newest entry has no canonical launch order",
+    );
+    expect(workflow).toContain("coordinates === null");
+    expect(workflow).toContain("const newestPageSize = 100");
+    expect(workflow).toContain("seenNewestIds");
+    expect(workflow).toContain("newestTokens.length !== newestTotal");
+    expect(workflow).toContain("launchChainId(entry) !== newestChainId");
+    expect(workflow).toContain("sort=oldest");
+    expect(workflow).toContain(
+      "staged Alchemy oldest page is not ordered oldest-first",
+    );
     expect(workflow).toContain('"/api/indexers/v1/token-list"');
     expect(workflow).toContain("/api/explore/token?address=");
     const alchemySmoke = workflow.slice(

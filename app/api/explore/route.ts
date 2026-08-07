@@ -97,9 +97,77 @@ function entryLaunchTime(entry: ExploreEntry): number {
   return Number.isFinite(value) ? value : 0;
 }
 
+function nonNegativeInteger(value: unknown): bigint | null {
+  const normalized = String(value ?? "");
+  return /^(?:0|[1-9][0-9]*)$/u.test(normalized)
+    ? BigInt(normalized)
+    : null;
+}
+
+function entryChainId(entry: ExploreEntry): string | null {
+  if (entry.exploreKind === "custom-project") return entry.chainId;
+  const [chainId] = entry.id.split(":", 1);
+  return /^\d+$/u.test(chainId ?? "") ? chainId : null;
+}
+
+function entryLaunchOrder(
+  entry: ExploreEntry,
+): readonly [bigint, bigint, bigint] | null {
+  const values = entry.exploreKind === "token"
+    ? [
+        entry.launchBlockNumber,
+        entry.launchTransactionIndex,
+        entry.launchLogIndex,
+      ]
+    : entry.launchCategoryProvenance.source === "registry.custom-launched"
+      ? [
+          entry.launchCategoryProvenance.blockNumber,
+          entry.launchCategoryProvenance.transactionIndex,
+          entry.launchCategoryProvenance.logIndex,
+        ]
+      : null;
+  if (values === null) return null;
+  const coordinates = values.map(nonNegativeInteger);
+  return coordinates.every((value): value is bigint => value !== null)
+    ? [coordinates[0], coordinates[1], coordinates[2]]
+    : null;
+}
+
+function compareCanonicalLaunchOrder(
+  first: ExploreEntry,
+  second: ExploreEntry,
+): number {
+  const firstChainId = entryChainId(first);
+  const secondChainId = entryChainId(second);
+  const firstOrder = entryLaunchOrder(first);
+  const secondOrder = entryLaunchOrder(second);
+  if (
+    firstChainId === null ||
+    firstChainId !== secondChainId ||
+    firstOrder === null ||
+    secondOrder === null
+  ) {
+    return 0;
+  }
+  for (let index = 0; index < firstOrder.length; index += 1) {
+    if (firstOrder[index] === secondOrder[index]) continue;
+    return firstOrder[index] > secondOrder[index] ? -1 : 1;
+  }
+  return 0;
+}
+
 function compareNewestEntries(first: ExploreEntry, second: ExploreEntry): number {
   const time = entryLaunchTime(second) - entryLaunchTime(first);
-  return time === 0 ? first.id.localeCompare(second.id) : time;
+  if (time !== 0) return time;
+  const firstChainId = entryChainId(first);
+  const secondChainId = entryChainId(second);
+  if (firstChainId !== secondChainId) {
+    if (firstChainId === null) return 1;
+    if (secondChainId === null) return -1;
+    return BigInt(firstChainId) < BigInt(secondChainId) ? -1 : 1;
+  }
+  const canonicalOrder = compareCanonicalLaunchOrder(first, second);
+  return canonicalOrder === 0 ? first.id.localeCompare(second.id) : canonicalOrder;
 }
 
 function sortExploreEntries(

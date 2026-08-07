@@ -1097,6 +1097,27 @@ export function evaluateReadModelOperationsSourceContracts(
       stagedAlchemySmokeBlock.includes(
         '"/api/explore?limit=20&page=1&sort=market-cap"',
       ) &&
+      stagedAlchemySmokeBlock.includes(
+        "entry.launchCategoryProvenance.blockNumber",
+      ) &&
+      stagedAlchemySmokeBlock.includes(
+        "entry.launchCategoryProvenance.transactionIndex",
+      ) &&
+      stagedAlchemySmokeBlock.includes(
+        "entry.launchCategoryProvenance.logIndex",
+      ) &&
+      stagedAlchemySmokeBlock.includes(
+        "staged Alchemy newest entry has no canonical launch order",
+      ) &&
+      stagedAlchemySmokeBlock.includes("coordinates === null") &&
+      stagedAlchemySmokeBlock.includes("const newestPageSize = 100") &&
+      stagedAlchemySmokeBlock.includes("seenNewestIds") &&
+      stagedAlchemySmokeBlock.includes("newestTokens.length !== newestTotal") &&
+      stagedAlchemySmokeBlock.includes("launchChainId(entry) !== newestChainId") &&
+      stagedAlchemySmokeBlock.includes("sort=oldest") &&
+      stagedAlchemySmokeBlock.includes(
+        "staged Alchemy oldest page is not ordered oldest-first",
+      ) &&
       stagedAlchemySmokeBlock.includes('"/api/indexers/v1/token-list"') &&
       stagedAlchemySmokeBlock.includes("/api/explore/token?address=") &&
       (stagedAlchemySmokeBlock.match(/\bfetch\(/gu) ?? []).length === 1 &&

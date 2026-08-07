@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import type { ExploreReadModel } from "../lib/onchain/types";
-import type { LauncherToken } from "../lib/tokens";
+import type { ExploreEntry, LauncherToken } from "../lib/tokens";
 
 const mocks = vi.hoisted(() => ({
   enrichTokensWithAlchemyPrices: vi.fn(),
@@ -25,7 +25,11 @@ vi.mock("../lib/alchemy/live-market.server", () => ({
   enrichTokensWithAlchemyPoolState: mocks.enrichTokensWithAlchemyPoolState,
 }));
 
-import { GET, inheritExploreEthUsdQuote } from "../app/api/explore/route";
+import {
+  GET,
+  inheritExploreEthUsdQuote,
+  paginateExploreEntriesV1,
+} from "../app/api/explore/route";
 
 const HOOK_ADDRESS =
   "0x3333333333333333333333333333333333333333" as const;
@@ -69,6 +73,53 @@ function readyModel(): ExploreReadModel {
   };
 }
 
+function orderedEntry(input: Readonly<{
+  id: string;
+  kind: "token" | "custom-project";
+  block: string;
+  transaction: number;
+  log: number;
+  chainId?: string;
+  launchedAt?: string;
+}>): ExploreEntry {
+  const base = {
+    exploreKind: input.kind,
+    id: input.id,
+    name: input.id,
+    symbol: input.id,
+    launchedAt: input.launchedAt ?? "2026-08-07T00:00:00.000Z",
+    links: [],
+  };
+  if (input.kind === "token") {
+    return {
+      ...base,
+      launchBlockNumber: input.block,
+      launchTransactionIndex: input.transaction,
+      launchLogIndex: input.log,
+      launchCategoryProvenance: {
+        schemaVersion: "programmable.explore-launch-category-provenance.v1",
+        category: "classic",
+        source: "canonical-launch-read-model",
+        recordId: input.id,
+        modelId: "classic",
+        modelVersion: "classic-v3",
+      },
+    } as unknown as ExploreEntry;
+  }
+  return {
+    ...base,
+    chainId: input.chainId ?? "1",
+    launchCategoryProvenance: {
+      schemaVersion: "programmable.explore-launch-category-provenance.v1",
+      category: "custom",
+      source: "registry.custom-launched",
+      blockNumber: input.block,
+      transactionIndex: input.transaction,
+      logIndex: input.log,
+    },
+  } as unknown as ExploreEntry;
+}
+
 describe("Explore API Alchemy boundary", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -110,6 +161,126 @@ describe("Explore API Alchemy boundary", () => {
         snapshot,
       ),
     ).toEqual({ ...launchSnapshot, ethUsdQuote });
+  });
+
+  it("orders mixed Classic and Custom launches by canonical chain position", () => {
+    const entries = [
+      orderedEntry({
+        id: "1:classic-log-8",
+        kind: "token",
+        block: "101",
+        transaction: 5,
+        log: 8,
+      }),
+      orderedEntry({
+        id: "custom:older-block",
+        kind: "custom-project",
+        block: "100",
+        transaction: 9,
+        log: 9,
+      }),
+      orderedEntry({
+        id: "custom:log-9",
+        kind: "custom-project",
+        block: "101",
+        transaction: 5,
+        log: 9,
+      }),
+      orderedEntry({
+        id: "1:newest-block",
+        kind: "token",
+        block: "102",
+        transaction: 0,
+        log: 0,
+      }),
+      orderedEntry({
+        id: "1:transaction-6",
+        kind: "token",
+        block: "101",
+        transaction: 6,
+        log: 0,
+      }),
+    ];
+    const paginate = (sort: "newest" | "oldest") =>
+      paginateExploreEntriesV1(entries, {
+        page: 1,
+        pageSize: entries.length,
+        query: "",
+        socials: null,
+        sort,
+        topThenNewest: false,
+      }).tokens.map(({ id }) => id);
+
+    const newest = [
+      "1:newest-block",
+      "1:transaction-6",
+      "custom:log-9",
+      "1:classic-log-8",
+      "custom:older-block",
+    ];
+    expect(paginate("newest")).toEqual(newest);
+    expect(paginate("oldest")).toEqual([...newest].reverse());
+  });
+
+  it("keeps mixed-chain ordering total and independent of input order", () => {
+    const entries = [
+      orderedEntry({
+        id: "2:newer-time",
+        kind: "token",
+        block: "1",
+        transaction: 0,
+        log: 0,
+        launchedAt: "2026-08-07T01:00:00.000Z",
+      }),
+      orderedEntry({
+        id: "1:block-7",
+        kind: "token",
+        block: "7",
+        transaction: 0,
+        log: 0,
+      }),
+      orderedEntry({
+        id: "custom:chain-1-block-6",
+        kind: "custom-project",
+        block: "6",
+        transaction: 0,
+        log: 0,
+        chainId: "1",
+      }),
+      orderedEntry({
+        id: "custom:chain-2-block-999",
+        kind: "custom-project",
+        block: "999",
+        transaction: 0,
+        log: 0,
+        chainId: "2",
+      }),
+    ];
+    const expected = [
+      "2:newer-time",
+      "1:block-7",
+      "custom:chain-1-block-6",
+      "custom:chain-2-block-999",
+    ];
+    const permutations = [
+      entries,
+      [...entries].reverse(),
+      [entries[2], entries[0], entries[3], entries[1]],
+      [entries[3], entries[1], entries[0], entries[2]],
+    ];
+
+    for (const candidates of permutations) {
+      expect(
+        paginateExploreEntriesV1(candidates, {
+          page: 1,
+          pageSize: candidates.length,
+          query: "",
+          socials: null,
+          sort: "newest",
+          topThenNewest: false,
+        }).tokens.map(({ id }) => id),
+      ).toEqual(expected);
+    }
   });
 
   it.each([
