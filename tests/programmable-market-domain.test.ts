@@ -53,6 +53,7 @@ describe("programmable.market website origin", () => {
         "../scripts/data-pipeline/cutover-http.mjs",
         "../scripts/data-pipeline/cutover-operator.mjs",
         "../scripts/verify-custom-launch-release-record.mjs",
+        "../docs/data-pipeline/PRODUCTION-CUTOVER-OPERATOR.md",
       ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
     );
     const schema = JSON.parse(
