@@ -42,7 +42,7 @@ export function programmableWellKnownDocumentV1(
       custom: Object.freeze({
         discoveryStatus: manifest.status,
         publicSubmissionStatus: "prelaunch" as const,
-        registryAddress: manifest.contracts.registry.address,
+        registryAddress: manifest.contracts.registry.address?.toLowerCase() ?? null,
         registryStartBlock: manifest.startBlock,
         registryGeneration: manifest.status === "live"
           ? "1"
