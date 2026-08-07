@@ -29,7 +29,7 @@
   font-size: 13px;
   font-weight: 610;
   gap: 7px;
-  min-height: 36px;
+  min-height: 44px;
   padding: 0 2px;
   transition:
     color 160ms ease,
@@ -191,7 +191,7 @@
   gap: 9px;
   max-width: min(100%, 440px);
   min-width: 0;
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 11px;
 }
 
@@ -1175,7 +1175,7 @@
   border-radius: 15px;
   box-shadow: var(--liquid-glass-inner-shadow);
   display: inline-flex;
-  min-height: 38px;
+  min-height: 44px;
   overflow: hidden;
   padding: 0 9px;
   transition:
@@ -1594,7 +1594,7 @@
   }
 
   .back {
-    min-height: 34px;
+    min-height: 44px;
   }
 
   .navigationRow {
