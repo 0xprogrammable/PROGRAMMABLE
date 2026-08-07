@@ -101,7 +101,7 @@ for (const [relativePath, expectedHash] of expectedArtifactFileHashes) {
 
 const builtEvents = [];
 for (const [name, source] of contracts) {
-  const artifact = readJson(join(root, "out", source, `${name}.json`));
+  const artifact = readJson(join(root, "contracts", "out", source, `${name}.json`));
   const publishedAbi = readJson(join(root, "docs", "security", "abi", `${name}.json`));
   if (canonical(artifact.abi) !== canonical(publishedAbi)) fail(`published ABI drift: ${name}`);
   if (name === "ProgrammableCustomFeePolicyVerifierV1") continue;
