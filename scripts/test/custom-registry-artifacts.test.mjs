@@ -25,6 +25,11 @@ function fixture() {
   const target = mkdtempSync(join(tmpdir(), "programmable-custom-registry-artifacts-"));
   mkdirSync(join(target, "contracts", "out"), { recursive: true });
   mkdirSync(join(target, "contracts", "spec"), { recursive: true });
+  cpSync(
+    join(repositoryRoot, "contracts", "deployments"),
+    join(target, "contracts", "deployments"),
+    { recursive: true },
+  );
   cpSync(join(repositoryRoot, "docs", "security"), join(target, "docs", "security"), {
     recursive: true,
   });
@@ -116,6 +121,44 @@ test("rejects a Forge creation-code mutation even when its ABI is unchanged", ()
     const artifact = JSON.parse(readFileSync(artifactPath, "utf8"));
     const tail = artifact.bytecode.object.at(-1);
     artifact.bytecode.object = `${artifact.bytecode.object.slice(0, -1)}${tail === "0" ? "1" : "0"}`;
+    writeFileSync(artifactPath, JSON.stringify(artifact));
+    assertRejected(verify(root), /Source\/Forge artifact binding drift/u);
+  });
+});
+
+test("accepts compiler-local immutable AST id renumbering", () => {
+  withFixture((root) => {
+    const artifactPath = join(
+      root,
+      "contracts",
+      "out",
+      "ProgrammableCustomRegistryV2.sol",
+      "ProgrammableCustomRegistryV2.json",
+    );
+    const artifact = JSON.parse(readFileSync(artifactPath, "utf8"));
+    const renumbered = {};
+    for (const [key, entries] of Object.entries(artifact.deployedBytecode.immutableReferences)) {
+      renumbered[String(Number(key) + 1_000_000)] = entries;
+    }
+    artifact.deployedBytecode.immutableReferences = renumbered;
+    writeFileSync(artifactPath, JSON.stringify(artifact));
+    const result = verify(root);
+    assert.equal(result.status, 0, result.stderr);
+  });
+});
+
+test("rejects an immutable runtime offset mutation", () => {
+  withFixture((root) => {
+    const artifactPath = join(
+      root,
+      "contracts",
+      "out",
+      "ProgrammableCustomRegistryV2.sol",
+      "ProgrammableCustomRegistryV2.json",
+    );
+    const artifact = JSON.parse(readFileSync(artifactPath, "utf8"));
+    const firstGroup = Object.values(artifact.deployedBytecode.immutableReferences)[0];
+    firstGroup[0].start += 1;
     writeFileSync(artifactPath, JSON.stringify(artifact));
     assertRejected(verify(root), /Source\/Forge artifact binding drift/u);
   });

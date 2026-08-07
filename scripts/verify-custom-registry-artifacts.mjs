@@ -208,7 +208,31 @@ function exactHexBytes(value, label) {
   return Buffer.from(value.slice(2), "hex");
 }
 
-function generationTwoArtifactBinding(artifact) {
+function normalizedImmutableReferences(value, label) {
+  if (value === undefined) return [];
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    fail(`invalid ${label} immutable references`);
+  }
+  const references = [];
+  for (const entries of Object.values(value)) {
+    if (!Array.isArray(entries)) fail(`invalid ${label} immutable reference group`);
+    for (const entry of entries) {
+      if (
+        entry === null
+        || typeof entry !== "object"
+        || Array.isArray(entry)
+        || !Number.isSafeInteger(entry.start)
+        || entry.start < 0
+        || !Number.isSafeInteger(entry.length)
+        || entry.length <= 0
+      ) fail(`invalid ${label} immutable reference`);
+      references.push({ start: entry.start, length: entry.length });
+    }
+  }
+  return references.sort((left, right) => left.start - right.start || left.length - right.length);
+}
+
+function generationTwoArtifactBinding(artifact, name) {
   return {
     abi: artifact.abi,
     bytecode: {
@@ -217,7 +241,10 @@ function generationTwoArtifactBinding(artifact) {
     },
     deployedBytecode: {
       object: artifact.deployedBytecode?.object,
-      immutableReferences: artifact.deployedBytecode?.immutableReferences,
+      immutableReferences: normalizedImmutableReferences(
+        artifact.deployedBytecode?.immutableReferences,
+        name,
+      ),
       linkReferences: artifact.deployedBytecode?.linkReferences,
     },
     methodIdentifiers: artifact.methodIdentifiers,
@@ -413,7 +440,7 @@ for (const [name, source] of generationTwoContracts) {
   const sourceSha256 = sha256Bytes(sourceBytes);
   const sourceKeccak256 = keccak256Bytes(sourceBytes, `${name} source`);
   const metadataSourceKeccak256 = artifact.metadata.sources[sourcePath]?.keccak256;
-  const artifactBindingHash = sha256Canonical(generationTwoArtifactBinding(artifact));
+  const artifactBindingHash = sha256Canonical(generationTwoArtifactBinding(artifact, name));
   const creationCodeSha256 = sha256Bytes(
     exactHexBytes(artifact.bytecode?.object, `${name} creation code`),
   );
