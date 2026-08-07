@@ -40,8 +40,8 @@ There is no upgradeability, owner sweep, WETH or game-token rescue, pause, mutab
 
 These omissions deliberately remove operator recovery powers. Accidental transfers may be unrecoverable, and a defect cannot be paused or upgraded. Users and reviewers must treat immutability as both a product invariant and an operational risk.
 
-## Launch-address risk
+## Launch-input risk
 
-The launch-session wallet is not yet bound. The launcher CREATE2 address depends on that wallet and root salt; child addresses and the canonical PoolKey then depend on the launcher and declared child salts. A wrong wallet, salt, compiler artifact, dependency address, or hook-address permission suffix invalidates the launch graph.
+The launch-session wallet is selected at creation time. The launcher CREATE2 address depends on that wallet and root salt; the token, hook, vault, and canonical PoolKey then depend on the launcher and the two authority-selected child salts. A wrong wallet, salt, compiler artifact, dependency address, or hook-address permission suffix invalidates the launch graph.
 
-Before any execution authority exists, derive every address from the selected wallet, confirm the hook mask `0x20cc`, verify token ordering and initial price, verify the 10 WETH and 1,000,000,000 OVERTIME initialization amounts, and rehearse the single atomic call. The package reports this as an architecture-review requirement and makes no deployment, audit, safety, or endorsement claim.
+The contract itself rejects alternate starting prices and WETH budgets and rejects creation-code hash drift. The final preflight must classify the two child salts as authority-selected, derive every address, confirm token ordering and hook mask `0x20cc`, ABI-encode the complete call, and bind sender, chain, target, zero value, and calldata hash before a fresh simulation and manual wallet confirmation. The package reports proposal-stage architecture review and makes no deployment, audit, safety, or endorsement claim.

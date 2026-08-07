@@ -4,7 +4,7 @@
 
 Overtime v1 is a recurring leader-time game implemented as one fee-enforcing Uniswap v4 hook. An opt-in exact-input WETH buy takes the crown. Ordinary swaps pay the same hook-owned fee but never change the leader or clock.
 
-The proposal is bound to source commit `12507ab8626fb707a21777be0ed88fdb1bd63429` and tree `c6d575f7f2cd30d04f7bd5383b3bd63a1eaf4ca7` in repository id `1326198143`.
+The proposal is bound to source commit `ed0bcdb41bdc604a08e90aefc7f93d99debf09b7` and tree `d8d499991d94df852271dd9c1531170bda36ae3a` in repository id `1326198143`.
 
 ## Game
 
@@ -24,13 +24,17 @@ Programmable fees, pending-pot funds, active-pot funds, finalized champion pools
 
 The source contains the seven requested implementation units: `OvertimeHook.sol`, `OvertimeChallengeRouter.sol`, `OvertimeToken.sol`, `OvertimeLauncher.sol`, `LockedLiquidityVault.sol`, `RoundMath.sol`, and `HookDataCodec.sol`.
 
-The launcher has one atomic deployment-and-launch entrypoint. It deterministically creates the fixed-supply token, challenge router, hook, and locked-liquidity vault; initializes the canonical WETH pool; and transfers the initial position claim into the vault in the same transaction. Any failed initialization or liquidity-lock step reverts the entire child deployment graph.
+The launch route deploys the immutable challenge router and launcher roots, then calls one atomic launcher entrypoint. The launcher deterministically creates the fixed-supply token, hook, and locked-liquidity vault; initializes the canonical WETH pool; and transfers the initial position claim into the vault in the same transaction. Any failed initialization or liquidity-lock step reverts the entire child deployment graph.
 
 There is no owner sweep, WETH or game-token rescue, pause, parameter setter, payout redirection, arbitrary router call, post-deployment mint, or removable initial-liquidity path.
 
-## Architecture review item
+## Launch-input binding
 
-The launch-session wallet has not been selected. That wallet determines the launcher root address, while the declared child-salt rules determine the token, router, hook, vault, and canonical PoolKey beneath it. The package therefore requests architecture review rather than claiming approval. Before execution, the compiler must bind one wallet, derive every address, verify the hook permission mask `0x20cc`, and rehearse the exact atomic transaction.
+The launch-session wallet is an expected creation-time input. The launcher rejects any starting price other than `792281625142643375935439503360000` and any WETH budget other than `10000000000000000000` base units. Token and hook creation bytes are constrained by immutable hashes. Only the ordered-token salt and permission-mined hook salt remain launch-authority-selected because their values depend on the wallet-derived launcher graph.
+
+After those salts are selected, the production preflight must ABI-encode the complete `deployAndLaunch` call and bind `keccak256(abi.encode(chainId, sender, target, valueWei, keccak256(calldata)))`. The wallet sees and manually confirms the exact sender, Ethereum chain, derived launcher target, zero value, full calldata hash, token, hook, and mask `0x20cc`. A changed field requires a fresh simulation and confirmation.
+
+The package remains `architecture-review-required` because public intake is a proposal-stage preflight and does not grant execution authority, not because the launch inputs are unclassified.
 
 ## Requested assessment
 
