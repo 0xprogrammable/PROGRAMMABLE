@@ -46,6 +46,7 @@ import type {
 import {
   createWebsiteProjectionTargetV1,
   assertProjectionTargetSecurityAttestationV1,
+  assertProductionDatabaseLoginRoleV1,
   verifiedPostgresTlsConfigurationV1,
   type ProjectionTargetSecurityAttestationRowV1,
 } from "../lib/server/projection-target/website-target";
@@ -1384,6 +1385,28 @@ describe("Website projection target", () => {
       "postgresql://runtime:secret@db.example.com/postgres",
       "not-a-certificate",
     )).toThrow("database CA is invalid");
+  });
+
+  it("accepts only the exact runtime role or its verified Supabase pooler routing identity", () => {
+    expect(() => assertProductionDatabaseLoginRoleV1(
+      "postgresql://programmable_website_projection_runtime:secret@db.example.com:5432/postgres",
+      "programmable_website_projection_runtime",
+    )).not.toThrow();
+    expect(() => assertProductionDatabaseLoginRoleV1(
+      "postgresql://programmable_website_projection_runtime.mnnvlrqwhfoppogslsje:secret@aws-0-eu-central-1.pooler.supabase.com:6543/postgres",
+      "programmable_website_projection_runtime",
+    )).not.toThrow();
+    for (const connectionString of [
+      "postgresql://unexpected_runtime:secret@db.example.com:5432/postgres",
+      "postgresql://programmable_website_projection_runtime.mnnvlrqwhfoppogslsje:secret@db.example.com:6543/postgres",
+      "postgresql://programmable_website_projection_runtime.invalid:secret@aws-0-eu-central-1.pooler.supabase.com:6543/postgres",
+      "postgresql://programmable_website_projection_runtime.mnnvlrqwhfoppogslsje:secret@aws-0-eu-central-1.pooler.supabase.com:9999/postgres",
+    ]) {
+      expect(() => assertProductionDatabaseLoginRoleV1(
+        connectionString,
+        "programmable_website_projection_runtime",
+      )).toThrow("database login role is invalid");
+    }
   });
 
   it("fails the production attestation for every weakened TLS, RLS, or role axis", () => {

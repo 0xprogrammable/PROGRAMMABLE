@@ -4,7 +4,8 @@ import { canonicalizeJson } from "../projection-target/canonical-json";
 import type {
   RegistryCustomLaunchPublicReadStoreV1,
 } from "./registry-public-store-v1";
-import { getProductionWebsiteProjectionTargetV1 } from "../projection-target/website-target";
+import { getProductionWebsiteRegistryCustomPublicReadTargetV1 } from
+  "../projection-target/website-target";
 import { isCustomLaunchRegistryPublicReadEnabled } from "./public-readiness";
 import { withGenesisCanaryRegistryCustomStoreV1 } from
   "./genesis-canary-public-v1";
@@ -80,11 +81,11 @@ export function createCustomLaunchProjectReadHandlersV2(input: Readonly<{
 let productionHandlers: ReturnType<typeof createCustomLaunchProjectReadHandlersV2> | null = null;
 
 async function production() {
-  const target = getProductionWebsiteProjectionTargetV1();
+  const target = getProductionWebsiteRegistryCustomPublicReadTargetV1();
   await target.assertProductionReadiness();
   productionHandlers ??= createCustomLaunchProjectReadHandlersV2({
     store: withGenesisCanaryRegistryCustomStoreV1(
-      target.registryCustomPublicStore,
+      target.store,
     ),
   });
   return productionHandlers;
