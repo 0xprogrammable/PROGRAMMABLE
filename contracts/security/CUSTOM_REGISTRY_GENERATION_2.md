@@ -11,20 +11,24 @@ classDiagram
   class ProgrammableCustomRegistryV2
   class ProgrammableCustomPartnerFactoryRegistryV2
   class ProgrammableCustomFeePolicyVerifierV2
-  class ProgrammableCustomAtomicRegistrarV1
+  class ProgrammableCustomExecutionPolicyRegistryV2
   class ProgrammableCustomAtomicRegistrarV2
   class ProviderOwnedFactory
 
   AccessControlDefaultAdminRules <|-- ProgrammableCustomRegistryV1
   ProgrammableCustomRegistryV1 <|-- ProgrammableCustomRegistryV2
   AccessControlDefaultAdminRules <|-- ProgrammableCustomPartnerFactoryRegistryV2
-  ReentrancyGuard <|-- ProgrammableCustomAtomicRegistrarV1
-  ProgrammableCustomAtomicRegistrarV1 <|-- ProgrammableCustomAtomicRegistrarV2
+  ReentrancyGuard <|-- ProgrammableCustomAtomicRegistrarV2
   IProgrammableCustomRegistryV1 <|.. ProgrammableCustomRegistryV1
   ProgrammableCustomRegistryV2 --> ProgrammableCustomFeePolicyVerifierV2 : same verify selector
   ProgrammableCustomRegistryV2 --> ProgrammableCustomPartnerFactoryRegistryV2 : exact caller authorization
+  ProgrammableCustomRegistryV2 --> ProgrammableCustomExecutionPolicyRegistryV2 : fixed companion binding
+  ProgrammableCustomExecutionPolicyRegistryV2 --> ProgrammableCustomRegistryV2 : exact approval and launch identity
+  ProgrammableCustomExecutionPolicyRegistryV2 --> ProgrammableCustomPartnerFactoryRegistryV2 : exact provider factory
   ProgrammableCustomAtomicRegistrarV2 --> ProgrammableCustomRegistryV2 : native atomic path
-  ProviderOwnedFactory --> ProgrammableCustomRegistryV2 : provider atomic path
+  ProgrammableCustomAtomicRegistrarV2 --> ProgrammableCustomExecutionPolicyRegistryV2 : same-tx capability proof
+  ProviderOwnedFactory --> ProgrammableCustomRegistryV2 : provider registration
+  ProviderOwnedFactory --> ProgrammableCustomExecutionPolicyRegistryV2 : same-tx capability proof
 ```
 
 ## State transitions and authorization
@@ -71,6 +75,15 @@ flowchart LR
 7. Approval, deployment, transition evidence, and factory evidence are one-use; counts are monotonic.
 8. Atomic deployment, initialization, runtime validation, and registration revert together on any failure.
 9. Revocation is terminal and correction history remains append-only.
+10. A Generation 2 record is publishable only with same-transaction capability summary and exact ordered route/source
+    companions whose hash equals the approval-bound `capabilitySetHash` and whose derived market set equals the
+    registration-bound `marketSetHash`.
+11. Standard v4 execution cannot target PoolManager directly; exact router/Permit2/PoolManager, Hook review,
+    quote/read identities, policies, and runtime are bound. Adapter and market-source proxies bind implementation and
+    admin identities. Later drift disables capabilities, not origin discovery.
+12. Every market source binds a canonical nonempty metric set of no more than 256 strictly ordered, unique, nonzero
+    IDs. Price, volume, liquidity, and charting have published standard IDs; unknown future IDs remain valid and are
+    preserved rather than guessed. The validator rejects both zero and the canonical empty-set hash.
 
 Focused unit and 1,000-run fuzz tests cover provider neutrality, exact factory checks, fee splits, shared basis,
 claim isolation, runtime/config/permission mutation, fake attribution, and commitment changes. Stateful invariants run
@@ -85,12 +98,13 @@ Informational results were one mixed dependency-pragma group, the inherited V1 c
 configuration-check complexity, and four uppercase immutable/interface naming notices. The constructor branches are
 fail-closed checks; uppercase names are stable manifest-facing protocol fields.
 
-- Upgradeability: the four Generation 2 components are direct deployments and contain no proxy/delegatecall upgrade
+- Upgradeability: the five Generation 2 components are direct deployments and contain no proxy/delegatecall upgrade
   path. A provider launch may still be upgradeable and must bind implementation/admin/permissions in its runtime set.
 - ERC conformance: the Registry continues to expose the frozen `IProgrammableCustomRegistryV1` ERC-165 interface.
   The package is not an ERC-20/721/1155 implementation.
 - Token integration: the Registry and verifier transfer no tokens. The atomic registrar can forward only the exact
-  approved constructor/initializer ETH value and requires a zero residual balance.
+  approved constructor/initializer ETH value and requires the post-launch balance to equal the preexisting forced-ETH
+  snapshot; unrelated forced ETH is neither consumed nor a launch blocker.
 - Cryptography: commitments use typed `abi.encode` plus Keccak-256 with explicit domains; there is no custom signature
   scheme or randomness.
 

@@ -5,6 +5,7 @@ import { StdInvariant } from "forge-std/StdInvariant.sol";
 import { Test } from "forge-std/Test.sol";
 
 import { ProgrammableCustomFeePolicyVerifierV2 } from "../../src/ProgrammableCustomFeePolicyVerifierV2.sol";
+import { ProgrammableCustomExecutionPolicyRegistryV2 } from "../../src/ProgrammableCustomExecutionPolicyRegistryV2.sol";
 import { ProgrammableCustomPartnerFactoryRegistryV2 } from "../../src/ProgrammableCustomPartnerFactoryRegistryV2.sol";
 import { ProgrammableCustomRegistryV1 } from "../../src/ProgrammableCustomRegistryV1.sol";
 import { ProgrammableCustomRegistryV2 } from "../../src/ProgrammableCustomRegistryV2.sol";
@@ -252,6 +253,11 @@ contract ProgrammableCustomRegistryV2InvariantTest is StdInvariant, Test {
         ProgrammableCustomPartnerFactoryRegistryV2 partnerRegistry =
             new ProgrammableCustomPartnerFactoryRegistryV2(2 days, address(this), address(0xFA01), address(0xFA02));
         ProgrammableCustomFeePolicyVerifierV2 verifier = new ProgrammableCustomFeePolicyVerifierV2();
+        uint256 nextNonce = vm.getNonce(address(this));
+        address predictedRegistry = vm.computeCreateAddress(address(this), nextNonce + 1);
+        ProgrammableCustomExecutionPolicyRegistryV2 executionPolicyRegistry = new ProgrammableCustomExecutionPolicyRegistryV2(
+            IProgrammableCustomRegistryV1(predictedRegistry), partnerRegistry, address(this)
+        );
         registry = new ProgrammableCustomRegistryV2(
             ProgrammableCustomRegistryV1.RegistryConfigV1({
                 initialAdminDelay: 2 days,
@@ -267,7 +273,8 @@ contract ProgrammableCustomRegistryV2InvariantTest is StdInvariant, Test {
                 registryPolicyHash: keccak256("registry-policy-v2")
             }),
             partnerRegistry,
-            verifier
+            verifier,
+            executionPolicyRegistry
         );
         RegistryInvariantApprovalActorV2 approvalActor = new RegistryInvariantApprovalActorV2(registry);
         registry.grantRole(registry.APPROVER_ROLE(), address(approvalActor));

@@ -16,6 +16,7 @@ const contractNames = [
   "ProgrammableCustomRegistryV2",
   "ProgrammableCustomPartnerFactoryRegistryV2",
   "ProgrammableCustomFeePolicyVerifierV2",
+  "ProgrammableCustomExecutionPolicyRegistryV2",
   "ProgrammableCustomAtomicRegistrarV2",
 ];
 
@@ -73,8 +74,8 @@ test("accepts the exact frozen Generation 1 and Generation 2 artifact sets", () 
   withFixture((root) => {
     const result = verify(root);
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /4 Generation 2 Source\/Forge\/ABI bindings/u);
-    assert.match(result.stdout, /15 Generation 2 event declarations/u);
+    assert.match(result.stdout, /5 Generation 2 Source\/Forge\/ABI bindings/u);
+    assert.match(result.stdout, /18 Generation 2 event declarations/u);
   });
 });
 
@@ -126,6 +127,22 @@ test("rejects any Generation 2 event-set byte or semantic declaration mutation",
     eventSet.events[0].topic0 = eventSet.events[1].topic0;
     writeFileSync(eventSetPath, `${JSON.stringify(eventSet, null, 2)}\n`);
     assertRejected(verify(root), /published artifact file hash drift/u);
+  });
+});
+
+test("rejects a Generation 2 trade-capability golden-vector semantic mutation", () => {
+  withFixture((root) => {
+    const vectorsPath = join(
+      root,
+      "docs",
+      "security",
+      "CUSTOM_REGISTRY_TRADE_CAPABILITY_V1_GOLDEN_VECTORS.json",
+    );
+    const vectors = JSON.parse(readFileSync(vectorsPath, "utf8"));
+    vectors.hashes.capabilityHash =
+      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    writeFileSync(vectorsPath, `${JSON.stringify(vectors, null, 2)}\n`);
+    assertRejected(verify(root), /published artifact file hash drift|golden-vector semantic drift/u);
   });
 });
 

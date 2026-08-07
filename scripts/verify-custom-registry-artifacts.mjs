@@ -49,34 +49,39 @@ const expectedMainnetDeployment = new Map([
 ]);
 
 const generationTwoContracts = [
-  ["ProgrammableCustomRegistryV2", "ProgrammableCustomRegistryV2.sol"],
-  ["ProgrammableCustomPartnerFactoryRegistryV2", "ProgrammableCustomPartnerFactoryRegistryV2.sol"],
   ["ProgrammableCustomFeePolicyVerifierV2", "ProgrammableCustomFeePolicyVerifierV2.sol"],
+  ["ProgrammableCustomPartnerFactoryRegistryV2", "ProgrammableCustomPartnerFactoryRegistryV2.sol"],
+  ["ProgrammableCustomExecutionPolicyRegistryV2", "ProgrammableCustomExecutionPolicyRegistryV2.sol"],
+  ["ProgrammableCustomRegistryV2", "ProgrammableCustomRegistryV2.sol"],
   ["ProgrammableCustomAtomicRegistrarV2", "ProgrammableCustomAtomicRegistrarV2.sol"],
 ];
 const expectedGenerationTwoArtifactFileHashes = new Map([
-  ["CUSTOM_REGISTRY_EVENT_SET_V2.json", "sha256:0c6c32e0db5eb55b8e0bd148a6206e0c0ab8605cda75338f3a556e75cd3eff1a"],
-  ["abi/ProgrammableCustomRegistryV2.json", "sha256:7c5fe7d25cc874a319c3621435c31cd8f531a7abfcd7d5073fc163d10d60524f"],
+  ["CUSTOM_REGISTRY_EVENT_SET_V2.json", "sha256:cc5b78cc4557909aade5df7ffd614c567ac069219ea0fc7db82bfb657bf159c5"],
+  ["CUSTOM_REGISTRY_TRADE_CAPABILITY_V1_GOLDEN_VECTORS.json", "sha256:8a35e3d8b6c597b5d209d8c3c244166d9c1948955ac6ba214c66972980fb7dce"],
+  ["abi/ProgrammableCustomRegistryV2.json", "sha256:4c0330ee055bbd27f395deb7e4c001f27a49a65752a00426840b99f7d6a5dc64"],
   ["abi/ProgrammableCustomPartnerFactoryRegistryV2.json", "sha256:054b5d2740314335d202e37d405273cbb9d0922398cbc2909e7cb7cee845061e"],
   ["abi/ProgrammableCustomFeePolicyVerifierV2.json", "sha256:0bc9bdda4a1e78e2c498568ddfa164b35c3cb5c297f563dd4771935e75304f62"],
-  ["abi/ProgrammableCustomAtomicRegistrarV2.json", "sha256:a053f14e59c3c54a0dad47e6e772ba411c7659a46eab3313a6c124260ebcff1f"],
+  ["abi/ProgrammableCustomExecutionPolicyRegistryV2.json", "sha256:071ee1474a7f78aef9d843e880ae5a19f312ee8a566c5501d3f2a059d8d85116"],
+  ["abi/ProgrammableCustomAtomicRegistrarV2.json", "sha256:a48974ccacc97e3b9fcfafd52cdfac1d187a9183eac1a65d5d26221a75561214"],
 ]);
 const expectedGenerationTwoEventSetHash =
-  "sha256:bcff2958529fecaa7ef8c4c654389829bfb7dd61a3246f0d681cf7db0a42a58c";
+  "sha256:be36b4977143371149695aa8a8702aef56b08ef4b756640d0e0070252c24ee57";
 const expectedGenerationTwoArtifactSetHash =
-  "sha256:75573593dc957d4511388ee20009ed3002f12f8a148f9cadbe58e0ff73cf97ba";
+  "sha256:fc9d1487c476165675f5d2d12569e33f70b9a3289982c56252607f38849c60b9";
+const expectedTradeCapabilityGoldenSemanticHash =
+  "sha256:da03a4562a19f7800933d9657a5ea3895c01a33ca149954850d846f83b202530";
 const expectedGenerationTwoReleaseCandidateFileHash =
-  "sha256:ce673b6dca09f6e79ebb6bf9a35936282b43b9859b53e1614b278adf69c7c0cc";
+  "sha256:e8b57809f08747d5971ebe240e1fa78773b4d2c4b7344a5146db76887f13ea29";
 const expectedGenerationTwoBuilds = new Map([
   [
-    "ProgrammableCustomRegistryV2",
+    "ProgrammableCustomFeePolicyVerifierV2",
     {
-      sourceSha256: "sha256:6f013c147a5f1d4aba70aa335a905346bb4011fd266b75ea311e75362002051f",
-      sourceKeccak256: "0xc373d34897f6f701ed772ce212412bd70cc988219472903497e870d46b6a8efc",
-      artifactBindingHash: "sha256:9091a7eaa9add1d85c65050811e9f2b9dd6aa11b1ebdb288913cdd66cec28f97",
-      creationCodeSha256: "sha256:9f3a363f1a120ba76427da8fa0338ddfdc4ef414118248ab82d37788fa2af605",
-      runtimeCodeSha256: "sha256:0415f561d74c1ffcad93cac58729a20a08365a866de0a1db2e42aaef3e4c6d59",
-      runtimeCodeKeccak256: "0x5b614de34459bb52a89f3ea876d3ea6c7a5e1fbeec688a8d11df9bc29684cb6e",
+      sourceSha256: "sha256:f18da940392fe45c61982617e6739145112562b251206ba908c69bd773f6cef6",
+      sourceKeccak256: "0xc4c639b1f93d4b6edd07a47a470c21d0280cb29ba6b87cfa957126564420775b",
+      artifactBindingHash: "sha256:e582711f661c00d9a67bbd3dc386ed0642e787c25ddd125e84b0449502a61608",
+      creationCodeSha256: "sha256:223f6d4007bed7727517cfec9828e23bbdb91476061e3500f1af42697e626a17",
+      runtimeCodeSha256: "sha256:70f042ad314ff9b71444130fa1742e41d8dff2ecce7ed9e38ac13d4edce4bdbe",
+      runtimeCodeKeccak256: "0x21a9704c30cbac965d99b1932503ebc786bd9f54026a7d6b8539dd051f454e5f",
     },
   ],
   [
@@ -91,25 +96,36 @@ const expectedGenerationTwoBuilds = new Map([
     },
   ],
   [
-    "ProgrammableCustomFeePolicyVerifierV2",
+    "ProgrammableCustomExecutionPolicyRegistryV2",
     {
-      sourceSha256: "sha256:f18da940392fe45c61982617e6739145112562b251206ba908c69bd773f6cef6",
-      sourceKeccak256: "0xc4c639b1f93d4b6edd07a47a470c21d0280cb29ba6b87cfa957126564420775b",
-      artifactBindingHash: "sha256:2b08cd7c1e2a18d067a393ba43270a14073601ec7193ea79c4d86e26aef794f3",
-      creationCodeSha256: "sha256:223f6d4007bed7727517cfec9828e23bbdb91476061e3500f1af42697e626a17",
-      runtimeCodeSha256: "sha256:70f042ad314ff9b71444130fa1742e41d8dff2ecce7ed9e38ac13d4edce4bdbe",
-      runtimeCodeKeccak256: "0x21a9704c30cbac965d99b1932503ebc786bd9f54026a7d6b8539dd051f454e5f",
+      sourceSha256: "sha256:2df71df700b795c5da57117bba456f626afbb57652bbc4dace21fd3a6da2bb36",
+      sourceKeccak256: "0x3c4eb392ac4b014b9f94681f6e7b77e087c8d07f3f14415cd632534f78b2cf9c",
+      artifactBindingHash: "sha256:605cc165f0daa4169dbe1769c607a4f3685715a5c3fbfbc77700aacacd1d09f0",
+      creationCodeSha256: "sha256:032b13a25c015f13eed364d9dc6df4593c6dfb90c88e0709dd1bc9442154f667",
+      runtimeCodeSha256: "sha256:3c1c7853e5bdc5d06d0a16b6d1dd80400ab0a36014866654148dc528035d3e5d",
+      runtimeCodeKeccak256: "0xbbb8dc3938ebefc3318702ebfcc1e36c667c347eb736a1badf2a26d0ea4cd9dc",
+    },
+  ],
+  [
+    "ProgrammableCustomRegistryV2",
+    {
+      sourceSha256: "sha256:2de88274f88b9819fa3e5f2988dddf8f21d4e6ad202428b884eb67496196df05",
+      sourceKeccak256: "0x19b8751be5a0cf147b4b51a0527705cbc7220651ea29dc06a5e4640aa2501135",
+      artifactBindingHash: "sha256:2cefde29b9beece34370ad9c2b5377d0691059ef08ff9e4c4023584d3bc613f7",
+      creationCodeSha256: "sha256:843f49a3b34cd2dd2769797d2ae899910d32aeab5b3fbcf5484ac9840befacfe",
+      runtimeCodeSha256: "sha256:4284b637af80a0a157a71dc52640a9ce06deb96b3a05c17f7e57e6aed248ea63",
+      runtimeCodeKeccak256: "0x7ff88b8da1d3bdc62608a33b2c2592249d005e802a38284267729274de38d347",
     },
   ],
   [
     "ProgrammableCustomAtomicRegistrarV2",
     {
-      sourceSha256: "sha256:556bd3ec006015b4a995fc930a9abc7388e37ec4bfefed216d9e1b190f2a489b",
-      sourceKeccak256: "0x524546ab24adca6d8a54b4907aa731616691018ce46923664011c3e3f52617c4",
-      artifactBindingHash: "sha256:f4b72b641df01420696430a473e3093476027331581ed6eb3c45d6f60ecb828d",
-      creationCodeSha256: "sha256:e2b3c58dd6516d155bbfdae49866b34344c15c6bd3968614fc020ec4f10f9e39",
-      runtimeCodeSha256: "sha256:ad7efb522b51299d0529ece070b414066d792bd0264be3801c917b8b0ca7fa20",
-      runtimeCodeKeccak256: "0x4969b46b1c540827ebcced06192d7204fc2b5a47eced3c587134b82d3cec3e04",
+      sourceSha256: "sha256:87dcd6dc88e7638abba093b7e63619dff643a7771ef6395f3b3f78785e73bf14",
+      sourceKeccak256: "0xe3a541fcfa0e17e091efedb3df83494ec61eba5862ff9e982dd0fab86ebac953",
+      artifactBindingHash: "sha256:6bb0a4b63401584ef09a57f74ef052d2ad451a6b7651567673eba0b8766cbcc8",
+      creationCodeSha256: "sha256:e5b740da4ff73640c8d3e18c041849965b386d1d94452e05b7e9822f7f9be7e6",
+      runtimeCodeSha256: "sha256:3a7ae093a3a01338f592081288c0719fc180ef1a5079b372725b705c25b85102",
+      runtimeCodeKeccak256: "0x4b35dd0f02cc34898575d7a028c0d68e96dcfe9d76cbe6660477ea334f28e6af",
     },
   ],
 ]);
@@ -403,7 +419,9 @@ for (const [name, source] of generationTwoContracts) {
       ? "registry"
       : name === "ProgrammableCustomPartnerFactoryRegistryV2"
         ? "partnerFactoryRegistry"
-        : "atomicRegistrar";
+        : name === "ProgrammableCustomExecutionPolicyRegistryV2"
+          ? "executionPolicyRegistry"
+          : "atomicRegistrar";
   for (const item of artifact.abi) {
     if (item.type !== "event" || (!item.name.startsWith("Custom") && !item.name.startsWith("Atomic"))) {
       continue;
@@ -413,9 +431,53 @@ for (const [name, source] of generationTwoContracts) {
   }
 }
 
+const tradeCapabilityGoldenVectorsPath = join(
+  securityRoot,
+  "CUSTOM_REGISTRY_TRADE_CAPABILITY_V1_GOLDEN_VECTORS.json",
+);
+const tradeCapabilityGoldenVectorsBytes = readFileSync(tradeCapabilityGoldenVectorsPath);
+const tradeCapabilityGoldenVectors = JSON.parse(tradeCapabilityGoldenVectorsBytes);
+const tradeCapabilityGoldenSemanticValue = {
+  abiEncoding: tradeCapabilityGoldenVectors.abiEncoding,
+  domains: tradeCapabilityGoldenVectors.domains,
+  ordering: tradeCapabilityGoldenVectors.ordering,
+  selectors: tradeCapabilityGoldenVectors.selectors,
+  preimages: tradeCapabilityGoldenVectors.preimages,
+  hashes: tradeCapabilityGoldenVectors.hashes,
+  events: tradeCapabilityGoldenVectors.events,
+};
+const actualTradeCapabilityGoldenSemanticHash = domainSeparatedHash(
+  tradeCapabilityGoldenVectors.schemaVersion,
+  tradeCapabilityGoldenSemanticValue,
+);
+if (
+  tradeCapabilityGoldenVectors.schemaVersion !== "programmable.trade-capability-golden-vectors.v1"
+  || tradeCapabilityGoldenVectors.semanticHash !== actualTradeCapabilityGoldenSemanticHash
+  || actualTradeCapabilityGoldenSemanticHash !== expectedTradeCapabilityGoldenSemanticHash
+  || tradeCapabilityGoldenVectors.selectors?.deployInitializeRegisterAndBindTradeCapabilityV1 !== "0x0ae882ed"
+  || tradeCapabilityGoldenVectors.selectors?.bindTradeCapabilityV1 !== "0x4eb3cb48"
+  || tradeCapabilityGoldenVectors.hashes?.emptyMarketSetHash
+    !== "0xbd6f28a96b79921f21d91177e262ccb903f8cee746201feb41bcd74385ae3eef"
+  || tradeCapabilityGoldenVectors.hashes?.capabilityHash
+    !== "0x772dad1715e737c3e8f7390576869606dc6a8608fe0e4b0fd7a46e4a16cc32d8"
+  || tradeCapabilityGoldenVectors.hashes?.directMetricSetHash
+    !== "0xf3e9aada876355d21cdbbc03cecd9c9d23f2a8a3ef9644a6d38c21fd05650eaf"
+  || tradeCapabilityGoldenVectors.hashes?.proxyMetricSetHash
+    !== "0x6e54d472f4b24c9c2c54eb7f582349bca14e21dce5c2ecfe345a75ce1a34dccd"
+  || tradeCapabilityGoldenVectors.hashes?.emptyMetricSetHash
+    !== "0x7b5384e78f1bd4310c1264ebe06d19b2fc61f8ff2781748daa2e14df0387082a"
+) fail("Generation 2 trade-capability golden-vector semantic drift");
+const tradeCapabilityGoldenFileHash = sha256Bytes(tradeCapabilityGoldenVectorsBytes);
+
 const actualArtifactSetHash = domainSeparatedHash(
   "programmable.custom-registry-artifact-set.v2",
-  { contracts: generationTwoBuildRecords },
+  {
+    contracts: generationTwoBuildRecords,
+    tradeCapabilityGoldenVectors: {
+      fileSha256: tradeCapabilityGoldenFileHash,
+      semanticHash: actualTradeCapabilityGoldenSemanticHash,
+    },
+  },
 );
 if (actualArtifactSetHash !== expectedGenerationTwoArtifactSetHash) {
   fail(`Generation 2 artifact-set hash drift: ${actualArtifactSetHash}`);
@@ -474,6 +536,7 @@ const expectedReleaseContractNames = {
   registry: "ProgrammableCustomRegistryV2",
   partnerFactoryRegistry: "ProgrammableCustomPartnerFactoryRegistryV2",
   feePolicyVerifier: "ProgrammableCustomFeePolicyVerifierV2",
+  executionPolicyRegistry: "ProgrammableCustomExecutionPolicyRegistryV2",
   atomicRegistrar: "ProgrammableCustomAtomicRegistrarV2",
 };
 if (
@@ -484,6 +547,10 @@ if (
   || generationTwoReleaseCandidate.minimumSupportedPublicApiVersion !== 2
   || generationTwoReleaseCandidate.registryRecordProducerVersion !== 4
   || generationTwoReleaseCandidate.release?.artifactSetHash !== expectedGenerationTwoArtifactSetHash
+  || generationTwoReleaseCandidate.release?.tradeCapabilityGoldenVectorsFileHash
+    !== tradeCapabilityGoldenFileHash
+  || generationTwoReleaseCandidate.release?.tradeCapabilityGoldenVectorsSemanticHash
+    !== actualTradeCapabilityGoldenSemanticHash
   || generationTwoReleaseCandidate.release?.sourceCommit !== null
   || generationTwoReleaseCandidate.release?.registryPolicyHash !== null
   || generationTwoReleaseCandidate.release?.deployer !== null
@@ -512,5 +579,6 @@ process.stdout.write(
   `verified ${contracts.length} Generation 1 published ABIs, ${builtEvents.length} Generation 1 event signatures, `
     + `${generationTwoContracts.length} Generation 2 Source/Forge/ABI bindings, `
     + `${generationTwoBuiltEvents.length} Generation 2 event declarations, ${actualArtifactSetHash}, `
-    + `${generationTwoSemanticHash}, ${expectedChainProfileHash}, and ${expectedRegistryPolicyHash}\n`,
+    + `${generationTwoSemanticHash}, ${expectedChainProfileHash}, ${expectedRegistryPolicyHash}, `
+    + "the trade-capability golden vectors, and the four-contract Ethereum Mainnet Generation 1 deployment evidence\n",
 );

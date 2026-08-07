@@ -2,11 +2,13 @@
 
 ## Compatibility boundary
 
-Generation 2 deliberately keeps `IProgrammableCustomRegistryV1` as the integration ABI. The
-`LaunchRegistrationV1` tuple contains 37 fixed fields followed by the nested fee policy. Field order, function
-selectors, and all 15 Custom event signatures remain frozen. A client that already decodes the c988 event set does
-not need a contract-specific parser change; it selects the official address and `registryGeneration` from the
-per-chain manifest.
+Generation 2 deliberately keeps `IProgrammableCustomRegistryV1` as the launch-record integration ABI. The
+`LaunchRegistrationV1` tuple contains 37 fixed fields followed by the nested fee policy. Its field order, function
+selectors, and 15 registration/lifecycle event signatures remain frozen. Generation 2 adds three companion events
+from a fixed execution-policy Registry. A bare Generation 2 registration without its exact same-transaction summary,
+route rows, and source rows is invalid for public projection. The closed public v2 launch object remains unchanged;
+the proof is exposed as a separately versioned linked trade-capability resource, so unchanged blind clients continue
+to decode launch objects without accepting the new resource as transaction authority.
 
 The Developer record producer is a separate compatibility boundary: record v3 commits only 34 fixed words and
 cannot reproduce this contract commitment. Record v3 remains frozen; contract-parity consumers use additive record
@@ -86,6 +88,14 @@ fee policy:            keccak256("programmable.custom-fee-policy.v2")
 partner configuration: keccak256("programmable.custom-partner-configuration.v2")
 partner approver role: keccak256("programmable.custom-partner-factory.approver.v2")
 partner revoker role:  keccak256("programmable.custom-partner-factory.revoker.v2")
+trade capability:      keccak256("programmable.trade-capability.v1")
+trade route:           keccak256("programmable.trade-route.v1")
+trade route set:       keccak256("programmable.trade-route-set.v1")
+market identity:       keccak256("programmable.trade-market-identity.v1")
+market set:            keccak256("programmable.trade-market-set.v1")
+market data source:    keccak256("programmable.market-data-source.v1")
+market source set:     keccak256("programmable.market-data-source-set.v1")
+market metric set:     keccak256("programmable.market-data-metric-set.v1")
 ```
 
 The partner configuration preimage is:
@@ -109,6 +119,64 @@ keccak256(abi.encode(
 
 Changing provider, model/template, either source revision, chain, generation, factory, live factory runtime,
 authorized launch runtime set, permissions, or fee policy changes the configuration commitment.
+
+## Trade-capability composition
+
+`capabilitySetHash` is exactly `computeTradeCapabilityHashV1(capability)`. The Registry approval and immutable launch
+identity commit that hash and a canonical `marketSetHash`. The execution-policy Registry independently recomputes the
+approval/registration binding, canonical route/source hashes, and the deduplicated sorted market set before emitting
+companions. Native registrar and authorized provider-factory paths use the same validator.
+
+Routes are strictly ordered by `marketId`, `marketPathId`, mode, target, adapter ID, selector, configuration hash,
+then full route hash. Multiple targets for the same market/path are allowed; exact duplicates are rejected. The
+market-set preimage deduplicates adjacent `(marketId, marketPathId)` tuples. The canonical project-only empty hash is
+`0xbd6f28a96b79921f21d91177e262ccb903f8cee746201feb41bcd74385ae3eef`. Sources are strictly ordered by
+market ID, source ID, kind, event emitter, StateView, configuration hash, then source hash.
+
+Execution modes are `unsupported`, `standard`, and `adapter`. Unsupported disables execution only; exact quote,
+simulation, read, and event-source identities may remain bound. Standard v4 execution binds Universal Router policy,
+PoolManager and Permit2 dependencies, planner commands/actions, hook data, calldata/value/recipient/deadline/slippage,
+delta accounting, settlement, nonstandard-token policy, Hook runtime/permissions/review, and Quoter/StateView
+identities. It rejects direct PoolManager execution. Adapter mode additionally binds adapter ID/version and direct or
+proxy implementation/admin identity. Event and StateRead sources separately bind target runtime and, for proxies,
+implementation/admin identities. Runtime, implementation, admin, or configuration drift disables the affected
+capability but never erases immutable origin discovery.
+
+### Canonical market metric set
+
+Every market-data source commits at least one explicit metric identifier through `metricsHash`. The canonical preimage
+is:
+
+```text
+keccak256(abi.encode(
+  keccak256("programmable.market-data-metric-set.v1"),
+  metricIds
+))
+```
+
+`metricIds` is a nonempty `bytes32[]` of at most 256 entries. Entries are interpreted as unsigned 256-bit values and
+must be strictly ascending, unique, and nonzero. Unknown future IDs are valid and must be preserved exactly; consumers
+must not relabel an unknown ID as one of the standard metrics. The four standard IDs and their hashes are:
+
+```text
+charting  keccak256("programmable.market-data-metric.charting.v1")
+          0x2a714fded90cab08c12dfa552dbf62db33ad0f88046d103ce8da2333cda5661e
+price     keccak256("programmable.market-data-metric.price.v1")
+          0x6ded616800dca9683566cb991d1cb94dd2f63cd767ccbf8254ca8510e45333c3
+volume    keccak256("programmable.market-data-metric.volume.v1")
+          0xa219cc0dbef5b006f060be31eeedc33471a75390d2306bb8ecc19ec2903d6347
+liquidity keccak256("programmable.market-data-metric.liquidity.v1")
+          0xe937ec83fc68a3f15b1d8169b28114096837f316757c8e8323953622a42f53e9
+```
+
+Their numeric order is charting, price, volume, liquidity. The helper rejects an empty input. The theoretical encoding
+of an empty list is nevertheless frozen as
+`0x7b5384e78f1bd4310c1264ebe06d19b2fc61f8ff2781748daa2e14df0387082a`, and the validator rejects that value in a
+source so a buggy approval implementation cannot publish a no-metric source. The Golden Vector file includes exact
+ordered arrays and hashes for the four-standard-metric set and the price/liquidity subset.
+
+Exact preimages, hashes, selectors, topics, indexed topics, and event data are frozen in
+`CUSTOM_REGISTRY_TRADE_CAPABILITY_V1_GOLDEN_VECTORS.json` and independently reproduced by Foundry tests.
 
 ## Fee policy
 

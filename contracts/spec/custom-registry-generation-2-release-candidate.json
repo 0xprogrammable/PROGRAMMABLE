@@ -30,6 +30,14 @@
       "runtimeCodeHash": null,
       "sourceVerified": false
     },
+    "executionPolicyRegistry": {
+      "name": "ProgrammableCustomExecutionPolicyRegistryV2",
+      "address": null,
+      "startBlock": null,
+      "deploymentTransactionHash": null,
+      "runtimeCodeHash": null,
+      "sourceVerified": false
+    },
     "atomicRegistrar": {
       "name": "ProgrammableCustomAtomicRegistrarV2",
       "address": null,
@@ -46,7 +54,9 @@
   },
   "release": {
     "sourceCommit": null,
-    "artifactSetHash": "sha256:75573593dc957d4511388ee20009ed3002f12f8a148f9cadbe58e0ff73cf97ba",
+    "artifactSetHash": "sha256:fc9d1487c476165675f5d2d12569e33f70b9a3289982c56252607f38849c60b9",
+    "tradeCapabilityGoldenVectorsFileHash": "sha256:8a35e3d8b6c597b5d209d8c3c244166d9c1948955ac6ba214c66972980fb7dce",
+    "tradeCapabilityGoldenVectorsSemanticHash": "sha256:da03a4562a19f7800933d9657a5ea3895c01a33ca149954850d846f83b202530",
     "registryPolicyHash": null,
     "deployer": null,
     "startingNonce": null,

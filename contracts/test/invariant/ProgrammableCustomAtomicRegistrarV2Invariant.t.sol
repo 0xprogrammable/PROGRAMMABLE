@@ -6,10 +6,12 @@ import { StdInvariant } from "forge-std/StdInvariant.sol";
 
 import { ProgrammableCustomAtomicRegistrarV1 } from "../../src/ProgrammableCustomAtomicRegistrarV1.sol";
 import { ProgrammableCustomAtomicRegistrarV2 } from "../../src/ProgrammableCustomAtomicRegistrarV2.sol";
+import { ProgrammableCustomExecutionPolicyRegistryV2 } from "../../src/ProgrammableCustomExecutionPolicyRegistryV2.sol";
 import { ProgrammableCustomFeePolicyVerifierV2 } from "../../src/ProgrammableCustomFeePolicyVerifierV2.sol";
 import { ProgrammableCustomPartnerFactoryRegistryV2 } from "../../src/ProgrammableCustomPartnerFactoryRegistryV2.sol";
 import { ProgrammableCustomRegistryV1 } from "../../src/ProgrammableCustomRegistryV1.sol";
 import { ProgrammableCustomRegistryV2 } from "../../src/ProgrammableCustomRegistryV2.sol";
+import { IProgrammableCustomExecutionPolicyV2 } from "../../src/interfaces/IProgrammableCustomExecutionPolicyV2.sol";
 import { IProgrammableCustomRegistryV1 } from "../../src/interfaces/IProgrammableCustomRegistryV1.sol";
 
 contract InvariantAtomicLaunchTargetV2 {
@@ -86,6 +88,9 @@ contract ProgrammableCustomAtomicRegistrarV2Handler {
         request.registration.primaryContract = registrar.predictAddress(request.salt, keccak256(request.creationCode));
         request.registration.primaryRuntimeCodeHash = keccak256(type(InvariantAtomicLaunchTargetV2).runtimeCode);
         request.registration.deploymentConfigurationHash = registrar.computeAtomicRequestCommitment(request);
+        IProgrammableCustomExecutionPolicyV2.TradeCapabilityV1 memory capability =
+            registrar.unsupportedTradeCapabilityV1(request.registration);
+        request.registration.capabilitySetHash = registrar.computeTradeCapabilityHashV1(capability);
         _rebind(request.registration);
     }
 
@@ -117,43 +122,22 @@ contract ProgrammableCustomAtomicRegistrarV2Handler {
         registration.builderAttributionHash = _hash(string.concat(label, "-builder"));
         registration.originHash = _hash(string.concat(label, "-origin"));
         registration.assetSetHash = _hash(string.concat(label, "-assets"));
-        registration.marketSetHash = _hash(string.concat(label, "-markets"));
-        registration.marketPathId = _hash(string.concat(label, "-market-path"));
+        registration.marketSetHash = registrar.PROJECT_ONLY_MARKET_SET_HASH();
+        registration.marketPathId = bytes32(0);
         registration.capabilitySetHash = _hash(string.concat(label, "-capabilities"));
         registration.reviewPolicyHash = _hash("published-security-policy-v2");
         registration.securityReviewHash = _hash(string.concat(label, "-security-review"));
         registration.reviewResultId = _hash("reviewed-exact-deployment");
         registration.finalityPolicyHash = _hash("native-blockhash-depth-v2");
-        registration.feePolicy = _nativePolicy(registration);
+        registration.feePolicy = _noMarketPolicy();
     }
 
-    function _nativePolicy(IProgrammableCustomRegistryV1.LaunchRegistrationV1 memory registration)
-        private
-        pure
-        returns (IProgrammableCustomRegistryV1.FeePolicyV1 memory policy)
-    {
-        policy.kind = IProgrammableCustomRegistryV1.FeePolicyKind.NativeCustom;
-        policy.totalFeeBps = 10;
-        policy.nativeCustomFeeBps = 10;
-        policy.modelId = registration.modelId;
-        policy.modelVersion = registration.modelVersion;
-        policy.templateId = registration.templateId;
-        policy.templateVersion = registration.templateVersion;
-        policy.marketPathId = registration.marketPathId;
-        policy.programmable.shareBps = 10;
-        policy.programmable.recipient = PROGRAMMABLE_RECIPIENT;
-        policy.programmable.currency = FEE_CURRENCY;
-        policy.programmable.chargeModeId = _hash("verified-official-market-path");
-        policy.programmable.basisId = _hash("actual-settled-market-basis");
-        policy.programmable.roundingId = _hash("cumulative-floor");
-        policy.programmable.accrualId = _hash("programmable-accrual");
-        policy.programmable.claimId = _hash("programmable-claim");
-        policy.programmable.claimRightId = _hash("programmable-claim-right");
-        policy.programmable.controlEvidenceHash = _hash("programmable-control");
-        policy.publicPolicyBindingHash = _hash("native-public-policy");
-        policy.claimIsolationEvidenceHash = _hash("native-claim-isolation");
-        policy.accountingSafetyEvidenceHash = _hash("native-accounting-safety");
-        policy.verificationEvidenceHash = _hash("native-verification");
+    function _noMarketPolicy() private pure returns (IProgrammableCustomRegistryV1.FeePolicyV1 memory policy) {
+        policy.kind = IProgrammableCustomRegistryV1.FeePolicyKind.NoQualifyingMarket;
+        policy.publicPolicyBindingHash = _hash("no-market-public-policy");
+        policy.claimIsolationEvidenceHash = _hash("no-market-claim-isolation");
+        policy.accountingSafetyEvidenceHash = _hash("no-market-accounting-safety");
+        policy.verificationEvidenceHash = _hash("no-market-verification");
     }
 
     function _rebind(IProgrammableCustomRegistryV1.LaunchRegistrationV1 memory registration) private view {
@@ -222,7 +206,11 @@ contract ProgrammableCustomAtomicRegistrarV2Invariant is StdInvariant, Test {
         ProgrammableCustomPartnerFactoryRegistryV2 partnerRegistry =
             new ProgrammableCustomPartnerFactoryRegistryV2(2 days, address(0xB001), address(0xB002), address(0xB003));
         uint256 currentNonce = vm.getNonce(address(this));
-        address predictedRegistrar = vm.computeCreateAddress(address(this), currentNonce + 1);
+        address predictedRegistry = vm.computeCreateAddress(address(this), currentNonce + 1);
+        address predictedRegistrar = vm.computeCreateAddress(address(this), currentNonce + 2);
+        ProgrammableCustomExecutionPolicyRegistryV2 executionPolicyRegistry = new ProgrammableCustomExecutionPolicyRegistryV2(
+            IProgrammableCustomRegistryV1(predictedRegistry), partnerRegistry, predictedRegistrar
+        );
         registry = new ProgrammableCustomRegistryV2(
             ProgrammableCustomRegistryV1.RegistryConfigV1({
                 initialAdminDelay: 2 days,
@@ -238,9 +226,10 @@ contract ProgrammableCustomAtomicRegistrarV2Invariant is StdInvariant, Test {
                 registryPolicyHash: keccak256("invariant-registry-policy")
             }),
             partnerRegistry,
-            verifier
+            verifier,
+            executionPolicyRegistry
         );
-        registrar = new ProgrammableCustomAtomicRegistrarV2(registry);
+        registrar = new ProgrammableCustomAtomicRegistrarV2(registry, executionPolicyRegistry);
         assertEq(address(registrar), predictedRegistrar);
         vm.deal(address(this), 1000 ether);
         handler = new ProgrammableCustomAtomicRegistrarV2Handler{ value: 1000 ether }(registry, verifier, registrar);

@@ -1,6 +1,6 @@
 {
   "domain": "programmable.custom-registry-event-set.v2",
-  "eventSetHash": "sha256:bcff2958529fecaa7ef8c4c654389829bfb7dd61a3246f0d681cf7db0a42a58c",
+  "eventSetHash": "sha256:be36b4977143371149695aa8a8702aef56b08ef4b756640d0e0070252c24ee57",
   "events": [
     {
       "emitter": "registry",
@@ -67,6 +67,24 @@
       "id": "feeEvidence",
       "signature": "CustomLaunchFeeEvidenceBoundV1(bytes32,bytes32,bytes32,address,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32)",
       "topic0": "0xe647c474a92f722808930d32d310f47d0e3a4faf393255e0dea4b272588babb0"
+    },
+    {
+      "emitter": "executionPolicyRegistry",
+      "id": "executionPolicyBound",
+      "signature": "CustomLaunchExecutionPolicyBoundV2(bytes32,bytes32,bytes32,bytes32,uint32,bytes32,uint32,bool,bytes32,bytes32)",
+      "topic0": "0x9b151aeb52499c57b4f540b411ff14ac2e34ac01334f7e2461a3f2f4e5b5d93f"
+    },
+    {
+      "emitter": "executionPolicyRegistry",
+      "id": "executionRouteBound",
+      "signature": "CustomLaunchExecutionRouteBoundV2(bytes32,bytes32,uint32,bytes32,bytes32,uint8,bytes32,address,bytes32,bytes32,bytes32,bytes32,bytes32)",
+      "topic0": "0xf0763dea7eac2631823ece83bf0eceef82bff47840141315afa3d3eb002c8a19"
+    },
+    {
+      "emitter": "executionPolicyRegistry",
+      "id": "marketDataSourceBound",
+      "signature": "CustomLaunchMarketDataSourceBoundV2(bytes32,bytes32,uint32,bytes32,bytes32,uint8,address,bytes32,uint64,bytes32,bytes32,bytes32)",
+      "topic0": "0xe64b9e53b8e5c278f41e9302d9f341e9006bfa3b4c3c919d4983696478d130a0"
     },
     {
       "emitter": "atomicRegistrar",

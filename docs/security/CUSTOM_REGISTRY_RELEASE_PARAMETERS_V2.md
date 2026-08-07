@@ -20,7 +20,7 @@ therefore requires the additive registry-record v4 producer/schema. That project
 - contract integration ABI version: `1`
 - minimum full-fidelity public API version: `2`
 - registry-record producer/schema version: `4`
-- Custom event count: `15`
+- Custom event count: `18` (`15` retained registration/lifecycle events plus `3` execution-policy companions)
 - Programmable fee recipient: `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`
 - native Custom fee: exactly `10` BPS
 - partner-template fee: exactly `20` BPS = `15` partner + `5` Programmable
@@ -38,10 +38,12 @@ launch runtime set, permissions, fee-policy hash, chain, and generation match an
 
 1. `ProgrammableCustomFeePolicyVerifierV2`;
 2. `ProgrammableCustomPartnerFactoryRegistryV2`;
-3. `ProgrammableCustomRegistryV2`; and
-4. `ProgrammableCustomAtomicRegistrarV2`.
+3. `ProgrammableCustomExecutionPolicyRegistryV2`;
+4. `ProgrammableCustomRegistryV2`; and
+5. `ProgrammableCustomAtomicRegistrarV2`.
 
-The registry receives the nonce-predicted fourth address as its initial and only writer. The script checks every
+The registry receives the nonce-predicted fifth address as its initial and only writer. The execution-policy Registry
+is immutably cross-bound to the predicted Registry, partner-factory Registry, and atomic registrar. The script checks every
 predicted address, writer binding, chain, starting nonce, and generation. Any interleaved or failed transaction voids
 the freeze and requires a new predeployment record. The script does not publish a manifest, enable submissions,
 deploy a provider factory, or perform a canary.
@@ -57,27 +59,38 @@ These SHA-256 hashes cover the exact JSON bytes in `docs/security/abi`:
 
 | Artifact | SHA-256 |
 | --- | --- |
-| Registry ABI | `sha256:7c5fe7d25cc874a319c3621435c31cd8f531a7abfcd7d5073fc163d10d60524f` |
+| Registry ABI | `sha256:4c0330ee055bbd27f395deb7e4c001f27a49a65752a00426840b99f7d6a5dc64` |
 | Partner-factory Registry ABI | `sha256:054b5d2740314335d202e37d405273cbb9d0922398cbc2909e7cb7cee845061e` |
 | Fee-policy verifier ABI | `sha256:0bc9bdda4a1e78e2c498568ddfa164b35c3cb5c297f563dd4771935e75304f62` |
-| Atomic registrar ABI | `sha256:a053f14e59c3c54a0dad47e6e772ba411c7659a46eab3313a6c124260ebcff1f` |
+| Execution-policy Registry ABI | `sha256:071ee1474a7f78aef9d843e880ae5a19f312ee8a566c5501d3f2a059d8d85116` |
+| Atomic registrar ABI | `sha256:a48974ccacc97e3b9fcfafd52cdfac1d187a9183eac1a65d5d26221a75561214` |
 
-The combined 15-event semantic commitment is
-`sha256:bcff2958529fecaa7ef8c4c654389829bfb7dd61a3246f0d681cf7db0a42a58c`. The byte-level SHA-256
+The combined 18-event semantic commitment is
+`sha256:be36b4977143371149695aa8a8702aef56b08ef4b756640d0e0070252c24ee57`. The byte-level SHA-256
 of `CUSTOM_REGISTRY_EVENT_SET_V2.json` is
-`sha256:0c6c32e0db5eb55b8e0bd148a6206e0c0ab8605cda75338f3a556e75cd3eff1a`.
+`sha256:cc5b78cc4557909aade5df7ffd614c567ac069219ea0fc7db82bfb657bf159c5`.
+
+The trade-capability Golden Vector file is
+`sha256:8a35e3d8b6c597b5d209d8c3c244166d9c1948955ac6ba214c66972980fb7dce`, with semantic commitment
+`sha256:da03a4562a19f7800933d9657a5ea3895c01a33ca149954850d846f83b202530`. The five-contract artifact-set
+commitment, including both Golden Vector commitments, is
+`sha256:fc9d1487c476165675f5d2d12569e33f70b9a3289982c56252607f38849c60b9`.
 
 ## Source and candidate runtime hashes
 
 | Component | Source SHA-256 | Candidate deployed-bytecode Keccak-256 |
 | --- | --- | --- |
-| Registry | `6f013c147a5f1d4aba70aa335a905346bb4011fd266b75ea311e75362002051f` | `0x5b614de34459bb52a89f3ea876d3ea6c7a5e1fbeec688a8d11df9bc29684cb6e` |
+| Registry | `2de88274f88b9819fa3e5f2988dddf8f21d4e6ad202428b884eb67496196df05` | `0x7ff88b8da1d3bdc62608a33b2c2592249d005e802a38284267729274de38d347` |
 | Partner-factory Registry | `e81544a2c30ffb35179f2e701fe54def0b5ac9bac5d4f7086d5b173905f03432` | `0x990af413455471779a9a1b76bf75943dabf95fdcc2821889c132f6c363aecde6` |
 | Fee-policy verifier | `f18da940392fe45c61982617e6739145112562b251206ba908c69bd773f6cef6` | `0x21a9704c30cbac965d99b1932503ebc786bd9f54026a7d6b8539dd051f454e5f` |
-| Atomic registrar | `556bd3ec006015b4a995fc930a9abc7388e37ec4bfefed216d9e1b190f2a489b` | `0x4969b46b1c540827ebcced06192d7204fc2b5a47eced3c587134b82d3cec3e04` |
+| Execution-policy Registry | `2df71df700b795c5da57117bba456f626afbb57652bbc4dace21fd3a6da2bb36` | `0xbbb8dc3938ebefc3318702ebfcc1e36c667c347eb736a1badf2a26d0ea4cd9dc` |
+| Atomic registrar | `87dcd6dc88e7638abba093b7e63619dff643a7771ef6395f3b3f78785e73bf14` | `0x4b35dd0f02cc34898575d7a028c0d68e96dcfe9d76cbe6660477ea334f28e6af` |
 
-Candidate bytecode hashes are build artifacts only; they are not live runtime evidence and must be rederived from
-the final committed source before deployment.
+Candidate deployed-bytecode hashes are compiler templates only. Registry, partner-factory Registry,
+execution-policy Registry, and atomic registrar contain immutable references, so these template hashes cannot equal
+their configured deployed runtime hashes. A post-deployment gate must mask only compiler-declared immutable ranges,
+verify every immutable through contract getters, and record the actual runtime Keccak from two RPC providers. None of
+the table values is live runtime evidence.
 
 ## External release blockers
 
