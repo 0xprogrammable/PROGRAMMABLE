@@ -1089,7 +1089,7 @@ export function evaluateReadModelOperationsSourceContracts(
         "STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
       ) &&
       stagedAlchemySmokeBlock.includes(
-        'response.headers.get("x-programmable-read-source") !== "blob"',
+        '!["blob", "blob+postgres"].includes(readSource ?? "")',
       ) &&
       stagedAlchemySmokeBlock.includes(
         'response.headers.get("x-programmable-rpc-provider") !== "alchemy"',
@@ -1102,7 +1102,7 @@ export function evaluateReadModelOperationsSourceContracts(
       (stagedAlchemySmokeBlock.match(/\bfetch\(/gu) ?? []).length === 1 &&
       !stagedAlchemySmokeBlock.includes("/api/ops/health") &&
       !stagedAlchemySmokeBlock.includes("/api/explore/profile") &&
-      !/(?:postgres|database|projector|quicknode|envio|real-block|sla)/iu.test(
+      !/(?:database|projector|quicknode|envio|real-block|sla)/iu.test(
         stagedAlchemySmokeBlock,
       ) &&
       !stagedAlchemySmokeBlock.includes(
