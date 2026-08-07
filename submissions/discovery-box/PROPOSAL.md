@@ -93,7 +93,9 @@ For an exact-input sale with gross AMM ETH output `G`, the fee is `floor(G * 100
 
 For an exact-output sale requesting net ETH output `N`, the hook uses `fee = floor(N * 1000 / 999,000)`. The AMM outputs `N + fee`; the caller receives exactly `N`.
 
-The formulas above show the zero-carry case. The hook stores the residual of `cumulative gross ETH volume * 1000` on the same 1,000,000-unit scale as the fee. Gross modes divide by 1,000,000; fee-on-top modes divide the net-plus-prior numerator by 999,000, which preserves the same gross-volume identity across alternating modes. After every successful sequence, `accrued fee * 1,000,000 + remainder = cumulative gross volume * 1000`. A specified gross swap reverts before accrual if carried dust would make the fee consume its entire input, so every successful swap retains a positive AMM leg.
+The formulas above show the zero-carry case. The hook stores the platform residual of `cumulative gross ETH volume * 1000` on the same 1,000,000-unit scale as the fee for the canonical pool lifetime. Gross modes divide by 1,000,000; fee-on-top modes divide the net-plus-prior numerator by 999,000, which preserves the same gross-volume identity across alternating modes. Claims do not reset the remainder. The project rate is exactly zero, so its independent fee stream is inert.
+
+Zero execution is fee-free. Every positive executed gross ETH amount below 1,000 wei reverts before any claim mint, liability write or remainder write, in all four swap quadrants. Exactly 1,000 wei is admissible. This fixed fail-closed minimum makes fragmentation behavior independent of prior swaps and claim timing.
 
 Specified-ETH paths reject a partial core fill because the pre-swap fee must not be based on an unexecuted request. Unspecified-ETH paths calculate the fee from the actual core result.
 
@@ -142,8 +144,9 @@ No keeper, oracle or service job is required. No third-party router, Hooklist, i
 - Builder-stated: a $10 discovery product should unlock a higher-value fixed membership bundle.
 - Agent-derived: 100 boxes, a 40-box maturity target, 0.30% buy LP fee and 1.00% to 0.30% sell LP fee.
 - Local evidence: a fixed-seed 20,000-path reduced-form model reaches 40 openings in 72.9% of balanced paths.
-- Local evidence: 55 Foundry tests pass across token behaviour, all 4 swap modes, fee claims, partial fills, caller-bound atomic launch, non-vacuous exact-output invariants and the first buy from a BOX-only pool.
-- Not yet evidenced: fork execution, deployed addresses, live fee collection, routing support and product availability.
+- Local evidence: the Foundry suite passes across token behaviour, all 4 swap modes, strict minimum-gross enforcement, fee claims, partial fills, caller-bound atomic launch, non-vacuous exact-output invariants and the first buy from a BOX-only pool.
+- Local evidence: pinned-block and current-head Ethereum mainnet fork smoke tests pass against the expected PoolManager address and runtime hash.
+- Not yet evidenced: deployment, live fee collection, production routing support, indexer/reorg/backfill integration and product availability.
 
 ## Open decisions
 

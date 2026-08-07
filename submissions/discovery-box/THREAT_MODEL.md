@@ -54,7 +54,9 @@ fee liability increase = ERC-6909 native-currency claim minted = positive hook d
 hook ERC-6909 native-claim balance >= aggregate liability
 ```
 
-The fee is always native ETH and 10 basis points of executed gross quote-side volume. The shared remainder is the residual numerator on a 1,000,000-unit fee scale. Gross paths divide by 1,000,000 and fee-on-top paths solve the same cumulative-gross identity with denominator 999,000. Thus `accrued fee * 1,000,000 + remainder = cumulative gross volume * 1000` across mixed quadrants.
+The fee is always native ETH and 10 basis points of executed gross quote-side volume. The platform remainder is the residual numerator on a 1,000,000-unit fee scale for the canonical pool lifetime; an owner claim does not reset it. Gross paths divide by 1,000,000 and fee-on-top paths solve the same cumulative-gross identity with denominator 999,000. Thus `accrued fee * 1,000,000 + remainder = cumulative gross volume * 1000` across mixed quadrants before claims, while lifetime fees earned remain independent of claim timing. The project rate is exactly zero, so its independent stream is inert.
+
+Zero execution is fee-free. Every positive executed gross native amount below 1,000 units is rejected before minting a claim or writing liability or remainder. This fail-closed minimum prevents fragmentation from turning sub-fee-unit swaps into a carry-dependent execution policy.
 
 Specified-ETH paths reject partial fills after the core swap because a before-swap charge cannot use an unexecuted requested amount. Unspecified-ETH paths use the actual core delta. This difference must be visible in quotes and tests.
 
@@ -76,7 +78,7 @@ Claims follow checks, effects and the claim-specific unlock under a reentrancy g
 | Direction confusion | Bind ETH as currency0 and `BOX` as currency1 in the canonical key; test both directions |
 | Gross-versus-net fee error | Differential tests for all 4 quadrants, dust and gross-up identities |
 | Partial-fill overcharge | Revert partial specified-ETH fills; charge actual unspecified-ETH results |
-| Zero AMM leg or sign crossing | The exact 999-wei then 1-wei regression reverts before accrual; every successful specified-gross swap has fee below gross and a positive core leg |
+| Subminimum execution, zero AMM leg or sign crossing | All four quadrants reject positive gross quote below 1,000 with the exact wrapped hook error before accounting; zero execution remains fee-free and every successful positive swap has a positive core leg |
 | Transient delta left open | Ordered mint and returned-delta tests for accrual; ordered burn and take tests for redemption; zero-delta invariants |
 | First buy has no settled ETH yet | Mint ERC-6909 backing during callback instead of taking ETH before router settlement |
 | Reentrancy during claim | Non-reentrant claim, authenticated unlock callback and atomic burn/take path |

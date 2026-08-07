@@ -67,20 +67,21 @@ For sells, test:
 
 ## Programmable fee: all 4 quadrants
 
-Use native ETH as `currency0`. Test zero, 1, 999, 1,000, 999,000, 1,000,000, `type(int128).max` boundaries and randomized amounts.
+Use native ETH as `currency0`. Zero execution is fee-free. Every positive executed gross native amount below 1,000 units must revert before any accounting write; 1,000 is the first admissible positive gross amount. Test zero, 1, 999, 1,000, 999,000, 1,000,000, `type(int128).max` boundaries and randomized amounts.
 
 1. Zero for one, exact input: `F=floor(G*1000/1_000_000)`, AMM input `G-F`, final caller input `G`.
 2. Zero for one, exact output: for core ETH input `X`, `F=floor(X*1000/999_000)`, final gross input `X+F`, and `F=floor((X+F)*1000/1_000_000)`.
 3. One for zero, exact input: for gross ETH output `G`, `F=floor(G*1000/1_000_000)`, final caller output `G-F`.
 4. One for zero, exact output: for requested net ETH output `N`, `F=floor(N*1000/999_000)`, core output `N+F`, final caller output `N`, and `F=floor((N+F)*1000/1_000_000)`.
 
-The displayed formulas are the zero-carry identities. The implementation stores a shared residual numerator below 1,000,000. Gross paths add `G*1000` and divide by 1,000,000; fee-on-top paths add `N*1000` and divide by 999,000 so the resulting fee also contributes to gross volume. Test two split micro-swaps in each mode and an alternating-mode sequence, then assert the exact cumulative gross-volume identity.
+The displayed formulas are the zero-carry identities. The implementation stores the platform residual numerator below 1,000,000 for the canonical pool lifetime. Gross paths add `G*1000` and divide by 1,000,000; fee-on-top paths add `N*1000` and divide by 999,000 so the resulting fee also contributes to gross volume. The zero-rate project stream is inert. Test split admissible swaps and an alternating-mode sequence, then assert the exact cumulative gross-volume identity. Claims must not reset the remainder.
 
-Add the exact no-op regression: execute a 999-wei gross exact-input buy, then attempt a 1-wei gross exact-input buy. The second call must revert with `ZeroCoreSwapUnsupported` through PoolManager's wrapped hook error, leave liability, remainder and backing unchanged, and execute no zero-sized AMM leg.
+For all four direction and exactness quadrants, construct a positive executed gross quote below 1,000 and require the exact wrapped `GrossQuoteBelowMinimum(grossQuote)` hook error. Each rejection must leave liability, remainder, backing and pool execution state unchanged. Then prove a gross quote of exactly 1,000 succeeds. Fuzz the complete 1 through 999 range and assert atomic rollback.
 
 For every case, prove:
 
 - the accumulated fee is the integral floor of 10 basis points of executed gross ETH volume, with fractional remainder carried across swaps
+- claims do not reset the lifetime remainder and cannot change the fee earned by later swaps
 - the project share is zero and the Programmable share is the complete hook fee
 - the hook mints exactly `F` ERC-6909 native-currency claims to itself
 - hook PoolManager delta is zero before unlock ends
@@ -145,6 +146,6 @@ Current state:
 - deterministic Builder preflight: passed
 - 20,000-path reduced-form economic model: passed
 - Solidity format, build, unit, fuzz, five stateful invariants and static analysis: passed locally
-- pinned fork and current-head smoke: planned
+- pinned Ethereum mainnet fork at block 23,000,000 and current-head smoke: passed locally against PoolManager `0x000000000004444c5dc75cB358380D2e3dE08A90` with runtime hash `0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293`
 - local web model tests and production build: passed; production router, quote parity, indexer and wallet-gated membership tests: planned
 - independent accounting and security review: required before candidate status
