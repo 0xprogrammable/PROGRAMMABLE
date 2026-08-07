@@ -2,7 +2,7 @@ import "server-only";
 
 import { canonicalizeJson } from "../projection-target/canonical-json";
 import type { Sha256Digest } from "../projection-target/hashing";
-import { getProductionWebsiteProjectionTargetV1 } from
+import { getProductionWebsiteRegistryCustomPublicReadTargetV1 } from
   "../projection-target/website-target";
 import { isCustomLaunchRegistryPublicReadEnabled } from "./public-readiness";
 import { withGenesisCanaryRegistryCustomStoreV1 } from
@@ -65,14 +65,43 @@ let productionHandlers:
 ReturnType<typeof createRegistryCustomLaunchPublicReadHandlersV1> | null = null;
 
 async function production() {
-  const target = getProductionWebsiteProjectionTargetV1();
-  await target.assertProductionReadiness();
+  let target: ReturnType<
+    typeof getProductionWebsiteRegistryCustomPublicReadTargetV1
+  >;
+  try {
+    target = getProductionWebsiteRegistryCustomPublicReadTargetV1();
+  } catch (error) {
+    logProductionReadFailure("construction", error);
+    throw error;
+  }
+  try {
+    await target.assertProductionReadiness();
+  } catch (error) {
+    logProductionReadFailure("attestation", error);
+    throw error;
+  }
   productionHandlers ??= createRegistryCustomLaunchPublicReadHandlersV1({
     store: withGenesisCanaryRegistryCustomStoreV1(
-      target.registryCustomPublicStore,
+      target.store,
     ),
   });
   return productionHandlers;
+}
+
+function logProductionReadFailure(
+  stage: "construction" | "attestation",
+  error: unknown,
+): void {
+  const code = error !== null && typeof error === "object"
+    && "code" in error && typeof error.code === "string"
+    && /^[A-Za-z0-9_-]{1,64}$/u.test(error.code)
+      ? error.code
+      : error instanceof TypeError ? "type_error" : "unknown";
+  console.error(JSON.stringify({
+    event: "registry_custom_public_read_dependency_failed",
+    stage,
+    code,
+  }));
 }
 
 export async function handleProductionRegistryCustomLaunchFeedV1(

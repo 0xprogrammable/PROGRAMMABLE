@@ -36,6 +36,11 @@ export interface WebsiteProjectionTargetV1 {
   readonly assertProductionReadiness: () => Promise<void>;
 }
 
+export interface WebsiteRegistryCustomPublicReadTargetV1 {
+  readonly store: PostgresRegistryCustomLaunchPublicStoreV1;
+  readonly assertProductionReadiness: () => Promise<void>;
+}
+
 export interface ProjectionTargetSecurityAttestationRowV1
 extends Record<string, unknown> {
   runtime_role: string;
@@ -79,6 +84,31 @@ export interface VerifiedPostgresTlsConfigurationV1 {
 }
 
 let productionTarget: WebsiteProjectionTargetV1 | null = null;
+let productionRegistryCustomPublicReadTarget:
+WebsiteRegistryCustomPublicReadTargetV1 | null = null;
+
+export function getProductionWebsiteRegistryCustomPublicReadTargetV1():
+WebsiteRegistryCustomPublicReadTargetV1 {
+  if (productionRegistryCustomPublicReadTarget !== null) {
+    return productionRegistryCustomPublicReadTarget;
+  }
+  const expectedDatabaseRole = environmentId(
+    "PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_ROLE",
+  );
+  const pool = createProductionProjectionTargetPostgresPoolV1(
+    environmentValue("PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_URL"),
+    environmentPem(
+      "PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_CA_PEM",
+      "CERTIFICATE",
+    ),
+    expectedDatabaseRole,
+  );
+  productionRegistryCustomPublicReadTarget = Object.freeze({
+    store: new PostgresRegistryCustomLaunchPublicStoreV1(pool),
+    assertProductionReadiness: () => pool.assertProductionReadiness(),
+  });
+  return productionRegistryCustomPublicReadTarget;
+}
 
 export function getProductionWebsiteProjectionTargetV1(): WebsiteProjectionTargetV1 {
   if (productionTarget !== null) return productionTarget;
