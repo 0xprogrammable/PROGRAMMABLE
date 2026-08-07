@@ -55,15 +55,23 @@ describe("interaction accessibility", () => {
     expect(launchCss).not.toMatch(/\.modelArt\s*\{[^}]*outline:/s);
   });
 
-  it("keeps the default arrow cursor policy across app controls", () => {
+  it("limits the pointer cursor to the explicitly interactive landing links", () => {
+    const landingCssPath = join(
+      root,
+      "components/landing-page.module.css",
+    );
     const css = [
       ...collectCssFiles(join(root, "app")),
       ...collectCssFiles(join(root, "components")),
     ]
+      .filter((path) => path !== landingCssPath)
       .map((path) => readFileSync(path, "utf8"))
       .join("\n");
+    const landingCss = readFileSync(landingCssPath, "utf8");
 
     expect(css).not.toMatch(/cursor:\s*(?:pointer|not-allowed)\b/);
+    expect(landingCss.match(/cursor:\s*pointer\b/g)).toHaveLength(3);
+    expect(landingCss).not.toMatch(/cursor:\s*not-allowed\b/);
   });
 
   it("keeps the interface dark-only without exposing a theme toggle", () => {
@@ -161,7 +169,7 @@ describe("interaction accessibility", () => {
     expect(landing).toContain('aria-label="Programmable on X"');
     expect(landing).toContain('aria-label="Programmable on GitHub"');
     expect(landing).toContain('aria-label="Programmable on Dexscreener"');
-    expect(landing).toContain("Developer docs");
+    expect(landing).toMatch(/>\s*Docs\s*</);
     expect(css).toMatch(
       /\.socialLink\s*\{[^}]*height:\s*44px;[^}]*width:\s*44px;/s,
     );

@@ -56,5 +56,11 @@ describe("Explore UI contract", () => {
     expect(styles).toMatch(
       /\.runnerHeading h3\s*\{[^}]*line-height:\s*1\.15;/s,
     );
+    expect(source).toContain(
+      'sizes="(max-width: 360px) 96px, (max-width: 420px) 104px, (max-width: 700px) 112px, (max-width: 900px) 46vw, 31vw"',
+    );
+    expect(styles).toMatch(
+      /\.runnerMarketStatus\s*\{[^}]*color:\s*var\(--explore-ivory-muted\);/s,
+    );
   });
 });

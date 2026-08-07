@@ -81,7 +81,7 @@ describe("landing page contract", () => {
     );
     expect(landing).toContain("Create a token");
     expect(landing).toContain("Explore tokens");
-    expect(landing).toContain("Developer docs");
+    expect(landing).toMatch(/>\s*Docs\s*</);
     expect(landing).not.toContain("liquid-glass-distortion");
     expect(landing).toContain('aria-label="Programmable links"');
     expect(landing).toContain('aria-label="Programmable on X"');

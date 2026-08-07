@@ -53,7 +53,7 @@ describe("topbar and Explore hero polish", () => {
     expect(landing).toContain('aria-label="Programmable on GitHub"');
     expect(landing).toContain('aria-label="Programmable on Dexscreener"');
     expect(landing).toContain('href="/docs/developers"');
-    expect(landing).toContain("Developer docs");
+    expect(landing).toMatch(/>\s*Docs\s*</);
     expect(navigation).not.toContain("ThemeToggle");
     expect(navigation).toContain('if (pathname === "/") return null;');
     expect(navigation).toContain("<WalletButton compact />");

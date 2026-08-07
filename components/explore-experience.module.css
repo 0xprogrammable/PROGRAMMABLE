@@ -486,7 +486,7 @@
 }
 
 .runnerMarketStatus {
-  color: var(--text-soft);
+  color: var(--explore-ivory-muted);
   display: inline-flex;
   flex: none;
   font-size: 12px;

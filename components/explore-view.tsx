@@ -1298,7 +1298,7 @@ export function ExploreView() {
                   fill
                   loading={index < 3 ? "eager" : "lazy"}
                   priority={index < 3}
-                  sizes="(max-width: 480px) 304px, (max-width: 700px) 420px, (max-width: 900px) 46vw, 31vw"
+                  sizes="(max-width: 360px) 96px, (max-width: 420px) 104px, (max-width: 700px) 112px, (max-width: 900px) 46vw, 31vw"
                   unoptimized={!canOptimizeTokenImage(imageSource)}
                   draggable={false}
                 />
