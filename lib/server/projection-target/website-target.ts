@@ -28,6 +28,8 @@ import {
 
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:@/+~-]{0,255}$/u;
+const SUPABASE_POOLER_HOST = /^aws-[0-9]+-[a-z0-9-]+\.pooler\.supabase\.com$/u;
+const SUPABASE_PROJECT_REF = /^[a-z]{20}$/u;
 
 export interface WebsiteProjectionTargetV1 {
   readonly handler: ProjectionTargetReferenceHandlerV1;
@@ -246,15 +248,7 @@ export function createProductionProjectionTargetPostgresPoolV1(
   if (!SAFE_ID.test(expectedRuntimeRole)) {
     throw new TypeError("website projection database role is invalid");
   }
-  let loginRole: string;
-  try {
-    loginRole = decodeURIComponent(new URL(tls.connectionString).username);
-  } catch {
-    throw new TypeError("website projection database login role is invalid");
-  }
-  if (loginRole !== expectedRuntimeRole) {
-    throw new TypeError("website projection database login role is invalid");
-  }
+  assertProductionDatabaseLoginRoleV1(tls.connectionString, expectedRuntimeRole);
   const pool = new Pool({
     connectionString: tls.connectionString,
     ssl: {
@@ -272,6 +266,28 @@ export function createProductionProjectionTargetPostgresPoolV1(
     // Route-level operations surface a bounded 503 without credential or URL data.
   });
   return new NodePostgresProjectionTargetPoolV1(pool, expectedRuntimeRole);
+}
+
+export function assertProductionDatabaseLoginRoleV1(
+  connectionString: string,
+  expectedRuntimeRole: string,
+): void {
+  let url: URL;
+  let loginRole: string;
+  try {
+    url = new URL(connectionString);
+    loginRole = decodeURIComponent(url.username);
+  } catch {
+    throw new TypeError("website projection database login role is invalid");
+  }
+  if (loginRole === expectedRuntimeRole) return;
+  const projectRef = loginRole.slice(expectedRuntimeRole.length + 1);
+  if (
+    !loginRole.startsWith(`${expectedRuntimeRole}.`)
+    || !SUPABASE_PROJECT_REF.test(projectRef)
+    || !SUPABASE_POOLER_HOST.test(url.hostname.toLowerCase())
+    || (url.port !== "5432" && url.port !== "6543")
+  ) throw new TypeError("website projection database login role is invalid");
 }
 
 export function verifiedPostgresTlsConfigurationV1(
