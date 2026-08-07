@@ -37,8 +37,9 @@ published source.
 The paired ERC-20's transfer coupling (LIFO NFT retirement, 16-per-transfer bound, holder-only
 prepareSell above it) contains no operator authority, never modifies amounts, and never blocks
 buys or receipt; residual risk is seller-side UX, not custody or censorship. Sell liveness is
-preserved: any holder can always prepare and then transfer the entire balance. Verified source
-for that contract is public at the recorded token identity on Etherscan.
+preserved: any holder can always prepare and then transfer the entire balance. The token and
+NFT sources are bound byte-exactly in the flagship closure (identical to their
+Etherscan-verified inputs), and the seller-exit suite exercises this exact boundary.
 
 ## Failure behavior
 

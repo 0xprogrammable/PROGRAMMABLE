@@ -22,9 +22,9 @@ architecture review of that record. It is not a request to launch anything new.
 
 ## Where the exact source lives
 
-The flagship/ directory of the primary repository holds the complete 30-file standard-JSON
-compile closure of the hook, byte for byte identical to the Etherscan-verified input for the
-recorded address, together with the pinned compiler profile (solc 0.8.26, optimizer runs 1,
+The flagship/ directory of the primary repository holds the complete standard-JSON compile
+closures of all four contracts — hook, token, NFT and renderer — a fifty-eight-file union,
+byte for byte identical to their Etherscan-verified inputs, together with the pinned compiler profile (solc 0.8.26, optimizer runs 1,
 via-IR, cancun, no metadata hash) and an offline proof: flagship/test/DeploymentProof.t.sol
 recompiles the tree and reproduces the recorded init-code hash, the CREATE2 derivation and the
 permission bits. Machine-readable provenance is in flagship/PROVENANCE.json. The repository
@@ -52,4 +52,8 @@ awakened Relic NFTs (LIFO, real burn events) so active NFTs never exceed whole-u
 bounded at 16 retirements per transfer. A larger unprepared transfer reverts
 PreparationRequired until the holder — msg.sender only — calls prepareSell. Amounts are never
 modified, buys are never affected, and no operator path exists. This is the strongest-label
-disclosure, not a hidden control.
+disclosure, not a hidden control. Following maintainer review, the token and NFT sources are
+now bound byte-exactly in the flagship closure and a dedicated eleven-test seller-exit suite
+(flagship/test/TokenNftSyncExit.t.sol) proves ordinary transfers, 0/1/16/>16 retirements,
+holder-only batch preparation, complete exit with no third-party involvement, allowance
+paths and atomic failure against those exact sources.

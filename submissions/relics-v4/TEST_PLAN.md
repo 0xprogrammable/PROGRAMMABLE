@@ -6,6 +6,15 @@ and checks that would only apply to a future fee-integrated variant.
 
 ## Reproducible from the primary repository
 
+- Seller-exit behavioral suite: flagship/test/TokenNftSyncExit.t.sol wires the exact
+  production token, NFT, renderer and hook sources together (the hook constructed at a
+  flag-valid address so its permission validation runs for real) and proves ordinary
+  transfers, inflow-never-mints, 0/1/16/>16 retirements, LIFO order, the exact
+  PreparationRequired quote with atomic unwind, holder-chosen preparation followed by a
+  complete exit with no third-party involvement, holder-only preparation against a full
+  operator plus allowance, sender-only capacity-bound awakening, allowance-driven
+  transferFrom, and batch bounds — eleven tests, all passing — plus a token CREATE2 proof
+  reproducing the recorded token address from this exact source.
 - Offline deployment proof: cd flagship and run forge test with the pinned profile
   (solc 0.8.26, optimizer runs 1, via-IR, cancun). Four tests assert byte-exactness: the
   abi-encoded constructor arguments equal the recorded bytes, the init-code hash equals the
@@ -22,8 +31,8 @@ and checks that would only apply to a future fee-integrated variant.
 ## Existing external evidence
 
 - Etherscan source verification of the hook, token, NFT and renderer at their recorded
-  addresses with the exact compiler profile; the flagship closure is byte-identical to the
-  verified standard-JSON input.
+  addresses with the exact compiler profile; the fifty-eight-file flagship closure is
+  byte-identical to the union of their verified standard-JSON inputs.
 - Public chain reads reproducible with any RPC: runtime code hash 0xd45977dd, code size 8644
   bytes, owner address(0), canonical pool id 0x33d9b408, fixed 10,000e18 total supply.
 - The private production pipeline ran unit, integration, fuzz, invariant, reentrancy,
