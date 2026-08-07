@@ -518,30 +518,124 @@ jobs:
           if (!releaseToken) {
             throw new Error("staged Alchemy Explore has no token identity");
           }
+          const newestPageSize = 100;
           const newest = await requestJson(
-            "/api/explore?limit=20&page=1&sort=newest",
+            `/api/explore?limit=${newestPageSize}&page=1&sort=newest`,
           );
+          const newestTotal = Number(newest.total);
+          const newestTotalPages = Number(newest.totalPages);
           if (
             newest.status !== "ready" ||
             !Array.isArray(newest.tokens) ||
-            newest.tokens.length < 1
+            newest.tokens.length < 1 ||
+            newest.page !== 1 ||
+            newest.pageSize !== newestPageSize ||
+            !Number.isSafeInteger(newestTotal) ||
+            newestTotal < 1 ||
+            newestTotal > 10_000 ||
+            !Number.isSafeInteger(newestTotalPages) ||
+            newestTotalPages < 1 ||
+            newestTotalPages > 100 ||
+            newestTotalPages !== Math.ceil(newestTotal / newestPageSize)
           ) {
             throw new Error("staged Alchemy newest page is not populated");
           }
-          for (let index = 1; index < newest.tokens.length; index += 1) {
-            const previous = newest.tokens[index - 1];
-            const current = newest.tokens[index];
-            const previousOrder = [
-              BigInt(previous.launchBlockNumber ?? "-1"),
-              BigInt(previous.launchTransactionIndex ?? -1),
-              BigInt(previous.launchLogIndex ?? -1),
-            ];
-            const currentOrder = [
-              BigInt(current.launchBlockNumber ?? "-1"),
-              BigInt(current.launchTransactionIndex ?? -1),
-              BigInt(current.launchLogIndex ?? -1),
-            ];
+          const newestTokens = [];
+          const seenNewestIds = new Set();
+          for (let pageNumber = 1; pageNumber <= newestTotalPages; pageNumber += 1) {
+            const page = pageNumber === 1
+              ? newest
+              : await requestJson(
+                  `/api/explore?limit=${newestPageSize}&page=${pageNumber}&sort=newest`,
+                );
             if (
+              page.status !== "ready" ||
+              page.page !== pageNumber ||
+              page.pageSize !== newestPageSize ||
+              page.total !== newestTotal ||
+              page.totalPages !== newestTotalPages ||
+              !Array.isArray(page.tokens) ||
+              page.tokens.length < 1
+            ) {
+              throw new Error("staged Alchemy newest pagination is not stable");
+            }
+            for (const entry of page.tokens) {
+              if (typeof entry?.id !== "string" || seenNewestIds.has(entry.id)) {
+                throw new Error("staged Alchemy newest pagination is not unique");
+              }
+              seenNewestIds.add(entry.id);
+              newestTokens.push(entry);
+            }
+          }
+          if (newestTokens.length !== newestTotal) {
+            throw new Error("staged Alchemy newest pagination is incomplete");
+          }
+          const newestChainId = String(newest.snapshot?.chainId ?? "");
+          if (!/^(?:0|[1-9][0-9]*)$/.test(newestChainId)) {
+            throw new Error("staged Alchemy newest snapshot has no canonical chain");
+          }
+          const launchChainId = (entry) => {
+            const value = entry.exploreKind === "token"
+              ? String(entry.id).split(":", 1)[0]
+              : entry.exploreKind === "custom-project"
+                ? String(entry.chainId ?? "")
+                : "";
+            if (!/^(?:0|[1-9][0-9]*)$/.test(value)) {
+              throw new Error("staged Alchemy newest entry has no canonical chain");
+            }
+            return value;
+          };
+          const launchOrder = (entry) => {
+            const coordinates = entry.exploreKind === "token"
+              ? [
+                  entry.launchBlockNumber,
+                  entry.launchTransactionIndex,
+                  entry.launchLogIndex,
+                ]
+              : entry.exploreKind === "custom-project" &&
+                  entry.launchCategoryProvenance?.category === "custom"
+                ? [
+                    entry.launchCategoryProvenance.blockNumber,
+                    entry.launchCategoryProvenance.transactionIndex,
+                    entry.launchCategoryProvenance.logIndex,
+                  ]
+                : null;
+            if (coordinates === null || coordinates.length !== 3) {
+              throw new Error(
+                "staged Alchemy newest entry has no canonical launch order",
+              );
+            }
+            return coordinates.map((value) => {
+              const normalized = String(value ?? "");
+              if (!/^(?:0|[1-9][0-9]*)$/.test(normalized)) {
+                throw new Error(
+                  "staged Alchemy newest entry has no canonical launch order",
+                );
+              }
+              return BigInt(normalized);
+            });
+          };
+          const launchTime = (entry) => {
+            const value = Date.parse(entry.launchedAt ?? "");
+            if (!Number.isFinite(value)) {
+              throw new Error("staged Alchemy newest entry has no canonical time");
+            }
+            return value;
+          };
+          for (const entry of newestTokens) {
+            if (launchChainId(entry) !== newestChainId) {
+              throw new Error("staged Alchemy newest entry is on another chain");
+            }
+            launchOrder(entry);
+            launchTime(entry);
+          }
+          for (let index = 1; index < newestTokens.length; index += 1) {
+            const previous = newestTokens[index - 1];
+            const current = newestTokens[index];
+            const previousOrder = launchOrder(previous);
+            const currentOrder = launchOrder(current);
+            if (
+              launchTime(current) > launchTime(previous) ||
               currentOrder.some(
                 (value, offset) =>
                   value > previousOrder[offset] &&
@@ -553,6 +647,23 @@ jobs:
             ) {
               throw new Error("staged Alchemy newest page is not ordered newest-first");
             }
+          }
+          const oldest = await requestJson(
+            `/api/explore?limit=${newestPageSize}&page=1&sort=oldest`,
+          );
+          const expectedOldestIds = newestTokens
+            .slice(-newestPageSize)
+            .reverse()
+            .map((entry) => entry.id);
+          if (
+            oldest.status !== "ready" ||
+            oldest.total !== newestTotal ||
+            oldest.totalPages !== newestTotalPages ||
+            !Array.isArray(oldest.tokens) ||
+            oldest.tokens.map((entry) => entry.id).join("\n") !==
+              expectedOldestIds.join("\n")
+          ) {
+            throw new Error("staged Alchemy oldest page is not ordered oldest-first");
           }
           const incrementalLaunchAddress =
             "0x468505087c2dfec4779f2d6a5f8481f03e32e905";
