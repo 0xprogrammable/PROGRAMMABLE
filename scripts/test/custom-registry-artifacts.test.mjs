@@ -241,6 +241,67 @@ test("rejects a Generation 2 trade-capability golden-vector semantic mutation", 
   });
 });
 
+test("rejects decimal-as-hex drift inside the nested proxy source preimage", () => {
+  withFixture((root) => {
+    const vectorsPath = join(
+      root,
+      "docs",
+      "security",
+      "CUSTOM_REGISTRY_TRADE_CAPABILITY_V1_GOLDEN_VECTORS.json",
+    );
+    const vectors = JSON.parse(readFileSync(vectorsPath, "utf8"));
+    vectors.preimages.proxySource.proxyBindingEvidenceHash =
+      "0x0000000000000000000000000000000000000000000000000000000000000209";
+    vectors.preimages.proxySource.proxyPolicyHash =
+      "0x0000000000000000000000000000000000000000000000000000000000000210";
+    writeFileSync(vectorsPath, `${JSON.stringify(vectors, null, 2)}\n`);
+    assertRejected(
+      verify(root),
+      /published artifact file hash drift|golden roundtrip drift at proxySourceHash/u,
+    );
+  });
+});
+
+test("rejects a nested child mutation even when its supplied parent hashes remain frozen", () => {
+  withFixture((root) => {
+    const vectorsPath = join(
+      root,
+      "docs",
+      "security",
+      "CUSTOM_REGISTRY_TRADE_CAPABILITY_V1_GOLDEN_VECTORS.json",
+    );
+    const vectors = JSON.parse(readFileSync(vectorsPath, "utf8"));
+    vectors.preimages.capability.marketDataSources[1].proxyPolicyHash =
+      "0x0000000000000000000000000000000000000000000000000000000000000210";
+    writeFileSync(vectorsPath, `${JSON.stringify(vectors, null, 2)}\n`);
+    assertRejected(
+      verify(root),
+      /published artifact file hash drift|golden roundtrip drift at capability.marketDataSources/u,
+    );
+  });
+});
+
+test("rejects event launchId topics that are not derived from the capability launchId", () => {
+  withFixture((root) => {
+    const vectorsPath = join(
+      root,
+      "docs",
+      "security",
+      "CUSTOM_REGISTRY_TRADE_CAPABILITY_V1_GOLDEN_VECTORS.json",
+    );
+    const vectors = JSON.parse(readFileSync(vectorsPath, "utf8"));
+    for (const event of Object.values(vectors.events)) {
+      event.topics[1] =
+        "0x0000000000000000000000000000000000000000000000000000000000000300";
+    }
+    writeFileSync(vectorsPath, `${JSON.stringify(vectors, null, 2)}\n`);
+    assertRejected(
+      verify(root),
+      /published artifact file hash drift|golden roundtrip drift at events\.summary\.topics/u,
+    );
+  });
+});
+
 test("rejects a market-event preimage mutation", () => {
   withFixture((root) => {
     const vectorsPath = join(

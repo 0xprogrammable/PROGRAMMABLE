@@ -6,6 +6,8 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 
+import { assertTradeCapabilityGoldenRoundTrip } from "./verify-custom-registry-trade-capability-golden.mjs";
+
 const root = resolve(
   process.env.PROGRAMMABLE_CUSTOM_REGISTRY_ARTIFACT_ROOT
     ?? join(dirname(fileURLToPath(import.meta.url)), ".."),
@@ -58,7 +60,7 @@ const generationTwoContracts = [
 ];
 const expectedGenerationTwoArtifactFileHashes = new Map([
   ["CUSTOM_REGISTRY_EVENT_SET_V2.json", "sha256:20724d1652169d4639ed452f91b43b188ba81da44352236b8ba5c889f527b85c"],
-  ["CUSTOM_REGISTRY_TRADE_CAPABILITY_V1_GOLDEN_VECTORS.json", "sha256:c16bc3a33efbb44d4473d89279d5c28a16a321c946ba6b16933ad0ba64b7e924"],
+  ["CUSTOM_REGISTRY_TRADE_CAPABILITY_V1_GOLDEN_VECTORS.json", "sha256:e88df768650d337bf514427b58df504af45d60f5083b04957c97ac0011d634ef"],
   ["abi/ProgrammableCustomRegistryV2.json", "sha256:22da28a286141a7ce2a40f8d0e6df25f3bc8ea1f5b98d171ef3ec72bc29f0cb7"],
   ["abi/ProgrammableCustomPartnerFactoryRegistryV2.json", "sha256:7b947c6daea5ff7246eaa357f19680719f030cb85d0413e07f41f48c9a994c9e"],
   ["abi/ProgrammableCustomFeePolicyVerifierV2.json", "sha256:702549e5b400e23ec1fac7f58ade143d205299b41289069879d95c38981f6151"],
@@ -69,11 +71,11 @@ const expectedGenerationTwoArtifactFileHashes = new Map([
 const expectedGenerationTwoEventSetHash =
   "sha256:1fce77eed87ebb4e09838448b282960586bcaab4f441e62e17c9b45b2ae1b46f";
 const expectedGenerationTwoArtifactSetHash =
-  "sha256:691c1345becc591fd3020702bd627d3545f371d3fef973d16cf3945941d7ffe7";
+  "sha256:c76c279772bb04bd2c5f9a1f311d0920ed3bfd5ac04087e6b3043ffe2667f09f";
 const expectedTradeCapabilityGoldenSemanticHash =
-  "sha256:e34bab905d179337446b1f81a3c45cfc455fd4c63735600fddde04d2dc66a59e";
+  "sha256:32f45185daf9ede4e68ec87b587776de5cc3a6c6da43c7026b2315650b668765";
 const expectedGenerationTwoReleaseCandidateFileHash =
-  "sha256:4862d89ed0967a2df56b67810bdb5a61960b875109b46d9d95b4a470e050fd76";
+  "sha256:9d75c2cd174e9686417f32848943fa722a429f37aa58c8cb4decc6a754463067";
 const expectedGenerationTwoBuilds = new Map([
   [
     "ProgrammableCustomFeePolicyVerifierV2",
@@ -499,6 +501,7 @@ const tradeCapabilityGoldenVectorsPath = join(
 );
 const tradeCapabilityGoldenVectorsBytes = readFileSync(tradeCapabilityGoldenVectorsPath);
 const tradeCapabilityGoldenVectors = JSON.parse(tradeCapabilityGoldenVectorsBytes);
+assertTradeCapabilityGoldenRoundTrip(tradeCapabilityGoldenVectors);
 const tradeCapabilityGoldenSemanticValue = {
   abiEncoding: tradeCapabilityGoldenVectors.abiEncoding,
   domains: tradeCapabilityGoldenVectors.domains,

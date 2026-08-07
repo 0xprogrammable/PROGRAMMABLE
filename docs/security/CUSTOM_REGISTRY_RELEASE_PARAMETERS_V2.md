@@ -77,10 +77,12 @@ of `CUSTOM_REGISTRY_EVENT_SET_V2.json` is
 `sha256:20724d1652169d4639ed452f91b43b188ba81da44352236b8ba5c889f527b85c`.
 
 The trade-capability Golden Vector file is
-`sha256:c16bc3a33efbb44d4473d89279d5c28a16a321c946ba6b16933ad0ba64b7e924`, with semantic commitment
-`sha256:e34bab905d179337446b1f81a3c45cfc455fd4c63735600fddde04d2dc66a59e`. The six-contract artifact-set
-commitment, including both Golden Vector commitments, is
-`sha256:691c1345becc591fd3020702bd627d3545f371d3fef973d16cf3945941d7ffe7`.
+`sha256:e88df768650d337bf514427b58df504af45d60f5083b04957c97ac0011d634ef`, with semantic commitment
+`sha256:32f45185daf9ede4e68ec87b587776de5cc3a6c6da43c7026b2315650b668765`. The release verifier independently
+reconstructs every nested Golden route, market, metric, source, set, capability, helper, indexed topic, and event-data
+value from its leaf preimages; it does not trust supplied parent hashes. The six-contract artifact-set commitment,
+including both Golden Vector commitments, is
+`sha256:c76c279772bb04bd2c5f9a1f311d0920ed3bfd5ac04087e6b3043ffe2667f09f`.
 
 ## Source and candidate runtime hashes
 

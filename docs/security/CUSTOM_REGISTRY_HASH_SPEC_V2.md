@@ -216,7 +216,12 @@ Revision approval binds previous/new policy hashes, the replacement flag, previo
 contiguous, one-use, append-only, revocable before use, and either replace the policy or explicitly retain it.
 
 Exact tuple orders, preimages, hashes, selectors, topics, indexed topics, and event data are frozen in
-`CUSTOM_REGISTRY_TRADE_CAPABILITY_V1_GOLDEN_VECTORS.json` and independently reproduced by Foundry tests.
+`CUSTOM_REGISTRY_TRADE_CAPABILITY_V1_GOLDEN_VECTORS.json`. Foundry independently reproduces the Solidity vectors,
+and `scripts/verify-custom-registry-trade-capability-golden.mjs` reconstructs every published nested route, market,
+metric, source, set, capability, helper, topic, and event-data value from its leaf preimages. In particular, the
+published proxy evidence/policy samples are decimal `209`/`210` encoded as bytes32 `0x...00d1`/`0x...00d2`, and the
+event launch identifier is decimal `300` encoded as the indexed bytes32 topic `0x...012c`. Parent hashes and event
+topic arrays are never accepted as substitutes for those independently derived child and identity values.
 
 ## Fee policy
 
