@@ -4,7 +4,7 @@
 
 Programmable is an interface for launching tokens whose market behavior is defined by Uniswap v4 hooks.
 
-[programmable.family](https://programmable.family) · [X](https://x.com/0xProgrammable)
+[programmable.market](https://programmable.market) · [X](https://x.com/0xProgrammable)
 
 ## Launch models
 
