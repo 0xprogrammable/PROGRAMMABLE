@@ -11,6 +11,7 @@ import {
 vi.mock("server-only", () => ({}));
 
 import {
+  attestGitHubSessionAuthorityConfigurationV1,
   createGitHubSessionAuthorityHandlerV1,
   type PrivySessionAuthorityBoundaryV1,
 } from "@/lib/server/custom-launch/github-session-authority-v1";
@@ -78,6 +79,24 @@ function fixture(linkedAccounts: readonly Readonly<{
   return {
     publicKey,
     workloadToken: createWorkloadToken(workload.privateKey),
+    environment: Object.freeze({
+      NEXT_PUBLIC_PRIVY_APP_ID: APP_ID,
+      PRIVY_APP_SECRET: "privy-app-secret",
+      PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_AUDIENCE: AUDIENCE,
+      PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_KEY_ID: KEY_ID,
+      PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_KEY_EPOCH: KEY_EPOCH,
+      PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_PRIVATE_KEY_PEM: privateKeyPem,
+      PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_PUBLIC_KEY_SPKI_SHA256:
+        publicKeySpkiSha256,
+      PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_WORKLOAD_ISSUER:
+        "programmable-authority-token-broker-v1",
+      PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_WORKLOAD_SUBJECT: "approval-runtime-v1",
+      PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_WORKLOAD_KEY_ID: "workload-access-v1",
+      PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_WORKLOAD_PUBLIC_KEY_PEM:
+        workloadPublicKeyPem,
+      PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_WORKLOAD_PUBLIC_KEY_SPKI_SHA256:
+        workloadPublicKeySpkiSha256,
+    }),
     handler: createGitHubSessionAuthorityHandlerV1({
       appId: APP_ID,
       audience: AUDIENCE,
@@ -97,6 +116,35 @@ function fixture(linkedAccounts: readonly Readonly<{
 }
 
 describe("GitHub session authority", () => {
+  it("attests the exact production key pair and workload configuration without credentials", () => {
+    const { environment } = fixture();
+    const attestation = attestGitHubSessionAuthorityConfigurationV1(environment);
+    expect(attestation).toMatchObject({
+      schemaVersion:
+        "programmable.github-session-authority-configuration-attestation.v1",
+      appId: APP_ID,
+      audience: AUDIENCE,
+      keyId: KEY_ID,
+      keyEpoch: KEY_EPOCH,
+      workloadIssuer: "programmable-authority-token-broker-v1",
+      workloadSubject: "approval-runtime-v1",
+      workloadKeyId: "workload-access-v1",
+      configurationHash: expect.stringMatching(/^sha256:[0-9a-f]{64}$/u),
+    });
+    expect(JSON.stringify(attestation)).not.toContain("PRIVATE KEY");
+    expect(JSON.stringify(attestation)).not.toContain("privy-app-secret");
+    expect(() => attestGitHubSessionAuthorityConfigurationV1({
+      ...environment,
+      PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_PUBLIC_KEY_SPKI_SHA256:
+        digest("substituted-session-authority-key"),
+    })).toThrow("public key binding differs");
+    expect(() => attestGitHubSessionAuthorityConfigurationV1({
+      ...environment,
+      PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_WORKLOAD_PUBLIC_KEY_SPKI_SHA256:
+        digest("substituted-workload-key"),
+    })).toThrow("workload public key binding differs");
+  });
+
   it("signs the exact V3 principal-application-list credential assertion", async () => {
     const { handler, publicKey, workloadToken } = fixture();
     const list = principalApplicationListRequest();
@@ -386,6 +434,59 @@ describe("GitHub session authority", () => {
     expect(assertion).toMatchObject({
       schemaVersion: "programmable.github-launch-mutation-assertion.v3",
       operation: "launch-session:launch:reissue",
+      credentialIssuer: "privy.io",
+      credentialVerifiedAt: NOW.toISOString(),
+    });
+    expect(verifies(assertion, publicKey)).toBe(true);
+  });
+
+  it("accepts the exact launch-authority refresh mutation after fresh credential verification", async () => {
+    const { handler, publicKey, workloadToken } = fixture();
+    const idempotencyKey = "launch-authority-refresh:v1:test-canary";
+    const authenticationRequest = {
+      schemaVersion: "programmable.principal-launch-authority-refresh-authentication.v1",
+      applicationHandle: HANDLE,
+      idempotencyKeyHash: canonicalSha256(
+        "programmable.principal-launch-authority-refresh-authentication-idempotency.v1",
+        { applicationHandle: HANDLE, idempotencyKey },
+      ),
+    } as const;
+    const canonicalRequest = canonicalizeJson(authenticationRequest);
+    const githubSessionCredentialHash = canonicalSha256(
+      "programmable.github-launch-session-credential.v2",
+      { credential: TOKEN },
+    );
+    const requestBindingHash = canonicalSha256(
+      "programmable.principal-launch-authority-refresh-authentication.v1",
+      authenticationRequest,
+    );
+    const preimage = {
+      schemaVersion: "programmable.github-launch-mutation-verification-request.v3",
+      authorityAudience: AUDIENCE,
+      audience: "programmable.launch-session.v2",
+      operation: "launch-session:authority:refresh",
+      requestBindingHash,
+      canonicalRequestHash: rawSha256(canonicalRequest),
+      githubSessionCredentialHash,
+      requiredCredentialState: "valid",
+      requireFreshCredentialVerification: true,
+    } as const;
+    const requestDigest = canonicalSha256(
+      "programmable.github-launch-mutation-verification-request.v3",
+      preimage,
+    );
+    const response = await handler(request({
+      ...preimage,
+      requestDigest,
+      canonicalRequest,
+      sessionCredential: TOKEN,
+    }, requestDigest, workloadToken));
+    expect(response.status).toBe(200);
+    const assertion = await response.json() as Record<string, unknown>;
+    expect(assertion).toMatchObject({
+      schemaVersion: "programmable.github-launch-mutation-assertion.v3",
+      operation: "launch-session:authority:refresh",
+      requestBindingHash,
       credentialIssuer: "privy.io",
       credentialVerifiedAt: NOW.toISOString(),
     });

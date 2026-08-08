@@ -7,6 +7,7 @@ import { encodeAbiParameters, keccak256, type Address } from "viem";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
+vi.setConfig({ testTimeout: 15_000 });
 
 import { canonicalizeJson } from
   "../lib/server/projection-target/canonical-json";

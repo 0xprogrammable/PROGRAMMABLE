@@ -53,7 +53,8 @@ Before any production action, create one immutable release record containing:
 - Website commit SHA, approval-service artifact digest, workflow run, and reviewed diff;
 - immutable candidate deployment URLs and the production alias observed before activation;
 - Website projection ordered migration inventory and exact digests for
-  `0001_projection_records_v1.sql` followed by `0002_custom_launch_wallet_profile_v2.sql`, database identity,
+  `0001_projection_records_v1.sql`, `0002_custom_launch_wallet_profile_v2.sql`, and
+  `0003_registry_custom_public_read_v1.sql`, database identity,
   runtime-role attestation, backup id, and restore-drill evidence;
 - approval-service release identity, database migration inventory, signer identity and epoch,
   control-axis generations, and `/readyz` evidence;
@@ -143,6 +144,19 @@ versioned secret references, never values:
   their exact key id, positive signer epoch, component binding hash, raw-key encoding, and SPKI
   SHA-256;
 - `NEXT_PUBLIC_PRIVY_APP_ID` and `PRIVY_APP_SECRET` for the same production Privy application;
+- `PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_AUDIENCE`;
+- `PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_KEY_ID` and
+  `PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_KEY_EPOCH`;
+- `PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_PRIVATE_KEY_PEM` and its independently reviewed
+  `PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_PUBLIC_KEY_SPKI_SHA256` binding;
+- `PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_WORKLOAD_ISSUER`,
+  `PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_WORKLOAD_SUBJECT`, and
+  `PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_WORKLOAD_KEY_ID`;
+- `PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_WORKLOAD_PUBLIC_KEY_PEM` and its independently reviewed
+  `PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_WORKLOAD_PUBLIC_KEY_SPKI_SHA256` binding;
+- protected GitHub environment variable
+  `PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_CONFIGURATION_EVIDENCE_SHA256`, set to the independently
+  materialized non-secret configuration-evidence digest bound by the release record;
 - `PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_URL`;
 - `PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_ROLE`;
 - `PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_CA_PEM`;
@@ -158,7 +172,8 @@ Apply the Website projection migrations and least-privilege grants described in
 `docs/operations/WEBSITE-PROJECTION-TARGET-V1.md` in this exact order:
 
 1. `0001_projection_records_v1.sql`;
-2. `0002_custom_launch_wallet_profile_v2.sql`.
+2. `0002_custom_launch_wallet_profile_v2.sql`;
+3. `0003_registry_custom_public_read_v1.sql`.
 
 Retain both exact digests and prove the resulting hosted catalog and grants, including the wallet-identity,
 post-launch-authority, inventory, and index changes from `0002`. Require forced RLS, the exact runtime role, TLS
@@ -210,7 +225,7 @@ curl --fail --silent --show-error \
   https://programmable.market/api/custom-launch/readiness
 ```
 
-Both responses must be uncached JSON and contain the following fields, plus four `ready` component
+Both responses must be uncached JSON and contain the following fields, plus five `ready` component
 results and the exact release commit and immutable deployment host:
 
 ```json
@@ -325,13 +340,14 @@ npm run probe:custom-launch -- \
 
 Require a successful exit and redacted output proving that the two Privy tokens bind the same live
 session and application, the current numeric GitHub principal exactly equals the protected expected
-id, and the known owned exact commit is `approved` with non-null receipt and entitlement bindings.
+id, and the known owned exact commit is `ready_for_registration` with non-null receipt and
+entitlement bindings.
 The probe must also read a current `active` eligibility with `launchAllowed=true`, require its receipt
 to match both the application's opaque handle and public id, and load a current descriptor for the same application with a valid
 default browser-wallet route. Direct access to a known real foreign application must return the
 same 404 boundary as an unavailable record; the own and foreign handles must differ. Expired,
 wrong-app, mismatched-session, missing-GitHub, multiple-GitHub, forged credentials, a missing or
-non-approved owned application, inactive eligibility, a substituted descriptor, or a readable
+non-launch-ready owned application, inactive eligibility, a substituted descriptor, or a readable
 foreign application fail the release.
 
 In `enabled` production mode the workflow requires all five protected canary values above and runs

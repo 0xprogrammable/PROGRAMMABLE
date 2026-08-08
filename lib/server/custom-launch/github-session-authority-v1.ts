@@ -45,6 +45,7 @@ const V3_OPERATIONS = new Set([...READ_OPERATIONS].filter(
   (operation) => operation !== "submit_application_appeal",
 ));
 const MUTATION_OPERATIONS = new Set([
+  "launch-session:authority:refresh",
   "launch-session:challenge:create",
   "launch-session:preparation:bind",
   "launch-session:wallet:authenticate",
@@ -85,6 +86,20 @@ interface AuthorityConfigurationV1 {
   readonly workloadPublicKeySpkiSha256: Sha256Digest;
   readonly boundary: PrivySessionAuthorityBoundaryV1;
   readonly now: () => Date;
+}
+
+export interface GitHubSessionAuthorityConfigurationAttestationV1 {
+  readonly schemaVersion: "programmable.github-session-authority-configuration-attestation.v1";
+  readonly appId: string;
+  readonly audience: string;
+  readonly keyId: string;
+  readonly keyEpoch: string;
+  readonly publicKeySpkiSha256: Sha256Digest;
+  readonly workloadIssuer: string;
+  readonly workloadSubject: string;
+  readonly workloadKeyId: string;
+  readonly workloadPublicKeySpkiSha256: Sha256Digest;
+  readonly configurationHash: Sha256Digest;
 }
 
 export function createGitHubSessionAuthorityHandlerV1(input: Readonly<{
@@ -144,35 +159,22 @@ export async function handleProductionGitHubSessionAuthorityV1(
 }
 
 function createProductionHandler(): (request: Request) => Promise<Response> {
-  const appId = requiredEnvironment("NEXT_PUBLIC_PRIVY_APP_ID");
-  const appSecret = requiredEnvironment("PRIVY_APP_SECRET");
+  const input = productionAuthorityInput(process.env);
+  const { appId, appSecret } = input;
   const privy = new PrivyClient({ appId, appSecret });
   return createGitHubSessionAuthorityHandlerV1({
     appId,
-    audience: requiredEnvironment("PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_AUDIENCE"),
-    keyId: requiredEnvironment("PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_KEY_ID"),
-    keyEpoch: requiredEnvironment("PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_KEY_EPOCH"),
-    privateKeyPem: requiredEnvironment(
-      "PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_PRIVATE_KEY_PEM",
-    ),
-    expectedPublicKeySpkiSha256: requiredDigestEnvironment(
-      "PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_PUBLIC_KEY_SPKI_SHA256",
-    ),
-    workloadIssuer: requiredEnvironment(
-      "PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_WORKLOAD_ISSUER",
-    ),
-    workloadSubject: requiredEnvironment(
-      "PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_WORKLOAD_SUBJECT",
-    ),
-    workloadKeyId: requiredEnvironment(
-      "PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_WORKLOAD_KEY_ID",
-    ),
-    workloadPublicKeyPem: requiredEnvironment(
-      "PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_WORKLOAD_PUBLIC_KEY_PEM",
-    ),
-    expectedWorkloadPublicKeySpkiSha256: requiredDigestEnvironment(
-      "PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_WORKLOAD_PUBLIC_KEY_SPKI_SHA256",
-    ),
+    audience: input.audience,
+    keyId: input.keyId,
+    keyEpoch: input.keyEpoch,
+    privateKeyPem: input.privateKeyPem,
+    expectedPublicKeySpkiSha256: input.expectedPublicKeySpkiSha256,
+    workloadIssuer: input.workloadIssuer,
+    workloadSubject: input.workloadSubject,
+    workloadKeyId: input.workloadKeyId,
+    workloadPublicKeyPem: input.workloadPublicKeyPem,
+    expectedWorkloadPublicKeySpkiSha256:
+      input.expectedWorkloadPublicKeySpkiSha256,
     boundary: Object.freeze({
       async verifyAccessToken(token: string) {
         const value = await privy.utils().auth().verifyAccessToken(token);
@@ -197,6 +199,120 @@ function createProductionHandler(): (request: Request) => Promise<Response> {
         });
       },
     }),
+  });
+}
+
+export function attestGitHubSessionAuthorityConfigurationV1(
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): Readonly<GitHubSessionAuthorityConfigurationAttestationV1> {
+  const input = productionAuthorityInput(environment);
+  const configuration = validateConfiguration({
+    appId: input.appId,
+    audience: input.audience,
+    keyId: input.keyId,
+    keyEpoch: input.keyEpoch,
+    privateKeyPem: input.privateKeyPem,
+    expectedPublicKeySpkiSha256: input.expectedPublicKeySpkiSha256,
+    workloadIssuer: input.workloadIssuer,
+    workloadSubject: input.workloadSubject,
+    workloadKeyId: input.workloadKeyId,
+    workloadPublicKeyPem: input.workloadPublicKeyPem,
+    expectedWorkloadPublicKeySpkiSha256:
+      input.expectedWorkloadPublicKeySpkiSha256,
+    boundary: UNREACHABLE_CONFIGURATION_BOUNDARY,
+  });
+  const binding = Object.freeze({
+    schemaVersion:
+      "programmable.github-session-authority-configuration-attestation.v1" as const,
+    appId: configuration.appId,
+    audience: configuration.audience,
+    keyId: configuration.keyId,
+    keyEpoch: configuration.keyEpoch,
+    publicKeySpkiSha256: configuration.publicKeySpkiSha256,
+    workloadIssuer: configuration.workloadIssuer,
+    workloadSubject: configuration.workloadSubject,
+    workloadKeyId: configuration.workloadKeyId,
+    workloadPublicKeySpkiSha256:
+      configuration.workloadPublicKeySpkiSha256,
+  });
+  return Object.freeze({
+    ...binding,
+    configurationHash: canonicalSha256(
+      "programmable.github-session-authority-configuration-attestation.v1",
+      binding,
+    ),
+  });
+}
+
+const UNREACHABLE_CONFIGURATION_BOUNDARY: PrivySessionAuthorityBoundaryV1 =
+  Object.freeze({
+    async verifyAccessToken() {
+      throw new TypeError("configuration attestation does not verify credentials");
+    },
+    async getCurrentUser() {
+      throw new TypeError("configuration attestation does not read users");
+    },
+  });
+
+function productionAuthorityInput(
+  environment: Readonly<Record<string, string | undefined>>,
+): Readonly<{
+  appId: string;
+  appSecret: string;
+  audience: string;
+  keyId: string;
+  keyEpoch: string;
+  privateKeyPem: string;
+  expectedPublicKeySpkiSha256: Sha256Digest;
+  workloadIssuer: string;
+  workloadSubject: string;
+  workloadKeyId: string;
+  workloadPublicKeyPem: string;
+  expectedWorkloadPublicKeySpkiSha256: Sha256Digest;
+}> {
+  return Object.freeze({
+    appId: requiredEnvironment(environment, "NEXT_PUBLIC_PRIVY_APP_ID"),
+    appSecret: requiredEnvironment(environment, "PRIVY_APP_SECRET"),
+    audience: requiredEnvironment(
+      environment,
+      "PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_AUDIENCE",
+    ),
+    keyId: requiredEnvironment(
+      environment,
+      "PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_KEY_ID",
+    ),
+    keyEpoch: requiredEnvironment(
+      environment,
+      "PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_KEY_EPOCH",
+    ),
+    privateKeyPem: requiredEnvironment(
+      environment,
+      "PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_PRIVATE_KEY_PEM",
+    ),
+    expectedPublicKeySpkiSha256: requiredDigestEnvironment(
+      environment,
+      "PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_PUBLIC_KEY_SPKI_SHA256",
+    ),
+    workloadIssuer: requiredEnvironment(
+      environment,
+      "PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_WORKLOAD_ISSUER",
+    ),
+    workloadSubject: requiredEnvironment(
+      environment,
+      "PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_WORKLOAD_SUBJECT",
+    ),
+    workloadKeyId: requiredEnvironment(
+      environment,
+      "PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_WORKLOAD_KEY_ID",
+    ),
+    workloadPublicKeyPem: requiredEnvironment(
+      environment,
+      "PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_WORKLOAD_PUBLIC_KEY_PEM",
+    ),
+    expectedWorkloadPublicKeySpkiSha256: requiredDigestEnvironment(
+      environment,
+      "PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_WORKLOAD_PUBLIC_KEY_SPKI_SHA256",
+    ),
   });
 }
 
@@ -791,14 +907,20 @@ function rawSha256(value: string | Uint8Array): Sha256Digest {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
-function requiredEnvironment(name: string): string {
-  const value = process.env[name]?.trim();
+function requiredEnvironment(
+  environment: Readonly<Record<string, string | undefined>>,
+  name: string,
+): string {
+  const value = environment[name]?.trim();
   if (!value) throw new TypeError(`${name} is not configured`);
   return value;
 }
 
-function requiredDigestEnvironment(name: string): Sha256Digest {
-  const value = requiredEnvironment(name);
+function requiredDigestEnvironment(
+  environment: Readonly<Record<string, string | undefined>>,
+  name: string,
+): Sha256Digest {
+  const value = requiredEnvironment(environment, name);
   if (!DIGEST.test(value)) throw new TypeError(`${name} is invalid`);
   return value as Sha256Digest;
 }
