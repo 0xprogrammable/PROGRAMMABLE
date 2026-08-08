@@ -1,4 +1,4 @@
-# Veritas — Test Plan
+# Test plan
 
 This file maps the `contracts/` Foundry test suite to the `backed-return-delta-review` rubric clauses, requirement by requirement, and states plainly which clauses are not yet proven. All test names below are verified to exist via `grep -rn "function test_NAME" contracts/test/` at the time of writing. All paths are root-relative, e.g. `contracts/test/Reentrancy.t.sol`.
 

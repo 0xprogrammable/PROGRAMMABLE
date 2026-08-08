@@ -1,4 +1,4 @@
-# Veritas — Provenance-Priced Liquidity for Content Assets
+# Proposal
 
 All source citations in this document are `path:line` references verified against the live repository. All test names are verified to exist via `grep -rn "function test_NAME" contracts/test/` at the time of writing. Where a claim is a corrected figure (see §4.3), the correction is stated explicitly rather than silently.
 
