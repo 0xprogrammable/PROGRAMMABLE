@@ -121,10 +121,6 @@ function principalList() {
       pullRequestNumber: 1,
       commitOid: "b".repeat(40),
       treeOid: "c".repeat(40),
-      intakeContract: "aeon-v1",
-      providerId: "aeon",
-      controlRepositoryId: "1325324453",
-      controlRepositoryOwnerId: "309941960",
       state: "ready_for_registration",
       reasonCodes: [],
       actionCodes: [],
@@ -466,6 +462,33 @@ describe("custom launch deployment probe", () => {
         now: () => NOW,
         attempts: 1,
       });
+
+    await expect(run(principalList())).resolves.toMatchObject({
+      authenticatedCanary: "passed",
+    });
+
+    await expect(run({
+      ...principalList(),
+      applications: principalList().applications.map((application) => ({
+        ...application,
+        intakeContract: "aeon-v1",
+        providerId: "aeon",
+        controlRepositoryId: "1325324453",
+        controlRepositoryOwnerId: "309941960",
+      })),
+    })).resolves.toMatchObject({ authenticatedCanary: "passed" });
+
+    await expect(run({
+      ...principalList(),
+      applications: principalList().applications.map((application) => ({
+        ...application,
+        intakeContract: "registry-v3",
+        providerId: "programmable-registry",
+        controlRepositoryId: "1320171831",
+        controlRepositoryOwnerId: "309941960",
+        grandfatheredAtReleaseBindingDigest: null,
+      })),
+    })).rejects.toThrow("not launch-ready");
 
     await expect(run({
       ...principalList(),

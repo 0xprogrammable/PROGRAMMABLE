@@ -627,10 +627,7 @@ function validatePrincipalApplicationList(value, expectedGithubUserId, ownApplic
   }
   if (
     ownApplication.state !== "ready_for_registration"
-    || ownApplication.intakeContract !== "aeon-v1"
-    || ownApplication.providerId !== "aeon"
-    || ownApplication.controlRepositoryId !== "1325324453"
-    || ownApplication.controlRepositoryOwnerId !== "309941960"
+    || ownApplication.intakeContract === "registry-v3"
     || !SHA256_DIGEST.test(ownApplication.receiptDigest ?? "")
     || !SHA256_DIGEST.test(ownApplication.launchEntitlementBindingHash ?? "")
   ) {

@@ -113,6 +113,7 @@ PROGRAMMABLE_RELEASE_EXPECTED_COMMIT_SHA=<exact-40-character-commit> \
 PROGRAMMABLE_RELEASE_EXPECTED_DEPLOYMENT_HOST=<immutable-vercel-host> \
 PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH=sha256:<exact-reviewed-package-hash> \
 PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE=<manual_review-or-autonomous_ai> \
+PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_EXPECTED_CONFIGURATION_HASH=sha256:<exact-session-authority-configuration-hash> \
 npm run probe:custom-launch -- --base-url=https://<immutable-deployment-host>
 ```
 
@@ -207,10 +208,12 @@ an incompatible state, or represented by an `.invalid` endpoint.
 
 After freeze clearance and all preceding gates, deploy through the reviewed production workflow in
 `.github/workflows/deploy-production.yml`. The workflow must check out the exact recorded commit;
-do not run an unrecorded laptop deployment or promote a different build. The workflow creates a
-production-targeted immutable candidate with `--skip-domain`; it does not move the production alias
-until the candidate returns its exact commit and immutable Vercel host and every mode-required probe
-passes. Only the resulting protected `verified=true` step output permits promotion of that same URL.
+do not run an unrecorded laptop deployment or promote a different build. The workflow creates and
+verifies a production-targeted immutable candidate with `--skip-domain`, records its exact commit,
+deployment id, and immutable Vercel host, then stops without moving the production alias. Its
+`verified_sha` output binds the checkout only; it is not a promotion authorization. Promotion is a
+separate Command Center decision after the exact staged handoff and every mode-required evidence
+artifact have been reverified against the same deployment id, URL, commit, record, and clearance.
 
 Keep `PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED=false`. Verify both the immutable deployment URL and
 `https://programmable.market`:
@@ -284,6 +287,7 @@ PROGRAMMABLE_RELEASE_EXPECTED_COMMIT_SHA=<exact-40-character-commit> \
 PROGRAMMABLE_RELEASE_EXPECTED_DEPLOYMENT_HOST=<immutable-vercel-host> \
 PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH=sha256:<exact-reviewed-package-hash> \
 PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE=<manual_review-or-autonomous_ai> \
+PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_EXPECTED_CONFIGURATION_HASH=sha256:<exact-session-authority-configuration-hash> \
 npm run probe:custom-launch -- \
   --base-url=https://<immutable-deployment-host> \
   --require-enabled
@@ -307,6 +311,7 @@ PROGRAMMABLE_RELEASE_EXPECTED_COMMIT_SHA=<exact-40-character-commit> \
 PROGRAMMABLE_RELEASE_EXPECTED_DEPLOYMENT_HOST=<immutable-vercel-host> \
 PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH=sha256:<exact-reviewed-package-hash> \
 PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE=<manual_review-or-autonomous_ai> \
+PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_EXPECTED_CONFIGURATION_HASH=sha256:<exact-session-authority-configuration-hash> \
 npm run probe:custom-launch -- \
   --base-url=https://programmable.market \
   --require-enabled
@@ -332,6 +337,7 @@ PROGRAMMABLE_RELEASE_EXPECTED_COMMIT_SHA=<exact-40-character-commit> \
 PROGRAMMABLE_RELEASE_EXPECTED_DEPLOYMENT_HOST=<immutable-vercel-host> \
 PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH=sha256:<exact-reviewed-package-hash> \
 PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE=<manual_review-or-autonomous_ai> \
+PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_EXPECTED_CONFIGURATION_HASH=sha256:<exact-session-authority-configuration-hash> \
 npm run probe:custom-launch -- \
   --base-url=https://programmable.market \
   --require-enabled \
@@ -341,7 +347,8 @@ npm run probe:custom-launch -- \
 Require a successful exit and redacted output proving that the two Privy tokens bind the same live
 session and application, the current numeric GitHub principal exactly equals the protected expected
 id, and the known owned exact commit is `ready_for_registration` with non-null receipt and
-entitlement bindings.
+entitlement bindings. The canary may use the canonical untagged Manual Review intake or another
+explicitly validated launchable intake; it must reject a `registry-v3` catalog-only record.
 The probe must also read a current `active` eligibility with `launchAllowed=true`, require its receipt
 to match both the application's opaque handle and public id, and load a current descriptor for the same application with a valid
 default browser-wallet route. Direct access to a known real foreign application must return the
@@ -350,10 +357,12 @@ wrong-app, mismatched-session, missing-GitHub, multiple-GitHub, forged credentia
 non-launch-ready owned application, inactive eligibility, a substituted descriptor, or a readable
 foreign application fail the release.
 
-In `enabled` production mode the workflow requires all five protected canary values above and runs
-this authenticated canary against the immutable candidate before it emits the promotion marker.
-Missing credentials are a release failure, not a skipped check. It repeats the check against the
-production domain after promotion.
+In `enabled` staging mode the workflow requires all five protected canary values above and runs this
+authenticated canary against the immutable candidate before recording the staged handoff. Missing
+credentials are a release failure, not a skipped check. The workflow does not promote the candidate
+and does not automate the post-promotion check. After a separately authorized promotion, the
+operator must rerun the same authenticated command against the production domain and attach its
+redacted evidence to the exact release record.
 
 This authenticated probe is not an onchain launch and does not by itself make the product live.
 Destroy or expire the canary credentials after the check.

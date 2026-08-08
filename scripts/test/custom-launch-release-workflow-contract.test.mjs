@@ -15,6 +15,34 @@ const POLICY_URL = new URL(
   "../resolve-custom-launch-staging-policy.mjs",
   import.meta.url,
 );
+const ACTIVATION_RUNBOOK_URL = new URL(
+  "../../docs/operations/CUSTOM-LAUNCH-PRODUCTION-ACTIVATION-V1.md",
+  import.meta.url,
+);
+
+function activationRunbookFailures(source) {
+  const failures = [];
+  const sessionConfigurationBinding =
+    "PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_EXPECTED_CONFIGURATION_HASH=sha256:<exact-session-authority-configuration-hash>";
+  if (source.split(sessionConfigurationBinding).length - 1 !== 4) {
+    failures.push("session-authority-probe-bindings");
+  }
+  for (const forbidden of [
+    "protected `verified=true` step output",
+    "before it emits the promotion marker",
+    "It repeats the check against the production domain after promotion",
+  ]) {
+    if (source.includes(forbidden)) failures.push(`false-automation:${forbidden}`);
+  }
+  for (const required of [
+    "`verified_sha` output binds the checkout only; it is not a promotion authorization",
+    "The workflow does not promote the candidate",
+    "does not automate the post-promotion check",
+  ]) {
+    if (!source.includes(required)) failures.push(`stage-only:${required}`);
+  }
+  return failures;
+}
 
 function workflowFailures(source) {
   const failures = [];
@@ -511,6 +539,22 @@ test("production flag parsing rejects duplicates, expansion, casing and whitespa
 test("the production workflow enforces the complete conditional detached-record contract", async () => {
   const source = await readFile(WORKFLOW_URL, "utf8");
   assert.deepEqual(workflowFailures(source), []);
+});
+
+test("the activation runbook binds every probe and keeps promotion manual", async () => {
+  const source = await readFile(ACTIVATION_RUNBOOK_URL, "utf8");
+  assert.deepEqual(activationRunbookFailures(source), []);
+  assert.notDeepEqual(
+    activationRunbookFailures(source.replace(
+      "PROGRAMMABLE_GITHUB_SESSION_AUTHORITY_EXPECTED_CONFIGURATION_HASH=sha256:<exact-session-authority-configuration-hash> \\\n",
+      "",
+    )),
+    [],
+  );
+  assert.notDeepEqual(
+    activationRunbookFailures(`${source}\nOnly a protected \`verified=true\` step output may promote.\n`),
+    [],
+  );
 });
 
 test("workflow contract detects weakened record and stage-only gates", async () => {
