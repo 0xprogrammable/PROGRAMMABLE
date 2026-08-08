@@ -43,9 +43,11 @@ Random Holder Rewards
 
 ## Dependencies and operations
 
-- Pinned mainnet fork: verify PoolManager address, runtime, interface, callback behavior, and one complete four-quadrant lifecycle at an exact block.
-- Current-head smoke: repeat runtime/interface checks and simulate one lifecycle without claiming deployment evidence.
-- Verify VRF coordinator runtime and request ABI; mock unavailable, reverting, duplicate, stale, and unauthorized responses.
+- The pinned Ethereum fork suite passed 3/3 tests at block 25,702,654 and the current-head smoke passed 3/3 tests at observed block 25,706,498. Both bind the deployed PoolManager and VRF coordinator runtime hashes, accept the request ABI, and finish buy/sell exact-input/exact-output swaps with zero PoolManager settlement deltas.
+- The pinned CREATE2 record publishes deployer `0x7fa9385be102ac3eac297483dd6233d62b3e1496`, salt `0x0000000000000000000000000000000000000000000000000000000000007b3e`, the complete ABI-encoded constructor arguments, initcode hash `0xbb1d38ad644d7ead2595d322f7ada9111abb15373f83522f297cb5025ac5d998`, runtime hash `0xc60a9528b58dc5cf3b909dc6805dcaf1a9469e71506406e3a2de0231fb42c6ee`, expected hook `0xc5c2f63f6bb3a15252d870a4e24f83fcd346c0cc`, and permission mask `0x00cc` in immutable `fork-evidence.json`.
+- The Sepolia rehearsal passed 4/4 pinned tests at block 11,353,915 and 3/3 current-head tests at observed block 11,441,586 against the deployed PoolManager, VRF v2.5 coordinator, LINK token, and key hash. A fork-only funded subscription authorizes the exact consumer, accepts a real coordinator request ABI, completes the reward callback lifecycle for ten winners, and completes a pull claim.
+- Mainnet and Sepolia subscriptions in these tests exist only inside local forks. They do not claim a public deployment, public funding, or live DON fulfillment. The review-only launch remains fail-closed at subscription id zero until an authorized platform deployer supplies and verifies its production subscription.
+- Unit and invariant coverage also exercises unavailable, reverting, duplicate, stale, and unauthorized VRF responses.
 - Gas bounds: beforeSwap, afterSwap, requestRound, the maximum 92-attempt fulfillment, platform claim, and winner claim.
 - Run Slither and record every finding disposition. If unavailable, report the gate blocked rather than passed.
 
