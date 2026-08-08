@@ -82,6 +82,15 @@ describe("Programmable branding assets", () => {
     );
   });
 
+  it("uses the current Warm Ivory loop mark in the Privy login modal", () => {
+    const walletProvider = read("components/wallet-provider.tsx");
+
+    expect(walletProvider).toContain(
+      'logo: "/brand/loop/programmable-loop-mark-warm-ivory-v1-1536.png"',
+    );
+    expect(walletProvider).not.toContain('logo: "/icon-512.png"');
+  });
+
   it("binds metadata to the cache-busted, tightly framed favicon set", () => {
     const layout = read("app/layout.tsx");
 

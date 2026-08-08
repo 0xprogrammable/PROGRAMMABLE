@@ -290,7 +290,7 @@ const privyConfig = {
   appearance: {
     theme: "light",
     accentColor: "#465a6f",
-    logo: "/icon-512.png",
+    logo: "/brand/loop/programmable-loop-mark-warm-ivory-v1-1536.png",
     landingHeader: "Connect to Programmable",
     loginMessage: "Use a wallet or email to continue",
     showWalletLoginFirst: true,
