@@ -1,0 +1,176 @@
+{
+  "schemaVersion": "programmable.custom-launch-release-record.v1",
+  "recordStatus": "freeze_cleared",
+  "createdAt": "2026-08-08T01:26:43Z",
+  "releaseIntent": {
+    "releaseId": "custom-launch-v1-20260808-001",
+    "product": "custom_launch",
+    "chainId": "1",
+    "reviewAuthorityMode": "manual_review",
+    "targetMode": "enabled"
+  },
+  "subject": {
+    "website": {
+      "repository": "0xprogrammable/programmable",
+      "commitSha": "0f06a736947fae14a38f46145909cbbfa6b41864",
+      "reviewedDiffBaseSha": "7728ebf586983a69a39e206e9a0bf7340445335b",
+      "reviewedDiffHeadSha": "0f06a736947fae14a38f46145909cbbfa6b41864",
+      "reviewedDiffSha256": "sha256:5b6d557c9713087bb426fbe4c9509bf2b2e44ac68a4e64e598bed6ea2a86b7be"
+    },
+    "approvalService": {
+      "packageArtifactHash": "sha256:ac83aaa741e2efae170fc296e7f355a6d75178a01ea8cf1fd5c1d14fe8653f38",
+      "detachedPackedArtifactFileSha256": "sha256:c6bd3ac34b2fe0fd976fdbe91b280594f6e0e411671a3a6ef19ca1bdefecd28d",
+      "productionContentManifestSha256": "sha256:44d6b0b7813603ab80797b2160a64270cb157cd6194d5ba9119dc1e47dcdc974",
+      "reviewAuthorityMode": "manual_review"
+    },
+    "crossRepositoryReleaseBinding": {
+      "repository": "0xprogrammable/programmable-open-hook-v2-internal",
+      "attestationCommitSha": "cdd74bf9e018b38609a6b5c9bd6f4b645fa0355d",
+      "documentPath": "services/autonomous-approval-v1/release/cross-repository-release-binding-v1.json",
+      "documentSha256": "sha256:56966b2731d51df6b3f45dbf4606dae40211d7880e73f611956dd6dc11d690ed"
+    },
+    "releaseSubjectSha256": "sha256:663d9846853c99e21be48124289970a235026531f38e53d4015abfb87aa02b21"
+  },
+  "commandCenter": {
+    "freezeClearance": {
+      "authority": "command_center",
+      "status": "cleared",
+      "decisionId": "cc-20260808-custom-launch-0f06a7-staging-clearance",
+      "immutableReference": "command-center://decision/cc-20260808-custom-launch-0f06a7-staging-clearance",
+      "decidedAt": "2026-08-08T01:26:43Z",
+      "statementSha256": "sha256:f29cb84ff9d27ce5ff18c01212744e574583f0b22b01a6350d3564f1e37c6acb",
+      "releaseSubjectSha256": "sha256:663d9846853c99e21be48124289970a235026531f38e53d4015abfb87aa02b21"
+    },
+    "promotionApproval": {
+      "authority": "command_center",
+      "status": "pending",
+      "decisionId": null,
+      "immutableReference": null,
+      "decidedAt": null,
+      "statementSha256": null,
+      "releaseSubjectSha256": null,
+      "candidateDeploymentId": null,
+      "immutableDeploymentUrl": null,
+      "websiteCommitSha": null,
+      "approvalServicePackageArtifactHash": null,
+      "crossRepositoryAttestationCommitSha": null,
+      "crossRepositoryBindingDocumentSha256": null
+    },
+    "liveDeclaration": {
+      "authority": "command_center",
+      "status": "pending",
+      "decisionId": null,
+      "immutableReference": null,
+      "decidedAt": null,
+      "statementSha256": null,
+      "releaseSubjectSha256": null,
+      "candidateDeploymentId": null,
+      "immutableDeploymentUrl": null,
+      "websiteCommitSha": null,
+      "approvalServicePackageArtifactHash": null,
+      "crossRepositoryAttestationCommitSha": null,
+      "crossRepositoryBindingDocumentSha256": null
+    }
+  },
+  "validation": {
+    "gates": [
+      { "id": "website_release", "result": "pending", "evidenceSha256": null, "evidenceLocator": null, "completedAt": null },
+      { "id": "approval_service_release", "result": "pending", "evidenceSha256": null, "evidenceLocator": null, "completedAt": null },
+      { "id": "contracts", "result": "pending", "evidenceSha256": null, "evidenceLocator": null, "completedAt": null },
+      { "id": "database", "result": "pending", "evidenceSha256": null, "evidenceLocator": null, "completedAt": null },
+      { "id": "security", "result": "pending", "evidenceSha256": null, "evidenceLocator": null, "completedAt": null },
+      { "id": "authority_chain_e2e", "result": "pending", "evidenceSha256": null, "evidenceLocator": null, "completedAt": null },
+      { "id": "production_dependencies", "result": "pending", "evidenceSha256": null, "evidenceLocator": null, "completedAt": null },
+      { "id": "rollback_snapshot", "result": "pending", "evidenceSha256": null, "evidenceLocator": null, "completedAt": null }
+    ]
+  },
+  "productionDependencies": {
+    "websiteProjection": {
+      "databaseIdentity": null,
+      "migrationDigest": null,
+      "runtimeRoleAttestationSha256": null,
+      "backupId": null,
+      "restoreDrillEvidenceSha256": null
+    },
+    "approvalService": {
+      "releaseIdentity": null,
+      "migrationInventorySha256": null,
+      "signerKeyId": null,
+      "signerEpoch": null,
+      "signerComponentBindingSha256": null,
+      "controlAxisGenerationsSha256": null,
+      "readyzEvidenceSha256": null
+    },
+    "identity": {
+      "privyApplicationId": null,
+      "githubOauthEnabled": null,
+      "identityTokensEnabled": null
+    },
+    "ethereum": {
+      "chainId": "1",
+      "chainProfileSha256": null,
+      "finalizedRpcBindings": []
+    },
+    "targets": {
+      "registryBindingSha256": null,
+      "websiteProjectionBindingSha256": null
+    }
+  },
+  "deployment": {
+    "rollback": {
+      "deploymentId": null,
+      "immutableDeploymentUrl": null,
+      "websiteCommitSha": null,
+      "productionAlias": null,
+      "configurationSnapshotSha256": null,
+      "capturedAt": null
+    },
+    "candidate": {
+      "deploymentId": null,
+      "immutableDeploymentUrl": null,
+      "websiteCommitSha": null,
+      "approvalServicePackageArtifactHash": null,
+      "crossRepositoryAttestationCommitSha": null,
+      "crossRepositoryBindingDocumentSha256": null,
+      "verified": null,
+      "verificationEvidenceSha256": null,
+      "verifiedAt": null
+    },
+    "promoted": {
+      "deploymentId": null,
+      "immutableDeploymentUrl": null,
+      "productionAlias": null,
+      "postPromotionEvidenceSha256": null,
+      "promotedAt": null
+    }
+  },
+  "promotionGate": {
+    "status": "blocked",
+    "workflow": {
+      "repository": "0xprogrammable/programmable",
+      "workflowFile": ".github/workflows/deploy-production.yml",
+      "eventName": "workflow_dispatch",
+      "ref": "refs/heads/production",
+      "environment": "production",
+      "runId": null,
+      "runAttempt": null,
+      "runUrl": null,
+      "commitSha": null,
+      "verifiedCommitSha": null,
+      "conclusion": null,
+      "candidateDeploymentId": null,
+      "immutableDeploymentUrl": null,
+      "approvalServicePackageArtifactHash": null,
+      "crossRepositoryAttestationCommitSha": null,
+      "crossRepositoryBindingDocumentSha256": null,
+      "candidateVerified": null,
+      "verificationEvidenceSha256": null
+    }
+  },
+  "canary": {
+    "status": "pending",
+    "evidenceSha256": null,
+    "evidenceLocator": null,
+    "completedAt": null
+  }
+}
