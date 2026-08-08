@@ -1,9 +1,9 @@
 {
   "schemaVersion": "programmable.custom-launch-release-record.v1",
   "recordStatus": "freeze_cleared",
-  "createdAt": "2026-08-08T01:26:43Z",
+  "createdAt": "2026-08-08T03:44:02Z",
   "releaseIntent": {
-    "releaseId": "custom-launch-v1-20260808-001",
+    "releaseId": "custom-launch-v1-20260808-002",
     "product": "custom_launch",
     "chainId": "1",
     "reviewAuthorityMode": "manual_review",
@@ -18,28 +18,28 @@
       "reviewedDiffSha256": "sha256:5b6d557c9713087bb426fbe4c9509bf2b2e44ac68a4e64e598bed6ea2a86b7be"
     },
     "approvalService": {
-      "packageArtifactHash": "sha256:ac83aaa741e2efae170fc296e7f355a6d75178a01ea8cf1fd5c1d14fe8653f38",
-      "detachedPackedArtifactFileSha256": "sha256:c6bd3ac34b2fe0fd976fdbe91b280594f6e0e411671a3a6ef19ca1bdefecd28d",
-      "productionContentManifestSha256": "sha256:44d6b0b7813603ab80797b2160a64270cb157cd6194d5ba9119dc1e47dcdc974",
+      "packageArtifactHash": "sha256:f3b4d6d4f7f37c146b23296bddda22d68bfe49f90c09a6228d2bfeefa426928c",
+      "detachedPackedArtifactFileSha256": "sha256:abe50083f843a1035ec3dc119a6c90768a53f9f9d49ca3383fa5c3becaebf420",
+      "productionContentManifestSha256": "sha256:a20ca07d333fea5d418c63fc42436890dc898f83ea3dcabc827d21a7d7b09dbf",
       "reviewAuthorityMode": "manual_review"
     },
     "crossRepositoryReleaseBinding": {
       "repository": "0xprogrammable/programmable-open-hook-v2-internal",
-      "attestationCommitSha": "cdd74bf9e018b38609a6b5c9bd6f4b645fa0355d",
+      "attestationCommitSha": "445e2333343e699758b56bd0bbe22a684992a544",
       "documentPath": "services/autonomous-approval-v1/release/cross-repository-release-binding-v1.json",
-      "documentSha256": "sha256:56966b2731d51df6b3f45dbf4606dae40211d7880e73f611956dd6dc11d690ed"
+      "documentSha256": "sha256:266c291d4af06fa817fed5f5feac1399bca44097c871fec06dd907ad11a189eb"
     },
-    "releaseSubjectSha256": "sha256:663d9846853c99e21be48124289970a235026531f38e53d4015abfb87aa02b21"
+    "releaseSubjectSha256": "sha256:c26408a7de0b09b35ef87635510da276903eee21ad333ce3eae247428b816ef1"
   },
   "commandCenter": {
     "freezeClearance": {
       "authority": "command_center",
       "status": "cleared",
-      "decisionId": "cc-20260808-custom-launch-0f06a7-staging-clearance",
-      "immutableReference": "command-center://decision/cc-20260808-custom-launch-0f06a7-staging-clearance",
-      "decidedAt": "2026-08-08T01:26:43Z",
-      "statementSha256": "sha256:f29cb84ff9d27ce5ff18c01212744e574583f0b22b01a6350d3564f1e37c6acb",
-      "releaseSubjectSha256": "sha256:663d9846853c99e21be48124289970a235026531f38e53d4015abfb87aa02b21"
+      "decisionId": "cc-20260808-custom-launch-0f06a7-staging-clearance-v3",
+      "immutableReference": "command-center://decision/cc-20260808-custom-launch-0f06a7-staging-clearance-v3",
+      "decidedAt": "2026-08-08T03:44:02Z",
+      "statementSha256": "sha256:857da209df4bb9e284d44e6cf0be04010eca67daa3569c31420895adc93ab426",
+      "releaseSubjectSha256": "sha256:c26408a7de0b09b35ef87635510da276903eee21ad333ce3eae247428b816ef1"
     },
     "promotionApproval": {
       "authority": "command_center",
