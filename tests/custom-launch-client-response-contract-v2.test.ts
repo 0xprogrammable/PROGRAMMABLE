@@ -208,6 +208,18 @@ describe("custom launch client response contracts", () => {
     });
   });
 
+  it("uses the same bounded numeric GitHub identity contract as session authority", async () => {
+    const maximum = applicationList();
+    maximum.subject.githubUserId = "9".repeat(20);
+    await expect(clientFor(maximum).applications()).resolves.toMatchObject({
+      subject: { githubUserId: "9".repeat(20) },
+    });
+
+    const tooLong = applicationList();
+    tooLong.subject.githubUserId = "9".repeat(21);
+    await expectContractMismatch(clientFor(tooLong).applications());
+  });
+
   it("accepts only the explicit AEON, registry-v3, and legacy compatibility shapes", async () => {
     const legacyOmitted = applicationList();
     await expect(clientFor(legacyOmitted).applications()).resolves.toMatchObject({

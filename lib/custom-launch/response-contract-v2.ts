@@ -3,6 +3,7 @@ const HEX_DATA_V2 = /^0x(?:[0-9a-f]{2})+$/u;
 const ADDRESS_V2 = /^0x[0-9a-f]{40}$/u;
 const UUID_V2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const POSITIVE_DECIMAL_V2 = /^[1-9][0-9]{0,77}$/u;
+const GITHUB_USER_ID_V2 = /^[1-9][0-9]{0,19}$/u;
 const UNSIGNED_DECIMAL_V2 = /^(?:0|[1-9][0-9]{0,77})$/u;
 const GIT_OID_V2 = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
 const BASE64URL_V2 = /^[A-Za-z0-9_-]+$/u;
@@ -95,7 +96,7 @@ function validateApplicationListV2(value: unknown): void {
     "provider", "githubUserId", "githubPrincipalHash",
   ]);
   literal(subject.provider, "github");
-  positiveDecimal(subject.githubUserId);
+  regexString(subject.githubUserId, GITHUB_USER_ID_V2, 20);
   digest(subject.githubPrincipalHash);
   const applications = arrayOf(record.applications, validateApplicationSummaryV2, 1_000);
   const handles = applications.map((candidate) => (candidate as JsonRecordV2).applicationHandle);

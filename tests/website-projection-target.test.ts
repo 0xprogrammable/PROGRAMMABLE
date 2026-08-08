@@ -1308,7 +1308,10 @@ describe("Website projection target", () => {
   });
 
   it("uses matching Privy sessions and the current server-side GitHub link", async () => {
-    const current = { githubUserId: GITHUB_USER_ID };
+    const current = {
+      githubUserId: GITHUB_USER_ID,
+      duplicate: false,
+    };
     const boundary = Object.freeze({
       async verifyAccessToken() {
         return { appId: "privy-app", userId: "did:privy:user", sessionId: "session-1" };
@@ -1325,7 +1328,11 @@ describe("Website projection target", () => {
               type: "github_oauth",
               subject: current.githubUserId,
               username: "current-user",
-            }],
+            }, ...(current.duplicate ? [{
+              type: "github_oauth",
+              subject: current.githubUserId,
+              username: "current-user-renamed",
+            }] : [])],
         };
       },
     });
@@ -1343,6 +1350,20 @@ describe("Website projection target", () => {
     await expect(authenticator.authenticate(privyRequest())).resolves.toMatchObject({
       githubUserId: "987654321",
     });
+    current.githubUserId = "9".repeat(20);
+    await expect(authenticator.authenticate(privyRequest())).resolves.toMatchObject({
+      githubUserId: "9".repeat(20),
+    });
+    current.githubUserId = "9".repeat(21);
+    await expect(authenticator.authenticate(privyRequest())).rejects.toThrow(
+      "github_identity_invalid",
+    );
+    current.githubUserId = GITHUB_USER_ID;
+    current.duplicate = true;
+    await expect(authenticator.authenticate(privyRequest())).rejects.toThrow(
+      "github_identity_ambiguous",
+    );
+    current.duplicate = false;
     current.githubUserId = "";
     await expect(authenticator.authenticate(privyRequest())).rejects.toThrow(
       "github_account_required",
