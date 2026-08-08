@@ -10,6 +10,14 @@ import {
   getSqrtPriceAtTick,
   isWithinBps,
 } from "./verify-stock-paired-v3-final-pricing.mjs";
+import {
+  createRpcCallBudget,
+  RpcHttpError,
+  RpcRequestShapeUnsupportedError,
+  RpcTimeoutError,
+  RpcTransportError,
+  withBoundedRpcRetry,
+} from "./rpc-resilience.mjs";
 
 const ROOT = resolve(import.meta.dirname, "../..");
 const DEFAULT_MANIFEST_PATH = resolve(
@@ -338,73 +346,184 @@ export function buildMonitorDefinition(manifest, config) {
   };
 }
 
-class RpcClient {
-  constructor(url, providerId, fetchImpl = fetch) {
+function retryAfterMs(response) {
+  const value = response.headers?.get?.("retry-after");
+  if (!value) return null;
+  if (/^\d+$/.test(value)) return Number(value) * 1_000;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? Math.max(0, timestamp - Date.now()) : null;
+}
+
+function isFetchTimeout(error) {
+  return (
+    typeof DOMException !== "undefined" &&
+    error instanceof DOMException &&
+    error.name === "TimeoutError"
+  );
+}
+
+export class RpcClient {
+  constructor(url, providerId, fetchImpl = fetch, retryOptions = {}) {
     this.url = url;
     this.providerId = providerId;
     this.fetchImpl = fetchImpl;
+    this.retryOptions = retryOptions;
     this.id = 0;
   }
 
-  async request(method, params) {
-    const response = await this.fetchImpl(this.url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
+  async post(body, remainingMs) {
+    try {
+      return await this.fetchImpl(this.url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(Math.max(1, Math.min(5_000, remainingMs))),
+      });
+    } catch (error) {
+      if (isFetchTimeout(error)) {
+        throw new RpcTimeoutError(this.providerId, error);
+      }
+      if (error instanceof TypeError) {
+        throw new RpcTransportError(this.providerId, error);
+      }
+      throw error;
+    }
+  }
+
+  async request(method, params, budget) {
+    return withBoundedRpcRetry(
+      (_attempt, remainingMs) =>
+        this.requestOnce(method, params, remainingMs),
+      {
+        ...this.retryOptions,
+        providerId: this.providerId,
+        operationName: method,
+        ...(budget ? { budget } : {}),
+      },
+    );
+  }
+
+  async requestOnce(method, params, remainingMs) {
+    const response = await this.post(
+      {
         jsonrpc: "2.0",
         id: ++this.id,
         method,
         params,
-      }),
-      signal: AbortSignal.timeout(15_000),
+      },
+      remainingMs,
+    );
+    if (!response.ok) {
+      throw new RpcHttpError(
+        this.providerId,
+        response.status,
+        retryAfterMs(response),
+      );
+    }
+    const payload = await response.json().catch(() => {
+      fail(`${this.providerId} returned malformed JSON for ${method}`);
     });
-    if (!response.ok) fail(`${this.providerId} returned HTTP ${response.status}`);
-    const payload = await response.json();
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      fail(`${this.providerId} returned a malformed ${method} response`);
+    }
     if (payload.error) {
-      fail(`${this.providerId} ${method}: ${payload.error.message ?? "RPC error"}`);
+      fail(`${this.providerId} returned a JSON-RPC error for ${method}`);
+    }
+    if (!Object.hasOwn(payload, "result")) {
+      fail(`${this.providerId} omitted the result for ${method}`);
     }
     return payload.result;
   }
 
   async batch(calls) {
+    const budget = createRpcCallBudget({
+      providerId: this.providerId,
+      operationName: "JSON-RPC batch",
+      maximumCalls: Math.min(3 + calls.length * 3, 256),
+      deadlineMs: this.retryOptions.deadlineMs ?? 20_000,
+    });
+    try {
+      return await withBoundedRpcRetry(
+        (_attempt, remainingMs) => this.batchOnce(calls, remainingMs),
+        {
+          ...this.retryOptions,
+          providerId: this.providerId,
+          operationName: "JSON-RPC batch",
+          budget,
+        },
+      );
+    } catch (error) {
+      if (!(error instanceof RpcRequestShapeUnsupportedError)) throw error;
+    }
+
+    // HTTP 413 is a definitive typed signal that this provider cannot accept
+    // the reviewed batch shape. Split only in that case, within the same
+    // provider and under the shared deadline/call budget.
+    const results = [];
+    for (let index = 0; index < calls.length; index += 8) {
+      const chunk = calls.slice(index, index + 8);
+      results.push(
+        ...(await Promise.all(
+          chunk.map(({ method, params }) =>
+            this.request(method, params, budget),
+          ),
+        )),
+      );
+    }
+    return results;
+  }
+
+  async batchOnce(calls, remainingMs) {
     const requests = calls.map(({ method, params }) => ({
       jsonrpc: "2.0",
       id: ++this.id,
       method,
       params,
     }));
-    const response = await this.fetchImpl(this.url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(requests),
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (response.ok) {
-      const payload = await response.json().catch(() => null);
-      if (Array.isArray(payload)) {
-        const byId = new Map(payload.map((entry) => [entry.id, entry]));
-        const complete = requests.every((request) => {
-          const entry = byId.get(request.id);
-          return entry && !entry.error;
-        });
-        if (complete) {
-          return requests.map((request) => byId.get(request.id).result);
-        }
+    const response = await this.post(requests, remainingMs);
+    if (!response.ok) {
+      if (response.status === 413) {
+        throw new RpcRequestShapeUnsupportedError(
+          this.providerId,
+          "the JSON-RPC batch shape",
+        );
       }
-    }
-
-    // Some public providers reject JSON-RPC arrays even though each read is
-    // available. Keep the monitor provider-agnostic with bounded parallelism.
-    const results = [];
-    for (let index = 0; index < calls.length; index += 8) {
-      const chunk = calls.slice(index, index + 8);
-      results.push(
-        ...(await Promise.all(
-          chunk.map(({ method, params }) => this.request(method, params)),
-        )),
+      throw new RpcHttpError(
+        this.providerId,
+        response.status,
+        retryAfterMs(response),
       );
     }
-    return results;
+    const payload = await response.json().catch(() => {
+      fail(`${this.providerId} returned malformed batch JSON`);
+    });
+    if (!Array.isArray(payload) || payload.length !== requests.length) {
+      fail(`${this.providerId} returned a malformed batch response`);
+    }
+    if (
+      payload.some(
+        (entry) =>
+          !entry || typeof entry !== "object" || Array.isArray(entry),
+      )
+    ) {
+      fail(`${this.providerId} returned malformed batch entries`);
+    }
+    const byId = new Map(payload.map((entry) => [entry.id, entry]));
+    const complete =
+      byId.size === requests.length &&
+      requests.every((request) => {
+        const entry = byId.get(request.id);
+        return (
+          entry &&
+          typeof entry === "object" &&
+          !entry.error &&
+          Object.hasOwn(entry, "result")
+        );
+      });
+    if (!complete) {
+      fail(`${this.providerId} returned a malformed or failed batch response`);
+    }
+    return requests.map((request) => byId.get(request.id).result);
   }
 }
 
@@ -617,6 +736,7 @@ export async function runStockPairedV3Monitor({
   config,
   rpcUrls,
   fetchImpl = fetch,
+  retryOptions = {},
   confirmations = DEFAULT_CONFIRMATIONS,
   observedAt = new Date(),
 }) {
@@ -632,7 +752,8 @@ export async function runStockPairedV3Monitor({
   requireInteger(confirmations, "confirmations", 1);
   const definition = buildMonitorDefinition(manifest, config);
   const clients = rpcUrls.map(
-    (url, index) => new RpcClient(url, providerIds[index], fetchImpl),
+    (url, index) =>
+      new RpcClient(url, providerIds[index], fetchImpl, retryOptions),
   );
   const heads = await Promise.all(
     clients.map(async (client) =>
@@ -737,12 +858,19 @@ async function main() {
   process.stdout.write(output);
 }
 
+function redactOperationalError(value) {
+  return String(value ?? "Unknown monitor failure").replace(
+    /https?:\/\/[^\s)"']+/giu,
+    "[redacted-rpc-url]",
+  );
+}
+
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 ) {
   main().catch((error) => {
-    process.stderr.write(`${error.message}\n`);
+    process.stderr.write(`${redactOperationalError(error.message)}\n`);
     process.exitCode = 1;
   });
 }

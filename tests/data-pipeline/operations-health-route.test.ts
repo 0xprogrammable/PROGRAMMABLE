@@ -116,6 +116,35 @@ describe("operations health route", () => {
     expect(mocks.readIndependentRpcHealth).toHaveBeenCalledOnce();
   });
 
+  it("fails closed without RPC details when independent health is unavailable", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.readIndexedReadModelHealth.mockResolvedValue({
+      chainId: 1,
+      index: {
+        ageSeconds: 4,
+        blockNumber: "25600010",
+        tokenCount: 281,
+      },
+    });
+    mocks.getOperationalOnchainDeployment.mockReturnValue({
+      status: "ready",
+      chainId: 1,
+    });
+    mocks.readIndependentRpcHealth.mockRejectedValue(
+      new Error("https://rpc.example/private-key returned HTTP 503"),
+    );
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(body).toMatchObject({ status: "unhealthy" });
+    expect(JSON.stringify(body)).not.toContain("private-key");
+    expect(mocks.readIndependentRpcHealth).toHaveBeenCalledOnce();
+    expect(mocks.readDurableExploreModel).not.toHaveBeenCalled();
+  });
+
   it("fails closed when indexed health and the deployment chain differ", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     mocks.readIndexedReadModelHealth.mockResolvedValue({

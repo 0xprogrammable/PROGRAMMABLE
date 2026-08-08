@@ -7,7 +7,9 @@ import {
   buildMonitorDefinition,
   evaluateProviderSnapshots,
   parseTargetEthToWei,
+  RpcClient,
 } from "../monitor-stock-paired-v3.mjs";
+import { RpcRetriesExhaustedError } from "../rpc-resilience.mjs";
 
 const ROOT = resolve(import.meta.dirname, "../../..");
 const manifest = JSON.parse(
@@ -140,3 +142,224 @@ test("rejects a policy change that silently widens the launch band", () => {
   );
 });
 
+function rpcResponse(status, payload, headers = {}) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: {
+      get(name) {
+        return headers[name.toLowerCase()] ?? null;
+      },
+    },
+    async json() {
+      return payload;
+    },
+  };
+}
+
+const noWaitRetry = {
+  delaysMs: [0, 0],
+  sleep: async () => undefined,
+};
+
+test("retries a bounded number of times after HTTP 429", async () => {
+  let requests = 0;
+  const client = new RpcClient(
+    "https://rpc-a.example/secret",
+    "rpc-a.example",
+    async () => {
+      requests += 1;
+      return requests < 3
+        ? rpcResponse(429, null, { "retry-after": "0" })
+        : rpcResponse(200, { result: "0x1234" });
+    },
+    noWaitRetry,
+  );
+
+  assert.equal(await client.request("eth_blockNumber", []), "0x1234");
+  assert.equal(requests, 3);
+});
+
+test("does not retry a non-transient JSON-RPC error", async () => {
+  let requests = 0;
+  const client = new RpcClient(
+    "https://rpc-a.example/secret",
+    "rpc-a.example",
+    async () => {
+      requests += 1;
+      return rpcResponse(200, {
+        error: { code: -32602, message: "invalid params" },
+      });
+    },
+    noWaitRetry,
+  );
+
+  await assert.rejects(
+    client.request("eth_getBlockByNumber", []),
+    /JSON-RPC error/,
+  );
+  assert.equal(requests, 1);
+});
+
+for (const status of [429, 503]) {
+  test(`does not fan out after exhausted HTTP ${status} batch retries`, async () => {
+    let batchRequests = 0;
+    let individualRequests = 0;
+    const client = new RpcClient(
+      "https://rpc-a.example/secret",
+      "rpc-a.example",
+      async (_url, init) => {
+        const body = JSON.parse(init.body);
+        if (Array.isArray(body)) {
+          batchRequests += 1;
+          return rpcResponse(status, null, { "retry-after": "0" });
+        }
+        individualRequests += 1;
+        return rpcResponse(200, { result: `${body.method}-result` });
+      },
+      noWaitRetry,
+    );
+
+    await assert.rejects(
+      client.batch([
+        { method: "eth_getCode", params: [] },
+        { method: "eth_call", params: [] },
+      ]),
+      RpcRetriesExhaustedError,
+    );
+    assert.equal(batchRequests, 3);
+    assert.equal(individualRequests, 0);
+  });
+}
+
+test("does not fan out after exhausted typed timeout retries", async () => {
+  let requests = 0;
+  const client = new RpcClient(
+    "https://rpc-a.example/secret",
+    "rpc-a.example",
+    async () => {
+      requests += 1;
+      throw new DOMException("timed out", "TimeoutError");
+    },
+    noWaitRetry,
+  );
+
+  await assert.rejects(
+    client.batch([
+      { method: "eth_getCode", params: [] },
+      { method: "eth_call", params: [] },
+    ]),
+    RpcRetriesExhaustedError,
+  );
+  assert.equal(requests, 3);
+});
+
+test("splits a batch only after a definitive typed HTTP 413", async () => {
+  let batchRequests = 0;
+  let individualRequests = 0;
+  const client = new RpcClient(
+    "https://rpc-a.example/secret",
+    "rpc-a.example",
+    async (_url, init) => {
+      const body = JSON.parse(init.body);
+      if (Array.isArray(body)) {
+        batchRequests += 1;
+        return rpcResponse(413, null);
+      }
+      individualRequests += 1;
+      return rpcResponse(200, { result: `${body.method}-result` });
+    },
+    noWaitRetry,
+  );
+
+  assert.deepEqual(
+    await client.batch([
+      { method: "eth_getCode", params: [] },
+      { method: "eth_call", params: [] },
+    ]),
+    ["eth_getCode-result", "eth_call-result"],
+  );
+  assert.equal(batchRequests, 1);
+  assert.equal(individualRequests, 2);
+});
+
+test("fails closed on a malformed successful batch without splitting", async () => {
+  let requests = 0;
+  const client = new RpcClient(
+    "https://rpc-a.example/secret",
+    "rpc-a.example",
+    async () => {
+      requests += 1;
+      return rpcResponse(200, { result: "not-an-array" });
+    },
+    noWaitRetry,
+  );
+
+  await assert.rejects(
+    client.batch([{ method: "eth_getCode", params: [] }]),
+    /malformed batch response/,
+  );
+  assert.equal(requests, 1);
+});
+
+test("does not retry an untyped error based on its message", async () => {
+  let requests = 0;
+  const client = new RpcClient(
+    "https://rpc-a.example/secret",
+    "rpc-a.example",
+    async () => {
+      requests += 1;
+      throw new Error("service unavailable");
+    },
+    noWaitRetry,
+  );
+
+  await assert.rejects(
+    client.request("eth_blockNumber", []),
+    /service unavailable/,
+  );
+  assert.equal(requests, 1);
+});
+
+test("enforces the hard total deadline", async () => {
+  let requests = 0;
+  const client = new RpcClient(
+    "https://rpc-a.example/secret",
+    "rpc-a.example",
+    async () => {
+      requests += 1;
+      return new Promise(() => undefined);
+    },
+    { deadlineMs: 10, delaysMs: [0, 0], sleep: async () => undefined },
+  );
+
+  await assert.rejects(
+    client.request("eth_blockNumber", []),
+    (error) => error.name === "RpcDeadlineExceededError",
+  );
+  assert.equal(requests, 1);
+});
+
+test("fails closed with a redacted error after all transient attempts fail", async () => {
+  let requests = 0;
+  const secret = "provider-secret-token";
+  const client = new RpcClient(
+    `https://rpc-a.example/${secret}`,
+    "rpc-a.example",
+    async () => {
+      requests += 1;
+      throw new TypeError("fetch failed");
+    },
+    noWaitRetry,
+  );
+
+  await assert.rejects(
+    client.request("eth_blockNumber", []),
+    (error) => {
+      assert.ok(error instanceof RpcRetriesExhaustedError);
+      assert.doesNotMatch(error.message, new RegExp(secret));
+      return true;
+    },
+  );
+  assert.equal(requests, 3);
+});
