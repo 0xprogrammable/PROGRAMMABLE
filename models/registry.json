@@ -18,6 +18,14 @@
       "documentation": "models/classic/README.md"
     },
     {
+      "id": "stock-paired",
+      "name": "Stock-Paired",
+      "status": "candidate",
+      "summary": "A fixed-supply token paired with one reviewed tokenized stock or ETF quote asset, with quote-asset rewards and permanently locked Uniswap v4 launch liquidity.",
+      "manifest": "models/stock-paired/model.json",
+      "documentation": "models/stock-paired/README.md"
+    },
+    {
       "id": "deep",
       "name": "Deep",
       "status": "design",
@@ -32,14 +40,6 @@
       "summary": "Settles which pool owns a token symbol by trading volume rather than registration order",
       "manifest": "models/first-mover/model.json",
       "documentation": "models/first-mover/README.md"
-    },
-    {
-      "id": "stock-paired",
-      "name": "Stock-Paired",
-      "status": "candidate",
-      "summary": "A fixed-supply token paired with one reviewed tokenized stock or ETF quote asset, with quote-asset rewards and permanently locked Uniswap v4 launch liquidity.",
-      "manifest": "models/stock-paired/model.json",
-      "documentation": "models/stock-paired/README.md"
     }
   ]
 }

@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "1.0.0",
+  "marketplaceName": "programmable-repo",
+  "marketplaceDisplayName": "Programmable",
+  "pluginName": "programmable",
+  "version": "0.2.1",
+  "displayName": "Programmable v4 Builder",
+  "description": "Package the Programmable v4 Builder skill for coding agents.",
+  "shortDescription": "Build Uniswap v4 projects with Programmable",
+  "longDescription": "Loads one canonical portable skill for Uniswap v4 project work.",
+  "developerName": "Programmable",
+  "category": "Developer Tools",
+  "capabilities": [
+    "Interactive",
+    "Read",
+    "Write"
+  ],
+  "defaultPrompt": [
+    "Use $programmable-v4-hook-builder to build my idea or repo, fix findings, check it, and prepare a GitHub PR without publishing."
+  ],
+  "license": "MIT",
+  "keywords": [
+    "uniswap-v4",
+    "smart-contracts",
+    "developer-tools"
+  ]
+}

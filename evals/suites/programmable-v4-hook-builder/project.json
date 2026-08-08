@@ -1,0 +1,29 @@
+{
+  "name": "eval-suite-programmable-v4-hook-builder",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "tags": ["type:eval-suite"],
+  "implicitDependencies": ["evals"],
+  "targets": {
+    "validate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node scripts/evals/validate-evals.mjs --suite programmable-v4-hook-builder"
+      }
+    },
+    "eval": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "node scripts/evals/run-model-evals.mjs --suite programmable-v4-hook-builder"
+      }
+    },
+    "eval:release": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "node scripts/evals/run-model-evals.mjs --suite programmable-v4-hook-builder --require-provider"
+      }
+    }
+  }
+}
