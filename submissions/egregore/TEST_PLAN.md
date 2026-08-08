@@ -1,5 +1,7 @@
 # Test plan
 
+**Project:** Egregore
+
 This submission-scoped test plan summarizes the repository's own [`TEST_PLAN.md`](../../TEST_PLAN.md), which is the
 canonical, more detailed version and is bound as evidence below.
 
@@ -20,7 +22,7 @@ sections of the universal checklist are not applicable.
 
 ## Solidity contracts
 
-**Result: 50 passing, 0 failing.**
+**Result: 51 passing, 0 failing.**
 
 - `test/egregore.spec.js` (34 tests) — unit/behavioral suite against `HookPoolManagerMock`: token supply, reward
   reservoir streaming and remainder carry-over, same-block exit blocking, decaying unstake-tax bands, lock-tier
@@ -43,9 +45,10 @@ sections of the universal checklist are not applicable.
   fee is charged internally exactly once and that every reported ETH liability is actually held, and an owner-only
   claim test that reverts four foreign callers across both entry points. This is the evidence that the hook's
   `take()`/return-delta accounting actually settles on-chain, not just against a mock.
-- `test/hook-planner.spec.js` (2 tests) — predicts the nested presale/bootstrapper/hookDeployer/token CREATE
-  addresses and mines a valid hook-flag CREATE2 salt, then verifies the finalize path deploys the hook at the
-  predicted address with `validateHookAddress = true`.
+- `test/hook-planner.spec.js` (3 tests) — predicts the nested presale/token/bootstrapper/hookDeployer CREATE
+  addresses, verifies the finalize path deploys the hook at the predicted address with `validateHookAddress = true`,
+  and asserts the on-chain salt search picked exactly the salt and address the off-chain mirror predicts, with the
+  address carrying permission mask `0x19cd`.
 
 Static analysis (Slither or equivalent) has not been run; `forge`/`cast`/`anvil` are not installed in this Hardhat
 project, so Foundry-specific evidence (gas/size snapshots, fuzz/invariant harnesses in Foundry's own format) is not
@@ -55,7 +58,8 @@ run against the real PoolManager.
 
 ## Custom hook (`hook.used = true`)
 
-- Permission mask and CREATE2 salt: reproduced and verified by `test/hook-planner.spec.js`.
+- Permission mask and CREATE2 salt: the deployer searches for the salt on-chain; `test/hook-planner.spec.js`
+  reproduces the same search off-chain and asserts the contract's own result matches it exactly.
 - PoolManager/PoolKey authentication, `onlyPoolManager`/`onlyPresale` gating: exercised implicitly by every test that
   calls hook functions from a non-authorized address and expects a revert (e.g. `rejects bootstrap calls from anyone
   but the presale`).
@@ -139,7 +143,7 @@ numerical examples, each with a named passing test.
 | --- | --- | --- |
 | `npm ci` | npm (Node 20.20.0) | passed |
 | `npx hardhat compile` | hardhat ^2.28.0, solc 0.8.26 | passed |
-| `npx hardhat test` | hardhat ^2.28.0, mocha/chai | passed — 50/50 |
+| `npx hardhat test` | hardhat ^2.28.0, mocha/chai | passed — 51/51 |
 | Slither / static analysis | not installed | not-applicable-with-reason (no Foundry/Slither toolchain in this Hardhat project) |
 | `forge`/`cast`/`anvil` evidence | not installed | not-applicable-with-reason (Hardhat project, not Foundry) |
 

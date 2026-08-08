@@ -1,5 +1,7 @@
 # Proposal
 
+**Project:** Egregore
+
 **Submission stage:** Proposal
 **Model id:** `egregore`
 
@@ -55,8 +57,11 @@ a partial fill; the mandatory fee is always charged on the amount actually execu
 
 `hook.used = true`. Permissions: `afterInitialize`, `beforeAddLiquidity`, `afterRemoveLiquidity`,
 `afterRemoveLiquidityReturnDelta`, `beforeSwap`, `beforeSwapReturnDelta`, `afterSwap`, `afterSwapReturnDelta` are
-enabled; every other flag is false. The resulting permission mask is `0x19cd` and the CREATE2 salt is mined against it.
-Every callback authenticates `onlyPoolManager`; `configurePool`/`activate` authenticate `onlyPresale`. The hook is
+enabled; every other flag is false, giving permission mask `0x19cd`. Because Uniswap v4 encodes those permissions in
+the low 14 bits of the hook's own address and CREATE2 cannot be inverted, the salt is found by search —
+`EgregoreHookDeployer` runs that search itself, in its own constructor, so the launch carries no off-chain parameter
+and there is nothing to mismatch. Every callback authenticates `onlyPoolManager`; `configurePool`/`activate`
+authenticate `onlyPresale`. The hook is
 CREATE2-deployed once by `EgregoreHookDeployer` (a small factory owned by the presale, not a general registry) and
 admits exactly one PoolKey for its lifetime. Return-delta shape: a `BeforeSwapDelta` whose specified component is a
 single non-negative `int128` on the quote currency and whose unspecified component is always exactly zero; a single
@@ -156,8 +161,8 @@ unstake-tax, reward-claim, treasury-flush, programmable-fee-claim).
 These were open questions in the first revision of this proposal. They are now settled in source and tests.
 
 1. **Fee basis.** Egregore adopts the canonical fixed-quote-asset (always-ETH) basis, via the
-   `beforeSwapReturnDelta` permission and a re-mined CREATE2 salt. The permission mask is now `0x19cd`; the salt is
-   mined against the new hook bytecode by `scripts/lib/hook-planner.js`, which the planner spec exercises.
+   `beforeSwapReturnDelta` permission. The permission mask is now `0x19cd`, and the salt that lands the hook on a
+   matching address is searched on-chain by `EgregoreHookDeployer` rather than supplied at deployment.
 2. **LP-exit tax.** The mandatory fee applies to swaps on the canonical pool only. Removing liquidity is not a swap,
    so the short-term LP-exit tax stays a project charge and is never routed into the Programmable liability.
 3. **Protocol-owned liquidity.** Permanent bootstrapper custody with no removal path is the intended design; the

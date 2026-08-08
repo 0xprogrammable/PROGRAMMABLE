@@ -1,5 +1,7 @@
 # Threat model
 
+**Project:** Egregore
+
 This submission-scoped threat model summarizes the repository's own [`THREAT_MODEL.md`](../../THREAT_MODEL.md);
 that file is the canonical, more detailed version and is bound as evidence below.
 
@@ -29,9 +31,12 @@ that file is the canonical, more detailed version and is bound as evidence below
 ## Custom hook boundary (`hook.used = true`)
 
 Permission mask: `afterInitialize`, `beforeAddLiquidity`, `afterRemoveLiquidity`,
-`afterRemoveLiquidityReturnDelta`, `beforeSwap`, `afterSwap`, `afterSwapReturnDelta` — every other flag, including
-`beforeSwapReturnDelta`, is false. Deployment: CREATE2 via `EgregoreHookDeployer`, salt mined off that deployer's
-address for the required flag bits (see `scripts/lib/hook-planner.js`).
+`afterRemoveLiquidityReturnDelta`, `beforeSwap`, `beforeSwapReturnDelta`, `afterSwap`, `afterSwapReturnDelta` — every
+other flag is false, giving mask `0x19cd`. Deployment: CREATE2 from `EgregoreHookDeployer`, which searches for the salt
+itself inside its own constructor until the address carries those flag bits. No salt is supplied from outside, so the
+launch takes no off-chain parameter and cannot be deployed against a mismatched one. `scripts/lib/hook-planner.js`
+keeps the same search off-chain purely as an independent mirror, and a test asserts the contract picked exactly the
+salt and address predicted for it.
 
 Per enabled callback: PoolManager authentication is `onlyPoolManager` throughout; the intended PoolKey is the single
 one stored by `configurePool()`; callback `sender` meaning is used exactly once, to suppress all tax/snapshot effects
