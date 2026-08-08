@@ -2,7 +2,7 @@
 
 ## Reproduction target
 
-Run all commands against source commit `ed0bcdb41bdc604a08e90aefc7f93d99debf09b7` and tree `d8d499991d94df852271dd9c1531170bda36ae3a`. Dependency revisions, compiler settings, bytecode metrics, command output, and evidence hashes are committed in that tree.
+Run all commands against source commit `a9bc79e377da73e336157df6e3ab1ca842092ec2` and tree `dd434971d1d5246ce1907891c34ef27b059a9ce2`. Dependency revisions, compiler settings, bytecode metrics, command output, and evidence hashes are committed in that tree.
 
 ## Unit and integration coverage
 
@@ -31,7 +31,7 @@ The evidence uses 1,000 fuzz runs per fuzz test. Stateful invariants use 256 run
 
 ## Fork rehearsal
 
-The fork transcript contains two independent, mandatory runs: a candidate lifecycle pinned at Ethereum block `25700561` and a current-head smoke at block `25706465`. Each binds the exact PoolManager, PositionManager, StateView, V4Quoter, and WETH runtime hashes; launches and permanently locks liquidity; exercises return-delta fee accrual, deadline and partial-fill rollback, and champion/crown-time/Programmable claim redemption; reconciles ERC-6909 backing to liabilities; and asserts the PoolManager nonzero-delta count plus actor/router/hook currency deltas are zero. Neither path contains a skip.
+The fork transcript contains two independent, mandatory runs: a candidate lifecycle pinned at Ethereum block `25700561` and a current-head smoke at block `25707960`. Each binds the exact PoolManager, PositionManager, StateView, V4Quoter, and WETH runtime hashes; launches and permanently locks liquidity; exercises return-delta fee accrual, deadline and partial-fill rollback, and champion/crown-time/Programmable claim redemption; reconciles ERC-6909 backing to liabilities; and asserts the PoolManager nonzero-delta count plus actor/router/hook currency deltas are zero. Neither path contains a skip.
 
 ## Static and size checks
 
@@ -45,7 +45,7 @@ forge build --sizes
 
 The checked-in Slither 0.11.6 output contains seven triaged findings: expected external-call reentrancy surfaces around the atomic launch flow, timestamp use required by round rules, a false constable suggestion, and an intermediate-representation limitation in a transient-storage dependency. The disposition file maps each result to its design rationale and tests.
 
-Runtime bytecode in the evidence is 17,198 bytes for the hook, 5,133 for the router, 14,909 for the launcher, 1,920 for the token, and 519 for the vault. The measured atomic deployment-and-launch call uses 6,625,865 gas in the gas-report harness.
+Runtime bytecode in the evidence is 17,200 bytes for the hook, 5,133 for the router, 14,909 for the launcher, 1,920 for the token, and 519 for the vault. The measured atomic deployment-and-launch call uses 6,626,325 gas in the gas-report harness.
 
 ## Admission checks
 

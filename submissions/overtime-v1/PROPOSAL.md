@@ -4,13 +4,13 @@
 
 Overtime v1 is a recurring leader-time game implemented as one fee-enforcing Uniswap v4 hook. An opt-in exact-input WETH buy takes the crown. Ordinary swaps pay the same hook-owned fee but never change the leader or clock.
 
-The proposal is bound to source commit `ed0bcdb41bdc604a08e90aefc7f93d99debf09b7` and tree `d8d499991d94df852271dd9c1531170bda36ae3a` in repository id `1326198143`.
+The proposal is bound to source commit `a9bc79e377da73e336157df6e3ab1ca842092ec2` and tree `dd434971d1d5246ce1907891c34ef27b059a9ce2` in repository id `1326198143`.
 
 ## Game
 
 The first valid challenge starts a round with a 15-minute soft deadline and a fixed 60-minute hard deadline. Each later challenge extends the soft deadline to the lesser of the hard deadline and the greater of the existing deadline or five minutes after the challenge.
 
-A challenge requires at least 0.01 WETH of actual settled quote volume. It pays the ordinary 110-basis-point hook-owned fee and a crown cost equal to the active pot times 50 basis points, clamped between 0.001 WETH and 0.05 WETH. A same-block displacement credits the displaced challenger contribution to a pull-based refund.
+A challenge requires at least 0.01 WETH of actual settled quote volume. It pays the ordinary 110-basis-point hook-owned fee and a crown cost equal to the active pot times 100 basis points, clamped between 0.001 WETH and 0.10 WETH. This design tweak improves balance while keeping the gross WETH buy floor unchanged. A same-block displacement credits the displaced challenger contribution to a pull-based refund.
 
 At a soft-deadline knockout, 40 percent goes to the champion, 50 percent is distributed by crown-seconds, and 10 percent rolls over. At the hard-cap decision, no champion bonus exists, 90 percent is distributed by crown-seconds, and 10 percent rolls over. Claims and refunds are pull-based without an administrator redirect path.
 
