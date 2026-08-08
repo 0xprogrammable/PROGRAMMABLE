@@ -36,7 +36,6 @@ contract EthFirstMoverFeeHookV1Test is Deployers {
     FeeSplitVaultFactoryV1 internal vaultFactory;
     EthFirstMoverFeeHookV1 internal hook;
 
-    address internal treasury;
     address internal builder;
     address internal alice;
     address internal bob;
@@ -58,7 +57,6 @@ contract EthFirstMoverFeeHookV1Test is Deployers {
         vm.deal(address(this), 100_000 ether);
         vm.roll(1_000_000);
 
-        treasury = makeAddr("programmableTreasury");
         builder = makeAddr("hookBuilder");
         alice = makeAddr("alice");
         bob = makeAddr("bob");
@@ -68,6 +66,14 @@ contract EthFirstMoverFeeHookV1Test is Deployers {
     }
 
     // --- Normalization --------------------------------------------------------------------------------------------
+
+    /// @dev The launcher share can only ever go to Programmable's real treasury, not to a value a deployer
+    ///      supplies. Hardcoded as a constant rather than merely checked at construction, so an incorrect address
+    ///      is not a possible deployment, not just one that was validated against at the time.
+    function test_launcherFeeRecipientIsTheEnforcedProgrammableTreasury() public view {
+        assertEq(hook.PROGRAMMABLE_TREASURY(), 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c);
+        assertEq(hook.launcherFeeRecipient(), hook.PROGRAMMABLE_TREASURY());
+    }
 
     function test_symbolNormalizationFoldsCase() public view {
         bytes32 upper = hook.symbolHashOf("PEPE");
@@ -419,9 +425,10 @@ contract EthFirstMoverFeeHookV1Test is Deployers {
         uint256 accrued = hook.builderFeesAccrued();
         assertGt(accrued, 0);
 
-        vm.prank(treasury);
+        address notTheBuilder = makeAddr("notTheBuilder");
+        vm.prank(notTheBuilder);
         vm.expectRevert(
-            abi.encodeWithSelector(EthFirstMoverFeeHookV1.UnauthorizedFeeRedirect.selector, treasury, builder)
+            abi.encodeWithSelector(EthFirstMoverFeeHookV1.UnauthorizedFeeRedirect.selector, notTheBuilder, builder)
         );
         hook.claimBuilderFees();
 
@@ -437,11 +444,11 @@ contract EthFirstMoverFeeHookV1Test is Deployers {
             Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
                 | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG
         );
-        bytes memory args = abi.encode(manager, treasury, builder, vaultFactory);
+        bytes memory args = abi.encode(manager, builder, vaultFactory);
         (address expected, bytes32 salt) =
             HookMiner.find(address(this), flags, type(EthFirstMoverFeeHookV1).creationCode, args);
 
-        deployed = new EthFirstMoverFeeHookV1{ salt: salt }(manager, treasury, builder, vaultFactory);
+        deployed = new EthFirstMoverFeeHookV1{ salt: salt }(manager, builder, vaultFactory);
         assertEq(address(deployed), expected, "mined hook address mismatch");
     }
 

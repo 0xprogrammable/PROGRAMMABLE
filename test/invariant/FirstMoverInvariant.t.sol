@@ -83,7 +83,6 @@ contract FirstMoverInvariantTest is StdInvariant, Deployers {
     FeeSplitVaultFactoryV1 internal vaultFactory;
     FirstMoverHandler internal handler;
 
-    address internal treasury;
     address internal builder;
     address internal beneficiary;
 
@@ -103,7 +102,6 @@ contract FirstMoverInvariantTest is StdInvariant, Deployers {
         vm.deal(address(this), 200_000 ether);
         vm.roll(1_000_000);
 
-        treasury = makeAddr("treasury");
         builder = makeAddr("builder");
         beneficiary = makeAddr("beneficiary");
 
@@ -205,10 +203,10 @@ contract FirstMoverInvariantTest is StdInvariant, Deployers {
             Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
                 | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG
         );
-        bytes memory args = abi.encode(manager, treasury, builder, vaultFactory);
+        bytes memory args = abi.encode(manager, builder, vaultFactory);
         (address expected, bytes32 salt) =
             HookMiner.find(address(this), flags, type(EthFirstMoverFeeHookV1).creationCode, args);
-        deployed = new EthFirstMoverFeeHookV1{ salt: salt }(manager, treasury, builder, vaultFactory);
+        deployed = new EthFirstMoverFeeHookV1{ salt: salt }(manager, builder, vaultFactory);
         require(address(deployed) == expected, "mined hook address mismatch");
     }
 

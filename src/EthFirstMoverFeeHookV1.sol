@@ -54,6 +54,15 @@ contract EthFirstMoverFeeHookV1 is BaseHook, IUnlockCallback, ReentrancyGuardTra
     using SafeCast for *;
 
     uint16 public constant BASIS_POINTS = 10_000;
+
+    /// @notice The Programmable treasury that receives the fixed 0.10 percentage-point launcher share.
+    /// @dev Hardcoded rather than accepted as a constructor argument. The launcher share is Programmable's own
+    ///      protocol revenue, not a parameter a deployer should be able to redirect; enforcing it as a constant
+    ///      makes an incorrect or malicious value impossible to deploy rather than merely validated against at
+    ///      construction. This is the same address Classic's own mainnet deployment pays. The builder beneficiary
+    ///      remains a constructor argument -- that one legitimately varies per accepted hook and is not
+    ///      Programmable's own wallet.
+    address public constant PROGRAMMABLE_TREASURY = 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c;
     uint16 public constant LAUNCHER_FEE_BPS = 10;
     uint16 public constant BUILDER_FEE_BPS = 10;
     uint16 public constant MIN_TOTAL_SWAP_FEE_BPS = 100;
@@ -190,20 +199,16 @@ contract EthFirstMoverFeeHookV1 is BaseHook, IUnlockCallback, ReentrancyGuardTra
         address indexed builder, address indexed recipient, address indexed caller, uint256 amount
     );
 
-    constructor(
-        IPoolManager poolManager_,
-        address launcherFeeRecipient_,
-        address builderFeeRecipient_,
-        FeeSplitVaultFactoryV1 feeSplitVaultFactory_
-    ) BaseHook(poolManager_) {
+    constructor(IPoolManager poolManager_, address builderFeeRecipient_, FeeSplitVaultFactoryV1 feeSplitVaultFactory_)
+        BaseHook(poolManager_)
+    {
         if (
-            address(poolManager_) == address(0) || launcherFeeRecipient_ == address(0)
-                || builderFeeRecipient_ == address(0) || address(feeSplitVaultFactory_) == address(0)
-                || address(feeSplitVaultFactory_).code.length == 0
+            address(poolManager_) == address(0) || builderFeeRecipient_ == address(0)
+                || address(feeSplitVaultFactory_) == address(0) || address(feeSplitVaultFactory_).code.length == 0
         ) {
             revert ZeroAddress();
         }
-        launcherFeeRecipient = launcherFeeRecipient_;
+        launcherFeeRecipient = PROGRAMMABLE_TREASURY;
         builderFeeRecipient = builderFeeRecipient_;
         feeSplitVaultFactory = feeSplitVaultFactory_;
     }
