@@ -221,7 +221,7 @@ describe("unreleased launch model gating", () => {
     expect(html).toContain("classic-botanical-v4.webp");
     expect(html).toContain("custom-galaxy-v3.webp");
     expect(html).toContain("aeon-framework-v1.webp");
-    expect(html).toContain("basedbid-v1.png");
+    expect(html).toContain("basedbid-v2.png");
     expect(html).not.toContain("In development");
     expect(html).not.toContain("Not available");
     expect(html).not.toContain("launch-model-classic-details");

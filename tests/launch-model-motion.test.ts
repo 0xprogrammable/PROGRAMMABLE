@@ -8,15 +8,22 @@ const read = (path: string) => readFileSync(join(root, path), "utf8");
 describe("launch model artwork", () => {
   it("uses the owned botanical art and exact Programmable loop asset", () => {
     const source = read("components/launch-entry.tsx");
+    const css = read("components/launch-experience.module.css");
 
     expect(source).toContain(
       'src="/brand/create/classic-botanical-v4.webp"',
     );
     expect(source).toContain(
-      'src="/brand/loop/programmable-loop-mark-transparent-v1.png"',
+      'src="/brand/loop/programmable-loop-mark-warm-ivory-v1-1536.png"',
     );
     expect(source).toContain('src="/brand/create/aeon-framework-v1.webp"');
-    expect(source).toContain('src="/brand/create/basedbid-v1.png"');
+    expect(source).toContain('src="/brand/create/basedbid-v2.png"');
+    expect(css).toMatch(
+      /\.basedBidArt \.artImage\s*\{[^}]*object-fit:\s*cover;/s,
+    );
+    expect(css).toMatch(
+      /\.modelCard\[data-launch-model-option="basedbid"\] \.basedBidArt \.artImage\s*\{[^}]*filter:\s*none;/s,
+    );
   });
 
   it("keeps model images stable on hover", () => {

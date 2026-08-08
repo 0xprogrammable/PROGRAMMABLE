@@ -49,10 +49,21 @@ export const metadata: Metadata = {
     "Integrate once to discover every Programmable Classic and Custom launch through canonical provenance, versioned feeds and explicit capabilities.",
   alternates: { canonical: "/docs/developers" },
   openGraph: {
+    type: "website",
+    siteName: "Programmable",
     title: "Programmable terminal integration",
     description:
       "Public API, category labels, contracts, events, schemas and ingestion rules for Programmable launches.",
     url: "/docs/developers",
+    images: [
+      {
+        url: "/og/programmable-night-garden-og-1200x630.png",
+        width: 1200,
+        height: 630,
+        type: "image/png",
+        alt: "A starry night garden with pink wildflowers and a violet glow",
+      },
+    ],
   },
 };
 

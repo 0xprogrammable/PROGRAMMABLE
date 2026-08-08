@@ -923,7 +923,7 @@ function ExploreGridSkeleton() {
     >
       {exploreSkeletonItems.map((index) => (
         <article
-          className={`${styles.runnerCard} ${styles.skeletonCard} liquid-glass-surface`}
+          className={`${styles.runnerCard} ${styles.skeletonCard}`}
           key={index}
         >
           <div className={`${styles.runnerArt} ${styles.skeletonArt}`} />
@@ -939,7 +939,8 @@ function ExploreGridSkeleton() {
 }
 
 function resultRangeLabel(payload: ExplorePayload | null) {
-  if (!payload || payload.status !== "ready") return "Loading launch index";
+  if (!payload) return "Loading launch index";
+  if (payload.status === "not-deployed") return "Explore unavailable";
   if (payload.total === 0) return "0 launches";
 
   const start = (payload.page - 1) * payload.pageSize + 1;
@@ -962,6 +963,8 @@ export function ExploreView() {
   const [retryKey, setRetryKey] = useState(0);
   const refreshKey = useLiveDataRefresh({ enabled: !preview });
   const activeExploreContentKey = useRef<string | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const resultStatusRef = useRef<HTMLParagraphElement>(null);
   const modelDatasetCache = useRef<{
     key: string;
     payload: ExplorePayload;
@@ -1177,7 +1180,8 @@ export function ExploreView() {
   const pageCount = Math.max(1, payload?.totalPages ?? 0);
   const activePage = Math.min(payload?.page ?? currentPage, pageCount);
   const paginationItems = getExplorePaginationItems(activePage, pageCount);
-  const resultLabel = resultRangeLabel(payload);
+  const resultLabel =
+    displayState.phase === "error" ? "" : resultRangeLabel(payload);
   const busy =
     !preview &&
     (displayState.phase === "loading" ||
@@ -1187,7 +1191,14 @@ export function ExploreView() {
   const hasPublicTokens =
     displayState.phase !== "ready" ||
     displayState.payload.total > 0 ||
-    Boolean(debouncedQuery);
+    Boolean(debouncedQuery) ||
+    socialFilter !== "all" ||
+    modelFilter !== "all";
+
+  function retryTokens() {
+    resultStatusRef.current?.focus({ preventScroll: true });
+    setRetryKey((value) => value + 1);
+  }
 
   function renderTokenState() {
     if (
@@ -1196,8 +1207,7 @@ export function ExploreView() {
         displayState.requestKey !== requestKey)
     ) {
       return (
-        <div className={styles.loadingState} role="status">
-          <span className="sr-only">Loading tokens</span>
+        <div className={styles.loadingState}>
           <ExploreGridSkeleton />
         </div>
       );
@@ -1210,7 +1220,7 @@ export function ExploreView() {
           <button
             className="text-button"
             type="button"
-            onClick={() => setRetryKey((value) => value + 1)}
+            onClick={retryTokens}
           >
             Try again
           </button>
@@ -1253,6 +1263,7 @@ export function ExploreView() {
                 setSocialFilter("all");
                 setModelFilter("all");
                 setCurrentPage(1);
+                searchInputRef.current?.focus();
               }}
             >
               Clear filters
@@ -1294,7 +1305,7 @@ export function ExploreView() {
                   fill
                   loading={index < 3 ? "eager" : "lazy"}
                   priority={index < 3}
-                  sizes="(max-width: 480px) 304px, (max-width: 700px) 420px, (max-width: 900px) 46vw, 31vw"
+                  sizes="(max-width: 360px) 96px, (max-width: 420px) 104px, (max-width: 700px) 112px, (max-width: 768px) calc(50vw - 54px), (max-width: 900px) 330px, 313px"
                   unoptimized={!canOptimizeTokenImage(imageSource)}
                   draggable={false}
                 />
@@ -1316,7 +1327,7 @@ export function ExploreView() {
 
           return (
             <article
-              className={`${styles.runnerCard} liquid-glass-surface`}
+              className={styles.runnerCard}
               key={token.id}
             >
               {href ? (
@@ -1332,18 +1343,19 @@ export function ExploreView() {
               )}
 
               <div className={styles.runnerMeta}>
-                <span
-                  className={styles.runnerCategory}
-                  aria-label={`Launch type ${token.launchCategory}`}
-                >
+                <span className={styles.runnerCategory}>
+                  <span className="sr-only">Launch type: </span>
                   {token.launchCategory}
                 </span>
                 {marketCapLabel ? (
-                  <span
-                    className={styles.runnerMarketCap}
-                    aria-label={`Market cap ${marketCapLabel}`}
-                  >
-                    <span className={styles.runnerMarketCapLabel}>MC</span>
+                  <span className={styles.runnerMarketCap}>
+                    <span className="sr-only">Market cap: </span>
+                    <span
+                      className={styles.runnerMarketCapLabel}
+                      aria-hidden="true"
+                    >
+                      MC
+                    </span>
                     <span className={styles.runnerMarketCapValue}>
                       {marketCapLabel}
                     </span>
@@ -1393,7 +1405,13 @@ export function ExploreView() {
     <>
       <div className={`${styles.page} explore-page page-width`}>
         <header className={styles.pageHeading}>
-          <h1>Launch tokens that work the way you imagine.</h1>
+          <h1 aria-label="Tokens that behave how you imagine">
+            <span>Tokens that behave</span>
+            <span>how you imagine</span>
+          </h1>
+          <p className={styles.pageDescription}>
+            Browse launches by model, market cap or social presence.
+          </p>
         </header>
 
         <section
@@ -1415,6 +1433,7 @@ export function ExploreView() {
                       Search tokens by name, ticker or contract address
                     </label>
                     <input
+                      ref={searchInputRef}
                       id="explore-token-search"
                       type="search"
                       autoComplete="off"
@@ -1431,6 +1450,7 @@ export function ExploreView() {
                         onClick={() => {
                           setQuery("");
                           setCurrentPage(1);
+                          searchInputRef.current?.focus();
                         }}
                       >
                         <CloseIcon aria-hidden="true" size={15} />
@@ -1438,7 +1458,19 @@ export function ExploreView() {
                     ) : null}
                   </div>
 
-                  <details className="token-filter" ref={filterRef}>
+                  <details
+                    className="token-filter"
+                    ref={filterRef}
+                    onBlur={(event) => {
+                      const nextTarget = event.relatedTarget;
+                      if (
+                        !(nextTarget instanceof Node) ||
+                        !event.currentTarget.contains(nextTarget)
+                      ) {
+                        event.currentTarget.removeAttribute("open");
+                      }
+                    }}
+                  >
                     <summary
                       className="liquid-glass-control"
                       aria-controls="explore-filter-panel"
@@ -1468,7 +1500,7 @@ export function ExploreView() {
                     </summary>
                     <div
                       id="explore-filter-panel"
-                      className={`token-filter-menu ${styles.filterMenu} liquid-glass-surface liquid-glass-distortion liquid-glass-popover`}
+                      className={`token-filter-menu ${styles.filterMenu} liquid-glass-surface liquid-glass-popover`}
                       role="group"
                       aria-label="Filter and sort tokens"
                     >
@@ -1587,10 +1619,12 @@ export function ExploreView() {
                       <button
                         type="button"
                         aria-label="Previous token page"
-                        disabled={activePage === 1 || busy}
-                        onClick={() =>
-                          setCurrentPage((page) => Math.max(1, page - 1))
-                        }
+                        aria-disabled={activePage === 1 || busy}
+                        disabled={activePage === 1}
+                        onClick={() => {
+                          if (busy) return;
+                          setCurrentPage((page) => Math.max(1, page - 1));
+                        }}
                       >
                         <ChevronLeft aria-hidden="true" size={15} />
                       </button>
@@ -1608,8 +1642,11 @@ export function ExploreView() {
                               aria-current={
                                 activePage === item ? "page" : undefined
                               }
-                              disabled={busy}
-                              onClick={() => setCurrentPage(item)}
+                              aria-disabled={busy}
+                              onClick={() => {
+                                if (busy) return;
+                                setCurrentPage(item);
+                              }}
                             >
                               {item}
                             </button>
@@ -1624,19 +1661,17 @@ export function ExploreView() {
                       <button
                         type="button"
                         aria-label="Next token page"
-                        disabled={activePage === pageCount || busy}
-                        onClick={() =>
+                        aria-disabled={activePage === pageCount || busy}
+                        disabled={activePage === pageCount}
+                        onClick={() => {
+                          if (busy) return;
                           setCurrentPage((page) =>
                             Math.min(pageCount, page + 1),
                           )
-                        }
+                        }}
                       >
                         <ChevronRight aria-hidden="true" size={15} />
                       </button>
-
-                      <span className="sr-only" aria-live="polite">
-                        Page {activePage} of {pageCount}
-                      </span>
                     </nav>
                   ) : null}
                 </div>
@@ -1644,16 +1679,20 @@ export function ExploreView() {
             ) : null}
           </div>
 
-          {hasPublicTokens ? (
-            <p
-              className="sr-only"
-              role="status"
-              aria-live="polite"
-              aria-atomic="true"
-            >
-              {resultLabel}
-            </p>
-          ) : null}
+          <p
+            ref={resultStatusRef}
+            className={
+              hasPublicTokens && displayState.phase !== "error"
+                ? styles.resultLabel
+                : "sr-only"
+            }
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            tabIndex={-1}
+          >
+            {resultLabel}
+          </p>
 
           {displayState.phase === "ready" &&
           displayState.refreshError ? (
@@ -1661,18 +1700,13 @@ export function ExploreView() {
               <span>Prices may be out of date</span>
               <button
                 type="button"
-                onClick={() => setRetryKey((value) => value + 1)}
+                onClick={retryTokens}
               >
                 Refresh
               </button>
             </div>
           ) : null}
 
-          {displayState.phase === "ready" && busy ? (
-            <span className="sr-only" role="status">
-              Updating tokens
-            </span>
-          ) : null}
           {renderTokenState()}
         </section>
       </div>

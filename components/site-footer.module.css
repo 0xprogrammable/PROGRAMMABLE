@@ -7,7 +7,7 @@
 .surface {
   background: var(--liquid-glass-surface-background);
   border: 1px solid var(--liquid-glass-border);
-  border-radius: 28px;
+  border-radius: 24px;
   box-shadow: var(--liquid-glass-shadow);
   display: grid;
   gap: 0 clamp(32px, 4vw, 58px);
@@ -18,7 +18,7 @@
     minmax(300px, 1.5fr);
   overflow: hidden;
   min-width: 0;
-  padding: 32px;
+  padding: 30px;
 }
 
 .surface > * {
@@ -47,7 +47,7 @@
   height: 38px;
   object-fit: contain;
   object-position: left center;
-  width: 38px;
+  width: 30px;
 }
 
 .copyright {

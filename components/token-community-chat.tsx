@@ -199,19 +199,22 @@ export function TokenCommunityChat({
       aria-labelledby={`${inputId}-title`}
     >
       <header className={styles.heading}>
-        <h2 id={`${inputId}-title`}>Community</h2>
+        <div>
+          <h2 id={`${inputId}-title`}>Private notes</h2>
+          <p>Saved only on this device</p>
+        </div>
       </header>
 
       <div
         className={styles.conversation}
         ref={conversationRef}
         role="log"
-        aria-label={`${tokenName} community messages`}
+        aria-label={`${tokenName} private notes`}
         aria-live="polite"
         aria-relevant="additions"
       >
         {messages.length === 0 ? (
-          <p className={styles.emptyMessage}>No messages yet.</p>
+          <p className={styles.emptyMessage}>No private notes yet.</p>
         ) : (
           messages.map((message) => {
             const authorLabel = message.authorLabel || "Member";
@@ -266,24 +269,24 @@ export function TokenCommunityChat({
           )}
         </span>
         <label className="sr-only" htmlFor={inputId}>
-          Write message
+          Write private note
         </label>
         <input
           id={inputId}
           autoComplete="off"
           maxLength={280}
-          name="community-message"
-          placeholder="Write message"
+          name="private-note"
+          placeholder="Add a private note"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
         />
         <button type="submit" disabled={!draft.trim()}>
           <Send aria-hidden="true" size={15} />
-          <span>Send</span>
+          <span>Save</span>
         </button>
       </form>
       <p className={styles.storageError} role="status" aria-live="polite">
-        {storageAvailable ? "" : "Messages could not be saved."}
+        {storageAvailable ? "" : "Notes could not be saved on this device."}
       </p>
     </section>
   );

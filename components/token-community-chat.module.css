@@ -7,9 +7,9 @@
   box-shadow: var(--liquid-glass-shadow);
   display: flex;
   flex-direction: column;
-  margin: 0 0 0 auto;
-  max-width: 380px;
-  min-height: 390px;
+  margin: 0;
+  max-width: none;
+  min-height: 280px;
   padding: 18px;
   width: 100%;
 }
@@ -29,6 +29,12 @@
   margin: 0;
 }
 
+.heading p {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 4px 0 0;
+}
+
 .messageMeta {
   color: var(--muted);
   font-size: 12px;
@@ -40,8 +46,8 @@
   flex: 1;
   gap: 14px;
   margin-top: 14px;
-  max-height: min(310px, 42svh);
-  min-height: 206px;
+  max-height: min(230px, 34svh);
+  min-height: 112px;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-right: 6px;
@@ -240,13 +246,6 @@
     overflow: hidden;
     white-space: nowrap;
     width: 1px;
-  }
-}
-
-@media (min-width: 721px) {
-  .panel {
-    position: sticky;
-    top: calc(var(--header-height) + 18px);
   }
 }
 

@@ -6,32 +6,34 @@ const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 describe("topbar and Explore hero polish", () => {
-  it("keeps the page plane clean and contains navigation in midnight glass", () => {
-    const globalCss = read("app/globals.css");
+  it("keeps the page plane continuous behind a frameless navigation", () => {
     const interfaceCss = read("app/interface.css");
 
-    expect(globalCss).toMatch(
-      /\.site-header\s*\{[^}]*background:\s*var\(--body-background\);[^}]*border:\s*0;[^}]*box-shadow:\s*none;/s,
-    );
     expect(interfaceCss).toMatch(
       /\.site-header\s*\{[^}]*background:\s*transparent;[^}]*border:\s*0;[^}]*box-shadow:\s*none;/s,
     );
     expect(interfaceCss).toMatch(
-      /\.header-inner\s*\{[^}]*backdrop-filter:\s*var\(--navigation-glass-backdrop\);[^}]*background:\s*var\(--navigation-glass-background\);[^}]*border:\s*1px solid var\(--navigation-glass-border\);[^}]*border-radius:\s*var\(--radius-panel\);[^}]*box-shadow:\s*var\(--navigation-glass-shadow\);/s,
+      /\.header-inner\s*\{[^}]*backdrop-filter:\s*none;[^}]*background:\s*transparent;[^}]*border:\s*0;[^}]*border-radius:\s*0;[^}]*box-shadow:\s*none;[^}]*max-width:\s*none;[^}]*width:\s*100%;/s,
     );
-    expect(globalCss).not.toMatch(
-      /@media \(max-width:\s*800px\)[\s\S]*?\.site-header\s*\{[^}]*border-bottom:/s,
+    expect(interfaceCss).not.toContain(
+      ".header-inner,\n  .liquid-glass-surface,\n  .mobile-nav",
     );
   });
 
-  it("uses a restrained glass state for active desktop navigation", () => {
+  it("uses text and a fine underline for active desktop navigation", () => {
     const interfaceCss = read("app/interface.css");
 
     expect(interfaceCss).toMatch(
       /\.desktop-nav\s*\{[^}]*background:\s*transparent;[^}]*border:\s*0;[^}]*box-shadow:\s*none;[^}]*padding:\s*0;/s,
     );
     expect(interfaceCss).toMatch(
-      /\.desktop-nav a\.active\s*\{[^}]*background:\s*var\(--navigation-glass-accent\);[^}]*box-shadow:\s*inset 0 1px 0 rgba\(255, 255, 255, 0\.055\);[^}]*color:\s*var\(--navigation-glass-ink\);/s,
+      /\.desktop-nav a\.active\s*\{[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;[^}]*color:\s*var\(--navigation-glass-ink\);/s,
+    );
+    expect(interfaceCss).toMatch(
+      /\.desktop-nav a\.active::after\s*\{[^}]*opacity:\s*1;[^}]*width:\s*18px;/s,
+    );
+    expect(interfaceCss).toMatch(
+      /\.wordmark:focus-visible,[\s\S]*?\.mobile-nav a:focus-visible\s*\{[^}]*box-shadow:\s*0 0 0 5px rgba\(3, 8, 24, 0\.86\);[^}]*outline:\s*2px solid var\(--brand-ivory\);/s,
     );
   });
 
@@ -45,29 +47,39 @@ describe("topbar and Explore hero polish", () => {
       "https://dexscreener.com/ethereum/0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0",
     );
     expect(landing).toContain(
-      'src="/brand/platforms/dexscreener-mark-white.png"',
+      'src="/brand/platforms/dexscreener-mark-warm-ivory-v1.png"',
     );
     expect(landing).toContain('aria-label="Programmable on X"');
     expect(landing).toContain('aria-label="Programmable on GitHub"');
     expect(landing).toContain('aria-label="Programmable on Dexscreener"');
     expect(landing).toContain('href="/docs/developers"');
+    expect(landing).toMatch(/>\s*Docs\s*</);
     expect(navigation).not.toContain("ThemeToggle");
     expect(navigation).toContain('if (pathname === "/") return null;');
     expect(navigation).toContain("<WalletButton compact />");
+    expect(navigation).not.toContain("liquid-glass-surface");
+    expect(navigation).not.toContain("lucide-react");
+    expect(navigation).toContain('if (href === "/docs/developers")');
     expect(interfaceCss).toMatch(
-      /@media \(min-width: 801px\)[\s\S]*?\.header-inner\s*\{[^}]*grid-template-columns:\s*auto auto auto;[^}]*justify-content:\s*center;[^}]*width:\s*max-content;/s,
+      /@media \(min-width: 801px\)[\s\S]*?\.header-inner\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto minmax\(0, 1fr\);[^}]*justify-content:\s*stretch;/s,
     );
     expect(interfaceCss).toMatch(
-      /@media \(max-width: 800px\)[\s\S]*?\.header-inner\s*\{[^}]*grid-template-columns:\s*auto auto;[^}]*justify-content:\s*center;[^}]*width:\s*max-content;/s,
+      /@media \(max-width: 800px\)[\s\S]*?\.header-inner\s*\{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\);[^}]*justify-content:\s*stretch;[^}]*max-width:\s*none;[^}]*width:\s*100%;/s,
+    );
+    expect(interfaceCss).toMatch(
+      /@media \(max-width: 800px\)[\s\S]*?\.mobile-nav\s*\{[^}]*backdrop-filter:\s*none;[^}]*background:\s*transparent;[^}]*border:\s*0;[^}]*box-shadow:\s*none;/s,
+    );
+    expect(interfaceCss).toMatch(
+      /@media \(min-width: 801px\) and \(max-width: 960px\)[\s\S]*?\.desktop-nav\s*\{[^}]*display:\s*none;[^}]*\}[\s\S]*?\.mobile-nav\s*\{[^}]*display:\s*grid;/s,
     );
     expect(landingCss).toMatch(
       /\.socialLink\s*\{[^}]*height:\s*44px;[^}]*width:\s*44px;/s,
     );
     expect(landingCss).toMatch(
-      /\.socialLink svg,\s*\.socialLogo\s*\{[^}]*height:\s*30px;[^}]*width:\s*30px;/s,
+      /\.socialLink svg,\s*\.socialLogo\s*\{[^}]*height:\s*24px;[^}]*width:\s*24px;/s,
     );
     expect(landingCss).toMatch(
-      /\.docsLink\s*\{[^}]*font-size:\s*20px;/s,
+      /\.docsLink\s*\{[^}]*font-size:\s*16px;/s,
     );
   });
 

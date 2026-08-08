@@ -1,5 +1,5 @@
-import { readFileSync, readdirSync } from "node:fs";
-import { extname, join } from "node:path";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -8,14 +8,6 @@ import {
 } from "../components/token-price-chart";
 
 const root = process.cwd();
-
-function collectCssFiles(directory: string): string[] {
-  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) return collectCssFiles(path);
-    return extname(entry.name) === ".css" ? [path] : [];
-  });
-}
 
 describe("interaction accessibility", () => {
   it("makes exact chart prices available to pointer and keyboard input", () => {
@@ -33,6 +25,29 @@ describe("interaction accessibility", () => {
     expect(chartSource).toContain("onKeyDown={inspectKeyboard}");
     expect(chartSource).toContain("tabIndex={0}");
     expect(chartSource).not.toContain("role=\"slider\"");
+  });
+
+  it("keeps primary token interactions at a reliable touch size", () => {
+    const tokenCss = readFileSync(
+      join(root, "components/token-experience.module.css"),
+      "utf8",
+    );
+    const chartCss = readFileSync(
+      join(root, "components/token-price-chart.module.css"),
+      "utf8",
+    );
+
+    expect(tokenCss).toMatch(/\.back\s*\{[^}]*min-height:\s*44px;/s);
+    expect(tokenCss).toMatch(/\.address\s*\{[^}]*min-height:\s*44px;/s);
+    expect(tokenCss).toMatch(
+      /\.slippageControl\s*\{[^}]*min-height:\s*44px;/s,
+    );
+    expect(tokenCss).toMatch(
+      /\.slippageControl input\s*\{[^}]*min-height:\s*44px;/s,
+    );
+    expect(chartCss).toMatch(
+      /\.rangeButton\s*\{[^}]*height:\s*44px;[^}]*min-width:\s*44px;/s,
+    );
   });
 
   it("removes decorative token separators and image-edge outlines", () => {
@@ -55,15 +70,18 @@ describe("interaction accessibility", () => {
     expect(launchCss).not.toMatch(/\.modelArt\s*\{[^}]*outline:/s);
   });
 
-  it("keeps the default arrow cursor policy across app controls", () => {
-    const css = [
-      ...collectCssFiles(join(root, "app")),
-      ...collectCssFiles(join(root, "components")),
-    ]
-      .map((path) => readFileSync(path, "utf8"))
-      .join("\n");
+  it("uses a pointer only for controls that can be activated", () => {
+    const interfaceCss = readFileSync(join(root, "app/interface.css"), "utf8");
 
-    expect(css).not.toMatch(/cursor:\s*(?:pointer|not-allowed)\b/);
+    expect(interfaceCss).toContain(
+      ":is(a[href], button:not(:disabled), summary, select)",
+    );
+    expect(interfaceCss).toMatch(
+      /:is\(a\[href\], button:not\(:disabled\), summary, select\)\s*\{[^}]*cursor:\s*pointer;/s,
+    );
+    expect(interfaceCss).toMatch(
+      /:is\(button:disabled, \[aria-disabled="true"\]\)\s*\{[^}]*cursor:\s*default;/s,
+    );
   });
 
   it("keeps the interface dark-only without exposing a theme toggle", () => {
@@ -88,11 +106,19 @@ describe("interaction accessibility", () => {
     const css = readFileSync(join(root, "app/interface.css"), "utf8");
 
     expect(source).toContain('className="atmosphere-stars');
-    expect(css).toMatch(
-      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.atmosphere-botanical\s*\{[^}]*transition:\s*none;/,
+    expect(source).toContain("const TWINKLE_COUNT = 36");
+    expect(source).toContain("Array.from({ length: TWINKLE_COUNT }");
+    expect(css).not.toMatch(
+      /\.atmosphere-stars-(?:primary|secondary)\s*\{[^}]*animation:/s,
     );
     expect(css).toMatch(
-      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.atmosphere-stars\s*\{[^}]*animation:\s*none;/,
+      /@media \(prefers-reduced-motion: no-preference\)[\s\S]*?\.atmosphere-sparkles i\s*\{[^}]*animation:\s*var\(--sparkle-animation\)/,
+    );
+    expect(css).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.atmosphere-sparkles i\s*\{[^}]*animation:\s*none;/,
+    );
+    expect(css).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.atmosphere-plant\s*\{[^}]*animation:\s*none;[^}]*transform:\s*none;[^}]*will-change:\s*auto;/,
     );
   });
 
@@ -153,6 +179,7 @@ describe("interaction accessibility", () => {
     expect(landing).toContain('aria-label="Programmable on X"');
     expect(landing).toContain('aria-label="Programmable on GitHub"');
     expect(landing).toContain('aria-label="Programmable on Dexscreener"');
+    expect(landing).toMatch(/>\s*Docs\s*</);
     expect(css).toMatch(
       /\.socialLink\s*\{[^}]*height:\s*44px;[^}]*width:\s*44px;/s,
     );
@@ -168,6 +195,7 @@ describe("interaction accessibility", () => {
       readFileSync(join(root, "app/interface.css"), "utf8"),
       readFileSync(join(root, "app/globals.css"), "utf8"),
     ];
+    const interfaceCss = styleSheets[0];
     const mobileMediaSegments = styleSheets.flatMap((css) => {
       const segments: string[] = [];
       const query = "@media (max-width: 800px)";
@@ -187,14 +215,45 @@ describe("interaction accessibility", () => {
     expect(source).toContain(
       'aria-current={current ? "page" : undefined}',
     );
-    expect(source).toContain('<Icon aria-hidden="true"');
+    expect(source).not.toContain('<Icon aria-hidden="true"');
+    expect(source).toContain("<span>{item.label}</span>");
     expect(mobileMediaSegments).toEqual(
       expect.arrayContaining([
         expect.stringMatching(
           /\.mobile-nav\s*\{[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/,
         ),
-        expect.stringMatching(/\.mobile-nav a\s*\{[^}]*min-width:\s*0/),
+        expect.stringMatching(
+          /\.mobile-nav\s*\{[^}]*background:\s*transparent;[^}]*border:\s*0;[^}]*height:\s*56px/,
+        ),
+        expect.stringMatching(
+          /\.mobile-nav a\s*\{[^}]*min-height:\s*48px;[^}]*min-width:\s*0/,
+        ),
       ]),
+    );
+    expect(interfaceCss).toMatch(
+      /\.wordmark,\s*\.header-social-link\s*\{[^}]*height:\s*44px;[^}]*width:\s*44px;/s,
+    );
+    expect(interfaceCss).toMatch(
+      /@media \(max-width: 800px\)[\s\S]*?\.header-actions \.wallet-button\s*\{[^}]*height:\s*44px;[^}]*min-height:\s*44px;/s,
+    );
+    expect(interfaceCss).toMatch(
+      /@media \(max-width: 800px\)[\s\S]*?\.mobile-nav\s*\{[^}]*inset-inline-end:\s*max\(12px, env\(safe-area-inset-right\)\);[^}]*inset-inline-start:\s*max\(12px, env\(safe-area-inset-left\)\);/s,
+    );
+    expect(interfaceCss).toMatch(
+      /@media \(max-width: 800px\)[\s\S]*?\.mobile-nav a::before\s*\{[^}]*background:\s*var\(--brand-ivory\);/s,
+    );
+    expect(
+      interfaceCss.match(
+        /text-shadow:\s*-1px -1px 0 rgba\(1, 5, 20, 0\.82\),[\s\S]*?1px 1px 0 rgba\(1, 5, 20, 0\.82\),[\s\S]*?0 2px 12px rgba\(1, 5, 20, 0\.92\);/g,
+      ),
+    ).toHaveLength(2);
+    expect(
+      interfaceCss.match(
+        /box-shadow:\s*0 0 0 1px rgba\(1, 5, 20, 0\.9\),\s*0 2px 8px rgba\(1, 5, 20, 0\.72\);/g,
+      ),
+    ).toHaveLength(2);
+    expect(interfaceCss).toMatch(
+      /@media \(max-width: 370px\)[\s\S]*?\.wallet-button-compact\s*\{[^}]*min-width:\s*44px;[^}]*width:\s*44px;[^}]*\}[\s\S]*?\.wallet-button-compact > span,[\s\S]*?display:\s*none;/s,
     );
   });
 

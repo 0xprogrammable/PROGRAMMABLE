@@ -93,7 +93,7 @@ test("staged target accepts only a deployment-specific Vercel origin", () => {
     "launcher-abc.vercel.app",
   );
   for (const target of [
-    "https://programmable.family/",
+    "https://programmable.market/",
     "http://launcher-abc.vercel.app/",
     "https://launcher-abc.vercel.app/path",
     "https://user:secret@launcher-abc.vercel.app/",
@@ -242,7 +242,7 @@ test("staged exposure gate accepts only the exact unaliased deployment", async (
     if (candidate.alias.includes(alias)) {
       return { alias, deploymentId: DEPLOYMENT };
     }
-    return alias === "programmable.family"
+    return alias === "programmable.market"
       ? { alias, deploymentId: productionAliasDeploymentId }
       : undefined;
   };
@@ -257,9 +257,10 @@ test("staged exposure gate accepts only the exact unaliased deployment", async (
     resolveAlias,
   });
   assert.equal(result.schedulerExposure, false);
+  assert.equal(result.productionDomain, "programmable.market");
   assert.equal(result.currentProduction.deploymentId, production.id);
 
-  candidate.alias = ["programmable.family"];
+  candidate.alias = ["programmable.market"];
   await assert.rejects(
     inspectUnexposedStagedDeployment({
       targetUrl: "https://launcher-abc.vercel.app/",

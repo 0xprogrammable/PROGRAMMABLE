@@ -189,10 +189,10 @@ export function LaunchModelPicker({
             />
             <Image
               className={launchExperience.classicLogo}
-              src="/brand/loop/programmable-loop-mark-transparent-v1.png"
+              src="/brand/loop/programmable-loop-mark-warm-ivory-v1-1536.png"
               alt=""
-              width={1254}
-              height={1254}
+              width={1536}
+              height={1536}
               sizes="128px"
             />
           </span>
@@ -255,10 +255,10 @@ export function LaunchModelPicker({
             />
             <Image
               className={`${launchExperience.classicLogo} ${launchExperience.customLogo}`}
-              src="/brand/loop/programmable-loop-mark-transparent-v1.png"
+              src="/brand/loop/programmable-loop-mark-warm-ivory-v1-1536.png"
               alt=""
-              width={1254}
-              height={1254}
+              width={1536}
+              height={1536}
               sizes="128px"
               loading="lazy"
               fetchPriority="low"
@@ -375,7 +375,7 @@ export function LaunchModelPicker({
           >
             <Image
               className={launchExperience.artImage}
-              src="/brand/create/basedbid-v1.png"
+              src="/brand/create/basedbid-v2.png"
               alt=""
               fill
               loading="lazy"

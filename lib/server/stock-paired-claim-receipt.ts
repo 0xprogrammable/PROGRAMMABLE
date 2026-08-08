@@ -9,10 +9,24 @@ import { stockFeeSplitVaultAbi } from "../stock-paired";
 import { getConfiguredStockPairedReleases } from "../stock-paired-release";
 
 export class StockPairedClaimReceiptError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly code: "pending" | "invalid" | "unavailable" = "invalid",
+  ) {
     super(message);
     this.name = "StockPairedClaimReceiptError";
   }
+}
+
+function isReceiptNotFound(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.name === "TransactionReceiptNotFoundError" ||
+    error.message.toLowerCase().includes("transaction receipt not found") ||
+    error.message
+      .toLowerCase()
+      .includes("transaction receipt could not be found")
+  );
 }
 
 export async function verifyStockPairedClaimReceipt(input: {
@@ -25,36 +39,58 @@ export async function verifyStockPairedClaimReceipt(input: {
 }) {
   const receiptResults = await Promise.allSettled(
     input.rpcClients.map((client) =>
-        client.getTransactionReceipt({
-          hash: input.transactionHash,
-        }),
+      client.getTransactionReceipt({
+        hash: input.transactionHash,
+      }),
     ),
   );
   const receipts = receiptResults.flatMap((result) =>
     result.status === "fulfilled" ? [result.value] : [],
   );
   if (receipts.length < 2) {
+    const unavailable = receiptResults.some(
+      (result) =>
+        result.status === "rejected" && !isReceiptNotFound(result.reason),
+    );
     throw new StockPairedClaimReceiptError(
-      "The claim is not visible on both Ethereum RPCs yet",
+      unavailable
+        ? "The claim receipt could not be verified across both Ethereum RPCs"
+        : "The claim receipt is still pending across Ethereum RPCs",
+      unavailable ? "unavailable" : "pending",
     );
   }
   const receiptKey = (receipt: (typeof receipts)[number]) =>
     [
+      receipt.transactionHash.toLowerCase(),
       receipt.blockHash.toLowerCase(),
       receipt.blockNumber.toString(),
       receipt.transactionIndex.toString(),
       receipt.status,
       receipt.to?.toLowerCase() ?? "",
       receipt.from.toLowerCase(),
+      receipt.logs
+        .map((log) =>
+          [
+            log.address.toLowerCase(),
+            log.topics.map((topic) => topic.toLowerCase()).join(","),
+            log.data.toLowerCase(),
+            log.logIndex?.toString() ?? "",
+            log.transactionIndex?.toString() ?? "",
+            log.removed ? "1" : "0",
+          ].join(":"),
+        )
+        .join(";"),
     ].join(":");
   const canonical = receipts.find(
     (candidate) =>
-      receipts.filter((receipt) => receiptKey(receipt) === receiptKey(candidate))
-        .length >= 2,
+      receipts.filter(
+        (receipt) => receiptKey(receipt) === receiptKey(candidate),
+      ).length >= 2,
   );
   if (!canonical) {
     throw new StockPairedClaimReceiptError(
       "Independent Ethereum RPCs disagree on the claim receipt",
+      "invalid",
     );
   }
   const releases = getConfiguredStockPairedReleases();
@@ -68,6 +104,8 @@ export async function verifyStockPairedClaimReceipt(input: {
   if (
     releases.length === 0 ||
     canonical.status !== "success" ||
+    canonical.transactionHash.toLowerCase() !==
+      input.transactionHash.toLowerCase() ||
     !canonical.to ||
     canonical.to.toLowerCase() !== input.vaultAddress.toLowerCase() ||
     canonical.from.toLowerCase() !== input.account.toLowerCase() ||
@@ -75,6 +113,7 @@ export async function verifyStockPairedClaimReceipt(input: {
   ) {
     throw new StockPairedClaimReceiptError(
       "The Stock-Paired claim receipt is invalid",
+      "invalid",
     );
   }
   const claims = canonical.logs.flatMap((log) => {
@@ -106,6 +145,7 @@ export async function verifyStockPairedClaimReceipt(input: {
   ) {
     throw new StockPairedClaimReceiptError(
       "The Stock-Paired claim event does not match this conversion",
+      "invalid",
     );
   }
   return claims[0].amount;

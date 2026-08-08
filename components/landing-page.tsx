@@ -20,10 +20,10 @@ export function LandingPage() {
       >
         <Image
           className={styles.brandLogo}
-          src="/brand/loop/programmable-loop-mark-header.png"
+          src="/brand/loop/programmable-loop-mark-header-warm-ivory-v1-1536.png"
           alt=""
-          width={146}
-          height={192}
+          width={1168}
+          height={1536}
           sizes="44px"
           priority
         />
@@ -37,57 +37,56 @@ export function LandingPage() {
             <span aria-hidden="true">Tokens that behave</span>
             <span aria-hidden="true">how you imagine</span>
           </h1>
-          <div className={styles.actions} aria-label="Get started">
+          <nav className={styles.actions} aria-label="Get started">
             <Link
-              className={`${styles.primaryAction} liquid-glass-control liquid-glass-distortion`}
+              className={styles.primaryAction}
               href="/launch"
             >
-              Create a Token
+              Create a token
             </Link>
             <Link
-              className={`${styles.secondaryAction} liquid-glass-control liquid-glass-distortion`}
+              className={styles.secondaryAction}
               href="/explore"
             >
-              Explore Tokens
+              Explore tokens
             </Link>
-          </div>
+          </nav>
           <nav className={styles.supportingLinks} aria-label="Programmable links">
-            <div className={styles.socialLinks}>
-              <a
-                className={styles.socialLink}
-                href="https://x.com/0xProgrammable"
-                target="_blank"
-                rel="noreferrer"
-                aria-label="Programmable on X"
-              >
-                <XBrandIcon />
-              </a>
-              <a
-                className={styles.socialLink}
-                href="https://github.com/0xprogrammable"
-                target="_blank"
-                rel="noreferrer"
-                aria-label="Programmable on GitHub"
-              >
-                <GitHubBrandIcon />
-              </a>
-              <a
-                className={styles.socialLink}
-                href="https://dexscreener.com/ethereum/0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0"
-                target="_blank"
-                rel="noreferrer"
-                aria-label="Programmable on Dexscreener"
-              >
-                <Image
-                  className={styles.socialLogo}
-                  src="/brand/platforms/dexscreener-mark-white.png"
-                  alt=""
-                  width={256}
-                  height={256}
-                  sizes="30px"
-                />
-              </a>
-            </div>
+            <a
+              className={styles.socialLink}
+              href="https://x.com/0xProgrammable"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Programmable on X"
+            >
+              <XBrandIcon />
+            </a>
+            <a
+              className={styles.socialLink}
+              href="https://github.com/0xprogrammable"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Programmable on GitHub"
+            >
+              <GitHubBrandIcon />
+            </a>
+            <a
+              className={styles.socialLink}
+              href="https://dexscreener.com/ethereum/0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Programmable on Dexscreener"
+            >
+              <Image
+                className={styles.socialLogo}
+                src="/brand/platforms/dexscreener-mark-warm-ivory-v1.png"
+                alt=""
+                width={256}
+                height={256}
+                sizes="24px"
+              />
+            </a>
+            <span className={styles.utilityDivider} aria-hidden="true" />
             <Link className={styles.docsLink} href="/docs/developers">
               Docs
             </Link>

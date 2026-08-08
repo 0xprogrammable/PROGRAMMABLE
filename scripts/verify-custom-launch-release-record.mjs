@@ -430,7 +430,12 @@ function validateRollback(errors, rollback) {
   requireString(errors, rollback.deploymentId, "deployment.rollback.deploymentId");
   validateImmutableCandidateUrl(errors, rollback.immutableDeploymentUrl, "deployment.rollback.immutableDeploymentUrl");
   validateCommit(errors, rollback.websiteCommitSha, "deployment.rollback.websiteCommitSha");
-  requireExact(errors, rollback.productionAlias, "deployment.rollback.productionAlias", "https://programmable.family");
+  requireExact(
+    errors,
+    rollback.productionAlias,
+    "deployment.rollback.productionAlias",
+    "https://programmable.market",
+  );
   validateSha256(errors, rollback.configurationSnapshotSha256, "deployment.rollback.configurationSnapshotSha256");
   validateTimestamp(errors, rollback.capturedAt, "deployment.rollback.capturedAt");
 }
@@ -446,7 +451,7 @@ function validateCandidate(
   requireExactKeys(errors, candidate, "deployment.candidate", ["deploymentId", "immutableDeploymentUrl", "websiteCommitSha", "approvalServicePackageArtifactHash", "crossRepositoryAttestationCommitSha", "crossRepositoryBindingDocumentSha256", "verified", "verificationEvidenceSha256", "verifiedAt"]);
   requireString(errors, candidate.deploymentId, "deployment.candidate.deploymentId");
   validateImmutableCandidateUrl(errors, candidate.immutableDeploymentUrl, "deployment.candidate.immutableDeploymentUrl");
-  if (candidate.immutableDeploymentUrl === "https://programmable.family") {
+  if (candidate.immutableDeploymentUrl === "https://programmable.market") {
     add(errors, "deployment.candidate.immutableDeploymentUrl", "must be an immutable candidate URL, not the production alias");
   }
   requireExact(errors, candidate.websiteCommitSha, "deployment.candidate.websiteCommitSha", websiteCommitSha);
@@ -681,7 +686,12 @@ export function verifyReleaseRecord(
       requireExact(errors, promoted.deploymentId, "deployment.promoted.deploymentId", record.deployment?.candidate?.deploymentId);
       requireExact(errors, promoted.immutableDeploymentUrl, "deployment.promoted.immutableDeploymentUrl", record.deployment?.candidate?.immutableDeploymentUrl);
       validateImmutableCandidateUrl(errors, promoted.immutableDeploymentUrl, "deployment.promoted.immutableDeploymentUrl");
-      requireExact(errors, promoted.productionAlias, "deployment.promoted.productionAlias", "https://programmable.family");
+      requireExact(
+        errors,
+        promoted.productionAlias,
+        "deployment.promoted.productionAlias",
+        "https://programmable.market",
+      );
       validateSha256(errors, promoted.postPromotionEvidenceSha256, "deployment.promoted.postPromotionEvidenceSha256");
       validateTimestamp(errors, promoted.promotedAt, "deployment.promoted.promotedAt");
       validateChronology(errors, record.commandCenter?.promotionApproval?.decidedAt, promoted.promotedAt, "deployment.promoted.promotedAt");

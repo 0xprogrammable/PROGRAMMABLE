@@ -143,10 +143,8 @@ export function calculateDocsReadingOffset({
     Number.isFinite(value) && value > 0 ? value : 0;
   return (
     safeHeight(scrollPaddingTop) +
-    Math.max(
-      safeHeight(stickyToolsHeight),
-      safeHeight(mobileNavigationHeight),
-    ) +
+    safeHeight(stickyToolsHeight) +
+    safeHeight(mobileNavigationHeight) +
     20
   );
 }

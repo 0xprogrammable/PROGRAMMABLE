@@ -46,7 +46,7 @@ describe("token detail metrics", () => {
   it("shows only user-facing market stats and converts volume to USD", () => {
     expect(buildTokenDetailMetrics(token)).toEqual([
       { label: "Market cap", value: "$168.56K" },
-      { label: "Type", value: "Classic" },
+      { label: "Category", value: "Classic" },
       { label: "Volume", value: "$900K" },
       { label: "Swap fee", value: "1%" },
     ]);
@@ -90,7 +90,7 @@ describe("token detail metrics", () => {
 
     expect(buildTokenDetailMetrics(token, null, volume)).toEqual([
       { label: "Market cap", value: "$168.56K" },
-      { label: "Type", value: "Classic" },
+      { label: "Category", value: "Classic" },
       { label: "Volume 1H", value: "$43.8K" },
       { label: "Swap fee", value: "1%" },
     ]);
@@ -146,7 +146,7 @@ describe("token detail metrics", () => {
 
     expect(buildTokenDetailMetrics(enriched)).toEqual([
       { label: "Market cap", value: "$168.56K" },
-      { label: "Type", value: "Classic" },
+      { label: "Category", value: "Classic" },
       { label: "Volume", value: "$1.2M" },
       { label: "Liquidity now", value: "$98.8K" },
       { label: "Swap fee", value: "1%" },

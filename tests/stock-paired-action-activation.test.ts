@@ -7,6 +7,9 @@ import {
 } from "viem";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { createStockPairedPoolKey } from "../lib/trade/stock-paired";
+import { computeOfficialV4PoolId } from "../lib/uniswap/liquidity-launcher-sdk";
+
 vi.mock("server-only", () => ({}));
 
 const mocks = vi.hoisted(() => ({
@@ -14,6 +17,10 @@ const mocks = vi.hoisted(() => ({
   lookup: vi.fn(),
   readLegacy: vi.fn(),
   createPublicClient: vi.fn(),
+  verifyClaimReceipt: vi.fn(),
+  resolveTradeDeployment: vi.fn(),
+  prepareConversion: vi.fn(),
+  conservativeConversion: vi.fn(),
 }));
 
 const account = getAddress("0x1111111111111111111111111111111111111111");
@@ -26,7 +33,9 @@ const quote = getAddress("0x7777777777777777777777777777777777777777");
 const hookCode = "0x6001600155" as Hex;
 const factoryCode = "0x6002600255" as Hex;
 const vaultCode = "0x6003600355" as Hex;
-const poolId = `0x${"88".repeat(32)}` as Hex;
+const poolId = computeOfficialV4PoolId(
+  createStockPairedPoolKey({ token, quoteAsset: quote, hook }),
+);
 const blockHash = `0x${"99".repeat(32)}` as Hex;
 const launchTransactionHash = `0x${"aa".repeat(32)}` as Hex;
 const configurationHash = `0x${"bb".repeat(32)}` as Hex;
@@ -225,6 +234,31 @@ vi.mock("../lib/stock-paired-release", async (importOriginal) => {
   };
 });
 
+vi.mock(
+  "../lib/server/stock-paired-claim-receipt",
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import("../lib/server/stock-paired-claim-receipt")
+    >();
+    return {
+      ...actual,
+      verifyStockPairedClaimReceipt: mocks.verifyClaimReceipt,
+    };
+  },
+);
+
+vi.mock("../lib/trade/stock-paired", async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import("../lib/trade/stock-paired")
+  >();
+  return {
+    ...actual,
+    resolveStockPairedTradeDeployment: mocks.resolveTradeDeployment,
+    prepareStockPairedRewardConversion: mocks.prepareConversion,
+    conservativeRewardConversion: mocks.conservativeConversion,
+  };
+});
+
 vi.mock("viem", async (importOriginal) => {
   const actual = await importOriginal<typeof import("viem")>();
   return {
@@ -234,16 +268,25 @@ vi.mock("viem", async (importOriginal) => {
 });
 
 import { POST } from "../app/api/profile/stock-paired/route";
+import { StockPairedClaimReceiptError } from "../lib/server/stock-paired-claim-receipt";
 
-function request() {
+function request(action: "claim" | "convert-to-eth" = "claim") {
   return new NextRequest("http://localhost/api/profile/stock-paired", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      action: "claim",
+      action,
       account,
       vaultAddress: vault,
       chainId: 1,
+      ...(action === "convert-to-eth"
+        ? {
+            claimTransactionHash: `0x${"12".repeat(32)}`,
+            amountIn: actionReward.claimableRaw,
+            slippageBps: 100,
+            deadline: "1800000000",
+          }
+        : {}),
     }),
   });
 }
@@ -261,6 +304,46 @@ describe("Stock-Paired action identity activation", () => {
     );
     mocks.lookup.mockResolvedValue(actionReward);
     mocks.readLegacy.mockResolvedValue(legacyModel);
+    mocks.verifyClaimReceipt.mockResolvedValue(
+      BigInt(actionReward.claimableRaw),
+    );
+    const preparedConversion = {
+      status: "approval-required",
+      approvalState: "token-to-permit2",
+      launchModel: "stock-paired",
+      conversion: "quote-asset-to-eth",
+      chainId: 1,
+      owner: account,
+      token,
+      quoteAsset: quote,
+      inputAsset: quote,
+      poolId,
+      quote: {
+        amountIn: actionReward.claimableRaw,
+        amountOut: "1000000000000000",
+        usdAmountOut: "2000000",
+        amountOutMinimum: "990000000000000",
+        gasEstimate: "100000",
+        slippageBps: 100,
+        deadline: "1800000000",
+      },
+      transaction: {
+        kind: "token-to-permit2",
+        chainId: 1,
+        from: account,
+        to: quote,
+        data: "0x",
+        value: "0",
+        gasLimit: "100000",
+        amountIn: actionReward.claimableRaw,
+      },
+    };
+    mocks.resolveTradeDeployment.mockReturnValue({
+      deployment: { quoteAsset: quote, poolId },
+      verifiedToken: indexedToken,
+    });
+    mocks.prepareConversion.mockResolvedValue(preparedConversion);
+    mocks.conservativeConversion.mockReturnValue(preparedConversion);
     let clientIndex = 0;
     mocks.createPublicClient.mockImplementation(() =>
       rpcClient(clientIndex++),
@@ -294,6 +377,41 @@ describe("Stock-Paired action identity activation", () => {
       expect(mocks.readLegacy).toHaveBeenCalledTimes(indexedEnabled ? 0 : 1);
     },
   );
+
+  it("returns a stable conflict before preparing a conversion for a pending claim receipt", async () => {
+    mocks.indexedEnabled = true;
+    mocks.verifyClaimReceipt.mockRejectedValue(
+      new StockPairedClaimReceiptError(
+        "The claim receipt is still pending across Ethereum RPCs",
+        "pending",
+      ),
+    );
+
+    const response = await POST(request("convert-to-eth"));
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      status: "pending",
+      code: "stock-paired-claim-receipt-pending",
+      error: "The claim receipt is still pending across Ethereum RPCs",
+    });
+  });
+
+  it("keeps a verified terminal claim receipt eligible for conversion", async () => {
+    mocks.indexedEnabled = true;
+
+    const response = await POST(request("convert-to-eth"));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mocks.verifyClaimReceipt).toHaveBeenCalledTimes(1);
+    expect(body).toMatchObject({
+      action: "convert-to-eth",
+      vaultAddress: vault,
+      claimTransactionHash: `0x${"12".repeat(32)}`,
+      claimedAmount: actionReward.claimableRaw,
+    });
+  });
 
   it.each([true, false])(
     "fails closed on same-provider aliases with indexed lookup %s",

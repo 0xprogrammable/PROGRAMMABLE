@@ -8,7 +8,7 @@
 ## Scope
 
 This runbook activates and, when necessary, disables the public Custom Launch experience on
-`programmable.family`. V1 supports Ethereum Mainnet only: every readiness result, launch
+`programmable.market`. V1 supports Ethereum Mainnet only: every readiness result, launch
 descriptor, wallet action, permit, finality record, Registry record, and Website projection must
 bind `chainId="1"`. Any other chain is out of scope and must fail closed.
 
@@ -198,7 +198,7 @@ until the candidate returns its exact commit and immutable Vercel host and every
 passes. Only the resulting protected `verified=true` step output permits promotion of that same URL.
 
 Keep `PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED=false`. Verify both the immutable deployment URL and
-`https://programmable.family`:
+`https://programmable.market`:
 
 ```bash
 curl --fail --silent --show-error \
@@ -207,7 +207,7 @@ curl --fail --silent --show-error \
 
 curl --fail --silent --show-error \
   --header 'Accept: application/json' \
-  https://programmable.family/api/custom-launch/readiness
+  https://programmable.market/api/custom-launch/readiness
 ```
 
 Both responses must be uncached JSON and contain the following fields, plus four `ready` component
@@ -293,7 +293,7 @@ PROGRAMMABLE_RELEASE_EXPECTED_DEPLOYMENT_HOST=<immutable-vercel-host> \
 PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH=sha256:<exact-reviewed-package-hash> \
 PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE=<manual_review-or-autonomous_ai> \
 npm run probe:custom-launch -- \
-  --base-url=https://programmable.family \
+  --base-url=https://programmable.market \
   --require-enabled
 ```
 
@@ -318,7 +318,7 @@ PROGRAMMABLE_RELEASE_EXPECTED_DEPLOYMENT_HOST=<immutable-vercel-host> \
 PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH=sha256:<exact-reviewed-package-hash> \
 PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE=<manual_review-or-autonomous_ai> \
 npm run probe:custom-launch -- \
-  --base-url=https://programmable.family \
+  --base-url=https://programmable.market \
   --require-enabled \
   --authenticated-canary
 ```

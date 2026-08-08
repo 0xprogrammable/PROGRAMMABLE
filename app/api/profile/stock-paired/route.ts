@@ -1079,10 +1079,35 @@ export async function POST(request: NextRequest) {
     if (error instanceof ClassicTradeInputError) {
       return json({ error: error.message }, 400);
     }
-    if (
-      error instanceof StockPairedClaimReceiptError ||
-      error instanceof StockPairedTradeUnavailableError
-    ) {
+    if (error instanceof StockPairedClaimReceiptError) {
+      if (error.code === "pending") {
+        return json(
+          {
+            status: "pending",
+            code: "stock-paired-claim-receipt-pending",
+            error: error.message,
+          },
+          409,
+        );
+      }
+      if (error.code === "unavailable") {
+        return json(
+          {
+            code: "stock-paired-claim-receipt-unavailable",
+            error: error.message,
+          },
+          503,
+        );
+      }
+      return json(
+        {
+          code: "stock-paired-claim-receipt-invalid",
+          error: error.message,
+        },
+        409,
+      );
+    }
+    if (error instanceof StockPairedTradeUnavailableError) {
       return json({ error: error.message }, 409);
     }
     console.error(

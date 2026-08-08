@@ -1106,7 +1106,7 @@ describe("read-model performance contract", () => {
                   projectId: "prj_test",
                   readyState: "READY",
                   target: "production",
-                  alias: ["programmable.family"],
+                  alias: ["programmable.market"],
                 },
               ],
             }),
@@ -1199,7 +1199,6 @@ describe("read-model performance contract", () => {
       token: "token",
       teamId: "team",
       projectId: "prj_test",
-      productionDomain: "programmable.family",
       fetchImpl,
     });
     expect(rollback).toMatchObject({
@@ -1211,7 +1210,7 @@ describe("read-model performance contract", () => {
       token: "token",
       teamId: "team",
       projectId: "prj_test",
-      productionDomain: "programmable.family",
+      productionDomain: "programmable.market",
       fetchImpl: async () =>
         new Response(
           JSON.stringify({
@@ -1221,7 +1220,7 @@ describe("read-model performance contract", () => {
                 projectId: "prj_test",
                 readyState: "READY",
                 target: "production",
-                alias: ["programmable.family"],
+                alias: ["programmable.market"],
               },
             ],
           }),

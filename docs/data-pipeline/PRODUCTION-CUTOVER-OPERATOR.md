@@ -481,7 +481,7 @@ grep -Fx "target_url=$STAGED_TARGET_URL" "$PRE_PROMOTE_BINDING_OUTPUT"
 vercel promote "$STAGED_DEPLOYMENT_ID" --yes --token="$VERCEL_TOKEN"
 
 npm run perf:read-model:post-promotion -- \
-  --target-url "https://programmable.family" \
+  --target-url "https://programmable.market" \
   --deployment-id "$STAGED_DEPLOYMENT_ID" \
   --git-head "$GITHUB_SHA" \
   --evidence "$READ_MODEL_RELEASE_EVIDENCE_PATH"

@@ -37,6 +37,15 @@ export type StockPairedBeneficiary = {
   shareBps: number;
 };
 
+export class StockPairedClaimPendingError extends Error {
+  readonly code = "stock-paired-claim-receipt-pending";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "StockPairedClaimPendingError";
+  }
+}
+
 export type StockPairedReward = {
   model: "stock-paired";
   tokenAddress: Address;
@@ -596,6 +605,13 @@ export async function prepareStockPairedRewardConversion(input: {
   });
   const body: unknown = await response.json();
   if (!response.ok) {
+    const code =
+      body &&
+      typeof body === "object" &&
+      "code" in body &&
+      typeof body.code === "string"
+        ? body.code
+        : "";
     const message =
       body &&
       typeof body === "object" &&
@@ -603,6 +619,9 @@ export async function prepareStockPairedRewardConversion(input: {
       typeof body.error === "string"
         ? body.error
         : "The stock reward could not be converted";
+    if (code === "stock-paired-claim-receipt-pending") {
+      throw new StockPairedClaimPendingError(message);
+    }
     throw new Error(message);
   }
   const prepared = record(body, "prepared Stock-Paired conversion");
