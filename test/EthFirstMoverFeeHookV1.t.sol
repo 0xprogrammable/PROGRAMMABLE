@@ -284,6 +284,104 @@ contract EthFirstMoverFeeHookV1Test is Deployers {
         assertEq(poolId, stillWithinWindow.poolId);
     }
 
+    // --- Fee-rounding regressions -------------------------------------------------------------------------------
+
+    /// @dev The exploit this guards against: previously, if a single swap's gross amount was small enough that the
+    ///      fixed 10 bps launcher/builder share floored to zero -- while creatorFee at the pool's higher total rate
+    ///      still accrued -- repeating that swap indefinitely never paid the launcher or builder anything, because
+    ///      each swap independently floored to zero and forgot. Cumulative accounting closes this: summed over many
+    ///      swaps, the two fixed shares converge to their exact bps of cumulative volume.
+    function test_launcherAndBuilderFeesConvergeAcrossManyTinySwaps() public {
+        Launch memory dust = _launch("DUST");
+
+        uint256 tinyBuy = 60; // wei
+        (uint256 tinyCreatorFee, uint256 tinyLauncherFee, uint256 tinyBuilderFee) =
+            hook.quoteGrossFees(tinyBuy, FEE_BPS);
+        assertGt(tinyCreatorFee, 0, "setup: creator fee is still nonzero at this size");
+        assertEq(tinyLauncherFee, 0, "setup: the naive per-swap launcher share floors to zero");
+        assertEq(tinyBuilderFee, 0, "setup: the naive per-swap builder share floors to zero");
+
+        uint256 repeats = 400;
+        for (uint256 i = 0; i < repeats; ++i) {
+            _buy(dust, tinyBuy);
+        }
+
+        uint256 expectedLauncher = (repeats * tinyBuy * hook.LAUNCHER_FEE_BPS()) / BASIS_POINTS;
+        uint256 expectedBuilder = (repeats * tinyBuy * hook.BUILDER_FEE_BPS()) / BASIS_POINTS;
+        assertGt(expectedLauncher, 0, "setup: repeated enough times the exact total is nonzero");
+
+        assertApproxEqAbs(
+            hook.launcherFeesAccrued(), expectedLauncher, 1, "launcher fees converge to the exact cumulative total"
+        );
+        assertApproxEqAbs(
+            hook.builderFeesAccrued(), expectedBuilder, 1, "builder fees converge to the exact cumulative total"
+        );
+    }
+
+    /// @dev The same convergence holds selling into the pool, not just buying.
+    function test_launcherAndBuilderFeesConvergeOnTheSellSideToo() public {
+        Launch memory dust = _launch("DUST2");
+        _buy(dust, 10 ether);
+        uint256 held = dust.token.balanceOf(address(this));
+
+        uint256 tinySell = 60; // wei of the token
+        uint256 repeats = 300;
+        assertLe(repeats * tinySell, held, "setup: enough tokens on hand for every sell");
+
+        uint256 launcherBefore = hook.launcherFeesAccrued();
+        uint256 builderBefore = hook.builderFeesAccrued();
+
+        for (uint256 i = 0; i < repeats; ++i) {
+            _sellExactInput(dust, tinySell);
+        }
+
+        assertGt(
+            hook.launcherFeesAccrued() - launcherBefore, 0, "the sell side converges instead of losing the fixed share"
+        );
+        assertGt(hook.builderFeesAccrued() - builderBefore, 0);
+    }
+
+    /// @dev And on exact-output swaps, which take a different path to the same charging function.
+    function test_launcherAndBuilderFeesConvergeOnExactOutputToo() public {
+        Launch memory dust = _launch("DUST3");
+
+        uint256 tinyTokenOut = 60; // wei of the token
+        uint256 repeats = 300;
+        uint256 launcherBefore = hook.launcherFeesAccrued();
+
+        for (uint256 i = 0; i < repeats; ++i) {
+            _buyExactOutput(dust, tinyTokenOut, 1 ether);
+        }
+
+        assertGt(hook.launcherFeesAccrued() - launcherBefore, 0, "exact-output swaps converge the same way");
+    }
+
+    /// @dev Direct split-vs-aggregate comparison: the fixed shares collected from many small swaps whose amounts
+    ///      sum to a total converge to the same amount as one swap of that total size, to within the single wei of
+    ///      dust that has not yet resolved into a whole unit at the moment either window is measured.
+    function test_splitSwapsConvergeToSameFixedSharesAsOneLargeSwap() public {
+        Launch memory splitPool = _launch("SPLIT");
+        Launch memory singlePool = _launch("SINGLE");
+
+        uint256 chunk = 70; // wei
+        uint256 chunks = 250;
+        uint256 total = chunk * chunks;
+
+        uint256 before = hook.launcherFeesAccrued();
+        for (uint256 i = 0; i < chunks; ++i) {
+            _buy(splitPool, chunk);
+        }
+        uint256 launcherFromSplit = hook.launcherFeesAccrued() - before;
+
+        before = hook.launcherFeesAccrued();
+        _buy(singlePool, total);
+        uint256 launcherFromSingle = hook.launcherFeesAccrued() - before;
+
+        assertApproxEqAbs(
+            launcherFromSplit, launcherFromSingle, 1, "splitting into many swaps does not reduce the fixed share paid"
+        );
+    }
+
     // --- Guards ---------------------------------------------------------------------------------------------------
 
     function test_rejectsNonCreatorRegistrar() public {
@@ -395,6 +493,26 @@ contract EthFirstMoverFeeHookV1Test is Deployers {
         return swapRouter.swap{ value: ethIn }(
             launch.key,
             SwapParams({ zeroForOne: true, amountSpecified: -int256(ethIn), sqrtPriceLimitX96: MIN_PRICE_LIMIT }),
+            settings,
+            ""
+        );
+    }
+
+    /// @dev Exact-input sell: spends `tokenIn` of the launch token for native ETH.
+    function _sellExactInput(Launch memory launch, uint256 tokenIn) private returns (BalanceDelta) {
+        return swapRouter.swap(
+            launch.key,
+            SwapParams({ zeroForOne: false, amountSpecified: -int256(tokenIn), sqrtPriceLimitX96: MAX_PRICE_LIMIT }),
+            settings,
+            ""
+        );
+    }
+
+    /// @dev Exact-output buy: spends whatever native ETH is required to receive exactly `tokenOut`.
+    function _buyExactOutput(Launch memory launch, uint256 tokenOut, uint256 ethBudget) private returns (BalanceDelta) {
+        return swapRouter.swap{ value: ethBudget }(
+            launch.key,
+            SwapParams({ zeroForOne: true, amountSpecified: int256(tokenOut), sqrtPriceLimitX96: MIN_PRICE_LIMIT }),
             settings,
             ""
         );
