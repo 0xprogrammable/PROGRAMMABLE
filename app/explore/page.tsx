@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
 
-import {
-  ExploreView,
-  type ExploreModelFilter,
-} from "@/components/explore-view";
+import { ExploreView } from "@/components/explore-view";
+import type { ExploreModelFilter } from "@/components/explore-view";
 
 export const metadata: Metadata = {
   title: "Programmable",
