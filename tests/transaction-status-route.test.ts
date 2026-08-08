@@ -11,6 +11,10 @@ const mocks = vi.hoisted(() => ({
     rpcUrl: "https://primary.example",
     rpcUrlSecondary: "https://secondary.example" as string | null,
   },
+  stockProviders: [
+    { endpoint: "https://stock-primary.example" },
+    { endpoint: "https://stock-secondary.example" },
+  ],
 }));
 
 vi.mock("viem", async (importOriginal) => {
@@ -31,6 +35,10 @@ vi.mock("@/lib/onchain/config", () => ({
   getOnchainDeployment: () => mocks.deployment,
 }));
 
+vi.mock("@/lib/server/action-rpc-quorum.server", () => ({
+  stockPairedActionRpcProviders: () => mocks.stockProviders,
+}));
+
 import { GET } from "../app/api/transaction-status/route";
 
 const transactionHash = `0x${"12".repeat(32)}`;
@@ -38,9 +46,10 @@ const transactionHash = `0x${"12".repeat(32)}`;
 function request(
   hash = transactionHash,
   chainId = 1,
+  policy?: "stock-paired",
 ) {
   return new NextRequest(
-    `https://programmable.family/api/transaction-status?hash=${hash}&chainId=${chainId}`,
+    `https://programmable.market/api/transaction-status?hash=${hash}&chainId=${chainId}${policy ? `&policy=${policy}` : ""}`,
   );
 }
 
@@ -87,6 +96,10 @@ describe("transaction status route", () => {
     mocks.deployment.chainId = 1;
     mocks.deployment.rpcUrl = "https://primary.example";
     mocks.deployment.rpcUrlSecondary = "https://secondary.example";
+    mocks.stockProviders = [
+      { endpoint: "https://stock-primary.example" },
+      { endpoint: "https://stock-secondary.example" },
+    ];
   });
 
   it("returns a confirmed primary receipt without transaction fallbacks", async () => {
@@ -336,6 +349,62 @@ describe("transaction status route", () => {
     await expect(response.json()).resolves.toEqual({
       status: "not-found",
       blockNumber: null,
+    });
+  });
+
+  it("requires matching terminal receipts for Stock-Paired status", async () => {
+    mocks.clients.push(client(), client());
+
+    const response = await GET(request(transactionHash, 1, "stock-paired"));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      status: "confirmed",
+      blockNumber: "123",
+    });
+  });
+
+  it("keeps Stock-Paired pending while only one RPC has a receipt", async () => {
+    mocks.clients.push(
+      client(),
+      client({ receipt: notFound("receipt") }),
+    );
+
+    const response = await GET(request(transactionHash, 1, "stock-paired"));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      status: "pending",
+      blockNumber: null,
+    });
+  });
+
+  it("fails closed when Stock-Paired terminal receipts disagree", async () => {
+    mocks.clients.push(
+      client(),
+      client({ receipt: { status: "success", blockNumber: 124n } }),
+    );
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+
+    const response = await GET(request(transactionHash, 1, "stock-paired"));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error: "Independent RPCs disagree on the transaction receipt",
+    });
+    consoleError.mockRestore();
+  });
+
+  it("fails closed when Stock-Paired has no independent RPC", async () => {
+    mocks.stockProviders = [{ endpoint: "https://stock-primary.example" }];
+
+    const response = await GET(request(transactionHash, 1, "stock-paired"));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error: "Stock-Paired transaction status requires two RPCs",
     });
   });
 });

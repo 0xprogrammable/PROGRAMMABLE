@@ -60,9 +60,9 @@
   font-family: var(--font-instrument), Arial, sans-serif;
   font-size: 11px;
   font-weight: 650;
-  height: 38px;
+  height: 44px;
   letter-spacing: 0.025em;
-  min-width: 40px;
+  min-width: 44px;
   padding: 0 8px;
   transition:
     background-color 150ms ease,
@@ -270,7 +270,7 @@
 
   .rangeButton {
     border-radius: 16px;
-    height: 40px;
+    height: 44px;
     min-width: 44px;
     padding-inline: 5px;
   }

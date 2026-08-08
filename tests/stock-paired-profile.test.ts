@@ -8,6 +8,7 @@ import {
   parseStockPairedProfileRewards,
   prepareStockPairedRewardAction,
   prepareStockPairedRewardConversion,
+  StockPairedClaimPendingError,
 } from "../lib/profile/stock-paired-rewards";
 import {
   STOCK_QUOTE_ASSETS,
@@ -250,6 +251,36 @@ describe("Stock-Paired profile rewards", () => {
         amountIn: claimedAmount,
       },
     });
+  });
+
+  it("keeps a server-declared pending claim receipt fail-closed", async () => {
+    const parsed = parseStockPairedProfileRewards(
+      response(),
+      STOCK_TEST_ACCOUNT,
+    );
+    if (parsed.status !== "ready") throw new Error("fixture not ready");
+    const reward = parsed.rewards[0];
+    const fetcher = vi.fn(async () => ({
+      ok: false,
+      status: 409,
+      json: async () => ({
+        status: "pending",
+        code: "stock-paired-claim-receipt-pending",
+        error: "The claim receipt is still pending across Ethereum RPCs",
+      }),
+    }));
+
+    await expect(
+      prepareStockPairedRewardConversion({
+        account: STOCK_TEST_ACCOUNT,
+        reward,
+        claimTransactionHash: `0x${"75".repeat(32)}`,
+        amountIn: reward.claimableRaw,
+        deadline: "12000",
+        chainId: 1,
+        fetcher,
+      }),
+    ).rejects.toBeInstanceOf(StockPairedClaimPendingError);
   });
 
   it("rejects a conversion that changes the exact approval amount", async () => {

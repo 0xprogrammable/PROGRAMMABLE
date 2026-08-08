@@ -158,7 +158,7 @@ async function completeRecord(level = "live") {
     deploymentId: "dpl_previous",
     immutableDeploymentUrl: "https://launcher-v4-previous.vercel.app",
     websiteCommitSha: commits.base,
-    productionAlias: "https://programmable.family",
+    productionAlias: "https://programmable.market",
     configurationSnapshotSha256: hashes.f,
     capturedAt: "2026-08-06T13:10:00Z",
   };
@@ -214,7 +214,7 @@ async function completeRecord(level = "live") {
   record.deployment.promoted = {
     deploymentId: "dpl_candidate",
     immutableDeploymentUrl: "https://launcher-v4-candidate.vercel.app",
-    productionAlias: "https://programmable.family",
+    productionAlias: "https://programmable.market",
     postPromotionEvidenceSha256: hashes.a,
     promotedAt: "2026-08-06T14:00:00Z",
   };
@@ -353,6 +353,21 @@ test("each release level is independently fail closed", async () => {
 
   const live = await completeRecord("live");
   assert.equal(verifyReleaseRecord(live, { require: "live" }).ok, true);
+});
+
+test("release records reject the former production alias", async () => {
+  const staging = await completeRecord("staging");
+  staging.deployment.rollback.productionAlias =
+    "https://programmable.family";
+  const stagingResult = verifyReleaseRecord(staging, { require: "staging" });
+  assert.equal(stagingResult.ok, false);
+  assert.match(stagingResult.errors.join("\n"), /productionAlias/u);
+
+  const live = await completeRecord("live");
+  live.deployment.promoted.productionAlias = "https://programmable.family";
+  const liveResult = verifyReleaseRecord(live, { require: "live" });
+  assert.equal(liveResult.ok, false);
+  assert.match(liveResult.errors.join("\n"), /productionAlias/u);
 });
 
 test("staging expectations bind the exact external workflow observations", async () => {

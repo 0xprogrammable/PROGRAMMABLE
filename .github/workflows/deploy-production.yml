@@ -114,7 +114,7 @@ jobs:
           echo "sha=$verified_sha" >> "$GITHUB_OUTPUT"
 
   deploy:
-    name: Stage programmable.family candidate
+    name: Stage programmable.market candidate
     needs: release-gate
     if: >-
       github.repository == '0xprogrammable/programmable' &&
@@ -179,7 +179,7 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: >-
           npm run perf:read-model:production-binding --
-          --target-url "https://programmable.family"
+          --target-url "https://programmable.market"
           --reject-git-head "$GITHUB_SHA"
           --github-output "$GITHUB_OUTPUT"
 
@@ -397,7 +397,7 @@ jobs:
           --vercel-project-id "$VERCEL_PROJECT_ID"
           --staged-deployment-id "$STAGED_DEPLOYMENT_ID"
           --staged-target-url "$STAGED_TARGET_URL"
-          --production-origin "https://programmable.family"
+          --production-origin "https://programmable.market"
           --expected-mode "$POLICY_MODE"
           --attestation-output "$RUNNER_TEMP/staged-release-attestation.json"
           --github-output "$GITHUB_OUTPUT"
@@ -417,7 +417,7 @@ jobs:
             echo
             echo "- SHA-256: \`${{ steps.release-attestation.outputs.attestation_sha256 }}\`"
             echo "- Runtime mode: \`${{ steps.read-model-policy.outputs.mode }}\`"
-            echo "- Production target: https://programmable.family"
+            echo "- Production target: https://programmable.market"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify staged deployment

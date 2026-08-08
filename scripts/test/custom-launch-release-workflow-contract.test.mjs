@@ -34,6 +34,22 @@ function workflowFailures(source) {
     "production-config-input",
     "CUSTOM_LAUNCH_PUBLIC_ENABLEMENT_REQUESTED: ${{ inputs.custom_launch_public_enablement }}",
   );
+  requireText("canonical-stage-name", "Stage programmable.market candidate");
+  requireText(
+    "canonical-rollback-target",
+    '--target-url "https://programmable.market"',
+  );
+  requireText(
+    "canonical-attestation-origin",
+    '--production-origin "https://programmable.market"',
+  );
+  requireText(
+    "canonical-summary-target",
+    "Production target: https://programmable.market",
+  );
+  if (source.includes("programmable.family")) {
+    failures.push("former-production-domain");
+  }
   requireText(
     "protected-production-mode",
     "CUSTOM_LAUNCH_PRODUCTION_MODE: ${{ vars.CUSTOM_LAUNCH_PRODUCTION_MODE }}",
@@ -365,6 +381,10 @@ test("workflow contract detects weakened record and stage-only gates", async () 
     source.replace(
       "custom-launch-candidate-canary-${{ github.run_id }}-${{ github.run_attempt }}",
       "missing-candidate-artifact",
+    ),
+    source.replace(
+      "https://programmable.market",
+      "https://programmable.family",
     ),
     `${source}\n      - run: vercel promote "$DEPLOYMENT_URL"\n`,
   ];

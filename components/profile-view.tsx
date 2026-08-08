@@ -49,6 +49,7 @@ import {
   isConfiguredStockPairedRewardsReady,
   prepareStockPairedRewardAction,
   prepareStockPairedRewardConversion,
+  StockPairedClaimPendingError,
   type StockPairedProfileRewards,
   type StockPairedReward,
 } from "@/lib/profile/stock-paired-rewards";
@@ -334,7 +335,57 @@ type ClassicV3ActionState = {
 };
 
 type DeepActionState = ClassicV3ActionState;
-type StockPairedActionState = ClassicV3ActionState;
+export type StockPairedPendingStage =
+  | "claim"
+  | "token-to-permit2"
+  | "permit2-to-router"
+  | "swap";
+
+type StockPairedReceiptGate =
+  | { outcome: "advance" }
+  | { outcome: "hold"; message: string }
+  | { outcome: "reverted"; message: string };
+
+export function resolveStockPairedReceiptGate(
+  pendingStage: StockPairedPendingStage,
+  receiptStatus: "pending" | "confirmed" | "reverted" | "unavailable",
+): StockPairedReceiptGate {
+  if (receiptStatus === "confirmed") {
+    return { outcome: "advance" };
+  }
+  if (receiptStatus === "reverted") {
+    return {
+      outcome: "reverted",
+      message:
+        pendingStage === "claim"
+          ? "The reward transaction reverted onchain"
+          : pendingStage === "swap"
+            ? "The ETH conversion reverted onchain"
+            : "The conversion approval reverted onchain",
+    };
+  }
+  if (receiptStatus === "unavailable") {
+    return {
+      outcome: "hold",
+      message: "Status unavailable. Check the same transaction again",
+    };
+  }
+  return {
+    outcome: "hold",
+    message:
+      pendingStage === "claim"
+        ? "Claim submitted. Check its status before converting"
+        : pendingStage === "swap"
+          ? "Conversion submitted. Check its status before showing it as complete"
+          : "Approval submitted. Check its status before continuing",
+  };
+}
+
+type StockPairedActionState = ClassicV3ActionState & {
+  pendingStage?: StockPairedPendingStage;
+  claimTransactionHash?: Hex;
+  amountIn?: string;
+};
 
 export type PendingProfileTransactionSource =
   | "classic"
@@ -348,10 +399,37 @@ export type PendingProfileTransactionRecord = {
   chainId: 1 | 11_155_111;
   source: PendingProfileTransactionSource;
   stateKey: string;
-  action: "claim" | "update-payout";
+  action: "claim" | "claim-as-eth" | "update-payout";
   transactionHash: Hex;
   submittedAt: number;
+  pendingStage?: StockPairedPendingStage;
+  claimTransactionHash?: Hex;
+  amountIn?: string;
 };
+
+export function stockPairedCheckpointAfterReceipt(
+  record: PendingProfileTransactionRecord,
+  outcome: "advance" | "reverted",
+): PendingProfileTransactionRecord | null {
+  if (
+    record.source !== "stock-paired" ||
+    record.action !== "claim-as-eth" ||
+    !record.pendingStage ||
+    !record.claimTransactionHash ||
+    !record.amountIn
+  ) {
+    return null;
+  }
+  if (outcome === "advance") {
+    return record.pendingStage === "swap" ? null : record;
+  }
+  if (record.pendingStage === "claim") return null;
+  return {
+    ...record,
+    transactionHash: record.claimTransactionHash,
+    pendingStage: "claim",
+  };
+}
 
 export type ProfileViewProps = {
   onchainData?: ProfileOnchainData;
@@ -455,12 +533,31 @@ export function getStockPairedClaimPaths(
     : ["quote-asset"];
 }
 
+export function shouldShowStockPairedEthClaimPath(
+  reward: Pick<
+    StockPairedReward,
+    "estimatedEth" | "estimatedUsd" | "payoutAddress"
+  >,
+  account?: string,
+  recovery?: Pick<
+    StockPairedActionState,
+    "claimTransactionHash" | "amountIn"
+  >,
+) {
+  return (
+    getStockPairedClaimPaths(reward, account).includes(
+      "quote-asset-to-eth",
+    ) || Boolean(recovery?.claimTransactionHash && recovery.amountIn)
+  );
+}
+
 type WaitForTransactionOptions = {
   maxAttempts?: number;
   intervalMs?: number;
   fetcher?: typeof fetch;
   wait?: (milliseconds: number) => Promise<void>;
   signal?: AbortSignal;
+  policy?: "stock-paired";
 };
 
 function throwIfTransactionPollAborted(signal?: AbortSignal) {
@@ -517,7 +614,9 @@ export async function waitForTransaction(
     const response = await fetcher(
       `/api/transaction-status?hash=${encodeURIComponent(
         transactionHash,
-      )}&chainId=${chainId}`,
+      )}&chainId=${chainId}${
+        options.policy ? `&policy=${options.policy}` : ""
+      }`,
       {
         method: "GET",
         cache: "no-store",
@@ -601,7 +700,9 @@ function isPendingProfileTransactionRecord(
     record.source === "deep" ||
     record.source === "stock-paired";
   const validAction =
-    record.action === "claim" || record.action === "update-payout";
+    record.action === "claim" ||
+    record.action === "claim-as-eth" ||
+    record.action === "update-payout";
   const validNetwork = record.chainId === 1 || record.chainId === 11_155_111;
   const validSubmittedAt =
     typeof record.submittedAt === "number" &&
@@ -621,14 +722,53 @@ function isPendingProfileTransactionRecord(
   }
 
   if (record.source === "classic") {
-    return record.action === "claim" && ethereumBytes32Pattern.test(stateKey);
+    return (
+      record.action === "claim" &&
+      record.pendingStage === undefined &&
+      record.claimTransactionHash === undefined &&
+      record.amountIn === undefined &&
+      ethereumBytes32Pattern.test(stateKey)
+    );
   }
 
   const [vaultAddress, stateAction, extra] = stateKey.split(":");
-  return (
+  const validStateKey =
     extra === undefined &&
     ethereumAddressPattern.test(vaultAddress ?? "") &&
-    stateAction === record.action
+    stateAction === record.action;
+  if (!validStateKey) return false;
+
+  if (record.source !== "stock-paired") {
+    return (
+      record.action !== "claim-as-eth" &&
+      record.pendingStage === undefined &&
+      record.claimTransactionHash === undefined &&
+      record.amountIn === undefined
+    );
+  }
+
+  if (record.action !== "claim-as-eth") {
+    return (
+      record.pendingStage === undefined &&
+      record.claimTransactionHash === undefined &&
+      record.amountIn === undefined
+    );
+  }
+
+  const validPendingStage =
+    record.pendingStage === "claim" ||
+    record.pendingStage === "token-to-permit2" ||
+    record.pendingStage === "permit2-to-router" ||
+    record.pendingStage === "swap";
+  const claimTransactionHash =
+    typeof record.claimTransactionHash === "string"
+      ? record.claimTransactionHash.toLowerCase()
+      : "";
+  return (
+    validPendingStage &&
+    ethereumBytes32Pattern.test(claimTransactionHash) &&
+    typeof record.amountIn === "string" &&
+    /^[1-9]\d{0,77}$/.test(record.amountIn)
   );
 }
 
@@ -661,6 +801,12 @@ export function parsePendingProfileTransactions(
       account: normalizedAccount,
       stateKey: record.stateKey.toLowerCase(),
       transactionHash: record.transactionHash.toLowerCase() as Hex,
+      ...(record.claimTransactionHash
+        ? {
+            claimTransactionHash:
+              record.claimTransactionHash.toLowerCase() as Hex,
+          }
+        : {}),
     };
     uniqueRecords.set(
       `${normalizedRecord.source}:${normalizedRecord.stateKey}`,
@@ -828,12 +974,19 @@ function forgetPendingProfileTransaction(
 
 function restoredPendingProfileActionState(
   record: PendingProfileTransactionRecord,
-): ProfileClaimActionState {
+): StockPairedActionState {
   return {
     account: record.account,
     status: "pending",
     message: "Transaction submitted. Check its current status",
     transactionHash: record.transactionHash,
+    ...(record.source === "stock-paired" && record.pendingStage
+      ? {
+          pendingStage: record.pendingStage,
+          claimTransactionHash: record.claimTransactionHash,
+          amountIn: record.amountIn,
+        }
+      : {}),
   };
 }
 
@@ -965,6 +1118,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   const transactionPollControllersRef = useRef<Set<AbortController>>(
     new Set(),
   );
+  const stockPairedActionLocksRef = useRef<Set<string>>(new Set());
   const hydratedPendingAccountRef = useRef<string | undefined>(undefined);
   const confirmedProfileTransactionsRef = useRef<
     Record<PendingProfileTransactionSource, Map<string, Hex>>
@@ -1456,6 +1610,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       revertedMessage,
       setActionState,
       manualCheck = false,
+      policy,
     }: {
       transactionHash: Hex;
       chainId: 1 | 11_155_111;
@@ -1469,6 +1624,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         state: Omit<ProfileClaimActionState, "account">,
       ) => void;
       manualCheck?: boolean;
+      policy?: "stock-paired";
     }) => {
       const pendingTransaction: PendingProfileTransactionRecord = {
         version: 1,
@@ -1505,6 +1661,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
           {
             maxAttempts: profileTransactionPollAttempts(manualCheck),
             signal: controller.signal,
+            policy,
           },
         );
         if (controller.signal.aborted) return;
@@ -1967,6 +2124,9 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         return;
       }
       const stateKey = `${reward.vaultAddress.toLowerCase()}:${action}`;
+      const lockKey = `${actionAccount.toLowerCase()}:${reward.vaultAddress.toLowerCase()}`;
+      if (stockPairedActionLocksRef.current.has(lockKey)) return;
+      stockPairedActionLocksRef.current.add(lockKey);
       const setActionState = (
         state: Omit<StockPairedActionState, "account">,
       ) => {
@@ -1975,219 +2135,375 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
           [stateKey]: { account: actionAccount, ...state },
         }));
       };
-      const existingState = stockPairedActionStates[stateKey];
-      if (
-        existingState?.account.toLowerCase() === actionAccount.toLowerCase()
-      ) {
-        if (
-          existingState.status === "pending" &&
-          existingState.transactionHash
-        ) {
+      let stockClaimConfirmed = false;
+      let recoveryClaimTransactionHash: Hex | undefined;
+      let recoveryAmountIn: string | undefined;
+      try {
+        const existingState = stockPairedActionStates[stateKey];
+        const scopedExistingState =
+          existingState?.account.toLowerCase() === actionAccount.toLowerCase()
+            ? existingState
+            : undefined;
+
+        if (action !== "claim-as-eth") {
+          if (
+            scopedExistingState?.status === "pending" &&
+            scopedExistingState.transactionHash
+          ) {
+            await settleSubmittedTransaction({
+              transactionHash: scopedExistingState.transactionHash,
+              chainId: scopedStockPairedRewards.chainId,
+              actionAccount,
+              source: "stock-paired",
+              stateKey,
+              action,
+              confirmedMessage:
+                action === "claim"
+                  ? "Claim confirmed"
+                  : "Payout address updated",
+              revertedMessage: "The reward transaction reverted onchain",
+              setActionState,
+              manualCheck: true,
+              policy: action === "claim" ? "stock-paired" : undefined,
+            });
+            return;
+          }
+          if (actionPending(scopedExistingState)) return;
+
+          setActionState({
+            status: "preparing",
+            message: "Checking the current onchain state",
+          });
+          const prepared = await prepareStockPairedRewardAction({
+            action,
+            account: actionAccount,
+            vaultAddress: reward.vaultAddress,
+            newPayoutAddress,
+            chainId: scopedStockPairedRewards.chainId,
+          });
+          if (
+            activeAccountRef.current?.toLowerCase() !==
+            actionAccount.toLowerCase()
+          ) {
+            throw new Error("The connected wallet changed before submission");
+          }
+          setActionState({
+            status: "wallet",
+            message: "Review the transaction in your wallet",
+          });
+          const transactionHash = await sendTransaction(prepared.transaction);
+          persistPendingProfileTransaction({
+            version: 1,
+            account: actionAccount.toLowerCase(),
+            chainId: scopedStockPairedRewards.chainId,
+            source: "stock-paired",
+            stateKey,
+            action,
+            transactionHash,
+            submittedAt: Date.now(),
+          });
           await settleSubmittedTransaction({
-            transactionHash: existingState.transactionHash,
+            transactionHash,
             chainId: scopedStockPairedRewards.chainId,
             actionAccount,
             source: "stock-paired",
             stateKey,
-            action: action === "claim-as-eth" ? "claim" : action,
+            action,
             confirmedMessage:
-              action === "claim" || action === "claim-as-eth"
+              action === "claim"
                 ? "Claim confirmed"
                 : "Payout address updated",
             revertedMessage: "The reward transaction reverted onchain",
             setActionState,
-            manualCheck: true,
+            policy: action === "claim" ? "stock-paired" : undefined,
           });
           return;
         }
-        if (actionPending(existingState)) return;
-      }
-      setActionState({
-        status: "preparing",
-        message: "Checking the current onchain state",
-      });
-      let stockClaimConfirmed = false;
-      try {
+
         if (
-          action === "claim-as-eth" &&
           reward.payoutAddress.toLowerCase() !== actionAccount.toLowerCase()
         ) {
           throw new Error(
             "Claim as ETH requires this wallet as the payout address",
           );
         }
-        const rewardAmount = reward.claimableRaw;
-        const prepared = await prepareStockPairedRewardAction({
-          action: action === "claim-as-eth" ? "claim" : action,
-          account: actionAccount,
-          vaultAddress: reward.vaultAddress,
-          newPayoutAddress,
-          chainId: scopedStockPairedRewards.chainId,
-        });
-        if (
-          activeAccountRef.current?.toLowerCase() !==
-          actionAccount.toLowerCase()
-        ) {
-          throw new Error("The connected wallet changed before submission");
-        }
-        setActionState({
-          status: "wallet",
-          message:
-            action === "claim-as-eth"
-              ? `Confirm the ${reward.quoteAssetSymbol} claim in your wallet`
-              : "Review the transaction in your wallet",
-        });
-        let transactionHash = await sendTransaction(prepared.transaction);
-        if (
-          activeAccountRef.current?.toLowerCase() ===
-          actionAccount.toLowerCase()
-        ) {
+        if (actionPending(scopedExistingState)) return;
+
+        const rewardAmount =
+          scopedExistingState?.amountIn ?? reward.claimableRaw;
+        let claimTransactionHash =
+          scopedExistingState?.claimTransactionHash;
+        stockClaimConfirmed = Boolean(
+          scopedExistingState?.status === "error" && claimTransactionHash,
+        );
+        recoveryClaimTransactionHash = claimTransactionHash;
+        recoveryAmountIn = rewardAmount;
+
+        const settleConversionStage = async ({
+          transactionHash,
+          pendingStage,
+          manualCheck,
+        }: {
+          transactionHash: Hex;
+          pendingStage: StockPairedPendingStage;
+          manualCheck: boolean;
+        }) => {
+          const authoritativeClaimHash =
+            claimTransactionHash ?? transactionHash;
+          claimTransactionHash = authoritativeClaimHash;
+          recoveryClaimTransactionHash = authoritativeClaimHash;
+          const pendingTransaction: PendingProfileTransactionRecord = {
+            version: 1,
+            account: actionAccount.toLowerCase(),
+            chainId: scopedStockPairedRewards.chainId,
+            source: "stock-paired",
+            stateKey,
+            action: "claim-as-eth",
+            transactionHash,
+            submittedAt: Date.now(),
+            pendingStage,
+            claimTransactionHash: authoritativeClaimHash,
+            amountIn: rewardAmount,
+          };
+          persistPendingProfileTransaction(pendingTransaction);
           setActionState({
             status: "confirming",
             message:
-              action === "claim-as-eth"
+              pendingStage === "claim"
                 ? `Claiming ${reward.quoteAssetSymbol}`
-                : "Confirming on Ethereum",
+                : pendingStage === "swap"
+                  ? "Converting to ETH"
+                  : "Confirming approval",
             transactionHash,
+            pendingStage,
+            claimTransactionHash: authoritativeClaimHash,
+            amountIn: rewardAmount,
           });
-          const receiptStatus = await waitForTransaction(
-            transactionHash,
-            scopedStockPairedRewards.chainId,
-          );
-          if (receiptStatus === "reverted") {
-            throw new Error("The reward transaction reverted onchain");
+          let receiptStatus: "pending" | "confirmed" | "reverted";
+          try {
+            receiptStatus = await waitForTransaction(
+              transactionHash,
+              scopedStockPairedRewards.chainId,
+              {
+                maxAttempts: profileTransactionPollAttempts(manualCheck),
+                policy: "stock-paired",
+              },
+            );
+          } catch {
+            const gate = resolveStockPairedReceiptGate(
+              pendingStage,
+              "unavailable",
+            );
+            if (gate.outcome !== "hold") return "pending" as const;
+            setActionState({
+              status: "pending",
+              message: gate.message,
+              transactionHash,
+              pendingStage,
+              claimTransactionHash: authoritativeClaimHash,
+              amountIn: rewardAmount,
+            });
+            return "pending" as const;
           }
           if (
             activeAccountRef.current?.toLowerCase() !==
             actionAccount.toLowerCase()
           ) {
+            return "pending" as const;
+          }
+          const gate = resolveStockPairedReceiptGate(
+            pendingStage,
+            receiptStatus,
+          );
+          if (gate.outcome === "hold") {
+            setActionState({
+              status: "pending",
+              message: gate.message,
+              transactionHash,
+              pendingStage,
+              claimTransactionHash: authoritativeClaimHash,
+              amountIn: rewardAmount,
+            });
+            return "pending" as const;
+          }
+          if (gate.outcome === "reverted") {
+            const checkpoint = stockPairedCheckpointAfterReceipt(
+              pendingTransaction,
+              gate.outcome,
+            );
+            if (checkpoint) {
+              persistPendingProfileTransaction(checkpoint);
+            } else {
+              forgetPendingProfileTransaction(pendingTransaction);
+            }
+            setActionState({
+              status: "error",
+              message: gate.message,
+              transactionHash,
+              ...(pendingStage === "claim"
+                ? {}
+                : {
+                    claimTransactionHash: authoritativeClaimHash,
+                    amountIn: rewardAmount,
+                  }),
+            });
+            return "reverted" as const;
+          }
+          if (
+            !stockPairedCheckpointAfterReceipt(
+              pendingTransaction,
+              gate.outcome,
+            )
+          ) {
+            forgetPendingProfileTransaction(pendingTransaction);
+          }
+          return "confirmed" as const;
+        };
+
+        const resumedStage = scopedExistingState?.pendingStage;
+        let transactionHash = scopedExistingState?.transactionHash;
+        if (
+          scopedExistingState?.status === "pending" &&
+          transactionHash &&
+          resumedStage
+        ) {
+          const status = await settleConversionStage({
+            transactionHash,
+            pendingStage: resumedStage,
+            manualCheck: true,
+          });
+          if (status !== "confirmed") return;
+          if (resumedStage === "swap") {
+            confirmedProfileTransactionsRef.current["stock-paired"].set(
+              stateKey,
+              transactionHash,
+            );
+            setActionState({
+              status: "confirmed",
+              message: "Claimed as ETH",
+              transactionHash,
+            });
+            setProfileRefresh((current) => current + 1);
             return;
           }
-          if (action === "claim-as-eth") {
-            stockClaimConfirmed = true;
-            const claimTransactionHash = transactionHash;
-            for (let step = 0; step < 3; step += 1) {
-              setActionState({
-                status: "preparing",
-                message: "Preparing the ETH conversion",
-                transactionHash,
-              });
-              let conversion:
-                | Awaited<
-                    ReturnType<
-                      typeof prepareStockPairedRewardConversion
-                    >
-                  >
-                | undefined;
-              for (let attempt = 0; attempt < 6; attempt += 1) {
-                try {
-                  const deadline = (
-                    BigInt(Math.floor(Date.now() / 1_000)) + 1_200n
-                  ).toString();
-                  conversion =
-                    await prepareStockPairedRewardConversion({
-                      account: actionAccount,
-                      reward,
-                      claimTransactionHash,
-                      amountIn: rewardAmount,
-                      deadline,
-                      chainId: scopedStockPairedRewards.chainId,
-                    });
-                  break;
-                } catch (conversionError) {
-                  const message =
-                    conversionError instanceof Error
-                      ? conversionError.message
-                      : "";
-                  const mayBeRpcLag =
-                    message.includes("not visible on both") ||
-                    message.includes(
-                      "could not be verified across both",
-                    );
-                  if (!mayBeRpcLag || attempt === 5) {
-                    throw conversionError;
-                  }
-                  await new Promise((resolve) =>
-                    window.setTimeout(resolve, 1_000),
-                  );
-                }
-              }
-              if (!conversion) {
-                throw new Error("The ETH conversion could not be prepared");
-              }
-              if (
-                activeAccountRef.current?.toLowerCase() !==
-                actionAccount.toLowerCase()
-              ) {
-                throw new Error(
-                  "The connected wallet changed during conversion",
-                );
-              }
-              const transactionKind = conversion.transaction.kind;
-              setActionState({
-                status: "wallet",
-                message:
-                  transactionKind === "token-to-permit2"
-                    ? `Approve ${reward.quoteAssetSymbol} for conversion`
-                    : transactionKind === "permit2-to-router"
-                      ? "Approve the Uniswap route"
-                      : "Confirm the ETH conversion",
-                transactionHash,
-              });
-              transactionHash = await sendTransaction(
-                conversion.transaction,
-              );
-              setActionState({
-                status: "confirming",
-                message:
-                  transactionKind === "swap"
-                    ? "Converting to ETH"
-                    : "Confirming approval",
-                transactionHash,
-              });
-              const conversionStatus = await waitForTransaction(
-                transactionHash,
-                scopedStockPairedRewards.chainId,
-              );
-              if (conversionStatus === "reverted") {
-                throw new Error(
-                  transactionKind === "swap"
-                    ? "The ETH conversion reverted onchain"
-                    : "The conversion approval reverted onchain",
-                );
-              }
-              if (transactionKind === "swap") {
-                confirmedProfileTransactionsRef.current["stock-paired"].set(
-                  stateKey,
-                  transactionHash,
-                );
-                setActionState({
-                  status: "confirmed",
-                  message: "Claimed as ETH",
-                  transactionHash,
-                });
-                setProfileRefresh((current) => current + 1);
-                return;
-              }
-            }
-            throw new Error(
-              "The conversion needs more approval steps than expected",
-            );
-          }
-          confirmedProfileTransactionsRef.current["stock-paired"].set(
-            stateKey,
-            transactionHash,
-          );
+          stockClaimConfirmed = true;
+        } else if (!stockClaimConfirmed) {
           setActionState({
-            status: "confirmed",
-            message:
-              action === "claim"
-                ? "Claim confirmed"
-                : "Payout address updated",
-            transactionHash,
+            status: "preparing",
+            message: "Checking the current onchain state",
           });
-          setProfileRefresh((current) => current + 1);
+          const prepared = await prepareStockPairedRewardAction({
+            action: "claim",
+            account: actionAccount,
+            vaultAddress: reward.vaultAddress,
+            chainId: scopedStockPairedRewards.chainId,
+          });
+          if (
+            activeAccountRef.current?.toLowerCase() !==
+            actionAccount.toLowerCase()
+          ) {
+            throw new Error("The connected wallet changed before submission");
+          }
+          setActionState({
+            status: "wallet",
+            message: `Confirm the ${reward.quoteAssetSymbol} claim in your wallet`,
+          });
+          transactionHash = await sendTransaction(prepared.transaction);
+          claimTransactionHash = transactionHash;
+          const status = await settleConversionStage({
+            transactionHash,
+            pendingStage: "claim",
+            manualCheck: false,
+          });
+          if (status !== "confirmed") return;
+          stockClaimConfirmed = true;
         }
+
+        if (!claimTransactionHash) {
+          throw new Error("The confirmed claim transaction is unavailable");
+        }
+
+        for (let step = 0; step < 3; step += 1) {
+          setActionState({
+            status: "preparing",
+            message: "Preparing the ETH conversion",
+            claimTransactionHash,
+            amountIn: rewardAmount,
+          });
+          let conversion:
+            | Awaited<ReturnType<typeof prepareStockPairedRewardConversion>>
+            | undefined;
+          for (let attempt = 0; attempt < 6; attempt += 1) {
+            try {
+              const deadline = (
+                BigInt(Math.floor(Date.now() / 1_000)) + 1_200n
+              ).toString();
+              conversion = await prepareStockPairedRewardConversion({
+                account: actionAccount,
+                reward,
+                claimTransactionHash,
+                amountIn: rewardAmount,
+                deadline,
+                chainId: scopedStockPairedRewards.chainId,
+              });
+              break;
+            } catch (conversionError) {
+              if (
+                !(conversionError instanceof StockPairedClaimPendingError) ||
+                attempt === 5
+              ) {
+                throw conversionError;
+              }
+              await new Promise((resolve) =>
+                window.setTimeout(resolve, 1_000),
+              );
+            }
+          }
+          if (!conversion) {
+            throw new Error("The ETH conversion could not be prepared");
+          }
+          if (
+            activeAccountRef.current?.toLowerCase() !==
+            actionAccount.toLowerCase()
+          ) {
+            throw new Error("The connected wallet changed during conversion");
+          }
+          const transactionKind = conversion.transaction.kind;
+          setActionState({
+            status: "wallet",
+            message:
+              transactionKind === "token-to-permit2"
+                ? `Approve ${reward.quoteAssetSymbol} for conversion`
+                : transactionKind === "permit2-to-router"
+                  ? "Approve the Uniswap route"
+                  : "Confirm the ETH conversion",
+            claimTransactionHash,
+            amountIn: rewardAmount,
+          });
+          transactionHash = await sendTransaction(conversion.transaction);
+          const status = await settleConversionStage({
+            transactionHash,
+            pendingStage: transactionKind,
+            manualCheck: false,
+          });
+          if (status !== "confirmed") return;
+          if (transactionKind === "swap") {
+            confirmedProfileTransactionsRef.current["stock-paired"].set(
+              stateKey,
+              transactionHash,
+            );
+            setActionState({
+              status: "confirmed",
+              message: "Claimed as ETH",
+              transactionHash,
+            });
+            setProfileRefresh((current) => current + 1);
+            return;
+          }
+        }
+        throw new Error(
+          "The conversion needs more approval steps than expected",
+        );
       } catch (caught) {
         if (
           activeAccountRef.current?.toLowerCase() !==
@@ -2202,10 +2518,18 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
             : caught instanceof Error
               ? caught.message
               : "The reward action could not be submitted",
+          ...(stockClaimConfirmed && recoveryClaimTransactionHash
+            ? {
+                claimTransactionHash: recoveryClaimTransactionHash,
+                amountIn: recoveryAmountIn,
+              }
+            : {}),
         });
         if (stockClaimConfirmed) {
           setProfileRefresh((current) => current + 1);
         }
+      } finally {
+        stockPairedActionLocksRef.current.delete(lockKey);
       }
     },
     [
@@ -4361,6 +4685,14 @@ function ProfileClaimRow({
   } of stockPairedClaims) {
     if (claimable === 0n && !stockClaimState && !ethState) continue;
     const paths = getStockPairedClaimPaths(reward, account);
+    const ethRecoveryAvailable = Boolean(
+      ethState?.claimTransactionHash && ethState.amountIn,
+    );
+    const showEthPath = shouldShowStockPairedEthClaimPath(
+      reward,
+      account,
+      ethState,
+    );
     const estimate = formatStockRewardEstimate(reward);
     const quoteActionActive =
       stockClaimState && stockClaimState.status !== "error";
@@ -4384,7 +4716,7 @@ function ProfileClaimRow({
       },
     ];
 
-    if (paths.includes("quote-asset-to-eth")) {
+    if (showEthPath) {
       actions.push({
         id: "claim-and-convert-to-eth",
         label: claimDialogActionLabel(ethState, "Receive in Ethereum"),
@@ -4393,7 +4725,9 @@ function ProfileClaimRow({
         disabled:
           actionPending(ethState) ||
           Boolean(quoteActionActive) ||
-          (claimable === 0n && !actionCanCheckStatus(ethState)),
+          (claimable === 0n &&
+            !actionCanCheckStatus(ethState) &&
+            !ethRecoveryAvailable),
         emphasis: "primary",
         onSelect: () => onStockPairedAction(reward, "claim-as-eth"),
       });

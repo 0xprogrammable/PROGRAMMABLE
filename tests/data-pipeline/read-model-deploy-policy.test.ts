@@ -402,7 +402,7 @@ describe("read-model production deploy policy", () => {
       vercelProjectId: "prj_1234567890abcdef",
       stagedDeploymentId: `dpl_${"b".repeat(24)}`,
       stagedDeploymentUrl: "https://programmable-stage-abc.vercel.app",
-      productionOrigin: "https://programmable.family",
+      productionOrigin: "https://programmable.market",
       expectedMode: "alchemy-only",
       timestamp: "2026-08-01T12:34:56.000Z",
     });
@@ -412,7 +412,7 @@ describe("read-model production deploy policy", () => {
       vercelProjectId: "prj_1234567890abcdef",
       stagedDeploymentId: `dpl_${"b".repeat(24)}`,
       stagedDeploymentUrl: "https://programmable-stage-abc.vercel.app",
-      productionOrigin: "https://programmable.family",
+      productionOrigin: "https://programmable.market",
       policyMode: "alchemy-only",
       indexedFlags: policy.indexedFlags,
       workerActivationFlags: policy.workerActivationFlags,
@@ -428,7 +428,7 @@ describe("read-model production deploy policy", () => {
         vercelProjectId: "prj_1234567890abcdef",
         stagedDeploymentId: `dpl_${"b".repeat(24)}`,
         stagedDeploymentUrl: "https://programmable-stage-abc.vercel.app",
-        productionOrigin: "https://programmable.family",
+        productionOrigin: "https://programmable.market",
         nowMs: Date.parse("2026-08-01T12:35:00.000Z"),
       }),
     ).toEqual(JSON.parse(result.json));
@@ -461,7 +461,7 @@ describe("read-model production deploy policy", () => {
         vercelProjectId: "prj_1234567890abcdef",
         stagedDeploymentId: `dpl_${"b".repeat(24)}`,
         stagedDeploymentUrl: "https://programmable-stage-abc.vercel.app",
-        productionOrigin: "https://programmable.family",
+        productionOrigin: "https://programmable.market",
         expectedMode: "indexed-or-shadow",
         timestamp: "2026-08-01T12:34:56.000Z",
       }).json,
@@ -514,7 +514,7 @@ describe("read-model production deploy policy", () => {
       vercelProjectId: "prj_1234567890abcdef",
       stagedDeploymentId: `dpl_${"b".repeat(24)}`,
       stagedDeploymentUrl: "https://programmable-stage-abc.vercel.app",
-      productionOrigin: "https://programmable.family",
+      productionOrigin: "https://programmable.market",
       expectedMode: "alchemy-only",
       timestamp: "2026-08-01T12:34:56.000Z",
     };
@@ -527,13 +527,19 @@ describe("read-model production deploy policy", () => {
     expect(() =>
       createStagedReleaseAttestation({
         ...valid,
-        stagedDeploymentUrl: "https://programmable.family",
+        stagedDeploymentUrl: "https://programmable.market",
       }),
     ).toThrow("deployment-specific Vercel host");
     expect(() =>
       createStagedReleaseAttestation({
         ...valid,
-        productionOrigin: "https://programmable.family/",
+        productionOrigin: "https://programmable.market/",
+      }),
+    ).toThrow("canonical Programmable domain");
+    expect(() =>
+      createStagedReleaseAttestation({
+        ...valid,
+        productionOrigin: "https://programmable.family",
       }),
     ).toThrow("canonical Programmable domain");
     expect(() =>

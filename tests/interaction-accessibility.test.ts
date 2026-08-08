@@ -27,6 +27,29 @@ describe("interaction accessibility", () => {
     expect(chartSource).not.toContain("role=\"slider\"");
   });
 
+  it("keeps primary token interactions at a reliable touch size", () => {
+    const tokenCss = readFileSync(
+      join(root, "components/token-experience.module.css"),
+      "utf8",
+    );
+    const chartCss = readFileSync(
+      join(root, "components/token-price-chart.module.css"),
+      "utf8",
+    );
+
+    expect(tokenCss).toMatch(/\.back\s*\{[^}]*min-height:\s*44px;/s);
+    expect(tokenCss).toMatch(/\.address\s*\{[^}]*min-height:\s*44px;/s);
+    expect(tokenCss).toMatch(
+      /\.slippageControl\s*\{[^}]*min-height:\s*44px;/s,
+    );
+    expect(tokenCss).toMatch(
+      /\.slippageControl input\s*\{[^}]*min-height:\s*44px;/s,
+    );
+    expect(chartCss).toMatch(
+      /\.rangeButton\s*\{[^}]*height:\s*44px;[^}]*min-width:\s*44px;/s,
+    );
+  });
+
   it("removes decorative token separators and image-edge outlines", () => {
     const tokenCss = readFileSync(
       join(root, "components/token-experience.module.css"),
