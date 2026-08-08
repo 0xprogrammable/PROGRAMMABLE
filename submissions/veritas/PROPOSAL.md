@@ -8,7 +8,7 @@ Veritas turns a content asset's provenance into a live, on-chain risk score — 
 
 ## 2. What the hook actually does
 
-`VeritasHook` (`contracts/src/VeritasHook.sol`) implements six callbacks against `PoolManager`. `_beforeInitialize` (`:456-480`) vetoes pool creation whenever the pool's live DRS exceeds the gate threshold its content owner committed to at registration, whenever no Veritas configuration exists for that `PoolKey` at all, or whenever the attestation's risk data has gone stale past `REGISTRATION_MAX_DATA_AGE` (§6.6). `_beforeSwap` (`:499-515`) reads live DRS and returns `lpFee | LPFeeLibrary.OVERRIDE_FEE_FLAG` (`:514`), overriding the pool's dynamic LP fee on every swap — provably independent of the staleness gate, since staleness is never read here. `_afterSwap` (`:526-573`) reads the swap's own realized `BalanceDelta`, performs exactly one `take` against the unspecified currency (`:564`), and returns exactly one `int128` equal to that same take (`:572`) — split between the Programmable fee and the insurance reserve in two accounting mappings, never two takes. `_afterAddLiquidity`/`_afterRemoveLiquidity` (`:600-804`, added 8 Aug alongside the staleness gate) track each LP position's own insurance tenure and pay a JIT-proof per-position claim on exit (§6.6). `disburseReserveToLPs` (`:820-847`) and `claimProgrammableFee` (`:855-867`) are the two permissionless exits for value the per-position mechanism cannot attribute to a specific position: neither has an access-control modifier, and both route value only to the pool's own in-range LPs (via `poolManager.donate`) or to the hardcoded `PROGRAMMABLE_FEE_RECIPIENT` respectively.
+`VeritasHook` (`contracts/src/VeritasHook.sol`) implements six callbacks against `PoolManager`. `_beforeInitialize` (`:456-480`) vetoes pool creation whenever the pool's live DRS exceeds the gate threshold its content owner committed to at registration, whenever no Veritas configuration exists for that `PoolKey` at all, or whenever the attestation's risk data has gone stale past `REGISTRATION_MAX_DATA_AGE` (§6.6). `_beforeSwap` (`:499-515`) reads live DRS and returns `lpFee | LPFeeLibrary.OVERRIDE_FEE_FLAG` (`:514`), overriding the pool's dynamic LP fee on every swap — provably independent of the staleness gate, since staleness is never read here. `_afterSwap` (`:526-573`) reads the swap's own realized `BalanceDelta`, performs exactly one `take` against the unspecified currency (`:564`), and returns exactly one `int128` equal to that same take (`:572`) — split between the Programmable fee and the insurance reserve in two accounting mappings, never two takes. `_afterAddLiquidity`/`_afterRemoveLiquidity` (`:600-804`, added 8 Aug alongside the staleness gate) track each LP position's own insurance tenure and pay a JIT-proof per-position claim on exit (§6.6). `disburseReserveToLPs` is the permissionless exit for reserve value the per-position mechanism cannot attribute to a specific position; it routes value only to the pool's own in-range LPs via `poolManager.donate`. `claimProgrammableFee`/`claimProgrammableFeeTo` are OWNER-ONLY (`NotProgrammableFeeOwner` for any other caller), matching the published policy that only the immutable owner may initiate a claim, with an owner-selected per-claim destination that is never stored.
 
 ## 3. Why this must be a hook
 
@@ -170,11 +170,57 @@ What was built instead: `registerPool` and `_beforeInitialize` reject a new pool
 
 Full threat analysis: `THREAT_MODEL.md` §3.7.
 
+### 6.8 Cumulative Programmable entitlement (carried remainder)
+
+Added 8 Aug 2026. `_splitFee` previously computed `FullMath.mulDiv(gross, 1000, 1_000_000)` and floored on every
+swap, carrying nothing. Any gross below 1,000 wei therefore paid the immutable owner exactly zero. Measured on that
+revision: 200 swaps of 999 wei accrued **0 wei** to the owner while the project-side reserve still collected 200 wei,
+and `programmableQuoteVolume` recorded 0 — so the shortfall was invisible to any on-chain reconciler.
+
+The fix carries the sub-unit **numerator**, not the quotient, keyed per pool and currency
+(`programmableFeeRemainder`, `contracts/src/VeritasHook.sol`). The hook serves many pools, so a single scalar would
+let one pool's volume pay another pool's entitlement; the mapping prevents that. `mulmod` recovers the fraction
+without overflow across the whole `uint256` range:
+
+```
+progAmount   = mulDiv(gross, 1000, 1e6)
+combined     = mulmod(gross, 1000, 1e6) + carriedRemainder
+progAmount  += combined / 1e6
+nextRemainder = combined % 1e6
+```
+
+The identity this preserves, asserted live: `programmableFees * HOOK_FEE_DENOM + programmableFeeRemainder ==
+programmableQuoteVolume * PROGRAMMABLE_FEE_PIPS`. Claims move `programmableFees` and never touch the remainder, so a
+claim cannot reset the carry. Volume is now recorded on every charged swap, including ones whose own 10 bps rounds to
+zero, keeping the audit trail reconcilable.
+
+Evidence: `contracts/test/ProgrammableFeeCumulative.t.sol` (5 tests: the exact 200x999 wei scenario, split-vs-unsplit
+equivalence, claim-does-not-reset-carry, per-pool isolation, and a fuzzed conservation property) plus the stateful
+`invariant_programmableEntitlementIsCumulative`. Mutation M5 (freeze the carry) makes all six fail; see `TEST_PLAN.md`
+§4. Confirmed on the live deployment: `programmableQuoteVolume = 996649006689767`, `programmableFees = 996649006689`,
+`programmableFeeRemainder = 767000`, which satisfies the identity exactly.
+
+### 6.9 Owner-only Programmable claim
+
+Added 8 Aug 2026. `claimProgrammableFee` was previously permissionless on the reasoning that the destination was
+hardcoded and therefore unredirectable. That reasoning covers *where funds land*, not *who may initiate a claim*,
+which the fee policy states as a separate requirement (`claimAuthority: owner-only`, a schema `const`). Both claim
+entrypoints now authenticate `msg.sender == PROGRAMMABLE_FEE_RECIPIENT`.
+
+`claimProgrammableFeeTo(key, destination)` implements `claimDestinationPolicy:
+owner-or-owner-selected-per-claim`: the owner may route one exact claim elsewhere, the zero address is rejected, and
+the destination is never written to storage, so `storedMutableRecipient: false` still holds.
+
+A side effect worth stating: reentrancy into the claim path is now stopped one layer *earlier* than before. Inside a
+hostile token callback `msg.sender` is the token, never the owner, so `NotProgrammableFeeOwner` fires before v4's lock
+is consulted. The lock remains behind it — the `test_P2_ReenterDisburse_*` tests still exercise it on a
+non-owner-gated entrypoint.
+
 ## 7. Known limitations
 
 **L1 — Below DRS 2860 the insurance reserve accrues exactly zero.** The 10 bps Programmable floor is *inclusive*, not additive: `builderPips = 3500 * DRS / 10000` (`contracts/src/VeritasHook.sol:409-411`) must exceed 1000 for the reserve to receive anything. `3500 * 2859 / 10000 = 1000` (integer division truncates `1000.65`), tied with the floor — zero reserve. `3500 * 2860 / 10000 = 1001`, first strictly above the floor. So DRS 0–2859 inclusive give exactly zero reserve accrual; DRS 2860 is the first DRS value with strictly positive accrual. Proven by `contracts/test/VeritasHook.t.sol:test_Reserve_ZeroDRS_NoAccrual`, `contracts/test/VeritasHook.t.sol:test_ProgrammableFee_FloorAppliesAtZeroDRS`, and `contracts/test/Integration.t.sol:test_FullFlow_AttestCreatePoolSwap`. Disclosed design, not a bug: low-risk content does not need an insurance buffer, but this does mean the reserve is a high-DRS-only feature.
 
-**L2 — RESOLVED 8 Aug 2026 (was: fee denomination could flip to the content currency in 2 of 4 quadrants).** Fixed by adding `beforeSwapReturnDelta` and collecting in `beforeSwap` for the two quadrants where the quote currency is the swap's specified side (§6.2-6.4); the hook's CREATE2-mined address changed accordingly (§11). Basis and denomination are now both always the quote currency, in all four quadrants, with no rate conversion. The fix introduces one narrower, still-open tradeoff, tracked as **L2b**: the two `beforeSwap`-collected quadrants price the fee off the REQUESTED amount (`params.amountSpecified`), not the executed amount, because execution is not yet known at that point in the call — a binding `sqrtPriceLimitX96` causing a genuine partial fill in those two quadrants means the fee can exceed what a proportionate share of the actual fill would justify. The two `afterSwap`-collected quadrants have no such gap (`programmableQuoteVolume` records the true realized amount there). Proven in `contracts/test/PartialFill.t.sol:test_C2_PartialFill_ExactOut_BeforeSwapUsesRequestedGross` and `test_C2_PartialFill_ExactOut_ZeroFillStillChargesFullRequestedFee`. Disclosed, not discovered.
+**L2 — RESOLVED 8 Aug 2026 (was: fee denomination could flip to the content currency in 2 of 4 quadrants).** Fixed by adding `beforeSwapReturnDelta` and collecting in `beforeSwap` for the two quadrants where the quote currency is the swap's specified side (§6.2-6.4); basis and denomination are now both always the quote currency, with no rate conversion. Two narrower issues remain open under this heading, both disclosed rather than worked around. **L2b — requested vs executed basis:** the two `beforeSwap`-collected quadrants price off `params.amountSpecified`, so a binding `sqrtPriceLimitX96` can make the charge exceed a proportionate share of the realized fill. **L2c — exact-output gross-up:** for an exact-output swap wanting `X` out, the pool releases `X + fee` and the swapper receives `X`, so the true gross quote-side amount is `X + fee` while the charge is computed on `X`; the basis is the net rather than the gross. Neither is refundable from `afterSwap`, which may only move the UNSPECIFIED currency, so a correct fix needs a gross-for-net inverse plus a revert-on-mismatch guard in the swap path. Deferred deliberately: that is a change to swap execution itself, and shipping it hurriedly risks a worse defect than the one it repairs.
 
 **L3 — Whole-supply registration proves less than it looks like it proves.** `registerPool` requires `balanceOf(msg.sender) == totalSupply()` on the content token (`contracts/src/VeritasHook.sol:301-307`). What it buys: no `PoolKey` squatting (`contracts/test/ReviewFindings.t.sol:test_Finding2_StrangerCanFrontRunRegisterPool`), codeless addresses rejected (`contracts/test/ReviewFindings.t.sol:test_RegisterPool_RejectsCodelessContentToken`), permanent 1:1 attestation<->token binding (`contracts/test/ReviewFindings.t.sol:test_OneAttestationBindsToExactlyOneToken`). What it does NOT buy: any evidence the token *is* the content — anyone can mint a fresh ERC-20 and hold 100% of it. Also a hard UX cliff for creators who pre-seeded liquidity, airdropped, used a launchpad/vesting, or hold in a Safe (`contracts/src/VeritasHook.sol:71-76`). The binding is irreversible with no unwind path (`contracts/src/VeritasHook.sol:78-80`) — adding one would need an admin.
 
@@ -247,7 +293,7 @@ No NoOp path exists: the hook never returns a delta it did not `take` (`contract
 
 ## 9. Test coverage
 
-See `TEST_PLAN.md` at the repo root for the full requirement-to-test mapping (160 tests across 13 suites, `forge test --offline` from `contracts/`). Fuzz tests and a mutation-tested stateful-invariant suite exist (`contracts/test/FuzzProperties.t.sol`, `contracts/test/invariant/`); fork tests do not. See `TEST_PLAN.md` §5 for exactly which rubric clauses that leaves unproven.
+See `TEST_PLAN.md` at the repo root for the full requirement-to-test mapping (168 tests across 14 suites, `forge test --offline` from `contracts/`). Fuzz tests and a mutation-tested stateful-invariant suite exist (`contracts/test/FuzzProperties.t.sol`, `contracts/test/invariant/`); fork tests do not. See `TEST_PLAN.md` §5 for exactly which rubric clauses that leaves unproven.
 
 ## 10. Dependencies, licence, third-party notices
 
@@ -255,4 +301,4 @@ Solidity: `^0.8.26`, Foundry, Cancun EVM, optimizer enabled at 800 runs (`contra
 
 ## 11. Deployment addresses and how to verify the permission bits
 
-Live Unichain Sepolia (chainId 1301) addresses are listed in `README.md` at the repo root; the hook was redeployed a second time on 8 Aug 2026 (current hook: `0x521D3D346294D1De78645c08996Ab774f960e5Cd`, bound to the SAME, unchanged `VeritasRegistry`/`VeritasOracle` from the earlier same-day redeploy) after adding `beforeSwapReturnDelta` to fix L2/R2 (§6.3, §7). The hook address's low bits encode its permission flags via CREATE2 mining: `contracts/script/DeployHookOnly.s.sol` mines the address against exactly `BEFORE_INITIALIZE_FLAG | AFTER_ADD_LIQUIDITY_FLAG | AFTER_REMOVE_LIQUIDITY_FLAG | BEFORE_SWAP_FLAG | AFTER_SWAP_FLAG | BEFORE_SWAP_RETURNS_DELTA_FLAG | AFTER_SWAP_RETURNS_DELTA_FLAG | AFTER_REMOVE_LIQUIDITY_RETURNS_DELTA_FLAG` — required address suffix `addr & 0x3FFF == 0x25CD`, confirmed against the live address. To independently verify a deployed hook's permission bits match `getHookPermissions()` (`contracts/src/VeritasHook.sol:339-357`), decode the deployed address's flag bits per `contracts/lib/uniswap-hooks/lib/v4-core/src/libraries/Hooks.sol` and compare against that function's return value — a mismatch would mean either the wrong bytecode was deployed or the address was not mined correctly, and `PoolManager.initialize` would reject it outright (`Hooks.HookAddressNotValid`). `contracts/verify.sh` submits the deployed source to Uniscan for verification (oracle, registry, hook). The Reactive side (`DilutionMonitorRSC` on Lasna) has not yet been redeployed against the current registry as of this writing — see `README.md` and `THREAT_MODEL.md` for current status; the on-chain dilution mechanism itself is fully proven in the Foundry suite regardless (`contracts/test/ReactiveIntegration.t.sol`).
+Live Unichain Sepolia (chainId 1301) addresses are listed in `README.md` at the repo root; the hook was redeployed a second time on 8 Aug 2026 (current hook: `0xc9f9E2b8ad61a49C83833dbBA0c7bEa86eE4A5Cd`, bound to the SAME, unchanged `VeritasRegistry`/`VeritasOracle` from the earlier same-day redeploy) after adding `beforeSwapReturnDelta` to fix L2/R2 (§6.3, §7). The hook address's low bits encode its permission flags via CREATE2 mining: `contracts/script/DeployHookOnly.s.sol` mines the address against exactly `BEFORE_INITIALIZE_FLAG | AFTER_ADD_LIQUIDITY_FLAG | AFTER_REMOVE_LIQUIDITY_FLAG | BEFORE_SWAP_FLAG | AFTER_SWAP_FLAG | BEFORE_SWAP_RETURNS_DELTA_FLAG | AFTER_SWAP_RETURNS_DELTA_FLAG | AFTER_REMOVE_LIQUIDITY_RETURNS_DELTA_FLAG` — required address suffix `addr & 0x3FFF == 0x25CD`, confirmed against the live address. To independently verify a deployed hook's permission bits match `getHookPermissions()` (`contracts/src/VeritasHook.sol:339-357`), decode the deployed address's flag bits per `contracts/lib/uniswap-hooks/lib/v4-core/src/libraries/Hooks.sol` and compare against that function's return value — a mismatch would mean either the wrong bytecode was deployed or the address was not mined correctly, and `PoolManager.initialize` would reject it outright (`Hooks.HookAddressNotValid`). `contracts/verify.sh` submits the deployed source to Uniscan for verification (oracle, registry, hook). The Reactive side (`DilutionMonitorRSC` on Lasna) has not yet been redeployed against the current registry as of this writing — see `README.md` and `THREAT_MODEL.md` for current status; the on-chain dilution mechanism itself is fully proven in the Foundry suite regardless (`contracts/test/ReactiveIntegration.t.sol`).

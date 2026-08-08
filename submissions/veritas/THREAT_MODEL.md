@@ -1,6 +1,6 @@
 # Threat model
 
-This document catalogs the threats considered against `contracts/src/VeritasHook.sol` and its dependencies (`VeritasRegistry.sol`, `VeritasOracle.sol`, `VeritasRegistryCallback.sol`), states the mitigation for each, and is explicit about residual risk that was identified and consciously accepted rather than fixed. It complements `PROPOSAL.md` (what the hook does and why) and `TEST_PLAN.md` (which rubric requirements each test proves). All test names and source citations below were verified against the actual current files, not transcribed from memory — `forge test --offline` from `contracts/` reports **160 tests passing, 0 failing** as of this writing.
+This document catalogs the threats considered against `contracts/src/VeritasHook.sol` and its dependencies (`VeritasRegistry.sol`, `VeritasOracle.sol`, `VeritasRegistryCallback.sol`), states the mitigation for each, and is explicit about residual risk that was identified and consciously accepted rather than fixed. It complements `PROPOSAL.md` (what the hook does and why) and `TEST_PLAN.md` (which rubric requirements each test proves). All test names and source citations below were verified against the actual current files, not transcribed from memory — `forge test --offline` from `contracts/` reports **168 tests passing, 0 failing** as of this writing.
 
 ## 1. Hard-fail self-check
 
@@ -154,12 +154,39 @@ Each entry: the threat, why it does or doesn't work, and the test evidence.
 
 **L2b (the one new, disclosed tradeoff).** The two `beforeSwap`-collected quadrants price the fee off `params.amountSpecified` — the REQUESTED quote amount — because the executed amount is not yet known at that point in the call. A caller-supplied `sqrtPriceLimitX96` that binds before the requested amount fully executes means the fee taken can exceed what a proportionate share of the actual fill would justify; in the extreme, an essentially-zero fill still pays the full requested fee (`test_C2_PartialFill_ExactOut_ZeroFillStillChargesFullRequestedFee`). The two `afterSwap`-collected quadrants have no such gap — they always price off the realized `BalanceDelta`, unaffected by this change. No revert-on-price-limit mitigation was added: it would trade a cost-basis edge case for a new liveness failure mode (a swapper with a legitimately narrow acceptable-price range could no longer swap at all in those two quadrants), judged the worse tradeoff given the fee is bounded to 0.35% either way (`MAX_RESERVE_FEE`).
 
+### 3.11 Sub-quantum swap splitting drained the mandatory entitlement — FIXED 8 Aug 2026
+
+**The threat.** `_splitFee` floored `gross * 1000 / 1e6` on every swap and carried nothing, so any gross below the
+1,000 wei quantum paid the immutable owner zero. Anyone routing volume as many small swaps paid the 10 bps zero times.
+Reproduced against this hook before the fix: 200 swaps of 999 wei accrued 0 wei to the owner, while the project-side
+reserve still collected 200 wei — the rounding loss fell entirely on Programmable, never on the project. Worse,
+`programmableQuoteVolume` stayed 0, so the shortfall could not be detected from on-chain state.
+
+**The fix.** A carried sub-unit numerator remainder per pool and currency (`programmableFeeRemainder`), so the
+entitlement is exact over any sequence of swaps. Claims never touch it. Volume is now recorded on every charged swap.
+Proven by `contracts/test/ProgrammableFeeCumulative.t.sol` and `invariant_programmableEntitlementIsCumulative`, and
+mutation-tested by M5. Verified on the live deployment, where the conservation identity holds exactly.
+
+**Residual.** The carry is bounded below `HOOK_FEE_DENOM` (one whole unit), so at most one sub-unit is ever
+outstanding per pool and currency at any instant.
+
+### 3.12 Anyone could initiate a Programmable claim — FIXED 8 Aug 2026
+
+**The former threat.** `claimProgrammableFee` was permissionless. No funds could be redirected (the destination was a
+hardcoded constant), but the published policy requires that only the immutable owner may *initiate* a claim, and this
+hook's own submission declared `claimAuthority: owner-only` while the code did not enforce it — a declaration that
+contradicted its implementation.
+
+**The fix.** Both claim entrypoints authenticate `msg.sender == PROGRAMMABLE_FEE_RECIPIENT`.
+`claimProgrammableFeeTo` adds the owner-selected per-claim destination the policy requires, rejecting the zero
+address and storing nothing. See `PROPOSAL.md` §6.9 for the reentrancy consequence.
+
 ## 4. Known limitations (cross-referenced against `PROPOSAL.md`'s L1–L12)
 
 Full detail and test citations live in `PROPOSAL.md` §7; summarized here with a threat-model lens:
 
 1. **L1 — reserve accrues zero below DRS 2860** (the inclusive 10 bps Programmable floor consumes the entire builder-selected fee at low DRS). Disclosed design, not a bug: low-risk content does not need a buffer.
-2. **L2 — RESOLVED 8 Aug 2026; see L2b.** Basis and denomination are now both always quote-side, in all four quadrants (§3.10). The fix's own narrower tradeoff, **L2b — before-quadrant basis is the requested amount, not the executed amount** (a binding price limit can make the two `beforeSwap`-collected quadrants overcharge relative to a partial fill), remains open and disclosed in the contract header (R2/R2b) and §3.10.
+2. **L2 — RESOLVED 8 Aug 2026; L2b and L2c remain open.** Basis and denomination are now both always quote-side in all four quadrants (§3.10). Still open: **L2b**, the two `beforeSwap`-collected quadrants price off the REQUESTED amount, so a binding price limit can overcharge relative to the realized fill; and **L2c**, for exact-output the true gross is `X + fee` while the charge is computed on `X`. Neither is refundable from `afterSwap` (unspecified currency only). Deferred deliberately rather than rushed - see `PROPOSAL.md` §7 L2.
 3. **L3 — whole-supply registration proves anti-squat, not anti-impersonation.** See §3.5.
 4. **L4 — the 30-day maturity path makes JIT capture of the *residual* `donate` fallback easier to time**, not the primary per-position path. See §3.1.
 5. **L5 — reserve can be stranded with no in-range liquidity.** See §3.6.
