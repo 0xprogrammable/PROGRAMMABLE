@@ -13,7 +13,7 @@ buyback-and-burn, and a stress-mode market-support mechanism.
 | --- | --- |
 | Outcome | Contributors get a proportional claim on the launched EGR token once the soft-cap-gated presale finalizes; ongoing traders pay a hook-owned tax that funds staker rewards, a burn-and-treasury reserve, and a market-support buyback; LPs who exit within 7 days of opening a position pay a 300 bps exit tax. |
 | Pool | currency0 = native ETH, currency1 = EGR (fixed 100,000,000 supply). One canonical PoolKey, registered once via `configurePool()`. Static 3000 (0.30%) LP fee. Alternative pools using the same hook address receive zero tax and zero effect. |
-| During a trade | Buys: flat 5% tax. Sells: continuous 10%-20% anti-dump tax as price runs above a rolling snapshot. Tax always lands on the swap's unspecified side (H-1 audit fix), so both exact-input and exact-output settle correctly on the real PoolManager. |
+| During a trade | Buys: flat 5% tax. Sells: continuous 10%-20% anti-dump tax as price runs above a rolling snapshot. Egregore's own tax always lands on the swap's unspecified side (H-1 audit fix), so both exact-input and exact-output settle correctly on the real PoolManager. The mandatory 10 bps Programmable fee is separate and always denominated in ETH, taken in `beforeSwap` in the two quadrants where ETH is the specified currency. |
 | Value | 5% builder/dev fee (hardcoded `DEV_FEE_RECIPIENT`), 10 bps mandatory Programmable fee (hardcoded `PROGRAMMABLE_FEE_RECIPIENT`), then 50/30/20 (normal) or 20/50/30 (stress) reward/reserve/market-support split of the remainder. Reserve flush burns 20%, routes 10% to LP incentives, pays 70% to the treasury recipient. Stress-mode support release buys EGR back through the pool and burns half. |
 | Creator choices | Soft cap, hard cap, presale duration, guardian/treasuryRecipient/builderManager/securityRecipient addresses — all fixed at deploy time via the `EgregorePresale` constructor. |
 | Fixed platform rules | Tax rates, split percentages, the 5% builder fee, the mandatory 10 bps Programmable fee, the 7-day LP-exit window, the unstake-tax decay schedule and the reservoir release rate are all compile-time constants with no setter. |
@@ -29,11 +29,12 @@ buyback-and-burn, and a stress-mode market-support mechanism.
 `hook.used = true`. Egregore needs a v4 hook because the flywheel requires atomic callback execution the token or a
 router alone cannot provide: `afterSwap` charges a hook-owned tax on the unspecified side of every swap (buy vs sell,
 exact-in vs exact-out); `afterRemoveLiquidity` charges a separate short-term LP-exit tax via return delta; `beforeSwap`
-refreshes an anti-dump price snapshot; and the hook's own `unlockCallback` runs protocol-owned buybacks through the same
-PoolKey without taxing itself. None of this is expressible as a plain ERC20 transfer tax or an external fee switch.
+refreshes an anti-dump price snapshot and takes the mandatory quote-side fee in the two quadrants where ETH is the
+specified currency; and the hook's own `unlockCallback` runs protocol-owned buybacks through the same PoolKey. None of
+this is expressible as a plain ERC20 transfer tax or an external fee switch.
 
 Egregore integrates the mandatory Programmable fee policy into this one custom hook rather than implementing the
-separate standard fee-hook profile; see `programmableFee` and the single largest open question below. All other
+separate standard fee-hook profile; see `programmableFee` below. All other
 protocol logic (presale, token, staking, treasury, buyback) is contract-only; there is no app, game, service, keeper,
 oracle or indexer surface in this proposal.
 
@@ -49,17 +50,22 @@ intended to run indefinitely with no retirement path beyond the bounded guardian
 Two assets: native ETH (quote) and EGR (launched, fixed-supply, burnable via OpenZeppelin's ERC20Burnable). Canonical
 PoolKey: `(ETH, EGR, 3000, 60, EgregoreHook)`, formed once at presale finalize by `EgregoreBootstrapper` seeding a
 single full-range position from the raised ETH and a fixed 49,500,000 EGR allocation. No router is bundled; any
-standard v4 router works. All four swap modes are supported; no partial fills (v4 exact-in/out swaps against this pool
-either fully execute or revert).
+standard v4 router works. All four swap modes are supported. A caller-supplied `sqrtPriceLimitX96` can bind and produce
+a partial fill; the mandatory fee is always charged on the amount actually executed, never on the amount requested.
 
 `hook.used = true`. Permissions: `afterInitialize`, `beforeAddLiquidity`, `afterRemoveLiquidity`,
-`afterRemoveLiquidityReturnDelta`, `beforeSwap`, `afterSwap`, `afterSwapReturnDelta` are enabled; every other flag
-(including `beforeSwapReturnDelta`) is false. Every callback authenticates `onlyPoolManager`; `configurePool`/`activate`
-authenticate `onlyPresale`. The hook is CREATE2-deployed once by `EgregoreHookDeployer` (a small factory owned by the
-presale, not a general registry) and admits exactly one PoolKey for its lifetime. Return-delta shape: a single
+`afterRemoveLiquidityReturnDelta`, `beforeSwap`, `beforeSwapReturnDelta`, `afterSwap`, `afterSwapReturnDelta` are
+enabled; every other flag is false. The resulting permission mask is `0x19cd` and the CREATE2 salt is mined against it.
+Every callback authenticates `onlyPoolManager`; `configurePool`/`activate` authenticate `onlyPresale`. The hook is
+CREATE2-deployed once by `EgregoreHookDeployer` (a small factory owned by the presale, not a general registry) and
+admits exactly one PoolKey for its lifetime. Return-delta shape: a `BeforeSwapDelta` whose specified component is a
+single non-negative `int128` on the quote currency and whose unspecified component is always exactly zero; a single
 non-negative `int128` against the unspecified currency for `afterSwap`; a `BalanceDelta` with up to two non-negative
-components for `afterRemoveLiquidity`. Self-calls (the hook's own buyback swap) are always suppressed in both
-`beforeSwap` and `afterSwap`.
+components for `afterRemoveLiquidity`.
+
+Uniswap v4 suppresses a hook's own callbacks entirely when that hook calls the PoolManager, so the protocol buyback
+never reaches `beforeSwap` or `afterSwap`. That path is not exempt from the mandatory fee: `_executeBuyback` charges it
+internally, exactly once, on the gross ETH the buyback moves.
 
 ## Product integration plan
 
@@ -70,15 +76,38 @@ API, or indexer surface in this proposal. `routingAndDiscoverability.routingMode
 
 **Mandatory Programmable fee** (`programmableFee`): `effective = max(selected, 10 bps)`; Egregore's selected totals
 (500 bps buy, 1000-2000 bps sell) are always far above the 10 bps floor, so `effective` always equals the selected
-total and the split is `10 bps Programmable + (selected - 10 bps) project`, never additive. Basis is the swap's gross
-volume on the same side Egregore's own tax already charges — **not** always the fixed quote asset via a mixed
-before/after path per the canonical quadrant table; see the single unresolved question below.
-`collection.status = pending-hook-integration` for exactly that reason, even though the 10-bps carve-out itself is
-implemented and tested. Immutable owner and sole claim authority: `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`.
-`claimProgrammableFees()` is permissionless and always pays that address; only that address can redirect a claim via
-`claimProgrammableFeesTo(recipient)`. Accrued as a `claimable-liability` keyed by `(poolId, currency, owner)`, not
-auto-transferred. The mandatory fee applies to swap tax only, not to the LP-exit or unstake taxes (also disclosed as
-an open question).
+total and the split is `10 bps Programmable + (selected - 10 bps) project`, never additive.
+
+Basis is the canonical fixed quote asset — always ETH (`currency0`) — in all four direction/exactness quadrants, via
+the quadrant-dependent path the policy's own table prescribes for a `currency0` quote asset:
+
+| Quadrant | Quote asset is | Path |
+| --- | --- | --- |
+| `zeroForOne` exact input | specified | `before-swap-return-delta` |
+| `zeroForOne` exact output | unspecified | `after-swap-return-delta` |
+| `oneForZero` exact input | unspecified | `after-swap-return-delta` |
+| `oneForZero` exact output | specified | `before-swap-return-delta` |
+
+Where ETH is the unspecified currency, the whole charge settles in `afterSwap` and the 10 bps is carved out of it.
+Where ETH is the specified currency, an `afterSwap` delta cannot reach it, so `beforeSwap` removes the quote-side fee
+up front and `afterSwap` then reconciles it against the amount the swap **actually executed**: the liability accrues
+exactly 10 bps of executed gross ETH, and because execution can never exceed the request, any over-reserved remainder
+is routed to the project rather than to the Programmable liability. Partial fills are therefore charged on executed
+volume, never on requested volume. On those two quadrants the project's own share is taken on the EGR leg at
+`selected - 10 bps`, which is what keeps the total non-additive.
+
+Uniswap v4 skips a hook's own swap callbacks, so protocol-owned buybacks cannot be charged through the callback path.
+`selfCallPolicy = same-pool-swap-fee-enforced-internally`: `_executeBuyback` reserves the fee before swapping, swaps
+only the remainder, and accrues exactly 10 bps of the gross ETH the buyback moved — once, backed by ETH the hook
+already holds.
+
+Immutable owner and sole claim authority: `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. Both `claimProgrammableFees()`
+and `claimProgrammableFeesTo(recipient)` are restricted to that address; no other role, administrator or arbitrary
+caller can trigger, sweep, redirect or mutate the liability, and neither entry point is gated on the hook being active
+or unpaused, so the owner can claim at any time. Nothing stores a mutable recipient, so an owner-selected destination
+applies to that one claim only. Accrued as a `claimable-liability` keyed by `(poolId, currency, owner)`, not
+auto-transferred. The mandatory fee applies to swaps on the canonical pool; the LP-exit and unstake taxes are project
+charges outside the policy's swap basis, and are not diverted into the Programmable liability.
 
 **Egregore's own tax**: builder/dev 5% (hardcoded `DEV_FEE_RECIPIENT`, `flushBuilderFees()` permissionless), then the
 remainder splits 50/30/20 (normal) or 20/50/30 (stress) into a staker reward pool, a reserve, and a market-support
@@ -88,10 +117,20 @@ unstake-tax, reward-claim, treasury-flush, programmable-fee-claim).
 
 ## Semantic examples
 
-- Buy of 100 EGR gross output, normal mode: tax = 5 EGR. Programmable share = grossAmount * 10/10000 = 0.1 EGR
-  (carved out of the 5 EGR, not added). Remaining 4.9 EGR: builder 0.245 EGR (5%), then 4.655 EGR splits 2.3275/1.3965/0.931
-  EGR (50/30/20 reward/reserve/support). Verified in `test/egregore.spec.js` and against the real PoolManager in
-  `test/egregore.v4.spec.js`.
+- Buy with an exact input of 1 ETH producing 100 EGR gross output, normal mode. ETH is the specified currency, so
+  `beforeSwap` reserves 1 * 10/10000 = 0.001 ETH and the pool swaps the remaining 0.999 ETH. `afterSwap` measures the
+  executed gross quote volume as 0.999 + 0.001 = 1 ETH, so exactly 0.001 ETH is owed and the whole reservation is the
+  liability with nothing left over. The project's share is taken on the EGR leg at the reduced rate:
+  100 * 490/10000 = 4.9 EGR, of which builder 0.245 EGR (5%), then 4.655 EGR splits 2.3275/1.3965/0.931 EGR
+  (50/30/20 reward/reserve/support). Total charge is still 5% of the trade, split 0.1% Programmable + 4.9% project,
+  never additive. Verified in `test/egregore.spec.js` and against the real PoolManager in `test/egregore.v4.spec.js`.
+- Same buy, but requested as an exact output while a price limit binds so only 0.4 ETH of the input executes: the
+  liability accrues 0.4 * 10/10000 = 0.00004 ETH, not 0.001 ETH. The difference between what was reserved and what is
+  owed is routed to the project, never stranded and never over-charged to the Programmable owner. Verified by
+  `charges the quote fee on executed volume, not requested, when an exact-input buy partially fills`.
+- Buy with an exact output of EGR, or sell with an exact input of EGR: ETH is the unspecified currency, so there is no
+  `beforeSwap` leg at all and the entire charge settles in `afterSwap`, with 10 bps of the executed ETH carved out of
+  it before the builder/reward/reserve/support split runs.
 - Sell pushing price 11%+ above the rolling snapshot: tax hits the 20% surge ceiling; below that, the curve is linear
   between 10% and 20%. Verified by `ramps the sell tax continuously between base and surge`.
 - LP exit within 7 days of opening: 3% tax on both withdrawn currencies. LP exit after 7 days: 0% tax. Verified by
@@ -112,17 +151,20 @@ unstake-tax, reward-claim, treasury-flush, programmable-fee-claim).
 - **Builder-stated**: the deploy-time role addresses (guardian, treasuryRecipient, builderManager, securityRecipient)
   are placeholders selected at deployment; no specific production addresses are claimed live in this proposal.
 
-## Open decisions
+## Resolved decisions
 
-1. Should Egregore adopt the canonical fixed-quote-asset (always-ETH) Programmable fee basis via a
-   `beforeSwapReturnDelta` hook permission and a re-mined CREATE2 salt, or is the current same-side-as-protocol-tax
-   implementation an acceptable variant for this custom hook?
-2. Should the mandatory Programmable fee also apply to the short-term LP-exit tax, given that LP removal is not
-   literally a "swap" but does move value out of the canonical pool?
-3. Should the one-time protocol-owned liquidity position gain an explicit lock/forwarder/unlock path, or is permanent
-   bootstrapper custody with no removal path the intended design?
-4. What monitoring, alerting and indexing (if any) should back the emitted events before or after any future mainnet
-   deployment?
+These were open questions in the first revision of this proposal. They are now settled in source and tests.
+
+1. **Fee basis.** Egregore adopts the canonical fixed-quote-asset (always-ETH) basis, via the
+   `beforeSwapReturnDelta` permission and a re-mined CREATE2 salt. The permission mask is now `0x19cd`; the salt is
+   mined against the new hook bytecode by `scripts/lib/hook-planner.js`, which the planner spec exercises.
+2. **LP-exit tax.** The mandatory fee applies to swaps on the canonical pool only. Removing liquidity is not a swap,
+   so the short-term LP-exit tax stays a project charge and is never routed into the Programmable liability.
+3. **Protocol-owned liquidity.** Permanent bootstrapper custody with no removal path is the intended design; the
+   position is not withdrawable by any role, which is what makes the launch liquidity non-rugpullable.
+4. **Monitoring and indexing.** All protocol state is reconstructable from emitted events alone
+   (`dataReconstruction` in `submission.json` describes the intended events-only indexer). No indexer, keeper or
+   off-chain service is part of this submission, and none is required for the contracts to function.
 
 This is a public, non-confidential proposal. The skill and local checker do not prove that fees are collected live.
 Acceptance, independent review, product integration, deployment, runtime matching, lifecycle evidence, monitoring,

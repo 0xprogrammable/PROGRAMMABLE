@@ -43,10 +43,14 @@ returns a zero delta instead of reverting).
 
 ## Value flows and accounting
 
-See `submission.json.valueFlows` for the full settlement description of every value-moving action. Summary: the
-unspecified-side tax (afterSwap) is taken via `poolManager.take()` and settled by the hook's own returned `int128`
-against the unspecified currency (H-1 audit fix — the hook never taxes the specified side, so the take() always
-settles instead of leaving a dangling delta); the LP-exit tax (afterRemoveLiquidity) works the same way per-currency.
+See `submission.json.valueFlows` for the full settlement description of every value-moving action. Summary:
+Egregore's own tax (afterSwap) is taken via `poolManager.take()` and settled by the hook's own returned `int128`
+against the unspecified currency (H-1 audit fix — the project tax never lands on the specified side, so the take()
+always settles instead of leaving a dangling delta); the LP-exit tax (afterRemoveLiquidity) works the same way
+per-currency. The mandatory Programmable fee is separate: in the two quadrants where ETH is the specified currency it
+is taken in `beforeSwap` via a `BeforeSwapDelta` whose specified component is backed by a `take()` for exactly the
+amount returned, and reconciled in `afterSwap` against the executed amount, so it likewise never leaves a dangling
+delta.
 No ERC-6909 claims are used. `customAccounting.conservationEquation`: the hook's own token/ETH balance always equals
 the sum of every accounting bucket plus staked principal, minus `totalEgrBurned` for EGR.
 
@@ -56,8 +60,8 @@ Egregore's own tax is **static** in rate structure (fixed formulas, no admin-adj
 single constant: buys are flat 500 bps; sells follow a continuous 1000-2000 bps curve driven by a rolling price
 snapshot (anti-dump, not price-manipulable by splitting a dump into smaller swaps, since the curve is continuous and
 keyed to a 5-minute-refreshed snapshot, not the immediately preceding swap). The mandatory Programmable fee
-(10 bps, `programmableFee`) is modeled fully in `submission.json`; see PROPOSAL.md's fee section and the disclosed gap
-versus the canonical fixed-quote-asset basis.
+(10 bps, `programmableFee`) is modeled fully in `submission.json` and uses the canonical fixed-quote-asset basis —
+always ETH, measured on executed volume — via the quadrant-dependent before/after path; see PROPOSAL.md's fee section.
 
 Recipient shares (`hook.feeMechanism.recipients`) sum to 1,000,000 ppm: builder/dev 50,000 ppm to the immutable
 `DEV_FEE_RECIPIENT`; the remaining 950,000 ppm splits into three internal buckets (staker reward 475,000 ppm, reserve
@@ -106,7 +110,7 @@ reserve-reconstruction solvency equation) should one be built later; none of it 
 | guardian | constructor address | no (role itself immutable) | none | Pauses user actions/tax capture for up to 7 days (auto-expires); `emergencyUnstake` always remains available. |
 | treasuryRecipient | two-step transfer | yes | none beyond the two-step accept | Only changes fee-split percentages / unlocks `releaseMarketSupport`; never moves staked principal or blocks unstaking. |
 | builderManager (deploy-time) | n/a — `DEV_FEE_RECIPIENT` is a compile-time constant | no | n/a | None. |
-| PROGRAMMABLE_FEE_RECIPIENT | itself only, via `claimProgrammableFeesTo` | no (address itself immutable) | none | None. |
+| PROGRAMMABLE_FEE_RECIPIENT | itself only, via `claimProgrammableFees` or `claimProgrammableFeesTo`; every other caller reverts | no (address itself immutable) | none | None. |
 | presale | immutable, set once at hook construction | no | none | None; one-shot setup inside the same `finalize()` transaction. |
 | securityRecipient | constructor address | no | none | None; one-time allocation. |
 
@@ -114,8 +118,10 @@ reserve-reconstruction solvency equation) should one be built later; none of it 
 
 - No independent third-party audit. The project has been reviewed and iteratively hardened across two AI-assisted
   audit passes plus a dedicated review for this submission; local tests do not constitute an audit.
-- The mandatory Programmable fee does not (yet) use the canonical fixed-quote-asset basis; see the open decisions in
-  PROPOSAL.md.
+- Enabling `beforeSwapReturnDelta` is inherently the highest-risk hook permission, because a specified-side delta can
+  in principle consume the whole swap amount. Egregore declares `zeroAmmLeg: forbidden` and
+  `specifiedDeltaCanConsumeEntireAmount: false`, and the returned component is bounded to 10 bps of the specified
+  amount, but this is exactly the surface an independent specialist review should target.
 - No indexer, monitoring, or incident-response tooling is built; `operations.monitoring`/`incidentResponse` in
   `submission.json` describe only what the guardian pause and emitted events already provide, not a running system.
 - This proposal targets Ethereum Mainnet only; `productionPoolManagerForChain` only recognizes Mainnet and Sepolia.
