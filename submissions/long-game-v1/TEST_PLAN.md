@@ -1,6 +1,6 @@
 # Test plan
 
-The exact evidence target is source revision `67512e3b7ea1cff4e214d31c209816278b374c5d` and review-target hash `sha256:b2a42a90b9236ab705b6fabb5cd273fea928b6a7eb70b57bf46a965aec9bd234`.
+The exact evidence target is review-envelope revision `6ff54ae2d8202d889176bb60ec44e99f602fa68d`, executable baseline `67512e3b7ea1cff4e214d31c209816278b374c5d`, review-target hash `sha256:f9f42aa1275d4e69b9ef769cdea7aa536b2cc7cb933789dd659e9ac4c420b93e`, and review-build-manifest digest `sha256:87baf34d59bb40afea1b6cd390928414bdd656d4ae309abc744db5f865b8845c`.
 
 ## Completed local evidence
 
@@ -13,11 +13,10 @@ The exact evidence target is source revision `67512e3b7ea1cff4e214d31c209816278b
 - Run the React demo’s four unit tests and Vite production build. The recorded large-chunk warning is a demo optimization item, not a contract gate.
 - Validate the exact `launch.json` against the `programmable:production` autonomous launch contract and rebuild the deterministic source/dependency closure.
 
-## Required independent and platform gates
+## Public review witness and remaining platform gates
 
-- Independently rebuild from the exact commit and dependency lock; rerun Foundry, fork, gas, size, and invariant suites in an isolated environment.
-- Independently review the recorded Slither 0.11.4 and Forge lint dispositions; developer-triaged static analysis is not an audit.
-- Review v4 delta signs, exact-output inversion, cumulative rounding, custody, solvency, intent authentication, reentrancy, unsupported tokens, economic manipulation, MEV, and the deliberate absence of recovery powers.
+- Public Actions run `31230698407` rebuilt the exact review commit and lock/config closure, reproduced the deployable artifacts, and reran Foundry, fork, size, invariant, and Slither commands in an isolated runner.
+- `CODEX_SECURITY_REVIEW.md` reviews v4 delta signs, exact-output inversion, cumulative rounding, custody, solvency, intent authentication, reentrancy, unsupported tokens, economic behavior, and the deliberate absence of recovery powers. Maintainers must verify its attribution, hash bindings, and dispositions; it is not a third-party human audit.
 - Execute the real-token initializer only after approval, funding authorization, fresh dependency-code checks, fresh price review, and final signed deployment verification.
 - Build and test provider-owned quoting, SDK actions, event indexing/reorg recovery, reconciliation, monitoring, registry, routing, and incident-response surfaces separately.
 

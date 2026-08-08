@@ -4,7 +4,9 @@
 
 **Model id:** `long-game-v1`
 
-**Exact source:** `67512e3b7ea1cff4e214d31c209816278b374c5d`
+**Exact review envelope:** `6ff54ae2d8202d889176bb60ec44e99f602fa68d`
+
+**Reviewed executable baseline:** `67512e3b7ea1cff4e214d31c209816278b374c5d`
 
 Long Game is an immutable Uniswap v4 hook system for custodied, non-transferable cost-basis positions. Verified exact-input buyers receive withdrawable positions backed by actual V4 output held by the hook. Verified sellers recover the sell-side project fee except for a maturity-decaying share of actual profit; that penalty rewards mature shares owned by other holders.
 
@@ -26,6 +28,6 @@ Position owners may withdraw V4 at any time without a fee. A verified sell destr
 
 ## Evidence and boundary
 
-The exact source revision records 65 passing Foundry tests across four suites, four stateful invariants with 8,192 calls and zero handler reverts, passing production contract-size checks, a full clean-clone pinned mainnet-fork launch and real PoolManager settlement rehearsal, triaged Slither 0.11.4 findings, and four passing React/Vite demo tests plus a production build. The refreshed Programmable v4 Builder reports `PROTOTYPE_READY`, and its static package intake reports `READY` without package errors or warnings.
+The exact review envelope publishes an attributable Codex semantic review, a canonical compiler/dependency/artifact manifest, and a successful exact-head GitHub Actions witness. That witness reproduced 65 passing Foundry tests across four suites, four stateful invariants with 8,192 calls and zero handler reverts, production contract-size checks, the pinned mainnet-fork launch and real PoolManager settlement rehearsal, and the classified Slither 0.11.4 result. The executable source, tests, launch scripts, specification, package lock, and explicit remappings remain byte-identical to baseline `67512e3b7ea1cff4e214d31c209816278b374c5d`.
 
-These are builder-declared local results, not an audit, acceptance, deployment, source/runtime verification, routing approval, or availability claim. Maintainer architecture review, independent security/economic review, quoting, indexing, monitoring, registry integration, routing-provider work, and final signed verification remain separate gates.
+The Codex record covers the requested swap, authorization, settlement, custody, accounting, rollback, permanent-liquidity, claim, exit, and failure paths and dispositions. It is an automated review, not a third-party human audit, acceptance, deployment, source/runtime verification, routing approval, security guarantee, or availability claim. Maintainer verification of the exact record and hashes remains open. Quoting, indexing, monitoring, registry integration, routing-provider work, and final signed verification remain separate gates.

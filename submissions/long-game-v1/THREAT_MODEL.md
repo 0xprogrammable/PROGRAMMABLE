@@ -31,6 +31,8 @@ initialBasis = soldBasis + withdrawnBasis + remainingBasis
 
 ## Residual risks
 
-Independent review is still required for v4 delta semantics, exact-output behavior on ordinary routes, composite rounding and scaled dust, custody loss from undiscovered logic errors, sybil splitting, router compatibility, MEV, pinned-price staleness, launch funding, dependency-code drift, and the deliberate inability to recover accidental unsupported transfers. V1 is intentionally limited to the existing fixed V4/WETH pair and has no generic token-deployment path. The existing V4 token is bound as fixed-supply, non-rebasing, non-fee-on-transfer behavior; any contradictory onchain observation must halt launch.
+The attributable Codex automated review record covers v4 delta semantics, exact-output behavior on ordinary routes, composite rounding and scaled dust, custody, authorization, settlement, rollback, permanent liquidity, claims, exits, and code-level failure paths against the unchanged executable baseline. Maintainer verification of its identity, hashes, witnesses, and finding dispositions remains required. The record is not a third-party human audit or security guarantee.
+
+Residual product risks include sybil splitting, router compatibility, MEV, pinned-price staleness, launch funding, dependency-code drift, and the deliberate inability to recover accidental unsupported transfers. V1 is intentionally limited to the existing fixed V4/WETH pair and has no generic token-deployment path. The existing V4 token is bound as fixed-supply, non-rebasing, non-fee-on-transfer behavior; any contradictory onchain observation must halt launch.
 
 Platform quoting, indexing, reorg recovery, monitoring, registry, routing-provider approval, and final runtime/source verification are outside the submitted contract system and remain separate maintainer-owned gates. Builder-declared tests are evidence for review, not an audit or production guarantee.
