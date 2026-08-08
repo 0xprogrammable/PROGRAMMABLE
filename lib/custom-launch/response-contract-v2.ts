@@ -7,6 +7,7 @@ const GITHUB_USER_ID_V2 = /^[1-9][0-9]{0,19}$/u;
 const UNSIGNED_DECIMAL_V2 = /^(?:0|[1-9][0-9]{0,77})$/u;
 const GIT_OID_V2 = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
 const BASE64URL_V2 = /^[A-Za-z0-9_-]+$/u;
+const LIST_CURSOR_V3 = /^[A-Za-z0-9_-]{16,512}$/u;
 const APPLICATION_ID_V3 = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const APPLICATION_HANDLE_V3 = /^github-[0-9a-f]{64}$/u;
 const FEE_ID_V1 = /^[a-z0-9][a-z0-9._:-]{0,127}$/u;
@@ -101,7 +102,7 @@ function validateApplicationListV2(value: unknown): void {
   const applications = arrayOf(record.applications, validateApplicationSummaryV2, 1_000);
   const handles = applications.map((candidate) => (candidate as JsonRecordV2).applicationHandle);
   if (new Set(handles).size !== handles.length) mismatch();
-  nullable(record.nextCursor, (candidate) => boundedString(candidate, 1, 4_096));
+  nullable(record.nextCursor, (candidate) => regexString(candidate, LIST_CURSOR_V3, 512));
 }
 
 function validateApplicationSummaryV2(value: unknown): void {
