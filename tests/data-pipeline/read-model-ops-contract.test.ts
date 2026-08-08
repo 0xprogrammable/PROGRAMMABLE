@@ -615,7 +615,7 @@ function publicFetch(healthStatus = "healthy") {
 function postPromotionInput(fetchImpl = publicFetch()) {
   return {
     rootDirectory: ROOT,
-    targetUrl: "https://programmable.family",
+    targetUrl: "https://programmable.market",
     expectedDeploymentId: DEPLOYMENT_ID,
     expectedGitHead: GIT_HEAD,
     token: "vercel-test-token",
@@ -655,7 +655,7 @@ describe("post-promotion route verification", () => {
     await expect(
       verifyPostPromotion({
         ...postPromotionInput(),
-        targetUrl: "https://programmable.family/untrusted",
+        targetUrl: "https://programmable.market/untrusted",
       }),
     ).rejects.toThrow("HTTPS origin");
   });
@@ -689,7 +689,7 @@ describe("post-promotion route verification", () => {
 
   it("captures a rollback binding and detects prior auto-promotion", async () => {
     const binding = await resolveProductionBinding({
-      targetUrl: "https://programmable.family",
+      targetUrl: "https://programmable.market",
       token: "vercel-test-token",
       teamId: "team_programmable_test",
       projectId: PROJECT_ID,
@@ -703,7 +703,7 @@ describe("post-promotion route verification", () => {
     );
     await expect(
       resolveProductionBinding({
-        targetUrl: "https://programmable.family",
+        targetUrl: "https://programmable.market",
         rejectGitHead: GIT_HEAD,
         token: "vercel-test-token",
         teamId: "team_programmable_test",
@@ -731,7 +731,7 @@ describe("post-promotion route verification", () => {
 
     await expect(
       resolveProductionBinding({
-        targetUrl: "https://programmable.family",
+        targetUrl: "https://programmable.market",
         token: "vercel-test-token",
         teamId: "team_programmable_test",
         projectId: PROJECT_ID,

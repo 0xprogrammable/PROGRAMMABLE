@@ -142,7 +142,7 @@ describe("Docs navigation state", () => {
     ).toBe("formats");
   });
 
-  it("places the reading marker below whichever Docs control is fixed", () => {
+  it("places the reading marker below every fixed Docs control", () => {
     expect(
       calculateDocsReadingOffset({
         mobileNavigationHeight: 0,
@@ -157,6 +157,13 @@ describe("Docs navigation state", () => {
         stickyToolsHeight: 0,
       }),
     ).toBe(154);
+    expect(
+      calculateDocsReadingOffset({
+        mobileNavigationHeight: 50,
+        scrollPaddingTop: 84,
+        stickyToolsHeight: 52,
+      }),
+    ).toBe(206);
   });
 
   it("keeps topic scrolling short, smooth and distance-aware", () => {
@@ -247,8 +254,13 @@ describe("Docs navigation state", () => {
     expect(deepResults).toEqual([]);
     expect(stockResults).toEqual([]);
     expect(classicResults[0]?.title).toBe("Classic and Custom labels");
-    expect(customResults[0]?.title).toBe("Classic and Custom labels");
-    expect(customResults[0]?.description).toContain("Programmable Classic");
+    expect(customResults[0]?.title).toBe("Custom Registry");
+    expect(customResults[0]?.description).toContain(
+      "authenticated Custom provenance",
+    );
+    expect(
+      customResults.some((result) => result.title === "Classic and Custom labels"),
+    ).toBe(true);
   });
 
   it("opens keyboard navigation on the first or last result", () => {

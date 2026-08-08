@@ -21,7 +21,7 @@ const plexMono = IBM_Plex_Mono({
 const siteUrl = new URL("https://programmable.market");
 const siteDescription = "Tokens that behave how you imagine.";
 const socialImageUrl = new URL(
-  "/og/programmable-loop-og-1200x630.png",
+  "/og/programmable-night-garden-og-1200x630.png",
   siteUrl,
 );
 
@@ -35,24 +35,24 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/favicon-pastel-v3.ico", sizes: "any" },
+      { url: "/favicon-warm-ivory-v1.ico", sizes: "any" },
       {
-        url: "/favicon-pastel-v3-16x16.png",
+        url: "/favicon-warm-ivory-v1-16x16.png",
         sizes: "16x16",
         type: "image/png",
       },
       {
-        url: "/favicon-pastel-v3-32x32.png",
+        url: "/favicon-warm-ivory-v1-32x32.png",
         sizes: "32x32",
         type: "image/png",
       },
       {
-        url: "/favicon-pastel-v3-48x48.png",
+        url: "/favicon-warm-ivory-v1-48x48.png",
         sizes: "48x48",
         type: "image/png",
       },
     ],
-    shortcut: "/favicon-pastel-v3.ico",
+    shortcut: "/favicon-warm-ivory-v1.ico",
     apple: [
       {
         url: "/apple-touch-icon.png",
@@ -75,7 +75,7 @@ export const metadata: Metadata = {
         width: 1200,
         height: 630,
         type: "image/png",
-        alt: "Programmable loop mark in a watercolor wildflower meadow",
+        alt: "A starry night garden with pink wildflowers and a violet glow",
       },
     ],
   },
@@ -87,7 +87,7 @@ export const metadata: Metadata = {
     images: [
       {
         url: socialImageUrl,
-        alt: "Programmable loop mark in a watercolor wildflower meadow",
+        alt: "A starry night garden with pink wildflowers and a violet glow",
       },
     ],
   },
@@ -96,7 +96,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   colorScheme: "dark",
   viewportFit: "cover",
-  themeColor: "#050b1c",
+  themeColor: "#010103",
 };
 
 export default function RootLayout({

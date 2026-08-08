@@ -772,7 +772,7 @@ export function buildTokenDetailMetrics(
         }
       : null,
     {
-      label: "Type",
+      label: "Category",
       value: "Classic",
     },
     volumeOverride ??
@@ -923,6 +923,89 @@ function MetricGrid({ metrics }: { metrics: TokenMetric[] }) {
         </div>
       ))}
     </dl>
+  );
+}
+
+function VerifiedLaunchRecord({
+  token,
+  explorerBase,
+}: {
+  token: LauncherToken;
+  explorerBase: string | null;
+}) {
+  const launchedAt = Number.isFinite(Date.parse(token.launchedAt))
+    ? new Intl.DateTimeFormat("en", {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: "UTC",
+      }).format(new Date(token.launchedAt))
+    : token.launchedAt;
+
+  return (
+    <details className={styles.launchRecord}>
+      <summary>
+        <span>Verified launch record</span>
+        <small>Onchain provenance</small>
+      </summary>
+      <dl>
+        <div>
+          <dt>Category</dt>
+          <dd>Classic</dd>
+        </div>
+        <div>
+          <dt>Model</dt>
+          <dd>{token.launchModelVersion ?? token.launchModel ?? "classic"}</dd>
+        </div>
+        <div>
+          <dt>Launched</dt>
+          <dd><time dateTime={token.launchedAt}>{launchedAt} UTC</time></dd>
+        </div>
+        {token.creatorAddress ? (
+          <div>
+            <dt>Creator</dt>
+            <dd>
+              {explorerBase ? (
+                <a href={`${explorerBase}/address/${token.creatorAddress}`} target="_blank" rel="noreferrer">
+                  <code>{token.creatorAddress}</code>
+                </a>
+              ) : (
+                <code>{token.creatorAddress}</code>
+              )}
+            </dd>
+          </div>
+        ) : null}
+        <div>
+          <dt>Hook</dt>
+          <dd>
+            {explorerBase ? (
+              <a href={`${explorerBase}/address/${token.hookAddress}`} target="_blank" rel="noreferrer">
+                <code>{token.hookAddress}</code>
+              </a>
+            ) : (
+              <code>{token.hookAddress}</code>
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt>Pool</dt>
+          <dd><code>{token.poolId}</code></dd>
+        </div>
+        {token.launchTransactionHash ? (
+          <div>
+            <dt>Launch transaction</dt>
+            <dd>
+              {explorerBase ? (
+                <a href={`${explorerBase}/tx/${token.launchTransactionHash}`} target="_blank" rel="noreferrer">
+                  <code>{token.launchTransactionHash}</code>
+                </a>
+              ) : (
+                <code>{token.launchTransactionHash}</code>
+              )}
+            </dd>
+          </div>
+        ) : null}
+      </dl>
+    </details>
   );
 }
 
@@ -1413,6 +1496,10 @@ function TokenDetailContent({
               onMarketCapChange={setChartMarketCap}
             />
             <MetricGrid metrics={metrics} />
+            <VerifiedLaunchRecord
+              token={token}
+              explorerBase={explorerBase}
+            />
           </div>
         </section>
 
@@ -1554,6 +1641,13 @@ function TokenDetailContent({
           )}
         </aside>
 
+        {token.launchModel === "deep" &&
+        token.growthTargetNativeWei &&
+        token.totalNativeAddedToLiquidityWei &&
+        token.tokenReserveRaw ? (
+          <DeepLiquiditySummary token={token} />
+        ) : null}
+
         <div className={styles.communityShell}>
           <TokenCommunityChat
             memberCount={previewProject?.communityMembers}
@@ -1562,13 +1656,6 @@ function TokenDetailContent({
             tokenName={token.name}
           />
         </div>
-
-        {token.launchModel === "deep" &&
-        token.growthTargetNativeWei &&
-        token.totalNativeAddedToLiquidityWei &&
-        token.tokenReserveRaw ? (
-          <DeepLiquiditySummary token={token} />
-        ) : null}
 
       </div>
       {copyError ? (

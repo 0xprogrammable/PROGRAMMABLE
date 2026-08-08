@@ -2606,7 +2606,7 @@ function TransactionEvidence({ chainId, transactionHash }: { chainId: string; tr
 }
 
 function LiveMessage({ error = false, id, message }: { error?: boolean; id?: string; message: string }) {
-  return <div id={id} className={styles.liveMessage} role={error ? "alert" : "status"}>{message}</div>;
+  return <div id={id} className={styles.liveMessage} data-error={error ? "true" : "false"} role={error ? "alert" : "status"}>{message}</div>;
 }
 
 export function presentationFormFromResponse(response: PrincipalLaunchPresentationResponseV1 | null): PresentationForm {

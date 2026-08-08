@@ -52,7 +52,7 @@ export const docsSearchItems: DocsSearchItem[] = [
     href: "/docs/developers#quickstart",
   },
   {
-    title: "Launch provider integration",
+    title: "Custom Registry",
     description:
       "Understand authenticated Custom provenance for unfamiliar templates, contracts, assets, and markets.",
     href: "/docs/developers#providers",

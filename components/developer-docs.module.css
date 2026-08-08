@@ -1,6 +1,6 @@
 :global([data-docs-shell]) {
-  --dev-accent: #8fb6d4;
-  --dev-accent-soft: rgba(143, 182, 212, 0.11);
+  --dev-accent: var(--brand-ivory);
+  --dev-accent-soft: rgba(248, 240, 233, 0.11);
   --dev-live: #7bcdb3;
   --dev-code: rgba(8, 12, 22, 0.88);
   --dev-code-border: rgba(244, 247, 250, 0.12);
@@ -10,9 +10,9 @@
 }
 
 .pathList {
-  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
-  backdrop-filter: var(--liquid-glass-backdrop);
-  background: var(--liquid-glass-surface-background);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: color-mix(in srgb, #010103 84%, var(--brand-ivory));
   border: 1px solid var(--liquid-glass-border);
   border-radius: 22px;
   box-shadow: var(--liquid-glass-shadow);
@@ -78,9 +78,9 @@
 }
 
 .workbench {
-  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
-  backdrop-filter: var(--liquid-glass-backdrop);
-  background: var(--liquid-glass-surface-background-strong);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: var(--dev-code);
   border: 1px solid var(--liquid-glass-border);
   border-radius: 22px;
   box-shadow: var(--liquid-glass-shadow);
@@ -248,7 +248,7 @@
 }
 
 .mappingBar code {
-  color: #8fb6d4;
+  color: var(--dev-accent);
   font-size: 11.5px;
 }
 
@@ -274,16 +274,16 @@
 .deploymentCard,
 .statusNote,
 .verificationRule {
-  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
-  backdrop-filter: var(--liquid-glass-backdrop);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   background: var(--liquid-glass-inner-background);
   border: 1px solid var(--liquid-glass-border);
   border-radius: 18px;
 }
 
 .prelaunchNotice {
-  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
-  backdrop-filter: var(--liquid-glass-backdrop);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   background: var(--liquid-glass-surface-background);
   border: 1px solid var(--liquid-glass-border);
   border-radius: 18px;
@@ -585,8 +585,8 @@
 }
 
 .historyDisclosure {
-  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
-  backdrop-filter: var(--liquid-glass-backdrop);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   background: var(--liquid-glass-surface-background);
   border: 1px solid var(--liquid-glass-border);
   border-radius: 18px;
@@ -828,8 +828,8 @@
 }
 
 .endpointGuidance {
-  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
-  backdrop-filter: var(--liquid-glass-backdrop);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   background: var(--liquid-glass-surface-background);
   border: 1px solid var(--liquid-glass-border);
   border-radius: 18px;
@@ -925,9 +925,9 @@
 }
 
 .agentPrompt {
-  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
-  backdrop-filter: var(--liquid-glass-backdrop);
-  background: var(--liquid-glass-surface-background-strong);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: var(--dev-code);
   border: 1px solid var(--liquid-glass-border);
   border-radius: 22px;
   box-shadow: var(--liquid-glass-shadow);

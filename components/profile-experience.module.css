@@ -1,7 +1,7 @@
 .page {
-  --profile-pink: #b52f6b;
-  --profile-pink-bright: #eb7fb3;
-  --profile-pink-wash: rgba(235, 127, 179, 0.12);
+  --profile-pink: var(--brand-ivory);
+  --profile-pink-bright: var(--brand-ivory);
+  --profile-pink-wash: rgba(248, 240, 233, 0.12);
   --profile-green: #19764d;
   --profile-panel: var(--liquid-glass-surface-background);
   --profile-subtle: var(--liquid-glass-inner-background);
@@ -14,9 +14,9 @@
 }
 
 :global(html[data-theme="dark"]) .page {
-  --profile-pink: #ef91be;
-  --profile-pink-bright: #f2a1c7;
-  --profile-pink-wash: rgba(239, 145, 190, 0.12);
+  --profile-pink: var(--brand-ivory);
+  --profile-pink-bright: var(--brand-ivory);
+  --profile-pink-wash: rgba(248, 240, 233, 0.12);
   --profile-green: #67c99a;
   --profile-panel: var(--liquid-glass-surface-background);
   --profile-subtle: var(--liquid-glass-inner-background);
@@ -50,7 +50,7 @@
 
 .avatar {
   align-items: center;
-  background: var(--avatar-background);
+  background: var(--liquid-glass-control-background-hover);
   border-radius: 15px;
   color: var(--profile-pink);
   display: flex;
@@ -226,27 +226,29 @@
 }
 
 .connectCard {
+  -webkit-backdrop-filter: none;
   align-items: center;
+  backdrop-filter: none;
   display: flex;
   flex-direction: column;
   justify-content: center;
   margin: 0 auto;
-  max-width: 560px;
-  min-height: min(620px, calc(100svh - var(--header-height) - 74px));
-  padding: 48px 18px 76px;
+  max-width: 540px;
+  min-height: min(520px, calc(100svh - var(--header-height) - 88px));
+  padding: 42px 18px 54px;
   border-radius: 28px;
   text-align: center;
 }
 
 .connectMark {
-  height: clamp(68px, 8vw, 88px);
-  margin-block-end: 26px;
+  height: clamp(62px, 7vw, 78px);
+  margin-block-end: 22px;
   object-fit: contain;
-  width: clamp(68px, 8vw, 88px);
+  width: clamp(62px, 7vw, 78px);
 }
 
 .connectCard h1 {
-  font-size: clamp(48px, 6.2vw, 68px);
+  font-size: clamp(46px, 5.4vw, 60px);
   font-weight: 565;
   letter-spacing: -0.052em;
   line-height: 0.94;
@@ -441,8 +443,8 @@
   background: var(--profile-panel);
   border: 1px solid var(--profile-line);
   border-radius: 24px;
-  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
-  backdrop-filter: var(--liquid-glass-backdrop);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   box-shadow: var(--liquid-glass-shadow);
   display: grid;
   gap: 10px;
@@ -537,8 +539,8 @@
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
-  height: 40px;
-  min-width: 40px;
+  height: 44px;
+  min-width: 44px;
   padding-inline: 6px;
   transition:
     border-color 150ms ease,
@@ -608,10 +610,32 @@
   font-weight: 500;
 }
 
+.feeComposition {
+  background: rgba(248, 240, 233, 0.075);
+  border: 1px solid var(--profile-line);
+  border-radius: 999px;
+  display: flex;
+  height: 10px;
+  margin-block-start: 20px;
+  max-width: 420px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.feeCompositionClaimed {
+  background: var(--brand-ivory);
+  min-width: 0;
+}
+
+.feeCompositionClaimable {
+  background: rgba(248, 240, 233, 0.28);
+  min-width: 0;
+}
+
 .feeChart {
   display: grid;
   flex: 1;
-  grid-template-rows: minmax(210px, 1fr) auto;
+  grid-template-rows: auto minmax(190px, 1fr) auto;
   margin: clamp(22px, 3vh, 34px) 0 0;
   min-height: 250px;
   min-width: 0;
@@ -627,17 +651,34 @@
     transparent 1px,
     transparent 25%
   );
-  inset: 0 0 24px;
-  opacity: 0.5;
+  inset: 38px 0 24px;
+  opacity: 0.32;
   pointer-events: none;
   position: absolute;
+}
+
+.chartHeading {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: 12px;
+  gap: 16px;
+  justify-content: space-between;
+  min-height: 32px;
+}
+
+.chartHeading strong {
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+  font-weight: 540;
+  text-align: end;
 }
 
 .feeChartInteraction {
   cursor: default;
   grid-column: 1;
-  grid-row: 1;
-  min-height: 210px;
+  grid-row: 2;
+  min-height: 190px;
   min-width: 0;
   outline: 0;
   position: relative;
@@ -661,7 +702,7 @@
   stroke: var(--profile-pink);
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 2.5;
+  stroke-width: 2.15;
   vector-effect: non-scaling-stroke;
 }
 
@@ -688,7 +729,7 @@
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   grid-column: 1;
-  grid-row: 2;
+  grid-row: 3;
   justify-content: space-between;
   min-height: 24px;
   padding-inline: 8px;
@@ -733,7 +774,7 @@
   color: var(--text-soft);
   display: inline-flex;
   font-size: 15px;
-  height: 40px;
+  height: 44px;
   justify-content: center;
   transition:
     background-color 150ms ease,
@@ -741,7 +782,7 @@
     color 150ms ease,
     opacity 150ms ease,
     transform 120ms var(--ease-out);
-  width: 40px;
+  width: 44px;
 }
 
 .claimPagination button:disabled {
@@ -1180,8 +1221,8 @@
   background: var(--profile-panel);
   border: 1px solid var(--profile-line);
   border-radius: 24px;
-  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
-  backdrop-filter: var(--liquid-glass-backdrop);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   box-shadow: var(--liquid-glass-shadow);
   display: grid;
   gap: 8px;
@@ -1441,6 +1482,23 @@
     font-size: 27px;
   }
 
+  .customProjectsHeader {
+    align-items: start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .customProjectList,
+  .customProjectCard {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .customProjectAction {
+    grid-column: 1;
+    justify-self: start;
+    min-height: 44px;
+  }
+
   .editGrid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1470,15 +1528,6 @@
     align-items: flex-start;
     flex-direction: column;
     gap: 11px;
-  }
-
-  .timeframeControls {
-    width: 100%;
-  }
-
-  .timeframeControls button {
-    flex: 1 1 0;
-    height: 44px;
   }
 
   .feeSummary {
@@ -1575,7 +1624,7 @@
   }
 
   .editButton {
-    min-height: 36px;
+    min-height: 44px;
   }
 
   .address {

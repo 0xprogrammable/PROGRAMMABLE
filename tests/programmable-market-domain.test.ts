@@ -42,4 +42,39 @@ describe("programmable.market website origin", () => {
       },
     ]);
   });
+
+  it("binds release workflows and read-model defaults to the canonical origin", async () => {
+    const sources = await Promise.all(
+      [
+        "../.github/workflows/deploy-production.yml",
+        "../scripts/perf/read-model-deploy-policy.mjs",
+        "../scripts/perf/read-model-live-verifier.mjs",
+        "../scripts/perf/read-model-gate.mjs",
+        "../scripts/data-pipeline/cutover-http.mjs",
+        "../scripts/data-pipeline/cutover-operator.mjs",
+        "../scripts/verify-custom-launch-release-record.mjs",
+        "../docs/data-pipeline/PRODUCTION-CUTOVER-OPERATOR.md",
+      ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+    );
+    const schema = JSON.parse(
+      await readFile(
+        new URL(
+          "../docs/operations/releases/custom-launch-v1/release-record.schema.json",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+
+    for (const source of sources) {
+      expect(source).toContain("programmable.market");
+      expect(source).not.toContain("programmable.family");
+    }
+    expect(
+      schema.$defs.deploymentSnapshot.properties.productionAlias.enum,
+    ).toEqual(["https://programmable.market", null]);
+    expect(
+      schema.$defs.promotedDeployment.properties.productionAlias.enum,
+    ).toEqual(["https://programmable.market", null]);
+  });
 });

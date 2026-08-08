@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
@@ -72,39 +72,79 @@ describe("Programmable branding assets", () => {
     const css = read("app/interface.css");
 
     expect(navigation).toContain(
-      'src="/brand/loop/programmable-loop-mark-header.png"',
+      'src="/brand/loop/programmable-loop-mark-header-warm-ivory-v1-1536.png"',
     );
     expect(css).toMatch(
-      /\.wordmark-logo\s*{[^}]*height: 28px;[^}]*width: auto;/s,
+      /\.wordmark-logo\s*{[^}]*height: 30px;[^}]*width: auto;/s,
     );
     expect(css).toMatch(
-      /\.wordmark,\s*\.header-social-link\s*{[^}]*height: 38px;[^}]*width: 38px;/s,
+      /\.wordmark,\s*\.header-social-link\s*{[^}]*height: 44px;[^}]*width: 44px;/s,
     );
   });
 
   it("binds metadata to the cache-busted, tightly framed favicon set", () => {
     const layout = read("app/layout.tsx");
-    const generator = read("scripts/generate-programmable-favicons.mjs");
 
-    expect(layout).toContain('url: "/favicon-pastel-v3.ico"');
-    expect(layout).toContain('url: "/favicon-pastel-v3-16x16.png"');
-    expect(layout).toContain('url: "/favicon-pastel-v3-32x32.png"');
-    expect(layout).toContain('url: "/favicon-pastel-v3-48x48.png"');
-    expect(generator).toContain(
-      '"programmable-loop-mark-transparent-v1.png"',
-    );
-    expect(generator).toContain("const inset = size <= 32 ? 1 : 2");
+    expect(layout).toContain('url: "/favicon-warm-ivory-v1.ico"');
+    expect(layout).toContain('url: "/favicon-warm-ivory-v1-16x16.png"');
+    expect(layout).toContain('url: "/favicon-warm-ivory-v1-32x32.png"');
+    expect(layout).toContain('url: "/favicon-warm-ivory-v1-48x48.png"');
   });
 
-  it("makes the loop visibly larger inside the fixed 16px browser box", async () => {
-    const previous = await alphaBounds("public/favicon-pastel-v2-16x16.png");
-    const current = await alphaBounds("public/favicon-pastel-v3-16x16.png");
+  it("keeps the Warm Ivory favicon transparent and tightly framed", async () => {
+    const current = await alphaBounds(
+      "public/favicon-warm-ivory-v1-16x16.png",
+    );
+    const { data, info } = await sharp(
+      join(root, "public/favicon-warm-ivory-v1-48x48.png"),
+    )
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const coreColors: Array<[number, number, number]> = [];
+
+    for (let index = 0; index < data.length; index += info.channels) {
+      if (data[index + 3] < 250) continue;
+      coreColors.push([data[index], data[index + 1], data[index + 2]]);
+    }
 
     expect(current.canvasWidth).toBe(16);
     expect(current.canvasHeight).toBe(16);
-    expect(current.width).toBeGreaterThan(previous.width);
-    expect(current.height).toBeGreaterThan(previous.height);
     expect(current.top).toBeLessThanOrEqual(1);
     expect(current.bottom).toBeGreaterThanOrEqual(14);
+    expect(coreColors.length).toBeGreaterThan(0);
+    expect(coreColors).toContainEqual([248, 240, 233]);
+    expect(
+      coreColors.every(
+        ([red, green, blue]) =>
+          red >= 248 && red <= 252 &&
+          green >= 240 && green <= 244 &&
+          blue >= 233 && blue <= 237,
+      ),
+    ).toBe(true);
+  });
+
+  it("uses the text-free Night Garden social preview at both exact sizes", async () => {
+    const layout = read("app/layout.tsx");
+    const docs = read("app/docs/developers/page.tsx");
+    const expected = [
+      ["public/og/programmable-night-garden-og-1200x630.png", 1200, 630],
+      ["public/og/programmable-night-garden-og-2400x1260.png", 2400, 1260],
+    ] as const;
+
+    expect(layout).toContain(
+      '"/og/programmable-night-garden-og-1200x630.png"',
+    );
+    expect(docs).toContain(
+      'url: "/og/programmable-night-garden-og-1200x630.png"',
+    );
+
+    for (const [path, width, height] of expected) {
+      const metadata = await sharp(join(root, path)).metadata();
+      expect(metadata.format).toBe("png");
+      expect(metadata.width).toBe(width);
+      expect(metadata.height).toBe(height);
+      expect(statSync(join(root, path)).size).toBeLessThan(5 * 1024 * 1024);
+    }
   });
 });

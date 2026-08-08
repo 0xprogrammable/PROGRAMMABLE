@@ -60,15 +60,15 @@ describe("token detail layout", () => {
     expect(chartSource).toContain("<p>{emptyMessage}</p>");
   });
 
-  it("uses a compact two-column market workspace with community on the right", () => {
+  it("keeps the market workspace compact and gives verified detail full width", () => {
     expect(detailStyles).toMatch(
-      /grid-template-areas:\s*"identity identity"\s*"chart trade"\s*"deep community";/s,
+      /grid-template-areas:\s*"identity identity"\s*"chart trade"\s*"deep deep"\s*"community community";/s,
     );
     expect(detailSource).toMatch(
       /<div className=\{styles\.marketChart\}>[\s\S]*?<TokenPriceChart[\s\S]*?<MetricGrid metrics=\{metrics\} \/>[\s\S]*?<\/div>/s,
     );
     expect(detailStyles).toMatch(
-      /\.communityShell\s*\{[^}]*grid-area:\s*community;[^}]*position:\s*sticky;/s,
+      /\.communityShell\s*\{[^}]*grid-area:\s*community;[^}]*position:\s*static;/s,
     );
     expect(detailStyles).toMatch(
       /\.identity\s*\{[^}]*grid-template-columns:\s*132px minmax\(0, 1fr\);/s,

@@ -1,64 +1,38 @@
-"use client";
+import Image from "next/image";
 
-import { usePathname } from "next/navigation";
-
-const desktopSky = "/brand/atmosphere/night-sky-desktop-v1.avif";
-const mobileSky = "/brand/atmosphere/night-sky-mobile-v1.avif";
-const desktopBotanical =
-  "/brand/atmosphere/night-sky-botanical-desktop-v1.avif";
-const mobileBotanical =
-  "/brand/atmosphere/night-sky-botanical-mobile-v1.avif";
-
-function AtmospherePicture({
-  className,
-  desktop,
-  mobile,
-}: {
-  className: string;
-  desktop: string;
-  mobile: string;
-}) {
-  return (
-    <picture className={className}>
-      <source media="(max-width: 640px)" srcSet={mobile} />
-      <img
-        src={desktop}
-        width={3200}
-        height={1800}
-        fetchPriority="high"
-        decoding="async"
-        alt=""
-      />
-    </picture>
-  );
-}
+const TWINKLE_COUNT = 36;
+const PLANT_SIZES = "(max-width: 520px) 46vw, (max-width: 1500px) 22vw, 330px";
 
 export function AtmosphereBackdrop() {
-  const pathname = usePathname();
-  const isLandingPage = pathname === "/";
-
   return (
-    <div
-      className="atmosphere-backdrop"
-      data-landing={isLandingPage ? "true" : "false"}
-      aria-hidden="true"
-    >
-      <AtmospherePicture
-        className="atmosphere-layer atmosphere-sky"
-        desktop={desktopSky}
-        mobile={mobileSky}
-      />
-      <AtmospherePicture
-        className="atmosphere-layer atmosphere-botanical"
-        desktop={desktopBotanical}
-        mobile={mobileBotanical}
-      />
+    <div className="atmosphere-backdrop" aria-hidden="true">
+      <span className="atmosphere-ground-glow" />
       <span className="atmosphere-stars atmosphere-stars-primary" />
       <span className="atmosphere-stars atmosphere-stars-secondary" />
       <span className="atmosphere-sparkles">
-        {Array.from({ length: 8 }, (_, index) => (
+        {Array.from({ length: TWINKLE_COUNT }, (_, index) => (
           <i key={index} />
         ))}
+      </span>
+      <span className="atmosphere-botanicals">
+        <Image
+          className="atmosphere-plant atmosphere-plant-left"
+          src="/brand/atmosphere/programmable-botanical-left-v2.webp"
+          width={1024}
+          height={1536}
+          sizes={PLANT_SIZES}
+          priority
+          alt=""
+        />
+        <Image
+          className="atmosphere-plant atmosphere-plant-right"
+          src="/brand/atmosphere/programmable-botanical-right-v2.webp"
+          width={1024}
+          height={1536}
+          sizes={PLANT_SIZES}
+          priority
+          alt=""
+        />
       </span>
       <span className="atmosphere-veil" />
     </div>

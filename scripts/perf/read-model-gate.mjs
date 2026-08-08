@@ -1026,7 +1026,7 @@ export async function main(argv = process.argv.slice(2)) {
       teamId: process.env.VERCEL_ORG_ID,
       projectId: process.env.VERCEL_PROJECT_ID,
       productionDomain:
-        process.env.PROGRAMMABLE_PRODUCTION_DOMAIN ?? "programmable.family",
+        process.env.PROGRAMMABLE_PRODUCTION_DOMAIN ?? "programmable.market",
     }),
     verifyLiveCacheAndKeyContracts({
       profile,

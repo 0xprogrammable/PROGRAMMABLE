@@ -60,22 +60,18 @@ describe("token community room storage", () => {
     ]);
   });
 
-  it("uses the real wallet profile avatar and concise composer labels", () => {
+  it("uses the real wallet profile avatar and discloses device-local notes", () => {
     expect(source).toContain("useWallet()");
     expect(source).toContain("currentAvatarDataUrl");
-    expect(source).toContain('placeholder="Write message"');
-    expect(source).toContain("<span>Send</span>");
-    expect(source).not.toContain("<span>Send message</span>");
-    expect(source).not.toMatch(/Local Room|Room Notice/i);
-    expect(source).not.toMatch(/Messages sync across tabs/i);
-    expect(source).not.toMatch(/Message Programmable/i);
+    expect(source).toContain('placeholder="Add a private note"');
+    expect(source).toContain("<span>Save</span>");
+    expect(source).toContain("Saved only on this device");
+    expect(source).not.toContain(">Community<");
   });
 
-  it("keeps the desktop panel compact and sticky without pinning mobile", () => {
-    expect(styles).toContain("max-width: 380px");
-    expect(styles).toMatch(
-      /@media \(min-width: 721px\)[\s\S]*position: sticky/,
-    );
+  it("keeps private notes full width and never pins them over trading", () => {
+    expect(styles).toContain("max-width: none");
+    expect(styles).not.toMatch(/@media \(min-width: 721px\)[\s\S]*position: sticky/);
     expect(styles).toMatch(
       /@media \(max-width: 560px\)[\s\S]*max-width: none/,
     );
