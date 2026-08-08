@@ -148,6 +148,24 @@ function launchAuthorityRefresh(state: "pending" | "current" | "failed") {
   };
 }
 
+function grantReissue(state: "pending" | "ready" | "failed") {
+  return {
+    schemaVersion: "programmable.browser-wallet-grant-reissue.v2",
+    state,
+    requestId: "123e4567-e89b-42d3-a456-426614174003",
+    requestDigest: DIGEST("6"),
+    analysisTaskId: "123e4567-e89b-42d3-a456-426614174004",
+    applicationId: "application-1",
+    applicationHandle: APPLICATION_HANDLE,
+    oldGrantId: GRANT_ID,
+    newGrantId: state === "ready"
+      ? "123e4567-e89b-42d3-a456-426614174005"
+      : null,
+    newGrantBindingHash: state === "ready" ? DIGEST("7") : null,
+    requestedAt: "2026-08-05T12:00:00.000Z",
+  };
+}
+
 function browserPreparation() {
   return {
     schemaVersion: "programmable.browser-wallet-launch-preparation.v2",
@@ -594,6 +612,44 @@ describe("custom launch client response contracts", () => {
       { schemaVersion: "programmable.principal-launch-authority-refresh-request.v1" },
       "launch-authority-refresh-request-1",
     ));
+  });
+
+  it("aligns grant reissue UUIDs and HTTP states with launch authority refresh", async () => {
+    const request = {
+      oldGrantId: GRANT_ID,
+      idempotencyKey: "grant-reissue-request-1",
+      request: {
+        schemaVersion: "programmable.browser-wallet-grant-reissue-request.v1" as const,
+      },
+    };
+    await expect(clientFor(grantReissue("pending"), 202).reissueLaunchGrant(
+      request,
+    )).resolves.toMatchObject({ state: "pending" });
+    await expect(clientFor(grantReissue("ready"), 200).reissueLaunchGrant(
+      request,
+    )).resolves.toMatchObject({ state: "ready" });
+    await expect(clientFor(grantReissue("failed"), 200).reissueLaunchGrant(
+      request,
+    )).resolves.toMatchObject({ state: "failed" });
+
+    await expectContractMismatch(
+      clientFor(grantReissue("pending"), 200).reissueLaunchGrant(request),
+    );
+    await expectContractMismatch(
+      clientFor(grantReissue("ready"), 202).reissueLaunchGrant(request),
+    );
+
+    for (const mutation of [
+      { requestId: "request-1" },
+      { analysisTaskId: "analysis-task-1" },
+      { oldGrantId: "grant-1" },
+      { newGrantId: "grant-2" },
+    ]) {
+      await expectContractMismatch(clientFor({
+        ...grantReissue("ready"),
+        ...mutation,
+      }).reissueLaunchGrant(request));
+    }
   });
 
   it("forwards refresh cancellation to the exact request fetch", async () => {

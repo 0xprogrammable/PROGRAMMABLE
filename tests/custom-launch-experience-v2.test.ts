@@ -10,6 +10,7 @@ import {
   assertBrowserWalletExecutionBinding,
   assertLaunchExecutionStatusBinding,
   assertLaunchSetupBindings,
+  assertLaunchWalletSigningBindingV2,
   assertSamePrincipalApplicationRevisionV1,
   buildPresentationDraftFromForm,
   buildCustomLaunchSelection,
@@ -30,7 +31,7 @@ import {
   reportPersistedLaunchTransactionV2,
   shouldClearLaunchRecoveryV2,
   validateLaunchConfigurationV2,
-  verifyAuthorizedLaunchPermitSignatureV2,
+  verifyAuthorizedLaunchPermitSignatureV2 as verifyAuthorizedLaunchPermitSignatureContractV2,
 } from "../components/custom-launch-experience";
 import {
   canonicalBrowserJsonV2,
@@ -38,10 +39,15 @@ import {
   fileSha256V2,
 } from "../lib/custom-launch/browser-authority-v2";
 import type {
+  AuthorizedLaunchPermitViewV2,
   BrowserWalletLaunchPreparationV2,
   LaunchDescriptorV2,
+  LaunchSessionChallengeViewV2,
+  LaunchSessionPreparationViewV2,
+  LaunchWalletOwnershipMessageV2,
   PrincipalCustomLaunchApplicationSummaryV2,
   PrincipalLaunchPresentationResponseV1,
+  Sha256DigestV2,
   TrustedLaunchPermitSignerV2,
 } from "../lib/custom-launch/contract-v2";
 import { CustomLaunchWebsiteRequestErrorV2 } from "../lib/custom-launch/client-v2";
@@ -131,6 +137,20 @@ function descriptor(): LaunchDescriptorV2 {
   };
 }
 
+function verifyAuthorizedLaunchPermitSignatureV2(input: Readonly<{
+  descriptor?: LaunchDescriptorV2;
+  githubPrincipalHash?: Sha256DigestV2;
+  permit: AuthorizedLaunchPermitViewV2;
+  trustedSigners: readonly TrustedLaunchPermitSignerV2[];
+}>) {
+  return verifyAuthorizedLaunchPermitSignatureContractV2({
+    descriptor: input.descriptor ?? descriptor(),
+    githubPrincipalHash: input.githubPrincipalHash ?? GITHUB_PRINCIPAL_HASH,
+    permit: input.permit,
+    trustedSigners: input.trustedSigners,
+  });
+}
+
 function application(): PrincipalCustomLaunchApplicationSummaryV2 {
   return {
     applicationId: "application-1",
@@ -193,6 +213,87 @@ function presentationResponse(): PrincipalLaunchPresentationResponseV1 {
     },
     committedAt: "2026-08-05T12:00:00.000Z",
   };
+}
+
+function walletSigningFixture(): Readonly<{
+  challenge: LaunchSessionChallengeViewV2;
+  descriptor: LaunchDescriptorV2;
+  preparation: LaunchSessionPreparationViewV2;
+  selection: ReturnType<typeof buildCustomLaunchSelection>;
+  wallet: `0x${string}`;
+}> {
+  const launchDescriptor = descriptor();
+  const route = defaultLaunchRoute(launchDescriptor);
+  const wallet = `0x${"1".repeat(40)}` as `0x${string}`;
+  const selection = buildCustomLaunchSelection({
+    descriptor: launchDescriptor,
+    wallet,
+    configuration: { tokenName: "Wild Game", tokenSymbol: "WILD" },
+  });
+  const challenge: LaunchSessionChallengeViewV2 = {
+    schemaVersion: "programmable.launch-session-challenge-view.v2",
+    grantId: launchDescriptor.grantId,
+    challengeId: "123e4567-e89b-42d3-a456-426614174004",
+    challengeBindingHash: digest("8"),
+    sessionId: "123e4567-e89b-42d3-a456-426614174001",
+    state: "ready_for_wallet",
+    createdAt: "2026-08-05T12:00:00.000Z",
+    expiresAt: "2026-08-05T12:10:00.000Z",
+  };
+  const walletMessage: LaunchWalletOwnershipMessageV2 = {
+    schemaVersion: "programmable.launch-wallet-ownership-message.v2",
+    audience: "programmable.launch-wallet-ownership.v2",
+    grantId: launchDescriptor.grantId,
+    grantBindingHash: launchDescriptor.grantBindingHash,
+    githubPrincipalHash: GITHUB_PRINCIPAL_HASH,
+    challengeId: challenge.challengeId,
+    challengeBindingHash: challenge.challengeBindingHash,
+    sessionId: challenge.sessionId,
+    sessionNonce: "123e4567-e89b-42d3-a456-426614174006",
+    walletNonce: "123e4567-e89b-42d3-a456-426614174007",
+    serviceChallengeHash: digest("1"),
+    walletNamespace: selection.launcherWallet.namespace,
+    walletValue: wallet,
+    chainId: route.chainId,
+    chainProfileId: route.chainProfileId,
+    chainProfileHash: digest("3"),
+    routeId: route.launchRouteId,
+    routeBindingHash: route.launchRouteBindingHash,
+    executionMode: route.executionMode,
+    transactionValueWei: route.transactionValuePolicy.valueWei,
+    templateBindingHash: digest("5"),
+    launchSpecificationHash: digest("6"),
+    preparationBindingHash: digest("7"),
+    launchArtifactCommitmentHash: digest("8"),
+    launchArtifactManifestHash: digest("9"),
+    launchArtifactOutputSetHash: digest("a"),
+    deploymentCalldataHash: digest("b"),
+    feeAssessmentHash: digest("c"),
+    grantControlGenerationsHash: digest("d"),
+    permitIssuanceGeneration: "1",
+    permitConsumptionGeneration: "1",
+    expiresAt: challenge.expiresAt,
+  };
+  const preparation: LaunchSessionPreparationViewV2 = {
+    schemaVersion: "programmable.launch-session-preparation-view.v2",
+    grantId: launchDescriptor.grantId,
+    challengeId: challenge.challengeId,
+    challengeBindingHash: challenge.challengeBindingHash,
+    sessionId: challenge.sessionId,
+    preparationBindingHash: walletMessage.preparationBindingHash,
+    launchArtifactCommitmentHash: walletMessage.launchArtifactCommitmentHash,
+    launchArtifactManifestHash: walletMessage.launchArtifactManifestHash,
+    launchArtifactOutputSetHash: walletMessage.launchArtifactOutputSetHash,
+    deploymentCalldataHash: walletMessage.deploymentCalldataHash,
+    walletMessage,
+    signingMessageBase64Url: Buffer.from(
+      canonicalBrowserJsonV2(walletMessage),
+      "utf8",
+    ).toString("base64url"),
+    state: "ready_for_wallet",
+    expiresAt: walletMessage.expiresAt,
+  };
+  return { challenge, descriptor: launchDescriptor, preparation, selection, wallet };
 }
 
 function walletExecution(
@@ -322,7 +423,7 @@ function actionPermitFixture(
     authorizationAuthenticatedAt: "2026-08-05T11:59:00.000Z",
     authorizationExpiresAt: "2026-08-05T12:15:00.000Z",
     githubUserId: "123456789",
-    githubPrincipalHash: digest("7"),
+    githubPrincipalHash: GITHUB_PRINCIPAL_HASH,
     challengeId: "123e4567-e89b-42d3-a456-426614174004",
     challengeBindingHash: digest("8"),
     sessionRecordId: "123e4567-e89b-42d3-a456-426614174005",
@@ -781,6 +882,63 @@ describe("custom launch browser authority", () => {
     })).toThrow("binding mismatch");
   });
 
+  it("signs only canonical wallet bytes bound to the current principal, grant, and route", () => {
+    const fixture = walletSigningFixture();
+    expect(() => assertLaunchWalletSigningBindingV2({
+      ...fixture,
+      githubPrincipalHash: GITHUB_PRINCIPAL_HASH,
+    })).not.toThrow();
+
+    const foreignMessage = {
+      ...fixture.preparation.walletMessage,
+      githubPrincipalHash: digest("e"),
+    };
+    expect(() => assertLaunchWalletSigningBindingV2({
+      ...fixture,
+      githubPrincipalHash: GITHUB_PRINCIPAL_HASH,
+      preparation: {
+        ...fixture.preparation,
+        walletMessage: foreignMessage,
+        signingMessageBase64Url: Buffer.from(
+          canonicalBrowserJsonV2(foreignMessage),
+          "utf8",
+        ).toString("base64url"),
+      },
+    })).toThrow("exact approved launch");
+
+    const substitutedSigningMessage = {
+      ...fixture.preparation.walletMessage,
+      permitConsumptionGeneration: "2",
+    };
+    expect(() => assertLaunchWalletSigningBindingV2({
+      ...fixture,
+      githubPrincipalHash: GITHUB_PRINCIPAL_HASH,
+      preparation: {
+        ...fixture.preparation,
+        signingMessageBase64Url: Buffer.from(
+          canonicalBrowserJsonV2(substitutedSigningMessage),
+          "utf8",
+        ).toString("base64url"),
+      },
+    })).toThrow("exact approved launch");
+    expect(() => assertLaunchWalletSigningBindingV2({
+      ...fixture,
+      githubPrincipalHash: GITHUB_PRINCIPAL_HASH,
+      descriptor: { ...fixture.descriptor, grantBindingHash: digest("e") },
+    })).toThrow("exact approved launch");
+    expect(() => assertLaunchWalletSigningBindingV2({
+      ...fixture,
+      githubPrincipalHash: GITHUB_PRINCIPAL_HASH,
+      descriptor: {
+        ...fixture.descriptor,
+        routes: fixture.descriptor.routes.map((route) => ({
+          ...route,
+          launchRouteBindingHash: digest("e"),
+        })),
+      },
+    })).toThrow("exact approved launch");
+  });
+
   it("accepts only the same exact GitHub revision across refresh and refetch", () => {
     expect(() => assertSamePrincipalApplicationRevisionV1(
       { ...application(), state: "ready_for_registration" },
@@ -940,15 +1098,50 @@ describe("custom launch browser authority", () => {
     }
   });
 
+  it("rejects a valid signed permit bound to another principal, grant, or descriptor route", async () => {
+    const fixture = actionPermitFixture(walletExecution().browserWalletAction);
+    const trustedSigners = [primaryPermitSigner.trustedSigner];
+    await expect(verifyAuthorizedLaunchPermitSignatureV2({
+      permit: fixture.permit,
+      trustedSigners,
+      githubPrincipalHash: digest("e"),
+    })).rejects.toThrow("signature authority");
+    await expect(verifyAuthorizedLaunchPermitSignatureV2({
+      permit: fixture.permit,
+      trustedSigners,
+      descriptor: { ...descriptor(), grantBindingHash: digest("e") },
+    })).rejects.toThrow("signature authority");
+    const mismatchedRoute = descriptor();
+    await expect(verifyAuthorizedLaunchPermitSignatureV2({
+      permit: fixture.permit,
+      trustedSigners,
+      descriptor: {
+        ...mismatchedRoute,
+        routes: mismatchedRoute.routes.map((route) => ({
+          ...route,
+          launchRouteBindingHash: digest("e"),
+        })),
+      },
+    })).rejects.toThrow("signature authority");
+  });
+
   it("accepts a real service-issued permit and rejects service-parser drift", async () => {
     const serviceArtifact = JSON.parse(Buffer.from(
       serviceGoldenPermit.canonicalSignedPermitBase64Url,
       "base64url",
     ).toString("utf8")) as {
       payload: {
+        chainId: string;
+        chainProfileId: string;
+        executionMode: string;
+        githubPrincipalHash: Sha256DigestV2;
         grantId: string;
+        grantBindingHash: Sha256DigestV2;
+        launchRouteBindingHash: Sha256DigestV2;
+        launchRouteId: string;
         sessionId: string;
         sessionBindingHash: `sha256:${string}`;
+        transactionValueWei: string;
       };
     } & Record<string, unknown>;
     const permit = {
@@ -966,7 +1159,29 @@ describe("custom launch browser authority", () => {
       validUntil: serviceGoldenPermit.validUntil,
     };
     const trustedSigner = serviceGoldenPermit.trustedSigner as TrustedLaunchPermitSignerV2;
+    const serviceRouteDescriptor = descriptor();
+    const serviceVerification = {
+      descriptor: {
+        ...serviceRouteDescriptor,
+        grantId: serviceArtifact.payload.grantId,
+        grantBindingHash: serviceArtifact.payload.grantBindingHash,
+        routes: serviceRouteDescriptor.routes.map((route) => ({
+          ...route,
+          chainId: serviceArtifact.payload.chainId,
+          chainProfileId: serviceArtifact.payload.chainProfileId,
+          launchRouteId: serviceArtifact.payload.launchRouteId,
+          launchRouteBindingHash: serviceArtifact.payload.launchRouteBindingHash,
+          executionMode: serviceArtifact.payload.executionMode,
+          transactionValuePolicy: {
+            kind: "exact" as const,
+            valueWei: serviceArtifact.payload.transactionValueWei,
+          },
+        })),
+      },
+      githubPrincipalHash: serviceArtifact.payload.githubPrincipalHash,
+    };
     await expect(verifyAuthorizedLaunchPermitSignatureV2({
+      ...serviceVerification,
       permit,
       trustedSigners: [trustedSigner],
     })).resolves.toEqual(trustedSigner);
@@ -977,12 +1192,14 @@ describe("custom launch browser authority", () => {
     const extraPayloadField = structuredClone(decoded);
     extraPayloadField.payload.unknownAuthority = digest("f");
     await expect(verifyAuthorizedLaunchPermitSignatureV2({
+      ...serviceVerification,
       permit: replacePermitArtifact(permit, extraPayloadField),
       trustedSigners: [trustedSigner],
     })).rejects.toThrow("canonical");
     const substitutedPermitId = structuredClone(decoded);
     substitutedPermitId.payload.permitId = digest("f");
     await expect(verifyAuthorizedLaunchPermitSignatureV2({
+      ...serviceVerification,
       permit: replacePermitArtifact(permit, substitutedPermitId),
       trustedSigners: [trustedSigner],
     })).rejects.toThrow("payload is invalid");
@@ -995,6 +1212,7 @@ describe("custom launch browser authority", () => {
       nested = next;
     }
     await expect(verifyAuthorizedLaunchPermitSignatureV2({
+      ...serviceVerification,
       permit: replacePermitArtifact(permit, tooDeep),
       trustedSigners: [trustedSigner],
     })).rejects.toThrow("deeply nested");

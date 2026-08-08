@@ -632,13 +632,13 @@ function validateGrantReissueV1(value: unknown): void {
   ]);
   literal(record.schemaVersion, "programmable.browser-wallet-grant-reissue.v2");
   enumValue(record.state, ["pending", "ready", "failed"]);
-  identifier(record.requestId);
+  uuid(record.requestId);
   digest(record.requestDigest);
-  identifier(record.analysisTaskId);
+  uuid(record.analysisTaskId);
   applicationV3Id(record.applicationId);
   applicationHandle(record.applicationHandle);
-  identifier(record.oldGrantId);
-  nullable(record.newGrantId, identifier);
+  uuid(record.oldGrantId);
+  nullable(record.newGrantId, uuid);
   nullable(record.newGrantBindingHash, digest);
   instant(record.requestedAt);
   if (record.state === "ready"

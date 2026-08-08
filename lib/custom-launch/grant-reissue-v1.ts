@@ -227,9 +227,15 @@ export function assertFreshReissuedGrantV1(input: Readonly<{
       !== originalApplication.controlRepositoryOwnerId
     || freshApplication.grandfatheredAtReleaseBindingDigest
       !== originalApplication.grandfatheredAtReleaseBindingDigest
-    || freshApplication.state !== "approved"
-    || freshApplication.receiptDigest !== originalApplication.receiptDigest
-    || freshApplication.launchEntitlementBindingHash === null
+    || originalApplication.state !== "ready_for_registration"
+    || originalApplication.receiptDigest === null
+    || originalApplication.launchEntitlementBindingHash
+      !== oldDescriptor.grantBindingHash
+    || freshApplication.state !== "ready_for_registration"
+    || freshApplication.receiptDigest === null
+    || freshApplication.receiptDigest === originalApplication.receiptDigest
+    || freshApplication.launchEntitlementBindingHash
+      !== reissue.newGrantBindingHash
   ) {
     throw new BrowserWalletGrantReissueBindingErrorV1(
       "The approved GitHub version changed. Review its current status before trying again",

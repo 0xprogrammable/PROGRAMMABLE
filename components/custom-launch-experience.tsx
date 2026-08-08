@@ -54,6 +54,8 @@ import {
   LaunchAuthorityRefreshFailedErrorV1,
   LaunchAuthorityRefreshSingleFlightV1,
   launchAuthorityObservationMatchesSetupV1,
+  launchAuthorityPreReadRefreshRequiredV1,
+  launchAuthorityRefreshGenerationAttemptV1,
   launchAuthorityRefreshIdempotencyKeyV1,
   launchAuthorityRefreshRequiredV1,
   pollPrincipalLaunchAuthorityRefreshV1,
@@ -73,9 +75,12 @@ import {
   type LaunchEligibilityViewV2,
   type LaunchExecutionStatusViewV2,
   type LaunchPresentationDraftV1,
+  type LaunchSessionChallengeViewV2,
+  type LaunchSessionPreparationViewV2,
   type PrincipalCustomLaunchApplicationSummaryV2,
   type PrincipalLaunchAuthorityRefreshViewV1,
   type PrincipalLaunchPresentationResponseV1,
+  type Sha256DigestV2,
   type TrustedLaunchPermitSignerV2,
   type UntrustedLaunchWalletSelectionV2,
 } from "@/lib/custom-launch/contract-v2";
@@ -477,6 +482,67 @@ export function assertLaunchSetupBindings(input: Readonly<{
   );
 }
 
+export function assertLaunchWalletSigningBindingV2(input: Readonly<{
+  challenge: LaunchSessionChallengeViewV2;
+  descriptor: LaunchDescriptorV2;
+  githubPrincipalHash: Sha256DigestV2;
+  preparation: LaunchSessionPreparationViewV2;
+  selection: UntrustedLaunchWalletSelectionV2;
+  wallet: `0x${string}`;
+}>): void {
+  const {
+    challenge,
+    descriptor,
+    githubPrincipalHash,
+    preparation,
+    selection,
+    wallet,
+  } = input;
+  const route = defaultLaunchRoute(descriptor);
+  const walletMessage = preparation.walletMessage;
+  const canonicalMessageBytes = new TextEncoder().encode(
+    canonicalBrowserJsonV2(walletMessage),
+  );
+  let signingMessageBytes: Uint8Array;
+  try {
+    signingMessageBytes = decodeCanonicalBase64Url(
+      preparation.signingMessageBase64Url,
+      canonicalMessageBytes.byteLength,
+      "wallet signing message",
+    );
+  } catch {
+    throw new Error("Wallet proof does not match the exact approved launch");
+  }
+  if (
+    preparation.grantId !== descriptor.grantId
+    || preparation.challengeId !== challenge.challengeId
+    || preparation.challengeBindingHash !== challenge.challengeBindingHash
+    || preparation.sessionId !== challenge.sessionId
+    || preparation.expiresAt !== walletMessage.expiresAt
+    || walletMessage.grantId !== descriptor.grantId
+    || walletMessage.grantBindingHash !== descriptor.grantBindingHash
+    || walletMessage.githubPrincipalHash !== githubPrincipalHash
+    || walletMessage.challengeId !== challenge.challengeId
+    || walletMessage.challengeBindingHash !== challenge.challengeBindingHash
+    || walletMessage.sessionId !== challenge.sessionId
+    || walletMessage.preparationBindingHash !== preparation.preparationBindingHash
+    || walletMessage.launchArtifactCommitmentHash !== preparation.launchArtifactCommitmentHash
+    || walletMessage.launchArtifactManifestHash !== preparation.launchArtifactManifestHash
+    || walletMessage.launchArtifactOutputSetHash !== preparation.launchArtifactOutputSetHash
+    || walletMessage.deploymentCalldataHash !== preparation.deploymentCalldataHash
+    || walletMessage.walletNamespace !== selection.launcherWallet.namespace
+    || selection.launcherWallet.value.toLowerCase() !== wallet.toLowerCase()
+    || walletMessage.walletValue.toLowerCase() !== wallet.toLowerCase()
+    || walletMessage.chainId !== route.chainId
+    || walletMessage.chainProfileId !== route.chainProfileId
+    || walletMessage.routeId !== route.launchRouteId
+    || walletMessage.routeBindingHash !== route.launchRouteBindingHash
+    || walletMessage.executionMode !== route.executionMode
+    || walletMessage.transactionValueWei !== route.transactionValuePolicy.valueWei
+    || signingMessageBytes.some((byte, index) => byte !== canonicalMessageBytes[index])
+  ) throw new Error("Wallet proof does not match the exact approved launch");
+}
+
 export function assertSamePrincipalApplicationRevisionV1(
   expected: PrincipalCustomLaunchApplicationSummaryV2,
   observed: PrincipalCustomLaunchApplicationSummaryV2,
@@ -603,6 +669,8 @@ export function assertBrowserWalletExecutionBinding(input: Readonly<{
 }
 
 export async function verifyAuthorizedLaunchPermitSignatureV2(input: Readonly<{
+  descriptor: LaunchDescriptorV2;
+  githubPrincipalHash: Sha256DigestV2;
   permit: AuthorizedLaunchPermitViewV2;
   trustedSigners: readonly TrustedLaunchPermitSignerV2[];
 }>): Promise<TrustedLaunchPermitSignerV2> {
@@ -611,6 +679,7 @@ export async function verifyAuthorizedLaunchPermitSignatureV2(input: Readonly<{
   );
   const payload = artifact.payload;
   const envelope = artifact.envelope;
+  const route = defaultLaunchRoute(input.descriptor);
   const digest = /^sha256:[0-9a-f]{64}$/u;
   exactObjectKeys(envelope, [
     "audience",
@@ -691,6 +760,15 @@ export async function verifyAuthorizedLaunchPermitSignatureV2(input: Readonly<{
     || input.permit.sessionId !== payload.sessionId
     || input.permit.sessionBindingHash !== payload.sessionBindingHash
     || input.permit.validUntil !== payload.validUntil
+    || payload.githubPrincipalHash !== input.githubPrincipalHash
+    || payload.grantId !== input.descriptor.grantId
+    || payload.grantBindingHash !== input.descriptor.grantBindingHash
+    || payload.chainId !== route.chainId
+    || payload.chainProfileId !== route.chainProfileId
+    || payload.launchRouteId !== route.launchRouteId
+    || payload.launchRouteBindingHash !== route.launchRouteBindingHash
+    || payload.executionMode !== route.executionMode
+    || payload.transactionValueWei !== route.transactionValuePolicy.valueWei
     || signer === undefined
   ) throw new Error("Launch permit signature authority is invalid");
 
@@ -1498,15 +1576,32 @@ export function CustomLaunchExperience({
     let currentApplication = input.application;
     let refreshCompleted = false;
     let refreshAuthority: PrincipalLaunchAuthorityRefreshViewV1 | null = null;
+    const launchAuthorityBinding = input.application.launchEntitlementBindingHash;
+    const refreshAttempt = launchAuthorityRefreshGenerationAttemptV1({
+      currentAttempt: launchAuthorityBinding === null
+        ? 0
+        : launchAuthorityRefreshAttemptRef.current.get(launchAuthorityBinding) ?? 0,
+      forceFreshObservation: input.forceFreshObservation === true,
+    });
+    if (input.forceFreshObservation === true && launchAuthorityBinding !== null) {
+      launchAuthorityRefreshAttemptRef.current.set(
+        launchAuthorityBinding,
+        refreshAttempt,
+      );
+    }
     for (let attempt = 0; attempt < 20; attempt += 1) {
       if (!isActive()) throw new LaunchAuthorityRefreshCancelledErrorV1();
-      if (currentApplication.state === "ready_for_registration" && !refreshCompleted) {
+      if (
+        currentApplication.state === "ready_for_registration"
+        && launchAuthorityPreReadRefreshRequiredV1({
+          forceFreshObservation: input.forceFreshObservation === true,
+          refreshCompleted,
+        })
+      ) {
         setStatusMessage("Running final source verification");
         const idempotencyKey = launchAuthorityRefreshIdempotencyKeyV1({
           application: currentApplication,
-          attempt: launchAuthorityRefreshAttemptRef.current.get(
-            currentApplication.launchEntitlementBindingHash!,
-          ) ?? 0,
+          attempt: refreshAttempt,
         });
         refreshAuthority = await launchAuthorityRefreshSingleFlightRef.current.run(
           `${currentApplication.applicationHandle}:${idempotencyKey}`,
@@ -1601,9 +1696,7 @@ export function CustomLaunchExperience({
         const idempotencyKey = launchAuthorityRefreshIdempotencyKeyV1({
           application: currentApplication,
           currentValidUntil,
-          attempt: launchAuthorityRefreshAttemptRef.current.get(
-            currentApplication.launchEntitlementBindingHash!,
-          ) ?? 0,
+          attempt: refreshAttempt,
         });
         refreshAuthority = await launchAuthorityRefreshSingleFlightRef.current.run(
           `${currentApplication.applicationHandle}:${idempotencyKey}`,
@@ -2103,31 +2196,14 @@ export function CustomLaunchExperience({
       }, isActive);
       if (!isActive()) return;
       const route = defaultLaunchRoute(activeDescriptor);
-      const walletMessage = preparation.walletMessage;
-      if (
-        preparation.grantId !== activeDescriptor.grantId
-        || preparation.challengeId !== challenge.challengeId
-        || preparation.challengeBindingHash !== challenge.challengeBindingHash
-        || preparation.sessionId !== challenge.sessionId
-        || walletMessage.grantId !== activeDescriptor.grantId
-        || walletMessage.grantBindingHash !== activeDescriptor.grantBindingHash
-        || walletMessage.challengeId !== challenge.challengeId
-        || walletMessage.challengeBindingHash !== challenge.challengeBindingHash
-        || walletMessage.sessionId !== challenge.sessionId
-        || walletMessage.preparationBindingHash !== preparation.preparationBindingHash
-        || walletMessage.launchArtifactCommitmentHash !== preparation.launchArtifactCommitmentHash
-        || walletMessage.launchArtifactManifestHash !== preparation.launchArtifactManifestHash
-        || walletMessage.launchArtifactOutputSetHash !== preparation.launchArtifactOutputSetHash
-        || walletMessage.deploymentCalldataHash !== preparation.deploymentCalldataHash
-        || walletMessage.walletNamespace !== selection.launcherWallet.namespace
-        || walletMessage.walletValue.toLowerCase() !== launchWalletAccount.toLowerCase()
-        || walletMessage.chainId !== route.chainId
-        || walletMessage.chainProfileId !== route.chainProfileId
-        || walletMessage.routeId !== route.launchRouteId
-        || walletMessage.routeBindingHash !== route.launchRouteBindingHash
-        || walletMessage.executionMode !== route.executionMode
-        || walletMessage.transactionValueWei !== route.transactionValuePolicy.valueWei
-      ) throw new Error("Wallet proof does not match the exact approved launch");
+      assertLaunchWalletSigningBindingV2({
+        challenge,
+        descriptor: activeDescriptor,
+        githubPrincipalHash: launchGithubPrincipalHash,
+        preparation,
+        selection,
+        wallet: launchWalletAccount,
+      });
 
       setLaunchProgress("wallet-proof");
       setStatusMessage("Confirm in your wallet");
@@ -2203,6 +2279,8 @@ export function CustomLaunchExperience({
         || permit.sessionBindingHash !== authenticatedSession.sessionBindingHash
       ) throw new Error("Launch permit does not match the exact approved launch");
       const verifiedPermitSigner = await verifyAuthorizedLaunchPermitSignatureV2({
+        descriptor: activeDescriptor,
+        githubPrincipalHash: launchGithubPrincipalHash,
         permit,
         trustedSigners: trustedLaunchPermitSigners,
       });

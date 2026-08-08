@@ -3,10 +3,12 @@ import { resolve } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
+import { assertLaunchSetupBindings } from "../components/custom-launch-experience";
 import { CustomLaunchWebsiteRequestErrorV2 } from "../lib/custom-launch/client-v2";
 import type {
   BrowserWalletGrantReissueViewV1,
   LaunchDescriptorV2,
+  LaunchEligibilityViewV2,
   PrincipalCustomLaunchApplicationSummaryV2,
 } from "../lib/custom-launch/contract-v2";
 import {
@@ -111,16 +113,41 @@ function application(
     pullRequestNumber: 7,
     commitOid: "a".repeat(40),
     treeOid: "b".repeat(40),
-    state: "approved",
+    state: "ready_for_registration",
     reasonCodes: [],
     actionCodes: [],
     correctionCount: 0,
     correctionPreview: [],
     receiptDigest: digest("8"),
-    launchEntitlementBindingHash: digest("9"),
+    launchEntitlementBindingHash: digest("3"),
     updatedAt: "2026-08-05T12:00:00.000Z",
     ...overrides,
   } as PrincipalCustomLaunchApplicationSummaryV2;
+}
+
+function freshApplication(
+  overrides: Partial<PrincipalCustomLaunchApplicationSummaryV2> = {},
+): PrincipalCustomLaunchApplicationSummaryV2 {
+  return application({
+    receiptDigest: digest("0"),
+    launchEntitlementBindingHash: digest("2"),
+    ...overrides,
+  });
+}
+
+function freshEligibility(): LaunchEligibilityViewV2 {
+  return {
+    schemaVersion: "programmable.launch-eligibility-view.v3",
+    applicationId: "application-1",
+    applicationHandle: APPLICATION_HANDLE,
+    grantId: NEW_GRANT_ID,
+    grantBindingHash: digest("2"),
+    state: "active",
+    launchAllowed: true,
+    receiptDigest: digest("0"),
+    validFrom: "2026-08-05T12:00:00.000Z",
+    validUntil: "2026-08-05T13:00:00.000Z",
+  };
 }
 
 describe("browser-wallet grant reissue Website flow", () => {
@@ -157,8 +184,28 @@ describe("browser-wallet grant reissue Website flow", () => {
       freshDescriptor: descriptor(true),
       reissue: result.snapshot,
       originalApplication: application(),
-      freshApplication: application({ launchEntitlementBindingHash: digest("0") }),
+      freshApplication: freshApplication(),
     })).not.toThrow();
+  });
+
+  it("accepts the current reissued application and binds its new receipt to fresh eligibility", () => {
+    const fresh = freshApplication();
+    const freshDescriptor = descriptor(true);
+    expect(() => {
+      assertFreshReissuedGrantV1({
+        oldDescriptor: descriptor(),
+        freshDescriptor,
+        reissue: reissue("ready"),
+        originalApplication: application(),
+        freshApplication: fresh,
+      });
+      assertLaunchSetupBindings({
+        application: fresh,
+        eligibility: freshEligibility(),
+        descriptor: freshDescriptor,
+        presentation: null,
+      });
+    }).not.toThrow();
   });
 
   it("fails closed when the signed-in GitHub principal cannot access the grant", async () => {
@@ -186,19 +233,35 @@ describe("browser-wallet grant reissue Website flow", () => {
     };
     expect(() => assertFreshReissuedGrantV1({
       ...common,
-      freshApplication: application({ commitOid: "b".repeat(40) }),
+      freshApplication: freshApplication({ commitOid: "b".repeat(40) }),
     })).toThrow(BrowserWalletGrantReissueBindingErrorV1);
     expect(() => assertFreshReissuedGrantV1({
       ...common,
-      freshApplication: application({ treeOid: "c".repeat(40) }),
+      freshApplication: freshApplication({ treeOid: "c".repeat(40) }),
     })).toThrow(BrowserWalletGrantReissueBindingErrorV1);
     expect(() => assertFreshReissuedGrantV1({
       ...common,
-      freshApplication: application({ repositoryOwnerId: "1" }),
+      freshApplication: freshApplication({ repositoryOwnerId: "1" }),
     })).toThrow(BrowserWalletGrantReissueBindingErrorV1);
     expect(() => assertFreshReissuedGrantV1({
       ...common,
-      freshApplication: application({ state: "revoked" }),
+      freshApplication: freshApplication({ state: "revoked" }),
+    })).toThrow(BrowserWalletGrantReissueBindingErrorV1);
+    expect(() => assertFreshReissuedGrantV1({
+      ...common,
+      freshApplication: freshApplication({ state: "approved" }),
+    })).toThrow(BrowserWalletGrantReissueBindingErrorV1);
+    expect(() => assertFreshReissuedGrantV1({
+      ...common,
+      freshApplication: freshApplication({ receiptDigest: null }),
+    })).toThrow(BrowserWalletGrantReissueBindingErrorV1);
+    expect(() => assertFreshReissuedGrantV1({
+      ...common,
+      freshApplication: freshApplication({ receiptDigest: digest("8") }),
+    })).toThrow(BrowserWalletGrantReissueBindingErrorV1);
+    expect(() => assertFreshReissuedGrantV1({
+      ...common,
+      freshApplication: freshApplication({ launchEntitlementBindingHash: digest("9") }),
     })).toThrow(BrowserWalletGrantReissueBindingErrorV1);
   });
 
@@ -249,7 +312,7 @@ describe("browser-wallet grant reissue Website flow", () => {
       freshDescriptor: descriptor(),
       reissue: reissue("ready"),
       originalApplication: application(),
-      freshApplication: application(),
+      freshApplication: freshApplication(),
     })).toThrow(BrowserWalletGrantReissueBindingErrorV1);
   });
 

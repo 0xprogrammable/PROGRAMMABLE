@@ -236,6 +236,12 @@ export function createCustomLaunchWebsiteClientV2(input: Readonly<{
         input.idempotencyKey,
         input.request,
         "programmable.browser-wallet-grant-reissue.v2",
+        "POST",
+        (status, value) => {
+          const valid = (status === 202 && value.state === "pending")
+            || (status === 200 && (value.state === "ready" || value.state === "failed"));
+          if (!valid) throw new TypeError("grant reissue HTTP state mismatch");
+        },
       );
     },
     reportLaunchTransaction(input: Readonly<{
