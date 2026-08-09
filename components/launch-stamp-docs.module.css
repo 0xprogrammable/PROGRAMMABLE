@@ -308,6 +308,11 @@
   max-width: 72ch !important;
 }
 
+.detailLine code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .recordLayout {
   border: 1px solid var(--panel-border);
   margin-top: 28px;
