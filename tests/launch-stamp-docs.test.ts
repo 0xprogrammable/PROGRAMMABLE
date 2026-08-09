@@ -4,8 +4,12 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  LAUNCH_KIND_V1,
   LAUNCH_STAMP_RUNTIME_HASH_DEFINITION,
   PROGRAMMABLE_LAUNCH_STAMP_MANIFEST,
+  PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ABI,
+  PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ARTIFACT,
+  STAMP_RECORD_V1_FIELDS,
 } from "../components/launch-stamp-docs-contract";
 
 const root = process.cwd();
@@ -18,7 +22,14 @@ const sitemap = read("app/sitemap.ts");
 const markdown = read("lib/developer-docs-content.ts");
 
 describe("Launch Stamp developer documentation", () => {
-  it("publishes one explicit prelaunch Router binding without placeholders", () => {
+  it("binds the frozen ABI artifact while keeping deployment data prelaunch", () => {
+    expect(PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ARTIFACT).toEqual({
+      contractName: "ProgrammableLaunchStampRouterV1",
+      sourceCommit: "0a7134bbb912222639627fb9078df2f8dd3a6c38",
+      sourceTree: "24ffb0c6b04af7993254560b4f03608de8f52231",
+      artifactPath:
+        "out/ProgrammableLaunchStampRouterV1.sol/ProgrammableLaunchStampRouterV1.json",
+    });
     expect(PROGRAMMABLE_LAUNCH_STAMP_MANIFEST).toEqual({
       launchStampRouter: {
         version: "1",
@@ -28,7 +39,7 @@ describe("Launch Stamp developer documentation", () => {
         startBlock: null,
         runtimeCodeHash: null,
         authority: null,
-        abi: null,
+        abi: "frozen",
       },
     });
     expect(LAUNCH_STAMP_RUNTIME_HASH_DEFINITION).toContain(
@@ -37,22 +48,106 @@ describe("Launch Stamp developer documentation", () => {
     expect(page).not.toMatch(/0x[a-fA-F0-9]{40}/);
   });
 
-  it("uses one recognition algorithm for token and Uniswap v4 pool identity", () => {
+  it("publishes the artifact-exact terminal signatures and selectors", () => {
+    expect(PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ABI).toEqual({
+      market: {
+        label: "Sole market-bearing write",
+        signature:
+          "launchAndStampV1((uint256,address,address,uint8,bytes32,bytes32,bytes32,bytes32,uint64,uint64,uint256),(bytes32,address,bytes32,(address,address,uint24,int24,address),bytes32,(uint8,address,bytes32,uint8,uint8)[]),bytes,bytes)",
+        selector: "0xe5f6b8cd",
+        returns: "bytes32 stampHash",
+      },
+      primaryReads: [
+        {
+          label: "Token to launch ID",
+          signature: "launchIdByToken(address)",
+          selector: "0x1dad847c",
+          returns: "bytes32 launchId",
+        },
+        {
+          label: "Market to launch ID",
+          signature: "launchIdByPool(address,bytes32)",
+          selector: "0x361df6f3",
+          returns: "bytes32 launchId",
+        },
+        {
+          label: "Launch ID to record",
+          signature: "launchStamp(bytes32)",
+          selector: "0x4c9e4764",
+          returns: "StampRecordV1",
+        },
+      ],
+      componentReads: [
+        {
+          label: "Exclusive-component proof",
+          signature: "stampProof(address)",
+          selector: "0x174b9f9d",
+          returns: "(bytes32 launchId, bytes32 stampHash)",
+        },
+        {
+          label: "Exclusive-component lookup",
+          signature: "launchIdByComponent(address)",
+          selector: "0x58c5e373",
+          returns: "bytes32 launchId",
+        },
+        {
+          label: "Recorded component runtime",
+          signature: "componentRuntimeCodeHash(address)",
+          selector: "0xc892d353",
+          returns: "bytes32 runtimeCodeHash",
+        },
+      ],
+    });
+  });
+
+  it("uses token or PoolManager and poolId as the universal recognition inputs", () => {
     expect(page).toContain("token or (PoolManager, poolId)");
+    expect(page).toContain('"          ? launchIdByToken(token)"');
     expect(page).toContain(
-      '"step 1  resolve input with the canonical Router → launchId"',
+      '"          : launchIdByPool(PoolManager, poolId)"',
     );
-    expect(page).toContain(
-      '"step 2  read launchStamp at launchId from the same Router"',
+    expect(page).toContain('"step 2  record := launchStamp(launchId)"');
+    expect(page).toContain("ABI-bound read sequence");
+    expect(page).toContain("Unavailable while address is null");
+  });
+
+  it("documents stampProof as exclusive-component corroboration, never a hook route", () => {
+    expect(page).toContain("stampProof(address)");
+    expect(page).toContain("A Classic hook is");
+    expect(page).toContain("There is no universal hook getter");
+    expect(JSON.stringify(PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ABI)).not.toContain(
+      "launchIdByHook",
     );
-    expect(page).toContain("Not executable calldata");
-    expect(page).not.toContain("functionName");
     expect(page).not.toContain("hook → launchId");
   });
 
-  it("limits stamps to future Classic and Custom provenance", () => {
+  it("freezes StampRecordV1 tuple order and LaunchKindV1 encoding", () => {
+    expect(STAMP_RECORD_V1_FIELDS).toEqual([
+      ["uint8", "kind"],
+      ["address", "launchWallet"],
+      ["address", "token"],
+      ["address", "hook"],
+      ["address", "poolManager"],
+      ["bytes32", "poolId"],
+      ["bytes32", "poolKeyHash"],
+      ["bytes32", "componentSetHash"],
+      ["bytes32", "routePayloadHash"],
+      ["address", "routeLauncher"],
+      ["bytes32", "routeLauncherRuntimeCodeHash"],
+      ["bytes32", "expectedResultHash"],
+      ["bytes32", "permitDigest"],
+      ["bytes32", "stampHash"],
+    ]);
+    expect(LAUNCH_KIND_V1).toEqual([
+      { value: 0, name: "Invalid", publicLabel: null },
+      { value: 1, name: "CustomGraph", publicLabel: "Programmable Custom" },
+      { value: 2, name: "Classic", publicLabel: "Programmable Classic" },
+    ]);
     expect(page).toContain("LaunchKindV1.CustomGraph");
     expect(page).toContain("LaunchKindV1.Classic");
+  });
+
+  it("limits stamps to future Classic and Custom provenance", () => {
     expect(page).toContain("Historical launches created before Router activation");
     expect(page).toContain(
       "Safety, tradability, liquidity, audit coverage, review status",
@@ -60,6 +155,8 @@ describe("Launch Stamp developer documentation", () => {
     expect(page).toContain(
       "A Registry, indexer, Supabase project, Programmable API, or",
     );
+    expect(page).toContain("The ABI and tuple layout are final");
+    expect(page).toContain("The deployment is not");
   });
 
   it("adds one discoverable route to the existing Docs navigation", () => {
@@ -80,10 +177,13 @@ describe("Launch Stamp developer documentation", () => {
     );
   });
 
-  it("keeps the page semantic, keyboard-visible, and reflow-safe", () => {
+  it("keeps the expanded reference semantic and reflow-safe", () => {
     expect(page).toContain('aria-labelledby="trust-root-heading"');
     expect(page).toContain("<dl className={styles.manifest}>");
     expect(page).toContain('aria-label="Launch stamp verification flow"');
+    expect(page).toContain(
+      'aria-label="StampRecordV1 fields in ABI order"',
+    );
     expect(page).toContain("<ol");
     expect(page).not.toContain('role="img"');
     expect(styles).toContain("@media (max-width: 700px)");

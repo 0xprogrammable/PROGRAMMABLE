@@ -3,7 +3,11 @@ import type { Metadata } from "next";
 import docsStyles from "@/components/docs-experience.module.css";
 import {
   LAUNCH_STAMP_RUNTIME_HASH_DEFINITION,
+  LAUNCH_KIND_V1,
   PROGRAMMABLE_LAUNCH_STAMP_MANIFEST,
+  PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ABI,
+  PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ARTIFACT,
+  STAMP_RECORD_V1_FIELDS,
 } from "@/components/launch-stamp-docs-contract";
 import styles from "@/components/launch-stamp-docs.module.css";
 import { DocsShell } from "@/components/docs-shell";
@@ -18,24 +22,30 @@ export const metadata: Metadata = {
 const sections = [
   { id: "trust-root", label: "Trust root" },
   { id: "algorithm", label: "Verification algorithm" },
+  { id: "abi", label: "Frozen ABI" },
   { id: "record", label: "Returned record" },
   { id: "boundary", label: "Trust boundary" },
   { id: "integration", label: "Integration seam" },
 ] as const;
 
-const conceptualVerifier = [
+const abiBoundVerifier = [
   "input := token OR (PoolManager, poolId)",
   "",
-  "step 1  resolve input with the canonical Router → launchId",
-  "        if no launchId is returned → NOT_STAMPED",
+  "step 1  launchId := input is token",
+  "          ? launchIdByToken(token)",
+  "          : launchIdByPool(PoolManager, poolId)",
+  "        if launchId == bytes32(0) → NOT_STAMPED",
   "",
-  "step 2  read launchStamp at launchId from the same Router",
-  "        if no record is returned → NOT_STAMPED",
+  "step 2  record := launchStamp(launchId)",
+  "        if record.stampHash == bytes32(0) → INDETERMINATE",
+  "        if identity or kind is inconsistent → INDETERMINATE",
   "",
-  "return launchStamp",
+  "return STAMPED(record)",
 ].join("\n");
 
 const router = PROGRAMMABLE_LAUNCH_STAMP_MANIFEST.launchStampRouter;
+const artifact = PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ARTIFACT;
+const abi = PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ABI;
 
 const manifestFields = [
   ["version", router.version],
@@ -73,8 +83,9 @@ function PrelaunchTrustRoot() {
 
       <p className={styles.hashDefinition}>
         <code>runtimeCodeHash</code> means {LAUNCH_STAMP_RUNTIME_HASH_DEFINITION}{" "}
-        No address, ABI, authority, start block, or runtime binding is published
-        before the final Router deployment is verified.
+        The ABI is frozen to the source artifact documented below. No address,
+        authority, start block, or runtime binding is published before the
+        final Router deployment is verified.
       </p>
     </section>
   );
@@ -119,27 +130,137 @@ export default function LaunchStampDocsPage() {
 
         <div className={styles.concept}>
           <div className={styles.conceptHeader}>
-            <span className={styles.conceptLabel}>Conceptual pseudocode</span>
-            <span>Not executable calldata</span>
+            <span className={styles.conceptLabel}>ABI-bound read sequence</span>
+            <span>Unavailable while address is null</span>
           </div>
-          <pre aria-label="Conceptual launch stamp verifier pseudocode">
-            {conceptualVerifier}
+          <pre aria-label="Launch stamp verifier pseudocode using the frozen ABI">
+            {abiBoundVerifier}
           </pre>
         </div>
 
         <p className={styles.scopeLine}>
-          A missing record means Programmable provenance is not established. It
-          is not a claim that the token, pool, or project is unsafe.
+          A successful zero lookup is <code>NOT_STAMPED</code>. A failed call or
+          inconsistent nonzero record is <code>INDETERMINATE</code>, not a
+          provenance result and not a claim that the token, pool, or project is
+          unsafe.
+        </p>
+      </section>
+
+      <section id="abi">
+        <h2>Bind to the frozen Router ABI</h2>
+        <p>
+          The signatures and selectors below come from the final Router source
+          artifact. They fix the call encoding, but they do not activate an
+          address or make the Router live.
+        </p>
+
+        <dl className={styles.artifactBinding}>
+          <div>
+            <dt>Contract</dt>
+            <dd>{artifact.contractName}</dd>
+          </div>
+          <div>
+            <dt>Source commit</dt>
+            <dd>{artifact.sourceCommit}</dd>
+          </div>
+          <div>
+            <dt>Source tree</dt>
+            <dd>{artifact.sourceTree}</dd>
+          </div>
+          <div>
+            <dt>Forge artifact</dt>
+            <dd>{artifact.artifactPath}</dd>
+          </div>
+        </dl>
+
+        <h3 className={styles.subheading}>Primary verification reads</h3>
+        <dl className={styles.abiList}>
+          {abi.primaryReads.map((entry) => (
+            <div key={entry.signature}>
+              <dt>{entry.label}</dt>
+              <dd>
+                <code>{entry.signature}</code>
+                <span>
+                  selector <code>{entry.selector}</code> · returns{" "}
+                  <code>{entry.returns}</code>
+                </span>
+              </dd>
+            </div>
+          ))}
+        </dl>
+
+        <h3 className={styles.subheading}>Exclusive-component reads</h3>
+        <dl className={styles.abiList}>
+          {abi.componentReads.map((entry) => (
+            <div key={entry.signature}>
+              <dt>{entry.label}</dt>
+              <dd>
+                <code>{entry.signature}</code>
+                <span>
+                  selector <code>{entry.selector}</code> · returns{" "}
+                  <code>{entry.returns}</code>
+                </span>
+              </dd>
+            </div>
+          ))}
+        </dl>
+
+        <p className={styles.scopeLine}>
+          <code>stampProof(address)</code> returns the component&apos;s exclusive
+          assignment and the corresponding record hash. A Classic hook is
+          shared infrastructure, so its component proof is intentionally{" "}
+          <code>(bytes32(0), bytes32(0))</code> even when its launch is stamped.
+          There is no universal hook getter.
+        </p>
+
+        <h3 className={styles.subheading}>Atomic write selector</h3>
+        <div className={styles.atomicSignature}>
+          <code>{abi.market.signature}</code>
+          <span>
+            selector <code>{abi.market.selector}</code> · payable · returns{" "}
+            <code>{abi.market.returns}</code>
+          </span>
+        </div>
+        <p className={styles.detailLine}>
+          This is the sole market-bearing state-changing selector. Verification
+          uses the read calls above and does not require a permit service,
+          Registry, or application server.
         </p>
       </section>
 
       <section id="record">
-        <h2>Keep record semantics separate</h2>
+        <h2>Decode the frozen record in order</h2>
         <p>
-          The final ABI will define the encoded tuple. Until that artifact is
-          frozen, consumers should bind only to these stable interpretation
-          rules and keep decoding behind an injected ABI adapter.
+          <code>launchStamp(bytes32)</code> returns{" "}
+          <code>StampRecordV1</code> with these fourteen fields in this exact
+          order. Decode the tuple with the frozen ABI rather than a locally
+          reconstructed type.
         </p>
+
+        <div className={styles.recordLayout}>
+          <div>
+            <span>StampRecordV1</span>
+            <span>ABI tuple order</span>
+          </div>
+          <ol aria-label="StampRecordV1 fields in ABI order">
+            {STAMP_RECORD_V1_FIELDS.map(([type, name]) => (
+              <li key={name}>
+                <code>{type}</code> <strong>{name}</strong>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        <dl className={styles.kindMap}>
+          {LAUNCH_KIND_V1.map((kind) => (
+            <div key={kind.name}>
+              <dt>
+                <code>{kind.value}</code> · {kind.name}
+              </dt>
+              <dd>{kind.publicLabel ?? "Not a valid stamped record kind"}</dd>
+            </div>
+          ))}
+        </dl>
 
         <dl className={styles.recordList}>
           <div>
@@ -160,16 +281,18 @@ export default function LaunchStampDocsPage() {
           <div>
             <dt>Launch kind</dt>
             <dd>
-              Read <code>LaunchKindV1.CustomGraph</code> or{" "}
-              <code>LaunchKindV1.Classic</code> as returned metadata. Do not
-              choose a trust root or verification path from the kind.
+              Map <code>LaunchKindV1.CustomGraph</code> (<code>1</code>) to
+              Programmable Custom and <code>LaunchKindV1.Classic</code> ({" "}
+              <code>2</code>) to Programmable Classic. Kind is returned
+              metadata; it never selects another trust root.
             </dd>
           </div>
           <div>
             <dt>Hook</dt>
             <dd>
-              A returned hook is descriptive metadata. It is not a universal
-              lookup key because more than one launch can use the same hook.
+              <code>record.hook</code> is descriptive metadata. The Classic
+              hook is shared by multiple launches, so it is never a universal
+              lookup or classification key.
             </dd>
           </div>
         </dl>
@@ -217,21 +340,22 @@ export default function LaunchStampDocsPage() {
       </section>
 
       <section className={styles.finalSection} id="integration">
-        <h2>Inject the final binding</h2>
+        <h2>Inject the verified deployment binding</h2>
         <p>
-          Keep the Router address, ABI, start block, runtime hash, authority,
-          and selector encoding in one versioned binding. Application logic
-          should receive that binding rather than hardcode provisional names or
-          calldata.
+          Keep the frozen ABI and selector map together with the eventual
+          Router address, start block, runtime hash, and authority in one
+          versioned binding. Application logic should receive that binding
+          rather than copy addresses or rebuild calldata locally.
         </p>
 
         <div className={styles.implementationRule}>
           <strong>Prelaunch rule</strong>
           <p>
-            While any required binding field above is <code>null</code>, do not
-            issue Router reads and do not present any launch as stamped. Replace
-            the conceptual pseudocode only after the final artifact and
-            deployment evidence are published together.
+            The ABI and tuple layout are final. The deployment is not. While
+            the address, runtime code hash, start block, or authority remains{" "}
+            <code>null</code>, do not issue Router reads and do not present any
+            launch as stamped. Enable the frozen read sequence only after those
+            fields are published and independently verified together.
           </p>
         </div>
       </section>
