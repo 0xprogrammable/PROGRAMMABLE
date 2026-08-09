@@ -5,6 +5,7 @@ import {
   LAUNCH_STAMP_RUNTIME_HASH_DEFINITION,
   LAUNCH_KIND_V1,
   PROGRAMMABLE_LAUNCH_STAMP_MANIFEST,
+  PROGRAMMABLE_LAUNCH_STAMP_RESOURCES,
   PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ABI,
   PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ARTIFACT,
   STAMP_RECORD_V1_FIELDS,
@@ -23,13 +24,18 @@ const sections = [
   { id: "trust-root", label: "Trust root" },
   { id: "algorithm", label: "Verification algorithm" },
   { id: "abi", label: "Frozen ABI" },
+  { id: "indexing", label: "Terminal indexing" },
   { id: "record", label: "Returned record" },
   { id: "boundary", label: "Trust boundary" },
-  { id: "integration", label: "Deployment state" },
+  { id: "integration", label: "Live deployment" },
 ] as const;
 
 const abiBoundVerifier = [
   "input := token OR (PoolManager, poolId)",
+  "",
+  "preflight  resolve one finalized canonical block",
+  "           require chainId, block range, Router runtime,",
+  "           and immutable bindings to match the manifest",
   "",
   "step 1  launchId := input is token",
   "          ? launchIdByToken(token)",
@@ -44,19 +50,35 @@ const abiBoundVerifier = [
 ].join("\n");
 
 const router = PROGRAMMABLE_LAUNCH_STAMP_MANIFEST.launchStampRouter;
+const chainId = PROGRAMMABLE_LAUNCH_STAMP_MANIFEST.chainId;
 const deployment = router.deploymentEvidence;
-const observedBindings = deployment.observedBindings;
+const bindings = router.bindings;
+const canary = router.canaryEvidence;
 const artifact = PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ARTIFACT;
 const abi = PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ABI;
+const events = Object.values(router.events);
+
+const terminalLogFilter = JSON.stringify(
+  {
+    address: router.address,
+    fromBlock: "0x1886b6c",
+    toBlock: "finalized",
+    topics: [events.map((event) => event.topic0)],
+  },
+  null,
+  2,
+);
 
 const manifestFields = [
+  ["chainId", chainId],
   ["version", router.version],
   ["generation", router.generation],
   ["address", router.address],
   ["startBlock", router.startBlock],
+  ["endBlock", router.endBlock],
   ["runtimeCodeHash", router.runtimeCodeHash],
-  ["authority", router.authority],
-  ["abi", router.abi],
+  ["finalityConfirmations", router.finalityConfirmations],
+  ["abiSha256", router.abiSha256],
 ] as const;
 
 const deploymentEvidenceFields = [
@@ -75,20 +97,51 @@ const deploymentEvidenceFields = [
   ["evidenceSha256", deployment.evidenceSha256],
 ] as const;
 
-const observedBindingFields = [
-  ["chainId", observedBindings.chainId],
-  ["permitAuthority", observedBindings.permitAuthority],
-  [
-    "permitAuthorityRuntimeCodeHash",
-    observedBindings.permitAuthorityRuntimeCodeHash,
-  ],
-  ["graphFactory", observedBindings.graphFactory],
-  ["graphFactoryRuntimeCodeHash", observedBindings.graphFactoryRuntimeCodeHash],
-  ["poolManager", observedBindings.poolManager],
-  ["poolManagerRuntimeCodeHash", observedBindings.poolManagerRuntimeCodeHash],
+const activationBindingFields = [
+  ["permitAuthority", bindings.permitAuthority],
+  ["permitAuthorityRuntimeCodeHash", bindings.permitAuthorityRuntimeCodeHash],
+  ["graphFactory", bindings.graphFactory],
+  ["graphFactoryRuntimeCodeHash", bindings.graphFactoryRuntimeCodeHash],
+  ["poolManager", bindings.poolManager],
+  ["poolManagerRuntimeCodeHash", bindings.poolManagerRuntimeCodeHash],
 ] as const;
 
-function PrelaunchTrustRoot() {
+const canaryIdentityFields = [
+  ["finality", canary.finality],
+  [
+    "customGraphOnchainCanary",
+    String(canary.routeCoverage.customGraphOnchainCanary),
+  ],
+  ["classicOnchainCanary", String(canary.routeCoverage.classicOnchainCanary)],
+  ["transactionHash", canary.transactionHash],
+  ["blockNumber", canary.blockNumber],
+  ["blockHash", canary.blockHash],
+  ["launchId", canary.launchId],
+  ["stampHash", canary.stampHash],
+  ["launchKind", canary.launchKind],
+  ["sourceRepository", canary.source.sourceRepository],
+  ["sourceCommit", canary.source.sourceCommit],
+  ["commitSubject", canary.source.commitSubject],
+  ["evidenceFileSha256", canary.evidenceFileSha256],
+  ["evidenceLineSha256", canary.evidenceLineSha256],
+] as const;
+
+const canaryObservationFields = [
+  ["initializer", canary.components.initializer],
+  ["token", canary.components.token],
+  ["hook", canary.components.hook],
+  ["poolManager", canary.pool.poolManager],
+  ["poolId", canary.pool.poolId],
+  ["activeLiquidity", canary.pool.activeLiquidity],
+  ["positionManager", canary.lpPosition.positionManager],
+  ["lpNftTokenId", canary.lpPosition.tokenId],
+  ["lpNftOwner", canary.lpPosition.owner],
+  ["platformFeePips", canary.platformFee.feePips],
+  ["platformFeeRecipient", canary.platformFee.recipient],
+  ["tokenTotalSupply", canary.tokenTotalSupply],
+] as const;
+
+function LiveTrustRoot() {
   return (
     <section
       aria-labelledby="trust-root-heading"
@@ -113,10 +166,12 @@ function PrelaunchTrustRoot() {
       </dl>
 
       <p className={styles.hashDefinition}>
-        <code>runtimeCodeHash</code> means {LAUNCH_STAMP_RUNTIME_HASH_DEFINITION}{" "}
-        The activation tuple above stays null while the canary is pending. The
-        finalized deployment evidence published below identifies the deployed
-        Router candidate, but does not activate terminal classification.
+        <code>runtimeCodeHash</code> means{" "}
+        {LAUNCH_STAMP_RUNTIME_HASH_DEFINITION} The live tuple above activates
+        direct verification for Router stamps at or after{" "}
+        <code>startBlock</code>. A terminal must still validate the Router
+        runtime and immutable bindings at the same canonical block as each
+        lookup.
       </p>
     </section>
   );
@@ -126,8 +181,8 @@ export default function LaunchStampDocsPage() {
   return (
     <DocsShell
       currentPath="/docs/launch-stamps"
-      description="For launches created after Router activation, resolve a token or Uniswap v4 market and read its launch stamp from one canonical contract. The result establishes Programmable provenance only."
-      heroAside={<PrelaunchTrustRoot />}
+      description="For launches stamped through the live Router, resolve a token or Uniswap v4 market and read its record from one canonical contract. The result establishes Programmable provenance only."
+      heroAside={<LiveTrustRoot />}
       heroId="trust-root"
       kicker="Developer provenance"
       sections={sections}
@@ -162,7 +217,7 @@ export default function LaunchStampDocsPage() {
         <div className={styles.concept}>
           <div className={styles.conceptHeader}>
             <span className={styles.conceptLabel}>ABI-bound read sequence</span>
-            <span>Unavailable while status is prelaunch</span>
+            <span>Live on Ethereum · finalized reads</span>
           </div>
           <pre aria-label="Launch stamp verifier pseudocode using the frozen ABI">
             {abiBoundVerifier}
@@ -181,8 +236,8 @@ export default function LaunchStampDocsPage() {
         <h2>Bind to the frozen Router ABI</h2>
         <p>
           The signatures and selectors below come from the final Router source
-          artifact. They fix the call encoding, but they do not activate the
-          Router or make terminal classification live.
+          artifact. They fix the call encoding. Bind them to the live address,
+          runtime code hash, and immutable getters before classifying a result.
         </p>
 
         <dl className={styles.artifactBinding}>
@@ -202,6 +257,45 @@ export default function LaunchStampDocsPage() {
             <dt>Forge artifact</dt>
             <dd>{artifact.artifactPath}</dd>
           </div>
+          <div>
+            <dt>Published ABI</dt>
+            <dd>
+              <a href={router.abiUrl}>{router.abiUrl}</a>
+            </dd>
+          </div>
+          <div>
+            <dt>ABI file SHA-256</dt>
+            <dd>{router.abiSha256}</dd>
+          </div>
+          <div>
+            <dt>GitHub ABI source</dt>
+            <dd>
+              <a href={PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.abiGithubUrl}>
+                Exact published file
+              </a>
+            </dd>
+          </div>
+        </dl>
+
+        <p className={styles.detailLine}>
+          Hash the exact downloaded ABI file bytes. Do not normalize or
+          reserialize the JSON before comparing its SHA-256 digest.
+        </p>
+
+        <h3 className={styles.subheading}>Trust-root reads</h3>
+        <dl className={styles.abiList}>
+          {abi.bindingReads.map((entry) => (
+            <div key={entry.signature}>
+              <dt>{entry.label}</dt>
+              <dd>
+                <code>{entry.signature}</code>
+                <span>
+                  selector <code>{entry.selector}</code> · returns{" "}
+                  <code>{entry.returns}</code>
+                </span>
+              </dd>
+            </div>
+          ))}
         </dl>
 
         <h3 className={styles.subheading}>Primary verification reads</h3>
@@ -237,11 +331,34 @@ export default function LaunchStampDocsPage() {
         </dl>
 
         <p className={styles.scopeLine}>
-          <code>stampProof(address)</code> returns the component&apos;s exclusive
-          assignment and the corresponding record hash. A Classic hook is
-          shared infrastructure, so its component proof is intentionally{" "}
+          <code>stampProof(address)</code> returns the component&apos;s
+          exclusive assignment and the corresponding record hash. A Classic hook
+          is shared infrastructure, so its component proof is intentionally{" "}
           <code>(bytes32(0), bytes32(0))</code> even when its launch is stamped.
           There is no universal hook getter.
+        </p>
+
+        <h3 className={styles.subheading}>Discovery events</h3>
+        <dl className={styles.abiList}>
+          {events.map((event) => (
+            <div key={event.topic0}>
+              <dt>{event.name}</dt>
+              <dd>
+                <code>{event.signature}</code>
+                <span>
+                  topic0 <code>{event.topic0}</code>
+                </span>
+                <span>
+                  indexed: <code>{event.indexedInputs.join(", ")}</code>
+                </span>
+              </dd>
+            </div>
+          ))}
+        </dl>
+        <p className={styles.detailLine}>
+          A matching topic is only a discovery candidate. Accept it only when
+          the emitter is the exact Router address on chain <code>1</code>, then
+          reproduce the record with canonical getter reads.
         </p>
 
         <h3 className={styles.subheading}>Atomic write selector</h3>
@@ -259,13 +376,185 @@ export default function LaunchStampDocsPage() {
         </p>
       </section>
 
+      <section id="indexing">
+        <h2>Backfill once, then follow finalized logs</h2>
+        <p className={docsStyles.lead}>
+          Terminals can discover every future Router stamp with one Ethereum log
+          stream. The filter is exact; the log is only an index candidate until
+          the point verifier reproduces it. Require{" "}
+          <code>eth_chainId == 0x1</code> before issuing this standard JSON-RPC
+          filter.
+        </p>
+
+        <div className={styles.concept}>
+          <div className={styles.conceptHeader}>
+            <span className={styles.conceptLabel}>eth_getLogs filter</span>
+            <span>Ethereum · canonical Router only</span>
+          </div>
+          <pre aria-label="Launch stamp Router event filter">
+            {terminalLogFilter}
+          </pre>
+        </div>
+
+        <dl className={styles.recordList}>
+          <div>
+            <dt>1 · Bind</dt>
+            <dd>
+              Verify chain, Router address, runtime, ABI URL and SHA-256,
+              topics, getters, immutable bindings, block range, and finality
+              policy before accepting any log.
+            </dd>
+          </div>
+          <div>
+            <dt>2 · Backfill</dt>
+            <dd>
+              Scan <code>eth_getLogs</code> in bounded chunks from block{" "}
+              <code>{router.startBlock}</code> to a finalized boundary. Respect{" "}
+              <code>endBlock</code> if a future manifest retires this Router.
+            </dd>
+          </div>
+          <div>
+            <dt>3 · Persist and dedupe</dt>
+            <dd>
+              Retain block number and hash, transaction hash and index, and log
+              index. Use those coordinates as the idempotency key so an overlap
+              can be replayed without duplicate classifications.
+            </dd>
+          </div>
+          <div>
+            <dt>4 · Verify candidates</dt>
+            <dd>
+              Decode each log by its matched signature and correlate the three
+              event types by <code>launchId</code>. Only{" "}
+              <code>ProgrammableLaunchStampedV1</code> supplies token and hook,
+              plus the non-indexed PoolManager, poolId, and stampHash. Read the
+              record at the same canonical block and classify only from{" "}
+              <code>record.kind</code>.
+            </dd>
+          </div>
+          <div>
+            <dt>5 · Checkpoint</dt>
+            <dd>
+              Advance a durable checkpoint only through the finalized boundary.
+              Explicit block-number reads require at least{" "}
+              <code>{router.finalityConfirmations}</code> confirmations.
+            </dd>
+          </div>
+          <div>
+            <dt>6 · Replay overlap</dt>
+            <dd>
+              Re-read an overlap window on every run. Deduplicate identical
+              coordinates and apply corrections idempotently before moving the
+              checkpoint.
+            </dd>
+          </div>
+          <div>
+            <dt>7 · Handle reorgs</dt>
+            <dd>
+              Prefer EIP-1898 reads with <code>requireCanonical: true</code>. If
+              a stored block hash changes, orphan the affected observations,
+              rewind to the last common finalized checkpoint, and replay.
+            </dd>
+          </div>
+          <div>
+            <dt>8 · Hand off to live</dt>
+            <dd>
+              After backfill reaches finality, poll or subscribe from the
+              overlapping checkpoint. Reconcile every notification through the
+              same log and getter checks before advancing, leaving no
+              backfill-to-live gap.
+            </dd>
+          </div>
+        </dl>
+
+        <h3 className={styles.subheading}>Verify each supported identity</h3>
+        <dl className={styles.boundaryList}>
+          <div>
+            <dt>Token</dt>
+            <dd>
+              Require <code>launchIdByToken(token)</code>,{" "}
+              <code>record.token == token</code>, and{" "}
+              <code>stampProof(token) == (launchId, record.stampHash)</code>.
+            </dd>
+          </div>
+          <div>
+            <dt>v4 pool</dt>
+            <dd>
+              Require <code>launchIdByPool(PoolManager, poolId)</code> and exact
+              equality with <code>record.poolManager</code> and{" "}
+              <code>record.poolId</code>. PoolManager must equal the published
+              immutable binding.
+            </dd>
+          </div>
+          <div>
+            <dt>Exclusive component</dt>
+            <dd>
+              Require <code>launchIdByComponent(component)</code>, matching{" "}
+              <code>stampProof(component)</code>, and equality between{" "}
+              <code>componentRuntimeCodeHash(component)</code> and the component
+              runtime read at the same block.
+            </dd>
+          </div>
+        </dl>
+
+        <p className={styles.scopeLine}>
+          Token and pool are the interoperable terminal inputs. A Custom hook
+          may also be an exclusive component; the shared Classic hook never
+          identifies a launch. Zero means not stamped only after a successful
+          canonical call. RPC or consistency failures remain indeterminate.
+        </p>
+
+        <h3 className={styles.subheading}>Canonical integration resources</h3>
+        <dl className={styles.artifactBinding}>
+          <div>
+            <dt>Discovery</dt>
+            <dd>
+              <a href={PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.discoveryUrl}>
+                {PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.discoveryUrl}
+              </a>
+            </dd>
+          </div>
+          <div>
+            <dt>Router reference</dt>
+            <dd>
+              <a href={PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.referenceUrl}>
+                Full verification contract
+              </a>
+            </dd>
+          </div>
+          <div>
+            <dt>Terminal guide</dt>
+            <dd>
+              <a href={PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.terminalGuideUrl}>
+                Backfill, live-follow, and reorg policy
+              </a>
+            </dd>
+          </div>
+          <div>
+            <dt>JSON-RPC verifier</dt>
+            <dd>
+              <a href={PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.jsonRpcVerifierUrl}>
+                Dependency-light implementation
+              </a>
+            </dd>
+          </div>
+          <div>
+            <dt>viem verifier</dt>
+            <dd>
+              <a href={PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.viemVerifierUrl}>
+                TypeScript implementation
+              </a>
+            </dd>
+          </div>
+        </dl>
+      </section>
+
       <section id="record">
         <h2>Decode the frozen record in order</h2>
         <p>
-          <code>launchStamp(bytes32)</code> returns{" "}
-          <code>StampRecordV1</code> with these fourteen fields in this exact
-          order. Decode the tuple with the frozen ABI rather than a locally
-          reconstructed type.
+          <code>launchStamp(bytes32)</code> returns <code>StampRecordV1</code>{" "}
+          with these fourteen fields in this exact order. Decode the tuple with
+          the frozen ABI rather than a locally reconstructed type.
         </p>
 
         <div className={styles.recordLayout}>
@@ -321,9 +610,9 @@ export default function LaunchStampDocsPage() {
           <div>
             <dt>Hook</dt>
             <dd>
-              <code>record.hook</code> is descriptive metadata. The Classic
-              hook is shared by multiple launches, so it is never a universal
-              lookup or classification key.
+              <code>record.hook</code> is descriptive metadata. The Classic hook
+              is shared by multiple launches, so it is never a universal lookup
+              or classification key.
             </dd>
           </div>
         </dl>
@@ -341,15 +630,29 @@ export default function LaunchStampDocsPage() {
           <div>
             <dt>It establishes</dt>
             <dd>
-              Programmable origin for the returned future Classic or Custom
-              launch record on the configured chain.
+              Canonical Router route and origin for the returned Classic or
+              Custom launch record at or after <code>startBlock</code>. It does
+              not claim that every recorded component was newly created; shared
+              Classic infrastructure can be recorded by reference.
+            </dd>
+          </div>
+          <div>
+            <dt>Atomic v4 pool check</dt>
+            <dd>
+              For the exact recorded pool, the Router requires{" "}
+              <code>slot0.sqrtPriceX96 == 0</code> immediately before its
+              authorized launch call and <code>slot0.sqrtPriceX96 != 0</code>{" "}
+              immediately after it, then writes the stamp in the same
+              transaction. This establishes initialization during that atomic
+              launch, not current pool state or liquidity.
             </dd>
           </div>
           <div>
             <dt>It does not establish</dt>
             <dd>
-              Safety, tradability, liquidity, audit coverage, review status,
-              approval, endorsement, or permission to launch.
+              Safety, tradability, current pool state, current liquidity, audit
+              coverage, review status, approval, endorsement, or permission to
+              launch.
             </dd>
           </div>
           <div>
@@ -365,18 +668,39 @@ export default function LaunchStampDocsPage() {
             <dd>
               Historical launches created before Router activation. Do not
               backfill them or infer stamps from legacy contracts and events.
+              Direct Classic Factory, Graph Factory, or Single Factory calls
+              outside the canonical Router do not create Router provenance.
+            </dd>
+          </div>
+          <div>
+            <dt>Third-party support</dt>
+            <dd>
+              A stamp does not automatically list a coin in GMGN, Axiom, FOMO,
+              or any other terminal. Each consumer decides whether and how to
+              integrate this public verification contract. Generic pool or token
+              discovery in a third-party API is not Router stamp integration and
+              must not be presented as Programmable provenance. GMGN market
+              numbers are not canonical onchain stamp evidence; read current
+              pool state separately through PoolManager or StateView.
+            </dd>
+          </div>
+          <div>
+            <dt>Launch operations</dt>
+            <dd>
+              The public GitHub approval → permit → wallet self-service flow is
+              not live. This reference activates read-only provenance detection,
+              not public launch authorization.
             </dd>
           </div>
         </dl>
       </section>
 
       <section className={styles.finalSection} id="integration">
-        <h2>Separate deployment evidence from activation</h2>
+        <h2>Bind to the live Router</h2>
         <p>
-          The Router candidate below is finalized and its runtime and immutable
-          getters were verified at the stated finalized block. These values are
-          deployment evidence only. The activation binding remains prelaunch
-          until the canary is complete.
+          The activation tuple is live on Ethereum. The deployment evidence
+          identifies the exact Router runtime, and the immutable bindings below
+          must match at the canonical block used for every lookup.
         </p>
 
         <h3 className={styles.subheading}>Finalized deployment evidence</h3>
@@ -388,10 +712,17 @@ export default function LaunchStampDocsPage() {
             </div>
           ))}
         </dl>
+        <p className={styles.detailLine}>
+          <code>finalized-verified</code> describes the deployment receipt,
+          runtime, and immutable getter evidence. It is not an Explorer source
+          publication status. The SHA-256 values are supplied handoff digests;
+          this Website repository did not independently download and recompute
+          their source evidence files.
+        </p>
 
-        <h3 className={styles.subheading}>Observed immutable getters</h3>
+        <h3 className={styles.subheading}>Live immutable bindings</h3>
         <dl className={styles.artifactBinding}>
-          {observedBindingFields.map(([field, value]) => (
+          {activationBindingFields.map(([field, value]) => (
             <div key={field}>
               <dt>{field}</dt>
               <dd>{value}</dd>
@@ -399,14 +730,65 @@ export default function LaunchStampDocsPage() {
           ))}
         </dl>
 
+        <h3 className={styles.subheading}>
+          Finalized CustomGraph canary (PCAN vector)
+        </h3>
+        <p>
+          The PCAN point-in-time test vector covers the CustomGraph route.
+          <code>PCAN</code> is the human-readable token symbol, not another
+          canary, launch, or trust identifier. There is no separate Classic
+          onchain canary claim. Future Classic stamps use the same live Router
+          ABI and become verifiable when their records exist.
+        </p>
+        <dl className={styles.artifactBinding}>
+          {canaryIdentityFields.map(([field, value]) => (
+            <div key={field}>
+              <dt>{field}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className={styles.detailLine}>
+          Canary source commit <code>{canary.source.sourceCommit}</code> is
+          separate from Router artifact source commit{" "}
+          <code>{artifact.sourceCommit}</code> and does not replace it. The
+          canary SHA-256 fields are supplied handoff digests; this Website
+          repository did not independently download or recompute their evidence
+          files and does not host them.
+        </p>
+
+        <h3 className={styles.subheading}>Canary observations</h3>
+        <dl className={styles.artifactBinding}>
+          {canaryObservationFields.map(([field, value]) => (
+            <div key={field}>
+              <dt>{field}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <h3 className={styles.subheading}>Canary component proofs</h3>
+        <dl className={`${styles.abiList} ${styles.proofList}`}>
+          {canary.stampProofs.map((proof) => (
+            <div key={proof.component}>
+              <dt>{proof.component}</dt>
+              <dd>
+                <code>{proof.launchId}</code>
+                <span>
+                  stampHash <code>{proof.stampHash}</code>
+                </span>
+              </dd>
+            </div>
+          ))}
+        </dl>
+
         <div className={styles.implementationRule}>
-          <strong>Activation rule</strong>
+          <strong>Classification rule</strong>
           <p>
-            While <code>status</code> is <code>prelaunch</code>, do not issue
-            Router reads and do not present any launch as stamped. Enable the
-            frozen read sequence only after the canary is complete and the
-            address, runtime code hash, start block, and authority are published
-            together in the live activation binding.
+            Resolve one finalized canonical block, enforce the published block
+            range, and validate the Router runtime and immutable bindings. Only
+            a consistent nonzero record is stamped. A canonical zero lookup is
+            not stamped; a failed call or mismatch is indeterminate.
           </p>
         </div>
       </section>
