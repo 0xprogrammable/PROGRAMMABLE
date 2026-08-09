@@ -16,6 +16,7 @@ export const docsCategories = [
   {
     href: "/docs/developers",
     label: "Developers",
+    relatedPaths: ["/docs/launch-stamps"],
     status: "available",
   },
 ] as const;
@@ -25,6 +26,7 @@ export const docsNavigation = [
     label: "Developers",
     items: [
       { href: "/docs/developers#paths", label: "Start here" },
+      { href: "/docs/launch-stamps", label: "Launch stamps" },
       { href: "/docs/developers#quickstart", label: "Quickstart" },
       { href: "/docs/developers#identity", label: "Launch identity" },
       { href: "/docs/developers#providers", label: "Custom Registry" },
@@ -39,6 +41,12 @@ export const docsNavigation = [
 ] as const;
 
 export const docsSearchItems: DocsSearchItem[] = [
+  {
+    title: "Launch stamps",
+    description:
+      "Verify future Classic and Custom provenance through one canonical Router lookup.",
+    href: "/docs/launch-stamps",
+  },
   {
     title: "Terminal contract",
     description:
