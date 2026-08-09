@@ -17,6 +17,9 @@
   `test_beneficiaryIsImmutable`, `test_releaseIsPermissionlessButPaysOnlyTheBeneficiary`.
   Outstanding: the creator-fee claim path through `FeeSplitVaultV1`, which is unmodified from the Classic release
   and covered by that model's suite.
+- The wallet's own tranche-share and expiry bounds are enforced independently of the hook, since the wallet is a
+  separate deployment that receives its own constructor arguments. Complete: `TrancheShareBelowMinimum` and
+  `ExpiryDaysOutOfRange` revert paths in `test/EthLadderFeeHookV1.t.sol`.
 
 ## Integration lifecycle
 
@@ -46,6 +49,10 @@
   `PartialFillUnsupported` as designed. Outstanding as a dedicated named test.
 - External-call and recipient failures: a token whose `creator()` reverts, a reward vault that rejects its claim, a
   beneficiary contract that reverts on receipt. Outstanding.
+- The full deployment-through-forfeiture sequence against the real, currently-deployed Ethereum Mainnet
+  `PoolManager`, including both the hook factory and the custody wallet factory. Complete:
+  `test_fullLifecycleAgainstTheRealPoolManager` in `test/EthLadderFeeHookV1MainnetFork.t.sol`. See
+  `models/ladder/DEPLOYMENT_GRAPH.md` for the exact inputs and postconditions at each step.
 
 ## Properties
 
@@ -64,12 +71,17 @@
 
 ## Release evidence
 
-- The suite runs against the revisions installed by `scripts/bootstrap-deps.sh`. Pinning those revisions in
-  `spec/ladder.json` is a release gate.
-- A mainnet-fork lifecycle against the live `PoolManager` is a release gate and is not yet included. The local
-  integration suite above uses `Deployers`, which deploys a real `PoolManager` in-process.
+- The suite runs against the revisions installed by `scripts/bootstrap-deps.sh`, and those exact revisions are
+  now pinned in `spec/ladder.json`.
+- A mainnet-fork lifecycle against the live `PoolManager` is complete:
+  `test/EthLadderFeeHookV1MainnetFork.t.sol` runs the full deployment, registration, initialization, liquidity,
+  trading, unlock, release and forfeiture sequence against the real, currently-deployed Ethereum Mainnet
+  `PoolManager`, asserting its bytecode hash before running. The exact sequence, with concrete inputs and
+  postconditions, is written up in `models/ladder/DEPLOYMENT_GRAPH.md`. The local integration suite above uses
+  `Deployers`, which deploys a fresh `PoolManager` in-process; this test is the one that runs against the real one.
 - Runtime code hashes and source verification are recorded after deployment. Not applicable at `design` status; no
-  Ladder contract is deployed.
+  Ladder contract is deployed, and every hash field in `spec/ladder.json`'s `contracts` array is `null` for that
+  reason.
 
 ## Defects found by this suite
 
