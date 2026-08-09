@@ -1,4 +1,9 @@
-import type { LauncherToken, TokenLinkKind } from "../tokens";
+import {
+  isLaunchStampProvenanceV1,
+  type LaunchStampProvenanceV1,
+  type LauncherToken,
+  type TokenLinkKind,
+} from "../tokens";
 import type { ExploreReadModel, ExploreSnapshot } from "./types";
 
 type IndexerLinks = Partial<Record<TokenLinkKind, string>>;
@@ -9,7 +14,7 @@ export type ProgrammableIndexerToken = {
   address: LauncherToken["tokenAddress"];
   name: string;
   symbol: string;
-  decimals: number;
+  decimals: number | null;
   description: string | null;
   imageUrl: string | null;
   links: IndexerLinks;
@@ -22,6 +27,8 @@ export type ProgrammableIndexerToken = {
     quoteAssetSymbol: LauncherToken["quoteAssetSymbol"] | null;
     quoteAssetName: LauncherToken["quoteAssetName"] | null;
     quoteIsCurrency0: LauncherToken["quoteIsCurrency0"] | null;
+    poolManagerAddress: `0x${string}` | null;
+    poolKey: LaunchStampProvenanceV1["poolKey"] | null;
     positionRecipient: LauncherToken["positionRecipient"] | null;
     positionTokenId: LauncherToken["positionTokenId"] | null;
     tokenLiquidityAmountRaw:
@@ -32,20 +39,21 @@ export type ProgrammableIndexerToken = {
       | null;
   };
   fees: {
-    model: "uniswap-v4-custom-accounting";
-    currency: string;
+    status: "verified" | "unknown";
+    model: "uniswap-v4-custom-accounting" | "unknown";
+    currency: string | null;
     currencyAddress: `0x${string}` | null;
-    buyHookFeeBps: number;
-    sellHookFeeBps: number;
+    buyHookFeeBps: number | null;
+    sellHookFeeBps: number | null;
     creatorFeeBps: number | null;
     buyCreatorFeeBps: number | null;
     sellCreatorFeeBps: number | null;
     growthFeeBps: number | null;
-    programmableFeeBps: number;
-    launcherFeeBps: number;
-    transferTaxBps: number;
-    lpFeePips: number;
-    launcherFeeIncludedInHookFee: true;
+    programmableFeeBps: number | null;
+    launcherFeeBps: number | null;
+    transferTaxBps: number | null;
+    lpFeePips: number | null;
+    launcherFeeIncludedInHookFee: true | null;
   };
   launch: {
     /**
@@ -55,6 +63,7 @@ export type ProgrammableIndexerToken = {
     model: string;
     modelId: NonNullable<LauncherToken["launchModel"]>;
     modelVersion: string | null;
+    category: "classic" | "custom";
     deepReleaseVersion:
       | "deep-full-range-v1"
       | "deep-full-range-v2"
@@ -66,6 +75,7 @@ export type ProgrammableIndexerToken = {
     transactionHash: LauncherToken["launchTransactionHash"] | null;
     blockNumber: LauncherToken["launchBlockNumber"] | null;
     launchedAt: string;
+    launchStampProvenance: LauncherToken["launchStampProvenance"] | null;
   };
   liquidityGrowth:
     | {
@@ -131,7 +141,9 @@ function launchIdentity(token: LauncherToken) {
     token.launchModel === "deep"
       ? token.deepReleaseVersion ?? null
       : token.launchModel === "stock-paired" ||
-          token.launchModelVersion === "classic-v3"
+          token.launchModel === "custom-graph" ||
+          token.launchModelVersion === "classic-v3" ||
+          token.launchModelVersion === "programmable-launch-stamp-router-v1"
         ? token.launchModelVersion ?? null
         : null;
 
@@ -270,6 +282,74 @@ export function serializeIndexerToken(
   const isDeepV1 = token.deepReleaseVersion === "deep-full-range-v1";
   const isDeepV2 = token.deepReleaseVersion === "deep-full-range-v2";
   const isDeepV3 = token.deepReleaseVersion === "deep-full-range-v3";
+  const isCustomGraph = token.launchModel === "custom-graph";
+  const launchStampProvenance = token.launchStampProvenance;
+  const isStamped = launchStampProvenance !== undefined;
+  if (
+    isStamped &&
+    (!token.creatorAddress ||
+      !token.launchTransactionHash ||
+      !token.launchBlockNumber ||
+      token.launchTransactionIndex === undefined ||
+      token.launchLogIndex === undefined ||
+      !isLaunchStampProvenanceV1(launchStampProvenance, {
+        chainId,
+        tokenAddress: token.tokenAddress,
+        hookAddress: token.hookAddress,
+        poolId: token.poolId,
+        launchWallet: token.creatorAddress,
+        transactionHash: token.launchTransactionHash,
+        blockNumber: token.launchBlockNumber,
+        transactionIndex: token.launchTransactionIndex,
+        launchLogIndex: token.launchLogIndex,
+      }))
+  ) {
+    throw new Error(`Token ${token.tokenAddress} has invalid launch stamp provenance`);
+  }
+  const stampedTokenDecimals =
+    Number.isSafeInteger(token.tokenDecimals) &&
+    (token.tokenDecimals as number) >= 0 &&
+    (token.tokenDecimals as number) <= 255
+      ? (token.tokenDecimals as number)
+      : null;
+  if (
+    isStamped &&
+    (token.launchModel !==
+        (launchStampProvenance.kind === "custom-graph"
+          ? "custom-graph"
+          : "classic") ||
+      token.launchModelVersion !== "programmable-launch-stamp-router-v1" ||
+      token.liquidityPath !== "programmable-v4" ||
+      token.totalSwapFeeBps !== null)
+  ) {
+    throw new Error(
+      `Token ${token.tokenAddress} has a mismatched launch stamp disclosure`,
+    );
+  }
+  if (
+    isCustomGraph && !isStamped
+  ) {
+    throw new Error(
+      `Token ${token.tokenAddress} is missing canonical Custom Graph disclosure`,
+    );
+  }
+  const hasUnknownFees = isStamped;
+  if (
+    hasUnknownFees &&
+    (token.buyHookFeeBps !== undefined ||
+      token.sellHookFeeBps !== undefined ||
+      token.creatorFeeBps !== undefined ||
+      token.buyCreatorFeeBps !== undefined ||
+      token.sellCreatorFeeBps !== undefined ||
+      token.growthFeeBps !== undefined ||
+      token.programmableFeeBps !== undefined ||
+      token.launcherFeeBps !== undefined ||
+      token.transferTaxBps !== undefined)
+  ) {
+    throw new Error(
+      `Token ${token.tokenAddress} has invented Router fee disclosure`,
+    );
+  }
   if (
     (token.launchModel === "deep" &&
       !isDeepV1 &&
@@ -313,33 +393,37 @@ export function serializeIndexerToken(
     );
   }
   if (
-    buyHookFeeBps === undefined ||
-    sellHookFeeBps === undefined ||
-    launcherFeeBps === undefined ||
-    transferTaxBps === undefined ||
-    programmableFeeBps === undefined ||
-    (!isDeepV3 &&
-      (buyCreatorFeeBps === null ||
-        sellCreatorFeeBps === null)) ||
-    (isDeepV3 && growthFeeBps === null)
+    (!hasUnknownFees && buyHookFeeBps === undefined) ||
+    (!hasUnknownFees && sellHookFeeBps === undefined) ||
+    (!hasUnknownFees && launcherFeeBps === undefined) ||
+    (!hasUnknownFees && transferTaxBps === undefined) ||
+    (!hasUnknownFees && programmableFeeBps === undefined) ||
+    (!hasUnknownFees &&
+      !isDeepV3 &&
+      (buyCreatorFeeBps === null || sellCreatorFeeBps === null)) ||
+    (!hasUnknownFees && isDeepV3 && growthFeeBps === null) ||
+    (!isStamped && token.totalSwapFeeBps === null)
   ) {
     throw new Error(
       `Token ${token.tokenAddress} is missing onchain fee disclosure`,
     );
   }
   if (
-    (isDeepV3
-      ? growthFeeBps! + programmableFeeBps !== buyHookFeeBps ||
-        growthFeeBps! + programmableFeeBps !== sellHookFeeBps ||
-        launcherFeeBps !== programmableFeeBps ||
-        ![undefined, 0].includes(token.creatorFeeBps) ||
-        ![undefined, 0].includes(token.buyCreatorFeeBps) ||
-        ![undefined, 0].includes(token.sellCreatorFeeBps)
-      : (buyCreatorFeeBps as number) + launcherFeeBps !==
-          buyHookFeeBps ||
-        (sellCreatorFeeBps as number) + launcherFeeBps !==
-          sellHookFeeBps) ||
-    transferTaxBps !== 0
+    !hasUnknownFees &&
+    (
+      (isDeepV3
+        ? growthFeeBps! + programmableFeeBps! !== buyHookFeeBps ||
+          growthFeeBps! + programmableFeeBps! !== sellHookFeeBps ||
+          launcherFeeBps !== programmableFeeBps ||
+          ![undefined, 0].includes(token.creatorFeeBps ?? undefined) ||
+          ![undefined, 0].includes(token.buyCreatorFeeBps) ||
+          ![undefined, 0].includes(token.sellCreatorFeeBps)
+        : (buyCreatorFeeBps as number) + launcherFeeBps! !==
+            buyHookFeeBps ||
+          (sellCreatorFeeBps as number) + launcherFeeBps! !==
+            sellHookFeeBps) ||
+      transferTaxBps !== 0
+    )
   ) {
     throw new Error(`Token ${token.tokenAddress} has an invalid fee disclosure`);
   }
@@ -406,7 +490,9 @@ export function serializeIndexerToken(
     address: token.tokenAddress,
     name: token.name,
     symbol: token.symbol,
-    decimals: token.tokenDecimals ?? 18,
+    decimals: isStamped
+      ? stampedTokenDecimals
+      : token.tokenDecimals ?? 18,
     description: token.description ?? null,
     imageUrl: token.imageUrl ?? null,
     links: indexerLinks(token),
@@ -419,35 +505,45 @@ export function serializeIndexerToken(
       quoteAssetSymbol,
       quoteAssetName,
       quoteIsCurrency0,
-      positionRecipient: token.positionRecipient ?? null,
-      positionTokenId: token.positionTokenId ?? null,
+      poolManagerAddress: launchStampProvenance?.poolManagerAddress ?? null,
+      poolKey: launchStampProvenance?.poolKey ?? null,
+      positionRecipient: isStamped
+        ? null
+        : token.positionRecipient ?? null,
+      positionTokenId: isStamped ? null : token.positionTokenId ?? null,
       tokenLiquidityAmountRaw:
         token.tokenLiquidityAmountRaw ?? null,
       lockedTokenDustRaw: token.lockedTokenDustRaw ?? null,
     },
     fees: {
-      model: "uniswap-v4-custom-accounting",
-      currency: quoteAssetSymbol ?? "ETH",
-      currencyAddress: quoteAssetAddress,
-      buyHookFeeBps,
-      sellHookFeeBps,
+      status: hasUnknownFees ? "unknown" : "verified",
+      model: hasUnknownFees ? "unknown" : "uniswap-v4-custom-accounting",
+      currency: hasUnknownFees ? null : quoteAssetSymbol ?? "ETH",
+      currencyAddress: hasUnknownFees ? null : quoteAssetAddress,
+      buyHookFeeBps: hasUnknownFees ? null : buyHookFeeBps!,
+      sellHookFeeBps: hasUnknownFees ? null : sellHookFeeBps!,
       creatorFeeBps:
+        !hasUnknownFees &&
         buyCreatorFeeBps !== null &&
         sellCreatorFeeBps !== null &&
         buyCreatorFeeBps === sellCreatorFeeBps
           ? buyCreatorFeeBps
           : null,
-      buyCreatorFeeBps,
-      sellCreatorFeeBps,
-      growthFeeBps,
-      programmableFeeBps,
-      launcherFeeBps,
-      transferTaxBps,
-      lpFeePips: token.lpFeePips ?? 0,
-      launcherFeeIncludedInHookFee: true,
+      buyCreatorFeeBps: hasUnknownFees ? null : buyCreatorFeeBps,
+      sellCreatorFeeBps: hasUnknownFees ? null : sellCreatorFeeBps,
+      growthFeeBps: hasUnknownFees ? null : growthFeeBps,
+      programmableFeeBps: hasUnknownFees ? null : programmableFeeBps!,
+      launcherFeeBps: hasUnknownFees ? null : launcherFeeBps!,
+      transferTaxBps: hasUnknownFees ? null : transferTaxBps!,
+      lpFeePips: hasUnknownFees ? null : token.lpFeePips ?? 0,
+      launcherFeeIncludedInHookFee: hasUnknownFees ? null : true,
     },
     launch: {
       ...launch,
+      category:
+        launchStampProvenance?.kind === "custom-graph"
+          ? "custom"
+          : "classic",
       deepReleaseVersion:
         token.launchModel === "deep"
           ? token.deepReleaseVersion!
@@ -458,6 +554,7 @@ export function serializeIndexerToken(
       transactionHash: token.launchTransactionHash ?? null,
       blockNumber: token.launchBlockNumber ?? null,
       launchedAt: token.launchedAt,
+      launchStampProvenance: launchStampProvenance ?? null,
     },
     liquidityGrowth: serializeLiquidityGrowth(token, isDeepV3),
   };
@@ -494,7 +591,10 @@ export function findIndexerToken(
   return token ? serializeIndexerToken(token, chainId) : null;
 }
 
-export function buildUniswapTokenList(
+export const UNISWAP_TOKEN_LIST_OMISSION_REASON =
+  "missing-valid-decimals" as const;
+
+export function buildUniswapTokenListResult(
   model: ExploreReadModel,
   chainId: number,
   generatedAt = new Date(),
@@ -505,23 +605,16 @@ export function buildUniswapTokenList(
     );
   }
 
-  return {
-    name: "Programmable",
-    timestamp: generatedAt.toISOString(),
-    version: {
-      major: 1,
-      minor: model.tokens.length,
-      patch: 0,
-    },
-    keywords: ["programmable", "uniswap v4"],
-    tokens: model.tokens.map((token) => {
-      const serialized = serializeIndexerToken(token, chainId);
-      return {
+  const tokens = model.tokens.flatMap((token) => {
+    const serialized = serializeIndexerToken(token, chainId);
+    if (serialized.decimals === null) return [];
+    return [
+      {
         chainId,
         address: token.tokenAddress,
         name: token.name,
         symbol: token.symbol,
-        decimals: token.tokenDecimals ?? 18,
+        decimals: serialized.decimals,
         ...(token.imageUrl ? { logoURI: token.imageUrl } : {}),
         extensions: {
           programmable: {
@@ -534,9 +627,14 @@ export function buildUniswapTokenList(
                 ? "v4-deep-liquidity"
                 : token.launchModel === "stock-paired"
                   ? "v4-stock-paired"
-                  : "v4-custom-accounting",
+                  : token.launchModel === "custom-graph"
+                    ? "v4-programmable-custom-graph"
+                    : "v4-custom-accounting",
             launchModel: serialized.launch.modelId,
             launchModelVersion: serialized.launch.modelVersion,
+            launchCategory: serialized.launch.category,
+            launchStampProvenance:
+              serialized.launch.launchStampProvenance,
             poolId: token.poolId,
             quoteAssetAddress:
               serialized.canonicalPool.quoteAssetAddress,
@@ -545,8 +643,9 @@ export function buildUniswapTokenList(
             quoteAssetName: serialized.canonicalPool.quoteAssetName,
             quoteIsCurrency0:
               serialized.canonicalPool.quoteIsCurrency0,
-            positionRecipient: token.positionRecipient ?? null,
-            positionTokenId: token.positionTokenId ?? null,
+            positionRecipient:
+              serialized.canonicalPool.positionRecipient,
+            positionTokenId: serialized.canonicalPool.positionTokenId,
             tokenLiquidityAmountRaw:
               token.tokenLiquidityAmountRaw ?? null,
             lockedTokenDustRaw: token.lockedTokenDustRaw ?? null,
@@ -557,11 +656,52 @@ export function buildUniswapTokenList(
             sellCreatorFeeBps: serialized.fees.sellCreatorFeeBps,
             launcherFeeBps: serialized.fees.launcherFeeBps,
             transferTaxBps: serialized.fees.transferTaxBps,
-            feeIncluded: true,
+            feeStatus: serialized.fees.status,
+            feeIncluded:
+              serialized.fees.launcherFeeIncludedInHookFee,
             liquidityGrowth: serialized.liquidityGrowth,
           },
         },
-      };
-    }),
+      },
+    ];
+  });
+  const omittedTokenCount = model.tokens.length - tokens.length;
+
+  return {
+    tokenList:
+      tokens.length === 0
+        ? null
+        : {
+            name: "Programmable",
+            timestamp: generatedAt.toISOString(),
+            version: {
+              major: 1,
+              minor: model.tokens.length,
+              patch: 0,
+            },
+            keywords: ["programmable", "uniswap v4"],
+            tokens,
+          },
+    omissions: {
+      count: omittedTokenCount,
+      reason:
+        omittedTokenCount === 0
+          ? null
+          : UNISWAP_TOKEN_LIST_OMISSION_REASON,
+    },
   };
+}
+
+export function buildUniswapTokenList(
+  model: ExploreReadModel,
+  chainId: number,
+  generatedAt = new Date(),
+) {
+  const result = buildUniswapTokenListResult(model, chainId, generatedAt);
+  if (result.tokenList === null) {
+    throw new Error(
+      "A token list cannot be published without a token with valid decimals",
+    );
+  }
+  return result.tokenList;
 }

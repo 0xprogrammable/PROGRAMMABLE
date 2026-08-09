@@ -25,6 +25,7 @@ import type {
   ExploreReadModel,
   ReadyOnchainDeployment,
 } from "../lib/onchain/types";
+import type { LauncherToken } from "../lib/tokens";
 
 const account = "0x1111111111111111111111111111111111111111" as const;
 const poolId = `0x${"22".repeat(32)}` as const;
@@ -59,14 +60,109 @@ const token = {
   creatorAddress: account,
   positionRecipient: account,
   positionTokenId: "1",
+  launchHash: `0x${"66".repeat(32)}` as const,
   launchTransactionHash: `0x${"77".repeat(32)}` as const,
   launchLogIndex: 0,
   launchBlockNumber: "90",
   launchedAt: "2026-08-04T00:00:00.000Z",
   launchModel: "classic" as const,
   totalSwapFeeBps: 100,
+  creatorFeesAccruedWei: "0",
+  creatorFeesGeneratedWei: "0",
   liquidityPath: "meme" as const,
-};
+} satisfies LauncherToken;
+
+function customGraphProvenance() {
+  const launchId = `0x${"aa".repeat(32)}` as const;
+  const stampHash = `0x${"ab".repeat(32)}` as const;
+  const poolManagerAddress =
+    "0x000000000004444c5dc75cB358380D2e3dE08A90" as const;
+  return {
+    schemaVersion: "programmable.launch-stamp-provenance.v1",
+    chainId: 1,
+    routerAddress: "0x8622DD5bAb44185f2A458ac90384Ac99248f8d56",
+    routerRuntimeCodeHash:
+      "0x40e27ecf201761d5eb66bc4f2d5c6124831ef078d7baf458ca5f41b1a8108546",
+    routerStartBlock: "25717612",
+    finalityConfirmations: 64,
+    kind: "custom-graph",
+    launchId,
+    stampHash,
+    launchWallet: account,
+    transactionHash: `0x${"ad".repeat(32)}`,
+    blockNumber: "25717620",
+    blockHash: `0x${"ae".repeat(32)}`,
+    transactionIndex: 2,
+    routeLogIndex: 8,
+    launchLogIndex: 9,
+    finalizedAtBlockNumber: "25717684",
+    finalizedAtBlockHash: `0x${"af".repeat(32)}`,
+    poolManagerAddress,
+    poolId: `0x${"99".repeat(32)}`,
+    poolKey: {
+      currency0: "0x0000000000000000000000000000000000000000",
+      currency1: "0x7777777777777777777777777777777777777777",
+      fee: 3_000,
+      tickSpacing: 60,
+      hooks: "0x8888888888888888888888888888888888888888",
+    },
+    poolKeyHash: `0x${"b1".repeat(32)}`,
+    componentSetHash: `0x${"b2".repeat(32)}`,
+    routePayloadHash: `0x${"b3".repeat(32)}`,
+    routeLauncherAddress:
+      "0x9999999999999999999999999999999999999999",
+    routeLauncherRuntimeCodeHash: `0x${"b4".repeat(32)}`,
+    expectedResultHash: `0x${"b5".repeat(32)}`,
+    permitDigest: `0x${"b6".repeat(32)}`,
+    components: [
+      {
+        address: "0x7777777777777777777777777777777777777777",
+        kind: "token",
+        scope: "exclusive",
+        runtimeCodeHash: `0x${"b7".repeat(32)}`,
+        logIndex: 6,
+        exclusiveProof: { launchId, stampHash },
+      },
+      {
+        address: "0x8888888888888888888888888888888888888888",
+        kind: "hook",
+        scope: "exclusive",
+        runtimeCodeHash: `0x${"b8".repeat(32)}`,
+        logIndex: 7,
+        exclusiveProof: { launchId, stampHash },
+      },
+    ],
+    tokenProof: {
+      tokenAddress: "0x7777777777777777777777777777777777777777",
+      launchId,
+      stampHash,
+    },
+    poolProof: {
+      poolManagerAddress,
+      poolId: `0x${"99".repeat(32)}`,
+      launchId,
+      stampHash,
+    },
+  } as const;
+}
+
+const customGraphToken = {
+  id: "1:custom-graph",
+  name: "Stamped graph",
+  symbol: "GRAPH",
+  tokenAddress: "0x7777777777777777777777777777777777777777",
+  hookAddress: "0x8888888888888888888888888888888888888888",
+  poolId: `0x${"99".repeat(32)}`,
+  creatorAddress: account,
+  launchBlockNumber: "25717620",
+  launchTransactionHash: `0x${"ad".repeat(32)}`,
+  launchLogIndex: 9,
+  launchedAt: "2026-08-09T00:00:00.000Z",
+  launchModel: "custom-graph",
+  totalSwapFeeBps: null,
+  launchStampProvenance: customGraphProvenance(),
+  liquidityPath: "programmable-v4",
+} satisfies LauncherToken;
 
 describe("Alchemy live creator profile", () => {
   beforeEach(() => {
@@ -134,5 +230,47 @@ describe("Alchemy live creator profile", () => {
       claimableCreatorFeesWei: "5",
       generatedCreatorFeesWei: "15",
     });
+    expect(mocks.multicall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contracts: [expect.objectContaining({ address: hookAddress })],
+      }),
+    );
+  });
+
+  it("keeps a stamped CustomGraph launch visible without querying its hook or inventing rewards", async () => {
+    mocks.getLogs.mockResolvedValue([]);
+    const model = {
+      status: "ready",
+      tokens: [customGraphToken],
+      snapshot: {
+        chainId: 1,
+        blockNumber: "100",
+        blockHash: `0x${"99".repeat(32)}`,
+        confirmations: 12,
+      },
+      creatorClaims: [],
+      launcherFeesAccruedWei: "0",
+      launcherFeesAccruedEth: "0",
+    } satisfies ExploreReadModel;
+
+    const profile = await readAlchemyCreatorProfile({
+      account,
+      deployment,
+      model,
+    });
+
+    expect(profile.tokens.map((entry) => entry.symbol)).toEqual(["GRAPH"]);
+    expect(profile.pools).toEqual([]);
+    expect(profile.claims).toEqual([]);
+    expect(profile.totals).toEqual({
+      claimableWei: "0",
+      claimableEth: "0",
+      generatedWei: "0",
+      generatedEth: "0",
+      claimedWei: "0",
+      claimedEth: "0",
+    });
+    expect(mocks.multicall).not.toHaveBeenCalled();
+    expect(mocks.getLogs).not.toHaveBeenCalled();
   });
 });

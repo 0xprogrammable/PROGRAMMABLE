@@ -7,6 +7,7 @@ import {
   safeAlchemyError,
 } from "../../../lib/alchemy/explore.server";
 import { enrichTokensWithAlchemyPoolState } from "../../../lib/alchemy/live-market.server";
+import { suppressRouterBoundCustomProjectDuplicates } from "../../../lib/alchemy/router-custom-collision";
 import { canonicalTokenExploreEntryV1 } from "../../../lib/explore-entry-v1";
 import {
   filterAndSortTokens,
@@ -300,10 +301,14 @@ export async function GET(request: NextRequest) {
       pageSize: integerQuery(search.get("limit"), 9),
       socials,
     } as const;
-    const [model, customProjects] = await Promise.all([
+    const [model, customProjectRecords] = await Promise.all([
       readAlchemyExploreModel(),
       readProductionCustomExploreDirectoryV1(request.signal),
     ]);
+    const customProjects = suppressRouterBoundCustomProjectDuplicates(
+      model.tokens,
+      customProjectRecords,
+    );
     let pricedModel = {
       ...model,
       tokens: await enrichTokensWithAlchemyPrices(model.tokens),

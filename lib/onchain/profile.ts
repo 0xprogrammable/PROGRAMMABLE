@@ -9,14 +9,28 @@ function sumStringValues(values: string[]) {
 export function buildCreatorProfile(
   model: ExploreReadModel,
   account: Address,
+  directRewardPoolIds: ReadonlySet<string> = new Set(),
 ): CreatorProfile {
   const normalizedAccount = account.toLowerCase();
   const tokens = model.tokens.filter(
     (token) =>
       token.creatorAddress?.toLowerCase() === normalizedAccount,
   );
+  const rewardTokens = tokens.flatMap((token) => {
+    const totalSwapFeeBps = token.totalSwapFeeBps;
+    if (
+      !directRewardPoolIds.has(token.poolId.toLowerCase()) ||
+      token.launchModel !== "classic" ||
+      typeof totalSwapFeeBps !== "number" ||
+      !Number.isSafeInteger(totalSwapFeeBps) ||
+      totalSwapFeeBps < 0
+    ) {
+      return [];
+    }
+    return [{ token, totalSwapFeeBps }];
+  });
   const tokenPools = new Set(
-    tokens.map((token) => token.poolId.toLowerCase()),
+    rewardTokens.map(({ token }) => token.poolId.toLowerCase()),
   );
   const claims = model.creatorClaims
     .filter(
@@ -35,26 +49,18 @@ export function buildCreatorProfile(
       }
       return second.logIndex - first.logIndex;
     });
-  const pools = tokens
-    .filter((token) => token.launchModel !== "stock-paired")
-    .map((token) => ({
+  const pools = rewardTokens.map(({ token, totalSwapFeeBps }) => ({
     tokenAddress: token.tokenAddress,
     name: token.name,
     symbol: token.symbol,
     poolId: token.poolId,
-    totalSwapFeeBps: token.totalSwapFeeBps,
-    launchModel:
-      token.launchModel === "stock-paired"
-        ? "classic"
-        : token.launchModel ?? "classic",
-    ...(token.adaptiveCurveHash
-      ? { adaptiveCurveHash: token.adaptiveCurveHash }
-      : {}),
+    totalSwapFeeBps,
+    launchModel: "classic" as const,
     claimableCreatorFeesWei: token.creatorFeesAccruedWei ?? "0",
     claimableCreatorFeesEth: token.creatorFeesAccruedEth ?? "0",
     generatedCreatorFeesWei: token.creatorFeesGeneratedWei ?? "0",
     generatedCreatorFeesEth: token.creatorFeesGeneratedEth ?? "0",
-    }));
+  }));
   const claimable = sumStringValues(
     pools.map((pool) => pool.claimableCreatorFeesWei),
   );

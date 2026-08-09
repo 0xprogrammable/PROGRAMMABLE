@@ -18,7 +18,8 @@ type PortfolioHistoryLaunchModel =
   | "classic"
   | "adaptive"
   | "deep"
-  | "stock-paired";
+  | "stock-paired"
+  | "custom-graph";
 
 export type PortfolioHistoryTokenPoint = {
   tokenAddress: Address;

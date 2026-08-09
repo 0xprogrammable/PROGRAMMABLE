@@ -453,6 +453,113 @@
   padding: 10px;
 }
 
+.launchesPanel {
+  background: var(--profile-panel);
+  border: 1px solid var(--profile-line);
+  border-radius: 20px;
+  box-shadow: var(--liquid-glass-shadow);
+  margin-block-end: 10px;
+  padding: 15px 16px 16px;
+}
+
+.launchesHeader {
+  align-items: end;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.launchesHeader h2 {
+  font-size: 18px;
+  font-weight: 640;
+  letter-spacing: -0.026em;
+  line-height: 1.1;
+  margin: 0;
+}
+
+.launchesHeader p,
+.launchesHeader > span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.launchesHeader p {
+  margin: 4px 0 0;
+}
+
+.launchesHeader > span {
+  flex: none;
+}
+
+.launchList {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  margin-block-start: 12px;
+}
+
+.launchRow {
+  align-items: center;
+  background: var(--profile-subtle);
+  border: 1px solid color-mix(in srgb, var(--profile-line) 72%, transparent);
+  border-radius: 15px;
+  color: var(--text);
+  display: grid;
+  gap: 11px;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  min-height: 64px;
+  padding: 9px 11px 9px 9px;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    transform 120ms var(--ease-out);
+}
+
+.launchMark {
+  background: var(--liquid-glass-control-background-hover);
+  border-radius: 11px;
+  height: 44px;
+  overflow: hidden;
+  position: relative;
+  width: 44px;
+}
+
+.launchMark img {
+  object-fit: cover;
+}
+
+.launchIdentity,
+.launchStatus {
+  display: grid;
+  min-width: 0;
+}
+
+.launchIdentity strong {
+  font-size: 14px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.launchIdentity small,
+.launchStatus small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.launchStatus {
+  justify-items: end;
+  text-align: end;
+}
+
+.launchStatus strong {
+  font-size: 12px;
+  font-weight: 650;
+}
+
 .feePanel,
 .claimablePanel,
 .loadingPanel {
@@ -1382,6 +1489,11 @@
   outline-offset: 2px;
 }
 
+.launchRow:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
 .feeChartInteraction:focus-visible {
   border-radius: 10px;
 }
@@ -1462,6 +1574,16 @@
     min-height: 340px;
   }
 
+  .claimablePanelEmpty {
+    min-height: 0;
+  }
+
+  .claimablePanelEmpty .claimEmpty {
+    flex: none;
+    min-height: 0;
+    padding-block: 28px 12px;
+  }
+
   .feeChart {
     min-height: 190px;
   }
@@ -1512,6 +1634,11 @@
   .sessionLoadingWorkspace {
     border-radius: 20px;
     padding: 6px;
+  }
+
+  .launchesPanel {
+    border-radius: 18px;
+    padding: 14px;
   }
 
   .feePanel {

@@ -7,6 +7,11 @@ import {
   type Hex,
 } from "viem";
 
+import {
+  isLaunchStampProvenanceV1,
+  type LaunchStampProvenanceV1,
+} from "../tokens";
+
 export type ProfileDataStatus =
   "unavailable" | "not-deployed" | "loading" | "ready" | "error";
 
@@ -21,7 +26,13 @@ export type ProfileToken = {
   fdvUsdWad?: string;
   marketCapQuoteWad?: string;
   quoteAssetSymbol?: string;
-  launchModel?: "classic" | "adaptive" | "deep" | "stock-paired";
+  launchModel?:
+    | "classic"
+    | "adaptive"
+    | "deep"
+    | "stock-paired"
+    | "custom-graph";
+  launchProvenance?: "canonical-router";
 };
 
 export type ProfilePosition = {
@@ -75,11 +86,12 @@ type ParsedProfileToken = ProfileToken & {
   poolId: Hex;
   hookAddress: Address;
   creatorAddress: Address;
-  positionRecipient: Address;
-  positionTokenId: string;
+  positionRecipient?: Address;
+  positionTokenId?: string;
   launchTransactionHash: Hex;
   launchLogIndex: number;
-  totalSwapFeeBps: number;
+  totalSwapFeeBps?: number;
+  launchStampProvenance?: LaunchStampProvenanceV1;
 };
 
 type ParsedProfilePool = {
@@ -155,6 +167,20 @@ function readAddress(
 ) {
   const value = readString(record, key, label);
   if (!isAddress(value)) {
+    throw new ProfileResponseError(`Invalid ${label}`);
+  }
+
+  return getAddress(value);
+}
+
+function readOptionalAddress(
+  record: Record<string, unknown>,
+  key: string,
+  label: string,
+) {
+  const value = record[key];
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "string" || !isAddress(value)) {
     throw new ProfileResponseError(`Invalid ${label}`);
   }
 
@@ -239,6 +265,37 @@ function readSafeInteger(
   return value;
 }
 
+function readOptionalSafeInteger(
+  record: Record<string, unknown>,
+  key: string,
+  label: string,
+) {
+  const value = record[key];
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new ProfileResponseError(`Invalid ${label}`);
+  }
+
+  return value;
+}
+
+function readLaunchStampProvenance(
+  record: Record<string, unknown>,
+  expected: Readonly<{
+    tokenAddress: Address;
+    hookAddress: Address;
+    poolId: Hex;
+  }>,
+) {
+  const value = record.launchStampProvenance;
+  if (value === undefined || value === null) return undefined;
+  if (!isLaunchStampProvenanceV1(value, expected)) {
+    throw new ProfileResponseError("Invalid launch stamp provenance");
+  }
+
+  return value;
+}
+
 function readTimestamp(
   record: Record<string, unknown>,
   key: string,
@@ -313,6 +370,8 @@ function parseToken(
       "Profile response contains a token for another creator",
     );
   }
+  const poolId = readHex(token, "poolId", "pool id", 32);
+  const hookAddress = readAddress(token, "hookAddress", "token hook address");
   const imageUrl = readOptionalHttpsUrl(token, "imageUrl", "token image");
   const marketCapEthWei = readOptionalIntegerString(
     token,
@@ -338,9 +397,71 @@ function parseToken(
     token.launchModel === "adaptive" ||
     token.launchModel === "classic" ||
     token.launchModel === "deep" ||
-    token.launchModel === "stock-paired"
+    token.launchModel === "stock-paired" ||
+    token.launchModel === "custom-graph"
       ? token.launchModel
       : undefined;
+  const launchStampProvenance = readLaunchStampProvenance(token, {
+    tokenAddress: address,
+    hookAddress,
+    poolId,
+  });
+  if (
+    (launchStampProvenance?.kind === "custom-graph" &&
+      launchModel !== "custom-graph") ||
+    (launchStampProvenance?.kind === "classic" && launchModel !== "classic")
+  ) {
+    throw new ProfileResponseError(
+      "Profile token model does not match its launch stamp",
+    );
+  }
+  const positionRecipient = readOptionalAddress(
+    token,
+    "positionRecipient",
+    "position recipient",
+  );
+  const positionTokenId = readOptionalIntegerString(
+    token,
+    "positionTokenId",
+    "position token id",
+  );
+  if ((positionRecipient === undefined) !== (positionTokenId === undefined)) {
+    throw new ProfileResponseError(
+      "Profile token contains an incomplete position proof",
+    );
+  }
+  const totalSwapFeeBps = readOptionalSafeInteger(
+    token,
+    "totalSwapFeeBps",
+    "token swap fee",
+  );
+  const launchTransactionHash = readHex(
+    token,
+    "launchTransactionHash",
+    "launch transaction hash",
+    32,
+  );
+  const launchLogIndex = readSafeInteger(
+    token,
+    "launchLogIndex",
+    "launch log index",
+  );
+  if (
+    launchStampProvenance &&
+    (!sameAddress(launchStampProvenance.launchWallet, creatorAddress) ||
+      launchStampProvenance.transactionHash.toLowerCase() !==
+        launchTransactionHash.toLowerCase() ||
+      launchStampProvenance.launchLogIndex !== launchLogIndex ||
+      readIntegerString(
+        token,
+        "launchBlockNumber",
+        "launch block number",
+      ) !== launchStampProvenance.blockNumber)
+  ) {
+    throw new ProfileResponseError(
+      "Profile token does not match its launch stamp",
+    );
+  }
 
   return {
     address,
@@ -354,35 +475,16 @@ function parseToken(
     ...(marketCapQuoteWad ? { marketCapQuoteWad } : {}),
     ...(quoteAssetSymbol ? { quoteAssetSymbol } : {}),
     ...(launchModel ? { launchModel } : {}),
-    poolId: readHex(token, "poolId", "pool id", 32),
-    hookAddress: readAddress(token, "hookAddress", "token hook address"),
+    poolId,
+    hookAddress,
     creatorAddress,
-    positionRecipient: readAddress(
-      token,
-      "positionRecipient",
-      "position recipient",
-    ),
-    positionTokenId: readIntegerString(
-      token,
-      "positionTokenId",
-      "position token id",
-    ),
-    launchTransactionHash: readHex(
-      token,
-      "launchTransactionHash",
-      "launch transaction hash",
-      32,
-    ),
-    launchLogIndex: readSafeInteger(
-      token,
-      "launchLogIndex",
-      "launch log index",
-    ),
-    totalSwapFeeBps: readSafeInteger(
-      token,
-      "totalSwapFeeBps",
-      "token swap fee",
-    ),
+    ...(positionRecipient && positionTokenId
+      ? { positionRecipient, positionTokenId }
+      : {}),
+    launchTransactionHash,
+    launchLogIndex,
+    ...(totalSwapFeeBps === undefined ? {} : { totalSwapFeeBps }),
+    ...(launchStampProvenance ? { launchStampProvenance } : {}),
   };
 }
 
@@ -530,6 +632,7 @@ export function mapCreatorProfileResponse(
     if (
       pool.name !== token.name ||
       pool.symbol !== token.symbol ||
+      token.totalSwapFeeBps === undefined ||
       pool.totalSwapFeeBps !== token.totalSwapFeeBps
     ) {
       throw new ProfileResponseError(
@@ -540,7 +643,11 @@ export function mapCreatorProfileResponse(
 
   for (const pool of pools) {
     const token = tokenByPool.get(pool.poolId.toLowerCase());
-    if (!token || !sameAddress(token.address, pool.tokenAddress)) {
+    if (
+      !token ||
+      token.launchStampProvenance !== undefined ||
+      !sameAddress(token.address, pool.tokenAddress)
+    ) {
       throw new ProfileResponseError(
         "Profile pool does not match a verified token",
       );
@@ -549,7 +656,13 @@ export function mapCreatorProfileResponse(
 
   for (const claim of claimEvents) {
     const token = tokenByPool.get(claim.poolId.toLowerCase());
-    if (!token || !sameAddress(token.address, claim.tokenAddress)) {
+    const pool = poolByPoolId.get(claim.poolId.toLowerCase());
+    if (
+      !token ||
+      !pool ||
+      token.launchStampProvenance !== undefined ||
+      !sameAddress(token.address, claim.tokenAddress)
+    ) {
       throw new ProfileResponseError(
         "Creator claim does not match a verified token",
       );
@@ -638,6 +751,17 @@ export function mapCreatorProfileResponse(
   readIntegerString(snapshot, "blockNumber", "snapshot block number");
   readHex(snapshot, "blockHash", "snapshot block hash", 32);
   readSafeInteger(snapshot, "confirmations", "snapshot confirmations");
+  if (
+    tokens.some(
+      (token) =>
+        token.launchStampProvenance !== undefined &&
+        token.launchStampProvenance.chainId !== chainId,
+    )
+  ) {
+    throw new ProfileResponseError(
+      "Profile launch stamp does not match the snapshot chain",
+    );
+  }
 
   const profileTokens: ProfileToken[] = tokens.map(
     ({
@@ -652,6 +776,7 @@ export function mapCreatorProfileResponse(
       marketCapQuoteWad,
       quoteAssetSymbol,
       launchModel,
+      launchStampProvenance,
     }) => ({
       address,
       name,
@@ -664,18 +789,30 @@ export function mapCreatorProfileResponse(
       ...(marketCapQuoteWad ? { marketCapQuoteWad } : {}),
       ...(quoteAssetSymbol ? { quoteAssetSymbol } : {}),
       ...(launchModel ? { launchModel } : {}),
+      ...(launchStampProvenance
+        ? { launchProvenance: "canonical-router" as const }
+        : {}),
     }),
   );
-  const positions: ProfilePosition[] = tokens.map((token) => ({
-    id: token.poolId,
-    tokenAddress: token.address,
-    tokenName: token.name,
-    tokenSymbol: token.symbol,
-    positionRecipient: token.positionRecipient,
-    positionTokenId: token.positionTokenId,
-    lockStatus: "permanently-locked",
-    href: token.href,
-  }));
+  const positions: ProfilePosition[] = tokens.flatMap((token) => {
+    if (
+      token.launchStampProvenance !== undefined ||
+      !token.positionRecipient ||
+      token.positionTokenId === undefined
+    ) {
+      return [];
+    }
+    return [{
+      id: token.poolId,
+      tokenAddress: token.address,
+      tokenName: token.name,
+      tokenSymbol: token.symbol,
+      positionRecipient: token.positionRecipient,
+      positionTokenId: token.positionTokenId,
+      lockStatus: "permanently-locked" as const,
+      href: token.href,
+    }];
+  });
   const claims: ProfileClaim[] = pools
     .filter((pool) => BigInt(pool.claimableWei) > 0n)
     .map((pool) => {

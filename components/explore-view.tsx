@@ -34,7 +34,9 @@ import {
   getTokenCardImageSource,
 } from "@/lib/token-image";
 import {
+  isLaunchStampProvenanceV1,
   type ExploreEntry,
+  type ExploreLaunchCategoryProvenance,
   type LauncherToken,
   type TokenLink,
 } from "@/lib/tokens";
@@ -269,10 +271,62 @@ function parseLauncherToken(value: unknown): LauncherToken | null {
     !isTokenAddress(value.hookAddress) ||
     !isBytes32(value.poolId) ||
     typeof value.launchedAt !== "string" ||
-    typeof value.totalSwapFeeBps !== "number" ||
-    !Number.isSafeInteger(value.totalSwapFeeBps) ||
-    value.totalSwapFeeBps < 0 ||
-    value.liquidityPath !== "meme"
+    (value.totalSwapFeeBps !== null &&
+      (typeof value.totalSwapFeeBps !== "number" ||
+        !Number.isSafeInteger(value.totalSwapFeeBps) ||
+        value.totalSwapFeeBps < 0)) ||
+    (value.liquidityPath !== "meme" &&
+      value.liquidityPath !== "programmable-v4")
+  ) {
+    return null;
+  }
+
+  const stamp = value.launchStampProvenance;
+  if (
+    stamp !== undefined &&
+    (!isTokenAddress(value.creatorAddress) ||
+      !isBytes32(value.launchTransactionHash) ||
+      typeof value.launchBlockNumber !== "string" ||
+      !/^[1-9][0-9]*$/u.test(value.launchBlockNumber) ||
+      !Number.isSafeInteger(value.launchTransactionIndex) ||
+      Number(value.launchTransactionIndex) < 0 ||
+      !Number.isSafeInteger(value.launchLogIndex) ||
+      Number(value.launchLogIndex) < 0 ||
+      !isLaunchStampProvenanceV1(stamp, {
+        tokenAddress: value.tokenAddress,
+        hookAddress: value.hookAddress,
+        poolId: value.poolId,
+        launchWallet: value.creatorAddress,
+        transactionHash: value.launchTransactionHash,
+        blockNumber: value.launchBlockNumber,
+        transactionIndex: Number(value.launchTransactionIndex),
+        launchLogIndex: Number(value.launchLogIndex),
+      }))
+  ) {
+    return null;
+  }
+  const stamped = stamp !== undefined;
+  const unknownStampedFees = stamped && value.totalSwapFeeBps === null;
+  if (
+    stamped
+      ? value.launchModel !==
+          (stamp.kind === "custom-graph" ? "custom-graph" : "classic") ||
+        value.launchModelVersion !== "programmable-launch-stamp-router-v1" ||
+        value.liquidityPath !== "programmable-v4" ||
+        !unknownStampedFees ||
+        (unknownStampedFees &&
+          (value.buyHookFeeBps !== undefined ||
+            value.sellHookFeeBps !== undefined ||
+            value.creatorFeeBps !== undefined ||
+            value.buyCreatorFeeBps !== undefined ||
+            value.sellCreatorFeeBps !== undefined ||
+            value.growthFeeBps !== undefined ||
+            value.programmableFeeBps !== undefined ||
+            value.launcherFeeBps !== undefined ||
+            value.transferTaxBps !== undefined))
+      : value.launchModel === "custom-graph" ||
+        value.totalSwapFeeBps === null ||
+        value.liquidityPath !== "meme"
   ) {
     return null;
   }
@@ -295,16 +349,31 @@ function parseLauncherToken(value: unknown): LauncherToken | null {
 function parseLaunchCategoryProvenance(
   value: unknown,
   category: "classic" | "custom",
-) {
+): ExploreLaunchCategoryProvenance | null {
   if (!isRecord(value)
     || value.schemaVersion !== "programmable.explore-launch-category-provenance.v1"
     || value.category !== category) return null;
+  if (value.source === "canonical-launch-stamp-router") {
+    return isBytes32(value.launchId) &&
+      isBytes32(value.stampHash) &&
+      isTokenAddress(value.routerAddress) &&
+      isBytes32(value.transactionHash) &&
+      isBytes32(value.blockHash) &&
+      typeof value.blockNumber === "string" &&
+      /^[1-9][0-9]*$/u.test(value.blockNumber) &&
+      Number.isSafeInteger(value.transactionIndex) &&
+      Number(value.transactionIndex) >= 0 &&
+      Number.isSafeInteger(value.logIndex) &&
+      Number(value.logIndex) >= 0
+      ? value as unknown as ExploreLaunchCategoryProvenance
+      : null;
+  }
   if (category === "classic") {
     return value.source === "canonical-launch-read-model"
       && typeof value.recordId === "string"
       && (typeof value.modelId === "string" || value.modelId === null)
       && (typeof value.modelVersion === "string" || value.modelVersion === null)
-      ? value
+      ? value as unknown as ExploreLaunchCategoryProvenance
       : null;
   }
   const baseValid = isSha256(value.projectId)
@@ -312,7 +381,9 @@ function parseLaunchCategoryProvenance(
     && isSha256(value.sourceRecordBindingHash)
     && isSha256(value.finalizedLaunchBindingHash);
   if (!baseValid) return null;
-  if (value.source === "interface-preview") return value;
+  if (value.source === "interface-preview") {
+    return value as unknown as ExploreLaunchCategoryProvenance;
+  }
   return value.source === "registry.custom-launched"
     && isTokenAddress(value.registryAddress)
     && typeof value.registryStartBlock === "string"
@@ -326,7 +397,7 @@ function parseLaunchCategoryProvenance(
     && Number.isSafeInteger(value.logIndex)
     && Number(value.logIndex) >= 0
     && isBytes32(value.configurationHash)
-    ? value : null;
+    ? value as unknown as ExploreLaunchCategoryProvenance : null;
 }
 
 function isSha256(value: unknown): value is `sha256:${string}` {
@@ -395,6 +466,12 @@ function parseCustomExploreMarkets(value: unknown, chainId: string) {
 }
 
 function parseCustomExploreEntry(value: unknown): ExploreEntry | null {
+  const categoryProvenance = isRecord(value)
+    ? parseLaunchCategoryProvenance(
+        value.launchCategoryProvenance,
+        "custom",
+      )
+    : null;
   if (!isRecord(value)
     || value.exploreKind !== "custom-project"
     || typeof value.id !== "string"
@@ -421,10 +498,8 @@ function parseCustomExploreEntry(value: unknown): ExploreEntry | null {
     || !Array.isArray(value.postLaunchAuthorityInventory.postLaunchAuthorities)
     || !Array.isArray(value.markets)
     || !Array.isArray(value.links)
-    || parseLaunchCategoryProvenance(
-      value.launchCategoryProvenance,
-      "custom",
-    ) === null
+    || categoryProvenance === null
+    || categoryProvenance.source === "canonical-launch-stamp-router"
   ) return null;
   const links = value.links.map(parseTokenLink);
   if (links.some((link) => link === null)) return null;
@@ -478,12 +553,42 @@ function parseExploreEntry(value: unknown): ExploreEntry | null {
     return parseCustomExploreEntry(value);
   }
   const token = parseLauncherToken(value);
+  const expectedCategory = token?.launchStampProvenance?.kind === "custom-graph"
+    ? "custom"
+    : "classic";
+  const categoryProvenance = isRecord(value)
+    ? parseLaunchCategoryProvenance(
+        value.launchCategoryProvenance,
+        expectedCategory,
+      )
+    : null;
   if (!token || !isRecord(value)
     || value.exploreKind !== "token"
-    || parseLaunchCategoryProvenance(
-      value.launchCategoryProvenance,
-      "classic",
-    ) === null) return null;
+    || categoryProvenance === null) return null;
+  const stamp = token.launchStampProvenance;
+  if (stamp) {
+    if (
+      categoryProvenance.source !==
+        "canonical-launch-stamp-router" ||
+      categoryProvenance.launchId.toLowerCase() !==
+        stamp.launchId.toLowerCase() ||
+      categoryProvenance.stampHash.toLowerCase() !==
+        stamp.stampHash.toLowerCase() ||
+      categoryProvenance.routerAddress.toLowerCase() !==
+        stamp.routerAddress.toLowerCase() ||
+      categoryProvenance.transactionHash.toLowerCase() !==
+        stamp.transactionHash.toLowerCase() ||
+      categoryProvenance.blockHash.toLowerCase() !==
+        stamp.blockHash.toLowerCase() ||
+      categoryProvenance.blockNumber !== stamp.blockNumber ||
+      categoryProvenance.transactionIndex !== stamp.transactionIndex ||
+      categoryProvenance.logIndex !== stamp.launchLogIndex
+    ) {
+      return null;
+    }
+  } else if (categoryProvenance.source === "canonical-launch-stamp-router") {
+    return null;
+  }
   return {
     ...token,
     exploreKind: "token",
@@ -862,11 +967,21 @@ export function filterTokensBySocialPresence<
   );
 }
 
+export function exploreTokenCardDescription(token: ExploreEntry) {
+  const description = token.description?.trim();
+  if (description) return description;
+
+  return token.exploreKind === "token" &&
+      isLaunchStampProvenanceV1(token.launchStampProvenance)
+    ? "Canonical Router stamp. v4 pool initialized."
+    : undefined;
+}
+
 export function getTokenCards(tokens: ExploreEntry[]): TokenCard[] {
   return tokens.map((token) => ({
     id: token.id,
     name: token.name,
-    description: token.description?.trim() || undefined,
+    description: exploreTokenCardDescription(token),
     imageUrl:
       token.imageUrl?.trim() || getFallbackTokenImage(
         token.tokenAddress ?? token.id,

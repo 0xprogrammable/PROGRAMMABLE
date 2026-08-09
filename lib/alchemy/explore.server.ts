@@ -11,6 +11,7 @@ import type {
   ReadyOnchainDeployment,
 } from "../onchain/types";
 import type { LauncherToken } from "../tokens";
+import { advanceLaunchStampRouterSlice } from "./launch-stamp.server";
 import {
   readAlchemyLaunchRegistry,
   writeAlchemyLaunchRegistry,
@@ -166,6 +167,49 @@ function sameLaunch(left: LauncherToken, right: LauncherToken) {
   );
 }
 
+function sameHex(left: string | undefined, right: string | undefined) {
+  return left?.toLowerCase() === right?.toLowerCase();
+}
+
+function sameLaunchStampBinding(left: LauncherToken, right: LauncherToken) {
+  const leftStamp = left.launchStampProvenance;
+  const rightStamp = right.launchStampProvenance;
+  if (leftStamp && rightStamp) {
+    return (
+      sameHex(leftStamp.launchId, rightStamp.launchId) &&
+      sameHex(leftStamp.stampHash, rightStamp.stampHash) &&
+      sameHex(leftStamp.routerAddress, rightStamp.routerAddress)
+    );
+  }
+  return (
+    sameHex(left.launchTransactionHash, right.launchTransactionHash) &&
+    sameHex(left.poolId, right.poolId) &&
+    sameHex(left.hookAddress, right.hookAddress)
+  );
+}
+
+function mergeDefinedToken(
+  existing: LauncherToken,
+  stamped: LauncherToken,
+): LauncherToken {
+  if (stamped.launchStampProvenance) {
+    return {
+      ...stamped,
+      launchDiscoverySource:
+        stamped.launchDiscoverySource ??
+        existing.launchDiscoverySource ??
+        "alchemy-launch-overlay",
+    };
+  }
+  const merged = { ...existing } as LauncherToken & Record<string, unknown>;
+  for (const [key, value] of Object.entries(stamped)) {
+    if (value !== undefined && (value !== null || merged[key] === undefined)) {
+      merged[key] = value;
+    }
+  }
+  return merged;
+}
+
 function mergeLaunchOverlay(
   base: ReadyExploreModel,
   overlayTokens: readonly LauncherToken[],
@@ -183,6 +227,34 @@ function mergeLaunchOverlay(
       ...token,
       launchDiscoverySource: "alchemy-launch-overlay",
     });
+  }
+  return { ...base, tokens: [...tokens.values()] } satisfies ReadyExploreModel;
+}
+
+function mergeLaunchStampRouterOverlay(
+  base: ReadyExploreModel,
+  routerTokens: readonly LauncherToken[],
+) {
+  const tokens = new Map(
+    base.tokens.map((token) => [token.tokenAddress.toLowerCase(), token]),
+  );
+  for (const token of routerTokens) {
+    const key = token.tokenAddress.toLowerCase();
+    const existing = tokens.get(key);
+    if (existing && !sameLaunchStampBinding(existing, token)) {
+      throw new Error(
+        `Alchemy launch stamp Router overlay conflicts for ${token.tokenAddress}`,
+      );
+    }
+    tokens.set(
+      key,
+      existing
+        ? mergeDefinedToken(existing, token)
+        : {
+            ...token,
+            launchDiscoverySource: "alchemy-launch-overlay",
+          },
+    );
   }
   return { ...base, tokens: [...tokens.values()] } satisfies ReadyExploreModel;
 }
@@ -209,12 +281,35 @@ function overlayTokensAfterBase(
 }
 
 function registryTokenIdentity(registry: AlchemyLaunchRegistry) {
-  return JSON.stringify(
-    registry.tokens.map((token) => [
+  return JSON.stringify({
+    classic: registry.tokens.map((token) => [
       token.tokenAddress.toLowerCase(),
       token.launchTransactionHash?.toLowerCase(),
       token.launchLogIndex,
     ]),
+    router: registry.launchStampRouter.tokens.map((token) => [
+      token.tokenAddress.toLowerCase(),
+      token.launchStampProvenance?.launchId.toLowerCase(),
+      token.launchStampProvenance?.stampHash.toLowerCase(),
+      token.launchTransactionHash?.toLowerCase(),
+      token.launchLogIndex,
+    ]),
+  });
+}
+
+function cursorRequiresPersistence(
+  next: AlchemyLaunchCursor,
+  previous: AlchemyLaunchCursor,
+) {
+  const nextBlock = BigInt(next.blockNumber);
+  const previousBlock = BigInt(previous.blockNumber);
+  return (
+    nextBlock < previousBlock ||
+    nextBlock - previousBlock >= LAUNCH_CURSOR_PERSIST_INTERVAL_BLOCKS ||
+    (
+      nextBlock === previousBlock &&
+      next.blockHash.toLowerCase() !== previous.blockHash.toLowerCase()
+    )
   );
 }
 
@@ -227,6 +322,18 @@ function persistentOverlayTokensAfterBase(
     delete persistent.launchDiscoverySource;
     return persistent;
   });
+}
+
+function withoutRouterTokenDuplicates(
+  classicTokens: readonly LauncherToken[],
+  routerTokens: readonly LauncherToken[],
+) {
+  const routerTokenKeys = new Set(
+    routerTokens.map((token) => token.tokenAddress.toLowerCase()),
+  );
+  return classicTokens.filter(
+    (token) => !routerTokenKeys.has(token.tokenAddress.toLowerCase()),
+  );
 }
 
 async function refreshAlchemyExploreRegistryOnce(
@@ -271,6 +378,13 @@ async function refreshAlchemyExploreRegistryOnce(
     cursorModel,
     "confirmed",
   );
+  const routerAdvance = await advanceLaunchStampRouterSlice(
+    deployment,
+    {
+      cursor: stored.registry.launchStampRouter.cursor,
+      tokens: stored.registry.launchStampRouter.tokens,
+    },
+  );
   const confirmedRegistry: AlchemyLaunchRegistry = {
     generatedAt: new Date().toISOString(),
     repositoryCommit: stored.registry.repositoryCommit,
@@ -279,14 +393,27 @@ async function refreshAlchemyExploreRegistryOnce(
       blockNumber: confirmed.snapshot.blockNumber,
       blockHash: confirmed.snapshot.blockHash,
     },
-    tokens: persistentOverlayTokensAfterBase(base, confirmed.tokens),
+    tokens: withoutRouterTokenDuplicates(
+      persistentOverlayTokensAfterBase(base, confirmed.tokens),
+      routerAdvance.slice.tokens,
+    ),
+    launchStampRouter: {
+      ...stored.registry.launchStampRouter,
+      cursor: routerAdvance.slice.cursor,
+      tokens: routerAdvance.slice.tokens,
+    },
   };
   const registryChanged =
     registryTokenIdentity(confirmedRegistry) !==
       registryTokenIdentity(stored.registry) ||
-    BigInt(confirmedRegistry.cursor.blockNumber) -
-      BigInt(stored.registry.cursor.blockNumber) >=
-      LAUNCH_CURSOR_PERSIST_INTERVAL_BLOCKS;
+    cursorRequiresPersistence(
+      confirmedRegistry.cursor,
+      stored.registry.cursor,
+    ) ||
+    cursorRequiresPersistence(
+      confirmedRegistry.launchStampRouter.cursor,
+      stored.registry.launchStampRouter.cursor,
+    ) || routerAdvance.rebuiltAfterReorg;
   let persisted = false;
   if (
     options.persist !== false &&
@@ -307,18 +434,24 @@ async function refreshAlchemyExploreRegistryOnce(
   const servedCursorModel = options.includeLatest === false
     ? confirmed
     : await advanceExploreLaunchDiscovery(deployment, confirmed, "latest");
-  const model: ReadyExploreModel = {
+  const classicModel: ReadyExploreModel = {
     ...mergeLaunchOverlay(
       base,
       overlayTokensAfterBase(base, servedCursorModel.tokens),
     ),
     launchDiscoverySnapshot: servedCursorModel.snapshot,
   };
+  const model = mergeLaunchStampRouterOverlay(
+    classicModel,
+    confirmedRegistry.launchStampRouter.tokens,
+  );
   return {
     model,
     baseBlockNumber: base.snapshot.blockNumber,
     confirmedBlockNumber: confirmed.snapshot.blockNumber,
     servedBlockNumber: servedCursorModel.snapshot.blockNumber,
+    launchStampRouterBlockNumber:
+      confirmedRegistry.launchStampRouter.cursor.blockNumber,
     persisted,
     registryChanged,
   } as const;

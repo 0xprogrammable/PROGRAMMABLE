@@ -5,6 +5,7 @@ vi.mock("server-only", () => ({}));
 
 import type { ExploreReadModel } from "../lib/onchain/types";
 import type { LauncherToken } from "../lib/tokens";
+import { customGraphToken } from "./launch-stamp-surface-fixture";
 
 const mocks = vi.hoisted(() => ({
   enrichTokensWithAlchemyPrices: vi.fn(),
@@ -133,6 +134,44 @@ describe("token detail Alchemy read", () => {
     expect(response.headers.get("Cache-Control")).toBe(
       "public, max-age=0, s-maxage=2, stale-while-revalidate=5",
     );
+  });
+
+  it("serves Router provenance for a finalized Custom Graph without Classic fields", async () => {
+    const model = {
+      status: "ready",
+      tokens: [customGraphToken],
+      snapshot,
+      launchDiscoverySnapshot,
+      creatorClaims: [],
+      launcherFeesAccruedWei: "0",
+      launcherFeesAccruedEth: "0",
+    } satisfies ExploreReadModel;
+    mocks.readAlchemyExploreModel.mockResolvedValue(model);
+    mocks.enrichTokensWithAlchemyPrices.mockResolvedValue([customGraphToken]);
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/explore/token?address=${customGraphToken.tokenAddress}`,
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.customProject).toBeNull();
+    expect(body.token).toMatchObject({
+      tokenAddress: customGraphToken.tokenAddress,
+      launchModel: "custom-graph",
+      totalSwapFeeBps: null,
+      launchCategoryProvenance: {
+        category: "custom",
+        source: "canonical-launch-stamp-router",
+        launchId: customGraphToken.launchStampProvenance.launchId,
+        stampHash: customGraphToken.launchStampProvenance.stampHash,
+      },
+      launchStampProvenance: customGraphToken.launchStampProvenance,
+    });
+    expect(body.token.positionRecipient).toBeUndefined();
+    expect(body.token.positionTokenId).toBeUndefined();
   });
 
   it.each([

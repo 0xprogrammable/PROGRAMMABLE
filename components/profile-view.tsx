@@ -3043,6 +3043,16 @@ export function buildProfilePortfolio(
   );
 }
 
+export function profileRouterLaunchEntries(
+  entries: readonly ProfilePortfolioEntry[],
+) {
+  return entries.filter(
+    (entry) =>
+      entry.launchedByWallet &&
+      entry.token.launchProvenance === "canonical-router",
+  );
+}
+
 export function profileClaimableWei(
   entries: readonly ProfilePortfolioEntry[],
   account?: string,
@@ -3523,6 +3533,67 @@ function ProfileLoadingState() {
   );
 }
 
+export function ProfileRouterLaunches({
+  entries,
+}: {
+  entries: readonly ProfilePortfolioEntry[];
+}) {
+  if (!entries.length) return null;
+
+  return (
+    <section
+      className={styles.launchesPanel}
+      aria-labelledby="profile-launches-title"
+    >
+      <header className={styles.launchesHeader}>
+        <div>
+          <h2 id="profile-launches-title">Launches</h2>
+          <p>Canonical Router records from this wallet.</p>
+        </div>
+        <span>
+          {entries.length} {entries.length === 1 ? "launch" : "launches"}
+        </span>
+      </header>
+
+      <div className={styles.launchList}>
+        {entries.map(({ token }) => {
+          const tokenImage =
+            token.imageUrl?.trim() || getFallbackTokenImage(token.address);
+          const tokenImageSource = getTokenCardImageSource(tokenImage);
+          const category =
+            token.launchModel === "custom-graph" ? "Custom" : "Classic";
+
+          return (
+            <Link
+              className={styles.launchRow}
+              href={token.href}
+              key={token.address}
+            >
+              <span className={styles.launchMark} aria-hidden="true">
+                <Image
+                  src={tokenImageSource}
+                  alt=""
+                  fill
+                  sizes="44px"
+                  unoptimized={!canOptimizeTokenImage(tokenImageSource)}
+                />
+              </span>
+              <span className={styles.launchIdentity}>
+                <strong>{token.name}</strong>
+                <small>${token.symbol}</small>
+              </span>
+              <span className={styles.launchStatus}>
+                <strong>{category}</strong>
+                <small>Router record</small>
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function ProfileAccountWorkspace({
   connected,
   data,
@@ -3714,6 +3785,7 @@ function ProfileAccountWorkspace({
     claimableEntries,
     claimPage,
   );
+  const routerLaunchEntries = profileRouterLaunchEntries(entries);
   const chainId = currentReady
     ? data.chainId
     : classicReady
@@ -3757,6 +3829,8 @@ function ProfileAccountWorkspace({
         </div>
       ) : null}
 
+      <ProfileRouterLaunches entries={routerLaunchEntries} />
+
       <div
         className={`${styles.profileWorkspace} liquid-glass-surface`}
       >
@@ -3769,7 +3843,9 @@ function ProfileAccountWorkspace({
         />
 
         <section
-          className={styles.claimablePanel}
+          className={`${styles.claimablePanel} ${
+            claimableEntries.length ? "" : styles.claimablePanelEmpty
+          }`}
           aria-labelledby="profile-claimable-title"
         >
           <header className={styles.panelHeader}>
