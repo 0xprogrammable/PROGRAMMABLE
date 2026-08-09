@@ -8,6 +8,7 @@ import { ProgrammableCustomFeePolicyVerifierV2 } from "../../src/ProgrammableCus
 import { ProgrammableCustomAtomicRegistrarV1 } from "../../src/ProgrammableCustomAtomicRegistrarV1.sol";
 import { ProgrammableCustomAtomicRegistrarV2 } from "../../src/ProgrammableCustomAtomicRegistrarV2.sol";
 import { ProgrammableCustomExecutionPolicyRegistryV2 } from "../../src/ProgrammableCustomExecutionPolicyRegistryV2.sol";
+import { ProgrammableLaunchStampV1 } from "../../src/ProgrammableLaunchStampV1.sol";
 import {
     ProgrammableCustomExecutionPolicyRevisionRegistryV2
 } from "../../src/ProgrammableCustomExecutionPolicyRevisionRegistryV2.sol";
@@ -304,8 +305,11 @@ contract ProgrammableCustomRegistryV2InvariantTest is StdInvariant, Test {
             executionPolicyRegistry,
             revisionRegistry
         );
-        ProgrammableCustomAtomicRegistrarV2 registrar =
-            new ProgrammableCustomAtomicRegistrarV2(registry, executionPolicyRegistry, partnerRegistry);
+        address predictedStamp = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
+        ProgrammableCustomAtomicRegistrarV2 registrar = new ProgrammableCustomAtomicRegistrarV2(
+            registry, executionPolicyRegistry, partnerRegistry, ProgrammableLaunchStampV1(predictedStamp)
+        );
+        new ProgrammableLaunchStampV1(registry, executionPolicyRegistry, address(registrar));
         assertEq(address(registrar), predictedRegistrar);
         RegistryInvariantApprovalActorV2 approvalActor = new RegistryInvariantApprovalActorV2(registry);
         registry.grantRole(registry.APPROVER_ROLE(), address(approvalActor));

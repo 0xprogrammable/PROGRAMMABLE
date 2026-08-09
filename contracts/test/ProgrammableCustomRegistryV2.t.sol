@@ -12,6 +12,7 @@ import {
 import { ProgrammableCustomAtomicRegistrarV1 } from "../src/ProgrammableCustomAtomicRegistrarV1.sol";
 import { ProgrammableCustomAtomicRegistrarV2 } from "../src/ProgrammableCustomAtomicRegistrarV2.sol";
 import { ProgrammableCustomExecutionPolicyRegistryV2 } from "../src/ProgrammableCustomExecutionPolicyRegistryV2.sol";
+import { ProgrammableLaunchStampV1 } from "../src/ProgrammableLaunchStampV1.sol";
 import {
     ProgrammableCustomExecutionPolicyRevisionRegistryV2
 } from "../src/ProgrammableCustomExecutionPolicyRevisionRegistryV2.sol";
@@ -111,6 +112,7 @@ contract ProgrammableCustomRegistryV2Test is Test {
         address predictedRevisionRegistry = vm.computeCreateAddress(address(this), nextNonce + 2);
         address predictedRegistry = vm.computeCreateAddress(address(this), nextNonce + 3);
         address predictedRegistrar = vm.computeCreateAddress(address(this), nextNonce + 4);
+        address predictedStamp = vm.computeCreateAddress(address(this), nextNonce + 5);
         factoryRegistry = new ProgrammableCustomPartnerFactoryRegistryV2(
             2 days, ADMIN, FACTORY_APPROVER, FACTORY_REVOKER, predictedRegistrar
         );
@@ -135,7 +137,10 @@ contract ProgrammableCustomRegistryV2Test is Test {
         registry = new ProgrammableCustomRegistryV2(
             config, factoryRegistry, verifier, executionPolicyRegistry, executionPolicyRevisionRegistry
         );
-        atomicRegistrar = new ProgrammableCustomAtomicRegistrarV2(registry, executionPolicyRegistry, factoryRegistry);
+        atomicRegistrar = new ProgrammableCustomAtomicRegistrarV2(
+            registry, executionPolicyRegistry, factoryRegistry, ProgrammableLaunchStampV1(predictedStamp)
+        );
+        new ProgrammableLaunchStampV1(registry, executionPolicyRegistry, address(atomicRegistrar));
         providerFactory = new FutureProviderFactoryV2();
         wrongFactory = new FutureProviderFactoryV2();
         runtimeTarget = new CustomRuntimeTargetV2();

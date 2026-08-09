@@ -7,6 +7,7 @@ import { StdInvariant } from "forge-std/StdInvariant.sol";
 import { ProgrammableCustomAtomicRegistrarV1 } from "../../src/ProgrammableCustomAtomicRegistrarV1.sol";
 import { ProgrammableCustomAtomicRegistrarV2 } from "../../src/ProgrammableCustomAtomicRegistrarV2.sol";
 import { ProgrammableCustomExecutionPolicyRegistryV2 } from "../../src/ProgrammableCustomExecutionPolicyRegistryV2.sol";
+import { ProgrammableLaunchStampV1 } from "../../src/ProgrammableLaunchStampV1.sol";
 import {
     ProgrammableCustomExecutionPolicyRevisionRegistryV2
 } from "../../src/ProgrammableCustomExecutionPolicyRevisionRegistryV2.sol";
@@ -250,7 +251,11 @@ contract ProgrammableCustomAtomicRegistrarV2Invariant is StdInvariant, Test {
             executionPolicyRegistry,
             revisionRegistry
         );
-        registrar = new ProgrammableCustomAtomicRegistrarV2(registry, executionPolicyRegistry, partnerRegistry);
+        address predictedStamp = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
+        registrar = new ProgrammableCustomAtomicRegistrarV2(
+            registry, executionPolicyRegistry, partnerRegistry, ProgrammableLaunchStampV1(predictedStamp)
+        );
+        new ProgrammableLaunchStampV1(registry, executionPolicyRegistry, address(registrar));
         assertEq(address(registrar), predictedRegistrar);
         vm.deal(address(this), 1000 ether);
         handler = new ProgrammableCustomAtomicRegistrarV2Handler{ value: 1000 ether }(

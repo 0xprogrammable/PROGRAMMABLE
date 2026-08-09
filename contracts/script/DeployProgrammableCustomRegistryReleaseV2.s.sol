@@ -9,6 +9,7 @@ import {
     ProgrammableCustomExecutionPolicyRevisionRegistryV2
 } from "../src/ProgrammableCustomExecutionPolicyRevisionRegistryV2.sol";
 import { ProgrammableCustomFeePolicyVerifierV2 } from "../src/ProgrammableCustomFeePolicyVerifierV2.sol";
+import { ProgrammableLaunchStampV1 } from "../src/ProgrammableLaunchStampV1.sol";
 import { ProgrammableCustomPartnerFactoryRegistryV2 } from "../src/ProgrammableCustomPartnerFactoryRegistryV2.sol";
 import { ProgrammableCustomRegistryV1 } from "../src/ProgrammableCustomRegistryV1.sol";
 import { ProgrammableCustomRegistryV2 } from "../src/ProgrammableCustomRegistryV2.sol";
@@ -17,7 +18,7 @@ import {
 } from "../src/interfaces/IProgrammableCustomPartnerFactoryRegistryV1.sol";
 import { IProgrammableCustomRegistryV1 } from "../src/interfaces/IProgrammableCustomRegistryV1.sol";
 
-/// @notice Six-transaction, nonce-bound Generation 2 release deployment.
+/// @notice Seven-transaction, nonce-bound Generation 2 release deployment.
 /// @dev This script pins generation=2 and never activates public status or deploys a provider-owned factory.
 contract DeployProgrammableCustomRegistryReleaseV2 is Script {
     uint64 private constant REGISTRY_GENERATION = 2;
@@ -51,6 +52,7 @@ contract DeployProgrammableCustomRegistryReleaseV2 is Script {
         address policyRevisionRegistry;
         address registry;
         address registrar;
+        address stampRegistry;
     }
 
     struct DeploymentResult {
@@ -60,6 +62,7 @@ contract DeployProgrammableCustomRegistryReleaseV2 is Script {
         ProgrammableCustomExecutionPolicyRevisionRegistryV2 policyRevisionRegistry;
         ProgrammableCustomRegistryV2 registry;
         ProgrammableCustomAtomicRegistrarV2 registrar;
+        ProgrammableLaunchStampV1 stampRegistry;
     }
 
     function run() external returns (DeploymentResult memory deployed) {
@@ -112,6 +115,7 @@ contract DeployProgrammableCustomRegistryReleaseV2 is Script {
         predicted.policyRevisionRegistry = vm.computeCreateAddress(deployer, nonce + 3);
         predicted.registry = vm.computeCreateAddress(deployer, nonce + 4);
         predicted.registrar = vm.computeCreateAddress(deployer, nonce + 5);
+        predicted.stampRegistry = vm.computeCreateAddress(deployer, nonce + 6);
     }
 
     function _requireAllVacant(PredictedAddresses memory predicted) private view {
@@ -121,6 +125,7 @@ contract DeployProgrammableCustomRegistryReleaseV2 is Script {
         _requireVacant(bytes32("policy-revision-registry"), predicted.policyRevisionRegistry);
         _requireVacant(bytes32("registry"), predicted.registry);
         _requireVacant(bytes32("registrar"), predicted.registrar);
+        _requireVacant(bytes32("stamp-registry"), predicted.stampRegistry);
     }
 
     function _deploy(DeploymentConfig memory config, PredictedAddresses memory predicted)
@@ -155,7 +160,13 @@ contract DeployProgrammableCustomRegistryReleaseV2 is Script {
             deployed.policyRevisionRegistry
         );
         deployed.registrar = new ProgrammableCustomAtomicRegistrarV2(
-            deployed.registry, deployed.initialPolicyRegistry, deployed.partnerFactoryRegistry
+            deployed.registry,
+            deployed.initialPolicyRegistry,
+            deployed.partnerFactoryRegistry,
+            ProgrammableLaunchStampV1(predicted.stampRegistry)
+        );
+        deployed.stampRegistry = new ProgrammableLaunchStampV1(
+            deployed.registry, deployed.initialPolicyRegistry, address(deployed.registrar)
         );
         vm.stopBroadcast();
     }
@@ -198,6 +209,7 @@ contract DeployProgrammableCustomRegistryReleaseV2 is Script {
         );
         _requireAddress(bytes32("registry"), predicted.registry, address(deployed.registry));
         _requireAddress(bytes32("registrar"), predicted.registrar, address(deployed.registrar));
+        _requireAddress(bytes32("stamp-registry"), predicted.stampRegistry, address(deployed.stampRegistry));
         if (!deployed.registry.hasRole(deployed.registry.WRITER_ROLE(), address(deployed.registrar))) {
             revert DeploymentAddressMismatch(bytes32("registrar-writer"), predicted.registrar, address(0));
         }
@@ -211,7 +223,7 @@ contract DeployProgrammableCustomRegistryReleaseV2 is Script {
             revert DeploymentGenerationMismatch(deployed.registry.REGISTRY_GENERATION(), REGISTRY_GENERATION);
         }
         uint256 finalNonce = vm.getNonce(config.deployer);
-        if (finalNonce != startingNonce + 6) revert DeploymentNonceMismatch(startingNonce + 6, finalNonce);
+        if (finalNonce != startingNonce + 7) revert DeploymentNonceMismatch(startingNonce + 7, finalNonce);
     }
 
     function _validateCrossBindings(DeploymentResult memory deployed) private view {
@@ -227,6 +239,11 @@ contract DeployProgrammableCustomRegistryReleaseV2 is Script {
                     != address(deployed.initialPolicyRegistry)
                 || deployed.partnerFactoryRegistry.REGISTRAR() != address(deployed.registrar)
                 || address(deployed.registrar.PARTNER_FACTORY_REGISTRY()) != address(deployed.partnerFactoryRegistry)
+                || address(deployed.registrar.STAMP_REGISTRY()) != address(deployed.stampRegistry)
+                || address(deployed.stampRegistry.REGISTRY()) != address(deployed.registry)
+                || address(deployed.stampRegistry.EXECUTION_POLICY_REGISTRY())
+                    != address(deployed.initialPolicyRegistry)
+                || deployed.stampRegistry.ATOMIC_REGISTRAR() != address(deployed.registrar)
         ) {
             revert DeploymentAddressMismatch(
                 bytes32("cross-binding"), address(deployed.initialPolicyRegistry), address(0)

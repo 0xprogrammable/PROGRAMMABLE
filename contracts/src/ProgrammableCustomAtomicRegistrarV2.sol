@@ -8,6 +8,7 @@ import { ProgrammableCustomAtomicRegistrarV1 } from "./ProgrammableCustomAtomicR
 import { ProgrammableCustomExecutionPolicyRegistryV2 } from "./ProgrammableCustomExecutionPolicyRegistryV2.sol";
 import { ProgrammableCustomPartnerFactoryRegistryV2 } from "./ProgrammableCustomPartnerFactoryRegistryV2.sol";
 import { ProgrammableCustomTradeCapabilityLibV1 } from "./ProgrammableCustomTradeCapabilityLibV1.sol";
+import { ProgrammableLaunchStampV1 } from "./ProgrammableLaunchStampV1.sol";
 import { IProgrammableCustomExecutionPolicyV2 } from "./interfaces/IProgrammableCustomExecutionPolicyV2.sol";
 import {
     IProgrammableCustomPartnerFactoryRegistryV2
@@ -42,6 +43,8 @@ contract ProgrammableCustomAtomicRegistrarV2 is ReentrancyGuard {
     ProgrammableCustomExecutionPolicyRegistryV2 public immutable EXECUTION_POLICY_REGISTRY;
     // slither-disable-next-line naming-convention
     ProgrammableCustomPartnerFactoryRegistryV2 public immutable PARTNER_FACTORY_REGISTRY;
+    // slither-disable-next-line naming-convention
+    ProgrammableLaunchStampV1 public immutable STAMP_REGISTRY;
 
     event AtomicCustomLaunchExecutedV1(
         bytes32 indexed launchId,
@@ -79,7 +82,8 @@ contract ProgrammableCustomAtomicRegistrarV2 is ReentrancyGuard {
     constructor(
         IProgrammableCustomRegistryV1 registry,
         ProgrammableCustomExecutionPolicyRegistryV2 executionPolicyRegistry,
-        ProgrammableCustomPartnerFactoryRegistryV2 partnerFactoryRegistry
+        ProgrammableCustomPartnerFactoryRegistryV2 partnerFactoryRegistry,
+        ProgrammableLaunchStampV1 stampRegistry
     ) {
         if (address(registry) == address(0) || address(registry).code.length == 0) revert InvalidRegistry();
         if (
@@ -92,9 +96,11 @@ contract ProgrammableCustomAtomicRegistrarV2 is ReentrancyGuard {
                 || partnerFactoryRegistry.REGISTRAR() != address(this)
                 || address(executionPolicyRegistry.PARTNER_FACTORY_REGISTRY()) != address(partnerFactoryRegistry)
         ) revert InvalidRegistry();
+        if (address(stampRegistry) == address(0)) revert InvalidRegistry();
         REGISTRY = registry;
         EXECUTION_POLICY_REGISTRY = executionPolicyRegistry;
         PARTNER_FACTORY_REGISTRY = partnerFactoryRegistry;
+        STAMP_REGISTRY = stampRegistry;
     }
 
     function predictAddress(bytes32 salt, bytes32 creationCodeHash) external view returns (address) {
@@ -139,12 +145,39 @@ contract ProgrammableCustomAtomicRegistrarV2 is ReentrancyGuard {
         primaryContract = _deployInitializeAndRegister(request, capability);
     }
 
+    /// @notice Atomic Generation 2 launch plus canonical onchain origin stamp for one exact v4 market.
+    function deployInitializeRegisterBindAndStampV1(
+        ProgrammableCustomAtomicRegistrarV1.AtomicLaunchRequestV1 calldata request,
+        IProgrammableCustomExecutionPolicyV2.TradeCapabilityV1 calldata capability,
+        ProgrammableLaunchStampV1.StampRequestV1 calldata stampRequest
+    ) external payable nonReentrant returns (address primaryContract, bytes32 stampHash) {
+        primaryContract = _deployInitializeAndRegister(request, capability);
+        stampHash = STAMP_REGISTRY.stampLaunchV1(stampRequest, request.registration, capability);
+    }
+
     /// @notice Same-transaction partner-factory launch, Registry registration and initial policy binding.
     /// @dev The provider factory is an exact approved call target but never a Registry writer.
     function launchPartnerFactoryRegisterAndBindTradeCapabilityV2(
         PartnerFactoryLaunchRequestV2 calldata request,
         IProgrammableCustomExecutionPolicyV2.TradeCapabilityV1 calldata capability
     ) external payable nonReentrant returns (address primaryContract) {
+        primaryContract = _launchPartnerFactoryRegisterAndBindTradeCapability(request, capability);
+    }
+
+    /// @notice Partner-factory launch plus canonical onchain origin stamp in the same transaction.
+    function launchPartnerFactoryRegisterBindAndStampV1(
+        PartnerFactoryLaunchRequestV2 calldata request,
+        IProgrammableCustomExecutionPolicyV2.TradeCapabilityV1 calldata capability,
+        ProgrammableLaunchStampV1.StampRequestV1 calldata stampRequest
+    ) external payable nonReentrant returns (address primaryContract, bytes32 stampHash) {
+        primaryContract = _launchPartnerFactoryRegisterAndBindTradeCapability(request, capability);
+        stampHash = STAMP_REGISTRY.stampLaunchV1(stampRequest, request.registration, capability);
+    }
+
+    function _launchPartnerFactoryRegisterAndBindTradeCapability(
+        PartnerFactoryLaunchRequestV2 calldata request,
+        IProgrammableCustomExecutionPolicyV2.TradeCapabilityV1 calldata capability
+    ) private returns (address primaryContract) {
         uint256 preexistingBalance = address(this).balance - msg.value;
         IProgrammableCustomRegistryV1.LaunchRegistrationV1 calldata registration = request.registration;
         if (msg.sender != registration.launchWallet) {

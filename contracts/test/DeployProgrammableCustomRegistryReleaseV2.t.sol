@@ -10,6 +10,7 @@ import {
     ProgrammableCustomExecutionPolicyRevisionRegistryV2
 } from "../src/ProgrammableCustomExecutionPolicyRevisionRegistryV2.sol";
 import { ProgrammableCustomFeePolicyVerifierV2 } from "../src/ProgrammableCustomFeePolicyVerifierV2.sol";
+import { ProgrammableLaunchStampV1 } from "../src/ProgrammableLaunchStampV1.sol";
 import { ProgrammableCustomPartnerFactoryRegistryV2 } from "../src/ProgrammableCustomPartnerFactoryRegistryV2.sol";
 import { ProgrammableCustomRegistryV1 } from "../src/ProgrammableCustomRegistryV1.sol";
 import { ProgrammableCustomRegistryV2 } from "../src/ProgrammableCustomRegistryV2.sol";
@@ -30,6 +31,7 @@ contract DeployProgrammableCustomRegistryReleaseV2Test is Test {
         address revisionRegistry;
         address registry;
         address registrar;
+        address stampRegistry;
     }
 
     DeployProgrammableCustomRegistryReleaseV2 private deployment;
@@ -42,14 +44,14 @@ contract DeployProgrammableCustomRegistryReleaseV2Test is Test {
         deployment = new DeployProgrammableCustomRegistryReleaseV2();
     }
 
-    function test_runRejectsInvalidInputsThenDeploysSixContractsInExactNonceOrderAndCrossBindsThem() public {
+    function test_runRejectsInvalidInputsThenDeploysSevenContractsInExactNonceOrderAndCrossBindsThem() public {
         _assertInvalidInputsFailBeforeDeployment();
         ExpectedAddresses memory expected = _expectedAddresses();
         DeployProgrammableCustomRegistryReleaseV2.DeploymentResult memory result = deployment.run();
         _assertAddressesAndBindings(result, expected);
         _assertRolesAndScope(result);
         _assertDeploymentSizes(result, expected);
-        assertEq(vm.getNonce(DEPLOYER), STARTING_NONCE + 6);
+        assertEq(vm.getNonce(DEPLOYER), STARTING_NONCE + 7);
     }
 
     function _expectedAddresses() private pure returns (ExpectedAddresses memory expected) {
@@ -59,6 +61,7 @@ contract DeployProgrammableCustomRegistryReleaseV2Test is Test {
         expected.revisionRegistry = vm.computeCreateAddress(DEPLOYER, STARTING_NONCE + 3);
         expected.registry = vm.computeCreateAddress(DEPLOYER, STARTING_NONCE + 4);
         expected.registrar = vm.computeCreateAddress(DEPLOYER, STARTING_NONCE + 5);
+        expected.stampRegistry = vm.computeCreateAddress(DEPLOYER, STARTING_NONCE + 6);
     }
 
     function _assertAddressesAndBindings(
@@ -71,6 +74,7 @@ contract DeployProgrammableCustomRegistryReleaseV2Test is Test {
         assertEq(address(result.policyRevisionRegistry), expected.revisionRegistry);
         assertEq(address(result.registry), expected.registry);
         assertEq(address(result.registrar), expected.registrar);
+        assertEq(address(result.stampRegistry), expected.stampRegistry);
         assertEq(address(result.initialPolicyRegistry.REGISTRY()), address(result.registry));
         assertEq(
             address(result.initialPolicyRegistry.PARTNER_FACTORY_REGISTRY()), address(result.partnerFactoryRegistry)
@@ -82,6 +86,10 @@ contract DeployProgrammableCustomRegistryReleaseV2Test is Test {
         assertEq(address(result.registrar.REGISTRY()), address(result.registry));
         assertEq(address(result.registrar.EXECUTION_POLICY_REGISTRY()), address(result.initialPolicyRegistry));
         assertEq(address(result.registrar.PARTNER_FACTORY_REGISTRY()), address(result.partnerFactoryRegistry));
+        assertEq(address(result.registrar.STAMP_REGISTRY()), address(result.stampRegistry));
+        assertEq(address(result.stampRegistry.REGISTRY()), address(result.registry));
+        assertEq(address(result.stampRegistry.EXECUTION_POLICY_REGISTRY()), address(result.initialPolicyRegistry));
+        assertEq(result.stampRegistry.ATOMIC_REGISTRAR(), address(result.registrar));
         assertEq(address(result.policyRevisionRegistry.REGISTRY()), address(result.registry));
         assertEq(
             address(result.policyRevisionRegistry.INITIAL_POLICY_REGISTRY()), address(result.initialPolicyRegistry)
@@ -125,6 +133,8 @@ contract DeployProgrammableCustomRegistryReleaseV2Test is Test {
         assertEq(registry.MINIMUM_FINALITY_BLOCKS(), 64);
         assertEq(registry.CHAIN_PROFILE_HASH(), keccak256("approved-chain-profile"));
         assertEq(registry.REGISTRY_POLICY_HASH(), keccak256("approved-registry-policy"));
+        assertEq(result.stampRegistry.CHAIN_ID(), 1);
+        assertEq(result.stampRegistry.REGISTRY_GENERATION(), 2);
     }
 
     function _assertDeploymentSizes(
@@ -137,6 +147,7 @@ contract DeployProgrammableCustomRegistryReleaseV2Test is Test {
         assertLt(address(result.policyRevisionRegistry).code.length, 24_576);
         assertLt(address(result.registry).code.length, 24_576);
         assertLt(address(result.registrar).code.length, 24_576);
+        assertLt(address(result.stampRegistry).code.length, 24_576);
 
         ProgrammableCustomRegistryV1.RegistryConfigV1 memory registryConfig =
             ProgrammableCustomRegistryV1.RegistryConfigV1({
@@ -196,7 +207,15 @@ contract DeployProgrammableCustomRegistryReleaseV2Test is Test {
         assertLt(
             abi.encodePacked(
                 type(ProgrammableCustomAtomicRegistrarV2).creationCode,
-                abi.encode(expected.registry, expected.policyRegistry, expected.partnerRegistry)
+                abi.encode(expected.registry, expected.policyRegistry, expected.partnerRegistry, expected.stampRegistry)
+            )
+            .length,
+            49_152
+        );
+        assertLt(
+            abi.encodePacked(
+                type(ProgrammableLaunchStampV1).creationCode,
+                abi.encode(expected.registry, expected.policyRegistry, expected.registrar)
             )
             .length,
             49_152
