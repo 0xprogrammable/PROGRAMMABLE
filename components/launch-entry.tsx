@@ -2,7 +2,14 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { lazy, Suspense, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 
 import { XBrandIcon } from "@/components/brand-icons";
@@ -27,6 +34,10 @@ function loadCustomLaunch() {
   return import("@/components/custom-launch-experience");
 }
 
+function loadManualApplicantLaunch() {
+  return import("@/components/manual-applicant-launch");
+}
+
 const LazyLaunchBuilderForm = lazy(async () => {
   const launchModule = await loadLaunchForm();
   return { default: launchModule.LaunchBuilderForm };
@@ -35,6 +46,11 @@ const LazyLaunchBuilderForm = lazy(async () => {
 const LazyCustomLaunchExperience = lazy(async () => {
   const customModule = await loadCustomLaunch();
   return { default: customModule.CustomLaunchExperience };
+});
+
+const LazyManualApplicantLaunch = lazy(async () => {
+  const applicantModule = await loadManualApplicantLaunch();
+  return { default: applicantModule.ManualApplicantLaunch };
 });
 
 function LaunchFormLoading({ onBack }: { onBack: () => void }) {
@@ -71,14 +87,32 @@ function LaunchFormLoading({ onBack }: { onBack: () => void }) {
 
 export function LaunchExperience({
   customLaunchPublicEnabled,
+  manualApplicantLaunchEnabled = false,
   trustedLaunchPermitSigners = [],
 }: {
   customLaunchPublicEnabled: boolean;
+  manualApplicantLaunchEnabled?: boolean;
   trustedLaunchPermitSigners?: readonly TrustedLaunchPermitSignerV2[];
 }) {
-  const [selectedModel, setSelectedModel] = useState<LaunchModel | "custom" | null>(null);
+  const [selectedModel, setSelectedModel] = useState<
+    LaunchModel | "custom" | "manual-applicant" | null
+  >(null);
+  const manualApplicantButtonRef = useRef<HTMLButtonElement>(null);
+  const restoreManualApplicantFocusRef = useRef(false);
 
-  function chooseModel(candidate: LaunchModel | "custom") {
+  useEffect(() => {
+    if (selectedModel !== null || !restoreManualApplicantFocusRef.current) return;
+    restoreManualApplicantFocusRef.current = false;
+    manualApplicantButtonRef.current?.focus();
+  }, [selectedModel]);
+
+  function chooseModel(candidate: LaunchModel | "custom" | "manual-applicant") {
+    if (candidate === "manual-applicant") {
+      if (!manualApplicantLaunchEnabled) return;
+      window.scrollTo({ left: 0, top: 0, behavior: "auto" });
+      setSelectedModel(candidate);
+      return;
+    }
     if (candidate === "custom") {
       if (!customLaunchPublicEnabled) return;
       window.scrollTo({ left: 0, top: 0, behavior: "auto" });
@@ -100,6 +134,7 @@ export function LaunchExperience({
   }
 
   function returnToModels() {
+    restoreManualApplicantFocusRef.current = selectedModel === "manual-applicant";
     window.scrollTo({ left: 0, top: 0, behavior: "auto" });
     setSelectedModel(null);
   }
@@ -108,6 +143,8 @@ export function LaunchExperience({
     return (
       <LaunchModelPicker
         customLaunchPublicEnabled={customLaunchPublicEnabled}
+        manualApplicantLaunchEnabled={manualApplicantLaunchEnabled}
+        manualApplicantButtonRef={manualApplicantButtonRef}
         onChoose={chooseModel}
       />
     );
@@ -120,6 +157,14 @@ export function LaunchExperience({
           onBack={returnToModels}
           trustedLaunchPermitSigners={trustedLaunchPermitSigners}
         />
+      </Suspense>
+    );
+  }
+
+  if (selectedModel === "manual-applicant") {
+    return (
+      <Suspense fallback={<LaunchFormLoading onBack={returnToModels} />}>
+        <LazyManualApplicantLaunch onBack={returnToModels} />
       </Suspense>
     );
   }
@@ -137,16 +182,23 @@ export function LaunchExperience({
 
 export function LaunchModelPicker({
   customLaunchPublicEnabled = false,
+  manualApplicantLaunchEnabled = false,
+  manualApplicantButtonRef,
   onChoose,
 }: {
   customLaunchPublicEnabled?: boolean;
-  onChoose: (model: LaunchModel | "custom") => void;
+  manualApplicantLaunchEnabled?: boolean;
+  manualApplicantButtonRef?: RefObject<HTMLButtonElement | null>;
+  onChoose: (model: LaunchModel | "custom" | "manual-applicant") => void;
 }) {
   const preloadAvailableForm = () => {
     void loadLaunchForm();
   };
   const preloadCustomLaunch = () => {
     void loadCustomLaunch();
+  };
+  const preloadManualApplicantLaunch = () => {
+    void loadManualApplicantLaunch();
   };
 
   return (
@@ -160,6 +212,70 @@ export function LaunchModelPicker({
       </header>
 
       <div className={`launch-model-grid ${launchExperience.modelGrid}`}>
+        {manualApplicantLaunchEnabled ? (
+          <button
+            ref={manualApplicantButtonRef}
+            className={`launch-model-card ${launchExperience.modelCard} liquid-glass-surface`}
+            data-launch-model-option="manual-applicant"
+            data-launch-model-available="true"
+            data-launch-model-launchable="true"
+            type="button"
+            aria-labelledby="launch-model-manual-applicant-title"
+            aria-describedby="launch-model-manual-applicant-description"
+            onPointerEnter={preloadManualApplicantLaunch}
+            onFocus={preloadManualApplicantLaunch}
+            onClick={() => onChoose("manual-applicant")}
+          >
+            <span
+              className={`launch-model-art ${launchExperience.modelArt} ${launchExperience.customArt}`}
+              aria-hidden="true"
+            >
+              <Image
+                className={launchExperience.artImage}
+                src="/brand/create/custom-galaxy-v3.webp"
+                alt=""
+                fill
+                loading="eager"
+                sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 96px) / 4), 260px"
+                priority
+              />
+              <Image
+                className={`${launchExperience.classicLogo} ${launchExperience.customLogo}`}
+                src="/brand/loop/programmable-loop-mark-warm-ivory-v1-1536.png"
+                alt=""
+                width={1536}
+                height={1536}
+                sizes="128px"
+              />
+            </span>
+            <span
+              className={`launch-model-card-body ${launchExperience.modelBody}`}
+            >
+              <span
+                className={`launch-model-card-heading ${launchExperience.modelHeading}`}
+              >
+                <strong id="launch-model-manual-applicant-title">
+                  Approved launch
+                </strong>
+                <small data-status="ready">Ready</small>
+              </span>
+              <span
+                className={`launch-model-description ${launchExperience.modelDescription}`}
+                id="launch-model-manual-applicant-description"
+              >
+                Sign in with the GitHub account and wallet approved in your
+                Hookbuilder submission. Your exact coin loads automatically.
+              </span>
+              <span
+                className={`launch-model-action ${launchExperience.modelAction}`}
+              >
+                Open applicant launch
+                <ArrowRight aria-hidden="true" size={16} />
+              </span>
+            </span>
+          </button>
+        ) : null}
+
         <button
           className={`launch-model-card ${launchExperience.modelCard} liquid-glass-surface`}
           data-launch-model-option="classic"

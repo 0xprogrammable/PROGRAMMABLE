@@ -62,3 +62,19 @@ paths = [
   '''tests/launch-stamp-docs\.test\.ts''',
 ]
 regexes = ['''(?i)0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce''']
+
+[[allowlists]]
+description = "Manual Router vendor artifacts contain public bytes32 runtime and pool-key hashes"
+condition = "AND"
+regexTarget = "match"
+paths = [
+  '''lib/vendor/manual-router-authority-v1/manual-router-portable\.v1\.mjs\.map''',
+  '''lib/vendor/manual-router-authority-v1/artifacts/manual-router-authority-golden\.v6\.json''',
+]
+regexes = [
+  '''tokenRuntimeCodeHash:\s*EvmBytes32V1;''',
+  '''poolKeyHash:\s*EvmBytes32V1;''',
+  '''tokenRuntimeCodeHash:\s*0x[0-9a-fA-F]{64}''',
+  '''poolKeyHash:\s*0x[0-9a-fA-F]{64}''',
+  '''poolKeyHash":\s*"0x[0-9a-fA-F]{64}"''',
+]

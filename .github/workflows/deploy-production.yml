@@ -21,6 +21,11 @@ on:
         required: false
         default: ""
         type: string
+      manual_applicant_launch_enablement:
+        description: Stage the separately gated Applicant-owned Router launch lane
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -164,6 +169,18 @@ jobs:
           --env-file .vercel/.env.production.local
           --requested "$CUSTOM_LAUNCH_PUBLIC_ENABLEMENT_REQUESTED"
           --production-mode "$CUSTOM_LAUNCH_PRODUCTION_MODE"
+          --github-output "$GITHUB_OUTPUT"
+
+      - name: Resolve manual Applicant launch policy
+        id: manual-applicant-policy
+        env:
+          MANUAL_APPLICANT_LAUNCH_ENABLEMENT_REQUESTED: ${{ inputs.manual_applicant_launch_enablement }}
+          MANUAL_APPLICANT_LAUNCH_PROTECTED_MODE: ${{ vars.PROGRAMMABLE_MANUAL_APPLICANT_LAUNCH_MODE }}
+        run: >-
+          node scripts/resolve-manual-applicant-launch-policy.mjs
+          --env-file .vercel/.env.production.local
+          --requested "$MANUAL_APPLICANT_LAUNCH_ENABLEMENT_REQUESTED"
+          --protected-mode "$MANUAL_APPLICANT_LAUNCH_PROTECTED_MODE"
           --github-output "$GITHUB_OUTPUT"
 
       - name: Capture sensitive production environment metadata

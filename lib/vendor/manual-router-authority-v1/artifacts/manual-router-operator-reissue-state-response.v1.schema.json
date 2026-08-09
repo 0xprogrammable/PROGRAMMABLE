@@ -1,0 +1,411 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:manual-router-operator-reissue-state-response:1",
+  "title": "Programmable manual Router operator reissue-state response v1",
+  "$comment": "Closed structural and size gate only. Accept only after the code-owned canonical validator re-derives every hash, Safe/ERC-1271 signature, GitHub Applicant 1.1.0 binding, Router ABI value, compilation, and simulation.",
+  "anyOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "currentApplicantIndex",
+        "currentPointer",
+        "disposition",
+        "schemaVersion",
+        "status"
+      ],
+      "properties": {
+        "currentApplicantIndex": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "approvedGitHubUserId",
+            "approvedLaunchWallet",
+            "entries",
+            "indexHash",
+            "previousIndexHash",
+            "schemaVersion"
+          ],
+          "properties": {
+            "approvedGitHubUserId": {
+              "type": "string",
+              "pattern": "^(?:0|[1-9][0-9]*)$",
+              "maxLength": 78
+            },
+            "approvedLaunchWallet": {
+              "type": "string",
+              "pattern": "^0x[0-9a-f]{40}$"
+            },
+            "entries": {
+              "type": "array",
+              "maxItems": 256,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "approvalBindingHash",
+                  "deadline",
+                  "failedTransactionEvidenceHash",
+                  "headSha",
+                  "pointerHash",
+                  "pullRequestNumber",
+                  "routeNonce",
+                  "signedArtifactHash",
+                  "state",
+                  "subjectHash",
+                  "submittedTransactionHash",
+                  "treeSha",
+                  "validAfter"
+                ],
+                "properties": {
+                  "approvalBindingHash": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "deadline": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(?:0|[1-9][0-9]*)$",
+                        "maxLength": 78
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "failedTransactionEvidenceHash": {
+                    "anyOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^sha256:[0-9a-f]{64}$"
+                      }
+                    ]
+                  },
+                  "headSha": {
+                    "type": "string",
+                    "pattern": "^(?:0|[1-9][0-9]*)$",
+                    "maxLength": 78
+                  },
+                  "pointerHash": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "pullRequestNumber": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "routeNonce": {
+                    "type": "string",
+                    "pattern": "^0x[0-9a-f]{64}$"
+                  },
+                  "signedArtifactHash": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^sha256:[0-9a-f]{64}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "state": {
+                    "type": "string",
+                    "maxLength": 1048576
+                  },
+                  "subjectHash": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "submittedTransactionHash": {
+                    "anyOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^0x[0-9a-f]{64}$"
+                      }
+                    ]
+                  },
+                  "treeSha": {
+                    "type": "string",
+                    "pattern": "^(?:0|[1-9][0-9]*)$",
+                    "maxLength": 78
+                  },
+                  "validAfter": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(?:0|[1-9][0-9]*)$",
+                        "maxLength": 78
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "indexHash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "previousIndexHash": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              ]
+            },
+            "schemaVersion": {
+              "const": "programmable.manual-router-applicant-index.v1"
+            }
+          }
+        },
+        "currentPointer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "approvalBindingHash",
+            "deadline",
+            "failedTransactionEvidenceHash",
+            "finalizedProofHash",
+            "headSha",
+            "pointerHash",
+            "preparationArtifactHash",
+            "previousPointerHash",
+            "routeNonce",
+            "schemaVersion",
+            "signatureRequestHash",
+            "signedArtifactHash",
+            "signedDescriptorHash",
+            "state",
+            "subject",
+            "submittedTransactionHash",
+            "treeSha",
+            "updatedAtEpochSeconds",
+            "validAfter"
+          ],
+          "properties": {
+            "approvalBindingHash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "deadline": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(?:0|[1-9][0-9]*)$",
+                  "maxLength": 78
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "failedTransactionEvidenceHash": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              ]
+            },
+            "finalizedProofHash": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              ]
+            },
+            "headSha": {
+              "type": "string",
+              "pattern": "^(?:0|[1-9][0-9]*)$",
+              "maxLength": 78
+            },
+            "pointerHash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "preparationArtifactHash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "previousPointerHash": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              ]
+            },
+            "routeNonce": {
+              "type": "string",
+              "pattern": "^0x[0-9a-f]{64}$"
+            },
+            "schemaVersion": {
+              "const": "programmable.manual-router-applicant-pointer.v1"
+            },
+            "signatureRequestHash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "signedArtifactHash": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "signedDescriptorHash": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "state": {
+              "type": "string",
+              "maxLength": 1048576
+            },
+            "subject": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "approvedGitHubUserId",
+                "approvedLaunchWallet",
+                "pullRequestNumber",
+                "repositoryId",
+                "schemaVersion",
+                "subjectHash"
+              ],
+              "properties": {
+                "approvedGitHubUserId": {
+                  "type": "string",
+                  "pattern": "^(?:0|[1-9][0-9]*)$",
+                  "maxLength": 78
+                },
+                "approvedLaunchWallet": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-f]{40}$"
+                },
+                "pullRequestNumber": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "repositoryId": {
+                  "type": "string",
+                  "pattern": "^(?:0|[1-9][0-9]*)$",
+                  "maxLength": 78
+                },
+                "schemaVersion": {
+                  "const": "programmable.manual-router-applicant-subject.v1"
+                },
+                "subjectHash": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              }
+            },
+            "submittedTransactionHash": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-f]{64}$"
+                }
+              ]
+            },
+            "treeSha": {
+              "type": "string",
+              "pattern": "^(?:0|[1-9][0-9]*)$",
+              "maxLength": 78
+            },
+            "updatedAtEpochSeconds": {
+              "type": "string",
+              "pattern": "^(?:0|[1-9][0-9]*)$",
+              "maxLength": 78
+            },
+            "validAfter": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(?:0|[1-9][0-9]*)$",
+                  "maxLength": 78
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        "disposition": {
+          "type": "string",
+          "maxLength": 1048576
+        },
+        "schemaVersion": {
+          "const": "programmable.manual-router-operator-reissue-state-response.v1"
+        },
+        "status": {
+          "type": "string",
+          "maxLength": 1048576
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "disposition",
+        "schemaVersion"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "maxLength": 1048576
+        },
+        "disposition": {
+          "type": "string",
+          "maxLength": 1048576
+        },
+        "schemaVersion": {
+          "const": "programmable.manual-router-operator-reissue-state-response.v1"
+        }
+      }
+    }
+  ]
+}

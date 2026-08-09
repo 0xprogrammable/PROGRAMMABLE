@@ -43,6 +43,50 @@ const APPROVED_OPERATIONS = Object.freeze({
         sha256: "bb39f651c11e49173e5b07e42edd2bfa4a1c0e78e5b0345a47b338751e451787",
       }),
     }),
+    Object.freeze({
+      id: "manual-router-finality",
+      path: "/api/ops/manual-router-finality",
+      schedule: "* * * * *",
+      activationEnvironment: "PROGRAMMABLE_MANUAL_APPLICANT_LAUNCH_ENABLED",
+      route: Object.freeze({
+        path: "app/api/ops/manual-router-finality/route.ts",
+        sha256: "73bb842a0bc9436d3a41ec9797a8ba82b71c7745c534a5cb5d5aea259e270656",
+      }),
+      auth: Object.freeze({
+        path: "lib/server/custom-launch/manual-router-cron-auth-v1.ts",
+        sha256: "21f03e26d47de05c678d77aedcefb93a57aad6ae8b5ad77c2374eb6c68391ead",
+      }),
+      runtime: Object.freeze({
+        path: "lib/server/custom-launch/manual-router-finality-worker-v1.ts",
+        sha256: "58b73adac414d26b46b6e868f63e1934c08901a1c4e20eac85f377926383f277",
+      }),
+      dependencies: Object.freeze([
+        Object.freeze({
+          path: "lib/server/custom-launch/manual-router-discovery-v1.ts",
+          sha256: "79724e9671013da64f2bbd76e70d3a0d151f173344d32655056f0f917960a2dd",
+        }),
+        Object.freeze({
+          path: "lib/server/custom-launch/manual-router-finality-v1.ts",
+          sha256: "c0176a253cf6967f6fe60cd23c4ea2aa44e68a0f6a6d6e3d6f8485094940c7c8",
+        }),
+        Object.freeze({
+          path: "lib/server/custom-launch/manual-router-production-v1.ts",
+          sha256: "e1f617ed1d5fc92bef9c935fae35ba2757b10a7120c75ec140b0e835af70fc71",
+        }),
+        Object.freeze({
+          path: "lib/server/custom-launch/manual-router-service-v1.ts",
+          sha256: "7b0249243ac4a1fa1408c6a1619eef4449a5dc19bb29b139888255246bfdd0b7",
+        }),
+        Object.freeze({
+          path: "lib/server/custom-launch/manual-router-store-v1.ts",
+          sha256: "cb21cf45ba4deaadd918279bb277d559e48eefdbcb078c3f018d1bb6342b901a",
+        }),
+      ]),
+      policy: Object.freeze({
+        path: "lib/server/custom-launch/manual-router-finality-policy-v1.ts",
+        sha256: "c24082d7a27f1742c6c8b9e4e86088a9d9a5c260b44061a1c86b69b9ae989343",
+      }),
+    }),
   ]),
   workers: Object.freeze([
     Object.freeze({
@@ -289,7 +333,8 @@ function routeIsAuthenticatedAndFailClosed(source, requireCutover = false) {
     /secretLength\s*>\s*1_024/u.test(source);
   const standardAuthorization =
     /matchesBearer\(request,\s*process\.env\.CRON_SECRET\)/u.test(source) ||
-    /const\s+secret\s*=\s*process\.env\.CRON_SECRET/u.test(source);
+    /const\s+secret\s*=\s*process\.env\.CRON_SECRET/u.test(source) ||
+    /const\s+secret\s*=\s*environment\.CRON_SECRET/u.test(source);
   const cutoverAuthorization =
     /PROGRAMMABLE_CUTOVER_BACKFILL_ACTIVE\s*===\s*["']true["']/u.test(source) &&
     /process\.env\.PROGRAMMABLE_CUTOVER_OPERATOR_SECRET/u.test(source) &&
@@ -307,6 +352,7 @@ function routeIsAuthenticatedAndFailClosed(source, requireCutover = false) {
       (cutoverAuthorization &&
         /mode\s*===\s*["']cutover["']/u.test(source))) &&
     (/if\s*\(\s*!isAuthorized\(request\)\s*\)/u.test(source) ||
+      /if\s*\(\s*!isManualRouterFinalityCronAuthorizedV1\(request\)\s*\)/u.test(source) ||
       /if\s*\(\s*mode\s*===\s*null\s*\)/u.test(source)) &&
     /status\s*:\s*401\b/u.test(source) &&
     /status\s*:\s*503\b/u.test(source) &&
@@ -665,6 +711,7 @@ export function evaluateReadModelOperationsSourceContracts(
   );
   for (const approvedCron of APPROVED_OPERATIONS.independentCrons) {
     const route = source(approvedCron.route.path);
+    const auth = approvedCron.auth ? source(approvedCron.auth.path) : "";
     const runtime = source(approvedCron.runtime.path);
     check(
       `ops-${approvedCron.id}-schedule`,
@@ -674,6 +721,8 @@ export function evaluateReadModelOperationsSourceContracts(
     check(
       `ops-${approvedCron.id}-source-digests`,
       sourceBindingMatches(source, approvedCron.route, expectedSha256Overrides) &&
+        (!approvedCron.auth
+          || sourceBindingMatches(source, approvedCron.auth, expectedSha256Overrides)) &&
         sourceBindingMatches(source, approvedCron.runtime, expectedSha256Overrides) &&
         (approvedCron.dependencies ?? []).every((binding) =>
           sourceBindingMatches(source, binding, expectedSha256Overrides)
@@ -683,7 +732,7 @@ export function evaluateReadModelOperationsSourceContracts(
     );
     check(
       `ops-${approvedCron.id}-route-auth`,
-      routeIsAuthenticatedAndFailClosed(route),
+      routeIsAuthenticatedAndFailClosed(`${route}\n${auth}`),
       `${approvedCron.id} requires the bounded timing-safe cron secret and fails closed`,
     );
     check(
