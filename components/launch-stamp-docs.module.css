@@ -240,6 +240,12 @@
   padding-block: 16px;
 }
 
+.abiList dt {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .abiList dd {
   display: grid;
   gap: 6px;

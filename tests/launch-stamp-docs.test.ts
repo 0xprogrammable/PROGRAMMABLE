@@ -508,6 +508,9 @@ describe("Launch Stamp developer documentation", () => {
       /\.abiList dd\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\);/s,
     );
     expect(styles).toMatch(
+      /\.abiList dt\s*\{[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;[^}]*word-break:\s*break-word;/s,
+    );
+    expect(styles).toMatch(
       /\.abiList dd > span,\s*\.abiList dd > span code\s*\{[^}]*max-width:\s*100%;[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;[^}]*word-break:\s*break-word;/s,
     );
     expect(styles).not.toContain("transition: all");
