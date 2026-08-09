@@ -1,6 +1,6 @@
 # Threat model
 
-This document catalogs the threats considered against `contracts/src/VeritasHook.sol` and its dependencies (`VeritasRegistry.sol`, `VeritasOracle.sol`, `VeritasRegistryCallback.sol`), states the mitigation for each, and is explicit about residual risk that was identified and consciously accepted rather than fixed. It complements `PROPOSAL.md` (what the hook does and why) and `TEST_PLAN.md` (which rubric requirements each test proves). All test names and source citations below were verified against the actual current files, not transcribed from memory — `forge test --offline` from `contracts/` reports **168 tests passing, 0 failing** as of this writing.
+This document catalogs the threats considered against `contracts/src/VeritasHook.sol` and its dependencies (`VeritasRegistry.sol`, `VeritasOracle.sol`, `VeritasRegistryCallback.sol`), states the mitigation for each, and is explicit about residual risk that was identified and consciously accepted rather than fixed. It complements `PROPOSAL.md` (what the hook does and why) and `TEST_PLAN.md` (which rubric requirements each test proves). All test names and source citations below were verified against the actual current files, not transcribed from memory — `forge test --offline` from `contracts/` reports **171 tests passing, 0 failing** as of this writing.
 
 ## 1. Hard-fail self-check
 
