@@ -262,6 +262,20 @@
   line-height: 1.55;
 }
 
+.proofList dd > code,
+.proofList dd span {
+  max-width: 100%;
+  min-width: 0;
+  width: 100%;
+}
+
+.proofList dd > code,
+.proofList dd span,
+.proofList dd span code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .atomicSignature {
   border-block: 1px solid var(--panel-border);
   display: grid;
@@ -430,6 +444,11 @@
 }
 
 @media (max-width: 700px) {
+  :global(html:has([data-launch-stamp-docs])),
+  :global(body:has([data-launch-stamp-docs])) {
+    overflow-x: clip;
+  }
+
   :global(html:has([data-launch-stamp-docs])) {
     scroll-padding-bottom: calc(88px + env(safe-area-inset-bottom));
   }
