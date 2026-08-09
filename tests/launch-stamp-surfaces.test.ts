@@ -213,6 +213,37 @@ describe("canonical Router stamp surfaces", () => {
     });
   });
 
+  it("fills missing Router card copy without inventing market data", () => {
+    const authoredDescription = "An authored token description.";
+    const cards = getTokenCards([
+      customGraphExploreEntry,
+      stampedClassicExploreEntry,
+      {
+        ...customGraphExploreEntry,
+        id: `${customGraphExploreEntry.id}:authored`,
+        description: authoredDescription,
+      },
+      canonicalTokenExploreEntryV1(legacyClassicToken),
+    ]);
+
+    expect(cards[0]).toMatchObject({
+      launchCategory: "Custom",
+      description:
+        "Canonical Router stamp. v4 pool initialized.",
+      marketCap: undefined,
+      marketStatus: undefined,
+    });
+    expect(cards[1]).toMatchObject({
+      launchCategory: "Classic",
+      description:
+        "Canonical Router stamp. v4 pool initialized.",
+      marketCap: undefined,
+      marketStatus: undefined,
+    });
+    expect(cards[2]?.description).toBe(authoredDescription);
+    expect(cards[3]?.description).toBeUndefined();
+  });
+
   it("rejects a stamped detail record on snapshot-chain drift", () => {
     expect(() =>
       parseDetailPayload(detailPayload(customGraphExploreEntry, 10)),

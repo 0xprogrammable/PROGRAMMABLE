@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
 
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { getAddress } from "viem";
 
@@ -22,6 +24,8 @@ import {
   profileClaimActionCount,
   profileEntryHasClaimableReward,
   profileHasRewardSurface,
+  profileRouterLaunchEntries,
+  ProfileRouterLaunches,
   profileRewardsForAccount,
   profileTransactionPollAttempts,
   reflectedConfirmedProfileTransactions,
@@ -758,6 +762,7 @@ describe("profile reward grouping", () => {
       name: "Stamped graph",
       symbol: "GRAPH",
       launchModel: "custom-graph",
+      launchProvenance: "canonical-router",
     } satisfies ProfileToken;
     const portfolio = buildProfilePortfolio(
       [customGraphToken],
@@ -777,6 +782,56 @@ describe("profile reward grouping", () => {
     ]);
     expect(profileClaimableWei(portfolio, firstAddress)).toBe(0n);
     expect(profileHasRewardSurface(portfolio)).toBe(false);
+  });
+
+  it("lists a connected launchWallet Router token independently of rewards", () => {
+    const routerCustom = {
+      ...tokens[0],
+      name: "Custom Graph",
+      symbol: "GRAPH",
+      launchModel: "custom-graph",
+      launchProvenance: "canonical-router",
+    } satisfies ProfileToken;
+    const legacy = {
+      ...tokens[1],
+      launchModel: "classic",
+    } satisfies ProfileToken;
+    const portfolio = buildProfilePortfolio(
+      [routerCustom, legacy],
+      [],
+      [],
+    );
+
+    expect(profileRouterLaunchEntries(portfolio)).toEqual([
+      expect.objectContaining({
+        token: routerCustom,
+        launchedByWallet: true,
+        claim: undefined,
+        classicRewards: [],
+        deepRewards: [],
+        stockPairedRewards: [],
+      }),
+    ]);
+    expect(profileHasRewardSurface(profileRouterLaunchEntries(portfolio)))
+      .toBe(false);
+    expect(profileViewSource).toContain("Canonical Router records from this wallet.");
+    expect(profileViewSource).toContain("Router record");
+
+    const html = renderToStaticMarkup(
+      createElement(ProfileRouterLaunches, {
+        entries: profileRouterLaunchEntries(portfolio),
+      }),
+    );
+    expect(html).toContain("Launches");
+    expect(html).toContain("Canonical Router records from this wallet.");
+    expect(html).toContain("Custom Graph");
+    expect(html).toContain("$GRAPH");
+    expect(html).toContain(`href="/token/${routerCustom.address}"`);
+    expect(html).toContain("Custom");
+    expect(html).toContain("Router record");
+    expect(html).not.toMatch(/>\s*Claim\s*</i);
+    expect(html).not.toContain("permanently locked");
+    expect(html).not.toContain("positionTokenId");
   });
 });
 

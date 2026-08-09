@@ -919,6 +919,33 @@
   width: 100%;
 }
 
+.routerNoticeShell {
+  min-height: 0;
+  padding: 20px;
+  position: static;
+}
+
+.routerNotice {
+  display: grid;
+  gap: 6px;
+}
+
+.routerNotice strong {
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 630;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+
+.routerNotice p {
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 48ch;
+}
+
 .tradeForm,
 .review,
 .submitted {

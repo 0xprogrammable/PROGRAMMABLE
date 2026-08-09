@@ -967,11 +967,21 @@ export function filterTokensBySocialPresence<
   );
 }
 
+export function exploreTokenCardDescription(token: ExploreEntry) {
+  const description = token.description?.trim();
+  if (description) return description;
+
+  return token.exploreKind === "token" &&
+      isLaunchStampProvenanceV1(token.launchStampProvenance)
+    ? "Canonical Router stamp. v4 pool initialized."
+    : undefined;
+}
+
 export function getTokenCards(tokens: ExploreEntry[]): TokenCard[] {
   return tokens.map((token) => ({
     id: token.id,
     name: token.name,
-    description: token.description?.trim() || undefined,
+    description: exploreTokenCardDescription(token),
     imageUrl:
       token.imageUrl?.trim() || getFallbackTokenImage(
         token.tokenAddress ?? token.id,

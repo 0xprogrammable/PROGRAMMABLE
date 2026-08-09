@@ -402,12 +402,72 @@ describe("profile API client", () => {
     expect(profile.tokens[1]).toMatchObject({
       address: getAddress(stampedTokenAddress),
       launchModel: "custom-graph",
+      launchProvenance: "canonical-router",
     });
     expect(profile.positions).toHaveLength(1);
     expect(profile.positions[0]?.tokenAddress).toBe(tokenAddress);
     expect(profile.claims).toHaveLength(1);
     expect(profile.claimableWei).toBe("200000000000000000");
     expect(profile.claimedWei).toBe("300000000000000000");
+  });
+
+  it("returns a connected launchWallet Router token with no reward or position state", () => {
+    const response = profileResponse();
+    const customGraphToken = {
+      id: "1:stamped-custom-graph-only",
+      name: "Custom Graph",
+      symbol: "GRAPH",
+      tokenAddress: stampedTokenAddress,
+      hookAddress: stampedHookAddress,
+      poolId: stampedPoolId,
+      creatorAddress: account,
+      launchTransactionHash: stampedLaunchTransactionHash,
+      launchLogIndex: 9,
+      launchBlockNumber: "25717620",
+      launchedAt: "2026-07-28T12:00:00.000Z",
+      totalSwapFeeBps: null,
+      launchModel: "custom-graph",
+      liquidityPath: "programmable-v4",
+      launchStampProvenance: launchStampProvenance({
+        kind: "custom-graph",
+        tokenAddress: stampedTokenAddress,
+        hookAddress: stampedHookAddress,
+        poolId: stampedPoolId,
+        transactionHash: stampedLaunchTransactionHash,
+      }),
+    } as const;
+    const profile = mapCreatorProfileResponse(
+      {
+        ...response,
+        tokens: [customGraphToken],
+        pools: [],
+        claims: [],
+        totals: {
+          claimableWei: "0",
+          claimableEth: "0",
+          generatedWei: "0",
+          generatedEth: "0",
+          claimedWei: "0",
+          claimedEth: "0",
+        },
+      },
+      account,
+    );
+
+    expect(profile.account).toBe(getAddress(account));
+    expect(profile.tokens).toEqual([
+      expect.objectContaining({
+        address: getAddress(stampedTokenAddress),
+        name: "Custom Graph",
+        symbol: "GRAPH",
+        launchModel: "custom-graph",
+        launchProvenance: "canonical-router",
+      }),
+    ]);
+    expect(profile.positions).toEqual([]);
+    expect(profile.claims).toEqual([]);
+    expect(profile.claimableWei).toBe("0");
+    expect(profile.claimedWei).toBe("0");
   });
 
   it("keeps the undeployed state explicit and rejects fabricated records", () => {

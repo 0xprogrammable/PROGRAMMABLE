@@ -75,6 +75,24 @@ describe("token detail layout", () => {
     );
   });
 
+  it("uses a compact read-only Router notice without shrinking live trade forms", () => {
+    expect(detailSource).toContain(
+      'isRouterStamped ? styles.routerNoticeShell : ""',
+    );
+    expect(detailSource).toContain('className={styles.routerNotice} role="status"');
+    expect(detailSource).toContain("market availability");
+    expect(detailSource).toContain("This page shows launch data only.");
+    expect(detailStyles).toMatch(
+      /\.tradeShell\s*\{[^}]*min-height:\s*390px;/s,
+    );
+    expect(detailStyles).toMatch(
+      /\.routerNoticeShell\s*\{[^}]*min-height:\s*0;[^}]*position:\s*static;/s,
+    );
+    expect(detailStyles).toMatch(
+      /\.routerNotice\s*\{[^}]*display:\s*grid;[^}]*gap:\s*6px;/s,
+    );
+  });
+
   it("keeps the mobile visual order aligned with DOM and keyboard order", () => {
     const contentSource = detailSource.slice(
       detailSource.indexOf("function TokenDetailContent"),

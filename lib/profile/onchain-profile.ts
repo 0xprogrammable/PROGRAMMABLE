@@ -32,6 +32,7 @@ export type ProfileToken = {
     | "deep"
     | "stock-paired"
     | "custom-graph";
+  launchProvenance?: "canonical-router";
 };
 
 export type ProfilePosition = {
@@ -775,6 +776,7 @@ export function mapCreatorProfileResponse(
       marketCapQuoteWad,
       quoteAssetSymbol,
       launchModel,
+      launchStampProvenance,
     }) => ({
       address,
       name,
@@ -787,6 +789,9 @@ export function mapCreatorProfileResponse(
       ...(marketCapQuoteWad ? { marketCapQuoteWad } : {}),
       ...(quoteAssetSymbol ? { quoteAssetSymbol } : {}),
       ...(launchModel ? { launchModel } : {}),
+      ...(launchStampProvenance
+        ? { launchProvenance: "canonical-router" as const }
+        : {}),
     }),
   );
   const positions: ProfilePosition[] = tokens.flatMap((token) => {

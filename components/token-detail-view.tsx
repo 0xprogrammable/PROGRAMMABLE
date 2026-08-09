@@ -1673,14 +1673,21 @@ function TokenDetailContent({
         </section>
 
         <aside
-          className={`${styles.tradeShell} liquid-glass-surface`}
-          aria-label={`${token.name} trade`}
+          className={`${styles.tradeShell} ${
+            isRouterStamped ? styles.routerNoticeShell : ""
+          } liquid-glass-surface`}
+          aria-label={
+            isRouterStamped
+              ? `${token.name} market availability`
+              : `${token.name} trade`
+          }
         >
           {isRouterStamped ? (
-            <div className={styles.submitted} role="status">
+            <div className={styles.routerNotice} role="status">
               <strong>Router launch</strong>
               <p>
-                Trading is not enabled in this interface for this PoolKey.
+                This page shows launch data only. Trading is not enabled here
+                for this PoolKey.
               </p>
             </div>
           ) : !canUseClassicTrade || classicSwapFeeBps === null ? (
