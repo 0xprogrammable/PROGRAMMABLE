@@ -168,6 +168,7 @@ export function buildDeveloperDocsMarkdown(
   "",
   "## Canonical resources",
   "",
+  "- [Launch Stamp Router reference](https://programmable.market/docs/launch-stamps) — direct provenance lookup for future Classic and Custom launches; the binding remains prelaunch until every deployment field is published.",
   `- [GitHub developer repository](${PROGRAMMABLE_DEVELOPER_REPOSITORY}) — canonical guides, schemas, fixtures, clients, compatibility and security policy.`,
   `- [Live discovery](${PROGRAMMABLE_WELL_KNOWN_URL}) — active API version, chains and canonical URLs.`,
   `- [Active OpenAPI](${PROGRAMMABLE_OPENAPI_URL}) — v${PROGRAMMABLE_ACTIVE_API_VERSION} HTTP contract.`,

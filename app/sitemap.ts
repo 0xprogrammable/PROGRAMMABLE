@@ -8,6 +8,7 @@ const PUBLIC_ROUTES = [
   "/launch",
   "/docs",
   "/docs/developers",
+  "/docs/launch-stamps",
   "/docs/models/classic",
   "/docs/models/custom",
   "/docs/models/stock-paired",

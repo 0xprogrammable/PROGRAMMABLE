@@ -48,7 +48,9 @@ export function DocsShell({
         >
           {docsCategories.map((category) => {
             if (category.status === "available") {
-              const active = currentPath === category.href;
+              const active =
+                currentPath === category.href ||
+                category.relatedPaths.some((path) => path === currentPath);
               return (
                 <Link
                   aria-current={active ? "page" : undefined}
