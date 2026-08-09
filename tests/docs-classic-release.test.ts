@@ -32,11 +32,14 @@ describe("Classic docs release binding", () => {
     expect(classicDocs).not.toContain("mainnet-classic-v2.json");
   });
 
-  it("publishes source identifiers without turning the integration guide into launch copy", () => {
-    expect(docsOverview).toContain(currentLauncher);
-    expect(docsOverview).toContain(currentFeeHook);
-    expect(docsOverview).toContain(legacyLauncher);
-    expect(docsOverview).toContain(legacyFeeHook);
+  it("keeps release-specific contracts out of the Router-first overview", () => {
+    expect(docsOverview).not.toContain(currentLauncher);
+    expect(docsOverview).not.toContain(currentFeeHook);
+    expect(docsOverview).not.toContain(legacyLauncher);
+    expect(docsOverview).not.toContain(legacyFeeHook);
+    expect(docsOverview).toContain(
+      "Historical launches and direct factory calls are outside this trust root.",
+    );
     expect(docsOverview).not.toContain("Set buy and sell fees");
     expect(classicDocs).toContain("Set separately from 1% to 10%");
     expect(classicDocs).toContain("The 0.10% Programmable share is included.");

@@ -9,6 +9,7 @@ export const PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ARTIFACT = {
 export const PROGRAMMABLE_LAUNCH_STAMP_RESOURCES = {
   discoveryUrl:
     "https://developers.programmable.family/.well-known/programmable.json",
+  manifestUrl: "https://developers.programmable.family/api/v2/manifest",
   abiUrl:
     "https://developers.programmable.family/abis/ethereum/programmable-launch-stamp-router-v1.json",
   abiGithubUrl:

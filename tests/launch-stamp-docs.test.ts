@@ -12,6 +12,7 @@ import {
   PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ARTIFACT,
   STAMP_RECORD_V1_FIELDS,
 } from "../components/launch-stamp-docs-contract";
+import { developerDocsMarkdown } from "../lib/developer-docs-content";
 
 const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), "utf8");
@@ -20,7 +21,6 @@ const styles = read("components/launch-stamp-docs.module.css");
 const docsData = read("components/docs-data.ts");
 const docsShell = read("components/docs-shell.tsx");
 const sitemap = read("app/sitemap.ts");
-const markdown = read("lib/developer-docs-content.ts");
 
 describe("Launch Stamp developer documentation", () => {
   it("publishes the exact live Router activation and finalized evidence", () => {
@@ -224,6 +224,7 @@ describe("Launch Stamp developer documentation", () => {
     expect(PROGRAMMABLE_LAUNCH_STAMP_RESOURCES).toEqual({
       discoveryUrl:
         "https://developers.programmable.family/.well-known/programmable.json",
+      manifestUrl: "https://developers.programmable.family/api/v2/manifest",
       abiUrl:
         "https://developers.programmable.family/abis/ethereum/programmable-launch-stamp-router-v1.json",
       abiGithubUrl:
@@ -481,13 +482,13 @@ describe("Launch Stamp developer documentation", () => {
     expect(page).toContain('currentPath="/docs/launch-stamps"');
     expect(page).toContain('alternates: { canonical: "/docs/launch-stamps" }');
     expect(sitemap).toContain('"/docs/launch-stamps"');
-    expect(markdown).toContain(
-      "[Launch Stamp Router reference](https://programmable.market/docs/launch-stamps)",
+    expect(developerDocsMarkdown).toContain(
+      "[GitHub Router reference](https://github.com/0xprogrammable/developers/blob/main/docs/reference/launch-stamp.md)",
     );
-    expect(markdown).toContain(
-      "live Ethereum Router binding for direct, future-only Classic and Custom provenance verification",
+    expect(developerDocsMarkdown).toContain(
+      "Router V1 is the canonical provenance source for future Classic and Custom launches",
     );
-    expect(markdown).not.toContain(
+    expect(developerDocsMarkdown).not.toContain(
       "the binding remains prelaunch until every deployment field is published",
     );
   });
@@ -503,6 +504,12 @@ describe("Launch Stamp developer documentation", () => {
     expect(styles).toContain("@media (max-width: 360px)");
     expect(styles).toContain("env(safe-area-inset-bottom)");
     expect(styles).toContain("var(--body-background) 92%");
+    expect(styles).toMatch(
+      /\.abiList dd\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\);/s,
+    );
+    expect(styles).toMatch(
+      /\.abiList dd > span,\s*\.abiList dd > span code\s*\{[^}]*max-width:\s*100%;[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;[^}]*word-break:\s*break-word;/s,
+    );
     expect(styles).not.toContain("transition: all");
     expect(styles).not.toMatch(/\n\s+width:\s*\d{3,}px/);
   });

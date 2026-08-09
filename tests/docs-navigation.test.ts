@@ -37,21 +37,19 @@ describe("Docs navigation state", () => {
   });
 
   it("uses the URL hash instead of keeping Overview active", () => {
-    expect(normalizeDocsHash("#verification")).toBe(
-      "/docs/developers#verification",
-    );
+    expect(normalizeDocsHash("#boundary")).toBe("/docs/developers#boundary");
     expect(
       isDocsNavigationItemActive({
-        activeHref: "/docs/developers#verification",
+        activeHref: "/docs/developers#boundary",
         currentPath: "/docs/developers",
         itemHref: "/docs/developers#terminal-contract",
       }),
     ).toBe(false);
     expect(
       isDocsNavigationItemActive({
-        activeHref: "/docs/developers#verification",
+        activeHref: "/docs/developers#boundary",
         currentPath: "/docs/developers",
-        itemHref: "/docs/developers#verification",
+        itemHref: "/docs/developers#boundary",
       }),
     ).toBe(true);
   });
@@ -63,15 +61,15 @@ describe("Docs navigation state", () => {
 
   it("canonicalizes a duplicated topic hash", () => {
     expect(normalizeDocsHash("#paths#paths")).toBe("/docs/developers#paths");
-    expect(normalizeDocsHash("#verification#verification")).toBe(
-      "/docs/developers#verification",
+    expect(normalizeDocsHash("#boundary#boundary")).toBe(
+      "/docs/developers#boundary",
     );
   });
 
   it("resolves browser Back and Forward hashes to one deterministic scroll target", () => {
-    expect(resolveDocsLocationTarget("#verification")).toEqual({
-      href: "/docs/developers#verification",
-      sectionId: "verification",
+    expect(resolveDocsLocationTarget("#boundary")).toEqual({
+      href: "/docs/developers#boundary",
+      sectionId: "boundary",
       shouldScroll: true,
     });
     expect(resolveDocsLocationTarget("#unknown")).toEqual({
@@ -234,14 +232,15 @@ describe("Docs navigation state", () => {
   });
 
   it("resolves search results from the current input", () => {
-    const terminalResults = getDocsSearchResults("terminal");
-    const schemaResults = getDocsSearchResults("schema");
+    const routerResults = getDocsSearchResults("router");
+    const manifestResults = getDocsSearchResults("manifest");
 
-    expect(terminalResults.length).toBeGreaterThan(0);
-    expect(terminalResults[0]?.title).toBe("Terminal contract");
-    expect(schemaResults.length).toBeGreaterThan(0);
-    expect(schemaResults[0]?.title).toBe("OpenAPI and JSON Schemas");
-    expect(schemaResults).not.toEqual(terminalResults);
+    expect(routerResults.length).toBeGreaterThan(0);
+    expect(routerResults[0]?.title).toBe("Router trust root");
+    expect(manifestResults.length).toBeGreaterThan(0);
+    expect(manifestResults[0]?.title).toBe("Manifest, ABI and GitHub");
+    expect(manifestResults).not.toEqual(routerResults);
+    expect(getDocsSearchResults("schema")).toEqual([]);
     expect(getDocsSearchResults("")).toEqual([]);
   });
 
@@ -253,13 +252,15 @@ describe("Docs navigation state", () => {
 
     expect(deepResults).toEqual([]);
     expect(stockResults).toEqual([]);
-    expect(classicResults[0]?.title).toBe("Classic and Custom labels");
-    expect(customResults[0]?.title).toBe("Custom Registry");
+    expect(classicResults[0]?.title).toBe("Classic and Custom launch kinds");
+    expect(customResults[0]?.title).toBe("Classic and Custom launch kinds");
     expect(customResults[0]?.description).toContain(
-      "authenticated Custom provenance",
+      "Router kind 1 to Programmable Custom",
     );
     expect(
-      customResults.some((result) => result.title === "Classic and Custom labels"),
+      customResults.some(
+        (result) => result.title === "Classic and Custom launch kinds",
+      ),
     ).toBe(true);
   });
 

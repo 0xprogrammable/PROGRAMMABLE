@@ -71,15 +71,18 @@ describe("Docs rail layout stability", () => {
 
   it("uses one concise developer guide with a current-page chapter rail", () => {
     expect(docsPage).toContain("sections={developerSections}");
-    expect(docsPage).toContain("<DeveloperDocsWorkbench />");
     expect(docsPage).toContain(
-      "<DeveloperAgentPrompt registryManifest={registryManifest} />",
+      'title="Verify future Programmable launches through one Router."',
     );
+    expect(docsPage).toContain('id="trust-root"');
+    expect(docsPage).toContain('id="identity"');
+    expect(docsPage).toContain('id="indexing"');
+    expect(docsPage).not.toContain("DeveloperDocsWorkbench");
     expect(docsPage).toContain('currentPath="/docs/developers"');
     expect(docsShell).not.toContain("docsGuides");
     expect(docsShell).not.toContain("Documentation guides");
     expect(docsShell).toContain('aria-label="Documentation categories"');
-    expect(docsShell).toContain("Public API");
+    expect(docsShell).toContain("Developer reference");
     expect(docsShell).toContain("Soon");
     expect(docsNavigation).toContain(
       "<p className={styles.navLabel}>Contents</p>",

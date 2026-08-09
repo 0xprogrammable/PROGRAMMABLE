@@ -27,13 +27,14 @@ export const docsNavigation = [
     items: [
       { href: "/docs/developers#paths", label: "Start here" },
       { href: "/docs/launch-stamps", label: "Launch stamps" },
-      { href: "/docs/developers#quickstart", label: "Quickstart" },
+      { href: "/docs/developers#trust-root", label: "Trust root" },
       { href: "/docs/developers#identity", label: "Launch identity" },
-      { href: "/docs/developers#providers", label: "Custom Registry" },
-      { href: "/docs/developers#markets", label: "Assets and markets" },
-      { href: "/docs/developers#verification", label: "Verified and fees" },
-      { href: "/docs/developers#data", label: "Finality and indexing" },
-      { href: "/docs/developers#reference", label: "API and versions" },
+      {
+        href: "/docs/developers#indexing",
+        label: "Optional event discovery",
+      },
+      { href: "/docs/developers#resources", label: "Resources" },
+      { href: "/docs/developers#boundary", label: "Trust boundary" },
       { href: "/docs/developers#checklist", label: "Checklist" },
       { href: "/docs/developers#agents", label: "AI agents" },
     ],
@@ -48,80 +49,69 @@ export const docsSearchItems: DocsSearchItem[] = [
     href: "/docs/launch-stamps",
   },
   {
-    title: "Terminal contract",
+    title: "Router trust root",
     description:
-      "Copy a minimal consumer for the public launch feed in cURL, TypeScript, or Python.",
-    href: "/docs/developers#quickstart",
+      "Bind to the live Ethereum Router, deployment range, runtime hash and frozen ABI.",
+    href: "/docs/developers#trust-root",
   },
   {
-    title: "Classic and Custom labels",
+    title: "Classic and Custom launch kinds",
     description:
-      "Map the two stable API categories to Programmable Classic and Programmable Custom.",
-    href: "/docs/developers#quickstart",
+      "Map Router kind 1 to Programmable Custom and kind 2 to Programmable Classic.",
+    href: "/docs/developers#trust-root",
   },
   {
-    title: "Custom Registry",
+    title: "Verify a token",
     description:
-      "Understand authenticated Custom provenance for unfamiliar templates, contracts, assets, and markets.",
-    href: "/docs/developers#providers",
-  },
-  {
-    title: "Launch detection",
-    description:
-      "Use the public feed or exact Ethereum source addresses, event topics, and start blocks.",
+      "Resolve a token to one launch ID and reproduce its canonical stamp record.",
     href: "/docs/developers#identity",
   },
   {
-    title: "Required fields",
+    title: "Verify a Uniswap v4 pool",
     description:
-      "Store identity, category, provenance, finality, markets, fees, and extensions correctly.",
-    href: "/docs/developers#markets",
+      "Resolve PoolManager and poolId without relying on token names, tickers or hook reuse.",
+    href: "/docs/developers#identity",
   },
   {
-    title: "Verification rules",
+    title: "Verify an exclusive component",
     description:
-      "Keep provenance, review scope, deployment binding, fees, and market support as separate facts.",
-    href: "/docs/developers#verification",
+      "Match launchId, stampProof and the recorded component runtime hash.",
+    href: "/docs/developers#identity",
   },
   {
-    title: "Backfill and updates",
-    description: "Traverse pages and persist a durable polling checkpoint.",
-    href: "/docs/developers#data",
+    title: "Optional event discovery",
+    description:
+      "Backfill and follow Router events only when continuous launch discovery is needed.",
+    href: "/docs/developers#indexing",
   },
   {
-    title: "Terminal rendering rules",
+    title: "Reorg and finality handling",
     description:
-      "Show every recognized launch without inventing unsupported market features.",
-    href: "/docs/developers#markets",
+      "Replay an overlap and advance only through one canonical finalized boundary.",
+    href: "/docs/developers#indexing",
   },
   {
-    title: "AI agents",
+    title: "Manifest, ABI and GitHub",
     description:
-      "Use llms.txt, Markdown, OpenAPI, schemas, and a copy-ready prompt.",
+      "Use the live manifest, byte-verified ABI and canonical verifier guides.",
+    href: "/docs/developers#resources",
+  },
+  {
+    title: "Provenance boundary",
+    description:
+      "Keep Router origin separate from safety, tradability, liquidity and terminal support.",
+    href: "/docs/developers#boundary",
+  },
+  {
+    title: "AI agent context",
+    description:
+      "Use the concise Markdown contract or the complete machine-readable Router reference.",
     href: "/docs/developers#agents",
-  },
-  {
-    title: "API reference",
-    description:
-      "Endpoints, token detail paths, query parameters, HTTP states, OpenAPI, JSON Schemas, and examples.",
-    href: "/docs/developers#reference",
-  },
-  {
-    title: "OpenAPI and JSON Schemas",
-    description:
-      "Generate clients and validate public responses against the normative contracts.",
-    href: "/docs/developers#reference",
-  },
-  {
-    title: "Programmable Verified",
-    description:
-      "Read the bounded review definition, exact deployment binding, revocation state, and fee evidence.",
-    href: "/docs/developers#verification",
   },
   {
     title: "Integration checklist",
     description:
-      "Verify discovery, cursor traversal, finality, unknown markets, fees, schemas, and retry behavior.",
+      "Verify chain, runtime, ABI, identity reads, launch kind and result states.",
     href: "/docs/developers#checklist",
   },
 ];
