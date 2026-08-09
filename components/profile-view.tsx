@@ -3844,7 +3844,9 @@ function ProfileAccountWorkspace({
         />
 
         <section
-          className={styles.claimablePanel}
+          className={`${styles.claimablePanel} ${
+            claimableEntries.length ? "" : styles.claimablePanelEmpty
+          }`}
           aria-labelledby="profile-claimable-title"
         >
           <header className={styles.panelHeader}>

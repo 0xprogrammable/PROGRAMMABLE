@@ -816,6 +816,12 @@ describe("profile reward grouping", () => {
       .toBe(false);
     expect(profileViewSource).toContain("Canonical Router records from this wallet.");
     expect(profileViewSource).toContain("Router record");
+    expect(profileViewSource).toContain(
+      'claimableEntries.length ? "" : styles.claimablePanelEmpty',
+    );
+    expect(profileExperienceCss).toMatch(
+      /@media \(max-width: 820px\)[\s\S]*\.claimablePanelEmpty\s*\{[^}]*min-height:\s*0;[\s\S]*\.claimablePanelEmpty \.claimEmpty\s*\{[^}]*min-height:\s*0;/,
+    );
 
     const html = renderToStaticMarkup(
       createElement(ProfileRouterLaunches, {

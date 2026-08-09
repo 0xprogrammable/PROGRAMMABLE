@@ -1574,6 +1574,16 @@
     min-height: 340px;
   }
 
+  .claimablePanelEmpty {
+    min-height: 0;
+  }
+
+  .claimablePanelEmpty .claimEmpty {
+    flex: none;
+    min-height: 0;
+    padding-block: 28px 12px;
+  }
+
   .feeChart {
     min-height: 190px;
   }
