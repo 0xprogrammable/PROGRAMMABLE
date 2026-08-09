@@ -11,12 +11,21 @@
   "specification": null,
   "deployment": null,
   "security": "models/first-mover/SECURITY.md",
-  "network": { "name": "Ethereum", "chainId": 1 },
+  "network": {
+    "name": "Ethereum",
+    "chainId": 1
+  },
   "contracts": [
     {
       "name": "EthFirstMoverFeeHookV1",
       "path": "src/EthFirstMoverFeeHookV1.sol",
       "role": "Applies the immutable buy and sell fee settings, owns the ticker registry and routes tribute.",
+      "address": null
+    },
+    {
+      "name": "EthFirstMoverFeeHookFactoryV1",
+      "path": "src/EthFirstMoverFeeHookFactoryV1.sol",
+      "role": "Deterministically deploys the hook at a valid v4 hook address via CREATE2, mirroring Classic's and Ladder's factory shape.",
       "address": null
     },
     {
@@ -26,7 +35,10 @@
       "address": null
     }
   ],
-  "review": { "independentAudit": false, "publicContest": false },
+  "review": {
+    "independentAudit": false,
+    "publicContest": false
+  },
   "releaseGates": [
     "Complete the mainnet-fork lifecycle covering claiming, confirmation, lapse and tribute.",
     "Publish fixed compiler and dependency revisions.",
