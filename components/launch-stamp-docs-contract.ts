@@ -66,6 +66,40 @@ export const PROGRAMMABLE_LAUNCH_STAMP_MANIFEST = {
     runtimeCodeHash: null,
     authority: null,
     abi: "frozen",
+    deploymentEvidence: {
+      verificationStatus: "finalized-verified",
+      address: "0x8622DD5bAb44185f2A458ac90384Ac99248f8d56",
+      deploymentTransactionHash:
+        "0x3bc086661555c10040feb3fceb23d33003e22ca033e65cfae72592119ee8d486",
+      deploymentBlockNumber: "25717612",
+      deploymentBlockHash:
+        "0x8e4512193217c2171624657717d32dbfe9896455e553cadc192fbfe32d3278bc",
+      finalizedBlockNumber: "25717634",
+      finalizedBlockHash:
+        "0x4177a280cd7e43da181bf1d73900eb2431c26d5fe933a5ed0e583370064cbd6e",
+      finalityDepth: 22,
+      runtimeCodeBytes: 23013,
+      runtimeCodeKeccak256:
+        "0x40e27ecf201761d5eb66bc4f2d5c6124831ef078d7baf458ca5f41b1a8108546",
+      runtimeCodeSha256:
+        "sha256:0b0e89074bff270bd5bf80ca9642f748dca1857d1ab643cbce65f4f663937ec7",
+      observedBindings: {
+        chainId: 1,
+        permitAuthority: "0x755509eA6e3F5Ec1aA2E797bb68f1B87DD8b886b",
+        permitAuthorityRuntimeCodeHash:
+          "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c",
+        graphFactory: "0xB012e4A8F2c5FC4E8E4faCA9D5Ad6FfF13FBA887",
+        graphFactoryRuntimeCodeHash:
+          "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8",
+        poolManager: "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        poolManagerRuntimeCodeHash:
+          "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293",
+      },
+      getterBundleSha256:
+        "sha256:6e6e8a93193bbe2f79f98594a1af32c27bae0746f8297dd13592d9608e2feb20",
+      evidenceSha256:
+        "sha256:f9786ebfb74c96a3c225567ad324f0fbecfd8520b8d8addec85ba58cd67e19ff",
+    },
   },
 } as const;
 

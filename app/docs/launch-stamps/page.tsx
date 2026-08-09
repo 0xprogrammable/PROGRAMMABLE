@@ -25,7 +25,7 @@ const sections = [
   { id: "abi", label: "Frozen ABI" },
   { id: "record", label: "Returned record" },
   { id: "boundary", label: "Trust boundary" },
-  { id: "integration", label: "Integration seam" },
+  { id: "integration", label: "Deployment state" },
 ] as const;
 
 const abiBoundVerifier = [
@@ -44,6 +44,8 @@ const abiBoundVerifier = [
 ].join("\n");
 
 const router = PROGRAMMABLE_LAUNCH_STAMP_MANIFEST.launchStampRouter;
+const deployment = router.deploymentEvidence;
+const observedBindings = deployment.observedBindings;
 const artifact = PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ARTIFACT;
 const abi = PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ABI;
 
@@ -57,6 +59,35 @@ const manifestFields = [
   ["abi", router.abi],
 ] as const;
 
+const deploymentEvidenceFields = [
+  ["verificationStatus", deployment.verificationStatus],
+  ["address", deployment.address],
+  ["deploymentTransactionHash", deployment.deploymentTransactionHash],
+  ["deploymentBlockNumber", deployment.deploymentBlockNumber],
+  ["deploymentBlockHash", deployment.deploymentBlockHash],
+  ["finalizedBlockNumber", deployment.finalizedBlockNumber],
+  ["finalizedBlockHash", deployment.finalizedBlockHash],
+  ["finalityDepth", deployment.finalityDepth],
+  ["runtimeCodeBytes", deployment.runtimeCodeBytes],
+  ["runtimeCodeKeccak256", deployment.runtimeCodeKeccak256],
+  ["runtimeCodeSha256", deployment.runtimeCodeSha256],
+  ["getterBundleSha256", deployment.getterBundleSha256],
+  ["evidenceSha256", deployment.evidenceSha256],
+] as const;
+
+const observedBindingFields = [
+  ["chainId", observedBindings.chainId],
+  ["permitAuthority", observedBindings.permitAuthority],
+  [
+    "permitAuthorityRuntimeCodeHash",
+    observedBindings.permitAuthorityRuntimeCodeHash,
+  ],
+  ["graphFactory", observedBindings.graphFactory],
+  ["graphFactoryRuntimeCodeHash", observedBindings.graphFactoryRuntimeCodeHash],
+  ["poolManager", observedBindings.poolManager],
+  ["poolManagerRuntimeCodeHash", observedBindings.poolManagerRuntimeCodeHash],
+] as const;
+
 function PrelaunchTrustRoot() {
   return (
     <section
@@ -66,7 +97,7 @@ function PrelaunchTrustRoot() {
     >
       <div className={styles.trustRootHeader}>
         <div>
-          <p>Canonical trust root</p>
+          <p>Canonical activation binding</p>
           <h2 id="trust-root-heading">Launch Stamp Router</h2>
         </div>
         <span className={styles.status}>Status: {router.status}</span>
@@ -83,9 +114,9 @@ function PrelaunchTrustRoot() {
 
       <p className={styles.hashDefinition}>
         <code>runtimeCodeHash</code> means {LAUNCH_STAMP_RUNTIME_HASH_DEFINITION}{" "}
-        The ABI is frozen to the source artifact documented below. No address,
-        authority, start block, or runtime binding is published before the
-        final Router deployment is verified.
+        The activation tuple above stays null while the canary is pending. The
+        finalized deployment evidence published below identifies the deployed
+        Router candidate, but does not activate terminal classification.
       </p>
     </section>
   );
@@ -131,7 +162,7 @@ export default function LaunchStampDocsPage() {
         <div className={styles.concept}>
           <div className={styles.conceptHeader}>
             <span className={styles.conceptLabel}>ABI-bound read sequence</span>
-            <span>Unavailable while address is null</span>
+            <span>Unavailable while status is prelaunch</span>
           </div>
           <pre aria-label="Launch stamp verifier pseudocode using the frozen ABI">
             {abiBoundVerifier}
@@ -150,8 +181,8 @@ export default function LaunchStampDocsPage() {
         <h2>Bind to the frozen Router ABI</h2>
         <p>
           The signatures and selectors below come from the final Router source
-          artifact. They fix the call encoding, but they do not activate an
-          address or make the Router live.
+          artifact. They fix the call encoding, but they do not activate the
+          Router or make terminal classification live.
         </p>
 
         <dl className={styles.artifactBinding}>
@@ -340,22 +371,42 @@ export default function LaunchStampDocsPage() {
       </section>
 
       <section className={styles.finalSection} id="integration">
-        <h2>Inject the verified deployment binding</h2>
+        <h2>Separate deployment evidence from activation</h2>
         <p>
-          Keep the frozen ABI and selector map together with the eventual
-          Router address, start block, runtime hash, and authority in one
-          versioned binding. Application logic should receive that binding
-          rather than copy addresses or rebuild calldata locally.
+          The Router candidate below is finalized and its runtime and immutable
+          getters were verified at the stated finalized block. These values are
+          deployment evidence only. The activation binding remains prelaunch
+          until the canary is complete.
         </p>
 
+        <h3 className={styles.subheading}>Finalized deployment evidence</h3>
+        <dl className={styles.artifactBinding}>
+          {deploymentEvidenceFields.map(([field, value]) => (
+            <div key={field}>
+              <dt>{field}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <h3 className={styles.subheading}>Observed immutable getters</h3>
+        <dl className={styles.artifactBinding}>
+          {observedBindingFields.map(([field, value]) => (
+            <div key={field}>
+              <dt>{field}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+
         <div className={styles.implementationRule}>
-          <strong>Prelaunch rule</strong>
+          <strong>Activation rule</strong>
           <p>
-            The ABI and tuple layout are final. The deployment is not. While
-            the address, runtime code hash, start block, or authority remains{" "}
-            <code>null</code>, do not issue Router reads and do not present any
-            launch as stamped. Enable the frozen read sequence only after those
-            fields are published and independently verified together.
+            While <code>status</code> is <code>prelaunch</code>, do not issue
+            Router reads and do not present any launch as stamped. Enable the
+            frozen read sequence only after the canary is complete and the
+            address, runtime code hash, start block, and authority are published
+            together in the live activation binding.
           </p>
         </div>
       </section>

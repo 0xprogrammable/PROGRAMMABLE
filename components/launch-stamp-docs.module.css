@@ -203,6 +203,11 @@
   padding-block: 14px;
 }
 
+.artifactBinding dt {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .artifactBinding dd {
   color: var(--text-soft);
   font-family: var(--font-plex-mono), monospace;
