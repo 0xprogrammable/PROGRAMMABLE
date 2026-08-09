@@ -1,6 +1,6 @@
 # Threat model
 
-This document catalogs the threats considered against `contracts/src/VeritasHook.sol` and its dependencies (`VeritasRegistry.sol`, `VeritasOracle.sol`, `VeritasRegistryCallback.sol`), states the mitigation for each, and is explicit about residual risk that was identified and consciously accepted rather than fixed. It complements `PROPOSAL.md` (what the hook does and why) and `TEST_PLAN.md` (which rubric requirements each test proves). All test names and source citations below were verified against the actual current files, not transcribed from memory — `forge test --offline` from `contracts/` reports **171 tests passing, 0 failing** as of this writing.
+This document catalogs the threats considered against `contracts/src/VeritasHook.sol` and its dependencies (`VeritasRegistry.sol`, `VeritasOracle.sol`, `VeritasRegistryCallback.sol`), states the mitigation for each, and is explicit about residual risk that was identified and consciously accepted rather than fixed. It complements `PROPOSAL.md` (what the hook does and why) and `TEST_PLAN.md` (which rubric requirements each test proves). All test names and source citations below were verified against the actual current files, not transcribed from memory — `forge test --offline` from `contracts/` reports **185 tests passing, 0 failing** as of this writing.
 
 ## 1. Hard-fail self-check
 
@@ -180,6 +180,26 @@ contradicted its implementation.
 **The fix.** Both claim entrypoints authenticate `msg.sender == PROGRAMMABLE_FEE_RECIPIENT`.
 `claimProgrammableFeeTo` adds the owner-selected per-claim destination the policy requires, rejecting the zero
 address and storing nothing. See `PROPOSAL.md` §6.9 for the reentrancy consequence.
+
+### 3.13 Dust could consume a whole exact input, leaving a zero-size AMM leg — FIXED 9 Aug 2026 (R2c)
+
+On exact input the Programmable skim is carved OUT of the specified amount, so v4 computes `amountToSwap = amountSpecified + hookDeltaSpecified`. A fee equal to the whole gross drove that to zero: the pool executed nothing while the taker still paid. `_beforeSwapSkim` now rejects it with `FeeWouldConsumeWholeSwap`.
+
+Reachability was derived, not assumed. `prog >= gross` requires `carry >= gross * (DENOM - PIPS)` and the carry is bounded by `DENOM`, so **only `gross == 1` can ever trigger it**, needing `carry >= 999_000`; `gross == 2` would already need a carry of 1,998,000, which cannot exist. The builder leg can never dominate either, since `builderPips <= MAX_RESERVE_FEE` is far below `DENOM`. The guard is nonetheless written in the general `fee >= gross` form so it survives a change to the fee constants. Exact output is deliberately not gated: there the skim is added on top, so its AMM leg stays strictly positive.
+
+Residual risk: a 1-wei exact-input swap can now revert at a specific carry value. That is intended and is the narrowest possible remedy — a 2-wei swap at the same carry still succeeds, so this is not a blanket dust ban. Pinned by `contracts/test/ProgrammableFeeCumulative.t.sol:test_R2c_*`.
+
+### 3.14 Delegated registration (`authorizeRegistrar`) — new authority surface, added 9 Aug 2026
+
+`VeritasLauncher` makes a launch atomic, which requires it to call `registerPool` while holding the content token's whole supply. It therefore cannot also be the attestation owner: `VeritasRegistry.attest` records `msg.sender` as owner and derives the attestation id from it, and oracle signatures are valid for only 10 minutes. Instead of weakening either the ownership proof or the supply proof, the owner names the delegate up front via `VeritasHook.authorizeRegistrar`.
+
+What the delegate can do: call `registerPool` for that one attestation. Nothing else. It still passes every gate (whole-supply, DRS, staleness, dispute, one-attestation-one-token), it holds no claim, reserve or royalty authority, and `registerPool` writes a pool's config exactly once.
+
+Residual risk, accepted and disclosed: attestation/token bindings are permanent (R7), so a hostile delegate could burn an attestation by binding it to a worthless token it deployed. The mitigation is that authorising is explicit, per-attestation, and revocable with `address(0)`; the guidance in the NatSpec is to authorise only a contract whose source is known. Pinned by `contracts/test/Launcher.t.sol` (`test_AuthorizeRegistrar_OnlyAttestationOwner`, `test_AuthorizeRegistrar_IsRevocable`, `test_AuthorizedRegistrar_CannotClaimProgrammableFees`).
+
+### 3.15 Launcher custody — no exit path by construction
+
+The seeded LP position belongs to `VeritasLauncher`, which exposes exactly three external entry points: `launch`, the view `predictToken`, and a PoolManager-only `unlockCallback`. There is no function that removes liquidity, transfers a position, sweeps a balance, or upgrades anything, so the seeded liquidity is locked at the EVM level rather than by a timelock. The content token's whole supply is minted straight to the launcher and spent into that position, so no premine reaches an EOA. Pinned by `contracts/test/Launcher.t.sol:test_Launch_SeededLiquidityHasNoExitPath`.
 
 ## 4. Known limitations (cross-referenced against `PROPOSAL.md`'s L1–L12)
 

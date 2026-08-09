@@ -12,14 +12,14 @@ forge test --offline
 `--offline` is the reliable invocation in this environment; a plain `forge test` has previously panicked here while building an unrelated system proxy/Etherscan trace component. As of the 8 Aug 2026 additions (per-position insurance claims, staleness registration gate, and a mutation-tested invariant/fuzz suite), `forge test --offline` reports:
 
 ```
-Ran 14 test suites in 10.79s (46.00s CPU time): 171 tests passed, 0 failed, 0 skipped (171 total tests)
+Ran 15 test suites in 13.12s (45.18s CPU time): 185 tests passed, 0 failed, 0 skipped (185 total tests)
 ```
 
 The invariant suite is run at `runs=128, depth=64` by default (see `contracts/foundry.toml`'s `[invariant]` section); a `FOUNDRY_PROFILE=deep` variant (`runs=1000, depth=200`) exists for a slower, more exhaustive pre-submission pass via `FOUNDRY_PROFILE=deep forge test --match-path 'test/invariant/*'`.
 
 ## 2. Suite inventory
 
-171 tests across 14 files:
+185 tests across 15 files:
 
 | Suite | Tests |
 |---|---|
@@ -28,16 +28,17 @@ The invariant suite is run at `runs=128, depth=64` by default (see `contracts/fo
 | `contracts/test/Reentrancy.t.sol` | 19 |
 | `contracts/test/VeritasRegistry.t.sol` | 16 |
 | `contracts/test/VeritasOracle.t.sol` | 14 |
+| `contracts/test/Launcher.t.sol` | 14 |
 | `contracts/test/invariant/VeritasInvariants.t.sol` | 14 |
 | `contracts/test/InsuranceClaims.t.sol` | 12 |
-| `contracts/test/ReviewFindings.t.sol` | 10 |
 | `contracts/test/ReactiveIntegration.t.sol` | 10 |
+| `contracts/test/ReviewFindings.t.sol` | 10 |
 | `contracts/test/Staleness.t.sol` | 9 |
 | `contracts/test/ProgrammableFeeCumulative.t.sol` | 8 |
 | `contracts/test/PartialFill.t.sol` | 5 |
 | `contracts/test/FuzzProperties.t.sol` | 4 |
 | `contracts/test/Integration.t.sol` | 3 |
-| **Total** | **171** |
+| **Total** | **185** |
 
 ## 3. Requirement → test mapping
 
