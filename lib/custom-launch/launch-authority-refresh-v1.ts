@@ -97,6 +97,21 @@ export function launchAuthorityRefreshIdempotencyKeyV1(input: Readonly<{
   return `launch-authority-refresh:v1:${digest.slice("sha256:".length)}`;
 }
 
+export function launchAuthorityRefreshGenerationAttemptV1(input: Readonly<{
+  currentAttempt: number;
+  forceFreshObservation: boolean;
+}>): number {
+  if (
+    !Number.isSafeInteger(input.currentAttempt)
+    || input.currentAttempt < 0
+    || input.currentAttempt > 10_000
+    || (input.forceFreshObservation && input.currentAttempt === 10_000)
+  ) throw new TypeError("refresh generation is invalid");
+  return input.forceFreshObservation
+    ? input.currentAttempt + 1
+    : input.currentAttempt;
+}
+
 export function launchAuthorityNeedsRefreshV1(input: Readonly<{
   descriptor: LaunchDescriptorV2;
   eligibility: LaunchEligibilityViewV2;
@@ -129,6 +144,13 @@ export function launchAuthorityRefreshRequiredV1(input: Readonly<{
 }>): boolean {
   return (input.forceFreshObservation && !input.refreshCompleted)
     || launchAuthorityNeedsRefreshV1(input);
+}
+
+export function launchAuthorityPreReadRefreshRequiredV1(input: Readonly<{
+  forceFreshObservation: boolean;
+  refreshCompleted: boolean;
+}>): boolean {
+  return !input.forceFreshObservation && !input.refreshCompleted;
 }
 
 export function launchAuthorityObservationMatchesSetupV1(input: Readonly<{
@@ -166,12 +188,11 @@ export async function pollPrincipalLaunchAuthorityRefreshV1(input: Readonly<{
     code: string;
   }>) => void;
 }>): Promise<PrincipalLaunchAuthorityRefreshViewV1> {
-  if (
-    input.application.state !== "ready_for_registration"
-    && input.application.state !== "approved"
-  ) throw new LaunchAuthorityRefreshBindingErrorV1(
+  if (input.application.state !== "ready_for_registration") {
+    throw new LaunchAuthorityRefreshBindingErrorV1(
     "This exact GitHub submission is not ready for launch verification",
-  );
+    );
+  }
   if (
     input.application.receiptDigest === null
     || input.application.launchEntitlementBindingHash === null

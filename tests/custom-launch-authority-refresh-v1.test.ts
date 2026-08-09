@@ -9,6 +9,8 @@ import {
   LAUNCH_AUTHORITY_REFRESH_IDEMPOTENCY_KEY_DOMAIN_V1,
   launchAuthorityNeedsRefreshV1,
   launchAuthorityObservationMatchesSetupV1,
+  launchAuthorityPreReadRefreshRequiredV1,
+  launchAuthorityRefreshGenerationAttemptV1,
   launchAuthorityRefreshIdempotencyKeyV1,
   launchAuthorityRefreshRequiredV1,
   pollPrincipalLaunchAuthorityRefreshV1,
@@ -72,6 +74,18 @@ function refresh(
 }
 
 describe("principal launch authority refresh", () => {
+  it("rejects an approved outcome that has no current grant", async () => {
+    await expect(pollPrincipalLaunchAuthorityRefreshV1({
+      client: { launchAuthorityRefresh: async () => refresh("current") },
+      application: application({
+        state: "approved",
+        launchEntitlementBindingHash: null,
+      }),
+      idempotencyKey: "launch-authority-refresh-approved-without-grant",
+      isActive: () => true,
+    })).rejects.toBeInstanceOf(LaunchAuthorityRefreshBindingErrorV1);
+  });
+
   it("uses one deterministic key per generation and a fresh key for explicit retry", () => {
     const first = launchAuthorityRefreshIdempotencyKeyV1({ application: application() });
     const same = launchAuthorityRefreshIdempotencyKeyV1({ application: application() });
@@ -391,6 +405,68 @@ describe("principal launch authority refresh", () => {
     })).toBe(true);
     expect(launchAuthorityRefreshRequiredV1({
       descriptor: { ...descriptor, validUntil: "2026-08-05T12:09:00.000Z" },
+      eligibility,
+      forceFreshObservation: true,
+      refreshCompleted: true,
+      now: Date.parse("2026-08-05T12:00:00.000Z"),
+    })).toBe(false);
+  });
+
+  it("uses a new TTL generation for the forced pre-challenge observation", () => {
+    const currentApplication = application();
+    const currentValidUntil = "2026-08-05T12:10:00.000Z";
+    const descriptor = {
+      validUntil: currentValidUntil,
+    } as LaunchDescriptorV2;
+    const eligibility = {
+      validUntil: currentValidUntil,
+    } as LaunchEligibilityViewV2;
+    const initialGeneration = launchAuthorityRefreshIdempotencyKeyV1({
+      application: currentApplication,
+    });
+
+    expect(launchAuthorityPreReadRefreshRequiredV1({
+      forceFreshObservation: false,
+      refreshCompleted: false,
+    })).toBe(true);
+    expect(launchAuthorityPreReadRefreshRequiredV1({
+      forceFreshObservation: true,
+      refreshCompleted: false,
+    })).toBe(false);
+    expect(launchAuthorityRefreshRequiredV1({
+      descriptor,
+      eligibility,
+      forceFreshObservation: true,
+      refreshCompleted: false,
+      now: Date.parse("2026-08-05T12:00:00.000Z"),
+    })).toBe(true);
+
+    const firstForcedAttempt = launchAuthorityRefreshGenerationAttemptV1({
+      currentAttempt: 0,
+      forceFreshObservation: true,
+    });
+    const preChallengeGeneration = launchAuthorityRefreshIdempotencyKeyV1({
+      application: currentApplication,
+      currentValidUntil,
+      attempt: firstForcedAttempt,
+    });
+    expect(preChallengeGeneration).not.toBe(initialGeneration);
+    expect(launchAuthorityRefreshIdempotencyKeyV1({
+      application: currentApplication,
+      currentValidUntil,
+      attempt: firstForcedAttempt,
+    })).toBe(preChallengeGeneration);
+    const secondForcedAttempt = launchAuthorityRefreshGenerationAttemptV1({
+      currentAttempt: firstForcedAttempt,
+      forceFreshObservation: true,
+    });
+    expect(launchAuthorityRefreshIdempotencyKeyV1({
+      application: currentApplication,
+      currentValidUntil,
+      attempt: secondForcedAttempt,
+    })).not.toBe(preChallengeGeneration);
+    expect(launchAuthorityRefreshRequiredV1({
+      descriptor,
       eligibility,
       forceFreshObservation: true,
       refreshCompleted: true,

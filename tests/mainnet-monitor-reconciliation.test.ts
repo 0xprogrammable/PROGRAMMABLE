@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { HttpRequestError } from "viem";
+import { describe, expect, it, vi } from "vitest";
 
 // The production monitor is intentionally a directly executable Node module.
 // @ts-expect-error JavaScript monitor has no separate declaration file.
-import { reconcileNativeFeeEvents } from "../contracts/scripts/monitor-meme-v1.mjs";
+import { createResilientRpcClient, reconcileNativeFeeEvents } from "../contracts/scripts/monitor-meme-v1.mjs";
 
 const transactionHash = `0x${"11".repeat(32)}`;
 const poolId = `0x${"22".repeat(32)}`;
@@ -109,5 +110,132 @@ describe("Mainnet monitor fee-event reconciliation", () => {
     expect(() =>
       reconcileNativeFeeEvents(events, trackedLaunches),
     ).toThrow("Native fee accrual is missing HookSwap");
+  });
+});
+
+describe("Mainnet monitor RPC resilience", () => {
+  const addresses = [
+    "0x0000000000000000000000000000000000000001",
+    "0x0000000000000000000000000000000000000002",
+    "0x0000000000000000000000000000000000000003",
+    "0x0000000000000000000000000000000000000004",
+  ];
+
+  function typedHttpError(status: number) {
+    return new HttpRequestError({
+      body: { method: "eth_getLogs" },
+      status,
+      url: "https://rpc-a.example",
+    });
+  }
+
+  it("does not retry or split on an untyped routing-message error", async () => {
+    const queries: Array<{ address: string | string[] }> = [];
+    const sleep = vi.fn(async () => undefined);
+    const client = createResilientRpcClient(
+      {
+        async getLogs(parameters: { address: string | string[] }) {
+          queries.push(parameters);
+          if (Array.isArray(parameters.address)) {
+            throw new Error("Can't route your request to suitable provider");
+          }
+          return [{ address: parameters.address }];
+        },
+      },
+      "rpc-a.example",
+      { delaysMs: [0, 0], sleep },
+    );
+
+    await expect(client.getLogs({ address: addresses })).rejects.toThrow(
+      "Can't route your request to suitable provider",
+    );
+    expect(
+      queries.filter(({ address }) => Array.isArray(address)),
+    ).toHaveLength(1);
+    expect(
+      queries.filter(({ address }) => !Array.isArray(address)),
+    ).toHaveLength(0);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it("does not fan out after typed HTTP 429 retries are exhausted", async () => {
+    const queries: Array<{ address: string | string[] }> = [];
+    const client = createResilientRpcClient(
+      {
+        async getLogs(parameters: { address: string | string[] }) {
+          queries.push(parameters);
+          throw typedHttpError(429);
+        },
+      },
+      "rpc-a.example",
+      { delaysMs: [0, 0], sleep: async () => undefined },
+    );
+
+    await expect(client.getLogs({ address: addresses })).rejects.toMatchObject(
+      { name: "RpcRetriesExhaustedError" },
+    );
+    expect(
+      queries.filter(({ address }) => Array.isArray(address)),
+    ).toHaveLength(3);
+    expect(
+      queries.filter(({ address }) => !Array.isArray(address)),
+    ).toHaveLength(0);
+  });
+
+  it("splits only after a definitive typed request-shape rejection", async () => {
+    const queries: Array<{ address: string | string[] }> = [];
+    const client = createResilientRpcClient(
+      {
+        async getLogs(parameters: { address: string | string[] }) {
+          queries.push(parameters);
+          if (Array.isArray(parameters.address)) throw typedHttpError(413);
+          return [{ address: parameters.address }];
+        },
+      },
+      "rpc-a.example",
+      { delaysMs: [0, 0], sleep: async () => undefined },
+    );
+
+    await expect(client.getLogs({ address: addresses })).resolves.toEqual(
+      addresses.map((address) => ({ address })),
+    );
+    expect(
+      queries.filter(({ address }) => Array.isArray(address)),
+    ).toHaveLength(1);
+    expect(
+      queries.filter(({ address }) => !Array.isArray(address)),
+    ).toHaveLength(4);
+  });
+
+  it("does not retry a non-transient RPC failure", async () => {
+    const getBlock = vi.fn(async () => {
+      throw new Error("execution reverted");
+    });
+    const sleep = vi.fn(async () => undefined);
+    const client = createResilientRpcClient(
+      { getBlock },
+      "rpc-a.example",
+      { delaysMs: [0, 0], sleep },
+    );
+
+    await expect(client.getBlock({ blockNumber: 1n })).rejects.toThrow(
+      "execution reverted",
+    );
+    expect(getBlock).toHaveBeenCalledOnce();
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it("rejects a retry configuration above three attempts", async () => {
+    const getBlockNumber = vi.fn(async () => 1n);
+    const client = createResilientRpcClient(
+      { getBlockNumber },
+      "rpc-a.example",
+      { maximumAttempts: 4 },
+    );
+
+    await expect(client.getBlockNumber()).rejects.toThrow(
+      "maximumAttempts must be between 1 and 3",
+    );
+    expect(getBlockNumber).not.toHaveBeenCalled();
   });
 });

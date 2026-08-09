@@ -19,6 +19,13 @@ import {
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+  createRpcCallBudget,
+  isRequestShapeUnsupportedError,
+  preserveTypedHttpError,
+  withBoundedRpcRetry,
+} from "./rpc-resilience.mjs";
+
 const DEFAULT_RPCS = [
   "https://rpc.mevblocker.io",
   "https://mainnet.gateway.tenderly.co",
@@ -242,6 +249,89 @@ async function loadDeployment(path) {
   };
 }
 
+const RETRIED_CLIENT_METHODS = new Set([
+  "getBalance",
+  "getBlock",
+  "getBlockNumber",
+  "getChainId",
+  "getCode",
+  "readContract",
+]);
+
+export function createResilientRpcClient(
+  client,
+  providerId,
+  retryOptions = {},
+) {
+  const retry = (operationName, operation, budget) =>
+    withBoundedRpcRetry(operation, {
+      ...retryOptions,
+      providerId,
+      operationName,
+      ...(budget ? { budget } : {}),
+    });
+
+  return new Proxy(client, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (typeof value !== "function") return value;
+
+      if (property === "getLogs") {
+        return async (parameters) => {
+          const addresses = parameters?.address;
+          const splitCount = Array.isArray(addresses) ? addresses.length : 0;
+          const budget = createRpcCallBudget({
+            providerId,
+            operationName: "eth_getLogs",
+            maximumCalls: Math.min(3 * (1 + splitCount), 256),
+            deadlineMs: 20_000,
+          });
+          try {
+            return await retry(
+              "eth_getLogs",
+              () => value.call(target, parameters),
+              budget,
+            );
+          } catch (error) {
+            if (
+              !isRequestShapeUnsupportedError(error) ||
+              !Array.isArray(addresses) ||
+              addresses.length < 2
+            ) {
+              throw error;
+            }
+
+            const sets = await Promise.all(
+              addresses.map((address) =>
+                retry(
+                  "eth_getLogs(single-address fallback)",
+                  () => value.call(target, { ...parameters, address }),
+                  budget,
+                ),
+              ),
+            );
+            return sets.flat();
+          }
+        };
+      }
+
+      if (RETRIED_CLIENT_METHODS.has(property)) {
+        return (...args) =>
+          retry(String(property), () => value.apply(target, args));
+      }
+      return value.bind(target);
+    },
+  });
+}
+
+function providerIdentity(endpoint, index) {
+  try {
+    return new URL(endpoint).hostname.toLowerCase();
+  } catch {
+    return `RPC provider ${index + 1}`;
+  }
+}
+
 function createClients() {
   const endpoints = (process.env.MAINNET_RPC_URLS ?? DEFAULT_RPCS.join(","))
     .split(",")
@@ -249,13 +339,24 @@ function createClients() {
     .filter(Boolean);
   assert(endpoints.length >= 2, "At least two RPC URLs are required");
   assert(new Set(endpoints).size === endpoints.length, "RPC URLs must be distinct");
-  return endpoints.slice(0, 2).map((endpoint) => ({
-    endpoint,
-    client: createPublicClient({
+  return endpoints.slice(0, 2).map((endpoint, index) => {
+    const client = createPublicClient({
       chain: mainnet,
-      transport: http(endpoint, { retryCount: 3, timeout: 15_000 }),
-    }),
-  }));
+      transport: http(endpoint, {
+        onFetchResponse: (response) =>
+          preserveTypedHttpError(response, endpoint),
+        retryCount: 0,
+        timeout: 5_000,
+      }),
+    });
+    return {
+      endpoint,
+      client: createResilientRpcClient(
+        client,
+        providerIdentity(endpoint, index),
+      ),
+    };
+  });
 }
 
 async function loadState(stateFile, deployment) {
