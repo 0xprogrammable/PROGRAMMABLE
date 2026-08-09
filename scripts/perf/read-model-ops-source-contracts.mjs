@@ -50,7 +50,11 @@ const APPROVED_OPERATIONS = Object.freeze({
       activationEnvironment: "PROGRAMMABLE_MANUAL_APPLICANT_LAUNCH_ENABLED",
       route: Object.freeze({
         path: "app/api/ops/manual-router-finality/route.ts",
-        sha256: "48b6c605412d8ab8ed84f0ca653edc5881a734264fd579b0a954d23f8d2a35c8",
+        sha256: "73bb842a0bc9436d3a41ec9797a8ba82b71c7745c534a5cb5d5aea259e270656",
+      }),
+      auth: Object.freeze({
+        path: "lib/server/custom-launch/manual-router-cron-auth-v1.ts",
+        sha256: "21f03e26d47de05c678d77aedcefb93a57aad6ae8b5ad77c2374eb6c68391ead",
       }),
       runtime: Object.freeze({
         path: "lib/server/custom-launch/manual-router-finality-worker-v1.ts",
@@ -329,7 +333,8 @@ function routeIsAuthenticatedAndFailClosed(source, requireCutover = false) {
     /secretLength\s*>\s*1_024/u.test(source);
   const standardAuthorization =
     /matchesBearer\(request,\s*process\.env\.CRON_SECRET\)/u.test(source) ||
-    /const\s+secret\s*=\s*process\.env\.CRON_SECRET/u.test(source);
+    /const\s+secret\s*=\s*process\.env\.CRON_SECRET/u.test(source) ||
+    /const\s+secret\s*=\s*environment\.CRON_SECRET/u.test(source);
   const cutoverAuthorization =
     /PROGRAMMABLE_CUTOVER_BACKFILL_ACTIVE\s*===\s*["']true["']/u.test(source) &&
     /process\.env\.PROGRAMMABLE_CUTOVER_OPERATOR_SECRET/u.test(source) &&
@@ -347,6 +352,7 @@ function routeIsAuthenticatedAndFailClosed(source, requireCutover = false) {
       (cutoverAuthorization &&
         /mode\s*===\s*["']cutover["']/u.test(source))) &&
     (/if\s*\(\s*!isAuthorized\(request\)\s*\)/u.test(source) ||
+      /if\s*\(\s*!isManualRouterFinalityCronAuthorizedV1\(request\)\s*\)/u.test(source) ||
       /if\s*\(\s*mode\s*===\s*null\s*\)/u.test(source)) &&
     /status\s*:\s*401\b/u.test(source) &&
     /status\s*:\s*503\b/u.test(source) &&
@@ -705,6 +711,7 @@ export function evaluateReadModelOperationsSourceContracts(
   );
   for (const approvedCron of APPROVED_OPERATIONS.independentCrons) {
     const route = source(approvedCron.route.path);
+    const auth = approvedCron.auth ? source(approvedCron.auth.path) : "";
     const runtime = source(approvedCron.runtime.path);
     check(
       `ops-${approvedCron.id}-schedule`,
@@ -714,6 +721,8 @@ export function evaluateReadModelOperationsSourceContracts(
     check(
       `ops-${approvedCron.id}-source-digests`,
       sourceBindingMatches(source, approvedCron.route, expectedSha256Overrides) &&
+        (!approvedCron.auth
+          || sourceBindingMatches(source, approvedCron.auth, expectedSha256Overrides)) &&
         sourceBindingMatches(source, approvedCron.runtime, expectedSha256Overrides) &&
         (approvedCron.dependencies ?? []).every((binding) =>
           sourceBindingMatches(source, binding, expectedSha256Overrides)
@@ -723,7 +732,7 @@ export function evaluateReadModelOperationsSourceContracts(
     );
     check(
       `ops-${approvedCron.id}-route-auth`,
-      routeIsAuthenticatedAndFailClosed(route),
+      routeIsAuthenticatedAndFailClosed(`${route}\n${auth}`),
       `${approvedCron.id} requires the bounded timing-safe cron secret and fails closed`,
     );
     check(

@@ -81,6 +81,45 @@ test("enabled policy binds only the strict server environment contract", () => {
     "OPS_BLOB_READ_WRITE_TOKEN=blob-token",
     `CRON_SECRET=${"c".repeat(32)}`,
   ].join("\n")), /PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL/u);
+
+  const invalidAlchemy = [
+    "http://eth-mainnet.g.alchemy.com/v2/key",
+    "https://foo.alchemy.com/v2/key",
+    "https://eth-mainnet.g.alchemy.com/",
+    "https://eth-mainnet.g.alchemy.com:8443/v2/key",
+    "https://user@eth-mainnet.g.alchemy.com/v2/key",
+    "https://eth-mainnet.g.alchemy.com/v2/key?query=true",
+    " https://eth-mainnet.g.alchemy.com/v2/key",
+    `https://eth-mainnet.g.alchemy.com/${"x".repeat(2_049)}`,
+  ];
+  for (const value of invalidAlchemy) {
+    assert.throws(() => assertManualApplicantServerEnvironment(
+      replaceEnvironmentValue(
+        enabledEnvironment,
+        "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
+        value,
+      ),
+    ));
+  }
+
+  const invalidQuickNode = [
+    "https://quiknode.pro/key",
+    "https://example.quicknode.com/key",
+    "https://example.quiknode.pro/",
+    "https://example.quiknode.pro:8443/key",
+    "https://user:pass@example.quiknode.pro/key",
+    "https://example.quiknode.pro/key#fragment",
+    "https://example.quiknode.pro/key ",
+  ];
+  for (const value of invalidQuickNode) {
+    assert.throws(() => assertManualApplicantServerEnvironment(
+      replaceEnvironmentValue(
+        enabledEnvironment,
+        "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL",
+        value,
+      ),
+    ));
+  }
 });
 
 test("production workflow keeps manual Applicant policy independent of legacy Custom", async () => {
@@ -93,3 +132,10 @@ test("production workflow keeps manual Applicant policy independent of legacy Cu
   assert.match(workflow, /PROGRAMMABLE_MANUAL_APPLICANT_LAUNCH_MODE/u);
   assert.match(workflow, /resolve-manual-applicant-launch-policy\.mjs/u);
 });
+
+function replaceEnvironmentValue(source, name, value) {
+  return source.replace(
+    new RegExp(`^${name}=.*$`, "mu"),
+    `${name}=${value}`,
+  );
+}

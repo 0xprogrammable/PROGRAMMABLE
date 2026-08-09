@@ -42,6 +42,8 @@ import {
 } from "@/lib/custom-launch/manual-router-client-v1";
 import {
   manualRouterBlocksNewSendV1,
+  manualRouterCanClearUncertainNoSendV1,
+  manualRouterFreshReadyMatchesCachedV1,
   manualRouterTransactionContextV1,
   parseManualRouterPersistedAttemptStorageV1,
   reconcileManualRouterBrowserAttemptV1,
@@ -324,23 +326,45 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     setLaunching(true);
     setError("");
     setErrorCode("");
-    const createdAt = new Date().toISOString();
-    const pending = Object.freeze({
-      schemaVersion: "programmable.manual-router-browser-attempt.v1" as const,
-      subjectHash: resolved.subjectHash,
-      descriptorHash: resolved.descriptorHash,
-      preparationHash: resolved.preparationHash,
-      launchWallet: directory.linkedLaunchWallet,
-      createdAt,
-      transactionHash: null,
-      phase: "wallet-prompt-opened" as const,
-    });
+    let pending: ManualRouterPersistedAttemptV1 | null = null;
     try {
+      const freshResolved = await resolveManualRouterApplicantSubmissionV1({
+        session: await getSession(),
+        launchWallet: directory.linkedLaunchWallet,
+        subjectHash: resolved.subjectHash,
+      });
+      setResolved(freshResolved);
+      if (freshResolved.status !== "ready") {
+        setError("The verified send window changed before wallet confirmation");
+        setErrorCode("launch_preflight_not_ready");
+        setStatus(freshWalletPreflightStatus(freshResolved.status));
+        return;
+      }
+      if (!manualRouterFreshReadyMatchesCachedV1({
+        cached: resolved,
+        fresh: freshResolved,
+        linkedLaunchWallet: directory.linkedLaunchWallet,
+      })) {
+        setError("The approved Router action changed. Refresh before continuing");
+        setErrorCode("launch_preflight_changed");
+        setStatus("Wallet was not opened because the approved launch changed");
+        return;
+      }
+      pending = Object.freeze({
+        schemaVersion: "programmable.manual-router-browser-attempt.v1" as const,
+        subjectHash: freshResolved.subjectHash,
+        descriptorHash: freshResolved.descriptorHash,
+        preparationHash: freshResolved.preparationHash,
+        launchWallet: directory.linkedLaunchWallet,
+        createdAt: new Date().toISOString(),
+        transactionHash: null,
+        phase: "wallet-prompt-opened" as const,
+      });
       // Durable local state is committed synchronously before the wallet prompt.
       // If storage is unavailable, no transaction is sent.
       persistAttempt(pending);
       setStatus("Confirm the one Router transaction in your wallet");
-      const action = resolved.browserAction.params[0];
+      const action = freshResolved.browserAction.params[0];
       const transactionHash = await sendBrowserWalletAction({
         chainId: "1",
         from: action.from,
@@ -361,13 +385,17 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
       setStatus("Transaction recorded. Waiting for Ethereum finality");
       await loadDirectory({
         quiet: true,
-        preferredSubjectHash: resolved.subjectHash,
+        preferredSubjectHash: freshResolved.subjectHash,
       });
     } catch (caught) {
       const message = errorMessage(caught);
       setError(message);
       setErrorCode(errorCodeOf(caught));
-      if (isExplicitWalletCancellation(caught)) {
+      if (pending === null) {
+        setStatus(
+          "Wallet was not opened because the launch could not be freshly verified",
+        );
+      } else if (isExplicitWalletCancellation(caught)) {
         removePersistedAttempt(pending.subjectHash);
         setAttempt(null);
         setStatus("Wallet confirmation was cancelled. No transaction was sent");
@@ -383,6 +411,7 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
   }, [
     attempt,
     directory,
+    getSession,
     loadDirectory,
     persistAttempt,
     reportSubmittedTransaction,
@@ -449,24 +478,42 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     storageRecoveryRequired,
   ]);
 
+  const canClearNoSend = resolved?.status === "ready"
+    && manualRouterCanClearUncertainNoSendV1({
+      attempt,
+      ready: resolved,
+      storageRecoveryRequired,
+    });
+
   const confirmNoTransactionSent = useCallback(() => {
     if (
       !selectedSubjectHash
       || resolved?.status !== "ready"
+      || !canClearNoSend
       || !noSendAttested
     ) return;
-    archiveCorruptAttempt(
-      selectedSubjectHash,
-      readRawPersistedAttempt(selectedSubjectHash),
-      "applicant-confirmed-no-send",
-    );
+    if (attempt?.phase === "wallet-prompt-opened") {
+      archivePersistedAttempt(attempt, "applicant-confirmed-no-send");
+    } else {
+      archiveCorruptAttempt(
+        selectedSubjectHash,
+        readRawPersistedAttempt(selectedSubjectHash),
+        "applicant-confirmed-no-send",
+      );
+    }
     removePersistedAttempt(selectedSubjectHash);
     setStorageRecoveryRequired(false);
     setNoSendAttested(false);
     setAttempt(null);
     setRecoveryHash("");
-    setStatus("Saved browser recovery state cleared. The verified permit is ready");
-  }, [noSendAttested, resolved?.status, selectedSubjectHash]);
+    setStatus("Uncertain browser attempt cleared after your no-send confirmation");
+  }, [
+    attempt,
+    canClearNoSend,
+    noSendAttested,
+    resolved?.status,
+    selectedSubjectHash,
+  ]);
 
   const checkFinality = useCallback(async () => {
     const transaction = manualRouterTransactionContextV1({ resolved, attempt });
@@ -783,7 +830,7 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
                   Verify hash
                 </button>
               </div>
-              {storageRecoveryRequired ? (
+              {canClearNoSend ? (
                 <div className={styles.noSendConfirmation}>
                   <label>
                     <input
@@ -802,7 +849,9 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
                     disabled={!noSendAttested}
                     onClick={confirmNoTransactionSent}
                   >
-                    Clear the unreadable attempt
+                    {storageRecoveryRequired
+                      ? "Clear the unreadable attempt"
+                      : "Clear the uncertain attempt"}
                   </button>
                 </div>
               ) : null}
@@ -873,6 +922,7 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
             <li>Your wallet pays gas</li>
             <li>The pending nonce is diagnostic only</li>
             <li>Do not retry an uncertain wallet send</li>
+            <li>Never speed up or replace a submitted beta transaction</li>
             <li>Public indexing starts after finality</li>
           </ul>
           <Link
@@ -1103,6 +1153,18 @@ function statusLabel(status: ManualRouterSubmissionSummaryV1["status"]): string 
     case "failed-awaiting-expiry": return "Reverted";
     case "finalized": return "Finalized";
   }
+}
+
+function freshWalletPreflightStatus(
+  status: ManualRouterResolveResponseV1["status"],
+): string {
+  if (status === "permit-not-yet-valid") {
+    return "Wallet was not opened because the verified send window is not open";
+  }
+  if (status === "reissue-required") {
+    return "Wallet was not opened because this permit now needs a fresh signature";
+  }
+  return "Wallet was not opened because this launch is no longer ready to send";
 }
 
 function shortAddress(value: string): string {

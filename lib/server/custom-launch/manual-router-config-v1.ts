@@ -1,7 +1,7 @@
 import "server-only";
 
-const ALCHEMY_HOST_SUFFIX = ".alchemy.com";
-const QUICKNODE_HOST_SUFFIXES = [".quiknode.pro", ".quicknode.com"] as const;
+const ALCHEMY_PRODUCTION_HOST = "eth-mainnet.g.alchemy.com";
+const QUICKNODE_PRODUCTION_HOST = /^(?:[a-z0-9-]+\.)+quiknode\.pro$/u;
 
 export type ManualRouterStrictRpcConfigurationV1 = Readonly<{
   alchemyUrl: string;
@@ -17,24 +17,23 @@ export function isManualRouterApplicantLaunchEnabledV1(
 export function resolveManualRouterStrictRpcConfigurationV1(
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): ManualRouterStrictRpcConfigurationV1 {
-  const alchemyUrl = requiredEnvironment(
+  const alchemyUrl = requiredRpcEnvironment(
     environment,
     "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
   );
-  const quickNodeUrl = requiredEnvironment(
+  const quickNodeUrl = requiredRpcEnvironment(
     environment,
     "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL",
   );
   const alchemy = strictProviderUrl(
     alchemyUrl,
     "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
-    (hostname) => hostname.endsWith(ALCHEMY_HOST_SUFFIX),
+    (hostname) => hostname === ALCHEMY_PRODUCTION_HOST,
   );
   const quickNode = strictProviderUrl(
     quickNodeUrl,
     "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL",
-    (hostname) => QUICKNODE_HOST_SUFFIXES.some((suffix) =>
-      hostname.endsWith(suffix)),
+    (hostname) => QUICKNODE_PRODUCTION_HOST.test(hostname),
   );
   if (
     alchemy.href === quickNode.href
@@ -74,12 +73,26 @@ function requiredEnvironment(
   return value;
 }
 
+function requiredRpcEnvironment(
+  environment: Readonly<Record<string, string | undefined>>,
+  name: string,
+): string {
+  const value = environment[name];
+  if (typeof value !== "string" || value.length === 0) {
+    throw new TypeError(`${name} is not configured`);
+  }
+  return value;
+}
+
 function strictProviderUrl(
   value: string,
   name: string,
   acceptsHostname: (hostname: string) => boolean,
 ): URL {
   let url: URL;
+  if (value.length > 2_048 || value !== value.trim()) {
+    throw new TypeError(`${name} is not a valid URL`);
+  }
   try {
     url = new URL(value);
   } catch {
@@ -91,6 +104,8 @@ function strictProviderUrl(
     || url.password !== ""
     || url.search !== ""
     || url.hash !== ""
+    || url.port !== ""
+    || url.pathname === "/"
     || !acceptsHostname(url.hostname.toLowerCase())
   ) {
     throw new TypeError(`${name} is not bound to its strict provider`);

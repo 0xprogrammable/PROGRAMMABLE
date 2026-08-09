@@ -130,12 +130,38 @@ ProductionManualRouterAuthorityV1 {
     },
   });
   const finality = new RouterLaunchFinalityVerifierV1({ rpc: composition.rpc });
-  const finalityAuthority: ManualRouterFinalityAuthorityV1 = Object.freeze({
+  const finalityAuthority = createProductionManualRouterFinalityAuthorityV1({
+    finality,
+    rpc: composition.rpc,
+  });
+  return Object.freeze({
+    composition,
+    website,
+    finality,
+    finalityAuthority,
+  });
+}
+
+const PORTABLE_FINALITY_OBSERVATION_UNAVAILABLE_MESSAGES = new Set([
+  "launch transaction is unavailable or invalid",
+  "launch receipt is unavailable or invalid",
+]);
+
+export function createProductionManualRouterFinalityAuthorityV1(
+  dependencies: Readonly<{
+    finality: Pick<RouterLaunchFinalityVerifierV1, "finalize">;
+    rpc: Pick<
+      PortableManualRouterCompositionV1["rpc"],
+      "readConsensus" | "collectCommonFinalizedAnchor"
+    >;
+  }>,
+): ManualRouterFinalityAuthorityV1 {
+  return Object.freeze({
     async finalize(input: Parameters<
       ManualRouterFinalityAuthorityV1["finalize"]
     >[0]) {
       try {
-        const proof = await finality.finalize({
+        const proof = await dependencies.finality.finalize({
           prepared: input.prepared as unknown as Readonly<Record<string, unknown>>,
           transactionHash: input.transactionHash,
         });
@@ -152,17 +178,17 @@ ProductionManualRouterAuthorityV1 {
             evidenceHash: sha256(error.evidence.evidenceHash),
           });
         }
-        if (error instanceof TypeError && /is not an object/iu.test(error.message)) {
+        if (isPortableFinalityObservationUnavailable(error)) {
           const [transaction, receipt, finalized] = await Promise.all([
-            composition.rpc.readConsensus(
+            dependencies.rpc.readConsensus(
               "eth_getTransactionByHash",
               [input.transactionHash],
             ),
-            composition.rpc.readConsensus(
+            dependencies.rpc.readConsensus(
               "eth_getTransactionReceipt",
               [input.transactionHash],
             ),
-            composition.rpc.collectCommonFinalizedAnchor(),
+            dependencies.rpc.collectCommonFinalizedAnchor(),
           ]);
           if (
             transaction === null
@@ -200,12 +226,11 @@ ProductionManualRouterAuthorityV1 {
       }
     },
   });
-  return Object.freeze({
-    composition,
-    website,
-    finality,
-    finalityAuthority,
-  });
+}
+
+function isPortableFinalityObservationUnavailable(error: unknown): boolean {
+  return error instanceof TypeError
+    && PORTABLE_FINALITY_OBSERVATION_UNAVAILABLE_MESSAGES.has(error.message);
 }
 
 export { RouterLaunchTransactionRevertedError };

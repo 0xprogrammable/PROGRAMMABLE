@@ -33,7 +33,8 @@ export type ManualRouterAttemptArchiveReasonV1 =
   | "server-submission-replaced-local"
   | "server-ready-superseded-local"
   | "server-ready-local-binding-mismatch"
-  | "server-not-yet-valid-local-attempt";
+  | "server-not-yet-valid-local-attempt"
+  | "applicant-confirmed-no-send";
 
 export type ManualRouterAttemptReconciliationV1 = Readonly<{
   active: ManualRouterPersistedAttemptV1 | null;
@@ -52,6 +53,61 @@ export function manualRouterBlocksNewSendV1(input: Readonly<{
     && input.attempt.subjectHash === input.ready.subjectHash
     && input.attempt.descriptorHash === input.ready.descriptorHash,
   );
+}
+
+export function manualRouterCanClearUncertainNoSendV1(input: Readonly<{
+  attempt: ManualRouterPersistedAttemptV1 | null;
+  ready: Extract<ManualRouterResolveResponseV1, { status: "ready" }>;
+  storageRecoveryRequired: boolean;
+}>): boolean {
+  if (input.storageRecoveryRequired) return true;
+  const attempt = input.attempt;
+  return attempt !== null
+    && attempt.phase === "wallet-prompt-opened"
+    && attempt.transactionHash === null
+    && attempt.subjectHash === input.ready.subjectHash
+    && attempt.descriptorHash === input.ready.descriptorHash
+    && attempt.preparationHash === input.ready.preparationHash
+    && attempt.launchWallet === input.ready.browserAction.params[0].from;
+}
+
+export function manualRouterFreshReadyMatchesCachedV1(input: Readonly<{
+  cached: Extract<ManualRouterResolveResponseV1, { status: "ready" }>;
+  fresh: ManualRouterResolveResponseV1;
+  linkedLaunchWallet: `0x${string}`;
+}>): input is Readonly<{
+  cached: Extract<ManualRouterResolveResponseV1, { status: "ready" }>;
+  fresh: Extract<ManualRouterResolveResponseV1, { status: "ready" }>;
+  linkedLaunchWallet: `0x${string}`;
+}> {
+  if (input.fresh.status !== "ready") return false;
+  const cached = input.cached;
+  const fresh = input.fresh;
+  const cachedAction = cached.browserAction;
+  const freshAction = fresh.browserAction;
+  const cachedTransaction = cachedAction.params[0];
+  const freshTransaction = freshAction.params[0];
+  return cached.subjectHash === fresh.subjectHash
+    && cached.pointerHash === fresh.pointerHash
+    && cached.approvalBindingHash === fresh.approvalBindingHash
+    && cached.routeNonce === fresh.routeNonce
+    && cached.validAfter === fresh.validAfter
+    && cached.deadline === fresh.deadline
+    && cached.descriptorHash === fresh.descriptorHash
+    && cached.envelopeHash === fresh.envelopeHash
+    && cached.preparationHash === fresh.preparationHash
+    && cached.expectedLaunchId === fresh.expectedLaunchId
+    && cached.expectedPoolId === fresh.expectedPoolId
+    && cachedAction.schemaVersion === freshAction.schemaVersion
+    && cachedAction.walletExecutionKind === freshAction.walletExecutionKind
+    && cachedAction.method === freshAction.method
+    && cachedAction.chainId === freshAction.chainId
+    && cachedTransaction.from === input.linkedLaunchWallet
+    && freshTransaction.from === input.linkedLaunchWallet
+    && cachedTransaction.from === freshTransaction.from
+    && cachedTransaction.to === freshTransaction.to
+    && cachedTransaction.data === freshTransaction.data
+    && cachedTransaction.value === freshTransaction.value;
 }
 
 /**

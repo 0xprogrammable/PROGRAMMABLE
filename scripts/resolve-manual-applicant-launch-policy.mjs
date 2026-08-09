@@ -85,13 +85,12 @@ export function assertManualApplicantServerEnvironment(envSource) {
   const alchemy = strictRpcUrl(
     values.get("PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL"),
     "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
-    (hostname) => hostname.endsWith(".alchemy.com"),
+    (hostname) => hostname === "eth-mainnet.g.alchemy.com",
   );
   const quickNode = strictRpcUrl(
     values.get("PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL"),
     "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL",
-    (hostname) => hostname.endsWith(".quiknode.pro")
-      || hostname.endsWith(".quicknode.com"),
+    (hostname) => /^(?:[a-z0-9-]+\.)+quiknode\.pro$/u.test(hostname),
   );
   if (
     alchemy.href === quickNode.href
@@ -130,6 +129,9 @@ function readExactEnvironmentValue(source, name) {
 
 function strictRpcUrl(value, name, acceptsHostname) {
   let url;
+  if (value.length > 2_048 || value !== value.trim()) {
+    throw new Error(`manual Applicant ${name} is not a valid URL`);
+  }
   try {
     url = new URL(value);
   } catch {
@@ -141,6 +143,8 @@ function strictRpcUrl(value, name, acceptsHostname) {
     || url.password !== ""
     || url.search !== ""
     || url.hash !== ""
+    || url.port !== ""
+    || url.pathname === "/"
     || !acceptsHostname(url.hostname.toLowerCase())
   ) throw new Error(`manual Applicant ${name} is not its strict provider`);
   return url;

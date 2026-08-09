@@ -20,6 +20,8 @@ import {
 } from "../lib/custom-launch/manual-router-contract-v1";
 import {
   manualRouterBlocksNewSendV1,
+  manualRouterCanClearUncertainNoSendV1,
+  manualRouterFreshReadyMatchesCachedV1,
   manualRouterTransactionContextV1,
   parseManualRouterPersistedAttemptStorageV1,
   reconcileManualRouterBrowserAttemptV1,
@@ -280,6 +282,88 @@ describe("manual Applicant browser durability", () => {
       storageRecoveryRequired: true,
     })).toBe(true);
   });
+
+  it("requires explicit no-send confirmation for a reloaded uncertain wallet prompt", () => {
+    const ready = resolved("ready") as Extract<ManualRouterResolveResponseV1, {
+      status: "ready";
+    }>;
+    const uncertain = Object.freeze({
+      ...attempt,
+      transactionHash: null,
+      phase: "wallet-prompt-opened" as const,
+    });
+    const reloaded = parseManualRouterPersistedAttemptStorageV1(
+      JSON.stringify(uncertain),
+      SUBJECT,
+    );
+    expect(reloaded).toMatchObject({ kind: "valid", attempt: uncertain });
+    expect(manualRouterCanClearUncertainNoSendV1({
+      attempt: reloaded.kind === "valid" ? reloaded.attempt : null,
+      ready,
+      storageRecoveryRequired: false,
+    })).toBe(true);
+    expect(manualRouterBlocksNewSendV1({
+      attempt: uncertain,
+      ready,
+      storageRecoveryRequired: false,
+    })).toBe(true);
+    expect(manualRouterCanClearUncertainNoSendV1({
+      attempt,
+      ready,
+      storageRecoveryRequired: false,
+    })).toBe(false);
+    expect(manualRouterCanClearUncertainNoSendV1({
+      attempt: { ...uncertain, preparationHash: `sha256:${"fa".repeat(32)}` },
+      ready,
+      storageRecoveryRequired: false,
+    })).toBe(false);
+  });
+
+  it("rejects a delayed cached ready state unless the fresh exact action is still ready", () => {
+    const cached = resolved("ready") as Extract<ManualRouterResolveResponseV1, {
+      status: "ready";
+    }>;
+    expect(manualRouterFreshReadyMatchesCachedV1({
+      cached,
+      fresh: cached,
+      linkedLaunchWallet: WALLET,
+    })).toBe(true);
+    expect(manualRouterFreshReadyMatchesCachedV1({
+      cached,
+      fresh: {
+        ...cached,
+        browserAction: {
+          ...cached.browserAction,
+          pendingNonceAtPreparation: "999",
+        },
+      },
+      linkedLaunchWallet: WALLET,
+    })).toBe(true);
+    expect(manualRouterFreshReadyMatchesCachedV1({
+      cached,
+      fresh: resolved("permit-not-yet-valid"),
+      linkedLaunchWallet: WALLET,
+    })).toBe(false);
+    expect(manualRouterFreshReadyMatchesCachedV1({
+      cached,
+      fresh: {
+        ...cached,
+        browserAction: {
+          ...cached.browserAction,
+          params: [{
+            ...cached.browserAction.params[0],
+            data: `0x${"ab".repeat(32)}`,
+          }],
+        },
+      },
+      linkedLaunchWallet: WALLET,
+    })).toBe(false);
+    expect(manualRouterFreshReadyMatchesCachedV1({
+      cached,
+      fresh: cached,
+      linkedLaunchWallet: OTHER_WALLET,
+    })).toBe(false);
+  });
 });
 
 describe("manual Applicant production configuration", () => {
@@ -333,7 +417,7 @@ describe("manual Applicant production configuration", () => {
     expect(() => assertManualRouterProductionConfigurationV1(valid)).not.toThrow();
   });
 
-  it("rejects missing, identical, aliased, queried, and mislabeled providers", () => {
+  it("rejects every provider URL shape rejected by the portable authority", () => {
     expect(() => resolveManualRouterStrictRpcConfigurationV1({
       ...valid,
       PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: undefined,
@@ -359,6 +443,35 @@ describe("manual Applicant production configuration", () => {
       PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL:
         `${valid.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL}?override=true`,
     })).toThrow("strict provider");
+    for (const alchemyUrl of [
+      "http://eth-mainnet.g.alchemy.com/v2/key",
+      "https://foo.alchemy.com/v2/key",
+      "https://eth-mainnet.g.alchemy.com/",
+      "https://eth-mainnet.g.alchemy.com:8443/v2/key",
+      "https://user@eth-mainnet.g.alchemy.com/v2/key",
+      "https://eth-mainnet.g.alchemy.com/v2/key#fragment",
+      ` ${valid.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL}`,
+      `https://eth-mainnet.g.alchemy.com/${"x".repeat(2_049)}`,
+    ]) {
+      expect(() => resolveManualRouterStrictRpcConfigurationV1({
+        ...valid,
+        PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: alchemyUrl,
+      })).toThrow();
+    }
+    for (const quickNodeUrl of [
+      "https://quiknode.pro/key",
+      "https://example.quicknode.com/key",
+      "https://example.quiknode.pro/",
+      "https://example.quiknode.pro:8443/key",
+      "https://user:pass@example.quiknode.pro/key",
+      "https://example.quiknode.pro/key?override=true",
+      `${valid.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL} `,
+    ]) {
+      expect(() => resolveManualRouterStrictRpcConfigurationV1({
+        ...valid,
+        PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: quickNodeUrl,
+      })).toThrow();
+    }
   });
 });
 
@@ -872,6 +985,21 @@ describe("manual Applicant browser contract", () => {
       "https://github.com/0xprogrammable/hookbuilder/tree/d928f56218409f8511cec7ab43410b1bdfaa1450/submissions/requests",
     );
     expect(component).toContain("listManualRouterApplicantSubmissionsV1");
+    expect(component).toContain("manualRouterCanClearUncertainNoSendV1");
+    expect(component).toContain("Clear the uncertain attempt");
+    expect(component).toContain(
+      "Never speed up or replace a submitted beta transaction",
+    );
+    const freshResolve = component.indexOf(
+      "const freshResolved = await resolveManualRouterApplicantSubmissionV1",
+    );
+    const durableArm = component.indexOf("persistAttempt(pending)", freshResolve);
+    const walletSend = component.indexOf("await sendBrowserWalletAction", freshResolve);
+    expect(freshResolve).toBeGreaterThan(-1);
+    expect(durableArm).toBeGreaterThan(freshResolve);
+    expect(walletSend).toBeGreaterThan(durableArm);
+    expect(component.slice(walletSend, component.indexOf(");", walletSend)))
+      .not.toMatch(/\bnonce\s*:/u);
     expect(component.indexOf("persistAttempt(submitted)")).toBeLessThan(
       component.indexOf("await reportSubmittedTransaction(submitted)"),
     );

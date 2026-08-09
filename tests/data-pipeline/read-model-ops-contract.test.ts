@@ -139,8 +139,8 @@ describe("read-model operations source contract", () => {
             '"/api/ops/manual-router-finality-drift"',
           ),
         [routePath]: readFileSync(resolve(ROOT, routePath), "utf8").replace(
-          "process.env.CRON_SECRET",
-          "process.env.AUTOMATION_SECRET",
+          "isManualRouterFinalityCronAuthorizedV1(request)",
+          "true",
         ),
         [runtimePath]: readFileSync(resolve(ROOT, runtimePath), "utf8").replace(
           'env.PROGRAMMABLE_MANUAL_APPLICANT_LAUNCH_ENABLED !== "true"',

@@ -13,13 +13,19 @@ production environment and deployment dispatch.
    Ethereum wallet from the approved pull request.
 2. Approved artifacts load automatically. There is no JSON/file import or
    public artifact-list endpoint.
-3. The browser persists `wallet-prompt-opened` before opening the wallet and
+3. Immediately before opening the wallet, the browser re-resolves the launch
+   through the server's dual-RPC clock and requires the same subject,
+   descriptor, preparation, exact Router action, and linked wallet with at
+   least 120 seconds of verified send window remaining.
+4. The browser persists `wallet-prompt-opened` before opening the wallet and
    persists the returned transaction hash synchronously before any network
    request. Pending nonce values are diagnostic only and never authorize a
    send or retry.
-4. The Applicant wallet submits the one Router transaction. The Website never
+5. The Applicant wallet submits the one Router transaction. The Website never
    sends from an operator or developer wallet.
-5. Both the browser and the private scheduled worker can converge on the same
+   During this beta, never speed up or replace a submitted transaction; recover
+   and verify only the exact original transaction hash.
+6. Both the browser and the private scheduled worker can converge on the same
    dual-provider finality proof. A one-provider result, an ambiguous result, or
    an unfinalized receipt fails closed.
 
@@ -92,6 +98,9 @@ indexer on the same public source of truth.
 - existing `OPS_BLOB_READ_WRITE_TOKEN`
 - existing `CRON_SECRET`
 
-The RPC names are exact and server-only. Aliases, missing providers, identical
-trust domains, and provider-family swaps are rejected. Enabling this lane does
-not enable or modify legacy Custom Launch.
+The RPC names are exact and server-only. Alchemy must use
+`eth-mainnet.g.alchemy.com`; QuickNode must use one or more subdomains under
+`quiknode.pro`. Both require HTTPS, a non-root path, at most 2,048 trimmed
+characters, and no credentials, non-default port, query, or fragment. Aliases,
+missing providers, and provider-family swaps are rejected. Enabling this lane
+does not enable or modify legacy Custom Launch.
