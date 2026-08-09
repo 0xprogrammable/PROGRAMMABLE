@@ -3567,7 +3567,6 @@ export function ProfileRouterLaunches({
             <Link
               className={styles.launchRow}
               href={token.href}
-              aria-label={`Open ${token.name}`}
               key={token.address}
             >
               <span className={styles.launchMark} aria-hidden="true">

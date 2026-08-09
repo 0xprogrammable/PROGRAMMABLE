@@ -835,6 +835,7 @@ describe("profile reward grouping", () => {
     expect(html).toContain(`href="/token/${routerCustom.address}"`);
     expect(html).toContain("Custom");
     expect(html).toContain("Router record");
+    expect(html).not.toContain('aria-label="Open Custom Graph"');
     expect(html).not.toMatch(/>\s*Claim\s*</i);
     expect(html).not.toContain("permanently locked");
     expect(html).not.toContain("positionTokenId");
