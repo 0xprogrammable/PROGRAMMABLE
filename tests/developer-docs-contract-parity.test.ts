@@ -4,29 +4,11 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
-  PROGRAMMABLE_ACTIVE_API_BASE,
-  PROGRAMMABLE_ACTIVE_API_VERSION,
-  PROGRAMMABLE_COMPAT_API_BASE,
-  PROGRAMMABLE_COMPAT_API_VERSION,
-  PROGRAMMABLE_ENDPOINTS,
-  PROGRAMMABLE_FEE_POLICY,
-  PROGRAMMABLE_FEE_RECIPIENT,
-  PROGRAMMABLE_FINALITY_STATES,
-  PROGRAMMABLE_LABELS,
-  PROGRAMMABLE_OPENAPI_URL,
-  PROGRAMMABLE_PLATFORM_ID,
-  PROGRAMMABLE_RUNTIME_HASH_SEAM,
-  PROGRAMMABLE_VERIFIED_DEFINITION,
-  PROGRAMMABLE_WELL_KNOWN_URL,
-} from "../components/developer-docs-contract";
-import {
-  CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH,
-  PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1,
-} from "../lib/custom-launch/registry-public-manifest-v1";
-import {
-  agentPrompt,
-  languageExamples,
-} from "../components/developer-docs-workbench";
+  LAUNCH_KIND_V1,
+  PROGRAMMABLE_LAUNCH_STAMP_MANIFEST,
+  PROGRAMMABLE_LAUNCH_STAMP_RESOURCES,
+  PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ABI,
+} from "../components/launch-stamp-docs-contract";
 import {
   developerDocsMarkdown,
   programmableLlmsIndex,
@@ -37,180 +19,153 @@ const pageSource = readFileSync(
   join(root, "app/docs/developers/page.tsx"),
   "utf8",
 );
+const router = PROGRAMMABLE_LAUNCH_STAMP_MANIFEST.launchStampRouter;
 
-describe("canonical public developer-contract facts", () => {
-  it("keeps active discovery and supported v1 compatibility explicit", () => {
-    expect(PROGRAMMABLE_ACTIVE_API_VERSION).toBe("2");
-    expect(PROGRAMMABLE_ACTIVE_API_BASE).toBe(
-      "https://developers.programmable.family/api/v2",
-    );
-    expect(PROGRAMMABLE_COMPAT_API_VERSION).toBe("1");
-    expect(PROGRAMMABLE_COMPAT_API_BASE).toBe(
-      "https://developers.programmable.family/api/v1",
-    );
-    expect(PROGRAMMABLE_WELL_KNOWN_URL).toBe(
-      "https://developers.programmable.family/.well-known/programmable.json",
-    );
-    expect(PROGRAMMABLE_OPENAPI_URL).toBe(
-      "https://developers.programmable.family/openapi/programmable-v2.yaml",
-    );
-    expect(developerDocsMarkdown).toContain(
-      `Active API: v2 at ${PROGRAMMABLE_ACTIVE_API_BASE}`,
-    );
-    expect(developerDocsMarkdown).toContain(
-      `Compatibility API: v1 at ${PROGRAMMABLE_COMPAT_API_BASE}`,
-    );
-  });
-
-  it("locks the complete active endpoint inventory to one major", () => {
-    expect(PROGRAMMABLE_ENDPOINTS.map((endpoint) => endpoint.path)).toEqual([
-      "/.well-known/programmable.json",
-      "/api/v2/status",
-      "/api/v2/manifest",
-      "/api/v2/launches",
-      "/api/v2/launches/{launchId}",
-      "/api/v2/launches/{chainId}/{tokenAddress}",
-      "/api/v2/token-list",
-    ]);
-    for (const endpoint of PROGRAMMABLE_ENDPOINTS) {
-      expect(developerDocsMarkdown).toContain(`GET ${endpoint.path}`);
-    }
-    expect(languageExamples[0]?.code).toContain(PROGRAMMABLE_WELL_KNOWN_URL);
-    expect(languageExamples[1]?.code).toContain("discovery.apiBaseUrl");
-    expect(developerDocsMarkdown).toContain(
-      "including project-only and multi-asset records",
-    );
-  });
-
-  it("locks the EVM runtime hash algorithm without conflating SHA-256 evidence", () => {
-    expect(PROGRAMMABLE_RUNTIME_HASH_SEAM).toEqual({
-      keccakAlgorithm: "keccak256(runtime bytecode)",
-      keccakField: "runtimeCodeKeccak256",
-      keccakFormat: "0x-prefixed bytes32",
-      sha256Field: "runtimeCodeSha256",
-      sha256Format: "sha256:",
+describe("Router-first public developer-contract facts", () => {
+  it("locks the live Ethereum trust root", () => {
+    expect(PROGRAMMABLE_LAUNCH_STAMP_MANIFEST.chainId).toBe(1);
+    expect(router).toMatchObject({
+      status: "live",
+      address: "0x8622DD5bAb44185f2A458ac90384Ac99248f8d56",
+      startBlock: "25717612",
+      endBlock: null,
+      runtimeCodeHash:
+        "0x40e27ecf201761d5eb66bc4f2d5c6124831ef078d7baf458ca5f41b1a8108546",
+      finalityConfirmations: 64,
+      abiSha256:
+        "sha256:bb4e728e9f9c850eb01f928e8a798ac206a82e241a8d93b3b3c686635c88ed86",
     });
-    expect(developerDocsMarkdown).toContain(
-      "`runtimeCodeKeccak256` is the `0x-prefixed bytes32` `keccak256(runtime bytecode)`",
-    );
-    expect(developerDocsMarkdown).toContain(
-      "Optional `runtimeCodeSha256` evidence uses the `sha256:` prefix",
-    );
-    expect(agentPrompt).toContain(
-      "runtimeCodeKeccak256 is 0x-prefixed bytes32 keccak256(runtime bytecode)",
-    );
-    for (const publicSurface of [
-      developerDocsMarkdown,
-      agentPrompt,
-      pageSource,
+    for (const value of [
+      router.address,
+      router.startBlock,
+      router.runtimeCodeHash,
+      router.abiSha256,
     ]) {
-      expect(publicSurface).not.toContain("runtimeCodeHash");
+      expect(developerDocsMarkdown).toContain(value);
+      expect(programmableLlmsIndex).toContain(value);
     }
   });
 
-  it("locks platform identity and exactly two public labels", () => {
-    expect(PROGRAMMABLE_PLATFORM_ID).toBe("programmable");
-    expect(PROGRAMMABLE_LABELS).toEqual({
-      classic: "Programmable Classic",
-      custom: "Programmable Custom",
+  it("locks discovery, manifest, ABI and GitHub resources", () => {
+    expect(PROGRAMMABLE_LAUNCH_STAMP_RESOURCES).toEqual({
+      discoveryUrl:
+        "https://developers.programmable.family/.well-known/programmable.json",
+      manifestUrl: "https://developers.programmable.family/api/v2/manifest",
+      abiUrl:
+        "https://developers.programmable.family/abis/ethereum/programmable-launch-stamp-router-v1.json",
+      abiGithubUrl:
+        "https://raw.githubusercontent.com/0xprogrammable/developers/main/abis/ethereum/programmable-launch-stamp-router-v1.json",
+      abiSha256:
+        "sha256:bb4e728e9f9c850eb01f928e8a798ac206a82e241a8d93b3b3c686635c88ed86",
+      referenceUrl:
+        "https://github.com/0xprogrammable/developers/blob/main/docs/reference/launch-stamp.md",
+      terminalGuideUrl:
+        "https://github.com/0xprogrammable/developers/blob/main/docs/guides/terminals-and-scanners.md",
+      jsonRpcVerifierUrl:
+        "https://github.com/0xprogrammable/developers/blob/main/examples/verify-launch-stamp.mjs",
+      viemVerifierUrl:
+        "https://github.com/0xprogrammable/developers/blob/main/examples/verify-launch-stamp-viem.ts",
     });
-    expect(developerDocsMarkdown).toContain(
-      "Partner, template, model, builder and origin attribution are additional facts. They never create a third public category and remain independent from market availability and fee activation.",
-    );
-    expect(agentPrompt).toContain("platformId=programmable");
+    for (const value of [
+      PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.discoveryUrl,
+      PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.manifestUrl,
+      PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.abiUrl,
+      PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.abiSha256,
+      PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.referenceUrl,
+      PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.terminalGuideUrl,
+      PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.jsonRpcVerifierUrl,
+      PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.viemVerifierUrl,
+    ]) {
+      expect(developerDocsMarkdown).toContain(value);
+    }
   });
 
-  it("locks the bounded Verified definition and lifecycle", () => {
-    expect(PROGRAMMABLE_VERIFIED_DEFINITION).toBe(
-      "Reviewed against the published Programmable security policy and cryptographically bound to the exact deployed contract revision.",
-    );
-    expect(PROGRAMMABLE_FINALITY_STATES).toEqual([
-      "observed",
-      "confirmed",
-      "finalized",
-      "orphaned",
+  it("locks exactly two supported public launch kinds", () => {
+    expect(LAUNCH_KIND_V1).toEqual([
+      { value: 0, name: "Invalid", publicLabel: null },
+      { value: 1, name: "CustomGraph", publicLabel: "Programmable Custom" },
+      { value: 2, name: "Classic", publicLabel: "Programmable Classic" },
     ]);
-    expect(developerDocsMarkdown).toContain(PROGRAMMABLE_VERIFIED_DEFINITION);
-    expect(programmableLlmsIndex).toContain(PROGRAMMABLE_VERIFIED_DEFINITION);
-    expect(agentPrompt).toContain(PROGRAMMABLE_VERIFIED_DEFINITION);
-  });
-
-  it("locks native and active partner fee math without coupling attribution", () => {
-    expect(PROGRAMMABLE_FEE_RECIPIENT).toBe(
-      "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
-    );
-    expect(PROGRAMMABLE_FEE_POLICY.nativeCustom).toEqual({
-      chargeMode: "official market path only",
-      programmableShareBps: 10,
-      totalBps: 10,
-    });
-    expect(PROGRAMMABLE_FEE_POLICY.partnerTemplate).toEqual({
-      applicability: "active fee-bearing partner-template market path",
-      attributionIndependent: true,
-      chargeMode: "template enforced",
-      noQualifyingMarket: {
-        partnerShareBps: 0,
-        programmableShareBps: 0,
-        status: "no-qualifying-market",
-        totalBps: 0,
-      },
-      partnerShareBps: 15,
-      programmableShareBps: 5,
-      totalBps: 20,
-    });
-    expect(developerDocsMarkdown).toContain(PROGRAMMABLE_FEE_RECIPIENT);
     expect(developerDocsMarkdown).toContain(
-      "a verified partner-attributed project may report `no-qualifying-market` with 0/0/0 BPS",
+      "| `1` | `CustomGraph` | Programmable Custom |",
     );
     expect(developerDocsMarkdown).toContain(
-      "Active fee-bearing partner-template target policy:** exactly 20 BPS total: 15 BPS partner plus 5 BPS Programmable",
+      "| `2` | `Classic` | Programmable Classic |",
     );
     expect(developerDocsMarkdown).toContain(
-      "No additional native 10 BPS is added",
-    );
-    expect(agentPrompt).toContain(
-      "Partner and template attribution are independent from market and fee state",
-    );
-    expect(agentPrompt).toContain(
-      "active fee-bearing partner-template path must prove 20 BPS total: 15 partner and 5 Programmable",
+      "`LaunchKindV1.Invalid = 0` is never a Programmable launch classification.",
     );
   });
 
-  it("keeps Community Custom fail-closed without placeholders", () => {
-    expect(PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1).toMatchObject({
-      status: "prelaunch",
-      publicSubmissionsEnabled: false,
-      startBlock: null,
-      contracts: {
-        registry: { address: null, runtimeCodeKeccak256: null },
-      },
-    });
+  it("locks token, pool and exclusive-component verification reads", () => {
+    for (const read of [
+      ...PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ABI.primaryReads,
+      ...PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ABI.componentReads,
+    ]) {
+      expect(developerDocsMarkdown).toContain(read.signature);
+    }
     expect(developerDocsMarkdown).toContain(
-      "Registry address is `null`, start block is `null`",
+      "The shared Classic hook is not a launch identifier.",
     );
     expect(developerDocsMarkdown).toContain(
-      "`publicSubmissionsEnabled` is `false`",
-    );
-    expect(developerDocsMarkdown).toContain(
-      CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH,
-    );
-    expect(developerDocsMarkdown).not.toContain(
-      "The Programmable Custom Registry is live",
+      "every runtime, binding, lookup, record, and proof read",
     );
   });
 
-  it("requires every public surface to consume the shared facts module", () => {
+  it("publishes every canonical event signature and topic", () => {
+    for (const event of Object.values(router.events)) {
+      expect(developerDocsMarkdown).toContain(event.signature);
+      expect(developerDocsMarkdown).toContain(event.topic0);
+    }
+    expect(developerDocsMarkdown).toContain(
+      "Point verification does not require an indexer.",
+    );
+    expect(developerDocsMarkdown).toContain("last common finalized checkpoint");
+    expect(developerDocsMarkdown).toContain("requireCanonical: true");
+  });
+
+  it("publishes the finalized PCAN vector", () => {
+    const canary = router.canaryEvidence;
+    for (const value of [
+      canary.transactionHash,
+      canary.launchId,
+      canary.stampHash,
+      canary.components.token,
+      canary.components.hook,
+      canary.components.initializer,
+      canary.pool.poolId,
+    ]) {
+      expect(developerDocsMarkdown).toContain(value);
+    }
+    expect(developerDocsMarkdown).toContain("## Finalized PCAN vector");
+  });
+
+  it("keeps the provenance boundary exact on every machine surface", () => {
+    for (const surface of [developerDocsMarkdown, programmableLlmsIndex]) {
+      expect(surface).toContain("Historical");
+      expect(surface).toMatch(/direct (?:factory|Classic)/i);
+      expect(surface).toMatch(/not (?:establish )?safety/i);
+      expect(surface).toContain("tradability");
+      expect(surface).toContain("current liquidity");
+      expect(surface).toContain("terminal support");
+      expect(surface).toContain("self-service");
+      expect(surface).not.toContain("Community Custom Registry");
+      expect(surface).not.toContain("cursor traversal");
+      expect(surface).not.toContain("GET /api/v2/launches");
+    }
+  });
+
+  it("makes the page consume only the shared Router contract", () => {
     for (const exportName of [
-      "PROGRAMMABLE_ACTIVE_API_VERSION",
-      "PROGRAMMABLE_COMPAT_API_VERSION",
-      "PROGRAMMABLE_FEE_POLICY",
-      "PROGRAMMABLE_FEE_RECIPIENT",
-      "PROGRAMMABLE_FINALITY_STATES",
-      "PROGRAMMABLE_LABELS",
-      "PROGRAMMABLE_RUNTIME_HASH_SEAM",
-      "PROGRAMMABLE_VERIFIED_DEFINITION",
+      "LAUNCH_KIND_V1",
+      "PROGRAMMABLE_LAUNCH_STAMP_MANIFEST",
+      "PROGRAMMABLE_LAUNCH_STAMP_RESOURCES",
+      "PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ABI",
     ]) {
       expect(pageSource).toContain(exportName);
     }
+    expect(pageSource).not.toContain("PROGRAMMABLE_ACTIVE_API_BASE");
+    expect(pageSource).not.toContain("PROGRAMMABLE_FEE_POLICY");
+    expect(pageSource).not.toContain("CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH");
   });
 });

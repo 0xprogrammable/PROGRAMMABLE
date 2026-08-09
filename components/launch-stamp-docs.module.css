@@ -240,9 +240,16 @@
   padding-block: 16px;
 }
 
+.abiList dt {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .abiList dd {
   display: grid;
   gap: 6px;
+  grid-template-columns: minmax(0, 1fr);
   margin: 0;
   min-width: 0;
 }
@@ -260,6 +267,14 @@
   color: var(--muted);
   font-size: 12px;
   line-height: 1.55;
+}
+
+.abiList dd > span,
+.abiList dd > span code {
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .proofList dd > code,

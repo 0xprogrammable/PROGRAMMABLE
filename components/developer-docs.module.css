@@ -472,6 +472,7 @@
 }
 
 .detectionFlow p code,
+.identityRules p code,
 .scopeNote code,
 .verificationRule code,
 .syncSteps p code,
@@ -655,6 +656,7 @@
   gap: 24px;
   grid-template-columns: minmax(190px, 0.7fr) minmax(0, 1.3fr);
   min-height: 60px;
+  min-width: 0;
   padding: 13px 4px;
 }
 
@@ -667,13 +669,57 @@
   font-family: var(--font-plex-mono), monospace;
   font-size: 12px;
   line-height: 1.55;
+  min-width: 0;
   overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .fieldTable span {
   color: var(--text-soft);
   font-size: 14px;
   line-height: 1.58;
+  min-width: 0;
+}
+
+.fieldTable a {
+  color: var(--text);
+  overflow-wrap: anywhere;
+  text-decoration-color: color-mix(in srgb, currentColor 42%, transparent);
+  text-underline-offset: 3px;
+}
+
+.fieldTable a:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.breakableValue {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 12px !important;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.eventDetails {
+  display: grid;
+  gap: 5px;
+}
+
+.eventDetails code,
+.eventDetails small {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.eventDetails small {
+  color: var(--muted);
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 11px;
+  line-height: 1.55;
 }
 
 .verificationGrid article {
@@ -736,6 +782,7 @@
 .syncSteps li > div {
   display: grid;
   gap: 6px;
+  min-width: 0;
 }
 
 .syncSteps strong {
@@ -757,6 +804,7 @@
   font-size: 11.5px;
   margin-top: 2px;
   overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .endpointList {
@@ -907,6 +955,7 @@
 .resourceLink > span {
   display: grid;
   gap: 3px;
+  min-width: 0;
 }
 
 .resourceLink strong {
@@ -917,6 +966,7 @@
 .resourceLink small {
   color: var(--muted);
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .resourceLink svg {
@@ -1110,6 +1160,11 @@
   font-size: 13.5px !important;
   line-height: 1.58 !important;
   margin: 0 !important;
+}
+
+.identityRules p code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .indexingRules code {
@@ -1331,6 +1386,10 @@
   padding-top: 3px;
 }
 
+.integrationChecklist li > span {
+  min-width: 0;
+}
+
 .integrationChecklist code {
   color: var(--text);
   font-family: var(--font-plex-mono), monospace;
@@ -1374,7 +1433,7 @@
   align-items: center;
   background: var(--text);
   border-radius: 10px;
-  color: var(--background);
+  color: var(--body-background);
   display: inline-flex;
   flex: 0 0 auto;
   font-size: 13px;

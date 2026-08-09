@@ -61,7 +61,7 @@ export function DocsShell({
                   key={category.label}
                 >
                   <strong>{category.label}</strong>
-                  <span>Public API</span>
+                  <span>Developer reference</span>
                 </Link>
               );
             }

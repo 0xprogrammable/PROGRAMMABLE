@@ -45,7 +45,6 @@ describe("Programmable branding assets", () => {
       "app/explore/page.tsx",
       "app/launch/page.tsx",
       "app/docs/layout.tsx",
-      "app/docs/developers/page.tsx",
       "app/docs/models/[model]/page.tsx",
     ].map(read);
 
@@ -54,6 +53,9 @@ describe("Programmable branding assets", () => {
     }
 
     const combinedSources = metadataSources.join("\n");
+    expect(read("app/docs/developers/page.tsx")).toContain(
+      'title: "Developer docs · Programmable"',
+    );
     for (const routeSpecificTitle of [
       'title: "Programmable — Launch what you imagine"',
       'title: "Explore — Programmable"',
@@ -101,9 +103,7 @@ describe("Programmable branding assets", () => {
   });
 
   it("keeps the Warm Ivory favicon transparent and tightly framed", async () => {
-    const current = await alphaBounds(
-      "public/favicon-warm-ivory-v1-16x16.png",
-    );
+    const current = await alphaBounds("public/favicon-warm-ivory-v1-16x16.png");
     const { data, info } = await sharp(
       join(root, "public/favicon-warm-ivory-v1-48x48.png"),
     )
@@ -126,9 +126,12 @@ describe("Programmable branding assets", () => {
     expect(
       coreColors.every(
         ([red, green, blue]) =>
-          red >= 248 && red <= 252 &&
-          green >= 240 && green <= 244 &&
-          blue >= 233 && blue <= 237,
+          red >= 248 &&
+          red <= 252 &&
+          green >= 240 &&
+          green <= 244 &&
+          blue >= 233 &&
+          blue <= 237,
       ),
     ).toBe(true);
   });
@@ -141,9 +144,7 @@ describe("Programmable branding assets", () => {
       ["public/og/programmable-night-garden-og-2400x1260.png", 2400, 1260],
     ] as const;
 
-    expect(layout).toContain(
-      '"/og/programmable-night-garden-og-1200x630.png"',
-    );
+    expect(layout).toContain('"/og/programmable-night-garden-og-1200x630.png"');
     expect(docs).toContain(
       'url: "/og/programmable-night-garden-og-1200x630.png"',
     );
