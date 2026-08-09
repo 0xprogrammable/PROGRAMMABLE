@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:manual-router-custom-graph-compile-request:1",
+  "title": "Programmable manual Router CustomGraph compile request v1",
+  "$comment": "Closed structural and size gate only. Accept only after the code-owned canonical validator re-derives every hash, Safe/ERC-1271 signature, GitHub Applicant 1.1.0 binding, Router ABI value, compilation, and simulation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "approvalRevisionHash",
+    "approvedGitHubUserId",
+    "authorizedLauncher",
+    "chainId",
+    "compileInputHash",
+    "compileRequestHash",
+    "graphFactory",
+    "graphRouteAdapterRegistryHash",
+    "headRepositoryId",
+    "headSha",
+    "launchWallet",
+    "preflightAuthorityBindingHash",
+    "pullRequestNumber",
+    "repositoryId",
+    "routeGenerationHash",
+    "routeNamespace",
+    "routeNonce",
+    "router",
+    "schemaVersion",
+    "treeSha"
+  ],
+  "properties": {
+    "approvalRevisionHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "approvedGitHubUserId": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]*)$",
+      "maxLength": 78
+    },
+    "authorizedLauncher": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{40}$"
+    },
+    "chainId": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]*)$",
+      "maxLength": 78
+    },
+    "compileInputHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "compileRequestHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "graphFactory": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{40}$"
+    },
+    "graphRouteAdapterRegistryHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "headRepositoryId": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]*)$",
+      "maxLength": 78
+    },
+    "headSha": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]*)$",
+      "maxLength": 78
+    },
+    "launchWallet": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{40}$"
+    },
+    "preflightAuthorityBindingHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "pullRequestNumber": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "repositoryId": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]*)$",
+      "maxLength": 78
+    },
+    "routeGenerationHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "routeNamespace": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "routeNonce": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "router": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{40}$"
+    },
+    "schemaVersion": {
+      "const": "programmable.router-custom-graph-compile-request.v3"
+    },
+    "treeSha": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]*)$",
+      "maxLength": 78
+    }
+  }
+}

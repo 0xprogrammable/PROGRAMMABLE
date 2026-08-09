@@ -1,0 +1,480 @@
+{
+  "inputs": {
+    "src/domain/canonical-json.ts": {
+      "bytes": 11086,
+      "format": "esm",
+      "imports": [
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:util"
+        }
+      ]
+    },
+    "src/domain/hashing.ts": {
+      "bytes": 2288,
+      "format": "esm",
+      "imports": [
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:crypto"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./canonical-json.js",
+          "path": "src/domain/canonical-json.ts"
+        }
+      ]
+    },
+    "src/github-rest/types.ts": {
+      "bytes": 10413,
+      "format": "esm",
+      "imports": []
+    },
+    "src/internal/router-self-service-v1/abi-codec.ts": {
+      "bytes": 33017,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../../domain/hashing.js",
+          "path": "src/domain/hashing.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./keccak.js",
+          "path": "src/internal/router-self-service-v1/keccak.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./production-binding.js",
+          "path": "src/internal/router-self-service-v1/production-binding.ts"
+        }
+      ]
+    },
+    "src/internal/router-self-service-v1/browser-action.ts": {
+      "bytes": 3615,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "./production-binding.js",
+          "path": "src/internal/router-self-service-v1/production-binding.ts"
+        }
+      ]
+    },
+    "src/internal/router-self-service-v1/finality.ts": {
+      "bytes": 23055,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../../domain/hashing.js",
+          "path": "src/domain/hashing.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./keccak.js",
+          "path": "src/internal/router-self-service-v1/keccak.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./production-binding.js",
+          "path": "src/internal/router-self-service-v1/production-binding.ts"
+        }
+      ]
+    },
+    "src/internal/router-self-service-v1/github-approval.ts": {
+      "bytes": 27883,
+      "format": "esm",
+      "imports": [
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:crypto"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../domain/hashing.js",
+          "path": "src/domain/hashing.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../github-rest/types.js",
+          "path": "src/github-rest/types.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./hookbuilder-applicant-request.js",
+          "path": "src/internal/router-self-service-v1/hookbuilder-applicant-request.ts"
+        }
+      ]
+    },
+    "src/internal/router-self-service-v1/hookbuilder-applicant-request.ts": {
+      "bytes": 18735,
+      "format": "esm",
+      "imports": [
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:crypto"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../domain/canonical-json.js",
+          "path": "src/domain/canonical-json.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../domain/hashing.js",
+          "path": "src/domain/hashing.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./keccak.js",
+          "path": "src/internal/router-self-service-v1/keccak.ts"
+        }
+      ]
+    },
+    "src/internal/router-self-service-v1/http-rpc-provider.ts": {
+      "bytes": 6311,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "./rpc.js",
+          "path": "src/internal/router-self-service-v1/rpc.ts"
+        }
+      ]
+    },
+    "src/internal/router-self-service-v1/keccak.ts": {
+      "bytes": 4158,
+      "format": "esm",
+      "imports": []
+    },
+    "src/internal/router-self-service-v1/manual-preparation.ts": {
+      "bytes": 7839,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../../domain/canonical-json.js",
+          "path": "src/domain/canonical-json.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../domain/hashing.js",
+          "path": "src/domain/hashing.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./abi-codec.js",
+          "path": "src/internal/router-self-service-v1/abi-codec.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./github-approval.js",
+          "path": "src/internal/router-self-service-v1/github-approval.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./production-binding.js",
+          "path": "src/internal/router-self-service-v1/production-binding.ts"
+        }
+      ]
+    },
+    "src/internal/router-self-service-v1/portable-publish-authority.ts": {
+      "bytes": 55467,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../../domain/canonical-json.js",
+          "path": "src/domain/canonical-json.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../domain/hashing.js",
+          "path": "src/domain/hashing.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./abi-codec.js",
+          "path": "src/internal/router-self-service-v1/abi-codec.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./browser-action.js",
+          "path": "src/internal/router-self-service-v1/browser-action.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./github-approval.js",
+          "path": "src/internal/router-self-service-v1/github-approval.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./http-rpc-provider.js",
+          "path": "src/internal/router-self-service-v1/http-rpc-provider.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./hookbuilder-applicant-request.js",
+          "path": "src/internal/router-self-service-v1/hookbuilder-applicant-request.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./manual-preparation.js",
+          "path": "src/internal/router-self-service-v1/manual-preparation.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./production-binding.js",
+          "path": "src/internal/router-self-service-v1/production-binding.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./route-nonce.js",
+          "path": "src/internal/router-self-service-v1/route-nonce.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./rpc.js",
+          "path": "src/internal/router-self-service-v1/rpc.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./signer.js",
+          "path": "src/internal/router-self-service-v1/signer.ts"
+        }
+      ]
+    },
+    "src/internal/router-self-service-v1/production-binding.ts": {
+      "bytes": 8160,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "./keccak.js",
+          "path": "src/internal/router-self-service-v1/keccak.ts"
+        }
+      ]
+    },
+    "src/internal/router-self-service-v1/route-nonce.ts": {
+      "bytes": 10302,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../../domain/canonical-json.js",
+          "path": "src/domain/canonical-json.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../domain/hashing.js",
+          "path": "src/domain/hashing.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./keccak.js",
+          "path": "src/internal/router-self-service-v1/keccak.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./production-binding.js",
+          "path": "src/internal/router-self-service-v1/production-binding.ts"
+        }
+      ]
+    },
+    "src/internal/router-self-service-v1/rpc.ts": {
+      "bytes": 49184,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../../domain/canonical-json.js",
+          "path": "src/domain/canonical-json.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../domain/hashing.js",
+          "path": "src/domain/hashing.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./keccak.js",
+          "path": "src/internal/router-self-service-v1/keccak.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./abi-codec.js",
+          "path": "src/internal/router-self-service-v1/abi-codec.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./browser-action.js",
+          "path": "src/internal/router-self-service-v1/browser-action.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./production-binding.js",
+          "path": "src/internal/router-self-service-v1/production-binding.ts"
+        }
+      ]
+    },
+    "src/internal/router-self-service-v1/signer.ts": {
+      "bytes": 7089,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../../domain/canonical-json.js",
+          "path": "src/domain/canonical-json.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../domain/hashing.js",
+          "path": "src/domain/hashing.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./abi-codec.js",
+          "path": "src/internal/router-self-service-v1/abi-codec.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./production-binding.js",
+          "path": "src/internal/router-self-service-v1/production-binding.ts"
+        }
+      ]
+    },
+    "src/public-api/manual-router.ts": {
+      "bytes": 1751,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../internal/router-self-service-v1/portable-publish-authority.js",
+          "path": "src/internal/router-self-service-v1/portable-publish-authority.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../internal/router-self-service-v1/hookbuilder-applicant-request.js",
+          "path": "src/internal/router-self-service-v1/hookbuilder-applicant-request.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../internal/router-self-service-v1/http-rpc-provider.js",
+          "path": "src/internal/router-self-service-v1/http-rpc-provider.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../internal/router-self-service-v1/finality.js",
+          "path": "src/internal/router-self-service-v1/finality.ts"
+        }
+      ]
+    }
+  },
+  "outputs": {
+    "artifacts/manual-router-portable-v1/manual-router-portable.v1.mjs": {
+      "bytes": 213847,
+      "entryPoint": "src/public-api/manual-router.ts",
+      "exports": [
+        "HOOKBUILDER_APPLICANT_1_1_PUBLIC_MAIN_BINDING_V1",
+        "MANUAL_ROUTER_ALCHEMY_RPC_ENV_V1",
+        "MANUAL_ROUTER_QUICKNODE_RPC_ENV_V1",
+        "RouterLaunchFinalityVerifierV1",
+        "RouterLaunchTransactionRevertedError",
+        "assertFailedRouterLaunchTransactionEvidenceV1",
+        "assertPortableManualRouterCompleteSignedArtifactV1",
+        "assertPortableManualRouterOperatorPreparationV1",
+        "assertPortableManualRouterSignedPublishRequestV1",
+        "createPortableManualRouterPublishAuthorityFromEnvV1",
+        "resolvePortableManualRouterReissueStateV1",
+        "verifyPortableManualRouterSignedPublishV1"
+      ],
+      "imports": [
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:util"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:crypto"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:crypto"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:crypto"
+        }
+      ],
+      "inputs": {
+        "src/domain/canonical-json.ts": {
+          "bytesInOutput": 10119
+        },
+        "src/domain/hashing.ts": {
+          "bytesInOutput": 1184
+        },
+        "src/github-rest/types.ts": {
+          "bytesInOutput": 168
+        },
+        "src/internal/router-self-service-v1/abi-codec.ts": {
+          "bytesInOutput": 27526
+        },
+        "src/internal/router-self-service-v1/browser-action.ts": {
+          "bytesInOutput": 2591
+        },
+        "src/internal/router-self-service-v1/finality.ts": {
+          "bytesInOutput": 16475
+        },
+        "src/internal/router-self-service-v1/github-approval.ts": {
+          "bytesInOutput": 21750
+        },
+        "src/internal/router-self-service-v1/hookbuilder-applicant-request.ts": {
+          "bytesInOutput": 14619
+        },
+        "src/internal/router-self-service-v1/http-rpc-provider.ts": {
+          "bytesInOutput": 5143
+        },
+        "src/internal/router-self-service-v1/keccak.ts": {
+          "bytesInOutput": 3732
+        },
+        "src/internal/router-self-service-v1/manual-preparation.ts": {
+          "bytesInOutput": 4645
+        },
+        "src/internal/router-self-service-v1/portable-publish-authority.ts": {
+          "bytesInOutput": 46413
+        },
+        "src/internal/router-self-service-v1/production-binding.ts": {
+          "bytesInOutput": 6582
+        },
+        "src/internal/router-self-service-v1/route-nonce.ts": {
+          "bytesInOutput": 7663
+        },
+        "src/internal/router-self-service-v1/rpc.ts": {
+          "bytesInOutput": 40390
+        },
+        "src/internal/router-self-service-v1/signer.ts": {
+          "bytesInOutput": 3387
+        },
+        "src/public-api/manual-router.ts": {
+          "bytesInOutput": 0
+        }
+      }
+    },
+    "artifacts/manual-router-portable-v1/manual-router-portable.v1.mjs.map": {
+      "bytes": 412104,
+      "exports": [],
+      "imports": [],
+      "inputs": {}
+    }
+  }
+}

@@ -126,6 +126,40 @@ describe("read-model operations source contract", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("binds the private manual Router finality cron independently", () => {
+    const routePath = "app/api/ops/manual-router-finality/route.ts";
+    const runtimePath =
+      "lib/server/custom-launch/manual-router-finality-worker-v1.ts";
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        "vercel.json": readFileSync(resolve(ROOT, "vercel.json"), "utf8")
+          .replace(
+            '"/api/ops/manual-router-finality"',
+            '"/api/ops/manual-router-finality-drift"',
+          ),
+        [routePath]: readFileSync(resolve(ROOT, routePath), "utf8").replace(
+          "process.env.CRON_SECRET",
+          "process.env.AUTOMATION_SECRET",
+        ),
+        [runtimePath]: readFileSync(resolve(ROOT, runtimePath), "utf8").replace(
+          'env.PROGRAMMABLE_MANUAL_APPLICANT_LAUNCH_ENABLED !== "true"',
+          'env.PROGRAMMABLE_MANUAL_APPLICANT_LAUNCH_ENABLED === "true"',
+        ),
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toEqual(
+      expect.arrayContaining([
+        "ops-cron-exact-set",
+        "ops-manual-router-finality-schedule",
+        "ops-manual-router-finality-source-digests",
+        "ops-manual-router-finality-route-auth",
+        "ops-manual-router-finality-activation",
+      ]),
+    );
+  });
+
   it("rejects scheduler, authorization and activation drift", () => {
     const vercelPath = resolve(ROOT, "vercel.json");
     const drift = evaluateReadModelOperationsSourceContracts(ROOT, {
