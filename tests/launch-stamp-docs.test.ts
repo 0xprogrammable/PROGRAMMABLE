@@ -513,6 +513,9 @@ describe("Launch Stamp developer documentation", () => {
     expect(styles).toMatch(
       /\.abiList dd > span,\s*\.abiList dd > span code\s*\{[^}]*max-width:\s*100%;[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;[^}]*word-break:\s*break-word;/s,
     );
+    expect(styles).toMatch(
+      /\.detailLine code\s*\{[^}]*overflow-wrap:\s*anywhere;[^}]*word-break:\s*break-word;/s,
+    );
     expect(styles).not.toContain("transition: all");
     expect(styles).not.toMatch(/\n\s+width:\s*\d{3,}px/);
   });
