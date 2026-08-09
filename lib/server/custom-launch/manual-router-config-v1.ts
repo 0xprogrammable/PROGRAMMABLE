@@ -1,5 +1,8 @@
 import "server-only";
 
+import { rpcProviderCommitment } from
+  "@/lib/data-pipeline/rpc-provider-commitments";
+
 const ALCHEMY_PRODUCTION_HOST = "eth-mainnet.g.alchemy.com";
 const QUICKNODE_PRODUCTION_HOST = /^(?:[a-z0-9-]+\.)+quiknode\.pro$/u;
 
@@ -42,6 +45,23 @@ export function resolveManualRouterStrictRpcConfigurationV1(
   ) {
     throw new TypeError("manual Router RPC providers are not independent");
   }
+  const alchemyCommitment = requiredCommitmentEnvironment(
+    environment,
+    "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT",
+  );
+  const quickNodeCommitment = requiredCommitmentEnvironment(
+    environment,
+    "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT",
+  );
+  if (alchemyCommitment === quickNodeCommitment) {
+    throw new TypeError("manual Router RPC commitments are not independent");
+  }
+  if (rpcProviderCommitment("endpoint", alchemy.href) !== alchemyCommitment) {
+    throw new TypeError("manual Router Alchemy endpoint commitment mismatch");
+  }
+  if (rpcProviderCommitment("endpoint", quickNode.href) !== quickNodeCommitment) {
+    throw new TypeError("manual Router QuickNode endpoint commitment mismatch");
+  }
   return Object.freeze({
     alchemyUrl: alchemy.href,
     quickNodeUrl: quickNode.href,
@@ -61,6 +81,7 @@ export function assertManualRouterProductionConfigurationV1(
   ] as const) {
     requiredEnvironment(environment, name);
   }
+  requiredCronSecretEnvironment(environment);
   resolveManualRouterStrictRpcConfigurationV1(environment);
 }
 
@@ -82,6 +103,30 @@ function requiredRpcEnvironment(
     throw new TypeError(`${name} is not configured`);
   }
   return value;
+}
+
+function requiredCronSecretEnvironment(
+  environment: Readonly<Record<string, string | undefined>>,
+): string {
+  const value = environment.CRON_SECRET;
+  const byteLength = typeof value === "string"
+    ? Buffer.byteLength(value, "utf8")
+    : 0;
+  if (typeof value !== "string" || byteLength < 32 || byteLength > 1_024) {
+    throw new TypeError("CRON_SECRET is not configured");
+  }
+  return value;
+}
+
+function requiredCommitmentEnvironment(
+  environment: Readonly<Record<string, string | undefined>>,
+  name: string,
+): `0x${string}` {
+  const value = environment[name];
+  if (typeof value !== "string" || !/^0x[0-9a-f]{64}$/u.test(value)) {
+    throw new TypeError(`${name} is not configured`);
+  }
+  return value as `0x${string}`;
 }
 
 function strictProviderUrl(
