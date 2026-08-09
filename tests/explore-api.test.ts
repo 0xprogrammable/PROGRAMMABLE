@@ -5,6 +5,7 @@ vi.mock("server-only", () => ({}));
 
 import type { ExploreReadModel } from "../lib/onchain/types";
 import type { ExploreEntry, LauncherToken } from "../lib/tokens";
+import { customGraphToken } from "./launch-stamp-surface-fixture";
 
 const mocks = vi.hoisted(() => ({
   enrichTokensWithAlchemyPrices: vi.fn(),
@@ -337,6 +338,38 @@ describe("Explore API Alchemy boundary", () => {
     expect(response.headers.get("Cache-Control")).toBe(
       "public, max-age=0, s-maxage=2, stale-while-revalidate=5",
     );
+  });
+
+  it("serves a finalized Router Custom Graph as a canonical Custom token", async () => {
+    mocks.readAlchemyExploreModel.mockResolvedValue({
+      ...readyModel(),
+      tokens: [customGraphToken],
+    });
+    mocks.enrichTokensWithAlchemyPrices.mockImplementation(async (tokens) => [
+      ...tokens,
+    ]);
+
+    const response = await GET(
+      new NextRequest("http://localhost/api/explore?sort=newest"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.tokens).toHaveLength(1);
+    expect(body.tokens[0]).toMatchObject({
+      exploreKind: "token",
+      tokenAddress: customGraphToken.tokenAddress,
+      launchModel: "custom-graph",
+      totalSwapFeeBps: null,
+      liquidityPath: "programmable-v4",
+      launchCategoryProvenance: {
+        category: "custom",
+        source: "canonical-launch-stamp-router",
+        launchId: customGraphToken.launchStampProvenance.launchId,
+        stampHash: customGraphToken.launchStampProvenance.stampHash,
+      },
+      launchStampProvenance: customGraphToken.launchStampProvenance,
+    });
   });
 
   it.each([

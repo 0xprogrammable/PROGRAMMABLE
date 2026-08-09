@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { encodeFunctionData, parseAbi } from "viem";
+import { encodeFunctionData, getAddress, parseAbi } from "viem";
 
 import {
   prepareCreatorClaim,
@@ -30,9 +30,96 @@ const stockHookAddress =
 const stockPoolId = `0x${"ee".repeat(32)}` as `0x${string}`;
 const stockLaunchTransactionHash =
   `0x${"ff".repeat(32)}` as `0x${string}`;
+const stampedTokenAddress =
+  "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const stampedHookAddress =
+  "0xabababababababababababababababababababab";
+const stampedPoolId = `0x${"12".repeat(32)}` as `0x${string}`;
+const stampedLaunchTransactionHash =
+  `0x${"13".repeat(32)}` as `0x${string}`;
 const claimCreatorFeesAbi = parseAbi([
   "function claimCreatorFees(bytes32 poolId) returns (uint256 amount)",
 ]);
+
+function launchStampProvenance(input: Readonly<{
+  kind: "custom-graph" | "classic";
+  tokenAddress: `0x${string}`;
+  hookAddress: `0x${string}`;
+  poolId: `0x${string}`;
+  transactionHash: `0x${string}`;
+}>) {
+  const launchId = `0x${"15".repeat(32)}` as const;
+  const stampHash = `0x${"16".repeat(32)}` as const;
+  const poolManagerAddress =
+    "0x000000000004444c5dc75cB358380D2e3dE08A90" as const;
+  return {
+    schemaVersion: "programmable.launch-stamp-provenance.v1",
+    chainId: 1,
+    routerAddress: "0x8622DD5bAb44185f2A458ac90384Ac99248f8d56",
+    routerRuntimeCodeHash:
+      "0x40e27ecf201761d5eb66bc4f2d5c6124831ef078d7baf458ca5f41b1a8108546",
+    routerStartBlock: "25717612",
+    finalityConfirmations: 64,
+    kind: input.kind,
+    launchId,
+    stampHash,
+    launchWallet: account,
+    transactionHash: input.transactionHash,
+    blockNumber: "25717620",
+    blockHash: `0x${"18".repeat(32)}`,
+    transactionIndex: 2,
+    routeLogIndex: 8,
+    launchLogIndex: 9,
+    finalizedAtBlockNumber: "25717684",
+    finalizedAtBlockHash: `0x${"19".repeat(32)}`,
+    poolManagerAddress,
+    poolId: input.poolId,
+    poolKey: {
+      currency0: "0x0000000000000000000000000000000000000000",
+      currency1: input.tokenAddress,
+      fee: 3_000,
+      tickSpacing: 60,
+      hooks: input.hookAddress,
+    },
+    poolKeyHash: `0x${"20".repeat(32)}`,
+    componentSetHash: `0x${"21".repeat(32)}`,
+    routePayloadHash: `0x${"22".repeat(32)}`,
+    routeLauncherAddress:
+      "0x1717171717171717171717171717171717171717",
+    routeLauncherRuntimeCodeHash: `0x${"23".repeat(32)}`,
+    expectedResultHash: `0x${"24".repeat(32)}`,
+    permitDigest: `0x${"25".repeat(32)}`,
+    components: [
+      {
+        address: input.tokenAddress,
+        kind: "token",
+        scope: "exclusive",
+        runtimeCodeHash: `0x${"26".repeat(32)}`,
+        logIndex: 6,
+        exclusiveProof: { launchId, stampHash },
+      },
+      {
+        address: input.hookAddress,
+        kind: "hook",
+        scope:
+          input.kind === "custom-graph"
+            ? "exclusive"
+            : "shared-infrastructure",
+        runtimeCodeHash: `0x${"27".repeat(32)}`,
+        logIndex: 7,
+        exclusiveProof:
+          input.kind === "custom-graph" ? { launchId, stampHash } : null,
+      },
+    ],
+    tokenProof: { tokenAddress: input.tokenAddress, launchId, stampHash },
+    poolProof: {
+      poolManagerAddress,
+      poolId: input.poolId,
+      launchId,
+      stampHash,
+    },
+  } as const;
+}
 
 function profileResponse() {
   return {
@@ -248,6 +335,81 @@ describe("profile API client", () => {
     expect(profile.positions).toHaveLength(2);
   });
 
+  it("keeps stamped launches visible without inferring fees or permanent positions", () => {
+    const response = profileResponse();
+    const customGraphToken = {
+      id: "1:stamped-custom-graph",
+      name: "Stamped graph",
+      symbol: "GRAPH",
+      tokenAddress: stampedTokenAddress,
+      hookAddress: stampedHookAddress,
+      poolId: stampedPoolId,
+      creatorAddress: account,
+      launchTransactionHash: stampedLaunchTransactionHash,
+      launchLogIndex: 9,
+      launchBlockNumber: "25717620",
+      launchedAt: "2026-07-28T12:00:00.000Z",
+      totalSwapFeeBps: null,
+      launchModel: "custom-graph",
+      liquidityPath: "programmable-v4",
+      launchStampProvenance: launchStampProvenance({
+        kind: "custom-graph",
+        tokenAddress: stampedTokenAddress,
+        hookAddress: stampedHookAddress,
+        poolId: stampedPoolId,
+        transactionHash: stampedLaunchTransactionHash,
+      }),
+    } as const;
+    const routerClassicToken = {
+      ...customGraphToken,
+      id: "1:stamped-classic",
+      name: "Stamped Classic",
+      symbol: "STAMP",
+      tokenAddress:
+        "0xacacacacacacacacacacacacacacacacacacacac",
+      poolId: `0x${"14".repeat(32)}`,
+      positionRecipient,
+      positionTokenId: "77",
+      totalSwapFeeBps: 100,
+      launchModel: "classic",
+      launchStampProvenance: launchStampProvenance({
+        kind: "classic",
+        tokenAddress:
+          "0xacacacacacacacacacacacacacacacacacacacac",
+        hookAddress: stampedHookAddress,
+        poolId: `0x${"14".repeat(32)}`,
+        transactionHash: stampedLaunchTransactionHash,
+      }),
+    } as const;
+
+    const profile = mapCreatorProfileResponse(
+      {
+        ...response,
+        tokens: [
+          ...response.tokens,
+          customGraphToken,
+          routerClassicToken,
+        ],
+      },
+      account,
+    );
+
+    expect(profile.tokens.map((token) => token.symbol)).toEqual([
+      "PRG",
+      "GRAPH",
+      "STAMP",
+    ]);
+    expect(profile.tokens[1]).toMatchObject({
+      address: getAddress(stampedTokenAddress),
+      launchModel: "custom-graph",
+    });
+    expect(profile.positions).toHaveLength(1);
+    expect(profile.positions[0]?.tokenAddress).toBe(tokenAddress);
+    expect(profile.claims).toHaveLength(1);
+    expect(profile.claimableWei).toBe("200000000000000000");
+    expect(profile.claimedWei).toBe("300000000000000000");
+  });
+
   it("keeps the undeployed state explicit and rejects fabricated records", () => {
     const undeployed = {
       status: "not-deployed",
@@ -298,6 +460,18 @@ describe("profile API client", () => {
         "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       ),
     ).toThrow("does not match the connected wallet");
+
+    const partialStamp = profileResponse();
+    partialStamp.tokens[0] = {
+      ...partialStamp.tokens[0],
+      launchStampProvenance: {
+        schemaVersion: "programmable.launch-stamp-provenance.v1",
+        kind: "custom-graph",
+      },
+    } as (typeof partialStamp.tokens)[number];
+    expect(() => mapCreatorProfileResponse(partialStamp, account)).toThrow(
+      "Invalid launch stamp provenance",
+    );
   });
 
   it("loads the account-keyed endpoint without browser caching", async () => {

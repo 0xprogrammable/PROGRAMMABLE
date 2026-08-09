@@ -751,6 +751,33 @@ describe("profile reward grouping", () => {
     expect(profileClaimableWei(portfolio, firstAddress)).toBe(0n);
     expect(profileHasRewardSurface(portfolio)).toBe(false);
   });
+
+  it("shows a stamped CustomGraph token without inventing a reward surface", () => {
+    const customGraphToken = {
+      ...tokens[0],
+      name: "Stamped graph",
+      symbol: "GRAPH",
+      launchModel: "custom-graph",
+    } satisfies ProfileToken;
+    const portfolio = buildProfilePortfolio(
+      [customGraphToken],
+      [],
+      [],
+    );
+
+    expect(portfolio).toEqual([
+      expect.objectContaining({
+        token: customGraphToken,
+        launchedByWallet: true,
+        claim: undefined,
+        classicRewards: [],
+        deepRewards: [],
+        stockPairedRewards: [],
+      }),
+    ]);
+    expect(profileClaimableWei(portfolio, firstAddress)).toBe(0n);
+    expect(profileHasRewardSurface(portfolio)).toBe(false);
+  });
 });
 
 describe("profile transaction status", () => {

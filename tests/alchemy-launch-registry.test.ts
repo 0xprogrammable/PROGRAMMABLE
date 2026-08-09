@@ -11,6 +11,8 @@ const blobMocks = vi.hoisted(() => ({
 vi.mock("@vercel/blob", () => blobMocks);
 
 import {
+  LAUNCH_STAMP_ROUTER_BINDING,
+  LAUNCH_STAMP_ROUTER_INITIAL_CURSOR,
   validateAlchemyLaunchRegistryEnvelope,
   writeAlchemyLaunchRegistry,
   type AlchemyLaunchRegistry,
@@ -57,8 +59,165 @@ function token(input: Readonly<{ address?: `0x${string}`; block?: string; log?: 
   };
 }
 
-function envelope(tokens: readonly LauncherToken[] = [token()]) {
-  const payload: AlchemyLaunchRegistry = {
+function routerToken(
+  input: Readonly<{
+    address?: `0x${string}`;
+    launchId?: `0x${string}`;
+    poolId?: `0x${string}`;
+    transactionHash?: `0x${string}`;
+  }> = {},
+): LauncherToken {
+  const address = input.address ??
+    "0x9444444444444444444444444444444444444444";
+  const hookAddress = "0x9555555555555555555555555555555555555555";
+  const launchId = input.launchId ?? `0x${"91".repeat(32)}`;
+  const stampHash = `0x${"92".repeat(32)}` as const;
+  const poolId = input.poolId ?? `0x${"93".repeat(32)}`;
+  const transactionHash = input.transactionHash ?? `0x${"94".repeat(32)}`;
+  return {
+    id: `1:${address.toLowerCase()}`,
+    name: "Stamped",
+    symbol: "STAMP",
+    tokenAddress: address,
+    hookAddress,
+    poolId,
+    creatorAddress: "0x9666666666666666666666666666666666666666",
+    launchBlockNumber: "25717620",
+    launchTransactionHash: transactionHash,
+    launchTransactionIndex: 2,
+    launchLogIndex: 9,
+    launchedAt: "2026-08-09T00:00:00.000Z",
+    totalSwapFeeBps: null,
+    launchModel: "custom-graph",
+    launchModelVersion: "programmable-launch-stamp-router-v1",
+    liquidityPath: "programmable-v4",
+    launchStampProvenance: {
+      schemaVersion: "programmable.launch-stamp-provenance.v1",
+      chainId: LAUNCH_STAMP_ROUTER_BINDING.chainId,
+      routerAddress: LAUNCH_STAMP_ROUTER_BINDING.routerAddress,
+      routerRuntimeCodeHash:
+        LAUNCH_STAMP_ROUTER_BINDING.routerRuntimeCodeHash,
+      routerStartBlock: LAUNCH_STAMP_ROUTER_BINDING.startBlock,
+      finalityConfirmations:
+        LAUNCH_STAMP_ROUTER_BINDING.finalityConfirmations,
+      kind: "custom-graph",
+      launchId,
+      stampHash,
+      launchWallet: "0x9666666666666666666666666666666666666666",
+      transactionHash,
+      blockNumber: "25717620",
+      blockHash: `0x${"95".repeat(32)}`,
+      transactionIndex: 2,
+      routeLogIndex: 8,
+      launchLogIndex: 9,
+      finalizedAtBlockNumber: "25717684",
+      finalizedAtBlockHash: `0x${"96".repeat(32)}`,
+      poolManagerAddress: "0x000000000004444c5dc75cB358380D2e3dE08A90",
+      poolId,
+      poolKey: {
+        currency0: "0x0000000000000000000000000000000000000000",
+        currency1: address,
+        fee: 3_000,
+        tickSpacing: 60,
+        hooks: hookAddress,
+      },
+      poolKeyHash: `0x${"97".repeat(32)}`,
+      componentSetHash: `0x${"98".repeat(32)}`,
+      routePayloadHash: `0x${"99".repeat(32)}`,
+      routeLauncherAddress: "0x9777777777777777777777777777777777777777",
+      routeLauncherRuntimeCodeHash: `0x${"a1".repeat(32)}`,
+      expectedResultHash: `0x${"a2".repeat(32)}`,
+      permitDigest: `0x${"a3".repeat(32)}`,
+      components: [
+        {
+          address,
+          kind: "token",
+          scope: "exclusive",
+          runtimeCodeHash: `0x${"a4".repeat(32)}`,
+          logIndex: 6,
+          exclusiveProof: { launchId, stampHash },
+        },
+        {
+          address: hookAddress,
+          kind: "hook",
+          scope: "exclusive",
+          runtimeCodeHash: `0x${"a5".repeat(32)}`,
+          logIndex: 7,
+          exclusiveProof: { launchId, stampHash },
+        },
+      ],
+      tokenProof: { tokenAddress: address, launchId, stampHash },
+      poolProof: {
+        poolManagerAddress: "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        poolId,
+        launchId,
+        stampHash,
+      },
+    },
+  };
+}
+
+function routerClassicToken(): LauncherToken {
+  const custom = routerToken();
+  const provenance = custom.launchStampProvenance!;
+  return {
+    ...custom,
+    launchModel: "classic",
+    launchStampProvenance: {
+      ...provenance,
+      kind: "classic",
+      components: provenance.components.map((component) =>
+        component.kind === "hook"
+          ? {
+              ...component,
+              scope: "shared-infrastructure" as const,
+              exclusiveProof: null,
+            }
+          : component
+      ),
+    },
+  };
+}
+
+function payload(
+  tokens: readonly LauncherToken[] = [token()],
+  routerTokens: readonly LauncherToken[] = [routerToken()],
+): AlchemyLaunchRegistry {
+  return {
+    generatedAt: "2026-08-04T00:01:00.000Z",
+    repositoryCommit: "a".repeat(40),
+    chainId: 1,
+    cursor: {
+      blockNumber: "130",
+      blockHash: `0x${"88".repeat(32)}`,
+    },
+    tokens,
+    launchStampRouter: {
+      schemaVersion: "programmable-launch-stamp-router-registry-v1",
+      binding: LAUNCH_STAMP_ROUTER_BINDING,
+      cursor: {
+        blockNumber: "25717680",
+        blockHash: `0x${"89".repeat(32)}`,
+      },
+      tokens: routerTokens,
+    },
+  };
+}
+
+function envelope(
+  tokens: readonly LauncherToken[] = [token()],
+  routerTokens: readonly LauncherToken[] = [routerToken()],
+) {
+  const registry = payload(tokens, routerTokens);
+  return {
+    schemaVersion: "programmable-alchemy-launch-registry-v2",
+    contentHash: keccak256(toBytes(JSON.stringify(registry))),
+    payload: registry,
+  };
+}
+
+function legacyEnvelope(tokens: readonly LauncherToken[] = [token()]) {
+  const registry = {
     generatedAt: "2026-08-04T00:01:00.000Z",
     repositoryCommit: "a".repeat(40),
     chainId: 1,
@@ -70,8 +229,8 @@ function envelope(tokens: readonly LauncherToken[] = [token()]) {
   };
   return {
     schemaVersion: "programmable-alchemy-launch-registry-v1",
-    contentHash: keccak256(toBytes(JSON.stringify(payload))),
-    payload,
+    contentHash: keccak256(toBytes(JSON.stringify(registry))),
+    payload: registry,
   };
 }
 
@@ -96,13 +255,38 @@ describe("Alchemy incremental launch registry", () => {
       chainId: 1,
       cursor: { blockNumber: "130" },
       tokens: [{ name: "Newest", launchBlockNumber: "120" }],
+      launchStampRouter: {
+        cursor: { blockNumber: "25717680" },
+        tokens: [{ name: "Stamped" }],
+      },
     });
+  });
+
+  it("migrates a v1 payload to the independent Router start cursor", () => {
+    expect(
+      validateAlchemyLaunchRegistryEnvelope(legacyEnvelope(), deployment),
+    ).toMatchObject({
+      cursor: { blockNumber: "130" },
+      launchStampRouter: {
+        cursor: LAUNCH_STAMP_ROUTER_INITIAL_CURSOR,
+        tokens: [],
+      },
+    });
+  });
+
+  it("never accepts stamped records through the legacy Classic cursor", () => {
+    expect(() =>
+      validateAlchemyLaunchRegistryEnvelope(
+        legacyEnvelope([{ ...routerToken(), launchBlockNumber: "120" }]),
+        deployment,
+      )
+    ).toThrow("invalid token");
   });
 
   it("rejects a token beyond the committed cursor", () => {
     expect(() =>
       validateAlchemyLaunchRegistryEnvelope(
-        envelope([token({ block: "131" })]),
+        envelope([token({ block: "131" })], []),
         deployment,
       )
     ).toThrow("invalid token");
@@ -116,10 +300,79 @@ describe("Alchemy incremental launch registry", () => {
           token({
             address: "0x9999999999999999999999999999999999999999",
           }),
+        ], []),
+        deployment,
+      )
+    ).toThrow("duplicate provenance");
+  });
+
+  it("rejects duplicate Router launch, pool, token, or event provenance", () => {
+    expect(() =>
+      validateAlchemyLaunchRegistryEnvelope(
+        envelope([], [
+          routerToken(),
+          routerToken({
+            address: "0x9888888888888888888888888888888888888888",
+          }),
         ]),
         deployment,
       )
     ).toThrow("duplicate provenance");
+  });
+
+  it("rejects the same token across the Classic and Router slices", () => {
+    const classic = token();
+    expect(() =>
+      validateAlchemyLaunchRegistryEnvelope(
+        envelope([classic], [
+          routerToken({ address: classic.tokenAddress }),
+        ]),
+        deployment,
+      )
+    ).toThrow("slices contain duplicate tokens");
+  });
+
+  it("rejects Router tokens that drift from the canonical binding", () => {
+    const valid = payload([], [routerToken()]);
+    const drifted = {
+      ...valid,
+      launchStampRouter: {
+        ...valid.launchStampRouter,
+        binding: {
+          ...LAUNCH_STAMP_ROUTER_BINDING,
+          finalityConfirmations: 12,
+        },
+      },
+    };
+    const candidate = {
+      schemaVersion: "programmable-alchemy-launch-registry-v2",
+      contentHash: keccak256(toBytes(JSON.stringify(drifted))),
+      payload: drifted,
+    };
+    expect(() =>
+      validateAlchemyLaunchRegistryEnvelope(candidate, deployment)
+    ).toThrow("Router registry is malformed");
+  });
+
+  it.each([
+    ["legacy model version", { launchModelVersion: "classic-v3" }],
+    ["invented total fee", { totalSwapFeeBps: 100 }],
+    ["invented hook fee", { buyHookFeeBps: 100 }],
+    [
+      "invented position",
+      {
+        positionRecipient:
+          "0x9777777777777777777777777777777777777777",
+        positionTokenId: "42",
+      },
+    ],
+  ] as const)("rejects stamped Classic with %s", (_label, mutation) => {
+    expect(() =>
+      validateAlchemyLaunchRegistryEnvelope(
+        envelope([], [{ ...routerClassicToken(), ...mutation }]),
+        deployment,
+      )
+    ).toThrow("invalid token");
   });
 
   it("rejects payload mutation after the content commitment", () => {

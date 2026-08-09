@@ -48,6 +48,7 @@ import {
 } from "@/lib/token-image";
 import { validatePreparedTradeResponse } from "@/lib/trade/client";
 import {
+  isLaunchStampProvenanceV1,
   type CustomProjectExploreEntry,
   type LauncherToken,
   type TokenLink,
@@ -329,8 +330,6 @@ function parseLauncherToken(value: unknown): LauncherToken | null {
     !isRecord(value.launchCategoryProvenance) ||
     value.launchCategoryProvenance.schemaVersion !==
       "programmable.explore-launch-category-provenance.v1" ||
-    value.launchCategoryProvenance.category !== "classic" ||
-    value.launchCategoryProvenance.source !== "canonical-launch-read-model" ||
     typeof value.id !== "string" ||
     typeof value.name !== "string" ||
     typeof value.symbol !== "string" ||
@@ -338,10 +337,84 @@ function parseLauncherToken(value: unknown): LauncherToken | null {
     !isTokenAddress(value.hookAddress) ||
     !isBytes32(value.poolId) ||
     typeof value.launchedAt !== "string" ||
-    typeof value.totalSwapFeeBps !== "number" ||
-    !Number.isSafeInteger(value.totalSwapFeeBps) ||
-    value.totalSwapFeeBps < 0 ||
-    value.liquidityPath !== "meme"
+    (value.totalSwapFeeBps !== null &&
+      (typeof value.totalSwapFeeBps !== "number" ||
+        !Number.isSafeInteger(value.totalSwapFeeBps) ||
+        value.totalSwapFeeBps < 0)) ||
+    (value.liquidityPath !== "meme" &&
+      value.liquidityPath !== "programmable-v4")
+  ) {
+    return null;
+  }
+
+  const stamp = value.launchStampProvenance;
+  if (
+    stamp !== undefined &&
+    (!isTokenAddress(value.creatorAddress) ||
+      !isBytes32(value.launchTransactionHash) ||
+      typeof value.launchBlockNumber !== "string" ||
+      !/^[1-9][0-9]*$/u.test(value.launchBlockNumber) ||
+      !Number.isSafeInteger(value.launchTransactionIndex) ||
+      Number(value.launchTransactionIndex) < 0 ||
+      !Number.isSafeInteger(value.launchLogIndex) ||
+      Number(value.launchLogIndex) < 0 ||
+      !isLaunchStampProvenanceV1(stamp, {
+        tokenAddress: value.tokenAddress,
+        hookAddress: value.hookAddress,
+        poolId: value.poolId,
+        launchWallet: value.creatorAddress,
+        transactionHash: value.launchTransactionHash,
+        blockNumber: value.launchBlockNumber,
+        transactionIndex: Number(value.launchTransactionIndex),
+        launchLogIndex: Number(value.launchLogIndex),
+      }))
+  ) {
+    return null;
+  }
+  const provenance = value.launchCategoryProvenance;
+  if (stamp) {
+    const unknownStampedFees = value.totalSwapFeeBps === null;
+    if (
+      value.launchModel !==
+        (stamp.kind === "custom-graph" ? "custom-graph" : "classic") ||
+      value.launchModelVersion !== "programmable-launch-stamp-router-v1" ||
+      value.liquidityPath !== "programmable-v4" ||
+      !unknownStampedFees ||
+      (unknownStampedFees &&
+        (value.buyHookFeeBps !== undefined ||
+          value.sellHookFeeBps !== undefined ||
+          value.creatorFeeBps !== undefined ||
+          value.buyCreatorFeeBps !== undefined ||
+          value.sellCreatorFeeBps !== undefined ||
+          value.growthFeeBps !== undefined ||
+          value.programmableFeeBps !== undefined ||
+          value.launcherFeeBps !== undefined ||
+          value.transferTaxBps !== undefined)) ||
+      provenance.category !==
+        (stamp.kind === "custom-graph" ? "custom" : "classic") ||
+      provenance.source !== "canonical-launch-stamp-router" ||
+      !isBytes32(provenance.launchId) ||
+      !isBytes32(provenance.stampHash) ||
+      !isTokenAddress(provenance.routerAddress) ||
+      !isBytes32(provenance.transactionHash) ||
+      !isBytes32(provenance.blockHash) ||
+      provenance.launchId.toLowerCase() !== stamp.launchId.toLowerCase() ||
+      provenance.stampHash.toLowerCase() !== stamp.stampHash.toLowerCase() ||
+      provenance.routerAddress.toLowerCase() !==
+        stamp.routerAddress.toLowerCase() ||
+      provenance.transactionHash.toLowerCase() !==
+        stamp.transactionHash.toLowerCase() ||
+      provenance.blockHash.toLowerCase() !== stamp.blockHash.toLowerCase() ||
+      provenance.blockNumber !== stamp.blockNumber ||
+      provenance.transactionIndex !== stamp.transactionIndex ||
+      provenance.logIndex !== stamp.launchLogIndex
+    ) return null;
+  } else if (
+    value.launchModel === "custom-graph" ||
+    value.totalSwapFeeBps === null ||
+    value.liquidityPath !== "meme" ||
+    provenance.category !== "classic" ||
+    provenance.source !== "canonical-launch-read-model"
   ) {
     return null;
   }
@@ -560,6 +633,13 @@ export function parseDetailPayload(value: unknown): DetailPayload {
     }
     snapshot = { chainId: Number(value.snapshot.chainId) };
   }
+  if (
+    token?.launchStampProvenance &&
+    snapshot &&
+    token.launchStampProvenance.chainId !== snapshot.chainId
+  ) {
+    throw new Error("The launch stamp does not match the snapshot network");
+  }
 
   return { status: value.status, token, customProject, snapshot };
 }
@@ -702,7 +782,7 @@ export function formatStockPairedGrossVolume(token: LauncherToken) {
   return formatUsdWadAmount(volumeUsdWad.toString()) ?? quoteUnitVolume;
 }
 
-function formatSwapFee(value: number | undefined) {
+function formatSwapFee(value: number | null | undefined) {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
     return null;
   }
@@ -773,8 +853,22 @@ export function buildTokenDetailMetrics(
       : null,
     {
       label: "Category",
-      value: "Classic",
+      value:
+        token.launchStampProvenance?.kind === "custom-graph"
+          ? "Custom"
+          : "Classic",
     },
+    token.launchStampProvenance !== undefined && token.currentTick !== undefined
+      ? {
+          label: "Pool state",
+          value:
+            token.activeLiquidity !== undefined &&
+            /^(?:0|[1-9]\d*)$/u.test(token.activeLiquidity) &&
+            BigInt(token.activeLiquidity) > 0n
+              ? "Initialized · active liquidity"
+              : "Initialized",
+        }
+      : null,
     volumeOverride ??
       (officialVolumeUsd !== null ||
       token.grossVolumeEth ||
@@ -829,6 +923,15 @@ export function buildTokenDetailMetrics(
   return values.filter(
     (metric): metric is TokenMetric =>
       metric !== null && metric.value.length > 0,
+  );
+}
+
+export function canUseClassicTokenTrade(token: LauncherToken) {
+  return (
+    token.launchStampProvenance === undefined &&
+    token.launchModel !== "custom-graph" &&
+    token.liquidityPath === "meme" &&
+    typeof token.totalSwapFeeBps === "number"
   );
 }
 
@@ -940,26 +1043,75 @@ function VerifiedLaunchRecord({
         timeZone: "UTC",
       }).format(new Date(token.launchedAt))
     : token.launchedAt;
+  const stamp = token.launchStampProvenance;
+  const category = stamp?.kind === "custom-graph" ? "Custom" : "Classic";
 
   return (
     <details className={styles.launchRecord}>
       <summary>
-        <span>Verified launch record</span>
-        <small>Onchain provenance</small>
+        <span>{stamp ? "Launch stamp provenance" : "Onchain launch record"}</span>
+        <small>{stamp ? "Canonical Router record" : "Onchain provenance"}</small>
       </summary>
       <dl>
         <div>
           <dt>Category</dt>
-          <dd>Classic</dd>
+          <dd>{category}</dd>
         </div>
         <div>
           <dt>Model</dt>
-          <dd>{token.launchModelVersion ?? token.launchModel ?? "classic"}</dd>
+          <dd>{token.launchModel ?? "classic"}</dd>
         </div>
         <div>
           <dt>Launched</dt>
           <dd><time dateTime={token.launchedAt}>{launchedAt} UTC</time></dd>
         </div>
+        {stamp ? (
+          <>
+            <div>
+              <dt>Launch ID</dt>
+              <dd><code>{stamp.launchId}</code></dd>
+            </div>
+            <div>
+              <dt>Stamp hash</dt>
+              <dd><code>{stamp.stampHash}</code></dd>
+            </div>
+            <div>
+              <dt>Router</dt>
+              <dd>
+                {explorerBase ? (
+                  <a href={`${explorerBase}/address/${stamp.routerAddress}`} target="_blank" rel="noreferrer">
+                    <code>{stamp.routerAddress}</code>
+                  </a>
+                ) : (
+                  <code>{stamp.routerAddress}</code>
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>Pool manager</dt>
+              <dd>
+                {explorerBase ? (
+                  <a href={`${explorerBase}/address/${stamp.poolManagerAddress}`} target="_blank" rel="noreferrer">
+                    <code>{stamp.poolManagerAddress}</code>
+                  </a>
+                ) : (
+                  <code>{stamp.poolManagerAddress}</code>
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>Launch block</dt>
+              <dd><code>{stamp.blockNumber}</code></dd>
+            </div>
+            <div>
+              <dt>Finality observed</dt>
+              <dd>
+                <code>{stamp.finalizedAtBlockNumber}</code>
+                {` (${stamp.finalityConfirmations} confirmations)`}
+              </dd>
+            </div>
+          </>
+        ) : null}
         {token.creatorAddress ? (
           <div>
             <dt>Creator</dt>
@@ -1173,6 +1325,15 @@ function TokenDetailContent({
     token.tokenDecimals <= 255
       ? token.tokenDecimals
       : 18;
+  const isRouterStamped = token.launchStampProvenance !== undefined;
+  const canUseClassicTrade = canUseClassicTokenTrade(token);
+  const classicTradeLaunchModel = token.launchModel === "custom-graph"
+    ? undefined
+    : token.launchModel;
+  const defaultSwapFeeBps = token.totalSwapFeeBps;
+  const classicSwapFeeBps = typeof defaultSwapFeeBps === "number"
+    ? defaultSwapFeeBps
+    : null;
 
   useEffect(
     () => () => {
@@ -1229,6 +1390,9 @@ function TokenDetailContent({
   }
 
   async function prepareNextTrade(source: PreparedTokenTrade) {
+    if (!canUseClassicTrade) {
+      throw new Error("Trading is not enabled for this pool");
+    }
     if (!wallet) {
       throw new Error("Connect an Ethereum wallet before continuing");
     }
@@ -1263,7 +1427,7 @@ function TokenDetailContent({
       token: getAddress(token.tokenAddress),
       hook: getAddress(token.hookAddress),
       poolId: token.poolId,
-      launchModel: token.launchModel,
+      launchModel: classicTradeLaunchModel,
       quoteAsset: token.quoteAssetAddress
         ? getAddress(token.quoteAssetAddress)
         : undefined,
@@ -1311,6 +1475,9 @@ function TokenDetailContent({
   }
 
   async function submitPreparedTrade(prepared: PreparedTokenTrade) {
+    if (!canUseClassicTrade) {
+      throw new Error("Trading is not enabled for this pool");
+    }
     if (!wallet) {
       throw new Error("Connect an Ethereum wallet before continuing");
     }
@@ -1330,7 +1497,7 @@ function TokenDetailContent({
       token: getAddress(token.tokenAddress),
       hook: getAddress(token.hookAddress),
       poolId: token.poolId,
-      launchModel: token.launchModel,
+      launchModel: classicTradeLaunchModel,
       quoteAsset: token.quoteAssetAddress
         ? getAddress(token.quoteAssetAddress)
         : undefined,
@@ -1480,21 +1647,23 @@ function TokenDetailContent({
           </div>
 
           <div className={styles.marketChart}>
-            <TokenPriceChart
-              tokenAddress={token.tokenAddress}
-              tokenName={token.name}
-              launchModel={token.launchModel}
-              preview={preview}
-              marketCapEthWei={
-                token.indexedMarketCapEthWei ?? token.marketCapEthWei
-              }
-              marketCapEth={token.indexedMarketCapEth ?? token.marketCapEth}
-              marketCapUsdWad={
-                token.indexedMarketCapUsdWad ?? token.fdvUsdWad
-              }
-              onVolumeChange={setChartVolume}
-              onMarketCapChange={setChartMarketCap}
-            />
+            {isRouterStamped ? null : (
+              <TokenPriceChart
+                tokenAddress={token.tokenAddress}
+                tokenName={token.name}
+                launchModel={classicTradeLaunchModel}
+                preview={preview}
+                marketCapEthWei={
+                  token.indexedMarketCapEthWei ?? token.marketCapEthWei
+                }
+                marketCapEth={token.indexedMarketCapEth ?? token.marketCapEth}
+                marketCapUsdWad={
+                  token.indexedMarketCapUsdWad ?? token.fdvUsdWad
+                }
+                onVolumeChange={setChartVolume}
+                onMarketCapChange={setChartMarketCap}
+              />
+            )}
             <MetricGrid metrics={metrics} />
             <VerifiedLaunchRecord
               token={token}
@@ -1507,7 +1676,18 @@ function TokenDetailContent({
           className={`${styles.tradeShell} liquid-glass-surface`}
           aria-label={`${token.name} trade`}
         >
-          {preview ? (
+          {isRouterStamped ? (
+            <div className={styles.submitted} role="status">
+              <strong>Router launch</strong>
+              <p>
+                Trading is not enabled in this interface for this PoolKey.
+              </p>
+            </div>
+          ) : !canUseClassicTrade || classicSwapFeeBps === null ? (
+            <div className={styles.submitted} role="status">
+              <p>Trading is unavailable because the fee policy is unknown</p>
+            </div>
+          ) : preview ? (
             <PreviewTokenTrade token={token} />
           ) : chainId !== 1 && chainId !== 11_155_111 ? (
             <div className={styles.submitted} role="status">
@@ -1524,7 +1704,7 @@ function TokenDetailContent({
               tokenDecimals={tokenDecimals}
               tokenPriceEth={token.tokenPriceEth}
               tokenPriceUsdWad={token.tokenPriceUsdWad}
-              launchModel={token.launchModel}
+              launchModel={classicTradeLaunchModel}
               quoteAsset={
                 token.quoteAssetAddress
                   ? getAddress(token.quoteAssetAddress)
@@ -1532,8 +1712,8 @@ function TokenDetailContent({
               }
               quoteAssetSymbol={token.quoteAssetSymbol}
               tokenPriceQuote={token.tokenPriceQuote}
-              buySwapFeeBps={token.buyHookFeeBps ?? token.totalSwapFeeBps}
-              sellSwapFeeBps={token.sellHookFeeBps ?? token.totalSwapFeeBps}
+              buySwapFeeBps={token.buyHookFeeBps ?? classicSwapFeeBps}
+              sellSwapFeeBps={token.sellHookFeeBps ?? classicSwapFeeBps}
               readBalances={readTokenBalances}
               onConnect={openWallet}
               onPrepared={submitPreparedTrade}
@@ -1544,11 +1724,11 @@ function TokenDetailContent({
               symbol={token.symbol}
               tokenDecimals={tokenDecimals}
               tokenPriceEth={token.tokenPriceEth}
-              launchModel={token.launchModel}
+              launchModel={classicTradeLaunchModel}
               totalSwapFeeBps={
                 tradeFlow.prepared.side === "buy"
-                  ? (token.buyHookFeeBps ?? token.totalSwapFeeBps)
-                  : (token.sellHookFeeBps ?? token.totalSwapFeeBps)
+                  ? (token.buyHookFeeBps ?? classicSwapFeeBps)
+                  : (token.sellHookFeeBps ?? classicSwapFeeBps)
               }
               pending={tradeFlow.submitting}
               error={tradeFlow.error}

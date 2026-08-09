@@ -485,6 +485,40 @@ describe("Explore refresh state", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("rejects Router provenance on a custom project without a complete stamp", async () => {
+    const project = customEntry(91);
+    const forged = {
+      ...project,
+      launchCategoryProvenance: {
+        schemaVersion: "programmable.explore-launch-category-provenance.v1",
+        category: "custom",
+        source: "canonical-launch-stamp-router",
+        launchId: `0x${"11".repeat(32)}`,
+        stampHash: `0x${"22".repeat(32)}`,
+        routerAddress: "0x8622DD5bAb44185f2A458ac90384Ac99248f8d56",
+        transactionHash: `0x${"33".repeat(32)}`,
+        blockHash: `0x${"44".repeat(32)}`,
+        blockNumber: "25717612",
+        transactionIndex: 1,
+        logIndex: 2,
+      },
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({
+        ...payload,
+        tokens: [forged],
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(loadExplorePayload(
+      "forged-custom-project-router-source",
+      new URLSearchParams(),
+    )).rejects.toThrow("invalid token record");
+  });
+
   it("stops a stalled Explore request after twelve seconds", async () => {
     vi.useFakeTimers();
     vi.spyOn(globalThis, "fetch").mockImplementation((_url, init) => {

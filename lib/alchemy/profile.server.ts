@@ -42,11 +42,34 @@ type RecentClaimCursor = Readonly<{
 
 const recentClaimCursors = new Map<string, Promise<RecentClaimCursor>>();
 
-function isDirectClassicReward(token: LauncherToken) {
+function isUnsignedInteger(value: unknown): value is string {
+  return typeof value === "string" && /^(0|[1-9]\d*)$/u.test(value);
+}
+
+function isBytes32(value: unknown): value is Hex {
+  return typeof value === "string" && /^0x[0-9a-f]{64}$/iu.test(value);
+}
+
+function isVerifiedLegacyDirectReward(
+  token: LauncherToken,
+  deployment: ReadyOnchainDeployment,
+) {
   return (
-    (token.launchModel === undefined || token.launchModel === "classic") &&
-    token.launchModelVersion !== "classic-v3" &&
-    /^0x[0-9a-f]{64}$/iu.test(token.poolId)
+    token.launchStampProvenance === undefined &&
+    token.launchModel === "classic" &&
+    token.liquidityPath === "meme" &&
+    token.hookAddress.toLowerCase() === deployment.feeHook.toLowerCase() &&
+    isBytes32(token.poolId) &&
+    isBytes32(token.launchHash) &&
+    isBytes32(token.launchTransactionHash) &&
+    typeof token.positionRecipient === "string" &&
+    /^0x[0-9a-f]{40}$/iu.test(token.positionRecipient) &&
+    isUnsignedInteger(token.positionTokenId) &&
+    typeof token.totalSwapFeeBps === "number" &&
+    Number.isSafeInteger(token.totalSwapFeeBps) &&
+    token.totalSwapFeeBps >= 0 &&
+    isUnsignedInteger(token.creatorFeesAccruedWei) &&
+    isUnsignedInteger(token.creatorFeesGeneratedWei)
   );
 }
 
@@ -207,18 +230,21 @@ export async function readAlchemyCreatorProfile(input: {
   model: ExploreReadModel;
 }): Promise<CreatorProfile> {
   if (input.model.status !== "ready") {
-    return buildCreatorProfile(input.model, input.account);
+    return buildCreatorProfile(input.model, input.account, new Set());
   }
 
   const normalizedAccount = input.account.toLowerCase();
   const ownedTokens = input.model.tokens.filter(
     (token) =>
-      token.creatorAddress?.toLowerCase() === normalizedAccount &&
-      isDirectClassicReward(token),
+      token.creatorAddress?.toLowerCase() === normalizedAccount,
+  );
+  const directRewardTokens = ownedTokens.filter((token) =>
+    isVerifiedLegacyDirectReward(token, input.deployment),
   );
   const tokenByPool = new Map(
-    ownedTokens.map((token) => [token.poolId.toLowerCase(), token]),
+    directRewardTokens.map((token) => [token.poolId.toLowerCase(), token]),
   );
+  const directRewardPoolIds = new Set(tokenByPool.keys());
   const liveSnapshot =
     input.model.launchDiscoverySnapshot ?? input.model.snapshot;
   const liveBlock = BigInt(liveSnapshot.blockNumber);
@@ -232,11 +258,11 @@ export async function readAlchemyCreatorProfile(input: {
   });
 
   const [poolStates, recentClaims] = await Promise.all([
-    ownedTokens.length
+    directRewardTokens.length
       ? client.multicall({
           allowFailure: true,
           blockNumber: liveBlock,
-          contracts: ownedTokens.map((token) => ({
+          contracts: directRewardTokens.map((token) => ({
             address: getAddress(token.hookAddress),
             abi: creatorFeeHookReadAbi,
             functionName: "poolFeeConfig" as const,
@@ -250,7 +276,7 @@ export async function readAlchemyCreatorProfile(input: {
       fromBlock: baseBlock + 1n,
       toBlock: liveBlock,
       hookAddresses: [...new Set(
-        ownedTokens.map((token) => token.hookAddress.toLowerCase()),
+        directRewardTokens.map((token) => token.hookAddress.toLowerCase()),
       )].map((address) => getAddress(address)),
       tokenByPool,
     }).catch(() => []),
@@ -278,7 +304,7 @@ export async function readAlchemyCreatorProfile(input: {
   }
 
   const refreshed = new Map<string, LauncherToken>();
-  ownedTokens.forEach((token, index) => {
+  directRewardTokens.forEach((token, index) => {
     const result = poolStates[index];
     if (result?.status !== "success") return;
     const [creator, , , registered, accrued] = result.result;
@@ -296,11 +322,6 @@ export async function readAlchemyCreatorProfile(input: {
   const scopedModel: ExploreReadModel = {
     ...input.model,
     tokens: input.model.tokens
-      .filter(
-        (token) =>
-          token.creatorAddress?.toLowerCase() !== normalizedAccount ||
-          isDirectClassicReward(token),
-      )
       .map(
         (token) =>
           refreshed.get(token.tokenAddress.toLowerCase()) ?? token,
@@ -311,5 +332,9 @@ export async function readAlchemyCreatorProfile(input: {
       ethUsdQuote: input.model.snapshot.ethUsdQuote,
     },
   };
-  return buildCreatorProfile(scopedModel, input.account);
+  return buildCreatorProfile(
+    scopedModel,
+    input.account,
+    directRewardPoolIds,
+  );
 }

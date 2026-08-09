@@ -361,6 +361,7 @@ function validateLaunch(
     launchTransactionHash !== base.event.transactionHash ||
     launchBlockNumber !== base.evidence.blockNumber ||
     !Number.isFinite(Date.parse(row.token.launchedAt)) ||
+    typeof row.token.totalSwapFeeBps !== "number" ||
     !Number.isInteger(row.token.totalSwapFeeBps) ||
     row.token.totalSwapFeeBps < 0 ||
     row.token.totalSwapFeeBps > 10_000 ||

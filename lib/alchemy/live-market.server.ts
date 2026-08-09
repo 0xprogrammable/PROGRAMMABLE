@@ -15,7 +15,10 @@ import {
 } from "../onchain/math";
 import type { ExploreSnapshot, ReadyOnchainDeployment } from "../onchain/types";
 import { usdValueFromWei } from "../onchain/usd";
-import type { LauncherToken } from "../tokens";
+import {
+  isLaunchStampProvenanceV1,
+  type LauncherToken,
+} from "../tokens";
 
 const LIVE_POOL_STATE_TTL_MS = 5_000;
 const MAX_LIVE_POOL_STATE_ENTRIES = 256;
@@ -25,6 +28,7 @@ type LivePoolState = Readonly<{
   tick: number;
   protocolFeePips: number;
   lpFeePips: number;
+  activeLiquidity: bigint;
   blockNumber: bigint;
 }>;
 
@@ -52,17 +56,80 @@ function trimPoolStateCache() {
   }
 }
 
-function validPoolToken(token: LauncherToken) {
+const NATIVE_CURRENCY = "0x0000000000000000000000000000000000000000";
+
+function validLaunchStampForToken(token: LauncherToken) {
+  const stamp = token.launchStampProvenance;
+  if (!stamp) return false;
+  if (
+    !token.creatorAddress ||
+    !token.launchTransactionHash ||
+    !token.launchBlockNumber ||
+    token.launchTransactionIndex === undefined ||
+    token.launchLogIndex === undefined
+  ) return false;
+
+  return isLaunchStampProvenanceV1(stamp, {
+    tokenAddress: token.tokenAddress,
+    hookAddress: token.hookAddress,
+    poolId: token.poolId,
+    launchWallet: token.creatorAddress,
+    transactionHash: token.launchTransactionHash,
+    blockNumber: token.launchBlockNumber,
+    transactionIndex: token.launchTransactionIndex,
+    launchLogIndex: token.launchLogIndex,
+  });
+}
+
+function hasNativeTokenPriceOrientation(token: LauncherToken) {
+  const stamp = token.launchStampProvenance;
+  if (stamp) {
+    return validLaunchStampForToken(token) &&
+      stamp.poolKey.currency0.toLowerCase() === NATIVE_CURRENCY &&
+      stamp.poolKey.currency1.toLowerCase() === token.tokenAddress.toLowerCase();
+  }
+
+  // Existing canonical read models are native/token pools. A Custom Graph is
+  // never allowed to inherit that assumption without its complete PoolKey.
+  return token.launchModel !== "custom-graph";
+}
+
+function validPoolStateToken(token: LauncherToken) {
+  if (!/^0x[0-9a-f]{64}$/iu.test(token.poolId)) return false;
+  if (token.launchStampProvenance) return validLaunchStampForToken(token);
+  return token.launchModel !== "stock-paired" &&
+    token.launchModel !== "custom-graph";
+}
+
+function validValuationToken(token: LauncherToken) {
   return (
-    token.launchModel !== "stock-paired" &&
+    hasNativeTokenPriceOrientation(token) &&
     typeof token.totalSupplyRaw === "string" &&
     /^(?:0|[1-9]\d*)$/u.test(token.totalSupplyRaw) &&
     typeof token.tokenDecimals === "number" &&
     Number.isInteger(token.tokenDecimals) &&
     token.tokenDecimals >= 0 &&
-    token.tokenDecimals <= 255 &&
-    /^0x[0-9a-f]{64}$/iu.test(token.poolId)
+    token.tokenDecimals <= 255
   );
+}
+
+function withoutNativeValuation(token: LauncherToken): LauncherToken {
+  const withoutValuation = { ...token };
+  delete withoutValuation.tokenPriceEth;
+  delete withoutValuation.tokenPriceEthWei;
+  delete withoutValuation.tokenPriceUsdWad;
+  delete withoutValuation.tokenPriceQuote;
+  delete withoutValuation.tokenPriceQuoteWad;
+  delete withoutValuation.marketCapEth;
+  delete withoutValuation.marketCapEthWei;
+  delete withoutValuation.marketCapQuote;
+  delete withoutValuation.marketCapQuoteWad;
+  delete withoutValuation.indexedMarketCapEth;
+  delete withoutValuation.indexedMarketCapEthWei;
+  delete withoutValuation.indexedMarketCapUsdWad;
+  delete withoutValuation.indexedValuationBlockNumber;
+  delete withoutValuation.fdvUsdWad;
+  return withoutValuation;
 }
 
 function snapshotBlock(snapshot: ExploreSnapshot) {
@@ -72,12 +139,40 @@ function snapshotBlock(snapshot: ExploreSnapshot) {
   return BigInt(snapshot.blockNumber);
 }
 
+function poolStateCacheKey(input: {
+  deployment: ReadyOnchainDeployment;
+  blockNumber: bigint;
+  poolId: string;
+}) {
+  return [
+    input.deployment.chainId,
+    input.deployment.stateView.toLowerCase(),
+    input.blockNumber.toString(),
+    input.poolId.toLowerCase(),
+  ].join(":");
+}
+
 function applyLivePoolState(
   token: LauncherToken,
   state: LivePoolState | null,
   snapshot: ExploreSnapshot,
 ) {
-  if (!state || !validPoolToken(token)) return token;
+  if (!state || !validPoolStateToken(token)) {
+    return token;
+  }
+
+  const currentState = {
+    ...(token.launchStampProvenance
+      ? withoutNativeValuation(token)
+      : token),
+    currentTick: state.tick,
+    activeLiquidity: state.activeLiquidity.toString(),
+    protocolFeePips: state.protocolFeePips,
+    lpFeePips: state.lpFeePips,
+  } satisfies LauncherToken;
+  if (state.activeLiquidity <= 0n || !validValuationToken(token)) {
+    return withoutNativeValuation(currentState);
+  }
 
   const tokenDecimals = token.tokenDecimals as number;
   const totalSupplyRaw = BigInt(token.totalSupplyRaw as string);
@@ -105,15 +200,12 @@ function applyLivePoolState(
     : undefined;
 
   return {
-    ...token,
+    ...currentState,
     tokenPriceEthWei: tokenPriceEthWei.toString(),
     tokenPriceEth: formatUnits(tokenPriceEthWei, 18),
     marketCapEthWei: marketCapEthWei.toString(),
     marketCapEth: formatUnits(marketCapEthWei, 18),
     indexedValuationBlockNumber: state.blockNumber.toString(),
-    currentTick: state.tick,
-    protocolFeePips: state.protocolFeePips,
-    lpFeePips: state.lpFeePips,
     ...(tokenPriceUsdWad === undefined
       ? {}
       : { tokenPriceUsdWad: tokenPriceUsdWad.toString() }),
@@ -128,16 +220,21 @@ export async function enrichTokensWithAlchemyPoolState(input: {
   snapshot: ExploreSnapshot;
   tokens: readonly LauncherToken[];
 }) {
-  const eligible = input.tokens.filter(validPoolToken);
+  const eligible = input.tokens.filter(validPoolStateToken);
   if (eligible.length === 0) return [...input.tokens];
 
   const blockNumber = snapshotBlock(input.snapshot);
   const states = new Map<string, Promise<LivePoolState | null>>();
   const missing: LauncherToken[] = [];
   for (const token of eligible) {
-    const key = token.poolId.toLowerCase();
-    const cached = currentCacheEntry(key);
-    if (cached) states.set(key, cached);
+    const poolId = token.poolId.toLowerCase();
+    const cacheKey = poolStateCacheKey({
+      deployment: input.deployment,
+      blockNumber,
+      poolId,
+    });
+    const cached = currentCacheEntry(cacheKey);
+    if (cached) states.set(poolId, cached);
     else missing.push(token);
   }
 
@@ -149,8 +246,8 @@ export async function enrichTokensWithAlchemyPoolState(input: {
         timeout: 12_000,
       }),
     });
-    const batch = client
-      .multicall({
+    const batch = Promise.all([
+      client.multicall({
         allowFailure: true,
         blockNumber,
         contracts: missing.map((token) => ({
@@ -159,17 +256,36 @@ export async function enrichTokensWithAlchemyPoolState(input: {
           functionName: "getSlot0" as const,
           args: [token.poolId as Hex],
         })),
-      })
-      .then((results) =>
-        results.map((result): LivePoolState | null => {
-          if (result.status !== "success") return null;
-          const [sqrtPriceX96, tick, protocolFeePips, lpFeePips] = result.result;
+      }),
+      client.multicall({
+        allowFailure: true,
+        blockNumber,
+        contracts: missing.map((token) => ({
+          address: input.deployment.stateView,
+          abi: stateViewReadAbi,
+          functionName: "getLiquidity" as const,
+          args: [token.poolId as Hex],
+        })),
+      }),
+    ])
+      .then(([slot0Results, liquidityResults]) =>
+        missing.map((_, index): LivePoolState | null => {
+          const slot0 = slot0Results[index];
+          const liquidity = liquidityResults[index];
+          if (
+            slot0?.status !== "success" ||
+            liquidity?.status !== "success"
+          ) {
+            return null;
+          }
+          const [sqrtPriceX96, tick, protocolFeePips, lpFeePips] = slot0.result;
           if (sqrtPriceX96 <= 0n) return null;
           return {
             sqrtPriceX96,
             tick,
             protocolFeePips,
             lpFeePips,
+            activeLiquidity: liquidity.result,
             blockNumber,
           };
         }),
@@ -177,13 +293,18 @@ export async function enrichTokensWithAlchemyPoolState(input: {
       .catch(() => missing.map(() => null));
 
     missing.forEach((token, index) => {
-      const key = token.poolId.toLowerCase();
+      const poolId = token.poolId.toLowerCase();
+      const cacheKey = poolStateCacheKey({
+        deployment: input.deployment,
+        blockNumber,
+        poolId,
+      });
       const value = batch.then((results) => results[index] ?? null);
-      livePoolStateCache.set(key, {
+      livePoolStateCache.set(cacheKey, {
         expiresAt: Date.now() + LIVE_POOL_STATE_TTL_MS,
         value,
       });
-      states.set(key, value);
+      states.set(poolId, value);
     });
     trimPoolStateCache();
   }

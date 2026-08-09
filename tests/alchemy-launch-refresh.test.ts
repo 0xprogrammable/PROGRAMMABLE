@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   getOnchainDeployment: vi.fn(),
   readDurableExploreModel: vi.fn(),
   advanceExploreLaunchDiscovery: vi.fn(),
+  advanceLaunchStampRouterSlice: vi.fn(),
   readAlchemyLaunchRegistry: vi.fn(),
   writeAlchemyLaunchRegistry: vi.fn(),
 }));
@@ -22,12 +23,18 @@ vi.mock("../lib/onchain/durable-model", () => ({
 vi.mock("../lib/onchain/read-model", () => ({
   advanceExploreLaunchDiscovery: mocks.advanceExploreLaunchDiscovery,
 }));
+vi.mock("../lib/alchemy/launch-stamp.server", () => ({
+  advanceLaunchStampRouterSlice: mocks.advanceLaunchStampRouterSlice,
+}));
 vi.mock("../lib/alchemy/launch-registry.server", () => ({
   readAlchemyLaunchRegistry: mocks.readAlchemyLaunchRegistry,
   writeAlchemyLaunchRegistry: mocks.writeAlchemyLaunchRegistry,
 }));
 
 import { refreshAlchemyExploreRegistry } from "../lib/alchemy/explore.server";
+import { canonicalTokenExploreEntryV1 } from "../lib/explore-entry-v1";
+import type { LauncherToken } from "../lib/tokens";
+import { stampedClassicToken } from "./launch-stamp-surface-fixture";
 
 const deployment = {
   environment: "production",
@@ -111,10 +118,37 @@ describe("Alchemy launch overlay refresh", () => {
         chainId: 1,
         cursor: snapshot("100"),
         tokens: [],
+        launchStampRouter: {
+          schemaVersion: "programmable-launch-stamp-router-registry-v1",
+          binding: {
+            chainId: 1,
+            routerAddress: "0x8622DD5bAb44185f2A458ac90384Ac99248f8d56",
+            routerRuntimeCodeHash:
+              "0x40e27ecf201761d5eb66bc4f2d5c6124831ef078d7baf458ca5f41b1a8108546",
+            startBlock: "25717612",
+            finalityConfirmations: 64,
+          },
+          cursor: {
+            blockNumber: "25717611",
+            blockHash:
+              "0x2d42bd6f5cea0a09b7a76c5ca51569ac69e677cef0498b12730d6f1f7a979a5e",
+          },
+          tokens: [],
+        },
       },
       etag: "registry-etag",
     });
     mocks.writeAlchemyLaunchRegistry.mockResolvedValue({ etag: "next-etag" });
+    mocks.advanceLaunchStampRouterSlice.mockImplementation(
+      async (_deployment, slice) => ({
+        slice,
+        scannedFromBlock: null,
+        scannedToBlock: null,
+        discovered: 0,
+        hydrated: 0,
+        rebuiltAfterReorg: false,
+      }),
+    );
   });
 
   afterEach(() => {
@@ -191,6 +225,214 @@ describe("Alchemy launch overlay refresh", () => {
     expect(result.model.tokens[1]).toMatchObject({
       launchDiscoverySource: "alchemy-launch-overlay",
     });
+  });
+
+  it("advances and persists the independent finalized Router cursor exactly once", async () => {
+    mocks.advanceExploreLaunchDiscovery
+      .mockResolvedValueOnce({ ...baseModel, snapshot: snapshot("110") })
+      .mockResolvedValueOnce({ ...baseModel, snapshot: snapshot("111") });
+    mocks.advanceLaunchStampRouterSlice.mockImplementationOnce(
+      async (_deployment, slice) => ({
+        slice: {
+          ...slice,
+          cursor: {
+            blockNumber: "25717680",
+            blockHash: `0x${"ab".repeat(32)}`,
+          },
+        },
+        scannedFromBlock: "25717612",
+        scannedToBlock: "25717680",
+        discovered: 0,
+        hydrated: 0,
+        rebuiltAfterReorg: false,
+      }),
+    );
+
+    const result = await refreshAlchemyExploreRegistry();
+
+    expect(mocks.advanceLaunchStampRouterSlice).toHaveBeenCalledTimes(1);
+    expect(mocks.advanceLaunchStampRouterSlice).toHaveBeenCalledWith(
+      deployment,
+      expect.objectContaining({
+        cursor: expect.objectContaining({ blockNumber: "25717611" }),
+      }),
+    );
+    expect(mocks.advanceExploreLaunchDiscovery).toHaveBeenCalledTimes(2);
+    expect(mocks.writeAlchemyLaunchRegistry).toHaveBeenCalledWith(
+      deployment,
+      expect.objectContaining({
+        launchStampRouter: expect.objectContaining({
+          cursor: expect.objectContaining({ blockNumber: "25717680" }),
+        }),
+      }),
+      "registry-etag",
+    );
+    expect(result.launchStampRouterBlockNumber).toBe("25717680");
+  });
+
+  it("persists a Router cursor hash replacement even without block progress", async () => {
+    const stored = await mocks.readAlchemyLaunchRegistry();
+    mocks.readAlchemyLaunchRegistry.mockResolvedValue({
+      ...stored,
+      registry: {
+        ...stored.registry,
+        launchStampRouter: {
+          ...stored.registry.launchStampRouter,
+          cursor: {
+            blockNumber: "25717680",
+            blockHash: `0x${"aa".repeat(32)}`,
+          },
+        },
+      },
+    });
+    mocks.advanceExploreLaunchDiscovery.mockResolvedValue({
+      ...baseModel,
+      snapshot: snapshot("100"),
+    });
+    mocks.advanceLaunchStampRouterSlice.mockImplementationOnce(
+      async (_deployment, slice) => ({
+        slice: {
+          ...slice,
+          cursor: {
+            ...slice.cursor,
+            blockHash: `0x${"bb".repeat(32)}`,
+          },
+        },
+        scannedFromBlock: "25717612",
+        scannedToBlock: "25717680",
+        discovered: 0,
+        hydrated: 0,
+        rebuiltAfterReorg: false,
+      }),
+    );
+
+    const result = await refreshAlchemyExploreRegistry({
+      includeLatest: false,
+    });
+
+    expect(result.registryChanged).toBe(true);
+    expect(mocks.writeAlchemyLaunchRegistry).toHaveBeenCalledWith(
+      deployment,
+      expect.objectContaining({
+        launchStampRouter: expect.objectContaining({
+          cursor: expect.objectContaining({
+            blockNumber: "25717680",
+            blockHash: `0x${"bb".repeat(32)}`,
+          }),
+        }),
+      }),
+      "registry-etag",
+    );
+  });
+
+  it("persists a Router-only reorg rebuild even below the cursor interval", async () => {
+    const stored = await mocks.readAlchemyLaunchRegistry();
+    mocks.readAlchemyLaunchRegistry.mockResolvedValue({
+      ...stored,
+      registry: {
+        ...stored.registry,
+        launchStampRouter: {
+          ...stored.registry.launchStampRouter,
+          cursor: {
+            blockNumber: "25717680",
+            blockHash: `0x${"aa".repeat(32)}`,
+          },
+        },
+      },
+    });
+    mocks.advanceExploreLaunchDiscovery.mockResolvedValue({
+      ...baseModel,
+      snapshot: snapshot("100"),
+    });
+    mocks.advanceLaunchStampRouterSlice.mockImplementationOnce(
+      async (_deployment, slice) => ({
+        slice: {
+          ...slice,
+          cursor: {
+            blockNumber: "25717690",
+            blockHash: `0x${"bb".repeat(32)}`,
+          },
+        },
+        scannedFromBlock: "25717612",
+        scannedToBlock: "25717690",
+        discovered: 0,
+        hydrated: 0,
+        rebuiltAfterReorg: true,
+      }),
+    );
+
+    const result = await refreshAlchemyExploreRegistry({
+      includeLatest: false,
+    });
+
+    expect(result.registryChanged).toBe(true);
+    expect(mocks.writeAlchemyLaunchRegistry).toHaveBeenCalledWith(
+      deployment,
+      expect.objectContaining({
+        launchStampRouter: expect.objectContaining({
+          cursor: expect.objectContaining({ blockNumber: "25717690" }),
+        }),
+      }),
+      "registry-etag",
+    );
+  });
+
+  it("keeps a stamped Classic authoritative over the legacy Classic overlay", async () => {
+    const unstampedClassic: LauncherToken = { ...stampedClassicToken };
+    delete unstampedClassic.launchStampProvenance;
+    const legacyClassic = {
+      ...unstampedClassic,
+      launchModelVersion: "classic-v3",
+      liquidityPath: "meme",
+      totalSwapFeeBps: 100,
+      buyHookFeeBps: 100,
+      sellHookFeeBps: 100,
+      creatorFeeBps: 90,
+      launcherFeeBps: 10,
+      positionRecipient:
+        "0x7777777777777777777777777777777777777777",
+      positionTokenId: "42",
+    } as const;
+    const classicModel = {
+      ...baseModel,
+      tokens: [baseToken, legacyClassic],
+      snapshot: snapshot("110"),
+    };
+    mocks.advanceExploreLaunchDiscovery.mockResolvedValue(classicModel);
+    mocks.advanceLaunchStampRouterSlice.mockResolvedValueOnce({
+      slice: {
+        cursor: {
+          blockNumber: "25718017",
+          blockHash: `0x${"cd".repeat(32)}`,
+        },
+        tokens: [stampedClassicToken],
+      },
+      scannedFromBlock: "25717612",
+      scannedToBlock: "25718017",
+      discovered: 1,
+      hydrated: 1,
+      rebuiltAfterReorg: false,
+    });
+
+    const result = await refreshAlchemyExploreRegistry({
+      includeLatest: false,
+      persist: false,
+    });
+    const stamped = result.model.tokens.find(
+      ({ tokenAddress }) =>
+        tokenAddress.toLowerCase() ===
+        stampedClassicToken.tokenAddress.toLowerCase(),
+    );
+
+    expect(stamped).toMatchObject({
+      launchModel: "classic",
+      launchModelVersion: "programmable-launch-stamp-router-v1",
+      liquidityPath: "programmable-v4",
+      totalSwapFeeBps: null,
+    });
+    expect(stamped).not.toHaveProperty("buyHookFeeBps");
+    expect(stamped).not.toHaveProperty("positionRecipient");
+    expect(() => canonicalTokenExploreEntryV1(stamped!)).not.toThrow();
   });
 
   it("retries an ETag conflict once but does not retry an RPC failure", async () => {

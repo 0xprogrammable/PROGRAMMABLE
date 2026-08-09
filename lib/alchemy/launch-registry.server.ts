@@ -10,16 +10,45 @@ import {
 
 import { resolveDurableExploreBlobToken } from "../onchain/durable-model";
 import type { ReadyOnchainDeployment } from "../onchain/types";
-import type { LauncherToken } from "../tokens";
+import {
+  CANONICAL_LAUNCH_STAMP_V1,
+  isLaunchStampProvenanceV1,
+  type LauncherToken,
+} from "../tokens";
 
 const ALCHEMY_LAUNCH_REGISTRY_DIRECTORY =
   "indexes/mainnet-classic-v2/alchemy-launch-registry-v1";
-const SCHEMA_VERSION = "programmable-alchemy-launch-registry-v1";
+const LEGACY_SCHEMA_VERSION = "programmable-alchemy-launch-registry-v1";
+const SCHEMA_VERSION = "programmable-alchemy-launch-registry-v2";
+const ROUTER_SLICE_SCHEMA_VERSION =
+  "programmable-launch-stamp-router-registry-v1";
 const REPOSITORY_COMMIT = /^[0-9a-f]{40}$/u;
+
+export const LAUNCH_STAMP_ROUTER_BINDING = Object.freeze({
+  chainId: CANONICAL_LAUNCH_STAMP_V1.chainId,
+  routerAddress: CANONICAL_LAUNCH_STAMP_V1.routerAddress,
+  routerRuntimeCodeHash: CANONICAL_LAUNCH_STAMP_V1.routerRuntimeCodeHash,
+  poolManagerAddress: CANONICAL_LAUNCH_STAMP_V1.poolManagerAddress,
+  startBlock: CANONICAL_LAUNCH_STAMP_V1.routerStartBlock,
+  finalityConfirmations: CANONICAL_LAUNCH_STAMP_V1.finalityConfirmations,
+} as const);
+
+export const LAUNCH_STAMP_ROUTER_INITIAL_CURSOR = Object.freeze({
+  blockNumber: "25717611",
+  blockHash:
+    "0x2d42bd6f5cea0a09b7a76c5ca51569ac69e677cef0498b12730d6f1f7a979a5e",
+} as const satisfies AlchemyLaunchCursor);
 
 export type AlchemyLaunchCursor = Readonly<{
   blockNumber: string;
   blockHash: Hex;
+}>;
+
+export type AlchemyLaunchStampRouterRegistry = Readonly<{
+  schemaVersion: typeof ROUTER_SLICE_SCHEMA_VERSION;
+  binding: typeof LAUNCH_STAMP_ROUTER_BINDING;
+  cursor: AlchemyLaunchCursor;
+  tokens: readonly LauncherToken[];
 }>;
 
 export type AlchemyLaunchRegistry = Readonly<{
@@ -28,12 +57,13 @@ export type AlchemyLaunchRegistry = Readonly<{
   chainId: number;
   cursor: AlchemyLaunchCursor;
   tokens: readonly LauncherToken[];
+  launchStampRouter: AlchemyLaunchStampRouterRegistry;
 }>;
 
 type AlchemyLaunchRegistryEnvelope = Readonly<{
-  schemaVersion: typeof SCHEMA_VERSION;
+  schemaVersion: typeof LEGACY_SCHEMA_VERSION | typeof SCHEMA_VERSION;
   contentHash: Hex;
-  payload: AlchemyLaunchRegistry;
+  payload: unknown;
 }>;
 
 export type AlchemyLaunchRegistryRead = Readonly<{
@@ -90,57 +120,385 @@ function validLaunchToken(value: unknown, cursorBlock: bigint) {
   return true;
 }
 
-export function validateAlchemyLaunchRegistryEnvelope(
+function sameHex(left: unknown, right: string) {
+  return typeof left === "string" && left.toLowerCase() === right.toLowerCase();
+}
+
+function validBytes32(value: unknown) {
+  return (
+    typeof value === "string" &&
+    isHex(value, { strict: true }) &&
+    value.length === 66
+  );
+}
+
+function validSafeNonNegativeInteger(value: unknown) {
+  return Number.isSafeInteger(value) && (value as number) >= 0;
+}
+
+function validProof(
   value: unknown,
-  deployment: ReadyOnchainDeployment,
-): AlchemyLaunchRegistry {
+  launchId: string,
+  stampHash: string,
+) {
+  return (
+    isRecord(value) &&
+    sameHex(value.launchId, launchId) &&
+    sameHex(value.stampHash, stampHash)
+  );
+}
+
+function validLaunchStampToken(value: unknown, cursorBlock: bigint) {
+  if (!validLaunchToken(value, cursorBlock) || !isRecord(value)) return false;
+  const provenance = value.launchStampProvenance;
+  if (!isRecord(provenance)) return false;
   if (
-    !isRecord(value) ||
-    value.schemaVersion !== SCHEMA_VERSION ||
-    typeof value.contentHash !== "string" ||
-    !isRecord(value.payload)
+    !isLaunchStampProvenanceV1(provenance, {
+      chainId: LAUNCH_STAMP_ROUTER_BINDING.chainId,
+      tokenAddress: value.tokenAddress as `0x${string}`,
+      hookAddress: value.hookAddress as `0x${string}`,
+      poolId: value.poolId as `0x${string}`,
+      launchWallet: value.creatorAddress as `0x${string}` | undefined,
+      transactionHash: value.launchTransactionHash as `0x${string}`,
+      blockNumber: value.launchBlockNumber as string,
+      transactionIndex: value.launchTransactionIndex as number,
+      launchLogIndex: value.launchLogIndex as number,
+    })
   ) {
-    throw new Error("Alchemy launch registry envelope is malformed");
+    return false;
   }
-  const payload = value.payload;
+  const launchId = String(provenance.launchId ?? "");
+  const stampHash = String(provenance.stampHash ?? "");
+  if (
+    provenance.schemaVersion !== "programmable.launch-stamp-provenance.v1" ||
+    provenance.chainId !== LAUNCH_STAMP_ROUTER_BINDING.chainId ||
+    !sameHex(
+      provenance.routerAddress,
+      LAUNCH_STAMP_ROUTER_BINDING.routerAddress,
+    ) ||
+    !sameHex(
+      provenance.routerRuntimeCodeHash,
+      LAUNCH_STAMP_ROUTER_BINDING.routerRuntimeCodeHash,
+    ) ||
+    provenance.routerStartBlock !== LAUNCH_STAMP_ROUTER_BINDING.startBlock ||
+    provenance.finalityConfirmations !==
+      LAUNCH_STAMP_ROUTER_BINDING.finalityConfirmations ||
+    (provenance.kind !== "custom-graph" && provenance.kind !== "classic") ||
+    !isHex(launchId, { strict: true }) ||
+    launchId.length !== 66 ||
+    !isHex(stampHash, { strict: true }) ||
+    stampHash.length !== 66 ||
+    !isAddress(String(provenance.launchWallet ?? "")) ||
+    !sameHex(provenance.launchWallet, String(value.creatorAddress)) ||
+    !sameHex(provenance.transactionHash, String(value.launchTransactionHash)) ||
+    provenance.blockNumber !== value.launchBlockNumber ||
+    !validBytes32(provenance.blockHash) ||
+    !validSafeNonNegativeInteger(provenance.transactionIndex) ||
+    provenance.transactionIndex !== value.launchTransactionIndex ||
+    !validSafeNonNegativeInteger(provenance.routeLogIndex) ||
+    provenance.launchLogIndex !== value.launchLogIndex ||
+    (provenance.routeLogIndex as number) >=
+      (provenance.launchLogIndex as number) ||
+    !validIntegerString(provenance.finalizedAtBlockNumber) ||
+    !validBytes32(provenance.finalizedAtBlockHash) ||
+    BigInt(provenance.finalizedAtBlockNumber as string) <
+      BigInt(provenance.blockNumber as string) +
+        BigInt(LAUNCH_STAMP_ROUTER_BINDING.finalityConfirmations) ||
+    !sameHex(provenance.poolId, String(value.poolId)) ||
+    !isAddress(String(provenance.poolManagerAddress ?? "")) ||
+    !sameHex(
+      provenance.poolManagerAddress,
+      LAUNCH_STAMP_ROUTER_BINDING.poolManagerAddress,
+    ) ||
+    !isRecord(provenance.poolKey) ||
+    !isAddress(String(provenance.poolKey.currency0 ?? "")) ||
+    !isAddress(String(provenance.poolKey.currency1 ?? "")) ||
+    !isAddress(String(provenance.poolKey.hooks ?? "")) ||
+    !sameHex(provenance.poolKey.hooks, String(value.hookAddress)) ||
+    !validSafeNonNegativeInteger(provenance.poolKey.fee) ||
+    (
+      (provenance.poolKey.fee as number) !== 0x80_00_00 &&
+      (provenance.poolKey.fee as number) > 1_000_000
+    ) ||
+    !Number.isSafeInteger(provenance.poolKey.tickSpacing) ||
+    (provenance.poolKey.tickSpacing as number) < 1 ||
+    (provenance.poolKey.tickSpacing as number) > 32_767 ||
+    !validBytes32(provenance.poolKeyHash) ||
+    !validBytes32(provenance.componentSetHash) ||
+    !validBytes32(provenance.routePayloadHash) ||
+    !isAddress(String(provenance.routeLauncherAddress ?? "")) ||
+    !validBytes32(provenance.routeLauncherRuntimeCodeHash) ||
+    !validBytes32(provenance.expectedResultHash) ||
+    !validBytes32(provenance.permitDigest) ||
+    !Array.isArray(provenance.components) ||
+    provenance.components.length < 2 ||
+    !isRecord(provenance.tokenProof) ||
+    !sameHex(provenance.tokenProof.tokenAddress, String(value.tokenAddress)) ||
+    !validProof(provenance.tokenProof, launchId, stampHash) ||
+    !isRecord(provenance.poolProof) ||
+    !sameHex(
+      provenance.poolProof.poolManagerAddress,
+      String(provenance.poolManagerAddress),
+    ) ||
+    !sameHex(provenance.poolProof.poolId, String(value.poolId)) ||
+    !validProof(provenance.poolProof, launchId, stampHash)
+  ) {
+    return false;
+  }
+  if (
+    BigInt(String(provenance.poolKey.currency0)) >=
+      BigInt(String(provenance.poolKey.currency1)) ||
+    value.liquidityPath !== "programmable-v4" ||
+    value.launchModelVersion !== "programmable-launch-stamp-router-v1" ||
+    value.totalSwapFeeBps !== null ||
+    value.positionRecipient !== undefined ||
+    value.positionTokenId !== undefined ||
+    value.buyHookFeeBps !== undefined ||
+    value.sellHookFeeBps !== undefined ||
+    value.creatorFeeBps !== undefined ||
+    value.buyCreatorFeeBps !== undefined ||
+    value.sellCreatorFeeBps !== undefined ||
+    value.growthFeeBps !== undefined ||
+    value.programmableFeeBps !== undefined ||
+    value.launcherFeeBps !== undefined ||
+    value.transferTaxBps !== undefined ||
+    (
+      provenance.kind === "custom-graph" &&
+      value.launchModel !== "custom-graph"
+    ) ||
+    (provenance.kind === "classic" && value.launchModel !== "classic")
+  ) {
+    return false;
+  }
+  const componentLogIndexes = new Set<number>();
+  const componentAddresses = new Set<string>();
+  for (const component of provenance.components) {
+    if (
+      !isRecord(component) ||
+      !isAddress(String(component.address ?? "")) ||
+      (
+        component.kind !== "token" &&
+        component.kind !== "hook" &&
+        component.kind !== "other"
+      ) ||
+      (
+        component.scope !== "exclusive" &&
+        component.scope !== "shared-infrastructure"
+      ) ||
+      !validBytes32(component.runtimeCodeHash) ||
+      !validSafeNonNegativeInteger(component.logIndex) ||
+      (component.logIndex as number) >= (provenance.routeLogIndex as number) ||
+      componentLogIndexes.has(component.logIndex as number) ||
+      componentAddresses.has(String(component.address).toLowerCase()) ||
+      (
+        component.scope === "exclusive"
+          ? !validProof(component.exclusiveProof, launchId, stampHash)
+          : component.exclusiveProof !== null
+      )
+    ) {
+      return false;
+    }
+    componentLogIndexes.add(component.logIndex as number);
+    componentAddresses.add(String(component.address).toLowerCase());
+  }
+  const tokenComponent = provenance.components.find(
+    (component) =>
+      isRecord(component) &&
+      component.kind === "token" &&
+      component.scope === "exclusive" &&
+      sameHex(component.address, String(value.tokenAddress)) &&
+      validProof(component.exclusiveProof, launchId, stampHash),
+  );
+  const hookComponent = provenance.components.find(
+    (component) =>
+      isRecord(component) &&
+      component.kind === "hook" &&
+      sameHex(component.address, String(value.hookAddress)) &&
+      (
+        provenance.kind === "classic"
+          ? component.scope === "shared-infrastructure" &&
+            component.exclusiveProof === null
+          : component.scope === "exclusive" &&
+            validProof(component.exclusiveProof, launchId, stampHash)
+      ),
+  );
+  return Boolean(
+    tokenComponent &&
+    hookComponent &&
+    provenance.components.filter(
+      (component) => isRecord(component) && component.kind === "token",
+    ).length === 1 &&
+    provenance.components.filter(
+      (component) => isRecord(component) && component.kind === "hook",
+    ).length === 1
+  );
+}
+
+function initialLaunchStampRouterRegistry(): AlchemyLaunchStampRouterRegistry {
+  return {
+    schemaVersion: ROUTER_SLICE_SCHEMA_VERSION,
+    binding: LAUNCH_STAMP_ROUTER_BINDING,
+    cursor: LAUNCH_STAMP_ROUTER_INITIAL_CURSOR,
+    tokens: [],
+  };
+}
+
+function validateCursor(value: unknown) {
+  return (
+    isRecord(value) &&
+    validIntegerString(value.blockNumber) &&
+    isHex(String(value.blockHash ?? ""), { strict: true }) &&
+    String(value.blockHash).length === 66
+  );
+}
+
+function validateClassicPayload(
+  payload: Record<string, unknown>,
+  deployment: ReadyOnchainDeployment,
+) {
   const repositoryCommit = requiredRepositoryCommit();
   if (
     payload.chainId !== deployment.chainId ||
     payload.repositoryCommit !== repositoryCommit ||
     typeof payload.generatedAt !== "string" ||
     !Number.isFinite(Date.parse(payload.generatedAt)) ||
-    !isRecord(payload.cursor) ||
-    !validIntegerString(payload.cursor.blockNumber) ||
-    !isHex(String(payload.cursor.blockHash ?? ""), { strict: true }) ||
-    String(payload.cursor.blockHash).length !== 66 ||
+    !validateCursor(payload.cursor) ||
     !Array.isArray(payload.tokens)
   ) {
     throw new Error("Alchemy launch registry payload is malformed");
   }
-  const registry = payload as unknown as AlchemyLaunchRegistry;
-  if (contentHash(registry).toLowerCase() !== value.contentHash.toLowerCase()) {
-    throw new Error("Alchemy launch registry content hash is invalid");
-  }
-  const cursorBlock = BigInt(registry.cursor.blockNumber);
-  if (!registry.tokens.every((token) => validLaunchToken(token, cursorBlock))) {
+  const cursor = payload.cursor as AlchemyLaunchCursor;
+  const cursorBlock = BigInt(cursor.blockNumber);
+  if (
+    !payload.tokens.every(
+      (token) =>
+        validLaunchToken(token, cursorBlock) &&
+        isRecord(token) &&
+        token.launchStampProvenance === undefined,
+    )
+  ) {
     throw new Error("Alchemy launch registry contains an invalid token");
   }
-  const tokenKeys = registry.tokens.map((token) =>
-    token.tokenAddress.toLowerCase(),
+  const tokenKeys = payload.tokens.map((token) =>
+    String((token as LauncherToken).tokenAddress).toLowerCase(),
   );
-  const eventKeys = registry.tokens.map((token) =>
-    [
-      token.launchTransactionHash?.toLowerCase(),
-      token.launchLogIndex,
-    ].join(":"),
-  );
+  const eventKeys = payload.tokens.map((token) => {
+    const launch = token as LauncherToken;
+    return [
+      launch.launchTransactionHash?.toLowerCase(),
+      launch.launchLogIndex,
+    ].join(":");
+  });
   if (
     new Set(tokenKeys).size !== tokenKeys.length ||
     new Set(eventKeys).size !== eventKeys.length
   ) {
     throw new Error("Alchemy launch registry contains duplicate provenance");
   }
-  return registry;
+}
+
+function validateRouterSlice(value: unknown): AlchemyLaunchStampRouterRegistry {
+  if (
+    !isRecord(value) ||
+    value.schemaVersion !== ROUTER_SLICE_SCHEMA_VERSION ||
+    !isRecord(value.binding) ||
+    value.binding.chainId !== LAUNCH_STAMP_ROUTER_BINDING.chainId ||
+    !sameHex(value.binding.routerAddress, LAUNCH_STAMP_ROUTER_BINDING.routerAddress) ||
+    !sameHex(
+      value.binding.routerRuntimeCodeHash,
+      LAUNCH_STAMP_ROUTER_BINDING.routerRuntimeCodeHash,
+    ) ||
+    !sameHex(
+      value.binding.poolManagerAddress,
+      LAUNCH_STAMP_ROUTER_BINDING.poolManagerAddress,
+    ) ||
+    value.binding.startBlock !== LAUNCH_STAMP_ROUTER_BINDING.startBlock ||
+    value.binding.finalityConfirmations !==
+      LAUNCH_STAMP_ROUTER_BINDING.finalityConfirmations ||
+    !validateCursor(value.cursor) ||
+    !Array.isArray(value.tokens)
+  ) {
+    throw new Error("Alchemy launch stamp Router registry is malformed");
+  }
+  const cursor = value.cursor as AlchemyLaunchCursor;
+  const cursorBlock = BigInt(cursor.blockNumber);
+  if (
+    cursorBlock < BigInt(LAUNCH_STAMP_ROUTER_INITIAL_CURSOR.blockNumber) ||
+    !value.tokens.every((token) => validLaunchStampToken(token, cursorBlock))
+  ) {
+    throw new Error("Alchemy launch stamp Router registry contains an invalid token");
+  }
+  const tokenKeys = value.tokens.map((token) =>
+    String((token as LauncherToken).tokenAddress).toLowerCase(),
+  );
+  const launchKeys = value.tokens.map((token) =>
+    String((token as LauncherToken & { launchStampProvenance: { launchId: string } })
+      .launchStampProvenance.launchId).toLowerCase(),
+  );
+  const poolKeys = value.tokens.map((token) =>
+    String((token as LauncherToken).poolId).toLowerCase(),
+  );
+  const eventKeys = value.tokens.map((token) => {
+    const launch = token as LauncherToken;
+    return `${launch.launchTransactionHash?.toLowerCase()}:${launch.launchLogIndex}`;
+  });
+  if (
+    new Set(tokenKeys).size !== tokenKeys.length ||
+    new Set(launchKeys).size !== launchKeys.length ||
+    new Set(poolKeys).size !== poolKeys.length ||
+    new Set(eventKeys).size !== eventKeys.length
+  ) {
+    throw new Error("Alchemy launch stamp Router registry contains duplicate provenance");
+  }
+  return value as unknown as AlchemyLaunchStampRouterRegistry;
+}
+
+export function validateAlchemyLaunchRegistryEnvelope(
+  value: unknown,
+  deployment: ReadyOnchainDeployment,
+): AlchemyLaunchRegistry {
+  if (
+    !isRecord(value) ||
+    (
+      value.schemaVersion !== LEGACY_SCHEMA_VERSION &&
+      value.schemaVersion !== SCHEMA_VERSION
+    ) ||
+    typeof value.contentHash !== "string" ||
+    !isRecord(value.payload)
+  ) {
+    throw new Error("Alchemy launch registry envelope is malformed");
+  }
+  const payload = value.payload;
+  if (
+    keccak256(toBytes(JSON.stringify(payload))).toLowerCase() !==
+      value.contentHash.toLowerCase()
+  ) {
+    throw new Error("Alchemy launch registry content hash is invalid");
+  }
+  validateClassicPayload(payload, deployment);
+  if (value.schemaVersion === LEGACY_SCHEMA_VERSION) {
+    return {
+      ...(payload as unknown as Omit<AlchemyLaunchRegistry, "launchStampRouter">),
+      launchStampRouter: initialLaunchStampRouterRegistry(),
+    };
+  }
+  const launchStampRouter = validateRouterSlice(payload.launchStampRouter);
+  const classicTokenKeys = new Set(
+    (payload.tokens as readonly LauncherToken[]).map((token) =>
+      token.tokenAddress.toLowerCase(),
+    ),
+  );
+  if (
+    launchStampRouter.tokens.some((token) =>
+      classicTokenKeys.has(token.tokenAddress.toLowerCase()),
+    )
+  ) {
+    throw new Error("Alchemy launch registry slices contain duplicate tokens");
+  }
+  return {
+    ...(payload as unknown as AlchemyLaunchRegistry),
+    launchStampRouter,
+  };
 }
 
 export async function readAlchemyLaunchRegistry(
@@ -164,6 +522,7 @@ export async function readAlchemyLaunchRegistry(
         chainId: deployment.chainId,
         cursor: initialCursor,
         tokens: [],
+        launchStampRouter: initialLaunchStampRouterRegistry(),
       },
       etag: null,
     };

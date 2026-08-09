@@ -237,8 +237,12 @@ async function legacyClaimToken(
   ];
   if (
     token.launchModel !== "classic" ||
+    token.launchStampProvenance !== undefined ||
     token.hookAddress.toLowerCase() !== deployment.feeHook.toLowerCase() ||
     !token.creatorAddress ||
+    typeof token.totalSwapFeeBps !== "number" ||
+    !Number.isSafeInteger(token.totalSwapFeeBps) ||
+    token.totalSwapFeeBps < 0 ||
     canonicalClaimPoolId(
       getAddress(token.tokenAddress),
       getAddress(token.hookAddress),

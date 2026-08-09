@@ -22,11 +22,16 @@ import { GET as getIndexerTokens } from "../app/api/indexers/v1/tokens/route";
 import {
   buildIndexerFeed,
   buildUniswapTokenList,
+  buildUniswapTokenListResult,
   findIndexerToken,
   serializeIndexerToken,
 } from "../lib/onchain/indexer-feed";
 import type { ExploreReadModel } from "../lib/onchain/types";
 import type { LauncherToken } from "../lib/tokens";
+import {
+  customGraphToken,
+  stampedClassicToken,
+} from "./launch-stamp-surface-fixture";
 
 const token: LauncherToken = {
   id: "test",
@@ -93,8 +98,39 @@ function expectAlchemyRpcHeaders(response: Response) {
   expect(response.headers.get("x-programmable-rpc-provider")).toBe(
     "alchemy",
   );
-  expect(response.headers.get("access-control-expose-headers")).toBe(
-    "X-Programmable-Launch-Source, X-Programmable-Read-Source, X-Programmable-Rpc-Provider",
+  expect(
+    response.headers
+      .get("access-control-expose-headers")
+      ?.split(", "),
+  ).toEqual(
+    expect.arrayContaining([
+      "X-Programmable-Launch-Source",
+      "X-Programmable-Read-Source",
+      "X-Programmable-Rpc-Provider",
+    ]),
+  );
+}
+
+function expectTokenListOmissions(
+  response: Response,
+  count: number,
+  reason: string | null,
+) {
+  expect(response.headers.get("x-programmable-omitted-token-count")).toBe(
+    String(count),
+  );
+  expect(response.headers.get("x-programmable-omission-reason")).toBe(
+    reason,
+  );
+  expect(
+    response.headers
+      .get("access-control-expose-headers")
+      ?.split(", "),
+  ).toEqual(
+    expect.arrayContaining([
+      "X-Programmable-Omitted-Token-Count",
+      "X-Programmable-Omission-Reason",
+    ]),
   );
 }
 
@@ -103,6 +139,7 @@ describe("public indexer fee disclosure", () => {
     const result = serializeIndexerToken(token, 1);
 
     expect(result.fees).toEqual({
+      status: "verified",
       model: "uniswap-v4-custom-accounting",
       currency: "ETH",
       currencyAddress: null,
@@ -308,6 +345,7 @@ describe("public indexer fee disclosure", () => {
           creatorFeeBps: 90,
           launcherFeeBps: 10,
           transferTaxBps: 0,
+          feeStatus: "verified",
           feeIncluded: true,
         },
       },
@@ -333,6 +371,118 @@ describe("public indexer fee disclosure", () => {
     expect(() =>
       serializeIndexerToken({ ...token, creatorFeeBps: 89 }, 1),
     ).toThrow("invalid fee disclosure");
+  });
+
+  it.each([
+    ["Custom", customGraphToken, "custom"],
+    ["stamped Classic", stampedClassicToken, "classic"],
+  ] as const)(
+    "publishes %s Router provenance without inventing unknown fees",
+    (_, stampedToken, category) => {
+      const withLegacyPositionIdentity = {
+        ...stampedToken,
+        positionRecipient:
+          "0x7777777777777777777777777777777777777777",
+        positionTokenId: "42",
+      } satisfies LauncherToken;
+      const result = serializeIndexerToken(withLegacyPositionIdentity, 1);
+
+      expect(result.fees).toEqual({
+        status: "unknown",
+        model: "unknown",
+        currency: null,
+        currencyAddress: null,
+        buyHookFeeBps: null,
+        sellHookFeeBps: null,
+        creatorFeeBps: null,
+        buyCreatorFeeBps: null,
+        sellCreatorFeeBps: null,
+        growthFeeBps: null,
+        programmableFeeBps: null,
+        launcherFeeBps: null,
+        transferTaxBps: null,
+        lpFeePips: null,
+        launcherFeeIncludedInHookFee: null,
+      });
+      expect(result.canonicalPool).toMatchObject({
+        poolId: stampedToken.poolId,
+        hookAddress: stampedToken.hookAddress,
+        poolManagerAddress:
+          stampedToken.launchStampProvenance.poolManagerAddress,
+        poolKey: stampedToken.launchStampProvenance.poolKey,
+        positionRecipient: null,
+        positionTokenId: null,
+      });
+      expect(result.launch).toMatchObject({
+        modelId: stampedToken.launchModel,
+        modelVersion: "programmable-launch-stamp-router-v1",
+        category,
+      });
+      expect(result.launch.launchStampProvenance).toEqual(
+        stampedToken.launchStampProvenance,
+      );
+    },
+  );
+
+  it.each([
+    ["Custom", customGraphToken],
+    ["stamped Classic", stampedClassicToken],
+  ] as const)("rejects invented %s Router fee fields", (_, stampedToken) => {
+    expect(() =>
+      serializeIndexerToken({
+        ...stampedToken,
+        buyHookFeeBps: 0,
+      }, 1),
+    ).toThrow("invented Router fee disclosure");
+    expect(() =>
+      serializeIndexerToken({
+        ...stampedToken,
+        totalSwapFeeBps: 100,
+      }, 1),
+    ).toThrow("mismatched launch stamp disclosure");
+  });
+
+  it("preserves a stamped token with unknown decimals outside the standard token list", () => {
+    const withoutDecimals: LauncherToken = { ...customGraphToken };
+    delete withoutDecimals.tokenDecimals;
+    const poisonedModel = {
+      ...readyModel,
+      tokens: [withoutDecimals, token],
+    } satisfies ExploreReadModel;
+
+    expect(serializeIndexerToken(withoutDecimals, 1)).toMatchObject({
+      address: withoutDecimals.tokenAddress,
+      decimals: null,
+      launch: {
+        launchStampProvenance: withoutDecimals.launchStampProvenance,
+      },
+    });
+    expect(buildIndexerFeed(poisonedModel, 1).tokens[0]).toMatchObject({
+      address: withoutDecimals.tokenAddress,
+      decimals: null,
+      launch: {
+        launchStampProvenance: withoutDecimals.launchStampProvenance,
+      },
+    });
+    expect(findIndexerToken(
+      poisonedModel,
+      1,
+      withoutDecimals.tokenAddress,
+    )).toMatchObject({
+      decimals: null,
+      launch: {
+        launchStampProvenance: withoutDecimals.launchStampProvenance,
+      },
+    });
+    const result = buildUniswapTokenListResult(poisonedModel, 1);
+    expect(result.omissions).toEqual({
+      count: 1,
+      reason: "missing-valid-decimals",
+    });
+    expect(result.tokenList).not.toHaveProperty("omissions");
+    expect(result.tokenList?.tokens.map(
+      (candidate) => candidate.address,
+    )).toEqual([token.tokenAddress]);
   });
 
   it("discloses Stock-Paired identity, quote asset and pool ordering", () => {
@@ -487,6 +637,148 @@ describe("public indexer fee disclosure", () => {
       address: token.tokenAddress,
       name: token.name,
       symbol: token.symbol,
+    });
+  });
+
+  it("serves finalized Router provenance through direct lookup and token-list routes", async () => {
+    const stampedModel = {
+      ...readyModel,
+      tokens: [customGraphToken],
+    } satisfies ExploreReadModel;
+    routeMocks.readAlchemyExploreModel.mockResolvedValue(stampedModel);
+
+    const direct = await getIndexerTokens(
+      new Request(
+        `https://programmable.family/api/indexers/v1/tokens?address=${customGraphToken.tokenAddress}`,
+      ),
+    );
+    const directBody = await direct.json();
+
+    expect(direct.status).toBe(200);
+    expect(directBody).toMatchObject({
+      address: customGraphToken.tokenAddress,
+      fees: {
+        status: "unknown",
+        buyHookFeeBps: null,
+        sellHookFeeBps: null,
+        creatorFeeBps: null,
+        launcherFeeBps: null,
+      },
+      canonicalPool: {
+        poolId: customGraphToken.poolId,
+        poolManagerAddress:
+          customGraphToken.launchStampProvenance.poolManagerAddress,
+        positionRecipient: null,
+        positionTokenId: null,
+      },
+      launch: {
+        category: "custom",
+        modelId: "custom-graph",
+        launchStampProvenance: customGraphToken.launchStampProvenance,
+      },
+    });
+
+    routeMocks.readAlchemyExploreModel.mockResolvedValue(stampedModel);
+    const tokenList = await getTokenList();
+    const tokenListBody = await tokenList.json();
+
+    expect(tokenList.status).toBe(200);
+    expect(tokenListBody.tokens).toHaveLength(1);
+    expect(tokenListBody.tokens[0]).toMatchObject({
+      address: customGraphToken.tokenAddress,
+      extensions: {
+        programmable: {
+          launchModel: "custom-graph",
+          feeStatus: "unknown",
+          buyFeeBps: null,
+          sellFeeBps: null,
+          creatorFeeBps: null,
+          launcherFeeBps: null,
+          positionRecipient: null,
+          positionTokenId: null,
+          launchStampProvenance: customGraphToken.launchStampProvenance,
+        },
+      },
+    });
+  });
+
+  it("keeps poisoned Router metadata in programmable feeds and omits only that token from the standard list", async () => {
+    const withoutDecimals: LauncherToken = { ...customGraphToken };
+    delete withoutDecimals.tokenDecimals;
+    const poisonedModel = {
+      ...readyModel,
+      tokens: [withoutDecimals, token],
+    } satisfies ExploreReadModel;
+    routeMocks.readAlchemyExploreModel.mockResolvedValue(poisonedModel);
+
+    const direct = await getIndexerTokens(
+      new Request(
+        `https://programmable.family/api/indexers/v1/tokens?address=${withoutDecimals.tokenAddress}`,
+      ),
+    );
+    expect(direct.status).toBe(200);
+    expect(await direct.json()).toMatchObject({
+      address: withoutDecimals.tokenAddress,
+      decimals: null,
+      launch: {
+        launchStampProvenance: withoutDecimals.launchStampProvenance,
+      },
+    });
+
+    const full = await getIndexerTokens(
+      new Request("https://programmable.family/api/indexers/v1/tokens"),
+    );
+    expect(full.status).toBe(200);
+    expect(await full.json()).toMatchObject({
+      tokens: [
+        {
+          address: withoutDecimals.tokenAddress,
+          decimals: null,
+          launch: {
+            launchStampProvenance:
+              withoutDecimals.launchStampProvenance,
+          },
+        },
+        {
+          address: token.tokenAddress,
+          decimals: token.tokenDecimals,
+        },
+      ],
+    });
+
+    const tokenList = await getTokenList();
+    expect(tokenList.status).toBe(200);
+    expectTokenListOmissions(
+      tokenList,
+      1,
+      "missing-valid-decimals",
+    );
+    expect((await tokenList.json()).tokens.map(
+      (candidate: { address: string }) => candidate.address,
+    )).toEqual([token.tokenAddress]);
+  });
+
+  it("fails closed instead of serving a schema-invalid list when every token lacks decimals", async () => {
+    const withoutDecimals: LauncherToken = { ...customGraphToken };
+    delete withoutDecimals.tokenDecimals;
+    routeMocks.readAlchemyExploreModel.mockResolvedValue({
+      ...readyModel,
+      tokens: [withoutDecimals],
+    } satisfies ExploreReadModel);
+
+    const response = await getTokenList();
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("retry-after")).toBe("60");
+    expectTokenListOmissions(
+      response,
+      1,
+      "missing-valid-decimals",
+    );
+    expect(await response.json()).toEqual({
+      status: "ready",
+      error:
+        "The token list is unavailable until a token has verified decimals",
     });
   });
 

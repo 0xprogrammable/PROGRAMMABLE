@@ -1938,9 +1938,14 @@ export function adaptIndexedCreatorProfileV2(
       if (left.logIndex !== right.logIndex) return right.logIndex - left.logIndex;
       return right.transactionHash.localeCompare(left.transactionHash);
     });
-  const pools = tokens
-    .filter((entry) => entry.launchModel !== "stock-paired")
-    .map((entry) => ({
+  const pools = tokens.flatMap((entry) => {
+    if (
+      entry.launchModel === "stock-paired" ||
+      typeof entry.totalSwapFeeBps !== "number"
+    ) {
+      return [];
+    }
+    return [{
       tokenAddress: entry.tokenAddress,
       name: entry.name,
       symbol: entry.symbol,
@@ -1951,7 +1956,8 @@ export function adaptIndexedCreatorProfileV2(
       claimableCreatorFeesEth: entry.creatorFeesAccruedEth ?? "0",
       generatedCreatorFeesWei: entry.creatorFeesGeneratedWei ?? "0",
       generatedCreatorFeesEth: entry.creatorFeesGeneratedEth ?? "0",
-    }));
+    }];
+  });
   const claimable = pools.reduce(
     (total, pool) => total + BigInt(pool.claimableCreatorFeesWei),
     0n,

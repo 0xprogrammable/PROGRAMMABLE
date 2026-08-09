@@ -27,7 +27,23 @@ describe("creator profile projection", () => {
           creatorFeesGeneratedWei: "500000000000000000",
           creatorFeesGeneratedEth: "0.5",
           totalSwapFeeBps: 100,
+          launchModel: "classic",
           liquidityPath: "meme",
+        },
+        {
+          id: "1:custom-graph",
+          name: "Stamped graph",
+          symbol: "GRAPH",
+          tokenAddress:
+            "0x7777777777777777777777777777777777777777",
+          hookAddress:
+            "0x8888888888888888888888888888888888888888",
+          poolId: `0x${"99".repeat(32)}`,
+          creatorAddress: creator,
+          launchedAt: "2026-07-28T00:00:00.000Z",
+          totalSwapFeeBps: null,
+          launchModel: "custom-graph",
+          liquidityPath: "programmable-v4",
         },
       ],
       creatorClaims: [
@@ -56,8 +72,17 @@ describe("creator profile projection", () => {
       launcherFeesAccruedEth: "0",
     };
 
-    const profile = buildCreatorProfile(model, creator);
-    expect(profile.tokens).toHaveLength(1);
+    const profile = buildCreatorProfile(
+      model,
+      creator,
+      new Set([poolId.toLowerCase()]),
+    );
+    expect(profile.tokens).toHaveLength(2);
+    expect(profile.tokens.map((token) => token.symbol)).toEqual([
+      "PRG",
+      "GRAPH",
+    ]);
+    expect(profile.pools).toHaveLength(1);
     expect(profile.claims).toHaveLength(1);
     expect(profile.totals).toEqual({
       claimableWei: "200000000000000000",
