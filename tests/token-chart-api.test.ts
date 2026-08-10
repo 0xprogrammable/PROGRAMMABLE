@@ -11,7 +11,15 @@ const mocks = vi.hoisted(() => {
       super("Token chart inputs failed integrity validation");
     }
   }
+  class TokenChartUnavailableError extends Error {
+    override name = "TokenChartUnavailableError";
+
+    constructor(readonly reason: string) {
+      super("Token chart data is unavailable for this pool");
+    }
+  }
   return {
+    assertTokenChartSupported: vi.fn(),
     getAlchemyOnchainDeployment: vi.fn(),
     isTokenChartRange: vi.fn(),
     enrichTokensWithAlchemyPoolState: vi.fn(),
@@ -19,6 +27,7 @@ const mocks = vi.hoisted(() => {
     readTokenChartSeries: vi.fn(),
     safeAlchemyError: vi.fn((error) => error),
     TokenChartIntegrityError,
+    TokenChartUnavailableError,
   };
 });
 
@@ -29,9 +38,11 @@ vi.mock("../lib/alchemy/explore.server", () => ({
 }));
 
 vi.mock("../lib/onchain/chart", () => ({
+  assertTokenChartSupported: mocks.assertTokenChartSupported,
   isTokenChartRange: mocks.isTokenChartRange,
   readTokenChartSeries: mocks.readTokenChartSeries,
   TokenChartIntegrityError: mocks.TokenChartIntegrityError,
+  TokenChartUnavailableError: mocks.TokenChartUnavailableError,
 }));
 
 vi.mock("../lib/alchemy/live-market.server", () => ({
@@ -78,6 +89,13 @@ describe("token chart Alchemy API", () => {
       ["1h", "1d", "1w", "all"].includes(range),
     );
     mocks.getAlchemyOnchainDeployment.mockReturnValue(deployment);
+    mocks.assertTokenChartSupported.mockImplementation((candidate) => {
+      if (candidate.launchModel === "custom-graph") {
+        throw new mocks.TokenChartUnavailableError(
+          "unsupported-pool-orientation",
+        );
+      }
+    });
     mocks.enrichTokensWithAlchemyPoolState.mockResolvedValue([token]);
     mocks.readAlchemyExploreModel.mockResolvedValue({
       status: "ready",
@@ -277,6 +295,39 @@ describe("token chart Alchemy API", () => {
       expect(mocks.readTokenChartSeries).not.toHaveBeenCalled();
     },
   );
+
+  it("fails closed for Custom Graph before enrichment or chart reads", async () => {
+    mocks.readAlchemyExploreModel.mockResolvedValue({
+      status: "ready",
+      tokens: [{ ...token, launchModel: "custom-graph" }],
+      snapshot,
+      launchDiscoverySnapshot,
+      creatorClaims: [],
+      launcherFeesAccruedWei: "0",
+      launcherFeesAccruedEth: "0",
+    });
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/explore/token/chart?address=${token.tokenAddress}`,
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(response.headers.get("Retry-After")).toBeNull();
+    expect(body).toMatchObject({
+      status: "unavailable",
+      dataQuality: {
+        status: "unavailable",
+        reason: "unsupported-pool-orientation",
+      },
+    });
+    expect(body).not.toHaveProperty("points");
+    expect(mocks.enrichTokensWithAlchemyPoolState).not.toHaveBeenCalled();
+    expect(mocks.readTokenChartSeries).not.toHaveBeenCalled();
+  });
 
   it.each([
     `address=${token.tokenAddress}&unused=random`,

@@ -26,7 +26,7 @@ import {
 import {
   TokenPriceChart,
   preloadTokenChart,
-  type TokenChartMarketCap,
+  type TokenChartFdv,
   type TokenChartVolume,
 } from "@/components/token-price-chart";
 import { CustomMarketTrade } from "@/components/custom-market-trade";
@@ -1181,8 +1181,7 @@ function TokenDetailContent({
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState("");
   const [chartVolume, setChartVolume] = useState<TokenChartVolume | null>(null);
-  const [chartMarketCap, setChartMarketCap] =
-    useState<TokenChartMarketCap | null>(null);
+  const [chartFdv, setChartFdv] = useState<TokenChartFdv | null>(null);
   const [tradeFlow, setTradeFlow] = useState<TradeFlow>({
     phase: "form",
   });
@@ -1220,13 +1219,13 @@ function TokenDetailContent({
   const metrics = useMemo(() => {
     return buildTokenDetailMetrics(
       token,
-      chartMarketCap
-        ? (formatUsdWadAmount(chartMarketCap.marketCapUsdWad) ??
-          formatEth(chartMarketCap.marketCapEth, "amount"))
+      chartFdv
+        ? (formatUsdWadAmount(chartFdv.fdvUsdWad) ??
+          formatEth(chartFdv.fdvEth, "amount"))
         : null,
       buildChartVolumeMetric(chartVolume),
     );
-  }, [chartMarketCap, chartVolume, token]);
+  }, [chartFdv, chartVolume, token]);
 
   const explorerBase =
     chainId === 1
@@ -1526,15 +1525,15 @@ function TokenDetailContent({
                 tokenName={token.name}
                 launchModel={classicTradeLaunchModel}
                 preview={preview}
-                marketCapEthWei={
+                fdvEthWei={
                   token.indexedMarketCapEthWei ?? token.marketCapEthWei
                 }
-                marketCapEth={token.indexedMarketCapEth ?? token.marketCapEth}
-                marketCapUsdWad={
+                fdvEth={token.indexedMarketCapEth ?? token.marketCapEth}
+                fdvUsdWad={
                   token.indexedMarketCapUsdWad ?? token.fdvUsdWad
                 }
                 onVolumeChange={setChartVolume}
-                onMarketCapChange={setChartMarketCap}
+                onFdvChange={setChartFdv}
               />
             )}
             <MetricGrid metrics={metrics} />

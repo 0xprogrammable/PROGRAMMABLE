@@ -54,6 +54,9 @@ describe("token detail layout", () => {
     expect(chartSource).toContain("aria-busy={loading}");
     expect(chartSource).toContain('role="status"');
     expect(chartSource).toContain("{chartStatus}");
+    expect(chartSource).toContain('"Current price loaded from 1 point"');
+    expect(chartSource).not.toContain("payload.points.length < 2");
+    expect(chartSource).toContain("tabIndex={0}");
     expect(chartSource).toMatch(
       /\{loading \? \([\s\S]*?styles\.waitingPlot[\s\S]*?aria-hidden="true"[\s\S]*?\) : chart \? \(/,
     );
@@ -145,8 +148,10 @@ describe("token detail layout", () => {
       "token.indexedMarketCapUsdWad ?? token.fdvUsdWad",
     );
     expect(chartSource).toContain(
-      "marketCapUsdWad: payload.marketCapUsdWad ?? marketCapUsdWad",
+      "fdvUsdWad: payload.fdvUsdWad ?? fdvUsdWad",
     );
+    expect(chartSource).not.toContain("payload.marketCap");
+    expect(chartSource).not.toMatch(/marketCap(?:Eth|Usd)\w*\?: string/);
   });
 
   it("omits empty team-profile filler copy", () => {

@@ -22,15 +22,15 @@ export type TokenChartPoint = {
 };
 
 export type TokenChartPayload = {
-  status: "ready" | "insufficient-history" | "not-deployed";
+  status: "ready" | "insufficient-history" | "partial";
   points: TokenChartPoint[];
   swapCount: number;
   volumeWei: string;
   volumeEth: string;
   volumeUsdWad?: string;
-  marketCapEthWei?: string;
-  marketCapEth?: string;
-  marketCapUsdWad?: string;
+  fdvEthWei?: string;
+  fdvEth?: string;
+  fdvUsdWad?: string;
 };
 type ChartPayload = TokenChartPayload;
 type ChartRequestState = {
@@ -52,10 +52,10 @@ export type TokenChartVolume = {
   volumeEth?: string;
   volumeUsdWad?: string;
 };
-export type TokenChartMarketCap = {
-  marketCapEthWei?: string;
-  marketCapEth?: string;
-  marketCapUsdWad?: string;
+export type TokenChartFdv = {
+  fdvEthWei?: string;
+  fdvEth?: string;
+  fdvUsdWad?: string;
 };
 
 type PositiveDecimal = {
@@ -118,41 +118,41 @@ function scaleDecimalByPriceRatio(
   return formatFixedInteger(numerator / denominator, precision);
 }
 
-export function getChartMarketCapAtPoint(
+export function getChartFdvAtPoint(
   payload: TokenChartPayload,
   inspectedPoint?: TokenChartPoint,
   latestPoint?: TokenChartPoint,
-): TokenChartMarketCap {
+): TokenChartFdv {
   if (!inspectedPoint || !latestPoint || inspectedPoint === latestPoint) {
     return {
-      marketCapEthWei: payload.marketCapEthWei,
-      marketCapEth: payload.marketCapEth,
-      marketCapUsdWad: payload.marketCapUsdWad,
+      fdvEthWei: payload.fdvEthWei,
+      fdvEth: payload.fdvEth,
+      fdvUsdWad: payload.fdvUsdWad,
     };
   }
 
-  const marketCapEthWei = scaleIntegerByPriceRatio(
-    payload.marketCapEthWei,
+  const fdvEthWei = scaleIntegerByPriceRatio(
+    payload.fdvEthWei,
     inspectedPoint.priceEth,
     latestPoint.priceEth,
   );
-  const marketCapEth = marketCapEthWei
-    ? formatFixedInteger(BigInt(marketCapEthWei), 18)
+  const fdvEth = fdvEthWei
+    ? formatFixedInteger(BigInt(fdvEthWei), 18)
     : scaleDecimalByPriceRatio(
-        payload.marketCapEth,
+        payload.fdvEth,
         inspectedPoint.priceEth,
         latestPoint.priceEth,
       );
-  const marketCapUsdWad = scaleIntegerByPriceRatio(
-    payload.marketCapUsdWad,
+  const fdvUsdWad = scaleIntegerByPriceRatio(
+    payload.fdvUsdWad,
     inspectedPoint.priceUsd ?? inspectedPoint.priceEth,
     latestPoint.priceUsd ?? latestPoint.priceEth,
   );
 
   return {
-    marketCapEthWei: marketCapEthWei ?? payload.marketCapEthWei,
-    marketCapEth: marketCapEth ?? payload.marketCapEth,
-    marketCapUsdWad: marketCapUsdWad ?? payload.marketCapUsdWad,
+    fdvEthWei: fdvEthWei ?? payload.fdvEthWei,
+    fdvEth: fdvEth ?? payload.fdvEth,
+    fdvUsdWad: fdvUsdWad ?? payload.fdvUsdWad,
   };
 }
 type ChartLaunchModel = "classic" | "adaptive" | "deep" | "stock-paired";
@@ -201,6 +201,14 @@ export function isAuthoritativeChartPayload(
   value: unknown,
 ): value is ChartPayload {
   if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  if (
+    "marketCapEthWei" in record ||
+    "marketCapEth" in record ||
+    "marketCapUsdWad" in record
+  ) {
+    return false;
+  }
   const payload = value as Partial<ChartPayload>;
   if (
     !isAuthoritativeChartPayloadStatus(payload.status) ||
@@ -210,9 +218,9 @@ export function isAuthoritativeChartPayload(
     !isUnsignedIntegerString(payload.volumeWei) ||
     !isUnsignedDecimalString(payload.volumeEth) ||
     !hasOptionalUnsignedInteger(payload.volumeUsdWad) ||
-    !hasOptionalUnsignedInteger(payload.marketCapEthWei) ||
-    !hasOptionalUnsignedDecimal(payload.marketCapEth) ||
-    !hasOptionalUnsignedInteger(payload.marketCapUsdWad)
+    !hasOptionalUnsignedInteger(payload.fdvEthWei) ||
+    !hasOptionalUnsignedDecimal(payload.fdvEth) ||
+    !hasOptionalUnsignedInteger(payload.fdvUsdWad)
   ) {
     return false;
   }
@@ -418,6 +426,53 @@ function linePath(points: PlottedPoint[]) {
   );
 }
 
+export function createChartGeometry(points: readonly TokenChartPoint[]) {
+  if (points.length === 0) return null;
+  const usesUsd = points.every(
+    (point) => point.priceUsd && Number(point.priceUsd) > 0,
+  );
+  const unit = usesUsd ? "USD" : "ETH";
+  const validPoints = points
+    .map((point) => ({
+      ...point,
+      value: Number(usesUsd ? point.priceUsd : point.priceEth),
+    }))
+    .filter((point) => Number.isFinite(point.value) && point.value > 0);
+  if (validPoints.length === 0) return null;
+
+  const values = validPoints.map((point) => point.value);
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  const span = maximum - minimum || maximum * 0.02 || 1;
+  const domainMinimum = Math.max(0, minimum - span * 0.1);
+  const domainMaximum = maximum + span * 0.1;
+  const domainSpan = domainMaximum - domainMinimum || 1;
+  const singlePoint = validPoints.length === 1;
+  const plottedPoints: PlottedPoint[] = validPoints.map((point, index) => ({
+    ...point,
+    x: singlePoint
+      ? (PLOT_LEFT + PLOT_RIGHT) / 2
+      : PLOT_LEFT +
+        (index / (validPoints.length - 1)) * (PLOT_RIGHT - PLOT_LEFT),
+    y:
+      PLOT_BOTTOM -
+      ((point.value - domainMinimum) / domainSpan) *
+        (PLOT_BOTTOM - PLOT_TOP),
+  }));
+  const path = singlePoint ? "" : linePath(plottedPoints);
+  const last = plottedPoints.at(-1)?.value ?? plottedPoints[0].value;
+
+  return {
+    unit,
+    points: plottedPoints,
+    path,
+    areaPath: path
+      ? `${path} L${PLOT_RIGHT},${VIEWBOX_HEIGHT} L${PLOT_LEFT},${VIEWBOX_HEIGHT} Z`
+      : "",
+    current: last,
+  } as const;
+}
+
 export function nearestChartPointIndex(
   clientX: number,
   boundsLeft: number,
@@ -476,21 +531,21 @@ export function TokenPriceChart({
   tokenName,
   launchModel,
   preview = false,
-  marketCapEthWei,
-  marketCapEth,
-  marketCapUsdWad,
+  fdvEthWei,
+  fdvEth,
+  fdvUsdWad,
   onVolumeChange,
-  onMarketCapChange,
+  onFdvChange,
 }: {
   tokenAddress: `0x${string}`;
   tokenName: string;
   launchModel?: ChartLaunchModel;
   preview?: boolean;
-  marketCapEthWei?: string;
-  marketCapEth?: string;
-  marketCapUsdWad?: string;
+  fdvEthWei?: string;
+  fdvEth?: string;
+  fdvUsdWad?: string;
   onVolumeChange?: (volume: TokenChartVolume | null) => void;
-  onMarketCapChange?: (marketCap: TokenChartMarketCap | null) => void;
+  onFdvChange?: (fdv: TokenChartFdv | null) => void;
 }) {
   const [request, setRequest] = useState<ChartRequestState | null>(null);
   const [range, setRange] = useState<ChartRange>("1d");
@@ -579,46 +634,7 @@ export function TokenPriceChart({
   }, [refreshKey]);
 
   const chart = useMemo(() => {
-    if (!payload || payload.points.length < 2) return null;
-    const usesUsd = payload.points.every(
-      (point) => point.priceUsd && Number(point.priceUsd) > 0,
-    );
-    const unit = usesUsd ? "USD" : "ETH";
-    const validPoints = payload.points
-      .map((point) => ({
-        ...point,
-        value: Number(usesUsd ? point.priceUsd : point.priceEth),
-      }))
-      .filter((point) => Number.isFinite(point.value) && point.value > 0);
-    if (validPoints.length < 2) return null;
-
-    const values = validPoints.map((point) => point.value);
-    const minimum = Math.min(...values);
-    const maximum = Math.max(...values);
-    const span = maximum - minimum || maximum * 0.02 || 1;
-    const domainMinimum = Math.max(0, minimum - span * 0.1);
-    const domainMaximum = maximum + span * 0.1;
-    const domainSpan = domainMaximum - domainMinimum || 1;
-    const points: PlottedPoint[] = validPoints.map((point, index) => ({
-      ...point,
-      x:
-        PLOT_LEFT +
-        (index / (validPoints.length - 1)) * (PLOT_RIGHT - PLOT_LEFT),
-      y:
-        PLOT_BOTTOM -
-        ((point.value - domainMinimum) / domainSpan) *
-          (PLOT_BOTTOM - PLOT_TOP),
-    }));
-    const path = linePath(points);
-    const last = points.at(-1)?.value ?? points[0].value;
-
-    return {
-      unit,
-      points,
-      path,
-      areaPath: `${path} L${PLOT_RIGHT},${VIEWBOX_HEIGHT} L${PLOT_LEFT},${VIEWBOX_HEIGHT} Z`,
-      current: last,
-    } as const;
+    return payload ? createChartGeometry(payload.points) : null;
   }, [payload]);
 
   const emptyMessage = getPriceHistoryEmptyMessage(launchModel, failed);
@@ -627,15 +643,15 @@ export function TokenPriceChart({
       ? chart.points[Math.min(activePointIndex, chart.points.length - 1)]
       : null;
   const displayedPrice = activePoint?.value ?? chart?.current;
-  const inspectedMarketCap = useMemo(() => {
+  const inspectedFdv = useMemo(() => {
     if (!payload) return null;
     const latestPoint = chart?.points.at(-1);
-    return getChartMarketCapAtPoint(
+    return getChartFdvAtPoint(
       {
         ...payload,
-        marketCapEthWei: payload.marketCapEthWei ?? marketCapEthWei,
-        marketCapEth: payload.marketCapEth ?? marketCapEth,
-        marketCapUsdWad: payload.marketCapUsdWad ?? marketCapUsdWad,
+        fdvEthWei: payload.fdvEthWei ?? fdvEthWei,
+        fdvEth: payload.fdvEth ?? fdvEth,
+        fdvUsdWad: payload.fdvUsdWad ?? fdvUsdWad,
       },
       activePoint ?? latestPoint,
       latestPoint,
@@ -643,16 +659,18 @@ export function TokenPriceChart({
   }, [
     activePoint,
     chart,
-    marketCapEth,
-    marketCapEthWei,
-    marketCapUsdWad,
+    fdvEth,
+    fdvEthWei,
+    fdvUsdWad,
     payload,
   ]);
   const chartStatus =
     !payload && !failed
       ? "Loading price history"
       : chart
-        ? `Price history loaded with ${chart.points.length} points`
+        ? chart.points.length === 1
+          ? "Current price loaded from 1 point"
+          : `Price history loaded with ${chart.points.length} points`
         : emptyMessage;
 
   useEffect(() => {
@@ -678,8 +696,8 @@ export function TokenPriceChart({
   }, [failed, launchModel, onVolumeChange, payload, range]);
 
   useEffect(() => {
-    onMarketCapChange?.(inspectedMarketCap);
-  }, [inspectedMarketCap, onMarketCapChange]);
+    onFdvChange?.(inspectedFdv);
+  }, [inspectedFdv, onFdvChange]);
 
   function inspectPointer(event: PointerEvent<HTMLDivElement>) {
     if (!chart) return;
@@ -834,12 +852,16 @@ export function TokenPriceChart({
                 />
               );
             })}
-            <path
-              className={styles.area}
-              d={chart.areaPath}
-              fill={`url(#${gradientId})`}
-            />
-            <path className={styles.line} d={chart.path} />
+            {chart.areaPath ? (
+              <path
+                className={styles.area}
+                d={chart.areaPath}
+                fill={`url(#${gradientId})`}
+              />
+            ) : null}
+            {chart.path ? (
+              <path className={styles.line} d={chart.path} />
+            ) : null}
             {activePoint ? (
               <line
                 className={styles.hoverGuide}

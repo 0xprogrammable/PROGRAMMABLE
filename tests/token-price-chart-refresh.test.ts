@@ -3,8 +3,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   acceptChartPayload,
   createSerializedChartRefresh,
+  createChartGeometry,
   getChartKeyboardInspectionIndex,
-  getChartMarketCapAtPoint,
+  getChartFdvAtPoint,
   isAuthoritativeChartPayload,
   isAuthoritativeChartPayloadStatus,
   nearestChartPointIndex,
@@ -46,27 +47,49 @@ describe("token price chart inspection", () => {
     expect(shouldClearChartInspectionAfterPointerUp("")).toBe(true);
   });
 
-  it("updates market cap to the inspected historical price", () => {
+  it("updates FDV to the inspected historical price", () => {
     expect(
-      getChartMarketCapAtPoint(
+      getChartFdvAtPoint(
         {
           status: "ready",
           points: [],
           swapCount: 2,
           volumeWei: "0",
           volumeEth: "0",
-          marketCapEthWei: "1000000000000000000000",
-          marketCapEth: "1000",
-          marketCapUsdWad: "2000000000000000000000000",
+          fdvEthWei: "1000000000000000000000",
+          fdvEth: "1000",
+          fdvUsdWad: "2000000000000000000000000",
         },
         { blockNumber: "1", priceEth: "0.5", priceUsd: "1000" },
         { blockNumber: "2", priceEth: "1", priceUsd: "2000" },
       ),
     ).toEqual({
-      marketCapEthWei: "500000000000000000000",
-      marketCapEth: "500",
-      marketCapUsdWad: "1000000000000000000000000",
+      fdvEthWei: "500000000000000000000",
+      fdvEth: "500",
+      fdvUsdWad: "1000000000000000000000000",
     });
+  });
+
+  it("keeps a current one-point series as an accessible inspectable value", () => {
+    const chart = createChartGeometry([
+      { blockNumber: "100", priceEth: "1", priceUsd: "3500" },
+    ]);
+
+    expect(chart).toMatchObject({
+      unit: "USD",
+      current: 3500,
+      path: "",
+      areaPath: "",
+      points: [
+        expect.objectContaining({
+          blockNumber: "100",
+          value: 3500,
+          x: 300,
+        }),
+      ],
+    });
+    expect(Number.isFinite(chart?.points[0]?.y)).toBe(true);
+    expect(getChartKeyboardInspectionIndex("End", null, 1)).toBe(0);
   });
 });
 
@@ -95,6 +118,18 @@ describe("token price chart refresh", () => {
         fdvUsdWad: "3000000000000000000000000",
       }),
     ).toBe(true);
+    expect(
+      isAuthoritativeChartPayload({
+        status: "ready",
+        points: [{ blockNumber: "1", priceEth: "0.1" }],
+        swapCount: 1,
+        volumeWei: "1",
+        volumeEth: "0.000000000000000001",
+        marketCapEthWei: "1000000000000000000000",
+        marketCapEth: "1000",
+        marketCapUsdWad: "3000000000000000000000000",
+      }),
+    ).toBe(false);
     expect(
       isAuthoritativeChartPayload({
         status: "not-deployed",

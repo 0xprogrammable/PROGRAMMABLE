@@ -103,11 +103,35 @@ export type TokenChartIntegrityReason =
   | "invalid-valuation-block"
   | "valuation-after-snapshot";
 
+export type TokenChartUnavailableReason = "unsupported-pool-orientation";
+
 export class TokenChartIntegrityError extends Error {
   override name = "TokenChartIntegrityError";
 
   constructor(readonly reason: TokenChartIntegrityReason) {
     super("Token chart inputs failed integrity validation");
+  }
+}
+
+export class TokenChartUnavailableError extends Error {
+  override name = "TokenChartUnavailableError";
+
+  constructor(readonly reason: TokenChartUnavailableReason) {
+    super("Token chart data is unavailable for this pool");
+  }
+}
+
+/**
+ * Router Custom Graph pools do not inherit the Classic native/token PoolKey
+ * orientation. Until the read model exposes a validated chart capability, the
+ * public chart must not interpret their sqrtPriceX96 or fee events as Classic.
+ */
+export function assertTokenChartSupported(token: LauncherToken) {
+  if (
+    token.launchModel === "custom-graph" ||
+    token.launchStampProvenance?.kind === "custom-graph"
+  ) {
+    throw new TokenChartUnavailableError("unsupported-pool-orientation");
   }
 }
 
@@ -339,6 +363,7 @@ async function readTokenChartSeriesFromRpc(input: {
     ethUsdQuote,
     range = "all",
   } = input;
+  assertTokenChartSupported(token);
   if (token.launchModel === "stock-paired") {
     return {
       status: "partial",

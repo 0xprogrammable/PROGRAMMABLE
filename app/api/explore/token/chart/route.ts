@@ -8,9 +8,11 @@ import {
 } from "../../../../../lib/alchemy/explore.server";
 import { enrichTokensWithAlchemyPoolState } from "../../../../../lib/alchemy/live-market.server";
 import {
+  assertTokenChartSupported,
   isTokenChartRange,
   readTokenChartSeries,
   TokenChartIntegrityError,
+  TokenChartUnavailableError,
   type TokenChartFreshness,
 } from "../../../../../lib/onchain/chart";
 
@@ -28,7 +30,12 @@ function chartDataQualityStatus(freshness: TokenChartFreshness) {
     : "partial" as const;
 }
 
-function unavailableDataQuality(reason: "integrity" | "source-unavailable") {
+function unavailableDataQuality(
+  reason:
+    | "integrity"
+    | "source-unavailable"
+    | "unsupported-pool-orientation",
+) {
   return {
     schemaVersion: TOKEN_CHART_DATA_QUALITY_SCHEMA_VERSION,
     status: "unavailable" as const,
@@ -111,6 +118,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    assertTokenChartSupported(token);
+
     const liveSnapshot = model.launchDiscoverySnapshot ?? model.snapshot;
     const liveToken = (
       await enrichTokensWithAlchemyPoolState({
@@ -164,23 +173,34 @@ export async function GET(request: NextRequest) {
     );
   } catch (error) {
     const integrityFailure = error instanceof TokenChartIntegrityError;
-    console.error(
-      "Alchemy token chart read failed",
-      safeAlchemyError(error),
-    );
+    const unsupportedPool = error instanceof TokenChartUnavailableError;
+    if (!unsupportedPool) {
+      console.error(
+        "Token chart read failed",
+        safeAlchemyError(error),
+      );
+    }
     return NextResponse.json(
       {
         status: "unavailable",
-        error: "Onchain chart data is temporarily unavailable",
+        error: unsupportedPool
+          ? "Price history is unavailable for this pool"
+          : "Onchain chart data is temporarily unavailable",
         dataQuality: unavailableDataQuality(
-          integrityFailure ? "integrity" : "source-unavailable",
+          integrityFailure
+            ? "integrity"
+            : unsupportedPool
+              ? error.reason
+              : "source-unavailable",
         ),
       },
       {
         status: 503,
         headers: {
           "Cache-Control": "no-store",
-          ...(integrityFailure ? {} : { "Retry-After": "5" }),
+          ...(integrityFailure || unsupportedPool
+            ? {}
+            : { "Retry-After": "5" }),
           "X-Programmable-Data-Quality": "unavailable",
         },
       },

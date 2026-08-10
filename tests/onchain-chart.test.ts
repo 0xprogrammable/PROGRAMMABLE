@@ -4,6 +4,7 @@ vi.mock("server-only", () => ({}));
 
 import {
   collapsePricePointsByBlock,
+  assertTokenChartSupported,
   feeVolumeEventKindForToken,
   findChartRangeStartBlock,
   isTokenChartRange,
@@ -11,9 +12,11 @@ import {
   samplePricePoints,
   sumGrossNativeVolume,
   TokenChartIntegrityError,
+  TokenChartUnavailableError,
 } from "../lib/onchain/chart";
 import type { ReadyOnchainDeployment } from "../lib/onchain/types";
 import type { LauncherToken } from "../lib/tokens";
+import { customGraphToken } from "./launch-stamp-surface-fixture";
 
 const deployment = {
   environment: "production",
@@ -197,6 +200,39 @@ describe("onchain token chart", () => {
         price: { status: "unavailable" },
         valuation: { status: "unavailable", metric: "fdv" },
       },
+    });
+  });
+
+  it.each([
+    ["native/token", customGraphToken],
+    [
+      "token/native",
+      {
+        ...customGraphToken,
+        launchStampProvenance: {
+          ...customGraphToken.launchStampProvenance,
+          poolKey: {
+            ...customGraphToken.launchStampProvenance.poolKey,
+            currency0: customGraphToken.tokenAddress,
+            currency1:
+              "0x0000000000000000000000000000000000000000" as const,
+          },
+        },
+      },
+    ],
+  ])("fails closed for Custom Graph %s orientation", async (_orientation, customToken) => {
+    expect(() => assertTokenChartSupported(customToken)).toThrowError(
+      TokenChartUnavailableError,
+    );
+    await expect(
+      readTokenChartSeries({
+        deployment,
+        token: customToken,
+        snapshotBlock: 25_718_017n,
+      }),
+    ).rejects.toMatchObject({
+      name: "TokenChartUnavailableError",
+      reason: "unsupported-pool-orientation",
     });
   });
 
