@@ -14,6 +14,7 @@ import {
   clearConfirmedProfileActionStates,
   getProfileSessionView,
   getProfileWorkspacePhase,
+  getProfileRewardDataQuality,
   getStockPairedClaimPaths,
   groupPendingProfileTransactionStates,
   groupProfileRewards,
@@ -214,6 +215,40 @@ describe("profile workspace loading state", () => {
     );
   });
 
+  it("keeps temporary reward outages distinct from accounting conflicts", () => {
+    expect(
+      getProfileWorkspacePhase(["ready", "error", "not-deployed"], true),
+    ).toBe("ready");
+    expect(
+      getProfileWorkspacePhase(
+        ["ready", "error", "not-deployed"],
+        true,
+        true,
+      ),
+    ).toBe("error");
+    expect(
+      getProfileRewardDataQuality(
+        ["ready", "error", "not-deployed"],
+        "unavailable",
+      ),
+    ).toBe("partial");
+    expect(
+      getProfileRewardDataQuality(
+        ["ready", "ready", "not-deployed"],
+        "stale",
+      ),
+    ).toBe("stale");
+    expect(profileViewSource).not.toContain(
+      "Classic rewards could not be loaded",
+    );
+    expect(profileViewSource).toContain(
+      "Current claim totals could not be verified",
+    );
+    expect(profileViewSource).toContain(
+      "PROFILE_LIVE_REFRESH_INTERVAL_MS = 30_000",
+    );
+  });
+
   it("contains five desktop claim rows inside the workspace while mobile keeps page flow", () => {
     expect(profileExperienceCss).toMatch(
       /@media \(min-width: 821px\) and \(min-height: 700px\)[\s\S]*?\.profileWorkspace\s*\{[\s\S]*?height: clamp\(/,
@@ -336,11 +371,61 @@ describe("fee earnings chart", () => {
     expect(profileViewSource).not.toContain("styles.claimHistory");
   });
 
+  it("keeps short and long histories finite without a permanent endpoint marker", () => {
+    const nowMs = Date.parse("2026-08-04T12:00:00.000Z");
+    const oneClaim = buildFeeEarningsChart(
+      [
+        {
+          id: "claim:only",
+          label: "Creator fees claimed",
+          detail: "0.1 ETH from ONE",
+          occurredAt: "Today",
+          occurredAtIso: "2026-08-04T11:30:00.000Z",
+          href: "/token/one",
+        },
+      ],
+      100_000_000_000_000_000n,
+      0n,
+      { nowMs, range: "all" },
+    );
+    const longHistory = buildFeeEarningsChart(
+      Array.from({ length: 80 }, (_, index) => ({
+        id: `claim:${index}`,
+        label: "Creator fees claimed",
+        detail: "0.001 ETH from MANY",
+        occurredAt: "This week",
+        occurredAtIso: new Date(nowMs - (80 - index) * 60_000).toISOString(),
+        href: "/token/many",
+      })),
+      80_000_000_000_000_000n,
+      0n,
+      { nowMs, range: "all" },
+    );
+
+    for (const chart of [oneClaim, longHistory]) {
+      expect(chart).not.toBeNull();
+      expect(
+        chart?.points.every(
+          (point) => Number.isFinite(point.x) && Number.isFinite(point.y),
+        ),
+      ).toBe(true);
+    }
+    expect(profileViewSource).not.toContain("<circle");
+    expect(profileViewSource).not.toContain("styles.feeActivePoint");
+    expect(profileViewSource).toMatch(
+      /\{activePoint \? \([\s\S]*?className=\{styles\.feeCursor\}/,
+    );
+    expect(profileViewSource).toContain("onFocus={activateLastPoint}");
+  });
+
   it("keeps the claim dialog focused on the selected token and actions", () => {
     expect(profileViewSource).not.toContain(">Claimable rewards<");
     expect(profileViewSource).not.toContain(
       "Choose the reward you want to claim.",
     );
+    expect(profileViewSource).not.toContain(">Ready<");
+    expect(profileViewSource).not.toContain("No rewards ready");
+    expect(profileViewSource).toContain("Claimable: ");
   });
 });
 

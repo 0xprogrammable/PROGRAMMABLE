@@ -121,7 +121,7 @@
   display: inline-flex;
   font-weight: 650;
   justify-content: center;
-  min-height: 42px;
+  min-height: 44px;
   transition:
     background-color 150ms ease,
     border-color 150ms ease,
@@ -434,7 +434,7 @@
   flex: none;
   font-size: 12px;
   font-weight: 680;
-  min-height: 36px;
+  min-height: 44px;
   padding-inline: 7px;
 }
 
@@ -821,13 +821,6 @@
   vector-effect: non-scaling-stroke;
 }
 
-.feeActivePoint {
-  fill: var(--profile-panel);
-  stroke: var(--profile-pink);
-  stroke-width: 3;
-  vector-effect: non-scaling-stroke;
-}
-
 .chartScale {
   align-items: center;
   color: var(--muted);
@@ -989,22 +982,10 @@
   min-width: 0;
 }
 
-.claimAmount > span,
 .claimAmount small {
   color: var(--muted);
   font-size: 11px;
   line-height: 1.25;
-}
-
-.claimAmount > span::before {
-  background: var(--profile-green);
-  border-radius: 50%;
-  content: "";
-  display: inline-block;
-  height: 5px;
-  margin-inline-end: 5px;
-  vertical-align: 1px;
-  width: 5px;
 }
 
 .claimAmount strong {
@@ -1028,7 +1009,7 @@
 
 .claimRow .claimButton {
   font-size: 11px;
-  min-height: 40px;
+  min-height: 44px;
   min-width: 0;
   padding-inline: 10px;
   white-space: nowrap;
@@ -1870,7 +1851,6 @@
     border: 1px solid ButtonText;
   }
 
-  .claimAmount > span::before,
   .claimEmpty::before {
     background: CanvasText;
   }
