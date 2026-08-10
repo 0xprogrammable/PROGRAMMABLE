@@ -547,13 +547,13 @@ describe("inactive Shards nested-factory Router V2 browser contract", () => {
     expect(MANUAL_ROUTER_NESTED_FACTORY_BINDING_V2.canonicalArtifact)
       .toEqual({
         path: "outputs/shards-nested-factory-route-v1.canonical.json",
-        byteLength: 1281987,
+        byteLength: 1287041,
         sha256:
-          "sha256:7385a806d831e7b89e598dca16de1c6107590659375d43d97d4d6ab30292f6d0",
+          "sha256:066475058bfd47b85b4216f95b434756d67d7e289ffb36535c121ef5d7c11bab",
         keccak256:
-          "0xe058d7fc4fb69c6a0860506caca5a32f0fc6845499fbb9b2dadbc0c4cd4cf21a",
+          "0x8c5521d6796e3e63c3e2cf82e1122c952e6465c345d8a10b3773a70aa2419fb3",
         integritySha256:
-          "sha256:de0d683e7eaeae6a1bb0e08a6c0a02318a7e22fb534f1f2d7df60284b6694e91",
+          "sha256:74028d65363189804912f2907400da11098d90579c9261e1d087b2d5a709ae6f",
         status:
           "frozen-contract-and-exact-shards-artifact-undeployed-acceptance-pending-no-permit-no-signature",
       });
@@ -574,14 +574,14 @@ describe("inactive Shards nested-factory Router V2 browser contract", () => {
     ).every((value) => value === null)).toBe(true);
     expect(MANUAL_ROUTER_NESTED_FACTORY_BINDING_V2.authorityVendor)
       .toEqual({
-        adapterCommit: "4ddfaac6a90ceaba6e9b4a8ce5bfb4b349a30f9e",
-        adapterTree: "6ef200f382b1dc0697025955d57168d6a8bb9519",
+        adapterCommit: "b180aca739e0745d16618542052e44b89e177bae",
+        adapterTree: "b7a90a8f7d0e48c581bf212595a1ad5d5906153f",
         bundleSha256:
-          "sha256:ff94874d02b597ba21b02c28391660118626287d39ffe26581cffc7c784e0e42",
+          "sha256:2857f80616cd9dd3da6128a298f935c2cdc7acc8909bfd7fad58ed82776241de",
         manifestSha256:
-          "sha256:d6076c4dbba68f86505fd3b9bef6a3ea3a4df1d2f2c5beace7d435331c0d703e",
+          "sha256:ba46a2aff95c30fe4f75e60c70da654c90787e58c1f3fdb15c408704c2d81343",
         goldenSha256:
-          "sha256:a0d8cde64a0464825d4fab6582b69b6c4e4a837f976503e872d6b29d745d0836",
+          "sha256:befb581ce142001a5cd5b68a256c55a86dc435630139832d5438f257b77f55db",
       });
     expect(MANUAL_ROUTER_NESTED_FACTORY_BINDING_V2.exactPlan).toMatchObject({
       routePayloadHash:
@@ -605,19 +605,19 @@ describe("inactive Shards nested-factory Router V2 browser contract", () => {
     const digest = (bytes: Buffer) => createHash("sha256")
       .update(bytes).digest("hex");
     expect(digest(manifestBytes)).toBe(
-      "d6076c4dbba68f86505fd3b9bef6a3ea3a4df1d2f2c5beace7d435331c0d703e",
+      "ba46a2aff95c30fe4f75e60c70da654c90787e58c1f3fdb15c408704c2d81343",
     );
     expect(manifest.adapter).toMatchObject({
       publicExport: "./manual-router-v2",
-      commit: "4ddfaac6a90ceaba6e9b4a8ce5bfb4b349a30f9e",
-      tree: "6ef200f382b1dc0697025955d57168d6a8bb9519",
+      commit: "b180aca739e0745d16618542052e44b89e177bae",
+      tree: "b7a90a8f7d0e48c581bf212595a1ad5d5906153f",
       provisionalDirtySource: false,
     });
     expect(digest(readFileSync(join(
       root,
       "manual-router-portable.v2.mjs",
     )))).toBe(
-      "ff94874d02b597ba21b02c28391660118626287d39ffe26581cffc7c784e0e42",
+      "2857f80616cd9dd3da6128a298f935c2cdc7acc8909bfd7fad58ed82776241de",
     );
     const golden = JSON.parse(readFileSync(join(
       root,
@@ -989,7 +989,9 @@ describe("inactive Shards nested-factory Router V2 browser contract", () => {
       plan,
     };
     expect(MANUAL_ROUTER_NESTED_FACTORY_BINDING_V2.acceptanceClaimSha256)
-      .toBeNull();
+      .toBe(
+        "sha256:02e0fba56c294bcef1d6d40dace601b96cf647f60f1b24fc16e1303f19b1aa39",
+      );
     expect(() => parseManualRouterRouteAcceptanceStateResponseV1({
       ...response,
       stateVersion: "1",

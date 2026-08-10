@@ -33,9 +33,16 @@ export type ManualRouterProductionBindingV2 = Readonly<{
   chainId: "0x1" | null;
   acceptanceClaimSha256: `sha256:${string}` | null;
   acceptanceSubjectSha256: `sha256:${string}`;
+  acceptanceRelease: Readonly<{
+    commit: string;
+    tree: string;
+    reviewedPlanSha256: Sha256Commitment;
+    routerArtifactBindingSha256: Sha256Commitment;
+    acceptanceRecordSha256: Sha256Commitment;
+  }>;
   canonicalArtifact: Readonly<{
     path: "outputs/shards-nested-factory-route-v1.canonical.json";
-    byteLength: 1281987;
+    byteLength: 1287041;
     sha256: Sha256Commitment;
     keccak256: EvmBytes32;
     integritySha256: Sha256Commitment;
@@ -102,18 +109,29 @@ ManualRouterProductionBindingV2 =
     active: false,
     activationAllowed: false,
     chainId: "0x1",
-    acceptanceClaimSha256: null,
+    acceptanceClaimSha256:
+      "sha256:02e0fba56c294bcef1d6d40dace601b96cf647f60f1b24fc16e1303f19b1aa39",
     acceptanceSubjectSha256:
       "sha256:948a920b86aa915bc2dfcdcf56b271f41a2843fc1360b734e9221c0533d960b8",
+    acceptanceRelease: Object.freeze({
+      commit: "e074d449aa0e60c40ddf05296823f2eb8c67dcc5",
+      tree: "17075bc60f5d997190b6085ce852aac3f73ad7d8",
+      reviewedPlanSha256:
+        "sha256:cfe926c42918ce1ca23efe8fa7352c2b6ed7090002f62a0d6d64481883205591",
+      routerArtifactBindingSha256:
+        "sha256:f93920386d226d26dcf55105fcfcc2400bcb3b211974daa3e09cd12082bb6b53",
+      acceptanceRecordSha256:
+        "sha256:1b079965e5ef4d09eb42aaab77bd843d6c340bb1d4cba37e3165918200f97251",
+    }),
     canonicalArtifact: Object.freeze({
       path: "outputs/shards-nested-factory-route-v1.canonical.json",
-      byteLength: 1281987,
+      byteLength: 1287041,
       sha256:
-        "sha256:7385a806d831e7b89e598dca16de1c6107590659375d43d97d4d6ab30292f6d0",
+        "sha256:066475058bfd47b85b4216f95b434756d67d7e289ffb36535c121ef5d7c11bab",
       keccak256:
-        "0xe058d7fc4fb69c6a0860506caca5a32f0fc6845499fbb9b2dadbc0c4cd4cf21a",
+        "0x8c5521d6796e3e63c3e2cf82e1122c952e6465c345d8a10b3773a70aa2419fb3",
       integritySha256:
-        "sha256:de0d683e7eaeae6a1bb0e08a6c0a02318a7e22fb534f1f2d7df60284b6694e91",
+        "sha256:74028d65363189804912f2907400da11098d90579c9261e1d087b2d5a709ae6f",
       status:
         "frozen-contract-and-exact-shards-artifact-undeployed-acceptance-pending-no-permit-no-signature",
     }),
@@ -147,7 +165,8 @@ ManualRouterProductionBindingV2 =
         "0xa98b7b95777267181a2b93a33632991e80a49f4a57d94150f8dfbd90421f34c1",
       revenuePolicyHash:
         "0xaa78b0bf63fca83fa9b969fbb6b2bb1ecabcbe49908a48f92403e8e51e4adab2",
-      reviewedPlanSha256: null,
+      reviewedPlanSha256:
+        "sha256:cfe926c42918ce1ca23efe8fa7352c2b6ed7090002f62a0d6d64481883205591",
       routerIdentity: null,
       factoryIdentity: null,
       revenueAttestationSha256: null,
@@ -161,14 +180,14 @@ ManualRouterProductionBindingV2 =
       primaryEvidence: null,
     }),
     authorityVendor: Object.freeze({
-      adapterCommit: "4ddfaac6a90ceaba6e9b4a8ce5bfb4b349a30f9e",
-      adapterTree: "6ef200f382b1dc0697025955d57168d6a8bb9519",
+      adapterCommit: "b180aca739e0745d16618542052e44b89e177bae",
+      adapterTree: "b7a90a8f7d0e48c581bf212595a1ad5d5906153f",
       bundleSha256:
-        "sha256:ff94874d02b597ba21b02c28391660118626287d39ffe26581cffc7c784e0e42",
+        "sha256:2857f80616cd9dd3da6128a298f935c2cdc7acc8909bfd7fad58ed82776241de",
       manifestSha256:
-        "sha256:d6076c4dbba68f86505fd3b9bef6a3ea3a4df1d2f2c5beace7d435331c0d703e",
+        "sha256:ba46a2aff95c30fe4f75e60c70da654c90787e58c1f3fdb15c408704c2d81343",
       goldenSha256:
-        "sha256:a0d8cde64a0464825d4fab6582b69b6c4e4a837f976503e872d6b29d745d0836",
+        "sha256:befb581ce142001a5cd5b68a256c55a86dc435630139832d5438f257b77f55db",
     }),
     eventTopics: Object.freeze({
       launchStamped: null,
@@ -184,6 +203,7 @@ export type ActiveManualRouterProductionBindingV2 = Readonly<{
   chainId: "0x1";
   acceptanceClaimSha256: `sha256:${string}`;
   acceptanceSubjectSha256: `sha256:${string}`;
+  acceptanceRelease: ManualRouterProductionBindingV2["acceptanceRelease"];
   canonicalArtifact: ManualRouterProductionBindingV2["canonicalArtifact"];
   route: typeof MANUAL_ROUTER_SHARDS_ROUTE_IDENTITY_V2 & Readonly<{
     profileKey: EvmBytes32;
@@ -275,11 +295,17 @@ ActiveManualRouterProductionBindingV2 {
     || binding.chainId !== "0x1"
     || binding.acceptanceSubjectSha256
       !== "sha256:948a920b86aa915bc2dfcdcf56b271f41a2843fc1360b734e9221c0533d960b8"
-    || binding.canonicalArtifact.byteLength !== 1281987
+    || !gitSha(binding.acceptanceRelease.commit)
+    || !gitSha(binding.acceptanceRelease.tree)
+    || binding.acceptanceRelease.reviewedPlanSha256
+      !== exactPlan.reviewedPlanSha256
+    || !sha256(binding.acceptanceRelease.routerArtifactBindingSha256)
+    || !sha256(binding.acceptanceRelease.acceptanceRecordSha256)
+    || binding.canonicalArtifact.byteLength !== 1287041
     || binding.canonicalArtifact.sha256
-      !== "sha256:7385a806d831e7b89e598dca16de1c6107590659375d43d97d4d6ab30292f6d0"
+      !== "sha256:066475058bfd47b85b4216f95b434756d67d7e289ffb36535c121ef5d7c11bab"
     || binding.canonicalArtifact.keccak256
-      !== "0xe058d7fc4fb69c6a0860506caca5a32f0fc6845499fbb9b2dadbc0c4cd4cf21a"
+      !== "0x8c5521d6796e3e63c3e2cf82e1122c952e6465c345d8a10b3773a70aa2419fb3"
     || !sha256(binding.acceptanceClaimSha256)
     || binding.router.address === null
     || FROZEN_SHARDS_APPLICANT_SELECTOR_V2 === null

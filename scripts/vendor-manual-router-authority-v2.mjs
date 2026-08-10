@@ -5,10 +5,10 @@ import { createHash } from "node:crypto";
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { basename, join, relative, resolve } from "node:path";
 
-const ADAPTER_COMMIT = "4ddfaac6a90ceaba6e9b4a8ce5bfb4b349a30f9e";
-const ADAPTER_TREE = "6ef200f382b1dc0697025955d57168d6a8bb9519";
+const ADAPTER_COMMIT = "b180aca739e0745d16618542052e44b89e177bae";
+const ADAPTER_TREE = "b7a90a8f7d0e48c581bf212595a1ad5d5906153f";
 const BUNDLE_SHA256 =
-  "ff94874d02b597ba21b02c28391660118626287d39ffe26581cffc7c784e0e42";
+  "2857f80616cd9dd3da6128a298f935c2cdc7acc8909bfd7fad58ed82776241de";
 const SOURCE_DIRECTORY = "services/autonomous-approval-v1";
 const PORTABLE_DIRECTORY = "artifacts/manual-router-portable-v2";
 const GOLDEN =

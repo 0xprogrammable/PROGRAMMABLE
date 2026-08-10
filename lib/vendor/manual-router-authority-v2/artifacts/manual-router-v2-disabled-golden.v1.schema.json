@@ -524,7 +524,7 @@
               ],
               "properties": {
                 "commit": {
-                  "const": "3d71e9243dd1b604099c79038c4c52a36062b0e4"
+                  "const": "1ac92f9694fb5c3ae534c65669775e634e3214f7"
                 },
                 "directLaunchSelector": {
                   "const": "0xc90ca102"
@@ -533,7 +533,7 @@
                   "const": "https://github.com/0xprogrammable/programmable"
                 },
                 "tree": {
-                  "const": "d38e368c591c6e4a511915a7397f887beb082db7"
+                  "const": "8e6920b46aa30e5a8afbebc3a86adfba22cc7628"
                 }
               }
             },

@@ -5,8 +5,8 @@
     "packageVersion": "0.1.0",
     "publicExport": "./manual-router-v2",
     "sourceEntry": "src/public-api/manual-router-v2.ts",
-    "commit": "4ddfaac6a90ceaba6e9b4a8ce5bfb4b349a30f9e",
-    "tree": "6ef200f382b1dc0697025955d57168d6a8bb9519",
+    "commit": "b180aca739e0745d16618542052e44b89e177bae",
+    "tree": "b7a90a8f7d0e48c581bf212595a1ad5d5906153f",
     "provisionalDirtySource": false
   },
   "exports": [
@@ -137,13 +137,13 @@
   "bundle": {
     "path": "lib/vendor/manual-router-authority-v2/manual-router-portable.v2.mjs",
     "bytes": 185686,
-    "sha256": "ff94874d02b597ba21b02c28391660118626287d39ffe26581cffc7c784e0e42",
+    "sha256": "2857f80616cd9dd3da6128a298f935c2cdc7acc8909bfd7fad58ed82776241de",
     "sourceMapPath": "lib/vendor/manual-router-authority-v2/manual-router-portable.v2.mjs.map",
-    "sourceMapSha256": "41c1a334beb2db6ec0522b61d4fbfd7475b782e6e4e831da5681655bd0392d72",
+    "sourceMapSha256": "823ac9d455a7b03935ed7a5e26324fd649ee9f3a1f1153276bc83cf0a341fc4d",
     "metafilePath": "lib/vendor/manual-router-authority-v2/manual-router-portable.v2.metafile.json",
     "metafileSha256": "f07e390958f93e72e95e2ed076c558160a75488e636d5dc1cfcab8aa2d4a0efc",
     "closurePath": "lib/vendor/manual-router-authority-v2/manual-router-portable.v2.closure.json",
-    "closureSha256": "d161a2c26b75bd1c984876ce13662c358370dcc239c1ec0d96de24944df480cd"
+    "closureSha256": "84bfdbf5ec3f504826025d3a57f505204e16a20e38ae7311e5bc693396022f01"
   },
   "closure": [
     {
@@ -164,7 +164,7 @@
     {
       "path": "src/internal/router-self-service-v1/nested-factory-v2.ts",
       "bytes": 220458,
-      "sha256": "9a8aaf327ffe5cf51869bc4818b2a9fb7d82c06f9bddf0aba0b8be1508c6b3d8"
+      "sha256": "d8895cf9217addde21890d19cad6afce8a6d2a975b26b653dbf507aa985f133a"
     },
     {
       "path": "src/public-api/manual-router-v2.ts",
@@ -201,7 +201,7 @@
       "sourcePath": "schemas/manual-router-v2-disabled-authority-release.v1.schema.json",
       "vendoredPath": "lib/vendor/manual-router-authority-v2/artifacts/manual-router-v2-disabled-authority-release.v1.schema.json",
       "bytes": 17528,
-      "sha256": "adbe3257d7d690e4d996db5755ae80bc6c647d47aefefd833109508f35cb1183"
+      "sha256": "27ee9a16b8c2fdad0d1b630f4b1c8ff5cac202bdaee29e69d59b336c066c80a2"
     },
     {
       "sourcePath": "schemas/manual-router-v2-disabled-capability-catalog.v1.schema.json",
@@ -213,7 +213,7 @@
       "sourcePath": "schemas/manual-router-v2-disabled-golden.v1.schema.json",
       "vendoredPath": "lib/vendor/manual-router-authority-v2/artifacts/manual-router-v2-disabled-golden.v1.schema.json",
       "bytes": 20444,
-      "sha256": "990761fb3003002eb83b865dfa4e167760befe3f05a43ef2cbaa6304e2026b38"
+      "sha256": "008e1f4be632c0f5615f206eb2beab39679c6c3fc9d160663363fb92bcfddb37"
     },
     {
       "sourcePath": "schemas/manual-router-v2-existing-launch-adoption-receipt.v1.schema.json",
@@ -261,7 +261,7 @@
       "sourcePath": "artifacts/manual-router-authority-v2/manual-router-v2-disabled-golden.v1.json",
       "vendoredPath": "lib/vendor/manual-router-authority-v2/artifacts/manual-router-v2-disabled-golden.v1.json",
       "bytes": 8331,
-      "sha256": "a0d8cde64a0464825d4fab6582b69b6c4e4a837f976503e872d6b29d745d0836"
+      "sha256": "befb581ce142001a5cd5b68a256c55a86dc435630139832d5438f257b77f55db"
     }
   ]
 }

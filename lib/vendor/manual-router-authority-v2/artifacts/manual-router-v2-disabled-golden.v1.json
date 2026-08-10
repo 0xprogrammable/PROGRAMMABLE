@@ -51,7 +51,7 @@
             "profileVersionHash": "0x06c015bd22b4c69690933c1058878ebdfef31f9aaae40bbe86d8a09fe1b2972c",
             "profileKey": "0xb90e215e0e29c0dacf021e5e778847af4100433ee7d22014b73f8ca4add09d0c"
           },
-          "profileSha256": "sha256:7385a806d831e7b89e598dca16de1c6107590659375d43d97d4d6ab30292f6d0",
+          "profileSha256": "sha256:066475058bfd47b85b4216f95b434756d67d7e289ffb36535c121ef5d7c11bab",
           "planSchemaId": "urn:programmable:reviewed-route-plan:1.0.0",
           "sourceRevisionHash": "0x3352fe14662ce467e98f475cf91f10304ce4d69b6342fae4bf3dc968c494d6dc",
           "manifestHash": "0x4672dfda95c9765916397701479483b8e1db852165949518cdc9932fd8e1b359",
@@ -59,10 +59,10 @@
           "poolManager": "0x000000000004444c5dc75cb358380d2e3de08a90",
           "poolManagerRuntimeCodeHash": "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293",
           "activation": null,
-          "capabilityHash": "sha256:fcba7b1493f2f4eb933c90730eabfb3312d7e09c15dc7f876a48e10caeb4f1b9"
+          "capabilityHash": "sha256:b21ff4dd01050121dbc30527a61b0c941e7632a061a671e9cea986fee5a7d054"
         }
       ],
-      "catalogHash": "sha256:ae3319bb701a554ff034ad39984902b541f996da1dff3a6b35a01f9400f6dd0b"
+      "catalogHash": "sha256:8aeb953990e4268b3eb67a830ca0dcf4a6caa099a4dbc0e0c157f43403e0d0a0"
     },
     "atomicDeploymentPlan": {
       "schemaVersion": "programmable.nested-factory-atomic-deployment-plan.v1",
@@ -84,26 +84,26 @@
       "schemaVersion": "programmable.nested-factory-final-route-ledger-binding.v1",
       "artifact": {
         "path": "outputs/shards-nested-factory-route-v1.canonical.json",
-        "byteLength": 1281987,
-        "sha256": "0x7385a806d831e7b89e598dca16de1c6107590659375d43d97d4d6ab30292f6d0",
-        "keccak256": "0xe058d7fc4fb69c6a0860506caca5a32f0fc6845499fbb9b2dadbc0c4cd4cf21a"
+        "byteLength": 1287041,
+        "sha256": "0x066475058bfd47b85b4216f95b434756d67d7e289ffb36535c121ef5d7c11bab",
+        "keccak256": "0x8c5521d6796e3e63c3e2cf82e1122c952e6465c345d8a10b3773a70aa2419fb3"
       },
       "integrity": {
         "path": "outputs/shards-nested-factory-route-v1.canonical.integrity.json",
-        "byteLength": 3066,
-        "sha256": "0xde0d683e7eaeae6a1bb0e08a6c0a02318a7e22fb534f1f2d7df60284b6694e91",
-        "keccak256": "0xcb271221d7a079456d6c782168c84e66a301315072584cce4f51ef3ba2b04f9f"
+        "byteLength": 3739,
+        "sha256": "0x74028d65363189804912f2907400da11098d90579c9261e1d087b2d5a709ae6f",
+        "keccak256": "0x44a685e0a909a78c9da6f1fd0cd79fd62e25590e13270cf95fbb7e66601e308b"
       },
       "generator": {
         "path": "work/generate-shards-route-artifact.mjs",
-        "byteLength": 73791,
-        "sha256": "0x87f11e9272e6110bab1e7d2d92d983d2c45757bb76422b2df65be61bbdc2451d",
-        "keccak256": "0x75c72ac76932dea676c633cb5a6c7b9473bb743c4b4af0307aefcb445245916b"
+        "byteLength": 76813,
+        "sha256": "0x3876075dfdb50f82bf5168bd12d42ae11594dbb8ffd68c9cbadcd7111ca0650a",
+        "keccak256": "0xb7effad54085a5033635b59623febcf15844e373f5048c872508c106467cc93f"
       },
       "router": {
         "repository": "https://github.com/0xprogrammable/programmable",
-        "commit": "3d71e9243dd1b604099c79038c4c52a36062b0e4",
-        "tree": "d38e368c591c6e4a511915a7397f887beb082db7",
+        "commit": "1ac92f9694fb5c3ae534c65669775e634e3214f7",
+        "tree": "8e6920b46aa30e5a8afbebc3a86adfba22cc7628",
         "directLaunchSelector": "0xc90ca102"
       },
       "exactRebuildModes": [
@@ -141,7 +141,7 @@
       "applicant-acceptance-current-head",
       "dual-rpc-currentness-and-gas-cap"
     ],
-    "releaseHash": "sha256:ce96c73e48384704d8911b149626eeb49954f2ff00c4574f886648206227a60a"
+    "releaseHash": "sha256:c45028a3c975485a5e86ad047090352c56bcb7313fcf0bb334aab4c90e96bbb5"
   },
-  "fixtureHash": "sha256:9edc9ae0c794c91c2931eb7f59085464c48c05523672397d54486d7ae5127db1"
+  "fixtureHash": "sha256:a243ccefed9da1104e1f6c6d7ac414815c172ed6e1fa2dc807c3a435d95aa55e"
 }
