@@ -40,7 +40,10 @@ import {
   isManualRouterApplicantLaunchEnabledV1,
   resolveManualRouterStrictRpcConfigurationV1,
 } from "../lib/server/custom-launch/manual-router-config-v1";
-import { handleProductionManualRouterWebsiteRouteV1 } from
+import {
+  handleManualRouterWebsiteRouteV1,
+  handleProductionManualRouterWebsiteRouteV1,
+} from
   "../lib/server/custom-launch/manual-router-routes-v1";
 import {
   assertManualRouterUsableSendWindowV1,
@@ -60,6 +63,8 @@ import {
 } from "../lib/server/custom-launch/manual-router-state-v1";
 import { canonicalSha256 } from
   "../lib/server/projection-target/hashing";
+import { GitHubPrincipalAuthenticationErrorV1 } from
+  "../lib/server/projection-target/github-entitlement";
 import { rpcProviderCommitment } from
   "../lib/data-pipeline/rpc-provider-commitments";
 
@@ -555,6 +560,56 @@ describe("manual Applicant Privy identity", () => {
       new Request("https://programmable.market/api"),
       WALLET,
     )).rejects.toThrow("github_subject_mismatch");
+  });
+
+  it("returns an Applicant authentication error instead of a storage failure", async () => {
+    vi.stubEnv("PROGRAMMABLE_MANUAL_APPLICANT_LAUNCH_ENABLED", "true");
+    const authenticator = createManualRouterApplicantAuthenticatorFromBoundaryV1({
+      githubAuthenticator: {
+        async authenticate() {
+          throw new GitHubPrincipalAuthenticationErrorV1(401, "session_required");
+        },
+      },
+      currentUserBoundary: {
+        async getCurrentUser() {
+          throw new TypeError("current user must not be read");
+        },
+      },
+    });
+    try {
+      const response = await handleManualRouterWebsiteRouteV1(
+        new Request(
+          "https://programmable.market/api/custom-launch/manual/submissions",
+          {
+            method: "POST",
+            headers: {
+              accept: "application/json",
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              schemaVersion:
+                "programmable.manual-router-applicant-list-request.v1",
+              launchWallet: WALLET,
+            }),
+          },
+        ),
+        "submissions",
+        {
+          authenticator,
+          service: {} as never,
+          finalityService: {} as never,
+        },
+      );
+
+      expect(response.status).toBe(401);
+      await expect(response.json()).resolves.toMatchObject({
+        schemaVersion: "programmable.manual-router-website-error.v1",
+        code: "applicant_authentication_required",
+        retryable: false,
+      });
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
 

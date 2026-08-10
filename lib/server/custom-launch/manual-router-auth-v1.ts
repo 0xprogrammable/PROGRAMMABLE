@@ -100,7 +100,12 @@ export function createManualRouterApplicantAuthenticatorFromBoundaryV1(
           principal.privyUserId,
         );
       } catch (error) {
-        if (error instanceof GitHubPrincipalAuthenticationErrorV1) throw error;
+        if (error instanceof GitHubPrincipalAuthenticationErrorV1) {
+          throw new ManualRouterApplicantAuthenticationErrorV1(
+            error.status,
+            "applicant_authentication_required",
+          );
+        }
         throw new ManualRouterApplicantAuthenticationErrorV1(
           401,
           "applicant_authentication_required",

@@ -3,6 +3,10 @@
 import { pathToFileURL } from "node:url";
 
 const ROUTE = "/api/custom-launch/manual/submissions";
+const AUTHENTICATION_PROBE = Object.freeze({
+  schemaVersion: "programmable.manual-router-applicant-list-request.v1",
+  launchWallet: "0x1111111111111111111111111111111111111111",
+});
 
 export async function verifyManualApplicantStagedRuntime({
   targetUrl,
@@ -32,47 +36,26 @@ export async function verifyManualApplicantStagedRuntime({
   let lastError;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      const response = await fetchImpl(new URL(ROUTE, origin), {
-        method: "POST",
-        redirect: "error",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          "x-vercel-protection-bypass": bypassSecret,
-        },
-        body: "{}",
-        signal: AbortSignal.timeout(30_000),
-      });
-      const responseText = await response.text();
-      if (Buffer.byteLength(responseText, "utf8") > 4_096) {
-        throw new Error("manual Applicant stage response is oversized");
-      }
-      let body;
-      try {
-        body = JSON.parse(responseText);
-      } catch {
-        throw new Error("manual Applicant stage response is not JSON");
-      }
-      if (
-        response.status !== 400
-        || response.headers.get("content-type")
-          !== "application/json; charset=utf-8"
-        || !response.headers.get("cache-control")?.startsWith("no-store")
-        || body === null
-        || typeof body !== "object"
-        || Array.isArray(body)
-        || Object.keys(body).sort().join("\0")
-          !== "code\0message\0retryable\0schemaVersion"
-        || body.schemaVersion !== "programmable.manual-router-website-error.v1"
-        || body.code !== "invalid_request"
-        || body.message !== "invalid_request"
-        || body.retryable !== false
-      ) throw new Error("manual Applicant staged authority preflight failed");
+      const invalid = await postProbe(fetchImpl, origin, bypassSecret, "{}");
+      assertTypedError(invalid, 400, "invalid_request");
+      const unauthenticated = await postProbe(
+        fetchImpl,
+        origin,
+        bypassSecret,
+        JSON.stringify(AUTHENTICATION_PROBE),
+      );
+      assertTypedError(
+        unauthenticated,
+        401,
+        "applicant_authentication_required",
+      );
       return Object.freeze({
         status: "verified",
         route: ROUTE,
-        httpStatus: response.status,
-        code: body.code,
+        httpStatus: invalid.response.status,
+        code: invalid.body.code,
+        authenticationHttpStatus: unauthenticated.response.status,
+        authenticationCode: unauthenticated.body.code,
       });
     } catch (error) {
       lastError = error;
@@ -82,6 +65,49 @@ export async function verifyManualApplicantStagedRuntime({
     }
   }
   throw lastError ?? new Error("manual Applicant staged authority preflight failed");
+}
+
+async function postProbe(fetchImpl, origin, bypassSecret, body) {
+  const response = await fetchImpl(new URL(ROUTE, origin), {
+    method: "POST",
+    redirect: "error",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "x-vercel-protection-bypass": bypassSecret,
+    },
+    body,
+    signal: AbortSignal.timeout(30_000),
+  });
+  const responseText = await response.text();
+  if (Buffer.byteLength(responseText, "utf8") > 4_096) {
+    throw new Error("manual Applicant stage response is oversized");
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(responseText);
+  } catch {
+    throw new Error("manual Applicant stage response is not JSON");
+  }
+  return Object.freeze({ response, body: parsed });
+}
+
+function assertTypedError(observed, status, code) {
+  const { response, body } = observed;
+  if (
+    response.status !== status
+    || response.headers.get("content-type") !== "application/json; charset=utf-8"
+    || !response.headers.get("cache-control")?.startsWith("no-store")
+    || body === null
+    || typeof body !== "object"
+    || Array.isArray(body)
+    || Object.keys(body).sort().join("\0")
+      !== "code\0message\0retryable\0schemaVersion"
+    || body.schemaVersion !== "programmable.manual-router-website-error.v1"
+    || body.code !== code
+    || body.message !== code
+    || body.retryable !== false
+  ) throw new Error("manual Applicant staged authority preflight failed");
 }
 
 function argumentsFrom(argv) {
