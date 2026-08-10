@@ -21,7 +21,7 @@ const sections = [
 
 const launchTypes = [
   {
-    availability: "Availability shown in Create.",
+    availability: "Check Create for current Classic availability.",
     href: "/docs/models/classic",
     label: "Classic",
     market:
@@ -30,15 +30,16 @@ const launchTypes = [
   },
   {
     availability:
-      "Public submissions unavailable. General public submission and self-service Custom launching are not available. Custom launches are activated individually.",
+      "Custom launches are activated individually. Approved applicants can launch an approved release through the gated flow. General public submissions and open public wallet self-service are unavailable.",
     href: "/docs/models/custom",
-    label: "Custom",
+    label: "Custom hooks",
     market:
       "Token market with release-specific Uniswap v4 hook logic and a launch-specific configuration.",
     tone: "limited",
   },
   {
-    availability: "Historical. New launches are closed.",
+    availability:
+      "New Stock-Paired launches are closed. Existing launches are historical.",
     href: "/docs/models/stock-paired",
     label: "Stock-Paired",
     market:
@@ -60,6 +61,13 @@ export default function TokensDocsPage() {
         <p>
           Open a launch guide for the complete token structure, fee behavior,
           reward flow and product boundaries.
+        </p>
+        <p>
+          Availability is action-specific. For Stock-Paired markets, trading and
+          quote-to-ETH conversion require the route, issuer, network and runtime
+          checks. Direct quote-token claims and payout changes instead require
+          their own vault, runtime and transaction-simulation checks; they do
+          not depend on the quote-to-ETH route.
         </p>
 
         <div

@@ -38,15 +38,20 @@ describe("Classic docs release binding", () => {
     expect(docsOverview).not.toContain(legacyLauncher);
     expect(docsOverview).not.toContain(legacyFeeHook);
     expect(docsOverview).toMatch(
-      /Historical launches and direct\s+factory calls are outside this verification path\./,
+      /startBlock<\/code> is\s+the first block to scan/,
+    );
+    expect(docsOverview).toMatch(
+      /direct factory call remains outside this verification path even when\s+it occurs later/,
     );
     expect(docsOverview).not.toContain("Set buy and sell fees");
-    expect(classicDocs).toContain("Set separately from 1% to 10%");
+    expect(classicDocs).toContain(
+      "Set separately from 1% to 10% in one-percentage-point steps",
+    );
     expect(classicDocs).toContain(
       "The Programmable share is included in the selected fee.",
     );
     expect(classicDocs).toContain(
-      "0.10% accrues to the Programmable fee recipient.",
+      "0.10 percentage points of the gross native swap amount accrues to",
     );
     expect(classicDocs).toContain("between two and five unique wallets");
     expect(classicDocs).toContain("future recipients or split percentages");

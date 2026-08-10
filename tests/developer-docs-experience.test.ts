@@ -38,7 +38,10 @@ describe("Developer documentation experience", () => {
       'alternates: { canonical: "/docs/developers" }',
     );
     expect(developerPage).toMatch(
-      /Historical launches and direct\s+factory calls are outside this verification path\./,
+      /startBlock<\/code> is\s+the first block to scan/,
+    );
+    expect(developerPage).toMatch(
+      /direct factory call remains outside this verification path even when\s+it occurs later/,
     );
   });
 
@@ -116,6 +119,61 @@ describe("Developer documentation experience", () => {
     );
   });
 
+  it("keeps the complete stamped verification gate explicit", () => {
+    for (const field of [
+      "poolId",
+      "poolKeyHash",
+      "componentSetHash",
+      "routePayloadHash",
+      "routeLauncherRuntimeCodeHash",
+      "expectedResultHash",
+      "permitDigest",
+      "stampHash",
+    ]) {
+      expect(verifyPage).toContain(`<code>${field}</code>`);
+    }
+    expect(verifyPage).toContain(
+      "record.poolManager == {bindings.poolManager}",
+    );
+    expect(verifyPage).toContain("LaunchKindV1.CustomGraph");
+    expect(verifyPage).toContain("there is no Classic");
+    expect(verifyPage).toContain("closing block-hash check");
+    expect(verifyPage).toContain("sole payable");
+    expect(verifyPage).toContain("reads.market.signature");
+    expect(verifyPage).toContain("reads.market.selector");
+    expect(verifyPage).toContain("reads.componentReads[2].signature");
+    expect(verifyPage).toContain("nonzero recorded runtime hash");
+    expect(verifyPage).toMatch(
+      /Use HTTPS for every remote Ethereum RPC\. Allow plaintext HTTP only\s+for loopback development endpoints\./,
+    );
+    expect(verifyPage).toContain("every published getter selector");
+    expect(verifyPage).toMatch(
+      /full signature,[\s\S]*?<code>topic0<\/code>\s+and indexed input names and order/,
+    );
+    expect(verifyPage).toMatch(
+      /descriptor disagrees, return <code>INDETERMINATE<\/code>/,
+    );
+    expect(verifyPage).toMatch(
+      /Require <code>status: live<\/code>, or <code>retired<\/code> only for\s+a historical read inside the published block range/,
+    );
+    expect(verifyPage).toMatch(/complete\s+activation data/);
+    expect(verifyPage).toContain("deployment evidence");
+    expect(verifyPage).toMatch(/finalized\s+canary evidence/);
+    expect(verifyPage).toContain("getter descriptors");
+    expect(verifyPage).toMatch(/event\s+descriptors/);
+    expect(verifyPage).toMatch(
+      /call <code>CHAIN_ID\(\)<\/code> and all\s+six immutable binding getters/,
+    );
+    expect(verifyPage).toMatch(
+      /call <code>eth_getCode<\/code> for the permit\s+authority, Graph Factory and PoolManager/,
+    );
+    expect(verifyPage).toContain("exact manifest runtime hash");
+    expect(verifyPage).toMatch(/Report a mismatch as\s+code drift/);
+    expect(verifyPage).toMatch(
+      /does not change the historical Router-provenance\s+result/,
+    );
+  });
+
   it("keeps Router-only Classic and Custom scope explicit", () => {
     expect(developerPage).toContain('kind.name === "CustomGraph"');
     expect(developerPage).toContain('kind.name === "Classic"');
@@ -123,7 +181,7 @@ describe("Developer documentation experience", () => {
     expect(developerPage).toContain("classicKind?.publicLabel");
     expect(verifyPage).toContain("LaunchKindV1.{kind.name}");
     expect(developerPage).toMatch(
-      /This path covers launches executed and stamped through this Router/,
+      /This path covers only launches executed and stamped through this\s+Router/,
     );
     for (const surface of [developerPage, verifyPage, indexingPage]) {
       expect(surface).not.toContain("MemeTokenLaunchedV2");
@@ -141,9 +199,9 @@ describe("Developer documentation experience", () => {
     expect(developerDocsMarkdown).toContain(
       "each consumer must implement the published verification procedure",
     );
-    expect(developerDocsMarkdown).toContain(
-      "General public Custom submission and wallet self-service launching are not live.",
-    );
+    expect(developerDocsMarkdown).toMatch(/General public submissions/);
+    expect(developerDocsMarkdown).toMatch(/open wallet self-service/);
+    expect(developerDocsMarkdown).toMatch(/Approved Hookbuilder Applicants/);
     expect(developerDocsMarkdown).toContain(
       "It does not automatically list or label a launch in GMGN, Axiom, FOMO",
     );

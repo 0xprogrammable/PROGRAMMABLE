@@ -1,6 +1,7 @@
 export type DocsSearchItem = {
   description: string;
   href: string;
+  keywords?: readonly string[];
   title: string;
 };
 
@@ -73,7 +74,7 @@ export const docsNavigation: readonly DocsNavigationGroup[] = [
       {
         depth: 1,
         href: "/docs/models/stock-paired",
-        label: "Stock-Paired",
+        label: "Stock-Paired · Historical",
       },
     ],
   },
@@ -84,7 +85,7 @@ export const docsNavigation: readonly DocsNavigationGroup[] = [
       {
         depth: 1,
         href: "/docs/launch-stamps",
-        label: "Router and launch stamps",
+        label: "Launch Stamp Router",
       },
     ],
   },
@@ -99,12 +100,12 @@ export const docsNavigation: readonly DocsNavigationGroup[] = [
       {
         depth: 1,
         href: "/docs/developers/verify",
-        label: "Verify a launch",
+        label: "Verify a token or pool",
       },
       {
         depth: 1,
         href: "/docs/developers/indexing",
-        label: "Index launches",
+        label: "Index new launches",
       },
       {
         depth: 1,
@@ -135,9 +136,8 @@ export const docsSearchItems: DocsSearchItem[] = [
     href: "/docs/models/classic",
   },
   {
-    title: "Custom",
-    description:
-      "Understand launches that use an individual Uniswap v4 hook.",
+    title: "Custom hooks",
+    description: "Understand launches that use an individual Uniswap v4 hook.",
     href: "/docs/models/custom",
   },
   {
@@ -159,13 +159,13 @@ export const docsSearchItems: DocsSearchItem[] = [
     href: "/docs/developers",
   },
   {
-    title: "Verify a launch",
+    title: "Verify a token or pool",
     description:
       "Verify a token, pool or component against its canonical Router record.",
     href: "/docs/developers/verify",
   },
   {
-    title: "Index launches",
+    title: "Index new launches",
     description:
       "Backfill Router events, follow new launches and handle finality and reorgs.",
     href: "/docs/developers/indexing",
@@ -175,6 +175,7 @@ export const docsSearchItems: DocsSearchItem[] = [
     description:
       "Use the concise Markdown guide and complete machine-readable reference.",
     href: "/docs/developers/machine-readable",
+    keywords: ["agent", "AI agent", "LLM"],
   },
   {
     title: "Router trust root",
@@ -183,7 +184,7 @@ export const docsSearchItems: DocsSearchItem[] = [
     href: "/docs/developers#trust-root",
   },
   {
-    title: "Router and launch stamps",
+    title: "Launch Stamp Router",
     description:
       "Read the canonical contract, deployment range, runtime hash and ABI reference.",
     href: "/docs/launch-stamps",
@@ -193,18 +194,6 @@ export const docsSearchItems: DocsSearchItem[] = [
     description:
       "Map Router kind 1 to Programmable Custom and kind 2 to Programmable Classic.",
     href: "/docs/developers#trust-root",
-  },
-  {
-    title: "Verify a token or pool",
-    description:
-      "Resolve one launch ID and reproduce its canonical stamp record.",
-    href: "/docs/developers#identity",
-  },
-  {
-    title: "Discover new launches",
-    description:
-      "Backfill and follow Router events when continuous discovery is needed.",
-    href: "/docs/developers#indexing",
   },
   {
     title: "Manifest, ABI and GitHub",
@@ -223,11 +212,5 @@ export const docsSearchItems: DocsSearchItem[] = [
     description:
       "Check chain, runtime, ABI, identity reads, launch kind and result states.",
     href: "/docs/developers#checklist",
-  },
-  {
-    title: "Agent-readable integration guide",
-    description:
-      "Open the concise Markdown guide and complete Router reference.",
-    href: "/docs/developers#agents",
   },
 ];

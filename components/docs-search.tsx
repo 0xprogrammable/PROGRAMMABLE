@@ -18,7 +18,10 @@ import styles from "@/components/docs-experience.module.css";
 import { docsNavigateEvent } from "@/components/docs-navigation";
 
 function normalizeDocsSearchText(value: string) {
-  return value.trim().toLowerCase().replace(/[\s-]+/g, " ");
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, " ");
 }
 
 export function getDocsSearchResults(query: string) {
@@ -30,20 +33,27 @@ export function getDocsSearchResults(query: string) {
       const title = normalizeDocsSearchText(item.title);
       const description = normalizeDocsSearchText(item.description);
       const titleWords = title.split(" ");
+      const keywords = (item.keywords ?? []).map(normalizeDocsSearchText);
+      const allowLooseSubstring = normalizedQuery.length > 2;
       const rank =
         title === normalizedQuery
           ? 0
-          : title.startsWith(normalizedQuery)
-            ? 1
-            : titleWords.some((word) => word.startsWith(normalizedQuery))
-              ? 2
-              : title.includes(normalizedQuery)
-                ? 3
-                : description.startsWith(normalizedQuery)
-                  ? 4
-                  : description.includes(normalizedQuery)
-                    ? 5
-                    : null;
+          : keywords.some((keyword) => keyword === normalizedQuery)
+            ? 0
+            : title.startsWith(normalizedQuery)
+              ? 1
+              : keywords.some((keyword) => keyword.startsWith(normalizedQuery))
+                ? 1
+                : titleWords.some((word) => word.startsWith(normalizedQuery))
+                  ? 2
+                  : allowLooseSubstring && title.includes(normalizedQuery)
+                    ? 3
+                    : description.startsWith(normalizedQuery)
+                      ? 4
+                      : allowLooseSubstring &&
+                          description.includes(normalizedQuery)
+                        ? 5
+                        : null;
       return { index, item, rank };
     })
     .filter(
@@ -304,9 +314,7 @@ export function DocsSearch({ id = "docs-search" }: { id?: string }) {
       )}
       <span className="sr-only" role="status" aria-live="polite">
         {normalizedQuery
-          ? `${results.length} ${
-              results.length === 1 ? "result" : "results"
-            }`
+          ? `${results.length} ${results.length === 1 ? "result" : "results"}`
           : ""}
       </span>
       {isOpen && normalizedQuery ? (

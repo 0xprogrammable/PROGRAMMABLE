@@ -8,10 +8,8 @@ import styles from "@/components/docs-experience.module.css";
 
 type ModelSlug = "classic" | "custom" | "stock-paired";
 
-const classicEvidenceCommit =
-  "1fb9558af4f0248de75d5c7983f80036e32f47cb";
-const stockPairedEvidenceCommit =
-  "ef2bbb51336a20aa2886dad0232f61495e8f2911";
+const classicEvidenceCommit = "1fb9558af4f0248de75d5c7983f80036e32f47cb";
+const stockPairedEvidenceCommit = "db30e8609002cdee16d7cbe5a2c5a0309b63ce9b";
 
 const classicSections = [
   { id: "terms", label: "How it works" },
@@ -45,26 +43,24 @@ const stockPairedSections = [
   { id: "deployment", label: "Contracts and source" },
 ] as const;
 
-const modelMetadata: Record<
-  ModelSlug,
-  { description: string; title: string }
-> = {
-  classic: {
-    title: "Classic",
-    description:
-      "How Classic creates a fixed-supply token, its Uniswap v4 market and the related fee and reward paths.",
-  },
-  custom: {
-    title: "Custom",
-    description:
-      "Requirements and provenance for releases that use individual Uniswap v4 hooks.",
-  },
-  "stock-paired": {
-    title: "Stock-Paired",
-    description:
-      "Historical Uniswap v4 pools that use an allowlisted Ondo Global Markets token as their quote asset.",
-  },
-};
+const modelMetadata: Record<ModelSlug, { description: string; title: string }> =
+  {
+    classic: {
+      title: "Classic",
+      description:
+        "How Classic creates a fixed-supply token, its Uniswap v4 market and the related fee and reward paths.",
+    },
+    custom: {
+      title: "Custom hooks",
+      description:
+        "Requirements and provenance for releases that use individual Uniswap v4 hooks.",
+    },
+    "stock-paired": {
+      title: "Stock-Paired",
+      description:
+        "Historical Uniswap v4 pools that use an allowlisted Ondo Global Markets token as their quote asset.",
+    },
+  };
 
 function isModelSlug(value: string): value is ModelSlug {
   return value in modelMetadata;
@@ -93,14 +89,10 @@ export async function generateMetadata({
 function ClassicDocs() {
   const launcher = "0xC3bd04aAc2fb2ba58efD7Eb673E544E0B80De770";
   const hook = "0x35Fe236EA82F7cF525c9719d7df8F49F94D720CC";
-  const rewardVaultFactory =
-    "0xF28967f9DFaC3Ca21384b59D6D75C8106b3eab2a";
-  const initialBuyCustodyFactory =
-    "0xDe21b9c0Cc0AfDB9be20e8236113f066BB8C66f4";
-  const positionRecipientFactory =
-    "0x291a9ff1059d225d02B1659430804486404dB507";
-  const ctoAuthority =
-    "0x9746469Cd79fdDc5aA7218e7dd51c829ee518c0C";
+  const rewardVaultFactory = "0xF28967f9DFaC3Ca21384b59D6D75C8106b3eab2a";
+  const initialBuyCustodyFactory = "0xDe21b9c0Cc0AfDB9be20e8236113f066BB8C66f4";
+  const positionRecipientFactory = "0x291a9ff1059d225d02B1659430804486404dB507";
+  const ctoAuthority = "0x9746469Cd79fdDc5aA7218e7dd51c829ee518c0C";
 
   return (
     <DocsShell
@@ -133,7 +125,9 @@ function ClassicDocs() {
           </div>
           <div className={styles.fact}>
             <span>Buy and sell fees</span>
-            <strong>Set separately from 1% to 10%</strong>
+            <strong>
+              Set separately from 1% to 10% in one-percentage-point steps
+            </strong>
           </div>
           <div className={styles.fact}>
             <span>Creator liquidity deposit</span>
@@ -141,14 +135,14 @@ function ClassicDocs() {
           </div>
         </div>
         <p>
-          The full supply enters the one-sided position at launch. The
-          position has no liquidity-removal path.
+          The full supply enters the one-sided position at launch. The position
+          has no liquidity-removal path.
         </p>
         <p>
           The current Classic curve starts at an approximate fully diluted
           valuation of 1.36 ETH before the Initial Buy. This value is the
-          curve&apos;s mathematical starting point, not the amount of liquidity or
-          sale proceeds, and it does not describe future market value. The
+          curve&apos;s mathematical starting point, not the amount of liquidity
+          or sale proceeds, and it does not describe future market value. The
           Initial Buy moves the live pool price before public trading begins.
         </p>
       </section>
@@ -156,14 +150,20 @@ function ClassicDocs() {
       <section id="fees">
         <h2>Fees</h2>
         <p>
-          The launch wallet sets the buy fee and sell fee separately. Each
-          rate can be from 1% to 10% and is fixed for the launch.
+          The launch wallet sets the buy fee and sell fee separately. Each rate
+          is 1%, 2%, 3% through 10% and is fixed for the launch.
         </p>
         <ul className={styles.contentList}>
           <li>The pool identifies each swap as a buy or a sell.</li>
           <li>The fixed rate for that direction is accounted in ETH.</li>
-          <li>The selected rate minus 0.10% accrues as creator rewards.</li>
-          <li>0.10% accrues to the Programmable fee recipient.</li>
+          <li>
+            The selected rate minus 0.10 percentage points accrues as creator
+            rewards.
+          </li>
+          <li>
+            0.10 percentage points of the gross native swap amount accrues to
+            the Programmable fee recipient.
+          </li>
         </ul>
         <div className={styles.callout}>
           <strong>
@@ -266,7 +266,11 @@ function ClassicDocs() {
         <ul className={styles.contentList}>
           <li>No minting after launch.</li>
           <li>No blacklist, sell restriction, rebase or transfer tax.</li>
-          <li>No token allocation for the creator or Programmable.</li>
+          <li>
+            No free or pre-minted token allocation goes to the creator or
+            Programmable. The launch wallet receives only the tokens it
+            purchases in the Initial Buy.
+          </li>
           <li>No separate Programmable launch fee beyond Ethereum gas.</li>
           <li>
             No conventional LP fee. Creator rewards come from the configured
@@ -365,7 +369,7 @@ function CustomDocs() {
     <DocsShell
       currentPath="/docs/models/custom"
       kicker="Launch model · Ethereum"
-      title="Custom"
+      title="Custom hooks"
       description="Custom launches use release-specific Uniswap v4 hook logic with behavior and controls defined by each release."
       sections={customSections}
     >
@@ -381,16 +385,17 @@ function CustomDocs() {
       <section id="availability">
         <h2>Current availability</h2>
         <p>
-          Custom releases are activated individually. General public Custom
-          submissions and wallet self-service launching are not available.
+          Custom releases are activated individually. Approved applicants can
+          launch an approved release through the gated flow. General public
+          submissions and open public wallet self-service are unavailable.
         </p>
       </section>
 
       <section id="release-scope">
         <h2>Behavior varies by release</h2>
         <p>
-          Do not infer one Custom release&apos;s permissions, controls, fee path or
-          liquidity path from another. Use the deployment and release records
+          Do not infer one Custom release&apos;s permissions, controls, fee path
+          or liquidity path from another. Use the deployment and release records
           for the launch you are inspecting.
         </p>
       </section>
@@ -405,17 +410,19 @@ function CustomDocs() {
           <li>The fee path, reward recipients and mutable controls.</li>
           <li>Liquidity custody and every withdrawal path.</li>
           <li>Transaction preparation, simulation and wallet validation.</li>
-          <li>Deployment records, runtime verification and supported network.</li>
+          <li>
+            Deployment records, runtime verification and supported network.
+          </li>
         </ul>
       </section>
 
       <section id="launch-information">
         <h2>Launch-specific information</h2>
         <p>
-          Read the launch&apos;s token, pool, hook and release records together. They
-          identify the deployed contracts, supported network, hook permissions,
-          fee and reward path, mutable controls, liquidity custody and any
-          withdrawal path. Project artwork, descriptions and links are
+          Read the launch&apos;s token, pool, hook and release records together.
+          They identify the deployed contracts, supported network, hook
+          permissions, fee and reward path, mutable controls, liquidity custody
+          and any withdrawal path. Project artwork, descriptions and links are
           presentation data and are not substitutes for these records.
         </p>
       </section>
@@ -426,9 +433,10 @@ function CustomDocs() {
           A Custom launch executed and stamped through the Launch Stamp Router
           can be identified by its canonical Router origin, launch ID, launch
           kind, token, pool and recorded components. The published verification
-          procedure must pass before an application uses that provenance.
-          Historical launches and direct factory calls are outside the Router
-          record.
+          procedure must pass before an application uses that provenance. The
+          published start block is the first block to scan for this Router. It
+          does not cover earlier launches, and direct factory calls remain
+          outside the Router record even when they occur later.
         </p>
       </section>
 
@@ -447,10 +455,53 @@ function CustomDocs() {
 }
 
 function StockPairedDocs() {
-  const launcher = "0x195750f33caD5eF2DF857a53226B421297A1e79e";
-  const hook = "0x7773D183fe7B60d4F1885047fa42b815a62Fe0Cc";
-  const coordinator =
-    "0xfa5f17389CA28D071781d59750b32C842ab6A54b";
+  const contractRows = [
+    {
+      release: "V1",
+      contract: "Launcher",
+      address: "0x195750f33caD5eF2DF857a53226B421297A1e79e",
+    },
+    {
+      release: "V1",
+      contract: "Fee hook",
+      address: "0x7773D183fe7B60d4F1885047fa42b815a62Fe0Cc",
+    },
+    {
+      release: "V1",
+      contract: "ETH launch coordinator",
+      address: "0xfa5f17389CA28D071781d59750b32C842ab6A54b",
+    },
+    {
+      release: "V2",
+      contract: "Launcher",
+      address: "0x5eA6Be24838061bA45dbE8D82DE1b267DC240Daf",
+    },
+    {
+      release: "V2",
+      contract: "Fee hook",
+      address: "0x90c67C1E866f86526F0e338459cD435E1F23A0cc",
+    },
+    {
+      release: "V2",
+      contract: "ETH launch coordinator",
+      address: "0xFb9E1034df6161088E8F358502B19E7515c30fD2",
+    },
+    {
+      release: "V3",
+      contract: "Launcher",
+      address: "0x0573879f72d8eE8B0e5a4Ec5E8bcDb2fCab9E51c",
+    },
+    {
+      release: "V3",
+      contract: "Fee hook",
+      address: "0x90c67C1E866f86526F0e338459cD435E1F23A0cc",
+    },
+    {
+      release: "V3",
+      contract: "ETH launch coordinator",
+      address: "0xdDC3ABbAB0df7F1189310a4f70e7e365796B74E2",
+    },
+  ] as const;
 
   return (
     <DocsShell
@@ -464,8 +515,10 @@ function StockPairedDocs() {
         <h2>Status</h2>
         <p>
           New Stock-Paired launches are closed. Existing tokens and deployment
-          records remain visible. Trading and reward actions are available only
-          when the route, issuer, network and runtime checks pass.
+          records remain visible. Trading and quote-to-ETH conversion are
+          available only when the route, issuer, network and runtime checks
+          pass. Direct quote-token claims and payout changes use separate vault,
+          runtime and transaction-simulation checks.
         </p>
       </section>
 
@@ -480,16 +533,33 @@ function StockPairedDocs() {
       </section>
 
       <section id="quote-assets">
-        <h2>Supported quote assets</h2>
-        <p>The historical launch path supported these quote tokens.</p>
+        <h2>Quote assets by release</h2>
+        <p>
+          The supported set changed between the three deployed releases. A token
+          remains bound to the release and quote asset used at launch.
+        </p>
         <ul className={styles.contentList}>
-          <li>NVDAon</li>
-          <li>SPYon</li>
-          <li>GOOGLon</li>
-          <li>SLVon</li>
-          <li>TSLAon</li>
-          <li>AAPLon</li>
+          <li>
+            <strong>V1 registry:</strong> NVDAon, SPYon, GOOGLon, SLVon, QQQon,
+            TSLAon and AAPLon. The ETH launch coordinator supported six of them.
+            QQQon was registered but not available through the ETH launch flow.
+          </li>
+          <li>
+            <strong>V2:</strong> NVDAon, SPYon, GOOGLon, SLVon, TSLAon, AAPLon,
+            BABAon, COPXon, CRCLon, TLTon and USOon.
+          </li>
+          <li>
+            <strong>V3:</strong> NVDAon, SPYon, GOOGLon, SLVon, TSLAon and
+            AAPLon.
+          </li>
         </ul>
+        <p>
+          V1 and V2 used one fixed start tick for every supported quote asset.
+          V3 used an immutable start tick for each asset, calibrated near
+          Classic&apos;s 1.3557 ETH initial fully diluted valuation. The
+          calibration was release evidence, not a live price oracle or a fixed
+          dollar valuation.
+        </p>
       </section>
 
       <section id="pool-creation">
@@ -497,7 +567,7 @@ function StockPairedDocs() {
         <ol className={styles.steps}>
           <li>
             <strong>Select a supported quote asset.</strong>
-            <span>NVDAon, SPYon, GOOGLon, SLVon, TSLAon or AAPLon.</span>
+            <span>The available assets depended on the launch release.</span>
           </li>
           <li>
             <strong>Route ETH into the quote asset.</strong>
@@ -580,15 +650,18 @@ function StockPairedDocs() {
             Programmable does not mint, redeem or promise delivery of the
             underlying share.
           </li>
-          <li>
-            Programmable does not prepare new Stock-Paired launches.
-          </li>
+          <li>Programmable does not prepare new Stock-Paired launches.</li>
         </ul>
       </section>
 
       <section id="deployment">
         <h2>Historical contracts and source</h2>
-        <p>These records describe the historical Mainnet deployment.</p>
+        <p>
+          V1, V2 and V3 are separate immutable Ethereum Mainnet deployments.
+          Existing launches must be identified by their launcher and fee-hook
+          addresses. V3 was the final release used for new launches before the
+          current application gate closed.
+        </p>
         <div className={styles.tableWrap}>
           <table className={styles.table}>
             <thead>
@@ -598,48 +671,71 @@ function StockPairedDocs() {
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td>Launcher</td>
-                <td>
-                  <DocsAddress address={launcher} label="Launcher" />
-                </td>
-              </tr>
-              <tr>
-                <td>Fee hook</td>
-                <td>
-                  <DocsAddress address={hook} label="Fee hook" />
-                </td>
-              </tr>
-              <tr>
-                <td>ETH launch coordinator</td>
-                <td>
-                  <DocsAddress
-                    address={coordinator}
-                    label="ETH launch coordinator"
-                  />
-                </td>
-              </tr>
+              {contractRows.map((row) => (
+                <tr key={`${row.release}-${row.contract}`}>
+                  <td>
+                    {row.release} · {row.contract}
+                  </td>
+                  <td>
+                    <DocsAddress
+                      address={row.address}
+                      label={`${row.release} ${row.contract}`}
+                    />
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
+        <h3>V1</h3>
         <div className={styles.sourceLinks}>
           <DocsExternalLink
             href={`https://github.com/0xprogrammable/programmable/blob/${stockPairedEvidenceCommit}/docs/superpowers/specs/2026-07-29-stock-paired-v1-design.md`}
             variant="chip"
           >
-            Model specification
+            V1 model specification
           </DocsExternalLink>
           <DocsExternalLink
             href={`https://github.com/0xprogrammable/programmable/blob/${stockPairedEvidenceCommit}/contracts/deployments/mainnet-stock-paired-v1.json`}
             variant="chip"
           >
-            Deployment record
+            V1 deployment record
           </DocsExternalLink>
           <DocsExternalLink
             href={`https://github.com/0xprogrammable/programmable/blob/${stockPairedEvidenceCommit}/contracts/security/STOCK-PAIRED-V1.md`}
             variant="chip"
           >
-            Security notes
+            V1 security notes
+          </DocsExternalLink>
+        </div>
+        <h3>V2</h3>
+        <div className={styles.sourceLinks}>
+          <DocsExternalLink
+            href={`https://github.com/0xprogrammable/programmable/blob/${stockPairedEvidenceCommit}/contracts/deployments/mainnet-stock-paired-v2.json`}
+            variant="chip"
+          >
+            V2 deployment record
+          </DocsExternalLink>
+          <DocsExternalLink
+            href={`https://github.com/0xprogrammable/programmable/blob/${stockPairedEvidenceCommit}/contracts/security/STOCK-PAIRED-V2.md`}
+            variant="chip"
+          >
+            V2 security notes
+          </DocsExternalLink>
+        </div>
+        <h3>V3</h3>
+        <div className={styles.sourceLinks}>
+          <DocsExternalLink
+            href={`https://github.com/0xprogrammable/programmable/blob/${stockPairedEvidenceCommit}/contracts/deployments/mainnet-stock-paired-v3.json`}
+            variant="chip"
+          >
+            V3 deployment record
+          </DocsExternalLink>
+          <DocsExternalLink
+            href={`https://github.com/0xprogrammable/programmable/blob/${stockPairedEvidenceCommit}/docs/stock-paired/STOCK-PAIRED-V3-RELEASE.md`}
+            variant="chip"
+          >
+            V3 release notes
           </DocsExternalLink>
         </div>
       </section>

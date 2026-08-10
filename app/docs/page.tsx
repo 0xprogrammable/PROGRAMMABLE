@@ -28,9 +28,9 @@ const launchTypes = [
   },
   {
     description:
-      "A launch whose Uniswap v4 market uses release-specific hook logic. Custom launches are activated individually; public submission and self-service launching are not available.",
+      "A launch whose Uniswap v4 market uses release-specific hook logic. Approved applicants can launch an approved release through the gated flow. General public submissions and open public wallet self-service are unavailable.",
     href: "/docs/models/custom",
-    label: "Custom",
+    label: "Custom hooks",
   },
   {
     description:
@@ -99,10 +99,12 @@ export default function DocsIndexPage() {
           PoolManager and poolId.
         </p>
         <p>
-          Launches executed and stamped through the Launch Stamp Router also
-          have a public provenance record. Applications can verify that record
-          before showing a Programmable label. Historical launches and direct
-          factory calls are outside this Router path.
+          Only launches executed and stamped through the Launch Stamp Router
+          have a public Router provenance record. Applications can verify that
+          record before showing a Programmable label. The published start block
+          is the first block to scan for this Router. It does not cover earlier
+          launches, and direct factory calls remain outside the Router path even
+          when they occur later.
         </p>
       </section>
 

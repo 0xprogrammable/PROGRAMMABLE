@@ -321,6 +321,7 @@
   letter-spacing: -0.028em;
   line-height: 1.24;
   text-wrap: balance;
+  width: fit-content;
 }
 
 .heroCopy > p {
@@ -451,7 +452,9 @@
   align-items: start;
   display: grid;
   gap: var(--docs-article-gap);
-  grid-template-columns: minmax(0, var(--docs-content-width)) var(--docs-toc-width);
+  grid-template-columns: minmax(0, var(--docs-content-width)) var(
+      --docs-toc-width
+    );
   max-width: var(--docs-main-width);
   width: 100%;
 }
@@ -492,7 +495,9 @@
   outline-offset: 8px;
 }
 
-:global(.route-transition-docs) [data-docs-shell] h1[tabindex="-1"]:focus-visible {
+:global(.route-transition-docs)
+  [data-docs-shell]
+  h1[tabindex="-1"]:focus-visible {
   border-radius: 4px;
   outline: 2px solid var(--focus);
   outline-offset: 8px;
@@ -1833,7 +1838,9 @@
 @media (forced-colors: active) {
   .content h2[tabindex="-1"]:focus-visible,
   .content h3[tabindex="-1"]:focus-visible,
-  :global(.route-transition-docs) [data-docs-shell] h1[tabindex="-1"]:focus-visible,
+  :global(.route-transition-docs)
+    [data-docs-shell]
+    h1[tabindex="-1"]:focus-visible,
   .addressCopyButton:focus-visible .addressCopyIcons,
   .codeCopyButton:focus-visible,
   .codeWindow:focus-visible,

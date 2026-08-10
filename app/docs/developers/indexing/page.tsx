@@ -38,7 +38,7 @@ export default function IndexLaunchesPage() {
       description="Discover launches from Router events, then establish provenance with canonical contract reads."
       kicker="Developer integration"
       parentHref="/docs/developers"
-      parentLabel="Developer integration"
+      parentLabel="Developers"
       sections={indexingSections}
       title="Index new launches"
     >
@@ -110,7 +110,8 @@ export default function IndexLaunchesPage() {
             live manifest
           </a>
           . Also verify the Router runtime, immutable bindings, hosted ABI and
-          ABI digest before the backfill begins.
+          ABI digest before the backfill begins. Remote RPC URLs must use HTTPS;
+          plain HTTP is accepted only for loopback development endpoints.
         </p>
       </section>
 
@@ -153,6 +154,14 @@ export default function IndexLaunchesPage() {
             </tbody>
           </table>
         </div>
+
+        <p className={styles.bodyCopy}>
+          Hash the exact downloaded ABI bytes and match the manifest digest.
+          From that byte-verified ABI, derive each full event signature, topic0,
+          and the indexed input names in their published order. If any event
+          descriptor differs from the manifest, return{" "}
+          <code>INDETERMINATE</code> and do not ingest the log.
+        </p>
       </section>
 
       <section id="verification">
@@ -166,8 +175,12 @@ export default function IndexLaunchesPage() {
             <code>{router.startBlock}</code> through a finalized boundary.
           </li>
           <li>
-            Require the exact Router emitter and published topic signatures.
-            Correlate the three event types by <code>launchId</code>.
+            Require the exact Router emitter and published topic signatures,
+            after deriving the byte-verified ABI closure: full signature,
+            topic0, and indexed input names in order. A mismatch is{" "}
+            <code>INDETERMINATE</code>; do not ingest the log.{" "}
+            {"Correlate the three event types by "}
+            <code>launchId</code>.
           </li>
           <li>
             Reproduce every candidate with{" "}

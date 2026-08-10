@@ -140,6 +140,38 @@ describe("Router-first public developer-contract facts", () => {
     expect(developerDocsMarkdown).toContain("requireCanonical: true");
   });
 
+  it("closes every canonical verification and event-descriptor gate", () => {
+    for (const value of [
+      "one concrete number and opening hash",
+      "all six immutable address/runtime binding getters",
+      "permit authority, Graph Factory, and PoolManager",
+      "closing hash to equal the opening hash",
+      "valid address encoding",
+      "nonzero `poolId`",
+      "do not invent a Classic immutable",
+      "separate drift signal",
+      "Plain HTTP is accepted only for loopback",
+    ]) {
+      expect(developerDocsMarkdown).toContain(value);
+    }
+    expect(routerReferenceSource).toContain(
+      "return candidate only after every required gate succeeds",
+    );
+    expect(routerReferenceSource).toMatch(
+      /Current component-runtime\s+equality is reported separately/,
+    );
+    expect(indexingSource).toContain("exact downloaded ABI bytes");
+    expect(indexingSource).toContain(
+      "indexed input names in their published order",
+    );
+    expect(indexingSource).toContain(
+      "<code>INDETERMINATE</code> and do not ingest the log",
+    );
+    expect(indexingSource).toContain(
+      "plain HTTP is accepted only for loopback",
+    );
+  });
+
   it("publishes the finalized PCAN vector", () => {
     const canary = router.canaryEvidence;
     for (const value of [
@@ -158,7 +190,12 @@ describe("Router-first public developer-contract facts", () => {
 
   it("keeps the provenance boundary exact on every machine surface", () => {
     for (const surface of [developerDocsMarkdown, programmableLlmsIndex]) {
-      expect(surface).toContain("Historical");
+      expect(surface).toContain(
+        "Only launches executed and stamped through this Router inside its published block range",
+      );
+      expect(surface).toMatch(
+        /Launches before `startBlock`, and direct factory calls outside the Router even when later, do not\./,
+      );
       expect(surface).toMatch(/direct (?:factory|Classic)/i);
       expect(surface).toMatch(/not (?:establish )?safety/i);
       expect(surface).toContain("tradability");
@@ -179,7 +216,11 @@ describe("Router-first public developer-contract facts", () => {
     ]) {
       expect(overviewSource).toContain(exportName);
     }
-    for (const source of [verifySource, indexingSource, routerReferenceSource]) {
+    for (const source of [
+      verifySource,
+      indexingSource,
+      routerReferenceSource,
+    ]) {
       expect(source).toContain("PROGRAMMABLE_LAUNCH_STAMP_MANIFEST");
       expect(source).toContain("PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ABI");
     }

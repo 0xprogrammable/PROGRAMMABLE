@@ -119,10 +119,12 @@
 .resultList code,
 .bodyCopy code,
 .checkList code,
+.linkList code,
 .steps code,
 .callout code {
   font-size: 0.9em;
   overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .breakableValue,
@@ -225,6 +227,7 @@
   font-size: 15.5px;
   line-height: 1.62;
   max-width: 62ch;
+  min-width: 0;
 }
 
 .checkList {

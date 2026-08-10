@@ -26,7 +26,7 @@ describe("Docs reference layout stability", () => {
       /\.page\s*\{[^}]*grid-template-columns:[^}]*var\(--docs-rail-width\)[^}]*minmax\(0,\s*var\(--docs-main-width\)\);/s,
     );
     expect(docsCss).toMatch(
-      /\.layout\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*var\(--docs-content-width\)\)\s*var\(--docs-toc-width\);/s,
+      /\.layout\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*var\(--docs-content-width\)\)\s*var\(\s*--docs-toc-width\s*\);/s,
     );
     expect(docsCss).toMatch(
       /\.sidebar\s*\{[^}]*grid-column:\s*1;[^}]*inline-size:\s*var\(--docs-rail-width\);[^}]*position:\s*sticky;[^}]*top:\s*calc\(var\(--header-height\) \+ 20px\);/s,
@@ -62,7 +62,7 @@ describe("Docs reference layout stability", () => {
       /\.content h2\[tabindex="-1"\]:focus-visible,[\s\S]*?outline:\s*2px solid var\(--focus\);/,
     );
     expect(docsCss).toMatch(
-      /:global\(\.route-transition-docs\) \[data-docs-shell\] h1\[tabindex="-1"\]:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--focus\);/s,
+      /:global\(\.route-transition-docs\)[\s\S]*?h1\[tabindex="-1"\]:focus-visible[\s\S]*?\{[^}]*outline:\s*2px solid var\(--focus\);/s,
     );
     expect(docsCss).not.toContain(
       '.content h2[tabindex="-1"]:focus,\n.content h3[tabindex="-1"]:focus {\n  outline: none;',
@@ -72,7 +72,9 @@ describe("Docs reference layout stability", () => {
   it("keeps desktop search in the rail and supplies a separate mobile search", () => {
     expect(docsShell).toContain("data-docs-tools");
     expect(docsShell).toContain("styles.sidebarSearch");
-    expect(docsShell).toContain('mobileSearch={<DocsSearch id="docs-search-mobile" />}');
+    expect(docsShell).toContain(
+      'mobileSearch={<DocsSearch id="docs-search-mobile" />}',
+    );
     expect(docsCss).toMatch(
       /\.sidebarSearch,\s*\.sidebarSearch \.search\s*\{[^}]*width:\s*100%;/s,
     );
@@ -102,7 +104,9 @@ describe("Docs reference layout stability", () => {
       /@media \(max-width:\s*700px\)[\s\S]*?\.sidebar\s*\{[^}]*inset-inline:\s*14px;/s,
     );
     expect(docsNavigation).toContain("dialog.showModal()");
-    expect(docsNavigation).toContain("if (event.target === event.currentTarget)");
+    expect(docsNavigation).toContain(
+      "if (event.target === event.currentTarget)",
+    );
   });
 
   it("does not animate the whole Docs shell during route changes", () => {

@@ -20,6 +20,7 @@ export const metadata: Metadata = {
 
 const manifest = PROGRAMMABLE_LAUNCH_STAMP_MANIFEST;
 const router = manifest.launchStampRouter;
+const bindings = router.bindings;
 const reads = PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ABI;
 const canary = router.canaryEvidence;
 const supportedKinds = LAUNCH_KIND_V1.filter(
@@ -43,7 +44,7 @@ export default function VerifyLaunchPage() {
       description="Resolve a token or Uniswap v4 pool to one Router record and cross-check it at a single canonical block."
       kicker="Developer integration"
       parentHref="/docs/developers"
-      parentLabel="Developer integration"
+      parentLabel="Developers"
       sections={verifySections}
       title="Verify a token or pool"
     >
@@ -99,10 +100,36 @@ export default function VerifyLaunchPage() {
           <a href={PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.abiUrl}>
             hosted Router ABI
           </a>
-          , hash its exact bytes and match the published digest. At the selected
-          block, verify the Router runtime and every immutable binding from the
-          manifest.
+          , hash its exact bytes and match the published digest. From that same
+          ABI, derive and match every published getter selector. For every
+          published event, derive and match its full signature,{" "}
+          <code>topic0</code> and indexed input names and order. Derive and
+          match the sole payable atomic signature{" "}
+          <code>{reads.market.signature}</code> and selector{" "}
+          <code>{reads.market.selector}</code> from that ABI too. If the digest
+          or any derived descriptor disagrees, return <code>INDETERMINATE</code>
+          {". "}At the selected block, verify the Router runtime and every
+          immutable binding from the manifest.
         </p>
+
+        <ol className={styles.steps}>
+          <li>
+            Require <code>status: live</code>, or <code>retired</code> only for
+            a historical read inside the published block range. Require complete
+            activation data from the manifest: deployment evidence, finalized
+            canary evidence, getter descriptors and event descriptors.
+          </li>
+          <li>
+            At the same canonical block, call <code>CHAIN_ID()</code> and all
+            six immutable binding getters below. Match every returned value to
+            the manifest.
+          </li>
+          <li>
+            At that block, call <code>eth_getCode</code> for the permit
+            authority, Graph Factory and PoolManager. Hash each runtime with EVM
+            Keccak-256 and require the exact manifest runtime hash.
+          </li>
+        </ol>
 
         <ul className={styles.codeList}>
           {reads.bindingReads.map((read) => (
@@ -126,6 +153,10 @@ export default function VerifyLaunchPage() {
 
         <ul className={styles.checkList}>
           <li>
+            Use HTTPS for every remote Ethereum RPC. Allow plaintext HTTP only
+            for loopback development endpoints.
+          </li>
+          <li>
             Prefer the provider&apos;s <code>finalized</code> block tag.
           </li>
           <li>
@@ -133,7 +164,13 @@ export default function VerifyLaunchPage() {
             <code>{router.finalityConfirmations}</code> confirmations.
           </li>
           <li>
-            Prefer EIP-1898 reads with <code>requireCanonical: true</code>.
+            Use EIP-1898 reads with <code>requireCanonical: true</code> when the
+            provider supports them.
+          </li>
+          <li>
+            Otherwise bind every read to the resolved block number. After the
+            last call, fetch that height again and require the same block hash
+            before returning <code>STAMPED</code> or <code>NOT_STAMPED</code>.
           </li>
           <li>
             Require the block to fall inside the Router&apos;s published live
@@ -159,21 +196,12 @@ export default function VerifyLaunchPage() {
                 Call <code>{reads.primaryReads[0].signature}</code>.
               </li>
               <li>
-                If the canonical call returns zero, return{" "}
-                <code>NOT_STAMPED</code>.
+                If the canonical call returns zero, complete the closing block
+                hash check when required, then return <code>NOT_STAMPED</code>.
               </li>
               <li>
-                Call <code>{reads.primaryReads[2].signature}</code> with the
-                nonzero launch ID.
-              </li>
-              <li>
-                Require <code>record.token == token</code> and a supported,
-                nonzero launch kind.
-              </li>
-              <li>
-                Call <code>{reads.componentReads[0].signature}</code> for the
-                token. Require the same launch ID and{" "}
-                <code>record.stampHash</code>.
+                For a nonzero launch ID, continue with the complete record and
+                token proof checks below.
               </li>
             </ol>
           </article>
@@ -182,21 +210,20 @@ export default function VerifyLaunchPage() {
             <h3>From a Uniswap v4 pool</h3>
             <ol className={styles.steps}>
               <li>
-                Call <code>{reads.primaryReads[1].signature}</code> with the
-                PoolManager and pool ID.
+                Require the supplied PoolManager to equal the immutable binding{" "}
+                <code>{bindings.poolManager}</code>.
               </li>
               <li>
-                If the canonical call returns zero, return{" "}
-                <code>NOT_STAMPED</code>.
+                Call <code>{reads.primaryReads[1].signature}</code> with that
+                bound PoolManager and the pool ID.
               </li>
               <li>
-                Call <code>{reads.primaryReads[2].signature}</code> with the
-                nonzero launch ID.
+                If the canonical call returns zero, complete the closing block
+                hash check when required, then return <code>NOT_STAMPED</code>.
               </li>
               <li>
-                Require exact equality with <code>record.poolManager</code> and{" "}
-                <code>record.poolId</code>, plus a supported, nonzero launch
-                kind.
+                For a nonzero launch ID, continue with the complete record and
+                pool identity checks below.
               </li>
             </ol>
           </article>
@@ -207,11 +234,59 @@ export default function VerifyLaunchPage() {
         <div className={styles.sectionIntro}>
           <h2>Cross-check the stamp</h2>
           <p>
-            Classify the launch only from the returned record. Names, tickers,
-            logos, creator metadata, factory lookalikes and shared hook
-            addresses are not provenance.
+            A nonzero lookup is only a candidate. Complete every check below at
+            the same canonical block before returning <code>STAMPED</code>.
           </p>
         </div>
+
+        <ol className={styles.steps}>
+          <li>
+            Read <code>{reads.primaryReads[2].signature}</code> with the nonzero
+            launch ID and require a supported, nonzero launch kind.
+          </li>
+          <li>
+            Require valid <code>launchWallet</code>, <code>token</code>,{" "}
+            <code>hook</code>, <code>poolManager</code> and{" "}
+            <code>routeLauncher</code> address fields.
+          </li>
+          <li>
+            Require nonzero <code>poolId</code>, <code>poolKeyHash</code>,{" "}
+            <code>componentSetHash</code>, <code>routePayloadHash</code>,{" "}
+            <code>routeLauncherRuntimeCodeHash</code>,{" "}
+            <code>expectedResultHash</code>, <code>permitDigest</code> and{" "}
+            <code>stampHash</code> commitments.
+          </li>
+          <li>
+            For every token, pool or exclusive-component query, require{" "}
+            <code>record.poolManager == {bindings.poolManager}</code>. Also
+            require the queried token or exact PoolManager and pool ID to match
+            the record.
+          </li>
+          <li>
+            For a token or exclusive component, require{" "}
+            <code>{reads.componentReads[0].signature}</code> to return the same
+            launch ID and <code>record.stampHash</code>. Also require{" "}
+            <code>{reads.componentReads[2].signature}</code> for the queried
+            address to return a nonzero recorded runtime hash.
+          </li>
+          <li>
+            For <code>LaunchKindV1.CustomGraph</code>, require{" "}
+            <code>record.routeLauncher</code> and{" "}
+            <code>record.routeLauncherRuntimeCodeHash</code> to equal the
+            immutable Graph Factory address and runtime hash. For Classic,
+            retain the permit-bound values in the record; there is no Classic
+            launcher immutable.
+          </li>
+          <li>
+            Complete the closing block-hash check for number-bound reads, then
+            classify only from <code>record.kind</code>.
+          </li>
+        </ol>
+
+        <p className={styles.bodyCopy}>
+          Names, tickers, logos, creator metadata, factory lookalikes and shared
+          hook addresses are not provenance.
+        </p>
 
         <dl className={styles.resultList}>
           {supportedKinds.map((kind) => (
@@ -235,9 +310,11 @@ export default function VerifyLaunchPage() {
           <code>{reads.componentReads[1].signature}</code>,{" "}
           <code>{reads.componentReads[0].signature}</code> and{" "}
           <code>{reads.componentReads[2].signature}</code>. Require the same
-          nonzero launch ID and stamp hash. Hash the runtime bytecode returned
-          by <code>eth_getCode</code> at the same block with EVM Keccak-256 and
-          match the recorded runtime hash.
+          nonzero launch ID and stamp hash, plus a nonzero recorded runtime
+          hash. You may compare the runtime returned by <code>eth_getCode</code>{" "}
+          at the canonical block with that recorded hash. Report a mismatch as
+          code drift. It does not change the historical Router-provenance
+          result.
         </p>
 
         <aside className={styles.callout}>
@@ -260,8 +337,9 @@ export default function VerifyLaunchPage() {
               <code>STAMPED</code>
             </dt>
             <dd>
-              Every canonical binding, lookup, identity, kind and proof check
-              succeeds.
+              Every canonical binding, lookup, record, identity, commitment,
+              route and proof check succeeds, including the closing block-hash
+              check when required.
             </dd>
           </div>
           <div>
@@ -269,7 +347,9 @@ export default function VerifyLaunchPage() {
               <code>NOT_STAMPED</code>
             </dt>
             <dd>
-              The canonical token or pool lookup succeeds and returns zero.
+              The canonical token, pool or exclusive-component lookup succeeds,
+              returns zero and passes the closing block-hash check when
+              required.
             </dd>
           </div>
           <div>

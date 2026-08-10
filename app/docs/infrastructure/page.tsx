@@ -98,9 +98,11 @@ export default function InfrastructureDocsPage() {
           identity at the same canonical block.
         </p>
         <p>
-          Historical launches and direct factory calls are outside the Router
-          record. Do not infer a stamp from a name, symbol, shared hook or
-          legacy event.
+          The published start block is the first block to scan for this Router.
+          It does not add provenance to earlier launches. A direct factory call
+          remains outside the Router record even when it occurs at or after that
+          block. Do not infer a stamp from a name, symbol, shared hook or legacy
+          event.
         </p>
         <p className={styles.note}>
           A verified record establishes Router provenance.{" "}
@@ -159,8 +161,9 @@ export default function InfrastructureDocsPage() {
           <div>
             <dt>It does not cover</dt>
             <dd>
-              Historical launches created before Router activation or direct
-              factory calls made outside the canonical Router path.
+              Launches created before Router activation and every direct factory
+              call outside the canonical Router path, including calls made at or
+              after the published start block.
             </dd>
           </div>
         </dl>

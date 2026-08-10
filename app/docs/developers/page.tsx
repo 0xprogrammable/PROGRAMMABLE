@@ -138,9 +138,11 @@ export default function DeveloperDocsPage() {
         <aside className={styles.callout}>
           <strong>Router V1 scope</strong>
           <p>
-            This path covers launches executed and stamped through this Router
-            from <code>startBlock</code> onward. Historical launches and direct
-            factory calls are outside this verification path.
+            This path covers only launches executed and stamped through this
+            Router within its published block range. <code>startBlock</code> is
+            the first block to scan, not a claim about earlier launches. A
+            direct factory call remains outside this verification path even when
+            it occurs later.
           </p>
         </aside>
       </section>

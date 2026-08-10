@@ -67,7 +67,7 @@ describe("Docs information architecture", () => {
           {
             depth: 1,
             href: "/docs/models/stock-paired",
-            label: "Stock-Paired",
+            label: "Stock-Paired · Historical",
           },
         ],
       },
@@ -78,7 +78,7 @@ describe("Docs information architecture", () => {
           {
             depth: 1,
             href: "/docs/launch-stamps",
-            label: "Router and launch stamps",
+            label: "Launch Stamp Router",
           },
         ],
       },
@@ -89,12 +89,12 @@ describe("Docs information architecture", () => {
           {
             depth: 1,
             href: "/docs/developers/verify",
-            label: "Verify a launch",
+            label: "Verify a token or pool",
           },
           {
             depth: 1,
             href: "/docs/developers/indexing",
-            label: "Index launches",
+            label: "Index new launches",
           },
           {
             depth: 1,
@@ -128,7 +128,11 @@ describe("Docs information architecture", () => {
 
   it("keeps the three developer tasks in the same shell and breadcrumb hierarchy", () => {
     for (const [source, path, title] of [
-      [developerOverview, "/docs/developers", "Integrate Programmable launches"],
+      [
+        developerOverview,
+        "/docs/developers",
+        "Integrate Programmable launches",
+      ],
       [verifyPage, "/docs/developers/verify", "Verify a token or pool"],
       [indexingPage, "/docs/developers/indexing", "Index new launches"],
       [
@@ -143,27 +147,30 @@ describe("Docs information architecture", () => {
     }
     for (const source of [verifyPage, indexingPage, machineReadablePage]) {
       expect(source).toContain('parentHref="/docs/developers"');
-      expect(source).toContain('parentLabel="Developer integration"');
+      expect(source).toContain('parentLabel="Developers"');
     }
   });
 
   it("keeps documentation availability separate from product status", () => {
     expect(docsShell).not.toContain('status === "available"');
     expect(docsShell).not.toContain('aria-disabled="true"');
-    expect(tokensPage).toContain("Availability shown in Create");
-    expect(tokensPage).toContain("Public submissions unavailable");
-    expect(tokensPage).toContain("Historical");
     expect(tokensPage).toContain(
-      "General public submission and self-service Custom launching are not available",
+      "Check Create for current Classic availability",
     );
+    expect(tokensPage).toContain("Custom launches are activated individually");
+    expect(tokensPage).toContain("Approved applicants");
+    expect(tokensPage).toContain("Existing launches are historical");
+    expect(tokensPage).toMatch(/General public submissions/);
+    expect(tokensPage).toMatch(/wallet self-service/);
   });
 
   it("keeps the verification scope precise", () => {
     expect(infrastructurePage).toContain(
       "Router verification applies only to stamped launches",
     );
-    expect(infrastructurePage).toContain(
-      "Historical launches and direct factory calls are outside",
+    expect(infrastructurePage).toContain("first block to scan for this Router");
+    expect(infrastructurePage).toMatch(
+      /direct factory call\s+remains outside the Router record even when it occurs at or after that\s+block/,
     );
     expect(infrastructurePage).toContain("It is not a safety guarantee.");
   });
@@ -175,7 +182,9 @@ describe("Docs information architecture", () => {
     expect(docsNavigation).toContain("dialog.showModal()");
     expect(docsNavigation).toContain('id="docs-mobile-navigation"');
     expect(docsNavigation).toContain('aria-haspopup="dialog"');
-    expect(docsNavigation).toContain('aria-label="Close documentation navigation"');
+    expect(docsNavigation).toContain(
+      'aria-label="Close documentation navigation"',
+    );
   });
 
   it("lets keyboard users bypass and dismiss the documentation controls", () => {

@@ -258,11 +258,15 @@ describe("Launch Stamp developer documentation", () => {
 
     expect(indexingPage).toContain("Backfill, verify, then follow live");
     expect(indexingPage).toContain("Read bounded");
-    expect(indexingPage).toContain("exact Router emitter and published topic signatures");
+    expect(indexingPage).toContain(
+      "exact Router emitter and published topic signatures",
+    );
     expect(indexingPage).toContain("Correlate the three event types by");
     expect(indexingPage).toContain("identity-specific token or pool lookup");
     expect(indexingPage).toContain("overlapping checkpoint");
-    expect(indexingPage).toContain("Deduplicate identical block, transaction and log coordinates");
+    expect(indexingPage).toContain(
+      "Deduplicate identical block, transaction and log coordinates",
+    );
     expect(indexingPage).toContain("last common finalized checkpoint");
     expect(indexingPage).toContain("ORPHANED");
     const eventContract = JSON.stringify(
@@ -428,9 +432,7 @@ describe("Launch Stamp developer documentation", () => {
   });
 
   it("limits stamps to Router-stamped Classic and Custom provenance", () => {
-    expect(page).toContain(
-      "Historical launches created before Router activation",
-    );
+    expect(page).toMatch(/before (?:this )?Router(?:'s|&apos;s)? start block/i);
     expect(page).toMatch(
       /Safety, tradability, current pool state, current liquidity, audit\s+coverage, review status/,
     );
@@ -463,20 +465,22 @@ describe("Launch Stamp developer documentation", () => {
     expect(page).toContain("slot0.sqrtPriceX96 == 0");
     expect(page).toContain("slot0.sqrtPriceX96 != 0");
     expect(page).toMatch(/not current pool state or liquidity/);
-    expect(page).toMatch(/does\s+not claim that every\s+component was newly created/);
+    expect(page).toMatch(
+      /does\s+not claim that every\s+component was newly created/,
+    );
     expect(page).toContain("not an Explorer source");
     expect(page).toContain("supplied handoff digests");
     expect(page).toMatch(/PCAN.*token symbol in this test case/s);
     expect(page).toContain("does not replace it");
-    expect(page).toMatch(
-      /General public Custom submission and wallet self-service\s+launching\s+are not live/,
-    );
+    expect(page).toMatch(/General public submission/);
+    expect(page).toMatch(/open wallet self-service/);
+    expect(page).toMatch(/Approved Hookbuilder Applicants/);
     expect(page).not.toContain("Classic onchain canary passed");
   });
 
   it("keeps the Router reference in Infrastructure and linked from Developers", () => {
     expect(docsData).toContain('href: "/docs/launch-stamps"');
-    expect(docsData).toContain('label: "Router and launch stamps"');
+    expect(docsData).toContain('label: "Launch Stamp Router"');
     expect(docsData).toContain(
       'relatedPaths: ["/docs/launch-stamps"] as const',
     );
@@ -492,7 +496,10 @@ describe("Launch Stamp developer documentation", () => {
       "[GitHub Router reference](https://github.com/0xprogrammable/developers/blob/main/docs/reference/launch-stamp.md)",
     );
     expect(developerDocsMarkdown).toContain(
-      "Router V1 covers only launches executed and stamped through it",
+      "Only launches executed and stamped through this Router inside its published block range",
+    );
+    expect(developerDocsMarkdown).toContain(
+      "direct factory calls outside the Router even when later, do not",
     );
     expect(developerDocsMarkdown).not.toContain(
       "the binding remains prelaunch until every deployment field is published",

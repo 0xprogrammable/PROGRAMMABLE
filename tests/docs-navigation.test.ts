@@ -287,11 +287,9 @@ describe("Docs navigation state", () => {
 
     expect(deepResults).toEqual([]);
     expect(stockResults[0]?.title).toBe("Stock-Paired");
-    expect(getDocsSearchResults("stock paired")[0]?.title).toBe(
-      "Stock-Paired",
-    );
+    expect(getDocsSearchResults("stock paired")[0]?.title).toBe("Stock-Paired");
     expect(classicResults[0]?.title).toBe("Classic");
-    expect(customResults[0]?.title).toBe("Custom");
+    expect(customResults[0]?.title).toBe("Custom hooks");
     expect(
       customResults.some(
         (result) => result.title === "Classic and Custom launch kinds",
@@ -302,16 +300,27 @@ describe("Docs navigation state", () => {
   it("finds the three dedicated developer guides", () => {
     expect(getDocsSearchResults("verify")[0]).toMatchObject({
       href: "/docs/developers/verify",
-      title: "Verify a launch",
+      title: "Verify a token or pool",
     });
-    expect(getDocsSearchResults("index launches")[0]).toMatchObject({
+    expect(getDocsSearchResults("index new launches")[0]).toMatchObject({
       href: "/docs/developers/indexing",
-      title: "Index launches",
+      title: "Index new launches",
     });
     expect(getDocsSearchResults("machine readable")[0]).toMatchObject({
       href: "/docs/developers/machine-readable",
       title: "Machine-readable docs",
     });
+    for (const query of ["agent", "AI agent", "LLM", "ai"]) {
+      expect(getDocsSearchResults(query)[0]).toMatchObject({
+        href: "/docs/developers/machine-readable",
+        title: "Machine-readable docs",
+      });
+    }
+    expect(getDocsSearchResults("ai")).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ href: "/docs/models/stock-paired" }),
+      ]),
+    );
   });
 
   it("opens keyboard navigation on the first or last result", () => {

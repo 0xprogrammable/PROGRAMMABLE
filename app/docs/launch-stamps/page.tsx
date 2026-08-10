@@ -34,20 +34,33 @@ const sections = [
 const abiBoundVerifier = [
   "input := token OR (PoolManager, poolId)",
   "",
-  "preflight  resolve one finalized canonical block",
-  "           require chainId, block range, Router runtime,",
-  "           and immutable bindings to match the manifest",
+  "preflight  require HTTPS RPC; HTTP is loopback-only",
+  "           require live/retired-in-range manifest with complete",
+  "           canary, binding, atomic, getter and event descriptors",
+  "           resolve one finalized canonical block → (number, openingHash)",
+  "           require eth_chainId, block range and Router runtime",
+  "           require ABI byte hash, getters, topics and indexed layouts",
+  "           require CHAIN_ID() == manifest.chainId",
+  "           require all six immutable bindings to match the manifest",
+  "           require permit authority, Graph Factory and PoolManager runtimes",
   "",
   "step 1  launchId := input is token",
   "          ? launchIdByToken(token)",
   "          : launchIdByPool(PoolManager, poolId)",
-  "        if launchId == bytes32(0) → NOT_STAMPED",
+  "        if launchId == bytes32(0) → candidate := NOT_STAMPED; finalize",
   "",
   "step 2  record := launchStamp(launchId)",
-  "        if record.stampHash == bytes32(0) → INDETERMINATE",
-  "        if identity or kind is inconsistent → INDETERMINATE",
+  "        require supported kind and exact token or pool identity",
+  "        require valid address fields and nonzero bytes32 fields",
+  "        require record.poolManager == immutable PoolManager",
+  "        for token input, require stampProof(token) ==",
+  "          (launchId, record.stampHash)",
+  "        CustomGraph → require Graph Factory address + runtime binding",
+  "        Classic → retain permit-bound recorded launcher + runtime",
+  "        candidate := STAMPED(record)",
   "",
-  "return STAMPED(record)",
+  "finalize  for number-bound reads, require closingHash == openingHash",
+  "return candidate only after every required gate succeeds",
 ].join("\n");
 
 const router = PROGRAMMABLE_LAUNCH_STAMP_MANIFEST.launchStampRouter;
@@ -194,8 +207,8 @@ export default function LaunchStampDocsPage() {
       currentPath="/docs/launch-stamps"
       description="The canonical onchain reference for identifying launches stamped through the Programmable Router on Ethereum."
       kicker="Reference"
-      parentHref="/docs/developers#agents"
-      parentLabel="Developer integration"
+      parentHref="/docs/infrastructure"
+      parentLabel="Infrastructure"
       sections={sections}
       title="Launch Stamp Router"
     >
@@ -350,8 +363,9 @@ export default function LaunchStampDocsPage() {
       <section id="algorithm">
         <h2>Token and pool identity</h2>
         <p className={styles.sectionLead}>
-          Resolve the launch identifier from a token or from the exact
-          PoolManager and pool ID, then read the record from the same Router.
+          Complete the manifest, canonical block, runtime, ABI, descriptor and
+          immutable-binding gates before resolving a launch identifier. Read the
+          lookup, record and proof from the same Router at the same block.
         </p>
 
         <div className={styles.codeFrame}>
@@ -363,6 +377,14 @@ export default function LaunchStampDocsPage() {
             {abiBoundVerifier}
           </pre>
         </div>
+
+        <p className={styles.detailLine}>
+          Remote RPC URLs must use HTTPS. Plain HTTP is accepted only for
+          loopback development endpoints. Prefer EIP-1898 reads with a concrete
+          block hash and <code>requireCanonical: true</code>. When reads are
+          bound by block number instead, refetch that height and require its
+          closing hash to match the opening hash before returning either result.
+        </p>
 
         <h3 className={styles.subheading}>Identity checks</h3>
         <dl className={styles.definitionList}>
@@ -387,9 +409,10 @@ export default function LaunchStampDocsPage() {
             <dt>Exclusive component</dt>
             <dd>
               Require <code>launchIdByComponent(component)</code>, matching{" "}
-              <code>stampProof(component)</code>, and equality between{" "}
-              <code>componentRuntimeCodeHash(component)</code> and the runtime
-              read at the same block.
+              <code>stampProof(component)</code>, and a nonzero recorded{" "}
+              <code>componentRuntimeCodeHash(component)</code>. Compare current
+              runtime separately as a drift signal; equality is not a historical
+              provenance gate.
             </dd>
           </div>
         </dl>
@@ -397,7 +420,9 @@ export default function LaunchStampDocsPage() {
           A Classic hook is shared infrastructure, so its component proof is
           intentionally <code>(bytes32(0), bytes32(0))</code> even when its
           launch is stamped. <code>stampProof(address)</code> corroborates an
-          exclusive component. There is no universal hook getter.
+          exclusive component. There is no universal hook getter. A current
+          component-runtime mismatch may require separate consumer action, but
+          it does not erase the Router&apos;s historical origin record.
         </p>
 
         <h3 className={styles.subheading} id="abi">
@@ -492,6 +517,16 @@ export default function LaunchStampDocsPage() {
             </li>
           ))}
         </ol>
+
+        <p className={styles.detailLine}>
+          Every address field must have valid 20-byte address encoding; this
+          does not add a blanket nonzero-address rule. Require nonzero values
+          for <code>poolId</code>, <code>poolKeyHash</code>,{" "}
+          <code>componentSetHash</code>, <code>routePayloadHash</code>,{" "}
+          <code>routeLauncherRuntimeCodeHash</code>,{" "}
+          <code>expectedResultHash</code>, <code>permitDigest</code>, and{" "}
+          <code>stampHash</code>.
+        </p>
 
         <dl className={styles.definitionList}>
           <div>
@@ -594,14 +629,24 @@ export default function LaunchStampDocsPage() {
           <div>
             <dt>STAMPED</dt>
             <dd>
-              The lookup and record are nonzero, consistent, and match the token
-              or pool identity and launch kind.
+              Every activation, canonical-block, runtime, ABI-descriptor,
+              immutable-binding, lookup, record, identity, proof, route and any
+              required closing-hash gate succeeds. Current component-runtime
+              equality is reported separately.
             </dd>
           </div>
           <div>
             <dt>NOT_STAMPED</dt>
             <dd>
-              A successful canonical lookup returns <code>bytes32(0)</code>.
+              After the preflight and any required closing block-hash check, a
+              successful canonical lookup returns <code>bytes32(0)</code>.
+            </dd>
+          </div>
+          <div>
+            <dt>UNAVAILABLE</dt>
+            <dd>
+              The Router is outside its published block range, the chain is
+              inactive, or required activation data is incomplete.
             </dd>
           </div>
           <div>
@@ -674,9 +719,10 @@ export default function LaunchStampDocsPage() {
           <div>
             <dt>Not launch authorization</dt>
             <dd>
-              General public Custom submission and wallet self-service launching
-              are not live. This read-only reference does not enable or
-              authorize public launching.
+              General public submissions and open wallet self-service are not
+              available. Approved Hookbuilder Applicants can use the gated flow
+              for a prepared release. This reference grants neither access nor
+              launch authorization.
             </dd>
           </div>
         </dl>
@@ -701,9 +747,8 @@ export default function LaunchStampDocsPage() {
             observations to the replacement entry.
           </li>
           <li>
-            Historical launches created before Router activation are excluded.
-            Do not backfill them or infer stamps from legacy contracts and
-            events.
+            Launches before this Router&apos;s start block are excluded. Do not
+            backfill them or infer stamps from legacy contracts and events.
           </li>
           <li>
             Direct Classic Factory, Graph Factory, or Single Factory calls

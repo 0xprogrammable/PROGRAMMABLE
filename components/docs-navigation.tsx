@@ -243,7 +243,9 @@ function getDocsScrollOffset(): number {
 function getDocsSectionTop(section: HTMLElement) {
   return Math.max(
     0,
-    section.getBoundingClientRect().top + window.scrollY - getDocsScrollOffset(),
+    section.getBoundingClientRect().top +
+      window.scrollY -
+      getDocsScrollOffset(),
   );
 }
 
@@ -341,7 +343,8 @@ export function DocsNavigation({
         });
 
         if (progress < 1) {
-          scrollAnimationFrameRef.current = window.requestAnimationFrame(update);
+          scrollAnimationFrameRef.current =
+            window.requestAnimationFrame(update);
           return;
         }
         complete();
@@ -590,9 +593,7 @@ export function DocsNavigation({
                         }
                         data-depth={item.depth ?? 0}
                         aria-current={active ? "page" : undefined}
-                        onClick={(event) =>
-                          handleNavigation(event, item.href)
-                        }
+                        onClick={(event) => handleNavigation(event, item.href)}
                       >
                         {item.label}
                       </Link>
@@ -636,7 +637,9 @@ export function DocsNavigation({
   }
 
   function renderMobileNavigation() {
-    return <div className={styles.mobileNavTree}>{renderGlobalNavigation()}</div>;
+    return (
+      <div className={styles.mobileNavTree}>{renderGlobalNavigation()}</div>
+    );
   }
 
   const activeCategory = docsCategories.find(
@@ -730,9 +733,7 @@ export function DocsPageNavigation({
   currentPath: string;
   sections?: readonly DocsPageSection[];
 }) {
-  const [activeSectionId, setActiveSectionId] = useState(
-    sections[0]?.id ?? "",
-  );
+  const [activeSectionId, setActiveSectionId] = useState(sections[0]?.id ?? "");
 
   useEffect(() => {
     if (sections.length === 0) return;

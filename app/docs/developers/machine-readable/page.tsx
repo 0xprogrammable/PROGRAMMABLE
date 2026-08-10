@@ -31,7 +31,7 @@ export default function MachineReadableDocsPage() {
       description="Use the same published source set in agents, terminals, scanners and build pipelines."
       kicker="Developer integration"
       parentHref="/docs/developers"
-      parentLabel="Developer integration"
+      parentLabel="Developers"
       sections={machineSections}
       title="Machine-readable docs"
     >
