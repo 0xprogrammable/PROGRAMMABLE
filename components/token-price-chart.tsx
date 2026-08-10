@@ -145,8 +145,8 @@ export function getChartFdvAtPoint(
       );
   const fdvUsdWad = scaleIntegerByPriceRatio(
     payload.fdvUsdWad,
-    inspectedPoint.priceUsd ?? inspectedPoint.priceEth,
-    latestPoint.priceUsd ?? latestPoint.priceEth,
+    inspectedPoint.priceEth,
+    latestPoint.priceEth,
   );
 
   return {
@@ -178,23 +178,36 @@ export function isAuthoritativeChartPayloadStatus(status: unknown) {
   return status === "ready" || status === "insufficient-history";
 }
 
-function isUnsignedIntegerString(value: unknown) {
+function isUnsignedIntegerString(value: unknown): value is string {
   return typeof value === "string" && /^\d+$/.test(value);
 }
 
-function isUnsignedDecimalString(value: unknown) {
+function isUnsignedDecimalString(value: unknown): value is string {
   return (
     typeof value === "string" &&
     /^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)
   );
 }
 
+function isPositiveDecimalString(value: unknown): value is string {
+  if (!isUnsignedDecimalString(value)) return false;
+  const [whole, fraction = ""] = value.split(".");
+  return BigInt(`${whole}${fraction}`) > 0n;
+}
+
 function hasOptionalUnsignedInteger(value: unknown) {
   return value === undefined || isUnsignedIntegerString(value);
 }
 
-function hasOptionalUnsignedDecimal(value: unknown) {
-  return value === undefined || isUnsignedDecimalString(value);
+function hasOptionalPositiveUnsignedInteger(value: unknown) {
+  return (
+    value === undefined ||
+    (isUnsignedIntegerString(value) && BigInt(value) > 0n)
+  );
+}
+
+function hasOptionalPositiveDecimal(value: unknown) {
+  return value === undefined || isPositiveDecimalString(value);
 }
 
 export function isAuthoritativeChartPayload(
@@ -218,9 +231,9 @@ export function isAuthoritativeChartPayload(
     !isUnsignedIntegerString(payload.volumeWei) ||
     !isUnsignedDecimalString(payload.volumeEth) ||
     !hasOptionalUnsignedInteger(payload.volumeUsdWad) ||
-    !hasOptionalUnsignedInteger(payload.fdvEthWei) ||
-    !hasOptionalUnsignedDecimal(payload.fdvEth) ||
-    !hasOptionalUnsignedInteger(payload.fdvUsdWad)
+    !hasOptionalPositiveUnsignedInteger(payload.fdvEthWei) ||
+    !hasOptionalPositiveDecimal(payload.fdvEth) ||
+    !hasOptionalPositiveUnsignedInteger(payload.fdvUsdWad)
   ) {
     return false;
   }
@@ -230,9 +243,9 @@ export function isAuthoritativeChartPayload(
       Boolean(point) &&
       typeof point === "object" &&
       isUnsignedIntegerString(point.blockNumber) &&
-      isUnsignedDecimalString(point.priceEth) &&
+      isPositiveDecimalString(point.priceEth) &&
       (point.priceUsd === undefined ||
-        isUnsignedDecimalString(point.priceUsd)),
+        isPositiveDecimalString(point.priceUsd)),
   );
 }
 

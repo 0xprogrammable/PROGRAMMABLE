@@ -60,8 +60,8 @@ describe("token price chart inspection", () => {
           fdvEth: "1000",
           fdvUsdWad: "2000000000000000000000000",
         },
-        { blockNumber: "1", priceEth: "0.5", priceUsd: "1000" },
-        { blockNumber: "2", priceEth: "1", priceUsd: "2000" },
+        { blockNumber: "1", priceEth: "0.5" },
+        { blockNumber: "2", priceEth: "1", priceUsd: "2500" },
       ),
     ).toEqual({
       fdvEthWei: "500000000000000000000",
@@ -128,6 +128,18 @@ describe("token price chart refresh", () => {
         marketCapEthWei: "1000000000000000000000",
         marketCapEth: "1000",
         marketCapUsdWad: "3000000000000000000000000",
+      }),
+    ).toBe(false);
+    expect(
+      isAuthoritativeChartPayload({
+        status: "ready",
+        points: [{ blockNumber: "1", priceEth: "0" }],
+        swapCount: 1,
+        volumeWei: "0",
+        volumeEth: "0",
+        fdvEthWei: "0",
+        fdvEth: "0",
+        fdvUsdWad: "0",
       }),
     ).toBe(false);
     expect(
