@@ -56,5 +56,7 @@ clone_at "blocknumberish" "https://github.com/Uniswap/blocknumberish.git" \
   "38fe20bc0341d5bc2780d41f90dadb70e10f8cea"
 clone_at "solmate" "https://github.com/transmissions11/solmate.git" \
   "4b47a19038b798b4a33d9749d25e570443520647"
+clone_at "shards-v1" "https://github.com/jesse-stahl/shards-v1.git" \
+  "91b38f3de64d96cac7e29f127c004f128fc1da59"
 
 echo "All contract dependencies match their pinned commits."
