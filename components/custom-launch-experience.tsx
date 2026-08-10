@@ -2350,10 +2350,12 @@ export function CustomLaunchExperience({
         // The durable prepared lock remains. Report immediately so the server
         // can recover the broadcast without permitting a second launch.
       }
-      setTransactionHash(hash);
-      setTransactionChainId(action.chainId);
-      setLaunchProgress("confirmation");
-      setStatusMessage("Waiting for confirmation");
+      if (isActive()) {
+        setTransactionHash(hash);
+        setTransactionChainId(action.chainId);
+        setLaunchProgress("confirmation");
+        setStatusMessage("Waiting for confirmation");
+      }
       await reportPersistedLaunchTransactionV2(client, reportRecovery);
       if (!isActive()) return;
       const finalized = await pollLaunchStatus(client, {

@@ -144,6 +144,27 @@ describe("custom launch applicant session currentness", () => {
       ]);
   });
 
+  it("returns a broadcast for durable recovery when the boundary changes during send", async () => {
+    const effects = dangerousSequenceEffects();
+    const persistBroadcast = vi.fn();
+    let current = true;
+    effects.sendBrowserWalletAction.mockImplementation(async () => {
+      current = false;
+      persistBroadcast("0xtransaction");
+      return "0xtransaction";
+    });
+
+    await expect(runCurrentCustomLaunchApplicantSequenceV2({
+      refreshBoundary: async () => undefined,
+      assertBoundary: () => {
+        if (!current) throw new Error("superseded boundary");
+      },
+      ...effects,
+    })).resolves.toMatchObject({ send: "0xtransaction" });
+    expect(persistBroadcast).toHaveBeenCalledWith("0xtransaction");
+    expect(effects.sendBrowserWalletAction).toHaveBeenCalledOnce();
+  });
+
   it("acquires imperative Identity then current Access within one exact auth boundary", async () => {
     const calls: string[] = [];
     const getAccessToken = vi.fn(async () => {
@@ -600,6 +621,7 @@ describe("custom launch applicant session currentness", () => {
     expect(componentSource).toContain("sessionBoundaryGuardRef.current.commit(sessionBoundaryKey)");
     expect(componentSource).toContain("createCustomLaunchWebsiteClientV2({ getSession })");
     expect(componentSource).toContain("const sequence = await runCurrentCustomLaunchApplicantSequenceV2({");
+    expect(componentSource).toContain("if (isActive()) {\n        setTransactionHash(hash);");
     expect(componentSource).toContain("readApplicantAuthState,");
     expect(componentSource).toContain("await reauthorizeGithub()");
     expect(componentSource).not.toContain('from "@/components/manual-applicant-launch"');
