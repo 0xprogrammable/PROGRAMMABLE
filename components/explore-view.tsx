@@ -1527,7 +1527,7 @@ export function ExploreView() {
                 {token.marketStatus ? (
                   <span
                     className={styles.runnerMarketStatus}
-                    aria-label="Market status No market"
+                    aria-label={`Market status ${token.marketStatus}`}
                   >
                     {token.marketStatus}
                   </span>

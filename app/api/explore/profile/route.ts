@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
         "Cache-Control": "private, max-age=0, s-maxage=15",
         "X-Programmable-Launch-Source": "alchemy",
         "X-Programmable-Read-Source": "rpc",
-        "X-Programmable-Rpc-Provider": "alchemy",
+        "X-Programmable-Rpc-Provider": "operational-dual",
       },
     });
   } catch (error) {

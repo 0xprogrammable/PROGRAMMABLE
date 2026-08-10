@@ -114,7 +114,7 @@ describe("public route coordinator wiring", () => {
       "private, max-age=0, s-maxage=15",
     );
     expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
-      "alchemy",
+      "operational-dual",
     );
   });
 
