@@ -13,6 +13,11 @@ import {
 const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 const developerPage = read("app/docs/developers/page.tsx");
+const verifyPage = read("app/docs/developers/verify/page.tsx");
+const indexingPage = read("app/docs/developers/indexing/page.tsx");
+const machineReadablePage = read(
+  "app/docs/developers/machine-readable/page.tsx",
+);
 const docsIndex = read("app/docs/page.tsx");
 const siteNavigation = read("components/site-navigation.tsx");
 const docsSearch = read("components/docs-search.tsx");
@@ -23,48 +28,55 @@ const llmsRoute = read("app/llms.txt/route.ts");
 const llmsFullRoute = read("app/llms-full.txt/route.ts");
 
 describe("Developer documentation experience", () => {
-  it("uses a real Docs overview and keeps the Router guide canonical", () => {
+  it("uses a real Docs overview and keeps the developer overview canonical", () => {
     expect(docsIndex).toContain('currentPath="/docs"');
-    expect(docsIndex).toContain('title="Programmable documentation"');
+    expect(docsIndex).toContain('title="Programmable"');
     expect(docsIndex).not.toContain("redirect(");
     expect(siteNavigation).toContain('href: "/docs"');
-    expect(developerPage).toContain(
-      'title="Integrate launch verification"',
-    );
+    expect(developerPage).toContain('title="Integrate Programmable launches"');
     expect(developerPage).toContain(
       'alternates: { canonical: "/docs/developers" }',
     );
-    expect(developerPage).toContain(
-      "Historical launches and direct factory calls are outside this verification path.",
+    expect(developerPage).toMatch(
+      /Historical launches and direct\s+factory calls are outside this verification path\./,
     );
   });
 
-  it("keeps navigation and search aligned with every rendered section", () => {
+  it("publishes focused verification, indexing and machine-readable routes", () => {
     expect(docsSearch).toContain("key={`${item.href}:${item.title}`}");
+    for (const [source, path, canonical] of [
+      [
+        verifyPage,
+        "/docs/developers/verify",
+        'alternates: { canonical: "/docs/developers/verify" }',
+      ],
+      [
+        indexingPage,
+        "/docs/developers/indexing",
+        'alternates: { canonical: "/docs/developers/indexing" }',
+      ],
+      [
+        machineReadablePage,
+        "/docs/developers/machine-readable",
+        'alternates: { canonical: "/docs/developers/machine-readable" }',
+      ],
+    ] as const) {
+      expect(source).toContain(`currentPath="${path}"`);
+      expect(source).toContain(canonical);
+      expect(docsData).toContain(`href: "${path}"`);
+    }
+
     for (const id of [
+      "paths",
       "trust-root",
-      "identity",
-      "indexing",
-      "resources",
       "boundary",
+      "resources",
       "checklist",
       "agents",
     ]) {
       expect(developerPage).toContain(`id="${id}"`);
-      expect(docsData).toContain(`/docs/developers#${id}`);
     }
-    expect(developerPage).toContain('heroId="paths"');
-    expect(docsData).not.toContain("/docs/developers#paths");
-    for (const staleId of [
-      "quickstart",
-      "providers",
-      "markets",
-      "verification",
-      "data",
-      "reference",
-    ]) {
-      expect(docsData).not.toContain(`/docs/developers#${staleId}`);
-    }
+    expect(developerPage).not.toContain("DeveloperDocsWorkbench");
   });
 
   it("puts the live manifest, frozen ABI and GitHub reference first", () => {
@@ -86,16 +98,18 @@ describe("Developer documentation experience", () => {
   });
 
   it("documents point verification without requiring an indexer or server", () => {
-    expect(developerPage).toContain("Resolve one record from token or pool");
+    expect(verifyPage).toContain("Resolve the launch ID");
+    expect(verifyPage).toContain("reads.primaryReads[0].signature");
+    expect(verifyPage).toContain("reads.primaryReads[1].signature");
+    expect(verifyPage).toContain("reads.componentReads[0].signature");
     expect(developerDocsMarkdown).toContain("launchIdByToken(address)");
     expect(developerDocsMarkdown).toContain("launchIdByPool(address,bytes32)");
     expect(developerDocsMarkdown).toContain("stampProof(address)");
-    expect(developerPage).toMatch(
-      /The shared\s+Classic hook is not a launch identifier\./,
+    expect(verifyPage).toMatch(
+      /The shared Classic hook is not a launch identifier\./,
     );
-    expect(developerPage).toContain("Discover new launches when needed");
-    expect(developerPage).toMatch(
-      /An indexer is an\s+implementation choice, not a trust dependency\./,
+    expect(indexingPage).toContain(
+      "Point verification needs an Ethereum provider, the manifest and the",
     );
     expect(developerDocsMarkdown).toContain(
       "point verification requires only an Ethereum provider.",
@@ -103,17 +117,21 @@ describe("Developer documentation experience", () => {
   });
 
   it("keeps Router-only Classic and Custom scope explicit", () => {
-    expect(developerPage).toContain("LaunchKindV1.{customKind?.name}");
-    expect(developerPage).toContain("LaunchKindV1.{classicKind?.name}");
-    expect(developerPage).toContain(
-      "This Router covers only launches executed and stamped through it",
+    expect(developerPage).toContain('kind.name === "CustomGraph"');
+    expect(developerPage).toContain('kind.name === "Classic"');
+    expect(developerPage).toContain("customKind?.publicLabel");
+    expect(developerPage).toContain("classicKind?.publicLabel");
+    expect(verifyPage).toContain("LaunchKindV1.{kind.name}");
+    expect(developerPage).toMatch(
+      /This path covers launches executed and stamped through this Router/,
     );
-    expect(developerPage).not.toContain("MemeTokenLaunchedV2");
-    expect(developerPage).not.toContain(
-      "0xC3bd04aAc2fb2ba58efD7Eb673E544E0B80De770",
-    );
-    expect(developerPage).not.toContain("CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH");
-    expect(developerPage).not.toContain("DeveloperDocsWorkbench");
+    for (const surface of [developerPage, verifyPage, indexingPage]) {
+      expect(surface).not.toContain("MemeTokenLaunchedV2");
+      expect(surface).not.toContain(
+        "0xC3bd04aAc2fb2ba58efD7Eb673E544E0B80De770",
+      );
+      expect(surface).not.toContain("CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH");
+    }
   });
 
   it("keeps provenance separate from safety and terminal support", () => {
@@ -143,19 +161,22 @@ describe("Developer documentation experience", () => {
     expect(llmsFullRoute).not.toContain("fetch(");
     expect(programmableLlmsIndex).toContain("Canonical read-only provenance");
     expect(programmableLlmsFullFallback).toContain("## Finalized PCAN vector");
+    expect(machineReadablePage).toContain('<a href="/docs/developers.md">');
+    expect(machineReadablePage).toContain('<a href="/llms.txt">');
+    expect(machineReadablePage).toContain('<a href="/llms-full.txt">');
   });
 
-  it("wraps long hashes and recomposes the technical layout on phones", () => {
+  it("wraps long values and makes the indexing table horizontally reachable", () => {
     expect(developerDocsCss).toContain(".breakableValue");
-    expect(developerDocsCss).toContain(".eventDetails");
+    expect(developerDocsCss).toContain(".technicalData dd");
     expect(developerDocsCss).toMatch(
-      /\.eventDetails code,[\s\S]*?overflow-wrap:\s*anywhere;/,
+      /\.eventTable code\s*\{[^}]*white-space:\s*normal;[^}]*word-break:\s*break-word;/s,
     );
     expect(developerDocsCss).toMatch(
-      /@media \(max-width: 620px\)[\s\S]*?\.fieldTable > div\s*\{[^}]*grid-template-columns:\s*1fr;/,
+      /\.tableScroll\s*\{[^}]*overflow-x:\s*auto;[^}]*overscroll-behavior-inline:\s*contain;/s,
     );
-    expect(developerDocsCss).toContain(
-      "@media (prefers-reduced-motion: reduce)",
+    expect(developerDocsCss).toMatch(
+      /@media \(max-width: 700px\)[\s\S]*?\.dataList > div,\s*\.resultList > div,\s*\.codeList li\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\);/s,
     );
     expect(developerDocsCss).not.toMatch(
       /font-size:\s*(?:10(?:\.5)?|11(?:\.5)?|12(?:\.5)?)px/,

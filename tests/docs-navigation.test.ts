@@ -5,6 +5,7 @@ import {
   docsNavigateEvent,
   easeDocsScroll,
   getDocsScrollDuration,
+  isDocsNavigationBranchActive,
   isDocsNavigationItemActive,
   normalizeDocsHash,
   pickActiveDocsSection,
@@ -122,6 +123,40 @@ describe("Docs navigation state", () => {
         activeHref: "/docs/models/classic",
         currentPath: "/docs/models/classic",
         itemHref: "/docs/developers#terminal-contract",
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps every focused developer guide inside the Developers branch", () => {
+    const developerOverview = {
+      href: "/docs/developers",
+      label: "Overview",
+      relatedPaths: [
+        "/docs/developers/verify",
+        "/docs/developers/indexing",
+        "/docs/developers/machine-readable",
+      ],
+    } as const;
+
+    for (const currentPath of developerOverview.relatedPaths) {
+      expect(
+        isDocsNavigationBranchActive({
+          currentPath,
+          item: developerOverview,
+        }),
+      ).toBe(true);
+      expect(
+        isDocsNavigationItemActive({
+          activeHref: currentPath,
+          currentPath,
+          itemHref: currentPath,
+        }),
+      ).toBe(true);
+    }
+    expect(
+      isDocsNavigationBranchActive({
+        currentPath: "/docs/launch-stamps",
+        item: developerOverview,
       }),
     ).toBe(false);
   });
@@ -262,6 +297,21 @@ describe("Docs navigation state", () => {
         (result) => result.title === "Classic and Custom launch kinds",
       ),
     ).toBe(true);
+  });
+
+  it("finds the three dedicated developer guides", () => {
+    expect(getDocsSearchResults("verify")[0]).toMatchObject({
+      href: "/docs/developers/verify",
+      title: "Verify a launch",
+    });
+    expect(getDocsSearchResults("index launches")[0]).toMatchObject({
+      href: "/docs/developers/indexing",
+      title: "Index launches",
+    });
+    expect(getDocsSearchResults("machine readable")[0]).toMatchObject({
+      href: "/docs/developers/machine-readable",
+      title: "Machine-readable docs",
+    });
   });
 
   it("opens keyboard navigation on the first or last result", () => {

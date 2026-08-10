@@ -15,8 +15,24 @@ import {
 } from "../lib/developer-docs-content";
 
 const root = process.cwd();
-const pageSource = readFileSync(
+const overviewSource = readFileSync(
   join(root, "app/docs/developers/page.tsx"),
+  "utf8",
+);
+const verifySource = readFileSync(
+  join(root, "app/docs/developers/verify/page.tsx"),
+  "utf8",
+);
+const indexingSource = readFileSync(
+  join(root, "app/docs/developers/indexing/page.tsx"),
+  "utf8",
+);
+const machineReadableSource = readFileSync(
+  join(root, "app/docs/developers/machine-readable/page.tsx"),
+  "utf8",
+);
+const routerReferenceSource = readFileSync(
+  join(root, "app/docs/launch-stamps/page.tsx"),
   "utf8",
 );
 const router = PROGRAMMABLE_LAUNCH_STAMP_MANIFEST.launchStampRouter;
@@ -155,17 +171,39 @@ describe("Router-first public developer-contract facts", () => {
     }
   });
 
-  it("makes the page consume only the shared Router contract", () => {
+  it("makes every human guide consume the shared Router contract", () => {
     for (const exportName of [
       "LAUNCH_KIND_V1",
       "PROGRAMMABLE_LAUNCH_STAMP_MANIFEST",
       "PROGRAMMABLE_LAUNCH_STAMP_RESOURCES",
-      "PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ABI",
     ]) {
-      expect(pageSource).toContain(exportName);
+      expect(overviewSource).toContain(exportName);
     }
-    expect(pageSource).not.toContain("PROGRAMMABLE_ACTIVE_API_BASE");
-    expect(pageSource).not.toContain("PROGRAMMABLE_FEE_POLICY");
-    expect(pageSource).not.toContain("CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH");
+    for (const source of [verifySource, indexingSource, routerReferenceSource]) {
+      expect(source).toContain("PROGRAMMABLE_LAUNCH_STAMP_MANIFEST");
+      expect(source).toContain("PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ABI");
+    }
+    expect(verifySource).toContain("router.runtimeCodeHash");
+    expect(verifySource).toContain("router.abiSha256");
+    expect(verifySource).toContain("router.finalityConfirmations");
+    expect(verifySource).toContain("Return one of four results");
+    expect(indexingSource).toContain("Object.values(router.events)");
+    expect(indexingSource).toContain("router.finalityConfirmations");
+    expect(indexingSource).toContain("requireCanonical: true");
+    expect(machineReadableSource).toContain(
+      "PROGRAMMABLE_LAUNCH_STAMP_RESOURCES",
+    );
+
+    for (const source of [
+      overviewSource,
+      verifySource,
+      indexingSource,
+      machineReadableSource,
+      routerReferenceSource,
+    ]) {
+      expect(source).not.toContain("PROGRAMMABLE_ACTIVE_API_BASE");
+      expect(source).not.toContain("PROGRAMMABLE_FEE_POLICY");
+      expect(source).not.toContain("CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH");
+    }
   });
 });
