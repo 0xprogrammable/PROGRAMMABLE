@@ -11,11 +11,15 @@ import { enrichTokensWithAlchemyPoolState } from "../../../../lib/alchemy/live-m
 import { suppressRouterBoundCustomProjectDuplicates } from "../../../../lib/alchemy/router-custom-collision";
 import {
   createExploreConsumerSource,
+  exploreLaunchSourceHeader,
+  exploreReadSourceHeader,
+  exploreRpcProviderHeader,
   type ExploreConsumerSource,
 } from "../../../../lib/explore-consumer.server";
 import { canonicalTokenExploreEntryV1 } from "../../../../lib/explore-entry-v1";
 import {
   buildExploreDataQuality,
+  publicExploreEntryV1,
   withExploreValuation,
   type ValuedExploreEntry,
 } from "../../../../lib/explore-financial-data";
@@ -117,6 +121,16 @@ export async function GET(request: NextRequest) {
     }
     const canonicalSource = canonicalAttempt.source;
     const customSource = customAttempt.source;
+    const sourceHeaders = {
+      "X-Programmable-Launch-Source": exploreLaunchSourceHeader({
+        canonical: canonicalSource,
+        custom: customSource,
+      }),
+      "X-Programmable-Read-Source": exploreReadSourceHeader({
+        canonical: canonicalSource,
+        custom: customSource,
+      }),
+    };
     const model = canonicalSource?.value ?? null;
     const token = model?.tokens.find(
       (candidate) =>
@@ -151,8 +165,7 @@ export async function GET(request: NextRequest) {
           status: 404,
           headers: {
             "Cache-Control": "no-store",
-            "X-Programmable-Launch-Source": "alchemy",
-            "X-Programmable-Read-Source": "blob",
+            ...sourceHeaders,
           },
         },
       );
@@ -164,7 +177,10 @@ export async function GET(request: NextRequest) {
           status: "unavailable",
           error: "Token identity is temporarily unavailable",
         },
-        { status: 503, headers: { "Cache-Control": "no-store" } },
+        {
+          status: 503,
+          headers: { "Cache-Control": "no-store", ...sourceHeaders },
+        },
       );
     }
 
@@ -239,11 +255,15 @@ export async function GET(request: NextRequest) {
       referenceBlock,
       identityAgeMs: sourceAges.length > 0 ? Math.max(...sourceAges) : null,
     });
+    const publicValuedToken = valuedToken
+      ? publicExploreEntryV1(valuedToken)
+      : null;
+    const rpcProvider = exploreRpcProviderHeader(deployment);
     const status = "ready" as const;
     return NextResponse.json(
       {
         status,
-        token: valuedToken,
+        token: publicValuedToken,
         customProject: valuedCustomProject,
         dataQuality,
         snapshot: model?.snapshot ?? null,
@@ -262,16 +282,16 @@ export async function GET(request: NextRequest) {
               : "public, max-age=0, s-maxage=30",
           "X-Programmable-Data-Quality": dataQuality.status,
           "X-Programmable-Valuation-Metric": "fdv",
-          "X-Programmable-Price-Source":
-            priceApiApplied ? "alchemy" : "read-model",
-          "X-Programmable-Launch-Source": customProject
-            ? "registry.custom-launched"
-            : canonicalSource?.status === "current" ? "alchemy" : "partial",
-          "X-Programmable-Read-Source": customProject
-            ? "postgres"
-            : canonicalSource?.origin === "fallback"
-              ? "durable"
-              : "blob",
+          ...(valuedToken
+            ? {
+                "X-Programmable-Price-Source":
+                  priceApiApplied ? "alchemy" : "read-model",
+              }
+            : {}),
+          ...sourceHeaders,
+          ...(rpcProvider === null
+            ? {}
+            : { "X-Programmable-Rpc-Provider": rpcProvider }),
         },
       },
     );

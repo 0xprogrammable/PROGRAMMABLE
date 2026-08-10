@@ -91,7 +91,10 @@ const launchDiscoverySnapshot = {
 describe("token detail Alchemy read", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getAlchemyOnchainDeployment.mockReturnValue({ status: "ready" });
+    mocks.getAlchemyOnchainDeployment.mockReturnValue({
+      status: "ready",
+      rpcUrlSecondary: "https://secondary.example",
+    });
     mocks.getOnchainDeployment.mockReturnValue({ status: "ready" });
     mocks.readProductionCustomExploreDirectoryV1.mockResolvedValue([]);
     mocks.readExploreReferenceHeadWithinRouteBudget.mockResolvedValue({
@@ -116,6 +119,11 @@ describe("token detail Alchemy read", () => {
       totalSupplyRaw: "1000000000000000000000000",
       tokenDecimals: 18,
       activeLiquidity: "1",
+      indexedMarketCapEth: "357.14",
+      indexedMarketCapEthWei: "357140000000000000000",
+      indexedMarketCapUsdWad: "1250000000000000000000000",
+      marketCapEth: "350",
+      marketCapEthWei: "350000000000000000000",
     });
     const model = {
       status: "ready",
@@ -174,16 +182,29 @@ describe("token detail Alchemy read", () => {
         unavailable: 0,
       },
     });
+    for (const field of [
+      "marketCapEth",
+      "marketCapEthWei",
+      "indexedMarketCapEth",
+      "indexedMarketCapEthWei",
+      "indexedMarketCapUsdWad",
+      "marketCapQuote",
+      "marketCapQuoteWad",
+    ]) {
+      expect(body.token).not.toHaveProperty(field);
+    }
     expect(body.launchDiscoverySnapshot).toEqual(launchDiscoverySnapshot);
     expect(response.headers.get("X-Programmable-Read-Source")).toBe(
-      "blob",
+      "operational+durable+postgres",
     );
-    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBeNull();
+    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
+      "operational-dual",
+    );
     expect(response.headers.get("X-Programmable-Price-Source")).toBe(
       "alchemy",
     );
     expect(response.headers.get("X-Programmable-Launch-Source")).toBe(
-      "alchemy",
+      "operational+durable+registry.custom-launched",
     );
     expect(response.headers.get("X-Programmable-Valuation-Metric")).toBe(
       "fdv",
@@ -265,6 +286,12 @@ describe("token detail Alchemy read", () => {
     await expect(response.json()).resolves.toMatchObject({
       launchDiscoverySnapshot,
     });
+    expect(response.headers.get("X-Programmable-Launch-Source")).toBe(
+      "operational+durable+registry.custom-launched",
+    );
+    expect(response.headers.get("X-Programmable-Read-Source")).toBe(
+      "operational+durable+postgres",
+    );
     expect(mocks.enrichTokensWithAlchemyPrices).not.toHaveBeenCalled();
   });
 

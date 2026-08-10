@@ -4,6 +4,7 @@ import { canonicalTokenExploreEntryV1 } from "../lib/explore-entry-v1";
 import {
   buildExploreDataQuality,
   exploreValuation,
+  publicExploreEntryV1,
   withExploreValuation,
 } from "../lib/explore-financial-data";
 import type { LauncherToken } from "../lib/tokens";
@@ -90,6 +91,46 @@ describe("Explore financial-data semantics", () => {
       freshness: "stale",
       lagBlocks: "65",
     });
+  });
+
+  it("publishes total-supply values only through the FDV contract", () => {
+    const entry = withExploreValuation(
+      canonicalTokenExploreEntryV1(goldenToken({
+        fdvUsdWad: undefined,
+        indexedMarketCapUsdWad: "2779462110000000000000000",
+        indexedMarketCapEth: "794.223",
+        indexedMarketCapEthWei: "794223000000000000000",
+        marketCapEth: "794",
+        marketCapEthWei: "794000000000000000000",
+        marketCapQuote: "2779462.11",
+        marketCapQuoteWad: "2779462110000000000000000",
+      })),
+      { referenceBlock: "25725569" },
+    );
+
+    const published = publicExploreEntryV1(entry);
+
+    expect(published).toMatchObject({
+      fdvUsdWad: "2779462110000000000000000",
+      valuation: {
+        status: "available",
+        metric: "fdv",
+        supplyBasis: "total",
+        currency: "usd",
+        valueWad: "2779462110000000000000000",
+      },
+    });
+    for (const field of [
+      "marketCapEth",
+      "marketCapEthWei",
+      "indexedMarketCapEth",
+      "indexedMarketCapEthWei",
+      "indexedMarketCapUsdWad",
+      "marketCapQuote",
+      "marketCapQuoteWad",
+    ]) {
+      expect(published).not.toHaveProperty(field);
+    }
   });
 
   it("summarizes partial identity and valuation quality explicitly", () => {

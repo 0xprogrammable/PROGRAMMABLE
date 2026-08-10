@@ -160,7 +160,10 @@ describe("Explore API Alchemy boundary", () => {
       finality: "confirmed",
     });
     mocks.getOnchainDeployment.mockReturnValue({ status: "ready" });
-    mocks.getAlchemyOnchainDeployment.mockReturnValue({ status: "ready" });
+    mocks.getAlchemyOnchainDeployment.mockReturnValue({
+      status: "ready",
+      rpcUrlSecondary: "https://secondary.example",
+    });
     mocks.enrichTokensWithAlchemyPrices.mockImplementation(async (tokens) => [
       ...tokens,
     ]);
@@ -353,7 +356,52 @@ describe("Explore API Alchemy boundary", () => {
     expect(mocks.enrichTokensWithAlchemyPrices).not.toHaveBeenCalled();
   });
 
-  it("keeps the top 20 by market cap first, then appends every remaining coin newest", async () => {
+  it("fails closed when the canonical source and durable fallback are unavailable", async () => {
+    mocks.readAlchemyExploreModel.mockRejectedValue(
+      new Error("canonical source unavailable"),
+    );
+    mocks.readDurableExploreModel.mockRejectedValue(
+      new Error("durable source unavailable"),
+    );
+    mocks.readProductionCustomExploreDirectoryV1.mockResolvedValue([]);
+    vi.resetModules();
+    const { GET: coldGet } = await import("../app/api/explore/route");
+
+    const response = await coldGet(
+      new NextRequest("http://localhost/api/explore?sort=newest"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body).toMatchObject({
+      status: "unavailable",
+      error: "Launch data is temporarily unavailable",
+      retryable: true,
+      dataQuality: {
+        status: "partial",
+        launchIdentity: {
+          status: "partial",
+          canonical: "unavailable",
+          custom: "current",
+        },
+      },
+    });
+    expect(body).not.toHaveProperty("tokens");
+    expect(body).not.toHaveProperty("launcherFeesAccruedWei");
+    expect(body).not.toHaveProperty("launcherFeesAccruedEth");
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(response.headers.get("Retry-After")).toBe("5");
+    expect(response.headers.get("X-Programmable-Launch-Source")).toBe(
+      "partial+registry.custom-launched",
+    );
+    expect(response.headers.get("X-Programmable-Read-Source")).toBe(
+      "postgres",
+    );
+    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBeNull();
+    expect(response.headers.get("X-Programmable-Price-Source")).toBeNull();
+  });
+
+  it("keeps the top 20 by FDV first, then appends every remaining coin newest", async () => {
     const response = await GET(
       new NextRequest(
         "http://localhost/api/explore?sort=highest-market-cap&page=1&limit=100",
@@ -401,6 +449,20 @@ describe("Explore API Alchemy boundary", () => {
       asOfBlock: "25630000",
       lagBlocks: "5",
     });
+    expect(body.tokens[0].fdvUsdWad).toBe(
+      body.tokens[0].valuation.valueWad,
+    );
+    for (const field of [
+      "marketCapEth",
+      "marketCapEthWei",
+      "indexedMarketCapEth",
+      "indexedMarketCapEthWei",
+      "indexedMarketCapUsdWad",
+      "marketCapQuote",
+      "marketCapQuoteWad",
+    ]) {
+      expect(body.tokens[0]).not.toHaveProperty(field);
+    }
     const symbols = body.tokens.map(
       (candidate: LauncherToken) => candidate.symbol,
     );
@@ -411,9 +473,14 @@ describe("Explore API Alchemy boundary", () => {
       Array.from({ length: 10 }, (_, index) => `T${10 - index}`),
     );
     expect(response.headers.get("X-Programmable-Read-Source")).toBe(
-      "blob",
+      "operational+durable+postgres",
     );
-    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBeNull();
+    expect(response.headers.get("X-Programmable-Launch-Source")).toBe(
+      "operational+durable+registry.custom-launched",
+    );
+    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
+      "operational-dual",
+    );
     expect(response.headers.get("X-Programmable-Price-Source")).toBe(
       "read-model",
     );
@@ -543,12 +610,18 @@ describe("Explore API Alchemy boundary", () => {
       },
     });
     expect(response.headers.get("Cache-Control")).toBe("no-store");
-    expect(response.headers.get("X-Programmable-Read-Source")).toBe("durable");
+    expect(response.headers.get("X-Programmable-Read-Source")).toBe(
+      "durable+postgres",
+    );
+    expect(response.headers.get("X-Programmable-Launch-Source")).toBe(
+      "durable+registry.custom-launched",
+    );
+    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBeNull();
   });
 
   it.each([
     ["newest", "sort=newest&page=3&limit=10"],
-    ["lowest market cap", "sort=lowest-market-cap&page=3&limit=10"],
+    ["lowest FDV", "sort=lowest-market-cap&page=3&limit=10"],
     ["social filter", "socials=yes&page=3&limit=10"],
     ["search", "q=token&page=3&limit=10"],
   ])("keeps all matching tokens paginated for %s", async (_label, query) => {
@@ -572,9 +645,11 @@ describe("Explore API Alchemy boundary", () => {
       ]),
     );
     expect(response.headers.get("X-Programmable-Read-Source")).toBe(
-      "blob",
+      "operational+durable+postgres",
     );
-    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBeNull();
+    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
+      "operational-dual",
+    );
     expect(response.headers.get("X-Programmable-Price-Source")).toBe(
       "read-model",
     );

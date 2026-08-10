@@ -10,11 +10,15 @@ import { enrichTokensWithAlchemyPoolState } from "../../../lib/alchemy/live-mark
 import { suppressRouterBoundCustomProjectDuplicates } from "../../../lib/alchemy/router-custom-collision";
 import {
   createExploreConsumerSource,
+  exploreLaunchSourceHeader,
+  exploreReadSourceHeader,
+  exploreRpcProviderHeader,
   type ExploreConsumerSource,
 } from "../../../lib/explore-consumer.server";
 import { canonicalTokenExploreEntryV1 } from "../../../lib/explore-entry-v1";
 import {
   buildExploreDataQuality,
+  publicExploreEntryV1,
   valuationSortValue,
   withExploreValuation,
   type ValuedExploreEntry,
@@ -559,12 +563,45 @@ export async function GET(request: NextRequest) {
       identityAgeMs: sourceAges.length > 0 ? Math.max(...sourceAges) : null,
     });
 
+    const sourceHeaders = {
+      "X-Programmable-Launch-Source": exploreLaunchSourceHeader({
+        canonical: canonicalSource,
+        custom: customSource,
+      }),
+      "X-Programmable-Read-Source": exploreReadSourceHeader({
+        canonical: canonicalSource,
+        custom: customSource,
+      }),
+    };
+    const rpcProvider = exploreRpcProviderHeader(deployment);
+
+    if (canonicalSource === null && entries.length === 0) {
+      return NextResponse.json(
+        {
+          status: "unavailable",
+          error: "Launch data is temporarily unavailable",
+          retryable: true,
+          dataQuality,
+        },
+        {
+          status: 503,
+          headers: {
+            "Cache-Control": "no-store",
+            "Retry-After": "5",
+            "X-Programmable-Data-Quality": dataQuality.status,
+            "X-Programmable-Valuation-Metric": "fdv",
+            ...sourceHeaders,
+          },
+        },
+      );
+    }
+
     const page = {
-      status: pricedModel?.status === "ready" || customSource !== null
+      status: pricedModel?.status === "ready" || entries.length > 0
         ? "ready" as const
         : pricedModel?.status ?? "not-deployed" as const,
       ...paginated,
-      tokens: pageEntries,
+      tokens: pageEntries.map(publicExploreEntryV1),
       sort: options.sort,
       query: options.query,
       sortMetric: "fdv" as const,
@@ -574,8 +611,12 @@ export async function GET(request: NextRequest) {
         pricedModel?.status === "ready"
           ? pricedModel.launchDiscoverySnapshot
           : undefined,
-      launcherFeesAccruedWei: pricedModel?.launcherFeesAccruedWei ?? "0",
-      launcherFeesAccruedEth: pricedModel?.launcherFeesAccruedEth ?? "0",
+      ...(pricedModel
+        ? {
+            launcherFeesAccruedWei: pricedModel.launcherFeesAccruedWei,
+            launcherFeesAccruedEth: pricedModel.launcherFeesAccruedEth,
+          }
+        : {}),
     };
 
     return NextResponse.json(
@@ -596,20 +637,16 @@ export async function GET(request: NextRequest) {
                   dataQuality.valuation.asOfBlock,
               }
             : {}),
-          "X-Programmable-Price-Source":
-            priceApiApplied ? "alchemy" : "read-model",
-          "X-Programmable-Launch-Source":
-            canonicalSource?.status === "current" &&
-            customSource?.status === "current"
-              ? customProjects.length > 0
-                ? "alchemy+registry.custom-launched"
-                : "alchemy"
-              : "partial",
-          "X-Programmable-Read-Source": customProjects.length > 0
-            ? "blob+postgres"
-            : canonicalSource?.origin === "fallback"
-              ? "durable"
-              : "blob",
+          ...(pricedModel
+            ? {
+                "X-Programmable-Price-Source":
+                  priceApiApplied ? "alchemy" : "read-model",
+              }
+            : {}),
+          ...sourceHeaders,
+          ...(rpcProvider === null
+            ? {}
+            : { "X-Programmable-Rpc-Provider": rpcProvider }),
         },
       },
     );

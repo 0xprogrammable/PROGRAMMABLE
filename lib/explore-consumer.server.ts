@@ -9,6 +9,11 @@ export type ExploreConsumerSource<T> = Readonly<{
   origin: "primary" | "fallback" | "memory";
 }>;
 
+type ExploreOperationalDeployment = Readonly<{
+  status: string;
+  rpcUrlSecondary?: string | null;
+}>;
+
 type SourceCandidate<T> = Readonly<{
   value: T;
   ageMs?: number;
@@ -81,4 +86,75 @@ export function createExploreConsumerSource<T>(input: Readonly<{
 
     throw primaryError;
   };
+}
+
+function joinSourceLabels(labels: readonly (string | null)[]): string {
+  const components = labels.flatMap((label) => label?.split("+") ?? []);
+  return [...new Set(components)].join("+") || "unavailable";
+}
+
+function canonicalLaunchSourceLabel(
+  source: ExploreConsumerSource<unknown> | null,
+): string | null {
+  if (source === null) return null;
+  if (source.origin === "fallback") return "durable";
+  if (source.origin === "memory") return "last-known-good";
+  return "operational+durable";
+}
+
+function customLaunchSourceLabel(
+  source: ExploreConsumerSource<unknown> | null,
+): string | null {
+  if (source === null) return null;
+  return source.status === "current"
+    ? "registry.custom-launched"
+    : "registry.custom-launched.last-known-good";
+}
+
+/**
+ * Describes the launch identity sources that were actually available. A
+ * missing canonical or Custom source stays visible as `partial` instead of
+ * being mislabeled as an operational read.
+ */
+export function exploreLaunchSourceHeader(input: Readonly<{
+  canonical: ExploreConsumerSource<unknown> | null;
+  custom: ExploreConsumerSource<unknown> | null;
+}>): string {
+  return joinSourceLabels([
+    canonicalLaunchSourceLabel(input.canonical) ?? "partial",
+    customLaunchSourceLabel(input.custom) ?? "partial",
+  ]);
+}
+
+/** Describes only stores/transports that returned usable data. */
+export function exploreReadSourceHeader(input: Readonly<{
+  canonical: ExploreConsumerSource<unknown> | null;
+  custom: ExploreConsumerSource<unknown> | null;
+}>): string {
+  const canonical = input.canonical === null
+    ? null
+    : input.canonical.origin === "primary"
+      ? "operational+durable"
+      : input.canonical.origin === "fallback"
+        ? "durable"
+        : "last-known-good";
+  const custom = input.custom === null
+    ? null
+    : input.custom.origin === "primary"
+      ? "postgres"
+      : "last-known-good";
+  return joinSourceLabels([canonical, custom]);
+}
+
+/**
+ * The Website's operational RPC boundary is provider-neutral. Omit this
+ * header when no usable operational deployment participated in the response.
+ */
+export function exploreRpcProviderHeader(
+  deployment: ExploreOperationalDeployment | null,
+): "operational-dual" | "operational-primary" | null {
+  if (deployment?.status !== "ready") return null;
+  return deployment.rpcUrlSecondary
+    ? "operational-dual"
+    : "operational-primary";
 }

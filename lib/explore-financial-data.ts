@@ -1,4 +1,9 @@
-import type { ExploreEntry, LauncherToken } from "./tokens";
+import type {
+  CanonicalTokenExploreEntry,
+  CustomProjectExploreEntry,
+  ExploreEntry,
+  LauncherToken,
+} from "./tokens";
 
 export const EXPLORE_DATA_QUALITY_SCHEMA_VERSION =
   "programmable.explore-data-quality.v1" as const;
@@ -31,6 +36,28 @@ export type ExploreValuation =
 
 export type ValuedExploreEntry<T extends ExploreEntry = ExploreEntry> =
   T & Readonly<{ valuation: ExploreValuation }>;
+
+const LEGACY_MARKET_CAP_FIELDS = [
+  "marketCapEth",
+  "marketCapEthWei",
+  "indexedMarketCapEth",
+  "indexedMarketCapEthWei",
+  "indexedMarketCapUsdWad",
+  "marketCapQuote",
+  "marketCapQuoteWad",
+] as const;
+
+type LegacyMarketCapField = typeof LEGACY_MARKET_CAP_FIELDS[number];
+
+export type PublicCanonicalExploreEntry =
+  Omit<
+    ValuedExploreEntry<CanonicalTokenExploreEntry>,
+    LegacyMarketCapField
+  > & Readonly<{ fdvUsdWad?: string }>;
+
+export type PublicValuedExploreEntry =
+  | PublicCanonicalExploreEntry
+  | ValuedExploreEntry<CustomProjectExploreEntry>;
 
 export type ExploreDataQuality = Readonly<{
   schemaVersion: typeof EXPLORE_DATA_QUALITY_SCHEMA_VERSION;
@@ -235,6 +262,29 @@ export function withExploreValuation<T extends ExploreEntry>(
   context: ValuationContext,
 ): ValuedExploreEntry<T> {
   return { ...entry, valuation: exploreValuation(entry, context) };
+}
+
+/**
+ * Removes legacy total-supply values whose names imply circulating market
+ * cap. Public consumers receive the typed FDV valuation and, for USD values,
+ * the existing `fdvUsdWad` compatibility field.
+ */
+export function publicExploreEntryV1(
+  entry: ValuedExploreEntry,
+): PublicValuedExploreEntry {
+  if (entry.exploreKind === "custom-project") return entry;
+
+  const output = { ...entry } as Record<string, unknown>;
+  for (const field of LEGACY_MARKET_CAP_FIELDS) delete output[field];
+  if (
+    entry.valuation.status === "available" &&
+    entry.valuation.currency === "usd"
+  ) {
+    output.fdvUsdWad = entry.valuation.valueWad;
+  } else {
+    delete output.fdvUsdWad;
+  }
+  return output as PublicCanonicalExploreEntry;
 }
 
 export function valuationSortValue(entry: ExploreEntry): bigint | null {
