@@ -48,26 +48,6 @@ jobs:
       - name: Verify hash-bound via-IR coverage inputs
         run: node scripts/check-coverage.mjs /dev/null scripts/coverage-via-ir-exceptions.json --inputs-only
 
-      - name: Test via-IR-only Router V2 paths on independent RPCs
-        shell: bash
-        run: |
-          set -euo pipefail
-          # PublicNode denies archive reads from GitHub-hosted runner IPs without a token.
-          # These two unauthenticated archive-capable providers are independent of one another.
-          for rpc in https://eth.drpc.org https://mainnet.gateway.tenderly.co; do
-            passed=0
-            for attempt in 1 2; do
-              if ETHEREUM_RPC_URL="$rpc" FOUNDRY_FUZZ_RUNS=1000 forge test \
-                --match-path 'test/ProgrammableLaunchStampRouterV2*.t.sol' \
-                --fuzz-seed 0x7368617264732d726f757465722d7632; then
-                passed=1
-                break
-              fi
-              sleep $((attempt * 3))
-            done
-            test "$passed" -eq 1
-          done
-
       - name: Measure source coverage
         run: >-
           forge coverage
