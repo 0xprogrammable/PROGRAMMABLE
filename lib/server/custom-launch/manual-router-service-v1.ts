@@ -573,6 +573,7 @@ export class ManualRouterWebsiteServiceV1 {
     const refreshed = await readManualRouterApplicantHeadV1({
       store: this.dependencies.store,
       ...artifactPrincipal(artifact),
+      useCompareAndSwapEtag: true,
     });
     if (
       refreshed.path !== verifiedHead.path
@@ -580,11 +581,11 @@ export class ManualRouterWebsiteServiceV1 {
       || canonicalizeJson(refreshed.pointers)
         !== canonicalizeJson(verifiedHead.pointers)
     ) throw conflict();
-    if (refreshed.etag === null) throw conflict();
-    return Object.freeze({
-      ...refreshed,
-      etag: strongExactShardsBlobEtag(refreshed.etag),
-    });
+    if (
+      refreshed.etag === null
+      || !/^"[0-9a-f]{32}"$/u.test(refreshed.etag)
+    ) throw conflict();
+    return refreshed;
   }
 
   async #assertShardsV1PublishTransition(input: Readonly<{
@@ -1244,10 +1245,4 @@ function routeCapabilityDisabled(): ManualRouterServiceErrorV1 {
 
 function conflict(): ManualRouterServiceErrorV1 {
   return new ManualRouterServiceErrorV1(409, "state_conflict", false);
-}
-
-function strongExactShardsBlobEtag(value: string): string {
-  if (/^"[0-9a-f]{32}"$/u.test(value)) return value;
-  if (/^W\/"[0-9a-f]{32}"$/u.test(value)) return value.slice(2);
-  throw conflict();
 }

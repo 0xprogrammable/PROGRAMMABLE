@@ -3,6 +3,7 @@ import "server-only";
 import {
   BlobPreconditionFailedError,
   get,
+  head,
   list as listBlobs,
   put,
 } from "@vercel/blob";
@@ -29,6 +30,7 @@ export interface ManualRouterPrivateBlobBoundaryV1 {
     etag: string | null;
     body: string | null;
   }> | null>;
+  head?(path: string): Promise<Readonly<{ etag: string }>>;
   put(
     path: string,
     body: string,
@@ -82,6 +84,27 @@ export class ManualRouterPrivateBlobStoreV1 {
       serialized: result.body,
       etag: result.etag,
     });
+  }
+
+  async readForCompareAndSwap(
+    path: string,
+  ): Promise<ManualRouterPrivateBlobReadV1> {
+    const checkedPath = manualRouterBlobPath(path);
+    if (typeof this.boundary.head !== "function") {
+      throw new TypeError("manual Router Blob CAS metadata is unavailable");
+    }
+    const before = await this.boundary.head(checkedPath);
+    const read = await this.read(checkedPath);
+    const after = await this.boundary.head(checkedPath);
+    if (
+      read === null
+      || before.etag !== after.etag
+      || typeof after.etag !== "string"
+      || after.etag.length < 1
+      || after.etag.length > 1_024
+      || /[\r\n\u0000]/u.test(after.etag)
+    ) throw new ManualRouterBlobCasConflictV1(checkedPath);
+    return Object.freeze({ ...read, etag: after.etag });
   }
 
   async putImmutable(
@@ -191,6 +214,10 @@ ManualRouterPrivateBlobStoreV1 {
           ? null
           : await new Response(result.stream).text(),
       });
+    },
+    async head(path: string) {
+      const result = await head(path, { token });
+      return Object.freeze({ etag: result.etag });
     },
     async put(
       path: string,

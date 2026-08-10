@@ -350,8 +350,8 @@ describe("exact Shards Router V1 Website service bridge", () => {
     `W/"${"A".repeat(32)}"`,
     `w/"${"a".repeat(32)}"`,
     `"${"A".repeat(32)}"`,
-  ])("rejects a noncanonical exact Shards CAS ETag: %s", async (readEtag) => {
-    const { store } = memoryStore({ readEtag: () => readEtag });
+  ])("rejects a noncanonical exact Shards CAS ETag: %s", async (headEtag) => {
+    const { store } = memoryStore({ headEtag: () => headEtag });
     await seedHead(store, ROOT_POINTER, ROOT_INDEX, shardsArtifact("root"));
     const service = new ManualRouterWebsiteServiceV1({
       store,
@@ -715,6 +715,7 @@ function mutate<T>(source: T, path: readonly string[], value: unknown): T {
 function memoryStore(hooks: Readonly<{
   weakReadEtags?: boolean;
   readEtag?: (strongEtag: string) => string;
+  headEtag?: (strongEtag: string) => string;
   beforePut?: (
     path: string,
     options: Readonly<{ allowOverwrite: boolean; ifMatch?: string }>,
@@ -736,6 +737,11 @@ function memoryStore(hooks: Readonly<{
               body: value.body,
             }
           : { statusCode: 404, etag: null, body: null };
+      },
+      async head(path) {
+        const value = values.get(path);
+        if (!value) throw new TypeError("missing Blob metadata");
+        return { etag: hooks.headEtag?.(value.etag) ?? value.etag };
       },
       async put(path, body, options) {
         await hooks.beforePut?.(path, options, values);
