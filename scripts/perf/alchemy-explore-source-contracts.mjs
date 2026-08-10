@@ -76,6 +76,11 @@ export function evaluateAlchemyExploreSourceContracts(
     "lib/onchain/indexer-feed.ts",
     sourceOverrides,
   );
+  const exploreConsumerSource = readSource(
+    rootDirectory,
+    "lib/explore-consumer.server.ts",
+    sourceOverrides,
+  );
   const runtimePath = "lib/alchemy/explore.server.ts";
   const runtimeSource = readSource(
     rootDirectory,
@@ -229,38 +234,33 @@ export function evaluateAlchemyExploreSourceContracts(
 
   check(
     "alchemy-explore-provenance",
-    routeSources.find(({ id }) => id === "explore")?.source.includes(
-      '"X-Programmable-Launch-Source": customProjects.length > 0',
-    ) &&
-      routeSources.find(({ id }) => id === "explore")?.source.includes(
-        '"alchemy+registry.custom-launched"',
+    routeSources
+      .filter(({ id }) => id !== "token-list")
+      .every(
+        ({ source }) =>
+          source.includes("exploreLaunchSourceHeader({") &&
+          source.includes("exploreReadSourceHeader({") &&
+          source.includes("exploreRpcProviderHeader(deployment)") &&
+          source.includes('"X-Programmable-Rpc-Provider": rpcProvider') &&
+          !source.includes('"X-Programmable-Rpc-Provider": "alchemy"'),
       ) &&
-      routeSources.find(({ id }) => id === "explore")?.source.includes(
-        '"X-Programmable-Read-Source": customProjects.length > 0',
-      ) &&
-      routeSources.find(({ id }) => id === "explore")?.source.includes(
-        '"blob+postgres"',
-      ) &&
-      routeSources.find(({ id }) => id === "token-detail")?.source.includes(
-        '"X-Programmable-Launch-Source": customProject',
-      ) &&
-      routeSources.find(({ id }) => id === "token-detail")?.source.includes(
-        '"registry.custom-launched"',
-      ) &&
-      routeSources.find(({ id }) => id === "token-detail")?.source.includes(
-        '"X-Programmable-Read-Source": customProject ? "postgres" : "blob"',
+      exploreConsumerSource.includes('return "operational+durable"') &&
+      exploreConsumerSource.includes('return "last-known-good"') &&
+      exploreConsumerSource.includes('"registry.custom-launched"') &&
+      exploreConsumerSource.includes('?? "partial"') &&
+      exploreConsumerSource.includes(
+        'return deployment.rpcUrlSecondary\n    ? "operational-dual"\n    : "operational-primary";',
       ) &&
       routeSources
         .filter(({ id }) => id !== "token-list")
-        .every(({ source }) =>
-          source.includes('"X-Programmable-Rpc-Provider": "alchemy"')) &&
+        .every(({ source }) => source.includes("...sourceHeaders")) &&
       responseSource.includes('"X-Programmable-Read-Source": "blob"') &&
       responseSource.includes('"X-Programmable-Rpc-Provider": "alchemy"') &&
       responseSource.includes('"X-Programmable-Launch-Source": "alchemy"') &&
       responseSource.includes(
         '"X-Programmable-Launch-Source, X-Programmable-Read-Source, X-Programmable-Rpc-Provider"',
       ),
-    "Alchemy public responses expose durable registry and live provider provenance",
+    "Explore responses expose honest source and operational-provider provenance",
   );
 
   return Object.freeze({
