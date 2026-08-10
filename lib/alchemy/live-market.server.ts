@@ -158,9 +158,11 @@ function applyLivePoolState(
   state: LivePoolState | null,
   snapshot: ExploreSnapshot,
 ) {
-  if (!state || !validPoolStateToken(token)) {
-    return token;
-  }
+  if (!validPoolStateToken(token)) return token;
+  // Preserve a last-known-good valuation with its original indexed block. The
+  // chart consumer treats that provenance as stale/partial and never relabels
+  // it as the current snapshot while the live read is unavailable.
+  if (!state) return token;
 
   const currentState = {
     ...(token.launchStampProvenance

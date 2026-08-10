@@ -90,6 +90,9 @@ describe("token price chart refresh", () => {
         swapCount: 2,
         volumeWei: "3",
         volumeEth: "0.000000000000000003",
+        fdvEthWei: "1000000000000000000000",
+        fdvEth: "1000",
+        fdvUsdWad: "3000000000000000000000000",
       }),
     ).toBe(true);
     expect(

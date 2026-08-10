@@ -82,7 +82,7 @@ describe("token chart operational RPC failover", () => {
     );
   });
 
-  it("keeps a healthy primary and current chart result unchanged", async () => {
+  it("keeps a healthy primary but marks a missing current price as partial", async () => {
     const primaryClient = client(vi.fn().mockResolvedValue([]));
     mocks.clients.set(primary, primaryClient);
 
@@ -91,10 +91,15 @@ describe("token chart operational RPC failover", () => {
       token,
       snapshotBlock: 100n,
     })).resolves.toMatchObject({
-      status: "insufficient-history",
+      status: "partial",
       points: [],
       swapCount: 0,
       volumeWei: "0",
+      freshness: {
+        history: { status: "current", throughBlock: "100" },
+        price: { status: "unavailable" },
+        valuation: { status: "unavailable", metric: "fdv" },
+      },
     });
     expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
     expect(primaryClient.getLogs).toHaveBeenCalledTimes(2);
@@ -116,7 +121,7 @@ describe("token chart operational RPC failover", () => {
       token,
       snapshotBlock: 100n,
     })).resolves.toMatchObject({
-      status: "insufficient-history",
+      status: "partial",
       points: [],
     });
     expect(mocks.createPublicClient).toHaveBeenCalledTimes(2);
@@ -145,5 +150,81 @@ describe("token chart operational RPC failover", () => {
       snapshotBlock: 100n,
     })).rejects.toBeInstanceOf(OperationalRpcUnavailableError);
     expect(mocks.createPublicClient).toHaveBeenCalledTimes(2);
+  });
+
+  it("never relabels an older indexed price as the current snapshot", async () => {
+    const primaryClient = client(vi.fn().mockResolvedValue([]));
+    mocks.clients.set(primary, primaryClient);
+
+    const series = await readTokenChartSeries({
+      deployment,
+      token: {
+        ...token,
+        tokenPriceEthWei: "1000000000000000000",
+        marketCapEthWei: "1000000000000000000000",
+        marketCapEth: "1000",
+        fdvUsdWad: "3000000000000000000000000",
+        indexedValuationBlockNumber: "99",
+      },
+      snapshotBlock: 100n,
+    });
+
+    expect(series).toMatchObject({
+      status: "partial",
+      points: [],
+      fdvEthWei: "1000000000000000000000",
+      fdvEth: "1000",
+      fdvUsdWad: "3000000000000000000000000",
+      freshness: {
+        price: { status: "unavailable" },
+        valuation: {
+          status: "stale",
+          metric: "fdv",
+          asOfBlock: "99",
+          lagBlocks: "1",
+        },
+      },
+    });
+    expect(series.points).not.toContainEqual(
+      expect.objectContaining({ blockNumber: "100" }),
+    );
+  });
+
+  it("appends a snapshot point only when its live valuation block matches", async () => {
+    const primaryClient = client(vi.fn().mockResolvedValue([]));
+    mocks.clients.set(primary, primaryClient);
+
+    await expect(readTokenChartSeries({
+      deployment,
+      token: {
+        ...token,
+        tokenPriceEthWei: "1000000000000000000",
+        marketCapEthWei: "1000000000000000000000",
+        marketCapEth: "1000",
+        fdvUsdWad: "3000000000000000000000000",
+        indexedValuationBlockNumber: "100",
+      },
+      snapshotBlock: 100n,
+    })).resolves.toMatchObject({
+      status: "insufficient-history",
+      points: [{ blockNumber: "100", priceEth: "1" }],
+      fdvEthWei: "1000000000000000000000",
+      fdvEth: "1000",
+      fdvUsdWad: "3000000000000000000000000",
+      freshness: {
+        history: { status: "current", throughBlock: "100" },
+        price: {
+          status: "current",
+          asOfBlock: "100",
+          lagBlocks: "0",
+        },
+        valuation: {
+          status: "current",
+          metric: "fdv",
+          asOfBlock: "100",
+          lagBlocks: "0",
+        },
+      },
+    });
   });
 });

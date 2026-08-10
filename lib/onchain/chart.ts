@@ -63,16 +63,53 @@ export type TokenChartPoint = {
 };
 
 export type TokenChartSeries = {
-  status: "ready" | "insufficient-history";
+  status: "ready" | "insufficient-history" | "partial";
   points: TokenChartPoint[];
   swapCount: number;
   volumeWei: string;
   volumeEth: string;
   volumeUsdWad?: string;
-  marketCapEthWei?: string;
-  marketCapEth?: string;
-  marketCapUsdWad?: string;
+  fdvEthWei?: string;
+  fdvEth?: string;
+  fdvUsdWad?: string;
+  freshness: TokenChartFreshness;
 };
+
+export type TokenChartFreshness = Readonly<{
+  history:
+    | Readonly<{ status: "current"; throughBlock: string }>
+    | Readonly<{ status: "unavailable" }>;
+  price:
+    | Readonly<{
+        status: "current" | "stale";
+        asOfBlock: string;
+        lagBlocks: string;
+      }>
+    | Readonly<{ status: "unavailable" }>;
+  valuation:
+    | Readonly<{
+        status: "current" | "stale";
+        metric: "fdv";
+        asOfBlock: string;
+        lagBlocks: string;
+      }>
+    | Readonly<{ status: "unavailable"; metric: "fdv" }>;
+}>;
+
+export type TokenChartIntegrityReason =
+  | "invalid-launch-block"
+  | "launch-after-snapshot"
+  | "invalid-token-decimals"
+  | "invalid-valuation-block"
+  | "valuation-after-snapshot";
+
+export class TokenChartIntegrityError extends Error {
+  override name = "TokenChartIntegrityError";
+
+  constructor(readonly reason: TokenChartIntegrityReason) {
+    super("Token chart inputs failed integrity validation");
+  }
+}
 
 export function isTokenChartRange(
   value: string | null,
@@ -209,13 +246,58 @@ function validNativeVolume(value: string | undefined) {
   return value && /^\d+$/.test(value) ? BigInt(value) : undefined;
 }
 
+function parseBlockNumber(
+  value: string | undefined,
+  invalidReason: TokenChartIntegrityReason,
+) {
+  if (value === undefined) return null;
+  if (!/^(?:0|[1-9]\d*)$/u.test(value)) {
+    throw new TokenChartIntegrityError(invalidReason);
+  }
+  return BigInt(value);
+}
+
+function freshnessAtBlock(
+  asOfBlock: bigint,
+  snapshotBlock: bigint,
+): Readonly<{
+  status: "current" | "stale";
+  asOfBlock: string;
+  lagBlocks: string;
+}> {
+  if (asOfBlock > snapshotBlock) {
+    throw new TokenChartIntegrityError("valuation-after-snapshot");
+  }
+  return {
+    status: asOfBlock === snapshotBlock ? "current" : "stale",
+    asOfBlock: asOfBlock.toString(),
+    lagBlocks: (snapshotBlock - asOfBlock).toString(),
+  };
+}
+
+function positiveInteger(value: string | undefined) {
+  return value && /^(?:0|[1-9]\d*)$/u.test(value) && BigInt(value) > 0n
+    ? value
+    : undefined;
+}
+
+function positiveDecimal(value: string | undefined) {
+  if (!value || !/^(?:0|[1-9]\d*)(?:\.\d+)?$/u.test(value)) {
+    return undefined;
+  }
+  const [whole, fraction = ""] = value.split(".");
+  return BigInt(`${whole}${fraction}`) > 0n ? value : undefined;
+}
+
 function appendSnapshotPoint(
   points: TokenChartPoint[],
   token: LauncherToken,
   snapshotBlock: bigint,
+  valuationBlock: bigint | null,
   ethUsdQuote?: { answer: string; decimals: number },
 ) {
   if (
+    valuationBlock !== snapshotBlock ||
     !token.tokenPriceEthWei ||
     !/^\d+$/.test(token.tokenPriceEthWei) ||
     BigInt(token.tokenPriceEthWei) <= 0n
@@ -259,28 +341,38 @@ async function readTokenChartSeriesFromRpc(input: {
   } = input;
   if (token.launchModel === "stock-paired") {
     return {
-      status: "insufficient-history",
+      status: "partial",
       points: [],
       swapCount: 0,
       volumeWei: "0",
       volumeEth: "0",
+      freshness: {
+        history: { status: "unavailable" },
+        price: { status: "unavailable" },
+        valuation: { status: "unavailable", metric: "fdv" },
+      },
     };
   }
-  const launchBlock = token.launchBlockNumber
-    ? BigInt(token.launchBlockNumber)
-    : deployment.deploymentBlock;
+  const launchBlock =
+    parseBlockNumber(token.launchBlockNumber, "invalid-launch-block") ??
+    deployment.deploymentBlock;
+  if (launchBlock > snapshotBlock) {
+    throw new TokenChartIntegrityError("launch-after-snapshot");
+  }
   if (
-    launchBlock > snapshotBlock ||
     typeof token.tokenDecimals !== "number" ||
-    !Number.isInteger(token.tokenDecimals)
+    !Number.isInteger(token.tokenDecimals) ||
+    token.tokenDecimals < 0 ||
+    token.tokenDecimals > 255
   ) {
-    return {
-      status: "insufficient-history",
-      points: [],
-      swapCount: 0,
-      volumeWei: "0",
-      volumeEth: "0",
-    };
+    throw new TokenChartIntegrityError("invalid-token-decimals");
+  }
+  const valuationBlock = parseBlockNumber(
+    token.indexedValuationBlockNumber,
+    "invalid-valuation-block",
+  );
+  if (valuationBlock !== null && valuationBlock > snapshotBlock) {
+    throw new TokenChartIntegrityError("valuation-after-snapshot");
   }
 
   const client = createPublicClient({
@@ -381,6 +473,7 @@ async function readTokenChartSeriesFromRpc(input: {
     points,
     token,
     snapshotBlock,
+    valuationBlock,
     ethUsdQuote,
   );
   const volumeUsdWad = ethUsdQuote
@@ -390,19 +483,46 @@ async function readTokenChartSeriesFromRpc(input: {
         ethUsdQuote.decimals,
       )
     : undefined;
+  const latestPoint = completedPoints.at(-1);
+  const latestPointBlock = latestPoint
+    ? parseBlockNumber(latestPoint.blockNumber, "invalid-valuation-block")
+    : null;
+  const priceFreshness = latestPointBlock === null
+    ? { status: "unavailable" as const }
+    : freshnessAtBlock(latestPointBlock, snapshotBlock);
+  // These legacy read-model values are total-supply valuations. The public
+  // chart contract names them FDV until circulating supply is evidenced.
+  const fdvEthWei = positiveInteger(token.marketCapEthWei);
+  const fdvEth = positiveDecimal(token.marketCapEth);
+  const fdvUsdWad = positiveInteger(token.fdvUsdWad);
+  const hasFdv = Boolean(fdvEthWei || fdvEth || fdvUsdWad);
+  const valuationFreshness = valuationBlock !== null && hasFdv
+    ? { metric: "fdv" as const, ...freshnessAtBlock(valuationBlock, snapshotBlock) }
+    : { status: "unavailable" as const, metric: "fdv" as const };
+  const hasCurrentPrice = priceFreshness.status === "current";
 
   return {
-    status: completedPoints.length >= 2 ? "ready" : "insufficient-history",
+    status: hasCurrentPrice
+      ? completedPoints.length >= 2
+        ? "ready"
+        : "insufficient-history"
+      : "partial",
     points: completedPoints,
     swapCount: rawPoints.length,
     volumeWei: volumeWei.toString(),
     volumeEth: formatUnits(volumeWei, 18),
     ...(volumeUsdWad === undefined ? {} : { volumeUsdWad }),
-    ...(token.marketCapEthWei
-      ? { marketCapEthWei: token.marketCapEthWei }
-      : {}),
-    ...(token.marketCapEth ? { marketCapEth: token.marketCapEth } : {}),
-    ...(token.fdvUsdWad ? { marketCapUsdWad: token.fdvUsdWad } : {}),
+    ...(valuationBlock === null || !fdvEthWei ? {} : { fdvEthWei }),
+    ...(valuationBlock === null || !fdvEth ? {} : { fdvEth }),
+    ...(valuationBlock === null || !fdvUsdWad ? {} : { fdvUsdWad }),
+    freshness: {
+      history: {
+        status: "current",
+        throughBlock: snapshotBlock.toString(),
+      },
+      price: priceFreshness,
+      valuation: valuationFreshness,
+    },
   };
 }
 

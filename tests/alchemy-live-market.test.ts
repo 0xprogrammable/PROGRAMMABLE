@@ -272,4 +272,50 @@ describe("Alchemy live pool market state", () => {
     expect(enriched[3]).not.toHaveProperty("currentTick");
     expect(enriched[3]).not.toHaveProperty("activeLiquidity");
   });
+
+  it("keeps last-known valuation provenance when the live pool state read is unavailable", async () => {
+    mocks.multicall.mockRejectedValue(
+      new Error("temporary StateView read failure"),
+    );
+    const staleToken = {
+      id: "1:stale-live",
+      name: "Stale live",
+      symbol: "STALE",
+      tokenAddress: "0x9999999999999999999999999999999999999999",
+      hookAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      poolId: `0x${"cc".repeat(32)}`,
+      launchedAt: "2026-08-10T00:00:00.000Z",
+      totalSupplyRaw: (1_000n * 10n ** 18n).toString(),
+      tokenDecimals: 18,
+      tokenPriceEth: "999",
+      tokenPriceEthWei: "999",
+      tokenPriceUsdWad: "999",
+      marketCapEth: "999",
+      marketCapEthWei: "999",
+      indexedMarketCapEth: "999",
+      indexedMarketCapEthWei: "999",
+      indexedMarketCapUsdWad: "999",
+      indexedValuationBlockNumber: "25680001",
+      fdvUsdWad: "999",
+      launchModel: "classic",
+      totalSwapFeeBps: 100,
+      liquidityPath: "meme",
+    } satisfies LauncherToken;
+    const snapshot = {
+      chainId: 1,
+      blockNumber: "25680002",
+      blockHash: `0x${"dd".repeat(32)}` as `0x${string}`,
+      confirmations: 0,
+    };
+
+    const [enriched] = await enrichTokensWithAlchemyPoolState({
+      deployment,
+      snapshot,
+      tokens: [staleToken],
+    });
+
+    expect(enriched).toEqual(staleToken);
+    expect(enriched?.indexedValuationBlockNumber).toBe("25680001");
+    expect(mocks.multicall).toHaveBeenCalledTimes(2);
+  });
 });

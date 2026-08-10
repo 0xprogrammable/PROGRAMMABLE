@@ -10,6 +10,7 @@ import {
   readTokenChartSeries,
   samplePricePoints,
   sumGrossNativeVolume,
+  TokenChartIntegrityError,
 } from "../lib/onchain/chart";
 import type { ReadyOnchainDeployment } from "../lib/onchain/types";
 import type { LauncherToken } from "../lib/tokens";
@@ -186,11 +187,58 @@ describe("onchain token chart", () => {
         ethUsdQuote: { answer: "350000000000", decimals: 8 },
       }),
     ).resolves.toEqual({
-      status: "insufficient-history",
+      status: "partial",
       points: [],
       swapCount: 0,
       volumeWei: "0",
       volumeEth: "0",
+      freshness: {
+        history: { status: "unavailable" },
+        price: { status: "unavailable" },
+        valuation: { status: "unavailable", metric: "fdv" },
+      },
     });
+  });
+
+  it.each([undefined, -1, 1.5, 256])(
+    "rejects invalid token decimals as an integrity failure: %s",
+    async (tokenDecimals) => {
+      await expect(
+        readTokenChartSeries({
+          deployment,
+          token: { ...classicToken, tokenDecimals },
+          snapshotBlock: 1_000n,
+        }),
+      ).rejects.toMatchObject({
+        name: "TokenChartIntegrityError",
+        reason: "invalid-token-decimals",
+      } satisfies Partial<TokenChartIntegrityError>);
+    },
+  );
+
+  it("rejects a launch block after the immutable snapshot", async () => {
+    await expect(
+      readTokenChartSeries({
+        deployment,
+        token: { ...classicToken, launchBlockNumber: "1001" },
+        snapshotBlock: 1_000n,
+      }),
+    ).rejects.toMatchObject({
+      name: "TokenChartIntegrityError",
+      reason: "launch-after-snapshot",
+    } satisfies Partial<TokenChartIntegrityError>);
+  });
+
+  it("rejects a malformed launch block instead of returning a zero series", async () => {
+    await expect(
+      readTokenChartSeries({
+        deployment,
+        token: { ...classicToken, launchBlockNumber: "not-a-block" },
+        snapshotBlock: 1_000n,
+      }),
+    ).rejects.toMatchObject({
+      name: "TokenChartIntegrityError",
+      reason: "invalid-launch-block",
+    } satisfies Partial<TokenChartIntegrityError>);
   });
 });

@@ -10,10 +10,31 @@ import { enrichTokensWithAlchemyPoolState } from "../../../../../lib/alchemy/liv
 import {
   isTokenChartRange,
   readTokenChartSeries,
+  TokenChartIntegrityError,
+  type TokenChartFreshness,
 } from "../../../../../lib/onchain/chart";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+const TOKEN_CHART_DATA_QUALITY_SCHEMA_VERSION =
+  "programmable.explore-chart-data-quality.v1" as const;
+
+function chartDataQualityStatus(freshness: TokenChartFreshness) {
+  return freshness.history.status === "current" &&
+    freshness.price.status === "current" &&
+    freshness.valuation.status === "current"
+    ? "current" as const
+    : "partial" as const;
+}
+
+function unavailableDataQuality(reason: "integrity" | "source-unavailable") {
+  return {
+    schemaVersion: TOKEN_CHART_DATA_QUALITY_SCHEMA_VERSION,
+    status: "unavailable" as const,
+    reason,
+  };
+}
 
 export async function GET(request: NextRequest) {
   const search = request.nextUrl.searchParams;
@@ -55,6 +76,7 @@ export async function GET(request: NextRequest) {
           status: "unavailable",
           address,
           error: "Onchain chart data is temporarily unavailable",
+          dataQuality: unavailableDataQuality("source-unavailable"),
         },
         {
           status: 503,
@@ -104,19 +126,26 @@ export async function GET(request: NextRequest) {
       ethUsdQuote: model.snapshot.ethUsdQuote,
       range: requestedRange,
     });
+    const { freshness, ...publicSeries } = series;
+    const qualityStatus = series.status === "partial"
+      ? "partial" as const
+      : chartDataQualityStatus(freshness);
     return NextResponse.json(
       {
-        ...series,
+        ...publicSeries,
         address,
         range: requestedRange,
         valuationMetric: "fdv",
         dataQuality: {
-          schemaVersion: "programmable.explore-chart-data-quality.v1",
-          status: "current",
+          schemaVersion: TOKEN_CHART_DATA_QUALITY_SCHEMA_VERSION,
+          status: qualityStatus,
           asOfBlock: liveSnapshot.blockNumber,
           blockHash: liveSnapshot.blockHash,
           finality:
             liveSnapshot.confirmations > 0 ? "confirmed" : "latest",
+          history: freshness.history,
+          price: freshness.price,
+          valuation: freshness.valuation,
         },
         snapshotBlock: liveSnapshot.blockNumber,
         snapshotHash: liveSnapshot.blockHash,
@@ -124,14 +153,17 @@ export async function GET(request: NextRequest) {
       {
         headers: {
           "Cache-Control":
-            "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
-          "X-Programmable-Data-Quality": "current",
+            qualityStatus === "current"
+              ? "public, max-age=0, s-maxage=2, stale-while-revalidate=2"
+              : "no-store",
+          "X-Programmable-Data-Quality": qualityStatus,
           "X-Programmable-Valuation-Metric": "fdv",
           "X-Programmable-Read-Source": "rpc",
         },
       },
     );
   } catch (error) {
+    const integrityFailure = error instanceof TokenChartIntegrityError;
     console.error(
       "Alchemy token chart read failed",
       safeAlchemyError(error),
@@ -140,12 +172,15 @@ export async function GET(request: NextRequest) {
       {
         status: "unavailable",
         error: "Onchain chart data is temporarily unavailable",
+        dataQuality: unavailableDataQuality(
+          integrityFailure ? "integrity" : "source-unavailable",
+        ),
       },
       {
         status: 503,
         headers: {
           "Cache-Control": "no-store",
-          "Retry-After": "5",
+          ...(integrityFailure ? {} : { "Retry-After": "5" }),
           "X-Programmable-Data-Quality": "unavailable",
         },
       },
