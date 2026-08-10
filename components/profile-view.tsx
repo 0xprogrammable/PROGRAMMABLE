@@ -74,6 +74,7 @@ import {
   fetchCreatorProfile,
   isProfileDataForAccount,
   loadingProfileData,
+  ProfileResponseError,
   UNAVAILABLE_PROFILE_DATA,
   type ProfileClaim,
   type ProfileActivity,
@@ -105,7 +106,7 @@ const creatorProfileCache = new Map<
   string,
   Readonly<{ data: ProfileOnchainData; updatedAt: number }>
 >();
-const CREATOR_PROFILE_CACHE_TTL_MS = 30_000;
+const CREATOR_PROFILE_CACHE_TTL_MS = 5 * 60_000;
 const MAX_CREATOR_PROFILE_CACHE_ENTRIES = 8;
 const PROFILE_LIVE_REFRESH_INTERVAL_MS = 30_000;
 type ReadyClassicV3Profile = Extract<
@@ -142,7 +143,7 @@ function readCachedCreatorProfile(account: string) {
     creatorProfileCache.delete(key);
     return null;
   }
-  return cached.data;
+  return { ...cached.data, sourceQuality: "stale" as const };
 }
 
 function cacheCreatorProfile(data: ProfileOnchainData) {
@@ -344,8 +345,11 @@ export function getProfileWorkspacePhase(
 export function getProfileRewardDataQuality(
   statuses: readonly ProfileWorkspaceSourceStatus[],
   classicQuality: ClassicV3ProfileSourceQuality,
+  creatorQuality: "current" | "stale" = "current",
 ): ProfileRewardDataQuality {
-  if (classicQuality === "stale") return "stale";
+  if (classicQuality === "stale" || creatorQuality === "stale") {
+    return "stale";
+  }
   if (
     classicQuality === "unavailable" ||
     statuses.some((status) => status === "error")
@@ -353,6 +357,29 @@ export function getProfileRewardDataQuality(
     return "partial";
   }
   return "current";
+}
+
+export function resolveCreatorProfileReadFailure(
+  current: ProfileOnchainData,
+  account: string,
+  caught: unknown,
+): ProfileOnchainData {
+  const kind =
+    caught instanceof ProfileResponseError ? caught.kind : "integrity";
+  if (
+    kind === "temporary" &&
+    isProfileDataForAccount(current, account) &&
+    current.status === "ready"
+  ) {
+    return { ...current, sourceQuality: "stale" };
+  }
+  return errorProfileData(
+    account,
+    kind === "temporary"
+      ? "Onchain creator data is temporarily unavailable"
+      : "Current creator reward data could not be verified",
+    kind,
+  );
 }
 
 const walletChangedBeforeSubmission =
@@ -1200,16 +1227,16 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       })
       .catch((caught: unknown) => {
         if (controller.signal.aborted) return;
+        const cached = readCachedCreatorProfile(account);
         setRemoteOnchainData((current) =>
-          isProfileDataForAccount(current, account) &&
-          current.status === "ready"
-            ? current
-            : errorProfileData(
-                account,
-                caught instanceof Error
-                  ? caught.message
-                  : "Onchain profile data could not be loaded",
-              ),
+          resolveCreatorProfileReadFailure(
+            cached ??
+              (current.status === "ready"
+                ? UNAVAILABLE_PROFILE_DATA
+                : current),
+            account,
+            caught,
+          ),
         );
       });
 
@@ -3613,6 +3640,9 @@ function ProfileAccountWorkspace({
     deepRewards.status === "loading" ||
     deepV3Profile.status === "loading" ||
     stockPairedRewards.status === "loading";
+  const integrityConflict =
+    (data.status === "error" && data.errorKind === "integrity") ||
+    classicV3SourceState.quality === "integrity";
   const phase = getProfileWorkspacePhase(
     [
       data.status,
@@ -3622,7 +3652,7 @@ function ProfileAccountWorkspace({
       stockPairedRewards.status,
     ],
     terminalErrorReady,
-    classicV3SourceState.quality === "integrity",
+    integrityConflict,
   );
 
   if (phase === "loading") {
@@ -3630,7 +3660,6 @@ function ProfileAccountWorkspace({
   }
 
   if (phase === "error") {
-    const integrityConflict = classicV3SourceState.quality === "integrity";
     return (
       <section className={styles.accountState} aria-live="polite">
         <h2>
@@ -3739,15 +3768,18 @@ function ProfileAccountWorkspace({
   const rewardDataQuality = getProfileRewardDataQuality(
     sourceStatuses,
     classicV3SourceState.quality,
+    data.sourceQuality ?? "current",
   );
   const sourceWarning =
-    classicV3SourceState.quality === "stale"
-      ? "Showing the last verified Classic rewards. Refresh to check current values."
-      : classicV3SourceState.quality === "unavailable"
-        ? "Classic rewards are temporarily unavailable. Refresh to check current values."
-        : sourceStatuses.some((status) => status === "error")
-          ? "Some reward values are temporarily unavailable. Refresh to check current totals."
-          : "";
+    data.sourceQuality === "stale"
+      ? "Showing the last verified reward totals. Refresh to check current values."
+      : classicV3SourceState.quality === "stale"
+        ? "Showing the last verified Classic rewards. Refresh to check current values."
+        : classicV3SourceState.quality === "unavailable"
+          ? "Classic rewards are temporarily unavailable. Refresh to check current values."
+          : sourceStatuses.some((status) => status === "error")
+            ? "Some reward values are temporarily unavailable. Refresh to check current totals."
+            : "";
   const emptyState =
     rewardDataQuality === "current"
       ? {

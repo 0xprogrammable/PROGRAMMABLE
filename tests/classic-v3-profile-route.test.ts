@@ -135,8 +135,57 @@ describe("Classic profile release gate", () => {
       ),
     );
 
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      status: "error",
+      error: {
+        kind: "integrity",
+        code: "classic_profile_integrity_conflict",
+        message: "Classic reward data could not be verified",
+      },
+    });
     expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps exhausted provider capacity typed as temporary", async () => {
+    const primary = {
+      ...mocks.client,
+      getCode: vi.fn(async () => {
+        throw new HttpRequestError({
+          status: 429,
+          url: "https://primary.example/rpc-key",
+        });
+      }),
+    };
+    const secondary = {
+      ...mocks.client,
+      getCode: vi.fn(async () => {
+        throw new HttpRequestError({
+          status: 503,
+          url: "https://secondary.example/rpc-key",
+        });
+      }),
+    };
+    mocks.createPublicClient
+      .mockReturnValueOnce(primary)
+      .mockReturnValueOnce(secondary);
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/profile/classic-v3?account=${account}`,
+      ),
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      status: "error",
+      error: {
+        kind: "temporary",
+        code: "classic_profile_temporarily_unavailable",
+        message: "Classic rewards are temporarily unavailable",
+      },
+    });
+    expect(mocks.createPublicClient).toHaveBeenCalledTimes(2);
   });
 
   it("rejects claims from a wallet that does not own the vault", async () => {

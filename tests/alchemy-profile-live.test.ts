@@ -20,7 +20,10 @@ vi.mock("viem", async (importOriginal) => {
 });
 
 import { HttpRequestError } from "viem";
-import { readAlchemyCreatorProfile } from "../lib/alchemy/profile.server";
+import {
+  AlchemyCreatorProfileIntegrityError,
+  readAlchemyCreatorProfile,
+} from "../lib/alchemy/profile.server";
 import type {
   ExploreReadModel,
   ReadyOnchainDeployment,
@@ -31,6 +34,9 @@ const account = "0x1111111111111111111111111111111111111111" as const;
 const poolId = `0x${"22".repeat(32)}` as const;
 const tokenAddress = "0x3333333333333333333333333333333333333333" as const;
 const hookAddress = "0x4444444444444444444444444444444444444444" as const;
+const secondPoolId = `0x${"23".repeat(32)}` as const;
+const secondTokenAddress =
+  "0x3434343434343434343434343434343434343434" as const;
 
 const deployment = {
   environment: "production",
@@ -70,6 +76,19 @@ const token = {
   creatorFeesAccruedWei: "0",
   creatorFeesGeneratedWei: "0",
   liquidityPath: "meme" as const,
+} satisfies LauncherToken;
+
+const secondToken = {
+  ...token,
+  id: "1:classic-second",
+  name: "Classic second",
+  symbol: "CLS2",
+  tokenAddress: secondTokenAddress,
+  poolId: secondPoolId,
+  positionTokenId: "2",
+  launchHash: `0x${"67".repeat(32)}` as const,
+  launchTransactionHash: `0x${"78".repeat(32)}` as const,
+  launchLogIndex: 1,
 } satisfies LauncherToken;
 
 function customGraphProvenance() {
@@ -164,6 +183,28 @@ const customGraphToken = {
   liquidityPath: "programmable-v4",
 } satisfies LauncherToken;
 
+function classicLiveModel(): ExploreReadModel {
+  return {
+    status: "ready",
+    tokens: [token],
+    snapshot: {
+      chainId: 1,
+      blockNumber: "100",
+      blockHash: `0x${"99".repeat(32)}`,
+      confirmations: 12,
+    },
+    launchDiscoverySnapshot: {
+      chainId: 1,
+      blockNumber: "105",
+      blockHash: `0x${"aa".repeat(32)}`,
+      confirmations: 0,
+    },
+    creatorClaims: [],
+    launcherFeesAccruedWei: "0",
+    launcherFeesAccruedEth: "0",
+  };
+}
+
 describe("Alchemy live creator profile", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -240,6 +281,11 @@ describe("Alchemy live creator profile", () => {
         contracts: [expect.objectContaining({ address: hookAddress })],
       }),
     );
+    expect(mocks.getLogs).toHaveBeenCalledWith(
+      expect.objectContaining({
+        args: { poolId: [poolId], creator: account },
+      }),
+    );
   });
 
   it("restarts the creator read on secondary after primary capacity", async () => {
@@ -312,6 +358,246 @@ describe("Alchemy live creator profile", () => {
       secondaryUrl,
       secondaryUrl,
     ]);
+  });
+
+  it("fails closed instead of re-dating cached rewards after a deterministic pool read error", async () => {
+    const isolatedDeployment = {
+      ...deployment,
+      rpcUrl: "https://deterministic-pool-read.example",
+    };
+    mocks.multicall.mockRejectedValueOnce(
+      new Error("pool result could not be decoded"),
+    );
+    mocks.getLogs.mockResolvedValue([]);
+
+    await expect(
+      readAlchemyCreatorProfile({
+        account,
+        deployment: isolatedDeployment,
+        model: classicLiveModel(),
+      }),
+    ).rejects.toBeInstanceOf(AlchemyCreatorProfileIntegrityError);
+
+    mocks.multicall.mockResolvedValueOnce([
+      {
+        status: "success",
+        result: [account, deployment.launcher, 100, true, 9n],
+      },
+    ]);
+    const recovered = await readAlchemyCreatorProfile({
+      account,
+      deployment: isolatedDeployment,
+      model: classicLiveModel(),
+    });
+
+    expect(recovered.snapshot?.blockNumber).toBe("105");
+    expect(recovered.totals.claimableWei).toBe("9");
+    expect(mocks.multicall).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects a partial multicall result instead of keeping an unverified reward", async () => {
+    mocks.multicall.mockResolvedValue([
+      {
+        status: "failure",
+        error: new Error("pool result missing"),
+      },
+    ]);
+    mocks.getLogs.mockResolvedValue([]);
+
+    await expect(
+      readAlchemyCreatorProfile({
+        account,
+        deployment: {
+          ...deployment,
+          rpcUrl: "https://partial-pool-read.example",
+        },
+        model: classicLiveModel(),
+      }),
+    ).rejects.toMatchObject({
+      name: "AlchemyCreatorProfileIntegrityError",
+      message: "Creator reward pool state could not be verified",
+    });
+  });
+
+  it("does not cache or advance freshness when the confirmed claim scan fails", async () => {
+    const isolatedDeployment = {
+      ...deployment,
+      rpcUrl: "https://deterministic-claim-log.example",
+    };
+    mocks.multicall.mockResolvedValue([
+      {
+        status: "success",
+        result: [account, deployment.launcher, 100, true, 5n],
+      },
+    ]);
+    mocks.getLogs
+      .mockRejectedValueOnce(new Error("claim log response is malformed"))
+      .mockResolvedValueOnce([]);
+
+    await expect(
+      readAlchemyCreatorProfile({
+        account,
+        deployment: isolatedDeployment,
+        model: classicLiveModel(),
+      }),
+    ).rejects.toBeInstanceOf(AlchemyCreatorProfileIntegrityError);
+
+    const recovered = await readAlchemyCreatorProfile({
+      account,
+      deployment: isolatedDeployment,
+      model: classicLiveModel(),
+    });
+
+    expect(recovered.snapshot?.blockNumber).toBe("105");
+    expect(recovered.totals.claimableWei).toBe("5");
+    expect(mocks.getLogs).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects a reward pool whose live ownership no longer matches", async () => {
+    mocks.multicall.mockResolvedValue([
+      {
+        status: "success",
+        result: [
+          "0x9999999999999999999999999999999999999999",
+          deployment.launcher,
+          100,
+          true,
+          5n,
+        ],
+      },
+    ]);
+    mocks.getLogs.mockResolvedValue([]);
+
+    await expect(
+      readAlchemyCreatorProfile({
+        account,
+        deployment: {
+          ...deployment,
+          rpcUrl: "https://pool-ownership-mismatch.example",
+        },
+        model: classicLiveModel(),
+      }),
+    ).rejects.toMatchObject({
+      name: "AlchemyCreatorProfileIntegrityError",
+      message: "Creator reward pool ownership does not match",
+    });
+  });
+
+  it("rescans confirmed claims when a verified pool is added on a shared hook", async () => {
+    const isolatedDeployment = {
+      ...deployment,
+      rpcUrl: "https://expanded-pool-set.example",
+    };
+    mocks.multicall
+      .mockResolvedValueOnce([
+        {
+          status: "success",
+          result: [account, deployment.launcher, 100, true, 5n],
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          status: "success",
+          result: [account, deployment.launcher, 100, true, 5n],
+        },
+        {
+          status: "success",
+          result: [account, deployment.launcher, 100, true, 7n],
+        },
+      ]);
+    mocks.getLogs
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          removed: false,
+          blockNumber: 102n,
+          transactionHash: `0x${"89".repeat(32)}`,
+          transactionIndex: 1,
+          logIndex: 3,
+          args: {
+            poolId: secondPoolId,
+            creator: account,
+            recipient: account,
+            caller: account,
+            amount: 10n,
+          },
+        },
+      ]);
+    mocks.getBlock.mockResolvedValue({ timestamp: 1_775_000_000n });
+
+    await readAlchemyCreatorProfile({
+      account,
+      deployment: isolatedDeployment,
+      model: classicLiveModel(),
+    });
+    const expanded = await readAlchemyCreatorProfile({
+      account,
+      deployment: isolatedDeployment,
+      model: {
+        ...classicLiveModel(),
+        tokens: [token, secondToken],
+      },
+    });
+
+    expect(mocks.getLogs).toHaveBeenCalledTimes(2);
+    expect(mocks.getLogs).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        args: {
+          poolId: [poolId, secondPoolId],
+          creator: account,
+        },
+      }),
+    );
+    expect(expanded.claims).toEqual([
+      expect.objectContaining({ poolId: secondPoolId, amountWei: "10" }),
+    ]);
+    expect(expanded.totals).toMatchObject({
+      claimableWei: "12",
+      claimedWei: "10",
+      generatedWei: "22",
+    });
+  });
+
+  it("ignores removed claims before attempting timestamp reads", async () => {
+    mocks.multicall.mockResolvedValue([
+      {
+        status: "success",
+        result: [account, deployment.launcher, 100, true, 5n],
+      },
+    ]);
+    mocks.getLogs.mockResolvedValue([
+      {
+        removed: true,
+        blockNumber: 102n,
+        transactionHash: `0x${"88".repeat(32)}`,
+        transactionIndex: 1,
+        logIndex: 2,
+        args: {
+          poolId,
+          creator: account,
+          recipient: account,
+          caller: account,
+          amount: 10n,
+        },
+      },
+    ]);
+
+    const profile = await readAlchemyCreatorProfile({
+      account,
+      deployment: {
+        ...deployment,
+        rpcUrl: "https://removed-claim.example",
+      },
+      model: classicLiveModel(),
+    });
+
+    expect(profile.claims).toEqual([]);
+    expect(profile.totals).toMatchObject({
+      claimableWei: "5",
+      claimedWei: "0",
+      generatedWei: "5",
+    });
+    expect(mocks.getBlock).not.toHaveBeenCalled();
   });
 
   it("keeps a stamped CustomGraph launch visible without querying its hook or inventing rewards", async () => {

@@ -35,9 +35,13 @@ import { uerc20ReadAbi } from "@/lib/onchain/abis";
 import { getOperationalOnchainDeployment } from "@/lib/onchain/config";
 import {
   safeOperationalRpcError,
+  isOperationalRpcFailoverEligible,
   withOperationalRpcFailover,
 } from "@/lib/onchain/operational-rpc-failover.server";
-import { encodeClassicV3RewardAction } from "@/lib/profile/classic-v3-rewards";
+import {
+  classicV3ProfileApiError,
+  encodeClassicV3RewardAction,
+} from "@/lib/profile/classic-v3-rewards";
 import { classicV3ActionRpcProviders } from "@/lib/server/action-rpc-quorum.server";
 import {
   CLASSIC_V3_ROUTE_SCOPE,
@@ -52,6 +56,15 @@ export const runtime = "nodejs";
 const MAX_REQUEST_BYTES = 2_048;
 const LOG_RANGE = 10_000n;
 const CONFIRMATIONS = 12n;
+
+class ClassicV3ProfileIntegrityError extends Error {
+  override name = "ClassicV3ProfileIntegrityError";
+
+  constructor(cause: unknown) {
+    super("Classic profile accounting or integrity conflict", { cause });
+  }
+}
+
 type ClassicActionRewardIdentity = Readonly<{
   vaultAddress: Address;
   poolId: Hex;
@@ -646,10 +659,35 @@ async function readRewards(account: Address) {
       rewards: [],
     };
   }
-  const deployment = getOperationalOnchainDeployment(environment);
-  return withOperationalRpcFailover(deployment, (rpcDeployment) =>
-    readRewardsFromClient(account, createClient(rpcDeployment.rpcUrl))
-  );
+  try {
+    const deployment = getOperationalOnchainDeployment(environment);
+    return await withOperationalRpcFailover(deployment, (rpcDeployment) =>
+      readRewardsFromClient(account, createClient(rpcDeployment.rpcUrl))
+    );
+  } catch (error) {
+    if (isOperationalRpcFailoverEligible(error)) throw error;
+    if (error instanceof ClassicV3ProfileIntegrityError) throw error;
+    throw new ClassicV3ProfileIntegrityError(error);
+  }
+}
+
+async function classicV3ProfileLegacyResult(account: Address) {
+  try {
+    return {
+      source: "rpc" as const,
+      response: json(await readRewards(account)),
+    };
+  } catch (error) {
+    if (!(error instanceof ClassicV3ProfileIntegrityError)) throw error;
+    console.error(
+      "Classic profile read failed",
+      safeOperationalRpcError(error),
+    );
+    return {
+      source: "rpc" as const,
+      response: json(classicV3ProfileApiError("integrity"), 409),
+    };
+  }
 }
 
 async function readLaunchByTransactionFromClient(
@@ -795,19 +833,16 @@ export async function GET(request: NextRequest) {
           chainId: 1,
           account: getAddress(input),
         }),
-      async legacy() {
-        return {
-          source: "rpc" as const,
-          response: json(await readRewards(getAddress(input))),
-        };
-      },
+      legacy: () => classicV3ProfileLegacyResult(getAddress(input)),
     });
   } catch (error) {
     console.error(
       "Classic profile read failed",
       safeOperationalRpcError(error),
     );
-    return json({ error: "Classic rewards are temporarily unavailable" }, 503);
+    return error instanceof ClassicV3ProfileIntegrityError
+      ? json(classicV3ProfileApiError("integrity"), 409)
+      : json(classicV3ProfileApiError("temporary"), 503);
   }
 }
 

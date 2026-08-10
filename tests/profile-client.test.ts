@@ -6,6 +6,7 @@ import {
   validatePreparedCreatorClaim,
 } from "../lib/profile/creator-claim";
 import {
+  creatorProfileApiError,
   fetchCreatorProfile,
   mapCreatorProfileResponse,
 } from "../lib/profile/onchain-profile";
@@ -551,6 +552,43 @@ describe("profile API client", () => {
         cache: "no-store",
       }),
     );
+  });
+
+  it("keeps a typed creator accounting conflict non-temporary", async () => {
+    const fetcher = vi.fn(async () => ({
+      ok: false,
+      status: 409,
+      json: async () => creatorProfileApiError("integrity"),
+    }));
+
+    await expect(
+      fetchCreatorProfile(account, undefined, fetcher),
+    ).rejects.toMatchObject({
+      name: "ProfileResponseError",
+      kind: "integrity",
+      message: "Current creator reward data could not be verified",
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("classifies a transport failure as temporary without exposing it", async () => {
+    const fetcher = vi.fn(async () => {
+      throw new Error("RPC https://provider.example/secret failed");
+    });
+
+    const failure = await fetchCreatorProfile(
+      account,
+      undefined,
+      fetcher,
+    ).catch((caught: unknown) => caught);
+
+    expect(failure).toMatchObject({
+      name: "ProfileResponseError",
+      kind: "temporary",
+      message: "Onchain creator data is temporarily unavailable",
+    });
+    expect(String(failure)).not.toContain("provider.example");
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 });
 

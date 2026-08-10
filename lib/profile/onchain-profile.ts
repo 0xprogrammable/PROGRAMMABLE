@@ -70,6 +70,8 @@ export type ProfileActivity = {
 export type ProfileOnchainData = {
   account?: Address;
   status: ProfileDataStatus;
+  sourceQuality?: "current" | "stale";
+  errorKind?: ProfileResponseErrorKind;
   chainId?: number;
   tokens: readonly ProfileToken[];
   positions: readonly ProfilePosition[];
@@ -132,10 +134,90 @@ export const UNAVAILABLE_PROFILE_DATA: Readonly<ProfileOnchainData> =
     activity: [],
   });
 
+export type ProfileResponseErrorKind = "temporary" | "integrity";
+
+export type CreatorProfileApiError =
+  | Readonly<{
+      status: "error";
+      error: Readonly<{
+        kind: "temporary";
+        code: "creator_profile_temporarily_unavailable";
+        message: "Onchain creator data is temporarily unavailable";
+      }>;
+    }>
+  | Readonly<{
+      status: "error";
+      error: Readonly<{
+        kind: "integrity";
+        code: "creator_profile_integrity_conflict";
+        message: "Current creator reward data could not be verified";
+      }>;
+    }>;
+
+export function creatorProfileApiError(
+  kind: ProfileResponseErrorKind,
+): CreatorProfileApiError {
+  return kind === "integrity"
+    ? {
+        status: "error",
+        error: {
+          kind,
+          code: "creator_profile_integrity_conflict",
+          message: "Current creator reward data could not be verified",
+        },
+      }
+    : {
+        status: "error",
+        error: {
+          kind,
+          code: "creator_profile_temporarily_unavailable",
+          message: "Onchain creator data is temporarily unavailable",
+        },
+      };
+}
+
+function parseCreatorProfileApiError(
+  value: unknown,
+): CreatorProfileApiError | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const response = value as Record<string, unknown>;
+  if (
+    response.status !== "error" ||
+    !response.error ||
+    typeof response.error !== "object" ||
+    Array.isArray(response.error)
+  ) {
+    return null;
+  }
+  const error = response.error as Record<string, unknown>;
+  if (
+    error.kind === "integrity" &&
+    error.code === "creator_profile_integrity_conflict" &&
+    error.message === "Current creator reward data could not be verified"
+  ) {
+    return creatorProfileApiError("integrity");
+  }
+  if (
+    error.kind === "temporary" &&
+    error.code === "creator_profile_temporarily_unavailable" &&
+    error.message === "Onchain creator data is temporarily unavailable"
+  ) {
+    return creatorProfileApiError("temporary");
+  }
+  return null;
+}
+
 export class ProfileResponseError extends Error {
-  constructor(message: string) {
-    super(message);
+  readonly kind: ProfileResponseErrorKind;
+
+  constructor(
+    message: string,
+    kind: ProfileResponseErrorKind = "integrity",
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
     this.name = "ProfileResponseError";
+    this.kind = kind;
   }
 }
 
@@ -888,10 +970,8 @@ export function mapCreatorProfileResponse(
   };
 }
 
-function readApiError(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
-  const error = (value as { error?: unknown }).error;
-  return typeof error === "string" ? error.trim() : "";
+function transientResponseStatus(status: number) {
+  return status === 408 || status === 425 || status === 429 || status >= 500;
 }
 
 export async function fetchCreatorProfile(
@@ -899,27 +979,65 @@ export async function fetchCreatorProfile(
   signal?: AbortSignal,
   fetcher: FetchLike = fetch,
 ) {
-  const response = await fetcher(
-    `/api/explore/profile?account=${encodeURIComponent(account)}`,
-    {
-      method: "GET",
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-      signal,
-    },
-  );
+  let response: Awaited<ReturnType<FetchLike>>;
+  try {
+    response = await fetcher(
+      `/api/explore/profile?account=${encodeURIComponent(account)}`,
+      {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+        signal,
+      },
+    );
+  } catch (caught) {
+    if (signal?.aborted) throw caught;
+    throw new ProfileResponseError(
+      "Onchain creator data is temporarily unavailable",
+      "temporary",
+      { cause: caught },
+    );
+  }
   let body: unknown;
   try {
     body = (await response.json()) as unknown;
-  } catch {
+  } catch (caught) {
+    if (!response.ok && transientResponseStatus(response.status)) {
+      throw new ProfileResponseError(
+        "Onchain creator data is temporarily unavailable",
+        "temporary",
+        { cause: caught },
+      );
+    }
     throw new ProfileResponseError(
-      "Onchain profile data returned an invalid response",
+      "Current creator reward data could not be verified",
+      "integrity",
+      { cause: caught },
     );
   }
 
   if (!response.ok) {
+    const apiError = parseCreatorProfileApiError(body);
+    if (apiError?.error.kind === "integrity") {
+      throw new ProfileResponseError(
+        apiError.error.message,
+        "integrity",
+      );
+    }
+    if (apiError?.error.kind === "temporary") {
+      throw new ProfileResponseError(
+        apiError.error.message,
+        "temporary",
+      );
+    }
+    const kind = transientResponseStatus(response.status)
+      ? "temporary"
+      : "integrity";
     throw new ProfileResponseError(
-      readApiError(body) || "Onchain profile data could not be loaded",
+      kind === "temporary"
+        ? "Onchain creator data is temporarily unavailable"
+        : "Current creator reward data could not be verified",
+      kind,
     );
   }
 
@@ -942,12 +1060,14 @@ export function loadingProfileData(account: string): ProfileOnchainData {
 export function errorProfileData(
   account: string,
   message: string,
+  errorKind: ProfileResponseErrorKind = "integrity",
 ): ProfileOnchainData {
   if (!isAddress(account)) return UNAVAILABLE_PROFILE_DATA;
 
   return {
     account: getAddress(account),
     status: "error",
+    errorKind,
     tokens: [],
     positions: [],
     claims: [],

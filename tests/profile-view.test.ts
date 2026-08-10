@@ -32,6 +32,7 @@ import {
   profileRewardActionErrorMessage,
   profileTransactionPollAttempts,
   reflectedConfirmedProfileTransactions,
+  resolveCreatorProfileReadFailure,
   preserveInterruptedTransactionStates,
   removePendingProfileTransactionRecord,
   resolveStockPairedReceiptGate,
@@ -48,9 +49,11 @@ import {
 import type { ClassicV3Reward } from "../lib/profile/classic-v3-rewards";
 import { CreatorClaimClientError } from "../lib/profile/creator-claim";
 import type { DeepV3CreatorToken } from "../lib/profile/deep-v3-profile";
-import type {
-  ProfileClaim,
-  ProfileToken,
+import {
+  ProfileResponseError,
+  type ProfileClaim,
+  type ProfileOnchainData,
+  type ProfileToken,
 } from "../lib/profile/onchain-profile";
 
 const firstAddress = getAddress(
@@ -283,6 +286,53 @@ describe("profile workspace loading state", () => {
     expect(profileViewSource).toContain(
       "PROFILE_LIVE_REFRESH_INTERVAL_MS = 30_000",
     );
+  });
+
+  it("uses LKG only for typed temporary creator reads and marks it stale", () => {
+    const current = {
+      account: firstAddress,
+      status: "ready",
+      tokens,
+      positions: [],
+      claims: [claim],
+      activity: [],
+    } satisfies ProfileOnchainData;
+
+    const stale = resolveCreatorProfileReadFailure(
+      current,
+      firstAddress,
+      new ProfileResponseError(
+        "Onchain creator data is temporarily unavailable",
+        "temporary",
+      ),
+    );
+    expect(stale).toMatchObject({
+      status: "ready",
+      sourceQuality: "stale",
+      claims: [claim],
+    });
+    expect(
+      getProfileRewardDataQuality(
+        ["ready", "ready"],
+        "current",
+        stale.sourceQuality,
+      ),
+    ).toBe("stale");
+
+    const blocked = resolveCreatorProfileReadFailure(
+      current,
+      firstAddress,
+      new ProfileResponseError(
+        "Current creator reward data could not be verified",
+        "integrity",
+      ),
+    );
+    expect(blocked).toMatchObject({
+      status: "error",
+      errorKind: "integrity",
+      tokens: [],
+      claims: [],
+    });
   });
 
   it("contains five desktop claim rows inside the workspace while mobile keeps page flow", () => {

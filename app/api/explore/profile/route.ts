@@ -6,7 +6,11 @@ import {
   readAlchemyExploreModel,
   safeAlchemyError,
 } from "../../../../lib/alchemy/explore.server";
-import { readAlchemyCreatorProfile } from "../../../../lib/alchemy/profile.server";
+import {
+  AlchemyCreatorProfileIntegrityError,
+  readAlchemyCreatorProfile,
+} from "../../../../lib/alchemy/profile.server";
+import { creatorProfileApiError } from "../../../../lib/profile/onchain-profile";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -67,9 +71,13 @@ export async function GET(request: NextRequest) {
       "Alchemy creator profile read failed",
       safeAlchemyError(error),
     );
+    const integrity = error instanceof AlchemyCreatorProfileIntegrityError;
     return NextResponse.json(
-      { error: "Onchain creator data is temporarily unavailable" },
-      { status: 503, headers: { "Cache-Control": "no-store" } },
+      creatorProfileApiError(integrity ? "integrity" : "temporary"),
+      {
+        status: integrity ? 409 : 503,
+        headers: { "Cache-Control": "no-store" },
+      },
     );
   }
 }

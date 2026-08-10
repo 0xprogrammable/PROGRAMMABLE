@@ -4,6 +4,7 @@ import { encodeFunctionData } from "viem";
 import { classicRewardVaultAbi } from "../lib/classic-v3";
 import {
   ClassicV3ProfileReadError,
+  classicV3ProfileApiError,
   fetchClassicV3ProfileRewards,
   parseClassicV3ProfileRewards,
   validatePreparedClassicV3RewardAction,
@@ -197,6 +198,25 @@ describe("Classic V3 profile rewards", () => {
       message: "Classic reward data could not be verified",
     });
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("never retries a typed API accounting or integrity conflict", async () => {
+    const fetcher = vi.fn(async () =>
+      new Response(JSON.stringify(classicV3ProfileApiError("integrity")), {
+        status: 409,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const wait = vi.fn(async () => undefined);
+
+    await expect(
+      fetchClassicV3ProfileRewards(account, undefined, fetcher, { wait }),
+    ).rejects.toMatchObject({
+      kind: "integrity",
+      message: "Classic reward data could not be verified",
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(wait).not.toHaveBeenCalled();
   });
 
   it("classifies a non-JSON success response as an integrity failure", async () => {

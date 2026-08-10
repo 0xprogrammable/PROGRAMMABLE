@@ -71,6 +71,77 @@ type FetchLike = (
 
 export type ClassicV3ProfileReadErrorKind = "temporary" | "integrity";
 
+export type ClassicV3ProfileApiError =
+  | Readonly<{
+      status: "error";
+      error: Readonly<{
+        kind: "temporary";
+        code: "classic_profile_temporarily_unavailable";
+        message: "Classic rewards are temporarily unavailable";
+      }>;
+    }>
+  | Readonly<{
+      status: "error";
+      error: Readonly<{
+        kind: "integrity";
+        code: "classic_profile_integrity_conflict";
+        message: "Classic reward data could not be verified";
+      }>;
+    }>;
+
+export function classicV3ProfileApiError(
+  kind: ClassicV3ProfileReadErrorKind,
+): ClassicV3ProfileApiError {
+  return kind === "integrity"
+    ? {
+        status: "error",
+        error: {
+          kind,
+          code: "classic_profile_integrity_conflict",
+          message: "Classic reward data could not be verified",
+        },
+      }
+    : {
+        status: "error",
+        error: {
+          kind,
+          code: "classic_profile_temporarily_unavailable",
+          message: "Classic rewards are temporarily unavailable",
+        },
+      };
+}
+
+function parseClassicV3ProfileApiError(
+  value: unknown,
+): ClassicV3ProfileApiError | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const response = value as Record<string, unknown>;
+  if (
+    response.status !== "error" ||
+    !response.error ||
+    typeof response.error !== "object" ||
+    Array.isArray(response.error)
+  ) {
+    return null;
+  }
+  const error = response.error as Record<string, unknown>;
+  if (
+    error.kind === "integrity" &&
+    error.code === "classic_profile_integrity_conflict" &&
+    error.message === "Classic reward data could not be verified"
+  ) {
+    return classicV3ProfileApiError("integrity");
+  }
+  if (
+    error.kind === "temporary" &&
+    error.code === "classic_profile_temporarily_unavailable" &&
+    error.message === "Classic rewards are temporarily unavailable"
+  ) {
+    return classicV3ProfileApiError("temporary");
+  }
+  return null;
+}
+
 export class ClassicV3ProfileReadError extends Error {
   readonly kind: ClassicV3ProfileReadErrorKind;
 
@@ -169,16 +240,25 @@ async function fetchClassicV3ProfileRewardsOnce(
       throw temporaryReadError(caught);
     }
 
-    if (!response.ok) {
-      throw transientResponseStatus(response.status)
-        ? temporaryReadError()
-        : integrityReadError();
-    }
     let body: unknown;
     try {
       body = await response.json();
     } catch (caught) {
-      throw integrityReadError(caught);
+      throw !response.ok && transientResponseStatus(response.status)
+        ? temporaryReadError(caught)
+        : integrityReadError(caught);
+    }
+    if (!response.ok) {
+      const apiError = parseClassicV3ProfileApiError(body);
+      if (apiError?.error.kind === "integrity") {
+        throw integrityReadError();
+      }
+      if (apiError?.error.kind === "temporary") {
+        throw temporaryReadError();
+      }
+      throw transientResponseStatus(response.status)
+        ? temporaryReadError()
+        : integrityReadError();
     }
     try {
       return parseClassicV3ProfileRewards(body, account);
