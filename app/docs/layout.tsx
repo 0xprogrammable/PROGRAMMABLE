@@ -1,14 +1,7 @@
 import type { Metadata } from "next";
-import { Manrope } from "next/font/google";
 import { ReactNode } from "react";
 
 import { SiteFooter } from "@/components/site-footer";
-
-const docsSans = Manrope({
-  subsets: ["latin"],
-  variable: "--font-docs",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "Documentation · Programmable",
@@ -19,9 +12,7 @@ export const metadata: Metadata = {
 export default function DocsLayout({ children }: { children: ReactNode }) {
   return (
     <>
-      <div className={docsSans.variable} data-docs-font>
-        {children}
-      </div>
+      <div data-docs-font>{children}</div>
       <SiteFooter />
     </>
   );

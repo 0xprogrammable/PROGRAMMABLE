@@ -71,10 +71,14 @@ export function DocsShell({
         </Link>
 
         <div className={styles.sidebarSearch} data-docs-tools>
-          <DocsSearch />
+          <DocsSearch id="docs-search-desktop" />
         </div>
 
-        <DocsNavigation currentPath={currentPath} sections={sections} />
+        <DocsNavigation
+          currentPath={currentPath}
+          mobileSearch={<DocsSearch id="docs-search-mobile" />}
+          sections={sections}
+        />
       </aside>
 
       <div

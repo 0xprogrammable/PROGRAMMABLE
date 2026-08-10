@@ -4,38 +4,58 @@ export type DocsSearchItem = {
   title: string;
 };
 
+export type DocsNavigationItem = {
+  depth?: 0 | 1;
+  href: string;
+  label: string;
+  relatedPaths?: readonly string[];
+};
+
+export type DocsNavigationGroup = {
+  items: readonly DocsNavigationItem[];
+  label: string;
+};
+
+const tokenModelPaths = [
+  "/docs/models/classic",
+  "/docs/models/custom",
+  "/docs/models/stock-paired",
+] as const;
+
+const developerReferencePaths = [
+  "/docs/developers/verify",
+  "/docs/developers/indexing",
+  "/docs/developers/machine-readable",
+] as const;
+
 export const docsCategories = [
   {
-    description: "Overview",
+    description: "Project overview",
     href: "/docs",
-    label: "Overview",
+    label: "Documentation",
     relatedPaths: [] as const,
   },
   {
-    description: "Models and status",
+    description: "Launch models and availability",
     href: "/docs/tokens",
     label: "Tokens and launches",
-    relatedPaths: [
-      "/docs/models/classic",
-      "/docs/models/custom",
-      "/docs/models/stock-paired",
-    ] as const,
+    relatedPaths: tokenModelPaths,
   },
   {
-    description: "Identity and data",
+    description: "Launch identity and protocol data",
     href: "/docs/infrastructure",
     label: "Infrastructure",
-    relatedPaths: [] as const,
+    relatedPaths: ["/docs/launch-stamps"] as const,
   },
   {
-    description: "Integration guide",
+    description: "Verification and indexing",
     href: "/docs/developers",
-    label: "Developer integration",
-    relatedPaths: ["/docs/launch-stamps"] as const,
+    label: "Developers",
+    relatedPaths: developerReferencePaths,
   },
 ] as const;
 
-export const docsNavigation = [
+export const docsNavigation: readonly DocsNavigationGroup[] = [
   {
     label: "Documentation",
     items: [{ href: "/docs", label: "Overview" }],
@@ -43,79 +63,130 @@ export const docsNavigation = [
   {
     label: "Tokens and launches",
     items: [
-      { href: "/docs/tokens", label: "Token overview" },
-      { href: "/docs/models/classic", label: "Classic" },
-      { href: "/docs/models/custom", label: "Custom" },
-      { href: "/docs/models/stock-paired", label: "Stock-Paired" },
+      {
+        href: "/docs/tokens",
+        label: "Overview",
+        relatedPaths: tokenModelPaths,
+      },
+      { depth: 1, href: "/docs/models/classic", label: "Classic" },
+      { depth: 1, href: "/docs/models/custom", label: "Custom hooks" },
+      {
+        depth: 1,
+        href: "/docs/models/stock-paired",
+        label: "Stock-Paired",
+      },
     ],
   },
   {
     label: "Infrastructure",
-    items: [{ href: "/docs/infrastructure", label: "System overview" }],
-  },
-  {
-    label: "Developer integration",
     items: [
-      { href: "/docs/developers", label: "Integration guide" },
-      { href: "/docs/launch-stamps", label: "Router reference" },
+      { href: "/docs/infrastructure", label: "Overview" },
+      {
+        depth: 1,
+        href: "/docs/launch-stamps",
+        label: "Router and launch stamps",
+      },
     ],
   },
-] as const;
+  {
+    label: "Developers",
+    items: [
+      {
+        href: "/docs/developers",
+        label: "Overview",
+        relatedPaths: developerReferencePaths,
+      },
+      {
+        depth: 1,
+        href: "/docs/developers/verify",
+        label: "Verify a launch",
+      },
+      {
+        depth: 1,
+        href: "/docs/developers/indexing",
+        label: "Index launches",
+      },
+      {
+        depth: 1,
+        href: "/docs/developers/machine-readable",
+        label: "Machine-readable docs",
+      },
+    ],
+  },
+];
 
 export const docsSearchItems: DocsSearchItem[] = [
   {
     title: "Documentation overview",
     description:
-      "Choose between project context, token models, infrastructure and developer integration.",
+      "Start with the project, launch models, infrastructure or developer references.",
     href: "/docs",
   },
   {
     title: "Tokens and launches",
     description:
-      "Compare Classic, Custom and historical Stock-Paired launches and the availability rules for each.",
+      "Compare the launch models and see which ones are currently available.",
     href: "/docs/tokens",
   },
   {
     title: "Classic",
     description:
-      "Understand fixed-supply launches, directional fees, creator rewards and Initial Buy custody.",
+      "Read how fixed-supply launches, swap fees, creator rewards and Initial Buy work.",
     href: "/docs/models/classic",
   },
   {
     title: "Custom",
     description:
-      "Learn what must be defined before a launch with an individual Uniswap v4 hook is activated.",
+      "Understand launches that use an individual Uniswap v4 hook.",
     href: "/docs/models/custom",
   },
   {
     title: "Stock-Paired",
     description:
-      "Read the historical token model, quote-asset routing and support boundaries.",
+      "Read the historical quote-asset model and its current support status.",
     href: "/docs/models/stock-paired",
   },
   {
     title: "Infrastructure",
     description:
-      "See how launch execution, token identity, Router provenance and public resources fit together.",
+      "See how launch execution, token identity and public protocol data fit together.",
     href: "/docs/infrastructure",
   },
   {
-    title: "Developer integration",
+    title: "Developer overview",
     description:
-      "Integrate launch verification in a terminal, wallet, scanner or indexer.",
+      "Choose the verification or indexing path for a terminal, wallet, scanner or app.",
     href: "/docs/developers",
   },
   {
-    title: "Launch verification",
+    title: "Verify a launch",
     description:
-      "Verify Router-stamped Classic and Custom provenance through one canonical contract.",
-    href: "/docs/launch-stamps",
+      "Verify a token, pool or component against its canonical Router record.",
+    href: "/docs/developers/verify",
+  },
+  {
+    title: "Index launches",
+    description:
+      "Backfill Router events, follow new launches and handle finality and reorgs.",
+    href: "/docs/developers/indexing",
+  },
+  {
+    title: "Machine-readable docs",
+    description:
+      "Use the concise Markdown guide and complete machine-readable reference.",
+    href: "/docs/developers/machine-readable",
   },
   {
     title: "Router trust root",
     description:
-      "Bind to the live Ethereum Router, deployment range, runtime hash and frozen ABI.",
+      "Bind to the Ethereum Router, deployment range, runtime hash and frozen ABI.",
     href: "/docs/developers#trust-root",
+  },
+  {
+    title: "Router and launch stamps",
+    description:
+      "Read the canonical contract, deployment range, runtime hash and ABI reference.",
+    href: "/docs/launch-stamps",
   },
   {
     title: "Classic and Custom launch kinds",
@@ -124,33 +195,15 @@ export const docsSearchItems: DocsSearchItem[] = [
     href: "/docs/developers#trust-root",
   },
   {
-    title: "Verify a token",
+    title: "Verify a token or pool",
     description:
-      "Resolve a token to one launch ID and reproduce its canonical stamp record.",
-    href: "/docs/developers#identity",
-  },
-  {
-    title: "Verify a Uniswap v4 pool",
-    description:
-      "Resolve PoolManager and poolId without relying on token names, tickers or hook reuse.",
-    href: "/docs/developers#identity",
-  },
-  {
-    title: "Verify an exclusive component",
-    description:
-      "Match launchId, stampProof and the recorded component runtime hash.",
+      "Resolve one launch ID and reproduce its canonical stamp record.",
     href: "/docs/developers#identity",
   },
   {
     title: "Discover new launches",
     description:
-      "Backfill and follow Router events only when continuous launch discovery is needed.",
-    href: "/docs/developers#indexing",
-  },
-  {
-    title: "Reorg and finality handling",
-    description:
-      "Replay an overlap and advance only through one canonical finalized boundary.",
+      "Backfill and follow Router events when continuous discovery is needed.",
     href: "/docs/developers#indexing",
   },
   {
@@ -162,19 +215,19 @@ export const docsSearchItems: DocsSearchItem[] = [
   {
     title: "Provenance boundary",
     description:
-      "Keep Router origin separate from safety, tradability, liquidity and terminal support.",
+      "Keep Router origin separate from safety, tradability, liquidity and app support.",
     href: "/docs/developers#boundary",
-  },
-  {
-    title: "Machine-readable docs",
-    description:
-      "Use the concise Markdown guide or the complete machine-readable Router reference.",
-    href: "/docs/developers#agents",
   },
   {
     title: "Integration checklist",
     description:
-      "Verify chain, runtime, ABI, identity reads, launch kind and result states.",
+      "Check chain, runtime, ABI, identity reads, launch kind and result states.",
     href: "/docs/developers#checklist",
+  },
+  {
+    title: "Agent-readable integration guide",
+    description:
+      "Open the concise Markdown guide and complete Router reference.",
+    href: "/docs/developers#agents",
   },
 ];
