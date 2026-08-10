@@ -61,6 +61,7 @@ import {
 } from "../lib/custom-launch/manual-router-browser-state-v1";
 import {
   listManualRouterApplicantSubmissionsVersionedV2,
+  MANUAL_ROUTER_LAUNCH_PREPARATION_REFRESH_REQUIRED_V1,
   ManualRouterWebsiteRequestErrorV1,
 } from
   "../lib/custom-launch/manual-router-client-v1";
@@ -252,6 +253,38 @@ describe("manual Applicant Privy hydration", () => {
         false,
       ),
     )).toBe(false);
+  });
+
+  it("maps legacy transport expiry to a calm launch preparation refresh", async () => {
+    const fetchV1 = vi.fn(async () => Response.json({
+      code: "permit_expired_reissue_required",
+      retryable: false,
+    }, { status: 409 }));
+    vi.stubGlobal("fetch", fetchV1);
+    let failure: unknown;
+    try {
+      await listManualRouterApplicantSubmissionsVersionedV2({
+        session: {
+          accessToken: "access-current",
+          identityToken: "identity-current",
+        },
+        launchWallet: WALLET,
+      });
+    } catch (caught) {
+      failure = caught;
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(fetchV1).toHaveBeenCalledOnce();
+    expect(failure).toBeInstanceOf(ManualRouterWebsiteRequestErrorV1);
+    expect(failure).toMatchObject({
+      status: 409,
+      code: MANUAL_ROUTER_LAUNCH_PREPARATION_REFRESH_REQUIRED_V1,
+      message: "Launch setup is no longer current. Refresh and try again",
+      retryable: true,
+    });
+    expect((failure as Error).message).not.toMatch(/permit|signature|expir|hour/iu);
   });
 
   it("refreshes independently before list and resolve without replaying either request", async () => {

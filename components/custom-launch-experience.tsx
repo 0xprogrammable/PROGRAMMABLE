@@ -326,6 +326,17 @@ type PendingGrantReissueV1 = Readonly<{
 class LaunchFlowCancelledError extends Error {}
 export class LaunchExecutionUnavailableError extends Error {}
 export class LaunchBindingMismatchError extends Error {}
+export const LAUNCH_PREPARATION_REFRESH_REQUIRED_V1 =
+  "launch_preparation_refresh_required" as const;
+
+export class LaunchPreparationRefreshRequiredErrorV1 extends Error {
+  readonly code = LAUNCH_PREPARATION_REFRESH_REQUIRED_V1;
+
+  constructor() {
+    super("Launch setup needs to be refreshed. Try again");
+    this.name = "LaunchPreparationRefreshRequiredErrorV1";
+  }
+}
 
 export function shouldClearLaunchRecoveryV2(caught: unknown): boolean {
   return caught instanceof LaunchExecutionUnavailableError;
@@ -799,7 +810,7 @@ export function assertLaunchPermitFreshnessV2(input: Readonly<{
     || actionNotBefore >= preparationExpiresAt
     || validUntil - trustedNow < 5_000
     || preparationExpiresAt - trustedNow < 5_000
-  ) throw new Error("Launch permit or wallet transaction has expired");
+  ) throw new LaunchPreparationRefreshRequiredErrorV1();
 }
 
 export async function fetchTrustedTimeV1(
@@ -1485,7 +1496,7 @@ export function CustomLaunchExperience({
   ]);
 
   const setApplicantFailure = useCallback((caught: unknown) => {
-    setApplicantRecovery(customLaunchApplicantRecoveryV2(caught));
+    setApplicantRecovery(customLaunchApplicantRecoveryForErrorV2(caught));
     setError(customLaunchErrorMessage(caught));
   }, []);
 
@@ -3163,18 +3174,56 @@ export function assertLaunchExecutionStatusBinding(
   }
 }
 
-function customLaunchErrorMessage(caught: unknown): string {
+export function customLaunchErrorMessage(caught: unknown): string {
   if (caught instanceof LaunchExecutionUnavailableError) return caught.message;
+  if (caught instanceof LaunchPreparationRefreshRequiredErrorV1) {
+    return "Launch setup needs to be refreshed. Try again";
+  }
+  if (isInternalLaunchSetupVerificationErrorV1(caught)) {
+    return "Launch setup could not be verified. Refresh and try again";
+  }
   if (caught instanceof CustomLaunchWebsiteRequestErrorV2) {
+    if (
+      caught.code === "LAUNCH_PREPARATION_REISSUE_REQUIRED"
+      || caught.code === LAUNCH_PREPARATION_REFRESH_REQUIRED_V1
+    ) return "Launch setup needs to be refreshed. Try again";
     if (caught.code === "github_account_required") return "Reconnect the GitHub account that opened the submission";
     if (caught.code === "LAUNCH_PRESENTATION_VERSION_CONFLICT") return "Project details changed in another window. Reload and try again";
     if (caught.status === 401) return "Reconnect GitHub to continue. Your last known approval stays visible";
-    if (caught.status === 403) return caught.publicMessage || "This launch is not currently available";
+    if (caught.status === 403) {
+      return containsInternalLaunchSetupVerificationTermsV1(caught)
+        ? "This launch is not currently available"
+        : caught.publicMessage || "This launch is not currently available";
+    }
     if (caught.status === 404) return "Reconnect the GitHub account that opened this submission";
     if ([408, 425, 429].includes(caught.status) || caught.status >= 500) return "Launch services are temporarily unavailable. Your last known approval stays visible";
+    if (containsInternalLaunchSetupVerificationTermsV1(caught)) {
+      return "Launch setup could not be verified. Refresh and try again";
+    }
     return caught.publicMessage || "Unable to continue this launch";
   }
   return caught instanceof Error ? caught.message : "Unable to continue this launch";
+}
+
+export function customLaunchApplicantRecoveryForErrorV2(
+  caught: unknown,
+): CustomLaunchApplicantRecoveryV2 {
+  if (
+    caught instanceof LaunchPreparationRefreshRequiredErrorV1
+    || isInternalLaunchSetupVerificationErrorV1(caught)
+  ) return "retry";
+  return customLaunchApplicantRecoveryV2(caught);
+}
+
+function isInternalLaunchSetupVerificationErrorV1(caught: unknown): boolean {
+  return caught instanceof Error
+    && !(caught instanceof CustomLaunchWebsiteRequestErrorV2)
+    && containsInternalLaunchSetupVerificationTermsV1(caught);
+}
+
+function containsInternalLaunchSetupVerificationTermsV1(caught: Error): boolean {
+  return /(?:\blaunch permit\b|\bsigned launch permit\b|\bpermit signature\b|\bpermit signer\b|\bed25519 permit\b)/iu
+    .test(caught.message);
 }
 
 function isPermanentGrantReissueFailure(caught: unknown): boolean {

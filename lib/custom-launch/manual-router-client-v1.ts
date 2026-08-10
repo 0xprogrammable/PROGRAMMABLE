@@ -19,6 +19,8 @@ import {
 } from "@/lib/custom-launch/manual-router-contract-v2";
 
 const MAXIMUM_RESPONSE_BYTES = 1_048_576;
+export const MANUAL_ROUTER_LAUNCH_PREPARATION_REFRESH_REQUIRED_V1 =
+  "launch_preparation_refresh_required" as const;
 
 export interface ManualRouterWebsiteSessionV1 {
   readonly accessToken: string;
@@ -352,10 +354,14 @@ function requestError(
   const record = value !== null && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
-  const code = typeof record.code === "string"
+  const upstreamCode = typeof record.code === "string"
     ? record.code
     : "launch_service_error";
-  const retryable = record.retryable === true;
+  const code = upstreamCode === "permit_expired_reissue_required"
+    ? MANUAL_ROUTER_LAUNCH_PREPARATION_REFRESH_REQUIRED_V1
+    : upstreamCode;
+  const retryable = code === MANUAL_ROUTER_LAUNCH_PREPARATION_REFRESH_REQUIRED_V1
+    || record.retryable === true;
   return new ManualRouterWebsiteRequestErrorV1(
     status,
     code,
@@ -384,8 +390,8 @@ function requestErrorMessage(code: string, status: number): string {
   if (code === "submission_not_found") {
     return "No approved launch is available for this GitHub account and wallet";
   }
-  if (code === "permit_expired_reissue_required") {
-    return "This launch permit expired. A new signature is required";
+  if (code === MANUAL_ROUTER_LAUNCH_PREPARATION_REFRESH_REQUIRED_V1) {
+    return "Launch setup is no longer current. Refresh and try again";
   }
   if (code === "transaction_not_finalized" || status === 425) {
     return "Transaction found. Waiting for Ethereum finality";

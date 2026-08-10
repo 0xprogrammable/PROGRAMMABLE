@@ -17,11 +17,14 @@ import {
   customApplicationDisplayState,
   customApplicationOpensLaunchExperience,
   customApplicationOpensLaunchExperienceV2,
+  customLaunchApplicantRecoveryForErrorV2,
+  customLaunchErrorMessage,
   customLaunchFeeReviewV1,
   defaultLaunchRoute,
   assertLaunchPermitFreshnessV2,
   fetchTrustedTimeV1,
   LaunchExecutionUnavailableError,
+  LaunchPreparationRefreshRequiredErrorV1,
   parsePersistedLaunchRecoveryV2,
   presentationFormFromResponse,
   requirePersistLaunchRecoveryV2,
@@ -1039,21 +1042,77 @@ describe("custom launch browser authority", () => {
       execution,
       trustedNow: "2026-08-05T12:05:00.000Z",
     })).not.toThrow();
-    expect(() => assertLaunchPermitFreshnessV2({
-      permit: fresh.permit,
-      execution,
-      trustedNow: "2026-08-05T11:59:59.999Z",
-    })).toThrow("expired");
-    expect(() => assertLaunchPermitFreshnessV2({
-      permit: fresh.permit,
-      execution,
-      trustedNow: "2026-08-05T12:09:55.001Z",
-    })).toThrow("expired");
-    expect(() => assertLaunchPermitFreshnessV2({
-      permit: fresh.permit,
-      execution: { ...execution, expiresAt: "2026-08-05T12:05:04.999Z" },
-      trustedNow: "2026-08-05T12:05:00.000Z",
-    })).toThrow("expired");
+    const staleCases = [
+      {
+        execution,
+        trustedNow: "2026-08-05T11:59:59.999Z",
+      },
+      {
+        execution,
+        trustedNow: "2026-08-05T12:09:55.001Z",
+      },
+      {
+        execution: { ...execution, expiresAt: "2026-08-05T12:05:04.999Z" },
+        trustedNow: "2026-08-05T12:05:00.000Z",
+      },
+    ] as const;
+    for (const stale of staleCases) {
+      let failure: unknown;
+      try {
+        assertLaunchPermitFreshnessV2({
+          permit: fresh.permit,
+          ...stale,
+        });
+      } catch (caught) {
+        failure = caught;
+      }
+      expect(failure).toBeInstanceOf(LaunchPreparationRefreshRequiredErrorV1);
+      expect(failure).toMatchObject({
+        code: "launch_preparation_refresh_required",
+      });
+      const message = customLaunchErrorMessage(failure);
+      expect(message).toBe("Launch setup needs to be refreshed. Try again");
+      expect(message).not.toMatch(/permit|signature|expir|hour/iu);
+      expect(customLaunchApplicantRecoveryForErrorV2(failure)).toBe("retry");
+    }
+  });
+
+  it("keeps internal launch authority verification details out of recovery copy", () => {
+    for (const detail of [
+      "Launch permit signature authority is invalid",
+      "Launch permit signer pin is invalid",
+      "Ed25519 permit verification is unavailable",
+      "Signed launch permit payload is invalid",
+      "Wallet target is not bound to the signed launch permit",
+    ]) {
+      const failure = new Error(detail);
+      const message = customLaunchErrorMessage(failure);
+      expect(message).toBe(
+        "Launch setup could not be verified. Refresh and try again",
+      );
+      expect(message).not.toMatch(/permit|signature|signer|ed25519/iu);
+      expect(customLaunchApplicantRecoveryForErrorV2(failure)).toBe("retry");
+    }
+  });
+
+  it("preserves typed request recovery while sanitizing internal server wording", () => {
+    const forbidden = "Launch permit signer pin is invalid";
+    const revoked = new CustomLaunchWebsiteRequestErrorV2(403, "grant_revoked", forbidden);
+    expect(customLaunchErrorMessage(revoked)).toBe(
+      "This launch is not currently available",
+    );
+    expect(customLaunchApplicantRecoveryForErrorV2(revoked))
+      .toBe("reconnect-github");
+
+    const unavailable = new CustomLaunchWebsiteRequestErrorV2(
+      503,
+      "launch_service_error",
+      forbidden,
+    );
+    expect(customLaunchErrorMessage(unavailable)).toBe(
+      "Launch services are temporarily unavailable. Your last known approval stays visible",
+    );
+    expect(customLaunchApplicantRecoveryForErrorV2(unavailable)).toBe("retry");
   });
 
   it("accepts only an exact no-store trusted-time response", async () => {
