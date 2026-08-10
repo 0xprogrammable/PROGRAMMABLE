@@ -83,7 +83,7 @@ describe("public route coordinator wiring", () => {
     vi.clearAllMocks();
   });
 
-  it("reads creator profile directly from the current Alchemy model", async () => {
+  it("reports the indexed model and operational RPC profile sources", async () => {
     const snapshot = {
       blockNumber: "25650000",
       blockHash: `0x${"33".repeat(32)}`,
@@ -113,8 +113,14 @@ describe("public route coordinator wiring", () => {
     expect(response.headers.get("Cache-Control")).toBe(
       "private, max-age=0, s-maxage=15",
     );
+    expect(response.headers.get("X-Programmable-Launch-Source")).toBe(
+      "indexed-read-model+operational-rpc",
+    );
     expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
       "operational-dual",
+    );
+    expect(response.headers.get("X-Programmable-Launch-Source")).not.toBe(
+      "alchemy",
     );
   });
 

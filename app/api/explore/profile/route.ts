@@ -56,7 +56,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(profile, {
       headers: {
         "Cache-Control": "private, max-age=0, s-maxage=15",
-        "X-Programmable-Launch-Source": "alchemy",
+        "X-Programmable-Launch-Source":
+          "indexed-read-model+operational-rpc",
         "X-Programmable-Read-Source": "rpc",
         "X-Programmable-Rpc-Provider": "operational-dual",
       },
