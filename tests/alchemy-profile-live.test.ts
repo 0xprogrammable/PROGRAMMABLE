@@ -3,8 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 const mocks = vi.hoisted(() => ({
+  createPublicClient: vi.fn(),
   getBlock: vi.fn(),
   getLogs: vi.fn(),
+  http: vi.fn((url: string) => ({ url })),
   multicall: vi.fn(),
 }));
 
@@ -12,14 +14,12 @@ vi.mock("viem", async (importOriginal) => {
   const actual = await importOriginal<typeof import("viem")>();
   return {
     ...actual,
-    createPublicClient: vi.fn(() => ({
-      getBlock: mocks.getBlock,
-      getLogs: mocks.getLogs,
-      multicall: mocks.multicall,
-    })),
+    createPublicClient: mocks.createPublicClient,
+    http: mocks.http,
   };
 });
 
+import { HttpRequestError } from "viem";
 import { readAlchemyCreatorProfile } from "../lib/alchemy/profile.server";
 import type {
   ExploreReadModel,
@@ -167,6 +167,11 @@ const customGraphToken = {
 describe("Alchemy live creator profile", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.createPublicClient.mockReturnValue({
+      getBlock: mocks.getBlock,
+      getLogs: mocks.getLogs,
+      multicall: mocks.multicall,
+    });
   });
 
   it("combines current claimable state with confirmed claim history", async () => {
@@ -235,6 +240,78 @@ describe("Alchemy live creator profile", () => {
         contracts: [expect.objectContaining({ address: hookAddress })],
       }),
     );
+  });
+
+  it("restarts the creator read on secondary after primary capacity", async () => {
+    const primaryUrl = "https://primary.example/rpc-key";
+    const secondaryUrl = "https://secondary.example/rpc-key";
+    const capacity = new HttpRequestError({
+      status: 429,
+      url: primaryUrl,
+    });
+    const primaryClient = {
+      getBlock: vi.fn().mockRejectedValue(capacity),
+      getLogs: vi.fn().mockRejectedValue(capacity),
+      multicall: vi.fn().mockRejectedValue(capacity),
+    };
+    const secondaryClient = {
+      getBlock: vi.fn(),
+      getLogs: vi.fn().mockResolvedValue([]),
+      multicall: vi.fn().mockResolvedValue([
+        {
+          status: "success",
+          result: [account, deployment.launcher, 100, true, 5n],
+        },
+      ]),
+    };
+    mocks.createPublicClient.mockImplementation(
+      ({ transport }: { transport: { url: string } }) =>
+        transport.url === primaryUrl ? primaryClient : secondaryClient,
+    );
+    const model = {
+      status: "ready",
+      tokens: [token],
+      snapshot: {
+        chainId: 1,
+        blockNumber: "100",
+        blockHash: `0x${"99".repeat(32)}`,
+        confirmations: 12,
+      },
+      launchDiscoverySnapshot: {
+        chainId: 1,
+        blockNumber: "105",
+        blockHash: `0x${"aa".repeat(32)}`,
+        confirmations: 0,
+      },
+      creatorClaims: [],
+      launcherFeesAccruedWei: "0",
+      launcherFeesAccruedEth: "0",
+    } satisfies ExploreReadModel;
+
+    const profile = await readAlchemyCreatorProfile({
+      account,
+      deployment: {
+        ...deployment,
+        rpcUrl: primaryUrl,
+        rpcUrlSecondary: secondaryUrl,
+      },
+      model,
+    });
+
+    expect(profile.totals).toMatchObject({
+      claimableWei: "5",
+      generatedWei: "5",
+    });
+    expect(primaryClient.multicall).toHaveBeenCalledTimes(1);
+    expect(secondaryClient.multicall).toHaveBeenCalledTimes(1);
+    expect(mocks.createPublicClient.mock.calls.map(
+      ([{ transport }]) => transport.url,
+    )).toEqual([
+      primaryUrl,
+      primaryUrl,
+      secondaryUrl,
+      secondaryUrl,
+    ]);
   });
 
   it("keeps a stamped CustomGraph launch visible without querying its hook or inventing rewards", async () => {

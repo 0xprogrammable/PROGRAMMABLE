@@ -32,6 +32,11 @@ import {
 } from "@/lib/data-pipeline/action-lookup";
 import { indexedLaunchLookupEnabled } from "@/lib/data-pipeline/route-activation.server";
 import { uerc20ReadAbi } from "@/lib/onchain/abis";
+import { getOperationalOnchainDeployment } from "@/lib/onchain/config";
+import {
+  safeOperationalRpcError,
+  withOperationalRpcFailover,
+} from "@/lib/onchain/operational-rpc-failover.server";
 import { encodeClassicV3RewardAction } from "@/lib/profile/classic-v3-rewards";
 import { classicV3ActionRpcProviders } from "@/lib/server/action-rpc-quorum.server";
 import {
@@ -72,13 +77,6 @@ const manifest = appDeployments[
 const releaseManifest =
   getConfiguredClassicV3Release(environment).releaseManifest;
 const chain = environment === "rehearsal" ? sepolia : mainnet;
-const rpcUrl =
-  environment === "rehearsal"
-    ? process.env.SEPOLIA_RPC_URL ?? "https://sepolia.drpc.org"
-    : process.env.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL ??
-      process.env.ETHEREUM_RPC_URL ??
-      "https://eth.drpc.org";
-
 function json(body: unknown, status = 200) {
   return NextResponse.json(body, {
     status,
@@ -86,7 +84,7 @@ function json(body: unknown, status = 200) {
   });
 }
 
-function createClient() {
+function createClient(rpcUrl: string) {
   return createPublicClient({
     chain,
     batch: { multicall: true },
@@ -416,7 +414,10 @@ async function readClassicActionState(input: {
   };
 }
 
-async function readRewards(account: Address) {
+async function readRewardsFromClient(
+  account: Address,
+  client: PublicClient,
+) {
   if (!isClassicV3ReleaseVerified(manifest, releaseManifest, chain.id)) {
     return {
       status: "not-deployed" as const,
@@ -431,7 +432,6 @@ async function readRewards(account: Address) {
   const vaultFactory = getAddress(
     manifest.classicRewardVaultFactoryV1 as string,
   );
-  const client = createClient();
   await Promise.all([
     assertCodeHash(
       client,
@@ -637,12 +637,30 @@ async function readRewards(account: Address) {
   };
 }
 
-async function readLaunchByTransaction(account: Address, transactionHash: Hex) {
+async function readRewards(account: Address) {
+  if (!isClassicV3ReleaseVerified(manifest, releaseManifest, chain.id)) {
+    return {
+      status: "not-deployed" as const,
+      account,
+      chainId: chain.id,
+      rewards: [],
+    };
+  }
+  const deployment = getOperationalOnchainDeployment(environment);
+  return withOperationalRpcFailover(deployment, (rpcDeployment) =>
+    readRewardsFromClient(account, createClient(rpcDeployment.rpcUrl))
+  );
+}
+
+async function readLaunchByTransactionFromClient(
+  account: Address,
+  transactionHash: Hex,
+  client: PublicClient,
+) {
   if (!isClassicV3ReleaseVerified(manifest, releaseManifest, chain.id)) {
     return { status: "not-deployed" as const, launch: null };
   }
   const launcher = getAddress(manifest.memeLaunchV2 as string);
-  const client = createClient();
   await assertCodeHash(
     client,
     launcher,
@@ -692,6 +710,23 @@ async function readLaunchByTransaction(account: Address, transactionHash: Hex) {
       launchTransactionHash: launch.transactionHash,
     },
   };
+}
+
+async function readLaunchByTransaction(
+  account: Address,
+  transactionHash: Hex,
+) {
+  if (!isClassicV3ReleaseVerified(manifest, releaseManifest, chain.id)) {
+    return { status: "not-deployed" as const, launch: null };
+  }
+  const deployment = getOperationalOnchainDeployment(environment);
+  return withOperationalRpcFailover(deployment, (rpcDeployment) =>
+    readLaunchByTransactionFromClient(
+      account,
+      transactionHash,
+      createClient(rpcDeployment.rpcUrl),
+    )
+  );
 }
 
 export async function GET(request: NextRequest) {
@@ -768,7 +803,10 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("Classic profile read failed", error);
+    console.error(
+      "Classic profile read failed",
+      safeOperationalRpcError(error),
+    );
     return json({ error: "Classic rewards are temporarily unavailable" }, 503);
   }
 }
@@ -986,7 +1024,10 @@ export async function POST(request: NextRequest) {
         403,
       );
     }
-    console.error("Classic reward preparation failed", error);
+    console.error(
+      "Classic reward preparation failed",
+      safeOperationalRpcError(error),
+    );
     return json(
       { error: "The reward action could not be simulated from current onchain state" },
       502,

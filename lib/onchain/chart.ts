@@ -1,6 +1,5 @@
 import {
   createPublicClient,
-  fallback,
   formatUnits,
   getAddress,
   http,
@@ -24,6 +23,7 @@ import {
 } from "./abis";
 import { deepV3NativeSwapFeesAccruedEvent } from "./deep-v3-explore";
 import { nativePriceWadFromSqrtPriceX96 } from "./math";
+import { withOperationalRpcFailover } from "./operational-rpc-failover.server";
 import type { ReadyOnchainDeployment } from "./types";
 import { usdValueFromWei } from "./usd";
 
@@ -243,7 +243,7 @@ function appendSnapshotPoint(
   return [...points, snapshotPoint];
 }
 
-export async function readTokenChartSeries(input: {
+async function readTokenChartSeriesFromRpc(input: {
   deployment: ReadyOnchainDeployment;
   token: LauncherToken;
   snapshotBlock: bigint;
@@ -285,21 +285,10 @@ export async function readTokenChartSeries(input: {
 
   const client = createPublicClient({
     chain: deployment.chainId === 1 ? mainnet : sepolia,
-    transport: deployment.rpcUrlSecondary
-      ? fallback([
-          http(deployment.rpcUrl, {
-            retryCount: 1,
-            timeout: 12_000,
-          }),
-          http(deployment.rpcUrlSecondary, {
-            retryCount: 1,
-            timeout: 12_000,
-          }),
-        ])
-      : http(deployment.rpcUrl, {
-          retryCount: 2,
-          timeout: 12_000,
-        }),
+    transport: http(deployment.rpcUrl, {
+      retryCount: 1,
+      timeout: 12_000,
+    }),
   });
   const rangeStartBlock = await findChartRangeStartBlock({
     launchBlock,
@@ -415,4 +404,20 @@ export async function readTokenChartSeries(input: {
     ...(token.marketCapEth ? { marketCapEth: token.marketCapEth } : {}),
     ...(token.fdvUsdWad ? { marketCapUsdWad: token.fdvUsdWad } : {}),
   };
+}
+
+export async function readTokenChartSeries(input: {
+  deployment: ReadyOnchainDeployment;
+  token: LauncherToken;
+  snapshotBlock: bigint;
+  ethUsdQuote?: { answer: string; decimals: number };
+  range?: TokenChartRange;
+}): Promise<TokenChartSeries> {
+  return withOperationalRpcFailover(
+    input.deployment,
+    (deployment) => readTokenChartSeriesFromRpc({
+      ...input,
+      deployment,
+    }),
+  );
 }

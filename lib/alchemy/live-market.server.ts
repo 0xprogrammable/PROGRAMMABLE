@@ -13,6 +13,7 @@ import {
   marketCapNativeWadFromSqrtPriceX96,
   nativePriceWadFromSqrtPriceX96,
 } from "../onchain/math";
+import { withOperationalRpcFailover } from "../onchain/operational-rpc-failover.server";
 import type { ExploreSnapshot, ReadyOnchainDeployment } from "../onchain/types";
 import { usdValueFromWei } from "../onchain/usd";
 import {
@@ -239,37 +240,39 @@ export async function enrichTokensWithAlchemyPoolState(input: {
   }
 
   if (missing.length > 0) {
-    const client = createPublicClient({
-      chain: input.deployment.chainId === 1 ? mainnet : sepolia,
-      transport: http(input.deployment.rpcUrl, {
-        retryCount: 2,
-        timeout: 12_000,
-      }),
-    });
-    const batch = Promise.all([
-      client.multicall({
-        allowFailure: true,
-        blockNumber,
-        contracts: missing.map((token) => ({
-          address: input.deployment.stateView,
-          abi: stateViewReadAbi,
-          functionName: "getSlot0" as const,
-          args: [token.poolId as Hex],
-        })),
-      }),
-      client.multicall({
-        allowFailure: true,
-        blockNumber,
-        contracts: missing.map((token) => ({
-          address: input.deployment.stateView,
-          abi: stateViewReadAbi,
-          functionName: "getLiquidity" as const,
-          args: [token.poolId as Hex],
-        })),
-      }),
-    ])
-      .then(([slot0Results, liquidityResults]) =>
-        missing.map((_, index): LivePoolState | null => {
+    const batch = withOperationalRpcFailover(
+      input.deployment,
+      async (rpcDeployment) => {
+        const client = createPublicClient({
+          chain: rpcDeployment.chainId === 1 ? mainnet : sepolia,
+          transport: http(rpcDeployment.rpcUrl, {
+            retryCount: 1,
+            timeout: 12_000,
+          }),
+        });
+        const [slot0Results, liquidityResults] = await Promise.all([
+          client.multicall({
+            allowFailure: true,
+            blockNumber,
+            contracts: missing.map((token) => ({
+              address: rpcDeployment.stateView,
+              abi: stateViewReadAbi,
+              functionName: "getSlot0" as const,
+              args: [token.poolId as Hex],
+            })),
+          }),
+          client.multicall({
+            allowFailure: true,
+            blockNumber,
+            contracts: missing.map((token) => ({
+              address: rpcDeployment.stateView,
+              abi: stateViewReadAbi,
+              functionName: "getLiquidity" as const,
+              args: [token.poolId as Hex],
+            })),
+          }),
+        ]);
+        return missing.map((_, index): LivePoolState | null => {
           const slot0 = slot0Results[index];
           const liquidity = liquidityResults[index];
           if (
@@ -288,8 +291,9 @@ export async function enrichTokensWithAlchemyPoolState(input: {
             activeLiquidity: liquidity.result,
             blockNumber,
           };
-        }),
-      )
+        });
+      },
+    )
       .catch(() => missing.map(() => null));
 
     missing.forEach((token, index) => {

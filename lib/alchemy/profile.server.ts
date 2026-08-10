@@ -15,6 +15,10 @@ import {
   creatorFeeHookReadAbi,
   creatorFeesClaimedEvent,
 } from "../onchain/abis";
+import {
+  isOperationalRpcFailoverEligible,
+  withOperationalRpcFailover,
+} from "../onchain/operational-rpc-failover.server";
 import type {
   CreatorClaim,
   CreatorProfile,
@@ -177,6 +181,7 @@ async function scanRecentClaims(input: RecentClaimReadInput) {
 function recentClaimCursorKey(input: RecentClaimReadInput) {
   return [
     input.deployment.chainId,
+    input.deployment.rpcUrl,
     input.account.toLowerCase(),
     input.fromBlock.toString(),
     ...input.hookAddresses.map((address) => address.toLowerCase()).sort(),
@@ -224,7 +229,7 @@ async function readRecentClaims(input: RecentClaimReadInput) {
   return (await current).claims;
 }
 
-export async function readAlchemyCreatorProfile(input: {
+async function readAlchemyCreatorProfileFromRpc(input: {
   account: Address;
   deployment: ReadyOnchainDeployment;
   model: ExploreReadModel;
@@ -268,7 +273,10 @@ export async function readAlchemyCreatorProfile(input: {
             functionName: "poolFeeConfig" as const,
             args: [token.poolId as Hex],
           })),
-        }).catch(() => [])
+        }).catch((error) => {
+          if (isOperationalRpcFailoverEligible(error)) throw error;
+          return [];
+        })
       : Promise.resolve([]),
     readRecentClaims({
       account: input.account,
@@ -279,7 +287,10 @@ export async function readAlchemyCreatorProfile(input: {
         directRewardTokens.map((token) => token.hookAddress.toLowerCase()),
       )].map((address) => getAddress(address)),
       tokenByPool,
-    }).catch(() => []),
+    }).catch((error) => {
+      if (isOperationalRpcFailoverEligible(error)) throw error;
+      return [];
+    }),
   ]);
 
   const claims = new Map(
@@ -336,5 +347,19 @@ export async function readAlchemyCreatorProfile(input: {
     scopedModel,
     input.account,
     directRewardPoolIds,
+  );
+}
+
+export async function readAlchemyCreatorProfile(input: {
+  account: Address;
+  deployment: ReadyOnchainDeployment;
+  model: ExploreReadModel;
+}): Promise<CreatorProfile> {
+  return withOperationalRpcFailover(
+    input.deployment,
+    (deployment) => readAlchemyCreatorProfileFromRpc({
+      ...input,
+      deployment,
+    }),
   );
 }

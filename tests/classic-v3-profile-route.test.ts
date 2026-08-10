@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { HttpRequestError } from "viem";
 
 vi.mock("server-only", () => ({}));
 
@@ -27,7 +28,11 @@ const mocks = vi.hoisted(() => {
     getBlockNumber: vi.fn(async () => 25_639_608n),
     getLogs: vi.fn(async () => []),
   };
-  return { client, runtimeCodes };
+  return {
+    client,
+    createPublicClient: vi.fn(() => client),
+    runtimeCodes,
+  };
 });
 
 vi.mock("server-only", () => ({}));
@@ -47,7 +52,7 @@ vi.mock("viem", async (importOriginal) => {
   const actual = await importOriginal<typeof import("viem")>();
   return {
     ...actual,
-    createPublicClient: vi.fn(() => mocks.client),
+    createPublicClient: mocks.createPublicClient,
     keccak256: vi.fn((value: keyof typeof mocks.runtimeCodes) => {
       const mocked = mocks.runtimeCodes[value];
       return mocked ?? actual.keccak256(value);
@@ -64,6 +69,17 @@ const account = "0x1111111111111111111111111111111111111111";
 const vault = "0x2222222222222222222222222222222222222222";
 
 describe("Classic profile release gate", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.createPublicClient.mockReturnValue(mocks.client);
+    vi.stubEnv("ETHEREUM_RPC_URL", "https://primary.example/rpc-key");
+    vi.stubEnv("ETHEREUM_RPC_URL_B", "https://secondary.example/rpc-key");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("returns the verified release with no rewards for an unused wallet", async () => {
     const response = await GET(
       new NextRequest(
@@ -78,6 +94,49 @@ describe("Classic profile release gate", () => {
       chainId: 1,
       rewards: [],
     });
+  });
+
+  it("uses the fixed secondary when the primary rejects capacity", async () => {
+    const primary = {
+      ...mocks.client,
+      getCode: vi.fn(async () => {
+        throw new HttpRequestError({
+          status: 429,
+          url: "https://primary.example/rpc-key",
+        });
+      }),
+    };
+    mocks.createPublicClient
+      .mockReturnValueOnce(primary)
+      .mockReturnValueOnce(mocks.client);
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/profile/classic-v3?account=${account}`,
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.createPublicClient).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not use secondary for an integrity error", async () => {
+    const primary = {
+      ...mocks.client,
+      getCode: vi.fn(async () => {
+        throw new Error("Classic runtime integrity mismatch");
+      }),
+    };
+    mocks.createPublicClient.mockReturnValueOnce(primary);
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/profile/classic-v3?account=${account}`,
+      ),
+    );
+
+    expect(response.status).toBe(503);
+    expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
   });
 
   it("rejects claims from a wallet that does not own the vault", async () => {
