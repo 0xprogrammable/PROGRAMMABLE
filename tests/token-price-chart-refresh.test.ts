@@ -166,8 +166,8 @@ describe("token price chart refresh", () => {
       isAuthoritativeChartPayload({
         status: "ready",
         points: [
-          { blockNumber: "1", priceEth: "0.1", priceUsd: "350" },
-          { blockNumber: "2", priceEth: "0.2", priceUsd: "700" },
+          { blockNumber: "99", priceEth: "0.1", priceUsd: "350" },
+          { blockNumber: "100", priceEth: "0.2", priceUsd: "700" },
         ],
         swapCount: 2,
         volumeWei: "3",
@@ -360,6 +360,86 @@ describe("token price chart refresh", () => {
           status: "partial",
           price: { status: "stale", asOfBlock: "99", lagBlocks: "1" },
           valuation: STALE_VALUATION_DATA_QUALITY.valuation,
+        },
+      }),
+    ).toBe(false);
+    expect(
+      isAuthoritativeChartPayload({
+        status: "ready",
+        points: [
+          { blockNumber: "98", priceEth: "0.1" },
+          { blockNumber: "99", priceEth: "0.2" },
+        ],
+        swapCount: 2,
+        volumeWei: "3",
+        volumeEth: "0.000000000000000003",
+        valuationMetric: "fdv",
+        dataQuality: CURRENT_DATA_QUALITY,
+      }),
+    ).toBe(false);
+  });
+
+  it("rejects unordered, duplicate, future, or noncanonical points before caching", () => {
+    for (const points of [
+      [
+        { blockNumber: "100", priceEth: "0.1" },
+        { blockNumber: "99", priceEth: "0.2" },
+      ],
+      [
+        { blockNumber: "100", priceEth: "0.1" },
+        { blockNumber: "100", priceEth: "0.2" },
+      ],
+      [
+        { blockNumber: "99", priceEth: "0.1" },
+        { blockNumber: "101", priceEth: "0.2" },
+      ],
+      [
+        { blockNumber: "099", priceEth: "0.1" },
+        { blockNumber: "100", priceEth: "0.2" },
+      ],
+    ]) {
+      expect(
+        isAuthoritativeChartPayload({
+          status: "ready",
+          points,
+          swapCount: 2,
+          volumeWei: "3",
+          volumeEth: "0.000000000000000003",
+          valuationMetric: "fdv",
+          dataQuality: CURRENT_DATA_QUALITY,
+        }),
+      ).toBe(false);
+    }
+  });
+
+  it("rejects noncanonical quality block numbers before caching", () => {
+    const noncanonicalBlock = "0100";
+    expect(
+      isAuthoritativeChartPayload({
+        status: "ready",
+        points: [
+          { blockNumber: "99", priceEth: "0.1" },
+          { blockNumber: noncanonicalBlock, priceEth: "0.2" },
+        ],
+        swapCount: 2,
+        volumeWei: "3",
+        volumeEth: "0.000000000000000003",
+        valuationMetric: "fdv",
+        dataQuality: {
+          ...CURRENT_DATA_QUALITY,
+          asOfBlock: noncanonicalBlock,
+          history: { status: "current", throughBlock: noncanonicalBlock },
+          price: {
+            status: "current",
+            asOfBlock: noncanonicalBlock,
+            lagBlocks: "0",
+          },
+          valuation: {
+            status: "current",
+            metric: "fdv",
+            asOfBlock: noncanonicalBlock,
+            lagBlocks: "0",
+          },
         },
       }),
     ).toBe(false);

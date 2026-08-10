@@ -213,6 +213,10 @@ function isUnsignedIntegerString(value: unknown): value is string {
   return typeof value === "string" && /^\d+$/.test(value);
 }
 
+function isCanonicalUnsignedIntegerString(value: unknown): value is string {
+  return typeof value === "string" && /^(?:0|[1-9]\d*)$/.test(value);
+}
+
 function isUnsignedDecimalString(value: unknown): value is string {
   return (
     typeof value === "string" &&
@@ -254,7 +258,7 @@ function parseChartDataQuality(value: unknown): TokenChartDataQuality | null {
   if (
     value.schemaVersion !== "programmable.explore-chart-data-quality.v1" ||
     (value.status !== "current" && value.status !== "partial") ||
-    !isUnsignedIntegerString(value.asOfBlock) ||
+    !isCanonicalUnsignedIntegerString(value.asOfBlock) ||
     !isBytes32(value.blockHash) ||
     BigInt(value.blockHash) === 0n ||
     (value.finality !== "confirmed" && value.finality !== "latest") ||
@@ -282,8 +286,8 @@ function parseChartDataQuality(value: unknown): TokenChartDataQuality | null {
   } else if (value.valuation.status === "stale") {
     if (
       value.status !== "partial" ||
-      !isUnsignedIntegerString(value.valuation.asOfBlock) ||
-      !isUnsignedIntegerString(value.valuation.lagBlocks)
+      !isCanonicalUnsignedIntegerString(value.valuation.asOfBlock) ||
+      !isCanonicalUnsignedIntegerString(value.valuation.lagBlocks)
     ) {
       return null;
     }
@@ -314,6 +318,25 @@ function hasValidChartCardinality(
   return status === "ready"
     ? pointCount >= 2
     : status === "insufficient-history" && pointCount === 1;
+}
+
+function hasValidChartPointBlocks(
+  points: TokenChartPoint[],
+  asOfBlock: string,
+) {
+  const snapshotBlock = BigInt(asOfBlock);
+  let previousBlock: bigint | null = null;
+  for (const point of points) {
+    const currentBlock = BigInt(point.blockNumber);
+    if (
+      currentBlock > snapshotBlock ||
+      (previousBlock !== null && currentBlock <= previousBlock)
+    ) {
+      return false;
+    }
+    previousBlock = currentBlock;
+  }
+  return previousBlock === snapshotBlock;
 }
 
 function withoutNonCurrentFdv(payload: ChartPayload): ChartPayload {
@@ -355,7 +378,7 @@ export function parseAuthoritativeChartPayload(
     !payload.points.every(
       (point) =>
         isRecord(point) &&
-        isUnsignedIntegerString(point.blockNumber) &&
+        isCanonicalUnsignedIntegerString(point.blockNumber) &&
         isPositiveDecimalString(point.priceEth) &&
         (point.priceUsd === undefined ||
           isPositiveDecimalString(point.priceUsd)),
@@ -363,10 +386,12 @@ export function parseAuthoritativeChartPayload(
   ) {
     return null;
   }
+  const points = payload.points as TokenChartPoint[];
+  if (!hasValidChartPointBlocks(points, dataQuality.asOfBlock)) return null;
 
   return withoutNonCurrentFdv({
     status: payload.status,
-    points: payload.points as TokenChartPoint[],
+    points,
     swapCount: payload.swapCount as number,
     volumeWei: payload.volumeWei as string,
     volumeEth: payload.volumeEth as string,
