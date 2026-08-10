@@ -252,28 +252,33 @@ describe("exact Shards Router V1 Website service bridge", () => {
   });
 
   it("refreshes an unchanged exact Shards head ETag after verification", async () => {
-    const { store, values } = memoryStore();
-    await seedHead(store, ROOT_POINTER, ROOT_INDEX, shardsArtifact("root"));
     const indexPath = manualRouterApplicantIndexPathV1({
       approvedGitHubUserId: EXACT.approvedGitHubUserId,
       approvedLaunchWallet: EXACT.approvedLaunchWallet,
     });
-    const baseAuthority = shardsAuthority();
+    let immutableWrites = 0;
+    let rotateDuringImmutableWrites = false;
+    const { store } = memoryStore({
+      weakReadEtags: true,
+      beforePut(path, options, values) {
+        if (
+          rotateDuringImmutableWrites
+          && !options.allowOverwrite
+          && path !== indexPath
+          && ++immutableWrites === 3
+        ) {
+          const current = values.get(indexPath)!;
+          values.set(indexPath, { ...current, etag: `"${"f".repeat(32)}"` });
+        }
+      },
+    });
+    await seedHead(store, ROOT_POINTER, ROOT_INDEX, shardsArtifact("root"));
     const service = new ManualRouterWebsiteServiceV1({
       store,
-      authority: Object.freeze({
-        ...baseAuthority,
-        async verifySignedPublish(input: Parameters<
-          ManualRouterWebsiteAuthorityV1["verifySignedPublish"]
-        >[0]) {
-          const verified = await baseAuthority.verifySignedPublish(input);
-          const current = values.get(indexPath)!;
-          values.set(indexPath, { ...current, etag: "etag-external-same-head" });
-          return verified;
-        },
-      }),
+      authority: shardsAuthority(),
     });
     const successor = shardsArtifact("successor");
+    rotateDuringImmutableWrites = true;
 
     await expect(service.publishSignedArtifact({
       schemaVersion: "programmable.manual-router-signed-artifact-publish-request.v1",
@@ -287,43 +292,76 @@ describe("exact Shards Router V1 Website service bridge", () => {
   });
 
   it("rejects semantic exact Shards head drift after verification", async () => {
-    const { store } = memoryStore();
-    await seedHead(store, ROOT_POINTER, ROOT_INDEX, shardsArtifact("root"));
     const indexPath = manualRouterApplicantIndexPathV1({
       approvedGitHubUserId: EXACT.approvedGitHubUserId,
       approvedLaunchWallet: EXACT.approvedLaunchWallet,
     });
-    const baseAuthority = shardsAuthority();
+    let immutableWrites = 0;
+    let driftDuringImmutableWrites: (() => Promise<void>) | null = null;
+    const { store } = memoryStore({
+      weakReadEtags: true,
+      async beforePut(path, options) {
+        if (
+          driftDuringImmutableWrites !== null
+          && !options.allowOverwrite
+          && path !== indexPath
+          && ++immutableWrites === 3
+        ) await driftDuringImmutableWrites();
+      },
+    });
+    await seedHead(store, ROOT_POINTER, ROOT_INDEX, shardsArtifact("root"));
     const successor = shardsArtifact("successor");
+    const nextPointer = pointerForArtifact(successor, EXACT.rootPointerHash);
+    const nextIndex = createManualRouterApplicantIndexV1({
+      previousIndex: ROOT_INDEX,
+      previousPointers: [ROOT_POINTER],
+      nextPointer,
+    }).index;
+    await store.putImmutable(
+      manualRouterContentPathV1("signed-artifacts", successor.signedArtifactHash),
+      successor,
+    );
+    await store.putImmutable(
+      manualRouterContentPathV1("pointer-history", nextPointer.pointerHash),
+      nextPointer,
+    );
+    driftDuringImmutableWrites = async () => {
+      const current = await store.read(indexPath);
+      await store.compareAndSwap(indexPath, current!.etag.slice(2), nextIndex);
+    };
     const service = new ManualRouterWebsiteServiceV1({
       store,
-      authority: Object.freeze({
-        ...baseAuthority,
-        async verifySignedPublish(input: Parameters<
-          ManualRouterWebsiteAuthorityV1["verifySignedPublish"]
-        >[0]) {
-          const verified = await baseAuthority.verifySignedPublish(input);
-          const nextPointer = verified.nextPointer as ManualRouterApplicantPointerV1;
-          const nextIndex = verified.nextApplicantIndex as ManualRouterApplicantIndexV1;
-          await store.putImmutable(
-            manualRouterContentPathV1("signed-artifacts", successor.signedArtifactHash),
-            successor,
-          );
-          await store.putImmutable(
-            manualRouterContentPathV1("pointer-history", nextPointer.pointerHash),
-            nextPointer,
-          );
-          const current = await store.read(indexPath);
-          await store.compareAndSwap(indexPath, current!.etag, nextIndex);
-          return verified;
-        },
-      }),
+      authority: shardsAuthority(),
     });
 
     await expect(service.publishSignedArtifact({
       schemaVersion: "programmable.manual-router-signed-artifact-publish-request.v1",
       expectedPreviousPointerHash: EXACT.rootPointerHash,
       signedArtifact: successor,
+    })).rejects.toMatchObject({
+      status: 409,
+      code: "state_conflict",
+      retryable: false,
+    } satisfies Partial<ManualRouterServiceErrorV1>);
+  });
+
+  it.each([
+    'W/"short"',
+    `W/"${"A".repeat(32)}"`,
+    `w/"${"a".repeat(32)}"`,
+    `"${"A".repeat(32)}"`,
+  ])("rejects a noncanonical exact Shards CAS ETag: %s", async (readEtag) => {
+    const { store } = memoryStore({ readEtag: () => readEtag });
+    await seedHead(store, ROOT_POINTER, ROOT_INDEX, shardsArtifact("root"));
+    const service = new ManualRouterWebsiteServiceV1({
+      store,
+      authority: shardsAuthority(),
+    });
+
+    await expect(service.publishSignedArtifact({
+      schemaVersion: "programmable.manual-router-signed-artifact-publish-request.v1",
+      expectedPreviousPointerHash: EXACT.rootPointerHash,
+      signedArtifact: shardsArtifact("successor"),
     })).rejects.toMatchObject({
       status: 409,
       code: "state_conflict",
@@ -674,7 +712,15 @@ function mutate<T>(source: T, path: readonly string[], value: unknown): T {
   return cloned as T;
 }
 
-function memoryStore() {
+function memoryStore(hooks: Readonly<{
+  weakReadEtags?: boolean;
+  readEtag?: (strongEtag: string) => string;
+  beforePut?: (
+    path: string,
+    options: Readonly<{ allowOverwrite: boolean; ifMatch?: string }>,
+    values: Map<string, { body: string; etag: string }>,
+  ) => void | Promise<void>;
+}> = {}) {
   const values = new Map<string, { body: string; etag: string }>();
   let version = 0;
   return {
@@ -683,10 +729,16 @@ function memoryStore() {
       async get(path) {
         const value = values.get(path);
         return value
-          ? { statusCode: 200, etag: value.etag, body: value.body }
+          ? {
+              statusCode: 200,
+              etag: hooks.readEtag?.(value.etag)
+                ?? (hooks.weakReadEtags ? `W/${value.etag}` : value.etag),
+              body: value.body,
+            }
           : { statusCode: 404, etag: null, body: null };
       },
       async put(path, body, options) {
+        await hooks.beforePut?.(path, options, values);
         const current = values.get(path);
         if (
           (!options.allowOverwrite && current)
@@ -697,7 +749,7 @@ function memoryStore() {
           throw error;
         }
         version += 1;
-        const etag = `etag-${version}`;
+        const etag = `"${version.toString(16).padStart(32, "0")}"`;
         values.set(path, { body, etag });
         return { etag };
       },

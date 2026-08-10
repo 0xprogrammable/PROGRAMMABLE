@@ -239,19 +239,21 @@ export class ManualRouterWebsiteServiceV1 {
       expected.idempotent !== verified.idempotent
       || canonicalizeJson(expected.index) !== canonicalizeJson(index)
     ) throw invalidArtifact();
-    const commitHead = await this.#refreshExactShardsV1PublishHead(
-      artifact,
-      head,
-    );
     const transition = await commitManualRouterApplicantHeadTransitionV1({
       store: this.dependencies.store,
-      head: commitHead,
+      head,
       nextPointer: pointer,
       nextIndex: index,
       immutableWrites: signedPublishImmutableWrites(artifact, pointer, index),
       // Different signed posts never converge implicitly. The losing request
       // must reload and prove the winner as its exact predecessor.
       acceptConcurrentExactTarget: false,
+      ...(manualRouterIsExactShardsV1ArtifactV1(artifact)
+        ? {
+            refreshHeadAfterImmutableWrites: () =>
+              this.#refreshExactShardsV1PublishHead(artifact, head),
+          }
+        : {}),
     });
     return Object.freeze({
       schemaVersion: pointer.schemaVersion
@@ -568,7 +570,6 @@ export class ManualRouterWebsiteServiceV1 {
     artifact: ManualRouterCompleteSignedArtifactViewAnyV2,
     verifiedHead: ManualRouterApplicantHeadV1,
   ): Promise<ManualRouterApplicantHeadV1> {
-    if (!manualRouterIsExactShardsV1ArtifactV1(artifact)) return verifiedHead;
     const refreshed = await readManualRouterApplicantHeadV1({
       store: this.dependencies.store,
       ...artifactPrincipal(artifact),
@@ -579,7 +580,11 @@ export class ManualRouterWebsiteServiceV1 {
       || canonicalizeJson(refreshed.pointers)
         !== canonicalizeJson(verifiedHead.pointers)
     ) throw conflict();
-    return refreshed;
+    if (refreshed.etag === null) throw conflict();
+    return Object.freeze({
+      ...refreshed,
+      etag: strongExactShardsBlobEtag(refreshed.etag),
+    });
   }
 
   async #assertShardsV1PublishTransition(input: Readonly<{
@@ -1239,4 +1244,10 @@ function routeCapabilityDisabled(): ManualRouterServiceErrorV1 {
 
 function conflict(): ManualRouterServiceErrorV1 {
   return new ManualRouterServiceErrorV1(409, "state_conflict", false);
+}
+
+function strongExactShardsBlobEtag(value: string): string {
+  if (/^"[0-9a-f]{32}"$/u.test(value)) return value;
+  if (/^W\/"[0-9a-f]{32}"$/u.test(value)) return value.slice(2);
+  throw conflict();
 }
