@@ -115,7 +115,8 @@ contract CoreBombFeeSource is IProgrammableProtocolFeeSourceV1 {
         Valid,
         ReturnBomb,
         RevertBomb,
-        MalformedRecipient
+        MalformedRecipient,
+        OverlongViews
     }
 
     address internal constant REWARD_WALLET = 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c;
@@ -135,6 +136,13 @@ contract CoreBombFeeSource is IProgrammableProtocolFeeSourceV1 {
     }
 
     function programmableFeeRecipient() external view returns (address recipient) {
+        if (mode == Mode.OverlongViews) {
+            uint256 encodedRecipient = uint256(uint160(REWARD_WALLET));
+            assembly ("memory-safe") {
+                mstore(0, encodedRecipient)
+                return(0, 0x40)
+            }
+        }
         if (mode == Mode.MalformedRecipient) {
             uint256 invalidEncoding = uint256(uint160(REWARD_WALLET)) | (uint256(1) << 200);
             assembly ("memory-safe") {
@@ -146,11 +154,23 @@ contract CoreBombFeeSource is IProgrammableProtocolFeeSourceV1 {
     }
 
     function accruedProgrammableFees(address asset) external view returns (uint256 amount) {
-        return _accrued[asset];
+        amount = _accrued[asset];
+        if (mode == Mode.OverlongViews) {
+            assembly ("memory-safe") {
+                mstore(0, amount)
+                return(0, 0x40)
+            }
+        }
     }
 
     function totalProgrammableFeesClaimed(address asset) external view returns (uint256 amount) {
-        return _totalClaimed[asset];
+        amount = _totalClaimed[asset];
+        if (mode == Mode.OverlongViews) {
+            assembly ("memory-safe") {
+                mstore(0, amount)
+                return(0, 0x40)
+            }
+        }
     }
 
     function claimProgrammableFees(address asset) external returns (uint256 amount) {

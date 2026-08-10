@@ -43,6 +43,10 @@ contract ProtocolRevenueSourceRegistryV1 is AccessControlDefaultAdminRules {
     address public constant REWARD_WALLET = 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c;
     bytes4 public constant CLAIM_SELECTOR = IProgrammableProtocolFeeSourceV1.claimProgrammableFees.selector;
     bytes4 public constant SOURCE_INTERFACE_ID = type(IProgrammableProtocolFeeSourceV1).interfaceId;
+    bytes4 private constant RECIPIENT_SELECTOR = IProgrammableProtocolFeeSourceV1.programmableFeeRecipient.selector;
+    bytes4 private constant ACCRUED_SELECTOR = IProgrammableProtocolFeeSourceV1.accruedProgrammableFees.selector;
+    bytes4 private constant TOTAL_CLAIMED_SELECTOR =
+        IProgrammableProtocolFeeSourceV1.totalProgrammableFeesClaimed.selector;
 
     uint256 public immutable CHAIN_ID;
     address public immutable collector;
@@ -256,11 +260,12 @@ contract ProtocolRevenueSourceRegistryV1 is AccessControlDefaultAdminRules {
         ) {
             return false;
         }
-        try IProgrammableProtocolFeeSourceV1(config.source).programmableFeeRecipient() returns (address recipient) {
-            return recipient == config.recipient;
-        } catch {
-            return false;
-        }
+        (bool success, uint256 rawRecipient) =
+            _tryStaticSourceWord(config.source, RECIPIENT_SELECTOR, config.asset, false);
+        if (!success || rawRecipient > type(uint160).max) return false;
+        // The explicit upper-bound check above makes this narrowing conversion lossless.
+        // forge-lint: disable-next-line(unsafe-typecast)
+        return address(uint160(rawRecipient)) == config.recipient;
     }
 
     function computeSourceId(ProtocolRevenueSourceConfigV1 calldata config) public view returns (bytes32) {
@@ -318,21 +323,41 @@ contract ProtocolRevenueSourceRegistryV1 is AccessControlDefaultAdminRules {
     }
 
     function _assertStandardSource(ProtocolRevenueSourceConfigV1 memory config) private view {
-        IProgrammableProtocolFeeSourceV1 source = IProgrammableProtocolFeeSourceV1(config.source);
-        try source.programmableFeeRecipient() returns (address recipient) {
-            if (recipient != config.recipient) revert SourceInterfaceMismatch(config.source);
-        } catch {
-            revert SourceInterfaceMismatch(config.source);
+        (bool recipientSuccess, uint256 rawRecipient) =
+            _tryStaticSourceWord(config.source, RECIPIENT_SELECTOR, config.asset, false);
+        if (!recipientSuccess || rawRecipient > type(uint160).max) revert SourceInterfaceMismatch(config.source);
+        // The explicit upper-bound check above makes this narrowing conversion lossless.
+        // forge-lint: disable-next-line(unsafe-typecast)
+        if (address(uint160(rawRecipient)) != config.recipient) revert SourceInterfaceMismatch(config.source);
+
+        (bool accruedSuccess,) = _tryStaticSourceWord(config.source, ACCRUED_SELECTOR, config.asset, true);
+        if (!accruedSuccess) revert SourceInterfaceMismatch(config.source);
+
+        (bool totalSuccess, uint256 totalClaimed) =
+            _tryStaticSourceWord(config.source, TOTAL_CLAIMED_SELECTOR, config.asset, true);
+        if (!totalSuccess) revert SourceInterfaceMismatch(config.source);
+        if (totalClaimed != 0) revert SourcePreviouslyClaimed(config.source, config.asset, totalClaimed);
+    }
+
+    /// @dev Probes one source view without copying untrusted return or revert data and accepts exactly one ABI word.
+    function _tryStaticSourceWord(address source, bytes4 selector, address asset, bool includeAsset)
+        private
+        view
+        returns (bool exactSuccess, uint256 result)
+    {
+        bytes memory callData =
+            includeAsset ? abi.encodeWithSelector(selector, asset) : abi.encodeWithSelector(selector);
+        bool callSuccess;
+        uint256 returnDataSize;
+        assembly ("memory-safe") {
+            callSuccess := staticcall(gas(), source, add(callData, 0x20), mload(callData), 0, 0)
+            returnDataSize := returndatasize()
+            if and(callSuccess, eq(returnDataSize, 0x20)) {
+                returndatacopy(0, 0, 0x20)
+                result := mload(0)
+            }
         }
-        try source.accruedProgrammableFees(config.asset) returns (uint256) { }
-        catch {
-            revert SourceInterfaceMismatch(config.source);
-        }
-        try source.totalProgrammableFeesClaimed(config.asset) returns (uint256 totalClaimed) {
-            if (totalClaimed != 0) revert SourcePreviouslyClaimed(config.source, config.asset, totalClaimed);
-        } catch {
-            revert SourceInterfaceMismatch(config.source);
-        }
+        exactSuccess = callSuccess && returnDataSize == 32;
     }
 
     function _grantRole(bytes32 role, address account) internal virtual override returns (bool) {

@@ -8,7 +8,13 @@ import {
     ProtocolRevenueSourceConfigV1
 } from "../../src/protocol-revenue-vnext/IProgrammableProtocolFeeSourceV1.sol";
 import { ProtocolRevenueSourceRegistryV1 } from "../../src/protocol-revenue-vnext/ProtocolRevenueSourceRegistryV1.sol";
-import { CoreMockERC20, CoreStandardFeeSource, CoreStandardFeeSourceV2, CoreTestBase } from "./CoreTestBase.t.sol";
+import {
+    CoreBombFeeSource,
+    CoreMockERC20,
+    CoreStandardFeeSource,
+    CoreStandardFeeSourceV2,
+    CoreTestBase
+} from "./CoreTestBase.t.sol";
 
 contract CoreRegistryTest is CoreTestBase {
     function test_exactFrozenConstantsAndIdentityDomains() public view {
@@ -156,6 +162,34 @@ contract CoreRegistryTest is CoreTestBase {
         );
         vm.prank(activator);
         registry.activateSource(config.sourceId);
+    }
+
+    function test_activationRejectsOverlongButPrefixValidViewReturn() public {
+        CoreBombFeeSource source = new CoreBombFeeSource();
+        ProtocolRevenueSourceConfigV1 memory config =
+            _config(address(source), address(0), uint64(block.number + ACTIVATION_DELAY));
+        vm.prank(proposer);
+        registry.proposeSource(config);
+        source.setMode(CoreBombFeeSource.Mode.OverlongViews);
+        vm.roll(config.activationBlock);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(ProtocolRevenueSourceRegistryV1.SourceInterfaceMismatch.selector, address(source))
+        );
+        vm.prank(activator);
+        registry.activateSource(config.sourceId);
+
+        (, bool registered, bool quarantined) = registry.sourceState(config.sourceId);
+        assertFalse(registered);
+        assertFalse(quarantined);
+        assertFalse(registry.isExecutable(config.sourceId));
+
+        source.setMode(CoreBombFeeSource.Mode.Valid);
+        vm.prank(activator);
+        registry.activateSource(config.sourceId);
+        assertTrue(registry.isExecutable(config.sourceId));
+        source.setMode(CoreBombFeeSource.Mode.OverlongViews);
+        assertFalse(registry.isExecutable(config.sourceId));
     }
 
     function test_activationRechecksErc20AssetCode() public {
