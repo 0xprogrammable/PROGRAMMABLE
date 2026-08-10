@@ -10,6 +10,7 @@ blocknumberish/=lib/blocknumberish/
 forge-std/=lib/forge-std/src/
 liquidity-launcher/=lib/liquidity-launcher/
 permit2/=lib/permit2/
+shards-v1/=lib/shards-v1/
 solady/=lib/solady/src/
 solmate/=lib/solmate/
 v4-periphery/=lib/v4-periphery/

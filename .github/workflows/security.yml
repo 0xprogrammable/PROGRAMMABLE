@@ -26,7 +26,7 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1
         with:
-          version: stable
+          version: v1.7.1
 
       - name: Bootstrap pinned dependencies
         run: ./scripts/bootstrap-deps.sh
@@ -45,16 +45,20 @@ jobs:
         with:
           sarif_file: slither.sarif
 
+      - name: Verify hash-bound via-IR coverage inputs
+        run: node scripts/check-coverage.mjs /dev/null scripts/coverage-via-ir-exceptions.json --inputs-only
+
       - name: Measure source coverage
         run: >-
           forge coverage
+          --ir-minimum
           --no-match-contract ClassicV3MainnetForkTest
           --exclude-tests
           --report lcov
           --report-file lcov.info
 
       - name: Check coverage floors
-        run: node scripts/check-coverage.mjs lcov.info
+        run: node scripts/check-coverage.mjs lcov.info scripts/coverage-via-ir-exceptions.json
 
       - name: Install actionlint
         env:
