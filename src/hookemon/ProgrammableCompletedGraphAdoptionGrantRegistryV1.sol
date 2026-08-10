@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import { IProgrammableCompletedGraphAdoptionCompatV1 } from "./IProgrammableCompletedGraphAdoptionCompatV1.sol";
-import { ProgrammableCompletedGraphAdoptionCompatCodecV1 } from "./ProgrammableCompletedGraphAdoptionCompatCodecV1.sol";
-import { ProgrammableCompletedGraphAdoptionValidatorV1 } from "./ProgrammableCompletedGraphAdoptionValidatorV1.sol";
+import {IProgrammableCompletedGraphAdoptionCompatV1} from "./IProgrammableCompletedGraphAdoptionCompatV1.sol";
+import {ProgrammableCompletedGraphAdoptionCompatCodecV1} from "./ProgrammableCompletedGraphAdoptionCompatCodecV1.sol";
+import {ProgrammableCompletedGraphAdoptionValidatorV1} from "./ProgrammableCompletedGraphAdoptionValidatorV1.sol";
 
 /// @dev Minimal local ERC-1271 surface. The implementation is codehash-pinned by the Registry.
 interface IERC1271CompatV1 {
@@ -15,22 +15,19 @@ interface IERC1271CompatV1 {
 ///      proves only a completed graph's typed provenance/current code commitments, then atomically marks a reviewed
 ///      grant Consumed and anchors the canonical adoption receipt.
 contract ProgrammableCompletedGraphAdoptionGrantRegistryV1 is IProgrammableCompletedGraphAdoptionCompatV1 {
-    uint256 public constant MAX_COMPONENTS = 24;
-    uint256 public constant MAX_EDGES = 64;
     uint64 public constant MAX_CURRENTNESS_LIFETIME = 1 hours;
     uint256 public constant MAX_SIGNATURE_BYTES = 4096;
     uint256 public constant AUTHORITY_GAS_RESERVE = 2_000_000;
     uint256 public constant MAX_AUTHORITY_STATICCALL_GAS = 500_000;
 
-    uint16 public constant IDENTITY_TOKEN = 1 << 0;
-    uint16 public constant IDENTITY_HOOK = 1 << 1;
-    uint16 public constant IDENTITY_NFT = 1 << 2;
-    uint16 public constant IDENTITY_APPLICATION = 1 << 3;
-    uint16 public constant IDENTITY_POOL = 1 << 4;
-    uint16 public constant IDENTITY_MASK_ALL = (1 << 5) - 1;
+    uint16 private constant IDENTITY_TOKEN = 1 << 0;
+    uint16 private constant IDENTITY_HOOK = 1 << 1;
+    uint16 private constant IDENTITY_NFT = 1 << 2;
+    uint16 private constant IDENTITY_APPLICATION = 1 << 3;
+    uint16 private constant IDENTITY_POOL = 1 << 4;
+    uint16 private constant IDENTITY_MASK_ALL = (1 << 5) - 1;
 
-    bytes32 public constant REGISTRY_ID_HASH = keccak256("PROGRAMMABLE_COMPLETED_GRAPH_ADOPTION_GRANT_REGISTRY_V1");
-    bytes32 public constant GRANT_STATE_HEAD_TYPEHASH = keccak256(
+    bytes32 private constant GRANT_STATE_HEAD_TYPEHASH = keccak256(
         "ProgrammableCompletedGraphGrantStateHeadV1(bytes32 grantDigest,bytes32 grantHash,bytes32 launchId,uint8 status)"
     );
 
@@ -61,6 +58,7 @@ contract ProgrammableCompletedGraphAdoptionGrantRegistryV1 is IProgrammableCompl
     uint256 private _reentrancyState = 1;
 
     mapping(bytes32 profileKey => AdoptionProfileCapabilityV1 capability) private _profileCapability;
+    mapping(bytes32 profileKey => ProfileStatusV1 status) private _profileStatus;
     mapping(bytes32 grantDigest => LaunchGrantV1 grant) private _grant;
     mapping(bytes32 grantDigest => bytes32 launchId) private _launchIdByGrantDigest;
     mapping(bytes32 grantDigest => GrantStatusV1 status) private _grantStatus;
@@ -77,6 +75,9 @@ contract ProgrammableCompletedGraphAdoptionGrantRegistryV1 is IProgrammableCompl
     mapping(bytes32 currentnessDigest => bool used) private _usedCurrentnessDigest;
     mapping(bytes32 currentnessDigest => bool revoked) private _revokedCurrentnessDigest;
     mapping(bytes32 currentnessNonce => bool used) private _usedCurrentnessNonce;
+    bool private _globalAdoptionKilled;
+    uint64 private _killSecurityEpoch;
+    uint64 private _killPolicyEpoch;
 
     error CanonicalCollision(uint8 field, bytes32 existing);
     error CurrentnessAlreadyRevoked(bytes32 digest);
@@ -111,13 +112,13 @@ contract ProgrammableCompletedGraphAdoptionGrantRegistryV1 is IProgrammableCompl
         bytes32 policyEpochHash
     ) {
         if (
-            reviewerAuthority.code.length == 0 || governance.code.length == 0 || finalityAuthority.code.length == 0
-                || indexerAuthority.code.length == 0 || codec.code.length == 0 || validator.code.length == 0
-                || reviewerAuthority == governance || reviewerAuthority == finalityAuthority
-                || reviewerAuthority == indexerAuthority || governance == finalityAuthority
-                || governance == indexerAuthority || finalityAuthority == indexerAuthority
-                || securityControlHeadHash == bytes32(0) || securityEpoch == 0 || securityEpochHash == bytes32(0)
-                || policyEpoch == 0 || policyEpochHash == bytes32(0)
+            !_isDirectDependency(reviewerAuthority) || !_isDirectDependency(governance)
+                || !_isDirectDependency(finalityAuthority) || !_isDirectDependency(indexerAuthority)
+                || !_isDirectDependency(codec) || !_isDirectDependency(validator) || reviewerAuthority == governance
+                || reviewerAuthority == finalityAuthority || reviewerAuthority == indexerAuthority
+                || governance == finalityAuthority || governance == indexerAuthority
+                || finalityAuthority == indexerAuthority || securityControlHeadHash == bytes32(0) || securityEpoch == 0
+                || securityEpochHash == bytes32(0) || policyEpoch == 0 || policyEpochHash == bytes32(0)
         ) revert InvalidBinding(1);
         if (
             ProgrammableCompletedGraphAdoptionCompatCodecV1(codec).CODEC_ID_HASH()
@@ -148,25 +149,69 @@ contract ProgrammableCompletedGraphAdoptionGrantRegistryV1 is IProgrammableCompl
     function registerAdoptionProfileV1(AdoptionProfileCapabilityV1 calldata capability) external override nonReentrant {
         _requireCodec();
         _requireGovernance();
+        bool requiresPool = (capability.requiredIdentityMask & IDENTITY_POOL) != 0;
         if (
             capability.profileKey == bytes32(0) || capability.profileDescriptorHash == bytes32(0)
                 || capability.exactContractBindingHash == bytes32(0) || capability.routeSchemaHash == bytes32(0)
                 || capability.planSchemaArtifactHash == bytes32(0) || capability.policyHash == bytes32(0)
+                || !_isDirectDependency(capability.stateVerifier)
+                || capability.stateVerifierRuntimeCodeHash == bytes32(0)
+                || capability.stateVerifier.codehash != capability.stateVerifierRuntimeCodeHash
+                || capability.stateSchemaHash == bytes32(0)
+                || (requiresPool
+                    && (capability.canonicalPoolManagerChainId != block.chainid
+                        || capability.canonicalPoolManager == address(0)
+                        || capability.canonicalPoolManagerRuntimeCodeHash == bytes32(0)))
+                || (!requiresPool
+                    && (capability.canonicalPoolManagerChainId != 0
+                        || capability.canonicalPoolManager != address(0)
+                        || capability.canonicalPoolManagerRuntimeCodeHash != bytes32(0)))
                 || capability.capabilitySemantics != CapabilitySemanticsV1.Adopt
                 || capability.admissionStatus != AdmissionStatusV1.Admitted
                 || capability.executionReadiness != ExecutionReadinessV1.CompletedGraphAdoptionOnly
                 || capability.executionReadinessConstraintHash != CODEC.ADOPTION_ONLY_READINESS_CONSTRAINT_HASH()
-                || capability.executionTimeConstraint != ExecutionTimeConstraintV1.AdoptionOnlyNoExecution
-                || capability.executionTimeConstraintEvidenceHash != bytes32(0)
+                || capability.executionTimeConstraint == ExecutionTimeConstraintV1.Invalid
+                || (capability.executionTimeConstraint == ExecutionTimeConstraintV1.ExternalExecutionTimeBound
+                    && capability.executionTimeConstraintEvidenceHash == bytes32(0))
+                || (capability.executionTimeConstraint == ExecutionTimeConstraintV1.AdoptionOnlyNoExecution
+                    && capability.executionTimeConstraintEvidenceHash != bytes32(0))
                 || capability.requiredIdentityMask & ~IDENTITY_MASK_ALL != 0
                 || capability.forbiddenIdentityMask & ~IDENTITY_MASK_ALL != 0
                 || capability.requiredIdentityMask & capability.forbiddenIdentityMask != 0 || !capability.enabled
-                || _profileCapability[capability.profileKey].profileKey != bytes32(0)
+                || _profileStatus[capability.profileKey] != ProfileStatusV1.Invalid
                 || CODEC.computeProfileKey(capability.profileDescriptorHash, capability.routeSchemaHash)
                     != capability.profileKey
         ) revert InvalidBinding(2);
         _profileCapability[capability.profileKey] = capability;
+        _profileStatus[capability.profileKey] = ProfileStatusV1.Active;
         emit AdoptionProfileRegisteredV1(capability.profileKey, capability.profileDescriptorHash, capability.policyHash);
+        emit AdoptionProfileStatusUpdatedV1(capability.profileKey, ProfileStatusV1.Active);
+    }
+
+    function setAdoptionProfileStatusV1(bytes32 profileKey, ProfileStatusV1 status) external override nonReentrant {
+        _requireReviewerOrGovernance();
+        ProfileStatusV1 current = _profileStatus[profileKey];
+        if (
+            current == ProfileStatusV1.Invalid || status == ProfileStatusV1.Invalid
+                || (current == ProfileStatusV1.Deprecated && status != ProfileStatusV1.Deprecated)
+        ) revert InvalidBinding(22);
+        _profileStatus[profileKey] = status;
+        emit AdoptionProfileStatusUpdatedV1(profileKey, status);
+    }
+
+    function setGlobalAdoptionKillV1(bool killed) external override nonReentrant {
+        _requireReviewerOrGovernance();
+        if (killed) {
+            _killSecurityEpoch = _securityEpoch;
+            _killPolicyEpoch = _policyEpoch;
+        } else if (!_globalAdoptionKilled || (_securityEpoch <= _killSecurityEpoch && _policyEpoch <= _killPolicyEpoch))
+        {
+            // A recovery must advance at least one control epoch. That fails closed for all grants/currentness
+            // issued before the incident and requires their review/rebind instead of reviving residual permits.
+            revert InvalidBinding(23);
+        }
+        _globalAdoptionKilled = killed;
+        emit GlobalAdoptionKillSetV1(killed);
     }
 
     function activateLaunchGrantV1(LaunchGrantV1 calldata grant, bytes calldata reviewerSignature)
@@ -177,7 +222,7 @@ contract ProgrammableCompletedGraphAdoptionGrantRegistryV1 is IProgrammableCompl
     {
         _requireCodec();
         AdoptionProfileCapabilityV1 memory capability = _profileCapability[grant.profileKey];
-        if (!capability.enabled || capability.admissionStatus != AdmissionStatusV1.Admitted) revert InvalidBinding(3);
+        _requireAvailableProfile(grant.profileKey, capability, 3);
         _validateGrantActivation(grant, capability);
         digest = launchGrantDigest(grant);
         if (grant.grantDigest != digest || grant.grantHash != CODEC.computeLaunchGrantHash(grant)) {
@@ -245,11 +290,14 @@ contract ProgrammableCompletedGraphAdoptionGrantRegistryV1 is IProgrammableCompl
         returns (bytes32 coreHash)
     {
         _requireCodec();
+        AdoptionProfileCapabilityV1 memory capability = _profileCapability[adoption.plan.profileKey];
         bytes32 planHash = CODEC.computePlanHash(adoption.plan);
         bytes32 grantDigest = launchGrantDigest(adoption.grant);
         bytes32 launchId =
             CODEC.computeLaunchId(address(this), adoption.plan.launchWallet, adoption.plan.profileKey, planHash);
-        _validateAdoptionEnvelope(adoption.grant, adoption.plan, adoption.request, grantDigest, planHash, launchId);
+        _validateAdoptionEnvelope(
+            adoption.grant, capability, adoption.plan, adoption.request, grantDigest, planHash, launchId
+        );
         bytes32 currentnessDigest = _validateCurrentness(
             adoption.grant,
             adoption.plan,
@@ -260,19 +308,14 @@ contract ProgrammableCompletedGraphAdoptionGrantRegistryV1 is IProgrammableCompl
             planHash
         );
         _requireValidator();
-        VALIDATOR.validateCompletedGraphV1(address(this), adoption.plan, adoption.components, adoption.edges);
+        VALIDATOR.validateCompletedGraphV1(
+            address(this), capability, adoption.plan, adoption.components, adoption.edges, adoption.request
+        );
         _reserveComponents(adoption.plan, adoption.components, launchId);
         _consumeCurrentness(adoption.currentness, currentnessDigest);
         _grantStatus[grantDigest] = GrantStatusV1.Consumed;
         coreHash = _recordAdoption(
-            adoption.grant,
-            adoption.plan,
-            adoption.request,
-            grantDigest,
-            adoption.currentness,
-            currentnessDigest,
-            launchId,
-            planHash
+            adoption.grant, adoption.request, grantDigest, currentnessDigest, launchId, planHash, capability
         );
         emit LaunchGrantConsumedV1(launchId, grantDigest);
         emit CanonicalReceiptAdoptedV1(launchId, coreHash, grantDigest);
@@ -322,36 +365,16 @@ contract ProgrammableCompletedGraphAdoptionGrantRegistryV1 is IProgrammableCompl
         return _hashTypedDataV4(CODEC.computeExecutionCurrentnessStructHash(currentness));
     }
 
-    function computePlanHash(CompletedGraphPlanV1 calldata plan) external pure override returns (bytes32) {
-        return keccak256(
-            abi.encode(
-                keccak256("ProgrammableCompletedGraphAdoptionPlanV1(bytes32 abiEncodedPlanHash)"),
-                keccak256(abi.encode(plan))
-            )
-        );
-    }
-
-    function computeLaunchId(address registry, address launchWallet, bytes32 profileKey, bytes32 contractPlanHash)
-        external
-        view
-        override
-        returns (bytes32)
-    {
-        _requireCodec();
-        return CODEC.computeLaunchId(registry, launchWallet, profileKey, contractPlanHash);
-    }
-
-    function computeAdoptionRequestHash(AdoptionRequestV1 calldata request) external pure override returns (bytes32) {
-        return keccak256(
-            abi.encode(
-                keccak256("ProgrammableCompletedGraphAdoptionRequestV1(bytes32 abiEncodedRequestHash)"),
-                keccak256(abi.encode(request))
-            )
-        );
-    }
-
     function launchGrantStatus(bytes32 digest) external view override returns (GrantStatusV1) {
         return _grantStatus[digest];
+    }
+
+    function adoptionProfileStatusV1(bytes32 profileKey) external view override returns (ProfileStatusV1) {
+        return _profileStatus[profileKey];
+    }
+
+    function globalAdoptionKilledV1() external view override returns (bool) {
+        return _globalAdoptionKilled;
     }
 
     function executionCurrentnessRevokedV1(bytes32 digest) external view override returns (bool) {
@@ -382,6 +405,7 @@ contract ProgrammableCompletedGraphAdoptionGrantRegistryV1 is IProgrammableCompl
     function currentSecurityPolicyEpochs()
         external
         view
+        override
         returns (
             bytes32 securityControlHeadHash,
             uint64 securityEpoch,
@@ -408,6 +432,8 @@ contract ProgrammableCompletedGraphAdoptionGrantRegistryV1 is IProgrammableCompl
                 || grant.executionReadiness != capability.executionReadiness
                 || grant.executionReadinessConstraintHash != capability.executionReadinessConstraintHash
                 || grant.executionTimeConstraint == ExecutionTimeConstraintV1.Invalid
+                || grant.executionTimeConstraint != capability.executionTimeConstraint
+                || grant.executionTimeConstraintEvidenceHash != capability.executionTimeConstraintEvidenceHash
                 || (grant.executionTimeConstraint == ExecutionTimeConstraintV1.ExternalExecutionTimeBound
                     && grant.executionTimeConstraintEvidenceHash == bytes32(0))
                 || (grant.executionTimeConstraint == ExecutionTimeConstraintV1.AdoptionOnlyNoExecution
@@ -415,8 +441,8 @@ contract ProgrammableCompletedGraphAdoptionGrantRegistryV1 is IProgrammableCompl
                 || grant.sourceRepositoryHash == bytes32(0) || grant.sourceCommitHash == bytes32(0)
                 || grant.sourceTreeHash == bytes32(0) || grant.componentGraphHash == bytes32(0)
                 || grant.exactRuntimeSetHash == bytes32(0) || grant.componentConfigurationSetHash == bytes32(0)
-                || grant.resultHash == bytes32(0) || grant.builderEvidenceHash == bytes32(0)
-                || grant.reviewerAttestationHash == bytes32(0)
+                || grant.revenueBindingHash != bytes32(0) || grant.resultHash == bytes32(0)
+                || grant.builderEvidenceHash == bytes32(0) || grant.reviewerAttestationHash == bytes32(0)
                 || grant.securityControlHeadHash != _securityControlHeadHash
                 || grant.securityEpochHash != _securityEpochHash || grant.policyHash != capability.policyHash
                 || grant.policyEpochHash != _policyEpochHash || grant.securityEpoch != _securityEpoch
@@ -427,16 +453,16 @@ contract ProgrammableCompletedGraphAdoptionGrantRegistryV1 is IProgrammableCompl
 
     function _validateAdoptionEnvelope(
         LaunchGrantV1 calldata grant,
+        AdoptionProfileCapabilityV1 memory capability,
         CompletedGraphPlanV1 calldata plan,
         AdoptionRequestV1 calldata request,
         bytes32 grantDigest,
         bytes32 planHash,
         bytes32 launchId
     ) private view {
-        AdoptionProfileCapabilityV1 memory capability = _profileCapability[plan.profileKey];
+        _requireAvailableProfile(plan.profileKey, capability, 7);
         if (
-            msg.sender != plan.launchWallet || !capability.enabled
-                || capability.capabilitySemantics != CapabilitySemanticsV1.Adopt
+            msg.sender != plan.launchWallet || capability.capabilitySemantics != CapabilitySemanticsV1.Adopt
                 || capability.admissionStatus != AdmissionStatusV1.Admitted
                 || capability.executionReadiness != ExecutionReadinessV1.CompletedGraphAdoptionOnly
                 || plan.profileDescriptorHash != capability.profileDescriptorHash
@@ -452,6 +478,8 @@ contract ProgrammableCompletedGraphAdoptionGrantRegistryV1 is IProgrammableCompl
                 || plan.executionReadiness != capability.executionReadiness
                 || plan.executionReadinessConstraintHash != capability.executionReadinessConstraintHash
                 || plan.executionTimeConstraint == ExecutionTimeConstraintV1.Invalid
+                || plan.executionTimeConstraint != capability.executionTimeConstraint
+                || plan.executionTimeConstraintEvidenceHash != capability.executionTimeConstraintEvidenceHash
                 || (plan.executionTimeConstraint == ExecutionTimeConstraintV1.ExternalExecutionTimeBound
                     && plan.executionTimeConstraintEvidenceHash == bytes32(0))
                 || (plan.executionTimeConstraint == ExecutionTimeConstraintV1.AdoptionOnlyNoExecution
@@ -461,8 +489,8 @@ contract ProgrammableCompletedGraphAdoptionGrantRegistryV1 is IProgrammableCompl
                 || plan.compilerArtifactHash == bytes32(0) || plan.applicantPlanArtifactHash == bytes32(0)
                 || plan.componentGraphHash == bytes32(0) || plan.exactRuntimeSetHash == bytes32(0)
                 || plan.componentConfigurationSetHash == bytes32(0) || plan.configurationHash == bytes32(0)
-                || plan.architectureResultHash == bytes32(0) || plan.deploymentLineageHash == bytes32(0)
-                || plan.resultHash == bytes32(0)
+                || plan.revenueBindingHash != bytes32(0) || plan.architectureResultHash == bytes32(0)
+                || plan.deploymentLineageHash == bytes32(0) || plan.resultHash == bytes32(0)
         ) revert InvalidBinding(7);
         if (
             _grantStatus[grantDigest] != GrantStatusV1.Active || _launchIdByGrantDigest[grantDigest] != launchId
@@ -480,13 +508,17 @@ contract ProgrammableCompletedGraphAdoptionGrantRegistryV1 is IProgrammableCompl
                 || grant.componentGraphHash != plan.componentGraphHash
                 || grant.exactRuntimeSetHash != plan.exactRuntimeSetHash
                 || grant.componentConfigurationSetHash != plan.componentConfigurationSetHash
-                || grant.resultHash != plan.resultHash || grant.policyHash != plan.policyHash
+                || grant.revenueBindingHash != plan.revenueBindingHash || grant.resultHash != plan.resultHash
+                || grant.policyHash != plan.policyHash || grant.securityControlHeadHash != _securityControlHeadHash
+                || grant.securityEpoch != _securityEpoch || grant.securityEpochHash != _securityEpochHash
+                || grant.policyEpoch != _policyEpoch || grant.policyEpochHash != _policyEpochHash
         ) revert InvalidBinding(8);
         if (
             request.launchId != launchId || request.profileKey != plan.profileKey
                 || request.componentGraphHash != plan.componentGraphHash || request.resultHash != plan.resultHash
                 || request.currentArchitectureStateHash == bytes32(0)
                 || ((plan.identityMask & IDENTITY_POOL) != 0) != (request.currentPoolStateHash != bytes32(0))
+                || request.currentRevenueStateHash != bytes32(0)
         ) revert InvalidBinding(9);
     }
 
@@ -497,6 +529,17 @@ contract ProgrammableCompletedGraphAdoptionGrantRegistryV1 is IProgrammableCompl
         for (uint256 i; i < components.length; ++i) {
             ComponentV1 calldata component = components[i];
             _reserveComponent(component, launchId);
+            emit CanonicalComponentRecordedV1(
+                launchId,
+                uint8(i),
+                component.account,
+                component.kind,
+                component.scope,
+                component.deploymentKind,
+                component.runtimeCodeHash,
+                component.configurationHash,
+                component.creationEvidenceHash
+            );
             if (
                 component.kind == ComponentKindV1.Token && component.account == plan.identities.token
                     && component.scope == ComponentScopeV1.Exclusive
@@ -560,67 +603,21 @@ contract ProgrammableCompletedGraphAdoptionGrantRegistryV1 is IProgrammableCompl
 
     function _recordAdoption(
         LaunchGrantV1 calldata grant,
-        CompletedGraphPlanV1 calldata plan,
         AdoptionRequestV1 calldata request,
         bytes32 grantDigest,
-        ExecutionCurrentnessV1 calldata currentness,
         bytes32 currentnessDigest,
         bytes32 launchId,
-        bytes32 planHash
+        bytes32 planHash,
+        AdoptionProfileCapabilityV1 memory capability
     ) private returns (bytes32 coreHash) {
         CanonicalReceiptCoreV1 memory core;
         core.launchId = launchId;
         core.launchGrantDigest = grantDigest;
+        core.launchGrantHash = grant.grantHash;
         core.executionCurrentnessDigest = currentnessDigest;
-        core.launchWallet = plan.launchWallet;
-        core.profileKey = plan.profileKey;
-        core.profileDescriptorHash = plan.profileDescriptorHash;
-        core.exactContractBindingHash = plan.exactContractBindingHash;
-        core.launchClassification = plan.launchClassification;
-        core.identityMask = plan.identityMask;
-        core.sourceRepositoryHash = plan.sourceRepositoryHash;
-        core.sourceCommitHash = plan.sourceCommitHash;
-        core.sourceTreeHash = plan.sourceTreeHash;
-        core.manifestHash = plan.manifestHash;
-        core.policyHash = plan.policyHash;
-        core.compilerArtifactHash = plan.compilerArtifactHash;
-        core.applicantPlanArtifactHash = plan.applicantPlanArtifactHash;
-        core.adoptionIntentHash = plan.adoptionIntentHash;
-        core.executionReadiness = plan.executionReadiness;
-        core.executionReadinessConstraintHash = plan.executionReadinessConstraintHash;
-        core.executionTimeConstraint = plan.executionTimeConstraint;
-        core.executionTimeConstraintEvidenceHash = plan.executionTimeConstraintEvidenceHash;
-        core.builderEvidenceHash = grant.builderEvidenceHash;
-        core.reviewerAttestationHash = grant.reviewerAttestationHash;
-        core.reviewSecurityControlHeadHash = grant.securityControlHeadHash;
-        core.reviewSecurityEpochHash = grant.securityEpochHash;
-        core.reviewPolicyEpochHash = grant.policyEpochHash;
-        core.reviewSecurityEpoch = grant.securityEpoch;
-        core.reviewPolicyEpoch = grant.policyEpoch;
-        core.securityControlHeadHash = currentness.securityControlHeadHash;
-        core.securityEpochHash = currentness.securityEpochHash;
-        core.policyEpochHash = currentness.policyEpochHash;
-        core.securityEpoch = currentness.securityEpoch;
-        core.policyEpoch = currentness.policyEpoch;
-        core.oneWinnerNonce = grant.oneWinnerNonce;
-        core.winnerKeyHash = grant.winnerKeyHash;
-        core.identities = plan.identities;
-        core.componentGraphHash = plan.componentGraphHash;
-        core.exactRuntimeSetHash = plan.exactRuntimeSetHash;
-        core.componentConfigurationSetHash = plan.componentConfigurationSetHash;
-        core.configurationHash = plan.configurationHash;
-        core.poolManager = plan.poolManager;
-        core.poolManagerRuntimeCodeHash = plan.poolManagerRuntimeCodeHash;
-        core.poolManagerComponentIndex = plan.poolManagerComponentIndex;
-        core.poolId = plan.poolId;
-        core.poolKeyHash = plan.poolKeyHash;
-        core.poolResultHash = plan.poolResultHash;
-        core.architectureResultHash = plan.architectureResultHash;
-        core.deploymentLineageHash = plan.deploymentLineageHash;
-        core.resultHash = plan.resultHash;
-        core.currentArchitectureStateHash = request.currentArchitectureStateHash;
-        core.currentPoolStateHash = request.currentPoolStateHash;
         core.contractPlanHash = planHash;
+        core.profileCapabilityHash = CODEC.computeAdoptionProfileCapabilityHash(capability);
+        core.adoptionRequestHash = CODEC.computeAdoptionRequestHash(request);
         coreHash = CODEC.computeCanonicalReceiptCoreHash(core);
         core.receiptCoreHash = coreHash;
         _canonicalReceiptCore[launchId] = core;
@@ -718,5 +715,30 @@ contract ProgrammableCompletedGraphAdoptionGrantRegistryV1 is IProgrammableCompl
 
     function _requireValidator() private view {
         if (address(VALIDATOR).codehash != VALIDATOR_RUNTIME_CODE_HASH) revert InvalidBinding(21);
+    }
+
+    function _requireAvailableProfile(bytes32 profileKey, AdoptionProfileCapabilityV1 memory capability, uint8 field)
+        private
+        view
+    {
+        if (
+            _globalAdoptionKilled || _profileStatus[profileKey] != ProfileStatusV1.Active || !capability.enabled
+                || capability.admissionStatus != AdmissionStatusV1.Admitted
+        ) revert InvalidBinding(field);
+    }
+
+    function _isDirectDependency(address dependency) private view returns (bool) {
+        if (dependency.code.length == 0) return false;
+        bytes memory runtime = dependency.code;
+        for (uint256 i; i < runtime.length; ++i) {
+            uint8 opcode = uint8(runtime[i]);
+            if (opcode == 0xf4) return false;
+            if (opcode >= 0x60 && opcode <= 0x7f) {
+                unchecked {
+                    i += opcode - 0x5f;
+                }
+            }
+        }
+        return true;
     }
 }

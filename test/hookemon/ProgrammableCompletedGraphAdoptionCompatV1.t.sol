@@ -2,7 +2,8 @@
 pragma solidity 0.8.26;
 
 import {
-    IProgrammableCompletedGraphAdoptionCompatV1
+    IProgrammableCompletedGraphAdoptionCompatV1,
+    IProgrammableCompletedGraphAdoptionStateVerifierV1
 } from "../../src/hookemon/IProgrammableCompletedGraphAdoptionCompatV1.sol";
 import {
     ProgrammableCompletedGraphAdoptionCompatCodecV1
@@ -16,10 +17,32 @@ import {
 
 interface VmCompatV1 {
     function warp(uint256 newTimestamp) external;
+
+    function etch(address target, bytes calldata code) external;
 }
 
 contract CompatAuthorityV1 {
-    function isValidSignature(bytes32, bytes calldata) external pure returns (bytes4) {
+    uint8 private _signatureMode;
+    bytes32 private _expectedDigest;
+
+    function setSignatureMode(uint8 signatureMode) external {
+        _signatureMode = signatureMode;
+    }
+
+    function setExpectedDigest(bytes32 expectedDigest) external {
+        _expectedDigest = expectedDigest;
+    }
+
+    function isValidSignature(bytes32 digest, bytes calldata) external view returns (bytes4) {
+        if (_signatureMode == 1) return 0xffffffff;
+        if (_signatureMode == 2) revert("compat authority revert");
+        if (_signatureMode == 3) {
+            assembly ("memory-safe") {
+                mstore(0, 0x1626ba7e)
+                return(31, 1)
+            }
+        }
+        if (_signatureMode == 4 && digest != _expectedDigest) return 0xffffffff;
         return 0x1626ba7e;
     }
 
@@ -50,6 +73,25 @@ contract CompatAuthorityV1 {
             securityControlHeadHash, securityEpoch, securityEpochHash, policyEpoch, policyEpochHash
         );
     }
+
+    function setProfileStatus(
+        ProgrammableCompletedGraphAdoptionGrantRegistryV1 registry,
+        bytes32 profileKey,
+        IProgrammableCompletedGraphAdoptionCompatV1.ProfileStatusV1 status
+    ) external {
+        registry.setAdoptionProfileStatusV1(profileKey, status);
+    }
+
+    function setGlobalKill(ProgrammableCompletedGraphAdoptionGrantRegistryV1 registry, bool killed) external {
+        registry.setGlobalAdoptionKillV1(killed);
+    }
+
+    function advanceFinality(
+        ProgrammableCompletedGraphAdoptionGrantRegistryV1 registry,
+        IProgrammableCompletedGraphAdoptionCompatV1.FinalityIndexingReceiptV1 calldata receipt
+    ) external {
+        registry.advanceFinalityIndexingV1(receipt);
+    }
 }
 
 contract CompatGraphNodeV1 {
@@ -57,6 +99,62 @@ contract CompatGraphNodeV1 {
 
     constructor(uint256 marker) {
         _marker = marker;
+    }
+}
+
+contract CompatStateVerifierV1 is IProgrammableCompletedGraphAdoptionStateVerifierV1 {
+    bytes32 private _architectureStateHash;
+    bytes32 private _poolStateHash;
+    bytes32 private _revenueStateHash;
+    uint8 private _mode;
+
+    function setStates(bytes32 architectureStateHash, bytes32 poolStateHash, bytes32 revenueStateHash) external {
+        _architectureStateHash = architectureStateHash;
+        _poolStateHash = poolStateHash;
+        _revenueStateHash = revenueStateHash;
+    }
+
+    function setMode(uint8 mode) external {
+        _mode = mode;
+    }
+
+    function verifyCurrentStateV1(
+        address,
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionProfileCapabilityV1 calldata,
+        IProgrammableCompletedGraphAdoptionCompatV1.CompletedGraphPlanV1 calldata,
+        IProgrammableCompletedGraphAdoptionCompatV1.ComponentV1[] calldata components,
+        IProgrammableCompletedGraphAdoptionCompatV1.GraphEdgeV1[] calldata edges,
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionRequestV1 calldata
+    ) external view returns (bytes32 architectureStateHash, bytes32 poolStateHash, bytes32 revenueStateHash) {
+        if (components.length != 2 || edges.length != 1) revert("unexpected graph");
+        if (_mode == 1) revert("compat verifier revert");
+        if (_mode == 2) {
+            assembly ("memory-safe") {
+                return(0, 32)
+            }
+        }
+        return (_architectureStateHash, _poolStateHash, _revenueStateHash);
+    }
+}
+
+/// @dev Test-only proxy-shaped dependency. Registration must reject its actual DELEGATECALL opcode.
+contract CompatDelegateProxyV1 {
+    address private immutable _implementation;
+
+    constructor(address implementation) {
+        _implementation = implementation;
+    }
+
+    fallback() external payable {
+        address implementation = _implementation;
+        assembly ("memory-safe") {
+            calldatacopy(0, 0, calldatasize())
+            let success := delegatecall(gas(), implementation, 0, calldatasize(), 0, 0)
+            returndatacopy(0, 0, returndatasize())
+            switch success
+            case 0 { revert(0, returndatasize()) }
+            default { return(0, returndatasize()) }
+        }
     }
 }
 
@@ -70,7 +168,11 @@ contract ProgrammableCompletedGraphAdoptionCompatV1Test {
     struct Fixture {
         ProgrammableCompletedGraphAdoptionCompatCodecV1 codec;
         ProgrammableCompletedGraphAdoptionGrantRegistryV1 registry;
+        CompatAuthorityV1 reviewer;
         CompatAuthorityV1 governance;
+        CompatAuthorityV1 finality;
+        CompatAuthorityV1 indexer;
+        CompatStateVerifierV1 stateVerifier;
         IProgrammableCompletedGraphAdoptionCompatV1.CompletedGraphAdoptionV1 adoption;
     }
 
@@ -95,10 +197,15 @@ contract ProgrammableCompletedGraphAdoptionCompatV1Test {
             fixture.registry.canonicalReceiptCore(launchId);
         require(core.receiptCoreHash == coreHash, "receipt self hash mismatch");
         require(core.launchGrantDigest == grantDigest, "grant digest mismatch");
+        require(core.launchGrantHash == fixture.adoption.grant.grantHash, "grant hash mismatch");
+        require(core.contractPlanHash == fixture.adoption.grant.contractPlanHash, "plan hash mismatch");
         require(
-            core.executionReadiness
-                == IProgrammableCompletedGraphAdoptionCompatV1.ExecutionReadinessV1.CompletedGraphAdoptionOnly,
-            "wrong readiness"
+            core.adoptionRequestHash == fixture.codec.computeAdoptionRequestHash(fixture.adoption.request),
+            "request hash mismatch"
+        );
+        require(core.profileCapabilityHash != bytes32(0), "empty capability hash");
+        require(
+            core.receiptCoreHash == fixture.codec.computeCanonicalReceiptCoreHash(core), "canonical core hash mismatch"
         );
     }
 
@@ -177,7 +284,7 @@ contract ProgrammableCompletedGraphAdoptionCompatV1Test {
         );
     }
 
-    function testEpochAdvanceBlocksStaleCurrentnessWithoutRevokingTheGrant() external {
+    function testEpochAdvanceRequiresGrantRereviewAndRebind() external {
         Fixture memory fixture = _fixture();
         fixture.governance
             .advanceEpochs(
@@ -199,17 +306,201 @@ contract ProgrammableCompletedGraphAdoptionCompatV1Test {
         );
     }
 
-    function testExternalExecutionConstraintRequiresEvidenceAndCannotCreateAnExecutePath() external {
+    function testFreshCurrentnessAtNewEpochCannotConsumeOldGrant() external {
+        Fixture memory fixture = _fixture();
+        bytes32 newHead = keccak256("compat-security-head-v2");
+        bytes32 newSecurityEpochHash = keccak256("compat-security-epoch-v2");
+        bytes32 newPolicyEpochHash = keccak256("compat-policy-epoch-v2");
+        fixture.governance.advanceEpochs(fixture.registry, newHead, 2, newSecurityEpochHash, 2, newPolicyEpochHash);
+        fixture.adoption.currentness.securityControlHeadHash = newHead;
+        fixture.adoption.currentness.securityEpoch = 2;
+        fixture.adoption.currentness.securityEpochHash = newSecurityEpochHash;
+        fixture.adoption.currentness.policyEpoch = 2;
+        fixture.adoption.currentness.policyEpochHash = newPolicyEpochHash;
+        fixture.adoption.currentness.nonce = keccak256("compat-fresh-currentness-after-epoch");
+
+        (bool success,) =
+            address(fixture.registry).call(abi.encodeCall(fixture.registry.adoptCompletedGraphV1, (fixture.adoption)));
+        require(!success, "fresh currentness bypassed stale grant review");
+        require(
+            fixture.registry.launchGrantStatus(fixture.adoption.grant.grantDigest)
+                == IProgrammableCompletedGraphAdoptionCompatV1.GrantStatusV1.Active,
+            "failed rebind check consumed grant"
+        );
+    }
+
+    function testGlobalKillBlocksActivationAndConsumptionUntilEpochRebind() external {
+        Fixture memory fixture = _fixture();
+        fixture.governance.setGlobalKill(fixture.registry, true);
+        require(fixture.registry.globalAdoptionKilledV1(), "global kill not recorded");
+        require(!_adoptionSucceeds(fixture), "global kill allowed consumption");
+
+        (bool activationSucceeded,) = address(fixture.registry)
+            .call(abi.encodeCall(fixture.registry.activateLaunchGrantV1, (fixture.adoption.grant, hex"01")));
+        require(!activationSucceeded, "global kill allowed activation");
+
+        fixture.governance
+            .advanceEpochs(
+                fixture.registry,
+                keccak256("compat-security-head-after-kill"),
+                2,
+                keccak256("compat-security-epoch-after-kill"),
+                2,
+                keccak256("compat-policy-epoch-after-kill")
+            );
+        fixture.governance.setGlobalKill(fixture.registry, false);
+        require(!fixture.registry.globalAdoptionKilledV1(), "global kill did not clear after epoch advance");
+        require(!_adoptionSucceeds(fixture), "pre-incident grant revived after kill clear");
+    }
+
+    function testSuspendedAndDeprecatedProfileBlockConsumptionAndRegistration() external {
+        Fixture memory fixture = _fixture();
+        bytes32 profileKey = fixture.adoption.plan.profileKey;
+        fixture.governance
+            .setProfileStatus(
+                fixture.registry, profileKey, IProgrammableCompletedGraphAdoptionCompatV1.ProfileStatusV1.Suspended
+            );
+        require(
+            fixture.registry.adoptionProfileStatusV1(profileKey)
+                == IProgrammableCompletedGraphAdoptionCompatV1.ProfileStatusV1.Suspended,
+            "profile not suspended"
+        );
+        require(!_adoptionSucceeds(fixture), "suspended profile consumed grant");
+        (bool activationSucceeded,) = address(fixture.registry)
+            .call(abi.encodeCall(fixture.registry.activateLaunchGrantV1, (fixture.adoption.grant, hex"01")));
+        require(!activationSucceeded, "suspended profile allowed activation");
+
+        fixture.governance
+            .setProfileStatus(
+                fixture.registry, profileKey, IProgrammableCompletedGraphAdoptionCompatV1.ProfileStatusV1.Deprecated
+            );
+        require(
+            fixture.registry.adoptionProfileStatusV1(profileKey)
+                == IProgrammableCompletedGraphAdoptionCompatV1.ProfileStatusV1.Deprecated,
+            "profile not deprecated"
+        );
+        require(!_adoptionSucceeds(fixture), "deprecated profile consumed grant");
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionProfileCapabilityV1 memory capability = _capability(fixture);
+        (bool registrationSucceeded,) = address(fixture.governance)
+            .call(abi.encodeCall(fixture.governance.register, (fixture.registry, capability)));
+        require(!registrationSucceeded, "deprecated profile was re-registered");
+    }
+
+    function testVerifierStateMutationAfterReviewBlocksAtomicConsumption() external {
+        Fixture memory fixture = _fixture();
+        fixture.stateVerifier.setStates(keccak256("mutated-architecture-state"), bytes32(0), bytes32(0));
+        require(!_adoptionSucceeds(fixture), "mutated current state accepted");
+        require(
+            fixture.registry.launchGrantStatus(fixture.adoption.grant.grantDigest)
+                == IProgrammableCompletedGraphAdoptionCompatV1.GrantStatusV1.Active,
+            "failed verifier check consumed grant"
+        );
+    }
+
+    function testVerifierRevertAndMalformedReturnAreFailClosed() external {
+        Fixture memory revertingFixture = _fixture();
+        revertingFixture.stateVerifier.setMode(1);
+        require(!_adoptionSucceeds(revertingFixture), "reverting verifier accepted");
+
+        Fixture memory malformedFixture = _fixture();
+        malformedFixture.stateVerifier.setMode(2);
+        require(!_adoptionSucceeds(malformedFixture), "malformed verifier return accepted");
+    }
+
+    function testCreateNonceZeroEvidenceIsAcceptedWhenTypedProvenanceMatches() external {
+        Fixture memory fixture = _fixture();
+        address deployer = 0x0000000000000000000000000000000000001234;
+        address created = _createAddressAtNonceZero(deployer);
+        bytes memory runtime = fixture.adoption.components[0].account.code;
+        VM.etch(created, runtime);
+
+        IProgrammableCompletedGraphAdoptionCompatV1.ComponentV1 memory component = fixture.adoption.components[0];
+        component.account = created;
+        component.deploymentKind = IProgrammableCompletedGraphAdoptionCompatV1.DeploymentKindV1.Create;
+        component.deployer = deployer;
+        component.createNonce = 0;
+        component.create2Salt = bytes32(0);
+        component.initCodeHash = keccak256("compat-create-nonce-zero-initcode");
+        component.externalCanonicalIdHash = bytes32(0);
+        component.runtimeCodeHash = created.codehash;
+        component.createTransactionEvidence = IProgrammableCompletedGraphAdoptionCompatV1.CreateTransactionEvidenceV1({
+            transactionHash: keccak256("compat-create-nonce-zero-tx"),
+            blockNumber: 1,
+            blockHash: keccak256("compat-create-nonce-zero-block"),
+            transactionIndex: 0,
+            sender: deployer,
+            senderNonce: 0,
+            to: address(0),
+            valueWei: 0,
+            inputHash: component.initCodeHash,
+            receiptSucceeded: true,
+            createdAddress: created,
+            finalityEvidenceHash: keccak256("compat-create-nonce-zero-finality"),
+            dualProviderEvidenceHash: keccak256("compat-create-nonce-zero-dual-provider")
+        });
+        fixture.adoption.components[0] = component;
+        _sortTwoComponents(fixture.adoption.components);
+        _refreshPlanCommitments(fixture);
+
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionProfileCapabilityV1 memory capability = _capability(fixture);
+        fixture.registry.VALIDATOR()
+            .validateCompletedGraphV1(
+                address(fixture.registry),
+                capability,
+                fixture.adoption.plan,
+                fixture.adoption.components,
+                fixture.adoption.edges,
+                fixture.adoption.request
+            );
+    }
+
+    function testErc1271WrongMagicRevertAndShortReturnAreFailClosed() external {
+        _assertAuthorityModeRejects(1, false);
+        _assertAuthorityModeRejects(2, false);
+        _assertAuthorityModeRejects(3, false);
+    }
+
+    function testErc1271DigestMutationIsRejected() external {
+        _assertAuthorityModeRejects(4, true);
+    }
+
+    function testGrantExecutionConstraintMustExactlyMatchTheRegisteredAdoptCapability() external {
         Fixture memory fixture = _fixture();
         fixture.adoption.grant.executionTimeConstraint =
         IProgrammableCompletedGraphAdoptionCompatV1.ExecutionTimeConstraintV1.ExternalExecutionTimeBound;
+        fixture.adoption.grant.executionTimeConstraintEvidenceHash = keccak256("source-execution-window-evidence");
         fixture.adoption.grant.oneWinnerNonce = keccak256("compat-external-time-bound-nonce");
         fixture.adoption.grant.grantHash = fixture.codec.computeLaunchGrantHash(fixture.adoption.grant);
         fixture.adoption.grant.grantDigest = fixture.registry.launchGrantDigest(fixture.adoption.grant);
 
         (bool success,) = address(fixture.registry)
             .call(abi.encodeCall(fixture.registry.activateLaunchGrantV1, (fixture.adoption.grant, hex"01")));
-        require(!success, "unproven source execution constraint accepted");
+        require(!success, "grant constraint bypassed registered ADOPT capability");
+    }
+
+    function testDenyCapabilityAndProxyShapedVerifierCannotBeRegistered() external {
+        Fixture memory fixture = _fixture();
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionProfileCapabilityV1 memory denied = _capability(fixture);
+        denied.profileDescriptorHash = keccak256("compat-deny-profile-descriptor");
+        denied.routeSchemaHash = keccak256("compat-deny-route-schema");
+        denied.profileKey = fixture.codec.computeProfileKey(denied.profileDescriptorHash, denied.routeSchemaHash);
+        denied.admissionStatus =
+        IProgrammableCompletedGraphAdoptionCompatV1.AdmissionStatusV1.DenyPendingReviewAndDeploymentEvidence;
+        (bool deniedRegistrationSucceeded,) =
+            address(fixture.governance).call(abi.encodeCall(fixture.governance.register, (fixture.registry, denied)));
+        require(!deniedRegistrationSucceeded, "DENY capability was registered");
+
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionProfileCapabilityV1 memory proxyBound = _capability(fixture);
+        proxyBound.profileDescriptorHash = keccak256("compat-proxy-profile-descriptor");
+        proxyBound.routeSchemaHash = keccak256("compat-proxy-route-schema");
+        proxyBound.profileKey =
+            fixture.codec.computeProfileKey(proxyBound.profileDescriptorHash, proxyBound.routeSchemaHash);
+        CompatDelegateProxyV1 proxy = new CompatDelegateProxyV1(address(fixture.stateVerifier));
+        proxyBound.stateVerifier = address(proxy);
+        proxyBound.stateVerifierRuntimeCodeHash = address(proxy).codehash;
+        (bool proxyRegistrationSucceeded,) = address(fixture.governance)
+            .call(abi.encodeCall(fixture.governance.register, (fixture.registry, proxyBound)));
+        require(!proxyRegistrationSucceeded, "delegatecall-shaped verifier was registered");
     }
 
     function testLegacyCustomGraphRouteCannotBeSilentlyReinterpreted() external {
@@ -245,6 +536,72 @@ contract ProgrammableCompletedGraphAdoptionCompatV1Test {
         );
     }
 
+    function testFuzzWinnerKeyHasExactlyOneActiveGrant(bytes32 competingNonce) external {
+        Fixture memory fixture = _fixture();
+        IProgrammableCompletedGraphAdoptionCompatV1.LaunchGrantV1 memory competing = fixture.adoption.grant;
+        competing.contractPlanHash = keccak256(abi.encode("compat-fuzz-competing-plan", competingNonce));
+        competing.oneWinnerNonce = competingNonce;
+        competing.grantHash = fixture.codec.computeLaunchGrantHash(competing);
+        competing.grantDigest = fixture.registry.launchGrantDigest(competing);
+
+        (bool success,) =
+            address(fixture.registry).call(abi.encodeCall(fixture.registry.activateLaunchGrantV1, (competing, hex"01")));
+        require(!success, "second grant won an occupied winner key");
+    }
+
+    function testFinalityAndIndexingOnlyAppendToTheImmutableReceiptCore() external {
+        Fixture memory fixture = _fixture();
+        bytes32 coreHash = fixture.registry.adoptCompletedGraphV1(fixture.adoption);
+        bytes32 launchId = fixture.adoption.request.launchId;
+        IProgrammableCompletedGraphAdoptionCompatV1.FinalityIndexingReceiptV1 memory finalityReceipt = _finalityReceipt(
+            fixture,
+            launchId,
+            coreHash,
+            IProgrammableCompletedGraphAdoptionCompatV1.ReceiptStatusV1.Finalized,
+            bytes32(0),
+            keccak256("compat-finality-evidence")
+        );
+        fixture.finality.advanceFinality(fixture.registry, finalityReceipt);
+        require(
+            fixture.registry.receiptStatus(launchId)
+                == IProgrammableCompletedGraphAdoptionCompatV1.ReceiptStatusV1.Finalized,
+            "receipt did not finalize"
+        );
+
+        IProgrammableCompletedGraphAdoptionCompatV1.FinalityIndexingReceiptV1 memory indexingReceipt = _finalityReceipt(
+            fixture,
+            launchId,
+            coreHash,
+            IProgrammableCompletedGraphAdoptionCompatV1.ReceiptStatusV1.Indexed,
+            finalityReceipt.finalityIndexingReceiptHash,
+            keccak256("compat-indexing-evidence")
+        );
+        fixture.indexer.advanceFinality(fixture.registry, indexingReceipt);
+        require(
+            fixture.registry.receiptStatus(launchId)
+                == IProgrammableCompletedGraphAdoptionCompatV1.ReceiptStatusV1.Indexed,
+            "receipt did not index"
+        );
+
+        IProgrammableCompletedGraphAdoptionCompatV1.FinalityIndexingReceiptV1 memory publishedReceipt = _finalityReceipt(
+            fixture,
+            launchId,
+            coreHash,
+            IProgrammableCompletedGraphAdoptionCompatV1.ReceiptStatusV1.Published,
+            indexingReceipt.finalityIndexingReceiptHash,
+            keccak256("compat-publication-evidence")
+        );
+        fixture.indexer.advanceFinality(fixture.registry, publishedReceipt);
+        require(
+            fixture.registry.receiptStatus(launchId)
+                == IProgrammableCompletedGraphAdoptionCompatV1.ReceiptStatusV1.Published,
+            "receipt did not publish"
+        );
+        require(
+            fixture.registry.canonicalReceiptCore(launchId).receiptCoreHash == coreHash, "append rewrote receipt core"
+        );
+    }
+
     function testPublishedTypehashesMatchTheCanonicalFormulaStrings() external {
         Fixture memory fixture = _fixture();
         require(
@@ -261,8 +618,17 @@ contract ProgrammableCompletedGraphAdoptionCompatV1Test {
         );
         require(
             fixture.codec.CANONICAL_RECEIPT_CORE_TYPEHASH()
-                == keccak256("ProgrammableCompletedGraphCanonicalReceiptCoreV1(bytes32 abiEncodedReceiptWithoutHash)"),
+                == keccak256(
+                    "ProgrammableCompletedGraphCanonicalReceiptCoreV1(bytes32 launchId,bytes32 launchGrantDigest,bytes32 launchGrantHash,bytes32 executionCurrentnessDigest,bytes32 contractPlanHash,bytes32 profileCapabilityHash,bytes32 adoptionRequestHash)"
+                ),
             "receipt typehash drift"
+        );
+        require(
+            fixture.codec.CREATE_TRANSACTION_EVIDENCE_TYPEHASH()
+                == keccak256(
+                    "ProgrammableCompletedGraphCreateTransactionEvidenceV1(bytes32 transactionHash,uint64 blockNumber,bytes32 blockHash,uint32 transactionIndex,address sender,uint64 senderNonce,address to,uint256 valueWei,bytes32 inputHash,bool receiptSucceeded,address createdAddress,bytes32 finalityEvidenceHash,bytes32 dualProviderEvidenceHash)"
+                ),
+            "create evidence typehash drift"
         );
     }
 
@@ -270,15 +636,16 @@ contract ProgrammableCompletedGraphAdoptionCompatV1Test {
         fixture.codec = new ProgrammableCompletedGraphAdoptionCompatCodecV1();
         ProgrammableCompletedGraphAdoptionValidatorV1 validator =
             new ProgrammableCompletedGraphAdoptionValidatorV1(address(fixture.codec));
-        CompatAuthorityV1 reviewer = new CompatAuthorityV1();
+        fixture.reviewer = new CompatAuthorityV1();
         fixture.governance = new CompatAuthorityV1();
-        CompatAuthorityV1 finality = new CompatAuthorityV1();
-        CompatAuthorityV1 indexer = new CompatAuthorityV1();
+        fixture.stateVerifier = new CompatStateVerifierV1();
+        fixture.finality = new CompatAuthorityV1();
+        fixture.indexer = new CompatAuthorityV1();
         fixture.registry = new ProgrammableCompletedGraphAdoptionGrantRegistryV1(
-            address(reviewer),
+            address(fixture.reviewer),
             address(fixture.governance),
-            address(finality),
-            address(indexer),
+            address(fixture.finality),
+            address(fixture.indexer),
             address(fixture.codec),
             address(validator),
             SECURITY_HEAD,
@@ -292,6 +659,12 @@ contract ProgrammableCompletedGraphAdoptionCompatV1Test {
         IProgrammableCompletedGraphAdoptionCompatV1.AdoptionProfileCapabilityV1 memory capability = _capability(fixture);
         fixture.governance.register(fixture.registry, capability);
         _buildGrantRequestAndCurrentness(fixture);
+        fixture.stateVerifier
+            .setStates(
+                fixture.adoption.request.currentArchitectureStateHash,
+                fixture.adoption.request.currentPoolStateHash,
+                fixture.adoption.request.currentRevenueStateHash
+            );
         fixture.registry.activateLaunchGrantV1(fixture.adoption.grant, hex"01");
     }
 
@@ -325,6 +698,10 @@ contract ProgrammableCompletedGraphAdoptionCompatV1Test {
         plan.deploymentLineageHash = keccak256("compat-deployment-lineage");
         fixture.adoption.plan = plan;
 
+        _buildComponentsAndPlanCommitments(fixture);
+    }
+
+    function _buildComponentsAndPlanCommitments(Fixture memory fixture) private {
         CompatGraphNodeV1 nodeA = new CompatGraphNodeV1(1);
         CompatGraphNodeV1 nodeB = new CompatGraphNodeV1(2);
         fixture.adoption.components = new IProgrammableCompletedGraphAdoptionCompatV1.ComponentV1[](2);
@@ -370,6 +747,7 @@ contract ProgrammableCompletedGraphAdoptionCompatV1Test {
                 fixture.adoption.plan.componentGraphHash,
                 fixture.adoption.plan.componentConfigurationSetHash,
                 fixture.adoption.plan.policyHash,
+                fixture.adoption.plan.revenueBindingHash,
                 address(0),
                 bytes32(0),
                 bytes32(0),
@@ -400,7 +778,8 @@ contract ProgrammableCompletedGraphAdoptionCompatV1Test {
             componentGraphHash: fixture.adoption.plan.componentGraphHash,
             resultHash: fixture.adoption.plan.resultHash,
             currentArchitectureStateHash: keccak256("compat-current-architecture"),
-            currentPoolStateHash: bytes32(0)
+            currentPoolStateHash: bytes32(0),
+            currentRevenueStateHash: bytes32(0)
         });
         IProgrammableCompletedGraphAdoptionCompatV1.LaunchGrantV1 memory grant;
         grant.chainId = block.chainid;
@@ -422,6 +801,7 @@ contract ProgrammableCompletedGraphAdoptionCompatV1Test {
         grant.componentGraphHash = fixture.adoption.plan.componentGraphHash;
         grant.exactRuntimeSetHash = fixture.adoption.plan.exactRuntimeSetHash;
         grant.componentConfigurationSetHash = fixture.adoption.plan.componentConfigurationSetHash;
+        grant.revenueBindingHash = fixture.adoption.plan.revenueBindingHash;
         grant.resultHash = fixture.adoption.plan.resultHash;
         grant.builderEvidenceHash = keccak256("compat-builder-evidence");
         grant.reviewerAttestationHash = keccak256("compat-reviewer-attestation");
@@ -458,9 +838,108 @@ contract ProgrammableCompletedGraphAdoptionCompatV1Test {
         fixture.adoption.currentnessSignature = hex"01";
     }
 
-    function _capability(Fixture memory fixture)
+    function _adoptionSucceeds(Fixture memory fixture) private returns (bool success) {
+        (success,) =
+            address(fixture.registry).call(abi.encodeCall(fixture.registry.adoptCompletedGraphV1, (fixture.adoption)));
+    }
+
+    function _createAddressAtNonceZero(address deployer) private pure returns (address) {
+        return address(uint160(uint256(keccak256(abi.encodePacked(hex"d694", deployer, hex"80")))));
+    }
+
+    function _sortTwoComponents(IProgrammableCompletedGraphAdoptionCompatV1.ComponentV1[] memory components)
         private
         pure
+    {
+        if (components[0].account <= components[1].account) return;
+        IProgrammableCompletedGraphAdoptionCompatV1.ComponentV1 memory first = components[0];
+        components[0] = components[1];
+        components[1] = first;
+    }
+
+    function _refreshPlanCommitments(Fixture memory fixture) private view {
+        for (uint256 i; i < fixture.adoption.components.length; ++i) {
+            fixture.adoption.components[i].creationEvidenceHash = fixture.codec
+                .computeComponentCreationEvidenceHash(
+                    address(fixture.registry), fixture.adoption.plan, i, fixture.adoption.components[i]
+                );
+            fixture.adoption.components[i].configurationHash =
+                fixture.codec.computeComponentConfigurationHash(fixture.adoption.components[i]);
+            if (
+                fixture.adoption.components[i].kind
+                    == IProgrammableCompletedGraphAdoptionCompatV1.ComponentKindV1.Application
+            ) {
+                fixture.adoption.plan.identities.applicationHash =
+                    fixture.codec.computeApplicationIdentityHash(fixture.adoption.components[i]);
+            }
+        }
+        fixture.adoption.plan.componentGraphHash =
+            fixture.codec.computeComponentGraphHash(fixture.adoption.components, fixture.adoption.edges);
+        fixture.adoption.plan.exactRuntimeSetHash =
+            fixture.codec.computeExactRuntimeSetHash(fixture.adoption.components);
+        fixture.adoption.plan.componentConfigurationSetHash =
+            fixture.codec.computeComponentConfigurationSetHash(fixture.adoption.components);
+        fixture.adoption.plan.configurationHash = fixture.codec
+            .computeConfigurationHash(
+                fixture.adoption.plan.componentGraphHash,
+                fixture.adoption.plan.componentConfigurationSetHash,
+                fixture.adoption.plan.policyHash,
+                fixture.adoption.plan.revenueBindingHash,
+                fixture.adoption.plan.poolManager,
+                fixture.adoption.plan.poolManagerRuntimeCodeHash,
+                fixture.adoption.plan.poolKeyHash,
+                fixture.adoption.plan.architectureResultHash
+            );
+        fixture.adoption.plan.resultHash = fixture.codec
+            .computeResultHash(
+                fixture.adoption.plan.componentGraphHash,
+                fixture.adoption.plan.configurationHash,
+                fixture.adoption.plan.architectureResultHash,
+                fixture.adoption.plan.poolResultHash,
+                fixture.adoption.plan.deploymentLineageHash
+            );
+        fixture.adoption.request.componentGraphHash = fixture.adoption.plan.componentGraphHash;
+        fixture.adoption.request.resultHash = fixture.adoption.plan.resultHash;
+    }
+
+    function _assertAuthorityModeRejects(uint8 signatureMode, bool mutateDigest) private {
+        Fixture memory fixture = _fixture();
+        if (mutateDigest) {
+            fixture.reviewer
+                .setExpectedDigest(fixture.registry.executionCurrentnessDigest(fixture.adoption.currentness));
+        }
+        fixture.reviewer.setSignatureMode(signatureMode);
+        if (mutateDigest) {
+            fixture.adoption.currentness.nonce = keccak256("compat-mutated-currentness-digest");
+        }
+        require(!_adoptionSucceeds(fixture), "invalid ERC1271 response accepted");
+        require(
+            fixture.registry.launchGrantStatus(fixture.adoption.grant.grantDigest)
+                == IProgrammableCompletedGraphAdoptionCompatV1.GrantStatusV1.Active,
+            "invalid ERC1271 response consumed grant"
+        );
+    }
+
+    function _finalityReceipt(
+        Fixture memory fixture,
+        bytes32 launchId,
+        bytes32 receiptCoreHash,
+        IProgrammableCompletedGraphAdoptionCompatV1.ReceiptStatusV1 nextStatus,
+        bytes32 previousHash,
+        bytes32 evidenceHash
+    ) private pure returns (IProgrammableCompletedGraphAdoptionCompatV1.FinalityIndexingReceiptV1 memory receipt) {
+        receipt.launchId = launchId;
+        receipt.receiptCoreHash = receiptCoreHash;
+        receipt.launchGrantDigest = fixture.adoption.grant.grantDigest;
+        receipt.nextStatus = nextStatus;
+        receipt.previousFinalityIndexingReceiptHash = previousHash;
+        receipt.evidenceHash = evidenceHash;
+        receipt.finalityIndexingReceiptHash = fixture.codec.computeFinalityIndexingReceiptHash(receipt);
+    }
+
+    function _capability(Fixture memory fixture)
+        private
+        view
         returns (IProgrammableCompletedGraphAdoptionCompatV1.AdoptionProfileCapabilityV1 memory capability)
     {
         capability.profileKey = fixture.adoption.plan.profileKey;
@@ -469,6 +948,9 @@ contract ProgrammableCompletedGraphAdoptionCompatV1Test {
         capability.routeSchemaHash = fixture.adoption.plan.routeSchemaHash;
         capability.planSchemaArtifactHash = fixture.adoption.plan.planSchemaArtifactHash;
         capability.policyHash = fixture.adoption.plan.policyHash;
+        capability.stateVerifier = address(fixture.stateVerifier);
+        capability.stateVerifierRuntimeCodeHash = address(fixture.stateVerifier).codehash;
+        capability.stateSchemaHash = keccak256("compat-state-schema-v1");
         capability.capabilitySemantics = IProgrammableCompletedGraphAdoptionCompatV1.CapabilitySemanticsV1.Adopt;
         capability.admissionStatus = IProgrammableCompletedGraphAdoptionCompatV1.AdmissionStatusV1.Admitted;
         capability.launchClassification = fixture.adoption.plan.launchClassification;

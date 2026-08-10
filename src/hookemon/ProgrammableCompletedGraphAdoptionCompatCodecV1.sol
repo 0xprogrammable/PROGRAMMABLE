@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import { IProgrammableCompletedGraphAdoptionCompatV1 } from "./IProgrammableCompletedGraphAdoptionCompatV1.sol";
+import {IProgrammableCompletedGraphAdoptionCompatV1} from "./IProgrammableCompletedGraphAdoptionCompatV1.sol";
 
 /// @notice Pure canonical hash codec for the source-neutral adoption compatibility package.
 /// @dev These hashes are deliberately not EIP-712 domain digests. The Registry applies its own EIP-712 domain to
@@ -21,7 +21,7 @@ contract ProgrammableCompletedGraphAdoptionCompatCodecV1 {
         "ProgrammableCompletedGraphLaunchGrantBindingAV1(uint256 chainId,address registry,address launchWallet,bytes32 applicantIdHash,bytes32 profileKey,bytes32 profileDescriptorHash,bytes32 exactContractBindingHash,bytes32 contractPlanHash,bytes32 applicantPlanArtifactHash,bytes32 adoptionIntentHash,uint8 executionReadiness,bytes32 executionReadinessConstraintHash)"
     );
     bytes32 public constant LAUNCH_GRANT_BINDING_B_TYPEHASH = keccak256(
-        "ProgrammableCompletedGraphLaunchGrantBindingBV1(uint8 executionTimeConstraint,bytes32 executionTimeConstraintEvidenceHash,bytes32 sourceRepositoryHash,bytes32 sourceCommitHash,bytes32 sourceTreeHash,bytes32 componentGraphHash,bytes32 exactRuntimeSetHash,bytes32 componentConfigurationSetHash,bytes32 resultHash)"
+        "ProgrammableCompletedGraphLaunchGrantBindingBV1(uint8 executionTimeConstraint,bytes32 executionTimeConstraintEvidenceHash,bytes32 sourceRepositoryHash,bytes32 sourceCommitHash,bytes32 sourceTreeHash,bytes32 componentGraphHash,bytes32 exactRuntimeSetHash,bytes32 componentConfigurationSetHash,bytes32 revenueBindingHash,bytes32 resultHash)"
     );
     bytes32 public constant LAUNCH_GRANT_REVIEW_TYPEHASH = keccak256(
         "ProgrammableCompletedGraphLaunchGrantReviewV1(bytes32 builderEvidenceHash,bytes32 reviewerAttestationHash,bytes32 securityControlHeadHash,bytes32 securityEpochHash,bytes32 policyHash,bytes32 policyEpochHash,uint64 securityEpoch,uint64 policyEpoch,bytes32 oneWinnerNonce,bytes32 winnerKeyHash)"
@@ -33,14 +33,16 @@ contract ProgrammableCompletedGraphAdoptionCompatCodecV1 {
         keccak256("ProgrammableCompletedGraphExecutionCurrentnessV1(bytes32 abiEncodedCurrentnessHash)");
     bytes32 public constant ADOPTION_REQUEST_TYPEHASH =
         keccak256("ProgrammableCompletedGraphAdoptionRequestV1(bytes32 abiEncodedRequestHash)");
+    bytes32 public constant PROFILE_CAPABILITY_TYPEHASH =
+        keccak256("ProgrammableCompletedGraphAdoptionProfileCapabilityV1(bytes32 abiEncodedCapabilityHash)");
     bytes32 public constant LAUNCH_ID_TYPEHASH = keccak256(
         "ProgrammableCompletedGraphAdoptionLaunchIdV1(uint256 chainId,address registry,address launchWallet,bytes32 profileKey,bytes32 contractPlanHash)"
     );
     bytes32 public constant COMPONENT_TYPEHASH = keccak256(
-        "ProgrammableCompletedGraphAdoptionComponentV1(address account,uint8 kind,uint8 scope,uint8 deploymentKind,address deployer,uint64 createNonce,bytes32 create2Salt,bytes32 initCodeHash,bytes32 externalCanonicalIdHash,bytes32 runtimeCodeHash,bytes32 configurationHash,bytes32 creationEvidenceHash)"
+        "ProgrammableCompletedGraphAdoptionComponentV1(address account,uint8 kind,uint8 scope,uint8 deploymentKind,address deployer,uint64 createNonce,bytes32 create2Salt,bytes32 initCodeHash,bytes32 createTransactionEvidenceHash,bytes32 externalCanonicalIdHash,bytes32 runtimeCodeHash,bytes32 configurationHash,bytes32 creationEvidenceHash)"
     );
     bytes32 public constant COMPONENT_CONFIGURATION_TYPEHASH = keccak256(
-        "ProgrammableCompletedGraphAdoptionComponentConfigurationV1(address account,uint8 kind,uint8 scope,uint8 deploymentKind,address deployer,uint64 createNonce,bytes32 create2Salt,bytes32 initCodeHash,bytes32 externalCanonicalIdHash,bytes32 runtimeCodeHash,bytes32 creationEvidenceHash)"
+        "ProgrammableCompletedGraphAdoptionComponentConfigurationV1(address account,uint8 kind,uint8 scope,uint8 deploymentKind,address deployer,uint64 createNonce,bytes32 create2Salt,bytes32 initCodeHash,bytes32 createTransactionEvidenceHash,bytes32 externalCanonicalIdHash,bytes32 runtimeCodeHash,bytes32 creationEvidenceHash)"
     );
     bytes32 public constant COMPONENT_CREATION_EVIDENCE_TYPEHASH = keccak256(
         "ProgrammableCompletedGraphAdoptionCreationEvidenceV1(bytes32 sourceBindingHash,bytes32 componentBindingHash)"
@@ -49,7 +51,10 @@ contract ProgrammableCompletedGraphAdoptionCompatCodecV1 {
         "ProgrammableCompletedGraphAdoptionCreationEvidenceSourceV1(uint256 chainId,address registry,bytes32 sourceRepositoryHash,bytes32 sourceCommitHash,bytes32 sourceTreeHash,bytes32 manifestHash,bytes32 policyHash,bytes32 applicantPlanArtifactHash,address launchWallet)"
     );
     bytes32 public constant COMPONENT_CREATION_EVIDENCE_COMPONENT_TYPEHASH = keccak256(
-        "ProgrammableCompletedGraphAdoptionCreationEvidenceComponentV1(uint256 componentIndex,address account,uint8 kind,uint8 scope,uint8 deploymentKind,address deployer,uint64 createNonce,bytes32 create2Salt,bytes32 initCodeHash,bytes32 externalCanonicalIdHash,bytes32 runtimeCodeHash)"
+        "ProgrammableCompletedGraphAdoptionCreationEvidenceComponentV1(uint256 componentIndex,address account,uint8 kind,uint8 scope,uint8 deploymentKind,address deployer,uint64 createNonce,bytes32 create2Salt,bytes32 initCodeHash,bytes32 createTransactionEvidenceHash,bytes32 externalCanonicalIdHash,bytes32 runtimeCodeHash)"
+    );
+    bytes32 public constant CREATE_TRANSACTION_EVIDENCE_TYPEHASH = keccak256(
+        "ProgrammableCompletedGraphCreateTransactionEvidenceV1(bytes32 transactionHash,uint64 blockNumber,bytes32 blockHash,uint32 transactionIndex,address sender,uint64 senderNonce,address to,uint256 valueWei,bytes32 inputHash,bool receiptSucceeded,address createdAddress,bytes32 finalityEvidenceHash,bytes32 dualProviderEvidenceHash)"
     );
     bytes32 public constant EDGE_TYPEHASH = keccak256(
         "ProgrammableCompletedGraphAdoptionEdgeV1(uint8 fromIndex,uint8 toIndex,uint8 kind,bytes32 relationHash)"
@@ -61,7 +66,7 @@ contract ProgrammableCompletedGraphAdoptionCompatCodecV1 {
     bytes32 public constant CONFIGURATION_SET_TYPEHASH =
         keccak256("ProgrammableCompletedGraphAdoptionConfigurationSetV1(bytes32 orderedCommitmentsHash)");
     bytes32 public constant CONFIGURATION_TYPEHASH = keccak256(
-        "ProgrammableCompletedGraphAdoptionConfigurationV1(bytes32 componentGraphHash,bytes32 componentConfigurationSetHash,bytes32 policyHash,address poolManager,bytes32 poolManagerRuntimeCodeHash,bytes32 poolKeyHash,bytes32 architectureResultHash)"
+        "ProgrammableCompletedGraphAdoptionConfigurationV1(bytes32 componentGraphHash,bytes32 componentConfigurationSetHash,bytes32 policyHash,bytes32 revenueBindingHash,address poolManager,bytes32 poolManagerRuntimeCodeHash,bytes32 poolKeyHash,bytes32 architectureResultHash)"
     );
     bytes32 public constant RESULT_TYPEHASH = keccak256(
         "ProgrammableCompletedGraphAdoptionResultV1(bytes32 componentGraphHash,bytes32 configurationHash,bytes32 architectureResultHash,bytes32 poolResultHash,bytes32 deploymentLineageHash)"
@@ -69,8 +74,9 @@ contract ProgrammableCompletedGraphAdoptionCompatCodecV1 {
     bytes32 public constant APPLICATION_IDENTITY_TYPEHASH = keccak256(
         "ProgrammableCompletedGraphApplicationIdentityV1(address account,bytes32 runtimeCodeHash,bytes32 configurationHash)"
     );
-    bytes32 public constant CANONICAL_RECEIPT_CORE_TYPEHASH =
-        keccak256("ProgrammableCompletedGraphCanonicalReceiptCoreV1(bytes32 abiEncodedReceiptWithoutHash)");
+    bytes32 public constant CANONICAL_RECEIPT_CORE_TYPEHASH = keccak256(
+        "ProgrammableCompletedGraphCanonicalReceiptCoreV1(bytes32 launchId,bytes32 launchGrantDigest,bytes32 launchGrantHash,bytes32 executionCurrentnessDigest,bytes32 contractPlanHash,bytes32 profileCapabilityHash,bytes32 adoptionRequestHash)"
+    );
     bytes32 public constant FINALITY_INDEXING_RECEIPT_TYPEHASH =
         keccak256("ProgrammableCompletedGraphFinalityIndexingReceiptV1(bytes32 abiEncodedReceiptWithoutHash)");
 
@@ -116,20 +122,33 @@ contract ProgrammableCompletedGraphAdoptionCompatCodecV1 {
         return keccak256(abi.encode(ADOPTION_REQUEST_TYPEHASH, keccak256(abi.encode(request))));
     }
 
+    function computeAdoptionProfileCapabilityHash(
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionProfileCapabilityV1 calldata capability
+    ) external pure returns (bytes32) {
+        return keccak256(abi.encode(PROFILE_CAPABILITY_TYPEHASH, keccak256(abi.encode(capability))));
+    }
+
     function computeLaunchId(address registry, address launchWallet, bytes32 profileKey, bytes32 contractPlanHash)
         external
         view
         returns (bytes32)
     {
-        return keccak256(
-            abi.encode(LAUNCH_ID_TYPEHASH, block.chainid, registry, launchWallet, profileKey, contractPlanHash)
-        );
+        return
+            keccak256(
+                abi.encode(LAUNCH_ID_TYPEHASH, block.chainid, registry, launchWallet, profileKey, contractPlanHash)
+            );
     }
 
     function computeComponentConfigurationHash(
         IProgrammableCompletedGraphAdoptionCompatV1.ComponentV1 calldata component
     ) external pure returns (bytes32) {
         return _componentConfigurationHash(component);
+    }
+
+    function computeCreateTransactionEvidenceHash(
+        IProgrammableCompletedGraphAdoptionCompatV1.CreateTransactionEvidenceV1 calldata evidence
+    ) external pure returns (bytes32) {
+        return _createTransactionEvidenceHash(evidence);
     }
 
     function computeComponentCreationEvidenceHash(
@@ -164,6 +183,7 @@ contract ProgrammableCompletedGraphAdoptionCompatCodecV1 {
                 component.createNonce,
                 component.create2Salt,
                 component.initCodeHash,
+                _createTransactionEvidenceHash(component.createTransactionEvidence),
                 component.externalCanonicalIdHash,
                 component.runtimeCodeHash
             )
@@ -182,9 +202,8 @@ contract ProgrammableCompletedGraphAdoptionCompatCodecV1 {
         bytes32[] memory edgeHashes = new bytes32[](edges.length);
         for (uint256 i; i < edges.length; ++i) {
             IProgrammableCompletedGraphAdoptionCompatV1.GraphEdgeV1 calldata edge = edges[i];
-            edgeHashes[i] = keccak256(
-                abi.encode(EDGE_TYPEHASH, edge.fromIndex, edge.toIndex, uint8(edge.kind), edge.relationHash)
-            );
+            edgeHashes[i] =
+                keccak256(abi.encode(EDGE_TYPEHASH, edge.fromIndex, edge.toIndex, uint8(edge.kind), edge.relationHash));
         }
         return keccak256(
             abi.encode(
@@ -219,6 +238,7 @@ contract ProgrammableCompletedGraphAdoptionCompatCodecV1 {
         bytes32 componentGraphHash,
         bytes32 componentConfigurationSetHash,
         bytes32 policyHash,
+        bytes32 revenueBindingHash,
         address poolManager,
         bytes32 poolManagerRuntimeCodeHash,
         bytes32 poolKeyHash,
@@ -230,6 +250,7 @@ contract ProgrammableCompletedGraphAdoptionCompatCodecV1 {
                 componentGraphHash,
                 componentConfigurationSetHash,
                 policyHash,
+                revenueBindingHash,
                 poolManager,
                 poolManagerRuntimeCodeHash,
                 poolKeyHash,
@@ -269,13 +290,22 @@ contract ProgrammableCompletedGraphAdoptionCompatCodecV1 {
         );
     }
 
-    /// @notice Hashes a receipt after forcing its self-hash field to zero.
+    /// @notice Hashes the compact canonical receipt after forcing its self-hash field to zero.
     function computeCanonicalReceiptCoreHash(
         IProgrammableCompletedGraphAdoptionCompatV1.CanonicalReceiptCoreV1 calldata core
     ) external pure returns (bytes32) {
-        IProgrammableCompletedGraphAdoptionCompatV1.CanonicalReceiptCoreV1 memory normalized = core;
-        normalized.receiptCoreHash = bytes32(0);
-        return keccak256(abi.encode(CANONICAL_RECEIPT_CORE_TYPEHASH, keccak256(abi.encode(normalized))));
+        return keccak256(
+            abi.encode(
+                CANONICAL_RECEIPT_CORE_TYPEHASH,
+                core.launchId,
+                core.launchGrantDigest,
+                core.launchGrantHash,
+                core.executionCurrentnessDigest,
+                core.contractPlanHash,
+                core.profileCapabilityHash,
+                core.adoptionRequestHash
+            )
+        );
     }
 
     /// @notice Hashes a finality/indexing append after forcing its self-hash field to zero.
@@ -303,6 +333,7 @@ contract ProgrammableCompletedGraphAdoptionCompatCodecV1 {
                 component.createNonce,
                 component.create2Salt,
                 component.initCodeHash,
+                _createTransactionEvidenceHash(component.createTransactionEvidence),
                 component.externalCanonicalIdHash,
                 component.runtimeCodeHash,
                 component.creationEvidenceHash
@@ -326,6 +357,7 @@ contract ProgrammableCompletedGraphAdoptionCompatCodecV1 {
                 component.createNonce,
                 component.create2Salt,
                 component.initCodeHash,
+                _createTransactionEvidenceHash(component.createTransactionEvidence),
                 component.externalCanonicalIdHash,
                 component.runtimeCodeHash,
                 component.configurationHash,
@@ -367,6 +399,7 @@ contract ProgrammableCompletedGraphAdoptionCompatCodecV1 {
                 grant.componentGraphHash,
                 grant.exactRuntimeSetHash,
                 grant.componentConfigurationSetHash,
+                grant.revenueBindingHash,
                 grant.resultHash
             )
         );
@@ -386,5 +419,28 @@ contract ProgrammableCompletedGraphAdoptionCompatCodecV1 {
             )
         );
         return keccak256(abi.encode(LAUNCH_GRANT_TYPEHASH, bindingAHash, bindingBHash, reviewHash));
+    }
+
+    function _createTransactionEvidenceHash(
+        IProgrammableCompletedGraphAdoptionCompatV1.CreateTransactionEvidenceV1 calldata evidence
+    ) private pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                CREATE_TRANSACTION_EVIDENCE_TYPEHASH,
+                evidence.transactionHash,
+                evidence.blockNumber,
+                evidence.blockHash,
+                evidence.transactionIndex,
+                evidence.sender,
+                evidence.senderNonce,
+                evidence.to,
+                evidence.valueWei,
+                evidence.inputHash,
+                evidence.receiptSucceeded,
+                evidence.createdAddress,
+                evidence.finalityEvidenceHash,
+                evidence.dualProviderEvidenceHash
+            )
+        );
     }
 }

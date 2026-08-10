@@ -33,6 +33,13 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
         Admitted
     }
 
+    enum ProfileStatusV1 {
+        Invalid,
+        Active,
+        Suspended,
+        Deprecated
+    }
+
     enum ExecutionTimeConstraintV1 {
         Invalid,
         AdoptionOnlyNoExecution,
@@ -95,6 +102,25 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
         bytes32 applicationHash;
     }
 
+    /// @notice Finalized top-level CREATE transaction evidence. This package does not execute CREATE.
+    /// @dev `to` is required to be zero and `inputHash` must equal the component init-code hash. The reviewer
+    ///      attestation binds the finalized dual-provider evidence; the Validator derives the created address.
+    struct CreateTransactionEvidenceV1 {
+        bytes32 transactionHash;
+        uint64 blockNumber;
+        bytes32 blockHash;
+        uint32 transactionIndex;
+        address sender;
+        uint64 senderNonce;
+        address to;
+        uint256 valueWei;
+        bytes32 inputHash;
+        bool receiptSucceeded;
+        address createdAddress;
+        bytes32 finalityEvidenceHash;
+        bytes32 dualProviderEvidenceHash;
+    }
+
     /// @dev Every component has exact CREATE/CREATE2 provenance and an observed runtime/config commitment.
     struct ComponentV1 {
         address account;
@@ -105,6 +131,7 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
         uint64 createNonce;
         bytes32 create2Salt;
         bytes32 initCodeHash;
+        CreateTransactionEvidenceV1 createTransactionEvidence;
         bytes32 externalCanonicalIdHash;
         bytes32 runtimeCodeHash;
         bytes32 configurationHash;
@@ -130,6 +157,8 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
         bytes32 sourceTreeHash;
         bytes32 manifestHash;
         bytes32 policyHash;
+        /// @dev V1 has no revenue activation path; this must be zero until a separately frozen profile version exists.
+        bytes32 revenueBindingHash;
         bytes32 compilerArtifactHash;
         bytes32 applicantPlanArtifactHash;
         bytes32 adoptionIntentHash;
@@ -182,6 +211,7 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
         bytes32 componentGraphHash;
         bytes32 exactRuntimeSetHash;
         bytes32 componentConfigurationSetHash;
+        bytes32 revenueBindingHash;
         bytes32 resultHash;
         bytes32 builderEvidenceHash;
         bytes32 reviewerAttestationHash;
@@ -230,6 +260,7 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
         bytes32 resultHash;
         bytes32 currentArchitectureStateHash;
         bytes32 currentPoolStateHash;
+        bytes32 currentRevenueStateHash;
     }
 
     /// @notice Closed typed adoption envelope. The only bytes field is the bounded ERC-1271 currentness signature.
@@ -251,6 +282,12 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
         bytes32 routeSchemaHash;
         bytes32 planSchemaArtifactHash;
         bytes32 policyHash;
+        address stateVerifier;
+        bytes32 stateVerifierRuntimeCodeHash;
+        bytes32 stateSchemaHash;
+        uint256 canonicalPoolManagerChainId;
+        address canonicalPoolManager;
+        bytes32 canonicalPoolManagerRuntimeCodeHash;
         CapabilitySemanticsV1 capabilitySemantics;
         AdmissionStatusV1 admissionStatus;
         LaunchClassificationV1 launchClassification;
@@ -263,61 +300,19 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
         bool enabled;
     }
 
-    /// @notice Canonical immutable identity after an active grant is consumed by typed adoption.
+    /// @notice Canonical immutable receipt identity after a grant is consumed by typed adoption.
+    /// @dev The compact onchain core hash-binds the complete typed Plan, Grant, registered capability and
+    ///      current-state request. Each of those inputs has its own closed codec preimage, so a mutable URL or
+    ///      indexer append can never rewrite launch identity.
     struct CanonicalReceiptCoreV1 {
         bytes32 launchId;
         bytes32 receiptCoreHash;
         bytes32 launchGrantDigest;
+        bytes32 launchGrantHash;
         bytes32 executionCurrentnessDigest;
-        address launchWallet;
-        bytes32 profileKey;
-        bytes32 profileDescriptorHash;
-        bytes32 exactContractBindingHash;
-        LaunchClassificationV1 launchClassification;
-        uint16 identityMask;
-        bytes32 sourceRepositoryHash;
-        bytes32 sourceCommitHash;
-        bytes32 sourceTreeHash;
-        bytes32 manifestHash;
-        bytes32 policyHash;
-        bytes32 compilerArtifactHash;
-        bytes32 applicantPlanArtifactHash;
-        bytes32 adoptionIntentHash;
-        ExecutionReadinessV1 executionReadiness;
-        bytes32 executionReadinessConstraintHash;
-        ExecutionTimeConstraintV1 executionTimeConstraint;
-        bytes32 executionTimeConstraintEvidenceHash;
-        bytes32 builderEvidenceHash;
-        bytes32 reviewerAttestationHash;
-        bytes32 reviewSecurityControlHeadHash;
-        bytes32 reviewSecurityEpochHash;
-        bytes32 reviewPolicyEpochHash;
-        uint64 reviewSecurityEpoch;
-        uint64 reviewPolicyEpoch;
-        bytes32 securityControlHeadHash;
-        bytes32 securityEpochHash;
-        bytes32 policyEpochHash;
-        uint64 securityEpoch;
-        uint64 policyEpoch;
-        bytes32 oneWinnerNonce;
-        bytes32 winnerKeyHash;
-        PrimaryIdentitiesV1 identities;
-        bytes32 componentGraphHash;
-        bytes32 exactRuntimeSetHash;
-        bytes32 componentConfigurationSetHash;
-        bytes32 configurationHash;
-        address poolManager;
-        bytes32 poolManagerRuntimeCodeHash;
-        uint8 poolManagerComponentIndex;
-        bytes32 poolId;
-        bytes32 poolKeyHash;
-        bytes32 poolResultHash;
-        bytes32 architectureResultHash;
-        bytes32 deploymentLineageHash;
-        bytes32 resultHash;
-        bytes32 currentArchitectureStateHash;
-        bytes32 currentPoolStateHash;
         bytes32 contractPlanHash;
+        bytes32 profileCapabilityHash;
+        bytes32 adoptionRequestHash;
     }
 
     struct FinalityIndexingReceiptV1 {
@@ -331,6 +326,8 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
     }
 
     event AdoptionProfileRegisteredV1(bytes32 indexed profileKey, bytes32 profileDescriptorHash, bytes32 policyHash);
+    event AdoptionProfileStatusUpdatedV1(bytes32 indexed profileKey, ProfileStatusV1 indexed status);
+    event GlobalAdoptionKillSetV1(bool indexed killed);
     event LaunchGrantActivatedV1(
         bytes32 indexed launchId,
         bytes32 indexed launchGrantDigest,
@@ -349,6 +346,17 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
         bytes32 policyEpochHash
     );
     event CanonicalReceiptAdoptedV1(bytes32 indexed launchId, bytes32 indexed receiptCoreHash, bytes32 grantDigest);
+    event CanonicalComponentRecordedV1(
+        bytes32 indexed launchId,
+        uint8 indexed componentIndex,
+        address indexed account,
+        ComponentKindV1 kind,
+        ComponentScopeV1 scope,
+        DeploymentKindV1 deploymentKind,
+        bytes32 runtimeCodeHash,
+        bytes32 configurationHash,
+        bytes32 creationEvidenceHash
+    );
     event FinalityIndexingAdvancedV1(
         bytes32 indexed launchId,
         ReceiptStatusV1 indexed status,
@@ -357,6 +365,10 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
     );
 
     function registerAdoptionProfileV1(AdoptionProfileCapabilityV1 calldata capability) external;
+
+    function setAdoptionProfileStatusV1(bytes32 profileKey, ProfileStatusV1 status) external;
+
+    function setGlobalAdoptionKillV1(bool killed) external;
 
     function activateLaunchGrantV1(LaunchGrantV1 calldata grant, bytes calldata reviewerSignature)
         external
@@ -385,18 +397,24 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
 
     function executionCurrentnessDigest(ExecutionCurrentnessV1 calldata currentness) external view returns (bytes32);
 
-    function computePlanHash(CompletedGraphPlanV1 calldata plan) external pure returns (bytes32);
-
-    function computeLaunchId(address registry, address launchWallet, bytes32 profileKey, bytes32 contractPlanHash)
-        external
-        view
-        returns (bytes32);
-
-    function computeAdoptionRequestHash(AdoptionRequestV1 calldata request) external pure returns (bytes32);
-
     function launchGrantStatus(bytes32 grantDigest) external view returns (GrantStatusV1);
 
+    function adoptionProfileStatusV1(bytes32 profileKey) external view returns (ProfileStatusV1);
+
+    function globalAdoptionKilledV1() external view returns (bool);
+
     function executionCurrentnessRevokedV1(bytes32 currentnessDigest) external view returns (bool);
+
+    function currentSecurityPolicyEpochs()
+        external
+        view
+        returns (
+            bytes32 securityControlHeadHash,
+            uint64 securityEpoch,
+            bytes32 securityEpochHash,
+            uint64 policyEpoch,
+            bytes32 policyEpochHash
+        );
 
     function launchGrantStateHead(bytes32 grantDigest) external view returns (LaunchGrantStateHeadV1 memory);
 
@@ -405,4 +423,18 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
     function canonicalReceiptCore(bytes32 launchId) external view returns (CanonicalReceiptCoreV1 memory);
 
     function finalityIndexingReceiptHash(bytes32 launchId) external view returns (bytes32);
+}
+
+/// @notice Fixed typed current-state verifier for one governance-registered ADOPT capability.
+/// @dev The Registry/Validator pin this dependency's runtime code hash. No target, selector or opaque action bytes
+///      are accepted from an applicant, and the return must be exactly three words.
+interface IProgrammableCompletedGraphAdoptionStateVerifierV1 {
+    function verifyCurrentStateV1(
+        address registry,
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionProfileCapabilityV1 calldata capability,
+        IProgrammableCompletedGraphAdoptionCompatV1.CompletedGraphPlanV1 calldata plan,
+        IProgrammableCompletedGraphAdoptionCompatV1.ComponentV1[] calldata components,
+        IProgrammableCompletedGraphAdoptionCompatV1.GraphEdgeV1[] calldata edges,
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionRequestV1 calldata request
+    ) external view returns (bytes32 architectureStateHash, bytes32 poolStateHash, bytes32 revenueStateHash);
 }

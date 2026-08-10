@@ -1,7 +1,11 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.1.0",
   "package": "PROGRAMMABLE_COMPLETED_GRAPH_ADOPTION_COMPAT_V1",
   "status": "INTERFACE_ONLY_NOT_DEPLOYED_NOT_ACTIVATED",
+  "supersedes": {
+    "withdrawnCandidateCommit": "a688cde9d77a8fea652f48756e4e49ace5318569",
+    "reason": "Superseded by an immutable successor that fail-closes grant review epochs, supports global/profile suspension, and requires a codehash-pinned typed current-state verifier."
+  },
   "scope": {
     "capabilitySemantics": "ADOPT",
     "supportedLaunchClassifications": [
@@ -20,80 +24,90 @@
     "optimizerRuns": 1000,
     "viaIR": false,
     "bytecodeHash": "none",
-    "cborMetadata": false
+    "cborMetadata": false,
+    "sizeMethod": "solc --bin --bin-runtime with the compiler settings above"
   },
   "contracts": [
     {
       "name": "IProgrammableCompletedGraphAdoptionCompatV1",
       "source": "src/hookemon/IProgrammableCompletedGraphAdoptionCompatV1.sol",
-      "sourceSha256": "05c9dc22befc30a799f346fa6bd95af985f74a0ffcc030ed88e387a52d3301be",
-      "abiSha256": "c6ff81d26a3940f5eb898adb3e93d9354364f62f5c19c41d5dfe5c3948d3e1ab",
+      "sourceSha256": "bf22c4e344ed2a5d253e04440c157ccd92289a2d8c6709f6b7cf7e2df7bdcde1",
+      "abiSha256": "c09d56d0afb1c2e76f9f1cbd620fff86e322fa6cb902be0d56736a021c2bbded",
+      "deployment": "interface_only"
+    },
+    {
+      "name": "IProgrammableCompletedGraphAdoptionStateVerifierV1",
+      "source": "src/hookemon/IProgrammableCompletedGraphAdoptionCompatV1.sol",
+      "abiSha256": "762175fca40b72952e31280e6e73492ebc8c9ea39b86462c7f2314c4ab00bd05",
       "deployment": "interface_only"
     },
     {
       "name": "ProgrammableCompletedGraphAdoptionCompatCodecV1",
       "source": "src/hookemon/ProgrammableCompletedGraphAdoptionCompatCodecV1.sol",
-      "sourceSha256": "a66f89e38140d5b5f4a5b1656080e43ebbda1d867be0af5733c544d090f35404",
-      "abiSha256": "60c006ffcebe393a088b545c0d932af9ac9927fea5f4c01fc0e6317ccdff4387",
-      "runtimeBytes": 10367,
-      "initcodeBytes": 10395
+      "sourceSha256": "ba0544f606d64c7663a1de713b5519d5cca11fca11e2264d90b4a5c338a26cc1",
+      "abiSha256": "57fe8880975a36d4f41408fc2f6fa3bc1023191ce98672ff9fa77de50405562b",
+      "runtimeBytes": 9896,
+      "initcodeBytes": 9924
     },
     {
       "name": "ProgrammableCompletedGraphAdoptionValidatorV1",
       "source": "src/hookemon/ProgrammableCompletedGraphAdoptionValidatorV1.sol",
-      "sourceSha256": "f6b0bedd2244a7b6459943dee940713387e4085fdeb63906be08ea725d4d45fe",
-      "abiSha256": "3b3127e59404a220ee1a7170c82eae2df82af53e83feff69cb214147c76f3650",
-      "runtimeBytes": 8921,
-      "initcodeBytes": 9348
+      "sourceSha256": "0ee9ceaab0bbdf0b56d589034f7989fa6a16cf9cb039a191697fd14d0bd6a95b",
+      "abiSha256": "c59d631fb14d9eccee570794f6f99e0b36038e081bbdb48afb4a9b67c824e986",
+      "runtimeBytes": 11881,
+      "initcodeBytes": 12547
     },
     {
       "name": "ProgrammableCompletedGraphAdoptionGrantRegistryV1",
       "source": "src/hookemon/ProgrammableCompletedGraphAdoptionGrantRegistryV1.sol",
-      "sourceSha256": "8a4e1e147d15e06ade24ccfe0b6678017473b9dd58be90dfc38be6f5c40349f1",
-      "abiSha256": "5842291532204dc46fcb1af800a8cd116136ac37d8f39df5fa05e869c3d0345c",
-      "runtimeBytes": 24128,
-      "runtimeMarginToEip170Bytes": 448,
-      "initcodeBytes": 25795
+      "sourceSha256": "c82e6572dca226832a4ae67bdac730a9015bf8a3af0ce7426b9e30099f2e8d64",
+      "abiSha256": "18258c94b4d89e9fe57d66baae20deb96d6da5de7a72eceb3b940183dc76153a",
+      "runtimeBytes": 23152,
+      "runtimeMarginToEip170Bytes": 1424,
+      "initcodeBytes": 25062
     }
   ],
   "test": {
     "source": "test/hookemon/ProgrammableCompletedGraphAdoptionCompatV1.t.sol",
-    "sourceSha256": "12afe8e8855f12d202d466f0e909108d7549d94d37516037734471ad0d2ded1f",
-    "abiSha256": "9bec7fcd84656f90479045a7e8612e722cee8dfdb8d1d5ee4988d8113ceb1435"
+    "sourceSha256": "8f0057238c7bef31ca76935797350708c3aa963367629ce0ff2f95d0680e7bf4",
+    "abiSha256": "35f527bff7b54bec32bc3e5fa4ed01939cfc9e299d0dae50e31f325e40debc2b"
   },
   "canonicalConstants": {
     "codecIdHash": "0x547425be5bbef0a87c0e12754155a053480cbbbecfcf4863bef3407f8289aa57",
-    "adoptionOnlyReadinessConstraintHash": "0x200d18f90220af00fdadb83b716523e45c4565e83d48533c1a95d6a89ea92d51",
-    "registryIdHash": "0xdc7cf7351f41fe4ade06c81ccd8d7577ce6a95cb947792ce236f5607c18b04dd",
     "validatorIdHash": "0x14a76cb1c48208f82ba7cec4f2c6c316357d0a1b840f6d673a35b7ddc4a75c1b",
+    "adoptionOnlyReadinessConstraintHash": "0x200d18f90220af00fdadb83b716523e45c4565e83d48533c1a95d6a89ea92d51",
     "maxComponents": 24,
     "maxEdges": 64,
     "maxCurrentnessLifetimeSeconds": 3600,
-    "maxCurrentnessSignatureBytes": 4096
+    "maxCurrentnessSignatureBytes": 4096,
+    "maxStateVerifierStaticcallGas": 500000,
+    "stateVerifierGasReserve": 200000
   },
   "typehashes": {
     "profileKey": "0x9a25d44486e0f5da0c0cc7d5056ed14417af084bed8a0423240224b21873c303",
     "plan": "0x805cdb8d5243266cd4de117238139815637ae34b43729a8e6414cf458404b2bb",
     "launchGrantBindingA": "0x6373614d13166df962b9ca91b7de99c21e0771d33aec15051550c9aa184dcec2",
-    "launchGrantBindingB": "0x6c47aa62e1d957bea8f086ec78bcd9c4ad78f7177e93f9f9c07bc577315b4e46",
+    "launchGrantBindingB": "0x5074082f1ec821097066a0f29f2734329945770f63628859a64bb1310d2b3c11",
     "launchGrantReview": "0xce9e9bdd3135aaf1758b97b785d944a631b186bfbe237130396bdc5008b63046",
     "launchGrant": "0x3b56d205c1923d957a4baf5345745b739502f4a61c6c9c702b86f3bf888cb21a",
     "executionCurrentness": "0x80da2016dad2177f0f808bda1cd467a9b4fc95293a112c7e49a7444d861a88db",
     "adoptionRequest": "0xd720a3bb8eaa496619389814b1f5089383d8120cb782f8f8de6a543ae7d65282",
+    "profileCapability": "0x6d7ab9935123d92d1e8635f5abb4c796e34a83de7cfd44e85499783a54b593e6",
     "launchId": "0x2c07dcd6f50916bffbcb031a1ed3459a8d67cb8c85f2e050b3653a38e48ac023",
-    "component": "0xfdd8dc0b6d30bb880d2682e88ec47de36f6362fae25dd405c8d938f6a5c835b5",
-    "componentConfiguration": "0x0858b53532ac3626af4d687a9aa6505e83ea3ecb4b378922886edc37b43d6992",
+    "component": "0x2feffe0465e90a45cb17d004c58df7034071f5fe5151eaa1b9a061ba6168fa07",
+    "componentConfiguration": "0xcbb63da62c513687c5ac668425c437ee6ed13a357238d9cdeded0213450b50d1",
     "componentCreationEvidence": "0x8e86028956a4e6bb49c599f177ad98ba38ee3bda010b2be4f0c1bb0f56efc8b8",
     "componentCreationEvidenceSource": "0x15fc00937c3315146bdc7c176bee5bbb12f32fdadf23ad2c6521e061a0ddd672",
-    "componentCreationEvidenceComponent": "0x87b21b9c2be03d3b5b2def676ab8c50351e1918bbe2ffe6f6da8dfdae66c4d27",
+    "componentCreationEvidenceComponent": "0xf96044b32aa830e3a6aec12b15ca690ce88d4e3e9c2ead2d11cb125d2e16738c",
+    "createTransactionEvidence": "0xbe75d2c6c37620da226fbc75a7d26dfc220ea3c8f40a632081eca7257c1e7578",
     "edge": "0x6b1c7fd87bcd073750ba10f3065f65834ab49e2c15966de1f932fbeb812ddb1a",
     "componentGraph": "0x12660ca1683041a564455ceef1c1cce5d8be7c40fdb30b82094a1f28f6229e63",
     "runtimeSet": "0x5280c798edc7ae0d7d38c3ba133d94c61a2320b513bc6285c1feb0812308319d",
     "configurationSet": "0x8bf0533d8cc244c8aa659dce00c39f372cd19c6e84bd606e1c67378a5fc05463",
-    "configuration": "0x87b06aadb70df67d2686d0c1475d849e356d509e77f5bf8694136126a476c04f",
+    "configuration": "0x621f11ade2adc9295784f1796d7d4f0a2ec6cff21f1434f2996b47c8e269a1fd",
     "result": "0x1ba6c743524c56589b68430a5ca12d963859b02bb84811cc1a5b5b2d2bcc2357",
     "applicationIdentity": "0x53bafaa1f1263dd1de9b54d09d55214a7ce1515141054d4c9d6d16bdfc34d57c",
-    "canonicalReceiptCore": "0x9333e8c9423f38a94ba18c957f914280a7145766629ef08f40f1b647845a2f36",
+    "canonicalReceiptCore": "0xd71e94ef7cda533039e82adfd0c4889a2fcd25c6cde410f89c754c03385ff949",
     "finalityIndexingReceipt": "0xa2aedbb59f3b10bfe02c86eb231f70247312a652def209b803045e4ae2a65343",
     "grantStateHead": "0xea2ef03d5b24274a61b1dc1ea27ddd9b1ffbdc47ef7680011d7a4cdbad2bffe6"
   },
@@ -103,52 +117,82 @@
     "grantHash": "keccak256(abi.encode(LAUNCH_GRANT_TYPEHASH, bindingAHash, bindingBHash, reviewHash)); grantHash and grantDigest are excluded from their own preimage",
     "grantDigest": "EIP-712 domain(chainId, registry) over codec.computeLaunchGrantStructHash(grant)",
     "currentnessDigest": "EIP-712 domain(chainId, registry) over codec.computeExecutionCurrentnessStructHash(currentness)",
-    "receiptCoreHash": "codec normalizes receiptCoreHash to zero before hashing",
+    "profileCapabilityHash": "keccak256(abi.encode(PROFILE_CAPABILITY_TYPEHASH, keccak256(abi.encode(AdoptionProfileCapabilityV1))))",
+    "receiptCoreHash": "keccak256 over the seven core fields excluding receiptCoreHash itself",
     "finalityIndexingReceiptHash": "codec normalizes finalityIndexingReceiptHash to zero before hashing"
   },
   "selectors": {
-    "activateLaunchGrantV1": "0xe126be07",
-    "adoptCompletedGraphV1": "0x6b877ca7",
+    "registerAdoptionProfileV1": "0x2a331453",
+    "setAdoptionProfileStatusV1": "0xd004d1b8",
+    "setGlobalAdoptionKillV1": "0xa4483ca4",
+    "activateLaunchGrantV1": "0xb27e65cf",
+    "revokeLaunchGrantV1": "0xc53aaad3",
+    "revokeExecutionCurrentnessV1": "0x2423590e",
+    "adoptCompletedGraphV1": "0xf6b69562",
     "advanceFinalityIndexingV1": "0xdab904dc",
     "advanceSecurityPolicyEpochsV1": "0xb6dd4e52",
     "launchGrantStatus": "0x564e8425",
     "launchGrantStateHead": "0xc1cd6750",
-    "executionCurrentnessRevokedV1": "0x3002600d"
+    "adoptionProfileStatusV1": "0xf3277610",
+    "globalAdoptionKilledV1": "0xd4fbea63",
+    "executionCurrentnessRevokedV1": "0x3002600d",
+    "verifyCurrentStateV1": "0x57d28c49"
   },
-  "grantAndCurrentness": {
-    "launchGrantLifecycle": ["Active", "Revoked", "Consumed"],
-    "launchGrantExpiry": "none",
-    "activation": "purpose-bound reviewer ERC-1271 attestation over the exact EIP-712 grant digest",
-    "consumption": "atomic Active to Consumed only after typed graph validation and reservation; a revert rolls back consumption",
-    "currentness": "separate reviewer ERC-1271 transport bound to chain, registry, wallet, grant digest, plan, request, result, intent, current security-control head and security/policy epochs; valid window is at most 3600 seconds",
-    "revocation": "reviewer or governance may revoke either an Active grant or a currentness digest; a security/policy epoch advance invalidates stale currentness without expiring the evergreen grant"
+  "launchGrantAndCurrentness": {
+    "grantLifecycle": ["None", "Active", "Revoked", "Consumed"],
+    "grantExpiry": "none",
+    "activation": "Anyone may activate an exact grant only with the codehash-pinned reviewer ERC-1271 attestation over its exact EIP-712 grant digest and an Active registered profile.",
+    "consumption": "Only the exact launch wallet may atomically consume Active to Consumed after fixed typed graph and current-state validation. Any revert rolls back reservations, currentness use, and consumption.",
+    "epochPolicy": "Grant securityControlHeadHash, securityEpoch/hash, policyEpoch/hash must equal current Registry state at activation and consumption. Any epoch/head drift requires a new reviewed grant/rebind; fresh currentness alone cannot consume the old grant.",
+    "currentness": "A separately reviewer-signed, revocable, one-use transport binds chain, registry, wallet, grant digest, plan, typed request, result, intent, current head/epochs and nonce. validAfter/deadline may span no more than 3600 seconds.",
+    "globalKill": "Reviewer or governance can kill activation and consumption immediately. Clearing a set kill requires a security or policy epoch advance, so pre-incident grants/currentness remain fail-closed.",
+    "stateReadback": "launchGrantStatus, launchGrantStateHead, currentSecurityPolicyEpochs and executionCurrentnessRevokedV1 are canonical state queries."
+  },
+  "profileLifecycle": {
+    "registration": "One-time only. Re-registration is forbidden even after suspension or deprecation.",
+    "states": ["Invalid", "Active", "Suspended", "Deprecated"],
+    "suspension": "Reviewer or governance may suspend an active profile; activation and consumption both reject it.",
+    "deprecation": "Deprecated is terminal; finalized receipt records remain readable and immutable.",
+    "admission": "DenyPendingReviewAndDeploymentEvidence cannot be registered as an active capability."
   },
   "typedProvenance": {
     "componentDeploymentKinds": ["Create", "Create2", "ExternalCanonical"],
+    "createEvidence": "CREATE evidence commits transaction hash, block number/hash/index, sender and nonce, to=zero, value, input hash, receipt status, derived created address, finality evidence and dual-provider evidence. CREATE nonce zero is valid.",
     "requiredPerComponent": [
-      "exact account and non-empty observed runtime code hash",
+      "exact non-empty observed runtime code hash",
       "configuration hash and source-bound creation evidence hash",
-      "canonical Create nonce or Create2 deployer/salt/init-code hash provenance, or an ExternalCanonical ID",
+      "canonical CREATE/CREATE2 provenance or an ExternalCanonical identifier",
       "strictly ordered components and edges plus directed connectivity from component zero"
     ],
-    "poolBinding": "a pool requires a complete nonzero PoolManager, runtime hash, ExternalCanonical component index, pool ID, pool key hash and pool result hash",
-    "applicationBinding": "applicationHash must equal the exact Application component account/runtime/configuration commitment"
+    "poolBinding": "When the pool identity bit is set, PoolManager address/runtime, ExternalCanonical component index, pool ID, PoolKey hash and pool result hash are all nonzero and bound. A capability that requires a pool also pins the canonical chain-specific PoolManager address/runtime.",
+    "applicationBinding": "applicationHash must equal the exact Application component account/runtime/configuration commitment."
+  },
+  "currentStateVerifier": {
+    "binding": "A registered direct, non-proxy, codehash-pinned stateVerifier and stateSchemaHash are mandatory for every active profile.",
+    "abi": "verifyCurrentStateV1(registry, capability, plan, components, edges, request) returns exactly (architectureStateHash, poolStateHash, revenueStateHash).",
+    "call": "The Validator executes only this fixed selector using STATICCALL, at most 500000 gas and with a 200000 gas reserve. It requires exactly 96 bytes of returndata; revert, short, oversized or mismatched result fails closed.",
+    "revenue": "V1 requires plan/grant revenueBindingHash and request/verifier revenue state to be zero. No revenue activation is represented."
   },
   "receiptAndFinality": {
-    "prepared": "grant activation creates Prepared state",
-    "adopted": "typed adoption anchors immutable CanonicalReceiptCoreV1",
+    "prepared": "Grant activation creates Prepared state and records the grant digest.",
+    "adopted": "Typed adoption anchors immutable CanonicalReceiptCoreV1 with grant digest/hash, currentness digest, plan hash, registered capability hash and typed request hash.",
     "appendOnlyTransitions": ["Prepared->Adopted", "Adopted->Finalized", "Finalized->Indexed", "Indexed->Published"],
     "authority": {
-      "finalized": "codehash-pinned finality authority",
-      "indexedAndPublished": "codehash-pinned indexer authority"
+      "finalized": "direct codehash-pinned finality authority",
+      "indexedAndPublished": "direct codehash-pinned indexer authority"
     },
-    "identity": "finality/indexing entries bind the immutable receipt core hash and grant digest and cannot rewrite launch identity"
+    "identity": "Finality/indexing records bind immutable receiptCoreHash and grant digest; no mutable URL or append can rewrite launch identity."
   },
   "executionReadiness": {
     "capability": "CompletedGraphAdoptionOnly",
     "constraintHash": "0x200d18f90220af00fdadb83b716523e45c4565e83d48533c1a95d6a89ea92d51",
-    "sourceTimeConstraint": "ExternalExecutionTimeBound may only record nonzero evidence; it has no execute route in this package",
-    "newSourceAnchor": "requires a distinct completed-graph plan, review, LaunchGrant and currentness; it must never be JIT-mutated under an existing grant"
+    "constraintEquality": "profile, plan and grant executionTimeConstraint and evidence hash must be exactly equal.",
+    "sourceTimeConstraint": "ExternalExecutionTimeBound is evidence only and has no execute route in this package.",
+    "newSourceAnchor": "A new source schedule anchor/deadline is a distinct reviewed plan, review, LaunchGrant and currentness; it must never be JIT-mutated under an existing grant."
+  },
+  "dependencyRule": {
+    "status": "PROXY_DEPENDENCIES_FORBIDDEN",
+    "rule": "Reviewer, governance, finality/indexer authorities, Codec, Validator and profile state verifier must have direct code and no DELEGATECALL opcode. Upgradeable assets or mutable dependencies require a separate typed profile verifier/review binding before activation."
   },
   "hookemonConsumer": {
     "grantIssuance": "DENY_PENDING_REVIEW_AND_DEPLOYMENT_EVIDENCE",
@@ -170,6 +214,10 @@
     ],
     "negativeVector": "testLegacyCustomGraphRouteCannotBeSilentlyReinterpreted"
   },
+  "futureV4Activation": {
+    "status": "NULL_DENY",
+    "requirement": "A future non-null v4 profile must machine-enforce chain-specific canonical PoolManager address/runtime plus full PoolKey and current slot/liquidity/fee state in its codehash-pinned typed verifier. An opaque contract-binding hash is insufficient."
+  },
   "productionProfileSlots": {
     "DIRECT_GRAPH": "NULL_DENY",
     "NESTED_FACTORY": "NULL_DENY",
@@ -187,14 +235,28 @@
       "CREATE or CREATE2 execution",
       "value, fund, transfer, approve or allowance execution"
     ],
-    "allowedBytes": "only the bounded reviewer ERC-1271 currentness signature",
+    "allowedBytes": "only the bounded reviewer ERC-1271 signature",
     "fixedExternalCalls": [
-      "codehash-pinned codec and validator",
-      "bounded-return-data ERC-1271 staticcall to the codehash-pinned reviewer authority"
+      "codehash-pinned Codec and Validator",
+      "bounded 32-byte ERC-1271 staticcall to the codehash-pinned reviewer authority",
+      "codehash-pinned typed stateVerifier fixed selector with exact 96-byte STATICCALL result"
     ]
   },
   "focusedValidation": {
-    "testSuite": "11 focused lifecycle/typehash/negative tests",
+    "forge": "22 focused tests passed; one winner-key property fuzzed for 1000 runs",
+    "coverage": [
+      "active grant becomes consumed and anchors immutable receipt",
+      "revoked grant/currentness and replay fail without consumption",
+      "years-later active grant works only with fresh bounded currentness",
+      "epoch drift rejects stale grant even with fresh currentness",
+      "global kill and suspended/deprecated profiles block activation/consumption",
+      "wrong-magic, revert, short-return and digest-mutated ERC-1271 responses fail",
+      "current-state mutation, verifier revert and malformed verifier return fail",
+      "typed CREATE nonce-zero evidence passes when address/provenance are exact",
+      "proxy-shaped verifier and deny capability registration fail",
+      "finality/indexing only append to immutable receipt core",
+      "legacy custom-graph route cannot silently migrate"
+    ],
     "slitherHighSignal": {
       "detectors": [
         "arbitrary-send-erc20",
@@ -202,30 +264,18 @@
         "arbitrary-send-eth",
         "controlled-delegatecall",
         "delegatecall-loop",
-        "reentrancy-balance",
         "reentrancy-eth",
         "reentrancy-no-eth",
+        "reentrancy-benign",
+        "reentrancy-events",
         "suicidal",
         "uninitialized-state",
-        "unprotected-upgrade"
+        "unprotected-upgrade",
+        "incorrect-equality",
+        "calls-loop"
       ],
-      "result": "0 findings"
+      "result": "No high/medium detector finding. The only two low calls-loop notices are bounded by MAX_COMPONENTS=24 and invoke only the codehash-pinned pure Codec; no applicant-controlled callee or state-changing external call is in either loop."
     },
-    "manualSurfaceReview": {
-      "result": "no executable CREATE, CREATE2, delegatecall, applicant-selected target, selector, opaque action bytes, value or token approval surface",
-      "fixedCalls": "only codehash-pinned Codec/Validator methods and a bounded 32-byte ERC-1271 staticcall"
-    },
-    "coverage": [
-      "active grant becomes consumed and anchors receipt",
-      "revoked currentness does not consume an active grant",
-      "revoked grant cannot consume even with otherwise-valid currentness",
-      "grant/currentness replay fails",
-      "winner-key reservation rejects a competing grant",
-      "years-later fresh currentness works for an active evergreen grant",
-      "epoch advance blocks stale currentness without revoking the evergreen grant",
-      "source-time evidence is required and cannot make an execute route",
-      "legacy custom-graph route mutation cannot silently consume the existing grant",
-      "published typehash formula values remain stable"
-    ]
+    "manualSurfaceReview": "No deployment, value, transfer, approval, arbitrary target, dynamic selector, opaque action bytes or delegatecall execution entry exists. This artifact does not claim deployment, approval or activation."
   }
 }

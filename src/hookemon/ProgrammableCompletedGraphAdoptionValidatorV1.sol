@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import { IProgrammableCompletedGraphAdoptionCompatV1 } from "./IProgrammableCompletedGraphAdoptionCompatV1.sol";
-import { ProgrammableCompletedGraphAdoptionCompatCodecV1 } from "./ProgrammableCompletedGraphAdoptionCompatCodecV1.sol";
+import {
+    IProgrammableCompletedGraphAdoptionCompatV1,
+    IProgrammableCompletedGraphAdoptionStateVerifierV1
+} from "./IProgrammableCompletedGraphAdoptionCompatV1.sol";
+import {ProgrammableCompletedGraphAdoptionCompatCodecV1} from "./ProgrammableCompletedGraphAdoptionCompatCodecV1.sol";
 
 /// @notice Stateless, codehash-pinnable validator for the closed completed-graph ADOPT ABI.
 /// @dev It has no authority, storage mutations, deployment, target, selector, opaque action, or value surface.
@@ -17,6 +20,9 @@ contract ProgrammableCompletedGraphAdoptionValidatorV1 {
     uint16 public constant IDENTITY_APPLICATION = 1 << 3;
     uint16 public constant IDENTITY_POOL = 1 << 4;
     uint16 public constant IDENTITY_MASK_ALL = (1 << 5) - 1;
+
+    uint256 public constant STATE_VERIFIER_GAS_RESERVE = 200_000;
+    uint256 public constant MAX_STATE_VERIFIER_STATICCALL_GAS = 500_000;
 
     bytes32 public constant VALIDATOR_ID_HASH = keccak256("PROGRAMMABLE_COMPLETED_GRAPH_ADOPTION_VALIDATOR_V1");
 
@@ -34,7 +40,7 @@ contract ProgrammableCompletedGraphAdoptionValidatorV1 {
 
     constructor(address codec) {
         if (
-            codec.code.length == 0
+            codec.code.length == 0 || _containsDelegateCallOpcode(codec)
                 || ProgrammableCompletedGraphAdoptionCompatCodecV1(codec).CODEC_ID_HASH()
                     != keccak256("PROGRAMMABLE_COMPLETED_GRAPH_ADOPTION_COMPAT_CODEC_V1")
         ) revert InvalidBinding(1);
@@ -44,19 +50,22 @@ contract ProgrammableCompletedGraphAdoptionValidatorV1 {
 
     function validateCompletedGraphV1(
         address registry,
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionProfileCapabilityV1 calldata capability,
         IProgrammableCompletedGraphAdoptionCompatV1.CompletedGraphPlanV1 calldata plan,
         IProgrammableCompletedGraphAdoptionCompatV1.ComponentV1[] calldata components,
-        IProgrammableCompletedGraphAdoptionCompatV1.GraphEdgeV1[] calldata edges
+        IProgrammableCompletedGraphAdoptionCompatV1.GraphEdgeV1[] calldata edges,
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionRequestV1 calldata request
     ) external view {
         if (registry == address(0)) revert InvalidBinding(2);
         _requireCodec();
-        _validatePlanIdentitiesAndPool(plan);
-        _validateComponents(registry, plan, components, edges);
+        _validatePlanIdentitiesAndPool(capability, plan);
+        _validateComponents(registry, capability, plan, components, edges, request);
     }
 
     function _validatePlanIdentitiesAndPool(
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionProfileCapabilityV1 calldata capability,
         IProgrammableCompletedGraphAdoptionCompatV1.CompletedGraphPlanV1 calldata plan
-    ) private pure {
+    ) private view {
         _validateIdentityBit(IDENTITY_TOKEN, plan.identityMask, plan.identities.token != address(0));
         _validateIdentityBit(IDENTITY_HOOK, plan.identityMask, plan.identities.hook != address(0));
         _validateIdentityBit(IDENTITY_NFT, plan.identityMask, plan.identities.nft != address(0));
@@ -76,13 +85,29 @@ contract ProgrammableCompletedGraphAdoptionValidatorV1 {
                     || plan.poolKeyHash != bytes32(0)
                     || plan.poolResultHash != bytes32(0))
         ) revert InvalidBinding(3);
+        bool profileRequiresPool = (capability.requiredIdentityMask & IDENTITY_POOL) != 0;
+        if (profileRequiresPool) {
+            if (
+                capability.canonicalPoolManagerChainId != block.chainid || capability.canonicalPoolManager == address(0)
+                    || capability.canonicalPoolManagerRuntimeCodeHash == bytes32(0)
+                    || plan.poolManager != capability.canonicalPoolManager
+                    || plan.poolManagerRuntimeCodeHash != capability.canonicalPoolManagerRuntimeCodeHash
+            ) revert InvalidBinding(3);
+        } else if (
+            capability.canonicalPoolManagerChainId != 0 || capability.canonicalPoolManager != address(0)
+                || capability.canonicalPoolManagerRuntimeCodeHash != bytes32(0)
+        ) {
+            revert InvalidBinding(3);
+        }
     }
 
     function _validateComponents(
         address registry,
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionProfileCapabilityV1 calldata capability,
         IProgrammableCompletedGraphAdoptionCompatV1.CompletedGraphPlanV1 calldata plan,
         IProgrammableCompletedGraphAdoptionCompatV1.ComponentV1[] calldata components,
-        IProgrammableCompletedGraphAdoptionCompatV1.GraphEdgeV1[] calldata edges
+        IProgrammableCompletedGraphAdoptionCompatV1.GraphEdgeV1[] calldata edges,
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionRequestV1 calldata request
     ) private view {
         if (components.length == 0 || components.length > MAX_COMPONENTS || edges.length > MAX_EDGES) {
             revert InvalidBinding(4);
@@ -112,23 +137,33 @@ contract ProgrammableCompletedGraphAdoptionValidatorV1 {
         if (CODEC.computeComponentConfigurationSetHash(components) != plan.componentConfigurationSetHash) {
             revert InvalidBinding(5);
         }
+        _validatePlanCommitments(plan);
+        _validateCurrentState(registry, capability, plan, components, edges, request);
+    }
+
+    function _validatePlanCommitments(IProgrammableCompletedGraphAdoptionCompatV1.CompletedGraphPlanV1 calldata plan)
+        private
+        view
+    {
+        bytes32 configurationHash = CODEC.computeConfigurationHash(
+            plan.componentGraphHash,
+            plan.componentConfigurationSetHash,
+            plan.policyHash,
+            plan.revenueBindingHash,
+            plan.poolManager,
+            plan.poolManagerRuntimeCodeHash,
+            plan.poolKeyHash,
+            plan.architectureResultHash
+        );
+        if (configurationHash != plan.configurationHash) revert InvalidBinding(5);
         if (
-            CODEC.computeConfigurationHash(
-                        plan.componentGraphHash,
-                        plan.componentConfigurationSetHash,
-                        plan.policyHash,
-                        plan.poolManager,
-                        plan.poolManagerRuntimeCodeHash,
-                        plan.poolKeyHash,
-                        plan.architectureResultHash
-                    ) != plan.configurationHash
-                || CODEC.computeResultHash(
-                        plan.componentGraphHash,
-                        plan.configurationHash,
-                        plan.architectureResultHash,
-                        plan.poolResultHash,
-                        plan.deploymentLineageHash
-                    ) != plan.resultHash
+            CODEC.computeResultHash(
+                    plan.componentGraphHash,
+                    configurationHash,
+                    plan.architectureResultHash,
+                    plan.poolResultHash,
+                    plan.deploymentLineageHash
+                ) != plan.resultHash
         ) revert InvalidBinding(5);
     }
 
@@ -172,16 +207,17 @@ contract ProgrammableCompletedGraphAdoptionValidatorV1 {
 
         if (component.deploymentKind == IProgrammableCompletedGraphAdoptionCompatV1.DeploymentKindV1.Create) {
             if (
-                component.deployer == address(0) || component.createNonce == 0 || component.create2Salt != bytes32(0)
+                component.deployer == address(0) || component.create2Salt != bytes32(0)
                     || component.initCodeHash == bytes32(0) || component.externalCanonicalIdHash != bytes32(0)
                     || _computeCreateAddress(component.deployer, component.createNonce) != component.account
             ) revert InvalidBinding(7);
+            _validateCreateTransactionEvidence(component);
         } else if (component.deploymentKind == IProgrammableCompletedGraphAdoptionCompatV1.DeploymentKindV1.Create2) {
             if (
                 component.deployer == address(0) || component.createNonce != 0 || component.initCodeHash == bytes32(0)
                     || component.externalCanonicalIdHash != bytes32(0)
                     || _computeCreate2Address(component.create2Salt, component.initCodeHash, component.deployer)
-                        != component.account
+                        != component.account || !_emptyCreateTransactionEvidence(component.createTransactionEvidence)
             ) revert InvalidBinding(7);
         } else if (
             component.deploymentKind == IProgrammableCompletedGraphAdoptionCompatV1.DeploymentKindV1.ExternalCanonical
@@ -189,6 +225,7 @@ contract ProgrammableCompletedGraphAdoptionValidatorV1 {
             if (
                 component.deployer != address(0) || component.createNonce != 0 || component.create2Salt != bytes32(0)
                     || component.initCodeHash != bytes32(0) || component.externalCanonicalIdHash == bytes32(0)
+                    || !_emptyCreateTransactionEvidence(component.createTransactionEvidence)
             ) revert InvalidBinding(7);
         } else {
             revert InvalidBinding(7);
@@ -264,6 +301,106 @@ contract ProgrammableCompletedGraphAdoptionValidatorV1 {
 
     function _validateIdentityBit(uint16 bit, uint16 mask, bool present) private pure {
         if (((mask & bit) != 0) != present) revert InvalidBinding(10);
+    }
+
+    function _validateCurrentState(
+        address registry,
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionProfileCapabilityV1 calldata capability,
+        IProgrammableCompletedGraphAdoptionCompatV1.CompletedGraphPlanV1 calldata plan,
+        IProgrammableCompletedGraphAdoptionCompatV1.ComponentV1[] calldata components,
+        IProgrammableCompletedGraphAdoptionCompatV1.GraphEdgeV1[] calldata edges,
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionRequestV1 calldata request
+    ) private view {
+        (bytes32 architectureStateHash, bytes32 poolStateHash, bytes32 revenueStateHash) =
+            _readCurrentState(registry, capability, plan, components, edges, request);
+        _validateCurrentStateHashes(plan, request, architectureStateHash, poolStateHash, revenueStateHash);
+    }
+
+    function _readCurrentState(
+        address registry,
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionProfileCapabilityV1 calldata capability,
+        IProgrammableCompletedGraphAdoptionCompatV1.CompletedGraphPlanV1 calldata plan,
+        IProgrammableCompletedGraphAdoptionCompatV1.ComponentV1[] calldata components,
+        IProgrammableCompletedGraphAdoptionCompatV1.GraphEdgeV1[] calldata edges,
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionRequestV1 calldata request
+    ) private view returns (bytes32 architectureStateHash, bytes32 poolStateHash, bytes32 revenueStateHash) {
+        address verifier = capability.stateVerifier;
+        if (
+            verifier.code.length == 0 || capability.stateVerifierRuntimeCodeHash == bytes32(0)
+                || verifier.codehash != capability.stateVerifierRuntimeCodeHash
+                || capability.stateSchemaHash == bytes32(0) || _containsDelegateCallOpcode(verifier)
+        ) revert InvalidBinding(12);
+        bytes memory data = abi.encodeCall(
+            IProgrammableCompletedGraphAdoptionStateVerifierV1.verifyCurrentStateV1,
+            (registry, capability, plan, components, edges, request)
+        );
+        bytes memory result = new bytes(96);
+        bool success;
+        uint256 returnDataSize;
+        uint256 callGas = gasleft();
+        if (callGas <= STATE_VERIFIER_GAS_RESERVE) revert InvalidBinding(12);
+        unchecked {
+            callGas -= STATE_VERIFIER_GAS_RESERVE;
+        }
+        if (callGas > MAX_STATE_VERIFIER_STATICCALL_GAS) callGas = MAX_STATE_VERIFIER_STATICCALL_GAS;
+        assembly ("memory-safe") {
+            success := staticcall(callGas, verifier, add(data, 0x20), mload(data), add(result, 0x20), 96)
+            returnDataSize := returndatasize()
+        }
+        if (!success || returnDataSize != 96) revert InvalidBinding(12);
+        return abi.decode(result, (bytes32, bytes32, bytes32));
+    }
+
+    function _validateCurrentStateHashes(
+        IProgrammableCompletedGraphAdoptionCompatV1.CompletedGraphPlanV1 calldata plan,
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionRequestV1 calldata request,
+        bytes32 architectureStateHash,
+        bytes32 poolStateHash,
+        bytes32 revenueStateHash
+    ) private pure {
+        if (
+            architectureStateHash != request.currentArchitectureStateHash
+                || poolStateHash != request.currentPoolStateHash || revenueStateHash != request.currentRevenueStateHash
+                || (plan.revenueBindingHash == bytes32(0)) != (revenueStateHash == bytes32(0))
+        ) revert InvalidBinding(12);
+    }
+
+    function _validateCreateTransactionEvidence(
+        IProgrammableCompletedGraphAdoptionCompatV1.ComponentV1 calldata component
+    ) private pure {
+        IProgrammableCompletedGraphAdoptionCompatV1.CreateTransactionEvidenceV1 calldata evidence =
+        component.createTransactionEvidence;
+        if (
+            evidence.transactionHash == bytes32(0) || evidence.blockNumber == 0 || evidence.blockHash == bytes32(0)
+                || evidence.sender != component.deployer || evidence.senderNonce != component.createNonce
+                || evidence.to != address(0) || evidence.inputHash != component.initCodeHash
+                || !evidence.receiptSucceeded || evidence.createdAddress != component.account
+                || evidence.finalityEvidenceHash == bytes32(0) || evidence.dualProviderEvidenceHash == bytes32(0)
+        ) revert InvalidBinding(13);
+    }
+
+    function _emptyCreateTransactionEvidence(
+        IProgrammableCompletedGraphAdoptionCompatV1.CreateTransactionEvidenceV1 calldata evidence
+    ) private pure returns (bool) {
+        return evidence.transactionHash == bytes32(0) && evidence.blockNumber == 0 && evidence.blockHash == bytes32(0)
+            && evidence.transactionIndex == 0 && evidence.sender == address(0) && evidence.senderNonce == 0
+            && evidence.to == address(0) && evidence.valueWei == 0 && evidence.inputHash == bytes32(0)
+            && !evidence.receiptSucceeded && evidence.createdAddress == address(0)
+            && evidence.finalityEvidenceHash == bytes32(0) && evidence.dualProviderEvidenceHash == bytes32(0);
+    }
+
+    function _containsDelegateCallOpcode(address dependency) private view returns (bool) {
+        bytes memory runtime = dependency.code;
+        for (uint256 i; i < runtime.length; ++i) {
+            uint8 opcode = uint8(runtime[i]);
+            if (opcode == 0xf4) return true;
+            if (opcode >= 0x60 && opcode <= 0x7f) {
+                unchecked {
+                    i += opcode - 0x5f;
+                }
+            }
+        }
+        return false;
     }
 
     function _computeCreate2Address(bytes32 salt, bytes32 initCodeHash, address deployer)
