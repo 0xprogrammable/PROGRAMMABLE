@@ -1502,7 +1502,7 @@ body:has([data-docs-shell]) .site-header::before {
     border-radius: 0;
     bottom: max(4px, env(safe-area-inset-bottom));
     box-shadow: none;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     height: 56px;
     inset-inline-end: max(12px, env(safe-area-inset-right));
     inset-inline-start: max(12px, env(safe-area-inset-left));
@@ -1591,7 +1591,7 @@ body:has([data-docs-shell]) .site-header::before {
     bottom: max(4px, env(safe-area-inset-bottom));
     box-shadow: none;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     height: 56px;
     inset-inline-end: max(12px, env(safe-area-inset-right));
     inset-inline-start: max(12px, env(safe-area-inset-left));
@@ -1681,7 +1681,7 @@ body:has([data-docs-shell]) .site-header::before {
   }
 
   .mobile-nav {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     height: 56px;
     padding: 0;
   }
@@ -1806,6 +1806,11 @@ body:has([data-docs-shell]) .site-header::before {
 }
 
 @media (max-width: 370px) {
+  .mobile-nav a {
+    font-size: 11px;
+    letter-spacing: -0.025em;
+  }
+
   .explore-token-address {
     max-width: 100%;
   }
