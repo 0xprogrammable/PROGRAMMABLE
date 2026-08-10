@@ -530,7 +530,13 @@ function ed25519SignatureBytes(value: `ed25519:${string}`): Uint8Array {
     throw invalid("Hookemon Ed25519 signature encoding is invalid");
   }
   const bytes = Uint8Array.from(decoded, (character) => character.charCodeAt(0));
-  if (bytes.length !== 64) throw invalid("Hookemon Ed25519 signature length is invalid");
+  const canonical = btoa(String.fromCharCode(...bytes))
+    .replace(/\+/gu, "-")
+    .replace(/\//gu, "_")
+    .replace(/=+$/u, "");
+  if (bytes.length !== 64 || canonical !== encoded) {
+    throw invalid("Hookemon Ed25519 signature length or encoding is invalid");
+  }
   return bytes;
 }
 

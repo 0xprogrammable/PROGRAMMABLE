@@ -228,6 +228,15 @@ describe("Hookemon browser Authority envelope", () => {
       verifySignature,
     })).rejects.toThrow(/signature encoding/u);
     await expect(verifyHookemonActionAuthorityEnvelopeV1({
+      action: fixture.action,
+      envelope: {
+        ...fixture.envelope,
+        signature: `${signature.slice(0, -1)}B`,
+      },
+      expectedRelease: fixture.expectedRelease,
+      verifySignature,
+    })).rejects.toThrow(/signature length or encoding/u);
+    await expect(verifyHookemonActionAuthorityEnvelopeV1({
       action: { ...fixture.action, opaque: "accepted" },
       envelope: fixture.envelope,
       expectedRelease: fixture.expectedRelease,
