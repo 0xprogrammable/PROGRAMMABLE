@@ -158,10 +158,10 @@ describe("unreleased launch model gating", () => {
     ).toEqual([-1, -1, 0, -1, -1, -1]);
   });
 
-  it("opens the gated Custom launcher and shows upcoming partner models", () => {
+  it("opens the approved Custom Hook launcher without the legacy Custom card", () => {
     const html = renderToStaticMarkup(
       createElement(LaunchModelPicker, {
-        customLaunchPublicEnabled: true,
+        manualApplicantLaunchEnabled: true,
         onChoose: () => undefined,
       }),
     );
@@ -177,18 +177,19 @@ describe("unreleased launch model gating", () => {
     expect(html).toContain(
       'id="launch-model-classic-title">Classic</strong>',
     );
-    expect(html).toContain('data-launch-model-option="custom"');
+    expect(html).toContain('data-launch-model-option="manual-applicant"');
     const customCard = html.match(
-      /<button[^>]*data-launch-model-option="custom"[^>]*>/,
+      /<button[^>]*data-launch-model-option="manual-applicant"[^>]*>/,
     )?.[0];
     expect(customCard).toContain('data-launch-model-launchable="true"');
     expect(html).toContain(
-      'id="launch-model-custom-title">Custom Hook</strong>',
+      'id="launch-model-manual-applicant-title">Custom Hook</strong>',
     );
     expect(html).toContain("Create a Classic coin");
-    expect(html).toContain("Build or resume");
-    expect(html).not.toContain("Create a Custom Hook");
-    expect(html).toContain("evidence required for release");
+    expect(html).toContain("Open Custom Hook launch");
+    expect(html).not.toContain('data-launch-model-option="custom"');
+    expect(html).not.toContain("Build or resume");
+    expect(html).not.toContain("Coming soon");
     expect(html).toContain('data-launch-model-option="aeon"');
     const aeonCard = html.match(
       /<a[^>]*href="https:\/\/x\.com\/aeonframework"[^>]*>/,
@@ -234,18 +235,15 @@ describe("unreleased launch model gating", () => {
     expect(html).not.toContain("Liquidity Growth");
   });
 
-  it("fails the Custom Hook launcher closed until the server gate is enabled", () => {
+  it("does not render the removed legacy Custom Hook card", () => {
     const html = renderToStaticMarkup(
       createElement(LaunchModelPicker, {
         onChoose: () => undefined,
       }),
     );
-    const customCard = html.match(
-      /<button[^>]*data-launch-model-option="custom"[^>]*>/,
-    )?.[0];
-    expect(customCard).toContain('data-launch-model-launchable="false"');
-    expect(customCard).toContain("disabled");
-    expect(html).toContain("Coming soon");
+    expect(html).not.toContain('data-launch-model-option="custom"');
+    expect(html).not.toContain('id="launch-model-custom-title"');
+    expect(html).not.toContain("Coming soon");
     expect(html).not.toContain("Build or resume");
   });
 

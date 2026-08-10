@@ -993,17 +993,20 @@ describe("manual Applicant browser contract", () => {
 
   it("adds the Applicant entry only behind its separate flag and exposes no upload fallback", () => {
     const disabled = renderToStaticMarkup(createElement(LaunchModelPicker, {
-      customLaunchPublicEnabled: false,
       manualApplicantLaunchEnabled: false,
       onChoose: () => undefined,
     }));
     const enabled = renderToStaticMarkup(createElement(LaunchModelPicker, {
-      customLaunchPublicEnabled: false,
       manualApplicantLaunchEnabled: true,
       onChoose: () => undefined,
     }));
     expect(disabled).not.toContain('data-launch-model-option="manual-applicant"');
     expect(enabled).toContain('data-launch-model-option="manual-applicant"');
+    expect(enabled).toContain(
+      'id="launch-model-manual-applicant-title">Custom Hook</strong>',
+    );
+    expect(enabled).toContain("Open Custom Hook launch");
+    expect(enabled).not.toContain('data-launch-model-option="custom"');
 
     const component = readFileSync(
       join(process.cwd(), "components/manual-applicant-launch.tsx"),
