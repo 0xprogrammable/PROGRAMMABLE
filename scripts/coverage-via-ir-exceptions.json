@@ -11,6 +11,10 @@
     {
       "path": "src/ProgrammableExactShardsProfileV1.sol",
       "sha256": "4cd394acad6aca92d433703cc0eaeb6becd890b404ceb855fa2c175a13d02809"
+    },
+    {
+      "path": "src/ProgrammableCompletedGraphAdoptionRouterV2_1.sol",
+      "sha256": "c25196d9901ccea6467058ce9d0c9a88acdf55d366653f07e40955c2a5236840"
     }
   ],
   "requiredTests": [
@@ -21,6 +25,10 @@
     {
       "path": "test/ProgrammableLaunchStampRouterV2Registry.t.sol",
       "sha256": "224fd26f37603c61b6849185959d12a4ce7e8b49b9dfa636e49a2e8fccf78396"
+    },
+    {
+      "path": "test/ProgrammableCompletedGraphAdoptionRouterV2_1.t.sol",
+      "sha256": "3f4febdeeb746f95a31e7f7ee88d5b418b0e633dbd35586a7fe5bd62d01a79d6"
     }
   ]
 }
