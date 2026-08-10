@@ -76,10 +76,10 @@ describe("topbar and Explore hero polish", () => {
       /\.socialLink\s*\{[^}]*height:\s*44px;[^}]*width:\s*44px;/s,
     );
     expect(landingCss).toMatch(
-      /\.socialLink svg,\s*\.socialLogo\s*\{[^}]*height:\s*24px;[^}]*width:\s*24px;/s,
+      /\.socialLink svg,\s*\.socialLogo\s*\{[^}]*height:\s*28px;[^}]*width:\s*28px;/s,
     );
     expect(landingCss).toMatch(
-      /\.docsLink\s*\{[^}]*font-size:\s*16px;/s,
+      /\.docsLink\s*\{[^}]*font-size:\s*17px;/s,
     );
   });
 
