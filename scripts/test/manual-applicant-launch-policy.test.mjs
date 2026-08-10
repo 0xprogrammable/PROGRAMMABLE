@@ -245,7 +245,7 @@ test("staged runtime preflight requires typed parse, authentication, and accepta
       const acceptance = String(url).endsWith("/route-acceptance");
       const authentication = !acceptance && init.body !== "{}";
       const code = acceptance
-        ? "session_required"
+        ? "applicant_authentication_required"
         : authentication
           ? "applicant_authentication_required"
           : "invalid_request";
@@ -271,7 +271,7 @@ test("staged runtime preflight requires typed parse, authentication, and accepta
     authenticationHttpStatus: 401,
     authenticationCode: "applicant_authentication_required",
     acceptanceHttpStatus: 401,
-    acceptanceCode: "session_required",
+    acceptanceCode: "applicant_authentication_required",
   });
   assert.equal(requests.length, 3);
   assert.equal(requests[0].url,
