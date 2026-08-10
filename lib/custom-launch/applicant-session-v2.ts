@@ -108,6 +108,12 @@ export type CustomLaunchApplicantDangerousStageV2 =
   | "execution"
   | "wallet-send";
 
+export function customLaunchApplicantStageRequiresExplicitSessionV2(
+  stage: CustomLaunchApplicantDangerousStageV2,
+): boolean {
+  return stage === "wallet-signature" || stage === "wallet-send";
+}
+
 export async function runCurrentCustomLaunchApplicantSequenceV2<
   Challenge,
   Preparation,

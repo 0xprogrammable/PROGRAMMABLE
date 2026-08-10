@@ -1,14 +1,22 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
+import {
+  customLaunchPersistedRecoveryProgressV2,
+  customLaunchRecoveryDisplayV2,
+  CustomLaunchRecoveryCopyV2,
+} from "../components/custom-launch-experience";
 import {
   acquireCurrentCustomLaunchWebsiteSessionV2,
   assertCurrentCustomLaunchPrincipalV2,
   customApplicationHasDurableApprovalV2,
   customApplicationHasCurrentLaunchEntitlementV2,
   customLaunchApplicantRecoveryV2,
+  customLaunchApplicantStageRequiresExplicitSessionV2,
   customLaunchApplicantSessionBoundaryKeyV2,
   runCurrentCustomLaunchApplicantSequenceV2,
   CustomLaunchApplicantBoundaryGuardV2,
@@ -103,6 +111,20 @@ function applicationList(githubPrincipalHash = digest("3")) {
 }
 
 describe("custom launch applicant session currentness", () => {
+  it("adds explicit refresh only at local wallet effect boundaries", () => {
+    const stages: Parameters<typeof customLaunchApplicantStageRequiresExplicitSessionV2>[0][] = [
+      "challenge",
+      "preparation",
+      "wallet-signature",
+      "wallet-authentication",
+      "authorization",
+      "execution",
+      "wallet-send",
+    ];
+    expect(stages.filter(customLaunchApplicantStageRequiresExplicitSessionV2))
+      .toEqual(["wallet-signature", "wallet-send"]);
+  });
+
   it("runs the production dangerous stages only in the fixed boundary-gated order", async () => {
     const effects = dangerousSequenceEffects();
     const stages: string[] = [];
@@ -163,6 +185,65 @@ describe("custom launch applicant session currentness", () => {
     })).resolves.toMatchObject({ send: "0xtransaction" });
     expect(persistBroadcast).toHaveBeenCalledWith("0xtransaction");
     expect(effects.sendBrowserWalletAction).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a prepared recovery unsubmitted when the final session refresh fails", async () => {
+    const effects = dangerousSequenceEffects();
+    let persistedRecovery: { stage: "prepared" } | null = null;
+    effects.createExecutionPreparation.mockImplementation(async () => {
+      persistedRecovery = { stage: "prepared" };
+      return "execution";
+    });
+    const getSession = vi.fn(async (stage: string) => {
+      if (stage === "wallet-send") {
+        throw new CustomLaunchApplicantSessionErrorV2(
+          "authentication",
+          "Reconnect GitHub to continue",
+        );
+      }
+    });
+
+    await expect(runCurrentCustomLaunchApplicantSequenceV2({
+      refreshBoundary: async (stage) => {
+        if (customLaunchApplicantStageRequiresExplicitSessionV2(stage)) {
+          await getSession(stage);
+        }
+      },
+      assertBoundary: () => undefined,
+      ...effects,
+    })).rejects.toMatchObject({ reason: "authentication" });
+
+    expect(getSession).toHaveBeenLastCalledWith("wallet-send");
+    expect(effects.createExecutionPreparation).toHaveBeenCalledOnce();
+    expect(effects.sendBrowserWalletAction).not.toHaveBeenCalled();
+    if (persistedRecovery === null) throw new Error("expected prepared recovery");
+    const progress = customLaunchPersistedRecoveryProgressV2(persistedRecovery);
+    const display = customLaunchRecoveryDisplayV2(progress);
+    const html = renderToStaticMarkup(createElement(CustomLaunchRecoveryCopyV2, {
+      launchProgress: progress,
+    }));
+    expect(display).toMatchObject({
+      title: "Launch not submitted",
+      submitted: false,
+    });
+    expect(html).toContain("Launch not submitted");
+    expect(html).toContain("Checking the reserved launch");
+    expect(html).not.toContain("Launch submitted");
+  });
+
+  it("labels only broadcast recovery as submitted", () => {
+    const progress = customLaunchPersistedRecoveryProgressV2({ stage: "broadcast" });
+    const display = customLaunchRecoveryDisplayV2(progress);
+    const html = renderToStaticMarkup(createElement(CustomLaunchRecoveryCopyV2, {
+      launchProgress: progress,
+    }));
+    expect(progress).toBe("confirmation");
+    expect(display).toMatchObject({
+      title: "Launch submitted",
+      submitted: true,
+    });
+    expect(html).toContain("Launch submitted");
+    expect(html).not.toContain("Launch not submitted");
   });
 
   it("acquires imperative Identity then current Access within one exact auth boundary", async () => {
@@ -621,6 +702,8 @@ describe("custom launch applicant session currentness", () => {
     expect(componentSource).toContain("sessionBoundaryGuardRef.current.commit(sessionBoundaryKey)");
     expect(componentSource).toContain("createCustomLaunchWebsiteClientV2({ getSession })");
     expect(componentSource).toContain("const sequence = await runCurrentCustomLaunchApplicantSequenceV2({");
+    expect(componentSource).toContain('if (recoveryRead.kind !== "absent")');
+    expect(componentSource).toContain("An existing launch attempt must be resolved before another transaction can be submitted");
     expect(componentSource).toContain("if (isActive()) {\n        setTransactionHash(hash);");
     expect(componentSource).toContain("readApplicantAuthState,");
     expect(componentSource).toContain("await reauthorizeGithub()");

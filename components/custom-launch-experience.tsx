@@ -45,6 +45,7 @@ import {
   customApplicationHasDurableApprovalV2,
   customApplicationHasCurrentLaunchEntitlementV2,
   customLaunchApplicantRecoveryV2,
+  customLaunchApplicantStageRequiresExplicitSessionV2,
   customLaunchApplicantSessionBoundaryKeyV2,
   runCurrentCustomLaunchApplicantSequenceV2,
   CustomLaunchApplicantBoundaryGuardV2,
@@ -168,11 +169,12 @@ const LAUNCH_PERMIT_LOCATOR_KEYS_V2 = [
 ] as const;
 
 type CustomLaunchScreen = "intro" | "applications" | "setup";
-type LaunchProgress =
+export type LaunchProgress =
   | "idle"
   | "preparing"
   | "wallet-proof"
   | "wallet-transaction"
+  | "reconciling"
   | "confirmation"
   | "publishing"
   | "complete";
@@ -212,6 +214,57 @@ type BroadcastLaunchRecoveryV2 = Readonly<{
 export type PersistedLaunchRecoveryV2 =
   | PreparedLaunchRecoveryV2
   | BroadcastLaunchRecoveryV2;
+
+export function customLaunchPersistedRecoveryProgressV2(
+  recovery: Pick<PersistedLaunchRecoveryV2, "stage">,
+): Extract<LaunchProgress, "reconciling" | "confirmation"> {
+  return recovery.stage === "prepared" ? "reconciling" : "confirmation";
+}
+
+export function customLaunchRecoveryDisplayV2(
+  launchProgress: LaunchProgress,
+  statusMessage = "",
+): Readonly<{ title: string; message: string; submitted: boolean }> {
+  if (launchProgress === "complete") {
+    return {
+      title: "Launch complete",
+      message: statusMessage || "The launched project is published.",
+      submitted: true,
+    };
+  }
+  if (launchProgress === "confirmation" || launchProgress === "publishing") {
+    return {
+      title: "Launch submitted",
+      message: statusMessage || "The approved transaction is being verified.",
+      submitted: true,
+    };
+  }
+  return {
+    title: "Launch not submitted",
+    message: statusMessage
+      || "Checking the reserved launch before another wallet action can start.",
+    submitted: false,
+  };
+}
+
+export function CustomLaunchRecoveryCopyV2({
+  launchProgress,
+  statusMessage,
+}: Readonly<{
+  launchProgress: LaunchProgress;
+  statusMessage?: string;
+}>) {
+  const display = customLaunchRecoveryDisplayV2(
+    launchProgress,
+    statusMessage,
+  );
+  return (
+    <>
+      <h2>{display.title}</h2>
+      <p>{display.message}</p>
+    </>
+  );
+}
 
 type LaunchRecoveryReadV2 =
   | Readonly<{ kind: "absent" }>
@@ -1457,7 +1510,11 @@ export function CustomLaunchExperience({
       setApplicationsLoading(false);
       setSetupLoading(false);
       setLaunchProgress((current) =>
-        current === "confirmation" || current === "publishing" ? current : "idle",
+        current === "reconciling"
+          || current === "confirmation"
+          || current === "publishing"
+          ? current
+          : "idle",
       );
       setApplicantRecovery(recovery);
       if (recovery !== "none") {
@@ -1675,8 +1732,13 @@ export function CustomLaunchExperience({
       }
       const recovery = recoveryRead.kind === "valid" ? recoveryRead.recovery : null;
       if (application.state === "launching" || recovery !== null) {
-        setLaunchProgress("confirmation");
-        setStatusMessage("Checking launch confirmation");
+        const recoveryProgress = recovery === null
+          ? "confirmation"
+          : customLaunchPersistedRecoveryProgressV2(recovery);
+        setLaunchProgress(recoveryProgress);
+        setStatusMessage(recoveryProgress === "reconciling"
+          ? "Launch not submitted. Checking the reserved launch before retrying"
+          : "Checking launch confirmation");
         setSetupLoading(false);
         if (!recovery) {
           setStatusMessage("Launch verification is still in progress");
@@ -2018,6 +2080,7 @@ export function CustomLaunchExperience({
     setLaunchProgress("preparing");
     setStatusMessage("Preparing approved launch");
     let activeDescriptor = descriptor;
+    let broadcastRecovery: BroadcastLaunchRecoveryV2 | null = null;
     try {
       const client = createCustomLaunchWebsiteClientV2({ getSession });
       if (!isActive()) return;
@@ -2103,16 +2166,9 @@ export function CustomLaunchExperience({
       const route = defaultLaunchRoute(activeDescriptor);
       const sequence = await runCurrentCustomLaunchApplicantSequenceV2({
         refreshBoundary: async (stage) => {
-          // Every server call also refreshes inside the dynamic client. Repeat
-          // only at the critical challenge/JIT boundaries and immediately
-          // before local wallet effects; preparation/auth avoid a duplicate.
-          if (
-            stage === "challenge"
-            || stage === "wallet-signature"
-            || stage === "authorization"
-            || stage === "execution"
-            || stage === "wallet-send"
-          ) {
+          // Server calls refresh through the dynamic client. Only local wallet
+          // effects need a second current-session proof at their exact edge.
+          if (customLaunchApplicantStageRequiresExplicitSessionV2(stage)) {
             await getSession();
           }
           if (!isActive()) throw new LaunchFlowCancelledError();
@@ -2340,6 +2396,7 @@ export function CustomLaunchExperience({
       const { permit } = sequence.authorization;
       const { action, execution } = sequence.execution;
       const { hash, reportRecovery } = sequence.send;
+      broadcastRecovery = reportRecovery;
       try {
         requirePersistLaunchSession(
           launchGithubPrincipalHash,
@@ -2424,9 +2481,26 @@ export function CustomLaunchExperience({
         clearLaunchSession(launchGithubPrincipalHash, applicationHandle);
       }
       setApplicantFailure(failure);
-      setLaunchProgress((current) =>
-        current === "confirmation" || current === "publishing" ? current : "idle",
+      const recoveryReadAfterFailure = readLaunchSession(
+        launchGithubPrincipalHash,
+        applicationHandle,
       );
+      if (broadcastRecovery !== null) {
+        setTransactionHash(broadcastRecovery.transactionHash);
+        setTransactionChainId(broadcastRecovery.chainId);
+        setLaunchProgress("confirmation");
+        setStatusMessage("Launch submitted. Check confirmation status");
+      } else if (
+        recoveryReadAfterFailure.kind === "valid"
+        && recoveryReadAfterFailure.recovery.stage === "prepared"
+      ) {
+        setLaunchProgress("reconciling");
+        setStatusMessage("Launch not submitted. Check the reserved launch before retrying");
+      } else {
+        setLaunchProgress((current) =>
+          current === "confirmation" || current === "publishing" ? current : "idle",
+        );
+      }
     } finally {
       launchSingleFlightRef.current.release(flowOwner);
     }
@@ -2615,12 +2689,22 @@ export function CustomLaunchExperience({
         </section>
       ) : !descriptor ? (
         <section className={styles.loadingPanel} aria-live="polite">
-          {launchProgress === "complete" ? <CircleCheck aria-hidden="true" size={20} /> : <LoaderCircle aria-hidden="true" className={styles.spin} size={20} />}
+          {launchProgress === "complete" ? <CircleCheck aria-hidden="true" size={20} /> : launchProgress === "reconciling" ? <Clock3 aria-hidden="true" size={20} /> : <LoaderCircle aria-hidden="true" className={styles.spin} size={20} />}
           <div className={styles.recoveryCopy}>
-            <h2>{launchProgress === "complete" ? "Launch complete" : "Launch submitted"}</h2>
-            <p>{statusMessage || "The approved transaction is being verified."}</p>
+            <CustomLaunchRecoveryCopyV2
+              launchProgress={launchProgress}
+              statusMessage={statusMessage}
+            />
             {transactionHash ? <TransactionEvidence chainId={transactionChainId} transactionHash={transactionHash} /> : null}
-            {launchProgress === "complete" ? <Link className={styles.secondaryButton} href="/explore?model=custom">Explore Custom</Link> : <button className={styles.secondaryButton} type="button" onClick={returnToApplications}>View submissions</button>}
+            {launchProgress === "complete" ? (
+              <Link className={styles.secondaryButton} href="/explore?model=custom">Explore Custom</Link>
+            ) : applicantRecovery !== "none" ? (
+              <button className={styles.secondaryButton} type="button" disabled={applicantReauthorizing} onClick={() => void recoverApplicantAccess()}>{applicantRecoveryAction}</button>
+            ) : launchProgress === "reconciling" && selected !== null ? (
+              <button className={styles.secondaryButton} type="button" onClick={() => void openApplication(selected)}>Check reserved launch</button>
+            ) : (
+              <button className={styles.secondaryButton} type="button" onClick={returnToApplications}>View submissions</button>
+            )}
           </div>
           <LiveMessage message={error} error />
         </section>
@@ -2933,6 +3017,7 @@ async function pollLaunchStatus(
     onPublishing: () => void;
   }>,
 ): Promise<Extract<LaunchExecutionStatusViewV2, { state: "finalized" }>> {
+  let observedBroadcast = input.launchTransactionId !== undefined;
   for (let attempt = 0; attempt < STATUS_POLL_ATTEMPTS; attempt += 1) {
     if (!input.isActive()) throw new LaunchFlowCancelledError();
     let status: LaunchExecutionStatusViewV2;
@@ -2954,10 +3039,15 @@ async function pollLaunchStatus(
     if (status.state === "execution_unavailable") {
       throw new LaunchExecutionUnavailableError("This launch authorization is no longer available. Return to your submissions and verify the current version");
     }
-    if (status.state === "broadcast") input.onPublishing();
+    if (status.state === "broadcast") {
+      observedBroadcast = true;
+      input.onPublishing();
+    }
     await delay(STATUS_POLL_DELAY_MS);
   }
-  throw new Error("The transaction was submitted and is still being verified. Return to this launch to check its status");
+  throw new Error(observedBroadcast
+    ? "The transaction was submitted and is still being verified. Return to this launch to check its status"
+    : "Launch was not submitted. The reserved launch must be checked before another wallet action can start");
 }
 
 export function assertLaunchExecutionStatusBinding(
