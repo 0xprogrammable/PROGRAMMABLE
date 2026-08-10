@@ -8,6 +8,7 @@ import {
   RouterLaunchFinalityVerifierV1,
   RouterLaunchTransactionRevertedError,
   assertPortableManualRouterCompleteSignedArtifactV1,
+  assertPortableManualRouterSignedPublishRequestV1,
   createPortableManualRouterPublishAuthorityFromEnvV1,
   resolvePortableManualRouterReissueStateV1,
   verifyPortableManualRouterSignedPublishV1,
@@ -26,6 +27,10 @@ import type { ManualRouterChainClockV1 } from
 import {
   type ManualRouterFinalityAuthorityV1,
 } from "@/lib/server/custom-launch/manual-router-finality-v1";
+import {
+  createShardsManualRouterPublishFetchV1,
+  isExactShardsManualRouterPublishRequestV1,
+} from "@/lib/server/custom-launch/manual-router-shards-publish-transport-v1";
 import {
   ManualRouterTransactionNotObservedErrorV1,
   type ManualRouterCompleteSignedArtifactViewV1,
@@ -94,6 +99,15 @@ ProductionManualRouterAuthorityV1 {
     // secret. The Applicant identity path is separately bound through Privy.
     githubReadToken: null,
   });
+  const shardsPublishComposition =
+    createPortableManualRouterPublishAuthorityFromEnvV1({
+      env: process.env,
+      fetch: createShardsManualRouterPublishFetchV1({
+        fetch,
+        quickNodeUrl: process.env[MANUAL_ROUTER_QUICKNODE_RPC_ENV_V1],
+      }),
+      githubReadToken: null,
+    });
   const website: ManualRouterWebsiteAuthorityV1 = Object.freeze({
     assertCompleteSignedArtifact(raw: unknown) {
       const artifact = assertPortableManualRouterCompleteSignedArtifactV1(raw);
@@ -102,9 +116,15 @@ ProductionManualRouterAuthorityV1 {
     async verifySignedPublish(input: Parameters<
       ManualRouterWebsiteAuthorityV1["verifySignedPublish"]
     >[0]) {
+      const verifiedRequest = assertPortableManualRouterSignedPublishRequestV1(
+        input.request,
+      );
       return await verifyPortableManualRouterSignedPublishV1({
-        composition,
         ...input,
+        composition: isExactShardsManualRouterPublishRequestV1(verifiedRequest)
+          ? shardsPublishComposition
+          : composition,
+        request: verifiedRequest,
       }) as unknown as ManualRouterVerifiedPublishV1;
     },
     async readChainClock(): Promise<ManualRouterChainClockV1> {
