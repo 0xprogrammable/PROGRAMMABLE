@@ -665,14 +665,14 @@ export function TokenTrade({
         </div>
       </div>
 
-      <dl className={styles.tradeFacts}>
+      <dl className={`${styles.tradeFacts} ${styles.tradeSettings}`}>
         <div>
-          <dt>Swap fee</dt>
+          <dt>Pool fee</dt>
           <dd>{formatBasisPoints(activeSwapFeeBps)}</dd>
         </div>
         <div>
           <dt>
-            <label htmlFor={slippageInputId}>Slippage</label>
+            <label htmlFor={slippageInputId}>Max slippage</label>
           </dt>
           <dd>
             <span
@@ -807,7 +807,7 @@ export function PreparedTradeReview({
           </div>
         ) : null}
         <div>
-          <dt>{launchModel === "deep" ? "Deep fee" : "Swap fee"}</dt>
+          <dt>{launchModel === "deep" ? "Deep fee" : "Pool fee"}</dt>
           <dd>{formatBasisPoints(totalSwapFeeBps)}</dd>
         </div>
         {!approval ? (

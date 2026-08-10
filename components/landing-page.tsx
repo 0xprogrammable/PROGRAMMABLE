@@ -83,7 +83,7 @@ export function LandingPage() {
                 alt=""
                 width={256}
                 height={256}
-                sizes="24px"
+                sizes="28px"
               />
             </a>
             <span className={styles.utilityDivider} aria-hidden="true" />

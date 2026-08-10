@@ -54,6 +54,13 @@
   min-width: 0;
 }
 
+.classicLayout {
+  grid-template-areas:
+    "identity identity"
+    "chart trade"
+    "deep deep";
+}
+
 .emptyState {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
@@ -1251,6 +1258,68 @@
   margin: 0;
 }
 
+.tradeSettings {
+  gap: 8px;
+}
+
+.tradeFacts.tradeSettings > div {
+  align-items: stretch;
+  background: var(--liquid-glass-inner-background);
+  border: 1px solid var(--liquid-glass-border);
+  border-radius: 15px;
+  box-shadow: var(--liquid-glass-inner-shadow);
+  flex-direction: column;
+  gap: 2px;
+  justify-content: center;
+  min-height: 78px;
+  padding: 7px 10px;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.tradeSettings > div:focus-within {
+  border-color: color-mix(in srgb, var(--focus) 58%, var(--control-glass-border));
+  box-shadow:
+    var(--liquid-glass-inner-shadow),
+    0 0 0 3px color-mix(in srgb, var(--focus) 11%, transparent);
+}
+
+.tradeSettings dt {
+  font-size: 11px;
+  font-weight: 620;
+  letter-spacing: 0.01em;
+}
+
+.tradeSettings dd {
+  align-items: center;
+  display: flex;
+  min-height: 44px;
+}
+
+.tradeSettings .slippageControl {
+  background: transparent;
+  border-color: transparent;
+  border-radius: 10px;
+  box-shadow: none;
+  padding: 0;
+  width: 100%;
+}
+
+.tradeSettings .slippageControl:focus-within {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.tradeSettings .slippageControlInvalid {
+  border-color: color-mix(in srgb, var(--danger) 54%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 28%, transparent);
+}
+
+.tradeSettings .slippageControl input {
+  text-align: start;
+}
+
 .error {
   background: color-mix(in srgb, var(--danger) 9%, transparent);
   border: 1px solid color-mix(in srgb, var(--danger) 18%, transparent);
@@ -1586,6 +1655,14 @@
       "deep"
       "community";
     grid-template-columns: 1fr;
+  }
+
+  .classicLayout {
+    grid-template-areas:
+      "identity"
+      "chart"
+      "trade"
+      "deep";
   }
 
   .tradeShell {
