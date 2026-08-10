@@ -13,6 +13,42 @@ import {
   shouldClearChartInspectionAfterPointerUp,
 } from "../components/token-price-chart";
 
+const CURRENT_DATA_QUALITY = {
+  schemaVersion: "programmable.explore-chart-data-quality.v1",
+  status: "current",
+  asOfBlock: "100",
+  blockHash: `0x${"11".repeat(32)}`,
+  finality: "confirmed",
+  history: { status: "current", throughBlock: "100" },
+  price: { status: "current", asOfBlock: "100", lagBlocks: "0" },
+  valuation: {
+    status: "current",
+    metric: "fdv",
+    asOfBlock: "100",
+    lagBlocks: "0",
+  },
+} as const;
+
+const STALE_VALUATION_DATA_QUALITY = {
+  ...CURRENT_DATA_QUALITY,
+  status: "partial",
+  valuation: {
+    status: "stale",
+    metric: "fdv",
+    asOfBlock: "99",
+    lagBlocks: "1",
+  },
+} as const;
+
+const UNAVAILABLE_VALUATION_DATA_QUALITY = {
+  ...CURRENT_DATA_QUALITY,
+  status: "partial",
+  valuation: {
+    status: "unavailable",
+    metric: "fdv",
+  },
+} as const;
+
 describe("token price chart inspection", () => {
   it("maps the pointer to the nearest plotted price point", () => {
     expect(nearestChartPointIndex(100, 100, 600, 7)).toBe(0);
@@ -70,6 +106,29 @@ describe("token price chart inspection", () => {
     });
   });
 
+  it("retains verified FDV when historical integer scaling would underflow", () => {
+    expect(
+      getChartFdvAtPoint(
+        {
+          status: "ready",
+          points: [],
+          swapCount: 2,
+          volumeWei: "0",
+          volumeEth: "0",
+          fdvEthWei: "1",
+          fdvEth: "0.000000000000000001",
+          fdvUsdWad: "1",
+        },
+        { blockNumber: "1", priceEth: "0.5" },
+        { blockNumber: "2", priceEth: "1" },
+      ),
+    ).toEqual({
+      fdvEthWei: "1",
+      fdvEth: "0.000000000000000001",
+      fdvUsdWad: "1",
+    });
+  });
+
   it("keeps a current one-point series as an accessible inspectable value", () => {
     const chart = createChartGeometry([
       { blockNumber: "100", priceEth: "1", priceUsd: "3500" },
@@ -116,6 +175,8 @@ describe("token price chart refresh", () => {
         fdvEthWei: "1000000000000000000000",
         fdvEth: "1000",
         fdvUsdWad: "3000000000000000000000000",
+        valuationMetric: "fdv",
+        dataQuality: CURRENT_DATA_QUALITY,
       }),
     ).toBe(true);
     expect(
@@ -128,6 +189,55 @@ describe("token price chart refresh", () => {
         marketCapEthWei: "1000000000000000000000",
         marketCapEth: "1000",
         marketCapUsdWad: "3000000000000000000000000",
+      }),
+    ).toBe(false);
+    expect(
+      isAuthoritativeChartPayload({
+        status: "insufficient-history",
+        points: [{ blockNumber: "100", priceEth: "0.1" }],
+        swapCount: 1,
+        volumeWei: "1",
+        volumeEth: "0.000000000000000001",
+        valuationMetric: "fdv",
+        dataQuality: CURRENT_DATA_QUALITY,
+      }),
+    ).toBe(true);
+    expect(
+      isAuthoritativeChartPayload({
+        status: "ready",
+        points: [{ blockNumber: "1", priceEth: "0.1" }],
+        swapCount: 1,
+        volumeWei: "1",
+        volumeEth: "0.000000000000000001",
+        valuationMetric: "fdv",
+        dataQuality: CURRENT_DATA_QUALITY,
+      }),
+    ).toBe(false);
+    expect(
+      isAuthoritativeChartPayload({
+        status: "ready",
+        points: [
+          { blockNumber: "99", priceEth: "0.1" },
+          { blockNumber: "100", priceEth: "0.2" },
+        ],
+        swapCount: 2,
+        volumeWei: "3",
+        volumeEth: "0.000000000000000003",
+        valuationMetric: "fdv",
+      }),
+    ).toBe(false);
+    expect(
+      isAuthoritativeChartPayload({
+        status: "insufficient-history",
+        points: [
+          { blockNumber: "1", priceEth: "0.1" },
+          { blockNumber: "2", priceEth: "0.2" },
+        ],
+        swapCount: 2,
+        volumeWei: "2",
+        volumeEth: "0.000000000000000002",
+        valuationMetric: "fdv",
+        dataQuality: CURRENT_DATA_QUALITY,
       }),
     ).toBe(false);
     expect(
@@ -167,6 +277,90 @@ describe("token price chart refresh", () => {
         swapCount: 1,
         volumeWei: "0",
         volumeEth: "Infinity",
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps current history but strips stale FDV before acceptance", () => {
+    const partialValuation = {
+      status: "ready" as const,
+      points: [
+        { blockNumber: "99", priceEth: "0.1" },
+        { blockNumber: "100", priceEth: "0.2" },
+      ],
+      swapCount: 2,
+      volumeWei: "3",
+      volumeEth: "0.000000000000000003",
+      fdvEthWei: "1000000000000000000000",
+      fdvEth: "1000",
+      fdvUsdWad: "3000000000000000000000000",
+      valuationMetric: "fdv" as const,
+      dataQuality: STALE_VALUATION_DATA_QUALITY,
+    };
+
+    expect(isAuthoritativeChartPayload(partialValuation)).toBe(true);
+    expect(acceptChartPayload("token:1d", partialValuation)).toEqual({
+      key: "token:1d",
+      payload: {
+        status: "ready",
+        points: partialValuation.points,
+        swapCount: 2,
+        volumeWei: "3",
+        volumeEth: "0.000000000000000003",
+        valuationMetric: "fdv",
+        dataQuality: STALE_VALUATION_DATA_QUALITY,
+      },
+      failed: false,
+    });
+  });
+
+  it("keeps current history but strips unavailable FDV before acceptance", () => {
+    const partialValuation = {
+      status: "ready" as const,
+      points: [
+        { blockNumber: "99", priceEth: "0.1" },
+        { blockNumber: "100", priceEth: "0.2" },
+      ],
+      swapCount: 2,
+      volumeWei: "3",
+      volumeEth: "0.000000000000000003",
+      fdvEthWei: "1000000000000000000000",
+      fdvEth: "1000",
+      fdvUsdWad: "3000000000000000000000000",
+      valuationMetric: "fdv" as const,
+      dataQuality: UNAVAILABLE_VALUATION_DATA_QUALITY,
+    };
+
+    expect(isAuthoritativeChartPayload(partialValuation)).toBe(true);
+    expect(acceptChartPayload("token:1d", partialValuation).payload).toEqual({
+      status: "ready",
+      points: partialValuation.points,
+      swapCount: 2,
+      volumeWei: "3",
+      volumeEth: "0.000000000000000003",
+      valuationMetric: "fdv",
+      dataQuality: UNAVAILABLE_VALUATION_DATA_QUALITY,
+    });
+  });
+
+  it("rejects stale price freshness before it can replace last-known-good data", () => {
+    expect(
+      isAuthoritativeChartPayload({
+        status: "ready",
+        points: [
+          { blockNumber: "98", priceEth: "0.1" },
+          { blockNumber: "99", priceEth: "0.2" },
+        ],
+        swapCount: 2,
+        volumeWei: "3",
+        volumeEth: "0.000000000000000003",
+        valuationMetric: "fdv",
+        dataQuality: {
+          ...CURRENT_DATA_QUALITY,
+          status: "partial",
+          price: { status: "stale", asOfBlock: "99", lagBlocks: "1" },
+          valuation: STALE_VALUATION_DATA_QUALITY.valuation,
+        },
       }),
     ).toBe(false);
   });

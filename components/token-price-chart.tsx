@@ -21,6 +21,34 @@ export type TokenChartPoint = {
   priceUsd?: string;
 };
 
+export type TokenChartDataQuality = Readonly<{
+  schemaVersion: "programmable.explore-chart-data-quality.v1";
+  status: "current" | "partial";
+  asOfBlock: string;
+  blockHash: `0x${string}`;
+  finality: "confirmed" | "latest";
+  history: Readonly<{ status: "current"; throughBlock: string }>;
+  price: Readonly<{
+    status: "current";
+    asOfBlock: string;
+    lagBlocks: "0";
+  }>;
+  valuation:
+    | Readonly<{
+        status: "current";
+        metric: "fdv";
+        asOfBlock: string;
+        lagBlocks: "0";
+      }>
+    | Readonly<{
+        status: "stale";
+        metric: "fdv";
+        asOfBlock: string;
+        lagBlocks: string;
+      }>
+    | Readonly<{ status: "unavailable"; metric: "fdv" }>;
+}>;
+
 export type TokenChartPayload = {
   status: "ready" | "insufficient-history" | "partial";
   points: TokenChartPoint[];
@@ -31,6 +59,8 @@ export type TokenChartPayload = {
   fdvEthWei?: string;
   fdvEth?: string;
   fdvUsdWad?: string;
+  valuationMetric?: "fdv";
+  dataQuality?: TokenChartDataQuality;
 };
 type ChartPayload = TokenChartPayload;
 type ChartRequestState = {
@@ -85,10 +115,10 @@ function scaleIntegerByPriceRatio(
   const inspected = parsePositiveDecimal(inspectedPrice);
   const latest = parsePositiveDecimal(latestPrice);
   if (!inspected || !latest) return undefined;
-  return (
+  const scaled =
     (BigInt(value) * inspected.coefficient * latest.scale) /
-    (latest.coefficient * inspected.scale)
-  ).toString();
+    (latest.coefficient * inspected.scale);
+  return scaled > 0n ? scaled.toString() : undefined;
 }
 
 function formatFixedInteger(value: bigint, decimals: number) {
@@ -115,7 +145,8 @@ function scaleDecimalByPriceRatio(
     10n ** BigInt(precision);
   const denominator =
     source.scale * inspected.scale * latest.coefficient;
-  return formatFixedInteger(numerator / denominator, precision);
+  const scaled = numerator / denominator;
+  return scaled > 0n ? formatFixedInteger(scaled, precision) : undefined;
 }
 
 export function getChartFdvAtPoint(
@@ -210,22 +241,109 @@ function hasOptionalPositiveDecimal(value: unknown) {
   return value === undefined || isPositiveDecimalString(value);
 }
 
-export function isAuthoritativeChartPayload(
-  value: unknown,
-): value is ChartPayload {
-  if (!value || typeof value !== "object") return false;
-  const record = value as Record<string, unknown>;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isBytes32(value: unknown): value is `0x${string}` {
+  return typeof value === "string" && /^0x[0-9a-f]{64}$/iu.test(value);
+}
+
+function parseChartDataQuality(value: unknown): TokenChartDataQuality | null {
+  if (!isRecord(value)) return null;
   if (
-    "marketCapEthWei" in record ||
-    "marketCapEth" in record ||
-    "marketCapUsdWad" in record
+    value.schemaVersion !== "programmable.explore-chart-data-quality.v1" ||
+    (value.status !== "current" && value.status !== "partial") ||
+    !isUnsignedIntegerString(value.asOfBlock) ||
+    !isBytes32(value.blockHash) ||
+    BigInt(value.blockHash) === 0n ||
+    (value.finality !== "confirmed" && value.finality !== "latest") ||
+    !isRecord(value.history) ||
+    value.history.status !== "current" ||
+    value.history.throughBlock !== value.asOfBlock ||
+    !isRecord(value.price) ||
+    value.price.status !== "current" ||
+    value.price.asOfBlock !== value.asOfBlock ||
+    value.price.lagBlocks !== "0" ||
+    !isRecord(value.valuation) ||
+    value.valuation.metric !== "fdv"
   ) {
-    return false;
+    return null;
   }
+
+  if (value.valuation.status === "current") {
+    if (
+      value.status !== "current" ||
+      value.valuation.asOfBlock !== value.asOfBlock ||
+      value.valuation.lagBlocks !== "0"
+    ) {
+      return null;
+    }
+  } else if (value.valuation.status === "stale") {
+    if (
+      value.status !== "partial" ||
+      !isUnsignedIntegerString(value.valuation.asOfBlock) ||
+      !isUnsignedIntegerString(value.valuation.lagBlocks)
+    ) {
+      return null;
+    }
+    const asOfBlock = BigInt(value.asOfBlock);
+    const valuationBlock = BigInt(value.valuation.asOfBlock);
+    const lagBlocks = BigInt(value.valuation.lagBlocks);
+    if (
+      valuationBlock >= asOfBlock ||
+      lagBlocks === 0n ||
+      asOfBlock - valuationBlock !== lagBlocks
+    ) {
+      return null;
+    }
+  } else if (
+    value.valuation.status !== "unavailable" ||
+    value.status !== "partial"
+  ) {
+    return null;
+  }
+
+  return value as TokenChartDataQuality;
+}
+
+function hasValidChartCardinality(
+  status: TokenChartPayload["status"],
+  pointCount: number,
+) {
+  return status === "ready"
+    ? pointCount >= 2
+    : status === "insufficient-history" && pointCount === 1;
+}
+
+function withoutNonCurrentFdv(payload: ChartPayload): ChartPayload {
+  if (payload.dataQuality?.valuation.status === "current") return payload;
+  const sanitized = { ...payload };
+  delete sanitized.fdvEthWei;
+  delete sanitized.fdvEth;
+  delete sanitized.fdvUsdWad;
+  return sanitized;
+}
+
+export function parseAuthoritativeChartPayload(
+  value: unknown,
+): ChartPayload | null {
+  if (!isRecord(value)) return null;
+  if (
+    "marketCapEthWei" in value ||
+    "marketCapEth" in value ||
+    "marketCapUsdWad" in value ||
+    value.valuationMetric !== "fdv"
+  ) {
+    return null;
+  }
+  const dataQuality = parseChartDataQuality(value.dataQuality);
+  if (dataQuality === null) return null;
   const payload = value as Partial<ChartPayload>;
   if (
     !isAuthoritativeChartPayloadStatus(payload.status) ||
     !Array.isArray(payload.points) ||
+    !hasValidChartCardinality(payload.status, payload.points.length) ||
     !Number.isSafeInteger(payload.swapCount) ||
     (payload.swapCount ?? -1) < 0 ||
     !isUnsignedIntegerString(payload.volumeWei) ||
@@ -233,20 +351,40 @@ export function isAuthoritativeChartPayload(
     !hasOptionalUnsignedInteger(payload.volumeUsdWad) ||
     !hasOptionalPositiveUnsignedInteger(payload.fdvEthWei) ||
     !hasOptionalPositiveDecimal(payload.fdvEth) ||
-    !hasOptionalPositiveUnsignedInteger(payload.fdvUsdWad)
+    !hasOptionalPositiveUnsignedInteger(payload.fdvUsdWad) ||
+    !payload.points.every(
+      (point) =>
+        isRecord(point) &&
+        isUnsignedIntegerString(point.blockNumber) &&
+        isPositiveDecimalString(point.priceEth) &&
+        (point.priceUsd === undefined ||
+          isPositiveDecimalString(point.priceUsd)),
+    )
   ) {
-    return false;
+    return null;
   }
 
-  return payload.points.every(
-    (point) =>
-      Boolean(point) &&
-      typeof point === "object" &&
-      isUnsignedIntegerString(point.blockNumber) &&
-      isPositiveDecimalString(point.priceEth) &&
-      (point.priceUsd === undefined ||
-        isPositiveDecimalString(point.priceUsd)),
-  );
+  return withoutNonCurrentFdv({
+    status: payload.status,
+    points: payload.points as TokenChartPoint[],
+    swapCount: payload.swapCount as number,
+    volumeWei: payload.volumeWei as string,
+    volumeEth: payload.volumeEth as string,
+    ...(payload.volumeUsdWad === undefined
+      ? {}
+      : { volumeUsdWad: payload.volumeUsdWad }),
+    ...(payload.fdvEthWei === undefined ? {} : { fdvEthWei: payload.fdvEthWei }),
+    ...(payload.fdvEth === undefined ? {} : { fdvEth: payload.fdvEth }),
+    ...(payload.fdvUsdWad === undefined ? {} : { fdvUsdWad: payload.fdvUsdWad }),
+    valuationMetric: "fdv",
+    dataQuality,
+  });
+}
+
+export function isAuthoritativeChartPayload(
+  value: unknown,
+): value is ChartPayload {
+  return parseAuthoritativeChartPayload(value) !== null;
 }
 
 export function preserveChartPayloadOnFailure(
@@ -267,7 +405,7 @@ export function acceptChartPayload(
   key: string,
   payload: ChartPayload,
 ): ChartRequestState {
-  return { key, payload, failed: false };
+  return { key, payload: withoutNonCurrentFdv(payload), failed: false };
 }
 
 async function requestTokenChartPayload(
@@ -287,8 +425,9 @@ async function requestTokenChartPayload(
   )
     .then(async (response) => {
       if (!response.ok) throw new Error("Chart request failed");
-      const payload: unknown = await response.json();
-      if (!isAuthoritativeChartPayload(payload)) {
+      const value: unknown = await response.json();
+      const payload = parseAuthoritativeChartPayload(value);
+      if (payload === null) {
         throw new Error("Chart source is not ready");
       }
       cacheChartPayload(key, payload);
@@ -544,9 +683,6 @@ export function TokenPriceChart({
   tokenName,
   launchModel,
   preview = false,
-  fdvEthWei,
-  fdvEth,
-  fdvUsdWad,
   onVolumeChange,
   onFdvChange,
 }: {
@@ -554,9 +690,6 @@ export function TokenPriceChart({
   tokenName: string;
   launchModel?: ChartLaunchModel;
   preview?: boolean;
-  fdvEthWei?: string;
-  fdvEth?: string;
-  fdvUsdWad?: string;
   onVolumeChange?: (volume: TokenChartVolume | null) => void;
   onFdvChange?: (fdv: TokenChartFdv | null) => void;
 }) {
@@ -660,23 +793,11 @@ export function TokenPriceChart({
     if (!payload) return null;
     const latestPoint = chart?.points.at(-1);
     return getChartFdvAtPoint(
-      {
-        ...payload,
-        fdvEthWei: payload.fdvEthWei ?? fdvEthWei,
-        fdvEth: payload.fdvEth ?? fdvEth,
-        fdvUsdWad: payload.fdvUsdWad ?? fdvUsdWad,
-      },
+      payload,
       activePoint ?? latestPoint,
       latestPoint,
     );
-  }, [
-    activePoint,
-    chart,
-    fdvEth,
-    fdvEthWei,
-    fdvUsdWad,
-    payload,
-  ]);
+  }, [activePoint, chart, payload]);
   const chartStatus =
     !payload && !failed
       ? "Loading price history"

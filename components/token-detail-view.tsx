@@ -1525,13 +1525,6 @@ function TokenDetailContent({
                 tokenName={token.name}
                 launchModel={classicTradeLaunchModel}
                 preview={preview}
-                fdvEthWei={
-                  token.indexedMarketCapEthWei ?? token.marketCapEthWei
-                }
-                fdvEth={token.indexedMarketCapEth ?? token.marketCapEth}
-                fdvUsdWad={
-                  token.indexedMarketCapUsdWad ?? token.fdvUsdWad
-                }
                 onVolumeChange={setChartVolume}
                 onFdvChange={setChartFdv}
               />

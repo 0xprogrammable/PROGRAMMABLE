@@ -138,19 +138,13 @@ describe("token detail layout", () => {
     expect(detailSource).not.toMatch(/<h2>\s*Trade \$/i);
   });
 
-  it("keeps chart scaling compatible while labeling total-supply value as FDV", () => {
+  it("uses only typed chart FDV while labeling total-supply value as FDV", () => {
     expect(detailSource).toContain('label: "FDV"');
     expect(detailSource).not.toContain('label: "Market cap"');
-    expect(detailSource).toContain(
-      "token.indexedMarketCapEthWei ?? token.marketCapEthWei",
-    );
-    expect(detailSource).toContain(
-      "token.indexedMarketCapUsdWad ?? token.fdvUsdWad",
-    );
-    expect(chartSource).toContain(
-      "fdvUsdWad: payload.fdvUsdWad ?? fdvUsdWad",
-    );
+    expect(detailSource).not.toContain("fdvEthWei={");
+    expect(detailSource).not.toContain("fdvUsdWad={");
     expect(chartSource).not.toContain("payload.marketCap");
+    expect(chartSource).not.toContain("payload.fdvUsdWad ?? fdvUsdWad");
     expect(chartSource).not.toMatch(/marketCap(?:Eth|Usd)\w*\?: string/);
   });
 

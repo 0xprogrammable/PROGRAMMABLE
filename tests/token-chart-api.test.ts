@@ -108,7 +108,10 @@ describe("token chart Alchemy API", () => {
     });
     mocks.readTokenChartSeries.mockResolvedValue({
       status: "ready",
-      points: [],
+      points: [
+        { blockNumber: "25630004", priceEth: "0.49", priceUsd: "1715" },
+        { blockNumber: "25630005", priceEth: "0.5", priceUsd: "1750" },
+      ],
       swapCount: 2,
       volumeWei: "1250000000000000000",
       volumeEth: "1.25",
