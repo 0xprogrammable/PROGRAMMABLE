@@ -14,29 +14,35 @@ const stockPairedEvidenceCommit =
   "ef2bbb51336a20aa2886dad0232f61495e8f2911";
 
 const classicSections = [
-  { id: "terms", label: "Terms" },
+  { id: "terms", label: "How it works" },
+  { id: "starting-point", label: "Supply and liquidity" },
   { id: "fees", label: "Fees" },
   { id: "rewards", label: "Rewards" },
   { id: "initial-buy", label: "Initial Buy" },
   { id: "launch-transaction", label: "Launch transaction" },
-  { id: "starting-point", label: "Starting point" },
-  { id: "boundaries", label: "Boundaries" },
-  { id: "deployment", label: "Deployment" },
+  { id: "boundaries", label: "Limits and risks" },
+  { id: "deployment", label: "Contracts and source" },
 ] as const;
 
 const customSections = [
-  { id: "status", label: "Status" },
+  { id: "status", label: "What Custom is" },
+  { id: "availability", label: "Current availability" },
+  { id: "release-scope", label: "Release-specific behavior" },
   { id: "release-requirements", label: "Release requirements" },
-  { id: "project-presentation", label: "Project presentation" },
+  { id: "launch-information", label: "Launch information" },
+  { id: "router-provenance", label: "Router provenance" },
+  { id: "project-presentation", label: "What activation does not prove" },
 ] as const;
 
 const stockPairedSections = [
+  { id: "status", label: "Status" },
   { id: "token-boundary", label: "Token boundary" },
-  { id: "pool-creation", label: "Pool creation" },
-  { id: "quote-rewards", label: "Quote rewards" },
-  { id: "routing", label: "Routing" },
-  { id: "quote-controls", label: "Quote controls" },
-  { id: "deployment", label: "Deployment" },
+  { id: "quote-assets", label: "Quote assets" },
+  { id: "pool-creation", label: "How launches worked" },
+  { id: "quote-rewards", label: "Fees and rewards" },
+  { id: "routing", label: "Routes" },
+  { id: "quote-controls", label: "Controls" },
+  { id: "deployment", label: "Contracts and source" },
 ] as const;
 
 const modelMetadata: Record<
@@ -46,12 +52,12 @@ const modelMetadata: Record<
   classic: {
     title: "Classic",
     description:
-      "Configure buy and sell fees, creator rewards and Initial Buy custody for a fixed-supply Uniswap v4 token.",
+      "How Classic creates a fixed-supply token, its Uniswap v4 market and the related fee and reward paths.",
   },
   custom: {
     title: "Custom",
     description:
-      "Release requirements and product boundaries for launches with individual Uniswap v4 hooks.",
+      "Requirements and provenance for releases that use individual Uniswap v4 hooks.",
   },
   "stock-paired": {
     title: "Stock-Paired",
@@ -99,19 +105,23 @@ function ClassicDocs() {
   return (
     <DocsShell
       currentPath="/docs/models/classic"
-      kicker="Classic · Ethereum"
+      kicker="Launch model · Ethereum"
       title="Classic"
-      description="A fixed-supply Uniswap v4 launch with configurable fees, creator rewards in ETH and permanent one-sided liquidity."
+      description="Classic creates a fixed-supply token and an ETH market with separately configured buy and sell fees."
       sections={classicSections}
     >
       <section id="terms">
-        <h2>Set the terms before the token launches</h2>
-        <p className={styles.lead}>
-          Classic creates the token, initializes its ETH pool and deposits the
-          complete supply into a permanently locked one-sided Uniswap v4
-          position. The launch wallet chooses the buy fee, sell fee, reward
-          destination and Initial Buy custody before signing.
+        <h2>How Classic works</h2>
+        <p>
+          A Classic launch creates the token, initializes its ETH pool and
+          deposits the full supply into a permanently locked one-sided Uniswap
+          v4 position. Before signing, the launch wallet chooses the buy fee,
+          sell fee, reward destination and Initial Buy custody.
         </p>
+      </section>
+
+      <section id="starting-point">
+        <h2>Supply and liquidity</h2>
         <div className={styles.factGrid}>
           <div className={styles.fact}>
             <span>Supply</span>
@@ -130,30 +140,35 @@ function ClassicDocs() {
             <strong>Not required</strong>
           </div>
         </div>
+        <p>
+          The full supply enters the one-sided position at launch. The
+          position has no liquidity-removal path.
+        </p>
+        <p>
+          The current Classic curve starts at an approximate fully diluted
+          valuation of 1.36 ETH before the Initial Buy. This value is the
+          curve&apos;s mathematical starting point, not the amount of liquidity or
+          sale proceeds, and it does not describe future market value. The
+          Initial Buy moves the live pool price before public trading begins.
+        </p>
       </section>
 
       <section id="fees">
-        <h2>Each direction has its own fixed fee</h2>
-        <div className={styles.flow}>
-          <div className={styles.flowItem}>
-            <span>Direction</span>
-            <strong>The pool identifies a buy or a sell</strong>
-          </div>
-          <div className={styles.flowItem}>
-            <span>Selected fee</span>
-            <strong>The launch&apos;s fixed rate is accounted in ETH</strong>
-          </div>
-          <div className={styles.flowItem}>
-            <span>Creator</span>
-            <strong>The selected rate minus 0.10% accrues as rewards</strong>
-          </div>
-          <div className={styles.flowItem}>
-            <span>Programmable</span>
-            <strong>0.10% accrues to the Programmable fee recipient</strong>
-          </div>
-        </div>
+        <h2>Fees</h2>
+        <p>
+          The launch wallet sets the buy fee and sell fee separately. Each
+          rate can be from 1% to 10% and is fixed for the launch.
+        </p>
+        <ul className={styles.contentList}>
+          <li>The pool identifies each swap as a buy or a sell.</li>
+          <li>The fixed rate for that direction is accounted in ETH.</li>
+          <li>The selected rate minus 0.10% accrues as creator rewards.</li>
+          <li>0.10% accrues to the Programmable fee recipient.</li>
+        </ul>
         <div className={styles.callout}>
-          <strong>The 0.10% Programmable share is included.</strong>
+          <strong>
+            The Programmable share is included in the selected fee.
+          </strong>
           <p>
             A 1% buy fee leaves 0.90% for creator rewards. It is not a second
             fee added to the selected rate. Normal ERC-20 transfers do not pay
@@ -163,85 +178,81 @@ function ClassicDocs() {
       </section>
 
       <section id="rewards">
-        <h2>Choose who receives the ETH</h2>
+        <h2>Rewards</h2>
         <p>
-          Rewards can go to the launch wallet, another wallet or a split
-          between two and five unique wallets. That configuration is recorded
-          at launch. Each current payout wallet can claim only its own
-          allocation.
+          Creator rewards accrue in ETH. They can go to the launch wallet,
+          another wallet or a split between two and five unique wallets. The
+          launch records the selected configuration, and each current payout
+          wallet can claim only its own allocation.
         </p>
-        <ol className={styles.steps}>
-          <li>
-            <strong>Rewards accrue by allocation</strong>
-            <span>
-              The vault accounts for each beneficiary without requiring the
-              launch wallet to distribute funds.
-            </span>
-          </li>
-          <li>
-            <strong>Each beneficiary claims independently</strong>
-            <span>
-              A beneficiary cannot claim another wallet&apos;s rewards or
-              redirect them.
-            </span>
-          </li>
-          <li>
-            <strong>A payout wallet can move future rewards</strong>
-            <span>
-              Accrued rewards remain claimable by the previous wallet. Future
-              accrual for that allocation moves to the new address without
-              changing its percentage.
-            </span>
-          </li>
-        </ol>
+        <h3>Allocation</h3>
+        <p>
+          The vault accounts for each beneficiary without requiring the launch
+          wallet to distribute funds.
+        </p>
+        <h3>Claims</h3>
+        <p>
+          Each beneficiary claims independently. A beneficiary cannot claim
+          another wallet&apos;s rewards or redirect them.
+        </p>
+        <h3>Changing a payout wallet</h3>
+        <p>
+          Accrued rewards remain claimable by the previous wallet. Future
+          accrual for that allocation moves to the new address without changing
+          its percentage.
+        </p>
         <div className={styles.callout}>
           <strong>
-            A disclosed community takeover (CTO) authority can replace the
-            future reward configuration.
+            The disclosed community takeover (CTO) authority can replace the
+            configuration for future rewards.
           </strong>
           <p>
-            It checkpoints the existing configuration first, then can change
-            future recipients and split percentages. It cannot move accrued
-            rewards, alter swap fees, change token supply or remove liquidity.
+            The authority checkpoints the existing configuration before it
+            changes future recipients or split percentages. It cannot move
+            accrued rewards, alter swap fees, change the token supply or remove
+            liquidity.
           </p>
         </div>
       </section>
 
       <section id="initial-buy">
-        <h2>Buy at launch, then choose how the tokens are held</h2>
+        <h2>Initial Buy custody</h2>
         <p>
-          The launch wallet chooses at least 0.0006 ETH for its Initial Buy.
-          Purchased tokens can remain unlocked, use a fixed lock, vest
-          linearly or vest after a cliff. Lock and vesting periods are
-          immutable after launch and can run from 1 to 3,650 days.
+          The launch wallet selects an Initial Buy of at least 0.0006 ETH.
+          Purchased tokens can remain unlocked, use a fixed lock, vest linearly
+          or vest after a cliff. Lock and vesting periods can run from 1 to
+          3,650 days and cannot be changed after launch.
         </p>
       </section>
 
       <section id="launch-transaction">
-        <h2>One transaction creates the launch</h2>
+        <h2>Launch transaction</h2>
+        <p>
+          The launch wallet completes the following actions in one transaction.
+        </p>
         <ol className={styles.steps}>
           <li>
-            <strong>Create the fixed-supply token</strong>
+            <strong>Create the fixed-supply token.</strong>
             <span>
               The UERC20 factory creates the token and records its metadata.
             </span>
           </li>
           <li>
-            <strong>Initialize the recorded ETH pool</strong>
+            <strong>Initialize the recorded ETH pool.</strong>
             <span>
               The hook stores the buy fee, sell fee and reward vault for the
               pool.
             </span>
           </li>
           <li>
-            <strong>Lock the one-sided position</strong>
+            <strong>Lock the one-sided position.</strong>
             <span>
               The complete supply enters a position with no liquidity-removal
               path.
             </span>
           </li>
           <li>
-            <strong>Execute the Initial Buy</strong>
+            <strong>Execute the Initial Buy.</strong>
             <span>
               Purchased tokens go to the launch wallet or its selected custody
               contract.
@@ -250,19 +261,8 @@ function ClassicDocs() {
         </ol>
       </section>
 
-      <section id="starting-point">
-        <h2>A deterministic starting point</h2>
-        <p>
-          The current Classic curve begins at an approximate fully diluted
-          valuation of 1.36 ETH before the Initial Buy. This is a mathematical
-          starting point, not guaranteed liquidity, sale proceeds or future
-          market value. The Initial Buy moves the live pool price before public
-          trading begins.
-        </p>
-      </section>
-
       <section id="boundaries">
-        <h2>What Classic does not add</h2>
+        <h2>Limits and risks</h2>
         <ul className={styles.contentList}>
           <li>No minting after launch.</li>
           <li>No blacklist, sell restriction, rebase or transfer tax.</li>
@@ -273,14 +273,17 @@ function ClassicDocs() {
             hook fee.
           </li>
           <li>
-            No guarantee that a third-party terminal routes through the
-            recorded hooked pool.
+            A third-party terminal can use a different pool or route. Check
+            which pool the terminal uses before trading.
           </li>
         </ul>
       </section>
 
       <section id="deployment">
-        <h2>Current Ethereum contracts</h2>
+        <h2>Contracts and source</h2>
+        <p>
+          These contracts define the current Classic deployment on Ethereum.
+        </p>
         <div className={styles.tableWrap}>
           <table className={styles.table}>
             <thead>
@@ -361,31 +364,42 @@ function CustomDocs() {
   return (
     <DocsShell
       currentPath="/docs/models/custom"
-      kicker="Custom · Individual activation"
+      kicker="Launch model · Ethereum"
       title="Custom"
-      description="Release requirements for tokens whose Uniswap v4 markets use individual hook logic."
+      description="Custom launches use release-specific Uniswap v4 hook logic with behavior and controls defined by each release."
       sections={customSections}
     >
       <section id="status">
-        <h2>Status</h2>
-        <p className={styles.lead}>
-          Custom launches are activated individually. Activation is not an
-          audit or safety claim, and general public submission and self-service
-          launching are not available.
+        <h2>What Custom is</h2>
+        <p>
+          A Custom launch creates a token whose Uniswap v4 market uses hook
+          logic defined for that release. The hook can change how swaps, fees,
+          liquidity or other permitted callbacks work.
         </p>
-        <div className={styles.callout}>
-          <strong>Each Custom release stands on its own.</strong>
-          <p>
-            Do not infer one release&apos;s permissions or behavior from another.
-            Before activation, the release must define its hook permissions,
-            mutable controls, fee and liquidity paths, transaction preparation,
-            deployed contracts and verification evidence.
-          </p>
-        </div>
+      </section>
+
+      <section id="availability">
+        <h2>Current availability</h2>
+        <p>
+          Custom releases are activated individually. General public Custom
+          submissions and wallet self-service launching are not available.
+        </p>
+      </section>
+
+      <section id="release-scope">
+        <h2>Behavior varies by release</h2>
+        <p>
+          Do not infer one Custom release&apos;s permissions, controls, fee path or
+          liquidity path from another. Use the deployment and release records
+          for the launch you are inspecting.
+        </p>
       </section>
 
       <section id="release-requirements">
-        <h2>What a release must define</h2>
+        <h2>Release requirements</h2>
+        <p>
+          Before activation, a release must define the following information.
+        </p>
         <ul className={styles.contentList}>
           <li>The allowed token and pool configuration.</li>
           <li>The fee path, reward recipients and mutable controls.</li>
@@ -395,12 +409,37 @@ function CustomDocs() {
         </ul>
       </section>
 
-      <section id="project-presentation">
-        <h2>Project presentation</h2>
+      <section id="launch-information">
+        <h2>Launch-specific information</h2>
         <p>
-          Project artwork, descriptions and links describe the token. They do
-          not verify the hook, approve a release or make a launch path
-          available.
+          Read the launch&apos;s token, pool, hook and release records together. They
+          identify the deployed contracts, supported network, hook permissions,
+          fee and reward path, mutable controls, liquidity custody and any
+          withdrawal path. Project artwork, descriptions and links are
+          presentation data and are not substitutes for these records.
+        </p>
+      </section>
+
+      <section id="router-provenance">
+        <h2>Router provenance</h2>
+        <p>
+          A Custom launch executed and stamped through the Launch Stamp Router
+          can be identified by its canonical Router origin, launch ID, launch
+          kind, token, pool and recorded components. The published verification
+          procedure must pass before an application uses that provenance.
+          Historical launches and direct factory calls are outside the Router
+          record.
+        </p>
+      </section>
+
+      <section id="project-presentation">
+        <h2>What activation does not prove</h2>
+        <p>
+          Activation makes the configured release path available. It does not
+          establish current tradability, liquidity, price, pool state, support
+          in an external terminal or the behavior of an interface outside the
+          release. Project artwork, descriptions and links do not verify the
+          hook or make another launch path available.
         </p>
       </section>
     </DocsShell>
@@ -416,52 +455,66 @@ function StockPairedDocs() {
   return (
     <DocsShell
       currentPath="/docs/models/stock-paired"
-      kicker="Historical launch model"
+      kicker="Historical launch model · Ethereum"
       title="Stock-Paired"
-      description="Existing fixed-supply tokens whose Uniswap v4 pools use an allowlisted Ondo Global Markets token as the quote asset."
+      description="Stock-Paired describes existing fixed-supply tokens whose Uniswap v4 pools use a supported Ondo Global Markets token as the quote asset."
       sections={stockPairedSections}
     >
+      <section id="status">
+        <h2>Status</h2>
+        <p>
+          New Stock-Paired launches are closed. Existing tokens and deployment
+          records remain visible. Trading and reward actions are available only
+          when the route, issuer, network and runtime checks pass.
+        </p>
+      </section>
+
       <section id="token-boundary">
         <h2>The launched token is not a share</h2>
-        <p className={styles.lead}>
-          Stock-Paired launches created a new Programmable token and paired it
-          with one supported Ondo Global Markets token. The launched token does
-          not represent ownership in the company and is not redeemable for the
-          selected stock.
+        <p>
+          A Stock-Paired launch created a new Programmable token and paired it
+          with one supported Ondo Global Markets token. The Programmable token
+          does not represent ownership in the company and is not redeemable for
+          the selected stock.
         </p>
-        <div className={styles.callout}>
-          <strong>New Stock-Paired launches are closed.</strong>
-          <p>
-            Existing tokens and deployment records remain visible. Trading and
-            reward actions are available only when the route, issuer, network
-            and runtime checks pass.
-          </p>
-        </div>
+      </section>
+
+      <section id="quote-assets">
+        <h2>Supported quote assets</h2>
+        <p>The historical launch path supported these quote tokens.</p>
+        <ul className={styles.contentList}>
+          <li>NVDAon</li>
+          <li>SPYon</li>
+          <li>GOOGLon</li>
+          <li>SLVon</li>
+          <li>TSLAon</li>
+          <li>AAPLon</li>
+        </ul>
       </section>
 
       <section id="pool-creation">
-        <h2>How the existing pools were created</h2>
+        <h2>How historical launches worked</h2>
         <ol className={styles.steps}>
           <li>
-            <strong>A supported quote asset was selected</strong>
+            <strong>Select a supported quote asset.</strong>
             <span>NVDAon, SPYon, GOOGLon, SLVon, TSLAon or AAPLon.</span>
           </li>
           <li>
-            <strong>ETH was routed into the quote asset</strong>
+            <strong>Route ETH into the quote asset.</strong>
             <span>
               The coordinator routed ETH through configured pools into the
               selected quote asset.
             </span>
           </li>
           <li>
-            <strong>The new token pool was created and locked</strong>
+            <strong>Create and lock the new token pool.</strong>
             <span>
               The token supply entered a permanently locked one-sided v4
               position against the quote asset.
             </span>
           </li>
           <li>
-            <strong>The quote asset bought the launched token</strong>
+            <strong>Buy the launched token with the quote asset.</strong>
             <span>
               The routed quote asset bought the launched token in the same
               wallet transaction.
@@ -471,7 +524,8 @@ function StockPairedDocs() {
       </section>
 
       <section id="quote-rewards">
-        <h2>Rewards accrue in the quote token</h2>
+        <h2>Fees and rewards</h2>
+        <p>Rewards accrue in the selected quote token.</p>
         <div className={styles.factGrid}>
           <div className={styles.fact}>
             <span>Supply</span>
@@ -493,7 +547,7 @@ function StockPairedDocs() {
       </section>
 
       <section id="routing">
-        <h2>The interface composes the route</h2>
+        <h2>Trading routes</h2>
         <p>
           A buy routes ETH into the configured quote token and then into the
           launched token&apos;s exact v4 pool. A sell reverses that path back to
@@ -502,17 +556,17 @@ function StockPairedDocs() {
           check.
         </p>
         <div className={styles.callout}>
-          <strong>External terminals do not inherit this route.</strong>
+          <strong>External terminals must implement the combined route.</strong>
           <p>
-            GMGN, Fomo and other interfaces must support the combined route
-            themselves. Programmable cannot represent them as compatible
-            without direct testing.
+            GMGN, Fomo and other interfaces do not inherit Programmable&apos;s
+            route. Compatibility requires direct testing of the interface and
+            its configured pools.
           </p>
         </div>
       </section>
 
       <section id="quote-controls">
-        <h2>The quote asset has its own controls</h2>
+        <h2>Quote-asset controls</h2>
         <ul className={styles.contentList}>
           <li>
             Ondo controls the supported quote-token implementation and can
@@ -533,7 +587,8 @@ function StockPairedDocs() {
       </section>
 
       <section id="deployment">
-        <h2>Historical Mainnet deployment</h2>
+        <h2>Historical contracts and source</h2>
+        <p>These records describe the historical Mainnet deployment.</p>
         <div className={styles.tableWrap}>
           <table className={styles.table}>
             <thead>
