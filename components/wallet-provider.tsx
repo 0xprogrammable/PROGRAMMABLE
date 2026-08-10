@@ -37,6 +37,12 @@ import {
 import { mainnet, sepolia } from "viem/chains";
 import { bytesToHex, hexToBytes, type Hex } from "viem";
 
+import type {
+  HookemonBrowserWalletActionV1,
+} from "@/lib/custom-launch/hookemon-applicant-contract-v1";
+import {
+  HOOKEMON_BROWSER_ACTION_SCHEMA_V1,
+} from "@/lib/custom-launch/hookemon-applicant-contract-v1";
 import { parseLocalProfile } from "@/lib/profile/local-profile";
 import {
   buildEip1193TransactionRequest,
@@ -92,6 +98,9 @@ type WalletContextValue = {
     data: `0x${string}`;
     value: `0x${string}`;
   }>) => Promise<Hex>;
+  sendHookemonBrowserWalletAction: (
+    action: HookemonBrowserWalletActionV1,
+  ) => Promise<Hex>;
   sendTransaction: (transaction: PreparedTransaction) => Promise<Hex>;
   readNativeBalance: () => Promise<WalletNativeBalance>;
   readTradeBalances: (token: `0x${string}`) => Promise<WalletTradeBalances>;
@@ -358,6 +367,67 @@ export async function assertExternalWalletAuthorityCurrent(input: Readonly<{
   ) {
     throw new Error("The active wallet account changed. Review the launch and try again");
   }
+}
+
+export type HookemonEip1193TransactionV1 = Readonly<{
+  from: `0x${string}`;
+  to?: `0x${string}`;
+  nonce: `0x${string}`;
+  gas: `0x${string}`;
+  data: `0x${string}`;
+  value: "0x0";
+}>;
+
+/**
+ * Isolated from the existing Router V1/V2 sender: Hookemon must bind an exact
+ * nonce and must omit `to` only for the normal-CREATE step.
+ */
+export function buildHookemonEip1193TransactionV1(
+  action: HookemonBrowserWalletActionV1,
+  connectedAccount: `0x${string}`,
+): HookemonEip1193TransactionV1 {
+  const transaction = action.transaction;
+  const executableAction = action.actionIndex === 0
+    ? action.actionKind === "ERC20_APPROVAL"
+      && action.currentness.kind === "PRE_APPROVAL"
+    : action.actionIndex === 1
+      && action.actionKind === "EOA_CREATE"
+      && action.currentness.kind === "PRE_CREATE";
+  if (
+    action.schemaVersion !== HOOKEMON_BROWSER_ACTION_SCHEMA_V1
+    || !executableAction
+    || transaction.chainId !== "0x1"
+    || transaction.method !== "eth_sendTransaction"
+    || transaction.from.toLowerCase() !== connectedAccount.toLowerCase()
+  ) {
+    throw new Error("The Hookemon wallet action is not executable");
+  }
+  if (
+    action.currentness.observedPendingNonce !== transaction.nonce
+    || (action.actionIndex === 0 && transaction.to === null)
+    || (action.actionIndex === 1 && transaction.to !== null)
+  ) throw new Error("The Hookemon wallet action nonce or target drifted");
+  const common = {
+    from: transaction.from,
+    nonce: transaction.nonce,
+    gas: transaction.gas,
+    data: transaction.data,
+    value: transaction.value,
+  } as const;
+  return transaction.to === null
+    ? Object.freeze(common)
+    : Object.freeze({ ...common, to: transaction.to });
+}
+
+export function assertHookemonPendingNonceV1(
+  observed: unknown,
+  expected: `0x${string}`,
+): void {
+  if (
+    typeof observed !== "string"
+    || !/^0x(?:0|[1-9a-f][0-9a-f]*)$/u.test(observed)
+    || observed !== expected
+  ) throw new Error("The Hookemon wallet nonce changed. Refresh the exact plan");
 }
 
 function decodeBase64Url(value: string): Uint8Array {
@@ -952,6 +1022,72 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
     }
   }, [connectedWallet, sendPrivyTransaction, wallet]);
 
+  const sendHookemonBrowserWalletAction = useCallback(async (
+    action: HookemonBrowserWalletActionV1,
+  ) => {
+    if (!connectedWallet || !wallet) {
+      throw new Error("Connect an Ethereum wallet before continuing");
+    }
+    if (appChain.id !== 1) {
+      throw new Error("The Hookemon launch is available only on Ethereum");
+    }
+    const transaction = buildHookemonEip1193TransactionV1(
+      action,
+      wallet.account,
+    );
+    const isEmbeddedWallet =
+      connectedWallet.walletClientType === "privy" ||
+      connectedWallet.walletClientType === "privy-v2";
+    try {
+      if (wallet.chainId !== "0x1") {
+        await connectedWallet.switchChain(1);
+      }
+      const provider = await connectedWallet.getEthereumProvider();
+      await assertExternalWalletAuthorityCurrent({
+        expectedAccount: wallet.account,
+        expectedChainId: "0x1",
+        networkName: "Ethereum",
+        request: (method) => provider.request({ method }),
+      });
+      const pendingNonce = await provider.request({
+        method: "eth_getTransactionCount",
+        params: [wallet.account, "pending"],
+      });
+      assertHookemonPendingNonceV1(pendingNonce, transaction.nonce);
+      if (isEmbeddedWallet) {
+        const result = await sendPrivyTransaction({
+          ...(transaction.to === undefined ? {} : { to: transaction.to }),
+          data: transaction.data,
+          value: 0n,
+          nonce: BigInt(transaction.nonce),
+          gasLimit: BigInt(transaction.gas),
+          chainId: 1,
+        }, {
+          address: wallet.account,
+          uiOptions: action.actionIndex === 0
+            ? {
+                description: "Approve the exact Hookemon USDC funding",
+                buttonText: "Approve USDC",
+                successHeader: "Approval submitted",
+              }
+            : {
+                description: "Create the exact Hookemon AtomicLauncher",
+                buttonText: "Create launcher",
+                successHeader: "Launcher submitted",
+              },
+        });
+        return parseSubmittedTransactionHash(result.hash);
+      }
+      const hash = await provider.request({
+        method: "eth_sendTransaction",
+        params: [transaction],
+      });
+      return parseSubmittedTransactionHash(hash);
+    } catch (caught) {
+      throw new Error(getWalletTransactionErrorMessage(caught));
+    }
+  }, [connectedWallet, sendPrivyTransaction, wallet]);
+
   const readTradeBalances = useCallback(
     async (token: `0x${string}`) => {
       if (!connectedWallet || !wallet) {
@@ -1054,6 +1190,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       setUsername,
       signLaunchMessage,
       sendBrowserWalletAction,
+      sendHookemonBrowserWalletAction,
       sendTransaction,
       readNativeBalance,
       readTradeBalances,
@@ -1074,6 +1211,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       readNativeBalance,
       readTradeBalances,
       sendBrowserWalletAction,
+      sendHookemonBrowserWalletAction,
       sendTransaction,
       signLaunchMessage,
       providerSettled,
@@ -1137,6 +1275,9 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
         throw new Error("Wallet sign-in is unavailable");
       },
       sendBrowserWalletAction: async () => {
+        throw new Error("Wallet sign-in is unavailable");
+      },
+      sendHookemonBrowserWalletAction: async () => {
         throw new Error("Wallet sign-in is unavailable");
       },
       sendTransaction: async () => {

@@ -1,7 +1,25 @@
 import { describe, expect, it, vi } from "vitest";
 import * as walletProvider from "../components/wallet-provider";
+import type {
+  HookemonBrowserWalletActionV1,
+} from "../lib/custom-launch/hookemon-applicant-contract-v1";
 
 type WalletProviderContract = {
+  assertHookemonPendingNonceV1: (
+    observed: unknown,
+    expected: `0x${string}`,
+  ) => void;
+  buildHookemonEip1193TransactionV1: (
+    action: HookemonBrowserWalletActionV1,
+    connectedAccount: `0x${string}`,
+  ) => Readonly<{
+    from: `0x${string}`;
+    to?: `0x${string}`;
+    nonce: `0x${string}`;
+    gas: `0x${string}`;
+    data: `0x${string}`;
+    value: "0x0";
+  }>;
   assertExternalWalletAuthorityCurrent: (input: Readonly<{
     expectedAccount: `0x${string}`;
     expectedChainId: string;
@@ -56,6 +74,66 @@ type WalletProviderContract = {
 const subject = walletProvider as unknown as WalletProviderContract;
 
 describe("wallet recovery state", () => {
+  it("builds exact-nonce Hookemon approval and null-to CREATE requests in isolation", () => {
+    const account = `0x${"1".repeat(40)}` as const;
+    const approval = subject.buildHookemonEip1193TransactionV1(
+      hookemonAction(0),
+      account,
+    );
+    expect(approval).toMatchObject({
+      from: account,
+      to: `0x${"2".repeat(40)}`,
+      nonce: "0x7",
+      gas: "0x10000",
+      value: "0x0",
+    });
+
+    const create = subject.buildHookemonEip1193TransactionV1(
+      hookemonAction(1),
+      account,
+    );
+    expect(create).toMatchObject({
+      from: account,
+      nonce: "0x8",
+      gas: "0x10000",
+      value: "0x0",
+    });
+    expect(Object.hasOwn(create, "to")).toBe(false);
+  });
+
+  it("keeps adoption disabled and rejects any pending-nonce drift", () => {
+    const account = `0x${"1".repeat(40)}` as const;
+    expect(() => subject.buildHookemonEip1193TransactionV1(
+      hookemonAction(2),
+      account,
+    )).toThrow(/not executable/u);
+    expect(() => subject.buildHookemonEip1193TransactionV1(
+      hookemonAction(0),
+      `0x${"9".repeat(40)}`,
+    )).toThrow(/not executable/u);
+    expect(() => subject.assertHookemonPendingNonceV1("0x8", "0x8"))
+      .not.toThrow();
+    expect(() => subject.assertHookemonPendingNonceV1("0x9", "0x8"))
+      .toThrow(/nonce changed/u);
+    expect(() => subject.assertHookemonPendingNonceV1("0x08", "0x8"))
+      .toThrow(/nonce changed/u);
+  });
+
+  it("rejects Hookemon action-kind and currentness substitutions", () => {
+    const account = `0x${"1".repeat(40)}` as const;
+    expect(() => subject.buildHookemonEip1193TransactionV1({
+      ...hookemonAction(0),
+      actionKind: "EOA_CREATE",
+    }, account)).toThrow(/not executable/u);
+    expect(() => subject.buildHookemonEip1193TransactionV1({
+      ...hookemonAction(1),
+      currentness: {
+        ...hookemonAction(1).currentness,
+        kind: "PRE_APPROVAL",
+      },
+    }, account)).toThrow(/not executable/u);
+  });
+
   it("fails closed when an external provider mutates chain before a wallet action", async () => {
     const request = vi.fn(async (method: "eth_chainId" | "eth_accounts") =>
       method === "eth_chainId"
@@ -357,3 +435,57 @@ describe("wallet recovery state", () => {
     expect(subject.selectConnectedWallet([older, newer])).toBe(newer);
   });
 });
+
+function hookemonAction(
+  actionIndex: 0 | 1 | 2,
+): HookemonBrowserWalletActionV1 {
+  const actionKind = [
+    "ERC20_APPROVAL",
+    "EOA_CREATE",
+    "COMPLETED_GRAPH_ADOPTION",
+  ][actionIndex] as HookemonBrowserWalletActionV1["actionKind"];
+  const nonce = actionIndex === 0 ? "0x7" : actionIndex === 1 ? "0x8" : "0x9";
+  return {
+    schemaVersion: "programmable.hookemon-browser-wallet-action.v1",
+    bindingHash: `sha256:${"1".repeat(64)}`,
+    stateVersion: "1",
+    actionIndex,
+    actionKind,
+    selectorHash: `sha256:${"2".repeat(64)}`,
+    actionHash: `sha256:${"3".repeat(64)}`,
+    dataHash: `0x${"4".repeat(64)}`,
+    previousFinalityEvidenceHash: actionIndex === 0
+      ? null
+      : `sha256:${"5".repeat(64)}`,
+    permitDigest: actionIndex === 2 ? `0x${"6".repeat(64)}` : null,
+    validAfterEpochSeconds: "1",
+    expiresAtEpochSeconds: "2",
+    currentness: {
+      schemaVersion: "programmable.hookemon-action-currentness.v1",
+      kind: ["PRE_APPROVAL", "PRE_CREATE", "PRE_ADOPTION"][actionIndex] as
+        HookemonBrowserWalletActionV1["currentness"]["kind"],
+      observedBlockNumber: "1",
+      observedBlockHash: `0x${"7".repeat(64)}`,
+      observedPendingNonce: nonce,
+      evidenceHash: `sha256:${"8".repeat(64)}`,
+      previousFinalityEvidenceHash: actionIndex === 0
+        ? null
+        : `sha256:${"5".repeat(64)}`,
+      completedGraphHash: actionIndex === 2 ? `0x${"9".repeat(64)}` : null,
+      currentPoolStateHash: actionIndex === 2 ? `0x${"a".repeat(64)}` : null,
+      runtimeStatusHash: actionIndex === 2
+        ? `sha256:${"b".repeat(64)}`
+        : null,
+    },
+    transaction: {
+      method: "eth_sendTransaction",
+      chainId: "0x1",
+      from: `0x${"1".repeat(40)}`,
+      to: actionIndex === 1 ? null : `0x${"2".repeat(40)}`,
+      nonce,
+      gas: "0x10000",
+      data: "0x6000",
+      value: "0x0",
+    },
+  };
+}
