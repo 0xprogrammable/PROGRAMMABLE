@@ -23,11 +23,13 @@ import {
   paginateProfileClaimableEntries,
   profileClaimableWei,
   profileClaimActionCount,
+  profileCreatorClaimErrorMessage,
   profileEntryHasClaimableReward,
   profileHasRewardSurface,
   profileRouterLaunchEntries,
   ProfileRouterLaunches,
   profileRewardsForAccount,
+  profileRewardActionErrorMessage,
   profileTransactionPollAttempts,
   reflectedConfirmedProfileTransactions,
   preserveInterruptedTransactionStates,
@@ -44,6 +46,7 @@ import {
   type StockPairedPendingStage,
 } from "../components/profile-view";
 import type { ClassicV3Reward } from "../lib/profile/classic-v3-rewards";
+import { CreatorClaimClientError } from "../lib/profile/creator-claim";
 import type { DeepV3CreatorToken } from "../lib/profile/deep-v3-profile";
 import type {
   ProfileClaim,
@@ -98,6 +101,39 @@ const claim = {
   claimableEth: "0.001",
   href: `/token/${secondAddress}`,
 } satisfies ProfileClaim;
+
+describe("profile action error copy", () => {
+  it("keeps actionable claim blocks and hides internal response states", () => {
+    expect(
+      profileCreatorClaimErrorMessage(
+        new CreatorClaimClientError(
+          "nothing-to-claim",
+          "There are no creator fees to claim for this pool",
+        ),
+      ),
+    ).toBe("There are no creator fees to claim for this pool");
+    expect(
+      profileCreatorClaimErrorMessage(
+        new CreatorClaimClientError(
+          "invalid-response",
+          "Creator claim preparation was not ready",
+        ),
+      ),
+    ).toBe(
+      "The creator claim was not completed. Check your wallet and try again.",
+    );
+  });
+
+  it("does not expose dormant reward parser details", () => {
+    expect(
+      profileRewardActionErrorMessage(
+        new Error("Deep reward action is not ready"),
+      ),
+    ).toBe(
+      "The reward action was not completed. Check your wallet and try again.",
+    );
+  });
+});
 
 const classicAllocation = {
   allocationIndex: 0,
@@ -899,8 +935,8 @@ describe("profile reward grouping", () => {
     ]);
     expect(profileHasRewardSurface(profileRouterLaunchEntries(portfolio)))
       .toBe(false);
-    expect(profileViewSource).toContain("Canonical Router records from this wallet.");
-    expect(profileViewSource).toContain("Router record");
+    expect(profileViewSource).toContain("Tokens launched from this wallet.");
+    expect(profileViewSource).not.toContain("Router record");
     expect(profileViewSource).toContain(
       'claimableEntries.length ? "" : styles.claimablePanelEmpty',
     );
@@ -914,12 +950,12 @@ describe("profile reward grouping", () => {
       }),
     );
     expect(html).toContain("Launches");
-    expect(html).toContain("Canonical Router records from this wallet.");
+    expect(html).toContain("Tokens launched from this wallet.");
     expect(html).toContain("Custom Graph");
     expect(html).toContain("$GRAPH");
     expect(html).toContain(`href="/token/${routerCustom.address}"`);
     expect(html).toContain("Custom");
-    expect(html).toContain("Router record");
+    expect(html).not.toContain("Router record");
     expect(html).not.toContain('aria-label="Open Custom Graph"');
     expect(html).not.toMatch(/>\s*Claim\s*</i);
     expect(html).not.toContain("permanently locked");

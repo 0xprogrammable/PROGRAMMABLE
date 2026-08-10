@@ -53,7 +53,10 @@ import {
   type StockPairedProfileRewards,
   type StockPairedReward,
 } from "@/lib/profile/stock-paired-rewards";
-import { prepareCreatorClaim } from "@/lib/profile/creator-claim";
+import {
+  CreatorClaimClientError,
+  prepareCreatorClaim,
+} from "@/lib/profile/creator-claim";
 import {
   canOptimizeTokenImage,
   getTokenCardImageSource,
@@ -350,6 +353,36 @@ export function getProfileRewardDataQuality(
     return "partial";
   }
   return "current";
+}
+
+const walletChangedBeforeSubmission =
+  "The connected wallet changed before submission";
+const insufficientNetworkFee =
+  "This wallet needs more ETH to cover the network fee";
+
+export function profileCreatorClaimErrorMessage(error: unknown) {
+  if (
+    error instanceof CreatorClaimClientError &&
+    error.code !== "invalid-response" &&
+    error.code !== "response-mismatch"
+  ) {
+    return error.message;
+  }
+  if (
+    error instanceof Error &&
+    (error.message === walletChangedBeforeSubmission ||
+      error.message === insufficientNetworkFee)
+  ) {
+    return error.message;
+  }
+  return "The creator claim was not completed. Check your wallet and try again.";
+}
+
+export function profileRewardActionErrorMessage(error: unknown) {
+  return error instanceof Error &&
+    error.message === walletChangedBeforeSubmission
+    ? error.message
+    : "The reward action was not completed. Check your wallet and try again.";
 }
 
 const pendingProfileTransactionStoragePrefix =
@@ -1767,10 +1800,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         }
         setClaimState({
           status: "error",
-          message:
-            caught instanceof Error
-              ? caught.message
-              : "The creator claim could not be submitted",
+          message: profileCreatorClaimErrorMessage(caught),
         });
       }
     },
@@ -1900,11 +1930,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         }
         setActionState({
           status: "error",
-          message:
-            caught instanceof Error &&
-            caught.message === "The connected wallet changed before submission"
-              ? caught.message
-              : "The reward action was not completed. Check your wallet and try again.",
+          message: profileRewardActionErrorMessage(caught),
         });
       }
     },
@@ -2029,10 +2055,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         }
         setActionState({
           status: "error",
-          message:
-            caught instanceof Error
-              ? caught.message
-              : "The reward action could not be submitted",
+          message: profileRewardActionErrorMessage(caught),
         });
       }
     },
@@ -3462,7 +3485,7 @@ export function ProfileRouterLaunches({
       <header className={styles.launchesHeader}>
         <div>
           <h2 id="profile-launches-title">Launches</h2>
-          <p>Canonical Router records from this wallet.</p>
+          <p>Tokens launched from this wallet.</p>
         </div>
         <span>
           {entries.length} {entries.length === 1 ? "launch" : "launches"}
@@ -3498,7 +3521,6 @@ export function ProfileRouterLaunches({
               </span>
               <span className={styles.launchStatus}>
                 <strong>{category}</strong>
-                <small>Router record</small>
               </span>
             </Link>
           );
@@ -3784,7 +3806,7 @@ function ProfileAccountWorkspace({
             <h2 id="profile-claimable-title">Claimable</h2>
             {loading ? (
               <span className={styles.visuallyHidden} role="status">
-                Refreshing reward sources
+                Refreshing rewards
               </span>
             ) : null}
             {claimPageData.totalPages > 1 ? (

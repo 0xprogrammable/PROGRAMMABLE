@@ -1,8 +1,8 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { metadata } from "@/app/hookathon/page";
+import { generateMetadata } from "@/app/hookathon/page";
 import { HookathonPage } from "@/components/hookathon-page";
 import { hookathonConfig } from "@/lib/hookathon/config";
 
@@ -18,6 +18,10 @@ function renderHookathon(initialNowMs: number) {
 }
 
 describe("Hookathon surface", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("renders the complete compact running state from one config", () => {
     const html = renderHookathon(confirmation);
 
@@ -64,6 +68,17 @@ describe("Hookathon surface", () => {
   });
 
   it("keeps the local draft canonical but out of search indexes", () => {
+    vi.stubEnv("VERCEL_ENV", undefined);
+    expect(generateMetadata().robots).toMatchObject({
+      index: false,
+      follow: false,
+      noarchive: true,
+    });
+
+    vi.stubEnv("VERCEL_ENV", "preview");
+    vi.stubEnv("NODE_ENV", "production");
+    const metadata = generateMetadata();
+
     expect(metadata.alternates).toEqual({ canonical: "/hookathon" });
     expect(metadata.robots).toMatchObject({
       index: false,
@@ -75,6 +90,17 @@ describe("Hookathon surface", () => {
         noimageindex: true,
       },
     });
+    expect(metadata.openGraph).toBeNull();
+    expect(metadata.twitter).toBeNull();
+  });
+
+  it("allows indexing only for the explicit production release", () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("NODE_ENV", "test");
+    const metadata = generateMetadata();
+
+    expect(metadata.robots).toEqual({ index: true, follow: true });
+    expect(metadata.alternates).toEqual({ canonical: "/hookathon" });
     expect(metadata.openGraph).toBeNull();
     expect(metadata.twitter).toBeNull();
   });
