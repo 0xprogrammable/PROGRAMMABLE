@@ -52,7 +52,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for rpc in https://ethereum-rpc.publicnode.com https://eth.drpc.org; do
+          # PublicNode denies archive reads from GitHub-hosted runner IPs without a token.
+          # These two unauthenticated archive-capable providers are independent of one another.
+          for rpc in https://eth.drpc.org https://mainnet.gateway.tenderly.co; do
             passed=0
             for attempt in 1 2; do
               if ETHEREUM_RPC_URL="$rpc" FOUNDRY_FUZZ_RUNS=1000 forge test \
