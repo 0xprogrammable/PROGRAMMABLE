@@ -28,6 +28,9 @@ import { useWallet } from "@/components/wallet-provider";
 import { getActiveManualRouterProductionBindingV2 } from
   "@/lib/custom-launch/manual-router-bindings-v2";
 import {
+  isExactHookemonApplicantGithubLoginV1,
+} from "@/lib/custom-launch/hookemon-applicant-presentation-v1";
+import {
   type ManualRouterApplicantListResponseV1,
   type ManualRouterPersistedAttemptV1,
   type ManualRouterResolveResponseV1,
@@ -172,15 +175,23 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
   const launchLockRef = useRef(false);
   const finalityLockRef = useRef(false);
   const exactShardsApplicant = isExactShardsGithubLogin(githubUsername);
-  const routeCapabilityUnavailable = exactShardsApplicant
+  const exactHookemonApplicant =
+    isExactHookemonApplicantGithubLoginV1(githubUsername);
+  const shardsRouteCapabilityUnavailable = exactShardsApplicant
     && NESTED_FACTORY_ACTIVATION === null;
+  // The Website must not infer an executable Hookemon action from source
+  // metadata. This stays hard-disabled until one immutable mixed-provenance
+  // profile, Facade and Authority release are bound together.
+  const hookemonRouteCapabilityUnavailable = exactHookemonApplicant;
   const routeAcceptanceRequired = exactShardsApplicant
     && NESTED_FACTORY_ACTIVATION !== null;
-  const routeAccepted = !exactShardsApplicant
-    || (
-      NESTED_FACTORY_ACTIVATION !== null
-      && routeAcceptance?.state === "accepted"
-    );
+  const routeAccepted = exactHookemonApplicant
+    ? false
+    : !exactShardsApplicant
+      || (
+        NESTED_FACTORY_ACTIVATION !== null
+        && routeAcceptance?.state === "accepted"
+      );
 
   const getSession = useCallback(async (): Promise<ManualRouterWebsiteSessionV1> => {
     const [accessToken, identityToken] = await Promise.all([
@@ -442,7 +453,6 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     authenticated,
     getSession,
     githubConnected,
-    routeAcceptanceRequired,
     exactShardsApplicant,
     selectedSubjectHash,
     routeAccepted,
@@ -850,9 +860,14 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     }),
   );
   const trustSteps = useMemo(() => [
+    ...(exactHookemonApplicant ? [{
+      label: "Completed-graph adoption",
+      detail: "Exact profile and Authority release required",
+      complete: false,
+    }] : []),
     ...(exactShardsApplicant ? [{
       label: "Exact route acceptance",
-      detail: routeCapabilityUnavailable
+      detail: shardsRouteCapabilityUnavailable
         ? "Route capability unavailable"
         : routeAcceptance?.state === "accepted"
           ? "nested-factory@1.0.0 accepted"
@@ -889,8 +904,8 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     githubUsername,
     resolved,
     routeAcceptance?.state,
-    routeAcceptanceRequired,
-    routeCapabilityUnavailable,
+    shardsRouteCapabilityUnavailable,
+    exactHookemonApplicant,
     exactShardsApplicant,
     routeAccepted,
     selected,
@@ -903,20 +918,33 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
           <ArrowLeft aria-hidden="true" size={15} />
           Back
         </button>
-        <span className={styles.betaLabel}>Approved applicants</span>
+        <span className={styles.betaLabel}>
+          {exactHookemonApplicant ? "Hookbuilder applicant" : "Approved applicants"}
+        </span>
       </header>
 
       <section className={styles.hero} aria-labelledby="applicant-launch-title">
         <div className={styles.heroCopy}>
           <span className={styles.kicker}>Applicant launch</span>
           <h1 id="applicant-launch-title" ref={titleRef} tabIndex={-1}>
-            Launch your approved coin
+            {exactHookemonApplicant
+              ? "Prepare the Hookemon launch"
+              : "Launch your approved coin"}
           </h1>
-          <p>
-            Sign in with the GitHub account from your submission and connect its
-            exact wallet. Your approved launch loads automatically. You pay gas
-            and send one transaction directly to the canonical Router.
-          </p>
+          {exactHookemonApplicant ? (
+            <p>
+              Hookemon requires three ordered wallet confirmations: the exact
+              USDC approval, the nonce-bound contract creation, then canonical
+              completed-graph adoption. Every step remains unavailable until
+              its fresh plan and chain checks are verified.
+            </p>
+          ) : (
+            <p>
+              Sign in with the GitHub account from your submission and connect its
+              exact wallet. Your approved launch loads automatically. You pay gas
+              and send one transaction directly to the canonical Router.
+            </p>
+          )}
         </div>
         <ol className={styles.trustRail} aria-label="Launch authorization">
           {trustSteps.map((step) => (
@@ -959,11 +987,35 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
             />
           ) : null}
 
-          {routeCapabilityUnavailable ? (
+          {shardsRouteCapabilityUnavailable ? (
             <p className={styles.nonceNote} role="status">
               The exact Shards route is not available yet. Wallet connection and
               launch stay disabled until its audited production binding is current.
             </p>
+          ) : null}
+
+          {hookemonRouteCapabilityUnavailable ? (
+            <section
+              className={styles.submission}
+              aria-labelledby="hookemon-launch-sequence-heading"
+            >
+              <div>
+                <span>Required order</span>
+                <strong id="hookemon-launch-sequence-heading">
+                  Hookemon completed-graph adoption
+                </strong>
+              </div>
+              <ol className={styles.hookemonSequence}>
+                <li>Approve the exact plan-bound USDC amount at nonce N</li>
+                <li>Create the exact AtomicLauncher at nonce N + 1</li>
+                <li>Adopt and stamp only after finalized graph verification</li>
+              </ol>
+              <p className={styles.nonceNote} role="status">
+                Wallet actions stay disabled until the exact Hookemon profile,
+                fresh chain checks, valid runtime status and Authority release
+                are current. Programmable never requests a private key.
+              </p>
+            </section>
           ) : null}
 
           <div className={styles.identityGrid}>
@@ -1189,22 +1241,44 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
 
         <aside className={styles.safetyPanel} aria-labelledby="safety-heading">
           <ShieldCheck aria-hidden="true" size={23} />
-          <h2 id="safety-heading">One wallet action</h2>
-          <p>
-            Your wallet sends one transaction to the verified Ethereum Router.
-            Programmable never needs your private key or an operator secret in
-            this browser.
-          </p>
-          <ul>
-            <li>Your wallet pays gas</li>
-            <li>The pending nonce is diagnostic only</li>
-            <li>Do not retry an uncertain wallet send</li>
-            <li>Never speed up or replace a submitted beta transaction</li>
-            <li>Public indexing starts after finality</li>
-          </ul>
+          <h2 id="safety-heading">
+            {exactHookemonApplicant ? "Three exact confirmations" : "One wallet action"}
+          </h2>
+          {exactHookemonApplicant ? (
+            <>
+              <p>
+                The Website guides approval, contract creation and adoption in
+                order. It never requests your private key or an operator secret.
+              </p>
+              <ul>
+                <li>Approval and CREATE use consecutive bound nonces</li>
+                <li>Any drift invalidates the complete plan</li>
+                <li>Adoption opens only after CREATE finality</li>
+                <li>Do not retry an uncertain wallet send</li>
+                <li>Public indexing starts after adoption finality</li>
+              </ul>
+            </>
+          ) : (
+            <>
+              <p>
+                Your wallet sends one transaction to the verified Ethereum Router.
+                Programmable never needs your private key or an operator secret in
+                this browser.
+              </p>
+              <ul>
+                <li>Your wallet pays gas</li>
+                <li>The pending nonce is diagnostic only</li>
+                <li>Do not retry an uncertain wallet send</li>
+                <li>Never speed up or replace a submitted beta transaction</li>
+                <li>Public indexing starts after finality</li>
+              </ul>
+            </>
+          )}
           <Link
             className={styles.githubLink}
-            href="https://github.com/0xprogrammable/hookbuilder/tree/279dd2fc2ea8c488943ca4e60ca889cb00bab40e/submissions/requests"
+            href={exactHookemonApplicant
+              ? "https://github.com/0xprogrammable/hookbuilder/pull/10"
+              : "https://github.com/0xprogrammable/hookbuilder/tree/279dd2fc2ea8c488943ca4e60ca889cb00bab40e/submissions/requests"}
             target="_blank"
             rel="noreferrer"
           >

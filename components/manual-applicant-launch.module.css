@@ -328,6 +328,20 @@
   font-family: var(--font-plex-mono), monospace;
 }
 
+.hookemonSequence {
+  color: var(--text-soft);
+  display: grid;
+  font-size: 12px;
+  gap: 8px;
+  line-height: 1.45;
+  margin: 18px 0 0;
+  padding-inline-start: 24px;
+}
+
+.hookemonSequence li {
+  padding-inline-start: 4px;
+}
+
 .confirmationTitle {
   align-items: center;
   color: var(--accent-strong);

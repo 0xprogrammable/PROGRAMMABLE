@@ -1059,7 +1059,7 @@ describe("inactive Shards nested-factory Router V2 browser contract", () => {
     expect(component).toContain("nestedFactoryRoute={isManualRouterResolveV2");
     expect(component).toContain('const SHARDS_GITHUB_LOGIN = "jesse-stahl"');
     expect(component).toContain(
-      "const routeCapabilityUnavailable = exactShardsApplicant",
+      "const shardsRouteCapabilityUnavailable = exactShardsApplicant",
     );
     expect(component).toContain(
       "requireExactShardsRoute: exactShardsApplicant",
