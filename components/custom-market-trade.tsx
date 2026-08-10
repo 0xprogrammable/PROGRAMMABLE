@@ -320,10 +320,10 @@ export function CustomMarketTrade({
           <span className={styles.asset}>{inputSymbol}</span>
         </div>
       </div>
-      <dl className={styles.tradeFacts}>
+      <dl className={`${styles.tradeFacts} ${styles.tradeSettings}`}>
         <div><dt>Route</dt><dd>Exact input · single pool</dd></div>
         <div>
-          <dt><label htmlFor={slippageId}>Slippage</label></dt>
+          <dt><label htmlFor={slippageId}>Max slippage</label></dt>
           <dd className={styles.slippageControl}>
             <input id={slippageId} inputMode="decimal" value={slippage} onChange={(event) => setSlippage(event.target.value)} />
             <span aria-hidden="true">%</span>

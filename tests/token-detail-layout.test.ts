@@ -60,15 +60,17 @@ describe("token detail layout", () => {
     expect(chartSource).toContain("<p>{emptyMessage}</p>");
   });
 
-  it("keeps the market workspace compact and gives verified detail full width", () => {
+  it("keeps the market workspace compact after removing auxiliary detail panels", () => {
     expect(detailStyles).toMatch(
       /grid-template-areas:\s*"identity identity"\s*"chart trade"\s*"deep deep"\s*"community community";/s,
     );
     expect(detailSource).toMatch(
       /<div className=\{styles\.marketChart\}>[\s\S]*?<TokenPriceChart[\s\S]*?<MetricGrid metrics=\{metrics\} \/>[\s\S]*?<\/div>/s,
     );
+    expect(detailSource).not.toContain("<VerifiedLaunchRecord");
+    expect(detailSource).not.toContain("<TokenCommunityChat");
     expect(detailStyles).toMatch(
-      /\.communityShell\s*\{[^}]*grid-area:\s*community;[^}]*position:\s*static;/s,
+      /\.classicLayout\s*\{[^}]*"identity identity"[^}]*"chart trade"[^}]*"deep deep"/s,
     );
     expect(detailStyles).toMatch(
       /\.identity\s*\{[^}]*grid-template-columns:\s*132px minmax\(0, 1fr\);/s,
@@ -102,7 +104,6 @@ describe("token detail layout", () => {
       ["identity", "className={styles.identity}"],
       ["chart", "className={styles.marketChart}"],
       ["trade", "styles.tradeShell"],
-      ["community", "className={styles.communityShell}"],
       ["deep", "<DeepLiquiditySummary token={token} />"],
     ] as const;
     const domOrder = domMarkers
@@ -110,7 +111,7 @@ describe("token detail layout", () => {
       .sort((left, right) => left.index - right.index)
       .map(({ area }) => area);
     const mobileAreas = detailStyles.match(
-      /@media \(max-width: 1020px\)[\s\S]*?\.layout\s*\{[^}]*grid-template-areas:\s*([\s\S]*?);/,
+      /@media \(max-width: 1020px\)[\s\S]*?\.classicLayout\s*\{[^}]*grid-template-areas:\s*([\s\S]*?);/,
     )?.[1];
     const visualOrder = [...(mobileAreas ?? "").matchAll(/"([^"]+)"/g)]
       .flatMap((match) => match[1].trim().split(/\s+/))
@@ -149,6 +150,7 @@ describe("token detail layout", () => {
   it("omits empty team-profile filler copy", () => {
     expect(detailSource).not.toContain("No team profile provided.");
     expect(detailSource).not.toContain("No team information provided.");
-    expect(detailSource).toContain("previewProject?.communityMembers");
+    expect(detailSource).not.toContain("previewProject?.communityMembers");
+    expect(detailSource).not.toContain("Private notes");
   });
 });

@@ -2423,7 +2423,7 @@ export function CustomLaunchExperience({
             <h2>{launchProgress === "complete" ? "Launch complete" : "Launch submitted"}</h2>
             <p>{statusMessage || "The approved transaction is being verified."}</p>
             {transactionHash ? <TransactionEvidence chainId={transactionChainId} transactionHash={transactionHash} /> : null}
-            {launchProgress === "complete" ? <Link className={styles.secondaryButton} href="/profile#custom-projects">View custom projects</Link> : <button className={styles.secondaryButton} type="button" onClick={returnToApplications}>View submissions</button>}
+            {launchProgress === "complete" ? <Link className={styles.secondaryButton} href="/explore?model=custom">Explore Custom</Link> : <button className={styles.secondaryButton} type="button" onClick={returnToApplications}>View submissions</button>}
           </div>
           <LiveMessage message={error} error />
         </section>
@@ -2504,7 +2504,7 @@ export function CustomLaunchExperience({
               <span>{statusMessage || "Exact approved commit ready"}</span>
             </div>
             {launchProgress === "complete" ? (
-              <Link className="primary-button" href="/profile#custom-projects">View custom projects <ArrowRight aria-hidden="true" size={16} /></Link>
+              <Link className="primary-button" href="/explore?model=custom">Explore Custom <ArrowRight aria-hidden="true" size={16} /></Link>
             ) : pendingGrantReissue !== null ? (
               <button
                 className="primary-button"
@@ -2557,7 +2557,7 @@ function ApplicationRow({ application, onOpen }: { application: PrincipalCustomL
       <div className={styles.applicationStatus} data-tone={display.tone}>{display.tone === "complete" || display.tone === "ready" ? <CircleCheck aria-hidden="true" size={17} /> : display.tone === "warning" ? <CircleAlert aria-hidden="true" size={17} /> : <Clock3 aria-hidden="true" size={17} />}<span><strong>{display.title}</strong><small>{formatObservedTime(application.updatedAt)}</small></span></div>
       {application.correctionPreview.length > 0 ? <ul className={styles.corrections}>{application.correctionPreview.slice(0, 3).map(({ correctionId, summary }) => <li key={correctionId}>{summary}</li>)}</ul> : null}
       {application.correctionPreview.length === 0 && guidance ? <p className={styles.guidance}>{guidance}</p> : null}
-      {application.state === "launched" ? <Link className={styles.rowAction} href="/profile#custom-projects">View project<ArrowRight aria-hidden="true" size={15} /></Link> : opensSetup ? <button className={styles.rowAction} type="button" onClick={onOpen}>{display.action}<ArrowRight aria-hidden="true" size={15} /></button> : <a className={styles.rowAction} href={githubUrl} target="_blank" rel="noreferrer">{display.action}<ExternalLink aria-hidden="true" size={14} /></a>}
+      {application.state === "launched" ? <Link className={styles.rowAction} href="/explore?model=custom">View in Explore<ArrowRight aria-hidden="true" size={15} /></Link> : opensSetup ? <button className={styles.rowAction} type="button" onClick={onOpen}>{display.action}<ArrowRight aria-hidden="true" size={15} /></button> : <a className={styles.rowAction} href={githubUrl} target="_blank" rel="noreferrer">{display.action}<ExternalLink aria-hidden="true" size={14} /></a>}
     </article>
   );
 }

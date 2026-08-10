@@ -19,7 +19,6 @@ import {
 
 import { useWallet } from "@/components/wallet-provider";
 import { useLiveDataRefresh } from "@/components/use-live-data-refresh";
-import type { AuthenticatedCustomLaunchProjectV2 } from "@/lib/custom-launch/contract-v2";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
 import { prepareAvatarImage } from "@/lib/profile/avatar";
 import {
@@ -88,186 +87,6 @@ const fallbackTokenImages = [
   "/brand/programmable-token-fallback-06-dusk.webp",
 ] as const;
 
-type CustomProjectsProfileState =
-  | { phase: "loading"; requestKey: string }
-  | {
-      phase: "ready";
-      requestKey: string;
-      projects: readonly AuthenticatedCustomLaunchProjectV2[];
-    }
-  | { phase: "error"; requestKey: string };
-
-function customProfileChainId(): string {
-  return process.env.NEXT_PUBLIC_PROGRAMMABLE_ONCHAIN_NETWORK === "rehearsal"
-    ? "11155111"
-    : "1";
-}
-
-function customProfilePrimaryTokenAddress(
-  project: AuthenticatedCustomLaunchProjectV2,
-): `0x${string}` | null {
-  const token = project.discoverableAssets.find(({ role, provenance }) =>
-    role === "primary-token" && provenance.kind === "launch-produced");
-  if (token === undefined
-    || (token.identity.namespace !== `eip155:${project.chainId}`
-      && token.identity.namespace !== `eip155:${project.chainId}:erc20`)
-    || !/^0x[0-9a-f]{40}$/u.test(token.identity.value)) return null;
-  return token.identity.value as `0x${string}`;
-}
-
-function parseCustomWalletProfile(
-  value: unknown,
-  namespace: string,
-  account: string,
-): readonly AuthenticatedCustomLaunchProjectV2[] {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("Custom projects returned an invalid response");
-  }
-  const profile = value as Record<string, unknown>;
-  if (profile.schemaVersion !== "programmable.custom-launch-wallet-profile.v2"
-    || typeof profile.subject !== "object" || profile.subject === null
-    || Array.isArray(profile.subject)
-    || (profile.subject as Record<string, unknown>).namespace !== namespace
-    || (profile.subject as Record<string, unknown>).value !== account
-    || !Array.isArray(profile.projects)) {
-    throw new Error("Custom projects returned an invalid wallet profile");
-  }
-  for (const candidate of profile.projects) {
-    if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate)) {
-      throw new Error("Custom projects returned an invalid project");
-    }
-    const project = candidate as Record<string, unknown>;
-    if (project.schemaVersion !== "programmable.custom-launch-website-record.v2"
-      || project.category !== "custom"
-      || project.status !== "launched"
-      || typeof project.launchingWallet !== "object"
-      || project.launchingWallet === null
-      || Array.isArray(project.launchingWallet)
-      || (project.launchingWallet as Record<string, unknown>).namespace !== namespace
-      || (project.launchingWallet as Record<string, unknown>).value !== account
-      || typeof project.postLaunchAuthorityInventory !== "object"
-      || project.postLaunchAuthorityInventory === null
-      || Array.isArray(project.postLaunchAuthorityInventory)
-      || (project.postLaunchAuthorityInventory as Record<string, unknown>).githubAuthority
-        !== "provenance-only-never-post-launch-authority"
-      || !Array.isArray(
-        (project.postLaunchAuthorityInventory as Record<string, unknown>)
-          .postLaunchAuthorities,
-      )) throw new Error("Custom projects returned an invalid project binding");
-  }
-  return profile.projects as AuthenticatedCustomLaunchProjectV2[];
-}
-
-function CustomProjectsProfileSection({ account }: { account: `0x${string}` }) {
-  const namespace = `eip155:${customProfileChainId()}`;
-  const normalizedAccount = account.toLowerCase() as `0x${string}`;
-  const requestKey = `${namespace}:${normalizedAccount}`;
-  const [state, setState] = useState<CustomProjectsProfileState>({
-    phase: "loading",
-    requestKey,
-  });
-  const visibleState: CustomProjectsProfileState = state.requestKey === requestKey
-    ? state
-    : { phase: "loading", requestKey };
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const query = new URLSearchParams({ namespace, wallet: normalizedAccount });
-    void fetch(`/api/custom-launch/v2/profile?${query.toString()}`, {
-      headers: { Accept: "application/json" },
-      signal: controller.signal,
-    }).then(async (response) => {
-      const body: unknown = await response.json().catch(() => null);
-      if (!response.ok) throw new Error("Custom projects are unavailable");
-      return parseCustomWalletProfile(body, namespace, normalizedAccount);
-    }).then((projects) => {
-      if (!controller.signal.aborted) {
-        setState({ phase: "ready", requestKey, projects });
-      }
-    }).catch(() => {
-      if (!controller.signal.aborted) setState({ phase: "error", requestKey });
-    });
-    return () => controller.abort();
-  }, [namespace, normalizedAccount, requestKey]);
-
-  return (
-    <section
-      className={styles.customProjects}
-      id="custom-projects"
-      aria-labelledby="custom-projects-title"
-    >
-      <header className={styles.customProjectsHeader}>
-        <div>
-          <span>Wallet-indexed</span>
-          <h2 id="custom-projects-title">Custom projects</h2>
-        </div>
-        <Link href="/explore?model=custom">Explore Custom</Link>
-      </header>
-      {visibleState.phase === "loading" ? (
-        <p className={styles.customProjectsState} role="status">Loading Custom projects</p>
-      ) : visibleState.phase === "error" ? (
-        <p className={styles.customProjectsState} role="status">
-          Custom projects are temporarily unavailable. Classic profile data is unaffected.
-        </p>
-      ) : visibleState.projects.length === 0 ? (
-        <p className={styles.customProjectsState}>
-          No finalized Custom launch is indexed for this wallet.
-        </p>
-      ) : (
-        <div className={styles.customProjectList}>
-          {visibleState.projects.map((project) => {
-            const tokenAddress = customProfilePrimaryTokenAddress(project);
-            const primaryToken = project.discoverableAssets.find(({ role }) =>
-              role === "primary-token");
-            const projectName = primaryToken?.onchainMetadata?.status === "available"
-              ? primaryToken.onchainMetadata.name
-              : project.modelId;
-            const walletAuthorities = project.postLaunchAuthorityInventory
-              .postLaunchAuthorities.filter(({ identity }) =>
-                identity.namespace === namespace
-                && identity.value === normalizedAccount);
-            return (
-              <article className={styles.customProjectCard} key={project.projectId}>
-                <div className={styles.customProjectIdentity}>
-                  <span>Custom</span>
-                  <h3>{projectName}</h3>
-                  <p>{project.modelId} · {new Date(project.finalizedAt).toLocaleDateString("en-GB")}</p>
-                </div>
-                <div className={styles.customProjectAuthority}>
-                  <span>Declared wallet authority</span>
-                  {walletAuthorities.length === 0 ? (
-                    <p>No post-launch role is declared for this wallet.</p>
-                  ) : (
-                    <ul>
-                      {walletAuthorities.map((authority) => (
-                        <li key={authority.authorityId}>
-                          <strong>{authority.disclosure.label}</strong>
-                          <span>{authority.postLaunchActions.join(" · ") || `${authority.feeRole} fee role`}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-                <p className={styles.customProjectProvenance}>
-                  GitHub is source provenance only, never post-launch authority.
-                </p>
-                {tokenAddress ? (
-                  <Link className={styles.customProjectAction} href={`/token/${tokenAddress}`}>
-                    View project
-                  </Link>
-                ) : (
-                  <Link className={styles.customProjectAction} href="/explore?model=custom">
-                    View in Explore
-                  </Link>
-                )}
-              </article>
-            );
-          })}
-        </div>
-      )}
-    </section>
-  );
-}
 const profileEnvironment =
   process.env.NEXT_PUBLIC_PROGRAMMABLE_ONCHAIN_NETWORK === "rehearsal"
     ? "rehearsal"
@@ -2771,8 +2590,6 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         onRetry={retryProfileData}
         terminalErrorReady={terminalErrorReady}
       />
-
-      <CustomProjectsProfileSection account={account} />
     </div>
   );
 }

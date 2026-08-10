@@ -29,11 +29,9 @@ import {
   type TokenChartMarketCap,
   type TokenChartVolume,
 } from "@/components/token-price-chart";
-import { TokenCommunityChat } from "@/components/token-community-chat";
 import { CustomMarketTrade } from "@/components/custom-market-trade";
 import {
   getExplorePreviewCustomProject,
-  getExplorePreviewProject,
   getExplorePreviewToken,
 } from "@/components/explore-preview-data";
 import { useInterfacePreview } from "@/components/interface-preview";
@@ -1029,138 +1027,6 @@ function MetricGrid({ metrics }: { metrics: TokenMetric[] }) {
   );
 }
 
-function VerifiedLaunchRecord({
-  token,
-  explorerBase,
-}: {
-  token: LauncherToken;
-  explorerBase: string | null;
-}) {
-  const launchedAt = Number.isFinite(Date.parse(token.launchedAt))
-    ? new Intl.DateTimeFormat("en", {
-        dateStyle: "medium",
-        timeStyle: "short",
-        timeZone: "UTC",
-      }).format(new Date(token.launchedAt))
-    : token.launchedAt;
-  const stamp = token.launchStampProvenance;
-  const category = stamp?.kind === "custom-graph" ? "Custom" : "Classic";
-
-  return (
-    <details className={styles.launchRecord}>
-      <summary>
-        <span>{stamp ? "Launch stamp provenance" : "Onchain launch record"}</span>
-        <small>{stamp ? "Canonical Router record" : "Onchain provenance"}</small>
-      </summary>
-      <dl>
-        <div>
-          <dt>Category</dt>
-          <dd>{category}</dd>
-        </div>
-        <div>
-          <dt>Model</dt>
-          <dd>{token.launchModel ?? "classic"}</dd>
-        </div>
-        <div>
-          <dt>Launched</dt>
-          <dd><time dateTime={token.launchedAt}>{launchedAt} UTC</time></dd>
-        </div>
-        {stamp ? (
-          <>
-            <div>
-              <dt>Launch ID</dt>
-              <dd><code>{stamp.launchId}</code></dd>
-            </div>
-            <div>
-              <dt>Stamp hash</dt>
-              <dd><code>{stamp.stampHash}</code></dd>
-            </div>
-            <div>
-              <dt>Router</dt>
-              <dd>
-                {explorerBase ? (
-                  <a href={`${explorerBase}/address/${stamp.routerAddress}`} target="_blank" rel="noreferrer">
-                    <code>{stamp.routerAddress}</code>
-                  </a>
-                ) : (
-                  <code>{stamp.routerAddress}</code>
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt>Pool manager</dt>
-              <dd>
-                {explorerBase ? (
-                  <a href={`${explorerBase}/address/${stamp.poolManagerAddress}`} target="_blank" rel="noreferrer">
-                    <code>{stamp.poolManagerAddress}</code>
-                  </a>
-                ) : (
-                  <code>{stamp.poolManagerAddress}</code>
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt>Launch block</dt>
-              <dd><code>{stamp.blockNumber}</code></dd>
-            </div>
-            <div>
-              <dt>Finality observed</dt>
-              <dd>
-                <code>{stamp.finalizedAtBlockNumber}</code>
-                {` (${stamp.finalityConfirmations} confirmations)`}
-              </dd>
-            </div>
-          </>
-        ) : null}
-        {token.creatorAddress ? (
-          <div>
-            <dt>Creator</dt>
-            <dd>
-              {explorerBase ? (
-                <a href={`${explorerBase}/address/${token.creatorAddress}`} target="_blank" rel="noreferrer">
-                  <code>{token.creatorAddress}</code>
-                </a>
-              ) : (
-                <code>{token.creatorAddress}</code>
-              )}
-            </dd>
-          </div>
-        ) : null}
-        <div>
-          <dt>Hook</dt>
-          <dd>
-            {explorerBase ? (
-              <a href={`${explorerBase}/address/${token.hookAddress}`} target="_blank" rel="noreferrer">
-                <code>{token.hookAddress}</code>
-              </a>
-            ) : (
-              <code>{token.hookAddress}</code>
-            )}
-          </dd>
-        </div>
-        <div>
-          <dt>Pool</dt>
-          <dd><code>{token.poolId}</code></dd>
-        </div>
-        {token.launchTransactionHash ? (
-          <div>
-            <dt>Launch transaction</dt>
-            <dd>
-              {explorerBase ? (
-                <a href={`${explorerBase}/tx/${token.launchTransactionHash}`} target="_blank" rel="noreferrer">
-                  <code>{token.launchTransactionHash}</code>
-                </a>
-              ) : (
-                <code>{token.launchTransactionHash}</code>
-              )}
-            </dd>
-          </div>
-        ) : null}
-      </dl>
-    </details>
-  );
-}
-
 function PreviewTokenTrade({ token }: { token: LauncherToken }) {
   const [slippagePercent, setSlippagePercent] = useState("1");
 
@@ -1209,14 +1075,14 @@ function PreviewTokenTrade({ token }: { token: LauncherToken }) {
         </div>
       </div>
 
-      <dl className={styles.tradeFacts}>
+      <dl className={`${styles.tradeFacts} ${styles.tradeSettings}`}>
         <div>
-          <dt>Swap fee</dt>
+          <dt>Pool fee</dt>
           <dd>{formatSwapFee(token.totalSwapFeeBps) ?? "—"}</dd>
         </div>
         <div>
           <dt>
-            <label htmlFor={`preview-slippage-${token.id}`}>Slippage</label>
+            <label htmlFor={`preview-slippage-${token.id}`}>Max slippage</label>
           </dt>
           <dd>
             <span className={styles.slippageControl}>
@@ -1315,9 +1181,6 @@ function TokenDetailContent({
     token.imageUrl?.trim() || getFallbackTokenImage(token.tokenAddress);
   const imageSource = getTokenCardImageSource(imageUrl);
   const projectLinks = token.links ?? [];
-  const previewProject = preview
-    ? getExplorePreviewProject(token.tokenAddress)
-    : undefined;
   const tokenDecimals =
     typeof token.tokenDecimals === "number" &&
     Number.isInteger(token.tokenDecimals) &&
@@ -1560,7 +1423,7 @@ function TokenDetailContent({
         </Link>
       </div>
 
-      <div className={styles.layout}>
+      <div className={`${styles.layout} ${styles.classicLayout}`}>
         <section className={styles.overview}>
           <div className={styles.identity}>
             <div className={styles.image}>
@@ -1665,10 +1528,6 @@ function TokenDetailContent({
               />
             )}
             <MetricGrid metrics={metrics} />
-            <VerifiedLaunchRecord
-              token={token}
-              explorerBase={explorerBase}
-            />
           </div>
         </section>
 
@@ -1834,15 +1693,6 @@ function TokenDetailContent({
         token.tokenReserveRaw ? (
           <DeepLiquiditySummary token={token} />
         ) : null}
-
-        <div className={styles.communityShell}>
-          <TokenCommunityChat
-            memberCount={previewProject?.communityMembers}
-            preview={preview}
-            tokenAddress={token.tokenAddress}
-            tokenName={token.name}
-          />
-        </div>
 
       </div>
       {copyError ? (
