@@ -185,6 +185,8 @@ export default function LaunchStampDocsPage() {
       heroAside={<LiveTrustRoot />}
       heroId="trust-root"
       kicker="Infrastructure · Router-stamped launches"
+      parentHref="/docs/developers#agents"
+      parentLabel="Developer integration"
       sections={sections}
       title="Verify a Router-stamped launch"
     >

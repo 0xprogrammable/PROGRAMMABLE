@@ -25,19 +25,19 @@ export const docsCategories = [
     description: "Identity and data",
     href: "/docs/infrastructure",
     label: "Infrastructure",
-    relatedPaths: ["/docs/launch-stamps"] as const,
+    relatedPaths: [] as const,
   },
   {
     description: "Integration guide",
     href: "/docs/developers",
     label: "Developer integration",
-    relatedPaths: [] as const,
+    relatedPaths: ["/docs/launch-stamps"] as const,
   },
 ] as const;
 
 export const docsNavigation = [
   {
-    label: "Programmable",
+    label: "Documentation",
     items: [{ href: "/docs", label: "Overview" }],
   },
   {
@@ -51,22 +51,13 @@ export const docsNavigation = [
   },
   {
     label: "Infrastructure",
-    items: [
-      { href: "/docs/infrastructure", label: "System overview" },
-      { href: "/docs/launch-stamps", label: "Launch verification" },
-    ],
+    items: [{ href: "/docs/infrastructure", label: "System overview" }],
   },
   {
     label: "Developer integration",
     items: [
-      { href: "/docs/developers#paths", label: "Start here" },
-      { href: "/docs/developers#trust-root", label: "Router binding" },
-      { href: "/docs/developers#identity", label: "Match a token or pool" },
-      { href: "/docs/developers#indexing", label: "Discover new launches" },
-      { href: "/docs/developers#resources", label: "Resources" },
-      { href: "/docs/developers#boundary", label: "What verification proves" },
-      { href: "/docs/developers#checklist", label: "Checklist" },
-      { href: "/docs/developers#agents", label: "Machine-readable docs" },
+      { href: "/docs/developers", label: "Integration guide" },
+      { href: "/docs/launch-stamps", label: "Router reference" },
     ],
   },
 ] as const;

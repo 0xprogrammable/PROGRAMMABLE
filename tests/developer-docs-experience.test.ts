@@ -54,7 +54,7 @@ describe("Developer documentation experience", () => {
       expect(docsData).toContain(`/docs/developers#${id}`);
     }
     expect(developerPage).toContain('heroId="paths"');
-    expect(docsData).toContain("/docs/developers#paths");
+    expect(docsData).not.toContain("/docs/developers#paths");
     for (const staleId of [
       "quickstart",
       "providers",
@@ -156,6 +156,9 @@ describe("Developer documentation experience", () => {
     );
     expect(developerDocsCss).toContain(
       "@media (prefers-reduced-motion: reduce)",
+    );
+    expect(developerDocsCss).not.toMatch(
+      /font-size:\s*(?:10(?:\.5)?|11(?:\.5)?|12(?:\.5)?)px/,
     );
     expect(developerDocsCss).not.toContain("transition: all");
   });

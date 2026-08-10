@@ -473,17 +473,20 @@ describe("Launch Stamp developer documentation", () => {
     expect(page).not.toContain("Classic onchain canary passed");
   });
 
-  it("keeps launch verification discoverable under Infrastructure", () => {
+  it("keeps the Router reference inside Developer integration", () => {
     expect(docsData).toContain(
-      '{ href: "/docs/launch-stamps", label: "Launch verification" }',
+      '{ href: "/docs/launch-stamps", label: "Router reference" }',
     );
     expect(docsData).toContain(
       'relatedPaths: ["/docs/launch-stamps"] as const',
     );
     expect(docsShell).toContain(
-      "category.relatedPaths.some((path) => path === currentPath)",
+      "item.relatedPaths.some((path) => path === currentPath)",
     );
     expect(page).toContain('currentPath="/docs/launch-stamps"');
+    expect(page).toContain('parentHref="/docs/developers#agents"');
+    expect(page).toContain('parentLabel="Developer integration"');
+    expect(docsShell).toContain('aria-label="Breadcrumb"');
     expect(page).toContain('alternates: { canonical: "/docs/launch-stamps" }');
     expect(sitemap).toContain('"/docs/launch-stamps"');
     expect(developerDocsMarkdown).toContain(
@@ -521,6 +524,9 @@ describe("Launch Stamp developer documentation", () => {
       /\.detailLine code\s*\{[^}]*overflow-wrap:\s*anywhere;[^}]*word-break:\s*break-word;/s,
     );
     expect(styles).not.toContain("transition: all");
+    expect(styles).not.toMatch(
+      /font-size:\s*(?:10(?:\.5)?|11(?:\.5)?|12(?:\.5)?)px/,
+    );
     expect(styles).not.toMatch(/\n\s+width:\s*\d{3,}px/);
   });
 });

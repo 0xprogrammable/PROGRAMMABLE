@@ -5,7 +5,6 @@ import { ChevronDown } from "lucide-react";
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -20,30 +19,26 @@ type SectionPosition = {
   top: number;
 };
 
-type ChapterIndicator = {
-  height: number;
-  offset: number;
-};
-
 export type DocsPageSection = {
   id: string;
   label: string;
 };
 
 const docsRootPath = "/docs/developers";
-const docsSectionHrefs = (() => {
-  const hrefs: string[] = [];
-  for (const group of docsNavigation) {
-    for (const item of group.items) {
-      if (item.href.startsWith(`${docsRootPath}#`)) hrefs.push(item.href);
-    }
-  }
-  return hrefs;
-})();
-const overviewHref = docsSectionHrefs[0] ?? `${docsRootPath}#paths`;
-const docsSectionIds = docsSectionHrefs.map((href) =>
-  href.slice(docsRootPath.length + 1),
+const docsSectionIds = [
+  "paths",
+  "trust-root",
+  "identity",
+  "indexing",
+  "resources",
+  "boundary",
+  "checklist",
+  "agents",
+] as const;
+const docsSectionHrefs = docsSectionIds.map(
+  (sectionId) => `${docsRootPath}#${sectionId}`,
 );
+const overviewHref = docsSectionHrefs[0] ?? `${docsRootPath}#paths`;
 const docsSectionHrefSet = new Set<string>(docsSectionHrefs);
 const emptyDocsPageSections: readonly DocsPageSection[] = [];
 
@@ -248,17 +243,11 @@ export function DocsNavigation({
   sections?: readonly DocsPageSection[];
 }) {
   const mobileNavigationRef = useRef<HTMLDetailsElement>(null);
-  const desktopNavigationRef = useRef<HTMLElement>(null);
   const locationInitializedRef = useRef(false);
   const scrollAnimationFrameRef = useRef<number | null>(null);
-  const [chapterIndicator, setChapterIndicator] =
-    useState<ChapterIndicator | null>(null);
   const trackedSectionIds = useMemo(
-    () =>
-      currentPath === docsRootPath
-        ? docsSectionIds
-        : sections.map((section) => section.id),
-    [currentPath, sections],
+    () => sections.map((section) => section.id),
+    [sections],
   );
   const trackedSectionIdSet = useMemo(
     () => new Set(trackedSectionIds),
@@ -280,11 +269,6 @@ export function DocsNavigation({
       if (item.href === activeHref || item.href === currentPath) {
         activeLabel = item.label;
       }
-    }
-  }
-  for (const section of sections) {
-    if (`${currentPath}#${section.id}` === activeHref) {
-      activeLabel = section.label;
     }
   }
 
@@ -401,38 +385,6 @@ export function DocsNavigation({
     },
     [currentPath, scrollToDocsSection, trackedSectionIdSet],
   );
-
-  const measureChapterIndicator = useCallback(() => {
-    const navigation = desktopNavigationRef.current;
-    const activeLink = navigation?.querySelector<HTMLElement>(
-      "[data-docs-context-link][data-active='true']",
-    );
-    const group = activeLink?.closest<HTMLElement>("[data-docs-context-group]");
-    if (!activeLink || !group) {
-      setChapterIndicator(null);
-      return;
-    }
-
-    const linkRect = activeLink.getBoundingClientRect();
-    const groupRect = group.getBoundingClientRect();
-    const nextIndicator = {
-      height: linkRect.height,
-      offset: linkRect.top - groupRect.top,
-    };
-    setChapterIndicator((current) =>
-      current &&
-      Math.abs(current.height - nextIndicator.height) < 0.5 &&
-      Math.abs(current.offset - nextIndicator.offset) < 0.5
-        ? current
-        : nextIndicator,
-    );
-  }, []);
-
-  useLayoutEffect(() => {
-    measureChapterIndicator();
-    window.addEventListener("resize", measureChapterIndicator);
-    return () => window.removeEventListener("resize", measureChapterIndicator);
-  }, [activeHref, measureChapterIndicator, sections.length]);
 
   useEffect(() => {
     if (trackedSectionIds.length === 0) return;
@@ -588,53 +540,10 @@ export function DocsNavigation({
     }
   }
 
-  function renderNavigation() {
-    const navigationGroups = sections.length === 0 ? docsNavigation : [];
-
+  function renderGlobalNavigation() {
     return (
       <>
-        {sections.length > 0 ? (
-          <div
-            className={`${styles.navGroup} ${styles.contextNavGroup}`}
-            data-docs-context-group
-          >
-            <span
-              aria-hidden="true"
-              className={styles.chapterIndicator}
-              data-visible={chapterIndicator ? "true" : undefined}
-              style={
-                chapterIndicator
-                  ? {
-                      height: `${chapterIndicator.height}px`,
-                      transform: `translate3d(0, ${chapterIndicator.offset}px, 0)`,
-                    }
-                  : undefined
-              }
-            />
-            <p className={styles.navLabel}>Contents</p>
-            <ul>
-              {sections.map((section) => {
-                const href = `${currentPath}#${section.id}`;
-                const active = href === activeHref;
-                return (
-                  <li key={href}>
-                    <Link
-                      href={href}
-                      data-docs-context-link
-                      data-active={active ? "true" : undefined}
-                      aria-current={active ? "location" : undefined}
-                      onClick={(event) => handleNavigation(event, href)}
-                    >
-                      {section.label}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        ) : null}
-
-        {navigationGroups.map((group) => (
+        {docsNavigation.map((group) => (
           <div className={styles.navGroup} key={group.label}>
             <p className={styles.navLabel}>{group.label}</p>
             <ul>
@@ -671,6 +580,34 @@ export function DocsNavigation({
     );
   }
 
+  function renderLocalNavigation() {
+    if (sections.length === 0) return null;
+
+    return (
+      <div className={`${styles.navGroup} ${styles.contextNavGroup}`}>
+        <p className={styles.navLabel}>On this page</p>
+        <ul>
+          {sections.map((section) => {
+            const href = `${currentPath}#${section.id}`;
+            const active = href === activeHref;
+            return (
+              <li key={href}>
+                <Link
+                  href={href}
+                  data-active={active ? "true" : undefined}
+                  aria-current={active ? "location" : undefined}
+                  onClick={(event) => handleNavigation(event, href)}
+                >
+                  {section.label}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
+  }
+
   function renderMobileNavigation() {
     const activeCategory = docsCategories.find(
       (category) =>
@@ -695,7 +632,25 @@ export function DocsNavigation({
 
     return (
       <>
-        {renderNavigation()}
+        {relatedItems.length > 0 ? (
+          <div className={styles.navGroup}>
+            <p className={styles.navLabel}>{activeGroup?.label}</p>
+            <ul>
+              {relatedItems.map((item) => (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    onClick={(event) => handleNavigation(event, item.href)}
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        {renderLocalNavigation()}
 
         <div className={styles.navGroup}>
           <p className={styles.navLabel}>Documentation</p>
@@ -725,24 +680,6 @@ export function DocsNavigation({
             })}
           </ul>
         </div>
-
-        {relatedItems.length > 0 ? (
-          <div className={styles.navGroup}>
-            <p className={styles.navLabel}>{activeGroup?.label}</p>
-            <ul>
-              {relatedItems.map((item) => (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    onClick={(event) => handleNavigation(event, item.href)}
-                  >
-                    {item.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
       </>
     );
   }
@@ -752,9 +689,8 @@ export function DocsNavigation({
       <nav
         className={styles.desktopNav}
         aria-label="Documentation navigation"
-        ref={desktopNavigationRef}
       >
-        {renderNavigation()}
+        {renderGlobalNavigation()}
       </nav>
 
       <details className={styles.mobileNav} ref={mobileNavigationRef}>
@@ -773,5 +709,92 @@ export function DocsNavigation({
         </nav>
       </details>
     </>
+  );
+}
+
+export function DocsPageNavigation({
+  currentPath,
+  sections = emptyDocsPageSections,
+}: {
+  currentPath: string;
+  sections?: readonly DocsPageSection[];
+}) {
+  const [activeSectionId, setActiveSectionId] = useState(
+    sections[0]?.id ?? "",
+  );
+
+  useEffect(() => {
+    if (sections.length === 0) return;
+
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const positions = sections.flatMap((section) => {
+        const element = document.getElementById(section.id);
+        return element
+          ? [
+              {
+                id: section.id,
+                top: element.getBoundingClientRect().top + window.scrollY,
+              },
+            ]
+          : [];
+      });
+      const activeId = pickActiveDocsSection({
+        atPageEnd:
+          Math.ceil(window.scrollY + window.innerHeight) >=
+          document.documentElement.scrollHeight - 2,
+        marker: window.scrollY + 164,
+        positions,
+      });
+      setActiveSectionId(activeId);
+    };
+    const scheduleUpdate = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(update);
+    };
+
+    update();
+    window.addEventListener("resize", scheduleUpdate);
+    window.addEventListener("scroll", scheduleUpdate, { passive: true });
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", scheduleUpdate);
+      window.removeEventListener("scroll", scheduleUpdate);
+    };
+  }, [sections]);
+
+  if (sections.length < 2) return null;
+
+  return (
+    <aside className={styles.pageNavigation} aria-label="On this page">
+      <p>On this page</p>
+      <ul>
+        {sections.map((section) => {
+          const href = `${currentPath}#${section.id}`;
+          const active = activeSectionId === section.id;
+          return (
+            <li key={href}>
+              <Link
+                aria-current={active ? "location" : undefined}
+                data-active={active ? "true" : undefined}
+                href={href}
+                onClick={(event) => {
+                  if (hasModifiedClick(event)) return;
+                  event.preventDefault();
+                  window.dispatchEvent(
+                    new CustomEvent(docsNavigateEvent, {
+                      detail: { href },
+                    }),
+                  );
+                }}
+              >
+                {section.label}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </aside>
   );
 }
