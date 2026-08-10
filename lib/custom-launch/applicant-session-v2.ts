@@ -114,6 +114,20 @@ export function customLaunchApplicantStageRequiresExplicitSessionV2(
   return stage === "wallet-signature" || stage === "wallet-send";
 }
 
+export async function refreshCurrentCustomLaunchApplicantStageV2(
+  input: Readonly<{
+    stage: CustomLaunchApplicantDangerousStageV2;
+    assertCurrent: () => void;
+    refreshSession: () => Promise<unknown>;
+  }>,
+): Promise<void> {
+  input.assertCurrent();
+  if (customLaunchApplicantStageRequiresExplicitSessionV2(input.stage)) {
+    await input.refreshSession();
+  }
+  input.assertCurrent();
+}
+
 export async function runCurrentCustomLaunchApplicantSequenceV2<
   Challenge,
   Preparation,

@@ -45,8 +45,8 @@ import {
   customApplicationHasDurableApprovalV2,
   customApplicationHasCurrentLaunchEntitlementV2,
   customLaunchApplicantRecoveryV2,
-  customLaunchApplicantStageRequiresExplicitSessionV2,
   customLaunchApplicantSessionBoundaryKeyV2,
+  refreshCurrentCustomLaunchApplicantStageV2,
   runCurrentCustomLaunchApplicantSequenceV2,
   CustomLaunchApplicantBoundaryGuardV2,
   CustomLaunchApplicantSingleFlightV2,
@@ -175,12 +175,14 @@ export type LaunchProgress =
   | "wallet-proof"
   | "wallet-transaction"
   | "reconciling"
+  | "ambiguous"
   | "confirmation"
   | "publishing"
   | "complete";
 
-type PreparedLaunchRecoveryV2 = Readonly<{
+export type PreparedLaunchRecoveryV2 = Readonly<{
   stage: "prepared";
+  walletRequestAttempted: false;
   applicationHandle: ApplicationHandleV3;
   githubPrincipalHash: `sha256:${string}`;
   grantId: string;
@@ -195,7 +197,24 @@ type PreparedLaunchRecoveryV2 = Readonly<{
   reservedTransactionHash: `0x${string}`;
 }>;
 
-type BroadcastLaunchRecoveryV2 = Readonly<{
+export type SubmissionUnknownLaunchRecoveryV2 = Readonly<{
+  stage: "submission-unknown";
+  walletRequestAttempted: true;
+  applicationHandle: ApplicationHandleV3;
+  githubPrincipalHash: `sha256:${string}`;
+  grantId: string;
+  grantBindingHash: `sha256:${string}`;
+  sessionId: string;
+  permitId: `sha256:${string}`;
+  chainId: string;
+  executionReservationId: string;
+  browserWalletActionHash: `sha256:${string}`;
+  reportIdempotencyKey: string;
+  expiresAt: string;
+  reservedTransactionHash: `0x${string}`;
+}>;
+
+export type BroadcastLaunchRecoveryV2 = Readonly<{
   stage: "broadcast";
   applicationHandle: ApplicationHandleV3;
   githubPrincipalHash: `sha256:${string}`;
@@ -213,18 +232,30 @@ type BroadcastLaunchRecoveryV2 = Readonly<{
 
 export type PersistedLaunchRecoveryV2 =
   | PreparedLaunchRecoveryV2
+  | SubmissionUnknownLaunchRecoveryV2
   | BroadcastLaunchRecoveryV2;
+
+export function customLaunchSubmissionUnknownRecoveryV2(
+  recovery: PreparedLaunchRecoveryV2,
+): SubmissionUnknownLaunchRecoveryV2 {
+  return Object.freeze({
+    ...recovery,
+    stage: "submission-unknown" as const,
+    walletRequestAttempted: true as const,
+  });
+}
 
 export function customLaunchPersistedRecoveryProgressV2(
   recovery: Pick<PersistedLaunchRecoveryV2, "stage">,
-): Extract<LaunchProgress, "reconciling" | "confirmation"> {
-  return recovery.stage === "prepared" ? "reconciling" : "confirmation";
+): Extract<LaunchProgress, "reconciling" | "ambiguous" | "confirmation"> {
+  if (recovery.stage === "prepared") return "reconciling";
+  return recovery.stage === "submission-unknown" ? "ambiguous" : "confirmation";
 }
 
 export function customLaunchRecoveryDisplayV2(
   launchProgress: LaunchProgress,
   statusMessage = "",
-): Readonly<{ title: string; message: string; submitted: boolean }> {
+): Readonly<{ title: string; message: string; submitted: boolean | null }> {
   if (launchProgress === "complete") {
     return {
       title: "Launch complete",
@@ -237,6 +268,14 @@ export function customLaunchRecoveryDisplayV2(
       title: "Launch submitted",
       message: statusMessage || "The approved transaction is being verified.",
       submitted: true,
+    };
+  }
+  if (launchProgress === "ambiguous" || launchProgress === "wallet-transaction") {
+    return {
+      title: "Submission status unknown",
+      message: statusMessage
+        || "Checking the reserved launch before another wallet action can start.",
+      submitted: null,
     };
   }
   return {
@@ -266,10 +305,16 @@ export function CustomLaunchRecoveryCopyV2({
   );
 }
 
-type LaunchRecoveryReadV2 =
+export type LaunchRecoveryReadV2 =
   | Readonly<{ kind: "absent" }>
   | Readonly<{ kind: "unreadable" }>
   | Readonly<{ kind: "valid"; recovery: PersistedLaunchRecoveryV2 }>;
+
+export function customLaunchRecoveryBlocksNewSubmissionV2(
+  recoveryRead: LaunchRecoveryReadV2,
+): boolean {
+  return recoveryRead.kind !== "absent";
+}
 
 type PendingGrantReissueV1 = Readonly<{
   oldDescriptor: LaunchDescriptorV2;
@@ -1511,6 +1556,7 @@ export function CustomLaunchExperience({
       setSetupLoading(false);
       setLaunchProgress((current) =>
         current === "reconciling"
+          || current === "ambiguous"
           || current === "confirmation"
           || current === "publishing"
           ? current
@@ -1736,9 +1782,13 @@ export function CustomLaunchExperience({
           ? "confirmation"
           : customLaunchPersistedRecoveryProgressV2(recovery);
         setLaunchProgress(recoveryProgress);
-        setStatusMessage(recoveryProgress === "reconciling"
-          ? "Launch not submitted. Checking the reserved launch before retrying"
-          : "Checking launch confirmation");
+        setStatusMessage(
+          recoveryProgress === "reconciling"
+            ? "Launch not submitted. Checking the reserved launch before retrying"
+            : recoveryProgress === "ambiguous"
+              ? "Submission status unknown. Checking the reserved launch"
+              : "Checking launch confirmation",
+        );
         setSetupLoading(false);
         if (!recovery) {
           setStatusMessage("Launch verification is still in progress");
@@ -1759,6 +1809,7 @@ export function CustomLaunchExperience({
           permitId: recovery.permitId,
           executionReservationId: recovery.executionReservationId,
           chainId: recovery.chainId,
+          submissionWasAttempted: recovery.stage === "submission-unknown",
           ...(recovery.stage === "broadcast"
             ? { launchTransactionId: recovery.transactionHash }
             : {}),
@@ -2064,7 +2115,7 @@ export function CustomLaunchExperience({
       githubPrincipalHash,
       selected.applicationHandle,
     );
-    if (recoveryRead.kind !== "absent") {
+    if (customLaunchRecoveryBlocksNewSubmissionV2(recoveryRead)) {
       setError("An existing launch attempt must be resolved before another transaction can be submitted");
       return;
     }
@@ -2168,11 +2219,14 @@ export function CustomLaunchExperience({
         refreshBoundary: async (stage) => {
           // Server calls refresh through the dynamic client. Only local wallet
           // effects need a second current-session proof at their exact edge.
-          if (customLaunchApplicantStageRequiresExplicitSessionV2(stage)) {
-            await getSession();
-          }
-          if (!isActive()) throw new LaunchFlowCancelledError();
-          assertLaunchWalletCurrent();
+          await refreshCurrentCustomLaunchApplicantStageV2({
+            stage,
+            refreshSession: getSession,
+            assertCurrent: () => {
+              if (!isActive()) throw new LaunchFlowCancelledError();
+              assertLaunchWalletCurrent();
+            },
+          });
         },
         assertBoundary: () => {
           if (!isActive()) throw new LaunchFlowCancelledError();
@@ -2341,6 +2395,7 @@ export function CustomLaunchExperience({
           const reportIdempotencyKey = idempotencyKey("transaction-report");
           const preparedRecovery: PreparedLaunchRecoveryV2 = {
             stage: "prepared",
+            walletRequestAttempted: false,
             applicationHandle,
             githubPrincipalHash: launchGithubPrincipalHash,
             grantId: activeDescriptor.grantId,
@@ -2359,12 +2414,22 @@ export function CustomLaunchExperience({
             applicationHandle,
             preparedRecovery,
           );
-          return { execution, action, reportIdempotencyKey };
+          return { execution, action, reportIdempotencyKey, preparedRecovery };
         },
         sendBrowserWalletAction: async ({ authentication, authorization, execution }) => {
           setLaunchProgress("wallet-transaction");
           setStatusMessage("Submit launch in your wallet");
           const transaction = execution.action.params[0];
+          const submissionUnknownRecovery = customLaunchSubmissionUnknownRecoveryV2(
+            execution.preparedRecovery,
+          );
+          // Persist ambiguity before invoking the wallet. If the provider loses
+          // the response after a side effect, reload must never enable a resend.
+          requirePersistLaunchSession(
+            launchGithubPrincipalHash,
+            applicationHandle,
+            submissionUnknownRecovery,
+          );
           const hash = await sendBrowserWalletAction({
             chainId: execution.action.chainId,
             from: transaction.from,
@@ -2404,8 +2469,8 @@ export function CustomLaunchExperience({
           reportRecovery,
         );
       } catch {
-        // The durable prepared lock remains. Report immediately so the server
-        // can recover the broadcast without permitting a second launch.
+        // The durable submission-unknown lock remains. Report immediately so
+        // the server can recover the broadcast without permitting a resend.
       }
       if (isActive()) {
         setTransactionHash(hash);
@@ -2490,12 +2555,18 @@ export function CustomLaunchExperience({
         setTransactionChainId(broadcastRecovery.chainId);
         setLaunchProgress("confirmation");
         setStatusMessage("Launch submitted. Check confirmation status");
-      } else if (
-        recoveryReadAfterFailure.kind === "valid"
-        && recoveryReadAfterFailure.recovery.stage === "prepared"
-      ) {
-        setLaunchProgress("reconciling");
-        setStatusMessage("Launch not submitted. Check the reserved launch before retrying");
+      } else if (recoveryReadAfterFailure.kind === "valid") {
+        const recoveryProgress = customLaunchPersistedRecoveryProgressV2(
+          recoveryReadAfterFailure.recovery,
+        );
+        setLaunchProgress(recoveryProgress);
+        setStatusMessage(
+          recoveryProgress === "reconciling"
+            ? "Launch not submitted. Check the reserved launch before retrying"
+            : recoveryProgress === "ambiguous"
+              ? "Submission status unknown. Check the reserved launch before retrying"
+              : "Launch submitted. Check confirmation status",
+        );
       } else {
         setLaunchProgress((current) =>
           current === "confirmation" || current === "publishing" ? current : "idle",
@@ -2689,7 +2760,7 @@ export function CustomLaunchExperience({
         </section>
       ) : !descriptor ? (
         <section className={styles.loadingPanel} aria-live="polite">
-          {launchProgress === "complete" ? <CircleCheck aria-hidden="true" size={20} /> : launchProgress === "reconciling" ? <Clock3 aria-hidden="true" size={20} /> : <LoaderCircle aria-hidden="true" className={styles.spin} size={20} />}
+          {launchProgress === "complete" ? <CircleCheck aria-hidden="true" size={20} /> : launchProgress === "reconciling" || launchProgress === "ambiguous" ? <Clock3 aria-hidden="true" size={20} /> : <LoaderCircle aria-hidden="true" className={styles.spin} size={20} />}
           <div className={styles.recoveryCopy}>
             <CustomLaunchRecoveryCopyV2
               launchProgress={launchProgress}
@@ -2700,7 +2771,7 @@ export function CustomLaunchExperience({
               <Link className={styles.secondaryButton} href="/explore?model=custom">Explore Custom</Link>
             ) : applicantRecovery !== "none" ? (
               <button className={styles.secondaryButton} type="button" disabled={applicantReauthorizing} onClick={() => void recoverApplicantAccess()}>{applicantRecoveryAction}</button>
-            ) : launchProgress === "reconciling" && selected !== null ? (
+            ) : (launchProgress === "reconciling" || launchProgress === "ambiguous") && selected !== null ? (
               <button className={styles.secondaryButton} type="button" onClick={() => void openApplication(selected)}>Check reserved launch</button>
             ) : (
               <button className={styles.secondaryButton} type="button" onClick={returnToApplications}>View submissions</button>
@@ -3012,6 +3083,7 @@ async function pollLaunchStatus(
     chainId?: string;
     launchRouteId?: string;
     launchTransactionId?: string;
+    submissionWasAttempted?: boolean;
     signal?: AbortSignal;
     isActive: () => boolean;
     onPublishing: () => void;
@@ -3047,7 +3119,9 @@ async function pollLaunchStatus(
   }
   throw new Error(observedBroadcast
     ? "The transaction was submitted and is still being verified. Return to this launch to check its status"
-    : "Launch was not submitted. The reserved launch must be checked before another wallet action can start");
+    : input.submissionWasAttempted
+      ? "Submission status remains unknown. The reserved launch must be checked before another wallet action can start"
+      : "Launch was not submitted. The reserved launch must be checked before another wallet action can start");
 }
 
 export function assertLaunchExecutionStatusBinding(
@@ -3233,6 +3307,7 @@ export function parsePersistedLaunchRecoveryV2(value: string | null): PersistedL
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
     const record = parsed as Record<string, unknown>;
     const stage = record.stage;
+    const walletRequestAttempted = record.walletRequestAttempted;
     const applicationHandle = record.applicationHandle;
     const githubPrincipalHash = record.githubPrincipalHash;
     const grantId = record.grantId;
@@ -3251,15 +3326,21 @@ export function parsePersistedLaunchRecoveryV2(value: string | null): PersistedL
       "grantBindingHash", "sessionId", "permitId", "chainId", "executionReservationId",
       "browserWalletActionHash", "reportIdempotencyKey", "expiresAt",
     ];
-    const expectedKeys = stage === "prepared"
-      ? [...commonKeys, "reservedTransactionHash"]
+    const legacyPrepared = stage === "prepared"
+      && walletRequestAttempted === undefined;
+    const expectedKeys = stage === "prepared" || stage === "submission-unknown"
+      ? [
+          ...commonKeys,
+          "reservedTransactionHash",
+          ...(legacyPrepared ? [] : ["walletRequestAttempted"]),
+        ]
       : stage === "broadcast"
         ? [...commonKeys, "transactionHash"]
         : [];
     const actualKeys = Object.keys(record).sort();
     expectedKeys.sort();
     if (
-      (stage !== "prepared" && stage !== "broadcast")
+      (stage !== "prepared" && stage !== "submission-unknown" && stage !== "broadcast")
       || actualKeys.length !== expectedKeys.length
       || actualKeys.some((key, index) => key !== expectedKeys[index])
       || typeof applicationHandle !== "string"
@@ -3275,6 +3356,8 @@ export function parsePersistedLaunchRecoveryV2(value: string | null): PersistedL
       || typeof browserWalletActionHash !== "string" || !/^sha256:[0-9a-f]{64}$/u.test(browserWalletActionHash)
       || typeof reportIdempotencyKey !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:@/+-]{0,255}$/u.test(reportIdempotencyKey)
       || typeof expiresAt !== "string" || !Number.isFinite(Date.parse(expiresAt))
+      || (stage === "prepared" && !legacyPrepared && walletRequestAttempted !== false)
+      || (stage === "submission-unknown" && walletRequestAttempted !== true)
     ) return null;
     const common = {
       applicationHandle: applicationHandle as ApplicationHandleV3,
@@ -3289,13 +3372,22 @@ export function parsePersistedLaunchRecoveryV2(value: string | null): PersistedL
       reportIdempotencyKey,
       expiresAt,
     };
-    if (stage === "prepared") {
+    if (stage === "prepared" || stage === "submission-unknown") {
       if (
         typeof reservedTransactionHash !== "string"
         || !/^0x0{64}$/u.test(reservedTransactionHash)
       ) return null;
+      if (stage === "submission-unknown" || legacyPrepared) {
+        return {
+          stage: "submission-unknown",
+          walletRequestAttempted: true,
+          ...common,
+          reservedTransactionHash: reservedTransactionHash as `0x${string}`,
+        };
+      }
       return {
-        stage,
+        stage: "prepared",
+        walletRequestAttempted: false,
         ...common,
         reservedTransactionHash: reservedTransactionHash as `0x${string}`,
       };

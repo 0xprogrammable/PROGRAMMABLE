@@ -7,8 +7,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   customLaunchPersistedRecoveryProgressV2,
+  customLaunchRecoveryBlocksNewSubmissionV2,
   customLaunchRecoveryDisplayV2,
+  customLaunchSubmissionUnknownRecoveryV2,
   CustomLaunchRecoveryCopyV2,
+  parsePersistedLaunchRecoveryV2,
+  requirePersistLaunchRecoveryV2,
+  type BroadcastLaunchRecoveryV2,
+  type PreparedLaunchRecoveryV2,
 } from "../components/custom-launch-experience";
 import {
   acquireCurrentCustomLaunchWebsiteSessionV2,
@@ -18,6 +24,7 @@ import {
   customLaunchApplicantRecoveryV2,
   customLaunchApplicantStageRequiresExplicitSessionV2,
   customLaunchApplicantSessionBoundaryKeyV2,
+  refreshCurrentCustomLaunchApplicantStageV2,
   runCurrentCustomLaunchApplicantSequenceV2,
   CustomLaunchApplicantBoundaryGuardV2,
   CustomLaunchApplicantSingleFlightV2,
@@ -35,6 +42,44 @@ const applicationHandle = `github-${"a".repeat(64)}` as const;
 const walletAccount = `0x${"1".repeat(40)}`;
 const otherWalletAccount = `0x${"2".repeat(40)}`;
 const githubUserId = "123456789";
+
+function preparedRecovery(): PreparedLaunchRecoveryV2 {
+  return {
+    stage: "prepared",
+    walletRequestAttempted: false,
+    applicationHandle,
+    githubPrincipalHash: digest("3"),
+    grantId: "123e4567-e89b-42d3-a456-426614174002",
+    grantBindingHash: digest("4"),
+    sessionId: "123e4567-e89b-42d3-a456-426614174001",
+    permitId: digest("5"),
+    chainId: "1",
+    executionReservationId: "123e4567-e89b-42d3-a456-426614174003",
+    browserWalletActionHash: digest("6"),
+    reportIdempotencyKey: "transaction-report-stable",
+    expiresAt: "2099-08-10T12:00:00.000Z",
+    reservedTransactionHash: `0x${"0".repeat(64)}`,
+  };
+}
+
+function broadcastRecovery(): BroadcastLaunchRecoveryV2 {
+  const prepared = preparedRecovery();
+  return {
+    stage: "broadcast",
+    applicationHandle: prepared.applicationHandle,
+    githubPrincipalHash: prepared.githubPrincipalHash,
+    grantId: prepared.grantId,
+    grantBindingHash: prepared.grantBindingHash,
+    sessionId: prepared.sessionId,
+    permitId: prepared.permitId,
+    chainId: prepared.chainId,
+    executionReservationId: prepared.executionReservationId,
+    browserWalletActionHash: prepared.browserWalletActionHash,
+    reportIdempotencyKey: prepared.reportIdempotencyKey,
+    expiresAt: prepared.expiresAt,
+    transactionHash: `0x${"7".repeat(64)}`,
+  };
+}
 
 function applicantAuthState(
   overrides: Partial<CustomLaunchApplicantAuthStateV2> = {},
@@ -125,6 +170,21 @@ describe("custom launch applicant session currentness", () => {
       .toEqual(["wallet-signature", "wallet-send"]);
   });
 
+  it("does not read tokens for an already superseded wallet stage", async () => {
+    const refreshSession = vi.fn();
+    await expect(refreshCurrentCustomLaunchApplicantStageV2({
+      stage: "wallet-send",
+      refreshSession,
+      assertCurrent: () => {
+        throw new CustomLaunchApplicantSessionErrorV2(
+          "superseded",
+          "Your account or wallet changed",
+        );
+      },
+    })).rejects.toMatchObject({ reason: "superseded" });
+    expect(refreshSession).not.toHaveBeenCalled();
+  });
+
   it("runs the production dangerous stages only in the fixed boundary-gated order", async () => {
     const effects = dangerousSequenceEffects();
     const stages: string[] = [];
@@ -189,9 +249,9 @@ describe("custom launch applicant session currentness", () => {
 
   it("keeps a prepared recovery unsubmitted when the final session refresh fails", async () => {
     const effects = dangerousSequenceEffects();
-    let persistedRecovery: { stage: "prepared" } | null = null;
+    let persistedRecovery: PreparedLaunchRecoveryV2 | null = null;
     effects.createExecutionPreparation.mockImplementation(async () => {
-      persistedRecovery = { stage: "prepared" };
+      persistedRecovery = preparedRecovery();
       return "execution";
     });
     const getSession = vi.fn(async (stage: string) => {
@@ -205,9 +265,11 @@ describe("custom launch applicant session currentness", () => {
 
     await expect(runCurrentCustomLaunchApplicantSequenceV2({
       refreshBoundary: async (stage) => {
-        if (customLaunchApplicantStageRequiresExplicitSessionV2(stage)) {
-          await getSession(stage);
-        }
+        await refreshCurrentCustomLaunchApplicantStageV2({
+          stage,
+          assertCurrent: () => undefined,
+          refreshSession: () => getSession(stage),
+        });
       },
       assertBoundary: () => undefined,
       ...effects,
@@ -217,6 +279,10 @@ describe("custom launch applicant session currentness", () => {
     expect(effects.createExecutionPreparation).toHaveBeenCalledOnce();
     expect(effects.sendBrowserWalletAction).not.toHaveBeenCalled();
     if (persistedRecovery === null) throw new Error("expected prepared recovery");
+    expect(persistedRecovery).toMatchObject({
+      stage: "prepared",
+      walletRequestAttempted: false,
+    });
     const progress = customLaunchPersistedRecoveryProgressV2(persistedRecovery);
     const display = customLaunchRecoveryDisplayV2(progress);
     const html = renderToStaticMarkup(createElement(CustomLaunchRecoveryCopyV2, {
@@ -232,18 +298,86 @@ describe("custom launch applicant session currentness", () => {
   });
 
   it("labels only broadcast recovery as submitted", () => {
-    const progress = customLaunchPersistedRecoveryProgressV2({ stage: "broadcast" });
+    const recovery = broadcastRecovery();
+    const progress = customLaunchPersistedRecoveryProgressV2(recovery);
     const display = customLaunchRecoveryDisplayV2(progress);
     const html = renderToStaticMarkup(createElement(CustomLaunchRecoveryCopyV2, {
       launchProgress: progress,
     }));
     expect(progress).toBe("confirmation");
+    expect(recovery.transactionHash).toMatch(/^0x[0-9a-f]{64}$/u);
     expect(display).toMatchObject({
       title: "Launch submitted",
       submitted: true,
     });
     expect(html).toContain("Launch submitted");
     expect(html).not.toContain("Launch not submitted");
+  });
+
+  it("keeps a lost wallet response ambiguous across reload without a resend", async () => {
+    const effects = dangerousSequenceEffects();
+    const walletSideEffect = vi.fn();
+    let storedRecovery: string | null = null;
+    const storage = {
+      getItem: () => storedRecovery,
+      setItem: (_key: string, value: string) => {
+        storedRecovery = value;
+      },
+    };
+    effects.createExecutionPreparation.mockImplementation(async () => {
+      requirePersistLaunchRecoveryV2(
+        storage,
+        "launch-recovery",
+        preparedRecovery(),
+      );
+      return "execution";
+    });
+    effects.sendBrowserWalletAction.mockImplementation(async () => {
+      const persistedRecovery = parsePersistedLaunchRecoveryV2(storedRecovery);
+      if (persistedRecovery === null) {
+        throw new Error("expected durable recovery before wallet request");
+      }
+      if (persistedRecovery.stage !== "prepared") {
+        throw new Error("expected prepared recovery before wallet request");
+      }
+      requirePersistLaunchRecoveryV2(
+        storage,
+        "launch-recovery",
+        customLaunchSubmissionUnknownRecoveryV2(persistedRecovery),
+      );
+      walletSideEffect();
+      throw new Error("wallet response lost after request");
+    });
+
+    await expect(runCurrentCustomLaunchApplicantSequenceV2({
+      refreshBoundary: async () => undefined,
+      assertBoundary: () => undefined,
+      ...effects,
+    })).rejects.toThrow("wallet response lost");
+
+    expect(walletSideEffect).toHaveBeenCalledOnce();
+    expect(effects.sendBrowserWalletAction).toHaveBeenCalledOnce();
+    const reloadedRecovery = parsePersistedLaunchRecoveryV2(storedRecovery);
+    expect(reloadedRecovery?.stage).toBe("submission-unknown");
+    if (reloadedRecovery === null) throw new Error("expected reload recovery");
+    expect(customLaunchRecoveryBlocksNewSubmissionV2({
+      kind: "valid",
+      recovery: reloadedRecovery,
+    })).toBe(true);
+    expect(customLaunchRecoveryBlocksNewSubmissionV2({ kind: "absent" }))
+      .toBe(false);
+    const progress = customLaunchPersistedRecoveryProgressV2(reloadedRecovery);
+    const display = customLaunchRecoveryDisplayV2(progress);
+    const html = renderToStaticMarkup(createElement(CustomLaunchRecoveryCopyV2, {
+      launchProgress: progress,
+    }));
+    expect(display).toMatchObject({
+      title: "Submission status unknown",
+      submitted: null,
+    });
+    expect(html).toContain("Submission status unknown");
+    expect(html).not.toContain("Launch not submitted");
+    expect(html).not.toContain("Launch submitted");
   });
 
   it("acquires imperative Identity then current Access within one exact auth boundary", async () => {
@@ -702,8 +836,21 @@ describe("custom launch applicant session currentness", () => {
     expect(componentSource).toContain("sessionBoundaryGuardRef.current.commit(sessionBoundaryKey)");
     expect(componentSource).toContain("createCustomLaunchWebsiteClientV2({ getSession })");
     expect(componentSource).toContain("const sequence = await runCurrentCustomLaunchApplicantSequenceV2({");
-    expect(componentSource).toContain('if (recoveryRead.kind !== "absent")');
+    expect(componentSource).toContain("if (customLaunchRecoveryBlocksNewSubmissionV2(recoveryRead))");
     expect(componentSource).toContain("An existing launch attempt must be resolved before another transaction can be submitted");
+    const unknownPersistence = componentSource.indexOf(
+      "const submissionUnknownRecovery = customLaunchSubmissionUnknownRecoveryV2(",
+    );
+    const walletRequest = componentSource.indexOf(
+      "const hash = await sendBrowserWalletAction({",
+      unknownPersistence,
+    );
+    expect(unknownPersistence).toBeGreaterThan(-1);
+    expect(walletRequest).toBeGreaterThan(unknownPersistence);
+    expect(componentSource.indexOf(
+      "requirePersistLaunchSession(",
+      unknownPersistence,
+    )).toBeLessThan(walletRequest);
     expect(componentSource).toContain("if (isActive()) {\n        setTransactionHash(hash);");
     expect(componentSource).toContain("readApplicantAuthState,");
     expect(componentSource).toContain("await reauthorizeGithub()");

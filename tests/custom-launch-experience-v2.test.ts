@@ -1516,6 +1516,7 @@ describe("custom launch browser authority", () => {
   it("fails closed when durable recovery cannot be written or read back exactly", () => {
     const recovery = parsePersistedLaunchRecoveryV2(JSON.stringify({
       stage: "prepared",
+      walletRequestAttempted: false,
       applicationHandle: APPLICATION_HANDLE,
       githubPrincipalHash: GITHUB_PRINCIPAL_HASH,
       grantId: "123e4567-e89b-42d3-a456-426614174002",
@@ -1540,9 +1541,10 @@ describe("custom launch browser authority", () => {
     }, "launch-key", recovery)).toThrow("could not be verified");
   });
 
-  it("rejects legacy, substituted, or extended browser recovery identities", () => {
+  it("normalizes legacy ambiguity and rejects substituted recovery identities", () => {
     const base = {
       stage: "prepared",
+      walletRequestAttempted: false,
       applicationHandle: APPLICATION_HANDLE,
       githubPrincipalHash: GITHUB_PRINCIPAL_HASH,
       grantId: "123e4567-e89b-42d3-a456-426614174002",
@@ -1557,6 +1559,27 @@ describe("custom launch browser authority", () => {
       reservedTransactionHash: `0x${"0".repeat(64)}`,
     };
     expect(parsePersistedLaunchRecoveryV2(JSON.stringify(base))).not.toBeNull();
+    expect(parsePersistedLaunchRecoveryV2(JSON.stringify({
+      ...base,
+      stage: "submission-unknown",
+      walletRequestAttempted: true,
+    }))).toMatchObject({
+      stage: "submission-unknown",
+      executionReservationId: base.executionReservationId,
+    });
+    expect(parsePersistedLaunchRecoveryV2(JSON.stringify({
+      ...base,
+      stage: "submission-unknown",
+      walletRequestAttempted: true,
+      transactionHash: `0x${"4".repeat(64)}`,
+    }))).toBeNull();
+    const legacyPrepared = { ...base } as Record<string, unknown>;
+    delete legacyPrepared.walletRequestAttempted;
+    expect(parsePersistedLaunchRecoveryV2(JSON.stringify(legacyPrepared)))
+      .toMatchObject({
+        stage: "submission-unknown",
+        walletRequestAttempted: true,
+      });
     expect(parsePersistedLaunchRecoveryV2(JSON.stringify({
       ...base,
       applicationHandle: "application-1",
