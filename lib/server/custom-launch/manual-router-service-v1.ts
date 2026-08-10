@@ -42,10 +42,17 @@ import {
 import {
   commitManualRouterApplicantHeadTransitionV1,
 } from "@/lib/server/custom-launch/manual-router-transition-v1";
+import {
+  MANUAL_ROUTER_SHARDS_V1_COMPATIBILITY_V1,
+  manualRouterClaimsShardsV1ArtifactV1,
+  manualRouterClaimsShardsV1PointerV1,
+  manualRouterIsExactShardsV1ArtifactV1,
+  manualRouterIsExactShardsV1PointerV1,
+} from "@/lib/server/custom-launch/manual-router-shards-v1-compat-v1";
 
 type EvmAddress = `0x${string}`;
 type EvmBytes32 = `0x${string}`;
-const SHARDS_GITHUB_USER_ID = "155705664";
+const MAXIMUM_SHARDS_V1_POINTER_LINEAGE_DEPTH = 64;
 
 export type ManualRouterCompleteSignedArtifactViewV1 = Readonly<{
   schemaVersion: "programmable.manual-router-complete-signed-artifact.v1";
@@ -176,12 +183,13 @@ export class ManualRouterWebsiteServiceV1 {
     } catch {
       throw invalidArtifact();
     }
-    assertNoLegacyShardsArtifact(artifact);
+    assertShardsV1ArtifactCompatibility(artifact);
     const principal = artifactPrincipal(artifact);
     const head = await readManualRouterApplicantHeadV1({
       store: this.dependencies.store,
       ...principal,
     });
+    await this.#assertShardsV1CurrentHead(artifact, head);
     let verified: ManualRouterVerifiedPublishV1;
     let checkedArtifact: ManualRouterCompleteSignedArtifactViewAnyV2;
     try {
@@ -196,7 +204,7 @@ export class ManualRouterWebsiteServiceV1 {
     } catch {
       throw invalidArtifact();
     }
-    assertNoLegacyShardsArtifact(checkedArtifact);
+    assertShardsV1ArtifactCompatibility(checkedArtifact);
     if (canonicalizeJson(artifact) !== canonicalizeJson(checkedArtifact)) {
       throw invalidArtifact();
     }
@@ -204,6 +212,12 @@ export class ManualRouterWebsiteServiceV1 {
     const pointer = assertManualRouterApplicantPointerAnyV2(
       verified.nextPointer,
     );
+    await this.#assertShardsV1PublishTransition({
+      artifact,
+      pointer,
+      head,
+      idempotent: verified.idempotent,
+    });
     if (
       pointer.state !== "signed-permit-available"
       || pointer.signedArtifactHash !== artifact.signedArtifactHash
@@ -257,11 +271,12 @@ export class ManualRouterWebsiteServiceV1 {
     } catch {
       throw invalidArtifact();
     }
-    assertNoLegacyShardsArtifact(artifact);
+    assertShardsV1ArtifactCompatibility(artifact);
     const head = await readManualRouterApplicantHeadV1({
       store: this.dependencies.store,
       ...artifactPrincipal(artifact),
     });
+    await this.#assertShardsV1CurrentHead(artifact, head);
     const matching = head.pointers.find((pointer) =>
       pointer.subject.subjectHash
         === artifact.preparationArtifact.subject.subjectHash);
@@ -311,11 +326,8 @@ export class ManualRouterWebsiteServiceV1 {
       approvedLaunchWallet: principal.launchWallet,
     });
     const clock = await this.dependencies.authority.readChainClock();
-    if (
-      principal.githubUserId === SHARDS_GITHUB_USER_ID
-      && head.pointers.some((pointer) => pointer.schemaVersion
-        === "programmable.manual-router-applicant-pointer.v1")
-    ) throw routeCapabilityDisabled();
+    await Promise.all(head.pointers.map((pointer) =>
+      this.#assertShardsV1PointerLineage(pointer)));
     await Promise.all(head.pointers.map(async (pointer) => {
       if (
         pointer.schemaVersion
@@ -360,6 +372,7 @@ export class ManualRouterWebsiteServiceV1 {
       approvedLaunchWallet: principal.launchWallet,
     });
     const pointer = currentPointer(head, principal.subjectHash);
+    await this.#assertShardsV1PointerLineage(pointer);
     const clock = await this.dependencies.authority.readChainClock();
     const status = manualRouterApplicantStatusAnyV2(pointer, clock);
     const common = resolveCommon(pointer);
@@ -496,7 +509,7 @@ export class ManualRouterWebsiteServiceV1 {
   async readPointerArtifact(
     pointer: ManualRouterApplicantPointerAnyV2,
   ): Promise<ManualRouterCompleteSignedArtifactViewAnyV2> {
-    assertNoLegacyShardsPointer(pointer);
+    assertShardsV1PointerCompatibility(pointer);
     const stored = await this.dependencies.store.read(manualRouterContentPathV1(
       "signed-artifacts",
       pointer.signedArtifactHash,
@@ -510,6 +523,7 @@ export class ManualRouterWebsiteServiceV1 {
     } catch {
       throw invalidArtifact();
     }
+    assertShardsV1ArtifactCompatibility(artifact);
     if (
       artifact.signedArtifactHash !== pointer.signedArtifactHash
       || artifact.descriptor.descriptorHash !== pointer.signedDescriptorHash
@@ -522,7 +536,133 @@ export class ManualRouterWebsiteServiceV1 {
         !== pointer.subject.approvedLaunchWallet.toLowerCase()
       || !pointerBindsArtifact(pointer, artifact)
     ) throw invalidArtifact();
+    await this.#assertShardsV1PointerLineage(pointer, artifact);
     return artifact;
+  }
+
+  async #assertShardsV1CurrentHead(
+    artifact: ManualRouterCompleteSignedArtifactViewAnyV2,
+    head: ManualRouterApplicantHeadV1,
+  ): Promise<void> {
+    if (!manualRouterClaimsShardsV1ArtifactV1(artifact)) return;
+    assertShardsV1ArtifactCompatibility(artifact);
+    const matches = head.pointers.filter((pointer) =>
+      pointer.subject.subjectHash
+        === artifact.preparationArtifact.subject.subjectHash);
+    if (matches.length !== 1) throw routeCapabilityDisabled();
+    await this.#assertShardsV1PointerLineage(matches[0]!);
+  }
+
+  async #assertShardsV1PublishTransition(input: Readonly<{
+    artifact: ManualRouterCompleteSignedArtifactViewAnyV2;
+    pointer: ManualRouterApplicantPointerAnyV2;
+    head: ManualRouterApplicantHeadV1;
+    idempotent: boolean;
+  }>): Promise<void> {
+    const claimsArtifact = manualRouterClaimsShardsV1ArtifactV1(input.artifact);
+    const claimsPointer = manualRouterClaimsShardsV1PointerV1(input.pointer);
+    if (!claimsArtifact && !claimsPointer) return;
+    assertShardsV1ArtifactCompatibility(input.artifact);
+    assertShardsV1PointerCompatibility(input.pointer);
+    const current = input.head.pointers.filter((pointer) =>
+      pointer.subject.subjectHash === input.pointer.subject.subjectHash);
+    if (current.length !== 1) throw routeCapabilityDisabled();
+    await this.#assertShardsV1PointerLineage(current[0]!);
+    if (
+      input.pointer.signedArtifactHash !== input.artifact.signedArtifactHash
+      || input.pointer.subject.subjectHash
+        !== input.artifact.preparationArtifact.subject.subjectHash
+      || input.pointer.schemaVersion
+        !== "programmable.manual-router-applicant-pointer.v1"
+      || !shardsV1PointerBindsArtifact(input.pointer, input.artifact)
+    ) throw routeCapabilityDisabled();
+    if (input.pointer.pointerHash === current[0]!.pointerHash) {
+      if (!input.idempotent) throw routeCapabilityDisabled();
+      return;
+    }
+    if (
+      input.idempotent
+      || input.pointer.state !== "signed-permit-available"
+      || input.pointer.previousPointerHash !== current[0]!.pointerHash
+      || input.pointer.signedArtifactHash === current[0]!.signedArtifactHash
+      || input.artifact.descriptor.reissueOf
+        !== current[0]!.signatureRequestHash
+    ) throw routeCapabilityDisabled();
+  }
+
+  async #assertShardsV1PointerLineage(
+    pointer: ManualRouterApplicantPointerAnyV2,
+    currentArtifact?: ManualRouterCompleteSignedArtifactViewAnyV2,
+  ): Promise<void> {
+    if (!manualRouterClaimsShardsV1PointerV1(pointer)) return;
+    assertShardsV1PointerCompatibility(pointer);
+    let current = pointer;
+    let suppliedArtifact = currentArtifact;
+    const seen = new Set<Sha256Digest>();
+    for (
+      let depth = 0;
+      depth < MAXIMUM_SHARDS_V1_POINTER_LINEAGE_DEPTH;
+      depth += 1
+    ) {
+      if (current.schemaVersion
+        !== "programmable.manual-router-applicant-pointer.v1") {
+        throw routeCapabilityDisabled();
+      }
+      assertShardsV1PointerCompatibility(current);
+      if (seen.has(current.pointerHash)) throw routeCapabilityDisabled();
+      seen.add(current.pointerHash);
+      const artifact = suppliedArtifact ?? await this.#readShardsV1Artifact(current);
+      suppliedArtifact = undefined;
+      assertShardsV1ArtifactCompatibility(artifact);
+      if (!shardsV1PointerBindsArtifact(current, artifact)) {
+        throw routeCapabilityDisabled();
+      }
+      if (current.pointerHash
+        === MANUAL_ROUTER_SHARDS_V1_COMPATIBILITY_V1.rootPointerHash) {
+        if (
+          current.previousPointerHash !== null
+          || current.signedArtifactHash
+            !== MANUAL_ROUTER_SHARDS_V1_COMPATIBILITY_V1.rootSignedArtifactHash
+          || artifact.descriptor.reissueOf !== null
+        ) throw routeCapabilityDisabled();
+        return;
+      }
+      if (current.previousPointerHash === null) throw routeCapabilityDisabled();
+      const childPointer = current;
+      const expectedPreviousPointerHash = current.previousPointerHash;
+      const previous = await this.dependencies.store.read(
+        manualRouterContentPathV1("pointer-history", expectedPreviousPointerHash),
+      );
+      if (previous === null) throw routeCapabilityDisabled();
+      try {
+        current = assertManualRouterApplicantPointerV1(previous.value);
+      } catch {
+        throw routeCapabilityDisabled();
+      }
+      if (current.pointerHash !== expectedPreviousPointerHash) {
+        throw routeCapabilityDisabled();
+      }
+      if (
+        childPointer.signedArtifactHash !== current.signedArtifactHash
+        && artifact.descriptor.reissueOf !== current.signatureRequestHash
+      ) throw routeCapabilityDisabled();
+    }
+    throw routeCapabilityDisabled();
+  }
+
+  async #readShardsV1Artifact(
+    pointer: ManualRouterApplicantPointerV1,
+  ): Promise<ManualRouterCompleteSignedArtifactViewAnyV2> {
+    const stored = await this.dependencies.store.read(manualRouterContentPathV1(
+      "signed-artifacts",
+      pointer.signedArtifactHash,
+    ));
+    if (stored === null) throw routeCapabilityDisabled();
+    try {
+      return this.dependencies.authority.assertCompleteSignedArtifact(stored.value);
+    } catch {
+      throw routeCapabilityDisabled();
+    }
   }
 
   async #assertV2AcceptanceCurrent(
@@ -616,23 +756,42 @@ function artifactPrincipal(
   });
 }
 
-function assertNoLegacyShardsArtifact(
+function assertShardsV1ArtifactCompatibility(
   artifact: ManualRouterCompleteSignedArtifactViewAnyV2,
 ): void {
   if (
-    artifact.schemaVersion === "programmable.manual-router-complete-signed-artifact.v1"
-    && artifact.preparationArtifact.subject.approvedGitHubUserId
-      === SHARDS_GITHUB_USER_ID
+    manualRouterClaimsShardsV1ArtifactV1(artifact)
+    && !manualRouterIsExactShardsV1ArtifactV1(artifact)
   ) throw routeCapabilityDisabled();
 }
 
-function assertNoLegacyShardsPointer(
+function assertShardsV1PointerCompatibility(
   pointer: ManualRouterApplicantPointerAnyV2,
 ): void {
   if (
-    pointer.schemaVersion === "programmable.manual-router-applicant-pointer.v1"
-    && pointer.subject.approvedGitHubUserId === SHARDS_GITHUB_USER_ID
+    manualRouterClaimsShardsV1PointerV1(pointer)
+    && !manualRouterIsExactShardsV1PointerV1(pointer)
   ) throw routeCapabilityDisabled();
+}
+
+function shardsV1PointerBindsArtifact(
+  pointer: ManualRouterApplicantPointerV1,
+  artifact: ManualRouterCompleteSignedArtifactViewAnyV2,
+): boolean {
+  return artifact.schemaVersion
+      === "programmable.manual-router-complete-signed-artifact.v1"
+    && pointer.signedArtifactHash === artifact.signedArtifactHash
+    && pointer.signedDescriptorHash === artifact.descriptor.descriptorHash
+    && pointer.signatureRequestHash === artifact.descriptor.signatureRequestHash
+    && pointer.preparationArtifactHash
+      === artifact.preparationArtifact.preparationArtifactHash
+    && pointer.subject.subjectHash
+      === artifact.preparationArtifact.subject.subjectHash
+    && pointer.subject.approvedLaunchWallet
+      === artifact.prepared.launchWallet.toLowerCase()
+    && pointer.headSha === artifact.preparationArtifact.approvalClaim.headSha
+    && pointer.treeSha === artifact.preparationArtifact.approvalClaim.treeSha
+    && pointer.routeNonce === artifact.descriptor.routeNonce;
 }
 
 function signedPublishImmutableWrites(
