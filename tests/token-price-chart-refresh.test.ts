@@ -1,9 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  acceptChartPayload,
   createSerializedChartRefresh,
+  getChartKeyboardInspectionIndex,
   getChartMarketCapAtPoint,
+  isAuthoritativeChartPayload,
+  isAuthoritativeChartPayloadStatus,
   nearestChartPointIndex,
+  preserveChartPayloadOnFailure,
+  shouldClearChartInspectionAfterPointerUp,
 } from "../components/token-price-chart";
 
 describe("token price chart inspection", () => {
@@ -20,6 +26,24 @@ describe("token price chart inspection", () => {
     expect(nearestChartPointIndex(400, 100, 0, 7)).toBe(0);
     expect(nearestChartPointIndex(Number.NaN, 100, 600, 7)).toBe(0);
     expect(nearestChartPointIndex(400, 100, 600, 0)).toBe(0);
+  });
+
+  it("supports bounded keyboard inspection for short and long series", () => {
+    expect(getChartKeyboardInspectionIndex("ArrowLeft", null, 1)).toBe(0);
+    expect(getChartKeyboardInspectionIndex("ArrowRight", 0, 2)).toBe(1);
+    expect(getChartKeyboardInspectionIndex("ArrowRight", 1, 2)).toBe(1);
+    expect(getChartKeyboardInspectionIndex("Home", 49_999, 50_000)).toBe(0);
+    expect(getChartKeyboardInspectionIndex("End", 0, 50_000)).toBe(49_999);
+    expect(getChartKeyboardInspectionIndex("Escape", 4, 8)).toBeNull();
+    expect(getChartKeyboardInspectionIndex("Enter", 4, 8)).toBeUndefined();
+    expect(getChartKeyboardInspectionIndex("ArrowLeft", null, 0)).toBeUndefined();
+  });
+
+  it("keeps hover inspection but clears touch and pen inspection on release", () => {
+    expect(shouldClearChartInspectionAfterPointerUp("mouse")).toBe(false);
+    expect(shouldClearChartInspectionAfterPointerUp("touch")).toBe(true);
+    expect(shouldClearChartInspectionAfterPointerUp("pen")).toBe(true);
+    expect(shouldClearChartInspectionAfterPointerUp("")).toBe(true);
   });
 
   it("updates market cap to the inspected historical price", () => {
@@ -49,6 +73,94 @@ describe("token price chart inspection", () => {
 describe("token price chart refresh", () => {
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("treats source readiness as unavailable instead of authoritative zero data", () => {
+    expect(isAuthoritativeChartPayloadStatus("ready")).toBe(true);
+    expect(isAuthoritativeChartPayloadStatus("insufficient-history")).toBe(true);
+    expect(isAuthoritativeChartPayloadStatus("not-deployed")).toBe(false);
+    expect(isAuthoritativeChartPayloadStatus("partial")).toBe(false);
+    expect(
+      isAuthoritativeChartPayload({
+        status: "ready",
+        points: [
+          { blockNumber: "1", priceEth: "0.1", priceUsd: "350" },
+          { blockNumber: "2", priceEth: "0.2", priceUsd: "700" },
+        ],
+        swapCount: 2,
+        volumeWei: "3",
+        volumeEth: "0.000000000000000003",
+      }),
+    ).toBe(true);
+    expect(
+      isAuthoritativeChartPayload({
+        status: "not-deployed",
+        points: [],
+        swapCount: 0,
+        volumeWei: "0",
+        volumeEth: "0",
+      }),
+    ).toBe(false);
+    expect(
+      isAuthoritativeChartPayload({
+        status: "partial",
+        points: [],
+        swapCount: 0,
+        volumeWei: "0",
+        volumeEth: "0",
+      }),
+    ).toBe(false);
+    expect(
+      isAuthoritativeChartPayload({
+        status: "ready",
+        points: [{ blockNumber: "2", priceEth: "NaN" }],
+        swapCount: 1,
+        volumeWei: "0",
+        volumeEth: "Infinity",
+      }),
+    ).toBe(false);
+  });
+
+  it("preserves last-known-good data through failure and replaces it on recovery", () => {
+    const cached = {
+      status: "ready" as const,
+      points: [
+        { blockNumber: "1", priceEth: "0.1" },
+        { blockNumber: "2", priceEth: "0.2" },
+      ],
+      swapCount: 2,
+      volumeWei: "3",
+      volumeEth: "0.000000000000000003",
+    };
+    const recovered = {
+      ...cached,
+      points: [
+        ...cached.points,
+        { blockNumber: "3", priceEth: "0.3" },
+      ],
+      swapCount: 3,
+      volumeWei: "6",
+      volumeEth: "0.000000000000000006",
+    };
+
+    const failed = preserveChartPayloadOnFailure(null, "token:1d", cached);
+    expect(failed).toEqual({
+      key: "token:1d",
+      payload: cached,
+      failed: true,
+    });
+    expect(acceptChartPayload("token:1d", recovered)).toEqual({
+      key: "token:1d",
+      payload: recovered,
+      failed: false,
+    });
+    expect(
+      preserveChartPayloadOnFailure(
+        { key: "other:1d", payload: cached, failed: false },
+        "token:1d",
+        null,
+      ),
+    ).toEqual({ key: "token:1d", payload: null, failed: true });
   });
 
   it("lets a response longer than the refresh interval finish before refreshing again", async () => {

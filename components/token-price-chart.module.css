@@ -137,11 +137,17 @@
   vector-effect: non-scaling-stroke;
 }
 
-.hoverDot {
-  fill: var(--canvas);
-  stroke: var(--token-accent, var(--accent));
-  stroke-width: 2.5;
-  vector-effect: non-scaling-stroke;
+.inspectionDot {
+  background: var(--canvas);
+  border: 2px solid var(--token-accent, var(--accent));
+  border-radius: 50%;
+  box-sizing: border-box;
+  height: 8px;
+  pointer-events: none;
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 8px;
+  z-index: 1;
 }
 
 .tooltip {

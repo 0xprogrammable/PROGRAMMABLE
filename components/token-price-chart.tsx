@@ -33,6 +33,11 @@ export type TokenChartPayload = {
   marketCapUsdWad?: string;
 };
 type ChartPayload = TokenChartPayload;
+type ChartRequestState = {
+  key: string;
+  payload: ChartPayload | null;
+  failed: boolean;
+};
 
 type PlottedPoint = TokenChartPoint & {
   x: number;
@@ -169,6 +174,81 @@ function cacheChartPayload(key: string, payload: ChartPayload) {
   }
 }
 
+export function isAuthoritativeChartPayloadStatus(status: unknown) {
+  return status === "ready" || status === "insufficient-history";
+}
+
+function isUnsignedIntegerString(value: unknown) {
+  return typeof value === "string" && /^\d+$/.test(value);
+}
+
+function isUnsignedDecimalString(value: unknown) {
+  return (
+    typeof value === "string" &&
+    /^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)
+  );
+}
+
+function hasOptionalUnsignedInteger(value: unknown) {
+  return value === undefined || isUnsignedIntegerString(value);
+}
+
+function hasOptionalUnsignedDecimal(value: unknown) {
+  return value === undefined || isUnsignedDecimalString(value);
+}
+
+export function isAuthoritativeChartPayload(
+  value: unknown,
+): value is ChartPayload {
+  if (!value || typeof value !== "object") return false;
+  const payload = value as Partial<ChartPayload>;
+  if (
+    !isAuthoritativeChartPayloadStatus(payload.status) ||
+    !Array.isArray(payload.points) ||
+    !Number.isSafeInteger(payload.swapCount) ||
+    (payload.swapCount ?? -1) < 0 ||
+    !isUnsignedIntegerString(payload.volumeWei) ||
+    !isUnsignedDecimalString(payload.volumeEth) ||
+    !hasOptionalUnsignedInteger(payload.volumeUsdWad) ||
+    !hasOptionalUnsignedInteger(payload.marketCapEthWei) ||
+    !hasOptionalUnsignedDecimal(payload.marketCapEth) ||
+    !hasOptionalUnsignedInteger(payload.marketCapUsdWad)
+  ) {
+    return false;
+  }
+
+  return payload.points.every(
+    (point) =>
+      Boolean(point) &&
+      typeof point === "object" &&
+      isUnsignedIntegerString(point.blockNumber) &&
+      isUnsignedDecimalString(point.priceEth) &&
+      (point.priceUsd === undefined ||
+        isUnsignedDecimalString(point.priceUsd)),
+  );
+}
+
+export function preserveChartPayloadOnFailure(
+  current: ChartRequestState | null,
+  key: string,
+  cachedPayload: ChartPayload | null,
+): ChartRequestState {
+  const currentPayload =
+    current?.key === key && current.payload ? current.payload : null;
+  return {
+    key,
+    payload: currentPayload ?? cachedPayload,
+    failed: true,
+  };
+}
+
+export function acceptChartPayload(
+  key: string,
+  payload: ChartPayload,
+): ChartRequestState {
+  return { key, payload, failed: false };
+}
+
 async function requestTokenChartPayload(
   tokenAddress: `0x${string}`,
   range: ChartRange,
@@ -186,7 +266,10 @@ async function requestTokenChartPayload(
   )
     .then(async (response) => {
       if (!response.ok) throw new Error("Chart request failed");
-      const payload = (await response.json()) as ChartPayload;
+      const payload: unknown = await response.json();
+      if (!isAuthoritativeChartPayload(payload)) {
+        throw new Error("Chart source is not ready");
+      }
       cacheChartPayload(key, payload);
       return payload;
     })
@@ -360,6 +443,34 @@ export function nearestChartPointIndex(
   return Math.round(normalized * (pointCount - 1));
 }
 
+export function getChartKeyboardInspectionIndex(
+  key: string,
+  activeIndex: number | null,
+  pointCount: number,
+) {
+  if (!Number.isSafeInteger(pointCount) || pointCount < 1) return undefined;
+
+  const lastIndex = pointCount - 1;
+  const current = Math.min(lastIndex, Math.max(0, activeIndex ?? lastIndex));
+
+  if (key === "ArrowLeft" || key === "ArrowDown") {
+    return Math.max(0, current - 1);
+  }
+  if (key === "ArrowRight" || key === "ArrowUp") {
+    return Math.min(lastIndex, current + 1);
+  }
+  if (key === "Home") return 0;
+  if (key === "End") return lastIndex;
+  if (key === "Escape") return null;
+  return undefined;
+}
+
+export function shouldClearChartInspectionAfterPointerUp(
+  pointerType: string,
+) {
+  return pointerType !== "mouse";
+}
+
 export function TokenPriceChart({
   tokenAddress,
   tokenName,
@@ -381,11 +492,7 @@ export function TokenPriceChart({
   onVolumeChange?: (volume: TokenChartVolume | null) => void;
   onMarketCapChange?: (marketCap: TokenChartMarketCap | null) => void;
 }) {
-  const [request, setRequest] = useState<{
-    key: string;
-    payload: ChartPayload | null;
-    failed: boolean;
-  } | null>(null);
+  const [request, setRequest] = useState<ChartRequestState | null>(null);
   const [range, setRange] = useState<ChartRange>("1d");
   const [activePointIndex, setActivePointIndex] = useState<number | null>(
     null,
@@ -433,11 +540,7 @@ export function TokenPriceChart({
           range,
         );
         if (signal.aborted) return;
-        setRequest({
-          key: requestKey,
-          payload: nextPayload,
-          failed: false,
-        });
+        setRequest(acceptChartPayload(requestKey, nextPayload));
       } catch (error: unknown) {
         if (
           signal.aborted ||
@@ -445,9 +548,11 @@ export function TokenPriceChart({
         )
           return;
         setRequest((current) =>
-          current?.key === requestKey && current.payload
-            ? current
-            : { key: requestKey, payload: null, failed: true },
+          preserveChartPayloadOnFailure(
+            current,
+            requestKey,
+            chartPayloadCache.get(requestKey)?.payload ?? null,
+          ),
         );
       }
     });
@@ -591,24 +696,12 @@ export function TokenPriceChart({
 
   function inspectKeyboard(event: KeyboardEvent<HTMLDivElement>) {
     if (!chart) return;
-    const lastIndex = chart.points.length - 1;
-    const current = activePointIndex ?? lastIndex;
-    let next: number | null = null;
-
-    if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
-      next = Math.max(0, current - 1);
-    } else if (event.key === "ArrowRight" || event.key === "ArrowUp") {
-      next = Math.min(lastIndex, current + 1);
-    } else if (event.key === "Home") {
-      next = 0;
-    } else if (event.key === "End") {
-      next = lastIndex;
-    } else if (event.key === "Escape") {
-      setActivePointIndex(null);
-      return;
-    } else {
-      return;
-    }
+    const next = getChartKeyboardInspectionIndex(
+      event.key,
+      activePointIndex,
+      chart.points.length,
+    );
+    if (next === undefined) return;
 
     event.preventDefault();
     setActivePointIndex(next);
@@ -689,15 +782,24 @@ export function TokenPriceChart({
           aria-label={`${tokenName} interactive price chart. Move the pointer or use arrow keys to inspect exact prices.`}
           aria-describedby={`${instructionId} ${activeValueId}`}
           onBlur={() => setActivePointIndex(null)}
+          onFocus={(event) => {
+            if (event.currentTarget.matches(":focus-visible")) {
+              setActivePointIndex(chart.points.length - 1);
+            }
+          }}
           onKeyDown={inspectKeyboard}
           onPointerDown={inspectPointer}
           onPointerEnter={inspectPointer}
           onPointerMove={inspectPointer}
-          onPointerUp={inspectPointer}
-          onPointerCancel={() => setActivePointIndex(null)}
-          onPointerLeave={(event) => {
-            if (event.pointerType !== "touch") setActivePointIndex(null);
+          onPointerUp={(event) => {
+            if (shouldClearChartInspectionAfterPointerUp(event.pointerType)) {
+              setActivePointIndex(null);
+              return;
+            }
+            inspectPointer(event);
           }}
+          onPointerCancel={() => setActivePointIndex(null)}
+          onPointerLeave={() => setActivePointIndex(null)}
         >
           <svg
             viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
@@ -739,36 +841,38 @@ export function TokenPriceChart({
             />
             <path className={styles.line} d={chart.path} />
             {activePoint ? (
-              <>
-                <line
-                  className={styles.hoverGuide}
-                  x1={activePoint.x}
-                  x2={activePoint.x}
-                  y1={PLOT_TOP}
-                  y2={PLOT_BOTTOM}
-                />
-                <circle
-                  className={styles.hoverDot}
-                  cx={activePoint.x}
-                  cy={activePoint.y}
-                  r="4.5"
-                />
-              </>
+              <line
+                className={styles.hoverGuide}
+                x1={activePoint.x}
+                x2={activePoint.x}
+                y1={PLOT_TOP}
+                y2={PLOT_BOTTOM}
+              />
             ) : null}
           </svg>
           {activePoint ? (
-            <div
-              className={styles.tooltip}
-              data-vertical={activePoint.y < 44 ? "below" : "above"}
-              style={{
-                left: `clamp(4.5rem, ${(activePoint.x / VIEWBOX_WIDTH) * 100}%, calc(100% - 4.5rem))`,
-                top: `${(activePoint.y / VIEWBOX_HEIGHT) * 100}%`,
-              }}
-              aria-hidden="true"
-            >
-              <strong>{formatPrice(activePoint.value, chart.unit)}</strong>
-              <span>Block {activePoint.blockNumber}</span>
-            </div>
+            <>
+              <span
+                className={styles.inspectionDot}
+                style={{
+                  left: `${(activePoint.x / VIEWBOX_WIDTH) * 100}%`,
+                  top: `${(activePoint.y / VIEWBOX_HEIGHT) * 100}%`,
+                }}
+                aria-hidden="true"
+              />
+              <div
+                className={styles.tooltip}
+                data-vertical={activePoint.y < 44 ? "below" : "above"}
+                style={{
+                  left: `clamp(4.5rem, ${(activePoint.x / VIEWBOX_WIDTH) * 100}%, calc(100% - 4.5rem))`,
+                  top: `${(activePoint.y / VIEWBOX_HEIGHT) * 100}%`,
+                }}
+                aria-hidden="true"
+              >
+                <strong>{formatPrice(activePoint.value, chart.unit)}</strong>
+                <span>Block {activePoint.blockNumber}</span>
+              </div>
+            </>
           ) : null}
           <span
             className="sr-only"
