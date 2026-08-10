@@ -11,12 +11,21 @@ interface IProgrammableExactShardsProfileV1 {
         IProgrammableLaunchStampRouterV2.NestedFactoryRouteV1 calldata route,
         IProgrammableLaunchStampRouterV2.StampRequestV2 calldata request,
         IPoolManager poolManager
-    ) external view returns (bytes32 poolId, bytes32 poolKeyHash, bytes32 expectedResultHash);
+    )
+        external
+        view
+        returns (
+            bytes32 poolId,
+            bytes32 poolKeyHash,
+            bytes32 expectedResultHash,
+            IProgrammableLaunchStampRouterV2.ExecutionModeV2 executionMode
+        );
 
     function validatePostV1(
         IProgrammableLaunchStampRouterV2.NestedFactoryRouteV1 calldata route,
         IProgrammableLaunchStampRouterV2.StampRequestV2 calldata request,
-        IPoolManager poolManager
+        IPoolManager poolManager,
+        IProgrammableLaunchStampRouterV2.ExecutionModeV2 executionMode
     ) external view returns (bytes32 observedResultHash);
 
     function computeExpectedResultHash(

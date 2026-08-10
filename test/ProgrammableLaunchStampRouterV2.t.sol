@@ -15,13 +15,17 @@ import { GeometricRendererV1 } from "shards-v1/src/GeometricRendererV1.sol";
 import { ShardHookV1 } from "shards-v1/src/ShardHookV1.sol";
 import { ShardLaunchFactoryV1 } from "shards-v1/src/ShardLaunchFactoryV1.sol";
 import { ShardNFTV1 } from "shards-v1/src/ShardNFTV1.sol";
+import { ShardSwapRouterV1 } from "shards-v1/src/ShardSwapRouterV1.sol";
 import { ShardTokenV1 } from "shards-v1/src/ShardTokenV1.sol";
 
 import { ProgrammableExactShardsProfileV1 } from "../src/ProgrammableExactShardsProfileV1.sol";
 import { ProgrammableLaunchStampRouterV2 } from "../src/ProgrammableLaunchStampRouterV2.sol";
 import { IProgrammableExactShardsProfileV1 } from "../src/interfaces/IProgrammableExactShardsProfileV1.sol";
 import { IProgrammableLaunchStampRouterV2 } from "../src/interfaces/IProgrammableLaunchStampRouterV2.sol";
-import { IProgrammableNestedFactoryV1 } from "../src/interfaces/IProgrammableNestedFactoryV1.sol";
+import {
+    IProgrammableNestedFactoryV1,
+    IProgrammableNestedHookV1
+} from "../src/interfaces/IProgrammableNestedFactoryV1.sol";
 
 contract RouterV2AuthorityMock is IERC1271 {
     mapping(bytes32 digest => bool approved) internal _approved;
@@ -47,6 +51,8 @@ contract RouterV2ForceEther {
 /// @dev Set ETHEREUM_RPC_URL to an archive endpoint. Default local runs skip rather than silently substituting mocks.
 contract ProgrammableLaunchStampRouterV2Test is Test {
     using StateLibrary for IPoolManager;
+
+    receive() external payable { }
 
     uint256 internal constant SNAPSHOT_BLOCK = 25_724_010;
     address internal constant POOL_MANAGER = 0x000000000004444c5dc75cB358380D2e3dE08A90;
@@ -135,17 +141,8 @@ contract ProgrammableLaunchStampRouterV2Test is Test {
         (uint160 sqrtPriceX96,,,) = IPoolManager(POOL_MANAGER).getSlot0(PoolId.wrap(POOL_ID));
         assertEq(sqrtPriceX96, START_SQRT_PRICE_X96);
 
-        bytes32 expectedStampHash = keccak256(
-            abi.encode(
-                keccak256(
-                    "ProgrammableLaunchStampV2(bytes32 permitDigest,bytes32 launchId,address factory,address poolManager,bytes32 poolId)"
-                ),
-                digest,
-                LAUNCH_ID,
-                FACTORY,
-                POOL_MANAGER,
-                POOL_ID
-            )
+        bytes32 expectedStampHash = _expectedStampHash(
+            digest, IProgrammableLaunchStampRouterV2.ExecutionModeV2.EXACT_FACTORY_LAUNCH_EXECUTED
         );
         assertEq(stampHash, expectedStampHash);
         IProgrammableLaunchStampRouterV2.StampRecordV2 memory record = router.launchStamp(LAUNCH_ID);
@@ -159,6 +156,10 @@ contract ProgrammableLaunchStampRouterV2Test is Test {
         assertEq(record.token, TOKEN);
         assertEq(record.hook, HOOK);
         assertEq(record.nft, NFT);
+        assertEq(
+            uint8(record.executionMode),
+            uint8(IProgrammableLaunchStampRouterV2.ExecutionModeV2.EXACT_FACTORY_LAUNCH_EXECUTED)
+        );
         assertEq(router.launchIdByToken(TOKEN), LAUNCH_ID);
         assertEq(router.launchIdByComponent(TOKEN), LAUNCH_ID);
         assertEq(router.launchIdByComponent(HOOK), LAUNCH_ID);
@@ -167,7 +168,99 @@ contract ProgrammableLaunchStampRouterV2Test is Test {
         assertEq(router.launchIdByPool(POOL_MANAGER, POOL_ID), LAUNCH_ID);
         assertTrue(router.nonceUsed(LAUNCH_WALLET, LAUNCH_ID));
         assertTrue(router.permitDigestUsed(digest));
-        _assertRouterEvents(vm.getRecordedLogs());
+        _assertRouterEvents(
+            vm.getRecordedLogs(), IProgrammableLaunchStampRouterV2.ExecutionModeV2.EXACT_FACTORY_LAUNCH_EXECUTED
+        );
+    }
+
+    function test_exactSponsoredExistingLaunchAdoptsAndRecordsMode() public {
+        _deployFactoryDirectly();
+        IProgrammableLaunchStampRouterV2.NestedFactoryRouteV1 memory route = _route();
+        _sponsorExactLaunch(route);
+        IProgrammableLaunchStampRouterV2.StampRequestV2 memory request = _request(route);
+        IProgrammableLaunchStampRouterV2.LaunchPermitV2 memory permit = _permit(route, request, 3600);
+        bytes32 digest = _approve(permit);
+        assertEq(router.computeExpectedResultHash(route, request), EXPECTED_RESULT_HASH);
+
+        vm.recordLogs();
+        vm.prank(LAUNCH_WALLET);
+        uint256 gasBefore = gasleft();
+        bytes32 stampHash = router.launchAndStampV2(permit, request, route, hex"01");
+        uint256 adoptionCallGas = gasBefore - gasleft();
+        emit log_named_uint("sponsored adoption call gas", adoptionCallGas);
+        assertLe(
+            (adoptionCallGas * 120) / 100 + CONSERVATIVE_INTRINSIC_AND_CALLDATA_GAS, EIP_7825_TRANSACTION_GAS_LIMIT
+        );
+
+        bytes32 expectedStampHash = _expectedStampHash(
+            digest, IProgrammableLaunchStampRouterV2.ExecutionModeV2.EXACT_EXISTING_LAUNCH_ADOPTED
+        );
+        assertEq(stampHash, expectedStampHash);
+        assertNotEq(
+            stampHash,
+            _expectedStampHash(digest, IProgrammableLaunchStampRouterV2.ExecutionModeV2.EXACT_FACTORY_LAUNCH_EXECUTED)
+        );
+        IProgrammableLaunchStampRouterV2.StampRecordV2 memory record = router.launchStamp(LAUNCH_ID);
+        assertEq(
+            uint8(record.executionMode),
+            uint8(IProgrammableLaunchStampRouterV2.ExecutionModeV2.EXACT_EXISTING_LAUNCH_ADOPTED)
+        );
+        _assertRouterEvents(
+            vm.getRecordedLogs(), IProgrammableLaunchStampRouterV2.ExecutionModeV2.EXACT_EXISTING_LAUNCH_ADOPTED
+        );
+    }
+
+    function test_sponsoredAdoptionSurvivesPostLaunchSwapDonationNftActivityBuilderChangeAndDust() public {
+        _deployFactoryDirectly();
+        IProgrammableLaunchStampRouterV2.NestedFactoryRouteV1 memory route = _route();
+        _sponsorExactLaunch(route);
+        IProgrammableLaunchStampRouterV2.StampRequestV2 memory request = _request(route);
+        _exerciseMutableSponsoredState(request.poolKey);
+
+        IProgrammableLaunchStampRouterV2.LaunchPermitV2 memory permit = _permit(route, request, 3600);
+        _approve(permit);
+        vm.prank(LAUNCH_WALLET);
+        router.launchAndStampV2(permit, request, route, hex"01");
+        assertEq(
+            uint8(router.launchStamp(LAUNCH_ID).executionMode),
+            uint8(IProgrammableLaunchStampRouterV2.ExecutionModeV2.EXACT_EXISTING_LAUNCH_ADOPTED)
+        );
+    }
+
+    function test_executionModeOrdinalsAreStableAndInvalidIsZero() public pure {
+        assertEq(uint8(IProgrammableLaunchStampRouterV2.ExecutionModeV2.INVALID), 0);
+        assertEq(uint8(IProgrammableLaunchStampRouterV2.ExecutionModeV2.EXACT_FACTORY_LAUNCH_EXECUTED), 1);
+        assertEq(uint8(IProgrammableLaunchStampRouterV2.ExecutionModeV2.EXACT_EXISTING_LAUNCH_ADOPTED), 2);
+        assertEq(uint8(IProgrammableLaunchStampRouterV2.ExecutionModeV2.REGISTERED_PROFILE_EXECUTED), 3);
+    }
+
+    function test_sponsoredAdoptionRejectsPartialChildState() public {
+        _deployFactoryDirectly();
+        vm.etch(TOKEN, hex"60006000f3");
+        IProgrammableLaunchStampRouterV2.NestedFactoryRouteV1 memory route = _route();
+        IProgrammableLaunchStampRouterV2.StampRequestV2 memory request = _request(route);
+        IProgrammableLaunchStampRouterV2.LaunchPermitV2 memory permit = _permit(route, request, 3600);
+        vm.expectRevert(
+            abi.encodeWithSelector(ProgrammableExactShardsProfileV1.InvalidShardsBinding.selector, uint8(12))
+        );
+        vm.prank(LAUNCH_WALLET);
+        router.launchAndStampV2(permit, request, route, hex"01");
+    }
+
+    function test_sponsoredAdoptionRejectsWrongCompletedIdentity() public {
+        _deployFactoryDirectly();
+        IProgrammableLaunchStampRouterV2.NestedFactoryRouteV1 memory route = _route();
+        _sponsorExactLaunch(route);
+        vm.mockCall(
+            HOOK, abi.encodeWithSelector(IProgrammableNestedHookV1.deployer.selector), abi.encode(address(0xdead))
+        );
+        IProgrammableLaunchStampRouterV2.StampRequestV2 memory request = _request(route);
+        IProgrammableLaunchStampRouterV2.LaunchPermitV2 memory permit = _permit(route, request, 3600);
+        vm.expectRevert(
+            abi.encodeWithSelector(ProgrammableExactShardsProfileV1.InvalidShardsBinding.selector, uint8(7))
+        );
+        vm.prank(LAUNCH_WALLET);
+        router.launchAndStampV2(permit, request, route, hex"01");
     }
 
     function test_vacantFactoryFailsClosed() public {
@@ -276,7 +369,9 @@ contract ProgrammableLaunchStampRouterV2Test is Test {
         bytes32 first = router.launchAndStampV2(permit, request, route, hex"01");
 
         for (uint256 i; i < 4; ++i) {
-            vm.expectRevert(abi.encodeWithSelector(ProgrammableExactShardsProfileV1.Occupied.selector, TOKEN));
+            vm.expectRevert(
+                abi.encodeWithSelector(ProgrammableLaunchStampRouterV2.LaunchAlreadyStamped.selector, LAUNCH_ID)
+            );
             vm.prank(LAUNCH_WALLET);
             router.launchAndStampV2(permit, request, route, abi.encode(i));
         }
@@ -352,7 +447,12 @@ contract ProgrammableLaunchStampRouterV2Test is Test {
         vm.mockCall(
             profile,
             abi.encodeWithSelector(IProgrammableExactShardsProfileV1.validatePreV1.selector),
-            abi.encode(POOL_ID, POOL_KEY_HASH, EXPECTED_RESULT_HASH)
+            abi.encode(
+                POOL_ID,
+                POOL_KEY_HASH,
+                EXPECTED_RESULT_HASH,
+                IProgrammableLaunchStampRouterV2.ExecutionModeV2.EXACT_FACTORY_LAUNCH_EXECUTED
+            )
         );
         vm.expectRevert();
         vm.prank(LAUNCH_WALLET);
@@ -483,25 +583,120 @@ contract ProgrammableLaunchStampRouterV2Test is Test {
         assertEq(returned, FACTORY);
     }
 
+    function _sponsorExactLaunch(IProgrammableLaunchStampRouterV2.NestedFactoryRouteV1 memory route) internal {
+        (address hook, address token, address nft) = IProgrammableNestedFactoryV1(FACTORY)
+            .launch(route.tokenSalt, route.hookSalt, route.hookCreationCode, route.params);
+        assertEq(hook, HOOK);
+        assertEq(token, TOKEN);
+        assertEq(nft, NFT);
+    }
+
+    function _exerciseMutableSponsoredState(PoolKey memory poolKey) internal {
+        ShardHookV1 hook = ShardHookV1(payable(HOOK));
+        ShardNFTV1 nft = ShardNFTV1(NFT);
+        ShardTokenV1 token = ShardTokenV1(TOKEN);
+        address nftRecipient = address(0xBEEF);
+        address successorBuilder = makeAddr("sponsored-successor-builder");
+
+        uint256 tokenId = hook.buyNFT{ value: 1 ether }(type(uint256).max, block.timestamp + 1 hours);
+        nft.transferFrom(address(this), nftRecipient, tokenId);
+        vm.roll(block.number + 1);
+        hook.donate{ value: 0.1 ether }();
+
+        ShardSwapRouterV1 swapRouter = new ShardSwapRouterV1(IPoolManager(POOL_MANAGER), poolKey);
+        uint256 shardOut = swapRouter.swapEthForShard{ value: 0.01 ether }(poolKey, 0, block.timestamp + 1 hours);
+        assertGt(shardOut, 1);
+        assertTrue(token.transfer(FACTORY, 1));
+
+        vm.prank(LAUNCH_WALLET);
+        hook.setBuilderFeeRecipient(successorBuilder);
+        assertEq(hook.builderFeeRecipient(), successorBuilder);
+        assertEq(token.balanceOf(FACTORY), 1);
+        (uint160 currentSqrtPriceX96,,,) = IPoolManager(POOL_MANAGER).getSlot0(PoolId.wrap(POOL_ID));
+        assertTrue(currentSqrtPriceX96 != 0 && currentSqrtPriceX96 != START_SQRT_PRICE_X96);
+    }
+
+    function _expectedStampHash(bytes32 digest, IProgrammableLaunchStampRouterV2.ExecutionModeV2 mode)
+        internal
+        pure
+        returns (bytes32)
+    {
+        return keccak256(
+            abi.encode(
+                keccak256(
+                    "ProgrammableLaunchStampV2(bytes32 permitDigest,bytes32 launchId,uint8 executionMode,address factory,address poolManager,bytes32 poolId)"
+                ),
+                digest,
+                LAUNCH_ID,
+                mode,
+                FACTORY,
+                POOL_MANAGER,
+                POOL_ID
+            )
+        );
+    }
+
     function _poolStateSlot() internal pure returns (bytes32) {
         return keccak256(abi.encodePacked(POOL_ID, bytes32(uint256(6))));
     }
 
-    function _assertRouterEvents(Vm.Log[] memory logs) internal view {
+    function _assertRouterEvents(Vm.Log[] memory logs, IProgrammableLaunchStampRouterV2.ExecutionModeV2 expectedMode)
+        internal
+        view
+    {
         bytes32 launchTopic = keccak256(
-            "ProgrammableLaunchStampedV2(bytes32,address,address,address,address,address,address,bytes32,bytes32)"
+            "ProgrammableLaunchStampedV2(bytes32,address,address,address,address,address,address,bytes32,bytes32,uint8)"
         );
         bytes32 routeTopic = keccak256(
-            "ProgrammableNestedFactoryRouteStampedV2(bytes32,bytes32,address,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32)"
+            "ProgrammableNestedFactoryRouteStampedV2(bytes32,bytes32,address,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,uint8)"
         );
+        bytes32 factoryLaunchTopic =
+            keccak256("ShardLaunched(address,address,address,bytes32,bytes32,address,address,bytes32)");
         uint256 launches;
         uint256 routes;
+        uint256 factoryLaunches;
         for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == FACTORY && logs[i].topics[0] == factoryLaunchTopic) ++factoryLaunches;
             if (logs[i].emitter != address(router)) continue;
-            if (logs[i].topics[0] == launchTopic) ++launches;
-            if (logs[i].topics[0] == routeTopic) ++routes;
+            if (logs[i].topics[0] == launchTopic) {
+                (,,,,,, IProgrammableLaunchStampRouterV2.ExecutionModeV2 mode) = abi.decode(
+                    logs[i].data,
+                    (
+                        address,
+                        address,
+                        address,
+                        address,
+                        bytes32,
+                        bytes32,
+                        IProgrammableLaunchStampRouterV2.ExecutionModeV2
+                    )
+                );
+                assertEq(uint8(mode), uint8(expectedMode));
+                ++launches;
+            }
+            if (logs[i].topics[0] == routeTopic) {
+                (,,,,,,, IProgrammableLaunchStampRouterV2.ExecutionModeV2 mode) = abi.decode(
+                    logs[i].data,
+                    (
+                        bytes32,
+                        bytes32,
+                        bytes32,
+                        bytes32,
+                        bytes32,
+                        bytes32,
+                        bytes32,
+                        IProgrammableLaunchStampRouterV2.ExecutionModeV2
+                    )
+                );
+                assertEq(uint8(mode), uint8(expectedMode));
+                ++routes;
+            }
         }
         assertEq(launches, 1);
         assertEq(routes, 1);
+        assertEq(
+            factoryLaunches,
+            expectedMode == IProgrammableLaunchStampRouterV2.ExecutionModeV2.EXACT_FACTORY_LAUNCH_EXECUTED ? 1 : 0
+        );
     }
 }

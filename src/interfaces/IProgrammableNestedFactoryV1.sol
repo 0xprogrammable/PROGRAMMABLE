@@ -78,6 +78,24 @@ interface IProgrammableNestedHookV1 {
     function initialised() external view returns (bool);
 
     function poolKey() external view returns (PoolKey memory);
+
+    function tickLower() external view returns (int24);
+
+    function tickBand() external view returns (int24);
+
+    function tickUpper() external view returns (int24);
+
+    function startSqrtPriceX96() external view returns (uint160);
+
+    function seedDust() external view returns (uint256);
+
+    function seedLiquidity() external view returns (uint128);
+
+    function seedLiquidityBand() external view returns (uint128);
+
+    function launcherFeeRecipient() external view returns (address);
+
+    function builderFeeRecipient() external view returns (address);
 }
 
 /// @notice Required post-launch NFT views for the bounded nested-factory profile.

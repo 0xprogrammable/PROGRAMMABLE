@@ -8,7 +8,7 @@ import { StateLibrary } from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 import { Currency } from "@uniswap/v4-core/src/types/Currency.sol";
 import { PoolId, PoolIdLibrary } from "@uniswap/v4-core/src/types/PoolId.sol";
 import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
-import { Test } from "forge-std/Test.sol";
+import { Test, Vm } from "forge-std/Test.sol";
 
 import { ProgrammableLaunchStampRouterV2 } from "../src/ProgrammableLaunchStampRouterV2.sol";
 import { IProgrammableLaunchStampRouterV2 } from "../src/interfaces/IProgrammableLaunchStampRouterV2.sol";
@@ -513,6 +513,7 @@ contract RegistryNestedFactoryModuleV1Mock is IProgrammableNestedFactoryModuleV1
             _approve(permit);
             module.setAttemptReentry(true);
 
+            vm.recordLogs();
             vm.prank(plan.launchWallet);
             router.launchRegisteredProfileAndStampV2(permit, hex"01");
 
@@ -521,6 +522,13 @@ contract RegistryNestedFactoryModuleV1Mock is IProgrammableNestedFactoryModuleV1
             assertEq(router.launchIdByToken(plan.token), permit.nonce);
             assertEq(router.launchIdByComponent(plan.hook), permit.nonce);
             assertEq(_poolSqrtPrice(plan.poolKey), plan.startSqrtPriceX96);
+            assertEq(
+                uint8(router.launchStamp(permit.nonce).executionMode),
+                uint8(IProgrammableLaunchStampRouterV2.ExecutionModeV2.REGISTERED_PROFILE_EXECUTED)
+            );
+            _assertPrimaryLaunchMode(
+                vm.getRecordedLogs(), IProgrammableLaunchStampRouterV2.ExecutionModeV2.REGISTERED_PROFILE_EXECUTED
+            );
         }
 
         function test_registeredExecutionUsesCallAndCannotMutateRouterRoleOrProfileStorage() public {
@@ -705,6 +713,34 @@ contract RegistryNestedFactoryModuleV1Mock is IProgrammableNestedFactoryModuleV1
 
         function _poolSqrtPrice(PoolKey memory key) private view returns (uint160 sqrtPriceX96) {
             (sqrtPriceX96,,,) = IPoolManager(POOL_MANAGER).getSlot0(key.toId());
+        }
+
+        function _assertPrimaryLaunchMode(
+            Vm.Log[] memory logs,
+            IProgrammableLaunchStampRouterV2.ExecutionModeV2 expectedMode
+        ) private view {
+            bytes32 launchTopic = keccak256(
+                "ProgrammableLaunchStampedV2(bytes32,address,address,address,address,address,address,bytes32,bytes32,uint8)"
+            );
+            uint256 matched;
+            for (uint256 i; i < logs.length; ++i) {
+                if (logs[i].emitter != address(router) || logs[i].topics[0] != launchTopic) continue;
+                (,,,,,, IProgrammableLaunchStampRouterV2.ExecutionModeV2 mode) = abi.decode(
+                    logs[i].data,
+                    (
+                        address,
+                        address,
+                        address,
+                        address,
+                        bytes32,
+                        bytes32,
+                        IProgrammableLaunchStampRouterV2.ExecutionModeV2
+                    )
+                );
+                assertEq(uint8(mode), uint8(expectedMode));
+                ++matched;
+            }
+            assertEq(matched, 1);
         }
 
         function _validHookSalt(address deployer, bytes32 seed) private pure returns (bytes32 salt) {

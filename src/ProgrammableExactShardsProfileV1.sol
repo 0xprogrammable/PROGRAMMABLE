@@ -2,11 +2,17 @@
 pragma solidity 0.8.26;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { IERC20Metadata } from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import { IERC721Metadata } from "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol";
 import { IPoolManager } from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import { Position } from "@uniswap/v4-core/src/libraries/Position.sol";
 import { StateLibrary } from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
+import { SqrtPriceMath } from "@uniswap/v4-core/src/libraries/SqrtPriceMath.sol";
+import { TickMath } from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import { Currency } from "@uniswap/v4-core/src/types/Currency.sol";
 import { PoolId, PoolIdLibrary } from "@uniswap/v4-core/src/types/PoolId.sol";
 import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
+import { LiquidityAmounts } from "@uniswap/v4-periphery/src/libraries/LiquidityAmounts.sol";
 
 import { IProgrammableExactShardsProfileV1 } from "./interfaces/IProgrammableExactShardsProfileV1.sol";
 import { IProgrammableLaunchStampRouterV2 } from "./interfaces/IProgrammableLaunchStampRouterV2.sol";
@@ -18,7 +24,8 @@ import {
 
 /// @title ProgrammableExactShardsProfileV1
 /// @notice Stateless validator for exactly jesse-stahl/shards-v1@91b38f3 and its frozen launch plan.
-/// @dev The platform predeploys the exact factory. The Router performs the applicant's one factory launch itself.
+/// @dev The platform predeploys the exact factory. The Router either performs the applicant's one factory launch or
+///      adopts an already-completed exact launch without claiming who previously called the permissionless factory.
 contract ProgrammableExactShardsProfileV1 is IProgrammableExactShardsProfileV1 {
     using PoolIdLibrary for PoolKey;
     using StateLibrary for IPoolManager;
@@ -76,6 +83,9 @@ contract ProgrammableExactShardsProfileV1 is IProgrammableExactShardsProfileV1 {
     int24 public constant TICK_UPPER = 69_060;
     uint160 public constant START_SQRT_PRICE_X96 = 2_502_784_483_440_051_878_955_016_419_363;
     uint160 public constant REQUIRED_HOOK_FLAGS = 0x20cc;
+    uint256 public constant SEED_AMOUNT = 10_000 ether;
+    uint256 public constant SEED_FULL_RANGE = 3000 ether;
+    uint256 public constant SEED_BAND = 7000 ether;
     uint160 private constant ALL_HOOK_MASK = uint160((1 << 14) - 1);
 
     bytes32 private constant POOL_KEY_TYPEHASH = keccak256(
@@ -95,23 +105,42 @@ contract ProgrammableExactShardsProfileV1 is IProgrammableExactShardsProfileV1 {
     uint8 private constant BIND_NFT = 8;
     uint8 private constant BIND_CONFIG = 9;
     uint8 private constant BIND_BALANCE = 10;
+    uint8 private constant BIND_SEED = 11;
+    uint8 private constant BIND_STATE = 12;
 
     error InvalidShardsBinding(uint8 field);
     error InvalidRuntime(address component, bytes32 expected, bytes32 actual);
-    error Occupied(address component);
 
     function validatePreV1(
         IProgrammableLaunchStampRouterV2.NestedFactoryRouteV1 calldata route,
         IProgrammableLaunchStampRouterV2.StampRequestV2 calldata request,
         IPoolManager poolManager
-    ) external view returns (bytes32 poolId, bytes32 poolKeyHash, bytes32 expectedResultHash) {
+    )
+        external
+        view
+        returns (
+            bytes32 poolId,
+            bytes32 poolKeyHash,
+            bytes32 expectedResultHash,
+            IProgrammableLaunchStampRouterV2.ExecutionModeV2 executionMode
+        )
+    {
         _validateExactRoute(route, request, poolManager);
         _validateFactory(route, poolManager);
-        _requireVacant(request.token);
-        _requireVacant(request.hook);
-        _requireVacant(request.nft);
         (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(request.poolKey.toId());
-        if (sqrtPriceX96 != 0) revert InvalidShardsBinding(BIND_POOL);
+        bool tokenPresent = request.token.code.length != 0;
+        bool hookPresent = request.hook.code.length != 0;
+        bool nftPresent = request.nft.code.length != 0;
+        if (!tokenPresent && !hookPresent && !nftPresent) {
+            if (sqrtPriceX96 != 0) revert InvalidShardsBinding(BIND_POOL);
+            executionMode = IProgrammableLaunchStampRouterV2.ExecutionModeV2.EXACT_FACTORY_LAUNCH_EXECUTED;
+        } else if (tokenPresent && hookPresent && nftPresent) {
+            if (sqrtPriceX96 == 0) revert InvalidShardsBinding(BIND_POOL);
+            _validateCompletedState(request, poolManager);
+            executionMode = IProgrammableLaunchStampRouterV2.ExecutionModeV2.EXACT_EXISTING_LAUNCH_ADOPTED;
+        } else {
+            revert InvalidShardsBinding(BIND_STATE);
+        }
         poolId = PoolId.unwrap(request.poolKey.toId());
         poolKeyHash = _poolKeyHash(request.poolKey);
         expectedResultHash = computeExpectedResultHash(route, request);
@@ -120,30 +149,23 @@ contract ProgrammableExactShardsProfileV1 is IProgrammableExactShardsProfileV1 {
     function validatePostV1(
         IProgrammableLaunchStampRouterV2.NestedFactoryRouteV1 calldata route,
         IProgrammableLaunchStampRouterV2.StampRequestV2 calldata request,
-        IPoolManager poolManager
+        IPoolManager poolManager,
+        IProgrammableLaunchStampRouterV2.ExecutionModeV2 executionMode
     ) external view returns (bytes32 observedResultHash) {
         _validateFactory(route, poolManager);
-        _requireRuntime(request.token, TOKEN_RUNTIME_CODE_HASH);
-        _requireRuntime(request.hook, HOOK_RUNTIME_CODE_HASH);
-        _requireRuntime(request.nft, NFT_RUNTIME_CODE_HASH);
-
-        IProgrammableNestedHookV1 hook = IProgrammableNestedHookV1(request.hook);
-        if (
-            address(hook.poolManager()) != POOL_MANAGER || hook.deployer() != FACTORY || hook.shard() != TOKEN
-                || hook.nft() != NFT || !hook.initialised() || _poolKeyHash(hook.poolKey()) != POOL_KEY_HASH
-        ) revert InvalidShardsBinding(BIND_HOOK);
-        IProgrammableNestedNftV1 nft = IProgrammableNestedNftV1(request.nft);
-        if (nft.hook() != HOOK || nft.renderer() != RENDERER) revert InvalidShardsBinding(BIND_NFT);
-
-        IProgrammableNestedFactoryV1 factory = IProgrammableNestedFactoryV1(FACTORY);
-        if (
-            factory.configurationHashOf(HOOK) != CONFIGURATION_HASH
-                || factory.computeConfigurationHash(HOOK, TOKEN, NFT, TOKEN_SALT, HOOK_SALT, route.params)
-                    != CONFIGURATION_HASH
-        ) revert InvalidShardsBinding(BIND_CONFIG);
-        if (IERC20(TOKEN).balanceOf(FACTORY) != 0) revert InvalidShardsBinding(BIND_BALANCE);
+        _validateCompletedState(request, poolManager);
         (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(request.poolKey.toId());
-        if (sqrtPriceX96 != START_SQRT_PRICE_X96) revert InvalidShardsBinding(BIND_POOL);
+        bool executed = executionMode == IProgrammableLaunchStampRouterV2.ExecutionModeV2.EXACT_FACTORY_LAUNCH_EXECUTED;
+        if (
+            executed
+                && (IERC20(TOKEN).balanceOf(FACTORY) != 0
+                    || IProgrammableNestedHookV1(HOOK).builderFeeRecipient() != BUILDER_FEE_RECIPIENT)
+        ) revert InvalidShardsBinding(BIND_BALANCE);
+        if (
+            sqrtPriceX96 == 0 || (executed && sqrtPriceX96 != START_SQRT_PRICE_X96)
+                || (!executed
+                    && executionMode != IProgrammableLaunchStampRouterV2.ExecutionModeV2.EXACT_EXISTING_LAUNCH_ADOPTED)
+        ) revert InvalidShardsBinding(BIND_POOL);
 
         observedResultHash = _resultHash(
             FACTORY_RUNTIME_CODE_HASH,
@@ -153,14 +175,76 @@ contract ProgrammableExactShardsProfileV1 is IProgrammableExactShardsProfileV1 {
             NFT_RUNTIME_CODE_HASH,
             CONFIGURATION_HASH,
             POOL_KEY_HASH,
-            sqrtPriceX96
+            START_SQRT_PRICE_X96
         );
+    }
+
+    function _validateCompletedState(
+        IProgrammableLaunchStampRouterV2.StampRequestV2 calldata request,
+        IPoolManager poolManager
+    ) private view {
+        _requireRuntime(request.token, TOKEN_RUNTIME_CODE_HASH);
+        _requireRuntime(request.hook, HOOK_RUNTIME_CODE_HASH);
+        _requireRuntime(request.nft, NFT_RUNTIME_CODE_HASH);
+
+        IProgrammableNestedHookV1 hook = IProgrammableNestedHookV1(request.hook);
+        if (
+            address(hook.poolManager()) != POOL_MANAGER || hook.deployer() != FACTORY || hook.shard() != TOKEN
+                || hook.nft() != NFT || !hook.initialised() || _poolKeyHash(hook.poolKey()) != POOL_KEY_HASH
+                || hook.tickLower() != TICK_LOWER || hook.tickBand() != TICK_BAND || hook.tickUpper() != TICK_UPPER
+                || hook.startSqrtPriceX96() != START_SQRT_PRICE_X96
+                || hook.launcherFeeRecipient() != LAUNCHER_FEE_RECIPIENT
+        ) revert InvalidShardsBinding(BIND_HOOK);
+        IProgrammableNestedNftV1 nft = IProgrammableNestedNftV1(request.nft);
+        if (
+            nft.hook() != HOOK || nft.renderer() != RENDERER
+                || keccak256(bytes(IERC721Metadata(NFT).name())) != keccak256("Shards")
+                || keccak256(bytes(IERC721Metadata(NFT).symbol())) != keccak256("SHARDS")
+        ) revert InvalidShardsBinding(BIND_NFT);
+
+        IProgrammableNestedFactoryV1 factory = IProgrammableNestedFactoryV1(FACTORY);
+        if (factory.configurationHashOf(HOOK) != CONFIGURATION_HASH) revert InvalidShardsBinding(BIND_CONFIG);
+        if (
+            IERC20(TOKEN).totalSupply() != SEED_AMOUNT || IERC20Metadata(TOKEN).decimals() != 18
+                || keccak256(bytes(IERC20Metadata(TOKEN).name())) != keccak256("Shard")
+                || keccak256(bytes(IERC20Metadata(TOKEN).symbol())) != keccak256("SHARD")
+        ) {
+            revert InvalidShardsBinding(BIND_BALANCE);
+        }
+
+        (uint128 expectedFull, uint128 expectedBand, uint256 expectedDust) = _seedIdentity();
+        if (
+            hook.seedLiquidity() != expectedFull || hook.seedLiquidityBand() != expectedBand
+                || hook.seedDust() != expectedDust
+        ) revert InvalidShardsBinding(BIND_SEED);
+        PoolId poolId = request.poolKey.toId();
+        uint128 fullPosition = poolManager.getPositionLiquidity(
+            poolId, Position.calculatePositionKey(HOOK, TICK_LOWER, TICK_UPPER, bytes32(0))
+        );
+        uint128 bandPosition = poolManager.getPositionLiquidity(
+            poolId, Position.calculatePositionKey(HOOK, TICK_BAND, TICK_UPPER, bytes32(0))
+        );
+        if (fullPosition != expectedFull || bandPosition != expectedBand) {
+            revert InvalidShardsBinding(BIND_SEED);
+        }
+    }
+
+    function _seedIdentity() private pure returns (uint128 full, uint128 band, uint256 dust) {
+        uint160 lower = TickMath.getSqrtPriceAtTick(TICK_LOWER);
+        uint160 bandLower = TickMath.getSqrtPriceAtTick(TICK_BAND);
+        uint160 upper = TickMath.getSqrtPriceAtTick(TICK_UPPER);
+        full = LiquidityAmounts.getLiquidityForAmount1(lower, upper, SEED_FULL_RANGE);
+        band = LiquidityAmounts.getLiquidityForAmount1(bandLower, upper, SEED_BAND);
+        dust = SEED_AMOUNT - SqrtPriceMath.getAmount1Delta(lower, upper, full, true)
+            - SqrtPriceMath.getAmount1Delta(bandLower, upper, band, true);
     }
 
     function computeExpectedResultHash(
         IProgrammableLaunchStampRouterV2.NestedFactoryRouteV1 calldata route,
         IProgrammableLaunchStampRouterV2.StampRequestV2 calldata request
     ) public pure returns (bytes32) {
+        // This commits to the reviewed CONFIGURED start price. In adoption mode it deliberately does not claim that
+        // the mutable current market price still equals the configured start price.
         return _resultHash(
             route.factoryRuntimeCodeHash,
             route.rendererRuntimeCodeHash,
@@ -305,10 +389,6 @@ contract ProgrammableExactShardsProfileV1 is IProgrammableExactShardsProfileV1 {
     function _requireRuntime(address account, bytes32 expected) private view {
         bytes32 actual = account.codehash;
         if (account.code.length == 0 || actual != expected) revert InvalidRuntime(account, expected, actual);
-    }
-
-    function _requireVacant(address account) private view {
-        if (account.code.length != 0) revert Occupied(account);
     }
 
     function _factoryAddress(address proxy, bytes32 salt, bytes32 initCodeHash) private pure returns (address) {

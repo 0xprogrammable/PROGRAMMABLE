@@ -17,10 +17,11 @@ import { IProgrammableNestedFactoryModuleV1 } from "./interfaces/IProgrammableNe
 import { ProgrammableExactShardsProfileV1 } from "./ProgrammableExactShardsProfileV1.sol";
 
 /// @title ProgrammableLaunchStampRouterV2
-/// @notice Executes and atomically stamps authority-permitted deterministic nested-factory launches.
-/// @dev The built-in Shards path calls the exact reviewed factory selector directly. Future profiles require an
-///      add-only Safe registration and one fixed CALL-only module ABI. No user target, selector, opaque payload,
-///      delegatecall, profile replacement, or removal exists.
+/// @notice Executes or adopts and atomically stamps authority-permitted deterministic nested-factory launches.
+/// @dev The built-in Shards path calls the exact reviewed factory selector only when all children and the pool are
+///      vacant. A fully completed exact launch can instead be adopted without another factory call. Future profiles
+///      require an add-only Safe registration and one fixed CALL-only module ABI. No user target, selector, opaque
+///      payload, delegatecall, profile replacement, or removal exists.
 contract ProgrammableLaunchStampRouterV2 is IProgrammableLaunchStampRouterV2, EIP712, ReentrancyGuard {
     using PoolIdLibrary for PoolKey;
     using StateLibrary for IPoolManager;
@@ -44,8 +45,9 @@ contract ProgrammableLaunchStampRouterV2 is IProgrammableLaunchStampRouterV2, EI
     bytes32 public constant PROFILE_KEY_TYPEHASH =
         keccak256("ProgrammableNestedFactoryProfileV1(bytes32 profileIdHash,bytes32 profileVersionHash)");
     bytes32 public constant SHARDS_PROFILE_KEY = 0xb90e215e0e29c0dacf021e5e778847af4100433ee7d22014b73f8ca4add09d0c;
-    bytes32 public constant SHARDS_DIRECT_SCHEMA_HASH =
-        keccak256("ProgrammableExactShardsProfileSchemaV1(validatePreV1,validatePostV1)");
+    bytes32 public constant SHARDS_DIRECT_SCHEMA_HASH = keccak256(
+        "ProgrammableExactShardsProfileSchemaV2(validatePreV1()->ExecutionModeV2,validatePostV1(ExecutionModeV2),modes=EXACT_FACTORY_LAUNCH_EXECUTED|EXACT_EXISTING_LAUNCH_ADOPTED)"
+    );
     bytes32 public constant NESTED_FACTORY_MODULE_SCHEMA_HASH = keccak256(
         "ProgrammableNestedFactoryModuleSchemaV1(routerV1()->address,planV1()->PlanV1,executeNestedFactoryV1(address)->bytes32,validatePostV1()->(bytes4,bytes32))"
     );
@@ -69,7 +71,7 @@ contract ProgrammableLaunchStampRouterV2 is IProgrammableLaunchStampRouterV2, EI
         "ProgrammableLaunchPermitV2(uint256 chainId,address router,address launchWallet,bytes32 routeIdHash,bytes32 routeVersionHash,bytes32 profileKey,bytes32 routePayloadHash,bytes32 expectedResultHash,bytes32 stampRequestHash,bytes32 nonce,uint64 validAfter,uint64 deadline,uint256 value)"
     );
     bytes32 private constant LAUNCH_STAMP_TYPEHASH = keccak256(
-        "ProgrammableLaunchStampV2(bytes32 permitDigest,bytes32 launchId,address factory,address poolManager,bytes32 poolId)"
+        "ProgrammableLaunchStampV2(bytes32 permitDigest,bytes32 launchId,uint8 executionMode,address factory,address poolManager,bytes32 poolId)"
     );
 
     address public immutable PERMIT_AUTHORITY;
@@ -112,6 +114,7 @@ contract ProgrammableLaunchStampRouterV2 is IProgrammableLaunchStampRouterV2, EI
         bytes32 poolId;
         bytes32 poolKeyHash;
         bytes32 configurationHash;
+        ExecutionModeV2 executionMode;
     }
 
     struct RegisteredLaunchStateV2 {
@@ -127,6 +130,7 @@ contract ProgrammableLaunchStampRouterV2 is IProgrammableLaunchStampRouterV2, EI
         bytes32 poolId;
         bytes32 poolKeyHash;
         bytes32 digest;
+        ExecutionModeV2 executionMode;
     }
 
     struct ExpectedResultCommitmentV2 {
@@ -199,7 +203,7 @@ contract ProgrammableLaunchStampRouterV2 is IProgrammableLaunchStampRouterV2, EI
         );
     }
 
-    /// @notice Direct exact-Shards hot path. The Router itself calls the reviewed factory selector.
+    /// @notice Direct exact-Shards hot path: execute the reviewed factory call, or adopt its exact completed result.
     function launchAndStampV2(
         LaunchPermitV2 calldata permit,
         StampRequestV2 calldata request,
@@ -209,7 +213,7 @@ contract ProgrammableLaunchStampRouterV2 is IProgrammableLaunchStampRouterV2, EI
         uint256 baseline = address(this).balance - msg.value;
         DirectLaunchStateV2 memory state = _prepareDirect(permit, request, route);
         state.digest = _consumePermit(permit, signature);
-        _executeDirect(route, request, permit.expectedResultHash);
+        _executeDirect(route, request, permit.expectedResultHash, state.executionMode);
         stampHash = _finishStamp(permit, _directWriteContext(route, request, state), state.digest);
         _requireBaseline(baseline);
     }
@@ -227,7 +231,7 @@ contract ProgrammableLaunchStampRouterV2 is IProgrammableLaunchStampRouterV2, EI
                 || route.profileKey != SHARDS_PROFILE_KEY || request.launchId != launchId
         ) revert InvalidBinding(6);
         bytes32 expectedResultHash;
-        (state.poolId, state.poolKeyHash, expectedResultHash) =
+        (state.poolId, state.poolKeyHash, expectedResultHash, state.executionMode) =
             SHARDS_PROFILE.validatePreV1(route, request, POOL_MANAGER);
         _validatePermit(
             permit,
@@ -244,13 +248,18 @@ contract ProgrammableLaunchStampRouterV2 is IProgrammableLaunchStampRouterV2, EI
     function _executeDirect(
         NestedFactoryRouteV1 calldata route,
         StampRequestV2 calldata request,
-        bytes32 expectedResultHash
+        bytes32 expectedResultHash,
+        ExecutionModeV2 executionMode
     ) private {
-        (address hook, address token, address nft) = IProgrammableNestedFactoryV1(route.factory)
-            .launch(route.tokenSalt, route.hookSalt, route.hookCreationCode, route.params);
-        if (hook != request.hook || token != request.token || nft != request.nft) revert InvalidBinding(7);
+        if (executionMode == ExecutionModeV2.EXACT_FACTORY_LAUNCH_EXECUTED) {
+            (address hook, address token, address nft) = IProgrammableNestedFactoryV1(route.factory)
+                .launch(route.tokenSalt, route.hookSalt, route.hookCreationCode, route.params);
+            if (hook != request.hook || token != request.token || nft != request.nft) revert InvalidBinding(7);
+        } else if (executionMode != ExecutionModeV2.EXACT_EXISTING_LAUNCH_ADOPTED) {
+            revert InvalidBinding(7);
+        }
         _requireRuntime(address(SHARDS_PROFILE), SHARDS_PROFILE_RUNTIME_CODE_HASH);
-        if (SHARDS_PROFILE.validatePostV1(route, request, POOL_MANAGER) != expectedResultHash) {
+        if (SHARDS_PROFILE.validatePostV1(route, request, POOL_MANAGER, executionMode) != expectedResultHash) {
             revert InvalidBinding(8);
         }
     }
@@ -281,6 +290,7 @@ contract ProgrammableLaunchStampRouterV2 is IProgrammableLaunchStampRouterV2, EI
         context.poolId = state.poolId;
         context.poolKeyHash = state.poolKeyHash;
         context.configurationHash = route.expectedConfigurationHash;
+        context.executionMode = state.executionMode;
     }
 
     /// @notice Future profile path. The selected audited module receives only the bound launch wallet.
@@ -685,6 +695,7 @@ contract ProgrammableLaunchStampRouterV2 is IProgrammableLaunchStampRouterV2, EI
         context.poolId = poolId;
         context.poolKeyHash = _poolKeyHash(plan.poolKey);
         context.configurationHash = plan.configurationHash;
+        context.executionMode = ExecutionModeV2.REGISTERED_PROFILE_EXECUTED;
     }
 
     function _planResultHash(IProgrammableNestedFactoryModuleV1.PlanV1 memory plan, bytes32 configurationHash)
@@ -714,7 +725,8 @@ contract ProgrammableLaunchStampRouterV2 is IProgrammableLaunchStampRouterV2, EI
         private
         returns (bytes32 stampHash)
     {
-        stampHash = _stampHash(context.launchId, context.factory, context.poolId, digest);
+        if (context.executionMode == ExecutionModeV2.INVALID) revert InvalidBinding(19);
+        stampHash = _stampHash(context.launchId, context.executionMode, context.factory, context.poolId, digest);
         StampRecordV2 storage record = _launchStamp[context.launchId];
         record.launchWallet = permit.launchWallet;
         record.factory = context.factory;
@@ -739,6 +751,7 @@ contract ProgrammableLaunchStampRouterV2 is IProgrammableLaunchStampRouterV2, EI
         record.expectedResultHash = permit.expectedResultHash;
         record.permitDigest = digest;
         record.stampHash = stampHash;
+        record.executionMode = context.executionMode;
 
         launchIdByToken[context.token] = context.launchId;
         _launchIdByPool[_poolLookupKey(address(POOL_MANAGER), context.poolId)] = context.launchId;
@@ -758,7 +771,8 @@ contract ProgrammableLaunchStampRouterV2 is IProgrammableLaunchStampRouterV2, EI
             context.revenuePolicyHash,
             context.configurationHash,
             permit.expectedResultHash,
-            digest
+            digest,
+            context.executionMode
         );
         emit ProgrammableLaunchStampedV2(
             context.launchId,
@@ -769,7 +783,8 @@ contract ProgrammableLaunchStampRouterV2 is IProgrammableLaunchStampRouterV2, EI
             context.renderer,
             address(POOL_MANAGER),
             context.poolId,
-            stampHash
+            stampHash,
+            context.executionMode
         );
     }
 
@@ -797,12 +812,16 @@ contract ProgrammableLaunchStampRouterV2 is IProgrammableLaunchStampRouterV2, EI
         );
     }
 
-    function _stampHash(bytes32 launchId, address factory, bytes32 poolId, bytes32 digest)
-        private
-        view
-        returns (bytes32)
-    {
-        return keccak256(abi.encode(LAUNCH_STAMP_TYPEHASH, digest, launchId, factory, address(POOL_MANAGER), poolId));
+    function _stampHash(
+        bytes32 launchId,
+        ExecutionModeV2 executionMode,
+        address factory,
+        bytes32 poolId,
+        bytes32 digest
+    ) private view returns (bytes32) {
+        return keccak256(
+            abi.encode(LAUNCH_STAMP_TYPEHASH, digest, launchId, executionMode, factory, address(POOL_MANAGER), poolId)
+        );
     }
 
     function _stampRequestHashCalldata(StampRequestV2 calldata request) private pure returns (bytes32) {

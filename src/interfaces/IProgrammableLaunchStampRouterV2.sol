@@ -22,6 +22,16 @@ interface IProgrammableLaunchStampRouterV2 {
         SharedInfrastructure
     }
 
+    /// @notice The exact execution path observed before a stamp was written.
+    /// @dev The first two modes are the only modes admitted by the built-in exact-Shards profile. The registered
+    ///      mode is reserved for the separately governed fixed-module path.
+    enum ExecutionModeV2 {
+        INVALID,
+        EXACT_FACTORY_LAUNCH_EXECUTED,
+        EXACT_EXISTING_LAUNCH_ADOPTED,
+        REGISTERED_PROFILE_EXECUTED
+    }
+
     /// @dev A bounded profile for the exact Shards factory ABI. `params.renderer` must be zero, selecting the
     ///      factory-created default renderer whose address and runtime are both bound here. The deployment calldata
     ///      hash is an offchain ceremony commitment; factory identity is independently proven by CREATE2 inputs.
@@ -113,6 +123,7 @@ interface IProgrammableLaunchStampRouterV2 {
         bytes32 expectedResultHash;
         bytes32 permitDigest;
         bytes32 stampHash;
+        ExecutionModeV2 executionMode;
     }
 
     struct ProfileCapabilityV2 {
@@ -135,7 +146,8 @@ interface IProgrammableLaunchStampRouterV2 {
         address renderer,
         address poolManager,
         bytes32 poolId,
-        bytes32 stampHash
+        bytes32 stampHash,
+        ExecutionModeV2 executionMode
     );
 
     event ProgrammableNestedFactoryRouteStampedV2(
@@ -148,7 +160,8 @@ interface IProgrammableLaunchStampRouterV2 {
         bytes32 revenuePolicyHash,
         bytes32 expectedConfigurationHash,
         bytes32 expectedResultHash,
-        bytes32 permitDigest
+        bytes32 permitDigest,
+        ExecutionModeV2 executionMode
     );
 
     event ProgrammableNestedFactoryProfileRegisteredV2(
