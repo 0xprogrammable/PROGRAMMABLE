@@ -2,6 +2,10 @@ import "server-only";
 
 import { getAddress, isAddress } from "viem";
 
+import * as portableManualRouterAuthorityV2 from
+  // @ts-expect-error -- generated, hash-bound ESM has no handwritten types.
+  "@/lib/vendor/manual-router-authority-v2/manual-router-portable.v2.mjs";
+
 import {
   getActiveManualRouterProductionBindingV2,
   type ActiveManualRouterProductionBindingV2,
@@ -14,6 +18,116 @@ import type {
 } from "@/lib/server/custom-launch/manual-router-artifact-v2";
 import { assertManualRouterApplicantSubjectV1 } from
   "@/lib/server/custom-launch/manual-router-state-v1";
+import type {
+  ManualRouterWebsiteAuthorityV1,
+} from "@/lib/server/custom-launch/manual-router-service-v1";
+
+export const PORTABLE_MANUAL_ROUTER_WEBSITE_AUTHORITY_FACTORY_V2 =
+  "createPortableManualRouterWebsiteAuthorityV2" as const;
+
+export type ManualRouterWebsiteAuthorityV2 = Omit<
+  ManualRouterWebsiteAuthorityV1,
+  "assertV2AcceptanceCurrent" | "assertV2ReadyCurrentness"
+> & Readonly<{
+  assertV2AcceptanceCurrent: NonNullable<
+    ManualRouterWebsiteAuthorityV1["assertV2AcceptanceCurrent"]
+  >;
+  assertV2ReadyCurrentness: NonNullable<
+    ManualRouterWebsiteAuthorityV1["assertV2ReadyCurrentness"]
+  >;
+}>;
+
+export type PortableManualRouterWebsiteAuthorityFactoryV2 = (
+  input: Readonly<{
+    binding: ActiveManualRouterProductionBindingV2;
+    env: Readonly<Record<string, string | undefined>>;
+    fetch: typeof fetch;
+  }>,
+) => ManualRouterWebsiteAuthorityV2;
+
+/**
+ * Loads the one portable Authority-owned Website facade. The frozen b180aca
+ * bundle intentionally does not export this surface, so production remains
+ * fail-closed until a later immutable Authority release adds it and the
+ * Website vendor/binding hashes are rebound together.
+ */
+export function createProductionManualRouterWebsiteAuthorityV2():
+ManualRouterWebsiteAuthorityV2 {
+  const binding = getActiveManualRouterProductionBindingV2();
+  const factory = portableWebsiteAuthorityFactoryV2(
+    portableManualRouterAuthorityV2,
+  );
+  return assertManualRouterWebsiteAuthorityV2(factory({
+    binding,
+    env: process.env,
+    fetch,
+  }));
+}
+
+/** Exact schema dispatch with no V1/V2 fallback. */
+export function createManualRouterWebsiteAuthorityDispatchV2(input: Readonly<{
+  v1: ManualRouterWebsiteAuthorityV1;
+  loadV2: () => ManualRouterWebsiteAuthorityV2;
+}>): ManualRouterWebsiteAuthorityV1 {
+  if (
+    input.v1 === null
+    || typeof input.v1 !== "object"
+    || typeof input.loadV2 !== "function"
+  ) throw new TypeError("manual Router authority dispatch is invalid");
+  let v2: ManualRouterWebsiteAuthorityV2 | null = null;
+  const loadV2 = (): ManualRouterWebsiteAuthorityV2 => {
+    v2 ??= input.loadV2();
+    return v2;
+  };
+  return Object.freeze({
+    assertCompleteSignedArtifact(raw: unknown) {
+      return artifactVersionV2(raw, "manual Router signed artifact")
+          === "programmable.manual-router-complete-signed-artifact.v2"
+        ? loadV2().assertCompleteSignedArtifact(raw)
+        : input.v1.assertCompleteSignedArtifact(raw);
+    },
+    async verifySignedPublish(request: Parameters<
+      ManualRouterWebsiteAuthorityV1["verifySignedPublish"]
+    >[0]) {
+      return publishArtifactVersionV2(request.request)
+          === "programmable.manual-router-complete-signed-artifact.v2"
+        ? await loadV2().verifySignedPublish(request)
+        : await input.v1.verifySignedPublish(request);
+    },
+    async readChainClock() {
+      // Chain time is route-independent. Keeping the existing production
+      // source preserves V1 behavior; the V2 facade must independently bind
+      // its own dual-RPC observations during currentness/preflight.
+      return await input.v1.readChainClock();
+    },
+    async assertV2AcceptanceCurrent(value: Parameters<NonNullable<
+      ManualRouterWebsiteAuthorityV1["assertV2AcceptanceCurrent"]
+    >>[0]) {
+      return await loadV2().assertV2AcceptanceCurrent(value);
+    },
+    async assertV2ReadyCurrentness(value: Parameters<NonNullable<
+      ManualRouterWebsiteAuthorityV1["assertV2ReadyCurrentness"]
+    >>[0]) {
+      return await loadV2().assertV2ReadyCurrentness(value);
+    },
+    async observeExactTransaction(value: Parameters<
+      ManualRouterWebsiteAuthorityV1["observeExactTransaction"]
+    >[0]) {
+      return artifactVersionV2(value.artifact, "manual Router transaction artifact")
+          === "programmable.manual-router-complete-signed-artifact.v2"
+        ? await loadV2().observeExactTransaction(value)
+        : await input.v1.observeExactTransaction(value);
+    },
+    async resolveReissueState(value: Parameters<
+      ManualRouterWebsiteAuthorityV1["resolveReissueState"]
+    >[0]) {
+      return reissueArtifactVersionV2(value.request)
+          === "programmable.manual-router-complete-signed-artifact.v2"
+        ? await loadV2().resolveReissueState(value)
+        : await input.v1.resolveReissueState(value);
+    },
+  });
+}
 
 /**
  * This is the Website's final fail-closed boundary after the portable
@@ -21,12 +135,10 @@ import { assertManualRouterApplicantSubjectV1 } from
  * absent from the production binding.
  */
 export function assertProductionManualRouterCompleteSignedArtifactV2(
-  _raw: unknown,
+  raw: unknown,
 ): ManualRouterCompleteSignedArtifactViewV2 {
-  getActiveManualRouterProductionBindingV2();
-  throw new TypeError(
-    "portable manual Router V2 Authority vendor is not installed",
-  );
+  return createProductionManualRouterWebsiteAuthorityV2()
+    .assertCompleteSignedArtifact(raw) as ManualRouterCompleteSignedArtifactViewV2;
 }
 
 /**
@@ -319,6 +431,85 @@ function exactObject(
     || strings.length !== expected.length
     || strings.some((key, index) => key !== expected[index])
   ) throw invalid(`${label} contains unexpected fields`);
+  return raw as Record<string, unknown>;
+}
+
+function portableWebsiteAuthorityFactoryV2(
+  namespace: object,
+): PortableManualRouterWebsiteAuthorityFactoryV2 {
+  const factory = (namespace as Record<string, unknown>)[
+    PORTABLE_MANUAL_ROUTER_WEBSITE_AUTHORITY_FACTORY_V2
+  ];
+  if (typeof factory !== "function") {
+    throw new TypeError(
+      "portable manual Router V2 Website Authority facade is not installed",
+    );
+  }
+  return factory as PortableManualRouterWebsiteAuthorityFactoryV2;
+}
+
+function assertManualRouterWebsiteAuthorityV2(
+  raw: unknown,
+): ManualRouterWebsiteAuthorityV2 {
+  if (
+    raw === null
+    || typeof raw !== "object"
+    || Array.isArray(raw)
+    || !Object.isFrozen(raw)
+  ) {
+    throw invalid("portable manual Router V2 Website Authority is invalid");
+  }
+  const authority = raw as Record<string, unknown>;
+  for (const method of [
+    "assertCompleteSignedArtifact", "assertV2AcceptanceCurrent",
+    "assertV2ReadyCurrentness", "observeExactTransaction", "readChainClock",
+    "resolveReissueState", "verifySignedPublish",
+  ] as const) {
+    if (typeof authority[method] !== "function") {
+      throw invalid("portable manual Router V2 Website Authority is incomplete");
+    }
+  }
+  return raw as ManualRouterWebsiteAuthorityV2;
+}
+
+function publishArtifactVersionV2(raw: unknown): ManualRouterArtifactVersionV2 {
+  const request = recordV2(raw, "manual Router signed publish request");
+  return artifactVersionV2(
+    request.signedArtifact,
+    "manual Router signed publish artifact",
+  );
+}
+
+function reissueArtifactVersionV2(raw: unknown): ManualRouterArtifactVersionV2 {
+  const request = recordV2(raw, "manual Router reissue request");
+  return artifactVersionV2(
+    request.previousSignedArtifact,
+    "manual Router previous signed artifact",
+  );
+}
+
+type ManualRouterArtifactVersionV2 =
+  | "programmable.manual-router-complete-signed-artifact.v1"
+  | "programmable.manual-router-complete-signed-artifact.v2";
+
+function artifactVersionV2(
+  raw: unknown,
+  label: string,
+): ManualRouterArtifactVersionV2 {
+  const artifact = recordV2(raw, label);
+  if (
+    artifact.schemaVersion
+      !== "programmable.manual-router-complete-signed-artifact.v1"
+    && artifact.schemaVersion
+      !== "programmable.manual-router-complete-signed-artifact.v2"
+  ) throw invalid(`${label} schema is unsupported`);
+  return artifact.schemaVersion;
+}
+
+function recordV2(raw: unknown, label: string): Record<string, unknown> {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    throw invalid(`${label} is invalid`);
+  }
   return raw as Record<string, unknown>;
 }
 

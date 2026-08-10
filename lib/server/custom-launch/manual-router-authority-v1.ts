@@ -32,6 +32,10 @@ import {
   type ManualRouterVerifiedPublishV1,
   type ManualRouterWebsiteAuthorityV1,
 } from "@/lib/server/custom-launch/manual-router-service-v1";
+import {
+  createManualRouterWebsiteAuthorityDispatchV2,
+  createProductionManualRouterWebsiteAuthorityV2,
+} from "@/lib/server/custom-launch/manual-router-authority-v2";
 
 export type ProductionManualRouterAuthorityV1 = Readonly<{
   composition: PortableManualRouterCompositionV1;
@@ -94,7 +98,7 @@ ProductionManualRouterAuthorityV1 {
     // secret. The Applicant identity path is separately bound through Privy.
     githubReadToken: null,
   });
-  const website: ManualRouterWebsiteAuthorityV1 = Object.freeze({
+  const legacyWebsite: ManualRouterWebsiteAuthorityV1 = Object.freeze({
     assertCompleteSignedArtifact(raw: unknown) {
       const artifact = assertPortableManualRouterCompleteSignedArtifactV1(raw);
       return artifact as unknown as ManualRouterCompleteSignedArtifactViewV1;
@@ -153,6 +157,10 @@ ProductionManualRouterAuthorityV1 {
         ...input,
       });
     },
+  });
+  const website = createManualRouterWebsiteAuthorityDispatchV2({
+    v1: legacyWebsite,
+    loadV2: createProductionManualRouterWebsiteAuthorityV2,
   });
   const finality = new RouterLaunchFinalityVerifierV1({ rpc: composition.rpc });
   const finalityAuthority = createProductionManualRouterFinalityAuthorityV1({
