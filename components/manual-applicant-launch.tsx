@@ -91,6 +91,13 @@ import {
 
 const FINALITY_POLL_MS = 15_000;
 const LIST_REFRESH_MS = 30_000;
+const APPLICANT_AUTH_RECOVERY_CODES = new Set([
+  "applicant_authentication_required",
+  "applicant_identity_changed",
+  "applicant_session_changed",
+  "applicant_reauthorization_required",
+  "github_subject_mismatch",
+]);
 // Presentation routing only. The server re-observes and authorizes the numeric
 // GitHub identity before it returns or records any Shards acceptance state.
 const SHARDS_GITHUB_LOGIN = "jesse-stahl";
@@ -176,15 +183,57 @@ export function applicantIdentityRequirementForLoginV1(
   return undefined;
 }
 
+export function manualRouterApplicantIdentityRequirementV1(input: Readonly<{
+  githubUserId: string;
+  githubLogin: string;
+  launchWallet: `0x${string}`;
+}>): WalletApplicantIdentityRequirementV1 {
+  return Object.freeze({
+    githubUserId: input.githubUserId,
+    githubLogin: input.githubLogin,
+    launchWallet: input.launchWallet,
+  });
+}
+
+export function manualRouterApplicantAuthRecoveryRequiredV1(
+  errorCode: string,
+): boolean {
+  return APPLICANT_AUTH_RECOVERY_CODES.has(errorCode);
+}
+
 export async function acquireManualRouterWebsiteSessionV1(input: Readonly<{
-  refreshApplicantSession: () => Promise<WalletApplicantSessionV1 | null>;
+  refreshApplicantSession: (
+    requirement?: WalletApplicantIdentityRequirementV1,
+  ) => Promise<WalletApplicantSessionV1 | null>;
+  requirement?: WalletApplicantIdentityRequirementV1;
 }>): Promise<ManualRouterWebsiteSessionV1> {
-  const session = await input.refreshApplicantSession();
+  const session = await input.refreshApplicantSession(input.requirement);
   if (!session) {
     throw new ManualRouterWebsiteRequestErrorV1(
       401,
       "applicant_authentication_required",
       "Sign in with your approved GitHub account",
+      false,
+    );
+  }
+  if (
+    !/^[1-9][0-9]{0,39}$/u.test(session.githubUserId)
+    || !/^0x[0-9a-f]{40}$/iu.test(session.launchWallet)
+    || (
+      input.requirement !== undefined
+      && (
+        session.githubUserId !== input.requirement.githubUserId
+        || session.githubLogin.toLowerCase()
+          !== input.requirement.githubLogin.toLowerCase()
+        || session.launchWallet.toLowerCase()
+          !== input.requirement.launchWallet.toLowerCase()
+      )
+    )
+  ) {
+    throw new ManualRouterWebsiteRequestErrorV1(
+      403,
+      "applicant_identity_changed",
+      "Reconnect the GitHub account and wallet approved in your submission",
       false,
     );
   }
@@ -208,9 +257,11 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     authenticated,
     connectGithub,
     githubConnected,
+    githubUserId,
     githubUsername,
     openWallet,
     refreshApplicantSession,
+    reauthorizeGithub,
     sendBrowserWalletAction,
     wallet,
   } = useWallet();
@@ -231,6 +282,7 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
   const [loadingAcceptance, setLoadingAcceptance] = useState(false);
   const [acceptingRoute, setAcceptingRoute] = useState(false);
   const [launching, setLaunching] = useState(false);
+  const [reauthorizing, setReauthorizing] = useState(false);
   const [checking, setChecking] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
@@ -277,10 +329,12 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
   const applicantIdentityRequirement =
     applicantIdentityRequirementForLoginV1(githubUsername);
 
-  const getSession = useCallback(async (): Promise<ManualRouterWebsiteSessionV1> => {
+  const getSession = useCallback(async (
+    requirement?: WalletApplicantIdentityRequirementV1,
+  ): Promise<ManualRouterWebsiteSessionV1> => {
     return acquireManualRouterWebsiteSessionV1({
-      refreshApplicantSession: () =>
-        refreshApplicantSession(applicantIdentityRequirement),
+      refreshApplicantSession,
+      requirement: requirement ?? applicantIdentityRequirement,
     });
   }, [applicantIdentityRequirement, refreshApplicantSession]);
 
@@ -308,7 +362,9 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
       if (!controller.signal.aborted) setRouteAcceptance(next);
     } catch (caught) {
       if (controller.signal.aborted) return;
-      setRouteAcceptance(null);
+      if (!manualRouterRetainsKnownApprovalV1(caught)) {
+        setRouteAcceptance(null);
+      }
       setError(errorMessage(caught));
       setErrorCode(errorCodeOf(caught));
     } finally {
@@ -375,8 +431,6 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     loadAbortRef.current = controller;
     const sequence = ++loadSequenceRef.current;
     if (!options?.quiet) setLoading(true);
-    setError("");
-    setErrorCode("");
     try {
       const directoryResponse = await runManualRouterRequestWithFreshSessionV1(
         getSession,
@@ -396,7 +450,6 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
         requireExactShardsRoute: exactShardsApplicant,
       });
       if (controller.signal.aborted || sequence !== loadSequenceRef.current) return;
-      setDirectory(next);
       const preferred = options?.preferredSubjectHash || selectedSubjectHash;
       const chosen = next.submissions.some(({ subjectHash }) =>
         subjectHash === preferred)
@@ -407,8 +460,13 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
         subjectHash === chosen) ?? null;
       if (chosenSubmission !== null) {
         const chosenSubjectHash = chosenSubmission.subjectHash;
+        const currentRequirement = manualRouterApplicantIdentityRequirementV1({
+          githubUserId: next.authenticatedGitHubUserId,
+          githubLogin: githubUsername,
+          launchWallet: next.linkedLaunchWallet,
+        });
         const rawResolved = await runManualRouterRequestWithFreshSessionV1(
-          getSession,
+          () => getSession(currentRequirement),
           async (session) => {
             const resolveRequest = {
               session,
@@ -518,13 +576,13 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
               : "Exact factory launch executed, stamped and finalized"
             : "Launch finalized. The canonical Router scanner will publish it after 64 confirmations");
         } else if (nextResolved.status === "ready") {
-          setStatus("Approved launch loaded and ready for your wallet");
+          setStatus("Approved launch loaded. Wallet confirmation is available");
         } else if (nextResolved.status === "permit-not-yet-valid") {
-          setStatus("Your signed launch is loaded. It opens at its verified chain time");
+          setStatus("Your approval is retained. Launch is temporarily unavailable");
         } else if (nextResolved.status === "reissue-required") {
-          setStatus("This permit expired. The signing team can publish a fresh permit");
+          setStatus("Your approval is retained. Launch is temporarily unavailable");
         } else if (nextResolved.status === "failed-awaiting-expiry") {
-          setStatus("The transaction reverted. Reissue becomes available after the permit expires");
+          setStatus("The transaction reverted. Launch is temporarily unavailable");
         } else if (nextResolved.status === "submitted-awaiting-finality") {
           setStatus("Transaction submitted. Waiting for private finality verification");
         }
@@ -535,10 +593,17 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
         setNoSendAttested(false);
         setStatus("No approved launch is available for this GitHub account and wallet");
       }
+      setDirectory(next);
+      setError("");
+      setErrorCode("");
     } catch (caught) {
       if (controller.signal.aborted) return;
-      setDirectory(null);
-      setResolved(null);
+      if (!manualRouterRetainsKnownApprovalV1(caught)) {
+        setDirectory(null);
+        setResolved(null);
+      } else {
+        setStatus("Existing approval is retained. Launch is temporarily unavailable");
+      }
       setError(errorMessage(caught));
       setErrorCode(errorCodeOf(caught));
     } finally {
@@ -552,6 +617,7 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     authenticated,
     getSession,
     githubConnected,
+    githubUsername,
     exactShardsApplicant,
     selectedSubjectHash,
     routeDiscoveryAllowed,
@@ -605,6 +671,28 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     });
   }, [loadDirectory]);
 
+  const reauthorizeApplicant = useCallback(async () => {
+    if (!githubConnected || reauthorizing) return;
+    loadAbortRef.current?.abort();
+    acceptanceAbortRef.current?.abort();
+    pollAbortRef.current?.abort();
+    setReauthorizing(true);
+    setError("");
+    setErrorCode("applicant_reauthorization_required");
+    setStatus("Reconnect GitHub to prove the current Applicant session");
+    try {
+      await reauthorizeGithub();
+      setStatus("GitHub reconnected. Refreshing the approved launch");
+      await loadDirectory();
+    } catch {
+      setError("Unable to reconnect GitHub. Try again");
+      setErrorCode("applicant_reauthorization_required");
+      setStatus("The approved launch remains saved, but wallet actions stay disabled");
+    } finally {
+      setReauthorizing(false);
+    }
+  }, [githubConnected, loadDirectory, reauthorizeGithub, reauthorizing]);
+
   const persistAttempt = useCallback((next: ManualRouterPersistedAttempt) => {
     writePersistedAttempt(next);
     setAttempt(next);
@@ -615,8 +703,15 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     signal?: AbortSignal,
   ) => {
     if (!currentAttempt.transactionHash) return;
+    const requirement = directory === null
+      ? undefined
+      : manualRouterApplicantIdentityRequirementV1({
+          githubUserId: directory.authenticatedGitHubUserId,
+          githubLogin: githubUsername,
+          launchWallet: currentAttempt.launchWallet,
+        });
     const input = {
-      session: await getSession(),
+      session: await getSession(requirement),
       launchWallet: currentAttempt.launchWallet,
       subjectHash: currentAttempt.subjectHash,
       descriptorHash: currentAttempt.descriptorHash,
@@ -637,7 +732,7 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
       phase: "reported" as const,
     });
     persistAttempt(reported);
-  }, [getSession, persistAttempt]);
+  }, [directory, getSession, githubUsername, persistAttempt]);
 
   const launch = useCallback(async () => {
     if (
@@ -658,8 +753,13 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     setErrorCode("");
     let pending: ManualRouterPersistedAttempt | null = null;
     try {
+      const currentRequirement = manualRouterApplicantIdentityRequirementV1({
+        githubUserId: directory.authenticatedGitHubUserId,
+        githubLogin: githubUsername,
+        launchWallet: directory.linkedLaunchWallet,
+      });
       const resolveRequest = {
-        session: await getSession(),
+        session: await getSession(currentRequirement),
         launchWallet: directory.linkedLaunchWallet,
         subjectHash: resolved.subjectHash,
       } as const;
@@ -668,7 +768,7 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
         : await resolveManualRouterApplicantSubmissionV1(resolveRequest);
       setResolved(freshResolved);
       if (freshResolved.status !== "ready") {
-        setError("The verified send window changed before wallet confirmation");
+        setError("Launch is temporarily unavailable. Retry the currentness check");
         setErrorCode("launch_preflight_not_ready");
         setStatus(freshWalletPreflightStatus(freshResolved.status));
         return;
@@ -692,6 +792,10 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
         setStatus("Wallet was not opened because the approved launch changed");
         return;
       }
+      // Re-prove the same refreshed Privy session, numeric GitHub principal
+      // and wallet after the server preflight and immediately before durable
+      // send state or a wallet prompt can be created.
+      await getSession(currentRequirement);
       const attemptCommon = {
         subjectHash: freshResolved.subjectHash,
         descriptorHash: freshResolved.descriptorHash,
@@ -772,6 +876,7 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     attempt,
     directory,
     getSession,
+    githubUsername,
     loadDirectory,
     persistAttempt,
     reportSubmittedTransaction,
@@ -887,7 +992,13 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
         await reportSubmittedTransaction(attempt, controller.signal);
       }
       const request = {
-        session: await getSession(),
+        session: await getSession(directory === null
+          ? undefined
+          : manualRouterApplicantIdentityRequirementV1({
+              githubUserId: directory.authenticatedGitHubUserId,
+              githubLogin: githubUsername,
+              launchWallet: transaction.launchWallet,
+            })),
         launchWallet: transaction.launchWallet,
         subjectHash: transaction.subjectHash,
         descriptorHash: transaction.descriptorHash,
@@ -933,7 +1044,9 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     }
   }, [
     attempt,
+    directory,
     getSession,
+    githubUsername,
     loadDirectory,
     reportSubmittedTransaction,
     resolved,
@@ -961,9 +1074,23 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
   const exactWallet = wallet && directory
     ? getAddress(wallet.account) === directory.linkedLaunchWallet
     : false;
+  const exactGithubPrincipal = directory !== null
+    && githubUserId === directory.authenticatedGitHubUserId;
+  const authRecoveryRequired = manualRouterApplicantAuthRecoveryRequiredV1(
+    errorCode,
+  );
+  const launchPreflightCurrent = resolved?.status === "ready"
+    && errorCode === ""
+    && !loading
+    && !reauthorizing;
   const launchReady = Boolean(
     resolved?.status === "ready"
+    && authReady
+    && authenticated
+    && githubConnected
+    && exactGithubPrincipal
     && exactWallet
+    && launchPreflightCurrent
     && routeAccepted
     && !manualRouterBlocksNewSend({
       attempt,
@@ -993,7 +1120,7 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
         : githubConnected
           ? "No approved submission for this account"
         : "Link the approved account",
-      complete: Boolean(githubConnected && selected),
+      complete: Boolean(githubConnected && exactGithubPrincipal && selected),
     },
     {
       label: "Exact launch wallet",
@@ -1003,17 +1130,21 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
       complete: exactWallet,
     },
     {
-      label: "Safe-signed Router permit",
+      label: "Launch preflight",
       detail: resolved?.status === "ready"
-        ? "Verified and inside its send window"
+        ? launchPreflightCurrent
+          ? "Current and verified"
+          : "Refresh required before launch"
         : resolved ? statusLabel(resolved.status) : "Waiting for approval",
-      complete: resolved?.status === "ready" || resolved?.status === "finalized",
+      complete: launchPreflightCurrent || resolved?.status === "finalized",
     },
   ], [
     directory,
+    exactGithubPrincipal,
     exactWallet,
     githubConnected,
     githubUsername,
+    launchPreflightCurrent,
     resolved,
     routeAcceptance?.state,
     shardsRouteCapabilityUnavailable,
@@ -1308,14 +1439,14 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
             <StateNotice
               kind="failed"
               title="Transaction reverted"
-              copy="The failed receipt is preserved. A replacement permit can only be issued after the current permit expires."
+              copy="The failed transaction is preserved. Your approval remains valid while the service confirms the next safe action."
             />
           ) : null}
           {resolved?.status === "reissue-required" ? (
             <StateNotice
               kind="expired"
-              title="Fresh signature required"
-              copy="This permit can no longer be sent safely. The signing workflow will publish a new permit to this same page."
+              title="Launch temporarily unavailable"
+              copy="Your approval is retained. Retry after the launch service refreshes its current execution evidence."
             />
           ) : null}
           {resolved?.status === "finalized" ? (
@@ -1340,15 +1471,28 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
             {error ? <p data-error="true">{error}</p> : null}
           </div>
 
-          <button
-            className={styles.refreshButton}
-            type="button"
-            disabled={loading || !wallet || !githubConnected}
-            onClick={() => void loadDirectory()}
-          >
-            <RefreshCw aria-hidden="true" size={14} />
-            Refresh approval
-          </button>
+          <div className={styles.sessionActions}>
+            {authRecoveryRequired && githubConnected ? (
+              <button
+                className={styles.refreshButton}
+                type="button"
+                disabled={reauthorizing}
+                onClick={() => void reauthorizeApplicant()}
+              >
+                <GitHubBrandIcon />
+                {reauthorizing ? "Reconnecting GitHub" : "Reconnect GitHub"}
+              </button>
+            ) : null}
+            <button
+              className={styles.refreshButton}
+              type="button"
+              disabled={loading || reauthorizing || !wallet || !githubConnected}
+              onClick={() => void loadDirectory()}
+            >
+              <RefreshCw aria-hidden="true" size={14} />
+              {authRecoveryRequired ? "Retry authentication" : "Refresh approval"}
+            </button>
+          </div>
         </section>
 
         <aside className={styles.safetyPanel} aria-labelledby="safety-heading">
@@ -1733,7 +1877,6 @@ function ReadyLaunch({
   hasBlockingAttempt: boolean;
   onLaunch: () => void;
 }) {
-  const deadline = new Date(Number(ready.deadline) * 1_000);
   const routeFacts = nestedFactoryRoute === null
     ? null
     : manualRouterRouteFactsV2(nestedFactoryRoute);
@@ -1745,11 +1888,13 @@ function ReadyLaunch({
           <strong id="confirmation-heading">
             {routeFacts
               ? `${routeFacts.model} · ${routeFacts.router}`
-              : "Safe-signed permit verified"}
+              : launchReady
+                ? "Launch preflight verified"
+                : "Approved launch"}
           </strong>
-          <span>Available until {Number.isFinite(deadline.getTime())
-            ? deadline.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-            : "its onchain deadline"}</span>
+          <span>{launchReady
+            ? "Current wallet check verified"
+            : "Approval retained. Refresh currentness before launch"}</span>
         </div>
       </div>
       <dl className={styles.transactionFacts}>
@@ -2105,11 +2250,22 @@ function errorCodeOf(error: unknown): string {
     : "browser_launch_error";
 }
 
+export function manualRouterRetainsKnownApprovalV1(error: unknown): boolean {
+  return error instanceof TypeError
+    || error instanceof ManualRouterWebsiteRequestErrorV1
+    && (
+      error.code === "applicant_authentication_required"
+      || error.code === "applicant_session_changed"
+      || error.retryable
+      || error.status >= 500
+    );
+}
+
 function statusLabel(status: ManualRouterSubmissionSummaryV1["status"]): string {
   switch (status) {
-    case "ready": return "Ready";
-    case "permit-not-yet-valid": return "Opens shortly";
-    case "reissue-required": return "Fresh signature needed";
+    case "ready": return "Approved";
+    case "permit-not-yet-valid": return "Launch temporarily unavailable";
+    case "reissue-required": return "Launch temporarily unavailable";
     case "submitted-awaiting-finality": return "Confirming";
     case "failed-awaiting-expiry": return "Reverted";
     case "finalized": return "Finalized";
@@ -2120,12 +2276,12 @@ function freshWalletPreflightStatus(
   status: ManualRouterResolveResponseV1["status"],
 ): string {
   if (status === "permit-not-yet-valid") {
-    return "Wallet was not opened because the verified send window is not open";
+    return "Wallet was not opened because launch is temporarily unavailable";
   }
   if (status === "reissue-required") {
-    return "Wallet was not opened because this permit now needs a fresh signature";
+    return "Wallet was not opened because current execution evidence is unavailable";
   }
-  return "Wallet was not opened because this launch is no longer ready to send";
+  return "Wallet was not opened because this launch is no longer current";
 }
 
 function shortAddress(value: string): string {

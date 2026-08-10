@@ -25,11 +25,11 @@ import {
   customLaunchApplicantStageRequiresExplicitSessionV2,
   customLaunchApplicantSessionBoundaryKeyV2,
   refreshCurrentCustomLaunchApplicantStageV2,
+  runCustomLaunchApplicantReauthorizationV2,
   runCurrentCustomLaunchApplicantSequenceV2,
   CustomLaunchApplicantBoundaryGuardV2,
   CustomLaunchApplicantSingleFlightV2,
   CustomLaunchApplicantSessionErrorV2,
-  type CustomLaunchApplicantAuthStateV2,
 } from "../lib/custom-launch/applicant-session-v2";
 import {
   createCustomLaunchWebsiteClientV2,
@@ -42,6 +42,7 @@ const applicationHandle = `github-${"a".repeat(64)}` as const;
 const walletAccount = `0x${"1".repeat(40)}`;
 const otherWalletAccount = `0x${"2".repeat(40)}`;
 const githubUserId = "123456789";
+const githubLogin = "applicant";
 
 function preparedRecovery(): PreparedLaunchRecoveryV2 {
   return {
@@ -81,15 +82,23 @@ function broadcastRecovery(): BroadcastLaunchRecoveryV2 {
   };
 }
 
-function applicantAuthState(
-  overrides: Partial<CustomLaunchApplicantAuthStateV2> = {},
-): CustomLaunchApplicantAuthStateV2 {
+function refreshedApplicantSession(
+  overrides: Partial<{
+    accessToken: string;
+    identityToken: string;
+    privyUserId: string;
+    githubUserId: string;
+    githubLogin: string;
+    launchWallet: `0x${string}`;
+  }> = {},
+) {
   return {
-    authReady: true,
-    authenticated: true,
-    githubConnected: true,
+    accessToken: "access-current",
+    identityToken: "identity-current",
+    privyUserId: "did:privy:applicant",
     githubUserId,
-    walletAccount,
+    githubLogin,
+    launchWallet: walletAccount as `0x${string}`,
     ...overrides,
   };
 }
@@ -99,10 +108,9 @@ function sessionInput(
 ): Parameters<typeof acquireCurrentCustomLaunchWebsiteSessionV2>[0] {
   return {
     expectedGithubUserId: githubUserId,
+    expectedGithubLogin: githubLogin,
     expectedWalletAccount: walletAccount,
-    getAccessToken: async () => "access-current",
-    getIdentityToken: async () => "identity-current",
-    readApplicantAuthState: applicantAuthState,
+    refreshApplicantSession: async () => refreshedApplicantSession(),
     isCurrent: () => true,
     ...overrides,
   };
@@ -380,50 +388,42 @@ describe("custom launch applicant session currentness", () => {
     expect(html).not.toContain("Launch submitted");
   });
 
-  it("acquires imperative Identity then current Access within one exact auth boundary", async () => {
-    const calls: string[] = [];
-    const getAccessToken = vi.fn(async () => {
-      calls.push("access");
-      return "access-current";
-    });
-    const getIdentityToken = vi.fn(async () => {
-      calls.push("identity");
-      return "identity-current";
-    });
+  it("acquires one canonical refreshed session for the exact principal and wallet", async () => {
+    const refreshApplicantSession = vi.fn(async () => refreshedApplicantSession());
 
     await expect(acquireCurrentCustomLaunchWebsiteSessionV2(sessionInput({
-      getAccessToken,
-      getIdentityToken,
+      refreshApplicantSession,
     }))).resolves.toEqual({
       accessToken: "access-current",
       identityToken: "identity-current",
     });
-    expect(calls).toEqual(["identity", "access"]);
+    expect(refreshApplicantSession).toHaveBeenCalledWith({
+      githubUserId,
+      githubLogin,
+      launchWallet: walletAccount,
+    });
   });
 
-  it("fails closed when identity is visible but the refreshed token is null", async () => {
-    const getIdentityToken = vi.fn(async () => null);
+  it("fails closed when identity is visible but canonical refresh returns null", async () => {
+    const refreshApplicantSession = vi.fn(async () => null);
     const downstream = vi.fn();
 
-    const getAccessToken = vi.fn(async () => "access-current");
     await expect(acquireCurrentCustomLaunchWebsiteSessionV2(sessionInput({
-      getAccessToken,
-      getIdentityToken,
+      refreshApplicantSession,
     })).then(downstream)).rejects.toMatchObject({
       reason: "authentication",
       message: "Reconnect GitHub to continue",
     });
-    expect(getIdentityToken).toHaveBeenCalledOnce();
-    expect(getAccessToken).not.toHaveBeenCalled();
+    expect(refreshApplicantSession).toHaveBeenCalledOnce();
     expect(downstream).not.toHaveBeenCalled();
   });
 
-  it("keeps the production dangerous sequence at zero effects for token-null", async () => {
+  it("keeps the production dangerous sequence at zero effects for refresh-null", async () => {
     const effects = dangerousSequenceEffects();
     await expect(runCurrentCustomLaunchApplicantSequenceV2({
       refreshBoundary: async () => {
         await acquireCurrentCustomLaunchWebsiteSessionV2(sessionInput({
-          getIdentityToken: async () => null,
+          refreshApplicantSession: async () => null,
         }));
       },
       assertBoundary: () => undefined,
@@ -434,12 +434,11 @@ describe("custom launch applicant session currentness", () => {
     }
   });
 
-  it("sanitizes refresh failure and never starts the Website request", async () => {
+  it("sanitizes canonical refresh failure and never starts the Website request", async () => {
     const fetchV2 = vi.fn();
     const client = createCustomLaunchWebsiteClientV2({
       getSession: () => acquireCurrentCustomLaunchWebsiteSessionV2(sessionInput({
-        getAccessToken: async () => "access-current",
-        getIdentityToken: async () => {
+        refreshApplicantSession: async () => {
           throw new Error("provider detail must not cross");
         },
       })),
@@ -460,7 +459,7 @@ describe("custom launch applicant session currentness", () => {
     await expect(runCurrentCustomLaunchApplicantSequenceV2({
       refreshBoundary: async () => {
         await acquireCurrentCustomLaunchWebsiteSessionV2(sessionInput({
-          getIdentityToken: async () => {
+          refreshApplicantSession: async () => {
             throw new Error("provider detail must not cross");
           },
         }));
@@ -473,79 +472,98 @@ describe("custom launch applicant session currentness", () => {
     }
   });
 
-  it("aborts a token sequence when auth, account, or wallet generation changes", async () => {
-    let current = true;
-    const getAccessToken = vi.fn(async () => "access-current");
+  it("keeps approval retained and wallet effects closed across reauthorization failure", async () => {
+    const retainedApproval = approvedApplication();
+    const reauthorizeGithub = vi.fn(async () => {
+      throw new Error("provider grant refresh failed");
+    });
+    const refreshCurrent = vi.fn(async () => refreshedApplicantSession());
+    const effects = dangerousSequenceEffects();
 
+    await expect(runCustomLaunchApplicantReauthorizationV2({
+      reauthorizeGithub,
+      refreshCurrent,
+    })).rejects.toThrow("provider grant refresh failed");
+    expect(retainedApproval.state).toBe("approved");
+    expect(customApplicationHasCurrentLaunchEntitlementV2(retainedApproval)).toBe(true);
+    expect(customApplicationHasDurableApprovalV2(retainedApproval, null)).toBe(false);
+    expect(refreshCurrent).not.toHaveBeenCalled();
+    for (const effect of Object.values(effects)) {
+      expect(effect).not.toHaveBeenCalled();
+    }
+  });
+
+  it("requires canonical refresh after successful reauthorization before recovery", async () => {
+    const events: string[] = [];
+    const reauthorizeGithub = vi.fn(async () => {
+      events.push("reauthorize");
+    });
+    const refreshCurrent = vi.fn(async () => {
+      events.push("canonical-refresh");
+      throw new CustomLaunchApplicantSessionErrorV2(
+        "authentication",
+        "Reconnect GitHub to continue",
+      );
+    });
+    const effects = dangerousSequenceEffects();
+
+    await expect(runCustomLaunchApplicantReauthorizationV2({
+      reauthorizeGithub,
+      refreshCurrent,
+    })).rejects.toMatchObject({ reason: "authentication" });
+    expect(events).toEqual(["reauthorize", "canonical-refresh"]);
+    for (const effect of Object.values(effects)) {
+      expect(effect).not.toHaveBeenCalled();
+    }
+  });
+
+  it("aborts a refreshed session when the account or wallet generation changes", async () => {
+    let current = true;
     await expect(acquireCurrentCustomLaunchWebsiteSessionV2(sessionInput({
-      getAccessToken,
-      getIdentityToken: async () => {
+      refreshApplicantSession: async () => {
         current = false;
-        return "identity-old-boundary";
+        return refreshedApplicantSession();
       },
       isCurrent: () => current,
     }))).rejects.toMatchObject({ reason: "superseded" });
-    expect(getAccessToken).not.toHaveBeenCalled();
   });
 
-  it("rejects a wrong numeric GitHub principal or launch wallet before token I/O", async () => {
-    for (const state of [
-      applicantAuthState({ githubUserId: "987654321" }),
-      applicantAuthState({ walletAccount: otherWalletAccount }),
+  it("rejects refreshed wrong GitHub, login, or wallet metadata before effects", async () => {
+    for (const refreshed of [
+      refreshedApplicantSession({ githubUserId: "987654321" }),
+      refreshedApplicantSession({ githubLogin: "wrong-account" }),
+      refreshedApplicantSession({ launchWallet: otherWalletAccount as `0x${string}` }),
     ]) {
-      const getIdentityToken = vi.fn(async () => "identity-current");
-      const getAccessToken = vi.fn(async () => "access-current");
       const effects = dangerousSequenceEffects();
+      const refreshApplicantSession = vi.fn(async () => refreshed);
       await expect(runCurrentCustomLaunchApplicantSequenceV2({
         refreshBoundary: async () => {
           await acquireCurrentCustomLaunchWebsiteSessionV2(sessionInput({
-            getAccessToken,
-            getIdentityToken,
-            readApplicantAuthState: () => state,
+            refreshApplicantSession,
           }));
         },
         assertBoundary: () => undefined,
         ...effects,
       })).rejects.toMatchObject({ reason: "superseded" });
-      expect(getIdentityToken).not.toHaveBeenCalled();
-      expect(getAccessToken).not.toHaveBeenCalled();
+      expect(refreshApplicantSession).toHaveBeenCalledOnce();
       for (const effect of Object.values(effects)) {
         expect(effect).not.toHaveBeenCalled();
       }
     }
   });
 
-  it("rejects principal drift between refreshed Identity and Access", async () => {
-    const states = [
-      applicantAuthState(),
-      applicantAuthState({
-        githubUserId: "987654321",
-        walletAccount: otherWalletAccount,
-      }),
-    ];
-    const effects = dangerousSequenceEffects();
-    await expect(runCurrentCustomLaunchApplicantSequenceV2({
-      refreshBoundary: async () => {
-        await acquireCurrentCustomLaunchWebsiteSessionV2(sessionInput({
-          readApplicantAuthState: () => states.shift() ?? states[0]!,
-        }));
-      },
-      assertBoundary: () => undefined,
-      ...effects,
-    })).rejects.toMatchObject({ reason: "superseded" });
-    for (const effect of Object.values(effects)) {
-      expect(effect).not.toHaveBeenCalled();
-    }
-  });
-
-  it("stops before signature, permit, execution and send when a later refresh is stale", async () => {
+  it("stops before signature, permit, execution and send when the local refresh is stale", async () => {
     const effects = dangerousSequenceEffects();
     await expect(runCurrentCustomLaunchApplicantSequenceV2({
       refreshBoundary: async (stage) => {
-        await acquireCurrentCustomLaunchWebsiteSessionV2(sessionInput({
-          getIdentityToken: async () =>
-            stage === "wallet-signature" ? null : "identity-current",
-        }));
+        await refreshCurrentCustomLaunchApplicantStageV2({
+          stage,
+          assertCurrent: () => undefined,
+          refreshSession: () => acquireCurrentCustomLaunchWebsiteSessionV2(sessionInput({
+            refreshApplicantSession: async () =>
+              stage === "wallet-signature" ? null : refreshedApplicantSession(),
+          })),
+        });
       },
       assertBoundary: () => undefined,
       ...effects,
@@ -560,9 +578,9 @@ describe("custom launch applicant session currentness", () => {
   });
 
   it("invalidates a deferred flow at the commit boundary before any dangerous stage", async () => {
-    let resolveIdentity!: (value: string) => void;
-    const identity = new Promise<string>((resolve) => {
-      resolveIdentity = resolve;
+    let resolveRefresh!: (value: ReturnType<typeof refreshedApplicantSession>) => void;
+    const refreshed = new Promise<ReturnType<typeof refreshedApplicantSession>>((resolve) => {
+      resolveRefresh = resolve;
     });
     const oldBoundary = customLaunchApplicantSessionBoundaryKeyV2({
       authReady: true,
@@ -584,8 +602,7 @@ describe("custom launch applicant session currentness", () => {
     const flow = runCurrentCustomLaunchApplicantSequenceV2({
       refreshBoundary: async () => {
         await acquireCurrentCustomLaunchWebsiteSessionV2(sessionInput({
-          getAccessToken: async () => "access-current",
-          getIdentityToken: async () => identity,
+          refreshApplicantSession: async () => refreshed,
           isCurrent: () => guard.isCurrent(snapshot),
         }));
       },
@@ -603,7 +620,7 @@ describe("custom launch applicant session currentness", () => {
     // CustomLaunchExperience commits this guard from its root callback ref,
     // before a superseded render can yield to passive effects or interaction.
     expect(guard.commit(newBoundary)).toBe(true);
-    resolveIdentity("identity-for-old-boundary");
+    resolveRefresh(refreshedApplicantSession());
 
     await expect(flow).rejects.toMatchObject({ reason: "superseded" });
     for (const effect of Object.values(effects)) {
@@ -852,12 +869,15 @@ describe("custom launch applicant session currentness", () => {
       unknownPersistence,
     )).toBeLessThan(walletRequest);
     expect(componentSource).toContain("if (isActive()) {\n        setTransactionHash(hash);");
-    expect(componentSource).toContain("readApplicantAuthState,");
-    expect(componentSource).toContain("await reauthorizeGithub()");
+    expect(componentSource).toContain("refreshApplicantSession,");
+    expect(componentSource).not.toContain("getIdentityToken,");
+    expect(componentSource).not.toContain("getAccessToken,");
+    expect(componentSource).toContain("runCustomLaunchApplicantReauthorizationV2({");
     expect(componentSource).not.toContain('from "@/components/manual-applicant-launch"');
     expect(clientSource).toContain("getSession: () => Promise<CustomLaunchWebsiteSessionV2>");
     expect(clientSource).not.toContain("session: CustomLaunchWebsiteSessionV2");
+    expect(walletSource).toContain("const { refreshUser } = useUser();");
+    expect(walletSource).toContain("refreshApplicantSession,");
     expect(walletSource).toContain("loadIdentityToken: getPrivyIdentityToken");
-    expect(walletSource).not.toContain("useIdentityToken");
   });
 });

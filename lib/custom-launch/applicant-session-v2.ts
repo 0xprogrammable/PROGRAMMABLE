@@ -262,58 +262,85 @@ export function customLaunchApplicantSessionBoundaryKeyV2(
 
 export async function acquireCurrentCustomLaunchWebsiteSessionV2(input: Readonly<{
   expectedGithubUserId: string;
+  expectedGithubLogin: string;
   expectedWalletAccount: string;
-  getAccessToken: () => Promise<string | null>;
-  getIdentityToken: () => Promise<string | null>;
-  readApplicantAuthState: () => CustomLaunchApplicantAuthStateV2;
+  refreshApplicantSession: (requirement: Readonly<{
+    githubUserId: string;
+    githubLogin: string;
+    launchWallet: `0x${string}`;
+  }>) => Promise<Readonly<{
+    accessToken: string;
+    identityToken: string;
+    privyUserId: string;
+    githubUserId: string;
+    githubLogin: string;
+    launchWallet: `0x${string}`;
+  }> | null>;
   isCurrent: () => boolean;
 }>): Promise<CustomLaunchWebsiteSessionV2> {
   assertCurrentApplicantBoundaryV2(input.isCurrent);
-  const before = requireCurrentCustomLaunchApplicantAuthStateV2(
-    input.readApplicantAuthState(),
-    input,
+  const expectedWalletAccount = normalizeApplicantWalletV2(
+    input.expectedWalletAccount,
   );
-
-  // WalletContext's getIdentityToken is the canonical imperative Privy read.
-  // Read Access only after Identity so the server can prove one current pair.
-  const identityToken = await readCurrentTokenV2(
-    input.getIdentityToken,
-    input.isCurrent,
-  );
-  assertCurrentApplicantBoundaryV2(input.isCurrent);
-  if (!identityToken?.trim()) {
+  if (expectedWalletAccount === null) {
+    throw new CustomLaunchApplicantSessionErrorV2(
+      "wallet",
+      "Connect your launch wallet to continue",
+    );
+  }
+  if (
+    !/^[1-9][0-9]{0,39}$/u.test(input.expectedGithubUserId)
+    || input.expectedGithubLogin.trim().length === 0
+  ) {
     throw new CustomLaunchApplicantSessionErrorV2(
       "authentication",
       "Reconnect GitHub to continue",
     );
   }
 
-  const currentAccessToken = await readCurrentTokenV2(
-    input.getAccessToken,
-    input.isCurrent,
-  );
+  let refreshed;
+  try {
+    // This is the sole Applicant token/currentness authority. The Wallet
+    // provider refreshes Privy's user and ID-token state, proves the numeric
+    // GitHub subject and exact wallet before and after token acquisition, and
+    // returns one current Access/Identity pair.
+    refreshed = await input.refreshApplicantSession({
+      githubUserId: input.expectedGithubUserId,
+      githubLogin: input.expectedGithubLogin,
+      launchWallet: expectedWalletAccount as `0x${string}`,
+    });
+  } catch {
+    refreshed = null;
+  }
   assertCurrentApplicantBoundaryV2(input.isCurrent);
-  if (!currentAccessToken?.trim()) {
+  if (!refreshed) {
     throw new CustomLaunchApplicantSessionErrorV2(
       "authentication",
       "Reconnect GitHub to continue",
     );
   }
-  const after = requireCurrentCustomLaunchApplicantAuthStateV2(
-    input.readApplicantAuthState(),
-    input,
-  );
-  if (!customLaunchApplicantAuthStateEqualV2(before, after)) {
+  if (
+    refreshed.githubUserId !== input.expectedGithubUserId
+    || refreshed.githubLogin.toLowerCase()
+      !== input.expectedGithubLogin.toLowerCase()
+    || normalizeApplicantWalletV2(refreshed.launchWallet)
+      !== expectedWalletAccount
+  ) {
     throw new CustomLaunchApplicantSessionErrorV2(
       "superseded",
-      "Your account or wallet changed. Reconnect GitHub and try again",
+      "Reconnect the GitHub account and wallet approved in your submission",
     );
   }
-  assertCurrentApplicantBoundaryV2(input.isCurrent);
+  if (!refreshed.accessToken.trim() || !refreshed.identityToken.trim()) {
+    throw new CustomLaunchApplicantSessionErrorV2(
+      "authentication",
+      "Reconnect GitHub to continue",
+    );
+  }
 
   return Object.freeze({
-    accessToken: currentAccessToken,
-    identityToken,
+    accessToken: refreshed.accessToken,
+    identityToken: refreshed.identityToken,
   });
 }
 
@@ -351,6 +378,18 @@ export function customLaunchApplicantRecoveryV2(
     ) return "retry";
   }
   return "none";
+}
+
+export async function runCustomLaunchApplicantReauthorizationV2<T>(
+  input: Readonly<{
+    reauthorizeGithub: () => Promise<void>;
+    refreshCurrent: () => Promise<T>;
+  }>,
+): Promise<T> {
+  await input.reauthorizeGithub();
+  // Reauthorization only restores the provider grant. A canonical refreshed
+  // Applicant session and server read must still succeed before UI recovery.
+  return await input.refreshCurrent();
 }
 
 export function customApplicationHasDurableApprovalV2(
@@ -394,65 +433,8 @@ function assertCurrentApplicantBoundaryV2(isCurrent: () => boolean): void {
   }
 }
 
-function requireCurrentCustomLaunchApplicantAuthStateV2(
-  state: CustomLaunchApplicantAuthStateV2,
-  expectation: Readonly<{
-    expectedGithubUserId: string;
-    expectedWalletAccount: string;
-  }>,
-): CustomLaunchApplicantAuthStateV2 {
-  const walletAccount = normalizeApplicantWalletV2(state.walletAccount);
-  const expectedWalletAccount = normalizeApplicantWalletV2(
-    expectation.expectedWalletAccount,
-  );
-  if (
-    !state.authReady
-    || !state.authenticated
-    || !state.githubConnected
-    || !/^[1-9][0-9]{0,39}$/u.test(state.githubUserId)
-  ) {
-    throw new CustomLaunchApplicantSessionErrorV2(
-      "authentication",
-      "Reconnect GitHub to continue",
-    );
-  }
-  if (walletAccount === null || expectedWalletAccount === null) {
-    throw new CustomLaunchApplicantSessionErrorV2(
-      "wallet",
-      "Connect your launch wallet to continue",
-    );
-  }
-  if (
-    state.githubUserId !== expectation.expectedGithubUserId
-    || walletAccount !== expectedWalletAccount
-  ) {
-    throw new CustomLaunchApplicantSessionErrorV2(
-      "superseded",
-      "Reconnect the GitHub account and wallet approved in your submission",
-    );
-  }
-  return state;
-}
-
 function normalizeApplicantWalletV2(value: string | null): string | null {
   return value !== null && /^0x[0-9a-f]{40}$/iu.test(value)
     ? value.toLowerCase()
     : null;
-}
-
-async function readCurrentTokenV2(
-  read: () => Promise<string | null>,
-  isCurrent: () => boolean,
-): Promise<string | null> {
-  try {
-    const token = await read();
-    assertCurrentApplicantBoundaryV2(isCurrent);
-    return token;
-  } catch (caught) {
-    if (caught instanceof CustomLaunchApplicantSessionErrorV2) throw caught;
-    throw new CustomLaunchApplicantSessionErrorV2(
-      "authentication",
-      "Reconnect GitHub to continue",
-    );
-  }
 }

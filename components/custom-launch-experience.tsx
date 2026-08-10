@@ -47,6 +47,7 @@ import {
   customLaunchApplicantRecoveryV2,
   customLaunchApplicantSessionBoundaryKeyV2,
   refreshCurrentCustomLaunchApplicantStageV2,
+  runCustomLaunchApplicantReauthorizationV2,
   runCurrentCustomLaunchApplicantSequenceV2,
   CustomLaunchApplicantBoundaryGuardV2,
   CustomLaunchApplicantSingleFlightV2,
@@ -1377,13 +1378,11 @@ export function CustomLaunchExperience({
     authReady,
     authenticated,
     connectGithub,
-    getAccessToken,
-    getIdentityToken,
     githubConnected,
     githubUserId,
     githubUsername,
     openWallet,
-    readApplicantAuthState,
+    refreshApplicantSession,
     reauthorizeGithub,
     sendBrowserWalletAction,
     signLaunchMessage,
@@ -1472,17 +1471,15 @@ export function CustomLaunchExperience({
     const requestBoundary = sessionBoundaryGuardRef.current.snapshot(sessionBoundaryKey);
     return acquireCurrentCustomLaunchWebsiteSessionV2({
       expectedGithubUserId: githubUserId,
+      expectedGithubLogin: githubUsername,
       expectedWalletAccount: wallet?.account ?? "",
-      getAccessToken,
-      getIdentityToken,
-      readApplicantAuthState,
+      refreshApplicantSession,
       isCurrent: () => sessionBoundaryGuardRef.current.isCurrent(requestBoundary),
     });
   }, [
-    getAccessToken,
-    getIdentityToken,
     githubUserId,
-    readApplicantAuthState,
+    githubUsername,
+    refreshApplicantSession,
     sessionBoundaryKey,
     wallet?.account,
   ]);
@@ -2603,13 +2600,17 @@ export function CustomLaunchExperience({
       setStatusMessage("Reconnect GitHub to prove the current session");
       setApplicantRecovery("retry");
       try {
-        await reauthorizeGithub();
-        setStatusMessage("GitHub reconnected. Refreshing your approved launch");
-        if (screen === "setup" && selected !== null) {
-          await openApplication(selected);
-        } else {
-          await loadApplications();
-        }
+        await runCustomLaunchApplicantReauthorizationV2({
+          reauthorizeGithub,
+          refreshCurrent: async () => {
+            setStatusMessage("GitHub reconnected. Refreshing your approved launch");
+            if (screen === "setup" && selected !== null) {
+              await openApplication(selected);
+            } else {
+              await loadApplications();
+            }
+          },
+        });
       } catch {
         setError("Unable to reconnect GitHub. Your last known approval stays visible");
         setStatusMessage("Wallet actions remain unavailable until GitHub reconnects");
