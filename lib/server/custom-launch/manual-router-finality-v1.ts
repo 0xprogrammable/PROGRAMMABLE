@@ -2,19 +2,27 @@ import "server-only";
 
 import type { Sha256Digest } from
   "@/lib/server/projection-target/hashing";
+import type { ManualRouterExecutionModeV2 } from
+  "@/lib/custom-launch/manual-router-contract-v2";
 import {
   readManualRouterApplicantHeadV1,
   type ManualRouterApplicantHeadV1,
 } from "@/lib/server/custom-launch/manual-router-head-v1";
 import {
+  assertManualRouterApplicantPointerV1,
   advanceManualRouterPointerDispositionV1,
   createManualRouterApplicantIndexV1,
-  type ManualRouterApplicantPointerV1,
+  type ManualRouterApplicantIndexV1,
 } from "@/lib/server/custom-launch/manual-router-state-v1";
+import {
+  advanceManualRouterPointerDispositionV2,
+  createManualRouterApplicantIndexV2,
+  type ManualRouterApplicantPointerAnyV2,
+} from "@/lib/server/custom-launch/manual-router-state-v2";
 import {
   ManualRouterServiceErrorV1,
   dispositionImmutableWrites,
-  type ManualRouterCompleteSignedArtifactViewV1,
+  type ManualRouterCompleteSignedArtifactViewAnyV2,
   type ManualRouterWebsiteServiceV1,
 } from "@/lib/server/custom-launch/manual-router-service-v1";
 import {
@@ -32,6 +40,7 @@ export type ManualRouterFinalityAuthorityResultV1 =
       disposition: "finalized";
       proof: Readonly<Record<string, unknown>>;
       proofHash: Sha256Digest;
+      executionMode: ManualRouterExecutionModeV2 | null;
     }>
   | Readonly<{
       disposition: "reverted" | "dropped";
@@ -41,7 +50,8 @@ export type ManualRouterFinalityAuthorityResultV1 =
 
 export interface ManualRouterFinalityAuthorityV1 {
   finalize(input: Readonly<{
-    prepared: ManualRouterCompleteSignedArtifactViewV1["prepared"];
+    artifact: ManualRouterCompleteSignedArtifactViewAnyV2;
+    prepared: ManualRouterCompleteSignedArtifactViewAnyV2["prepared"];
     transactionHash: TransactionHash;
     deadline: string;
   }>): Promise<ManualRouterFinalityAuthorityResultV1>;
@@ -71,7 +81,7 @@ export class ManualRouterFinalityServiceV1 {
   }
 
   async finalizeDiscoveredPointer(input: Readonly<{
-    pointer: ManualRouterApplicantPointerV1;
+    pointer: ManualRouterApplicantPointerAnyV2;
   }>): Promise<Readonly<Record<string, unknown>>> {
     const pointer = input.pointer;
     if (
@@ -137,6 +147,7 @@ export class ManualRouterFinalityServiceV1 {
         : artifact.prepared.preparationHash !== input.preparationHash
     ) throw conflict();
     const result = await this.dependencies.authority.finalize({
+      artifact,
       prepared: artifact.prepared,
       transactionHash: input.transactionHash,
       deadline: pointer.deadline,
@@ -150,24 +161,13 @@ export class ManualRouterFinalityServiceV1 {
     }
     const clock = await this.dependencies.website.dependencies.authority
       .readChainClock();
-    const nextPointer = result.disposition === "finalized"
-      ? advanceManualRouterPointerDispositionV1({
-          previous: pointer,
-          updatedAtEpochSeconds: clock.maximumTimestamp,
-          transactionHash: input.transactionHash,
-          finalizedProofHash: result.proofHash,
-        })
-      : advanceManualRouterPointerDispositionV1({
-          previous: pointer,
-          updatedAtEpochSeconds: clock.maximumTimestamp,
-          transactionHash: input.transactionHash,
-          failedTransactionEvidenceHash: result.evidenceHash,
-        });
-    const next = createManualRouterApplicantIndexV1({
-      previousIndex: head.index,
-      previousPointers: head.pointers,
-      nextPointer,
+    const nextPointer = advanceFinalityPointer({
+      pointer,
+      updatedAtEpochSeconds: clock.maximumTimestamp,
+      transactionHash: input.transactionHash,
+      result,
     });
+    const next = nextFinalityIndex(head, nextPointer);
     const evidenceWrite = result.disposition === "finalized"
       ? Object.freeze({
           path: manualRouterContentPathV1("proofs", result.proofHash),
@@ -202,9 +202,23 @@ export class ManualRouterFinalityServiceV1 {
 }
 
 function finalizedResponse(
-  pointer: ManualRouterApplicantPointerV1,
+  pointer: ManualRouterApplicantPointerAnyV2,
   idempotent: boolean,
 ) {
+  if (pointer.schemaVersion === "programmable.manual-router-applicant-pointer.v2") {
+    return Object.freeze({
+      schemaVersion: "programmable.manual-router-applicant-finality-response.v2",
+      disposition: "finalized",
+      subjectHash: pointer.subject.subjectHash,
+      descriptorHash: pointer.signedDescriptorHash,
+      routeBindingHash: pointer.routeBindingHash,
+      transactionHash: pointer.submittedTransactionHash,
+      proofHash: pointer.finalityEvidenceHash,
+      executionMode: pointer.executionMode,
+      pointerHash: pointer.pointerHash,
+      idempotent,
+    });
+  }
   return Object.freeze({
     schemaVersion: "programmable.manual-router-applicant-finality-response.v1",
     disposition: "finalized",
@@ -218,10 +232,23 @@ function finalizedResponse(
 }
 
 function failedResponse(
-  pointer: ManualRouterApplicantPointerV1,
+  pointer: ManualRouterApplicantPointerAnyV2,
   disposition: "reverted" | "dropped",
   idempotent: boolean,
 ) {
+  if (pointer.schemaVersion === "programmable.manual-router-applicant-pointer.v2") {
+    return Object.freeze({
+      schemaVersion: "programmable.manual-router-applicant-finality-response.v2",
+      disposition,
+      subjectHash: pointer.subject.subjectHash,
+      descriptorHash: pointer.signedDescriptorHash,
+      routeBindingHash: pointer.routeBindingHash,
+      transactionHash: pointer.submittedTransactionHash,
+      failedTransactionEvidenceHash: pointer.failedTransactionEvidenceHash,
+      pointerHash: pointer.pointerHash,
+      idempotent,
+    });
+  }
   return Object.freeze({
     schemaVersion: "programmable.manual-router-applicant-finality-response.v1",
     disposition,
@@ -240,7 +267,7 @@ function conflict(): ManualRouterServiceErrorV1 {
 
 async function failedDisposition(
   store: ManualRouterPrivateBlobStoreV1,
-  pointer: ManualRouterApplicantPointerV1,
+  pointer: ManualRouterApplicantPointerAnyV2,
 ): Promise<"reverted" | "dropped"> {
   if (pointer.failedTransactionEvidenceHash === null) throw conflict();
   const stored = await store.read(manualRouterContentPathV1(
@@ -261,4 +288,71 @@ async function failedDisposition(
     return "reverted";
   }
   throw conflict();
+}
+
+function advanceFinalityPointer(input: Readonly<{
+  pointer: ManualRouterApplicantPointerAnyV2;
+  updatedAtEpochSeconds: string;
+  transactionHash: TransactionHash;
+  result: Exclude<ManualRouterFinalityAuthorityResultV1, {
+    disposition: "not-finalized";
+  }>;
+}>) {
+  if (input.pointer.schemaVersion === "programmable.manual-router-applicant-pointer.v2") {
+    return input.result.disposition === "finalized"
+      ? advanceManualRouterPointerDispositionV2({
+          previous: input.pointer,
+          updatedAtEpochSeconds: input.updatedAtEpochSeconds,
+          transactionHash: input.transactionHash,
+          finalityEvidenceHash: input.result.proofHash,
+          executionMode: requireV2ExecutionMode(input.result.executionMode),
+        })
+      : advanceManualRouterPointerDispositionV2({
+          previous: input.pointer,
+          updatedAtEpochSeconds: input.updatedAtEpochSeconds,
+          transactionHash: input.transactionHash,
+          failedTransactionEvidenceHash: input.result.evidenceHash,
+        });
+  }
+  return input.result.disposition === "finalized"
+    ? advanceManualRouterPointerDispositionV1({
+        previous: input.pointer,
+        updatedAtEpochSeconds: input.updatedAtEpochSeconds,
+        transactionHash: input.transactionHash,
+        finalizedProofHash: input.result.proofHash,
+      })
+    : advanceManualRouterPointerDispositionV1({
+        previous: input.pointer,
+        updatedAtEpochSeconds: input.updatedAtEpochSeconds,
+        transactionHash: input.transactionHash,
+        failedTransactionEvidenceHash: input.result.evidenceHash,
+      });
+}
+
+function requireV2ExecutionMode(
+  value: ManualRouterExecutionModeV2 | null,
+): ManualRouterExecutionModeV2 {
+  if (value === null) throw conflict();
+  return value;
+}
+
+function nextFinalityIndex(
+  head: ManualRouterApplicantHeadV1,
+  nextPointer: ManualRouterApplicantPointerAnyV2,
+) {
+  if (
+    nextPointer.schemaVersion === "programmable.manual-router-applicant-pointer.v2"
+    || head.index?.schemaVersion === "programmable.manual-router-applicant-index.v2"
+  ) {
+    return createManualRouterApplicantIndexV2({
+      previousIndex: head.index,
+      previousPointers: head.pointers,
+      nextPointer,
+    });
+  }
+  return createManualRouterApplicantIndexV1({
+    previousIndex: head.index as ManualRouterApplicantIndexV1 | null,
+    previousPointers: head.pointers.map(assertManualRouterApplicantPointerV1),
+    nextPointer,
+  });
 }

@@ -2,11 +2,11 @@ import "server-only";
 
 import type { Sha256Digest } from "@/lib/server/projection-target/hashing";
 import {
-  assertManualRouterApplicantIndexV1,
-  assertManualRouterApplicantPointerV1,
-  type ManualRouterApplicantIndexV1,
-  type ManualRouterApplicantPointerV1,
-} from "@/lib/server/custom-launch/manual-router-state-v1";
+  assertManualRouterApplicantIndexAnyV2,
+  assertManualRouterApplicantPointerAnyV2,
+  type ManualRouterApplicantIndexAnyV2,
+  type ManualRouterApplicantPointerAnyV2,
+} from "@/lib/server/custom-launch/manual-router-state-v2";
 import {
   manualRouterApplicantIndexPathV1,
   manualRouterContentPathV1,
@@ -16,8 +16,8 @@ import {
 export type ManualRouterApplicantHeadV1 = Readonly<{
   path: string;
   etag: string | null;
-  index: ManualRouterApplicantIndexV1 | null;
-  pointers: readonly ManualRouterApplicantPointerV1[];
+  index: ManualRouterApplicantIndexAnyV2 | null;
+  pointers: readonly ManualRouterApplicantPointerAnyV2[];
 }>;
 
 export async function readManualRouterApplicantHeadV1(input: Readonly<{
@@ -40,8 +40,8 @@ export async function readManualRouterApplicantHeadV1(input: Readonly<{
     throw new TypeError("manual Router Applicant head has a missing pointer");
   }
   const pointers = pointerReads.map((read) =>
-    assertManualRouterApplicantPointerV1(read!.value));
-  const index = assertManualRouterApplicantIndexV1(
+    assertManualRouterApplicantPointerAnyV2(read!.value));
+  const index = assertManualRouterApplicantIndexAnyV2(
     storedIndex.value,
     pointers,
   );

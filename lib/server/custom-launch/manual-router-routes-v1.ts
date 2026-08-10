@@ -19,6 +19,8 @@ import type { ManualRouterWebsiteServiceV1 } from
   "@/lib/server/custom-launch/manual-router-service-v1";
 import type { ManualRouterFinalityServiceV1 } from
   "@/lib/server/custom-launch/manual-router-finality-v1";
+import type { ManualRouterRouteAcceptanceServiceV1 } from
+  "@/lib/server/custom-launch/manual-router-acceptance-v1";
 
 export type ManualRouterWebsiteRouteKindV1 =
   | "signed-artifacts"
@@ -26,7 +28,8 @@ export type ManualRouterWebsiteRouteKindV1 =
   | "submissions"
   | "resolve"
   | "report-transaction"
-  | "finality";
+  | "finality"
+  | "route-acceptance";
 
 export async function handleProductionManualRouterWebsiteRouteV1(
   request: Request,
@@ -40,6 +43,7 @@ export async function handleProductionManualRouterWebsiteRouteV1(
     return handleManualRouterWebsiteRouteV1(request, kind, {
       authenticator: production.authenticator,
       finalityService: production.finalityService,
+      routeAcceptanceService: production.routeAcceptanceService,
       service: production.service,
     });
   } catch (error) {
@@ -53,12 +57,23 @@ export async function handleManualRouterWebsiteRouteV1(
   dependencies: Readonly<{
     authenticator: ManualRouterApplicantAuthenticatorV1;
     finalityService: ManualRouterFinalityServiceV1;
+    routeAcceptanceService: ManualRouterRouteAcceptanceServiceV1;
     service: ManualRouterWebsiteServiceV1;
   }>,
 ): Promise<Response> {
   try {
     assertManualRouterLaneEnabledV1();
     const body = await readManualRouterStrictJsonRequestV1(request);
+    if (kind === "route-acceptance") {
+      const principal = await dependencies.authenticator.authenticateGithub(
+        request,
+      );
+      return manualRouterJsonResponseV1(200,
+        await dependencies.routeAcceptanceService.handle({
+          request: body,
+          principal,
+        }));
+    }
     if (kind === "signed-artifacts") {
       return manualRouterJsonResponseV1(
         201,

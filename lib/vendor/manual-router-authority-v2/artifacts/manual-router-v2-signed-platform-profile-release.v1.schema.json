@@ -1,0 +1,282 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:manual-router-v2-signed-platform-profile-release:1",
+  "title": "Programmable manual Router V2 signed platform profile release",
+  "$comment": "Closed structural and size gate only. The portable V2 code verifier must re-derive every hash, signature, release, acceptance CAS, currentness, calldata and gas-policy binding.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "attestationHash",
+    "authority",
+    "schemaVersion",
+    "signatureBase64Url",
+    "signatureSha256",
+    "statement"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "programmable.signed-nested-factory-platform-profile-release-attestation.v1"
+    },
+    "statement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "applicantAcceptanceVerifierArtifactSha256",
+        "capabilityAdminConfigurationSha256",
+        "capabilityCatalogHash",
+        "capabilityHash",
+        "ceremonyPolicySha256",
+        "chainId",
+        "deploymentBytesVerificationHash",
+        "deploymentPlanHash",
+        "executionModePolicy",
+        "expectedConfigurationHash",
+        "expectedPoolId",
+        "expiresAtEpochSeconds",
+        "independentAuditSha256",
+        "issuedAtEpochSeconds",
+        "liveCeremonyRequirement",
+        "manifestHash",
+        "moduleRuntimeBindingHash",
+        "permitAuthorityConfigurationSha256",
+        "planSchemaId",
+        "portableVerifierArtifactSha256",
+        "predeploymentReceiptHash",
+        "profileGasAuditSha256",
+        "profileId",
+        "profileKey",
+        "profileSha256",
+        "profileVersion",
+        "releaseAttestationAuthorityBindingHash",
+        "releaseId",
+        "releaseRevision",
+        "revenueAttestationSha256",
+        "revenuePolicyHash",
+        "revenueVerifierArtifactSha256",
+        "reviewedPlanSha256",
+        "revocationEpoch",
+        "routeId",
+        "routeVersion",
+        "routerRuntimeBindingHash",
+        "schemaVersion",
+        "sourceRevisionHash",
+        "statementHash"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.nested-factory-platform-profile-release-statement.v1"
+        },
+        "releaseId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "releaseRevision": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "revocationEpoch": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "chainId": {
+          "const": "1"
+        },
+        "issuedAtEpochSeconds": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "expiresAtEpochSeconds": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "capabilityCatalogHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "capabilityHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "routeId": {
+          "const": "nested-factory"
+        },
+        "routeVersion": {
+          "const": "1.0.0"
+        },
+        "profileId": {
+          "const": "exact-shards-nested-factory"
+        },
+        "profileVersion": {
+          "const": "1.0.0"
+        },
+        "profileKey": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$"
+        },
+        "profileSha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "planSchemaId": {
+          "const": "urn:programmable:reviewed-route-plan:1.0.0"
+        },
+        "reviewedPlanSha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "applicantAcceptanceVerifierArtifactSha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "executionModePolicy": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": false,
+          "prefixItems": [
+            {
+              "const": "EXACT_EXISTING_LAUNCH_ADOPTED"
+            },
+            {
+              "const": "EXACT_FACTORY_LAUNCH_EXECUTED"
+            }
+          ]
+        },
+        "sourceRevisionHash": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$"
+        },
+        "manifestHash": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$"
+        },
+        "revenuePolicyHash": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$"
+        },
+        "expectedPoolId": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$"
+        },
+        "expectedConfigurationHash": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$"
+        },
+        "routerRuntimeBindingHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "moduleRuntimeBindingHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "permitAuthorityConfigurationSha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "capabilityAdminConfigurationSha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "deploymentPlanHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "deploymentBytesVerificationHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "predeploymentReceiptHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "profileGasAuditSha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "portableVerifierArtifactSha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "ceremonyPolicySha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "independentAuditSha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "revenueAttestationSha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "revenueVerifierArtifactSha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "releaseAttestationAuthorityBindingHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "liveCeremonyRequirement": {
+          "const": "fresh-dual-rpc-factory-children-pool-safe-nonce-currentness-before-permit-and-launch"
+        },
+        "statementHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authorityId",
+        "keyEpoch",
+        "keyId",
+        "publicKeySpkiSha256",
+        "schemaVersion",
+        "signatureScheme"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.nested-factory-release-attestation-authority.v1"
+        },
+        "authorityId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "keyId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "keyEpoch": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "signatureScheme": {
+          "const": "ed25519"
+        },
+        "publicKeySpkiSha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "signatureBase64Url": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{86}$"
+    },
+    "signatureSha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "attestationHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

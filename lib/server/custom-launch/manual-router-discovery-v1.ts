@@ -4,8 +4,8 @@ import {
   readManualRouterApplicantHeadV1,
   type ManualRouterApplicantHeadV1,
 } from "@/lib/server/custom-launch/manual-router-head-v1";
-import type { ManualRouterApplicantPointerV1 } from
-  "@/lib/server/custom-launch/manual-router-state-v1";
+import type { ManualRouterApplicantPointerAnyV2 } from
+  "@/lib/server/custom-launch/manual-router-state-v2";
 import {
   manualRouterApplicantIndexPrefixV1,
   type ManualRouterPrivateBlobStoreV1,
@@ -16,7 +16,7 @@ const READ_BATCH_SIZE = 20;
 
 export type ManualRouterPendingFinalityCandidateV1 = Readonly<{
   head: ManualRouterApplicantHeadV1;
-  pointer: ManualRouterApplicantPointerV1;
+  pointer: ManualRouterApplicantPointerAnyV2;
 }>;
 
 /**

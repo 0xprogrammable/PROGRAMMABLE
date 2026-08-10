@@ -16,6 +16,9 @@ export interface AuthenticatedManualRouterApplicantV1
 }
 
 export interface ManualRouterApplicantAuthenticatorV1 {
+  authenticateGithub(
+    request: Request,
+  ): Promise<AuthenticatedGitHubPrincipalV1>;
   authenticate(
     request: Request,
     requestedLaunchWallet: string,
@@ -84,55 +87,67 @@ export function createManualRouterApplicantAuthenticatorFromBoundaryV1(
     throw new TypeError("manual Router Applicant authenticator is invalid");
   }
 
+  const readCurrentGithubPrincipal = async (request: Request) => {
+    let principal: AuthenticatedGitHubPrincipalV1;
+    let currentUser: Awaited<ReturnType<
+      ManualRouterApplicantCurrentUserBoundaryV1["getCurrentUser"]
+    >>;
+    try {
+      principal = await input.githubAuthenticator.authenticate(request);
+      currentUser = await input.currentUserBoundary.getCurrentUser(
+        principal.privyUserId,
+      );
+    } catch (error) {
+      if (error instanceof GitHubPrincipalAuthenticationErrorV1) {
+        throw new ManualRouterApplicantAuthenticationErrorV1(
+          error.status,
+          "applicant_authentication_required",
+        );
+      }
+      throw new ManualRouterApplicantAuthenticationErrorV1(
+        401,
+        "applicant_authentication_required",
+      );
+    }
+    if (currentUser.id !== principal.privyUserId) {
+      throw new ManualRouterApplicantAuthenticationErrorV1(
+        401,
+        "applicant_identity_mismatch",
+      );
+    }
+
+    const currentGitHubSubjects = new Set(
+      currentUser.linkedAccounts
+        .filter((account) => account.type === "github_oauth")
+        .map((account) => account.subject)
+        .filter((subject): subject is string => typeof subject === "string"),
+    );
+    if (
+      currentGitHubSubjects.size !== 1
+      || !currentGitHubSubjects.has(principal.githubUserId)
+    ) {
+      throw new ManualRouterApplicantAuthenticationErrorV1(
+        403,
+        "github_subject_mismatch",
+      );
+    }
+    return Object.freeze({ principal, currentUser });
+  };
+
   return Object.freeze({
+    async authenticateGithub(
+      request: Request,
+    ): Promise<AuthenticatedGitHubPrincipalV1> {
+      return (await readCurrentGithubPrincipal(request)).principal;
+    },
     async authenticate(
       request: Request,
       requestedLaunchWallet: string,
     ): Promise<AuthenticatedManualRouterApplicantV1> {
       const requested = applicantWallet(requestedLaunchWallet);
-      let principal: AuthenticatedGitHubPrincipalV1;
-      let currentUser: Awaited<ReturnType<
-        ManualRouterApplicantCurrentUserBoundaryV1["getCurrentUser"]
-      >>;
-      try {
-        principal = await input.githubAuthenticator.authenticate(request);
-        currentUser = await input.currentUserBoundary.getCurrentUser(
-          principal.privyUserId,
-        );
-      } catch (error) {
-        if (error instanceof GitHubPrincipalAuthenticationErrorV1) {
-          throw new ManualRouterApplicantAuthenticationErrorV1(
-            error.status,
-            "applicant_authentication_required",
-          );
-        }
-        throw new ManualRouterApplicantAuthenticationErrorV1(
-          401,
-          "applicant_authentication_required",
-        );
-      }
-      if (currentUser.id !== principal.privyUserId) {
-        throw new ManualRouterApplicantAuthenticationErrorV1(
-          401,
-          "applicant_identity_mismatch",
-        );
-      }
-
-      const currentGitHubSubjects = new Set(
-        currentUser.linkedAccounts
-          .filter((account) => account.type === "github_oauth")
-          .map((account) => account.subject)
-          .filter((subject): subject is string => typeof subject === "string"),
+      const { principal, currentUser } = await readCurrentGithubPrincipal(
+        request,
       );
-      if (
-        currentGitHubSubjects.size !== 1
-        || !currentGitHubSubjects.has(principal.githubUserId)
-      ) {
-        throw new ManualRouterApplicantAuthenticationErrorV1(
-          403,
-          "github_subject_mismatch",
-        );
-      }
 
       const ethereumWallets = new Set(
         currentUser.linkedAccounts

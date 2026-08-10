@@ -233,7 +233,7 @@ test("enabled policy requires exact independent protected commitments", () => {
   ), /QuickNode endpoint commitment is invalid/u);
 });
 
-test("staged runtime preflight requires typed parse and authentication errors", async () => {
+test("staged runtime preflight requires typed parse, authentication, and acceptance errors", async () => {
   const requests = [];
   const result = await verifyManualApplicantStagedRuntime({
     targetUrl: "https://candidate.example.vercel.app/",
@@ -242,17 +242,20 @@ test("staged runtime preflight requires typed parse and authentication errors", 
     retryDelayMs: 0,
     async fetchImpl(url, init) {
       requests.push({ url: String(url), init });
-      const authentication = init.body !== "{}";
-      const code = authentication
-        ? "applicant_authentication_required"
-        : "invalid_request";
+      const acceptance = String(url).endsWith("/route-acceptance");
+      const authentication = !acceptance && init.body !== "{}";
+      const code = acceptance
+        ? "session_required"
+        : authentication
+          ? "applicant_authentication_required"
+          : "invalid_request";
       return new Response(JSON.stringify({
         schemaVersion: "programmable.manual-router-website-error.v1",
         code,
         message: code,
         retryable: false,
       }), {
-        status: authentication ? 401 : 400,
+        status: acceptance || authentication ? 401 : 400,
         headers: {
           "cache-control": "no-store, max-age=0",
           "content-type": "application/json; charset=utf-8",
@@ -267,11 +270,17 @@ test("staged runtime preflight requires typed parse and authentication errors", 
     code: "invalid_request",
     authenticationHttpStatus: 401,
     authenticationCode: "applicant_authentication_required",
+    acceptanceHttpStatus: 401,
+    acceptanceCode: "session_required",
   });
-  assert.equal(requests.length, 2);
+  assert.equal(requests.length, 3);
+  assert.equal(requests[0].url,
+    "https://candidate.example.vercel.app/api/custom-launch/manual/submissions");
+  assert.equal(requests[1].url,
+    "https://candidate.example.vercel.app/api/custom-launch/manual/submissions");
+  assert.equal(requests[2].url,
+    "https://candidate.example.vercel.app/api/custom-launch/manual/route-acceptance");
   for (const request of requests) {
-    assert.equal(request.url,
-      "https://candidate.example.vercel.app/api/custom-launch/manual/submissions");
     assert.equal(new Headers(request.init.headers).has("authorization"), false);
   }
   assert.equal(requests[0].init.body, "{}");
@@ -279,6 +288,7 @@ test("staged runtime preflight requires typed parse and authentication errors", 
     schemaVersion: "programmable.manual-router-applicant-list-request.v1",
     launchWallet: "0x1111111111111111111111111111111111111111",
   });
+  assert.equal(requests[2].init.body, "{}");
 
   await assert.rejects(() => verifyManualApplicantStagedRuntime({
     targetUrl: "https://candidate.example.vercel.app/",

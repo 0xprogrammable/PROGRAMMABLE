@@ -1,0 +1,396 @@
+import "server-only";
+
+import { getAddress, isAddress } from "viem";
+
+import {
+  getActiveManualRouterProductionBindingV2,
+  type ActiveManualRouterProductionBindingV2,
+} from "@/lib/custom-launch/manual-router-bindings-v2";
+import type {
+  ManualRouterBrowserWalletActionV2,
+  ManualRouterCompleteSignedArtifactViewV2,
+  ManualRouterNestedFactoryPrimaryEvidenceV2,
+  ManualRouterNestedFactoryRouteBindingV2,
+} from "@/lib/server/custom-launch/manual-router-artifact-v2";
+import { assertManualRouterApplicantSubjectV1 } from
+  "@/lib/server/custom-launch/manual-router-state-v1";
+
+/**
+ * This is the Website's final fail-closed boundary after the portable
+ * Authority parser. It cannot activate while any frozen release identity is
+ * absent from the production binding.
+ */
+export function assertProductionManualRouterCompleteSignedArtifactV2(
+  _raw: unknown,
+): ManualRouterCompleteSignedArtifactViewV2 {
+  getActiveManualRouterProductionBindingV2();
+  throw new TypeError(
+    "portable manual Router V2 Authority vendor is not installed",
+  );
+}
+
+/**
+ * Narrow projection helper for already-portable-verified test artifacts. It is
+ * deliberately not the production verifier and must never be wired directly
+ * to an HTTP boundary.
+ */
+export function assertManualRouterCompleteSignedArtifactForBindingV2(
+  raw: unknown,
+  binding: ActiveManualRouterProductionBindingV2,
+): ManualRouterCompleteSignedArtifactViewV2 {
+  const value = exactObject(raw, [
+    "artifactKind", "binding", "descriptor", "preparationArtifact",
+    "prepared", "route", "schemaVersion", "signedArtifactHash",
+  ], "manual Router V2 complete signed artifact");
+  if (
+    value.schemaVersion
+      !== "programmable.manual-router-complete-signed-artifact.v2"
+    || value.artifactKind !== "nested-factory"
+  ) throw invalid("manual Router V2 artifact discriminator is invalid");
+  const route = routeBinding(value.route, binding);
+  const commitments = exactObject(value.binding, [
+    "acceptanceSubjectHash", "applicantAcceptanceClaimSha256",
+    "applicantAcceptanceRecordHash", "currentAcceptanceHash",
+    "grantBindingHash", "launchArtifactCommitmentHash", "routeBindingHash",
+  ], "manual Router V2 artifact binding");
+  const descriptor = exactObject(value.descriptor, [
+    "deadline", "descriptorHash", "envelopeHash", "reissueOf", "routeNonce",
+    "signatureRequestHash", "validAfter",
+  ], "manual Router V2 descriptor");
+  const preparationArtifact = exactObject(value.preparationArtifact, [
+    "approvalClaim", "preparationArtifactHash", "subject",
+  ], "manual Router V2 preparation artifact");
+  const approvalClaim = exactObject(preparationArtifact.approvalClaim, [
+    "approvedGitHubUserId", "approvedLaunchWallet", "headSha", "treeSha",
+  ], "manual Router V2 approval claim");
+  const subject = assertManualRouterApplicantSubjectV1(
+    preparationArtifact.subject,
+  );
+  const prepared = exactObject(value.prepared, [
+    "browserAction", "expectedComponents", "expectedLaunchId",
+    "expectedPoolId", "expectedToken", "launchWallet", "preparationHash",
+    "primaryEvidence",
+  ], "manual Router V2 prepared launch");
+  const launchWallet = address(prepared.launchWallet);
+  const expectedToken = address(prepared.expectedToken);
+  const browserAction = action(prepared.browserAction, binding, launchWallet);
+  const expectedComponents = components(prepared.expectedComponents);
+  const primaryEvidence = evidence(
+    prepared.primaryEvidence,
+    binding,
+    launchWallet,
+  );
+  const approvedWallet = address(approvalClaim.approvedLaunchWallet);
+  if (
+    subject.approvedGitHubUserId !== numericId(
+      approvalClaim.approvedGitHubUserId,
+    )
+    || subject.approvedLaunchWallet !== approvedWallet.toLowerCase()
+    || launchWallet !== approvedWallet
+    || launchWallet !== getAddress(binding.exactPlan.launchWallet)
+    || expectedComponents.find(({ kind }) => kind === "token")?.account
+      !== expectedToken
+    || primaryEvidence.poolId !== bytes32(prepared.expectedPoolId)
+    || primaryEvidence.profileKey !== route.profileKey
+    || commitments.acceptanceSubjectHash
+      !== "sha256:948a920b86aa915bc2dfcdcf56b271f41a2843fc1360b734e9221c0533d960b8"
+    || commitments.applicantAcceptanceClaimSha256
+      !== binding.acceptanceClaimSha256
+  ) throw invalid("manual Router V2 artifact principal binding is invalid");
+  const validAfter = uint(descriptor.validAfter);
+  const deadline = uint(descriptor.deadline);
+  if (
+    BigInt(validAfter) > BigInt(deadline)
+    || BigInt(deadline) - BigInt(validAfter) > 3_600n
+  ) {
+    throw invalid("manual Router V2 artifact validity is invalid");
+  }
+  return deepFreeze({
+    schemaVersion: value.schemaVersion,
+    artifactKind: value.artifactKind,
+    signedArtifactHash: sha256(value.signedArtifactHash),
+    route,
+    binding: {
+      grantBindingHash: sha256(commitments.grantBindingHash),
+      routeBindingHash: sha256(commitments.routeBindingHash),
+      launchArtifactCommitmentHash: sha256(
+        commitments.launchArtifactCommitmentHash,
+      ),
+      acceptanceSubjectHash: sha256(commitments.acceptanceSubjectHash),
+      currentAcceptanceHash: sha256(commitments.currentAcceptanceHash),
+      applicantAcceptanceClaimSha256: sha256(
+        commitments.applicantAcceptanceClaimSha256,
+      ),
+      applicantAcceptanceRecordHash: sha256(
+        commitments.applicantAcceptanceRecordHash,
+      ),
+    },
+    descriptor: {
+      descriptorHash: sha256(descriptor.descriptorHash),
+      signatureRequestHash: sha256(descriptor.signatureRequestHash),
+      envelopeHash: sha256(descriptor.envelopeHash),
+      routeNonce: bytes32(descriptor.routeNonce),
+      validAfter,
+      deadline,
+      reissueOf: nullableSha256(descriptor.reissueOf),
+    },
+    preparationArtifact: {
+      preparationArtifactHash: sha256(
+        preparationArtifact.preparationArtifactHash,
+      ),
+      subject,
+      approvalClaim: {
+        headSha: gitSha(approvalClaim.headSha),
+        treeSha: gitSha(approvalClaim.treeSha),
+        approvedGitHubUserId: subject.approvedGitHubUserId,
+        approvedLaunchWallet: approvedWallet,
+      },
+    },
+    prepared: {
+      preparationHash: sha256(prepared.preparationHash),
+      launchWallet,
+      expectedLaunchId: bytes32(prepared.expectedLaunchId),
+      expectedPoolId: bytes32(prepared.expectedPoolId),
+      expectedToken,
+      expectedComponents,
+      browserAction,
+      primaryEvidence,
+    },
+  });
+}
+
+function routeBinding(
+  raw: unknown,
+  binding: ActiveManualRouterProductionBindingV2,
+): ManualRouterNestedFactoryRouteBindingV2 {
+  const value = exactObject(raw, [
+    "profileId", "profileKey", "profileVersion", "routeId", "routeVersion",
+    "schemaVersion",
+  ], "manual Router V2 route binding");
+  if (
+    value.schemaVersion !== "programmable.manual-router-route-binding.v2"
+    || value.routeId !== binding.route.routeId
+    || value.routeVersion !== binding.route.routeVersion
+    || value.profileId !== binding.route.profileId
+    || value.profileVersion !== binding.route.profileVersion
+    || value.profileKey !== binding.route.profileKey
+  ) throw invalid("manual Router V2 route binding is not the frozen capability");
+  return deepFreeze({
+    schemaVersion: value.schemaVersion,
+    routeId: value.routeId,
+    routeVersion: value.routeVersion,
+    profileId: value.profileId,
+    profileVersion: value.profileVersion,
+    profileKey: bytes32(value.profileKey),
+  });
+}
+
+function action(
+  raw: unknown,
+  binding: ActiveManualRouterProductionBindingV2,
+  launchWallet: `0x${string}`,
+): ManualRouterBrowserWalletActionV2 {
+  const value = exactObject(raw, [
+    "chainId", "method", "params", "pendingNonceAtPreparation",
+    "schemaVersion", "walletExecutionKind",
+  ], "manual Router V2 browser action");
+  if (
+    value.schemaVersion !== "programmable.browser-wallet-action.v2"
+    || value.walletExecutionKind !== "eoa-direct"
+    || value.method !== "eth_sendTransaction"
+    || value.chainId !== binding.chainId
+    || !Array.isArray(value.params)
+    || value.params.length !== 1
+    || (
+      value.pendingNonceAtPreparation !== null
+      && !isUint(value.pendingNonceAtPreparation)
+    )
+  ) throw invalid("manual Router V2 browser action is invalid");
+  const transaction = exactObject(value.params[0], [
+    "data", "from", "to", "value",
+  ], "manual Router V2 browser transaction");
+  const from = address(transaction.from);
+  const to = address(transaction.to);
+  const data = hex(transaction.data);
+  if (
+    from !== launchWallet
+    || to !== getAddress(binding.router.address)
+    || !data.startsWith(binding.router.directLaunchSelector)
+    || data.length <= binding.router.directLaunchSelector.length
+    || transaction.value !== "0x0"
+  ) throw invalid("manual Router V2 browser transaction is not exact Shards");
+  return deepFreeze({
+    schemaVersion: value.schemaVersion,
+    walletExecutionKind: value.walletExecutionKind,
+    method: value.method,
+    chainId: value.chainId,
+    pendingNonceAtPreparation: value.pendingNonceAtPreparation as string | null,
+    params: [{ from, to, data, value: "0x0" }],
+  });
+}
+
+function components(raw: unknown) {
+  if (!Array.isArray(raw) || raw.length !== 3) {
+    throw invalid("manual Router V2 components are invalid");
+  }
+  const checked = raw.map((entry) => {
+    const value = exactObject(entry, [
+      "account", "kind", "runtimeCodeHash",
+    ], "manual Router V2 component");
+    if (!new Set(["token", "hook", "nft"]).has(String(value.kind))) {
+      throw invalid("manual Router V2 component kind is invalid");
+    }
+    return deepFreeze({
+      account: address(value.account),
+      kind: value.kind as "token" | "hook" | "nft",
+      runtimeCodeHash: bytes32(value.runtimeCodeHash),
+    });
+  });
+  if (
+    new Set(checked.map(({ kind }) => kind)).size !== 3
+    || new Set(checked.map(({ account }) => account)).size !== 3
+  ) throw invalid("manual Router V2 components are ambiguous");
+  return deepFreeze(checked);
+}
+
+function evidence(
+  raw: unknown,
+  binding: ActiveManualRouterProductionBindingV2,
+  launchWallet: `0x${string}`,
+): ManualRouterNestedFactoryPrimaryEvidenceV2 {
+  const value = exactObject(raw, [
+    "configurationHash", "evidenceCommitmentHash", "expectedResultHash",
+    "factoryIdentity", "kind", "launchWallet", "nonce", "poolId",
+    "profileId", "profileKey", "profileVersion", "revenuePolicyHash",
+    "routeId", "routePayloadHash", "routeVersion", "routerIdentity",
+    "stampRequestHash",
+  ], "manual Router V2 primary evidence");
+  if (
+    value.kind !== binding.route.primaryEvidenceKind
+    || value.routeId !== binding.route.routeId
+    || value.routeVersion !== binding.route.routeVersion
+    || value.profileId !== binding.route.profileId
+    || value.profileVersion !== binding.route.profileVersion
+    || value.profileKey !== binding.route.profileKey
+    || address(value.launchWallet) !== launchWallet
+    || value.routerIdentity !== binding.exactPlan.routerIdentity
+    || value.factoryIdentity !== binding.exactPlan.factoryIdentity
+    || value.routePayloadHash !== binding.exactPlan.routePayloadHash
+    || value.expectedResultHash !== binding.exactPlan.expectedResultHash
+    || value.revenuePolicyHash !== binding.exactPlan.revenuePolicyHash
+    || value.poolId !== binding.exactPlan.poolId
+    || value.configurationHash !== binding.exactPlan.configurationHash
+  ) throw invalid("manual Router V2 primary evidence is not exact Shards");
+  return deepFreeze({
+    kind: value.kind,
+    routerIdentity: sha256(value.routerIdentity),
+    factoryIdentity: sha256(value.factoryIdentity),
+    routeId: value.routeId,
+    routeVersion: value.routeVersion,
+    profileId: value.profileId,
+    profileVersion: value.profileVersion,
+    profileKey: bytes32(value.profileKey),
+    routePayloadHash: bytes32(value.routePayloadHash),
+    expectedResultHash: bytes32(value.expectedResultHash),
+    revenuePolicyHash: bytes32(value.revenuePolicyHash),
+    poolId: bytes32(value.poolId),
+    configurationHash: bytes32(value.configurationHash),
+    stampRequestHash: bytes32(value.stampRequestHash),
+    launchWallet,
+    nonce: bytes32(value.nonce),
+    evidenceCommitmentHash: sha256(value.evidenceCommitmentHash),
+  });
+}
+
+function exactObject(
+  raw: unknown,
+  fields: readonly string[],
+  label: string,
+): Record<string, unknown> {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    throw invalid(`${label} is invalid`);
+  }
+  const keys = Reflect.ownKeys(raw);
+  const strings = keys.filter((key): key is string => typeof key === "string")
+    .sort();
+  const expected = [...fields].sort();
+  if (
+    keys.length !== strings.length
+    || strings.length !== expected.length
+    || strings.some((key, index) => key !== expected[index])
+  ) throw invalid(`${label} contains unexpected fields`);
+  return raw as Record<string, unknown>;
+}
+
+function address(value: unknown): `0x${string}` {
+  if (
+    typeof value !== "string"
+    || !isAddress(value, { strict: true })
+    || BigInt(value) === 0n
+  ) throw invalid("manual Router V2 address is invalid");
+  return getAddress(value);
+}
+
+function bytes32(value: unknown): `0x${string}` {
+  if (
+    typeof value !== "string"
+    || !/^0x[0-9a-f]{64}$/u.test(value)
+    || BigInt(value) === 0n
+  ) throw invalid("manual Router V2 bytes32 is invalid");
+  return value as `0x${string}`;
+}
+
+function sha256(value: unknown): `sha256:${string}` {
+  if (typeof value !== "string" || !/^sha256:[0-9a-f]{64}$/u.test(value)) {
+    throw invalid("manual Router V2 SHA-256 is invalid");
+  }
+  return value as `sha256:${string}`;
+}
+
+function nullableSha256(value: unknown): `sha256:${string}` | null {
+  return value === null ? null : sha256(value);
+}
+
+function numericId(value: unknown): string {
+  if (typeof value !== "string" || !/^[1-9][0-9]{0,63}$/u.test(value)) {
+    throw invalid("manual Router V2 numeric id is invalid");
+  }
+  return value;
+}
+
+function gitSha(value: unknown): string {
+  if (typeof value !== "string" || !/^[0-9a-f]{40}$/u.test(value)) {
+    throw invalid("manual Router V2 Git SHA is invalid");
+  }
+  return value;
+}
+
+function uint(value: unknown): string {
+  if (!isUint(value)) throw invalid("manual Router V2 uint is invalid");
+  return value;
+}
+
+function isUint(value: unknown): value is string {
+  return typeof value === "string" && /^(?:0|[1-9][0-9]*)$/u.test(value);
+}
+
+function hex(value: unknown): `0x${string}` {
+  if (typeof value !== "string" || !/^0x(?:[0-9a-f]{2})+$/u.test(value)) {
+    throw invalid("manual Router V2 hex value is invalid");
+  }
+  return value as `0x${string}`;
+}
+
+function invalid(message: string): TypeError {
+  return new TypeError(message);
+}
+
+function deepFreeze<T>(value: T): T {
+  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const nested of Object.values(value as Record<string, unknown>)) {
+      deepFreeze(nested);
+    }
+    Object.freeze(value);
+  }
+  return value;
+}
