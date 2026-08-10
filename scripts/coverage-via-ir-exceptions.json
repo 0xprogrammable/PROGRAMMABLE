@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "foundryVersion": "1.7.1",
+  "coverageMode": "--ir-minimum",
+  "reason": "Foundry cannot attribute coverage source maps for these stack-heavy contracts under --ir-minimum; the exact Mainnet-fork suites below are required on two independent RPC providers instead.",
+  "sourceExceptions": [
+    {
+      "path": "src/ProgrammableLaunchStampRouterV2.sol",
+      "sha256": "79f9418e23f818d1af7ed1bfaa4b257e6431e8575d175670ccca64350692c54c"
+    },
+    {
+      "path": "src/ProgrammableExactShardsProfileV1.sol",
+      "sha256": "4cd394acad6aca92d433703cc0eaeb6becd890b404ceb855fa2c175a13d02809"
+    }
+  ],
+  "requiredTests": [
+    {
+      "path": "test/ProgrammableLaunchStampRouterV2.t.sol",
+      "sha256": "0fe36daa70314d0e00b51d21be39eaf6cc1f149b5b74786370db5f2d84bddfbf"
+    },
+    {
+      "path": "test/ProgrammableLaunchStampRouterV2Registry.t.sol",
+      "sha256": "224fd26f37603c61b6849185959d12a4ce7e8b49b9dfa636e49a2e8fccf78396"
+    }
+  ]
+}

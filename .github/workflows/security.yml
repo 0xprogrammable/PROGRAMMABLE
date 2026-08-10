@@ -26,7 +26,7 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1
         with:
-          version: stable
+          version: v1.7.1
 
       - name: Bootstrap pinned dependencies
         run: ./scripts/bootstrap-deps.sh
@@ -45,16 +45,38 @@ jobs:
         with:
           sarif_file: slither.sarif
 
+      - name: Verify hash-bound via-IR coverage inputs
+        run: node scripts/check-coverage.mjs /dev/null scripts/coverage-via-ir-exceptions.json --inputs-only
+
+      - name: Test via-IR-only Router V2 paths on independent RPCs
+        shell: bash
+        run: |
+          set -euo pipefail
+          for rpc in https://ethereum-rpc.publicnode.com https://eth.drpc.org; do
+            passed=0
+            for attempt in 1 2; do
+              if ETHEREUM_RPC_URL="$rpc" FOUNDRY_FUZZ_RUNS=1000 forge test \
+                --match-path 'test/ProgrammableLaunchStampRouterV2*.t.sol' \
+                --fuzz-seed 0x7368617264732d726f757465722d7632; then
+                passed=1
+                break
+              fi
+              sleep $((attempt * 3))
+            done
+            test "$passed" -eq 1
+          done
+
       - name: Measure source coverage
         run: >-
           forge coverage
+          --ir-minimum
           --no-match-contract ClassicV3MainnetForkTest
           --exclude-tests
           --report lcov
           --report-file lcov.info
 
       - name: Check coverage floors
-        run: node scripts/check-coverage.mjs lcov.info
+        run: node scripts/check-coverage.mjs lcov.info scripts/coverage-via-ir-exceptions.json
 
       - name: Install actionlint
         env:
