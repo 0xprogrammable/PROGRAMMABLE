@@ -1,10 +1,20 @@
 {
-  "schemaVersion": "1.1.0",
+  "schemaVersion": "1.4.0",
   "package": "PROGRAMMABLE_COMPLETED_GRAPH_ADOPTION_COMPAT_V1",
   "status": "INTERFACE_ONLY_NOT_DEPLOYED_NOT_ACTIVATED",
   "supersedes": {
-    "withdrawnCandidateCommit": "a688cde9d77a8fea652f48756e4e49ace5318569",
-    "reason": "Superseded by an immutable successor that fail-closes grant review epochs, supports global/profile suspension, and requires a codehash-pinned typed current-state verifier."
+    "withdrawnCandidates": [
+      {
+        "commit": "a688cde9d77a8fea652f48756e4e49ace5318569",
+        "verdict": "P0_FAIL",
+        "reason": "epoch/currentness revival, missing lifecycle kill and opaque current-state verification"
+      },
+      {
+        "commit": "d329cfab7d6aa0131b82343c9ca73365985b2d51",
+        "verdict": "P0_P1_FAIL",
+        "reason": "profile revival, stale artifact, runtime-only shared identity and overbroad dependency claim"
+      }
+    ]
   },
   "scope": {
     "capabilitySemantics": "ADOPT",
@@ -25,81 +35,137 @@
     "viaIR": false,
     "bytecodeHash": "none",
     "cborMetadata": false,
-    "sizeMethod": "solc --bin --bin-runtime with the compiler settings above"
+    "sizeMethod": "Foundry standard JSON bytecode/deployedBytecode under the exact pinned profile"
   },
   "contracts": [
     {
       "name": "IProgrammableCompletedGraphAdoptionCompatV1",
       "source": "src/hookemon/IProgrammableCompletedGraphAdoptionCompatV1.sol",
-      "sourceSha256": "bf22c4e344ed2a5d253e04440c157ccd92289a2d8c6709f6b7cf7e2df7bdcde1",
-      "abiSha256": "c09d56d0afb1c2e76f9f1cbd620fff86e322fa6cb902be0d56736a021c2bbded",
+      "sourceSha256": "75fced51331e2cb262ab622d9b948a587a69e37944d46d0784feaf382d9b63e6",
+      "abiSha256": "b62393993aa9163a6611344da16cf92dec84448da8a3ceb9ed2cebd401e49237",
       "deployment": "interface_only"
     },
     {
       "name": "IProgrammableCompletedGraphAdoptionStateVerifierV1",
       "source": "src/hookemon/IProgrammableCompletedGraphAdoptionCompatV1.sol",
-      "abiSha256": "762175fca40b72952e31280e6e73492ebc8c9ea39b86462c7f2314c4ab00bd05",
+      "abiSha256": "06daf1ffab3be85b1b5aa75000c73b1c497261dde262dd3735245a5254269f0e",
       "deployment": "interface_only"
     },
     {
       "name": "ProgrammableCompletedGraphAdoptionCompatCodecV1",
       "source": "src/hookemon/ProgrammableCompletedGraphAdoptionCompatCodecV1.sol",
-      "sourceSha256": "ba0544f606d64c7663a1de713b5519d5cca11fca11e2264d90b4a5c338a26cc1",
-      "abiSha256": "57fe8880975a36d4f41408fc2f6fa3bc1023191ce98672ff9fa77de50405562b",
-      "runtimeBytes": 9896,
-      "initcodeBytes": 9924
+      "sourceSha256": "bbe686eea049df4606357516270f9b4f4c228b26d01eb030e8473fba4b95edf3",
+      "abiSha256": "52176cb85a9b45f3f61703eb82e4c16a7d2e3d98d52afafed9b85de74fdb6803",
+      "runtimeBytes": 14684,
+      "initcodeBytes": 14712,
+      "artifact": "out-hookemon-compat/ProgrammableCompletedGraphAdoptionCompatCodecV1.sol/ProgrammableCompletedGraphAdoptionCompatCodecV1.json",
+      "runtimeMarginToEip170Bytes": 9892,
+      "runtimeSha256": "486bda47cba85ab9f0845aeb0c62a1aa4f2c1177fbf2aa94cde2b384ca3d7dcb",
+      "runtimeKeccak256": "0x1570eb95011b32da976fe6525c80e79e13cd5e3d186913b5382b210cfcf2eca4",
+      "initcodeSha256": "c5fa9651d93f16a80ba25f4f8bf108e425f308de887fe566b72490fd500a2681",
+      "initcodeKeccak256": "0x9004c7d193eed73561ab76a1f3723f2201f4137f578c0721a5c933ec17b58627"
     },
     {
       "name": "ProgrammableCompletedGraphAdoptionValidatorV1",
       "source": "src/hookemon/ProgrammableCompletedGraphAdoptionValidatorV1.sol",
-      "sourceSha256": "0ee9ceaab0bbdf0b56d589034f7989fa6a16cf9cb039a191697fd14d0bd6a95b",
-      "abiSha256": "c59d631fb14d9eccee570794f6f99e0b36038e081bbdb48afb4a9b67c824e986",
-      "runtimeBytes": 11881,
-      "initcodeBytes": 12547
+      "sourceSha256": "23f2a91e78448f1e5a398ab128708f64f48c510a692508d6ff7a3c7f43b3b9e6",
+      "abiSha256": "35f69ec571e756712d187400b333ede249c0c78ed1950c3ca2ca2484defb86c5",
+      "runtimeBytes": 20506,
+      "initcodeBytes": 21207,
+      "artifact": "out-hookemon-compat/ProgrammableCompletedGraphAdoptionValidatorV1.sol/ProgrammableCompletedGraphAdoptionValidatorV1.json",
+      "runtimeMarginToEip170Bytes": 4070,
+      "runtimeSha256": "e409c45c92a31567709f4777ed20fbfaeb3976a4ec6d4d83aba86e821d993e0f",
+      "runtimeKeccak256": "0x8731204649667173a497dd43fb183ac2ea01db5337f2c35b6c86af792b417ff8",
+      "initcodeSha256": "aac81492f529b3ea4cd8593fbaf9abe300efe364bad1800fbae2f4f48cb136da",
+      "initcodeKeccak256": "0x9b72baa662790129773316dc75d780ca65389bae9bc2357112f1d50c1c0e55e1"
     },
     {
       "name": "ProgrammableCompletedGraphAdoptionGrantRegistryV1",
       "source": "src/hookemon/ProgrammableCompletedGraphAdoptionGrantRegistryV1.sol",
-      "sourceSha256": "c82e6572dca226832a4ae67bdac730a9015bf8a3af0ce7426b9e30099f2e8d64",
-      "abiSha256": "18258c94b4d89e9fe57d66baae20deb96d6da5de7a72eceb3b940183dc76153a",
-      "runtimeBytes": 23152,
-      "runtimeMarginToEip170Bytes": 1424,
-      "initcodeBytes": 25062
+      "sourceSha256": "26a32dbf539ab5fbacd6a2371dcc1152878a1ba9006a3dcb6e5c0f436fe6d107",
+      "abiSha256": "a60f3f4e10c9b49413108785de4278b244e5687027d95db45dc8e549d6906d5c",
+      "runtimeBytes": 23917,
+      "runtimeMarginToEip170Bytes": 659,
+      "initcodeBytes": 26834,
+      "artifact": "out-hookemon-compat/ProgrammableCompletedGraphAdoptionGrantRegistryV1.sol/ProgrammableCompletedGraphAdoptionGrantRegistryV1.json",
+      "runtimeSha256": "b9e7d19e2b6098612fae25ee67febd2adb0a19725798dcd9acedddb5f4a64166",
+      "runtimeKeccak256": "0x40b0dbfd17be9051139376ac378c574d063edd90316668884cc5fcaebe0766ec",
+      "initcodeSha256": "8dd469341e870d04120587079d0c47dc5932580e30242da0b5175dc2ba9dc8d9",
+      "initcodeKeccak256": "0x87448654a9c51f4c499186bc17d81b9ffc46aa8fbae6e74d04833784c1d47aba"
+    },
+    {
+      "name": "IProgrammableCompletedGraphAdoptionPreflightV1",
+      "source": "src/hookemon/IProgrammableCompletedGraphAdoptionCompatV1.sol",
+      "role": "IMMUTABLE_TYPED_PREFLIGHT_INTERFACE",
+      "sourceSha256": "75fced51331e2cb262ab622d9b948a587a69e37944d46d0784feaf382d9b63e6",
+      "abiSha256": "c3428ec15e3c46db043be9e72511f9603b4a3f6c437cab5020dab9eff340cdb1"
+    },
+    {
+      "name": "ProgrammableCompletedGraphAdoptionPreflightV1",
+      "source": "src/hookemon/ProgrammableCompletedGraphAdoptionPreflightV1.sol",
+      "role": "IMMUTABLE_SIDE_EFFECT_FREE_PREFLIGHT_COMPANION",
+      "sourceSha256": "94b53667478b64e5c00702a8846ffe2363d094093288d2c4223978cd06770e19",
+      "abiSha256": "e1869e3ad641aded7dd290d53e61e447ea27a382f163e2af2fcbab455ef4b9d4",
+      "artifact": "out-hookemon-compat/ProgrammableCompletedGraphAdoptionPreflightV1.sol/ProgrammableCompletedGraphAdoptionPreflightV1.json",
+      "runtimeBytes": 8328,
+      "runtimeMarginToEip170Bytes": 16248,
+      "runtimeSha256": "21495dce04eb0c66272b8ee777b279988dd413057baabd820c1ae5d7d151d47b",
+      "runtimeKeccak256": "0xe7aedac223b999b55a579a45ad10d8892e90438755ad159c674999f58d5c1cd7",
+      "initcodeBytes": 8711,
+      "initcodeSha256": "cb455081aa84f3f06fc4335c66f49e5710eefb840a649102cf941e775ae44fb9",
+      "initcodeKeccak256": "0x91be86b2a5fe36bec779db43a63a0b9b2965a41fc05954fa0120a08b4bf69c14"
     }
   ],
   "test": {
     "source": "test/hookemon/ProgrammableCompletedGraphAdoptionCompatV1.t.sol",
-    "sourceSha256": "8f0057238c7bef31ca76935797350708c3aa963367629ce0ff2f95d0680e7bf4",
-    "abiSha256": "35f527bff7b54bec32bc3e5fa4ed01939cfc9e299d0dae50e31f325e40debc2b"
+    "sourceSha256": "f3cfb373dc09263e2d478535bb76025278b57f40005f2b35daed3dd2c8b2ae40",
+    "abiSha256": "4afabbeefba122adbb67bdc174caf1f3c06c6213be6f6581cfc273fcbd04e522"
   },
   "canonicalConstants": {
     "codecIdHash": "0x547425be5bbef0a87c0e12754155a053480cbbbecfcf4863bef3407f8289aa57",
     "validatorIdHash": "0x14a76cb1c48208f82ba7cec4f2c6c316357d0a1b840f6d673a35b7ddc4a75c1b",
+    "preflightIdHash": "0xf73375acccc5b87c1eff04c1c39b377a3579361816f36f7524d753d800b898f5",
+    "preflightRequiredRuntimeMask": 511,
     "adoptionOnlyReadinessConstraintHash": "0x200d18f90220af00fdadb83b716523e45c4565e83d48533c1a95d6a89ea92d51",
+    "eip712NameHash": "0x97fa37440048567cd094276a4b03a37e41a324c6bafc86796f704d1256adc03b",
+    "eip712VersionHash": "0xc89efdaa54c0f20c7adf612882df0950f5a951637e0307cdcb4c672f298b8bc6",
     "maxComponents": 24,
     "maxEdges": 64,
     "maxCurrentnessLifetimeSeconds": 3600,
     "maxCurrentnessSignatureBytes": 4096,
-    "maxStateVerifierStaticcallGas": 500000,
-    "stateVerifierGasReserve": 200000
+    "authorityGasReserve": 2000000,
+    "maxAuthorityStaticcallGas": 500000,
+    "stateVerifierGasReserve": 200000,
+    "maxStateVerifierStaticcallGas": 500000
   },
   "typehashes": {
     "profileKey": "0x9a25d44486e0f5da0c0cc7d5056ed14417af084bed8a0423240224b21873c303",
     "plan": "0x805cdb8d5243266cd4de117238139815637ae34b43729a8e6414cf458404b2bb",
+    "sourceCommit": "0x6221b4052987e4949872d24c485f8a71e43870d23253337dd9790a0d1b1eea77",
+    "sourceTree": "0x4502ffc7dd7543b715f1a350448998f257045a66ed8d453f207529cc903318c0",
     "launchGrantBindingA": "0x6373614d13166df962b9ca91b7de99c21e0771d33aec15051550c9aa184dcec2",
-    "launchGrantBindingB": "0x5074082f1ec821097066a0f29f2734329945770f63628859a64bb1310d2b3c11",
-    "launchGrantReview": "0xce9e9bdd3135aaf1758b97b785d944a631b186bfbe237130396bdc5008b63046",
+    "launchGrantBindingB": "0x868b8ac64fe6e7697770adb355fe0641961e7842b4f63486a14d25015cf4b4ac",
+    "launchGrantReview": "0xd4ece64261d615a8f4898a5b37753589a42dd09302ca03226e5731e5675bf122",
     "launchGrant": "0x3b56d205c1923d957a4baf5345745b739502f4a61c6c9c702b86f3bf888cb21a",
     "executionCurrentness": "0x80da2016dad2177f0f808bda1cd467a9b4fc95293a112c7e49a7444d861a88db",
+    "preflightQuery": "0x1f3f5062fa7410c2f889bdbab98c86b0059a5a1670845167541edbdcae27b8aa",
+    "preflightRuntimeControl": "0x8f809ecf56042f140caa365c8e024b29949dcb9e77b3c485a19643241c7e89bb",
+    "preflightLifecycle": "0x7c7dca0a5c187e4f351f9b64042e6c481cf2bb1098c61db98ebb10fd2d8b68db",
+    "preflightReservation": "0xa2ea343354998fbef45ee6b687dbe26bbfe21d57a0cdc0b13dd4852850f610a7",
+    "preflightComponentLeaf": "0x3f43d44bb443a48c7bb43bcaf77f31cd72cca0cad2dda7524b0635157ce252f9",
+    "preflightGlobalHead": "0xdee47b7e5a0efe12953554073a6a17189af47aa9d8a8850417afc4e66e821139",
+    "preflightReadback": "0xe158a2f1ef93fdb06a11589ee27fbfd57218c0325fde089ca4ee45832daeab0e",
     "adoptionRequest": "0xd720a3bb8eaa496619389814b1f5089383d8120cb782f8f8de6a543ae7d65282",
     "profileCapability": "0x6d7ab9935123d92d1e8635f5abb4c796e34a83de7cfd44e85499783a54b593e6",
-    "launchId": "0x2c07dcd6f50916bffbcb031a1ed3459a8d67cb8c85f2e050b3653a38e48ac023",
-    "component": "0x2feffe0465e90a45cb17d004c58df7034071f5fe5151eaa1b9a061ba6168fa07",
-    "componentConfiguration": "0xcbb63da62c513687c5ac668425c437ee6ed13a357238d9cdeded0213450b50d1",
+    "stampLaunchId": "0x09a20fe5a6d4f9a91cda72ce66220db7fa7e040d190f66422d99c4e7dab72f13",
+    "winnerKey": "0x170be498006d706782775a51221ef03d8caa6029d211c1ab147929da5587e46d",
+    "component": "0xcdd03ae75671e4867e6736a6cf24db2bf1aaa356a3a58e1e45a08b648e09af06",
+    "componentConfiguration": "0x1253f0a73a66a5829720d0c57e61e545201c77fcabfb2c1a4440f57c9ec44c3a",
+    "sharedComponentIdentity": "0xaf5d15890cdece2279c56c3eb2cb55ebd231ad6b52bf08afe8d12edaf6aa3c14",
     "componentCreationEvidence": "0x8e86028956a4e6bb49c599f177ad98ba38ee3bda010b2be4f0c1bb0f56efc8b8",
-    "componentCreationEvidenceSource": "0x15fc00937c3315146bdc7c176bee5bbb12f32fdadf23ad2c6521e061a0ddd672",
-    "componentCreationEvidenceComponent": "0xf96044b32aa830e3a6aec12b15ca690ce88d4e3e9c2ead2d11cb125d2e16738c",
-    "createTransactionEvidence": "0xbe75d2c6c37620da226fbc75a7d26dfc220ea3c8f40a632081eca7257c1e7578",
+    "componentCreationEvidenceSource": "0xec9ff60ed640455bd96e6a1d2e1f73413301f333661f6b3b929319e96867ab0b",
+    "componentCreationEvidenceComponent": "0xf8363305f8a480f9d253a545605a1a155d3828ba40319347d57a1b5c3f8d969c",
+    "creationReceiptEvidence": "0xe98d854764395c75afe4d6f0c7a59ed13212fcc9b8eada07a7ab55ce11e7e530",
     "edge": "0x6b1c7fd87bcd073750ba10f3065f65834ab49e2c15966de1f932fbeb812ddb1a",
     "componentGraph": "0x12660ca1683041a564455ceef1c1cce5d8be7c40fdb30b82094a1f28f6229e63",
     "runtimeSet": "0x5280c798edc7ae0d7d38c3ba133d94c61a2320b513bc6285c1feb0812308319d",
@@ -107,9 +173,15 @@
     "configuration": "0x621f11ade2adc9295784f1796d7d4f0a2ec6cff21f1434f2996b47c8e269a1fd",
     "result": "0x1ba6c743524c56589b68430a5ca12d963859b02bb84811cc1a5b5b2d2bcc2357",
     "applicationIdentity": "0x53bafaa1f1263dd1de9b54d09d55214a7ce1515141054d4c9d6d16bdfc34d57c",
-    "canonicalReceiptCore": "0xd71e94ef7cda533039e82adfd0c4889a2fcd25c6cde410f89c754c03385ff949",
+    "canonicalReceiptCore": "0xfbc43d14cb32d75fb719805f1b8f5c17519cf9410710ec067d8684b57a646491",
     "finalityIndexingReceipt": "0xa2aedbb59f3b10bfe02c86eb231f70247312a652def209b803045e4ae2a65343",
-    "grantStateHead": "0xea2ef03d5b24274a61b1dc1ea27ddd9b1ffbdc47ef7680011d7a4cdbad2bffe6"
+    "grantStateHead": "0x8a520d97e0f1b1a0d51f6b781b11b6c579d8bb18382df193606c0b83b30c1b7a",
+    "preflightAuthorityRoles": "0xc99ae98599426067f53a7bfe1a2a0a25fe2c820f003793fb5960ff71aa82473b",
+    "preflightCoreDependencies": "0x7ddf0274f2363b9d004915645e62d8b4305e5b76c53bb86dd9e29a69ab9f9644",
+    "preflightBaseRuntimeBinding": "0xc4ee4c70e1f16cf3b57ad669a86b8e38de4efcc7a1ada83d00b5b57634a50b3d",
+    "preflightProfileRuntimeBinding": "0xe0aacb28c0cc4eaa45bbd334b05ad2585658b92d4a01f19c6af2bd9016de99ed",
+    "preflightRuntimeAuthorityBinding": "0x98c82081678d57ea993f328a2ba231ba9677f155689a88c13948064a949a06f2",
+    "eip712Domain": "0x8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f"
   },
   "digestRules": {
     "profileKey": "keccak256(abi.encode(PROFILE_KEY_TYPEHASH, profileDescriptorHash, routeSchemaHash))",
@@ -118,46 +190,85 @@
     "grantDigest": "EIP-712 domain(chainId, registry) over codec.computeLaunchGrantStructHash(grant)",
     "currentnessDigest": "EIP-712 domain(chainId, registry) over codec.computeExecutionCurrentnessStructHash(currentness)",
     "profileCapabilityHash": "keccak256(abi.encode(PROFILE_CAPABILITY_TYPEHASH, keccak256(abi.encode(AdoptionProfileCapabilityV1))))",
-    "receiptCoreHash": "keccak256 over the seven core fields excluding receiptCoreHash itself",
-    "finalityIndexingReceiptHash": "codec normalizes finalityIndexingReceiptHash to zero before hashing"
+    "receiptCoreHash": "keccak256 over the eight typed core fields stampLaunchId, sourceLaunchId, grant digest/hash, currentness digest, plan hash, capability hash and request hash; receiptCoreHash itself is excluded",
+    "finalityIndexingReceiptHash": "codec normalizes finalityIndexingReceiptHash to zero before hashing",
+    "stampLaunchId": "keccak256(abi.encode(STAMP_LAUNCH_ID_TYPEHASH, chainId, registry, launchWallet, profileKey, contractPlanHash, sourceLaunchId)); sourceLaunchId is explicitly fed only through this published formula",
+    "sourceCommitHash": "keccak256(abi.encode(SOURCE_COMMIT_TYPEHASH, exact raw bytes20 Git commit object id)); raw bytes20 padding/equality is forbidden",
+    "sourceTreeHash": "keccak256(abi.encode(SOURCE_TREE_TYPEHASH, exact raw bytes20 Git tree object id)); raw bytes20 padding/equality is forbidden",
+    "winnerKeyHash": "keccak256(abi.encode(WINNER_KEY_TYPEHASH, exact chain/registry/applicant/profile/source including sourceLaunchId/plan/graph/intent/security/policy/review-generation domain)); supplied winnerKeyHash must equal the Codec result; antiReplayNonce is excluded so a second nonce cannot create another winner",
+    "creationReceiptEvidenceHash": "keccak256(abi.encode(CREATION_RECEIPT_EVIDENCE_TYPEHASH, CreationReceiptEvidenceV1))",
+    "grantStateHead": "keccak256(abi.encode(GRANT_STATE_HEAD_TYPEHASH, grantDigest, grantHash, stampLaunchId, status))",
+    "preflightQueryHash": "keccak256(abi.encode(PREFLIGHT_QUERY_TYPEHASH, keccak256(abi.encode(AdoptionPreflightQueryV1)))); candidate currentness digest is a separate diagnostic argument and is excluded",
+    "preflightComponentLeafHash": "keccak256(abi.encode(PREFLIGHT_COMPONENT_LEAF_TYPEHASH, canonical index/account/scope/expected shared identity/expected runtime/actual runtime/exclusive occupant/shared identity))",
+    "preflightReadbackHash": "keccak256(abi.encode(PREFLIGHT_READBACK_TYPEHASH, globalReadbackHeadHash, keccak256(abi.encodePacked(componentLeafHash[0..n-1]))))"
   },
   "selectors": {
-    "registerAdoptionProfileV1": "0x2a331453",
+    "registerAdoptionProfileV1": "0xb35544a4",
     "setAdoptionProfileStatusV1": "0xd004d1b8",
     "setGlobalAdoptionKillV1": "0xa4483ca4",
-    "activateLaunchGrantV1": "0xb27e65cf",
+    "activateLaunchGrantV1": "0x7bef77f0",
     "revokeLaunchGrantV1": "0xc53aaad3",
     "revokeExecutionCurrentnessV1": "0x2423590e",
-    "adoptCompletedGraphV1": "0xf6b69562",
+    "adoptCompletedGraphV1": "0x4e0aca2e",
     "advanceFinalityIndexingV1": "0xdab904dc",
-    "advanceSecurityPolicyEpochsV1": "0xb6dd4e52",
-    "launchGrantStatus": "0x564e8425",
-    "launchGrantStateHead": "0xc1cd6750",
-    "adoptionProfileStatusV1": "0xf3277610",
-    "globalAdoptionKilledV1": "0xd4fbea63",
-    "executionCurrentnessRevokedV1": "0x3002600d",
-    "verifyCurrentStateV1": "0x57d28c49"
+    "advanceSecurityPolicyEpochsV1": "0xd34530e0",
+    "launchGrantDigest": "0x71b1fd16",
+    "executionCurrentnessDigest": "0x6b7fdd60",
+    "preflightControlStateV1": "0x4b9956b9",
+    "preflightGrantReceiptStateV1": "0x93d83146",
+    "preflightComponentStateV1": "0x481b029d",
+    "canonicalReceiptCore": "0x0542d36f",
+    "adoptionPreflightReadbackV1": "0xc96dd959",
+    "computeAdoptionPreflightAggregateV1": "0x711d856f",
+    "verifyCurrentStateV1": "0x46e6a40e",
+    "validateProfileCapabilityV1": "0xb0742795",
+    "validateLaunchGrantV1": "0xf6722097",
+    "validateAdoptionEnvelopeV1": "0xa7461668",
+    "computeSourceCommitHash": "0x272bfb97",
+    "computeSourceTreeHash": "0x15e5418e",
+    "computeStampLaunchId": "0x5e75e08c",
+    "computeWinnerKeyHash": "0xa81966af",
+    "sourceRevisionMatches": "0x03489345",
+    "computeAdoptionPreflightQueryHash": "0xc88ac9a5",
+    "computeAdoptionPreflightComponentLeafHash": "0xe0fb2b31",
+    "computeAdoptionPreflightGlobalHeadHash": "0xc0ff2fb5",
+    "computeAdoptionPreflightReadbackHash": "0x66dd2481"
   },
   "launchGrantAndCurrentness": {
-    "grantLifecycle": ["None", "Active", "Revoked", "Consumed"],
+    "grantLifecycle": [
+      "None",
+      "Active",
+      "Revoked",
+      "Consumed"
+    ],
     "grantExpiry": "none",
     "activation": "Anyone may activate an exact grant only with the codehash-pinned reviewer ERC-1271 attestation over its exact EIP-712 grant digest and an Active registered profile.",
     "consumption": "Only the exact launch wallet may atomically consume Active to Consumed after fixed typed graph and current-state validation. Any revert rolls back reservations, currentness use, and consumption.",
-    "epochPolicy": "Grant securityControlHeadHash, securityEpoch/hash, policyEpoch/hash must equal current Registry state at activation and consumption. Any epoch/head drift requires a new reviewed grant/rebind; fresh currentness alone cannot consume the old grant.",
-    "currentness": "A separately reviewer-signed, revocable, one-use transport binds chain, registry, wallet, grant digest, plan, typed request, result, intent, current head/epochs and nonce. validAfter/deadline may span no more than 3600 seconds.",
-    "globalKill": "Reviewer or governance can kill activation and consumption immediately. Clearing a set kill requires a security or policy epoch advance, so pre-incident grants/currentness remain fail-closed.",
-    "stateReadback": "launchGrantStatus, launchGrantStateHead, currentSecurityPolicyEpochs and executionCurrentnessRevokedV1 are canonical state queries."
+    "epochPolicy": "Grant and Currentness securityControlHeadHash, security epoch/hash, policy epoch/hash and review generation/hash must equal current Registry and registered profile controls. Any drift requires a new profile identity where applicable, review, grant, currentness, winner nonce and derived winner key. Fresh currentness cannot revive an old grant.",
+    "currentness": "A separately reviewer-signed, revocable, one-use transport binds chain, registry, wallet, grant digest, plan, typed request, typed preflight aggregate, pre-sign Validator simulation evidence, exact service deployment identity, dual-provider quorum evidence, result, intent, current head/epochs/review generation and nonce. validAfter/deadline may span no more than 3600 seconds and is never an Applicant approval deadline.",
+    "globalKill": "Reviewer or governance can kill activation and consumption immediately. Clearing a set kill requires a strictly newer review generation plus a security or policy epoch advance; all pre-incident grants/currentness remain fail-closed.",
+    "stateReadback": "adoptionPreflightReadbackV1 is the side-effect-free typed consumer surface. It distinguishes chain/registry, all nine runtime classes, immutable runtime/authority binding, security/policy/review controls, kill/profile/grant/winner/currentness, graph/component/token/pool vacancy, receipt core and finality/indexing state without issuing a permit or creating an Applicant TTL. canonicalReceiptCore preserves the full immutable post-adoption core."
   },
   "profileLifecycle": {
     "registration": "One-time only. Re-registration is forbidden even after suspension or deprecation.",
-    "states": ["Invalid", "Active", "Suspended", "Deprecated"],
-    "suspension": "Reviewer or governance may suspend an active profile; activation and consumption both reject it.",
+    "states": [
+      "Invalid",
+      "Active",
+      "Suspended",
+      "Deprecated"
+    ],
+    "suspension": "Reviewer or governance may suspend an active profile; activation and consumption both reject it. Suspension is terminal for that exact profile identity/version except for a final transition to Deprecated. It cannot return to Active.",
+    "rebindAfterSuspension": "Recovery requires a separately registered profile identity/version plus a newly reviewed LaunchGrant and fresh currentness; pre-suspension grants/currentness cannot revive.",
     "deprecation": "Deprecated is terminal; finalized receipt records remain readable and immutable.",
     "admission": "DenyPendingReviewAndDeploymentEvidence cannot be registered as an active capability."
   },
   "typedProvenance": {
-    "componentDeploymentKinds": ["Create", "Create2", "ExternalCanonical"],
-    "createEvidence": "CREATE evidence commits transaction hash, block number/hash/index, sender and nonce, to=zero, value, input hash, receipt status, derived created address, finality evidence and dual-provider evidence. CREATE nonce zero is valid.",
+    "componentDeploymentKinds": [
+      "Create",
+      "Create2",
+      "ExternalCanonical"
+    ],
+    "createEvidence": "Top-level CREATE evidence binds finalized tx hash/block/index, sender+nonce, to=zero, value, exact initcode input hash, receipt success, CREATE-derived topLevelCreatedAddress, finality and dual-provider evidence. CREATE nonce zero is valid.",
     "requiredPerComponent": [
       "exact non-empty observed runtime code hash",
       "configuration hash and source-bound creation evidence hash",
@@ -165,10 +276,11 @@
       "strictly ordered components and edges plus directed connectivity from component zero"
     ],
     "poolBinding": "When the pool identity bit is set, PoolManager address/runtime, ExternalCanonical component index, pool ID, PoolKey hash and pool result hash are all nonzero and bound. A capability that requires a pool also pins the canonical chain-specific PoolManager address/runtime.",
-    "applicationBinding": "applicationHash must equal the exact Application component account/runtime/configuration commitment."
+    "applicationBinding": "applicationHash must equal the exact Application component account/runtime/configuration commitment.",
+    "create2Evidence": "CREATE2 evidence binds the finalized outer transaction context, the top-level CREATE address when outer to=zero, component deployer+salt+initcode-derived account, and a nonzero internalCreationTraceHash. Nested constructor CREATE2 and shared/fixed factories are representable; authenticated trace/history verification remains an external activation prerequisite."
   },
   "currentStateVerifier": {
-    "binding": "A registered direct, non-proxy, codehash-pinned stateVerifier and stateSchemaHash are mandatory for every active profile.",
+    "binding": "A registered codehash-pinned stateVerifier, state schema and nonzero behavior-evidence hash are mandatory. Onchain bytecode screening rejects DELEGATECALL; it does not claim to prove every CALL/STATICCALL forwarding dependency immutable.",
     "abi": "verifyCurrentStateV1(registry, capability, plan, components, edges, request) returns exactly (architectureStateHash, poolStateHash, revenueStateHash).",
     "call": "The Validator executes only this fixed selector using STATICCALL, at most 500000 gas and with a 200000 gas reserve. It requires exactly 96 bytes of returndata; revert, short, oversized or mismatched result fails closed.",
     "revenue": "V1 requires plan/grant revenueBindingHash and request/verifier revenue state to be zero. No revenue activation is represented."
@@ -176,7 +288,12 @@
   "receiptAndFinality": {
     "prepared": "Grant activation creates Prepared state and records the grant digest.",
     "adopted": "Typed adoption anchors immutable CanonicalReceiptCoreV1 with grant digest/hash, currentness digest, plan hash, registered capability hash and typed request hash.",
-    "appendOnlyTransitions": ["Prepared->Adopted", "Adopted->Finalized", "Finalized->Indexed", "Indexed->Published"],
+    "appendOnlyTransitions": [
+      "Prepared->Adopted",
+      "Adopted->Finalized",
+      "Finalized->Indexed",
+      "Indexed->Published"
+    ],
     "authority": {
       "finalized": "direct codehash-pinned finality authority",
       "indexedAndPublished": "direct codehash-pinned indexer authority"
@@ -191,8 +308,8 @@
     "newSourceAnchor": "A new source schedule anchor/deadline is a distinct reviewed plan, review, LaunchGrant and currentness; it must never be JIT-mutated under an existing grant."
   },
   "dependencyRule": {
-    "status": "PROXY_DEPENDENCIES_FORBIDDEN",
-    "rule": "Reviewer, governance, finality/indexer authorities, Codec, Validator and profile state verifier must have direct code and no DELEGATECALL opcode. Upgradeable assets or mutable dependencies require a separate typed profile verifier/review binding before activation."
+    "status": "DELEGATECALL_PROXY_REJECTED_EXTERNAL_BEHAVIOR_ATTESTATION_REQUIRED",
+    "rule": "Reviewer, governance, finality/indexer authorities, Codec, Validator, Preflight and profile state verifier require exact runtime codehashes and bytecode without DELEGATECALL. Because CALL/STATICCALL forwarding plus mutable storage cannot be proven generically from runtime alone, exact source/storage/control behavior evidence is mandatory before any non-null activation."
   },
   "hookemonConsumer": {
     "grantIssuance": "DENY_PENDING_REVIEW_AND_DEPLOYMENT_EVIDENCE",
@@ -243,18 +360,25 @@
     ]
   },
   "focusedValidation": {
-    "forge": "22 focused tests passed; one winner-key property fuzzed for 1000 runs",
+    "forge": "36 focused tests passed; one winner-key property fuzzed for 10000 runs",
     "coverage": [
-      "active grant becomes consumed and anchors immutable receipt",
-      "revoked grant/currentness and replay fail without consumption",
-      "years-later active grant works only with fresh bounded currentness",
-      "epoch drift rejects stale grant even with fresh currentness",
-      "global kill and suspended/deprecated profiles block activation/consumption",
-      "wrong-magic, revert, short-return and digest-mutated ERC-1271 responses fail",
-      "current-state mutation, verifier revert and malformed verifier return fail",
-      "typed CREATE nonce-zero evidence passes when address/provenance are exact",
-      "proxy-shaped verifier and deny capability registration fail",
-      "finality/indexing only append to immutable receipt core",
+      "evergreen Active grant succeeds years later only with fresh bounded currentness",
+      "revoked/consumed grants, currentness replay and nonce replay fail atomically",
+      "security/policy/review-generation drift rejects old grant even with fresh currentness",
+      "global kill and terminal profile suspension/deprecation prevent revival",
+      "winner key is derived from every required domain axis; identical concurrent domain has one winner",
+      "sourceLaunchId, stampLaunchId and antiReplayNonce are explicitly named, pairwise distinct in the Golden, and no equality condition exists",
+      "applicant/request, executable-source and carrier identities are separately grant-bound and cannot substitute for one another",
+      "review rebind requires a fresh terminal nonce/key domain and old grant remains terminal",
+      "typed state mutation, verifier revert/malformed return and PoolManager mismatch fail",
+      "typed preflight distinguishes runtime/control/profile/grant/winner/vacancy/replay/receipt/index state without signing or side effects",
+      "component runtime mutation changes the ordered preflight leaf and cannot consume the durable grant",
+      "missing pre-sign simulation, service deployment identity or dual-provider quorum evidence is retryable failure and does not consume the grant",
+      "candidate currentness digest used/revoked diagnostics are distinguishable but excluded from the signed snapshot to avoid circularity",
+      "ERC-1271 wrong magic, revert, short return and digest mutation fail",
+      "CREATE nonce-zero and outer-CREATE/nested-CREATE2 receipt+trace contexts are exact",
+      "shared component provenance/config identity cannot drift across plans",
+      "finality/indexing append without rewriting immutable receipt core",
       "legacy custom-graph route cannot silently migrate"
     ],
     "slitherHighSignal": {
@@ -274,8 +398,316 @@
         "incorrect-equality",
         "calls-loop"
       ],
-      "result": "No high/medium detector finding. The only two low calls-loop notices are bounded by MAX_COMPONENTS=24 and invoke only the codehash-pinned pure Codec; no applicant-controlled callee or state-changing external call is in either loop."
+      "result": "No high/medium detector finding. Four low calls-loop notices are bounded by MAX_COMPONENTS=24 and invoke only exact codehash-pinned Codec or Registry readback paths; the state-changing Registry loop is nonReentrant and runs only after Validator success."
     },
-    "manualSurfaceReview": "No deployment, value, transfer, approval, arbitrary target, dynamic selector, opaque action bytes or delegatecall execution entry exists. This artifact does not claim deployment, approval or activation."
+    "manualSurfaceReview": "No deployment, value, transfer, approval, arbitrary target, dynamic selector, opaque action bytes or delegatecall execution entry exists. This artifact does not claim deployment, approval or activation.",
+    "slitherFull": {
+      "detectors": 101,
+      "result": "No independently reproducible high/medium safety finding. Remaining reports are intentional Solidity zero-default memory initialization, the bounded <=1h internal currentness transport timestamp, bounded ERC-1271/state-verifier assembly return handling, four capped/codehash-pinned calls-loop notices, and naming style."
+    }
+  },
+  "abiCanonicalization": "recursive JSON object-key sort via jq -cS; UTF-8 bytes; no trailing LF",
+  "typehashPreimages": {
+    "profileKey": {
+      "constant": "PROFILE_KEY_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionProfileV1(bytes32 profileDescriptorHash,bytes32 routeSchemaHash)"
+    },
+    "plan": {
+      "constant": "PLAN_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionPlanV1(bytes32 abiEncodedPlanHash)"
+    },
+    "sourceCommit": {
+      "constant": "SOURCE_COMMIT_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphSourceCommitV1(bytes20 gitObjectId)"
+    },
+    "sourceTree": {
+      "constant": "SOURCE_TREE_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphSourceTreeV1(bytes20 gitObjectId)"
+    },
+    "launchGrantBindingA": {
+      "constant": "LAUNCH_GRANT_BINDING_A_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphLaunchGrantBindingAV1(uint256 chainId,address registry,address launchWallet,bytes32 applicantIdHash,bytes32 profileKey,bytes32 profileDescriptorHash,bytes32 exactContractBindingHash,bytes32 contractPlanHash,bytes32 applicantPlanArtifactHash,bytes32 adoptionIntentHash,uint8 executionReadiness,bytes32 executionReadinessConstraintHash)"
+    },
+    "launchGrantBindingB": {
+      "constant": "LAUNCH_GRANT_BINDING_B_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphLaunchGrantBindingBV1(uint8 executionTimeConstraint,bytes32 executionTimeConstraintEvidenceHash,bytes32 sourceRepositoryHash,bytes32 sourceCommitHash,bytes32 sourceTreeHash,bytes32 sourceLaunchId,bytes32 componentGraphHash,bytes32 exactRuntimeSetHash,bytes32 componentConfigurationSetHash,bytes32 revenueBindingHash,bytes32 resultHash)"
+    },
+    "launchGrantReview": {
+      "constant": "LAUNCH_GRANT_REVIEW_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphLaunchGrantReviewV1(bytes32 builderEvidenceHash,bytes32 reviewerAttestationHash,bytes32 securityControlHeadHash,bytes32 securityEpochHash,bytes32 policyHash,bytes32 policyEpochHash,bytes32 reviewGenerationHash,uint64 securityEpoch,uint64 policyEpoch,uint64 reviewGeneration,bytes32 antiReplayNonce,bytes32 winnerKeyHash)"
+    },
+    "launchGrant": {
+      "constant": "LAUNCH_GRANT_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphLaunchGrantV1(bytes32 bindingAHash,bytes32 bindingBHash,bytes32 reviewHash)"
+    },
+    "executionCurrentness": {
+      "constant": "EXECUTION_CURRENTNESS_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphExecutionCurrentnessV1(bytes32 abiEncodedCurrentnessHash)"
+    },
+    "preflightQuery": {
+      "constant": "PREFLIGHT_QUERY_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionPreflightQueryV1(bytes32 abiEncodedQueryHash)"
+    },
+    "preflightRuntimeControl": {
+      "constant": "PREFLIGHT_RUNTIME_CONTROL_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionPreflightRuntimeControlV1(uint256 chainId,address registry,bytes32 runtimeAuthorityBindingHash,uint16 liveRuntimeMask,bytes32 dependencyBehaviorEvidenceHash,bytes32 securityControlHeadHash,uint64 securityEpoch,bytes32 securityEpochHash,uint64 policyEpoch,bytes32 policyEpochHash,bytes32 reviewGenerationHash,uint64 reviewGeneration,bool globalAdoptionKilled)"
+    },
+    "preflightLifecycle": {
+      "constant": "PREFLIGHT_LIFECYCLE_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionPreflightLifecycleV1(uint8 profileStatus,bytes32 profileCapabilityHash,bytes32 grantStateHeadHash,bytes32 winnerNonceOccupantGrantDigest,bytes32 winnerKeyOccupantGrantDigest,bool currentnessNonceUsed,uint8 receiptStatus,bytes32 receiptCoreHash,bytes32 finalityIndexingReceiptHash)"
+    },
+    "preflightReservation": {
+      "constant": "PREFLIGHT_RESERVATION_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionPreflightReservationV1(bytes32 graphOccupantStampLaunchId,bytes32 exclusiveTokenOccupantStampLaunchId,bytes32 poolOccupantStampLaunchId)"
+    },
+    "preflightComponentLeaf": {
+      "constant": "PREFLIGHT_COMPONENT_LEAF_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionPreflightComponentLeafV1(uint8 componentIndex,address component,uint8 componentScope,bytes32 expectedSharedIdentityHash,bytes32 expectedRuntimeCodeHash,bytes32 actualRuntimeCodeHash,bytes32 exclusiveComponentOccupantStampLaunchId,bytes32 sharedComponentIdentityHash)"
+    },
+    "preflightGlobalHead": {
+      "constant": "PREFLIGHT_GLOBAL_HEAD_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionPreflightGlobalHeadV1(bytes32 queryHash,bytes32 runtimeControlHash,bytes32 lifecycleHash,bytes32 reservationHash)"
+    },
+    "preflightReadback": {
+      "constant": "PREFLIGHT_READBACK_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionPreflightReadbackV1(bytes32 globalReadbackHeadHash,bytes32 orderedComponentLeavesHash)"
+    },
+    "adoptionRequest": {
+      "constant": "ADOPTION_REQUEST_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionRequestV1(bytes32 abiEncodedRequestHash)"
+    },
+    "profileCapability": {
+      "constant": "PROFILE_CAPABILITY_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionProfileCapabilityV1(bytes32 abiEncodedCapabilityHash)"
+    },
+    "stampLaunchId": {
+      "constant": "STAMP_LAUNCH_ID_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionStampLaunchIdV1(uint256 chainId,address registry,address launchWallet,bytes32 profileKey,bytes32 contractPlanHash,bytes32 sourceLaunchId)"
+    },
+    "winnerKey": {
+      "constant": "WINNER_KEY_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionWinnerKeyV1(uint256 chainId,address registry,address launchWallet,bytes32 applicantIdHash,bytes32 profileKey,bytes32 profileDescriptorHash,bytes32 exactContractBindingHash,bytes32 sourceRepositoryHash,bytes32 sourceCommitHash,bytes32 sourceTreeHash,bytes32 sourceLaunchId,bytes32 contractPlanHash,bytes32 applicantPlanArtifactHash,bytes32 componentGraphHash,bytes32 adoptionIntentHash,uint64 securityEpoch,bytes32 securityEpochHash,uint64 policyEpoch,bytes32 policyEpochHash,uint64 reviewGeneration,bytes32 reviewGenerationHash)"
+    },
+    "component": {
+      "constant": "COMPONENT_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionComponentV1(address account,uint8 kind,uint8 scope,uint8 deploymentKind,address deployer,uint64 createNonce,bytes32 create2Salt,bytes32 initCodeHash,bytes32 creationReceiptEvidenceHash,bytes32 externalCanonicalIdHash,bytes32 runtimeCodeHash,bytes32 configurationHash,bytes32 creationEvidenceHash)"
+    },
+    "componentConfiguration": {
+      "constant": "COMPONENT_CONFIGURATION_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionComponentConfigurationV1(address account,uint8 kind,uint8 scope,uint8 deploymentKind,address deployer,uint64 createNonce,bytes32 create2Salt,bytes32 initCodeHash,bytes32 creationReceiptEvidenceHash,bytes32 externalCanonicalIdHash,bytes32 runtimeCodeHash)"
+    },
+    "sharedComponentIdentity": {
+      "constant": "SHARED_COMPONENT_IDENTITY_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphSharedComponentIdentityV1(address account,uint8 kind,uint8 deploymentKind,address deployer,uint64 createNonce,bytes32 create2Salt,bytes32 initCodeHash,bytes32 creationReceiptEvidenceHash,bytes32 externalCanonicalIdHash,bytes32 runtimeCodeHash,bytes32 intrinsicConfigurationHash)"
+    },
+    "componentCreationEvidence": {
+      "constant": "COMPONENT_CREATION_EVIDENCE_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionCreationEvidenceV1(bytes32 sourceBindingHash,bytes32 componentBindingHash)"
+    },
+    "componentCreationEvidenceSource": {
+      "constant": "COMPONENT_CREATION_EVIDENCE_SOURCE_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionCreationEvidenceSourceV1(uint256 chainId,address registry,bytes32 sourceRepositoryHash,bytes32 sourceCommitHash,bytes32 sourceTreeHash,bytes32 sourceLaunchId,bytes32 manifestHash,bytes32 policyHash,bytes32 applicantPlanArtifactHash,address launchWallet)"
+    },
+    "componentCreationEvidenceComponent": {
+      "constant": "COMPONENT_CREATION_EVIDENCE_COMPONENT_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionCreationEvidenceComponentV1(uint256 componentIndex,address account,uint8 kind,uint8 scope,uint8 deploymentKind,address deployer,uint64 createNonce,bytes32 create2Salt,bytes32 initCodeHash,bytes32 creationReceiptEvidenceHash,bytes32 externalCanonicalIdHash,bytes32 runtimeCodeHash)"
+    },
+    "creationReceiptEvidence": {
+      "constant": "CREATION_RECEIPT_EVIDENCE_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphCreationReceiptEvidenceV1(bytes32 transactionHash,uint64 blockNumber,bytes32 blockHash,uint32 transactionIndex,address transactionSender,uint64 transactionSenderNonce,address transactionTo,uint256 transactionValueWei,bytes32 transactionInputHash,bool receiptSucceeded,address topLevelCreatedAddress,bytes32 internalCreationTraceHash,bytes32 finalityEvidenceHash,bytes32 dualProviderEvidenceHash)"
+    },
+    "edge": {
+      "constant": "EDGE_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionEdgeV1(uint8 fromIndex,uint8 toIndex,uint8 kind,bytes32 relationHash)"
+    },
+    "componentGraph": {
+      "constant": "COMPONENT_GRAPH_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionGraphV1(bytes32 componentsHash,bytes32 edgesHash)"
+    },
+    "runtimeSet": {
+      "constant": "RUNTIME_SET_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionRuntimeSetV1(bytes32 orderedCommitmentsHash)"
+    },
+    "configurationSet": {
+      "constant": "CONFIGURATION_SET_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionConfigurationSetV1(bytes32 orderedCommitmentsHash)"
+    },
+    "configuration": {
+      "constant": "CONFIGURATION_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionConfigurationV1(bytes32 componentGraphHash,bytes32 componentConfigurationSetHash,bytes32 policyHash,bytes32 revenueBindingHash,address poolManager,bytes32 poolManagerRuntimeCodeHash,bytes32 poolKeyHash,bytes32 architectureResultHash)"
+    },
+    "result": {
+      "constant": "RESULT_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionResultV1(bytes32 componentGraphHash,bytes32 configurationHash,bytes32 architectureResultHash,bytes32 poolResultHash,bytes32 deploymentLineageHash)"
+    },
+    "applicationIdentity": {
+      "constant": "APPLICATION_IDENTITY_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphApplicationIdentityV1(address account,bytes32 runtimeCodeHash,bytes32 configurationHash)"
+    },
+    "canonicalReceiptCore": {
+      "constant": "CANONICAL_RECEIPT_CORE_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphCanonicalReceiptCoreV1(bytes32 stampLaunchId,bytes32 sourceLaunchId,bytes32 launchGrantDigest,bytes32 launchGrantHash,bytes32 executionCurrentnessDigest,bytes32 contractPlanHash,bytes32 profileCapabilityHash,bytes32 adoptionRequestHash)"
+    },
+    "finalityIndexingReceipt": {
+      "constant": "FINALITY_INDEXING_RECEIPT_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphFinalityIndexingReceiptV1(bytes32 abiEncodedReceiptWithoutHash)"
+    },
+    "grantStateHead": {
+      "constant": "GRANT_STATE_HEAD_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphGrantStateHeadV1(bytes32 grantDigest,bytes32 grantHash,bytes32 stampLaunchId,uint8 status)"
+    },
+    "preflightAuthorityRoles": {
+      "constant": "PREFLIGHT_AUTHORITY_ROLES_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionPreflightAuthorityRolesV1(address reviewerAuthority,bytes32 reviewerAuthorityRuntimeCodeHash,address governance,bytes32 governanceRuntimeCodeHash,address finalityAuthority,bytes32 finalityAuthorityRuntimeCodeHash,address indexerAuthority,bytes32 indexerAuthorityRuntimeCodeHash)"
+    },
+    "preflightCoreDependencies": {
+      "constant": "PREFLIGHT_CORE_DEPENDENCIES_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionPreflightCoreDependenciesV1(address codec,bytes32 codecRuntimeCodeHash,address validator,bytes32 validatorRuntimeCodeHash,address preflight,bytes32 preflightRuntimeCodeHash)"
+    },
+    "preflightBaseRuntimeBinding": {
+      "constant": "PREFLIGHT_BASE_RUNTIME_BINDING_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionPreflightBaseRuntimeBindingV1(uint256 chainId,address registry,bytes32 authorityRolesHash,bytes32 coreDependenciesHash,bytes32 dependencyBehaviorEvidenceHash)"
+    },
+    "preflightProfileRuntimeBinding": {
+      "constant": "PREFLIGHT_PROFILE_RUNTIME_BINDING_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionPreflightProfileRuntimeBindingV1(address stateVerifier,bytes32 stateVerifierRuntimeCodeHash,uint256 canonicalPoolManagerChainId,address canonicalPoolManager,bytes32 canonicalPoolManagerRuntimeCodeHash)"
+    },
+    "preflightRuntimeAuthorityBinding": {
+      "constant": "PREFLIGHT_RUNTIME_AUTHORITY_BINDING_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionPreflightRuntimeAuthorityBindingV1(bytes32 baseRuntimeBindingHash,bytes32 profileRuntimeBindingHash)"
+    },
+    "eip712Domain": {
+      "constant": "EIP712_DOMAIN_TYPEHASH",
+      "preimage": "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+    }
+  },
+  "identitySeparation": {
+    "sourceLaunchId": {
+      "role": "SOURCE_DEFINED_GRAPH_IDENTITY",
+      "formula": "exact reviewed source output copied into CompletedGraphPlanV1 and LaunchGrantV1",
+      "independentFrom": [
+        "stampLaunchId",
+        "antiReplayNonce"
+      ]
+    },
+    "stampLaunchId": {
+      "role": "ROUTER_REGISTRY_CANONICAL_STAMP_IDENTITY",
+      "formula": "keccak256(abi.encode(STAMP_LAUNCH_ID_TYPEHASH, chainId, registry, launchWallet, profileKey, contractPlanHash, sourceLaunchId))",
+      "independentFrom": [
+        "antiReplayNonce"
+      ]
+    },
+    "antiReplayNonce": {
+      "role": "INDEPENDENT_TERMINAL_ONE_WINNER_NONCE",
+      "formula": "reviewer-bound nonzero bytes32 included in LaunchGrant review hash; excluded from sourceLaunchId, stampLaunchId and winnerKeyHash formulas",
+      "equalityForbiddenWith": [
+        "sourceLaunchId",
+        "stampLaunchId"
+      ]
+    },
+    "hookemonExecutionEvidenceComparator": {
+      "status": "EXTERNAL_UNFROZEN_NOT_CONSUMED",
+      "staticWords": 37,
+      "rule": "Hookemon supplies its own read-only comparator candidate. This package neither copies nor authorizes an unfrozen applicant-specific typehash or selector."
+    }
+  },
+  "compatibilityBoundary": {
+    "genericContractRole": "SOURCE_NEUTRAL_COMPLETED_GRAPH_ADOPTION_AND_CANONICAL_STAMP_ONLY",
+    "arbitraryExecution": "FORBIDDEN",
+    "applicantSpecificComparatorSelectorsAccepted": false,
+    "legacyNonceEqualsSourceOrStampIdentity": "FORBIDDEN",
+    "rawGitObjectPaddingEquality": "FORBIDDEN",
+    "consumerRule": "Consumers use only this artifact ABI/typehash/selector set. Applicant-specific evidence is hash-bound through reviewed plan/evidence and an exact registered state verifier; it is never interpreted as generic Router calldata."
+  },
+  "hookemonCompatibility": {
+    "status": "DENY_PENDING_EXACT_APPLICANT_REVIEW_DEPLOYMENT_EVIDENCE_AND_PROFILE_BINDING",
+    "sourceExecution": "UNSUPPORTED_BY_THIS_ADOPT_ONLY_INTERFACE",
+    "identifiers": [
+      "sourceLaunchId",
+      "stampLaunchId",
+      "antiReplayNonce"
+    ],
+    "observedExecutionEvidenceComparator": "EXTERNAL_UNFROZEN_NOT_CONSUMED",
+    "legacyCustomGraphRequestMigration": "FORBIDDEN_REQUIRES_NEW_REVIEWED_ROUTE_SCHEMA_PROFILE_AND_GRANT",
+    "sourceScheduleWindow": "SOURCE_REVISION_OR_JIT_REVIEW_BINDING_REQUIRED_ROUTER_DOES_NOT_BYPASS"
+  },
+  "shardsCompatibility": {
+    "status": "DENY_UNDEPLOYED_EXTERNAL_NESTED_FACTORY_PROFILE_NOT_BOUND_BY_THIS_ARTIFACT",
+    "frozenSourceMutation": false,
+    "relationship": "This additive ADOPT-only package does not reinterpret or modify the frozen Shards NESTED_FACTORY execution profile."
+  },
+  "reproducibility": {
+    "config": "config/hookemon-compat/foundry.toml",
+    "configSha256": "3a16f92f61239374c33b67ba015c84fa372e5743674f655f6395317d5e90fc8a",
+    "remappings": "remappings.txt",
+    "remappingsSha256": "2f87686a246a21832728206395e762da51036a9fdf196ae43f7ead4768694ec0",
+    "generator": "scripts/generate-hookemon-adoption-compat-artifact.sh",
+    "generatorSha256": "f8ea7733de09d289037620dadf605e1bc7faff301c2e785854310cfff4ee609c",
+    "checker": "scripts/check-hookemon-adoption-compat-artifact.sh",
+    "checkerSha256": "e0aa311a7cb2abb071d7c2c8e218e6d416156a2219402985d91918978ef4332c",
+    "artifactCheckCommand": "./scripts/generate-hookemon-adoption-compat-artifact.sh --check",
+    "detachedCheckoutCommand": "FOUNDRY_CONFIG=config/hookemon-compat/foundry.toml forge test --match-contract ProgrammableCompletedGraphAdoptionCompatV1Test",
+    "dependencyMode": "PINNED_SOLC_0.8.26_LOCAL_HOOKEMON_SOURCES_ONLY_NO_LINKED_LIBRARIES; repository remappings are hash-bound but unused",
+    "abiCanonicalization": "recursive JSON object-key sort via jq -cS; UTF-8 bytes; no trailing LF",
+    "typehashDerivation": "canonical Solidity string literals extracted by constant name and hashed with Ethereum keccak256"
+  },
+  "sourceIdentityReferents": {
+    "applicantRequest": {
+      "role": "APPLICANT_AND_REVIEW_ADMISSION_IDENTITY",
+      "binding": "LaunchGrantV1.applicantIdHash plus reviewerAttestationHash; the attestation must transitively commit the exact reviewAdmissionHash and request receipt",
+      "mayReplaceExecutableSource": false
+    },
+    "executableEvidenceSource": {
+      "role": "EXECUTABLE_AND_MEASURED_SOURCE_REVISION",
+      "binding": "CompletedGraphPlanV1.sourceRepositoryHash/sourceCommitId/sourceTreeId and LaunchGrantV1.sourceRepositoryHash/sourceCommitHash/sourceTreeHash",
+      "gitCommitRule": "sourceCommitHash = keccak256(abi.encode(SOURCE_COMMIT_TYPEHASH, exact raw bytes20 executable-source Git commit object id))",
+      "gitTreeRule": "sourceTreeHash = keccak256(abi.encode(SOURCE_TREE_TYPEHASH, exact raw bytes20 executable-source Git tree object id))",
+      "mayBeRequestOrCarrierRevision": false
+    },
+    "carrierEvidenceProvenance": {
+      "role": "OFFCHAIN_CARRIER_PROVENANCE_ONLY",
+      "binding": "LaunchGrantV1.builderEvidenceHash may commit the exact carrier/evidence provenance",
+      "mayReplaceApplicantRequestOrExecutableSource": false
+    }
+  },
+  "deployment": {
+    "status": "UNDEPLOYED",
+    "chainId": null,
+    "codec": null,
+    "validator": null,
+    "preflight": null,
+    "registry": null,
+    "creationTransactions": null,
+    "finalityReceipts": null,
+    "sourceVerificationReceipts": null
+  },
+  "activation": {
+    "status": "DENY",
+    "registeredProfiles": [],
+    "issuedProductionGrants": [],
+    "publicConsumersBound": false
+  },
+  "preflight": {
+    "status": "IMMUTABLE_TYPED_COMPANION_UNDEPLOYED",
+    "sideEffects": false,
+    "signing": false,
+    "applicantTtl": false,
+    "requiredRuntimeMask": 511,
+    "runtimeMaskBits": [
+      "reviewer",
+      "governance",
+      "finality",
+      "indexer",
+      "codec",
+      "validator",
+      "stateVerifier",
+      "canonicalPoolManagerOrNoPool",
+      "preflight"
+    ],
+    "providerPolicy": "dualProviderQuorumEvidenceHash is a purpose-bound Authority attestation over two independent provider observations at one exact block identity; the contract never claims it queried providers",
+    "providerOutage": "PENDING_RETRYABLE_APPROVAL_UNCHANGED",
+    "simulationPolicy": "simulationEvidenceHash binds the exact pre-sign side-effect-free Validator eth_call recipe/result and cannot claim simulation of circular final signed calldata",
+    "deploymentPolicy": "serviceDeploymentBindingHash must bind the exact content-addressed Authority/API deployment; cache-only or provider-only state is insufficient",
+    "vacancyPolicy": "zero graph/component/token/pool/index occupants before the first transaction is valid and expected; total=1 is a post-transaction dual-finality/indexing condition only"
   }
 }

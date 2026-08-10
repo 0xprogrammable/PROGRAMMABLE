@@ -48,16 +48,230 @@ contract ProgrammableCompletedGraphAdoptionValidatorV1 {
         CODEC_RUNTIME_CODE_HASH = codec.codehash;
     }
 
+    /// @notice Validates one reusable, governance-registered ADOPT capability against the Registry's live controls.
+    /// @dev Pure policy lives in this codehash-pinned companion so the state-owning Registry remains deployable.
+    function validateProfileCapabilityV1(
+        address registry,
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionProfileCapabilityV1 calldata capability
+    ) external view returns (bool) {
+        _requireCodec();
+        if (registry == address(0)) return false;
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionPreflightControlStateV1 memory control =
+            IProgrammableCompletedGraphAdoptionCompatV1(registry).preflightControlStateV1(capability.profileKey);
+        bool requiresPool = (capability.requiredIdentityMask & IDENTITY_POOL) != 0;
+        bool forbidsPool = (capability.forbiddenIdentityMask & IDENTITY_POOL) != 0;
+        bool canonicalPoolConfigured = capability.canonicalPoolManagerChainId != 0
+            || capability.canonicalPoolManager != address(0)
+            || capability.canonicalPoolManagerRuntimeCodeHash != bytes32(0);
+        return capability.profileKey != bytes32(0) && capability.profileDescriptorHash != bytes32(0)
+            && capability.exactContractBindingHash != bytes32(0) && capability.routeSchemaHash != bytes32(0)
+            && capability.planSchemaArtifactHash != bytes32(0) && capability.policyHash != bytes32(0)
+            && capability.stateVerifierBinding.stateVerifier.code.length != 0
+            && !_containsDelegateCallOpcode(capability.stateVerifierBinding.stateVerifier)
+            && capability.stateVerifierBinding.stateVerifierRuntimeCodeHash != bytes32(0)
+            && capability.stateVerifierBinding.stateVerifier.codehash
+                == capability.stateVerifierBinding.stateVerifierRuntimeCodeHash
+            && capability.stateVerifierBinding.stateSchemaHash != bytes32(0)
+            && capability.stateVerifierBinding.stateVerifierBehaviorEvidenceHash != bytes32(0)
+            && capability.reviewControl.reviewGeneration == control.reviewControl.reviewGeneration
+            && capability.reviewControl.reviewGenerationHash == control.reviewControl.reviewGenerationHash
+            && (!canonicalPoolConfigured
+                || (capability.canonicalPoolManagerChainId == block.chainid
+                    && capability.canonicalPoolManager != address(0)
+                    && capability.canonicalPoolManagerRuntimeCodeHash != bytes32(0)))
+            && (!requiresPool || canonicalPoolConfigured) && (!forbidsPool || !canonicalPoolConfigured)
+            && capability.capabilitySemantics == IProgrammableCompletedGraphAdoptionCompatV1.CapabilitySemanticsV1.Adopt
+            && capability.admissionStatus == IProgrammableCompletedGraphAdoptionCompatV1.AdmissionStatusV1.Admitted
+            && capability.executionReadiness
+                == IProgrammableCompletedGraphAdoptionCompatV1.ExecutionReadinessV1.CompletedGraphAdoptionOnly
+            && capability.executionReadinessConstraintHash == CODEC.ADOPTION_ONLY_READINESS_CONSTRAINT_HASH()
+            && capability.executionTimeConstraint
+                != IProgrammableCompletedGraphAdoptionCompatV1.ExecutionTimeConstraintV1.Invalid
+            && (capability.executionTimeConstraint
+                    != IProgrammableCompletedGraphAdoptionCompatV1.ExecutionTimeConstraintV1.ExternalExecutionTimeBound
+                || capability.executionTimeConstraintEvidenceHash != bytes32(0))
+            && (capability.executionTimeConstraint
+                    != IProgrammableCompletedGraphAdoptionCompatV1.ExecutionTimeConstraintV1.AdoptionOnlyNoExecution
+                || capability.executionTimeConstraintEvidenceHash == bytes32(0))
+            && capability.requiredIdentityMask & ~IDENTITY_MASK_ALL == 0
+            && capability.forbiddenIdentityMask & ~IDENTITY_MASK_ALL == 0
+            && capability.requiredIdentityMask & capability.forbiddenIdentityMask == 0 && capability.enabled
+            && control.profileStatus == IProgrammableCompletedGraphAdoptionCompatV1.ProfileStatusV1.Invalid
+            && CODEC.computeProfileKey(capability.profileDescriptorHash, capability.routeSchemaHash)
+                == capability.profileKey;
+    }
+
+    /// @notice Validates the durable grant's immutable review bindings against the live Registry/profile controls.
+    function validateLaunchGrantV1(
+        address registry,
+        IProgrammableCompletedGraphAdoptionCompatV1.LaunchGrantV1 calldata grant,
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionProfileCapabilityV1 calldata capability
+    ) external view returns (bool) {
+        _requireCodec();
+        if (registry == address(0)) return false;
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionPreflightControlStateV1 memory control =
+            IProgrammableCompletedGraphAdoptionCompatV1(registry).preflightControlStateV1(grant.profileKey);
+        return grant.chainId == block.chainid && grant.registry == registry && grant.launchWallet != address(0)
+            && grant.applicantIdHash != bytes32(0) && grant.profileKey == capability.profileKey
+            && grant.profileDescriptorHash == capability.profileDescriptorHash
+            && grant.exactContractBindingHash == capability.exactContractBindingHash
+            && grant.contractPlanHash != bytes32(0) && grant.applicantPlanArtifactHash != bytes32(0)
+            && grant.adoptionIntentHash != bytes32(0)
+            && grant.executionReadiness
+                == IProgrammableCompletedGraphAdoptionCompatV1.ExecutionReadinessV1.CompletedGraphAdoptionOnly
+            && grant.executionReadiness == capability.executionReadiness
+            && grant.executionReadinessConstraintHash == capability.executionReadinessConstraintHash
+            && grant.executionTimeConstraint
+                != IProgrammableCompletedGraphAdoptionCompatV1.ExecutionTimeConstraintV1.Invalid
+            && grant.executionTimeConstraint == capability.executionTimeConstraint
+            && grant.executionTimeConstraintEvidenceHash == capability.executionTimeConstraintEvidenceHash
+            && (grant.executionTimeConstraint
+                    != IProgrammableCompletedGraphAdoptionCompatV1.ExecutionTimeConstraintV1.ExternalExecutionTimeBound
+                || grant.executionTimeConstraintEvidenceHash != bytes32(0))
+            && (grant.executionTimeConstraint
+                    != IProgrammableCompletedGraphAdoptionCompatV1.ExecutionTimeConstraintV1.AdoptionOnlyNoExecution
+                || grant.executionTimeConstraintEvidenceHash == bytes32(0)) && grant.sourceRepositoryHash != bytes32(0)
+            && grant.sourceCommitHash != bytes32(0) && grant.sourceTreeHash != bytes32(0)
+            && grant.sourceLaunchId != bytes32(0) && grant.componentGraphHash != bytes32(0)
+            && grant.exactRuntimeSetHash != bytes32(0) && grant.componentConfigurationSetHash != bytes32(0)
+            && grant.revenueBindingHash == bytes32(0) && grant.resultHash != bytes32(0)
+            && grant.builderEvidenceHash != bytes32(0) && grant.reviewerAttestationHash != bytes32(0)
+            && grant.securityControlHeadHash == control.securityControlHeadHash
+            && grant.securityEpochHash == control.securityEpochHash && grant.policyHash == capability.policyHash
+            && grant.policyEpochHash == control.policyEpochHash && grant.securityEpoch == control.securityEpoch
+            && grant.policyEpoch == control.policyEpoch
+            && grant.reviewControl.reviewGeneration == control.reviewControl.reviewGeneration
+            && grant.reviewControl.reviewGenerationHash == control.reviewControl.reviewGenerationHash
+            && grant.reviewControl.reviewGeneration == capability.reviewControl.reviewGeneration
+            && grant.reviewControl.reviewGenerationHash == capability.reviewControl.reviewGenerationHash
+            && grant.antiReplayNonce != bytes32(0) && grant.winnerKeyHash != bytes32(0)
+            && grant.winnerKeyHash == CODEC.computeWinnerKeyHash(grant);
+    }
+
+    /// @notice Validates the closed grant/plan/request envelope and its live Registry lifecycle state.
+    function validateAdoptionEnvelopeV1(
+        address registry,
+        address launchCaller,
+        IProgrammableCompletedGraphAdoptionCompatV1.LaunchGrantV1 calldata grant,
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionProfileCapabilityV1 calldata capability,
+        IProgrammableCompletedGraphAdoptionCompatV1.CompletedGraphPlanV1 calldata plan,
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionRequestV1 calldata request,
+        bytes32 grantDigest,
+        bytes32 planHash,
+        bytes32 stampLaunchId
+    ) external view returns (bool) {
+        _requireCodec();
+        if (registry == address(0)) return false;
+        IProgrammableCompletedGraphAdoptionCompatV1 source = IProgrammableCompletedGraphAdoptionCompatV1(registry);
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionPreflightControlStateV1 memory control =
+            source.preflightControlStateV1(plan.profileKey);
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionPreflightQueryV1 memory query;
+        query.launchGrantDigest = grantDigest;
+        query.stampLaunchId = stampLaunchId;
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionPreflightGrantReceiptStateV1 memory lifecycle =
+            source.preflightGrantReceiptStateV1(query, bytes32(0));
+        return _validAdoptionProfileAndPlan(launchCaller, capability, plan, control)
+            && _validAdoptionGrantPlan(
+            grant, capability, plan, control, lifecycle, grantDigest, planHash, stampLaunchId
+        ) && request.stampLaunchId == stampLaunchId && request.profileKey == plan.profileKey
+            && request.componentGraphHash == plan.componentGraphHash && request.resultHash == plan.resultHash
+            && request.currentArchitectureStateHash != bytes32(0)
+            && ((plan.identityMask & IDENTITY_POOL) != 0) == (request.currentPoolStateHash != bytes32(0))
+            && request.currentRevenueStateHash == bytes32(0);
+    }
+
+    function _validAdoptionProfileAndPlan(
+        address launchCaller,
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionProfileCapabilityV1 calldata capability,
+        IProgrammableCompletedGraphAdoptionCompatV1.CompletedGraphPlanV1 calldata plan,
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionPreflightControlStateV1 memory control
+    ) private pure returns (bool) {
+        return launchCaller == plan.launchWallet && !control.globalAdoptionKilled
+            && control.profileStatus == IProgrammableCompletedGraphAdoptionCompatV1.ProfileStatusV1.Active
+            && capability.enabled
+            && capability.capabilitySemantics == IProgrammableCompletedGraphAdoptionCompatV1.CapabilitySemanticsV1.Adopt
+            && capability.admissionStatus == IProgrammableCompletedGraphAdoptionCompatV1.AdmissionStatusV1.Admitted
+            && capability.executionReadiness
+                == IProgrammableCompletedGraphAdoptionCompatV1.ExecutionReadinessV1.CompletedGraphAdoptionOnly
+            && plan.profileDescriptorHash == capability.profileDescriptorHash
+            && plan.exactContractBindingHash == capability.exactContractBindingHash
+            && plan.routeSchemaHash == capability.routeSchemaHash
+            && plan.planSchemaArtifactHash == capability.planSchemaArtifactHash
+            && plan.policyHash == capability.policyHash && plan.launchClassification == capability.launchClassification
+            && plan.identityMask & ~IDENTITY_MASK_ALL == 0
+            && plan.identityMask & capability.requiredIdentityMask == capability.requiredIdentityMask
+            && plan.identityMask & capability.forbiddenIdentityMask == 0 && plan.adoptionIntentHash != bytes32(0)
+            && plan.executionReadiness
+                == IProgrammableCompletedGraphAdoptionCompatV1.ExecutionReadinessV1.CompletedGraphAdoptionOnly
+            && plan.executionReadiness == capability.executionReadiness
+            && plan.executionReadinessConstraintHash == capability.executionReadinessConstraintHash
+            && plan.executionTimeConstraint
+                != IProgrammableCompletedGraphAdoptionCompatV1.ExecutionTimeConstraintV1.Invalid
+            && plan.executionTimeConstraint == capability.executionTimeConstraint
+            && plan.executionTimeConstraintEvidenceHash == capability.executionTimeConstraintEvidenceHash
+            && (plan.executionTimeConstraint
+                    != IProgrammableCompletedGraphAdoptionCompatV1.ExecutionTimeConstraintV1.ExternalExecutionTimeBound
+                || plan.executionTimeConstraintEvidenceHash != bytes32(0))
+            && (plan.executionTimeConstraint
+                    != IProgrammableCompletedGraphAdoptionCompatV1.ExecutionTimeConstraintV1.AdoptionOnlyNoExecution
+                || plan.executionTimeConstraintEvidenceHash == bytes32(0)) && plan.manifestHash != bytes32(0)
+            && plan.compilerArtifactHash != bytes32(0) && plan.applicantPlanArtifactHash != bytes32(0)
+            && plan.componentGraphHash != bytes32(0) && plan.exactRuntimeSetHash != bytes32(0)
+            && plan.componentConfigurationSetHash != bytes32(0) && plan.configurationHash != bytes32(0)
+            && plan.revenueBindingHash == bytes32(0) && plan.architectureResultHash != bytes32(0)
+            && plan.deploymentLineageHash != bytes32(0) && plan.resultHash != bytes32(0);
+    }
+
+    function _validAdoptionGrantPlan(
+        IProgrammableCompletedGraphAdoptionCompatV1.LaunchGrantV1 calldata grant,
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionProfileCapabilityV1 calldata capability,
+        IProgrammableCompletedGraphAdoptionCompatV1.CompletedGraphPlanV1 calldata plan,
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionPreflightControlStateV1 memory control,
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionPreflightGrantReceiptStateV1 memory lifecycle,
+        bytes32 grantDigest,
+        bytes32 planHash,
+        bytes32 stampLaunchId
+    ) private view returns (bool) {
+        return lifecycle.grantStateHead.status == IProgrammableCompletedGraphAdoptionCompatV1.GrantStatusV1.Active
+            && lifecycle.grantStateHead.stampLaunchId == stampLaunchId
+            && lifecycle.receiptStatus == IProgrammableCompletedGraphAdoptionCompatV1.ReceiptStatusV1.Prepared
+            && lifecycle.grantStateHead.grantHash == CODEC.computeLaunchGrantHash(grant)
+            && lifecycle.grantStateHead.grantDigest == grantDigest && grant.contractPlanHash == planHash
+            && grant.applicantPlanArtifactHash == plan.applicantPlanArtifactHash
+            && grant.adoptionIntentHash == plan.adoptionIntentHash
+            && grant.executionReadiness == plan.executionReadiness
+            && grant.executionReadinessConstraintHash == plan.executionReadinessConstraintHash
+            && grant.executionTimeConstraint == plan.executionTimeConstraint
+            && grant.executionTimeConstraintEvidenceHash == plan.executionTimeConstraintEvidenceHash
+            && grant.sourceRepositoryHash == plan.sourceRepositoryHash && grant.sourceLaunchId == plan.sourceLaunchId
+            && grant.componentGraphHash == plan.componentGraphHash
+            && grant.exactRuntimeSetHash == plan.exactRuntimeSetHash
+            && grant.componentConfigurationSetHash == plan.componentConfigurationSetHash
+            && grant.revenueBindingHash == plan.revenueBindingHash && grant.resultHash == plan.resultHash
+            && grant.policyHash == plan.policyHash && grant.securityControlHeadHash == control.securityControlHeadHash
+            && grant.securityEpoch == control.securityEpoch && grant.securityEpochHash == control.securityEpochHash
+            && grant.policyEpoch == control.policyEpoch && grant.policyEpochHash == control.policyEpochHash
+            && grant.reviewControl.reviewGeneration == control.reviewControl.reviewGeneration
+            && grant.reviewControl.reviewGenerationHash == control.reviewControl.reviewGenerationHash
+            && grant.reviewControl.reviewGeneration == capability.reviewControl.reviewGeneration
+            && grant.reviewControl.reviewGenerationHash == capability.reviewControl.reviewGenerationHash;
+    }
+
     function validateCompletedGraphV1(
         address registry,
         IProgrammableCompletedGraphAdoptionCompatV1.AdoptionProfileCapabilityV1 calldata capability,
         IProgrammableCompletedGraphAdoptionCompatV1.CompletedGraphPlanV1 calldata plan,
+        bytes32 sourceCommitHash,
+        bytes32 sourceTreeHash,
         IProgrammableCompletedGraphAdoptionCompatV1.ComponentV1[] calldata components,
         IProgrammableCompletedGraphAdoptionCompatV1.GraphEdgeV1[] calldata edges,
         IProgrammableCompletedGraphAdoptionCompatV1.AdoptionRequestV1 calldata request
     ) external view {
         if (registry == address(0)) revert InvalidBinding(2);
         _requireCodec();
+        if (!CODEC.sourceRevisionMatches(plan.sourceCommitId, plan.sourceTreeId, sourceCommitHash, sourceTreeHash)) {
+            revert InvalidBinding(2);
+        }
         _validatePlanIdentitiesAndPool(capability, plan);
         _validateComponents(registry, capability, plan, components, edges, request);
     }
@@ -85,20 +299,21 @@ contract ProgrammableCompletedGraphAdoptionValidatorV1 {
                     || plan.poolKeyHash != bytes32(0)
                     || plan.poolResultHash != bytes32(0))
         ) revert InvalidBinding(3);
-        bool profileRequiresPool = (capability.requiredIdentityMask & IDENTITY_POOL) != 0;
-        if (profileRequiresPool) {
+        bool canonicalPoolConfigured = capability.canonicalPoolManagerChainId != 0
+            || capability.canonicalPoolManager != address(0)
+            || capability.canonicalPoolManagerRuntimeCodeHash != bytes32(0);
+        if (canonicalPoolConfigured) {
             if (
                 capability.canonicalPoolManagerChainId != block.chainid || capability.canonicalPoolManager == address(0)
                     || capability.canonicalPoolManagerRuntimeCodeHash == bytes32(0)
-                    || plan.poolManager != capability.canonicalPoolManager
-                    || plan.poolManagerRuntimeCodeHash != capability.canonicalPoolManagerRuntimeCodeHash
             ) revert InvalidBinding(3);
-        } else if (
-            capability.canonicalPoolManagerChainId != 0 || capability.canonicalPoolManager != address(0)
-                || capability.canonicalPoolManagerRuntimeCodeHash != bytes32(0)
-        ) {
-            revert InvalidBinding(3);
         }
+        if (
+            hasPool
+                && (!canonicalPoolConfigured
+                    || plan.poolManager != capability.canonicalPoolManager
+                    || plan.poolManagerRuntimeCodeHash != capability.canonicalPoolManagerRuntimeCodeHash)
+        ) revert InvalidBinding(3);
     }
 
     function _validateComponents(
@@ -211,21 +426,22 @@ contract ProgrammableCompletedGraphAdoptionValidatorV1 {
                     || component.initCodeHash == bytes32(0) || component.externalCanonicalIdHash != bytes32(0)
                     || _computeCreateAddress(component.deployer, component.createNonce) != component.account
             ) revert InvalidBinding(7);
-            _validateCreateTransactionEvidence(component);
+            _validateCreationReceiptEvidence(component);
         } else if (component.deploymentKind == IProgrammableCompletedGraphAdoptionCompatV1.DeploymentKindV1.Create2) {
             if (
                 component.deployer == address(0) || component.createNonce != 0 || component.initCodeHash == bytes32(0)
                     || component.externalCanonicalIdHash != bytes32(0)
                     || _computeCreate2Address(component.create2Salt, component.initCodeHash, component.deployer)
-                        != component.account || !_emptyCreateTransactionEvidence(component.createTransactionEvidence)
+                        != component.account
             ) revert InvalidBinding(7);
+            _validateCreationReceiptEvidence(component);
         } else if (
             component.deploymentKind == IProgrammableCompletedGraphAdoptionCompatV1.DeploymentKindV1.ExternalCanonical
         ) {
             if (
                 component.deployer != address(0) || component.createNonce != 0 || component.create2Salt != bytes32(0)
                     || component.initCodeHash != bytes32(0) || component.externalCanonicalIdHash == bytes32(0)
-                    || !_emptyCreateTransactionEvidence(component.createTransactionEvidence)
+                    || !_emptyCreationReceiptEvidence(component.creationReceiptEvidence)
             ) revert InvalidBinding(7);
         } else {
             revert InvalidBinding(7);
@@ -324,11 +540,13 @@ contract ProgrammableCompletedGraphAdoptionValidatorV1 {
         IProgrammableCompletedGraphAdoptionCompatV1.GraphEdgeV1[] calldata edges,
         IProgrammableCompletedGraphAdoptionCompatV1.AdoptionRequestV1 calldata request
     ) private view returns (bytes32 architectureStateHash, bytes32 poolStateHash, bytes32 revenueStateHash) {
-        address verifier = capability.stateVerifier;
+        address verifier = capability.stateVerifierBinding.stateVerifier;
         if (
-            verifier.code.length == 0 || capability.stateVerifierRuntimeCodeHash == bytes32(0)
-                || verifier.codehash != capability.stateVerifierRuntimeCodeHash
-                || capability.stateSchemaHash == bytes32(0) || _containsDelegateCallOpcode(verifier)
+            verifier.code.length == 0 || capability.stateVerifierBinding.stateVerifierRuntimeCodeHash == bytes32(0)
+                || verifier.codehash != capability.stateVerifierBinding.stateVerifierRuntimeCodeHash
+                || capability.stateVerifierBinding.stateSchemaHash == bytes32(0)
+                || capability.stateVerifierBinding.stateVerifierBehaviorEvidenceHash == bytes32(0)
+                || _containsDelegateCallOpcode(verifier)
         ) revert InvalidBinding(12);
         bytes memory data = abi.encodeCall(
             IProgrammableCompletedGraphAdoptionStateVerifierV1.verifyCurrentStateV1,
@@ -365,28 +583,51 @@ contract ProgrammableCompletedGraphAdoptionValidatorV1 {
         ) revert InvalidBinding(12);
     }
 
-    function _validateCreateTransactionEvidence(
+    function _validateCreationReceiptEvidence(
         IProgrammableCompletedGraphAdoptionCompatV1.ComponentV1 calldata component
     ) private pure {
-        IProgrammableCompletedGraphAdoptionCompatV1.CreateTransactionEvidenceV1 calldata evidence =
-        component.createTransactionEvidence;
+        IProgrammableCompletedGraphAdoptionCompatV1.CreationReceiptEvidenceV1 calldata
+            evidence = component.creationReceiptEvidence;
         if (
             evidence.transactionHash == bytes32(0) || evidence.blockNumber == 0 || evidence.blockHash == bytes32(0)
-                || evidence.sender != component.deployer || evidence.senderNonce != component.createNonce
-                || evidence.to != address(0) || evidence.inputHash != component.initCodeHash
-                || !evidence.receiptSucceeded || evidence.createdAddress != component.account
-                || evidence.finalityEvidenceHash == bytes32(0) || evidence.dualProviderEvidenceHash == bytes32(0)
+                || evidence.transactionSender == address(0) || evidence.transactionInputHash == bytes32(0)
+                || !evidence.receiptSucceeded || evidence.finalityEvidenceHash == bytes32(0)
+                || evidence.dualProviderEvidenceHash == bytes32(0)
         ) revert InvalidBinding(13);
+        if (component.deploymentKind == IProgrammableCompletedGraphAdoptionCompatV1.DeploymentKindV1.Create) {
+            if (
+                evidence.transactionSender != component.deployer
+                    || evidence.transactionSenderNonce != component.createNonce || evidence.transactionTo != address(0)
+                    || evidence.transactionInputHash != component.initCodeHash
+                    || evidence.topLevelCreatedAddress != component.account
+                    || evidence.internalCreationTraceHash != bytes32(0)
+            ) revert InvalidBinding(13);
+        } else if (component.deploymentKind == IProgrammableCompletedGraphAdoptionCompatV1.DeploymentKindV1.Create2) {
+            bool outerCreate = evidence.transactionTo == address(0);
+            address expectedTopLevelCreatedAddress = outerCreate
+                ? _computeCreateAddress(evidence.transactionSender, evidence.transactionSenderNonce)
+                : address(0);
+            if (
+                evidence.topLevelCreatedAddress != expectedTopLevelCreatedAddress
+                    || evidence.internalCreationTraceHash == bytes32(0)
+            ) {
+                revert InvalidBinding(13);
+            }
+        } else {
+            revert InvalidBinding(13);
+        }
     }
 
-    function _emptyCreateTransactionEvidence(
-        IProgrammableCompletedGraphAdoptionCompatV1.CreateTransactionEvidenceV1 calldata evidence
+    function _emptyCreationReceiptEvidence(
+        IProgrammableCompletedGraphAdoptionCompatV1.CreationReceiptEvidenceV1 calldata evidence
     ) private pure returns (bool) {
         return evidence.transactionHash == bytes32(0) && evidence.blockNumber == 0 && evidence.blockHash == bytes32(0)
-            && evidence.transactionIndex == 0 && evidence.sender == address(0) && evidence.senderNonce == 0
-            && evidence.to == address(0) && evidence.valueWei == 0 && evidence.inputHash == bytes32(0)
-            && !evidence.receiptSucceeded && evidence.createdAddress == address(0)
-            && evidence.finalityEvidenceHash == bytes32(0) && evidence.dualProviderEvidenceHash == bytes32(0);
+            && evidence.transactionIndex == 0 && evidence.transactionSender == address(0)
+            && evidence.transactionSenderNonce == 0 && evidence.transactionTo == address(0)
+            && evidence.transactionValueWei == 0 && evidence.transactionInputHash == bytes32(0)
+            && !evidence.receiptSucceeded && evidence.topLevelCreatedAddress == address(0)
+            && evidence.internalCreationTraceHash == bytes32(0) && evidence.finalityEvidenceHash == bytes32(0)
+            && evidence.dualProviderEvidenceHash == bytes32(0);
     }
 
     function _containsDelegateCallOpcode(address dependency) private view returns (bool) {

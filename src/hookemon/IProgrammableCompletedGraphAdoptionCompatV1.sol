@@ -95,6 +95,19 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
         PoolBinds
     }
 
+    /// @notice Monotonic global review control, nested to keep the non-viaIR ABI decoder bounded.
+    struct ReviewGenerationV1 {
+        bytes32 reviewGenerationHash;
+        uint64 reviewGeneration;
+    }
+
+    struct StateVerifierBindingV1 {
+        address stateVerifier;
+        bytes32 stateVerifierRuntimeCodeHash;
+        bytes32 stateSchemaHash;
+        bytes32 stateVerifierBehaviorEvidenceHash;
+    }
+
     struct PrimaryIdentitiesV1 {
         address token;
         address hook;
@@ -102,26 +115,32 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
         bytes32 applicationHash;
     }
 
-    /// @notice Finalized top-level CREATE transaction evidence. This package does not execute CREATE.
-    /// @dev `to` is required to be zero and `inputHash` must equal the component init-code hash. The reviewer
-    ///      attestation binds the finalized dual-provider evidence; the Validator derives the created address.
-    struct CreateTransactionEvidenceV1 {
+    /// @notice Finalized transaction/receipt context for an observed CREATE or CREATE2. This package never deploys.
+    /// @dev CREATE requires a contract-creation transaction (`transactionTo == 0`) whose sender, nonce and input
+    ///      hash derive the component. CREATE2 may be nested under either a normal call or an outer CREATE; the
+    ///      optional `topLevelCreatedAddress` distinguishes those receipt contexts while a nonzero internal trace
+    ///      binds the nested call chain/deployer/opcode result. The component separately binds the CREATE2 deployer,
+    ///      salt and init-code hash. Trace/history hashes are reviewer-authenticated evidence, not onchain facts.
+    struct CreationReceiptEvidenceV1 {
         bytes32 transactionHash;
         uint64 blockNumber;
         bytes32 blockHash;
         uint32 transactionIndex;
-        address sender;
-        uint64 senderNonce;
-        address to;
-        uint256 valueWei;
-        bytes32 inputHash;
+        address transactionSender;
+        uint64 transactionSenderNonce;
+        address transactionTo;
+        uint256 transactionValueWei;
+        bytes32 transactionInputHash;
         bool receiptSucceeded;
-        address createdAddress;
+        address topLevelCreatedAddress;
+        bytes32 internalCreationTraceHash;
         bytes32 finalityEvidenceHash;
         bytes32 dualProviderEvidenceHash;
     }
 
-    /// @dev Every component has exact CREATE/CREATE2 provenance and an observed runtime/config commitment.
+    /// @dev Every component has exact CREATE/CREATE2 provenance, an observed runtime and a plan-independent
+    ///      configuration commitment. Source/plan-bound creation evidence remains separate so shared identity cannot
+    ///      accidentally depend on a later applicant plan.
     struct ComponentV1 {
         address account;
         ComponentKindV1 kind;
@@ -131,7 +150,7 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
         uint64 createNonce;
         bytes32 create2Salt;
         bytes32 initCodeHash;
-        CreateTransactionEvidenceV1 createTransactionEvidence;
+        CreationReceiptEvidenceV1 creationReceiptEvidence;
         bytes32 externalCanonicalIdHash;
         bytes32 runtimeCodeHash;
         bytes32 configurationHash;
@@ -153,8 +172,15 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
         bytes32 routeSchemaHash;
         bytes32 planSchemaArtifactHash;
         bytes32 sourceRepositoryHash;
-        bytes32 sourceCommitHash;
-        bytes32 sourceTreeHash;
+        /// @dev Exact raw Git object identity of the executable/evidence source revision. It is neither the
+        ///      applicant-request/review-admission revision nor an offchain carrier/evidence commit. The paired
+        ///      commitment must use the Codec domain helper.
+        bytes20 sourceCommitId;
+        /// @dev Exact raw Git tree identity of that same executable/evidence source revision. It is never compared
+        ///      to a padded bytes32 value and cannot be substituted by a request or carrier tree.
+        bytes20 sourceTreeId;
+        /// @dev Source-defined graph identity. The Router never equates it with an anti-replay nonce.
+        bytes32 sourceLaunchId;
         bytes32 manifestHash;
         bytes32 policyHash;
         /// @dev V1 has no revenue activation path; this must be zero until a separately frozen profile version exists.
@@ -187,13 +213,13 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
 
     /// @notice Evergreen reviewed authority. No expiry field exists; revocation and epochs control currentness.
     struct LaunchGrantV1 {
-        /// @dev `grantHash` is the codec's canonical binding/review hash; `grantDigest` is the Registry EIP-712 digest.
-        ///      Neither field is included in the preimage, so the reviewer can compute then populate both values.
-        bytes32 grantHash;
-        bytes32 grantDigest;
+        /// @dev The codec derives the canonical grant hash and the Registry derives its EIP-712 digest. Neither
+        ///      self-hash is applicant-supplied, which keeps this already-large non-viaIR ABI bounded.
         uint256 chainId;
         address registry;
         address launchWallet;
+        /// @dev Applicant/request identity. The reviewed attestation below must transitively bind the exact
+        ///      review-admission hash and request receipt; it is separate from executable-source Git objects.
         bytes32 applicantIdHash;
         bytes32 profileKey;
         bytes32 profileDescriptorHash;
@@ -205,15 +231,23 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
         bytes32 executionReadinessConstraintHash;
         ExecutionTimeConstraintV1 executionTimeConstraint;
         bytes32 executionTimeConstraintEvidenceHash;
+        /// @dev Repository identity for the executable/evidence source revision named by sourceCommitHash/treeHash.
         bytes32 sourceRepositoryHash;
+        /// @dev Domain-separated commitment to the executable/evidence source commit, never a raw padded Git OID.
         bytes32 sourceCommitHash;
+        /// @dev Domain-separated commitment to the executable/evidence source tree, never a raw padded Git OID.
         bytes32 sourceTreeHash;
+        /// @dev Source-defined graph identity, copied exactly from the reviewed plan.
+        bytes32 sourceLaunchId;
         bytes32 componentGraphHash;
         bytes32 exactRuntimeSetHash;
         bytes32 componentConfigurationSetHash;
         bytes32 revenueBindingHash;
         bytes32 resultHash;
+        /// @dev May bind the offchain carrier/evidence provenance, but cannot replace the executable-source fields.
         bytes32 builderEvidenceHash;
+        /// @dev Must bind the exact applicant/request review-admission hash and request receipt. It cannot replace
+        ///      executable-source Git commitments or carrier provenance.
         bytes32 reviewerAttestationHash;
         bytes32 securityControlHeadHash;
         bytes32 securityEpochHash;
@@ -221,7 +255,9 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
         bytes32 policyEpochHash;
         uint64 securityEpoch;
         uint64 policyEpoch;
-        bytes32 oneWinnerNonce;
+        ReviewGenerationV1 reviewControl;
+        /// @dev Independent one-winner nonce. It is never a Source or Registry stamp identifier.
+        bytes32 antiReplayNonce;
         bytes32 winnerKeyHash;
     }
 
@@ -229,7 +265,7 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
         bytes32 grantDigest;
         bytes32 grantHash;
         bytes32 stateHeadHash;
-        bytes32 launchId;
+        bytes32 stampLaunchId;
         GrantStatusV1 status;
     }
 
@@ -241,6 +277,15 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
         bytes32 launchGrantDigest;
         bytes32 contractPlanHash;
         bytes32 receiptRequestHash;
+        /// @dev Hash of the exact typed onchain preflight readback returned by this Registry. It is diagnostic and
+        ///      currentness evidence, never an evergreen applicant deadline or a substitute LaunchGrant.
+        bytes32 preflightReadbackHash;
+        /// @dev Purpose-bound simulation evidence for the exact plan/request/value-zero adoption transaction.
+        bytes32 simulationEvidenceHash;
+        /// @dev Exact content-addressed service/deployment identity used to obtain this currentness transport.
+        bytes32 serviceDeploymentBindingHash;
+        /// @dev Authority-attested evidence that two independent providers returned the same typed preflight state.
+        bytes32 dualProviderQuorumEvidenceHash;
         bytes32 expectedResultHash;
         bytes32 adoptionIntentHash;
         bytes32 securityControlHeadHash;
@@ -248,13 +293,109 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
         bytes32 policyEpochHash;
         uint64 securityEpoch;
         uint64 policyEpoch;
+        ReviewGenerationV1 reviewControl;
         bytes32 nonce;
         uint64 validAfter;
         uint64 deadline;
     }
 
+    /// @notice Exact keys for a side-effect-free state read. A caller queries every component in canonical order;
+    ///         candidateCurrentnessDigest is diagnostic and excluded from the signed aggregate to avoid circularity.
+    struct AdoptionPreflightQueryV1 {
+        bytes32 profileKey;
+        bytes32 launchGrantDigest;
+        bytes32 expectedContractPlanHash;
+        bytes32 stampLaunchId;
+        bytes32 antiReplayNonce;
+        bytes32 winnerKeyHash;
+        bytes32 componentGraphHash;
+        uint8 componentIndex;
+        address component;
+        ComponentScopeV1 componentScope;
+        bytes32 expectedSharedIdentityHash;
+        bytes32 expectedRuntimeCodeHash;
+        address exclusiveToken;
+        address poolManager;
+        bytes32 poolId;
+        bytes32 currentnessNonce;
+    }
+
+    /// @notice Typed side-effect-free diagnostic surface. It never verifies a signature, reserves state or issues a
+    ///         permit. Provider quorum is an Authority policy over byte-identical readbacks, not an onchain claim.
+    struct AdoptionPreflightReadbackV1 {
+        bytes32 queryHash;
+        uint256 chainId;
+        address registry;
+        bytes32 runtimeAuthorityBindingHash;
+        uint16 liveRuntimeMask;
+        bytes32 dependencyBehaviorEvidenceHash;
+        bytes32 securityControlHeadHash;
+        uint64 securityEpoch;
+        bytes32 securityEpochHash;
+        uint64 policyEpoch;
+        bytes32 policyEpochHash;
+        ReviewGenerationV1 reviewControl;
+        bool globalAdoptionKilled;
+        ProfileStatusV1 profileStatus;
+        bytes32 profileCapabilityHash;
+        LaunchGrantStateHeadV1 grantStateHead;
+        bytes32 winnerNonceOccupantGrantDigest;
+        bytes32 winnerKeyOccupantGrantDigest;
+        bool currentnessRevoked;
+        bool currentnessUsed;
+        bool currentnessNonceUsed;
+        ReceiptStatusV1 receiptStatus;
+        bytes32 receiptCoreHash;
+        bytes32 finalityIndexingReceiptHash;
+        bytes32 graphOccupantStampLaunchId;
+        bytes32 exclusiveComponentOccupantStampLaunchId;
+        bytes32 sharedComponentIdentityHash;
+        bytes32 exclusiveTokenOccupantStampLaunchId;
+        bytes32 poolOccupantStampLaunchId;
+        bytes32 actualComponentRuntimeCodeHash;
+        bytes32 componentLeafHash;
+        bytes32 globalReadbackHeadHash;
+    }
+
+    /// @dev Compact Registry-only slices consumed by the codehash-pinned Preflight companion.
+    struct AdoptionPreflightControlStateV1 {
+        bytes32 runtimeAuthorityBindingHash;
+        uint16 liveRuntimeMask;
+        bytes32 dependencyBehaviorEvidenceHash;
+        bytes32 securityControlHeadHash;
+        uint64 securityEpoch;
+        bytes32 securityEpochHash;
+        uint64 policyEpoch;
+        bytes32 policyEpochHash;
+        ReviewGenerationV1 reviewControl;
+        bool globalAdoptionKilled;
+        ProfileStatusV1 profileStatus;
+        bytes32 profileCapabilityHash;
+    }
+
+    struct AdoptionPreflightGrantReceiptStateV1 {
+        LaunchGrantStateHeadV1 grantStateHead;
+        bytes32 winnerNonceOccupantGrantDigest;
+        bytes32 winnerKeyOccupantGrantDigest;
+        bool currentnessRevoked;
+        bool currentnessUsed;
+        bool currentnessNonceUsed;
+        ReceiptStatusV1 receiptStatus;
+        bytes32 receiptCoreHash;
+        bytes32 finalityIndexingReceiptHash;
+        bytes32 graphOccupantStampLaunchId;
+        bytes32 exclusiveTokenOccupantStampLaunchId;
+        bytes32 poolOccupantStampLaunchId;
+    }
+
+    struct AdoptionPreflightComponentStateV1 {
+        bytes32 exclusiveComponentOccupantStampLaunchId;
+        bytes32 sharedComponentIdentityHash;
+        bytes32 actualComponentRuntimeCodeHash;
+    }
+
     struct AdoptionRequestV1 {
-        bytes32 launchId;
+        bytes32 stampLaunchId;
         bytes32 profileKey;
         bytes32 componentGraphHash;
         bytes32 resultHash;
@@ -282,9 +423,10 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
         bytes32 routeSchemaHash;
         bytes32 planSchemaArtifactHash;
         bytes32 policyHash;
-        address stateVerifier;
-        bytes32 stateVerifierRuntimeCodeHash;
-        bytes32 stateSchemaHash;
+        /// @dev Behavior evidence proves that any forwarding/mutable dependency behind the verifier is frozen;
+        ///      absence of a DELEGATECALL opcode alone cannot establish that property.
+        StateVerifierBindingV1 stateVerifierBinding;
+        ReviewGenerationV1 reviewControl;
         uint256 canonicalPoolManagerChainId;
         address canonicalPoolManager;
         bytes32 canonicalPoolManagerRuntimeCodeHash;
@@ -305,7 +447,10 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
     ///      current-state request. Each of those inputs has its own closed codec preimage, so a mutable URL or
     ///      indexer append can never rewrite launch identity.
     struct CanonicalReceiptCoreV1 {
-        bytes32 launchId;
+        /// @dev Router/Registry identifier derived only by the published STAMP_LAUNCH_ID_TYPEHASH formula.
+        bytes32 stampLaunchId;
+        /// @dev Source-defined identity retained separately for public discovery and consumer reconciliation.
+        bytes32 sourceLaunchId;
         bytes32 receiptCoreHash;
         bytes32 launchGrantDigest;
         bytes32 launchGrantHash;
@@ -316,7 +461,7 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
     }
 
     struct FinalityIndexingReceiptV1 {
-        bytes32 launchId;
+        bytes32 stampLaunchId;
         bytes32 receiptCoreHash;
         bytes32 launchGrantDigest;
         ReceiptStatusV1 nextStatus;
@@ -329,25 +474,29 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
     event AdoptionProfileStatusUpdatedV1(bytes32 indexed profileKey, ProfileStatusV1 indexed status);
     event GlobalAdoptionKillSetV1(bool indexed killed);
     event LaunchGrantActivatedV1(
-        bytes32 indexed launchId,
+        bytes32 indexed stampLaunchId,
         bytes32 indexed launchGrantDigest,
         address indexed launchWallet,
-        bytes32 oneWinnerNonce,
+        bytes32 antiReplayNonce,
         bytes32 winnerKeyHash
     );
-    event LaunchGrantRevokedV1(bytes32 indexed launchId, bytes32 indexed launchGrantDigest);
-    event LaunchGrantConsumedV1(bytes32 indexed launchId, bytes32 indexed launchGrantDigest);
+    event LaunchGrantRevokedV1(bytes32 indexed stampLaunchId, bytes32 indexed launchGrantDigest);
+    event LaunchGrantConsumedV1(bytes32 indexed stampLaunchId, bytes32 indexed launchGrantDigest);
     event ExecutionCurrentnessRevokedV1(bytes32 indexed executionCurrentnessDigest);
-    event SecurityPolicyEpochsAdvancedV1(
+    event SecurityPolicyReviewControlsAdvancedV1(
         bytes32 indexed securityControlHeadHash,
         uint64 securityEpoch,
         bytes32 securityEpochHash,
         uint64 policyEpoch,
-        bytes32 policyEpochHash
+        bytes32 policyEpochHash,
+        uint64 reviewGeneration,
+        bytes32 reviewGenerationHash
     );
-    event CanonicalReceiptAdoptedV1(bytes32 indexed launchId, bytes32 indexed receiptCoreHash, bytes32 grantDigest);
+    event CanonicalReceiptAdoptedV1(
+        bytes32 indexed stampLaunchId, bytes32 indexed receiptCoreHash, bytes32 grantDigest
+    );
     event CanonicalComponentRecordedV1(
-        bytes32 indexed launchId,
+        bytes32 indexed stampLaunchId,
         uint8 indexed componentIndex,
         address indexed account,
         ComponentKindV1 kind,
@@ -358,7 +507,7 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
         bytes32 creationEvidenceHash
     );
     event FinalityIndexingAdvancedV1(
-        bytes32 indexed launchId,
+        bytes32 indexed stampLaunchId,
         ReceiptStatusV1 indexed status,
         bytes32 indexed finalityIndexingReceiptHash,
         bytes32 evidenceHash
@@ -384,7 +533,9 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
         uint64 securityEpoch,
         bytes32 securityEpochHash,
         uint64 policyEpoch,
-        bytes32 policyEpochHash
+        bytes32 policyEpochHash,
+        uint64 reviewGeneration,
+        bytes32 reviewGenerationHash
     ) external;
 
     function adoptCompletedGraphV1(CompletedGraphAdoptionV1 calldata adoption)
@@ -397,32 +548,19 @@ interface IProgrammableCompletedGraphAdoptionCompatV1 {
 
     function executionCurrentnessDigest(ExecutionCurrentnessV1 calldata currentness) external view returns (bytes32);
 
-    function launchGrantStatus(bytes32 grantDigest) external view returns (GrantStatusV1);
+    function preflightControlStateV1(bytes32 profileKey) external view returns (AdoptionPreflightControlStateV1 memory);
 
-    function adoptionProfileStatusV1(bytes32 profileKey) external view returns (ProfileStatusV1);
-
-    function globalAdoptionKilledV1() external view returns (bool);
-
-    function executionCurrentnessRevokedV1(bytes32 currentnessDigest) external view returns (bool);
-
-    function currentSecurityPolicyEpochs()
+    function preflightGrantReceiptStateV1(AdoptionPreflightQueryV1 calldata query, bytes32 candidateCurrentnessDigest)
         external
         view
-        returns (
-            bytes32 securityControlHeadHash,
-            uint64 securityEpoch,
-            bytes32 securityEpochHash,
-            uint64 policyEpoch,
-            bytes32 policyEpochHash
-        );
+        returns (AdoptionPreflightGrantReceiptStateV1 memory);
 
-    function launchGrantStateHead(bytes32 grantDigest) external view returns (LaunchGrantStateHeadV1 memory);
+    function preflightComponentStateV1(address component)
+        external
+        view
+        returns (AdoptionPreflightComponentStateV1 memory);
 
-    function receiptStatus(bytes32 launchId) external view returns (ReceiptStatusV1);
-
-    function canonicalReceiptCore(bytes32 launchId) external view returns (CanonicalReceiptCoreV1 memory);
-
-    function finalityIndexingReceiptHash(bytes32 launchId) external view returns (bytes32);
+    function canonicalReceiptCore(bytes32 stampLaunchId) external view returns (CanonicalReceiptCoreV1 memory);
 }
 
 /// @notice Fixed typed current-state verifier for one governance-registered ADOPT capability.
@@ -437,4 +575,23 @@ interface IProgrammableCompletedGraphAdoptionStateVerifierV1 {
         IProgrammableCompletedGraphAdoptionCompatV1.GraphEdgeV1[] calldata edges,
         IProgrammableCompletedGraphAdoptionCompatV1.AdoptionRequestV1 calldata request
     ) external view returns (bytes32 architectureStateHash, bytes32 poolStateHash, bytes32 revenueStateHash);
+}
+
+/// @notice Immutable typed preflight projection and aggregate verifier. It has no state-changing or signing surface.
+interface IProgrammableCompletedGraphAdoptionPreflightV1 {
+    function CODEC() external view returns (address);
+
+    function adoptionPreflightReadbackV1(
+        address registry,
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionPreflightQueryV1 calldata query,
+        bytes32 candidateCurrentnessDigest
+    ) external view returns (IProgrammableCompletedGraphAdoptionCompatV1.AdoptionPreflightReadbackV1 memory);
+
+    function computeAdoptionPreflightAggregateV1(
+        address registry,
+        IProgrammableCompletedGraphAdoptionCompatV1.CompletedGraphAdoptionV1 calldata adoption,
+        IProgrammableCompletedGraphAdoptionCompatV1.AdoptionProfileCapabilityV1 calldata capability,
+        bytes32 grantDigest,
+        bytes32 contractPlanHash
+    ) external view returns (bytes32);
 }
