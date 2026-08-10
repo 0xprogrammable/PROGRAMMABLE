@@ -66,6 +66,8 @@ import {
   manualRouterDirectoryForApplicantV2,
   manualRouterFreshReadyMatchesCachedV1,
   manualRouterFreshReadyMatchesCachedV2,
+  manualRouterIsExactShardsV1ApplicantDirectory,
+  manualRouterResolveForApplicantV2,
   manualRouterRouteFactsV2,
   manualRouterTransactionContextV1,
   manualRouterTransactionContextV2,
@@ -172,11 +174,21 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
   const launchLockRef = useRef(false);
   const finalityLockRef = useRef(false);
   const exactShardsApplicant = isExactShardsGithubLogin(githubUsername);
+  const exactShardsV1Compatibility = exactShardsApplicant
+    && NESTED_FACTORY_ACTIVATION === null
+    && directory !== null
+    && manualRouterIsExactShardsV1ApplicantDirectory(directory);
   const routeCapabilityUnavailable = exactShardsApplicant
-    && NESTED_FACTORY_ACTIVATION === null;
+    && NESTED_FACTORY_ACTIVATION === null
+    && directory !== null
+    && !exactShardsV1Compatibility;
   const routeAcceptanceRequired = exactShardsApplicant
     && NESTED_FACTORY_ACTIVATION !== null;
+  const routeDiscoveryAllowed = !exactShardsApplicant
+    || NESTED_FACTORY_ACTIVATION === null
+    || routeAcceptance?.state === "accepted";
   const routeAccepted = !exactShardsApplicant
+    || exactShardsV1Compatibility
     || (
       NESTED_FACTORY_ACTIVATION !== null
       && routeAcceptance?.state === "accepted"
@@ -275,7 +287,12 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     quiet?: boolean;
     preferredSubjectHash?: ManualRouterSha256V1 | "";
   }>) => {
-    if (!authenticated || !githubConnected || !wallet || !routeAccepted) return;
+    if (
+      !authenticated
+      || !githubConnected
+      || !wallet
+      || !routeDiscoveryAllowed
+    ) return;
     loadAbortRef.current?.abort();
     const controller = new AbortController();
     loadAbortRef.current = controller;
@@ -314,9 +331,14 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
           subjectHash: chosenSubjectHash,
           signal: controller.signal,
         } as const;
-        const nextResolved = isNestedFactorySubmissionV2(chosenSubmission)
+        const rawResolved = isNestedFactorySubmissionV2(chosenSubmission)
           ? await resolveManualRouterApplicantSubmissionV2(resolveRequest)
           : await resolveManualRouterApplicantSubmissionV1(resolveRequest);
+        const nextResolved = manualRouterResolveForApplicantV2({
+          directory: next,
+          resolved: rawResolved,
+          requireExactShardsRoute: exactShardsApplicant,
+        });
         if (controller.signal.aborted || sequence !== loadSequenceRef.current) return;
         setResolved(nextResolved);
         const stored = isManualRouterResolveV2(nextResolved)
@@ -442,15 +464,14 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     authenticated,
     getSession,
     githubConnected,
-    routeAcceptanceRequired,
     exactShardsApplicant,
     selectedSubjectHash,
-    routeAccepted,
+    routeDiscoveryAllowed,
     wallet,
   ]);
 
   useEffect(() => {
-    if (!authenticated || !githubConnected || !wallet || !routeAccepted) {
+    if (!authenticated || !githubConnected || !wallet || !routeDiscoveryAllowed) {
       loadAbortRef.current?.abort();
       return;
     }
@@ -463,7 +484,13 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
       window.clearTimeout(kickoff);
       window.clearInterval(interval);
     };
-  }, [authenticated, githubConnected, loadDirectory, routeAccepted, wallet]);
+  }, [
+    authenticated,
+    githubConnected,
+    loadDirectory,
+    routeDiscoveryAllowed,
+    wallet,
+  ]);
 
   useEffect(() => () => {
     loadAbortRef.current?.abort();
@@ -850,7 +877,7 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     }),
   );
   const trustSteps = useMemo(() => [
-    ...(exactShardsApplicant ? [{
+    ...(routeAcceptanceRequired ? [{
       label: "Exact route acceptance",
       detail: routeCapabilityUnavailable
         ? "Route capability unavailable"
@@ -891,7 +918,6 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     routeAcceptance?.state,
     routeAcceptanceRequired,
     routeCapabilityUnavailable,
-    exactShardsApplicant,
     routeAccepted,
     selected,
   ]);
@@ -992,7 +1018,7 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
               {!wallet ? (
                 <button
                   type="button"
-                  disabled={!githubConnected || !routeAccepted}
+                  disabled={!githubConnected || !routeDiscoveryAllowed}
                   onClick={openWallet}>Connect wallet</button>
               ) : null}
             </div>

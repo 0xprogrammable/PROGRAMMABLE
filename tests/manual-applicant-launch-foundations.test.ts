@@ -39,11 +39,14 @@ import {
   type ManualRouterResolveResponseV2,
 } from "../lib/custom-launch/manual-router-contract-v2";
 import {
+  MANUAL_ROUTER_EXACT_SHARDS_V1_BROWSER_BINDING,
   manualRouterBlocksNewSendV1,
   manualRouterCanClearUncertainNoSendV1,
   manualRouterDirectoryForApplicantV2,
   manualRouterFreshReadyMatchesCachedV1,
   manualRouterFreshReadyMatchesCachedV2,
+  manualRouterIsExactShardsV1ApplicantDirectory,
+  manualRouterResolveForApplicantV2,
   manualRouterRouteFactsV2,
   manualRouterTransactionContextV1,
   parseManualRouterPersistedAttemptStorageV1,
@@ -746,7 +749,7 @@ describe("inactive Shards nested-factory Router V2 browser contract", () => {
     }
   });
 
-  it("never substitutes a legacy pointer into the accepted Jesse route", () => {
+  it("admits only the exact Shards V1 directory or the exact V2 route", () => {
     const legacy = {
       schemaVersion: "programmable.manual-router-applicant-list-response.v1",
       authenticatedGitHubUserId: "123456789",
@@ -773,7 +776,89 @@ describe("inactive Shards nested-factory Router V2 browser contract", () => {
     expect(() => manualRouterDirectoryForApplicantV2({
       directory: legacy,
       requireExactShardsRoute: true,
-    })).toThrow("exact Shards Router V2 submission is unavailable");
+    })).toThrow("exact Shards Router submission is unavailable");
+
+    const binding = MANUAL_ROUTER_EXACT_SHARDS_V1_BROWSER_BINDING;
+    const exactV1 = {
+      schemaVersion: "programmable.manual-router-applicant-list-response.v1",
+      authenticatedGitHubUserId: binding.authenticatedGitHubUserId,
+      linkedLaunchWallet: binding.linkedLaunchWallet,
+      submissions: [{
+        subjectHash: binding.subjectHash,
+        pointerHash: POINTER,
+        pullRequestNumber: binding.pullRequestNumber,
+        headSha: binding.headSha,
+        treeSha: binding.treeSha,
+        approvalBindingHash: binding.approvalBindingHash,
+        routeNonce: binding.routeNonce,
+        status: "ready" as const,
+        deadline: "1786387607",
+        submittedTransactionHash: null,
+        failedTransactionEvidenceHash: null,
+      }],
+      applicantIndexHash: APPROVAL,
+    } satisfies ManualRouterApplicantListResponseV1;
+    expect(manualRouterIsExactShardsV1ApplicantDirectory(exactV1)).toBe(true);
+    expect(manualRouterDirectoryForApplicantV2({
+      directory: exactV1,
+      requireExactShardsRoute: true,
+    })).toBe(exactV1);
+
+    const exactResolved = {
+      schemaVersion: "programmable.manual-router-applicant-resolve-response.v1",
+      subjectHash: binding.subjectHash,
+      pointerHash: POINTER,
+      approvalBindingHash: binding.approvalBindingHash,
+      routeNonce: binding.routeNonce,
+      status: "finalized" as const,
+      transactionHash: LAUNCH_ID,
+      proofHash: APPROVAL,
+    } satisfies ManualRouterResolveResponseV1;
+    expect(manualRouterResolveForApplicantV2({
+      directory: exactV1,
+      resolved: exactResolved,
+      requireExactShardsRoute: true,
+    })).toBe(exactResolved);
+    for (const nearMiss of [
+      { ...exactV1, authenticatedGitHubUserId: "155705665" },
+      { ...exactV1, linkedLaunchWallet: WALLET },
+      { ...exactV1, submissions: [] },
+      { ...exactV1, submissions: [{
+        ...exactV1.submissions[0], subjectHash: SUBJECT,
+      }] },
+      { ...exactV1, submissions: [{
+        ...exactV1.submissions[0], pullRequestNumber: 7,
+      }] },
+      { ...exactV1, submissions: [{
+        ...exactV1.submissions[0], headSha: "b".repeat(40),
+      }] },
+      { ...exactV1, submissions: [{
+        ...exactV1.submissions[0], treeSha: "c".repeat(40),
+      }] },
+      { ...exactV1, submissions: [{
+        ...exactV1.submissions[0], approvalBindingHash: APPROVAL,
+      }] },
+      { ...exactV1, submissions: [{
+        ...exactV1.submissions[0], routeNonce: ROUTE_NONCE,
+      }] },
+    ] satisfies ManualRouterApplicantListResponseV1[]) {
+      expect(manualRouterIsExactShardsV1ApplicantDirectory(nearMiss)).toBe(false);
+      expect(() => manualRouterDirectoryForApplicantV2({
+        directory: nearMiss,
+        requireExactShardsRoute: true,
+      })).toThrow("exact Shards Router submission is unavailable");
+    }
+    for (const resolvedNearMiss of [
+      { ...exactResolved, pointerHash: `sha256:${"23".repeat(32)}` as const },
+      { ...exactResolved, approvalBindingHash: APPROVAL },
+      { ...exactResolved, routeNonce: ROUTE_NONCE },
+    ] satisfies ManualRouterResolveResponseV1[]) {
+      expect(() => manualRouterResolveForApplicantV2({
+        directory: exactV1,
+        resolved: resolvedNearMiss,
+        requireExactShardsRoute: true,
+      })).toThrow("exact Shards Router V1 resolution is unavailable");
+    }
 
     const mixed = {
       schemaVersion: "programmable.manual-router-applicant-list-response.v2",
@@ -1065,8 +1150,11 @@ describe("inactive Shards nested-factory Router V2 browser contract", () => {
       "requireExactShardsRoute: exactShardsApplicant",
     );
     expect(component).toContain(
-      "disabled={!githubConnected || !routeAccepted}",
+      "disabled={!githubConnected || !routeDiscoveryAllowed}",
     );
+    expect(component).toContain("manualRouterResolveForApplicantV2");
+    expect(component).toContain("exactShardsV1Compatibility");
+    expect(component).toContain("...(routeAcceptanceRequired ? [{");
     expect(component).toContain("The exact Shards route is not available yet");
     expect(component).toContain("isNestedFactorySubmissionV2(chosenSubmission)");
     expect(component).toContain("Reviewed deployment order");
