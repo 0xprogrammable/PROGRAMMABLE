@@ -87,7 +87,7 @@ export function LandingPage() {
               />
             </a>
             <span className={styles.utilityDivider} aria-hidden="true" />
-            <Link className={styles.docsLink} href="/docs/developers">
+            <Link className={styles.docsLink} href="/docs">
               Docs
             </Link>
           </nav>

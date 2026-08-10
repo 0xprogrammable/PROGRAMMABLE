@@ -19,7 +19,7 @@ const legacyLauncher = "0xD240D06f8586eB799f20056054e5b527405E6bAd";
 const legacyFeeHook = "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC";
 
 describe("Classic docs release binding", () => {
-  it("keeps the hidden Classic reference bound to the active V3 contracts", () => {
+  it("keeps the public Classic reference bound to the active V3 contracts", () => {
     expect(classicRelease.status).toBe(
       "deployment-source-and-lifecycle-verified",
     );
@@ -38,7 +38,7 @@ describe("Classic docs release binding", () => {
     expect(docsOverview).not.toContain(legacyLauncher);
     expect(docsOverview).not.toContain(legacyFeeHook);
     expect(docsOverview).toContain(
-      "Historical launches and direct factory calls are outside this trust root.",
+      "Historical launches and direct factory calls are outside this verification path.",
     );
     expect(docsOverview).not.toContain("Set buy and sell fees");
     expect(classicDocs).toContain("Set separately from 1% to 10%");

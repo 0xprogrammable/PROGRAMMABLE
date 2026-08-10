@@ -244,19 +244,19 @@ describe("Docs navigation state", () => {
     expect(getDocsSearchResults("")).toEqual([]);
   });
 
-  it("keeps unpublished product guides out of search while explaining record categories", () => {
+  it("finds every published launch guide and the Router categories", () => {
     const deepResults = getDocsSearchResults("deep");
     const stockResults = getDocsSearchResults("stock");
     const classicResults = getDocsSearchResults("classic");
     const customResults = getDocsSearchResults("custom");
 
     expect(deepResults).toEqual([]);
-    expect(stockResults).toEqual([]);
-    expect(classicResults[0]?.title).toBe("Classic and Custom launch kinds");
-    expect(customResults[0]?.title).toBe("Classic and Custom launch kinds");
-    expect(customResults[0]?.description).toContain(
-      "Router kind 1 to Programmable Custom",
+    expect(stockResults[0]?.title).toBe("Stock-Paired");
+    expect(getDocsSearchResults("stock paired")[0]?.title).toBe(
+      "Stock-Paired",
     );
+    expect(classicResults[0]?.title).toBe("Classic");
+    expect(customResults[0]?.title).toBe("Custom");
     expect(
       customResults.some(
         (result) => result.title === "Classic and Custom launch kinds",

@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 
-import { docsCategories } from "@/components/docs-data";
+import { docsCategories, docsNavigation } from "@/components/docs-data";
 import styles from "@/components/docs-experience.module.css";
 import {
   DocsNavigation,
+  DocsPageNavigation,
   type DocsPageSection,
 } from "@/components/docs-navigation";
 import { DocsSearch } from "@/components/docs-search";
@@ -17,6 +18,8 @@ export function DocsShell({
   heroId,
   heroMeta,
   kicker,
+  parentHref,
+  parentLabel,
   sections,
   title,
 }: {
@@ -27,13 +30,42 @@ export function DocsShell({
   heroId?: string;
   heroMeta?: ReactNode;
   kicker?: string;
+  parentHref?: string;
+  parentLabel?: string;
   sections?: readonly DocsPageSection[];
   title: string;
 }) {
+  const category = docsCategories.find(
+    (item) =>
+      item.href === currentPath ||
+      item.relatedPaths.some((path) => path === currentPath),
+  );
+  let currentNavigationItem: { href: string; label: string } | undefined;
+  for (const group of docsNavigation) {
+    const item = group.items.find(
+      (candidate) => candidate.href.split("#")[0] === currentPath,
+    );
+    if (item) {
+      currentNavigationItem = item;
+      break;
+    }
+  }
+  const breadcrumbParent =
+    parentHref && parentLabel
+      ? { href: parentHref, label: parentLabel }
+      : category && category.href !== currentPath
+        ? { href: category.href, label: category.label }
+        : null;
+  const breadcrumbLabel = currentNavigationItem?.label ?? kicker ?? title;
+
   return (
     <div className={`${styles.page} page-width`} data-docs-shell>
+      <a className={styles.skipDocsNavigation} href="#docs-content">
+        Skip documentation navigation
+      </a>
+
       <aside className={styles.sidebar} data-docs-sidebar>
-        <Link className={styles.sidebarBrand} href="/docs/developers">
+        <Link className={styles.sidebarBrand} href="/docs">
           <span>Programmable</span>
           <strong>Documentation</strong>
         </Link>
@@ -42,56 +74,41 @@ export function DocsShell({
           <DocsSearch />
         </div>
 
-        <nav
-          aria-label="Documentation categories"
-          className={styles.docsCategories}
-        >
-          {docsCategories.map((category) => {
-            if (category.status === "available") {
-              const active =
-                currentPath === category.href ||
-                category.relatedPaths.some((path) => path === currentPath);
-              return (
-                <Link
-                  aria-current={active ? "page" : undefined}
-                  className={`${styles.docsCategory} ${
-                    active ? styles.docsCategoryActive : ""
-                  }`}
-                  href={category.href}
-                  key={category.label}
-                >
-                  <strong>{category.label}</strong>
-                  <span>Developer reference</span>
-                </Link>
-              );
-            }
-
-            return (
-              <span
-                aria-disabled="true"
-                className={`${styles.docsCategory} ${styles.docsCategoryUnavailable}`}
-                key={category.label}
-              >
-                <strong>{category.label}</strong>
-                <span>Soon</span>
-              </span>
-            );
-          })}
-        </nav>
-
         <DocsNavigation currentPath={currentPath} sections={sections} />
       </aside>
 
-      <div className={styles.mainColumn}>
+      <div
+        className={styles.mainColumn}
+        id="docs-content"
+        tabIndex={-1}
+      >
         <header
           className={styles.hero}
           data-docs-hero
           data-has-aside={heroAside ? "true" : undefined}
           id={heroAside ? (heroId ?? "paths") : undefined}
         >
+          <nav aria-label="Breadcrumb" className={styles.breadcrumbs}>
+            {currentPath === "/docs" ? (
+              <span aria-current="page">Docs</span>
+            ) : (
+              <>
+                <Link href="/docs">Docs</Link>
+                <span aria-hidden="true">/</span>
+                {breadcrumbParent ? (
+                  <>
+                    <Link href={breadcrumbParent.href}>
+                      {breadcrumbParent.label}
+                    </Link>
+                    <span aria-hidden="true">/</span>
+                  </>
+                ) : null}
+                <span aria-current="page">{breadcrumbLabel}</span>
+              </>
+            )}
+          </nav>
           <div className={styles.heroHeader}>
             <div className={styles.heroCopy}>
-              {kicker ? <p className={styles.heroKicker}>{kicker}</p> : null}
               <h1>{title}</h1>
               <p>{description}</p>
             </div>
@@ -108,6 +125,7 @@ export function DocsShell({
           <article className={styles.content} data-docs-content>
             {children}
           </article>
+          <DocsPageNavigation currentPath={currentPath} sections={sections} />
         </div>
       </div>
     </div>

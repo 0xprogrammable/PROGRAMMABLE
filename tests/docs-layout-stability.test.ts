@@ -20,18 +20,30 @@ const docsPage = readFileSync(
 const interfaceCss = readFileSync(join(root, "app/interface.css"), "utf8");
 
 describe("Docs rail layout stability", () => {
-  it("keeps the desktop rail sticky beside one bounded reading column", () => {
+  it("keeps the desktop rail sticky beside a bounded article and page outline", () => {
     expect(docsCss).toMatch(
-      /\.page\s*\{[^}]*--docs-content-width:\s*940px;[^}]*--docs-rail-width:\s*220px;/s,
+      /\.page\s*\{[^}]*--docs-content-width:\s*800px;[^}]*--docs-main-width:\s*1024px;[^}]*--docs-rail-width:\s*232px;[^}]*--docs-toc-width:\s*184px;/s,
     );
     expect(docsCss).toMatch(
-      /\.page\s*\{[^}]*grid-template-columns:[^}]*var\(--docs-rail-width\)[^}]*minmax\(0,\s*var\(--docs-content-width\)\);/s,
+      /\.page\s*\{[^}]*grid-template-columns:[^}]*var\(--docs-rail-width\)[^}]*minmax\(0,\s*var\(--docs-main-width\)\);/s,
     );
     expect(docsCss).toMatch(
       /\.sidebar\s*\{[^}]*grid-column:\s*1;[^}]*inline-size:\s*var\(--docs-rail-width\);[^}]*position:\s*sticky;[^}]*top:\s*calc\(var\(--header-height\) \+ 22px\);/s,
     );
     expect(docsCss).toMatch(
       /\.mainColumn\s*\{[^}]*grid-column:\s*2;[^}]*min-width:\s*0;/s,
+    );
+    expect(docsCss).not.toMatch(
+      /font-size:\s*(?:10(?:\.5)?|11(?:\.5)?|12(?:\.5)?)px/,
+    );
+    expect(docsCss).toMatch(
+      /\.content h2\[tabindex="-1"\]:focus-visible,[\s\S]*?outline:\s*2px solid var\(--focus\);/,
+    );
+    expect(docsCss).toMatch(
+      /:global\(\.route-transition-docs\) \[data-docs-shell\] h1\[tabindex="-1"\]:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--focus\);/s,
+    );
+    expect(docsCss).not.toContain(
+      '.content h2[tabindex="-1"]:focus,\n.content h3[tabindex="-1"]:focus {\n  outline: none;',
     );
   });
 
@@ -48,7 +60,16 @@ describe("Docs rail layout stability", () => {
 
   it("keeps the mobile disclosure fixed to the page inset", () => {
     expect(docsCss).toMatch(
+      /@media \(max-width:\s*1220px\)[\s\S]*?\.pageNavigation\s*\{[^}]*order:\s*-1;[^}]*position:\s*static;/s,
+    );
+    expect(docsCss).toMatch(
+      /@media \(min-width:\s*961px\) and \(max-width:\s*1220px\)[\s\S]*?\.atmosphere-plant-left\),[\s\S]*?\.atmosphere-plant-right\)\s*\{[^}]*transform:\s*none;[\s\S]*?\.atmosphere-plant-left\)\s*\{[^}]*left:\s*0;[\s\S]*?\.atmosphere-plant-right\)\s*\{[^}]*right:\s*0;/s,
+    );
+    expect(docsCss).toMatch(
       /@media \(max-width:\s*960px\)[\s\S]*?\.sidebar\s*\{[^}]*inline-size:\s*auto;[^}]*inset-inline:\s*24px;[^}]*position:\s*fixed;[^}]*top:\s*calc\(var\(--header-height\) \+ 8px\);/s,
+    );
+    expect(docsCss).toMatch(
+      /@media \(max-width:\s*960px\)[\s\S]*?\.pageNavigation\s*\{[^}]*display:\s*none;/s,
     );
     expect(docsCss).toMatch(
       /@media \(max-width:\s*700px\)[\s\S]*?\.sidebar\s*\{[^}]*inset-inline:\s*14px;/s,
@@ -69,10 +90,10 @@ describe("Docs rail layout stability", () => {
     );
   });
 
-  it("uses one concise developer guide with a current-page chapter rail", () => {
+  it("uses one concise developer guide with stable global and local navigation", () => {
     expect(docsPage).toContain("sections={developerSections}");
     expect(docsPage).toContain(
-      'title="Verify future Programmable launches through one Router."',
+      'title="Integrate launch verification"',
     );
     expect(docsPage).toContain('id="trust-root"');
     expect(docsPage).toContain('id="identity"');
@@ -81,14 +102,15 @@ describe("Docs rail layout stability", () => {
     expect(docsPage).toContain('currentPath="/docs/developers"');
     expect(docsShell).not.toContain("docsGuides");
     expect(docsShell).not.toContain("Documentation guides");
-    expect(docsShell).toContain('aria-label="Documentation categories"');
-    expect(docsShell).toContain("Developer reference");
-    expect(docsShell).toContain("Soon");
+    expect(docsShell).toContain("<DocsNavigation");
+    expect(docsShell).toContain("<DocsPageNavigation");
+    expect(docsShell).toContain('aria-label="Breadcrumb"');
+    expect(docsShell).not.toContain("Soon");
     expect(docsNavigation).toContain(
-      "<p className={styles.navLabel}>Contents</p>",
+      "<p className={styles.navLabel}>On this page</p>",
     );
-    expect(docsNavigation).toContain(
-      "const navigationGroups = sections.length === 0 ? docsNavigation : [];",
-    );
+    expect(docsNavigation).toContain("renderGlobalNavigation");
+    expect(docsNavigation).toContain("renderMobileNavigation");
+    expect(docsNavigation).toContain("{renderMobileNavigation()}");
   });
 });

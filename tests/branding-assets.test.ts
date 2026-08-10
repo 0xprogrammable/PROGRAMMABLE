@@ -38,14 +38,12 @@ async function alphaBounds(path: string, threshold = 16) {
 }
 
 describe("Programmable branding assets", () => {
-  it("keeps the browser tab branded only as Programmable on every route", () => {
+  it("keeps product routes branded and gives Docs pages descriptive titles", () => {
     const metadataSources = [
       "app/layout.tsx",
       "app/page.tsx",
       "app/explore/page.tsx",
       "app/launch/page.tsx",
-      "app/docs/layout.tsx",
-      "app/docs/models/[model]/page.tsx",
     ].map(read);
 
     for (const source of metadataSources) {
@@ -53,8 +51,14 @@ describe("Programmable branding assets", () => {
     }
 
     const combinedSources = metadataSources.join("\n");
+    expect(read("app/docs/layout.tsx")).toContain(
+      'title: "Documentation · Programmable"',
+    );
     expect(read("app/docs/developers/page.tsx")).toContain(
-      'title: "Developer docs · Programmable"',
+      'title: "Developer integration · Programmable"',
+    );
+    expect(read("app/docs/models/[model]/page.tsx")).toContain(
+      "title: `${metadata.title} · Programmable`",
     );
     for (const routeSpecificTitle of [
       'title: "Programmable — Launch what you imagine"',

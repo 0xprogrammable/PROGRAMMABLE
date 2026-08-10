@@ -7,6 +7,8 @@ const PUBLIC_ROUTES = [
   "/explore",
   "/launch",
   "/docs",
+  "/docs/tokens",
+  "/docs/infrastructure",
   "/docs/developers",
   "/docs/launch-stamps",
   "/docs/models/classic",

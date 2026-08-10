@@ -12,12 +12,12 @@
 .pathList {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-  background: color-mix(in srgb, #010103 84%, var(--brand-ivory));
-  border: 1px solid var(--liquid-glass-border);
-  border-radius: 22px;
-  box-shadow: var(--liquid-glass-shadow);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
   display: grid;
-  overflow: hidden;
+  gap: 10px;
 }
 
 .pathList > a {
@@ -26,8 +26,10 @@
   display: grid;
   gap: 13px;
   grid-template-columns: 24px minmax(0, 1fr) auto;
-  min-height: 76px;
-  padding: 13px 16px;
+  background: color-mix(in srgb, var(--surface-soft) 76%, transparent);
+  border-radius: 14px;
+  min-height: 84px;
+  padding: 16px 18px;
   text-decoration: none;
   transition:
     background-color 130ms var(--ease-out),
@@ -35,7 +37,7 @@
 }
 
 .pathList > a + a {
-  border-top: 1px solid var(--liquid-glass-border);
+  border-top: 0;
 }
 
 .pathList > a > svg:first-child {
@@ -52,14 +54,14 @@
 }
 
 .pathList strong {
-  font-size: 14px;
+  font-size: 17px;
   font-weight: 660;
 }
 
 .pathList small {
   color: var(--text-soft);
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 .sectionIntro {
@@ -109,7 +111,7 @@
 
 .workbenchLabel {
   color: #dce1e6;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 680;
 }
 
@@ -118,7 +120,7 @@
   border-radius: 8px;
   color: #b3bbc4;
   display: inline-flex;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 620;
   gap: 6px;
   min-height: 40px;
@@ -141,7 +143,7 @@
   border-radius: 8px;
   color: #929ca7;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 620;
   min-height: 40px;
   padding-inline: 11px;
@@ -169,7 +171,7 @@
   background: transparent;
   border-radius: 8px;
   color: #abb4be;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 630;
   gap: 6px;
   min-height: 40px;
@@ -209,7 +211,7 @@
   color: #7f8994;
   display: block;
   font-family: var(--font-plex-mono), "SFMono-Regular", Consolas, monospace;
-  font-size: 11px;
+  font-size: 13px;
   margin-bottom: 14px;
 }
 
@@ -228,7 +230,7 @@
 
 .codePanel code {
   color: #e0e5ea;
-  font-size: 12.5px;
+  font-size: 13.5px;
   line-height: 1.72;
   tab-size: 2;
   white-space: pre;
@@ -241,7 +243,7 @@
   color: #aeb7c1;
   display: flex;
   flex-wrap: wrap;
-  font-size: 12px;
+  font-size: 13px;
   gap: 8px 10px;
   min-height: 48px;
   padding: 9px 14px;
@@ -249,12 +251,12 @@
 
 .mappingBar code {
   color: var(--dev-accent);
-  font-size: 11.5px;
+  font-size: 13px;
 }
 
 .mappingBar strong {
   color: #eef1f4;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 650;
   margin-right: 14px;
 }
@@ -400,7 +402,7 @@
 
 .providerLifecycle span {
   color: var(--text-soft);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .providerLifecycle span[aria-hidden="true"] {
@@ -426,14 +428,14 @@
   color: var(--dev-accent);
   display: block;
   font-family: var(--font-plex-mono), monospace;
-  font-size: 11.5px;
+  font-size: 13px;
   margin-bottom: 8px;
 }
 
 .labelGrid h3,
 .detectionFlow h3,
 .verificationGrid h3 {
-  font-size: 17px !important;
+  font-size: 22px !important;
 }
 
 .labelGrid p,
@@ -441,8 +443,8 @@
 .verificationRule p,
 .statusNote p {
   color: var(--text-soft) !important;
-  font-size: 14px !important;
-  line-height: 1.58 !important;
+  font-size: 17px !important;
+  line-height: 1.65 !important;
   margin: 8px 0 0 !important;
 }
 
@@ -457,7 +459,7 @@
 .statusNote strong,
 .verificationRule strong {
   color: var(--text);
-  font-size: 13.5px;
+  font-size: 16px;
   font-weight: 680;
 }
 
@@ -491,13 +493,13 @@
 }
 
 .subsectionHeader h3 {
-  font-size: 18px !important;
+  font-size: 22px !important;
 }
 
 .subsectionHeader p {
   color: var(--muted) !important;
-  font-size: 13px !important;
-  line-height: 1.5 !important;
+  font-size: 15px !important;
+  line-height: 1.55 !important;
   margin: 5px 0 0 !important;
 }
 
@@ -506,7 +508,7 @@
   color: var(--dev-accent);
   display: inline-flex;
   flex: 0 0 auto;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 640;
   gap: 6px;
   min-height: 40px;
@@ -541,13 +543,13 @@
 
 .deploymentCard > header span {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .deploymentCard > header > code {
   color: var(--dev-live);
   font-family: var(--font-plex-mono), monospace;
-  font-size: 10.5px;
+  font-size: 13px;
 }
 
 .deploymentCard dl {
@@ -567,7 +569,7 @@
 
 .deploymentCard dt {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.5;
 }
 
@@ -580,7 +582,7 @@
 .deploymentCard dd > code {
   display: block;
   font-family: var(--font-plex-mono), monospace;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
@@ -635,8 +637,8 @@
 
 .scopeNote {
   color: var(--text-soft) !important;
-  font-size: 13.5px !important;
-  line-height: 1.58 !important;
+  font-size: 16px !important;
+  line-height: 1.62 !important;
   margin-top: 15px !important;
   max-width: 78ch !important;
 }
@@ -646,8 +648,8 @@
 }
 
 .fieldTable {
-  border-block: 1px solid var(--dev-rule);
   display: grid;
+  gap: 10px;
 }
 
 .fieldTable > div {
@@ -655,19 +657,21 @@
   display: grid;
   gap: 24px;
   grid-template-columns: minmax(190px, 0.7fr) minmax(0, 1.3fr);
-  min-height: 60px;
+  background: color-mix(in srgb, var(--surface-soft) 72%, transparent);
+  border-radius: 12px;
+  min-height: 64px;
   min-width: 0;
-  padding: 13px 4px;
+  padding: 16px 18px;
 }
 
 .fieldTable > div + div {
-  border-top: 1px solid var(--dev-rule);
+  border-top: 0;
 }
 
 .fieldTable code {
   color: var(--dev-accent);
   font-family: var(--font-plex-mono), monospace;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.55;
   min-width: 0;
   overflow-wrap: anywhere;
@@ -676,8 +680,8 @@
 
 .fieldTable span {
   color: var(--text-soft);
-  font-size: 14px;
-  line-height: 1.58;
+  font-size: 16px;
+  line-height: 1.62;
   min-width: 0;
 }
 
@@ -696,7 +700,7 @@
 
 .breakableValue {
   font-family: var(--font-plex-mono), monospace;
-  font-size: 12px !important;
+  font-size: 14px !important;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
@@ -718,7 +722,7 @@
 .eventDetails small {
   color: var(--muted);
   font-family: var(--font-plex-mono), monospace;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.55;
 }
 
@@ -755,25 +759,28 @@
 
 .syncSteps {
   display: grid;
+  gap: 12px;
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
 .syncSteps li {
+  background: color-mix(in srgb, var(--surface-soft) 60%, transparent);
+  border-radius: 14px;
   display: grid;
   gap: 14px;
   grid-template-columns: 30px minmax(0, 1fr);
-  padding: 17px 4px;
+  padding: 18px;
 }
 
 .syncSteps li + li {
-  border-top: 1px solid var(--dev-rule);
+  border-top: 0;
 }
 
 .stepNumber {
   color: var(--dev-accent);
-  font-size: 13px;
+  font-size: 14px;
   font-variant-numeric: tabular-nums;
   font-weight: 720;
   padding-top: 2px;
@@ -787,21 +794,21 @@
 
 .syncSteps strong {
   color: var(--text);
-  font-size: 14.5px;
+  font-size: 17px;
   font-weight: 670;
 }
 
 .syncSteps p {
   color: var(--text-soft) !important;
-  font-size: 14px !important;
-  line-height: 1.58 !important;
+  font-size: 16px !important;
+  line-height: 1.62 !important;
   margin: 0 !important;
 }
 
 .syncSteps li > div > code {
   color: var(--dev-accent);
   font-family: var(--font-plex-mono), monospace;
-  font-size: 11.5px;
+  font-size: 13px;
   margin-top: 2px;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -839,14 +846,14 @@
 .method {
   color: var(--dev-live);
   font-family: var(--font-plex-mono), monospace;
-  font-size: 10.5px;
+  font-size: 13px;
   font-weight: 760;
 }
 
 .endpointRow > a > code {
   color: var(--text);
   font-family: var(--font-plex-mono), monospace;
-  font-size: 11.5px;
+  font-size: 13px;
   overflow-wrap: anywhere;
 }
 
@@ -862,7 +869,7 @@
 
 .endpointDescription small {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.45;
 }
 
@@ -905,7 +912,7 @@
 .endpointGuidance > div code {
   color: var(--dev-accent);
   font-family: var(--font-plex-mono), monospace;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .httpStates {
@@ -920,32 +927,33 @@
   align-items: center;
   color: var(--text-soft);
   display: inline-flex;
-  font-size: 12px;
+  font-size: 13px;
   gap: 6px;
 }
 
 .httpStates code {
   color: var(--dev-accent);
   font-family: var(--font-plex-mono), monospace;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 720;
 }
 
 .resourceGrid {
   display: grid;
-  gap: 0 24px;
+  gap: 12px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-top: 26px;
 }
 
 .resourceLink {
   align-items: center;
-  border-bottom: 1px solid var(--dev-rule);
+  background: color-mix(in srgb, var(--surface-soft) 68%, transparent);
+  border-radius: 14px;
   color: inherit;
   display: flex;
   justify-content: space-between;
-  min-height: 72px;
-  padding: 12px 4px;
+  min-height: 82px;
+  padding: 16px 18px;
   text-decoration: none;
   transition:
     background-color 130ms var(--ease-out),
@@ -960,12 +968,12 @@
 
 .resourceLink strong {
   color: var(--text);
-  font-size: 13.5px;
+  font-size: 16px;
 }
 
 .resourceLink small {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 14px;
   overflow-wrap: anywhere;
 }
 
@@ -1006,7 +1014,7 @@
   border-radius: 9px;
   color: #111419;
   flex: 0 0 auto;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 710;
   gap: 6px;
   min-height: 38px;
@@ -1036,7 +1044,7 @@
 }
 
 .agentPromptCode code {
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.7;
 }
 
@@ -1054,7 +1062,7 @@
   border-radius: 8px;
   color: #aab3bd;
   display: inline-flex;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 620;
   gap: 6px;
   min-height: 36px;
@@ -1084,7 +1092,7 @@
 .verifiedDefinition span,
 .feeGrid article > span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 680;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1099,7 +1107,7 @@
 .compatibilityBand code {
   color: var(--dev-accent);
   font-family: var(--font-plex-mono), monospace;
-  font-size: 11px;
+  font-size: 13px;
   overflow-wrap: anywhere;
 }
 
@@ -1116,16 +1124,17 @@
 
 .originFlow {
   align-items: center;
-  border-block: 1px solid var(--dev-rule);
+  background: color-mix(in srgb, var(--surface-soft) 54%, transparent);
+  border-radius: 14px;
   display: flex;
   flex-wrap: wrap;
   gap: 8px 12px;
-  padding-block: 18px;
+  padding: 18px;
 }
 
 .originFlow span {
   color: var(--text-soft);
-  font-size: 12px;
+  font-size: 15px;
 }
 
 .originFlow span[aria-hidden="true"] {
@@ -1149,7 +1158,7 @@
 .indexingRules strong {
   color: var(--text);
   display: block;
-  font-size: 14px;
+  font-size: 17px;
   font-weight: 680;
   margin-bottom: 7px;
 }
@@ -1157,8 +1166,8 @@
 .identityRules p,
 .indexingRules p {
   color: var(--text-soft) !important;
-  font-size: 13.5px !important;
-  line-height: 1.58 !important;
+  font-size: 16px !important;
+  line-height: 1.62 !important;
   margin: 0 !important;
 }
 
@@ -1217,7 +1226,7 @@
   color: var(--dev-accent);
   display: block;
   font-family: var(--font-plex-mono), monospace;
-  font-size: 11px;
+  font-size: 13px;
   margin-bottom: 8px;
   overflow-wrap: anywhere;
 }
@@ -1280,7 +1289,7 @@
 
 .feeGrid small {
   color: var(--muted) !important;
-  font-size: 12px !important;
+  font-size: 13px !important;
 }
 
 .finalityRail {
@@ -1302,7 +1311,7 @@
 
 .finalityRail span {
   color: var(--dev-accent);
-  font-size: 11px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
   font-weight: 720;
 }
@@ -1315,7 +1324,7 @@
 
 .finalityRail small {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.45;
 }
 
@@ -1340,7 +1349,7 @@
 .versionMatrix code {
   color: var(--dev-accent);
   font-family: var(--font-plex-mono), monospace;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .versionMatrix strong {
@@ -1359,6 +1368,7 @@
 .integrationChecklist {
   counter-reset: integration-step;
   display: grid;
+  gap: 12px;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -1366,21 +1376,22 @@
 
 .integrationChecklist li {
   align-items: start;
-  border-top: 1px solid var(--dev-rule);
+  background: color-mix(in srgb, var(--surface-soft) 62%, transparent);
+  border-radius: 14px;
   color: var(--text-soft);
   counter-increment: integration-step;
   display: grid;
-  font-size: 14px;
+  font-size: 16px;
   gap: 16px;
   grid-template-columns: 28px minmax(0, 1fr);
-  line-height: 1.58;
-  padding: 14px 4px;
+  line-height: 1.65;
+  padding: 18px;
 }
 
 .integrationChecklist li::before {
   color: var(--dev-accent);
   content: counter(integration-step, decimal-leading-zero);
-  font-size: 11px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
   font-weight: 720;
   padding-top: 3px;
@@ -1407,7 +1418,7 @@
   gap: 24px;
   justify-content: space-between;
   margin-top: 28px;
-  padding: 20px;
+  padding: 24px;
 }
 
 .finalCta > div {
@@ -1417,14 +1428,14 @@
 
 .finalCta strong {
   color: var(--text);
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 690;
 }
 
 .finalCta p {
   color: var(--text-soft) !important;
-  font-size: 13.5px !important;
-  line-height: 1.55 !important;
+  font-size: 16px !important;
+  line-height: 1.6 !important;
   margin: 0 !important;
   max-width: 64ch !important;
 }
@@ -1436,7 +1447,7 @@
   color: var(--body-background);
   display: inline-flex;
   flex: 0 0 auto;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 700;
   gap: 7px;
   min-height: 44px;

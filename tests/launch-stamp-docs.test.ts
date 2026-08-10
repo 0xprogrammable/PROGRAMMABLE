@@ -244,7 +244,9 @@ describe("Launch Stamp developer documentation", () => {
     expect(page).toContain("eth_chainId == 0x1");
     expect(page).toContain('fromBlock: "0x1886b6c"');
     expect(page).not.toContain("chainId,\n    address: router.address");
-    expect(page).toContain("Backfill once, then follow finalized logs");
+    expect(page).toContain(
+      "Backfill from the start block, then follow finalized logs",
+    );
     expect(page).toContain("1 · Bind");
     expect(page).toContain("3 · Persist and dedupe");
     expect(page).toContain("coordinates as the idempotency key");
@@ -422,7 +424,7 @@ describe("Launch Stamp developer documentation", () => {
     expect(page).toContain("LaunchKindV1.Classic");
   });
 
-  it("limits stamps to future Classic and Custom provenance", () => {
+  it("limits stamps to Router-stamped Classic and Custom provenance", () => {
     expect(page).toContain(
       "Historical launches created before Router activation",
     );
@@ -433,27 +435,27 @@ describe("Launch Stamp developer documentation", () => {
       "A Registry, indexer, Supabase project, Programmable API, or",
     );
     expect(page).toContain(
-      "PCAN point-in-time test vector covers the CustomGraph route",
+      "This point-in-time test case covers the CustomGraph route",
     );
-    expect(page).toContain("There is no");
-    expect(page).toMatch(/separate Classic\s+onchain canary claim/);
+    expect(page).toContain("The published evidence does not include");
+    expect(page).toMatch(/a separate Classic\s+onchain canary/);
     expect(page).toMatch(
-      /Future Classic stamps use\s+the same live Router\s+ABI/,
+      /Router-stamped Classic launches use\s+the same\s+live Router\s+ABI/,
     );
     expect(page).toMatch(
       /Direct Classic Factory, Graph Factory, or Single Factory\s+calls/,
     );
     expect(page).toMatch(
-      /does not automatically list a coin in GMGN, Axiom, FOMO/,
+      /does not automatically list a token in GMGN, Axiom, FOMO/,
     );
     expect(page).toMatch(
-      /Generic pool or token\s+discovery in a third-party API is not Router stamp integration/,
+      /Generic pool or\s+token discovery in a third-party API is not Router stamp\s+integration/,
     );
     expect(page).toMatch(
       /GMGN market\s+numbers are not canonical onchain stamp evidence/,
     );
     expect(page).toMatch(
-      /read current\s+pool state separately through PoolManager or StateView/,
+      /read current\s+pool state separately through\s+PoolManager or\s+StateView/,
     );
     expect(page).toContain("slot0.sqrtPriceX96 == 0");
     expect(page).toContain("slot0.sqrtPriceX96 != 0");
@@ -463,30 +465,35 @@ describe("Launch Stamp developer documentation", () => {
     );
     expect(page).toContain("not an Explorer source");
     expect(page).toContain("supplied handoff digests");
-    expect(page).toMatch(/PCAN.*human-readable token symbol/s);
+    expect(page).toMatch(/PCAN.*token symbol in this test case/s);
     expect(page).toContain("does not replace it");
     expect(page).toMatch(
-      /The public GitHub approval → permit → wallet self-service flow is\s+not live/,
+      /General public Custom submission and wallet self-service\s+launching are not live/,
     );
     expect(page).not.toContain("Classic onchain canary passed");
   });
 
-  it("adds one discoverable route to the existing Docs navigation", () => {
+  it("keeps the Router reference inside Developer integration", () => {
     expect(docsData).toContain(
-      '{ href: "/docs/launch-stamps", label: "Launch stamps" }',
+      '{ href: "/docs/launch-stamps", label: "Router reference" }',
     );
-    expect(docsData).toContain('relatedPaths: ["/docs/launch-stamps"]');
+    expect(docsData).toContain(
+      'relatedPaths: ["/docs/launch-stamps"] as const',
+    );
     expect(docsShell).toContain(
-      "category.relatedPaths.some((path) => path === currentPath)",
+      "item.relatedPaths.some((path) => path === currentPath)",
     );
     expect(page).toContain('currentPath="/docs/launch-stamps"');
+    expect(page).toContain('parentHref="/docs/developers#agents"');
+    expect(page).toContain('parentLabel="Developer integration"');
+    expect(docsShell).toContain('aria-label="Breadcrumb"');
     expect(page).toContain('alternates: { canonical: "/docs/launch-stamps" }');
     expect(sitemap).toContain('"/docs/launch-stamps"');
     expect(developerDocsMarkdown).toContain(
       "[GitHub Router reference](https://github.com/0xprogrammable/developers/blob/main/docs/reference/launch-stamp.md)",
     );
     expect(developerDocsMarkdown).toContain(
-      "Router V1 is the canonical provenance source for future Classic and Custom launches",
+      "Router V1 covers only launches executed and stamped through it",
     );
     expect(developerDocsMarkdown).not.toContain(
       "the binding remains prelaunch until every deployment field is published",
@@ -517,6 +524,9 @@ describe("Launch Stamp developer documentation", () => {
       /\.detailLine code\s*\{[^}]*overflow-wrap:\s*anywhere;[^}]*word-break:\s*break-word;/s,
     );
     expect(styles).not.toContain("transition: all");
+    expect(styles).not.toMatch(
+      /font-size:\s*(?:10(?:\.5)?|11(?:\.5)?|12(?:\.5)?)px/,
+    );
     expect(styles).not.toMatch(/\n\s+width:\s*\d{3,}px/);
   });
 });
