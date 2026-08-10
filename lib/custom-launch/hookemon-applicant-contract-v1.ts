@@ -4,6 +4,10 @@ import {
   keccak256,
 } from "viem";
 
+import {
+  verifyHookemonAdoptionCalldataV22,
+} from "./hookemon-adoption-verifier-v22";
+
 export const HOOKEMON_FLOW_STATE_SCHEMA_V1 =
   "programmable.hookemon-applicant-flow-state-response.v1" as const;
 export const HOOKEMON_BROWSER_ACTION_SCHEMA_V1 =
@@ -305,13 +309,12 @@ export function parseHookemonBrowserWalletActionV1(
   if (actionIndex === 1 && dataHash !== binding.launcherInitCodeHash) {
     throw invalid("Hookemon launcher init code drifted");
   }
-  // V2.2 adoption has a nested permit, plan, stamp request, 23-component
-  // graph, edge vector and signature. A target, selector and data hash are not
-  // sufficient browser authority. Keep this step unavailable until the exact
-  // frozen ABI decoder recomputes every binding and byte-for-byte re-encodes
-  // the calldata in this client bundle.
   if (actionIndex === 2) {
-    throw invalid("Hookemon V2.2 adoption decoder is unavailable");
+    verifyHookemonAdoptionCalldataV22({
+      calldata: transaction.data,
+      expectedSelector: binding.adoptionSelector,
+      expectedCalldataHash: dataHash,
+    });
   }
   return deepFreeze({
     schemaVersion: HOOKEMON_BROWSER_ACTION_SCHEMA_V1,

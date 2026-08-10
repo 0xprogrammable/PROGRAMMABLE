@@ -6,6 +6,9 @@ import { describe, expect, it } from "vitest";
 import { getAddress, keccak256 } from "viem";
 
 import {
+  assertHookemonAdoptionByteExactReencodingV22,
+} from "../lib/custom-launch/hookemon-adoption-verifier-v22";
+import {
   createHookemonFinalityRequestV1,
   createHookemonTransactionReportV1,
   HOOKEMON_BROWSER_ACTION_SCHEMA_V1,
@@ -99,6 +102,30 @@ describe("Hookemon Applicant Authority/browser contract", () => {
       binding,
       "1000",
     )).toThrow(/V2\.2 adoption decoder is unavailable/u);
+  });
+
+  it("reserves a byte-exact final guard for the frozen V2.2 recomputation", () => {
+    const expectedCalldataHash = keccak256(adoptionData);
+    expect(() => assertHookemonAdoptionByteExactReencodingV22({
+      calldata: adoptionData,
+      expectedSelector: adoptionSelector,
+      expectedCalldataHash,
+      reencodedCalldata: adoptionData,
+    })).not.toThrow();
+
+    const sameSelectorTamper = `${adoptionSelector}${"ac".repeat(96)}` as const;
+    expect(() => assertHookemonAdoptionByteExactReencodingV22({
+      calldata: adoptionData,
+      expectedSelector: adoptionSelector,
+      expectedCalldataHash,
+      reencodedCalldata: sameSelectorTamper,
+    })).toThrow(/byte-exact deterministic re-encoding/u);
+    expect(() => assertHookemonAdoptionByteExactReencodingV22({
+      calldata: sameSelectorTamper,
+      expectedSelector: adoptionSelector,
+      expectedCalldataHash,
+      reencodedCalldata: sameSelectorTamper,
+    })).toThrow(/byte-exact deterministic re-encoding/u);
   });
 
   it("rejects route substitution, CREATE-to-call conversion and nonce drift", () => {
