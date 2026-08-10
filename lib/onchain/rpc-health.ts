@@ -11,20 +11,27 @@ import type { ReadyOnchainDeployment } from "./types";
 type RpcRole = "primary" | "secondary";
 type ProviderStatus =
   | "available"
+  | "stale"
   | "unavailable"
   | "invalid"
   | "unknown";
+
+export const OPERATIONAL_RPC_MAX_HEAD_AGE_SECONDS = 5 * 60;
+export const OPERATIONAL_RPC_MAX_FUTURE_SKEW_SECONDS = 60;
 
 type RpcHealthClient = Readonly<{
   getChainId: () => Promise<number>;
   getBlockNumber: () => Promise<bigint>;
   getBlock: (input: Readonly<{ blockNumber: bigint }>) => Promise<{
+    number: bigint | null;
     hash: Hex | null;
+    timestamp: bigint;
   }>;
 }>;
 
 export type OperationalRpcHealthDependencies = Readonly<{
   createClient: (rpcUrl: string) => RpcHealthClient;
+  nowMs: () => number;
 }>;
 
 export type OperationalRpcHealth = Readonly<{
@@ -36,9 +43,18 @@ export type OperationalRpcHealth = Readonly<{
     failoverUsed: boolean;
   }>;
   providers: Readonly<{
-    primary: Readonly<{ status: ProviderStatus; head: string | null }>;
-    secondary: Readonly<{ status: ProviderStatus; head: string | null }>;
+    primary: Readonly<{
+      status: ProviderStatus;
+      head: string | null;
+      headAgeSeconds: number | null;
+    }>;
+    secondary: Readonly<{
+      status: ProviderStatus;
+      head: string | null;
+      headAgeSeconds: number | null;
+    }>;
   }>;
+  freshness: Readonly<{ maxHeadAgeSeconds: number }>;
   quorum: Readonly<{
     status: "verified" | "unavailable" | "mismatch";
   }>;
@@ -51,6 +67,7 @@ export type OperationalRpcHealth = Readonly<{
 type ProviderProbe = {
   status: ProviderStatus;
   head: bigint | null;
+  headAgeSeconds: number | null;
   client: RpcHealthClient | null;
 };
 
@@ -74,6 +91,7 @@ function defaultDependencies(
 ): OperationalRpcHealthDependencies {
   const chain = deployment.chainId === 1 ? mainnet : sepolia;
   return {
+    nowMs: Date.now,
     createClient: (rpcUrl) =>
       createPublicClient({
         chain,
@@ -89,6 +107,7 @@ function publicProvider(probe: ProviderProbe) {
   return {
     status: probe.status,
     head: probe.head?.toString() ?? null,
+    headAgeSeconds: probe.headAgeSeconds,
   } as const;
 }
 
@@ -115,6 +134,9 @@ function result(
       primary: publicProvider(probes.primary),
       secondary: publicProvider(probes.secondary),
     },
+    freshness: {
+      maxHeadAgeSeconds: OPERATIONAL_RPC_MAX_HEAD_AGE_SECONDS,
+    },
     quorum: { status: input.quorumStatus },
     confirmedBlock: input.confirmedBlock ?? null,
   };
@@ -138,8 +160,18 @@ export async function readOperationalRpcHealth(
   dependencies = defaultDependencies(deployment),
 ): Promise<OperationalRpcHealth> {
   const probes: Record<RpcRole, ProviderProbe> = {
-    primary: { status: "unknown", head: null, client: null },
-    secondary: { status: "unknown", head: null, client: null },
+    primary: {
+      status: "unknown",
+      head: null,
+      headAgeSeconds: null,
+      client: null,
+    },
+    secondary: {
+      status: "unknown",
+      head: null,
+      headAgeSeconds: null,
+      client: null,
+    },
   };
   const secondaryUrl = deployment.rpcUrlSecondary;
   if (!secondaryUrl || secondaryUrl === deployment.rpcUrl) {
@@ -150,6 +182,16 @@ export async function readOperationalRpcHealth(
       quorumStatus: "unavailable",
     });
   }
+  const nowMs = dependencies.nowMs();
+  if (!Number.isSafeInteger(nowMs) || nowMs < 0) {
+    return result(deployment, probes, {
+      status: "unhealthy",
+      readStatus: "blocked",
+      servedBy: null,
+      quorumStatus: "unavailable",
+    });
+  }
+  const observedAtSeconds = BigInt(Math.floor(nowMs / 1_000));
 
   const roleForUrl = (rpcUrl: string): RpcRole => {
     if (rpcUrl === deployment.rpcUrl) return "primary";
@@ -170,8 +212,29 @@ export async function readOperationalRpcHealth(
         probes[role].head = head;
         throw new RpcHealthIntegrityError();
       }
-      probes[role].status = "available";
       probes[role].head = head;
+      const headBlock = await client.getBlock({ blockNumber: head });
+      if (
+        headBlock.number !== head ||
+        !validBlockHash(headBlock.hash) ||
+        typeof headBlock.timestamp !== "bigint" ||
+        headBlock.timestamp < 0n ||
+        headBlock.timestamp >
+          observedAtSeconds +
+            BigInt(OPERATIONAL_RPC_MAX_FUTURE_SKEW_SECONDS)
+      ) {
+        probes[role].status = "invalid";
+        throw new RpcHealthIntegrityError();
+      }
+      const headAge =
+        observedAtSeconds > headBlock.timestamp
+          ? observedAtSeconds - headBlock.timestamp
+          : 0n;
+      probes[role].headAgeSeconds = Number(headAge);
+      probes[role].status =
+        headAge > BigInt(OPERATIONAL_RPC_MAX_HEAD_AGE_SECONDS)
+          ? "stale"
+          : "available";
       return role;
     } catch (error) {
       if (error instanceof RpcHealthIntegrityError) throw error;
@@ -242,7 +305,10 @@ export async function readOperationalRpcHealth(
     }
     try {
       const block = await probe.client.getBlock({ blockNumber });
-      if (!validBlockHash(block.hash)) {
+      if (
+        block.number !== blockNumber ||
+        !validBlockHash(block.hash)
+      ) {
         probe.status = "invalid";
         return { status: "invalid", hash: null } as const;
       }

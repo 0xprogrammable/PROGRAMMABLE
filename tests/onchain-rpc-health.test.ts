@@ -4,6 +4,7 @@ import { HttpRequestError } from "viem";
 vi.mock("server-only", () => ({}));
 
 import {
+  OPERATIONAL_RPC_MAX_HEAD_AGE_SECONDS,
   readOperationalRpcHealth,
   type OperationalRpcHealthDependencies,
 } from "../lib/onchain/rpc-health";
@@ -12,6 +13,8 @@ import type { ReadyOnchainDeployment } from "../lib/onchain/types";
 const PRIMARY_URL = "https://primary.example/rpc-key";
 const SECONDARY_URL = "https://secondary.example/rpc-key";
 const BLOCK_HASH = `0x${"11".repeat(32)}` as const;
+const NOW_SECONDS = 1_800_000_000n;
+const NOW_MS = Number(NOW_SECONDS) * 1_000;
 
 const deployment = {
   environment: "production",
@@ -42,19 +45,35 @@ function httpFailure(status: number, url: string) {
 function client(input?: Readonly<{
   chainId?: number;
   head?: bigint;
+  headTimestamp?: bigint | (() => bigint);
   blockHash?: `0x${string}`;
   chainError?: unknown;
+  headBlockError?: unknown;
   blockError?: unknown;
 }>) {
+  const head = input?.head ?? 100n;
   return {
     getChainId: vi.fn(async () => {
       if (input?.chainError) throw input.chainError;
       return input?.chainId ?? 1;
     }),
-    getBlockNumber: vi.fn(async () => input?.head ?? 100n),
-    getBlock: vi.fn(async () => {
-      if (input?.blockError) throw input.blockError;
-      return { hash: input?.blockHash ?? BLOCK_HASH };
+    getBlockNumber: vi.fn(async () => head),
+    getBlock: vi.fn(async ({ blockNumber }: { blockNumber: bigint }) => {
+      if (blockNumber === head && input?.headBlockError) {
+        throw input.headBlockError;
+      }
+      if (blockNumber !== head && input?.blockError) {
+        throw input.blockError;
+      }
+      const headTimestamp =
+        typeof input?.headTimestamp === "function"
+          ? input.headTimestamp()
+          : input?.headTimestamp ?? NOW_SECONDS - 12n;
+      return {
+        number: blockNumber,
+        hash: input?.blockHash ?? BLOCK_HASH,
+        timestamp: headTimestamp,
+      };
     }),
   };
 }
@@ -70,12 +89,17 @@ function dependencies(
   });
   return {
     createClient,
+    nowMs: () => NOW_MS,
   } satisfies OperationalRpcHealthDependencies;
 }
 
 describe("operational RPC health", () => {
   it("reports healthy only when both fixed providers agree", async () => {
-    const primary = client({ head: 100n });
+    const primary = client({
+      head: 100n,
+      headTimestamp:
+        NOW_SECONDS - BigInt(OPERATIONAL_RPC_MAX_HEAD_AGE_SECONDS),
+    });
     const secondary = client({ head: 101n });
 
     await expect(
@@ -92,8 +116,19 @@ describe("operational RPC health", () => {
         failoverUsed: false,
       },
       providers: {
-        primary: { status: "available", head: "100" },
-        secondary: { status: "available", head: "101" },
+        primary: {
+          status: "available",
+          head: "100",
+          headAgeSeconds: OPERATIONAL_RPC_MAX_HEAD_AGE_SECONDS,
+        },
+        secondary: {
+          status: "available",
+          head: "101",
+          headAgeSeconds: 12,
+        },
+      },
+      freshness: {
+        maxHeadAgeSeconds: OPERATIONAL_RPC_MAX_HEAD_AGE_SECONDS,
       },
       quorum: { status: "verified" },
       confirmedBlock: { number: "88", hash: BLOCK_HASH },
@@ -188,6 +223,122 @@ describe("operational RPC health", () => {
     });
   });
 
+  it("uses a fresh fixed secondary when the primary head is stale", async () => {
+    const primary = client({
+      headTimestamp:
+        NOW_SECONDS -
+        BigInt(OPERATIONAL_RPC_MAX_HEAD_AGE_SECONDS + 1),
+    });
+    const secondary = client({ headTimestamp: NOW_SECONDS - 8n });
+    const deps = dependencies(primary, secondary);
+
+    const health = await readOperationalRpcHealth(
+      deployment,
+      deps,
+    );
+
+    expect(health).toMatchObject({
+      status: "degraded",
+      read: {
+        status: "available",
+        servedBy: "secondary",
+        failoverUsed: true,
+      },
+      providers: {
+        primary: {
+          status: "stale",
+          head: "100",
+          headAgeSeconds: OPERATIONAL_RPC_MAX_HEAD_AGE_SECONDS + 1,
+        },
+        secondary: {
+          status: "available",
+          head: "100",
+          headAgeSeconds: 8,
+        },
+      },
+      freshness: {
+        maxHeadAgeSeconds: OPERATIONAL_RPC_MAX_HEAD_AGE_SECONDS,
+      },
+      quorum: { status: "unavailable" },
+      confirmedBlock: { number: "88", hash: BLOCK_HASH },
+    });
+    expect(primary.getBlock).toHaveBeenCalledTimes(1);
+    expect(secondary.getBlock).toHaveBeenCalledTimes(2);
+    expect(deps.createClient.mock.calls.map(([url]) => url)).toEqual([
+      PRIMARY_URL,
+      SECONDARY_URL,
+    ]);
+  });
+
+  it("fails closed when both providers agree only on stale heads", async () => {
+    const staleTimestamp =
+      NOW_SECONDS -
+      BigInt(OPERATIONAL_RPC_MAX_HEAD_AGE_SECONDS + 1);
+    const primary = client({ headTimestamp: staleTimestamp });
+    const secondary = client({ headTimestamp: staleTimestamp });
+
+    const health = await readOperationalRpcHealth(
+      deployment,
+      dependencies(primary, secondary),
+    );
+
+    expect(health).toMatchObject({
+      status: "unhealthy",
+      read: {
+        status: "unavailable",
+        servedBy: null,
+        failoverUsed: false,
+      },
+      providers: {
+        primary: {
+          status: "stale",
+          headAgeSeconds: OPERATIONAL_RPC_MAX_HEAD_AGE_SECONDS + 1,
+        },
+        secondary: {
+          status: "stale",
+          headAgeSeconds: OPERATIONAL_RPC_MAX_HEAD_AGE_SECONDS + 1,
+        },
+      },
+      quorum: { status: "unavailable" },
+      confirmedBlock: null,
+    });
+    expect(primary.getBlock).toHaveBeenCalledTimes(1);
+    expect(secondary.getBlock).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns to verified current health after the primary recovers", async () => {
+    let primaryTimestamp =
+      NOW_SECONDS -
+      BigInt(OPERATIONAL_RPC_MAX_HEAD_AGE_SECONDS + 1);
+    const primary = client({
+      headTimestamp: () => primaryTimestamp,
+    });
+    const secondary = client({ headTimestamp: NOW_SECONDS - 8n });
+    const deps = dependencies(primary, secondary);
+
+    await expect(
+      readOperationalRpcHealth(deployment, deps),
+    ).resolves.toMatchObject({
+      status: "degraded",
+      read: { servedBy: "secondary", failoverUsed: true },
+      providers: { primary: { status: "stale" } },
+    });
+
+    primaryTimestamp = NOW_SECONDS - 6n;
+
+    await expect(
+      readOperationalRpcHealth(deployment, deps),
+    ).resolves.toMatchObject({
+      status: "healthy",
+      read: { servedBy: "primary", failoverUsed: false },
+      providers: {
+        primary: { status: "available", headAgeSeconds: 6 },
+        secondary: { status: "available", headAgeSeconds: 8 },
+      },
+      quorum: { status: "verified" },
+    });
+  });
+
   it("reports unhealthy when both configured providers are down", async () => {
     const primary = client({
       chainError: httpFailure(429, PRIMARY_URL),
@@ -210,8 +361,19 @@ describe("operational RPC health", () => {
         failoverUsed: false,
       },
       providers: {
-        primary: { status: "unavailable", head: null },
-        secondary: { status: "unavailable", head: null },
+        primary: {
+          status: "unavailable",
+          head: null,
+          headAgeSeconds: null,
+        },
+        secondary: {
+          status: "unavailable",
+          head: null,
+          headAgeSeconds: null,
+        },
+      },
+      freshness: {
+        maxHeadAgeSeconds: OPERATIONAL_RPC_MAX_HEAD_AGE_SECONDS,
       },
       quorum: { status: "unavailable" },
       confirmedBlock: null,
