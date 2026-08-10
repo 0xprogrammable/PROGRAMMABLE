@@ -67,7 +67,7 @@ const APPROVED_OPERATIONS = Object.freeze({
         }),
         Object.freeze({
           path: "lib/server/custom-launch/manual-router-finality-v1.ts",
-          sha256: "be7a0fe1c482a734b0c5605c88bf82e7eb547cd3d57ada7695634fdd23b26ed8",
+          sha256: "f653ee2ea386740d4536445a86397ef527aa828d6e7f91f3741082d1b1f9833d",
         }),
         Object.freeze({
           path: "lib/server/custom-launch/manual-router-production-v1.ts",
@@ -75,11 +75,11 @@ const APPROVED_OPERATIONS = Object.freeze({
         }),
         Object.freeze({
           path: "lib/server/custom-launch/manual-router-service-v1.ts",
-          sha256: "36ba5a141b30a204d0e2493e8d382f366b070eef4547fe69c12935e63d619fcd",
+          sha256: "97a99851bc8eb0c60ad43d6548931da6faafb4f17f7857cdd31fd6767fe64412",
         }),
         Object.freeze({
           path: "lib/server/custom-launch/manual-router-store-v1.ts",
-          sha256: "5462e4413798e8fa2804c4727ccd6c9355aa9860eeb0a345ad167b01f0eb4162",
+          sha256: "24a464017173af3bda97d6fc7d143dec27453a25315424a8348cbca2ad8acd66",
         }),
       ]),
       policy: Object.freeze({

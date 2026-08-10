@@ -94,11 +94,13 @@ export function createManualRouterWebsiteAuthorityDispatchV2(input: Readonly<{
         ? await loadV2().verifySignedPublish(request)
         : await input.v1.verifySignedPublish(request);
     },
-    async readChainClock() {
+    async readChainClock(selector: Parameters<
+      ManualRouterWebsiteAuthorityV1["readChainClock"]
+    >[0]) {
       // Chain time is route-independent. Keeping the existing production
       // source preserves V1 behavior; the V2 facade must independently bind
       // its own dual-RPC observations during currentness/preflight.
-      return await input.v1.readChainClock();
+      return await input.v1.readChainClock(selector);
     },
     async assertV2AcceptanceCurrent(value: Parameters<NonNullable<
       ManualRouterWebsiteAuthorityV1["assertV2AcceptanceCurrent"]
@@ -121,7 +123,13 @@ export function createManualRouterWebsiteAuthorityDispatchV2(input: Readonly<{
     async resolveReissueState(value: Parameters<
       ManualRouterWebsiteAuthorityV1["resolveReissueState"]
     >[0]) {
-      return reissueArtifactVersionV2(value.request)
+      const version = value.artifact === undefined
+        ? reissueArtifactVersionV2(value.request)
+        : artifactVersionV2(
+            value.artifact,
+            "manual Router previous signed artifact",
+          );
+      return version
           === "programmable.manual-router-complete-signed-artifact.v2"
         ? await loadV2().resolveReissueState(value)
         : await input.v1.resolveReissueState(value);

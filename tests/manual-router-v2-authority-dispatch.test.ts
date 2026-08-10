@@ -19,7 +19,11 @@ const V2_ARTIFACT = Object.freeze({
 
 describe("manual Router production authority version dispatch", () => {
   it("keeps every V1 operation on the existing authority", async () => {
-    const { authority: v1, calls: v1Calls } = fakeAuthority("v1");
+    const {
+      authority: v1,
+      calls: v1Calls,
+      selectors: v1Selectors,
+    } = fakeAuthority("v1");
     const { authority: v2, calls: v2Calls } = fakeAuthority("v2");
     const loadV2 = vi.fn(() => v2 as ManualRouterWebsiteAuthorityV2);
     const dispatch = createManualRouterWebsiteAuthorityDispatchV2({
@@ -36,13 +40,15 @@ describe("manual Router production authority version dispatch", () => {
     await dispatch.resolveReissueState({
       request: { previousSignedArtifact: V1_ARTIFACT },
     } as never);
-    await dispatch.readChainClock();
+    const clockSelector = { pointer: { routeTest: "v1" } } as never;
+    await dispatch.readChainClock(clockSelector);
 
     expect(v1Calls).toEqual([
       "assert", "publish", "transaction", "reissue", "clock",
     ]);
     expect(v2Calls).toEqual([]);
     expect(loadV2).not.toHaveBeenCalled();
+    expect(v1Selectors).toEqual([clockSelector]);
   });
 
   it("routes every V2 operation to the portable facade without V1 fallback", async () => {
@@ -119,6 +125,7 @@ describe("manual Router production authority version dispatch", () => {
 
 function fakeAuthority(label: "v1" | "v2") {
   const calls: string[] = [];
+  const selectors: unknown[] = [];
   const authority = {
     assertCompleteSignedArtifact(raw: unknown) {
       calls.push("assert");
@@ -128,8 +135,9 @@ function fakeAuthority(label: "v1" | "v2") {
       calls.push("publish");
       return {};
     },
-    async readChainClock() {
+    async readChainClock(selector?: unknown) {
       calls.push("clock");
+      selectors.push(selector);
       return {
         minimumTimestamp: "1",
         maximumTimestamp: "1",
@@ -157,6 +165,7 @@ function fakeAuthority(label: "v1" | "v2") {
     authority: authority as unknown as ManualRouterWebsiteAuthorityV1,
     calls,
     label,
+    selectors,
   };
 }
 

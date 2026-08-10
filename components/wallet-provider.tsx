@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import {
+  getIdentityToken as getPrivyIdentityToken,
   PrivyProvider,
   useIdentityToken,
   useLinkAccount,
@@ -10,6 +11,7 @@ import {
   usePrivy,
   useSendTransaction as usePrivySendTransaction,
   useSignMessage as usePrivySignMessage,
+  useUser,
   useWallets,
   type PrivyClientConfig,
 } from "@privy-io/react-auth";
@@ -77,10 +79,26 @@ export type WalletNativeBalance = {
   gasPriceWei: bigint;
 };
 
+export type WalletApplicantIdentityRequirementV1 = Readonly<{
+  githubUserId: string;
+  githubLogin: string;
+  launchWallet: `0x${string}`;
+}>;
+
+export type WalletApplicantSessionV1 = Readonly<{
+  accessToken: string;
+  identityToken: string;
+  privyUserId: string;
+  githubUserId: string;
+  githubLogin: string;
+  launchWallet: `0x${string}`;
+}>;
+
 type WalletContextValue = {
   wallet: WalletState | null;
   username: string;
   avatarDataUrl: string;
+  authReady: boolean;
   authenticated: boolean;
   hasSession: boolean;
   connecting: boolean;
@@ -91,6 +109,9 @@ type WalletContextValue = {
   }) => Promise<boolean>;
   getAccessToken: () => Promise<string | null>;
   getIdentityToken: () => Promise<string | null>;
+  refreshApplicantSession: (
+    requirement?: WalletApplicantIdentityRequirementV1,
+  ) => Promise<WalletApplicantSessionV1 | null>;
   githubConnected: boolean;
   githubUsername: string;
   connectGithub: () => void;
@@ -137,6 +158,145 @@ export function isWalletProviderSettled(
   authenticated: boolean,
 ) {
   return privyReady && (!authenticated || walletsReady);
+}
+
+export async function resolveWalletIdentityToken(input: Readonly<{
+  authenticated: boolean;
+  cachedIdentityToken: string | null;
+  loadIdentityToken: () => Promise<string | null>;
+}>): Promise<string | null> {
+  if (!input.authenticated) return null;
+  if (input.cachedIdentityToken !== null) return input.cachedIdentityToken;
+
+  try {
+    return await input.loadIdentityToken();
+  } catch {
+    return null;
+  }
+}
+
+type RefreshableApplicantUserV1 = Readonly<{
+  id: string;
+  github?: Readonly<{
+    subject: string;
+    username: string | null;
+  }>;
+  linkedAccounts: readonly Readonly<{
+    type: string;
+    subject?: string;
+    username?: string | null;
+    address?: string;
+    chainType?: string;
+  }>[];
+}>;
+
+type ApplicantAuthoritySnapshotV1 = Readonly<{
+  privyUserId: string | null;
+  githubUserId: string | null;
+  githubLogin: string | null;
+  walletAddress: string | null;
+}>;
+
+export async function refreshWalletApplicantSessionV1(input: Readonly<{
+  authenticated: boolean;
+  readCurrentAuthority: () => ApplicantAuthoritySnapshotV1;
+  refreshUser: () => Promise<RefreshableApplicantUserV1 | null | undefined>;
+  getAccessToken: () => Promise<string | null>;
+  getIdentityToken: () => Promise<string | null>;
+  requirement?: WalletApplicantIdentityRequirementV1;
+}>): Promise<WalletApplicantSessionV1 | null> {
+  if (!input.authenticated) return null;
+  const initial = input.readCurrentAuthority();
+  if (
+    typeof initial.privyUserId !== "string"
+    || initial.privyUserId.length === 0
+    || typeof initial.githubUserId !== "string"
+    || initial.githubUserId.length === 0
+    || typeof initial.githubLogin !== "string"
+    || initial.githubLogin.length === 0
+    || typeof initial.walletAddress !== "string"
+    || !isEthereumAddress(initial.walletAddress)
+  ) return null;
+
+  try {
+    const refreshedUser = await input.refreshUser();
+    if (
+      refreshedUser === null
+      || typeof refreshedUser !== "object"
+      || refreshedUser.id !== initial.privyUserId
+      || !Array.isArray(refreshedUser.linkedAccounts)
+    ) return null;
+    if (!authoritySnapshotMatches(initial, input.readCurrentAuthority())) {
+      return null;
+    }
+
+    const github = refreshedUser.github;
+    const githubAccounts = refreshedUser.linkedAccounts.filter(
+      (account) => account.type === "github_oauth",
+    );
+    if (
+      !github
+      || typeof github.subject !== "string"
+      || github.subject.length === 0
+      || typeof github.username !== "string"
+      || github.username.length === 0
+      || github.subject !== initial.githubUserId
+      || github.username.toLowerCase() !== initial.githubLogin.toLowerCase()
+      || githubAccounts.length !== 1
+      || !githubAccounts.some((account) =>
+        account.subject === github.subject
+        && account.username?.toLowerCase() === github.username!.toLowerCase()
+      )
+    ) return null;
+
+    const launchWallet = initial.walletAddress.toLowerCase() as `0x${string}`;
+    if (refreshedUser.linkedAccounts.filter((account) =>
+      account.type === "wallet"
+      && account.chainType === "ethereum"
+      && typeof account.address === "string"
+      && account.address.toLowerCase() === launchWallet
+    ).length !== 1) return null;
+    if (
+      input.requirement
+      && (
+        github.subject !== input.requirement.githubUserId
+        || github.username.toLowerCase()
+          !== input.requirement.githubLogin.toLowerCase()
+        || launchWallet !== input.requirement.launchWallet.toLowerCase()
+      )
+    ) return null;
+
+    const accessToken = await input.getAccessToken();
+    const identityToken = await input.getIdentityToken();
+    if (
+      typeof accessToken !== "string"
+      || accessToken.length === 0
+      || typeof identityToken !== "string"
+      || identityToken.length === 0
+      || !authoritySnapshotMatches(initial, input.readCurrentAuthority())
+    ) return null;
+    return Object.freeze({
+      accessToken,
+      identityToken,
+      privyUserId: refreshedUser.id,
+      githubUserId: github.subject,
+      githubLogin: github.username,
+      launchWallet,
+    });
+  } catch {
+    return null;
+  }
+}
+
+function authoritySnapshotMatches(
+  expected: ApplicantAuthoritySnapshotV1,
+  current: ApplicantAuthoritySnapshotV1,
+): boolean {
+  return current.privyUserId === expected.privyUserId
+    && current.githubUserId === expected.githubUserId
+    && current.githubLogin?.toLowerCase() === expected.githubLogin?.toLowerCase()
+    && current.walletAddress?.toLowerCase()
+      === expected.walletAddress?.toLowerCase();
 }
 
 export function getWalletProfileStorageKey(account: string) {
@@ -573,6 +733,7 @@ function ConfiguredWalletProvider({
 
 function PrivyWalletBridge({ children }: { children: ReactNode }) {
   const { authenticated, getAccessToken, logout, ready, user } = usePrivy();
+  const { refreshUser } = useUser();
   const { identityToken } = useIdentityToken();
   const { sendTransaction: sendPrivyTransaction } = usePrivySendTransaction();
   const { signMessage: signPrivyMessage } = usePrivySignMessage();
@@ -661,6 +822,40 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
   );
   const hasSession = activeAuthenticated;
   const sessionAction = getWalletSessionAction(ready, activeAuthenticated);
+  const getCurrentIdentityToken = useCallback(
+    () => resolveWalletIdentityToken({
+      authenticated: activeAuthenticated,
+      cachedIdentityToken: identityToken,
+      loadIdentityToken: getPrivyIdentityToken,
+    }),
+    [activeAuthenticated, identityToken],
+  );
+  const applicantAuthorityRef = useRef<ApplicantAuthoritySnapshotV1>({
+    privyUserId: user?.id ?? null,
+    githubUserId: user?.github?.subject ?? null,
+    githubLogin: user?.github?.username ?? null,
+    walletAddress: wallet?.account ?? null,
+  });
+  useEffect(() => {
+    applicantAuthorityRef.current = {
+      privyUserId: user?.id ?? null,
+      githubUserId: user?.github?.subject ?? null,
+      githubLogin: user?.github?.username ?? null,
+      walletAddress: wallet?.account ?? null,
+    };
+  }, [user?.github?.subject, user?.github?.username, user?.id, wallet?.account]);
+  const refreshApplicantSession = useCallback(
+    (requirement?: WalletApplicantIdentityRequirementV1) =>
+      refreshWalletApplicantSessionV1({
+        authenticated: activeAuthenticated && ready,
+        readCurrentAuthority: () => applicantAuthorityRef.current,
+        refreshUser,
+        getAccessToken,
+        getIdentityToken: getPrivyIdentityToken,
+        requirement,
+      }),
+    [activeAuthenticated, getAccessToken, ready, refreshUser],
+  );
 
   const profileValue = useSyncExternalStore(
     subscribeToProfiles,
@@ -1201,6 +1396,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       wallet,
       username,
       avatarDataUrl,
+      authReady: ready,
       authenticated: activeAuthenticated,
       hasSession,
       connecting: !providerSettled && !providerTimedOut,
@@ -1208,7 +1404,8 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       openWallet,
       disconnect,
       getAccessToken,
-      getIdentityToken: async () => identityToken,
+      getIdentityToken: getCurrentIdentityToken,
+      refreshApplicantSession,
       githubConnected,
       githubUsername,
       connectGithub,
@@ -1227,14 +1424,16 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       disconnect,
       disconnecting,
       getAccessToken,
+      getCurrentIdentityToken,
       githubConnected,
       githubUsername,
       hasSession,
-      identityToken,
       openWallet,
       providerTimedOut,
       readNativeBalance,
       readTradeBalances,
+      ready,
+      refreshApplicantSession,
       sendBrowserWalletAction,
       sendHookemonBrowserWalletAction,
       sendTransaction,
@@ -1284,6 +1483,7 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
       wallet: null,
       username: "",
       avatarDataUrl: "",
+      authReady: false,
       authenticated: false,
       hasSession: false,
       connecting: false,
@@ -1292,6 +1492,7 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
       disconnect: async () => false,
       getAccessToken: async () => null,
       getIdentityToken: async () => null,
+      refreshApplicantSession: async () => null,
       githubConnected: false,
       githubUsername: "",
       connectGithub: () => setDialogOpen(true),

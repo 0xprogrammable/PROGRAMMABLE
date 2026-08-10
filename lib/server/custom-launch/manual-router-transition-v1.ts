@@ -49,6 +49,7 @@ export async function commitManualRouterApplicantHeadTransitionV1(
     nextIndex: ManualRouterApplicantIndexAnyV2;
     immutableWrites: readonly ManualRouterImmutableWriteV1[];
     acceptConcurrentExactTarget: boolean;
+    refreshHeadAfterImmutableWrites?: () => Promise<ManualRouterApplicantHeadV1>;
   }>,
 ): Promise<ManualRouterHeadTransitionResultV1> {
   const pointer = assertManualRouterApplicantPointerAnyV2(input.nextPointer);
@@ -79,8 +80,14 @@ export async function commitManualRouterApplicantHeadTransitionV1(
       concurrentConvergence: false,
     });
   }
+  const commitHead = input.refreshHeadAfterImmutableWrites === undefined
+    ? input.head
+    : assertSemanticallyIdenticalHead(
+        input.head,
+        await input.refreshHeadAfterImmutableWrites(),
+      );
   try {
-    await input.store.compareAndSwap(input.head.path, input.head.etag, index);
+    await input.store.compareAndSwap(commitHead.path, commitHead.etag, index);
     return Object.freeze({
       index,
       pointer,
@@ -111,6 +118,19 @@ export async function commitManualRouterApplicantHeadTransitionV1(
       concurrentConvergence: true,
     });
   }
+}
+
+function assertSemanticallyIdenticalHead(
+  verified: ManualRouterApplicantHeadV1,
+  refreshed: ManualRouterApplicantHeadV1,
+): ManualRouterApplicantHeadV1 {
+  if (
+    refreshed.path !== verified.path
+    || canonicalizeJson(refreshed.index) !== canonicalizeJson(verified.index)
+    || canonicalizeJson(refreshed.pointers)
+      !== canonicalizeJson(verified.pointers)
+  ) throw new ManualRouterBlobCasConflictV1(verified.path);
+  return refreshed;
 }
 
 function replaceCurrentPointer(

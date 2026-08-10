@@ -10,6 +10,12 @@ vi.mock("server-only", () => ({}));
 
 import { LaunchModelPicker } from "../components/launch-entry";
 import {
+  acquireManualRouterWebsiteSessionV1,
+  applicantIdentityRequirementForLoginV1,
+  manualRouterApplicantDiscoveryReady,
+  runManualRouterRequestWithFreshSessionV1,
+} from "../components/manual-applicant-launch";
+import {
   MANUAL_ROUTER_PRODUCTION_BINDING_V1,
   assertManualRouterProductionBindingV1,
 } from "../lib/custom-launch/manual-router-bindings-v1";
@@ -39,11 +45,14 @@ import {
   type ManualRouterResolveResponseV2,
 } from "../lib/custom-launch/manual-router-contract-v2";
 import {
+  MANUAL_ROUTER_EXACT_SHARDS_V1_BROWSER_BINDING,
   manualRouterBlocksNewSendV1,
   manualRouterCanClearUncertainNoSendV1,
   manualRouterDirectoryForApplicantV2,
   manualRouterFreshReadyMatchesCachedV1,
   manualRouterFreshReadyMatchesCachedV2,
+  manualRouterIsExactShardsV1ApplicantDirectory,
+  manualRouterResolveForApplicantV2,
   manualRouterRouteFactsV2,
   manualRouterTransactionContextV1,
   parseManualRouterPersistedAttemptStorageV1,
@@ -95,6 +104,126 @@ import { rpcProviderCommitment } from
 
 const WALLET = "0x1111111111111111111111111111111111111111" as const;
 const OTHER_WALLET = "0x2222222222222222222222222222222222222222" as const;
+
+describe("manual Applicant Privy hydration", () => {
+  it("binds refreshed sessions to the exact Shards and Hookemon identities", () => {
+    expect(applicantIdentityRequirementForLoginV1("jesse-stahl")).toEqual({
+      githubUserId: "155705664",
+      githubLogin: "jesse-stahl",
+      launchWallet: "0xceebb3a6543cebeb2ed66963897a0abea52a50cc",
+    });
+    expect(applicantIdentityRequirementForLoginV1("hookemonv4")).toEqual({
+      githubUserId: "312745360",
+      githubLogin: "hookemonv4",
+      launchWallet: "0x5E9a7A24DCCC81cddd10b8a555300E227533c89f",
+    });
+    expect(applicantIdentityRequirementForLoginV1("other-applicant"))
+      .toBeUndefined();
+  });
+  it("does not start discovery before Privy is ready and starts once on the ready transition", () => {
+    const listAndResolve = vi.fn();
+    const runDiscovery = (authReady: boolean) => {
+      if (manualRouterApplicantDiscoveryReady({
+        authReady,
+        authenticated: true,
+        githubConnected: true,
+        walletConnected: true,
+        routeDiscoveryAllowed: true,
+      })) listAndResolve();
+    };
+
+    runDiscovery(false);
+    expect(listAndResolve).not.toHaveBeenCalled();
+    runDiscovery(true);
+    expect(listAndResolve).toHaveBeenCalledTimes(1);
+
+    const component = readFileSync(
+      join(process.cwd(), "components/manual-applicant-launch.tsx"),
+      "utf8",
+    );
+    expect(component.match(/manualRouterApplicantDiscoveryReady\(\{/gu))
+      .toHaveLength(2);
+    expect(component).toContain("NESTED_FACTORY_ACTIVATION === null\n      || !authReady");
+    expect(component).toContain("authReady,\n    authenticated,\n    githubConnected,\n    loadDirectory");
+  });
+
+  it("requires one refreshed Applicant session and never retries a request", async () => {
+    const refreshApplicantSession = vi.fn(async () => ({
+      accessToken: "access-token",
+      identityToken: "identity-token",
+      privyUserId: "did:privy:approved",
+      githubUserId: "155705664",
+      githubLogin: "jesse-stahl",
+      launchWallet: `0x${"a".repeat(40)}` as const,
+    }));
+    const session = await acquireManualRouterWebsiteSessionV1({
+      refreshApplicantSession,
+    });
+
+    expect(session).toEqual({
+      accessToken: "access-token",
+      identityToken: "identity-token",
+    });
+    expect(refreshApplicantSession).toHaveBeenCalledTimes(1);
+    const component = readFileSync(
+      join(process.cwd(), "components/manual-applicant-launch.tsx"),
+      "utf8",
+    );
+    expect(component).not.toContain("getAccessToken");
+    expect(component).not.toContain("getIdentityToken");
+  });
+
+  it("keeps unresolved dual-token hydration closed before any request", async () => {
+    const request = vi.fn();
+    await expect(acquireManualRouterWebsiteSessionV1({
+      refreshApplicantSession: async () => null,
+    })).rejects.toMatchObject({
+      status: 401,
+      code: "applicant_authentication_required",
+    });
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("refreshes independently before list and resolve without replaying either request", async () => {
+    const events: string[] = [];
+    let refreshCount = 0;
+    const getSession = vi.fn(async () => {
+      refreshCount += 1;
+      events.push(`refresh-${refreshCount}`);
+      return {
+        accessToken: `access-${refreshCount}`,
+        identityToken: `identity-${refreshCount}`,
+      };
+    });
+
+    await runManualRouterRequestWithFreshSessionV1(getSession, async () => {
+      events.push("list");
+    });
+    await runManualRouterRequestWithFreshSessionV1(getSession, async () => {
+      events.push("resolve");
+    });
+
+    expect(events).toEqual(["refresh-1", "list", "refresh-2", "resolve"]);
+    expect(getSession).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not invoke resolve when its dedicated refresh fails", async () => {
+    const getSession = vi.fn()
+      .mockResolvedValueOnce({
+        accessToken: "list-access",
+        identityToken: "list-identity",
+      })
+      .mockRejectedValueOnce(new Error("refresh failed"));
+    const list = vi.fn(async () => undefined);
+    const resolve = vi.fn(async () => undefined);
+
+    await runManualRouterRequestWithFreshSessionV1(getSession, list);
+    await expect(runManualRouterRequestWithFreshSessionV1(getSession, resolve))
+      .rejects.toThrow("refresh failed");
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(resolve).not.toHaveBeenCalled();
+  });
+});
 const SUBJECT = `sha256:${"11".repeat(32)}` as const;
 const POINTER = `sha256:${"22".repeat(32)}` as const;
 const APPROVAL = `sha256:${"33".repeat(32)}` as const;
@@ -746,7 +875,7 @@ describe("inactive Shards nested-factory Router V2 browser contract", () => {
     }
   });
 
-  it("never substitutes a legacy pointer into the accepted Jesse route", () => {
+  it("admits only the exact Shards V1 directory or the exact V2 route", () => {
     const legacy = {
       schemaVersion: "programmable.manual-router-applicant-list-response.v1",
       authenticatedGitHubUserId: "123456789",
@@ -773,7 +902,89 @@ describe("inactive Shards nested-factory Router V2 browser contract", () => {
     expect(() => manualRouterDirectoryForApplicantV2({
       directory: legacy,
       requireExactShardsRoute: true,
-    })).toThrow("exact Shards Router V2 submission is unavailable");
+    })).toThrow("exact Shards Router submission is unavailable");
+
+    const binding = MANUAL_ROUTER_EXACT_SHARDS_V1_BROWSER_BINDING;
+    const exactV1 = {
+      schemaVersion: "programmable.manual-router-applicant-list-response.v1",
+      authenticatedGitHubUserId: binding.authenticatedGitHubUserId,
+      linkedLaunchWallet: binding.linkedLaunchWallet,
+      submissions: [{
+        subjectHash: binding.subjectHash,
+        pointerHash: POINTER,
+        pullRequestNumber: binding.pullRequestNumber,
+        headSha: binding.headSha,
+        treeSha: binding.treeSha,
+        approvalBindingHash: binding.approvalBindingHash,
+        routeNonce: binding.routeNonce,
+        status: "ready" as const,
+        deadline: "1786387607",
+        submittedTransactionHash: null,
+        failedTransactionEvidenceHash: null,
+      }],
+      applicantIndexHash: APPROVAL,
+    } satisfies ManualRouterApplicantListResponseV1;
+    expect(manualRouterIsExactShardsV1ApplicantDirectory(exactV1)).toBe(true);
+    expect(manualRouterDirectoryForApplicantV2({
+      directory: exactV1,
+      requireExactShardsRoute: true,
+    })).toBe(exactV1);
+
+    const exactResolved = {
+      schemaVersion: "programmable.manual-router-applicant-resolve-response.v1",
+      subjectHash: binding.subjectHash,
+      pointerHash: POINTER,
+      approvalBindingHash: binding.approvalBindingHash,
+      routeNonce: binding.routeNonce,
+      status: "finalized" as const,
+      transactionHash: LAUNCH_ID,
+      proofHash: APPROVAL,
+    } satisfies ManualRouterResolveResponseV1;
+    expect(manualRouterResolveForApplicantV2({
+      directory: exactV1,
+      resolved: exactResolved,
+      requireExactShardsRoute: true,
+    })).toBe(exactResolved);
+    for (const nearMiss of [
+      { ...exactV1, authenticatedGitHubUserId: "155705665" },
+      { ...exactV1, linkedLaunchWallet: WALLET },
+      { ...exactV1, submissions: [] },
+      { ...exactV1, submissions: [{
+        ...exactV1.submissions[0], subjectHash: SUBJECT,
+      }] },
+      { ...exactV1, submissions: [{
+        ...exactV1.submissions[0], pullRequestNumber: 7,
+      }] },
+      { ...exactV1, submissions: [{
+        ...exactV1.submissions[0], headSha: "b".repeat(40),
+      }] },
+      { ...exactV1, submissions: [{
+        ...exactV1.submissions[0], treeSha: "c".repeat(40),
+      }] },
+      { ...exactV1, submissions: [{
+        ...exactV1.submissions[0], approvalBindingHash: APPROVAL,
+      }] },
+      { ...exactV1, submissions: [{
+        ...exactV1.submissions[0], routeNonce: ROUTE_NONCE,
+      }] },
+    ] satisfies ManualRouterApplicantListResponseV1[]) {
+      expect(manualRouterIsExactShardsV1ApplicantDirectory(nearMiss)).toBe(false);
+      expect(() => manualRouterDirectoryForApplicantV2({
+        directory: nearMiss,
+        requireExactShardsRoute: true,
+      })).toThrow("exact Shards Router submission is unavailable");
+    }
+    for (const resolvedNearMiss of [
+      { ...exactResolved, pointerHash: `sha256:${"23".repeat(32)}` as const },
+      { ...exactResolved, approvalBindingHash: APPROVAL },
+      { ...exactResolved, routeNonce: ROUTE_NONCE },
+    ] satisfies ManualRouterResolveResponseV1[]) {
+      expect(() => manualRouterResolveForApplicantV2({
+        directory: exactV1,
+        resolved: resolvedNearMiss,
+        requireExactShardsRoute: true,
+      })).toThrow("exact Shards Router V1 resolution is unavailable");
+    }
 
     const mixed = {
       schemaVersion: "programmable.manual-router-applicant-list-response.v2",
@@ -1065,8 +1276,11 @@ describe("inactive Shards nested-factory Router V2 browser contract", () => {
       "requireExactShardsRoute: exactShardsApplicant",
     );
     expect(component).toContain(
-      "disabled={!githubConnected || !routeAccepted}",
+      "disabled={!githubConnected || !routeDiscoveryAllowed}",
     );
+    expect(component).toContain("manualRouterResolveForApplicantV2");
+    expect(component).toContain("exactShardsV1Compatibility");
+    expect(component).toContain("...(routeAcceptanceRequired ? [{");
     expect(component).toContain("The exact Shards route is not available yet");
     expect(component).toContain("isNestedFactorySubmissionV2(chosenSubmission)");
     expect(component).toContain("Reviewed deployment order");

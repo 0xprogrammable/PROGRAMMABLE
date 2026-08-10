@@ -160,7 +160,7 @@ export class ManualRouterFinalityServiceV1 {
       );
     }
     const clock = await this.dependencies.website.dependencies.authority
-      .readChainClock();
+      .readChainClock({ artifact });
     const nextPointer = advanceFinalityPointer({
       pointer,
       updatedAtEpochSeconds: clock.maximumTimestamp,

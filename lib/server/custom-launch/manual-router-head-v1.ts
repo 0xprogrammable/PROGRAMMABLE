@@ -24,9 +24,12 @@ export async function readManualRouterApplicantHeadV1(input: Readonly<{
   store: ManualRouterPrivateBlobStoreV1;
   approvedGitHubUserId: string;
   approvedLaunchWallet: `0x${string}`;
+  useCompareAndSwapEtag?: boolean;
 }>): Promise<ManualRouterApplicantHeadV1> {
   const path = manualRouterApplicantIndexPathV1(input);
-  const storedIndex = await input.store.read(path);
+  const storedIndex = input.useCompareAndSwapEtag === true
+    ? await input.store.readForCompareAndSwap(path)
+    : await input.store.read(path);
   if (storedIndex === null) {
     return Object.freeze({ path, etag: null, index: null, pointers: [] });
   }
