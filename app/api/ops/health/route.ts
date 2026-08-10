@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 import {
   getOperationalOnchainDeployment,
   readDurableExploreModel,
-  readIndependentRpcHealth,
+  readOperationalRpcHealth,
+  type OperationalRpcHealth,
 } from "../../../../lib/onchain";
 import { readIndexedReadModelHealth } from "../../../../lib/data-pipeline/read-model-health.server";
 
@@ -11,6 +12,29 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const MAX_INDEX_AGE_MS = 15 * 60 * 1_000;
+
+function unhealthyRpcResponse(
+  rpc: OperationalRpcHealth,
+  startedAt: number,
+) {
+  console.error("Programmable operations RPC health check failed", {
+    errorName: "OperationalRpcHealthUnhealthy",
+    readStatus: rpc.read.status,
+    quorumStatus: rpc.quorum.status,
+    durationMs: Date.now() - startedAt,
+  });
+  return NextResponse.json(
+    {
+      status: "unhealthy",
+      rpc,
+      checkedAt: new Date().toISOString(),
+    },
+    {
+      status: 503,
+      headers: { "Cache-Control": "no-store" },
+    },
+  );
+}
 
 export async function GET() {
   const startedAt = Date.now();
@@ -26,7 +50,10 @@ export async function GET() {
       if (indexed.chainId !== deployment.chainId) {
         throw new Error("Indexed read-model chain binding is unavailable");
       }
-      const rpc = await readIndependentRpcHealth(deployment);
+      const rpc = await readOperationalRpcHealth(deployment);
+      if (rpc.status === "unhealthy") {
+        return unhealthyRpcResponse(rpc, startedAt);
+      }
       if (
         rpc.chainId !== deployment.chainId ||
         rpc.chainId !== indexed.chainId
@@ -51,10 +78,13 @@ export async function GET() {
 
     const [index, rpc] = await Promise.all([
       readDurableExploreModel(deployment, MAX_INDEX_AGE_MS),
-      readIndependentRpcHealth(deployment),
+      readOperationalRpcHealth(deployment),
     ]);
     if (index.status !== "ready") {
       throw new Error(`Durable index ${index.reason}: ${index.detail}`);
+    }
+    if (rpc.status === "unhealthy") {
+      return unhealthyRpcResponse(rpc, startedAt);
     }
 
     return NextResponse.json(
