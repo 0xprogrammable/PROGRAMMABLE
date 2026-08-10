@@ -42,6 +42,11 @@ type WalletProviderContract = {
     walletsReady: boolean,
     authenticated: boolean,
   ) => boolean;
+  resolveWalletIdentityToken: (input: Readonly<{
+    authenticated: boolean;
+    cachedIdentityToken: string | null;
+    loadIdentityToken: () => Promise<string | null>;
+  }>) => Promise<string | null>;
   selectAuthenticatedWallet: <T extends {
     address: string;
     connectedAt: number;
@@ -232,6 +237,54 @@ describe("wallet recovery state", () => {
       hookemonBinding.launchWallet,
       "899",
     )).toThrow(/not current/u);
+  });
+
+  it("refreshes an authenticated Privy identity token when hook hydration is still null", async () => {
+    const loadIdentityToken = vi.fn(async () => "fresh-identity-token");
+
+    await expect(subject.resolveWalletIdentityToken({
+      authenticated: true,
+      cachedIdentityToken: null,
+      loadIdentityToken,
+    })).resolves.toBe("fresh-identity-token");
+    expect(loadIdentityToken).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retrieve an identity token for an unauthenticated session", async () => {
+    const loadIdentityToken = vi.fn(async () => "unexpected-token");
+
+    await expect(subject.resolveWalletIdentityToken({
+      authenticated: false,
+      cachedIdentityToken: null,
+      loadIdentityToken,
+    })).resolves.toBeNull();
+    expect(loadIdentityToken).not.toHaveBeenCalled();
+  });
+
+  it("keeps identity-token retrieval failures fail closed", async () => {
+    await expect(subject.resolveWalletIdentityToken({
+      authenticated: true,
+      cachedIdentityToken: null,
+      loadIdentityToken: async () => null,
+    })).resolves.toBeNull();
+    await expect(subject.resolveWalletIdentityToken({
+      authenticated: true,
+      cachedIdentityToken: null,
+      loadIdentityToken: async () => {
+        throw new Error("Privy unavailable");
+      },
+    })).resolves.toBeNull();
+  });
+
+  it("uses the Privy hook token without reading browser storage or refreshing", async () => {
+    const loadIdentityToken = vi.fn(async () => "unexpected-token");
+
+    await expect(subject.resolveWalletIdentityToken({
+      authenticated: true,
+      cachedIdentityToken: "hook-identity-token",
+      loadIdentityToken,
+    })).resolves.toBe("hook-identity-token");
+    expect(loadIdentityToken).not.toHaveBeenCalled();
   });
 
   it("fails closed when an external provider mutates chain before a wallet action", async () => {

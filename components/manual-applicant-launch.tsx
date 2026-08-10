@@ -69,6 +69,8 @@ import {
   manualRouterDirectoryForApplicantV2,
   manualRouterFreshReadyMatchesCachedV1,
   manualRouterFreshReadyMatchesCachedV2,
+  manualRouterIsExactShardsV1ApplicantDirectory,
+  manualRouterResolveForApplicantV2,
   manualRouterRouteFactsV2,
   manualRouterTransactionContextV1,
   manualRouterTransactionContextV2,
@@ -128,10 +130,45 @@ type ManualRouterTransaction = Readonly<{
       lane: "v2";
       routeBindingHash: ManualRouterSha256V1;
     }>
-);
+  );
+
+export function manualRouterApplicantDiscoveryReady(input: Readonly<{
+  authReady: boolean;
+  authenticated: boolean;
+  githubConnected: boolean;
+  walletConnected: boolean;
+  routeDiscoveryAllowed: boolean;
+}>): boolean {
+  return input.authReady
+    && input.authenticated
+    && input.githubConnected
+    && input.walletConnected
+    && input.routeDiscoveryAllowed;
+}
+
+export async function acquireManualRouterWebsiteSessionV1(input: Readonly<{
+  getAccessToken: () => Promise<string | null>;
+  getIdentityToken: () => Promise<string | null>;
+}>): Promise<ManualRouterWebsiteSessionV1> {
+  let accessToken = await input.getAccessToken();
+  const identityToken = await input.getIdentityToken();
+  if (!accessToken && identityToken) {
+    accessToken = await input.getAccessToken();
+  }
+  if (!accessToken || !identityToken) {
+    throw new ManualRouterWebsiteRequestErrorV1(
+      401,
+      "applicant_authentication_required",
+      "Sign in with your approved GitHub account",
+      false,
+    );
+  }
+  return { accessToken, identityToken };
+}
 
 export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
   const {
+    authReady,
     authenticated,
     connectGithub,
     getAccessToken,
@@ -177,41 +214,43 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
   const exactShardsApplicant = isExactShardsGithubLogin(githubUsername);
   const exactHookemonApplicant =
     isExactHookemonApplicantGithubLoginV1(githubUsername);
+  const exactShardsV1Compatibility = exactShardsApplicant
+    && NESTED_FACTORY_ACTIVATION === null
+    && directory !== null
+    && manualRouterIsExactShardsV1ApplicantDirectory(directory);
   const shardsRouteCapabilityUnavailable = exactShardsApplicant
-    && NESTED_FACTORY_ACTIVATION === null;
+    && NESTED_FACTORY_ACTIVATION === null
+    && directory !== null
+    && !exactShardsV1Compatibility;
   // The Website must not infer an executable Hookemon action from source
   // metadata. This stays hard-disabled until one immutable mixed-provenance
   // profile, Facade and Authority release are bound together.
   const hookemonRouteCapabilityUnavailable = exactHookemonApplicant;
   const routeAcceptanceRequired = exactShardsApplicant
     && NESTED_FACTORY_ACTIVATION !== null;
+  const routeDiscoveryAllowed = !exactShardsApplicant
+    || NESTED_FACTORY_ACTIVATION === null
+    || routeAcceptance?.state === "accepted";
   const routeAccepted = exactHookemonApplicant
     ? false
     : !exactShardsApplicant
+      || exactShardsV1Compatibility
       || (
         NESTED_FACTORY_ACTIVATION !== null
         && routeAcceptance?.state === "accepted"
       );
 
   const getSession = useCallback(async (): Promise<ManualRouterWebsiteSessionV1> => {
-    const [accessToken, identityToken] = await Promise.all([
-      getAccessToken(),
-      getIdentityToken(),
-    ]);
-    if (!accessToken || !identityToken) {
-      throw new ManualRouterWebsiteRequestErrorV1(
-        401,
-        "applicant_authentication_required",
-        "Sign in with your approved GitHub account",
-        false,
-      );
-    }
-    return { accessToken, identityToken };
+    return acquireManualRouterWebsiteSessionV1({
+      getAccessToken,
+      getIdentityToken,
+    });
   }, [getAccessToken, getIdentityToken]);
 
   const loadRouteAcceptance = useCallback(async () => {
     if (
       NESTED_FACTORY_ACTIVATION === null
+      || !authReady
       || !authenticated
       || !githubConnected
       || !isExactShardsGithubLogin(githubUsername)
@@ -241,18 +280,19 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
       }
       if (!controller.signal.aborted) setLoadingAcceptance(false);
     }
-  }, [authenticated, getSession, githubConnected, githubUsername]);
+  }, [authReady, authenticated, getSession, githubConnected, githubUsername]);
 
   useEffect(() => {
     if (
       NESTED_FACTORY_ACTIVATION === null
+      || !authReady
       || !authenticated
       || !githubConnected
       || !isExactShardsGithubLogin(githubUsername)
     ) return;
     const kickoff = window.setTimeout(() => void loadRouteAcceptance(), 0);
     return () => window.clearTimeout(kickoff);
-  }, [authenticated, githubConnected, githubUsername, loadRouteAcceptance]);
+  }, [authReady, authenticated, githubConnected, githubUsername, loadRouteAcceptance]);
 
   const acceptReviewedRoute = useCallback(async () => {
     if (
@@ -286,7 +326,13 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     quiet?: boolean;
     preferredSubjectHash?: ManualRouterSha256V1 | "";
   }>) => {
-    if (!authenticated || !githubConnected || !wallet || !routeAccepted) return;
+    if (!wallet || !manualRouterApplicantDiscoveryReady({
+      authReady,
+      authenticated,
+      githubConnected,
+      walletConnected: true,
+      routeDiscoveryAllowed,
+    })) return;
     loadAbortRef.current?.abort();
     const controller = new AbortController();
     loadAbortRef.current = controller;
@@ -325,9 +371,14 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
           subjectHash: chosenSubjectHash,
           signal: controller.signal,
         } as const;
-        const nextResolved = isNestedFactorySubmissionV2(chosenSubmission)
+        const rawResolved = isNestedFactorySubmissionV2(chosenSubmission)
           ? await resolveManualRouterApplicantSubmissionV2(resolveRequest)
           : await resolveManualRouterApplicantSubmissionV1(resolveRequest);
+        const nextResolved = manualRouterResolveForApplicantV2({
+          directory: next,
+          resolved: rawResolved,
+          requireExactShardsRoute: exactShardsApplicant,
+        });
         if (controller.signal.aborted || sequence !== loadSequenceRef.current) return;
         setResolved(nextResolved);
         const stored = isManualRouterResolveV2(nextResolved)
@@ -450,17 +501,24 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
       }
     }
   }, [
+    authReady,
     authenticated,
     getSession,
     githubConnected,
     exactShardsApplicant,
     selectedSubjectHash,
-    routeAccepted,
+    routeDiscoveryAllowed,
     wallet,
   ]);
 
   useEffect(() => {
-    if (!authenticated || !githubConnected || !wallet || !routeAccepted) {
+    if (!manualRouterApplicantDiscoveryReady({
+      authReady,
+      authenticated,
+      githubConnected,
+      walletConnected: wallet !== null,
+      routeDiscoveryAllowed,
+    })) {
       loadAbortRef.current?.abort();
       return;
     }
@@ -473,7 +531,14 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
       window.clearTimeout(kickoff);
       window.clearInterval(interval);
     };
-  }, [authenticated, githubConnected, loadDirectory, routeAccepted, wallet]);
+  }, [
+    authReady,
+    authenticated,
+    githubConnected,
+    loadDirectory,
+    routeDiscoveryAllowed,
+    wallet,
+  ]);
 
   useEffect(() => () => {
     loadAbortRef.current?.abort();
@@ -865,7 +930,7 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
       detail: "Exact profile and Authority release required",
       complete: false,
     }] : []),
-    ...(exactShardsApplicant ? [{
+    ...(routeAcceptanceRequired ? [{
       label: "Exact route acceptance",
       detail: shardsRouteCapabilityUnavailable
         ? "Route capability unavailable"
@@ -906,7 +971,7 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     routeAcceptance?.state,
     shardsRouteCapabilityUnavailable,
     exactHookemonApplicant,
-    exactShardsApplicant,
+    routeAcceptanceRequired,
     routeAccepted,
     selected,
   ]);
@@ -1044,7 +1109,7 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
               {!wallet ? (
                 <button
                   type="button"
-                  disabled={!githubConnected || !routeAccepted}
+                  disabled={!githubConnected || !routeDiscoveryAllowed}
                   onClick={openWallet}>Connect wallet</button>
               ) : null}
             </div>

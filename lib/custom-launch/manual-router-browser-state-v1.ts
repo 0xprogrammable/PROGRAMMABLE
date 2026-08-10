@@ -23,15 +23,54 @@ export type ManualRouterApplicantDirectoryAnyV2 =
   | ManualRouterApplicantListResponseV1
   | ManualRouterApplicantListResponseV2;
 
+export const MANUAL_ROUTER_EXACT_SHARDS_V1_BROWSER_BINDING = Object.freeze({
+  authenticatedGitHubUserId: "155705664",
+  linkedLaunchWallet: "0xceebb3a6543cebeb2ed66963897a0abea52a50cc",
+  subjectHash:
+    "sha256:c818b79c99277b878b2e0be70f1479fa8a864f111fbe0579bf9e2b8cf95524ee",
+  pullRequestNumber: 6,
+  headSha: "1aa5017154d227e639cfe6256f39bf3916352124",
+  treeSha: "48149d436bf222c440980e1fc31a71899b833af7",
+  approvalBindingHash:
+    "sha256:a036d02141ae96c178691ceb9aac9390260e4caf71acb37fe427c0803bdc0b03",
+  routeNonce:
+    "0xfcd4ff3393a669e5bb9f21a97f9adaad624bcfad67c9ef3763ec5e4488d6df9f",
+} as const);
+
+export function manualRouterIsExactShardsV1ApplicantDirectory(
+  directory: ManualRouterApplicantDirectoryAnyV2,
+): directory is ManualRouterApplicantListResponseV1 {
+  if (
+    directory.schemaVersion
+      !== "programmable.manual-router-applicant-list-response.v1"
+    || directory.submissions.length !== 1
+  ) return false;
+  const exact = MANUAL_ROUTER_EXACT_SHARDS_V1_BROWSER_BINDING;
+  const submission = directory.submissions[0]!;
+  return directory.authenticatedGitHubUserId
+      === exact.authenticatedGitHubUserId
+    && directory.linkedLaunchWallet.toLowerCase()
+      === exact.linkedLaunchWallet
+    && submission.subjectHash === exact.subjectHash
+    && submission.pullRequestNumber === exact.pullRequestNumber
+    && submission.headSha === exact.headSha
+    && submission.treeSha === exact.treeSha
+    && submission.approvalBindingHash === exact.approvalBindingHash
+    && submission.routeNonce === exact.routeNonce;
+}
+
 export function manualRouterDirectoryForApplicantV2(input: Readonly<{
   directory: ManualRouterApplicantDirectoryAnyV2;
   requireExactShardsRoute: boolean;
 }>): ManualRouterApplicantDirectoryAnyV2 {
   if (!input.requireExactShardsRoute) return input.directory;
+  if (manualRouterIsExactShardsV1ApplicantDirectory(input.directory)) {
+    return input.directory;
+  }
   if (
     input.directory.schemaVersion
       !== "programmable.manual-router-applicant-list-response.v2"
-  ) throw new TypeError("exact Shards Router V2 submission is unavailable");
+  ) throw new TypeError("exact Shards Router submission is unavailable");
   const submissions = input.directory.submissions.filter(
     (submission): submission is ManualRouterNestedFactorySubmissionSummaryV2 =>
       submission.artifactSchemaVersion
@@ -44,6 +83,35 @@ export function manualRouterDirectoryForApplicantV2(input: Readonly<{
     ...input.directory,
     submissions: Object.freeze(submissions),
   });
+}
+
+export function manualRouterResolveForApplicantV2(input: Readonly<{
+  directory: ManualRouterApplicantDirectoryAnyV2;
+  resolved: ManualRouterResolveResponseV1 | ManualRouterResolveResponseV2;
+  requireExactShardsRoute: boolean;
+}>): ManualRouterResolveResponseV1 | ManualRouterResolveResponseV2 {
+  if (!input.requireExactShardsRoute) return input.resolved;
+  const directory = manualRouterDirectoryForApplicantV2(input);
+  if (directory.schemaVersion
+    !== "programmable.manual-router-applicant-list-response.v1") {
+    if (input.resolved.schemaVersion
+      === "programmable.manual-router-applicant-resolve-response.v1") {
+      throw new TypeError("exact Shards Router V2 submission is unavailable");
+    }
+    return input.resolved;
+  }
+  if (input.resolved.schemaVersion
+    !== "programmable.manual-router-applicant-resolve-response.v1") {
+    throw new TypeError("exact Shards Router V1 submission is unavailable");
+  }
+  const submission = directory.submissions[0]!;
+  if (
+    input.resolved.subjectHash !== submission.subjectHash
+    || input.resolved.pointerHash !== submission.pointerHash
+    || input.resolved.approvalBindingHash !== submission.approvalBindingHash
+    || input.resolved.routeNonce !== submission.routeNonce
+  ) throw new TypeError("exact Shards Router V1 resolution is unavailable");
+  return input.resolved;
 }
 
 export type ManualRouterPersistedAttemptReadV1 =
