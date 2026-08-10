@@ -53,10 +53,14 @@
 }
 
 .deadline {
+  align-items: baseline;
   color: var(--brand-ivory-muted);
+  display: flex;
+  flex-wrap: wrap;
   font-family: var(--font-plex-mono), monospace;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+  gap: 4px;
   line-height: 16px;
   margin: 12px 0 0;
 }
@@ -90,6 +94,7 @@
   background: var(--brand-ivory);
   border: 1px solid var(--brand-ivory);
   color: #010103;
+  min-width: 190px;
 }
 
 .primaryAction:disabled {
@@ -144,6 +149,10 @@
 }
 
 @media (max-width: 420px) {
+  .deadline {
+    column-gap: 8px;
+  }
+
   .timer {
     gap: 12px;
     grid-template-columns: repeat(4, minmax(42px, 1fr));
@@ -166,6 +175,7 @@
 
   .primaryAction,
   .secondaryAction {
+    min-width: 0;
     width: 100%;
   }
 }
