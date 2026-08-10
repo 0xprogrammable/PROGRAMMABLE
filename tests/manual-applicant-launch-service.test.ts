@@ -11,6 +11,7 @@ import { readManualRouterApplicantHeadV1 } from
 import {
   createManualRouterApplicantIndexV1,
   createManualRouterSignedPointerV1,
+  type ManualRouterApplicantIndexV1,
   type ManualRouterApplicantPointerV1,
 } from "../lib/server/custom-launch/manual-router-state-v1";
 import {
@@ -41,6 +42,49 @@ const SUBJECT = Object.freeze({
 });
 
 describe("manual Applicant signed publication service", () => {
+  it("never publishes a legacy direct-graph permit for the Shards Applicant", async () => {
+    const { store, values } = memoryStore();
+    const service = new ManualRouterWebsiteServiceV1({
+      store,
+      authority: authorityBoundary(async () => {}),
+    });
+    const legacy = artifact("1");
+    const shardsSubjectCore = {
+      ...legacy.preparationArtifact.subject,
+      approvedGitHubUserId: "155705664",
+    };
+    const { subjectHash: ignored, ...subjectWithoutHash } = shardsSubjectCore;
+    void ignored;
+    const shardsSubject = Object.freeze({
+      ...subjectWithoutHash,
+      subjectHash: canonicalSha256(
+        subjectWithoutHash.schemaVersion,
+        subjectWithoutHash,
+      ),
+    });
+    const shardsArtifact = Object.freeze({
+      ...legacy,
+      preparationArtifact: Object.freeze({
+        ...legacy.preparationArtifact,
+        subject: shardsSubject,
+        approvalClaim: Object.freeze({
+          ...legacy.preparationArtifact.approvalClaim,
+          approvedGitHubUserId: "155705664",
+        }),
+      }),
+    });
+    await expect(service.publishSignedArtifact({
+      schemaVersion:
+        "programmable.manual-router-signed-artifact-publish-request.v1",
+      expectedPreviousPointerHash: null,
+      signedArtifact: shardsArtifact,
+    })).rejects.toMatchObject({
+      status: 503,
+      code: "route_capability_disabled",
+    } satisfies Partial<ManualRouterServiceErrorV1>);
+    expect(values.size).toBe(0);
+  });
+
   it("uses the real Applicant-index CAS so two concurrent signed posts have one winner", async () => {
     const { store, values } = memoryStore();
     const barrier = verificationBarrier(2);
@@ -233,6 +277,7 @@ describe("manual Applicant browser and cron finality", () => {
             proofHash,
           }),
           proofHash,
+          executionMode: null,
         });
       },
     });
@@ -378,8 +423,10 @@ function authorityBoundary(
       await beforeVerify();
       const pointer = pointerForArtifact(artifact);
       const next = createManualRouterApplicantIndexV1({
-        previousIndex: input.currentApplicantIndex,
-        previousPointers: input.currentApplicantPointers,
+        previousIndex: input.currentApplicantIndex as
+          ManualRouterApplicantIndexV1 | null,
+        previousPointers: input.currentApplicantPointers as
+          readonly ManualRouterApplicantPointerV1[],
         nextPointer: pointer,
       });
       return Object.freeze({

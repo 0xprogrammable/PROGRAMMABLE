@@ -7,12 +7,17 @@ import {
   type ManualRouterApplicantHeadV1,
 } from "@/lib/server/custom-launch/manual-router-head-v1";
 import {
-  assertManualRouterApplicantIndexV1,
   assertManualRouterApplicantPointerV1,
   createManualRouterApplicantIndexV1,
   type ManualRouterApplicantIndexV1,
-  type ManualRouterApplicantPointerV1,
 } from "@/lib/server/custom-launch/manual-router-state-v1";
+import {
+  assertManualRouterApplicantIndexAnyV2,
+  assertManualRouterApplicantPointerAnyV2,
+  createManualRouterApplicantIndexV2,
+  type ManualRouterApplicantIndexAnyV2,
+  type ManualRouterApplicantPointerAnyV2,
+} from "@/lib/server/custom-launch/manual-router-state-v2";
 import {
   ManualRouterBlobCasConflictV1,
   manualRouterApplicantIndexPathV1,
@@ -25,8 +30,8 @@ export type ManualRouterImmutableWriteV1 = Readonly<{
 }>;
 
 export type ManualRouterHeadTransitionResultV1 = Readonly<{
-  index: ManualRouterApplicantIndexV1;
-  pointer: ManualRouterApplicantPointerV1;
+  index: ManualRouterApplicantIndexAnyV2;
+  pointer: ManualRouterApplicantPointerAnyV2;
   idempotent: boolean;
   concurrentConvergence: boolean;
 }>;
@@ -40,13 +45,13 @@ export async function commitManualRouterApplicantHeadTransitionV1(
   input: Readonly<{
     store: ManualRouterPrivateBlobStoreV1;
     head: ManualRouterApplicantHeadV1;
-    nextPointer: ManualRouterApplicantPointerV1;
-    nextIndex: ManualRouterApplicantIndexV1;
+    nextPointer: ManualRouterApplicantPointerAnyV2;
+    nextIndex: ManualRouterApplicantIndexAnyV2;
     immutableWrites: readonly ManualRouterImmutableWriteV1[];
     acceptConcurrentExactTarget: boolean;
   }>,
 ): Promise<ManualRouterHeadTransitionResultV1> {
-  const pointer = assertManualRouterApplicantPointerV1(input.nextPointer);
+  const pointer = assertManualRouterApplicantPointerAnyV2(input.nextPointer);
   const principal = {
     approvedGitHubUserId: pointer.subject.approvedGitHubUserId,
     approvedLaunchWallet: pointer.subject.approvedLaunchWallet,
@@ -55,12 +60,8 @@ export async function commitManualRouterApplicantHeadTransitionV1(
     input.head.path !== manualRouterApplicantIndexPathV1(principal)
     || (input.head.index === null) !== (input.head.etag === null)
   ) throw new TypeError("manual Router transition head is invalid");
-  const expected = createManualRouterApplicantIndexV1({
-    previousIndex: input.head.index,
-    previousPointers: input.head.pointers,
-    nextPointer: pointer,
-  });
-  const index = assertManualRouterApplicantIndexV1(
+  const expected = expectedIndex(input.head, pointer, input.nextIndex);
+  const index = assertManualRouterApplicantIndexAnyV2(
     input.nextIndex,
     replaceCurrentPointer(input.head.pointers, pointer),
   );
@@ -113,15 +114,40 @@ export async function commitManualRouterApplicantHeadTransitionV1(
 }
 
 function replaceCurrentPointer(
-  previous: readonly ManualRouterApplicantPointerV1[],
-  next: ManualRouterApplicantPointerV1,
-): readonly ManualRouterApplicantPointerV1[] {
+  previous: readonly ManualRouterApplicantPointerAnyV2[],
+  next: ManualRouterApplicantPointerAnyV2,
+): readonly ManualRouterApplicantPointerAnyV2[] {
   const bySubject = new Map(previous.map((pointer) =>
     [pointer.subject.subjectHash, pointer] as const));
   bySubject.set(next.subject.subjectHash, next);
   return Object.freeze([...bySubject.values()].sort((left, right) =>
     left.subject.pullRequestNumber - right.subject.pullRequestNumber
     || left.subject.subjectHash.localeCompare(right.subject.subjectHash)));
+}
+
+function expectedIndex(
+  head: ManualRouterApplicantHeadV1,
+  pointer: ManualRouterApplicantPointerAnyV2,
+  nextIndex: ManualRouterApplicantIndexAnyV2,
+) {
+  if (nextIndex.schemaVersion === "programmable.manual-router-applicant-index.v2") {
+    return createManualRouterApplicantIndexV2({
+      previousIndex: head.index,
+      previousPointers: head.pointers,
+      nextPointer: pointer,
+    });
+  }
+  if (
+    pointer.schemaVersion !== "programmable.manual-router-applicant-pointer.v1"
+    || head.index?.schemaVersion === "programmable.manual-router-applicant-index.v2"
+    || head.pointers.some((candidate) =>
+      candidate.schemaVersion !== "programmable.manual-router-applicant-pointer.v1")
+  ) throw new TypeError("manual Router V1 index cannot replace a V2 head");
+  return createManualRouterApplicantIndexV1({
+    previousIndex: head.index as ManualRouterApplicantIndexV1 | null,
+    previousPointers: head.pointers.map(assertManualRouterApplicantPointerV1),
+    nextPointer: pointer,
+  });
 }
 
 function assertUniqueImmutableWrites(

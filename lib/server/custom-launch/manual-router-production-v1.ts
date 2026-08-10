@@ -3,6 +3,10 @@ import "server-only";
 import {
   ManualRouterFinalityServiceV1,
 } from "@/lib/server/custom-launch/manual-router-finality-v1";
+import { ManualRouterRouteAcceptanceServiceV1 } from
+  "@/lib/server/custom-launch/manual-router-acceptance-v1";
+import { createProductionManualRouterRouteAcceptanceAuthorityV1 } from
+  "@/lib/server/custom-launch/manual-router-acceptance-authority-v1";
 import {
   createManualRouterApplicantAuthenticatorV1,
   type ManualRouterApplicantAuthenticatorV1,
@@ -25,6 +29,7 @@ export type ProductionManualRouterWebsiteV1 = Readonly<{
   authenticator: ManualRouterApplicantAuthenticatorV1;
   service: ManualRouterWebsiteServiceV1;
   finalityService: ManualRouterFinalityServiceV1;
+  routeAcceptanceService: ManualRouterRouteAcceptanceServiceV1;
   store: ManualRouterPrivateBlobStoreV1;
 }>;
 
@@ -47,6 +52,10 @@ ProductionManualRouterWebsiteV1 {
     finalityService: new ManualRouterFinalityServiceV1({
       authority: authority.finalityAuthority,
       website: service,
+      store,
+    }),
+    routeAcceptanceService: new ManualRouterRouteAcceptanceServiceV1({
+      authority: createProductionManualRouterRouteAcceptanceAuthorityV1(),
       store,
     }),
     store,

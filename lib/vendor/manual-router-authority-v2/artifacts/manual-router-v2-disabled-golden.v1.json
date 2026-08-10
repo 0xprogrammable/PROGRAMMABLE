@@ -1,0 +1,147 @@
+{
+  "schemaVersion": "programmable.manual-router-v2-disabled-golden.v1",
+  "activationAllowed": false,
+  "release": {
+    "schemaVersion": "programmable.nested-factory-authority-release.v1",
+    "status": "disabled-awaiting-frozen-router-security-and-production-bindings",
+    "chainId": "1",
+    "routeId": "nested-factory",
+    "routeVersion": "1.0.0",
+    "profileId": "exact-shards-nested-factory",
+    "profileVersion": "1.0.0",
+    "profileKey": "0xb90e215e0e29c0dacf021e5e778847af4100433ee7d22014b73f8ca4add09d0c",
+    "revenuePolicyHash": "0xaa78b0bf63fca83fa9b969fbb6b2bb1ecabcbe49908a48f92403e8e51e4adab2",
+    "executionModePolicy": [
+      "EXACT_EXISTING_LAUNCH_ADOPTED",
+      "EXACT_FACTORY_LAUNCH_EXECUTED"
+    ],
+    "applicantAcceptanceProtocol": {
+      "schemaVersion": "programmable.hookbuilder-applicant-acceptance-protocol.v1",
+      "repository": "https://github.com/0xprogrammable/hookbuilder",
+      "commit": "bfdd4eff15da6c23e56c8b1f9f260d70f6c45bbe",
+      "tree": "e8fafb861cfd073101091af06d861ce54e7a9d9b",
+      "sourcePath": "scripts/applicant-route-acceptance-core.mjs",
+      "sourceSha256": "sha256:0a9cadb93a900a2c0cceccdebd85a61811a01d6c0521ea30327746f031b5264f",
+      "goldenPath": "submissions/examples/applicant-route-acceptance-v1.golden.json",
+      "goldenSha256": "sha256:ed316c930ead7d438f82b77758f8ed3ed1e92cd5cc83b01ae5fa7aef9ef0e383",
+      "subjectSchemaVersion": "programmable.application-acceptance-subject.v1",
+      "canonicalization": "urn:programmable:canonical-json:2.0.0",
+      "canonicalSubjectByteLength": 278,
+      "acceptanceSubjectHash": "sha256:948a920b86aa915bc2dfcdcf56b271f41a2843fc1360b734e9221c0533d960b8"
+    },
+    "applicantAcceptanceProtocolBindingSha256": "sha256:a6d0e2df0b751ea75540feb5345d165070102367d9d55dcbb7f9a78226acadad",
+    "plannedFactoryDeployer": "0x2bb333d48dfaf1596d9036671d2e43168994249e",
+    "predeploymentSenderPolicy": "planned-platform-eoa-or-any-eoa-with-exact-canonical-proxy-transaction-proof",
+    "capabilityCatalog": {
+      "schemaVersion": "programmable.nested-factory-capability-catalog.v1",
+      "catalogVersion": "1.0.0",
+      "entries": [
+        {
+          "schemaVersion": "programmable.nested-factory-capability.v1",
+          "catalogVersion": "1.0.0",
+          "capabilityId": "exact-shards-nested-factory@1.0.0",
+          "state": "disabled",
+          "chainId": "1",
+          "routeId": "nested-factory",
+          "routeVersion": "1.0.0",
+          "profile": {
+            "profileId": "exact-shards-nested-factory",
+            "profileVersion": "1.0.0",
+            "profileIdHash": "0x80bf21eb2466daeb15cfbbc66749f03be10a9f84aa4060c8ce97146a93b8d33d",
+            "profileVersionHash": "0x06c015bd22b4c69690933c1058878ebdfef31f9aaae40bbe86d8a09fe1b2972c",
+            "profileKey": "0xb90e215e0e29c0dacf021e5e778847af4100433ee7d22014b73f8ca4add09d0c"
+          },
+          "profileSha256": "sha256:066475058bfd47b85b4216f95b434756d67d7e289ffb36535c121ef5d7c11bab",
+          "planSchemaId": "urn:programmable:reviewed-route-plan:1.0.0",
+          "sourceRevisionHash": "0x3352fe14662ce467e98f475cf91f10304ce4d69b6342fae4bf3dc968c494d6dc",
+          "manifestHash": "0x4672dfda95c9765916397701479483b8e1db852165949518cdc9932fd8e1b359",
+          "revenuePolicyHash": "0xaa78b0bf63fca83fa9b969fbb6b2bb1ecabcbe49908a48f92403e8e51e4adab2",
+          "poolManager": "0x000000000004444c5dc75cb358380d2e3de08a90",
+          "poolManagerRuntimeCodeHash": "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293",
+          "activation": null,
+          "capabilityHash": "sha256:b21ff4dd01050121dbc30527a61b0c941e7632a061a671e9cea986fee5a7d054"
+        }
+      ],
+      "catalogHash": "sha256:8aeb953990e4268b3eb67a830ca0dcf4a6caa099a4dbc0e0c157f43403e0d0a0"
+    },
+    "atomicDeploymentPlan": {
+      "schemaVersion": "programmable.nested-factory-atomic-deployment-plan.v1",
+      "factoryDeploymentProxy": "0x4e59b44847b379578588920ca78fbf26c0b4956c",
+      "factoryDeploymentProxyRuntimeCodeHash": "0x2fa86add0aed31f33a762c9d88e807c475bd51d0f52bd0955754b2608f7e4989",
+      "factorySalt": "0x655a4b5a2b704bef84b4ff94adde0a7ac40ad0366c82ddca5290180fe4c3986d",
+      "factoryInitCodeBytes": 37942,
+      "factoryInitCodeHash": "0x7d05592489495559b1288f8ad342239b3fb95a6aa005b5b0b1551c9523401585",
+      "factoryDeploymentCalldataBytes": 37974,
+      "factoryDeploymentCalldataHash": "0xf37ce9748abe4d5243cbd26f48c6ea5789ab1ebe8e19ea96d2198693e957c4ec",
+      "factory": "0x9442a520e7b31d10177c75a363355c2c29141ac5",
+      "factoryRuntimeCodeHash": "0x134a9e5674f22e62e939c2238693077b8027c553bb26d6a4e9e3d8554e5f85b5",
+      "renderer": "0x090dbd2fab1a467f90ed82a443efa9aab658de14",
+      "rendererRuntimeCodeHash": "0x9b54a61918b2ddf9b7daf41d9bf2d705cbef3a0fd618275762b99e19c53459bf",
+      "hookCreationCodeHash": "0x3fbdbc069ee5bfcb1ded77a8d4e550f1bb0692a488b6eb5d23dac090fbca0716",
+      "deploymentPlanHash": "sha256:35a29b0263d1c0c6e098d79bc530fd2f3b4e61eb16836b7bba6be5d02ace1ae6"
+    },
+    "finalRouteLedgerBinding": {
+      "schemaVersion": "programmable.nested-factory-final-route-ledger-binding.v1",
+      "artifact": {
+        "path": "outputs/shards-nested-factory-route-v1.canonical.json",
+        "byteLength": 1287041,
+        "sha256": "0x066475058bfd47b85b4216f95b434756d67d7e289ffb36535c121ef5d7c11bab",
+        "keccak256": "0x8c5521d6796e3e63c3e2cf82e1122c952e6465c345d8a10b3773a70aa2419fb3"
+      },
+      "integrity": {
+        "path": "outputs/shards-nested-factory-route-v1.canonical.integrity.json",
+        "byteLength": 3739,
+        "sha256": "0x74028d65363189804912f2907400da11098d90579c9261e1d087b2d5a709ae6f",
+        "keccak256": "0x44a685e0a909a78c9da6f1fd0cd79fd62e25590e13270cf95fbb7e66601e308b"
+      },
+      "generator": {
+        "path": "work/generate-shards-route-artifact.mjs",
+        "byteLength": 76813,
+        "sha256": "0x3876075dfdb50f82bf5168bd12d42ae11594dbb8ffd68c9cbadcd7111ca0650a",
+        "keccak256": "0xb7effad54085a5033635b59623febcf15844e373f5048c872508c106467cc93f"
+      },
+      "router": {
+        "repository": "https://github.com/0xprogrammable/programmable",
+        "commit": "1ac92f9694fb5c3ae534c65669775e634e3214f7",
+        "tree": "8e6920b46aa30e5a8afbebc3a86adfba22cc7628",
+        "directLaunchSelector": "0xc90ca102"
+      },
+      "exactRebuildModes": [
+        "A-primary/B-verifier",
+        "B-primary/A-verifier"
+      ],
+      "routePayloadHash": "0x75403c2f52dbdf623cfcd077fab52308b3e1e0623016ec73539fac5234f21356",
+      "expectedResultHash": "0x29de1a5462fe7b07a0d58894f7ec5e2eb4e870c83153e2109647c7f4094c828b",
+      "launchId": "0xd225b22ea82ef2425660da409849a55c1c44751eedd9cd1b581a48358a0905eb",
+      "stampRequestHash": "0x276a295580bcb65ed286a2a02efba575eaee87c090f54c94e5ad8a2b78552bce",
+      "activationAllowed": false,
+      "activationState": "disabled-pending-production-bindings",
+      "revenueAttestationSha256": null,
+      "revenueVerifierArtifactSha256": null
+    },
+    "routeArtifactStatus": "frozen-ledger-bound-disabled-pending-production-bindings",
+    "routePayloadHash": "0x75403c2f52dbdf623cfcd077fab52308b3e1e0623016ec73539fac5234f21356",
+    "expectedResultHash": "0x29de1a5462fe7b07a0d58894f7ec5e2eb4e870c83153e2109647c7f4094c828b",
+    "launchId": "0xd225b22ea82ef2425660da409849a55c1c44751eedd9cd1b581a48358a0905eb",
+    "stampRequestHash": "0x276a295580bcb65ed286a2a02efba575eaee87c090f54c94e5ad8a2b78552bce",
+    "permitNonce": "0xd225b22ea82ef2425660da409849a55c1c44751eedd9cd1b581a48358a0905eb",
+    "signedPlatformReleaseHash": null,
+    "currentnessEvidenceHash": null,
+    "currentAcceptanceHash": null,
+    "applicantGrantHash": null,
+    "launchPreflightHash": null,
+    "ownerSignatureRequest": null,
+    "missingProductionBindings": [
+      "deployed-router-and-module-runtime",
+      "exact-factory-and-renderer-predeployment",
+      "permit-authority-and-capability-admin",
+      "release-attestation-authority",
+      "revenue-attestation-and-verifier",
+      "profile-gas-audit",
+      "applicant-acceptance-current-head",
+      "dual-rpc-currentness-and-gas-cap"
+    ],
+    "releaseHash": "sha256:c45028a3c975485a5e86ad047090352c56bcb7313fcf0bb334aab4c90e96bbb5"
+  },
+  "fixtureHash": "sha256:a243ccefed9da1104e1f6c6d7ac414815c172ed6e1fa2dc807c3a435d95aa55e"
+}

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -13,19 +14,43 @@ import {
   assertManualRouterProductionBindingV1,
 } from "../lib/custom-launch/manual-router-bindings-v1";
 import {
+  MANUAL_ROUTER_NESTED_FACTORY_BINDING_V2,
+  MANUAL_ROUTER_NESTED_FACTORY_PROFILE_TYPE_V2,
+  MANUAL_ROUTER_SHARDS_ROUTE_IDENTITY_V2,
+  deriveManualRouterNestedFactoryProfileKeyV2,
+  getActiveManualRouterProductionBindingV2,
+  isManualRouterProductionBindingV2Active,
+} from "../lib/custom-launch/manual-router-bindings-v2";
+import {
   parseManualRouterApplicantListResponseV1,
   parseManualRouterResolveResponseV1,
+  type ManualRouterApplicantListResponseV1,
   type ManualRouterPersistedAttemptV1,
   type ManualRouterResolveResponseV1,
 } from "../lib/custom-launch/manual-router-contract-v1";
 import {
+  parseManualRouterApplicantListResponseV2,
+  parseManualRouterApplicantFinalityResponseV2,
+  parseManualRouterApplicantTransactionResponseV2,
+  parseManualRouterBrowserWalletActionV2,
+  parseManualRouterRouteBindingV2,
+  parseManualRouterRouteAcceptanceStateResponseV1,
+  type ManualRouterApplicantListResponseV2,
+  type ManualRouterResolveResponseV2,
+} from "../lib/custom-launch/manual-router-contract-v2";
+import {
   manualRouterBlocksNewSendV1,
   manualRouterCanClearUncertainNoSendV1,
+  manualRouterDirectoryForApplicantV2,
   manualRouterFreshReadyMatchesCachedV1,
+  manualRouterFreshReadyMatchesCachedV2,
+  manualRouterRouteFactsV2,
   manualRouterTransactionContextV1,
   parseManualRouterPersistedAttemptStorageV1,
   reconcileManualRouterBrowserAttemptV1,
 } from "../lib/custom-launch/manual-router-browser-state-v1";
+import { listManualRouterApplicantSubmissionsVersionedV2 } from
+  "../lib/custom-launch/manual-router-client-v1";
 import {
   createManualRouterApplicantAuthenticatorFromBoundaryV1,
 } from "../lib/server/custom-launch/manual-router-auth-v1";
@@ -76,9 +101,18 @@ const APPROVAL = `sha256:${"33".repeat(32)}` as const;
 const DESCRIPTOR = `sha256:${"44".repeat(32)}` as const;
 const ENVELOPE = `sha256:${"55".repeat(32)}` as const;
 const PREPARATION = `sha256:${"66".repeat(32)}` as const;
+const ACCEPTANCE_SUBJECT =
+  "sha256:948a920b86aa915bc2dfcdcf56b271f41a2843fc1360b734e9221c0533d960b8" as const;
+const CURRENT_ACCEPTANCE = `sha256:${"67".repeat(32)}` as const;
+const ACCEPTANCE_CLAIM = `sha256:${"68".repeat(32)}` as const;
+const ACCEPTANCE_RECORD = `sha256:${"69".repeat(32)}` as const;
 const ROUTE_NONCE = `0x${"77".repeat(32)}` as const;
 const LAUNCH_ID = `0x${"88".repeat(32)}` as const;
 const POOL_ID = `0x${"99".repeat(32)}` as const;
+const NESTED_PROFILE_KEY = deriveManualRouterNestedFactoryProfileKeyV2(
+  "exact-shards-nested-factory",
+  "1.0.0",
+);
 
 describe("manual Applicant browser durability", () => {
   const attempt = Object.freeze({
@@ -373,6 +407,738 @@ describe("manual Applicant browser durability", () => {
   });
 });
 
+describe("inactive Shards nested-factory Router V2 browser contract", () => {
+  const route = Object.freeze({
+    routeId: "nested-factory" as const,
+    routeVersion: "1.0.0" as const,
+    profileId: "exact-shards-nested-factory" as const,
+    profileVersion: "1.0.0" as const,
+    profileKey: NESTED_PROFILE_KEY,
+  });
+  const token = "0x3333333333333333333333333333333333333333" as const;
+  const hook = "0x4444444444444444444444444444444444444444" as const;
+  const nft = "0x5555555555555555555555555555555555555555" as const;
+  const router = "0x6666666666666666666666666666666666666666" as const;
+
+  function browserAction() {
+    return {
+      schemaVersion: "programmable.browser-wallet-action.v2" as const,
+      walletExecutionKind: "eoa-direct" as const,
+      method: "eth_sendTransaction" as const,
+      chainId: "0x1" as const,
+      pendingNonceAtPreparation: "7",
+      params: [{
+        from: WALLET,
+        to: router,
+        data: "0x1234" as const,
+        value: "0x0" as const,
+      }] as const,
+    };
+  }
+
+  function launchPreflight() {
+    const action = browserAction().params[0];
+    return {
+      schemaVersion: "programmable.nested-factory-launch-preflight.v1" as const,
+      chainId: "1" as const,
+      issuedAtEpochSeconds: "1001",
+      expiresAtEpochSeconds: "1120",
+      grantHash: APPROVAL,
+      releaseAttestationHash: `sha256:${"6a".repeat(32)}` as const,
+      acceptanceSubjectHash: ACCEPTANCE_SUBJECT,
+      currentAcceptanceHash: CURRENT_ACCEPTANCE,
+      capabilityHash: `sha256:${"6b".repeat(32)}` as const,
+      launchId: LAUNCH_ID,
+      permitNonce: ROUTE_NONCE,
+      executionMode: "EXACT_FACTORY_LAUNCH_EXECUTED" as const,
+      executionModePolicy: [
+        "EXACT_EXISTING_LAUNCH_ADOPTED",
+        "EXACT_FACTORY_LAUNCH_EXECUTED",
+      ] as const,
+      browserAction: {
+        ...action,
+        actionHash: `sha256:${"6c".repeat(32)}` as const,
+      },
+      currentnessEvidenceHash: `sha256:${"6d".repeat(32)}` as const,
+      gasEvidenceHash: `sha256:${"6e".repeat(32)}` as const,
+      maximumLiveGasEstimate: "1000000",
+      bufferedGasLimit: "1250000",
+      mainnetTransactionGasLimit: "16777216" as const,
+      preflightHash: `sha256:${"6f".repeat(32)}` as const,
+    };
+  }
+
+  function readyV2(): Extract<ManualRouterResolveResponseV2, {
+    status: "ready";
+  }> {
+    return {
+      schemaVersion: "programmable.manual-router-applicant-resolve-response.v2",
+      subjectHash: SUBJECT,
+      pointerHash: POINTER,
+      grantBindingHash: APPROVAL,
+      routeBindingHash: `sha256:${"34".repeat(32)}`,
+      launchArtifactCommitmentHash: `sha256:${"35".repeat(32)}`,
+      acceptanceSubjectHash: ACCEPTANCE_SUBJECT,
+      currentAcceptanceHash: CURRENT_ACCEPTANCE,
+      applicantAcceptanceClaimSha256: ACCEPTANCE_CLAIM,
+      applicantAcceptanceRecordHash: ACCEPTANCE_RECORD,
+      route,
+      routeNonce: ROUTE_NONCE,
+      status: "ready",
+      validAfter: "1000",
+      deadline: "2000",
+      descriptorHash: DESCRIPTOR,
+      envelopeHash: ENVELOPE,
+      preparationHash: PREPARATION,
+      expectedLaunchId: LAUNCH_ID,
+      expectedPoolId: POOL_ID,
+      expectedToken: token,
+      expectedComponents: [{
+        account: token,
+        kind: "token",
+        runtimeCodeHash: `0x${"41".repeat(32)}`,
+      }, {
+        account: hook,
+        kind: "hook",
+        runtimeCodeHash: `0x${"42".repeat(32)}`,
+      }, {
+        account: nft,
+        kind: "nft",
+        runtimeCodeHash: `0x${"43".repeat(32)}`,
+      }],
+      primaryEvidence: {
+        kind: "shards-nested-factory",
+        routerIdentity: `sha256:${"51".repeat(32)}`,
+        factoryIdentity: `sha256:${"52".repeat(32)}`,
+        routeId: route.routeId,
+        routeVersion: route.routeVersion,
+        profileId: route.profileId,
+        profileVersion: route.profileVersion,
+        profileKey: route.profileKey,
+        routePayloadHash: `0x${"53".repeat(32)}`,
+        expectedResultHash: `0x${"54".repeat(32)}`,
+        poolId: POOL_ID,
+        configurationHash: `0x${"57".repeat(32)}`,
+        revenuePolicyHash: `0x${"58".repeat(32)}`,
+        stampRequestHash: `0x${"55".repeat(32)}`,
+        launchWallet: WALLET,
+        nonce: ROUTE_NONCE,
+        evidenceCommitmentHash: `sha256:${"56".repeat(32)}`,
+      },
+      browserAction: browserAction(),
+      launchPreflight: launchPreflight(),
+    };
+  }
+
+  it("freezes only the exact route/profile names and keeps every release commitment inactive", () => {
+    expect(MANUAL_ROUTER_NESTED_FACTORY_PROFILE_TYPE_V2).toBe(
+      "ProgrammableNestedFactoryProfileV1(bytes32 profileIdHash,bytes32 profileVersionHash)",
+    );
+    expect(MANUAL_ROUTER_SHARDS_ROUTE_IDENTITY_V2).toEqual({
+      routeId: "nested-factory",
+      routeVersion: "1.0.0",
+      profileId: "exact-shards-nested-factory",
+      profileVersion: "1.0.0",
+      primaryEvidenceKind: "shards-nested-factory",
+    });
+    expect(MANUAL_ROUTER_NESTED_FACTORY_BINDING_V2.active).toBe(false);
+    expect(MANUAL_ROUTER_NESTED_FACTORY_BINDING_V2.activationAllowed)
+      .toBe(false);
+    expect(MANUAL_ROUTER_NESTED_FACTORY_BINDING_V2.canonicalArtifact)
+      .toEqual({
+        path: "outputs/shards-nested-factory-route-v1.canonical.json",
+        byteLength: 1287041,
+        sha256:
+          "sha256:066475058bfd47b85b4216f95b434756d67d7e289ffb36535c121ef5d7c11bab",
+        keccak256:
+          "0x8c5521d6796e3e63c3e2cf82e1122c952e6465c345d8a10b3773a70aa2419fb3",
+        integritySha256:
+          "sha256:74028d65363189804912f2907400da11098d90579c9261e1d087b2d5a709ae6f",
+        status:
+          "frozen-contract-and-exact-shards-artifact-undeployed-acceptance-pending-no-permit-no-signature",
+      });
+    expect(MANUAL_ROUTER_NESTED_FACTORY_BINDING_V2.router).toEqual({
+      address: null,
+      runtimeCodeHash: null,
+      directLaunchSelector: null,
+    });
+    expect(MANUAL_ROUTER_NESTED_FACTORY_BINDING_V2.module).toEqual({
+      address: null,
+      runtimeCodeHash: null,
+    });
+    expect(Object.values(
+      MANUAL_ROUTER_NESTED_FACTORY_BINDING_V2.schemaHashes,
+    ).every((value) => value === null)).toBe(true);
+    expect(Object.values(
+      MANUAL_ROUTER_NESTED_FACTORY_BINDING_V2.eventTopics,
+    ).every((value) => value === null)).toBe(true);
+    expect(MANUAL_ROUTER_NESTED_FACTORY_BINDING_V2.authorityVendor)
+      .toEqual({
+        adapterCommit: "b180aca739e0745d16618542052e44b89e177bae",
+        adapterTree: "b7a90a8f7d0e48c581bf212595a1ad5d5906153f",
+        bundleSha256:
+          "sha256:2857f80616cd9dd3da6128a298f935c2cdc7acc8909bfd7fad58ed82776241de",
+        manifestSha256:
+          "sha256:ba46a2aff95c30fe4f75e60c70da654c90787e58c1f3fdb15c408704c2d81343",
+        goldenSha256:
+          "sha256:befb581ce142001a5cd5b68a256c55a86dc435630139832d5438f257b77f55db",
+      });
+    expect(MANUAL_ROUTER_NESTED_FACTORY_BINDING_V2.exactPlan).toMatchObject({
+      routePayloadHash:
+        "0x75403c2f52dbdf623cfcd077fab52308b3e1e0623016ec73539fac5234f21356",
+      expectedResultHash:
+        "0x29de1a5462fe7b07a0d58894f7ec5e2eb4e870c83153e2109647c7f4094c828b",
+      launchId:
+        "0xd225b22ea82ef2425660da409849a55c1c44751eedd9cd1b581a48358a0905eb",
+      stampRequestHash:
+        "0x276a295580bcb65ed286a2a02efba575eaee87c090f54c94e5ad8a2b78552bce",
+    });
+    expect(isManualRouterProductionBindingV2Active()).toBe(false);
+    expect(() => getActiveManualRouterProductionBindingV2())
+      .toThrow("production binding is inactive");
+  });
+
+  it("vendors the exact disabled Authority V2 bundle and canonical Golden", () => {
+    const root = join(process.cwd(), "lib/vendor/manual-router-authority-v2");
+    const manifestBytes = readFileSync(join(root, "manifest.json"));
+    const manifest = JSON.parse(manifestBytes.toString("utf8"));
+    const digest = (bytes: Buffer) => createHash("sha256")
+      .update(bytes).digest("hex");
+    expect(digest(manifestBytes)).toBe(
+      "ba46a2aff95c30fe4f75e60c70da654c90787e58c1f3fdb15c408704c2d81343",
+    );
+    expect(manifest.adapter).toMatchObject({
+      publicExport: "./manual-router-v2",
+      commit: "b180aca739e0745d16618542052e44b89e177bae",
+      tree: "b7a90a8f7d0e48c581bf212595a1ad5d5906153f",
+      provisionalDirtySource: false,
+    });
+    expect(digest(readFileSync(join(
+      root,
+      "manual-router-portable.v2.mjs",
+    )))).toBe(
+      "2857f80616cd9dd3da6128a298f935c2cdc7acc8909bfd7fad58ed82776241de",
+    );
+    const golden = JSON.parse(readFileSync(join(
+      root,
+      "artifacts/manual-router-v2-disabled-golden.v1.json",
+    ), "utf8"));
+    expect(golden).toMatchObject({
+      activationAllowed: false,
+      release: {
+        routePayloadHash:
+          MANUAL_ROUTER_NESTED_FACTORY_BINDING_V2.exactPlan.routePayloadHash,
+        expectedResultHash:
+          MANUAL_ROUTER_NESTED_FACTORY_BINDING_V2.exactPlan.expectedResultHash,
+        launchId: MANUAL_ROUTER_NESTED_FACTORY_BINDING_V2.exactPlan.launchId,
+        stampRequestHash:
+          MANUAL_ROUTER_NESTED_FACTORY_BINDING_V2.exactPlan.stampRequestHash,
+        finalRouteLedgerBinding: {
+          activationAllowed: false,
+          revenueAttestationSha256: null,
+          revenueVerifierArtifactSha256: null,
+        },
+      },
+    });
+  });
+
+  it("derives and parses only the typed exact Shards profile identity", () => {
+    expect(NESTED_PROFILE_KEY).toMatch(/^0x[0-9a-f]{64}$/u);
+    expect(parseManualRouterRouteBindingV2(route)).toEqual(route);
+    expect(() => manualRouterRouteFactsV2(route))
+      .toThrow("production binding is inactive");
+    expect(() => parseManualRouterRouteBindingV2({
+      ...route,
+      profileId: "shards-compatible-v1",
+    })).toThrow("literal is invalid");
+    expect(() => parseManualRouterRouteBindingV2({
+      ...route,
+      profileKey: `0x${"ff".repeat(32)}`,
+    })).toThrow("profile key is invalid");
+    expect(() => parseManualRouterRouteBindingV2({
+      ...route,
+      routeId: "custom-graph",
+    })).toThrow("literal is invalid");
+  });
+
+  it("rejects every V2 response and wallet action until the audited binding is frozen", () => {
+    const nestedSummary = {
+      artifactSchemaVersion:
+        "programmable.manual-router-complete-signed-artifact.v2",
+      subjectHash: SUBJECT,
+      pointerHash: POINTER,
+      pullRequestNumber: 6,
+      headSha: "a".repeat(40),
+      treeSha: "b".repeat(40),
+      grantBindingHash: APPROVAL,
+      routeBindingHash: `sha256:${"34".repeat(32)}`,
+      launchArtifactCommitmentHash: `sha256:${"35".repeat(32)}`,
+      acceptanceSubjectHash: ACCEPTANCE_SUBJECT,
+      currentAcceptanceHash: CURRENT_ACCEPTANCE,
+      applicantAcceptanceClaimSha256: ACCEPTANCE_CLAIM,
+      applicantAcceptanceRecordHash: ACCEPTANCE_RECORD,
+      route,
+      routeNonce: ROUTE_NONCE,
+      status: "ready",
+      deadline: "2000",
+      submittedTransactionHash: null,
+      failedTransactionEvidenceHash: null,
+      executionMode: null,
+    };
+    const list = {
+      schemaVersion: "programmable.manual-router-applicant-list-response.v2",
+      authenticatedGitHubUserId: "123456789",
+      linkedLaunchWallet: WALLET,
+      submissions: [nestedSummary],
+      applicantIndexHash: POINTER,
+    };
+    expect(() => parseManualRouterApplicantListResponseV2(list))
+      .toThrow("production binding is inactive");
+    expect(() => parseManualRouterApplicantListResponseV2({
+      ...list,
+      submissions: [{ ...nestedSummary, approvalBindingHash: APPROVAL }],
+    })).toThrow("unexpected fields");
+    expect(() => parseManualRouterBrowserWalletActionV2(
+      browserAction(),
+      WALLET,
+    )).toThrow("production binding is inactive");
+    expect(() => parseManualRouterBrowserWalletActionV2({
+      ...browserAction(),
+      schemaVersion: "programmable.browser-wallet-router-action.v1",
+    }, WALLET)).toThrow("browser wallet action V2 is invalid");
+    expect(() => parseManualRouterBrowserWalletActionV2({
+      ...browserAction(),
+      params: [{ ...browserAction().params[0], value: "0x1" }],
+    }, WALLET)).toThrow("browser wallet transaction V2 is invalid");
+  });
+
+  it("keeps a pure V1 applicant directory valid after the V2 switch is installed", async () => {
+    const legacy = {
+      schemaVersion: "programmable.manual-router-applicant-list-response.v1",
+      authenticatedGitHubUserId: "123456789",
+      linkedLaunchWallet: WALLET,
+      submissions: [{
+        subjectHash: SUBJECT,
+        pointerHash: POINTER,
+        pullRequestNumber: 7,
+        headSha: "a".repeat(40),
+        treeSha: "b".repeat(40),
+        approvalBindingHash: APPROVAL,
+        routeNonce: ROUTE_NONCE,
+        status: "ready",
+        deadline: "2000",
+        submittedTransactionHash: null,
+        failedTransactionEvidenceHash: null,
+      }],
+      applicantIndexHash: POINTER,
+    } as const;
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify(legacy),
+      { status: 200, headers: { "content-type": "application/json" } },
+    )));
+    try {
+      await expect(listManualRouterApplicantSubmissionsVersionedV2({
+        session: { accessToken: "access", identityToken: "identity" },
+        launchWallet: WALLET,
+      })).resolves.toEqual(legacy);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("never substitutes a legacy pointer into the accepted Jesse route", () => {
+    const legacy = {
+      schemaVersion: "programmable.manual-router-applicant-list-response.v1",
+      authenticatedGitHubUserId: "123456789",
+      linkedLaunchWallet: WALLET,
+      submissions: [{
+        subjectHash: SUBJECT,
+        pointerHash: POINTER,
+        pullRequestNumber: 7,
+        headSha: "a".repeat(40),
+        treeSha: "b".repeat(40),
+        approvalBindingHash: APPROVAL,
+        routeNonce: ROUTE_NONCE,
+        status: "ready" as const,
+        deadline: "2000",
+        submittedTransactionHash: null,
+        failedTransactionEvidenceHash: null,
+      }],
+      applicantIndexHash: POINTER,
+    } satisfies ManualRouterApplicantListResponseV1;
+    expect(manualRouterDirectoryForApplicantV2({
+      directory: legacy,
+      requireExactShardsRoute: false,
+    })).toBe(legacy);
+    expect(() => manualRouterDirectoryForApplicantV2({
+      directory: legacy,
+      requireExactShardsRoute: true,
+    })).toThrow("exact Shards Router V2 submission is unavailable");
+
+    const mixed = {
+      schemaVersion: "programmable.manual-router-applicant-list-response.v2",
+      authenticatedGitHubUserId: "123456789",
+      linkedLaunchWallet: WALLET,
+      submissions: [{
+        ...legacy.submissions[0],
+        artifactSchemaVersion:
+          "programmable.manual-router-complete-signed-artifact.v1" as const,
+      }, {
+        artifactSchemaVersion:
+          "programmable.manual-router-complete-signed-artifact.v2" as const,
+        subjectHash: `sha256:${"19".repeat(32)}` as const,
+        pointerHash: `sha256:${"29".repeat(32)}` as const,
+        pullRequestNumber: 6,
+        headSha: "c".repeat(40),
+        treeSha: "d".repeat(40),
+        grantBindingHash: APPROVAL,
+        routeBindingHash: `sha256:${"39".repeat(32)}` as const,
+        launchArtifactCommitmentHash: `sha256:${"49".repeat(32)}` as const,
+        acceptanceSubjectHash: ACCEPTANCE_SUBJECT,
+        currentAcceptanceHash: CURRENT_ACCEPTANCE,
+        applicantAcceptanceClaimSha256: ACCEPTANCE_CLAIM,
+        applicantAcceptanceRecordHash: ACCEPTANCE_RECORD,
+        route,
+        routeNonce: ROUTE_NONCE,
+        status: "ready" as const,
+        deadline: "2000",
+        submittedTransactionHash: null,
+        failedTransactionEvidenceHash: null,
+        executionMode: null,
+      }],
+      applicantIndexHash: POINTER,
+    } satisfies ManualRouterApplicantListResponseV2;
+    const exact = manualRouterDirectoryForApplicantV2({
+      directory: mixed,
+      requireExactShardsRoute: true,
+    });
+    expect(exact.submissions).toHaveLength(1);
+    expect("artifactSchemaVersion" in exact.submissions[0]!
+      && exact.submissions[0]!.artifactSchemaVersion)
+      .toBe("programmable.manual-router-complete-signed-artifact.v2");
+  });
+
+  it("parses V2 report and finality acknowledgements with exact route selectors", () => {
+    const routeBindingHash = `sha256:${"71".repeat(32)}` as const;
+    const transactionHash = `0x${"72".repeat(32)}` as const;
+    const expected = {
+      subjectHash: SUBJECT,
+      descriptorHash: DESCRIPTOR,
+      routeBindingHash,
+      transactionHash,
+    } as const;
+    const report = {
+      schemaVersion:
+        "programmable.manual-router-applicant-transaction-response.v2",
+      ...expected,
+      pointerHash: POINTER,
+      idempotent: false,
+    } as const;
+    expect(parseManualRouterApplicantTransactionResponseV2(report, expected))
+      .toEqual(report);
+    expect(() => parseManualRouterApplicantTransactionResponseV2({
+      ...report,
+      routeBindingHash: `sha256:${"73".repeat(32)}`,
+    }, expected)).toThrow("changed its selector");
+    expect(() => parseManualRouterApplicantTransactionResponseV2({
+      ...report,
+      approvalBindingHash: APPROVAL,
+    }, expected)).toThrow("unexpected fields");
+
+    const finalized = {
+      schemaVersion:
+        "programmable.manual-router-applicant-finality-response.v2",
+      disposition: "finalized",
+      ...expected,
+      proofHash: `sha256:${"74".repeat(32)}`,
+      executionMode: "EXACT_EXISTING_LAUNCH_ADOPTED",
+      pointerHash: POINTER,
+      idempotent: true,
+    } as const;
+    expect(parseManualRouterApplicantFinalityResponseV2(finalized, expected))
+      .toEqual(finalized);
+    expect(() => parseManualRouterApplicantFinalityResponseV2({
+      ...finalized,
+      failedTransactionEvidenceHash: `sha256:${"75".repeat(32)}`,
+    }, expected)).toThrow("unexpected fields");
+    expect(() => parseManualRouterApplicantFinalityResponseV2({
+      ...finalized,
+      executionMode: "EXACT_EXISTING_LAUNCH_ADOPTED_AND_PRISTINE",
+    }, expected)).toThrow("execution mode is invalid");
+  });
+
+  it("keeps exact GitHub route acceptance review-only and unreachable before activation", () => {
+    const plan = {
+      schemaVersion: "programmable.manual-router-route-acceptance-plan.v1",
+      requestHeadSha: "1aa5017154d227e639cfe6256f39bf3916352124",
+      requestTreeSha: "b".repeat(40),
+      sourceCommit: "91b38f3de64d96cac7e29f127c004f128fc1da59",
+      sourceTree: "92d6def8609e829487adea66c13901734e43c8c7",
+      fromRouteId: "custom-graph",
+      fromRouteVersion: "1.0.0",
+      toRouteId: route.routeId,
+      toRouteVersion: route.routeVersion,
+      profileId: route.profileId,
+      profileVersion: route.profileVersion,
+      profileKey: route.profileKey,
+      routerAddress: router,
+      routerRuntimeCodeHash: `0x${"61".repeat(32)}`,
+      moduleAddress: "0x7777777777777777777777777777777777777777",
+      moduleRuntimeCodeHash: `0x${"62".repeat(32)}`,
+      routePayloadHash: `0x${"63".repeat(32)}`,
+      expectedResultHash: `0x${"64".repeat(32)}`,
+      revenuePolicyHash: `0x${"67".repeat(32)}`,
+      poolId: POOL_ID,
+      configurationHash: `0x${"68".repeat(32)}`,
+      reviewedPlanSha256: `sha256:${"65".repeat(32)}`,
+      launchWallet: WALLET,
+      reviewedFactory: {
+        address: "0x8888888888888888888888888888888888888888",
+        runtimeCodeHash: `0x${"81".repeat(32)}`,
+      },
+      reviewedComponents: [
+        ["renderer", "0x9999999999999999999999999999999999999999", "82"],
+        ["token", "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "83"],
+        ["hook", "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "84"],
+        ["nft", "0xcccccccccccccccccccccccccccccccccccccccc", "85"],
+      ].map(([kind, address, hash]) => ({
+        kind,
+        address,
+        deployer: "0x8888888888888888888888888888888888888888",
+        runtimeCodeHash: `0x${hash.repeat(32)}`,
+      })),
+      atomicLaunch: {
+        transactionCount: 1,
+        transactionSender: WALLET,
+        executionEntry: "acceptance-bound-router",
+        predeployment: {
+          status: "completed-and-verified",
+          applicantAction: false,
+          productionExecutionPhase:
+            "platform-release-before-applicant-acceptance",
+          factoryAddress: "0x8888888888888888888888888888888888888888",
+          factoryRuntimeCodeHash: `0x${"81".repeat(32)}`,
+          rendererAddress: "0x9999999999999999999999999999999999999999",
+          rendererRuntimeCodeHash: `0x${"82".repeat(32)}`,
+          predeploymentEvidenceSha256: `sha256:${"87".repeat(32)}`,
+          gasCapReceiptSha256: `sha256:${"88".repeat(32)}`,
+        },
+        launchExecution: {
+          productionExecutionCaller: "programmable-launch-stamp-router-v2",
+          applicantAction: "launch-and-stamp",
+        },
+        initialStatePolicy: {
+          mode: "exact-predeployed-only",
+          state: {
+            id: "exact-predeployed-pair",
+            factoryRuntimeCodeHash: `0x${"81".repeat(32)}`,
+            rendererRuntimeCodeHash: `0x${"82".repeat(32)}`,
+            action: "launch-and-stamp",
+          },
+          commonPreconditions: {
+            tokenCode: "empty",
+            hookCode: "empty",
+            nftCode: "empty",
+            poolSlot0: "zero",
+          },
+        },
+      },
+      economics: {
+        totalFeeBps: 100,
+        legOrder: [
+          "builder-provider",
+          "programmable-launcher",
+          "shards-nft-holders",
+        ],
+        legs: [{
+          roleLabel: "ProgrammableRevenueRoleV1:builder-provider",
+          feeBps: 10,
+          recipient: "0xdddddddddddddddddddddddddddddddddddddddd",
+          recipientModeLabel:
+            "ProgrammableRevenueRecipientModeV1:current-builder-may-rotate-to-successor",
+        }, {
+          roleLabel: "ProgrammableRevenueRoleV1:programmable-launcher",
+          feeBps: 10,
+          recipient: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          recipientModeLabel:
+            "ProgrammableRevenueRecipientModeV1:immutable-launcher-recipient",
+        }, {
+          roleLabel: "ProgrammableRevenueRoleV1:shards-nft-holders",
+          feeBps: 80,
+          recipient: "0xffffffffffffffffffffffffffffffffffffffff",
+          recipientModeLabel:
+            "ProgrammableRevenueRecipientModeV1:exact-shards-hook-running-holder-accumulator",
+        }],
+        revenuePolicyHash: `0x${"67".repeat(32)}`,
+      },
+    };
+    const claimCanonicalJson = "{}";
+    const response = {
+      schemaVersion:
+        "programmable.manual-router-route-acceptance-state-response.v1",
+      state: "pending",
+      stateVersion: "0",
+      claimSha256: `sha256:${createHash("sha256")
+        .update(claimCanonicalJson, "utf8").digest("hex")}`,
+      acceptanceSubjectHash:
+        "sha256:948a920b86aa915bc2dfcdcf56b271f41a2843fc1360b734e9221c0533d960b8",
+      currentAcceptanceHash: null,
+      claimCanonicalJson,
+      acceptedAtEpochSeconds: null,
+      acceptanceRecordHash: null,
+      plan,
+    };
+    expect(MANUAL_ROUTER_NESTED_FACTORY_BINDING_V2.acceptanceClaimSha256)
+      .toBe(
+        "sha256:02e0fba56c294bcef1d6d40dace601b96cf647f60f1b24fc16e1303f19b1aa39",
+      );
+    expect(() => parseManualRouterRouteAcceptanceStateResponseV1({
+      ...response,
+      stateVersion: "1",
+    })).toThrow("disposition is invalid");
+    expect(() => parseManualRouterRouteAcceptanceStateResponseV1({
+      ...response,
+      claimCanonicalJson: "{\"changed\":true}",
+    })).toThrow("claim hash is invalid");
+    expect(() => parseManualRouterRouteAcceptanceStateResponseV1(response))
+      .toThrow("production binding is inactive");
+    expect(() => parseManualRouterRouteAcceptanceStateResponseV1({
+      ...response,
+      plan: { ...plan, launchAuthorization: false },
+    })).toThrow("unexpected fields");
+    expect(() => parseManualRouterRouteAcceptanceStateResponseV1({
+      ...response,
+      plan: { ...plan, toRouteId: "custom-graph" },
+    })).toThrow("literal is invalid");
+    expect(() => parseManualRouterRouteAcceptanceStateResponseV1({
+      ...response,
+      plan: {
+        ...plan,
+        reviewedComponents: [
+          plan.reviewedComponents[1],
+          plan.reviewedComponents[0],
+          ...plan.reviewedComponents.slice(2),
+        ],
+      },
+    })).toThrow("component order is invalid");
+    expect(() => parseManualRouterRouteAcceptanceStateResponseV1({
+      ...response,
+      plan: {
+        ...plan,
+        economics: {
+          ...plan.economics,
+          legs: plan.economics.legs.map((leg, index) =>
+            index === 2 ? { ...leg, feeBps: 79 } : leg),
+        },
+      },
+    })).toThrow("revenue leg is invalid");
+
+    const client = readFileSync(
+      join(process.cwd(), "lib/custom-launch/manual-router-client-v1.ts"),
+      "utf8",
+    );
+    expect(client).toContain("/api/custom-launch/manual/route-acceptance");
+    expect(client).toContain(
+      "programmable.manual-router-route-acceptance-state-request.v1",
+    );
+    expect(client).toContain(
+      "programmable.applicant-route-acceptance-command.v1",
+    );
+    expect(client).toContain('action: "accept-reviewed-route"');
+    expect(client).toContain('expectedState: "pending"');
+    expect(client).toContain("claimSha256");
+
+    const component = readFileSync(
+      join(process.cwd(), "components/manual-applicant-launch.tsx"),
+      "utf8",
+    );
+    expect(component).toContain("NESTED_FACTORY_ACTIVATION !== null");
+    expect(component).toContain("Accept exact reviewed route");
+    expect(component).toContain("It does not\n            authorize a launch");
+    expect(component).toContain("manualRouterFreshReadyMatchesCachedV2");
+    expect(component).toContain("nestedFactoryRoute={isManualRouterResolveV2");
+    expect(component).toContain('const SHARDS_GITHUB_LOGIN = "jesse-stahl"');
+    expect(component).toContain(
+      "const routeCapabilityUnavailable = exactShardsApplicant",
+    );
+    expect(component).toContain(
+      "requireExactShardsRoute: exactShardsApplicant",
+    );
+    expect(component).toContain(
+      "disabled={!githubConnected || !routeAccepted}",
+    );
+    expect(component).toContain("The exact Shards route is not available yet");
+    expect(component).toContain("isNestedFactorySubmissionV2(chosenSubmission)");
+    expect(component).toContain("Reviewed deployment order");
+    expect(component).toContain("Reviewed economics");
+    expect(component).toContain(
+      "Completed and verified platform predeployment",
+    );
+    expect(component).toContain("Required launch state");
+  });
+
+  it("rechecks every exact V2 route, artifact, component and action binding before send", () => {
+    const cached = readyV2();
+    expect(manualRouterFreshReadyMatchesCachedV2({
+      cached,
+      fresh: cached,
+      linkedLaunchWallet: WALLET,
+    })).toBe(true);
+    expect(manualRouterFreshReadyMatchesCachedV2({
+      cached,
+      fresh: {
+        ...cached,
+        browserAction: {
+          ...cached.browserAction,
+          pendingNonceAtPreparation: "999",
+        },
+      },
+      linkedLaunchWallet: WALLET,
+    })).toBe(true);
+    for (const fresh of [
+      {
+        ...cached,
+        routeBindingHash: `sha256:${"fe".repeat(32)}` as const,
+      },
+      {
+        ...cached,
+        expectedComponents: cached.expectedComponents.map((component, index) =>
+          index === 1
+            ? { ...component, runtimeCodeHash: `0x${"fe".repeat(32)}` as const }
+            : component),
+      },
+      {
+        ...cached,
+        primaryEvidence: {
+          ...cached.primaryEvidence,
+          routePayloadHash: `0x${"fe".repeat(32)}` as const,
+        },
+      },
+      {
+        ...cached,
+        browserAction: {
+          ...cached.browserAction,
+          params: [{
+            ...cached.browserAction.params[0],
+            data: "0x5678" as const,
+          }] as const,
+        },
+      },
+    ] as const) {
+      expect(manualRouterFreshReadyMatchesCachedV2({
+        cached,
+        fresh,
+        linkedLaunchWallet: WALLET,
+      })).toBe(false);
+    }
+    expect(manualRouterFreshReadyMatchesCachedV2({
+      cached,
+      fresh: cached,
+      linkedLaunchWallet: OTHER_WALLET,
+    })).toBe(false);
+  });
+});
+
 describe("manual Applicant production configuration", () => {
   const alchemyUrl = "https://eth-mainnet.g.alchemy.com/v2/test-key";
   const quickNodeUrl = "https://example.quiknode.pro/test-key";
@@ -598,6 +1364,7 @@ describe("manual Applicant Privy identity", () => {
           authenticator,
           service: {} as never,
           finalityService: {} as never,
+          routeAcceptanceService: {} as never,
         },
       );
 
@@ -1086,8 +1853,12 @@ describe("manual Applicant browser contract", () => {
       "Never speed up or replace a submitted beta transaction",
     );
     const freshResolve = component.indexOf(
-      "const freshResolved = await resolveManualRouterApplicantSubmissionV1",
+      "const freshResolved = isManualRouterResolveV2(resolved)",
     );
+    expect(component.slice(freshResolve, freshResolve + 300))
+      .toContain("resolveManualRouterApplicantSubmissionV1(resolveRequest)");
+    expect(component.slice(freshResolve, freshResolve + 300))
+      .toContain("resolveManualRouterApplicantSubmissionV2(resolveRequest)");
     const durableArm = component.indexOf("persistAttempt(pending)", freshResolve);
     const walletSend = component.indexOf("await sendBrowserWalletAction", freshResolve);
     expect(freshResolve).toBeGreaterThan(-1);

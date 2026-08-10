@@ -25,6 +25,8 @@ import { getAddress } from "viem";
 import { GitHubBrandIcon } from "@/components/brand-icons";
 import styles from "@/components/manual-applicant-launch.module.css";
 import { useWallet } from "@/components/wallet-provider";
+import { getActiveManualRouterProductionBindingV2 } from
+  "@/lib/custom-launch/manual-router-bindings-v2";
 import {
   type ManualRouterApplicantListResponseV1,
   type ManualRouterPersistedAttemptV1,
@@ -32,32 +34,98 @@ import {
   type ManualRouterSha256V1,
   type ManualRouterSubmissionSummaryV1,
 } from "@/lib/custom-launch/manual-router-contract-v1";
+import type {
+  ManualRouterApplicantListResponseV2,
+  ManualRouterNestedFactorySubmissionSummaryV2,
+  ManualRouterPersistedAttemptV2,
+  ManualRouterResolveResponseV2,
+  ManualRouterRouteAcceptancePlanV1,
+  ManualRouterRouteAcceptanceStateResponseV1,
+  ManualRouterRouteBindingV2,
+  ManualRouterSubmissionSummaryV2,
+} from "@/lib/custom-launch/manual-router-contract-v2";
 import {
+  acceptManualRouterReviewedRouteV1,
   listManualRouterApplicantSubmissionsV1,
+  listManualRouterApplicantSubmissionsVersionedV2,
   ManualRouterWebsiteRequestErrorV1,
+  readManualRouterRouteAcceptanceStateV1,
   reportManualRouterApplicantTransactionV1,
+  reportManualRouterApplicantTransactionV2,
   requestManualRouterApplicantFinalityV1,
+  requestManualRouterApplicantFinalityV2,
   resolveManualRouterApplicantSubmissionV1,
+  resolveManualRouterApplicantSubmissionV2,
   type ManualRouterWebsiteSessionV1,
 } from "@/lib/custom-launch/manual-router-client-v1";
 import {
   manualRouterBlocksNewSendV1,
+  manualRouterBlocksNewSendV2,
   manualRouterCanClearUncertainNoSendV1,
+  manualRouterCanClearUncertainNoSendV2,
+  manualRouterDirectoryForApplicantV2,
   manualRouterFreshReadyMatchesCachedV1,
+  manualRouterFreshReadyMatchesCachedV2,
+  manualRouterRouteFactsV2,
   manualRouterTransactionContextV1,
+  manualRouterTransactionContextV2,
   parseManualRouterPersistedAttemptStorageV1,
+  parseManualRouterPersistedAttemptStorageV2,
   reconcileManualRouterBrowserAttemptV1,
+  reconcileManualRouterBrowserAttemptV2,
   type ManualRouterAttemptArchiveReasonV1,
   type ManualRouterPersistedAttemptReadV1,
+  type ManualRouterPersistedAttemptReadV2,
 } from "@/lib/custom-launch/manual-router-browser-state-v1";
 
 const FINALITY_POLL_MS = 15_000;
 const LIST_REFRESH_MS = 30_000;
+// Presentation routing only. The server re-observes and authorizes the numeric
+// GitHub identity before it returns or records any Shards acceptance state.
+const SHARDS_GITHUB_LOGIN = "jesse-stahl";
 const ATTEMPT_STORAGE_PREFIX = "programmable:manual-router-browser-attempt:v1";
+const ATTEMPT_STORAGE_PREFIX_V2 =
+  "programmable:manual-router-browser-attempt:v2";
+const NESTED_FACTORY_ACTIVATION = (() => {
+  try {
+    return getActiveManualRouterProductionBindingV2();
+  } catch {
+    return null;
+  }
+})();
 
 type ReadyResolveV1 = Extract<ManualRouterResolveResponseV1, {
   status: "ready";
 }>;
+type ReadyResolveV2 = Extract<ManualRouterResolveResponseV2, {
+  status: "ready";
+}>;
+type ReadyResolve = ReadyResolveV1 | ReadyResolveV2;
+type ManualRouterDirectory =
+  | ManualRouterApplicantListResponseV1
+  | ManualRouterApplicantListResponseV2;
+type ManualRouterResolved =
+  | ManualRouterResolveResponseV1
+  | ManualRouterResolveResponseV2;
+type ManualRouterPersistedAttempt =
+  | ManualRouterPersistedAttemptV1
+  | ManualRouterPersistedAttemptV2;
+type ManualRouterSubmission =
+  | ManualRouterSubmissionSummaryV1
+  | ManualRouterSubmissionSummaryV2;
+type ManualRouterTransaction = Readonly<{
+  launchWallet: `0x${string}`;
+  subjectHash: ManualRouterSha256V1;
+  descriptorHash: ManualRouterSha256V1;
+  preparationHash: ManualRouterSha256V1;
+  transactionHash: `0x${string}`;
+}> & (
+  | Readonly<{ lane: "v1" }>
+  | Readonly<{
+      lane: "v2";
+      routeBindingHash: ManualRouterSha256V1;
+    }>
+);
 
 export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
   const {
@@ -72,23 +140,28 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     wallet,
   } = useWallet();
   const [directory, setDirectory] =
-    useState<ManualRouterApplicantListResponseV1 | null>(null);
+    useState<ManualRouterDirectory | null>(null);
   const [selectedSubjectHash, setSelectedSubjectHash] =
     useState<ManualRouterSha256V1 | "">("");
   const [resolved, setResolved] =
-    useState<ManualRouterResolveResponseV1 | null>(null);
+    useState<ManualRouterResolved | null>(null);
+  const [routeAcceptance, setRouteAcceptance] =
+    useState<ManualRouterRouteAcceptanceStateResponseV1 | null>(null);
   const [attempt, setAttempt] =
-    useState<ManualRouterPersistedAttemptV1 | null>(null);
+    useState<ManualRouterPersistedAttempt | null>(null);
   const [storageRecoveryRequired, setStorageRecoveryRequired] = useState(false);
   const [noSendAttested, setNoSendAttested] = useState(false);
   const [recoveryHash, setRecoveryHash] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingAcceptance, setLoadingAcceptance] = useState(false);
+  const [acceptingRoute, setAcceptingRoute] = useState(false);
   const [launching, setLaunching] = useState(false);
   const [checking, setChecking] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [errorCode, setErrorCode] = useState("");
   const loadAbortRef = useRef<AbortController | null>(null);
+  const acceptanceAbortRef = useRef<AbortController | null>(null);
   const pollAbortRef = useRef<AbortController | null>(null);
   const titleRef = useRef<HTMLHeadingElement | null>(null);
 
@@ -98,6 +171,16 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
   const loadSequenceRef = useRef(0);
   const launchLockRef = useRef(false);
   const finalityLockRef = useRef(false);
+  const exactShardsApplicant = isExactShardsGithubLogin(githubUsername);
+  const routeCapabilityUnavailable = exactShardsApplicant
+    && NESTED_FACTORY_ACTIVATION === null;
+  const routeAcceptanceRequired = exactShardsApplicant
+    && NESTED_FACTORY_ACTIVATION !== null;
+  const routeAccepted = !exactShardsApplicant
+    || (
+      NESTED_FACTORY_ACTIVATION !== null
+      && routeAcceptance?.state === "accepted"
+    );
 
   const getSession = useCallback(async (): Promise<ManualRouterWebsiteSessionV1> => {
     const [accessToken, identityToken] = await Promise.all([
@@ -115,11 +198,84 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     return { accessToken, identityToken };
   }, [getAccessToken, getIdentityToken]);
 
+  const loadRouteAcceptance = useCallback(async () => {
+    if (
+      NESTED_FACTORY_ACTIVATION === null
+      || !authenticated
+      || !githubConnected
+      || !isExactShardsGithubLogin(githubUsername)
+    ) {
+      setRouteAcceptance(null);
+      return;
+    }
+    acceptanceAbortRef.current?.abort();
+    const controller = new AbortController();
+    acceptanceAbortRef.current = controller;
+    setLoadingAcceptance(true);
+    try {
+      const next = await readManualRouterRouteAcceptanceStateV1({
+        session: await getSession(),
+        claimSha256: NESTED_FACTORY_ACTIVATION.acceptanceClaimSha256,
+        signal: controller.signal,
+      });
+      if (!controller.signal.aborted) setRouteAcceptance(next);
+    } catch (caught) {
+      if (controller.signal.aborted) return;
+      setRouteAcceptance(null);
+      setError(errorMessage(caught));
+      setErrorCode(errorCodeOf(caught));
+    } finally {
+      if (acceptanceAbortRef.current === controller) {
+        acceptanceAbortRef.current = null;
+      }
+      if (!controller.signal.aborted) setLoadingAcceptance(false);
+    }
+  }, [authenticated, getSession, githubConnected, githubUsername]);
+
+  useEffect(() => {
+    if (
+      NESTED_FACTORY_ACTIVATION === null
+      || !authenticated
+      || !githubConnected
+      || !isExactShardsGithubLogin(githubUsername)
+    ) return;
+    const kickoff = window.setTimeout(() => void loadRouteAcceptance(), 0);
+    return () => window.clearTimeout(kickoff);
+  }, [authenticated, githubConnected, githubUsername, loadRouteAcceptance]);
+
+  const acceptReviewedRoute = useCallback(async () => {
+    if (
+      NESTED_FACTORY_ACTIVATION === null
+      || routeAcceptance?.state !== "pending"
+      || acceptingRoute
+    ) return;
+    setAcceptingRoute(true);
+    setError("");
+    setErrorCode("");
+    try {
+      const next = await acceptManualRouterReviewedRouteV1({
+        session: await getSession(),
+        expectedStateVersion: routeAcceptance.stateVersion,
+        claimSha256: NESTED_FACTORY_ACTIVATION.acceptanceClaimSha256,
+      });
+      if (next.state !== "accepted") {
+        throw new Error("The reviewed route acceptance was not recorded");
+      }
+      setRouteAcceptance(next);
+      setStatus("Exact nested-factory route accepted. You may connect the launch wallet");
+    } catch (caught) {
+      setError(errorMessage(caught));
+      setErrorCode(errorCodeOf(caught));
+    } finally {
+      setAcceptingRoute(false);
+    }
+  }, [acceptingRoute, getSession, routeAcceptance]);
+
   const loadDirectory = useCallback(async (options?: Readonly<{
     quiet?: boolean;
     preferredSubjectHash?: ManualRouterSha256V1 | "";
   }>) => {
-    if (!authenticated || !githubConnected || !wallet) return;
+    if (!authenticated || !githubConnected || !wallet || !routeAccepted) return;
     loadAbortRef.current?.abort();
     const controller = new AbortController();
     loadAbortRef.current = controller;
@@ -128,10 +284,17 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     setError("");
     setErrorCode("");
     try {
-      const next = await listManualRouterApplicantSubmissionsV1({
+      const request = {
         session: await getSession(),
         launchWallet: wallet.account,
         signal: controller.signal,
+      } as const;
+      const directoryResponse = NESTED_FACTORY_ACTIVATION === null
+        ? await listManualRouterApplicantSubmissionsV1(request)
+        : await listManualRouterApplicantSubmissionsVersionedV2(request);
+      const next = manualRouterDirectoryForApplicantV2({
+        directory: directoryResponse,
+        requireExactShardsRoute: exactShardsApplicant,
       });
       if (controller.signal.aborted || sequence !== loadSequenceRef.current) return;
       setDirectory(next);
@@ -141,16 +304,24 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
         ? preferred
         : preferredSubmission(next.submissions)?.subjectHash ?? "";
       setSelectedSubjectHash(chosen);
-      if (chosen) {
-        const nextResolved = await resolveManualRouterApplicantSubmissionV1({
+      const chosenSubmission = next.submissions.find(({ subjectHash }) =>
+        subjectHash === chosen) ?? null;
+      if (chosenSubmission !== null) {
+        const chosenSubjectHash = chosenSubmission.subjectHash;
+        const resolveRequest = {
           session: await getSession(),
           launchWallet: next.linkedLaunchWallet,
-          subjectHash: chosen,
+          subjectHash: chosenSubjectHash,
           signal: controller.signal,
-        });
+        } as const;
+        const nextResolved = isNestedFactorySubmissionV2(chosenSubmission)
+          ? await resolveManualRouterApplicantSubmissionV2(resolveRequest)
+          : await resolveManualRouterApplicantSubmissionV1(resolveRequest);
         if (controller.signal.aborted || sequence !== loadSequenceRef.current) return;
         setResolved(nextResolved);
-        const stored = readPersistedAttempt(chosen);
+        const stored = isManualRouterResolveV2(nextResolved)
+          ? readPersistedAttemptV2(chosenSubjectHash)
+          : readPersistedAttempt(chosenSubjectHash);
         const serverResolvesCorruptAttempt = nextResolved.status !== "ready";
         let localRecoveryBlocked = false;
         if (stored.kind === "corrupt" && !serverResolvesCorruptAttempt) {
@@ -164,18 +335,35 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
         } else {
           if (stored.kind === "corrupt") {
             archiveCorruptAttempt(
-              chosen,
+              chosenSubjectHash,
               stored.raw,
               `server-${nextResolved.status}`,
+              isManualRouterResolveV2(nextResolved),
             );
-            removePersistedAttempt(chosen);
+            removePersistedAttempt(
+              chosenSubjectHash,
+              isManualRouterResolveV2(nextResolved),
+            );
           }
-          const reconciliation = reconcileManualRouterBrowserAttemptV1({
-            attempt: stored.kind === "valid" ? stored.attempt : null,
-            resolved: nextResolved,
-            launchWallet: next.linkedLaunchWallet,
-            nowIso: new Date().toISOString(),
-          });
+          const reconciliation = isManualRouterResolveV2(nextResolved)
+            ? reconcileManualRouterBrowserAttemptV2({
+                attempt: stored.kind === "valid"
+                  && isManualRouterPersistedAttemptV2(stored.attempt)
+                  ? stored.attempt
+                  : null,
+                resolved: nextResolved,
+                launchWallet: next.linkedLaunchWallet,
+                nowIso: new Date().toISOString(),
+              })
+            : reconcileManualRouterBrowserAttemptV1({
+                attempt: stored.kind === "valid"
+                  && !isManualRouterPersistedAttemptV2(stored.attempt)
+                  ? stored.attempt
+                  : null,
+                resolved: nextResolved,
+                launchWallet: next.linkedLaunchWallet,
+                nowIso: new Date().toISOString(),
+              });
           if (reconciliation.archive && reconciliation.archiveReason) {
             archivePersistedAttempt(
               reconciliation.archive,
@@ -192,7 +380,10 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
             );
           } else if (reconciliation.active === null) {
             if (reconciliation.archive !== null) {
-              removePersistedAttempt(chosen);
+              removePersistedAttempt(
+                chosenSubjectHash,
+                isManualRouterResolveV2(nextResolved),
+              );
             }
           } else if (
             stored.kind !== "valid"
@@ -212,7 +403,11 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
         if (localRecoveryBlocked) {
           // The fail-closed recovery status above must remain visible.
         } else if (nextResolved.status === "finalized") {
-          setStatus("Launch finalized. The canonical Router scanner will publish it after 64 confirmations");
+          setStatus(isManualRouterResolveV2(nextResolved)
+            ? nextResolved.executionMode === "EXACT_EXISTING_LAUNCH_ADOPTED"
+              ? "Sponsored launch adopted and finalized with its exact Router stamp"
+              : "Exact factory launch executed, stamped and finalized"
+            : "Launch finalized. The canonical Router scanner will publish it after 64 confirmations");
         } else if (nextResolved.status === "ready") {
           setStatus("Approved launch loaded and ready for your wallet");
         } else if (nextResolved.status === "permit-not-yet-valid") {
@@ -247,12 +442,15 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     authenticated,
     getSession,
     githubConnected,
+    routeAcceptanceRequired,
+    exactShardsApplicant,
     selectedSubjectHash,
+    routeAccepted,
     wallet,
   ]);
 
   useEffect(() => {
-    if (!authenticated || !githubConnected || !wallet) {
+    if (!authenticated || !githubConnected || !wallet || !routeAccepted) {
       loadAbortRef.current?.abort();
       return;
     }
@@ -265,10 +463,11 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
       window.clearTimeout(kickoff);
       window.clearInterval(interval);
     };
-  }, [authenticated, githubConnected, loadDirectory, wallet]);
+  }, [authenticated, githubConnected, loadDirectory, routeAccepted, wallet]);
 
   useEffect(() => () => {
     loadAbortRef.current?.abort();
+    acceptanceAbortRef.current?.abort();
     pollAbortRef.current?.abort();
   }, []);
 
@@ -284,17 +483,17 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     });
   }, [loadDirectory]);
 
-  const persistAttempt = useCallback((next: ManualRouterPersistedAttemptV1) => {
+  const persistAttempt = useCallback((next: ManualRouterPersistedAttempt) => {
     writePersistedAttempt(next);
     setAttempt(next);
   }, []);
 
   const reportSubmittedTransaction = useCallback(async (
-    currentAttempt: ManualRouterPersistedAttemptV1,
+    currentAttempt: ManualRouterPersistedAttempt,
     signal?: AbortSignal,
   ) => {
     if (!currentAttempt.transactionHash) return;
-    await reportManualRouterApplicantTransactionV1({
+    const input = {
       session: await getSession(),
       launchWallet: currentAttempt.launchWallet,
       subjectHash: currentAttempt.subjectHash,
@@ -302,7 +501,15 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
       preparationHash: currentAttempt.preparationHash,
       transactionHash: currentAttempt.transactionHash,
       signal,
-    });
+    } as const;
+    if (isManualRouterPersistedAttemptV2(currentAttempt)) {
+      await reportManualRouterApplicantTransactionV2({
+        ...input,
+        routeBindingHash: currentAttempt.routeBindingHash,
+      });
+    } else {
+      await reportManualRouterApplicantTransactionV1(input);
+    }
     const reported = Object.freeze({
       ...currentAttempt,
       phase: "reported" as const,
@@ -315,8 +522,9 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
       !wallet
       || !directory
       || resolved?.status !== "ready"
+      || !routeAccepted
       || launchLockRef.current
-      || manualRouterBlocksNewSendV1({
+      || manualRouterBlocksNewSend({
         attempt,
         ready: resolved,
         storageRecoveryRequired,
@@ -326,13 +534,16 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     setLaunching(true);
     setError("");
     setErrorCode("");
-    let pending: ManualRouterPersistedAttemptV1 | null = null;
+    let pending: ManualRouterPersistedAttempt | null = null;
     try {
-      const freshResolved = await resolveManualRouterApplicantSubmissionV1({
+      const resolveRequest = {
         session: await getSession(),
         launchWallet: directory.linkedLaunchWallet,
         subjectHash: resolved.subjectHash,
-      });
+      } as const;
+      const freshResolved = isManualRouterResolveV2(resolved)
+        ? await resolveManualRouterApplicantSubmissionV2(resolveRequest)
+        : await resolveManualRouterApplicantSubmissionV1(resolveRequest);
       setResolved(freshResolved);
       if (freshResolved.status !== "ready") {
         setError("The verified send window changed before wallet confirmation");
@@ -340,18 +551,26 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
         setStatus(freshWalletPreflightStatus(freshResolved.status));
         return;
       }
-      if (!manualRouterFreshReadyMatchesCachedV1({
-        cached: resolved,
-        fresh: freshResolved,
-        linkedLaunchWallet: directory.linkedLaunchWallet,
-      })) {
+      const freshMatches = isManualRouterResolveV2(resolved)
+        ? isManualRouterResolveV2(freshResolved)
+          && manualRouterFreshReadyMatchesCachedV2({
+            cached: resolved,
+            fresh: freshResolved,
+            linkedLaunchWallet: directory.linkedLaunchWallet,
+          })
+        : !isManualRouterResolveV2(freshResolved)
+          && manualRouterFreshReadyMatchesCachedV1({
+            cached: resolved,
+            fresh: freshResolved,
+            linkedLaunchWallet: directory.linkedLaunchWallet,
+          });
+      if (!freshMatches) {
         setError("The approved Router action changed. Refresh before continuing");
         setErrorCode("launch_preflight_changed");
         setStatus("Wallet was not opened because the approved launch changed");
         return;
       }
-      pending = Object.freeze({
-        schemaVersion: "programmable.manual-router-browser-attempt.v1" as const,
+      const attemptCommon = {
         subjectHash: freshResolved.subjectHash,
         descriptorHash: freshResolved.descriptorHash,
         preparationHash: freshResolved.preparationHash,
@@ -359,7 +578,23 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
         createdAt: new Date().toISOString(),
         transactionHash: null,
         phase: "wallet-prompt-opened" as const,
-      });
+      } as const;
+      pending = isManualRouterResolveV2(freshResolved)
+        ? Object.freeze({
+            ...attemptCommon,
+            schemaVersion:
+              "programmable.manual-router-browser-attempt.v2" as const,
+            grantBindingHash: freshResolved.grantBindingHash,
+            routeBindingHash: freshResolved.routeBindingHash,
+            launchArtifactCommitmentHash:
+              freshResolved.launchArtifactCommitmentHash,
+            route: freshResolved.route,
+          })
+        : Object.freeze({
+            ...attemptCommon,
+            schemaVersion:
+              "programmable.manual-router-browser-attempt.v1" as const,
+          });
       // Durable local state is committed synchronously before the wallet prompt.
       // If storage is unavailable, no transaction is sent.
       persistAttempt(pending);
@@ -396,7 +631,10 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
           "Wallet was not opened because the launch could not be freshly verified",
         );
       } else if (isExplicitWalletCancellation(caught)) {
-        removePersistedAttempt(pending.subjectHash);
+        removePersistedAttempt(
+          pending.subjectHash,
+          isManualRouterPersistedAttemptV2(pending),
+        );
         setAttempt(null);
         setStatus("Wallet confirmation was cancelled. No transaction was sent");
       } else {
@@ -416,6 +654,7 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     persistAttempt,
     reportSubmittedTransaction,
     resolved,
+    routeAccepted,
     sendBrowserWalletAction,
     storageRecoveryRequired,
     wallet,
@@ -426,16 +665,7 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
       storageRecoveryRequired
       && resolved?.status === "ready"
       && directory
-        ? Object.freeze({
-            schemaVersion: "programmable.manual-router-browser-attempt.v1" as const,
-            subjectHash: resolved.subjectHash,
-            descriptorHash: resolved.descriptorHash,
-            preparationHash: resolved.preparationHash,
-            launchWallet: directory.linkedLaunchWallet,
-            createdAt: new Date().toISOString(),
-            transactionHash: null,
-            phase: "wallet-prompt-opened" as const,
-          })
+        ? recoveryAttemptFromReady(resolved, directory.linkedLaunchWallet)
         : null
     );
     if (!recoveryAttempt) return;
@@ -479,7 +709,7 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
   ]);
 
   const canClearNoSend = resolved?.status === "ready"
-    && manualRouterCanClearUncertainNoSendV1({
+    && manualRouterCanClearUncertainNoSend({
       attempt,
       ready: resolved,
       storageRecoveryRequired,
@@ -497,11 +727,18 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     } else {
       archiveCorruptAttempt(
         selectedSubjectHash,
-        readRawPersistedAttempt(selectedSubjectHash),
+        readRawPersistedAttempt(
+          selectedSubjectHash,
+          isManualRouterResolveV2(resolved),
+        ),
         "applicant-confirmed-no-send",
+        isManualRouterResolveV2(resolved),
       );
     }
-    removePersistedAttempt(selectedSubjectHash);
+    removePersistedAttempt(
+      selectedSubjectHash,
+      isManualRouterResolveV2(resolved),
+    );
     setStorageRecoveryRequired(false);
     setNoSendAttested(false);
     setAttempt(null);
@@ -511,12 +748,12 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     attempt,
     canClearNoSend,
     noSendAttested,
-    resolved?.status,
+    resolved,
     selectedSubjectHash,
   ]);
 
   const checkFinality = useCallback(async () => {
-    const transaction = manualRouterTransactionContextV1({ resolved, attempt });
+    const transaction = manualRouterTransactionContext({ resolved, attempt });
     if (!transaction || finalityLockRef.current) return;
     finalityLockRef.current = true;
     pollAbortRef.current?.abort();
@@ -527,7 +764,7 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
       if (attempt?.transactionHash && attempt.phase !== "reported") {
         await reportSubmittedTransaction(attempt, controller.signal);
       }
-      await requestManualRouterApplicantFinalityV1({
+      const request = {
         session: await getSession(),
         launchWallet: transaction.launchWallet,
         subjectHash: transaction.subjectHash,
@@ -535,7 +772,15 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
         preparationHash: transaction.preparationHash,
         transactionHash: transaction.transactionHash,
         signal: controller.signal,
-      });
+      } as const;
+      if (transaction.lane === "v2") {
+        await requestManualRouterApplicantFinalityV2({
+          ...request,
+          routeBindingHash: transaction.routeBindingHash,
+        });
+      } else {
+        await requestManualRouterApplicantFinalityV1(request);
+      }
       await loadDirectory({
         quiet: true,
         preferredSubjectHash: transaction.subjectHash,
@@ -573,7 +818,7 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
   ]);
 
   const transaction = useMemo(
-    () => manualRouterTransactionContextV1({ resolved, attempt }),
+    () => manualRouterTransactionContext({ resolved, attempt }),
     [attempt, resolved],
   );
   useEffect(() => {
@@ -597,13 +842,23 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
   const launchReady = Boolean(
     resolved?.status === "ready"
     && exactWallet
-    && !manualRouterBlocksNewSendV1({
+    && routeAccepted
+    && !manualRouterBlocksNewSend({
       attempt,
       ready: resolved,
       storageRecoveryRequired,
     }),
   );
   const trustSteps = useMemo(() => [
+    ...(exactShardsApplicant ? [{
+      label: "Exact route acceptance",
+      detail: routeCapabilityUnavailable
+        ? "Route capability unavailable"
+        : routeAcceptance?.state === "accepted"
+          ? "nested-factory@1.0.0 accepted"
+          : "Review and accept the frozen plan",
+      complete: routeAccepted,
+    }] : []),
     {
       label: "GitHub approval",
       detail: selected
@@ -633,6 +888,11 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     githubConnected,
     githubUsername,
     resolved,
+    routeAcceptance?.state,
+    routeAcceptanceRequired,
+    routeCapabilityUnavailable,
+    exactShardsApplicant,
+    routeAccepted,
     selected,
   ]);
 
@@ -690,6 +950,22 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
             )}
           </div>
 
+          {routeAcceptanceRequired ? (
+            <RouteAcceptanceReview
+              state={routeAcceptance}
+              loading={loadingAcceptance}
+              accepting={acceptingRoute}
+              onAccept={() => void acceptReviewedRoute()}
+            />
+          ) : null}
+
+          {routeCapabilityUnavailable ? (
+            <p className={styles.nonceNote} role="status">
+              The exact Shards route is not available yet. Wallet connection and
+              launch stay disabled until its audited production binding is current.
+            </p>
+          ) : null}
+
           <div className={styles.identityGrid}>
             <div className={styles.identityRow} data-complete={Boolean(directory)}>
               <span className={styles.identityIcon} aria-hidden="true">
@@ -714,7 +990,10 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
                 <strong>{wallet ? shortAddress(wallet.account) : "Not connected"}</strong>
               </div>
               {!wallet ? (
-                <button type="button" onClick={openWallet}>Connect wallet</button>
+                <button
+                  type="button"
+                  disabled={!githubConnected || !routeAccepted}
+                  onClick={openWallet}>Connect wallet</button>
               ) : null}
             </div>
           </div>
@@ -723,9 +1002,9 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
             <button
               className={`button-primary ${styles.connectButton}`}
               type="button"
-              onClick={openWallet}
+              onClick={connectGithub}
             >
-              Sign in to continue
+              Sign in with GitHub to continue
             </button>
           ) : null}
 
@@ -772,9 +1051,12 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
           {resolved?.status === "ready" ? (
             <ReadyLaunch
               ready={resolved}
+              nestedFactoryRoute={isManualRouterResolveV2(resolved)
+                ? resolved.route
+                : null}
               launchReady={launchReady}
               launching={launching}
-              hasBlockingAttempt={manualRouterBlocksNewSendV1({
+              hasBlockingAttempt={manualRouterBlocksNewSend({
                 attempt,
                 ready: resolved,
                 storageRecoveryRequired,
@@ -877,12 +1159,7 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
               <CheckCircle2 aria-hidden="true" size={26} />
               <div>
                 <span>Finalized Router proof</span>
-                <strong id="finalized-heading">Your coin is launched</strong>
-                <p>
-                  The canonical scanner publishes it to Explore, feeds and your
-                  wallet profile after 64 confirmations. This private lane does
-                  not create a second public profile record.
-                </p>
+                <FinalizedLaunchCopy resolved={resolved} />
                 <Link
                   href={`https://etherscan.io/tx/${resolved.transactionHash}`}
                   target="_blank"
@@ -947,26 +1224,343 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
   );
 }
 
+function FinalizedLaunchCopy({ resolved }: {
+  resolved: Extract<ManualRouterResolved, { status: "finalized" }>;
+}) {
+  if (!isManualRouterResolveV2(resolved)) {
+    return (
+      <>
+        <strong id="finalized-heading">Your coin is launched</strong>
+        <p>
+          The canonical scanner publishes it to Explore, feeds and your
+          wallet profile after 64 confirmations. This private lane does
+          not create a second public profile record.
+        </p>
+      </>
+    );
+  }
+  if (resolved.executionMode === "EXACT_EXISTING_LAUNCH_ADOPTED") {
+    return (
+      <>
+        <strong id="finalized-heading">Sponsored launch adopted</strong>
+        <p>
+          The Router proof confirms the exact reviewed identities,
+          configuration, runtimes and stamp. It does not prove who first
+          called the factory, a pristine market or the current market price.
+          Public indexing remains a separate scanner step.
+        </p>
+      </>
+    );
+  }
+  return (
+    <>
+      <strong id="finalized-heading">Exact factory launch executed</strong>
+      <p>
+        The Router executed the reviewed factory path and finalized the exact
+        component, pool, configuration, runtime and stamp proof. Public
+        indexing remains a separate scanner step.
+      </p>
+    </>
+  );
+}
+
+function RouteAcceptanceReview({
+  state,
+  loading,
+  accepting,
+  onAccept,
+}: {
+  state: ManualRouterRouteAcceptanceStateResponseV1 | null;
+  loading: boolean;
+  accepting: boolean;
+  onAccept: () => void;
+}) {
+  const plan = state?.plan ?? null;
+  const acceptanceState = state?.state ?? null;
+  const reviewedClaim = state === null
+    ? null
+    : prettyCanonicalClaimJson(state.claimCanonicalJson);
+  const facts = plan === null ? [] : [
+    ["Request head", plan.requestHeadSha],
+    ["Request tree", plan.requestTreeSha],
+    ["Source commit", plan.sourceCommit],
+    ["Source tree", plan.sourceTree],
+    ["Requested route", `${plan.fromRouteId}@${plan.fromRouteVersion}`],
+    ["Accepted route", `${plan.toRouteId}@${plan.toRouteVersion}`],
+    ["Profile", `${plan.profileId}@${plan.profileVersion}`],
+    ["Profile key", plan.profileKey],
+    ["Router", plan.routerAddress],
+    ["Router runtime", plan.routerRuntimeCodeHash],
+    ["Module", plan.moduleAddress],
+    ["Module runtime", plan.moduleRuntimeCodeHash],
+    ["Route payload", plan.routePayloadHash],
+    ["Expected result", plan.expectedResultHash],
+    ["Revenue policy", plan.revenuePolicyHash],
+    ["Pool", plan.poolId],
+    ["Configuration", plan.configurationHash],
+    ["Reviewed plan", plan.reviewedPlanSha256],
+    ["Launch wallet", plan.launchWallet],
+  ] as const;
+  return (
+    <section className={styles.submission} aria-labelledby="route-acceptance-heading">
+      <div>
+        <span>Required before wallet connection</span>
+        <strong id="route-acceptance-heading">Exact nested-factory route</strong>
+      </div>
+      {plan === null ? (
+        <p className={styles.nonceNote} role={loading ? "status" : undefined}>
+          {loading
+            ? "Loading the frozen reviewed plan"
+            : "Link the approved GitHub account to load the frozen reviewed plan"}
+        </p>
+      ) : (
+        <>
+          <details open={acceptanceState === "pending"}>
+            <summary>Review the complete frozen plan</summary>
+            <dl>
+              {facts.map(([label, value]) => (
+                <div key={label}>
+                  <dt>{label}</dt>
+                  <dd><code title={value}>{value}</code></dd>
+                </div>
+              ))}
+            </dl>
+            <StructuredRouteAcceptancePlan plan={plan} />
+            {reviewedClaim === null ? null : (
+              <>
+                <strong>Complete reviewed claim</strong>
+                <pre
+                  aria-label="Complete reviewed route acceptance claim"
+                  tabIndex={0}
+                  style={{
+                    maxHeight: "24rem",
+                    overflow: "auto",
+                    overflowWrap: "anywhere",
+                    whiteSpace: "pre-wrap",
+                  }}
+                ><code>{reviewedClaim}</code></pre>
+              </>
+            )}
+          </details>
+          <p className={styles.nonceNote}>
+            This records your review of the exact route binding. It does not
+            authorize a launch or submit a transaction.
+          </p>
+          {acceptanceState === "pending" ? (
+            <button
+              className={`button-primary ${styles.launchButton}`}
+              type="button"
+              disabled={accepting}
+              onClick={onAccept}
+            >
+              {accepting ? (
+                <>
+                  <LoaderCircle
+                    className={styles.spinner}
+                    aria-hidden="true"
+                    size={17}
+                  />
+                  Recording acceptance
+                </>
+              ) : "Accept exact reviewed route"}
+            </button>
+          ) : (
+            <p className={styles.nonceNote} role="status">
+              Exact route accepted. Wallet connection is now available.
+            </p>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+function StructuredRouteAcceptancePlan({
+  plan,
+}: {
+  plan: ManualRouterRouteAcceptancePlanV1;
+}) {
+  const predeployment = plan.atomicLaunch.predeployment;
+  const launchExecution = plan.atomicLaunch.launchExecution;
+  const requiredState = plan.atomicLaunch.initialStatePolicy.state;
+  const preconditions = plan.atomicLaunch.initialStatePolicy.commonPreconditions;
+  return (
+    <>
+      <strong>Reviewed factory</strong>
+      <dl>
+        <div>
+          <dt>Address</dt>
+          <dd><code>{plan.reviewedFactory.address}</code></dd>
+        </div>
+        <div>
+          <dt>Runtime</dt>
+          <dd><code>{plan.reviewedFactory.runtimeCodeHash}</code></dd>
+        </div>
+      </dl>
+
+      <strong>Reviewed deployment order</strong>
+      <ol>
+        {plan.reviewedComponents.map((component) => (
+          <li key={component.kind}>
+            <strong>{component.kind}</strong>{" "}
+            <code>{component.address}</code>{" "}
+            <span>deployed by <code>{component.deployer}</code></span>{" "}
+            <span>runtime <code>{component.runtimeCodeHash}</code></span>
+          </li>
+        ))}
+      </ol>
+
+      <strong>Atomic launch</strong>
+      <dl>
+        <div>
+          <dt>Transactions</dt>
+          <dd>{plan.atomicLaunch.transactionCount}</dd>
+        </div>
+        <div>
+          <dt>Sender</dt>
+          <dd><code>{plan.atomicLaunch.transactionSender}</code></dd>
+        </div>
+        <div>
+          <dt>Execution entry</dt>
+          <dd><code>{plan.atomicLaunch.executionEntry}</code></dd>
+        </div>
+        <div>
+          <dt>Applicant action</dt>
+          <dd><code>{launchExecution.applicantAction}</code></dd>
+        </div>
+        <div>
+          <dt>Launch caller</dt>
+          <dd><code>{launchExecution.productionExecutionCaller}</code></dd>
+        </div>
+      </dl>
+
+      <strong>Completed and verified platform predeployment</strong>
+      <dl>
+        <div>
+          <dt>Status</dt>
+          <dd>{predeployment.status}</dd>
+        </div>
+        <div>
+          <dt>Applicant action</dt>
+          <dd>{predeployment.applicantAction ? "Yes" : "No"}</dd>
+        </div>
+        <div>
+          <dt>Phase</dt>
+          <dd><code>{predeployment.productionExecutionPhase}</code></dd>
+        </div>
+        <div>
+          <dt>Factory</dt>
+          <dd><code>{predeployment.factoryAddress}</code></dd>
+        </div>
+        <div>
+          <dt>Factory runtime</dt>
+          <dd><code>{predeployment.factoryRuntimeCodeHash}</code></dd>
+        </div>
+        <div>
+          <dt>Renderer</dt>
+          <dd><code>{predeployment.rendererAddress}</code></dd>
+        </div>
+        <div>
+          <dt>Renderer runtime</dt>
+          <dd><code>{predeployment.rendererRuntimeCodeHash}</code></dd>
+        </div>
+        <div>
+          <dt>Evidence</dt>
+          <dd><code>{predeployment.predeploymentEvidenceSha256}</code></dd>
+        </div>
+        <div>
+          <dt>Gas-cap receipt</dt>
+          <dd><code>{predeployment.gasCapReceiptSha256}</code></dd>
+        </div>
+      </dl>
+
+      <strong>Required launch state</strong>
+      <dl>
+        <div>
+          <dt>Policy</dt>
+          <dd><code>{plan.atomicLaunch.initialStatePolicy.mode}</code></dd>
+        </div>
+        <div>
+          <dt>State</dt>
+          <dd><code>{requiredState.id}</code></dd>
+        </div>
+        <div>
+          <dt>Factory runtime</dt>
+          <dd><code>{requiredState.factoryRuntimeCodeHash}</code></dd>
+        </div>
+        <div>
+          <dt>Renderer runtime</dt>
+          <dd><code>{requiredState.rendererRuntimeCodeHash}</code></dd>
+        </div>
+        <div>
+          <dt>Action</dt>
+          <dd><code>{requiredState.action}</code></dd>
+        </div>
+      </dl>
+
+      <strong>Required child and pool preconditions</strong>
+      <dl>
+        <div>
+          <dt>Token code</dt>
+          <dd>{preconditions.tokenCode}</dd>
+        </div>
+        <div>
+          <dt>Hook code</dt>
+          <dd>{preconditions.hookCode}</dd>
+        </div>
+        <div>
+          <dt>NFT code</dt>
+          <dd>{preconditions.nftCode}</dd>
+        </div>
+        <div>
+          <dt>Pool slot0</dt>
+          <dd>{preconditions.poolSlot0}</dd>
+        </div>
+      </dl>
+
+      <strong>Reviewed economics · {plan.economics.totalFeeBps} bps total</strong>
+      <ol>
+        {plan.economics.legs.map((leg, index) => (
+          <li key={leg.roleLabel}>
+            <strong>{plan.economics.legOrder[index]} · {leg.feeBps} bps</strong>{" "}
+            <span>recipient <code>{leg.recipient}</code></span>{" "}
+            <span><code>{leg.recipientModeLabel}</code></span>
+          </li>
+        ))}
+      </ol>
+    </>
+  );
+}
+
 function ReadyLaunch({
   ready,
+  nestedFactoryRoute,
   launchReady,
   launching,
   hasBlockingAttempt,
   onLaunch,
 }: {
-  ready: ReadyResolveV1;
+  ready: ReadyResolve;
+  nestedFactoryRoute: ManualRouterRouteBindingV2 | null;
   launchReady: boolean;
   launching: boolean;
   hasBlockingAttempt: boolean;
   onLaunch: () => void;
 }) {
   const deadline = new Date(Number(ready.deadline) * 1_000);
+  const routeFacts = nestedFactoryRoute === null
+    ? null
+    : manualRouterRouteFactsV2(nestedFactoryRoute);
   return (
     <section className={styles.confirmation} aria-labelledby="confirmation-heading">
       <div className={styles.confirmationTitle}>
         <CheckCircle2 aria-hidden="true" size={21} />
         <div>
-          <strong id="confirmation-heading">Safe-signed permit verified</strong>
+          <strong id="confirmation-heading">
+            {routeFacts
+              ? `${routeFacts.model} · ${routeFacts.router}`
+              : "Safe-signed permit verified"}
+          </strong>
           <span>Available until {Number.isFinite(deadline.getTime())
             ? deadline.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
             : "its onchain deadline"}</span>
@@ -985,6 +1579,18 @@ function ReadyLaunch({
           <dt>Gas payer</dt>
           <dd>Your wallet</dd>
         </div>
+        {routeFacts ? (
+          <>
+            <div>
+              <dt>Route</dt>
+              <dd>{routeFacts.route}</dd>
+            </div>
+            <div>
+              <dt>Profile</dt>
+              <dd>{routeFacts.profile}</dd>
+            </div>
+          </>
+        ) : null}
       </dl>
       <button
         className={`button-primary ${styles.launchButton}`}
@@ -1029,9 +1635,144 @@ function StateNotice({
   );
 }
 
+function isExactShardsGithubLogin(login: string | null): boolean {
+  return login?.toLowerCase() === SHARDS_GITHUB_LOGIN;
+}
+
+function isNestedFactorySubmissionV2(
+  submission: ManualRouterSubmission,
+): submission is ManualRouterNestedFactorySubmissionSummaryV2 {
+  return "artifactSchemaVersion" in submission
+    && submission.artifactSchemaVersion
+      === "programmable.manual-router-complete-signed-artifact.v2";
+}
+
+function isManualRouterResolveV2(
+  resolved: ManualRouterResolved,
+): resolved is ManualRouterResolveResponseV2 {
+  return resolved.schemaVersion
+    === "programmable.manual-router-applicant-resolve-response.v2";
+}
+
+function isManualRouterPersistedAttemptV2(
+  attempt: ManualRouterPersistedAttempt,
+): attempt is ManualRouterPersistedAttemptV2 {
+  return attempt.schemaVersion
+    === "programmable.manual-router-browser-attempt.v2";
+}
+
+function manualRouterBlocksNewSend(input: Readonly<{
+  attempt: ManualRouterPersistedAttempt | null;
+  ready: ReadyResolve;
+  storageRecoveryRequired: boolean;
+}>): boolean {
+  if (isManualRouterResolveV2(input.ready)) {
+    if (input.attempt !== null && !isManualRouterPersistedAttemptV2(input.attempt)) {
+      return true;
+    }
+    return manualRouterBlocksNewSendV2({
+      ...input,
+      attempt: input.attempt,
+      ready: input.ready,
+    });
+  }
+  if (input.attempt !== null && isManualRouterPersistedAttemptV2(input.attempt)) {
+    return true;
+  }
+  return manualRouterBlocksNewSendV1({
+    ...input,
+    attempt: input.attempt,
+    ready: input.ready,
+  });
+}
+
+function manualRouterCanClearUncertainNoSend(input: Readonly<{
+  attempt: ManualRouterPersistedAttempt | null;
+  ready: ReadyResolve;
+  storageRecoveryRequired: boolean;
+}>): boolean {
+  if (isManualRouterResolveV2(input.ready)) {
+    return manualRouterCanClearUncertainNoSendV2({
+      ...input,
+      attempt: input.attempt !== null
+        && isManualRouterPersistedAttemptV2(input.attempt)
+        ? input.attempt
+        : null,
+      ready: input.ready,
+    });
+  }
+  return manualRouterCanClearUncertainNoSendV1({
+    ...input,
+    attempt: input.attempt !== null
+      && !isManualRouterPersistedAttemptV2(input.attempt)
+      ? input.attempt
+      : null,
+    ready: input.ready,
+  });
+}
+
+function manualRouterTransactionContext(input: Readonly<{
+  resolved: ManualRouterResolved | null;
+  attempt: ManualRouterPersistedAttempt | null;
+}>): ManualRouterTransaction | null {
+  if (input.resolved === null) return null;
+  if (isManualRouterResolveV2(input.resolved)) {
+    const transaction = manualRouterTransactionContextV2({
+      resolved: input.resolved,
+      attempt: input.attempt !== null
+        && isManualRouterPersistedAttemptV2(input.attempt)
+        ? input.attempt
+        : null,
+    });
+    return transaction === null
+      ? null
+      : Object.freeze({ ...transaction, lane: "v2" as const });
+  }
+  const transaction = manualRouterTransactionContextV1({
+    resolved: input.resolved,
+    attempt: input.attempt !== null
+      && !isManualRouterPersistedAttemptV2(input.attempt)
+      ? input.attempt
+      : null,
+  });
+  return transaction === null
+    ? null
+    : Object.freeze({ ...transaction, lane: "v1" as const });
+}
+
+function recoveryAttemptFromReady(
+  ready: ReadyResolve,
+  launchWallet: `0x${string}`,
+): ManualRouterPersistedAttempt {
+  const common = {
+    subjectHash: ready.subjectHash,
+    descriptorHash: ready.descriptorHash,
+    preparationHash: ready.preparationHash,
+    launchWallet,
+    createdAt: new Date().toISOString(),
+    transactionHash: null,
+    phase: "wallet-prompt-opened" as const,
+  } as const;
+  return isManualRouterResolveV2(ready)
+    ? Object.freeze({
+        ...common,
+        schemaVersion:
+          "programmable.manual-router-browser-attempt.v2" as const,
+        grantBindingHash: ready.grantBindingHash,
+        routeBindingHash: ready.routeBindingHash,
+        launchArtifactCommitmentHash: ready.launchArtifactCommitmentHash,
+        route: ready.route,
+      })
+    : Object.freeze({
+        ...common,
+        schemaVersion:
+          "programmable.manual-router-browser-attempt.v1" as const,
+      });
+}
+
 function preferredSubmission(
-  submissions: readonly ManualRouterSubmissionSummaryV1[],
-): ManualRouterSubmissionSummaryV1 | null {
+  submissions: readonly ManualRouterSubmission[],
+): ManualRouterSubmission | null {
   const priority: Record<ManualRouterSubmissionSummaryV1["status"], number> = {
     ready: 0,
     "submitted-awaiting-finality": 1,
@@ -1045,8 +1786,14 @@ function preferredSubmission(
     || right.pullRequestNumber - left.pullRequestNumber)[0] ?? null;
 }
 
-function attemptStorageKey(subjectHash: ManualRouterSha256V1): string {
-  return `${ATTEMPT_STORAGE_PREFIX}:${subjectHash}`;
+function attemptStorageKey(
+  subjectHash: ManualRouterSha256V1,
+  nestedFactory: boolean,
+): string {
+  const prefix = nestedFactory
+    ? ATTEMPT_STORAGE_PREFIX_V2
+    : ATTEMPT_STORAGE_PREFIX;
+  return `${prefix}:${subjectHash}`;
 }
 
 function readPersistedAttempt(
@@ -1054,37 +1801,55 @@ function readPersistedAttempt(
 ): ManualRouterPersistedAttemptReadV1 {
   let stored: string | null;
   try {
-    stored = window.localStorage.getItem(attemptStorageKey(subjectHash));
+    stored = window.localStorage.getItem(attemptStorageKey(subjectHash, false));
   } catch {
     return Object.freeze({ kind: "corrupt", raw: null });
   }
   return parseManualRouterPersistedAttemptStorageV1(stored, subjectHash);
 }
 
-function writePersistedAttempt(attempt: ManualRouterPersistedAttemptV1): void {
+function readPersistedAttemptV2(
+  subjectHash: ManualRouterSha256V1,
+): ManualRouterPersistedAttemptReadV2 {
+  let stored: string | null;
+  try {
+    stored = window.localStorage.getItem(attemptStorageKey(subjectHash, true));
+  } catch {
+    return Object.freeze({ kind: "corrupt", raw: null });
+  }
+  return parseManualRouterPersistedAttemptStorageV2(stored, subjectHash);
+}
+
+function writePersistedAttempt(attempt: ManualRouterPersistedAttempt): void {
+  const nestedFactory = isManualRouterPersistedAttemptV2(attempt);
+  const key = attemptStorageKey(attempt.subjectHash, nestedFactory);
   const serialized = JSON.stringify(attempt);
-  window.localStorage.setItem(attemptStorageKey(attempt.subjectHash), serialized);
-  if (window.localStorage.getItem(attemptStorageKey(attempt.subjectHash)) !== serialized) {
+  window.localStorage.setItem(key, serialized);
+  if (window.localStorage.getItem(key) !== serialized) {
     throw new Error("The launch attempt could not be saved before opening your wallet");
   }
 }
 
-function removePersistedAttempt(subjectHash: ManualRouterSha256V1): void {
+function removePersistedAttempt(
+  subjectHash: ManualRouterSha256V1,
+  nestedFactory: boolean,
+): void {
   try {
-    window.localStorage.removeItem(attemptStorageKey(subjectHash));
+    window.localStorage.removeItem(attemptStorageKey(subjectHash, nestedFactory));
   } catch {
     // Explicit cancellation is safe even when private-mode storage cleanup fails.
   }
 }
 
 function archivePersistedAttempt(
-  attempt: ManualRouterPersistedAttemptV1,
+  attempt: ManualRouterPersistedAttempt,
   reason: ManualRouterAttemptArchiveReasonV1,
 ): void {
   archiveRawAttempt(
     attempt.subjectHash,
     JSON.stringify(attempt),
     reason,
+    isManualRouterPersistedAttemptV2(attempt),
   );
 }
 
@@ -1092,21 +1857,28 @@ function archiveCorruptAttempt(
   subjectHash: ManualRouterSha256V1,
   raw: string | null,
   reason: string,
+  nestedFactory: boolean,
 ): void {
-  archiveRawAttempt(subjectHash, raw, reason);
+  archiveRawAttempt(subjectHash, raw, reason, nestedFactory);
 }
 
 function archiveRawAttempt(
   subjectHash: ManualRouterSha256V1,
   raw: string | null,
   reason: string,
+  nestedFactory: boolean,
 ): void {
   try {
     const boundedRaw = raw === null || raw.length > 1_048_576 ? null : raw;
+    const prefix = nestedFactory
+      ? ATTEMPT_STORAGE_PREFIX_V2
+      : ATTEMPT_STORAGE_PREFIX;
     window.localStorage.setItem(
-      `${ATTEMPT_STORAGE_PREFIX}:history:${subjectHash}`,
+      `${prefix}:history:${subjectHash}`,
       JSON.stringify({
-        schemaVersion: "programmable.manual-router-browser-attempt-history.v1",
+        schemaVersion: nestedFactory
+          ? "programmable.manual-router-browser-attempt-history.v2"
+          : "programmable.manual-router-browser-attempt-history.v1",
         archivedAt: new Date().toISOString(),
         reason,
         raw: boundedRaw,
@@ -1119,9 +1891,12 @@ function archiveRawAttempt(
 
 function readRawPersistedAttempt(
   subjectHash: ManualRouterSha256V1,
+  nestedFactory: boolean,
 ): string | null {
   try {
-    return window.localStorage.getItem(attemptStorageKey(subjectHash));
+    return window.localStorage.getItem(
+      attemptStorageKey(subjectHash, nestedFactory),
+    );
   } catch {
     return null;
   }
@@ -1169,4 +1944,8 @@ function freshWalletPreflightStatus(
 
 function shortAddress(value: string): string {
   return `${value.slice(0, 6)}…${value.slice(-4)}`;
+}
+
+function prettyCanonicalClaimJson(value: string): string {
+  return JSON.stringify(JSON.parse(value) as unknown, null, 2);
 }

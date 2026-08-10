@@ -7,6 +7,26 @@ const AUTHENTICATION_PROBE = Object.freeze({
   schemaVersion: "programmable.manual-router-applicant-list-request.v1",
   launchWallet: "0x1111111111111111111111111111111111111111",
 });
+const CHECKS = Object.freeze([
+  Object.freeze({
+    route: ROUTE,
+    status: 400,
+    code: "invalid_request",
+    body: "{}",
+  }),
+  Object.freeze({
+    route: ROUTE,
+    status: 401,
+    code: "applicant_authentication_required",
+    body: JSON.stringify(AUTHENTICATION_PROBE),
+  }),
+  Object.freeze({
+    route: "/api/custom-launch/manual/route-acceptance",
+    status: 401,
+    code: "session_required",
+    body: "{}",
+  }),
+]);
 
 export async function verifyManualApplicantStagedRuntime({
   targetUrl,
@@ -36,19 +56,19 @@ export async function verifyManualApplicantStagedRuntime({
   let lastError;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      const invalid = await postProbe(fetchImpl, origin, bypassSecret, "{}");
-      assertTypedError(invalid, 400, "invalid_request");
-      const unauthenticated = await postProbe(
-        fetchImpl,
-        origin,
-        bypassSecret,
-        JSON.stringify(AUTHENTICATION_PROBE),
-      );
-      assertTypedError(
-        unauthenticated,
-        401,
-        "applicant_authentication_required",
-      );
+      const observed = [];
+      for (const check of CHECKS) {
+        const result = await postProbe(
+          fetchImpl,
+          origin,
+          bypassSecret,
+          check.route,
+          check.body,
+        );
+        assertTypedError(result, check.status, check.code);
+        observed.push(result);
+      }
+      const [invalid, unauthenticated, acceptance] = observed;
       return Object.freeze({
         status: "verified",
         route: ROUTE,
@@ -56,6 +76,8 @@ export async function verifyManualApplicantStagedRuntime({
         code: invalid.body.code,
         authenticationHttpStatus: unauthenticated.response.status,
         authenticationCode: unauthenticated.body.code,
+        acceptanceHttpStatus: acceptance.response.status,
+        acceptanceCode: acceptance.body.code,
       });
     } catch (error) {
       lastError = error;
@@ -67,8 +89,8 @@ export async function verifyManualApplicantStagedRuntime({
   throw lastError ?? new Error("manual Applicant staged authority preflight failed");
 }
 
-async function postProbe(fetchImpl, origin, bypassSecret, body) {
-  const response = await fetchImpl(new URL(ROUTE, origin), {
+async function postProbe(fetchImpl, origin, bypassSecret, route, body) {
+  const response = await fetchImpl(new URL(route, origin), {
     method: "POST",
     redirect: "error",
     headers: {

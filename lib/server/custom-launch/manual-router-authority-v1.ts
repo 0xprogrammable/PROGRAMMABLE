@@ -194,6 +194,7 @@ export function createProductionManualRouterFinalityAuthorityV1(
           disposition: "finalized" as const,
           proof,
           proofHash: sha256(proof.proofHash),
+          executionMode: null,
         });
       } catch (error) {
         if (error instanceof RouterLaunchTransactionRevertedError) {

@@ -5,6 +5,14 @@ import nextTypeScript from "eslint-config-next/typescript";
 export default defineConfig([
   ...nextVitals,
   ...nextTypeScript,
+  {
+    files: [
+      "lib/vendor/manual-router-authority-v2/manual-router-portable.v2.mjs",
+    ],
+    rules: {
+      "@next/next/no-assign-module-variable": "off",
+    },
+  },
   globalIgnores([
     ".next/**",
     ".vercel/**",

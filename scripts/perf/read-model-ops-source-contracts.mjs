@@ -63,23 +63,23 @@ const APPROVED_OPERATIONS = Object.freeze({
       dependencies: Object.freeze([
         Object.freeze({
           path: "lib/server/custom-launch/manual-router-discovery-v1.ts",
-          sha256: "79724e9671013da64f2bbd76e70d3a0d151f173344d32655056f0f917960a2dd",
+          sha256: "12685b945d26d585eedb21212d4df7a57c89aa5e23b0594aa23e23e9be3fdc79",
         }),
         Object.freeze({
           path: "lib/server/custom-launch/manual-router-finality-v1.ts",
-          sha256: "c0176a253cf6967f6fe60cd23c4ea2aa44e68a0f6a6d6e3d6f8485094940c7c8",
+          sha256: "be7a0fe1c482a734b0c5605c88bf82e7eb547cd3d57ada7695634fdd23b26ed8",
         }),
         Object.freeze({
           path: "lib/server/custom-launch/manual-router-production-v1.ts",
-          sha256: "e1f617ed1d5fc92bef9c935fae35ba2757b10a7120c75ec140b0e835af70fc71",
+          sha256: "79915b2a03b39e457ea5fd1253a58f76242510170c46dbed95654b269e5af595",
         }),
         Object.freeze({
           path: "lib/server/custom-launch/manual-router-service-v1.ts",
-          sha256: "7b0249243ac4a1fa1408c6a1619eef4449a5dc19bb29b139888255246bfdd0b7",
+          sha256: "36ba5a141b30a204d0e2493e8d382f366b070eef4547fe69c12935e63d619fcd",
         }),
         Object.freeze({
           path: "lib/server/custom-launch/manual-router-store-v1.ts",
-          sha256: "cb21cf45ba4deaadd918279bb277d559e48eefdbcb078c3f018d1bb6342b901a",
+          sha256: "5462e4413798e8fa2804c4727ccd6c9355aa9860eeb0a345ad167b01f0eb4162",
         }),
       ]),
       policy: Object.freeze({

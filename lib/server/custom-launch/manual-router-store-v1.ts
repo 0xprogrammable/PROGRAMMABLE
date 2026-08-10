@@ -294,6 +294,35 @@ export function manualRouterApplicantIndexPrefixV1(): string {
   return `${BASE_PATH}/applicants/`;
 }
 
+/**
+ * Mutable acceptance pointer. Its key is the stable Hookbuilder application
+ * subject, never an acceptance-claim revision. A rotated claim therefore has
+ * exactly one CAS predecessor instead of creating a second implicit head.
+ */
+export function manualRouterRouteAcceptanceHeadPathV1(
+  acceptanceSubjectHash: `sha256:${string}`,
+): string {
+  return `${BASE_PATH}/route-acceptance-heads/${sha256Hex(
+    acceptanceSubjectHash,
+  )}.json`;
+}
+
+export function manualRouterRouteAcceptanceHistoryPathV1(
+  acceptanceHash: `sha256:${string}`,
+): string {
+  return `${BASE_PATH}/route-acceptance-history/${sha256Hex(
+    acceptanceHash,
+  )}.json`;
+}
+
+export function manualRouterRouteAcceptanceRecordPathV1(
+  applicantAcceptanceRecordHash: `sha256:${string}`,
+): string {
+  return `${BASE_PATH}/route-acceptance-records/${sha256Hex(
+    applicantAcceptanceRecordHash,
+  )}.json`;
+}
+
 function sha256Hex(value: `sha256:${string}`): string {
   if (!/^sha256:[0-9a-f]{64}$/u.test(value)) {
     throw new TypeError("manual Router content hash is invalid");
