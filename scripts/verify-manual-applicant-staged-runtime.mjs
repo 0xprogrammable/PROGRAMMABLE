@@ -23,7 +23,7 @@ const CHECKS = Object.freeze([
   Object.freeze({
     route: "/api/custom-launch/manual/route-acceptance",
     status: 401,
-    code: "session_required",
+    code: "applicant_authentication_required",
     body: "{}",
   }),
 ]);
