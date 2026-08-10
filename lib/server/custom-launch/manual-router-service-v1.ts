@@ -239,9 +239,13 @@ export class ManualRouterWebsiteServiceV1 {
       expected.idempotent !== verified.idempotent
       || canonicalizeJson(expected.index) !== canonicalizeJson(index)
     ) throw invalidArtifact();
+    const commitHead = await this.#refreshExactShardsV1PublishHead(
+      artifact,
+      head,
+    );
     const transition = await commitManualRouterApplicantHeadTransitionV1({
       store: this.dependencies.store,
-      head,
+      head: commitHead,
       nextPointer: pointer,
       nextIndex: index,
       immutableWrites: signedPublishImmutableWrites(artifact, pointer, index),
@@ -558,6 +562,24 @@ export class ManualRouterWebsiteServiceV1 {
         === artifact.preparationArtifact.subject.subjectHash);
     if (matches.length !== 1) throw routeCapabilityDisabled();
     await this.#assertShardsV1PointerLineage(matches[0]!);
+  }
+
+  async #refreshExactShardsV1PublishHead(
+    artifact: ManualRouterCompleteSignedArtifactViewAnyV2,
+    verifiedHead: ManualRouterApplicantHeadV1,
+  ): Promise<ManualRouterApplicantHeadV1> {
+    if (!manualRouterIsExactShardsV1ArtifactV1(artifact)) return verifiedHead;
+    const refreshed = await readManualRouterApplicantHeadV1({
+      store: this.dependencies.store,
+      ...artifactPrincipal(artifact),
+    });
+    if (
+      refreshed.path !== verifiedHead.path
+      || canonicalizeJson(refreshed.index) !== canonicalizeJson(verifiedHead.index)
+      || canonicalizeJson(refreshed.pointers)
+        !== canonicalizeJson(verifiedHead.pointers)
+    ) throw conflict();
+    return refreshed;
   }
 
   async #assertShardsV1PublishTransition(input: Readonly<{

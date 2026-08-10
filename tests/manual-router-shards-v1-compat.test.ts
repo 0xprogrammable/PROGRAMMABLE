@@ -251,6 +251,86 @@ describe("exact Shards Router V1 Website service bridge", () => {
     });
   });
 
+  it("refreshes an unchanged exact Shards head ETag after verification", async () => {
+    const { store, values } = memoryStore();
+    await seedHead(store, ROOT_POINTER, ROOT_INDEX, shardsArtifact("root"));
+    const indexPath = manualRouterApplicantIndexPathV1({
+      approvedGitHubUserId: EXACT.approvedGitHubUserId,
+      approvedLaunchWallet: EXACT.approvedLaunchWallet,
+    });
+    const baseAuthority = shardsAuthority();
+    const service = new ManualRouterWebsiteServiceV1({
+      store,
+      authority: Object.freeze({
+        ...baseAuthority,
+        async verifySignedPublish(input: Parameters<
+          ManualRouterWebsiteAuthorityV1["verifySignedPublish"]
+        >[0]) {
+          const verified = await baseAuthority.verifySignedPublish(input);
+          const current = values.get(indexPath)!;
+          values.set(indexPath, { ...current, etag: "etag-external-same-head" });
+          return verified;
+        },
+      }),
+    });
+    const successor = shardsArtifact("successor");
+
+    await expect(service.publishSignedArtifact({
+      schemaVersion: "programmable.manual-router-signed-artifact-publish-request.v1",
+      expectedPreviousPointerHash: EXACT.rootPointerHash,
+      signedArtifact: successor,
+    })).resolves.toMatchObject({
+      state: "signed-permit-available",
+      signedArtifactHash: successor.signedArtifactHash,
+      idempotent: false,
+    });
+  });
+
+  it("rejects semantic exact Shards head drift after verification", async () => {
+    const { store } = memoryStore();
+    await seedHead(store, ROOT_POINTER, ROOT_INDEX, shardsArtifact("root"));
+    const indexPath = manualRouterApplicantIndexPathV1({
+      approvedGitHubUserId: EXACT.approvedGitHubUserId,
+      approvedLaunchWallet: EXACT.approvedLaunchWallet,
+    });
+    const baseAuthority = shardsAuthority();
+    const successor = shardsArtifact("successor");
+    const service = new ManualRouterWebsiteServiceV1({
+      store,
+      authority: Object.freeze({
+        ...baseAuthority,
+        async verifySignedPublish(input: Parameters<
+          ManualRouterWebsiteAuthorityV1["verifySignedPublish"]
+        >[0]) {
+          const verified = await baseAuthority.verifySignedPublish(input);
+          const nextPointer = verified.nextPointer as ManualRouterApplicantPointerV1;
+          const nextIndex = verified.nextApplicantIndex as ManualRouterApplicantIndexV1;
+          await store.putImmutable(
+            manualRouterContentPathV1("signed-artifacts", successor.signedArtifactHash),
+            successor,
+          );
+          await store.putImmutable(
+            manualRouterContentPathV1("pointer-history", nextPointer.pointerHash),
+            nextPointer,
+          );
+          const current = await store.read(indexPath);
+          await store.compareAndSwap(indexPath, current!.etag, nextIndex);
+          return verified;
+        },
+      }),
+    });
+
+    await expect(service.publishSignedArtifact({
+      schemaVersion: "programmable.manual-router-signed-artifact-publish-request.v1",
+      expectedPreviousPointerHash: EXACT.rootPointerHash,
+      signedArtifact: successor,
+    })).rejects.toMatchObject({
+      status: 409,
+      code: "state_conflict",
+      retryable: false,
+    } satisfies Partial<ManualRouterServiceErrorV1>);
+  });
+
   it("blocks every path for an exact-looking V1 head outside pointer40d8 lineage", async () => {
     const { store, values } = memoryStore();
     const orphanArtifact = shardsArtifact("successor");
