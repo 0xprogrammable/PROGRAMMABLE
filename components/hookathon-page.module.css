@@ -1,0 +1,350 @@
+.page {
+  background: var(--body-background);
+  color: var(--brand-ivory);
+  min-height: calc(100svh - var(--header-height));
+  min-width: 0;
+  position: relative;
+}
+
+.shell {
+  margin: 0 auto;
+  max-width: var(--page-width);
+  padding: 20px 32px 28px;
+  width: 100%;
+}
+
+.hero {
+  align-items: center;
+  display: grid;
+  gap: clamp(48px, 7vw, 104px);
+  grid-template-columns: minmax(300px, 0.72fr) minmax(620px, 1.28fr);
+  min-height: 218px;
+  padding: 12px 0 28px;
+}
+
+.hero h1 {
+  font-size: clamp(72px, 7.8vw, 112px);
+  font-weight: 520;
+  letter-spacing: -0.065em;
+  line-height: 0.9;
+  margin: 0;
+  text-wrap: balance;
+}
+
+.prizes,
+.entry,
+.conditions {
+  border-top: 1px solid var(--panel-border-soft);
+}
+
+.prizes {
+  align-items: center;
+  display: grid;
+  gap: 48px;
+  grid-template-columns: minmax(260px, 0.72fr) minmax(480px, 1.28fr);
+  min-height: 112px;
+  padding: 20px 0;
+}
+
+.prizeLead {
+  align-items: baseline;
+  display: flex;
+  gap: 24px;
+}
+
+.prizeLead h2,
+.entry > h2,
+.eligibility h2,
+.judging h2 {
+  color: var(--brand-ivory-muted);
+  font-size: 14px;
+  font-weight: 560;
+  line-height: 20px;
+  margin: 0;
+}
+
+.prizeLead p {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 48px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  letter-spacing: -0.055em;
+  line-height: 1;
+  margin: 0;
+}
+
+.prizeSplit {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.prizeSplit li {
+  display: grid;
+  gap: 4px;
+}
+
+.prizeSplit span {
+  color: var(--brand-ivory-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.prizeSplit strong {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  letter-spacing: -0.035em;
+  line-height: 32px;
+}
+
+.entry {
+  display: grid;
+  gap: 48px;
+  grid-template-columns: minmax(150px, 0.3fr) minmax(0, 1.7fr);
+  min-height: 188px;
+  padding: 24px 0 28px;
+}
+
+.entry > h2 {
+  padding-top: 4px;
+}
+
+.steps {
+  display: grid;
+  gap: 32px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.steps li {
+  align-items: flex-start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 28px minmax(0, 1fr);
+}
+
+.stepNumber {
+  align-items: center;
+  border: 1px solid var(--panel-border);
+  border-radius: 50%;
+  color: var(--brand-ivory-soft);
+  display: inline-flex;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 12px;
+  height: 28px;
+  justify-content: center;
+  line-height: 1;
+  width: 28px;
+}
+
+.steps h3 {
+  font-size: 24px;
+  font-weight: 560;
+  letter-spacing: -0.035em;
+  line-height: 32px;
+  margin: 0;
+}
+
+.steps p,
+.eligibility p,
+.judging p {
+  color: var(--brand-ivory-soft);
+  font-size: 14px;
+  line-height: 20px;
+  margin: 8px 0 0;
+  text-wrap: pretty;
+}
+
+.conditions {
+  display: grid;
+  gap: 64px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(380px, 0.65fr);
+  min-height: 132px;
+  padding: 22px 0 12px;
+}
+
+.eligibility,
+.judging {
+  min-width: 0;
+}
+
+.eligibility p {
+  max-width: 84ch;
+}
+
+.judging ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+
+.judging li {
+  color: var(--brand-ivory);
+  font-size: 18px;
+  font-weight: 560;
+  letter-spacing: -0.02em;
+  line-height: 28px;
+}
+
+.judging p {
+  max-width: 52ch;
+}
+
+:global(.app-frame):has(.page) > main {
+  background: var(--body-background);
+}
+
+:global(.app-frame):has(.page) > :global(.atmosphere-backdrop) {
+  opacity: 0;
+}
+
+@media (max-width: 1100px) {
+  .hero {
+    gap: 32px;
+    grid-template-columns: minmax(260px, 0.62fr) minmax(560px, 1.38fr);
+  }
+
+  .steps {
+    gap: 24px;
+  }
+
+  .conditions {
+    gap: 40px;
+    grid-template-columns: minmax(0, 1.2fr) minmax(340px, 0.8fr);
+  }
+}
+
+@media (max-width: 960px) {
+  .shell {
+    padding-top: 12px;
+  }
+
+  .hero {
+    align-items: start;
+    gap: 32px;
+    grid-template-columns: 1fr;
+    padding-top: 8px;
+  }
+
+  .hero h1 {
+    font-size: 72px;
+  }
+
+  .prizes {
+    gap: 32px;
+    grid-template-columns: minmax(240px, 0.7fr) minmax(0, 1.3fr);
+  }
+
+  .entry {
+    gap: 32px;
+    grid-template-columns: 128px minmax(0, 1fr);
+  }
+
+  .conditions {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 0.8fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .shell {
+    padding: 8px 20px calc(32px + env(safe-area-inset-bottom));
+  }
+
+  .hero {
+    min-height: 0;
+    padding: 12px 0 28px;
+  }
+
+  .hero h1 {
+    font-size: clamp(48px, 15vw, 60px);
+  }
+
+  .prizes,
+  .entry,
+  .conditions {
+    grid-template-columns: 1fr;
+  }
+
+  .prizes {
+    gap: 20px;
+    padding: 24px 0 28px;
+  }
+
+  .prizeLead {
+    align-items: flex-end;
+    justify-content: space-between;
+  }
+
+  .prizeLead p {
+    font-size: 36px;
+  }
+
+  .prizeSplit {
+    gap: 16px;
+  }
+
+  .prizeSplit strong {
+    font-size: 20px;
+    line-height: 28px;
+  }
+
+  .entry {
+    gap: 24px;
+    padding: 24px 0 28px;
+  }
+
+  .entry > h2 {
+    padding-top: 0;
+  }
+
+  .steps {
+    gap: 24px;
+    grid-template-columns: 1fr;
+  }
+
+  .steps li {
+    gap: 16px;
+  }
+
+  .conditions {
+    gap: 28px;
+    padding: 24px 0 12px;
+  }
+
+  .eligibility p,
+  .judging p,
+  .steps p {
+    font-size: 16px;
+    line-height: 24px;
+  }
+
+  .judging ul {
+    gap: 8px 20px;
+  }
+}
+
+@media (max-width: 360px) {
+  .shell {
+    padding-inline: 16px;
+  }
+
+  .prizeLead {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .prizeSplit {
+    gap: 8px;
+  }
+}

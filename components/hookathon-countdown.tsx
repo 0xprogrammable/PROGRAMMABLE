@@ -1,0 +1,221 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+
+import styles from "@/components/hookathon-countdown.module.css";
+import {
+  getHookathonCountdown,
+  type HookathonCountdownParts,
+} from "@/lib/hookathon/time";
+
+type ClipboardWriter = Readonly<{
+  writeText: (text: string) => Promise<void>;
+}>;
+
+export type HookathonCountdownProps = Readonly<{
+  deadlineIso: string;
+  deadlineDisplay: string;
+  hookbuilderUrl: string;
+  initialNowMs: number;
+  prompt: string;
+}>;
+
+type CopyState = "idle" | "copied" | "error";
+
+const COUNTDOWN_UNITS = [
+  { key: "days", label: "Days" },
+  { key: "hours", label: "Hours" },
+  { key: "minutes", label: "Minutes" },
+  { key: "seconds", label: "Seconds" },
+] as const satisfies ReadonlyArray<{
+  key: keyof Pick<
+    HookathonCountdownParts,
+    "days" | "hours" | "minutes" | "seconds"
+  >;
+  label: string;
+}>;
+
+function paddedUnit(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+export async function writeBuilderPromptToClipboard(
+  prompt: string,
+  clipboard?: ClipboardWriter,
+) {
+  const writer =
+    clipboard ??
+    (typeof navigator === "undefined" ? undefined : navigator.clipboard);
+
+  if (!writer) {
+    throw new Error("Clipboard access is unavailable");
+  }
+
+  await writer.writeText(prompt);
+}
+
+export function HookathonCountdown({
+  deadlineIso,
+  deadlineDisplay,
+  hookbuilderUrl,
+  initialNowMs,
+  prompt,
+}: HookathonCountdownProps) {
+  const deadlineMs = Date.parse(deadlineIso);
+  const [countdown, setCountdown] = useState(() =>
+    getHookathonCountdown(deadlineMs, initialNowMs),
+  );
+  const [copyState, setCopyState] = useState<CopyState>("idle");
+  const copyResetTimeoutRef = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    const monotonicStartMs = performance.now();
+    let tickTimeout: number | undefined;
+
+    const currentServerBoundTime = () =>
+      initialNowMs + Math.max(0, performance.now() - monotonicStartMs);
+
+    const clearTick = () => {
+      if (tickTimeout === undefined) return;
+      window.clearTimeout(tickTimeout);
+      tickTimeout = undefined;
+    };
+
+    const syncCountdown = () => {
+      clearTick();
+      const next = getHookathonCountdown(
+        deadlineMs,
+        currentServerBoundTime(),
+      );
+
+      setCountdown((current) =>
+        current.totalSeconds === next.totalSeconds &&
+        current.ended === next.ended
+          ? current
+          : next,
+      );
+
+      if (next.ended || document.hidden) return;
+
+      const nextBoundary = next.totalMilliseconds % 1_000;
+      const delay = nextBoundary === 0 ? 1_000 : Math.max(50, nextBoundary);
+      tickTimeout = window.setTimeout(syncCountdown, delay);
+    };
+
+    const syncVisibility = () => {
+      clearTick();
+      if (!document.hidden) syncCountdown();
+    };
+
+    syncCountdown();
+    document.addEventListener("visibilitychange", syncVisibility);
+
+    return () => {
+      clearTick();
+      document.removeEventListener("visibilitychange", syncVisibility);
+    };
+  }, [deadlineMs, initialNowMs]);
+
+  useEffect(
+    () => () => {
+      if (copyResetTimeoutRef.current !== undefined) {
+        window.clearTimeout(copyResetTimeoutRef.current);
+      }
+    },
+    [],
+  );
+
+  async function copyBuilderPrompt() {
+    if (countdown.ended) return;
+
+    if (copyResetTimeoutRef.current !== undefined) {
+      window.clearTimeout(copyResetTimeoutRef.current);
+    }
+
+    try {
+      await writeBuilderPromptToClipboard(prompt);
+      setCopyState("copied");
+      copyResetTimeoutRef.current = window.setTimeout(() => {
+        setCopyState("idle");
+        copyResetTimeoutRef.current = undefined;
+      }, 2_400);
+    } catch {
+      setCopyState("error");
+    }
+  }
+
+  const buttonLabel = countdown.ended
+    ? "Submissions closed"
+    : copyState === "copied"
+      ? "Prompt copied"
+      : copyState === "error"
+        ? "Try copy again"
+        : "Copy builder prompt";
+
+  const copyAnnouncement =
+    copyState === "copied"
+      ? "Builder prompt copied"
+      : copyState === "error"
+        ? "Unable to copy. Try again."
+        : "";
+
+  return (
+    <div
+      className={styles.island}
+      data-state={countdown.ended ? "ended" : "running"}
+    >
+      <div className={styles.timerFrame}>
+        {countdown.ended ? (
+          <p className={styles.closed} aria-hidden="true">
+            Submissions closed
+          </p>
+        ) : (
+          <dl className={styles.timer} aria-hidden="true">
+            {COUNTDOWN_UNITS.map((unit) => (
+              <div className={styles.unit} key={unit.key}>
+                <dd>{paddedUnit(countdown[unit.key])}</dd>
+                <dt>{unit.label}</dt>
+              </div>
+            ))}
+          </dl>
+        )}
+      </div>
+
+      <p className="sr-only">
+        Submissions close on {deadlineDisplay} in Europe/Zurich.
+      </p>
+      <p className={styles.deadline}>
+        <time dateTime={deadlineIso}>{deadlineDisplay}</time>
+        <span aria-hidden="true"> · </span>
+        <span>Europe/Zurich</span>
+      </p>
+
+      <div className={styles.actions}>
+        <button
+          className={styles.primaryAction}
+          disabled={countdown.ended}
+          onClick={copyBuilderPrompt}
+          type="button"
+        >
+          {buttonLabel}
+        </button>
+        <a
+          className={styles.secondaryAction}
+          href={hookbuilderUrl}
+          rel="noreferrer"
+          target="_blank"
+        >
+          Open Hookbuilder
+          <span aria-hidden="true">↗</span>
+        </a>
+      </div>
+
+      <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {copyAnnouncement}
+      </p>
+      <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {countdown.ended ? "Submissions closed" : ""}
+      </p>
+    </div>
+  );
+}
