@@ -233,22 +233,26 @@ test("enabled policy requires exact independent protected commitments", () => {
   ), /QuickNode endpoint commitment is invalid/u);
 });
 
-test("staged runtime preflight accepts only the typed client error", async () => {
-  let request;
+test("staged runtime preflight requires typed parse and authentication errors", async () => {
+  const requests = [];
   const result = await verifyManualApplicantStagedRuntime({
     targetUrl: "https://candidate.example.vercel.app/",
     bypassSecret: "b".repeat(32),
     attempts: 1,
     retryDelayMs: 0,
     async fetchImpl(url, init) {
-      request = { url: String(url), init };
+      requests.push({ url: String(url), init });
+      const authentication = init.body !== "{}";
+      const code = authentication
+        ? "applicant_authentication_required"
+        : "invalid_request";
       return new Response(JSON.stringify({
         schemaVersion: "programmable.manual-router-website-error.v1",
-        code: "invalid_request",
-        message: "invalid_request",
+        code,
+        message: code,
         retryable: false,
       }), {
-        status: 400,
+        status: authentication ? 401 : 400,
         headers: {
           "cache-control": "no-store, max-age=0",
           "content-type": "application/json; charset=utf-8",
@@ -261,11 +265,20 @@ test("staged runtime preflight accepts only the typed client error", async () =>
     route: "/api/custom-launch/manual/submissions",
     httpStatus: 400,
     code: "invalid_request",
+    authenticationHttpStatus: 401,
+    authenticationCode: "applicant_authentication_required",
   });
-  assert.equal(request.url,
-    "https://candidate.example.vercel.app/api/custom-launch/manual/submissions");
-  assert.equal(request.init.body, "{}");
-  assert.equal(new Headers(request.init.headers).has("authorization"), false);
+  assert.equal(requests.length, 2);
+  for (const request of requests) {
+    assert.equal(request.url,
+      "https://candidate.example.vercel.app/api/custom-launch/manual/submissions");
+    assert.equal(new Headers(request.init.headers).has("authorization"), false);
+  }
+  assert.equal(requests[0].init.body, "{}");
+  assert.deepEqual(JSON.parse(requests[1].init.body), {
+    schemaVersion: "programmable.manual-router-applicant-list-request.v1",
+    launchWallet: "0x1111111111111111111111111111111111111111",
+  });
 
   await assert.rejects(() => verifyManualApplicantStagedRuntime({
     targetUrl: "https://candidate.example.vercel.app/",
