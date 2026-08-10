@@ -3,12 +3,13 @@ import { join } from "node:path";
 
 import Ajv2020 from "ajv/dist/2020";
 import { describe, expect, it } from "vitest";
-import { getAddress, keccak256 } from "viem";
+import { getAddress, getCreateAddress, keccak256 } from "viem";
 
 import {
   assertHookemonAdoptionByteExactReencodingV22,
 } from "../lib/custom-launch/hookemon-adoption-verifier-v22";
 import {
+  assertHookemonApplicantFlowBindingV1,
   createHookemonFinalityRequestV1,
   createHookemonTransactionReportV1,
   HOOKEMON_BROWSER_ACTION_SCHEMA_V1,
@@ -27,7 +28,8 @@ const address = (byte: number) => getAddress(
   `0x${byte.toString(16).padStart(2, "0").repeat(20)}`,
 );
 
-const launcher = address(0x22);
+const launchWallet = address(0x11);
+const launcher = getCreateAddress({ from: launchWallet, nonce: 8n });
 const fundingUsdc = "123456789";
 const approvalData = `0x095ea7b3${launcher.slice(2).toLowerCase().padStart(64, "0")}${
   BigInt(fundingUsdc).toString(16).padStart(64, "0")
@@ -44,7 +46,7 @@ const binding = Object.freeze({
   planHash: bytes32(5),
   sourceCommit: "11".repeat(20),
   sourceTree: "22".repeat(20),
-  launchWallet: address(0x11),
+  launchWallet,
   launcher,
   launcherInitCodeHash: keccak256(createData),
   fundingUsdc,
@@ -96,6 +98,16 @@ describe("Hookemon Applicant Authority/browser contract", () => {
 
   });
 
+  it("derives the normal-CREATE launcher from wallet and launcher nonce", () => {
+    expect(assertHookemonApplicantFlowBindingV1(binding).launcher).toBe(
+      getCreateAddress({ from: launchWallet, nonce: 8n }),
+    );
+    expect(() => assertHookemonApplicantFlowBindingV1({
+      ...binding,
+      launcher: address(0x22),
+    })).toThrow(/nonce or finality binding is invalid/u);
+  });
+
   it("keeps adoption unavailable until the exact V2.2 decoder is frozen", () => {
     expect(() => parseHookemonBrowserWalletActionV1(
       action(2),
@@ -128,7 +140,7 @@ describe("Hookemon Applicant Authority/browser contract", () => {
     })).toThrow(/byte-exact deterministic re-encoding/u);
   });
 
-  it("rejects route substitution, CREATE-to-call conversion and nonce drift", () => {
+  it("rejects noncanonical approval, CREATE-to-call conversion and nonce drift", () => {
     const wrongApproval = structuredClone(action(0));
     wrongApproval.transaction.data = `0x095ea7b3${address(0x99)
       .slice(2).toLowerCase().padStart(64, "0")}${
@@ -139,7 +151,48 @@ describe("Hookemon Applicant Authority/browser contract", () => {
       wrongApproval,
       binding,
       "1000",
-    )).toThrow(/spender or amount/u);
+    )).toThrow(/approval calldata is invalid/u);
+
+    const wrongAmount = structuredClone(action(0));
+    wrongAmount.transaction.data = `0x095ea7b3${launcher.slice(2)
+      .toLowerCase().padStart(64, "0")}${
+      (BigInt(fundingUsdc) + 1n).toString(16).padStart(64, "0")
+    }`;
+    wrongAmount.dataHash = keccak256(wrongAmount.transaction.data);
+    expect(() => parseHookemonBrowserWalletActionV1(
+      wrongAmount,
+      binding,
+      "1000",
+    )).toThrow(/approval calldata is invalid/u);
+
+    const dirtySpenderPadding = structuredClone(action(0));
+    dirtySpenderPadding.transaction.data = `0x095ea7b3${"01".repeat(12)}${
+      launcher.slice(2).toLowerCase()
+    }${BigInt(fundingUsdc).toString(16).padStart(64, "0")}`;
+    dirtySpenderPadding.dataHash = keccak256(
+      dirtySpenderPadding.transaction.data,
+    );
+    expect(() => parseHookemonBrowserWalletActionV1(
+      dirtySpenderPadding,
+      binding,
+      "1000",
+    )).toThrow(/approval calldata is invalid/u);
+
+    const wrongUsdcTarget = structuredClone(action(0));
+    wrongUsdcTarget.transaction.to = address(0x99);
+    expect(() => parseHookemonBrowserWalletActionV1(
+      wrongUsdcTarget,
+      binding,
+      "1000",
+    )).toThrow(/approval transaction is invalid/u);
+
+    const nonzeroValue = structuredClone(action(0));
+    nonzeroValue.transaction.value = "0x1" as "0x0";
+    expect(() => parseHookemonBrowserWalletActionV1(
+      nonzeroValue,
+      binding,
+      "1000",
+    )).toThrow(/transaction envelope is invalid/u);
 
     const createCall = structuredClone(action(1));
     createCall.transaction.to = address(0x77);
@@ -157,6 +210,23 @@ describe("Hookemon Applicant Authority/browser contract", () => {
       binding,
       "1000",
     )).toThrow(/CREATE transaction/u);
+
+    const alteredInitcode = structuredClone(action(1));
+    alteredInitcode.transaction.data = "0x6001";
+    alteredInitcode.dataHash = keccak256(alteredInitcode.transaction.data);
+    expect(() => parseHookemonBrowserWalletActionV1(
+      alteredInitcode,
+      binding,
+      "1000",
+    )).toThrow(/launcher init code drifted/u);
+
+    const alteredDataHash = structuredClone(action(1));
+    alteredDataHash.dataHash = bytes32(0xee);
+    expect(() => parseHookemonBrowserWalletActionV1(
+      alteredDataHash,
+      binding,
+      "1000",
+    )).toThrow(/data hash is invalid/u);
 
     const staleObservation = structuredClone(action(2));
     staleObservation.currentness.observedPendingNonce = "0x62";

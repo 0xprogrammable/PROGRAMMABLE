@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { getCreateAddress } from "viem";
 
 import {
   createHookemonBrowserAttemptV1,
@@ -21,6 +22,7 @@ const sha = (byte: number) =>
   `sha256:${byte.toString(16).padStart(2, "0").repeat(32)}` as const;
 const bytes32 = (byte: number) =>
   `0x${byte.toString(16).padStart(2, "0").repeat(32)}` as const;
+const launchWallet = "0x1111111111111111111111111111111111111111" as const;
 
 const binding = Object.freeze({
   bindingHash: sha(1),
@@ -30,8 +32,8 @@ const binding = Object.freeze({
   planHash: bytes32(5),
   sourceCommit: "11".repeat(20),
   sourceTree: "22".repeat(20),
-  launchWallet: "0x1111111111111111111111111111111111111111",
-  launcher: "0x2222222222222222222222222222222222222222",
+  launchWallet,
+  launcher: getCreateAddress({ from: launchWallet, nonce: 8n }),
   launcherInitCodeHash: bytes32(6),
   fundingUsdc: "1000000",
   approvalNonce: "7",

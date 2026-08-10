@@ -1,5 +1,6 @@
 import {
   getAddress,
+  getCreateAddress,
   isAddress,
   keccak256,
 } from "viem";
@@ -152,6 +153,7 @@ const CURRENTNESS_KINDS = Object.freeze([
   "PRE_CREATE",
   "PRE_ADOPTION",
 ] as const);
+const VALIDATED_BROWSER_ACTIONS_V1 = new WeakSet<HookemonBrowserWalletActionV1>();
 
 export function assertHookemonApplicantFlowBindingV1(
   raw: HookemonApplicantFlowBindingV1,
@@ -164,12 +166,18 @@ export function assertHookemonApplicantFlowBindingV1(
   ], "Hookemon flow binding");
   const approvalNonce = uint(value.approvalNonce);
   const launcherNonce = uint(value.launcherNonce);
+  const launchWallet = address(value.launchWallet);
+  const launcher = address(value.launcher);
   const requiredConfirmations = safePositiveInteger(
     value.requiredConfirmations,
     "Hookemon finality depth",
   );
   if (
     BigInt(launcherNonce) !== BigInt(approvalNonce) + 1n
+    || launcher !== getCreateAddress({
+      from: launchWallet,
+      nonce: BigInt(launcherNonce),
+    })
     || requiredConfirmations > 10_000
   ) throw invalid("Hookemon flow nonce or finality binding is invalid");
   return deepFreeze({
@@ -180,8 +188,8 @@ export function assertHookemonApplicantFlowBindingV1(
     planHash: bytes32(value.planHash),
     sourceCommit: gitSha(value.sourceCommit),
     sourceTree: gitSha(value.sourceTree),
-    launchWallet: address(value.launchWallet),
-    launcher: address(value.launcher),
+    launchWallet,
+    launcher,
     launcherInitCodeHash: bytes32(value.launcherInitCodeHash),
     fundingUsdc: positiveUint(value.fundingUsdc),
     approvalNonce,
@@ -316,7 +324,7 @@ export function parseHookemonBrowserWalletActionV1(
       expectedCalldataHash: dataHash,
     });
   }
-  return deepFreeze({
+  const parsed = deepFreeze({
     schemaVersion: HOOKEMON_BROWSER_ACTION_SCHEMA_V1,
     bindingHash: binding.bindingHash,
     stateVersion: uint(value.stateVersion),
@@ -332,6 +340,23 @@ export function parseHookemonBrowserWalletActionV1(
     currentness,
     transaction,
   });
+  VALIDATED_BROWSER_ACTIONS_V1.add(parsed);
+  return parsed;
+}
+
+export function revalidateHookemonBrowserWalletActionForSendV1(
+  action: HookemonBrowserWalletActionV1,
+  expectedBinding: HookemonApplicantFlowBindingV1,
+  currentEpochSeconds: string,
+): HookemonBrowserWalletActionV1 {
+  if (!VALIDATED_BROWSER_ACTIONS_V1.has(action)) {
+    throw invalid("Hookemon browser action was not runtime-validated");
+  }
+  return parseHookemonBrowserWalletActionV1(
+    action,
+    expectedBinding,
+    currentEpochSeconds,
+  );
 }
 
 export function createHookemonTransactionReportV1(
@@ -411,16 +436,16 @@ function assertApprovalData(
   data: `0x${string}`,
   binding: HookemonApplicantFlowBindingV1,
 ): void {
-  if (data.length !== 138 || !data.startsWith(HOOKEMON_APPROVE_SELECTOR)) {
+  const amount = BigInt(binding.fundingUsdc);
+  if (amount >= 1n << 256n) {
+    throw invalid("Hookemon approval amount is invalid");
+  }
+  const canonicalData = `${HOOKEMON_APPROVE_SELECTOR}${binding.launcher
+    .slice(2).toLowerCase().padStart(64, "0")}${amount
+    .toString(16).padStart(64, "0")}`;
+  if (data !== canonicalData) {
     throw invalid("Hookemon approval calldata is invalid");
   }
-  const spenderWord = data.slice(10, 74);
-  const amountWord = data.slice(74, 138);
-  const spender = address(`0x${spenderWord.slice(24)}`);
-  if (
-    spender !== binding.launcher
-    || BigInt(`0x${amountWord}`) !== BigInt(binding.fundingUsdc)
-  ) throw invalid("Hookemon approval spender or amount is invalid");
 }
 
 function parseCurrentness(
