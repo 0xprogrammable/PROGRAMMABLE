@@ -142,7 +142,6 @@ export function LaunchExperience({
   if (!selectedModel) {
     return (
       <LaunchModelPicker
-        customLaunchPublicEnabled={customLaunchPublicEnabled}
         manualApplicantLaunchEnabled={manualApplicantLaunchEnabled}
         manualApplicantButtonRef={manualApplicantButtonRef}
         onChoose={chooseModel}
@@ -181,21 +180,16 @@ export function LaunchExperience({
 }
 
 export function LaunchModelPicker({
-  customLaunchPublicEnabled = false,
   manualApplicantLaunchEnabled = false,
   manualApplicantButtonRef,
   onChoose,
 }: {
-  customLaunchPublicEnabled?: boolean;
   manualApplicantLaunchEnabled?: boolean;
   manualApplicantButtonRef?: RefObject<HTMLButtonElement | null>;
-  onChoose: (model: LaunchModel | "custom" | "manual-applicant") => void;
+  onChoose: (model: LaunchModel | "manual-applicant") => void;
 }) {
   const preloadAvailableForm = () => {
     void loadLaunchForm();
-  };
-  const preloadCustomLaunch = () => {
-    void loadCustomLaunch();
   };
   const preloadManualApplicantLaunch = () => {
     void loadManualApplicantLaunch();
@@ -255,7 +249,7 @@ export function LaunchModelPicker({
                 className={`launch-model-card-heading ${launchExperience.modelHeading}`}
               >
                 <strong id="launch-model-manual-applicant-title">
-                  Approved launch
+                  Custom Hook
                 </strong>
                 <small data-status="ready">Ready</small>
               </span>
@@ -269,7 +263,7 @@ export function LaunchModelPicker({
               <span
                 className={`launch-model-action ${launchExperience.modelAction}`}
               >
-                Open applicant launch
+                Open Custom Hook launch
                 <ArrowRight aria-hidden="true" size={16} />
               </span>
             </span>
@@ -337,86 +331,6 @@ export function LaunchModelPicker({
                 className={`launch-model-action ${launchExperience.modelAction}`}
               >
                 Create a Classic coin
-                <ArrowRight aria-hidden="true" size={16} />
-              </span>
-            ) : null}
-          </span>
-        </button>
-
-        <button
-          className={`launch-model-card ${launchExperience.modelCard} liquid-glass-surface`}
-          data-launch-model-option="custom"
-          data-launch-model-available={customLaunchPublicEnabled}
-          data-launch-model-launchable={customLaunchPublicEnabled}
-          type="button"
-          disabled={!customLaunchPublicEnabled}
-          aria-labelledby="launch-model-custom-title"
-          aria-describedby="launch-model-custom-description"
-          onPointerEnter={customLaunchPublicEnabled ? preloadCustomLaunch : undefined}
-          onFocus={customLaunchPublicEnabled ? preloadCustomLaunch : undefined}
-          onClick={() => onChoose("custom")}
-        >
-          <span
-            className={`launch-model-art ${launchExperience.modelArt} ${launchExperience.customArt}`}
-            aria-hidden="true"
-          >
-            <Image
-              className={launchExperience.artImage}
-              src="/brand/create/custom-galaxy-v3.webp"
-              alt=""
-              fill
-              loading="lazy"
-              fetchPriority="low"
-              sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 96px) / 4), 260px"
-            />
-            <Image
-              className={`${launchExperience.classicLogo} ${launchExperience.customLogo}`}
-              src="/brand/loop/programmable-loop-mark-warm-ivory-v1-1536.png"
-              alt=""
-              width={1536}
-              height={1536}
-              sizes="128px"
-              loading="lazy"
-              fetchPriority="low"
-            />
-            <span className={launchExperience.customSparkles}>
-              <span />
-              <span />
-              <span />
-              <span />
-              <span />
-              <span />
-              <span />
-              <span />
-              <span />
-              <span />
-            </span>
-          </span>
-
-          <span
-            className={`launch-model-card-body ${launchExperience.modelBody}`}
-          >
-            <span
-              className={`launch-model-card-heading ${launchExperience.modelHeading}`}
-            >
-              <strong id="launch-model-custom-title">Custom Hook</strong>
-              {!customLaunchPublicEnabled ? (
-                <small data-status="pending">Coming soon</small>
-              ) : null}
-            </span>
-            <span
-              className={`launch-model-description ${launchExperience.modelDescription}`}
-              id="launch-model-custom-description"
-            >
-              Review the framework for token-specific Uniswap v4 hook logic,
-              including permissions, fee behavior, liquidity rules, and the
-              evidence required for release.
-            </span>
-            {customLaunchPublicEnabled ? (
-              <span
-                className={`launch-model-action ${launchExperience.modelAction}`}
-              >
-                Build or resume
                 <ArrowRight aria-hidden="true" size={16} />
               </span>
             ) : null}

@@ -50,14 +50,14 @@ describe("launch model artwork", () => {
     expect(source).toContain(
       'aria-describedby="launch-model-classic-description"',
     );
-    expect(source).toContain('onClick={() => onChoose("custom")}');
-    expect(source).toContain("disabled={!customLaunchPublicEnabled}");
+    expect(source).toContain('onClick={() => onChoose("manual-applicant")}');
     expect(source).toContain(
-      'aria-labelledby="launch-model-custom-title"',
+      'aria-labelledby="launch-model-manual-applicant-title"',
     );
     expect(source).toContain(
-      'aria-describedby="launch-model-custom-description"',
+      'aria-describedby="launch-model-manual-applicant-description"',
     );
+    expect(source).not.toContain('data-launch-model-option="custom"');
     expect(source).toContain('href="https://x.com/aeonframework"');
     expect(source).toContain(
       'aria-labelledby="launch-model-aeon-title"',
@@ -81,27 +81,19 @@ describe("launch model artwork", () => {
   });
 
   it("keeps decorative movement subtle and compositor-safe", () => {
-    const source = read("components/launch-entry.tsx");
     const css = read("components/launch-experience.module.css");
-    const sparkleMarkup = source.match(
-      /<span className=\{launchExperience\.customSparkles\}>[\s\S]*?<\/span>/,
-    )?.[0];
     const classicDrift = css.match(
       /@keyframes classic-botanical-drift[\s\S]*?(?=\n}\n\n@media)/,
     )?.[0];
 
     expect(css).toContain("@media (prefers-reduced-motion: no-preference)");
-    expect(sparkleMarkup?.match(/<span \/>/g)).toHaveLength(10);
     expect(css).toContain(
       "animation: classic-botanical-drift 12s steps(1, end) infinite",
     );
     expect(css).toContain("translate3d(0.06%, -0.03%, 0) scale(1.0012)");
     expect(classicDrift).not.toContain("filter:");
-    expect(css).toContain(
-      "animation: custom-star-sparkle 6.4s cubic-bezier(0.2, 0, 0, 1) infinite",
-    );
     expect(css).toMatch(
-      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.classicArt \.artImage,[\s\S]*?\.customSparkles > span\s*\{\s*animation:\s*none;/,
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.classicArt \.artImage[\s\S]*?animation:\s*none;/,
     );
   });
 });
