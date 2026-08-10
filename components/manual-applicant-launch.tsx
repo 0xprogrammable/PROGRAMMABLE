@@ -927,7 +927,7 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
           </ul>
           <Link
             className={styles.githubLink}
-            href="https://github.com/0xprogrammable/hookbuilder/tree/d928f56218409f8511cec7ab43410b1bdfaa1450/submissions/requests"
+            href="https://github.com/0xprogrammable/hookbuilder/tree/279dd2fc2ea8c488943ca4e60ca889cb00bab40e/submissions/requests"
             target="_blank"
             rel="noreferrer"
           >

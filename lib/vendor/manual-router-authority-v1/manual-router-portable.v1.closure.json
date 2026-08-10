@@ -9,12 +9,12 @@
   "format": "esm",
   "target": "node20",
   "minified": false,
-  "bundleBytes": 213847,
-  "bundleSha256": "sha256:0a7f85b0559d4cd3dab7431d92d487cc97239c6a3005f18bdb8cb92ea9163597",
-  "sourceMapBytes": 412104,
-  "sourceMapSha256": "sha256:bcc446caa4d8e04a93f3c9fc9c24664fee5ba0a3fadbaba64761bd19faf2c41d",
-  "metafileBytes": 14889,
-  "metafileSha256": "sha256:3250af64281519bbc8493fa0be3219cbc7a5bc01ce28ae8517ddee44f8d60864",
+  "bundleBytes": 216297,
+  "bundleSha256": "sha256:9f29b1d00ce602fa8673d7e96574933f1e29f46794718433242e1d5c3fe250f1",
+  "sourceMapBytes": 416435,
+  "sourceMapSha256": "sha256:3a0491b107ecb578a09114d9e4c5c32910aa362a70feacf637039d0b89f7abca",
+  "metafileBytes": 15440,
+  "metafileSha256": "sha256:eef7d0538e497baf616db3e0f6bf60a54a547918e7aae687a28f959a5f15a384",
   "inputPaths": [
     "src/domain/canonical-json.ts",
     "src/domain/hashing.ts",
@@ -31,6 +31,7 @@
     "src/internal/router-self-service-v1/production-binding.ts",
     "src/internal/router-self-service-v1/route-nonce.ts",
     "src/internal/router-self-service-v1/rpc.ts",
+    "src/internal/router-self-service-v1/shards-direct-profile.ts",
     "src/internal/router-self-service-v1/signer.ts",
     "src/public-api/manual-router.ts"
   ],
@@ -42,6 +43,7 @@
     "HOOKBUILDER_APPLICANT_1_1_PUBLIC_MAIN_BINDING_V1",
     "MANUAL_ROUTER_ALCHEMY_RPC_ENV_V1",
     "MANUAL_ROUTER_QUICKNODE_RPC_ENV_V1",
+    "PRODUCTION_SHARDS_ROUTER_V1_DIRECT_SIMULATION_PROFILE_V1",
     "RouterLaunchFinalityVerifierV1",
     "RouterLaunchTransactionRevertedError",
     "assertFailedRouterLaunchTransactionEvidenceV1",
@@ -52,5 +54,5 @@
     "resolvePortableManualRouterReissueStateV1",
     "verifyPortableManualRouterSignedPublishV1"
   ],
-  "closureHash": "sha256:57f1b2ce00cc7369771ee465e2d530c81ddf93bb08b473a68cb04f2836629c20"
+  "closureHash": "sha256:180f3c256789a36f171e1ec3d23fb2dca471f5f403c284e10cb4c352eb252daa"
 }
