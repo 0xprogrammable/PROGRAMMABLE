@@ -78,3 +78,19 @@ regexes = [
   '''poolKeyHash:\s*0x[0-9a-fA-F]{64}''',
   '''poolKeyHash":\s*"0x[0-9a-fA-F]{64}"''',
 ]
+
+[[allowlists]]
+description = "Disabled Shards Router V2 artifacts contain only public bytes32 plan bindings"
+condition = "AND"
+regexTarget = "match"
+paths = [
+  '''lib/vendor/manual-router-authority-v2/artifacts/manual-router-v2-disabled-golden\.v1\.json''',
+  '''lib/vendor/manual-router-authority-v2/manual-router-portable\.v2\.mjs''',
+  '''lib/vendor/manual-router-authority-v2/manual-router-portable\.v2\.mjs\.map''',
+]
+regexes = [
+  '''profileKey["']?\s*[:=]\s*["']?0x[0-9a-fA-F]{64}''',
+  '''profileKey:\s+EvmBytes32V1;''',
+  '''EXACT_SHARDS_(?:TOKEN_SALT|TOKEN|TOKEN_RUNTIME_HASH)_V1\s*=\s*"0x[0-9a-fA-F]{64}"''',
+  '''(?i)0x50d17eaaeb52c66e64b918385abf6523fdae57cf''',
+]
