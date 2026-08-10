@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import {
+  getIdentityToken as getPrivyIdentityToken,
   PrivyProvider,
   useIdentityToken,
   useLinkAccount,
@@ -70,6 +71,7 @@ type WalletContextValue = {
   wallet: WalletState | null;
   username: string;
   avatarDataUrl: string;
+  authReady: boolean;
   authenticated: boolean;
   hasSession: boolean;
   connecting: boolean;
@@ -122,6 +124,21 @@ export function isWalletProviderSettled(
   authenticated: boolean,
 ) {
   return privyReady && (!authenticated || walletsReady);
+}
+
+export async function resolveWalletIdentityToken(input: Readonly<{
+  authenticated: boolean;
+  cachedIdentityToken: string | null;
+  loadIdentityToken: () => Promise<string | null>;
+}>): Promise<string | null> {
+  if (!input.authenticated) return null;
+  if (input.cachedIdentityToken !== null) return input.cachedIdentityToken;
+
+  try {
+    return await input.loadIdentityToken();
+  } catch {
+    return null;
+  }
 }
 
 export function getWalletProfileStorageKey(account: string) {
@@ -577,6 +594,14 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
   );
   const hasSession = activeAuthenticated;
   const sessionAction = getWalletSessionAction(ready, activeAuthenticated);
+  const getCurrentIdentityToken = useCallback(
+    () => resolveWalletIdentityToken({
+      authenticated: activeAuthenticated,
+      cachedIdentityToken: identityToken,
+      loadIdentityToken: getPrivyIdentityToken,
+    }),
+    [activeAuthenticated, identityToken],
+  );
 
   const profileValue = useSyncExternalStore(
     subscribeToProfiles,
@@ -1040,6 +1065,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       wallet,
       username,
       avatarDataUrl,
+      authReady: ready,
       authenticated: activeAuthenticated,
       hasSession,
       connecting: !providerSettled && !providerTimedOut,
@@ -1047,7 +1073,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       openWallet,
       disconnect,
       getAccessToken,
-      getIdentityToken: async () => identityToken,
+      getIdentityToken: getCurrentIdentityToken,
       githubConnected,
       githubUsername,
       connectGithub,
@@ -1065,14 +1091,15 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       disconnect,
       disconnecting,
       getAccessToken,
+      getCurrentIdentityToken,
       githubConnected,
       githubUsername,
       hasSession,
-      identityToken,
       openWallet,
       providerTimedOut,
       readNativeBalance,
       readTradeBalances,
+      ready,
       sendBrowserWalletAction,
       sendTransaction,
       signLaunchMessage,
@@ -1121,6 +1148,7 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
       wallet: null,
       username: "",
       avatarDataUrl: "",
+      authReady: false,
       authenticated: false,
       hasSession: false,
       connecting: false,

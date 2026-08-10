@@ -127,10 +127,45 @@ type ManualRouterTransaction = Readonly<{
       lane: "v2";
       routeBindingHash: ManualRouterSha256V1;
     }>
-);
+  );
+
+export function manualRouterApplicantDiscoveryReady(input: Readonly<{
+  authReady: boolean;
+  authenticated: boolean;
+  githubConnected: boolean;
+  walletConnected: boolean;
+  routeDiscoveryAllowed: boolean;
+}>): boolean {
+  return input.authReady
+    && input.authenticated
+    && input.githubConnected
+    && input.walletConnected
+    && input.routeDiscoveryAllowed;
+}
+
+export async function acquireManualRouterWebsiteSessionV1(input: Readonly<{
+  getAccessToken: () => Promise<string | null>;
+  getIdentityToken: () => Promise<string | null>;
+}>): Promise<ManualRouterWebsiteSessionV1> {
+  let accessToken = await input.getAccessToken();
+  const identityToken = await input.getIdentityToken();
+  if (!accessToken && identityToken) {
+    accessToken = await input.getAccessToken();
+  }
+  if (!accessToken || !identityToken) {
+    throw new ManualRouterWebsiteRequestErrorV1(
+      401,
+      "applicant_authentication_required",
+      "Sign in with your approved GitHub account",
+      false,
+    );
+  }
+  return { accessToken, identityToken };
+}
 
 export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
   const {
+    authReady,
     authenticated,
     connectGithub,
     getAccessToken,
@@ -195,24 +230,16 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     );
 
   const getSession = useCallback(async (): Promise<ManualRouterWebsiteSessionV1> => {
-    const [accessToken, identityToken] = await Promise.all([
-      getAccessToken(),
-      getIdentityToken(),
-    ]);
-    if (!accessToken || !identityToken) {
-      throw new ManualRouterWebsiteRequestErrorV1(
-        401,
-        "applicant_authentication_required",
-        "Sign in with your approved GitHub account",
-        false,
-      );
-    }
-    return { accessToken, identityToken };
+    return acquireManualRouterWebsiteSessionV1({
+      getAccessToken,
+      getIdentityToken,
+    });
   }, [getAccessToken, getIdentityToken]);
 
   const loadRouteAcceptance = useCallback(async () => {
     if (
       NESTED_FACTORY_ACTIVATION === null
+      || !authReady
       || !authenticated
       || !githubConnected
       || !isExactShardsGithubLogin(githubUsername)
@@ -242,18 +269,19 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
       }
       if (!controller.signal.aborted) setLoadingAcceptance(false);
     }
-  }, [authenticated, getSession, githubConnected, githubUsername]);
+  }, [authReady, authenticated, getSession, githubConnected, githubUsername]);
 
   useEffect(() => {
     if (
       NESTED_FACTORY_ACTIVATION === null
+      || !authReady
       || !authenticated
       || !githubConnected
       || !isExactShardsGithubLogin(githubUsername)
     ) return;
     const kickoff = window.setTimeout(() => void loadRouteAcceptance(), 0);
     return () => window.clearTimeout(kickoff);
-  }, [authenticated, githubConnected, githubUsername, loadRouteAcceptance]);
+  }, [authReady, authenticated, githubConnected, githubUsername, loadRouteAcceptance]);
 
   const acceptReviewedRoute = useCallback(async () => {
     if (
@@ -287,12 +315,13 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     quiet?: boolean;
     preferredSubjectHash?: ManualRouterSha256V1 | "";
   }>) => {
-    if (
-      !authenticated
-      || !githubConnected
-      || !wallet
-      || !routeDiscoveryAllowed
-    ) return;
+    if (!wallet || !manualRouterApplicantDiscoveryReady({
+      authReady,
+      authenticated,
+      githubConnected,
+      walletConnected: true,
+      routeDiscoveryAllowed,
+    })) return;
     loadAbortRef.current?.abort();
     const controller = new AbortController();
     loadAbortRef.current = controller;
@@ -461,6 +490,7 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
       }
     }
   }, [
+    authReady,
     authenticated,
     getSession,
     githubConnected,
@@ -471,7 +501,13 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
   ]);
 
   useEffect(() => {
-    if (!authenticated || !githubConnected || !wallet || !routeDiscoveryAllowed) {
+    if (!manualRouterApplicantDiscoveryReady({
+      authReady,
+      authenticated,
+      githubConnected,
+      walletConnected: wallet !== null,
+      routeDiscoveryAllowed,
+    })) {
       loadAbortRef.current?.abort();
       return;
     }
@@ -485,6 +521,7 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
       window.clearInterval(interval);
     };
   }, [
+    authReady,
     authenticated,
     githubConnected,
     loadDirectory,

@@ -10,6 +10,10 @@ vi.mock("server-only", () => ({}));
 
 import { LaunchModelPicker } from "../components/launch-entry";
 import {
+  acquireManualRouterWebsiteSessionV1,
+  manualRouterApplicantDiscoveryReady,
+} from "../components/manual-applicant-launch";
+import {
   MANUAL_ROUTER_PRODUCTION_BINDING_V1,
   assertManualRouterProductionBindingV1,
 } from "../lib/custom-launch/manual-router-bindings-v1";
@@ -98,6 +102,69 @@ import { rpcProviderCommitment } from
 
 const WALLET = "0x1111111111111111111111111111111111111111" as const;
 const OTHER_WALLET = "0x2222222222222222222222222222222222222222" as const;
+
+describe("manual Applicant Privy hydration", () => {
+  it("does not start discovery before Privy is ready and starts once on the ready transition", () => {
+    const listAndResolve = vi.fn();
+    const runDiscovery = (authReady: boolean) => {
+      if (manualRouterApplicantDiscoveryReady({
+        authReady,
+        authenticated: true,
+        githubConnected: true,
+        walletConnected: true,
+        routeDiscoveryAllowed: true,
+      })) listAndResolve();
+    };
+
+    runDiscovery(false);
+    expect(listAndResolve).not.toHaveBeenCalled();
+    runDiscovery(true);
+    expect(listAndResolve).toHaveBeenCalledTimes(1);
+
+    const component = readFileSync(
+      join(process.cwd(), "components/manual-applicant-launch.tsx"),
+      "utf8",
+    );
+    expect(component.match(/manualRouterApplicantDiscoveryReady\(\{/gu))
+      .toHaveLength(2);
+    expect(component).toContain("NESTED_FACTORY_ACTIVATION === null\n      || !authReady");
+    expect(component).toContain("authReady,\n    authenticated,\n    githubConnected,\n    loadDirectory");
+  });
+
+  it("reacquires access once after identity hydration and never retries a request", async () => {
+    const events: string[] = [];
+    let accessCall = 0;
+    const session = await acquireManualRouterWebsiteSessionV1({
+      getAccessToken: async () => {
+        accessCall += 1;
+        events.push(`access-${accessCall}`);
+        return accessCall === 1 ? null : "access-token";
+      },
+      getIdentityToken: async () => {
+        events.push("identity");
+        return "identity-token";
+      },
+    });
+
+    expect(session).toEqual({
+      accessToken: "access-token",
+      identityToken: "identity-token",
+    });
+    expect(events).toEqual(["access-1", "identity", "access-2"]);
+  });
+
+  it("keeps unresolved dual-token hydration closed before any request", async () => {
+    const request = vi.fn();
+    await expect(acquireManualRouterWebsiteSessionV1({
+      getAccessToken: async () => null,
+      getIdentityToken: async () => null,
+    })).rejects.toMatchObject({
+      status: 401,
+      code: "applicant_authentication_required",
+    });
+    expect(request).not.toHaveBeenCalled();
+  });
+});
 const SUBJECT = `sha256:${"11".repeat(32)}` as const;
 const POINTER = `sha256:${"22".repeat(32)}` as const;
 const APPROVAL = `sha256:${"33".repeat(32)}` as const;
