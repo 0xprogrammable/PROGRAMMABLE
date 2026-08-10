@@ -135,7 +135,9 @@ describe("token detail layout", () => {
     expect(detailSource).not.toMatch(/<h2>\s*Trade \$/i);
   });
 
-  it("lets chart inspection scale token-level market cap fallbacks", () => {
+  it("keeps chart scaling compatible while labeling total-supply value as FDV", () => {
+    expect(detailSource).toContain('label: "FDV"');
+    expect(detailSource).not.toContain('label: "Market cap"');
     expect(detailSource).toContain(
       "token.indexedMarketCapEthWei ?? token.marketCapEthWei",
     );

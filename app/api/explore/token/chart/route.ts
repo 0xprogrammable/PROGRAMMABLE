@@ -52,18 +52,17 @@ export async function GET(request: NextRequest) {
     if (deployment.status !== "ready" || model.status !== "ready") {
       return NextResponse.json(
         {
-          status: "not-deployed",
+          status: "unavailable",
           address,
-          points: [],
-          swapCount: 0,
-          volumeWei: "0",
-          volumeEth: "0",
+          error: "Onchain chart data is temporarily unavailable",
         },
         {
+          status: 503,
           headers: {
-            "Cache-Control": "public, max-age=0, s-maxage=60",
+            "Cache-Control": "no-store",
+            "Retry-After": "5",
+            "X-Programmable-Data-Quality": "unavailable",
             "X-Programmable-Read-Source": "rpc",
-            "X-Programmable-Rpc-Provider": "alchemy",
           },
         },
       );
@@ -85,7 +84,6 @@ export async function GET(request: NextRequest) {
           headers: {
             "Cache-Control": "no-store",
             "X-Programmable-Read-Source": "rpc",
-            "X-Programmable-Rpc-Provider": "alchemy",
           },
         },
       );
@@ -111,6 +109,15 @@ export async function GET(request: NextRequest) {
         ...series,
         address,
         range: requestedRange,
+        valuationMetric: "fdv",
+        dataQuality: {
+          schemaVersion: "programmable.explore-chart-data-quality.v1",
+          status: "current",
+          asOfBlock: liveSnapshot.blockNumber,
+          blockHash: liveSnapshot.blockHash,
+          finality:
+            liveSnapshot.confirmations > 0 ? "confirmed" : "latest",
+        },
         snapshotBlock: liveSnapshot.blockNumber,
         snapshotHash: liveSnapshot.blockHash,
       },
@@ -118,8 +125,9 @@ export async function GET(request: NextRequest) {
         headers: {
           "Cache-Control":
             "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
+          "X-Programmable-Data-Quality": "current",
+          "X-Programmable-Valuation-Metric": "fdv",
           "X-Programmable-Read-Source": "rpc",
-          "X-Programmable-Rpc-Provider": "alchemy",
         },
       },
     );
@@ -129,8 +137,18 @@ export async function GET(request: NextRequest) {
       safeAlchemyError(error),
     );
     return NextResponse.json(
-      { error: "Onchain chart data is temporarily unavailable" },
-      { status: 503, headers: { "Cache-Control": "no-store" } },
+      {
+        status: "unavailable",
+        error: "Onchain chart data is temporarily unavailable",
+      },
+      {
+        status: 503,
+        headers: {
+          "Cache-Control": "no-store",
+          "Retry-After": "5",
+          "X-Programmable-Data-Quality": "unavailable",
+        },
+      },
     );
   }
 }

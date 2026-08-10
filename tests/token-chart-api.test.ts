@@ -112,17 +112,65 @@ describe("token chart Alchemy API", () => {
       volumeWei: "1250000000000000000",
       volumeEth: "1.25",
       volumeUsdWad: "4375000000000000000000",
+      valuationMetric: "fdv",
+      dataQuality: {
+        schemaVersion: "programmable.explore-chart-data-quality.v1",
+        status: "current",
+        asOfBlock: launchDiscoverySnapshot.blockNumber,
+        blockHash: launchDiscoverySnapshot.blockHash,
+        finality: "confirmed",
+      },
     });
     expect(response.headers.get("X-Programmable-Read-Source")).toBe(
       "rpc",
     );
-    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
-      "alchemy",
-    );
+    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBeNull();
     expect(response.headers.get("Cache-Control")).toBe(
       "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
     );
+    expect(response.headers.get("X-Programmable-Valuation-Metric")).toBe(
+      "fdv",
+    );
   });
+
+  it.each(["deployment", "model"])(
+    "returns unavailable without fabricated zero series when %s is not ready",
+    async (unavailable) => {
+      if (unavailable === "deployment") {
+        mocks.getAlchemyOnchainDeployment.mockReturnValue({
+          status: "not-deployed",
+        });
+      } else {
+        mocks.readAlchemyExploreModel.mockResolvedValue({
+          status: "not-deployed",
+          tokens: [],
+          snapshot: null,
+          creatorClaims: [],
+          launcherFeesAccruedWei: "0",
+          launcherFeesAccruedEth: "0",
+        });
+      }
+
+      const response = await GET(
+        new NextRequest(
+          `http://localhost/api/explore/token/chart?address=${token.tokenAddress}`,
+        ),
+      );
+      const body = await response.json();
+
+      expect(response.status).toBe(503);
+      expect(response.headers.get("Cache-Control")).toBe("no-store");
+      expect(body).toMatchObject({
+        status: "unavailable",
+        error: "Onchain chart data is temporarily unavailable",
+      });
+      expect(body).not.toHaveProperty("points");
+      expect(body).not.toHaveProperty("swapCount");
+      expect(body).not.toHaveProperty("volumeWei");
+      expect(body).not.toHaveProperty("volumeEth");
+      expect(mocks.readTokenChartSeries).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     `address=${token.tokenAddress}&unused=random`,

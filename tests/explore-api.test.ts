@@ -12,6 +12,10 @@ const mocks = vi.hoisted(() => ({
   enrichTokensWithAlchemyPoolState: vi.fn(),
   getAlchemyOnchainDeployment: vi.fn(),
   readAlchemyExploreModel: vi.fn(),
+  readProductionCustomExploreDirectoryV1: vi.fn(),
+  readExploreReferenceHeadWithinRouteBudget: vi.fn(),
+  getOnchainDeployment: vi.fn(),
+  readDurableExploreModel: vi.fn(),
   safeAlchemyError: vi.fn((error) => error),
 }));
 
@@ -26,7 +30,26 @@ vi.mock("../lib/alchemy/live-market.server", () => ({
   enrichTokensWithAlchemyPoolState: mocks.enrichTokensWithAlchemyPoolState,
 }));
 
+vi.mock("../lib/server/custom-launch/explore-directory-v1", () => ({
+  readProductionCustomExploreDirectoryV1:
+    mocks.readProductionCustomExploreDirectoryV1,
+}));
+
+vi.mock("../lib/explore-reference-head.server", () => ({
+  readExploreReferenceHeadWithinRouteBudget:
+    mocks.readExploreReferenceHeadWithinRouteBudget,
+}));
+
+vi.mock("../lib/onchain/config", () => ({
+  getOnchainDeployment: mocks.getOnchainDeployment,
+}));
+
+vi.mock("../lib/onchain/durable-model", () => ({
+  readDurableExploreModel: mocks.readDurableExploreModel,
+}));
+
 import {
+  dedupeExploreEntriesV1,
   GET,
   inheritExploreEthUsdQuote,
   paginateExploreEntriesV1,
@@ -50,6 +73,10 @@ function token(index: number): LauncherToken {
     launchTransactionIndex: 0,
     launchLogIndex: 0,
     indexedMarketCapUsdWad: String(BigInt(index) * 10n ** 18n),
+    indexedValuationBlockNumber: "25630000",
+    totalSupplyRaw: "1000000000000000000000000000",
+    tokenDecimals: 18,
+    activeLiquidity: "1",
     links: [{ kind: "x", url: `https://x.com/token${index}` }],
     totalSwapFeeBps: 100,
     liquidityPath: "meme",
@@ -125,6 +152,14 @@ describe("Explore API Alchemy boundary", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.readAlchemyExploreModel.mockResolvedValue(readyModel());
+    mocks.readProductionCustomExploreDirectoryV1.mockResolvedValue([]);
+    mocks.readExploreReferenceHeadWithinRouteBudget.mockResolvedValue({
+      blockNumber: "25630005",
+      blockHash: `0x${"77".repeat(32)}`,
+      indexedAt: "2026-08-10T17:55:45.000Z",
+      finality: "confirmed",
+    });
+    mocks.getOnchainDeployment.mockReturnValue({ status: "ready" });
     mocks.getAlchemyOnchainDeployment.mockReturnValue({ status: "ready" });
     mocks.enrichTokensWithAlchemyPrices.mockImplementation(async (tokens) => [
       ...tokens,
@@ -284,6 +319,24 @@ describe("Explore API Alchemy boundary", () => {
     }
   });
 
+  it("deduplicates exact canonical records but fails closed on conflicts", () => {
+    const entry = orderedEntry({
+      id: "1:duplicate",
+      kind: "token",
+      block: "101",
+      transaction: 0,
+      log: 0,
+    });
+
+    expect(dedupeExploreEntriesV1([entry, { ...entry }])).toEqual([entry]);
+    expect(() =>
+      dedupeExploreEntriesV1([
+        entry,
+        { ...entry, name: "Conflicting name" },
+      ]),
+    ).toThrow("Canonical Explore sources disagree");
+  });
+
   it.each([
     "unused=random",
     "page=1&page=2",
@@ -316,6 +369,37 @@ describe("Explore API Alchemy boundary", () => {
       total: 30,
       totalPages: 1,
       sort: "market-cap",
+      sortMetric: "fdv",
+      dataQuality: {
+        schemaVersion: "programmable.explore-data-quality.v1",
+        status: "complete",
+        launchIdentity: {
+          status: "current",
+          canonical: "current",
+          custom: "current",
+          asOfBlock: "25630000",
+          referenceBlock: "25630005",
+          lagBlocks: "5",
+        },
+        valuation: {
+          status: "current",
+          metric: "fdv",
+          available: 30,
+          unavailable: 0,
+          stale: 0,
+          unknown: 0,
+          asOfBlock: "25630000",
+        },
+      },
+    });
+    expect(body.tokens[0].valuation).toMatchObject({
+      status: "available",
+      metric: "fdv",
+      supplyBasis: "total",
+      currency: "usd",
+      freshness: "current",
+      asOfBlock: "25630000",
+      lagBlocks: "5",
     });
     const symbols = body.tokens.map(
       (candidate: LauncherToken) => candidate.symbol,
@@ -329,11 +413,15 @@ describe("Explore API Alchemy boundary", () => {
     expect(response.headers.get("X-Programmable-Read-Source")).toBe(
       "blob",
     );
-    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
-      "alchemy",
-    );
+    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBeNull();
     expect(response.headers.get("X-Programmable-Price-Source")).toBe(
-      "alchemy",
+      "read-model",
+    );
+    expect(response.headers.get("X-Programmable-Data-Quality")).toBe(
+      "complete",
+    );
+    expect(response.headers.get("X-Programmable-Valuation-Metric")).toBe(
+      "fdv",
     );
     expect(response.headers.get("Cache-Control")).toBe(
       "public, max-age=0, s-maxage=2, stale-while-revalidate=5",
@@ -372,6 +460,92 @@ describe("Explore API Alchemy boundary", () => {
     });
   });
 
+  it("retains canonical identities when the Custom directory is temporarily unavailable", async () => {
+    mocks.readProductionCustomExploreDirectoryV1.mockRejectedValue(
+      new Error("custom directory unavailable"),
+    );
+
+    const response = await GET(
+      new NextRequest("http://localhost/api/explore?sort=newest&limit=100"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.total).toBe(30);
+    expect(body.dataQuality).toMatchObject({
+      status: "stale",
+      launchIdentity: {
+        canonical: "current",
+        custom: "last-known-good",
+        status: "last-known-good",
+      },
+    });
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+  });
+
+  it("keeps canonical launches visible with honest stale valuation quality during enrichment failure", async () => {
+    mocks.enrichTokensWithAlchemyPrices.mockRejectedValue(
+      new Error("provider unavailable"),
+    );
+    mocks.enrichTokensWithAlchemyPoolState.mockRejectedValue(
+      new Error("provider unavailable"),
+    );
+    mocks.readExploreReferenceHeadWithinRouteBudget.mockResolvedValue({
+      blockNumber: "25630100",
+      blockHash: `0x${"88".repeat(32)}`,
+      indexedAt: "2026-08-10T18:00:00.000Z",
+      finality: "confirmed",
+    });
+
+    const response = await GET(
+      new NextRequest("http://localhost/api/explore?sort=market-cap&limit=100"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.total).toBe(30);
+    expect(body.tokens).toHaveLength(30);
+    expect(body.tokens.every((entry: {
+      valuation: { status: string; valueWad?: string };
+    }) =>
+      entry.valuation.status === "available" &&
+      entry.valuation.valueWad !== "0"
+    )).toBe(true);
+    expect(body.dataQuality).toMatchObject({
+      status: "stale",
+      valuation: { status: "stale", stale: 30 },
+    });
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+  });
+
+  it("uses the bounded durable model as last known good when the primary read fails", async () => {
+    mocks.readAlchemyExploreModel.mockRejectedValue(
+      new Error("primary unavailable"),
+    );
+    mocks.readDurableExploreModel.mockResolvedValue({
+      status: "ready",
+      envelope: { payload: { model: readyModel() } },
+      ageMs: 1_000,
+    });
+
+    const response = await GET(
+      new NextRequest("http://localhost/api/explore?sort=newest&limit=100"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.total).toBe(30);
+    expect(body.dataQuality).toMatchObject({
+      status: "stale",
+      launchIdentity: {
+        status: "last-known-good",
+        canonical: "last-known-good",
+      },
+    });
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(response.headers.get("X-Programmable-Read-Source")).toBe("durable");
+  });
+
   it.each([
     ["newest", "sort=newest&page=3&limit=10"],
     ["lowest market cap", "sort=lowest-market-cap&page=3&limit=10"],
@@ -400,11 +574,9 @@ describe("Explore API Alchemy boundary", () => {
     expect(response.headers.get("X-Programmable-Read-Source")).toBe(
       "blob",
     );
-    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
-      "alchemy",
-    );
+    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBeNull();
     expect(response.headers.get("X-Programmable-Price-Source")).toBe(
-      "alchemy",
+      "read-model",
     );
   });
 });

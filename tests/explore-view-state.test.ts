@@ -8,7 +8,7 @@ import {
   filterTokensBySocialPresence,
   getTokenCards,
   getExplorePaginationItems,
-  getMarketCap,
+  getExploreValuationMetric,
   loadExploreModelDataset,
   loadExplorePayload,
   paginateTokensByExploreFilters,
@@ -398,7 +398,7 @@ describe("Explore refresh state", () => {
     ).toBe(true);
   });
 
-  it("prefers a compatible indexed market cap over the older canonical snapshot", () => {
+  it("exposes total-supply valuation as FDV without calling it market cap", () => {
     const token = {
       id: "1:test",
       name: "Test",
@@ -409,11 +409,17 @@ describe("Explore refresh state", () => {
       launchedAt: "2026-07-29T00:00:00.000Z",
       fdvUsdWad: "100000000000000000000",
       indexedMarketCapUsdWad: "125000000000000000000",
+      totalSupplyRaw: "1000000000000000000000000000",
+      tokenDecimals: 18,
+      activeLiquidity: "1",
       totalSwapFeeBps: 100,
       liquidityPath: "meme",
     } satisfies LauncherToken;
 
-    expect(getMarketCap(classicEntry(token))).toEqual({ kind: "usd", value: 125 });
+    expect(getExploreValuationMetric(classicEntry(token))).toEqual({
+      kind: "usd",
+      value: 125,
+    });
   });
 
   it("keeps the last valid page when a background refresh fails", () => {

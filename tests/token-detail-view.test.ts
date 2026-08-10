@@ -22,6 +22,9 @@ const token = {
   tokenPriceEth: "0.002",
   tokenPriceUsdWad: parseEther("6").toString(),
   fdvUsdWad: parseEther("168560").toString(),
+  totalSupplyRaw: parseEther("1000000").toString(),
+  tokenDecimals: 18,
+  activeLiquidity: "1",
   grossVolumeEth: "300",
   creatorFeesGeneratedEth: "3",
   launcherFeesGeneratedEth: "0.3",
@@ -45,7 +48,7 @@ const canonicalToken = {
 describe("token detail metrics", () => {
   it("shows only user-facing market stats and converts volume to USD", () => {
     expect(buildTokenDetailMetrics(token)).toEqual([
-      { label: "Market cap", value: "$168.56K" },
+      { label: "FDV", value: "$168.56K" },
       { label: "Category", value: "Classic" },
       { label: "Volume", value: "$900K" },
       { label: "Swap fee", value: "1%" },
@@ -60,14 +63,34 @@ describe("token detail metrics", () => {
     expect(labels).not.toContain("Network fee");
   });
 
-  it("uses the chart-point market cap while the chart is inspected", () => {
+  it("shows unavailable instead of inventing FDV without reliable supply or liquidity", () => {
+    const withoutSupply = {
+      ...token,
+      totalSupplyRaw: undefined,
+    } satisfies LauncherToken;
+    const withoutLiquidity = {
+      ...token,
+      activeLiquidity: "0",
+    } satisfies LauncherToken;
+
+    expect(buildTokenDetailMetrics(withoutSupply)[0]).toEqual({
+      label: "FDV",
+      value: "Unavailable",
+    });
+    expect(buildTokenDetailMetrics(withoutLiquidity, "$999M")[0]).toEqual({
+      label: "FDV",
+      value: "Unavailable",
+    });
+  });
+
+  it("uses the chart-point FDV while the chart is inspected", () => {
     expect(buildTokenDetailMetrics(token, "$212.4K")[0]).toEqual({
-      label: "Market cap",
+      label: "FDV",
       value: "$212.4K",
     });
   });
 
-  it("uses the same indexed market cap shown on Explore", () => {
+  it("uses the same total-supply FDV shown on Explore", () => {
     expect(
       buildTokenDetailMetrics({
         ...token,
@@ -75,7 +98,7 @@ describe("token detail metrics", () => {
         indexedMarketCapUsdWad: parseEther("43750").toString(),
       })[0],
     ).toEqual({
-      label: "Market cap",
+      label: "FDV",
       value: "$43.75K",
     });
   });
@@ -89,7 +112,7 @@ describe("token detail metrics", () => {
     });
 
     expect(buildTokenDetailMetrics(token, null, volume)).toEqual([
-      { label: "Market cap", value: "$168.56K" },
+      { label: "FDV", value: "$168.56K" },
       { label: "Category", value: "Classic" },
       { label: "Volume 1H", value: "$43.8K" },
       { label: "Swap fee", value: "1%" },
@@ -145,7 +168,7 @@ describe("token detail metrics", () => {
     } satisfies LauncherToken;
 
     expect(buildTokenDetailMetrics(enriched)).toEqual([
-      { label: "Market cap", value: "$168.56K" },
+      { label: "FDV", value: "$168.56K" },
       { label: "Category", value: "Classic" },
       { label: "Volume", value: "$1.2M" },
       { label: "Liquidity now", value: "$98.8K" },
@@ -173,6 +196,19 @@ describe("token detail metrics", () => {
     };
 
     expect(parseDetailPayload(payload).token?.uniswapV4Pool).toEqual(validPool);
+    expect(() =>
+      parseDetailPayload({
+        ...payload,
+        token: {
+          ...canonicalToken,
+          valuation: {
+            status: "available",
+            metric: "market-cap",
+            valueWad: "1",
+          },
+        },
+      }),
+    ).toThrow("invalid token record");
     expect(() =>
       parseDetailPayload({
         ...payload,

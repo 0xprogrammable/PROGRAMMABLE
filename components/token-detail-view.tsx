@@ -41,6 +41,11 @@ import { useWallet } from "@/components/wallet-provider";
 import { parseDiscoverableMarketTradeCapabilityV1 } from
   "@/lib/custom-launch/trade-capability-v1";
 import {
+  exploreValuation,
+  isExploreValuation,
+  type ExploreValuation,
+} from "@/lib/explore-financial-data";
+import {
   canOptimizeTokenImage,
   getTokenCardImageSource,
 } from "@/lib/token-image";
@@ -55,9 +60,11 @@ import {
 import type { PostLaunchAuthorityInventoryV1 } from "@/lib/custom-launch/contract-v2";
 import styles from "./token-experience.module.css";
 
+type DetailToken = LauncherToken & Readonly<{ valuation: ExploreValuation }>;
+
 type DetailPayload = {
   status: "ready" | "not-deployed";
-  token: LauncherToken | null;
+  token: DetailToken | null;
   customProject: CustomProjectExploreEntry | null;
   snapshot: { chainId: number } | null;
 };
@@ -69,7 +76,7 @@ type DetailState =
   | { phase: "error"; message: string; requestKey: string }
   | {
       phase: "ready";
-      token: LauncherToken;
+      token: DetailToken;
       chainId: number;
       requestKey: string;
     }
@@ -321,7 +328,7 @@ function parseCustomAuthorityInventory(
   return value as unknown as PostLaunchAuthorityInventoryV1;
 }
 
-function parseLauncherToken(value: unknown): LauncherToken | null {
+function parseLauncherToken(value: unknown): DetailToken | null {
   if (!isRecord(value)) return null;
   if (
     value.exploreKind !== "token" ||
@@ -430,7 +437,7 @@ function parseLauncherToken(value: unknown): LauncherToken | null {
     return null;
   }
 
-  return {
+  const token: LauncherToken = {
     ...(value as unknown as LauncherToken),
     links,
     description:
@@ -438,6 +445,12 @@ function parseLauncherToken(value: unknown): LauncherToken | null {
     imageUrl: safeImageUrl(value.imageUrl),
     uniswapV4Pool: uniswapV4Pool ?? undefined,
   };
+  const valuation = value.valuation === undefined
+    ? exploreValuation(token)
+    : isExploreValuation(value.valuation)
+      ? value.valuation
+      : null;
+  return valuation === null ? null : { ...token, valuation };
 }
 
 function parseCustomProject(value: unknown): CustomProjectExploreEntry | null {
@@ -806,7 +819,7 @@ export function buildChartVolumeMetric(
 
 export function buildTokenDetailMetrics(
   token: LauncherToken,
-  marketCapOverride?: string | null,
+  fdvOverride?: string | null,
   volumeOverride?: TokenMetric,
 ): TokenMetric[] {
   const fallbackVolumeUsd = calculateEthVolumeUsdValue({
@@ -824,31 +837,28 @@ export function buildTokenDetailMetrics(
     token.launchModel === "stock-paired"
       ? formatStockPairedGrossVolume(token)
       : null;
-  const hasMarketCap =
-    typeof marketCapOverride === "string" ||
-    token.indexedMarketCapUsdWad !== undefined ||
-    token.indexedMarketCapEth !== undefined ||
-    token.fdvUsdWad !== undefined ||
-    Boolean(token.marketCapEth) ||
-    Boolean(token.marketCapQuote);
+  const explicitValuation = (token as { valuation?: unknown }).valuation;
+  const valuation = isExploreValuation(explicitValuation)
+    ? explicitValuation
+    : exploreValuation(token);
+  const safeFdvOverride = fdvOverride?.trim() ? fdvOverride : null;
+  const formattedFdv = valuation.status === "available"
+    ? safeFdvOverride ?? (
+        valuation.currency === "usd"
+          ? formatUsd(valuation.valueWad, "amount")
+          : valuation.currency === "eth"
+            ? formatEth(formatUnits(BigInt(valuation.valueWad), 18), "amount")
+            : formatQuoteAmount(
+                formatUnits(BigInt(valuation.valueWad), 18),
+                valuation.quoteSymbol,
+              )
+      )
+    : null;
   const values: Array<TokenMetric | null> = [
-    hasMarketCap
-      ? {
-          label: "Market cap",
-          value:
-            marketCapOverride ??
-            formatUsd(
-              token.indexedMarketCapUsdWad ?? token.fdvUsdWad,
-              "amount",
-            ) ??
-            formatEth(
-              token.indexedMarketCapEth ?? token.marketCapEth,
-              "amount",
-            ) ??
-            formatQuoteAmount(token.marketCapQuote, token.quoteAssetSymbol) ??
-            "",
-        }
-      : null,
+    {
+      label: "FDV",
+      value: formattedFdv ?? "Unavailable",
+    },
     {
       label: "Category",
       value:
