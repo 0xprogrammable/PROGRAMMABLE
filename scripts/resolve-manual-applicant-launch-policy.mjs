@@ -3,6 +3,9 @@
 import { appendFile, readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
+import { VERCEL_SENSITIVE_PRODUCTION_METADATA_SCHEMA } from
+  "./bind-vercel-sensitive-production-metadata.mjs";
+
 export const MANUAL_APPLICANT_LAUNCH_FLAG =
   "PROGRAMMABLE_MANUAL_APPLICANT_LAUNCH_ENABLED";
 export const MANUAL_APPLICANT_SERVER_ENVIRONMENT = Object.freeze([
@@ -13,6 +16,14 @@ export const MANUAL_APPLICANT_SERVER_ENVIRONMENT = Object.freeze([
   "OPS_BLOB_READ_WRITE_TOKEN",
   "CRON_SECRET",
 ]);
+export const MANUAL_APPLICANT_SENSITIVE_SERVER_ENVIRONMENT = Object.freeze([
+  "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
+  "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL",
+  "PRIVY_APP_SECRET",
+  "OPS_BLOB_READ_WRITE_TOKEN",
+  "CRON_SECRET",
+]);
+const HEX_BYTES32 = /^0x[0-9a-f]{64}$/u;
 
 export function readManualApplicantLaunchFlag(envSource) {
   const matches = [];
@@ -49,6 +60,9 @@ export function resolveManualApplicantLaunchPolicy({
   requested,
   productionEnvSource,
   protectedMode,
+  sensitiveMetadataSource,
+  expectedVercelProjectId,
+  endpointCommitments,
 }) {
   const dispatchEnabled = exactBoolean(
     requested,
@@ -74,33 +88,38 @@ export function resolveManualApplicantLaunchPolicy({
     );
   }
   if (configuredEnabled) {
-    assertManualApplicantServerEnvironment(productionEnvSource);
+    assertManualApplicantServerEnvironment(productionEnvSource, {
+      sensitiveMetadataSource,
+      expectedVercelProjectId,
+      endpointCommitments,
+    });
   }
   return Object.freeze({ enabled: configuredEnabled });
 }
 
-export function assertManualApplicantServerEnvironment(envSource) {
+export function assertManualApplicantServerEnvironment(
+  envSource,
+  {
+    sensitiveMetadataSource,
+    expectedVercelProjectId,
+    endpointCommitments,
+  } = {},
+) {
   const values = new Map(MANUAL_APPLICANT_SERVER_ENVIRONMENT.map((name) =>
     [name, readExactEnvironmentValue(envSource, name)]));
-  const alchemy = strictRpcUrl(
-    values.get("PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL"),
-    "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
-    (hostname) => hostname === "eth-mainnet.g.alchemy.com",
-  );
-  const quickNode = strictRpcUrl(
-    values.get("PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL"),
-    "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL",
-    (hostname) => /^(?:[a-z0-9-]+\.)+quiknode\.pro$/u.test(hostname),
-  );
-  if (
-    alchemy.href === quickNode.href
-    || alchemy.hostname === quickNode.hostname
-    || alchemy.hostname.split(".").slice(-2).join(".")
-      === quickNode.hostname.split(".").slice(-2).join(".")
-  ) throw new Error("manual Applicant RPC providers are not independent");
-  if (values.get("CRON_SECRET").length < 32) {
-    throw new Error("manual Applicant CRON_SECRET is too short");
+  for (const name of MANUAL_APPLICANT_SENSITIVE_SERVER_ENVIRONMENT) {
+    if (values.get(name) !== "") {
+      throw new Error(`manual Applicant ${name} custody was downgraded`);
+    }
   }
+  if (values.get("NEXT_PUBLIC_PRIVY_APP_ID") === "") {
+    throw new Error("manual Applicant NEXT_PUBLIC_PRIVY_APP_ID is not configured");
+  }
+  assertExactSensitiveProductionMetadata({
+    source: sensitiveMetadataSource,
+    expectedVercelProjectId,
+  });
+  assertEndpointCommitments(endpointCommitments);
   return Object.freeze(Object.fromEntries(
     [...values.keys()].map((name) => [name, "configured"]),
   ));
@@ -121,33 +140,66 @@ function readExactEnvironmentValue(source, name) {
       || (raw.startsWith("'") && raw.endsWith("'")))
     ? raw.slice(1, -1)
     : raw;
-  if (!value || /[\r\n\u0000]/u.test(value)) {
+  if (/[\r\n\u0000]/u.test(value)) {
     throw new Error(`manual Applicant ${name} is not configured`);
   }
   return value;
 }
 
-function strictRpcUrl(value, name, acceptsHostname) {
-  let url;
-  if (value.length > 2_048 || value !== value.trim()) {
-    throw new Error(`manual Applicant ${name} is not a valid URL`);
-  }
+function assertExactSensitiveProductionMetadata({
+  source,
+  expectedVercelProjectId,
+}) {
+  if (
+    typeof expectedVercelProjectId !== "string"
+    || !/^prj_[A-Za-z0-9]{8,128}$/u.test(expectedVercelProjectId)
+  ) throw new Error("manual Applicant Vercel project binding is invalid");
+  let metadata;
   try {
-    url = new URL(value);
+    metadata = JSON.parse(source);
   } catch {
-    throw new Error(`manual Applicant ${name} is not a valid URL`);
+    throw new Error("manual Applicant sensitive production metadata is invalid");
   }
   if (
-    url.protocol !== "https:"
-    || url.username !== ""
-    || url.password !== ""
-    || url.search !== ""
-    || url.hash !== ""
-    || url.port !== ""
-    || url.pathname === "/"
-    || !acceptsHostname(url.hostname.toLowerCase())
-  ) throw new Error(`manual Applicant ${name} is not its strict provider`);
-  return url;
+    metadata === null
+    || typeof metadata !== "object"
+    || Array.isArray(metadata)
+    || Object.keys(metadata).sort().join("\0")
+      !== "envs\0schemaVersion\0target\0vercelProjectId"
+    || metadata.schemaVersion
+      !== VERCEL_SENSITIVE_PRODUCTION_METADATA_SCHEMA
+    || metadata.vercelProjectId !== expectedVercelProjectId
+    || metadata.target !== "production"
+    || !Array.isArray(metadata.envs)
+  ) throw new Error("manual Applicant sensitive production metadata is invalid");
+  for (const name of MANUAL_APPLICANT_SENSITIVE_SERVER_ENVIRONMENT) {
+    const matches = metadata.envs.filter(
+      (entry) => entry !== null && typeof entry === "object" && entry.key === name,
+    );
+    if (
+      matches.length !== 1
+      || matches[0].type !== "sensitive"
+      || !Array.isArray(matches[0].target)
+      || matches[0].target.length !== 1
+      || matches[0].target[0] !== "production"
+      || Object.hasOwn(matches[0], "value")
+    ) throw new Error(`manual Applicant ${name} is not exact sensitive production metadata`);
+  }
+}
+
+function assertEndpointCommitments(value) {
+  const alchemy = value?.alchemy;
+  const quickNode = value?.quickNode;
+  if (!HEX_BYTES32.test(alchemy ?? "")) {
+    throw new Error("manual Applicant Alchemy endpoint commitment is invalid");
+  }
+  if (!HEX_BYTES32.test(quickNode ?? "")) {
+    throw new Error("manual Applicant QuickNode endpoint commitment is invalid");
+  }
+  if (alchemy === quickNode) {
+    throw new Error("manual Applicant endpoint commitments are not independent");
+  }
+  return Object.freeze({ alchemy, quickNode });
 }
 
 function exactBoolean(value, label) {
@@ -167,7 +219,14 @@ function argumentsFrom(argv) {
     result[name.slice(2)] = value;
   }
   for (const name of [
-    "env-file", "requested", "protected-mode", "github-output",
+    "env-file",
+    "manual-sensitive-metadata",
+    "vercel-project-id",
+    "alchemy-endpoint-commitment",
+    "quicknode-endpoint-commitment",
+    "requested",
+    "protected-mode",
+    "github-output",
   ]) {
     if (!result[name]) throw new Error(`--${name} is required`);
   }
@@ -180,6 +239,15 @@ async function main(argv) {
     requested: args.requested,
     productionEnvSource: await readFile(args["env-file"], "utf8"),
     protectedMode: args["protected-mode"],
+    sensitiveMetadataSource: await readFile(
+      args["manual-sensitive-metadata"],
+      "utf8",
+    ),
+    expectedVercelProjectId: args["vercel-project-id"],
+    endpointCommitments: {
+      alchemy: args["alchemy-endpoint-commitment"],
+      quickNode: args["quicknode-endpoint-commitment"],
+    },
   });
   await appendFile(
     args["github-output"],

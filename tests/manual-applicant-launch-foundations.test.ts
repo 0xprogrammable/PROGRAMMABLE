@@ -60,6 +60,8 @@ import {
 } from "../lib/server/custom-launch/manual-router-state-v1";
 import { canonicalSha256 } from
   "../lib/server/projection-target/hashing";
+import { rpcProviderCommitment } from
+  "../lib/data-pipeline/rpc-provider-commitments";
 
 const WALLET = "0x1111111111111111111111111111111111111111" as const;
 const OTHER_WALLET = "0x2222222222222222222222222222222222222222" as const;
@@ -367,15 +369,20 @@ describe("manual Applicant browser durability", () => {
 });
 
 describe("manual Applicant production configuration", () => {
+  const alchemyUrl = "https://eth-mainnet.g.alchemy.com/v2/test-key";
+  const quickNodeUrl = "https://example.quiknode.pro/test-key";
   const valid = {
     PROGRAMMABLE_MANUAL_APPLICANT_LAUNCH_ENABLED: "true",
-    PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL:
-      "https://eth-mainnet.g.alchemy.com/v2/test-key",
-    PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL:
-      "https://example.quiknode.pro/test-key",
+    PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: alchemyUrl,
+    PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: quickNodeUrl,
+    PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT:
+      rpcProviderCommitment("endpoint", alchemyUrl),
+    PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT:
+      rpcProviderCommitment("endpoint", quickNodeUrl),
     NEXT_PUBLIC_PRIVY_APP_ID: "privy-app",
     PRIVY_APP_SECRET: "privy-secret",
     OPS_BLOB_READ_WRITE_TOKEN: "blob-token",
+    CRON_SECRET: "c".repeat(32),
   };
 
   it("returns the typed default-off response before constructing production clients", async () => {
@@ -384,6 +391,7 @@ describe("manual Applicant production configuration", () => {
     vi.stubEnv("PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL", "");
     vi.stubEnv("OPS_BLOB_READ_WRITE_TOKEN", "");
     vi.stubEnv("PRIVY_APP_SECRET", "");
+    vi.stubEnv("CRON_SECRET", "");
     try {
       const response = await handleProductionManualRouterWebsiteRouteV1(
         new Request("https://programmable.com/api/custom-launch/manual/submissions", {
@@ -472,6 +480,35 @@ describe("manual Applicant production configuration", () => {
         PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: quickNodeUrl,
       })).toThrow();
     }
+  });
+
+  it("binds runtime RPCs to protected commitments and validates cron bytes", () => {
+    expect(() => resolveManualRouterStrictRpcConfigurationV1({
+      ...valid,
+      PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT:
+        `0x${"1".repeat(64)}`,
+    })).toThrow("Alchemy endpoint commitment mismatch");
+    expect(() => resolveManualRouterStrictRpcConfigurationV1({
+      ...valid,
+      PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT:
+        valid.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT,
+    })).toThrow("commitments are not independent");
+    expect(() => assertManualRouterProductionConfigurationV1({
+      ...valid,
+      CRON_SECRET: "c".repeat(31),
+    })).toThrow("CRON_SECRET");
+    expect(() => assertManualRouterProductionConfigurationV1({
+      ...valid,
+      CRON_SECRET: "c".repeat(1_025),
+    })).toThrow("CRON_SECRET");
+    expect(() => assertManualRouterProductionConfigurationV1({
+      ...valid,
+      CRON_SECRET: "é".repeat(16),
+    })).not.toThrow();
+    expect(() => assertManualRouterProductionConfigurationV1({
+      ...valid,
+      CRON_SECRET: "é".repeat(513),
+    })).toThrow("CRON_SECRET");
   });
 });
 

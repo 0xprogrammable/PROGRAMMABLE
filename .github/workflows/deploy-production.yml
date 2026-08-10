@@ -171,24 +171,33 @@ jobs:
           --production-mode "$CUSTOM_LAUNCH_PRODUCTION_MODE"
           --github-output "$GITHUB_OUTPUT"
 
-      - name: Resolve manual Applicant launch policy
-        id: manual-applicant-policy
-        env:
-          MANUAL_APPLICANT_LAUNCH_ENABLEMENT_REQUESTED: ${{ inputs.manual_applicant_launch_enablement }}
-          MANUAL_APPLICANT_LAUNCH_PROTECTED_MODE: ${{ vars.PROGRAMMABLE_MANUAL_APPLICANT_LAUNCH_MODE }}
-        run: >-
-          node scripts/resolve-manual-applicant-launch-policy.mjs
-          --env-file .vercel/.env.production.local
-          --requested "$MANUAL_APPLICANT_LAUNCH_ENABLEMENT_REQUESTED"
-          --protected-mode "$MANUAL_APPLICANT_LAUNCH_PROTECTED_MODE"
-          --github-output "$GITHUB_OUTPUT"
-
       - name: Capture sensitive production environment metadata
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           umask 077
           vercel env ls production --format json --token="$VERCEL_TOKEN" > "$RUNNER_TEMP/vercel-production-env-metadata.json"
+          node scripts/bind-vercel-sensitive-production-metadata.mjs \
+            --metadata-file "$RUNNER_TEMP/vercel-production-env-metadata.json" \
+            --vercel-project-id "$VERCEL_PROJECT_ID"
+
+      - name: Resolve manual Applicant launch policy
+        id: manual-applicant-policy
+        env:
+          MANUAL_APPLICANT_LAUNCH_ENABLEMENT_REQUESTED: ${{ inputs.manual_applicant_launch_enablement }}
+          MANUAL_APPLICANT_LAUNCH_PROTECTED_MODE: ${{ vars.PROGRAMMABLE_MANUAL_APPLICANT_LAUNCH_MODE }}
+          PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT }}
+          PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT }}
+        run: >-
+          node scripts/resolve-manual-applicant-launch-policy.mjs
+          --env-file .vercel/.env.production.local
+          --manual-sensitive-metadata "$RUNNER_TEMP/vercel-production-env-metadata.json"
+          --vercel-project-id "$VERCEL_PROJECT_ID"
+          --alchemy-endpoint-commitment "$PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT"
+          --quicknode-endpoint-commitment "$PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT"
+          --requested "$MANUAL_APPLICANT_LAUNCH_ENABLEMENT_REQUESTED"
+          --protected-mode "$MANUAL_APPLICANT_LAUNCH_PROTECTED_MODE"
+          --github-output "$GITHUB_OUTPUT"
 
       - name: Capture current production rollback target
         id: production-before
@@ -322,8 +331,10 @@ jobs:
         id: deploy
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT }}
+          PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT }}
         run: |
-          deployment_url="$(vercel deploy --prebuilt --prod --skip-domain --archive=tgz --meta githubCommitSha="$GITHUB_SHA" --env VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA" --env PROGRAMMABLE_RELEASE_COMMIT_SHA="$GITHUB_SHA" --token="$VERCEL_TOKEN")"
+          deployment_url="$(vercel deploy --prebuilt --prod --skip-domain --archive=tgz --meta githubCommitSha="$GITHUB_SHA" --env VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA" --env PROGRAMMABLE_RELEASE_COMMIT_SHA="$GITHUB_SHA" --env PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT="$PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT" --env PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT="$PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT" --token="$VERCEL_TOKEN")"
           case "$deployment_url" in
             https://*) ;;
             *)
@@ -444,6 +455,15 @@ jobs:
           curl --fail --silent --show-error \
             --retry 12 --retry-all-errors --retry-delay 5 \
             --max-time 30 "$DEPLOYMENT_URL/" > /dev/null
+
+      - name: Verify staged manual Applicant runtime
+        if: steps.manual-applicant-policy.outputs.enabled == 'true'
+        env:
+          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: >-
+          node scripts/verify-manual-applicant-staged-runtime.mjs
+          --target-url "$STAGED_TARGET_URL"
 
       - name: Smoke staged Alchemy Explore APIs
         if: steps.read-model-policy.outputs.mode == 'alchemy-only'
