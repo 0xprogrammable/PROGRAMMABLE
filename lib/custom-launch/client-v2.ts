@@ -37,6 +37,10 @@ import {
 } from "./response-contract-v2";
 
 type FetchV2 = typeof fetch;
+type CustomLaunchWebsiteClientSessionInputV2 = Readonly<{
+  getSession: () => Promise<CustomLaunchWebsiteSessionV2>;
+}>;
+type RequestOptionsV2 = Readonly<{ signal?: AbortSignal }>;
 
 export class CustomLaunchWebsiteRequestErrorV2 extends Error {
   constructor(
@@ -49,16 +53,27 @@ export class CustomLaunchWebsiteRequestErrorV2 extends Error {
   }
 }
 
-export function createCustomLaunchWebsiteClientV2(input: Readonly<{
-  session: CustomLaunchWebsiteSessionV2;
-  fetch?: FetchV2;
-}>) {
+export function createCustomLaunchWebsiteClientV2(
+  input: CustomLaunchWebsiteClientSessionInputV2 & Readonly<{ fetch?: FetchV2 }>,
+) {
   const fetchV2 = input.fetch ?? globalThis.fetch.bind(globalThis);
-  const headers = () => ({
-    accept: "application/json",
-    authorization: `Bearer ${input.session.accessToken}`,
-    "x-privy-identity-token": input.session.identityToken,
-  });
+  const headers = async (signal?: AbortSignal) => {
+    signal?.throwIfAborted();
+    const session = await input.getSession();
+    signal?.throwIfAborted();
+    if (!session.accessToken.trim() || !session.identityToken.trim()) {
+      throw new CustomLaunchWebsiteRequestErrorV2(
+        401,
+        "applicant_authentication_required",
+        "Sign in with your approved GitHub account",
+      );
+    }
+    return {
+      accept: "application/json",
+      authorization: `Bearer ${session.accessToken}`,
+      "x-privy-identity-token": session.identityToken,
+    };
+  };
   const write = async <T>(
     path: string,
     idempotencyKey: string,
@@ -67,26 +82,31 @@ export function createCustomLaunchWebsiteClientV2(input: Readonly<{
     method: "POST" | "PUT" = "POST",
     validateStatus?: (status: number, value: T) => void,
     signal?: AbortSignal,
-  ): Promise<T> => requestJsonV2<T>(fetchV2, path, {
-    method,
-    headers: {
-      ...headers(),
-      "content-type": "application/json",
-      "idempotency-key": idempotencyKey,
-    },
-    body: JSON.stringify(body),
-    signal,
-  }, schemaVersion, validateStatus);
+  ): Promise<T> => {
+    const requestHeaders = await headers(signal);
+    return requestJsonV2<T>(fetchV2, path, {
+      method,
+      headers: {
+        ...requestHeaders,
+        "content-type": "application/json",
+        "idempotency-key": idempotencyKey,
+      },
+      body: JSON.stringify(body),
+      signal,
+    }, schemaVersion, validateStatus);
+  };
   const read = async <T>(
     path: string,
     schemaVersion: string,
     signal?: AbortSignal,
-  ): Promise<T> =>
-    requestJsonV2<T>(fetchV2, path, {
+  ): Promise<T> => {
+    const requestHeaders = await headers(signal);
+    return requestJsonV2<T>(fetchV2, path, {
       method: "GET",
-      headers: headers(),
+      headers: requestHeaders,
       signal,
     }, schemaVersion);
+  };
 
   return Object.freeze({
     async applications(input: Readonly<{
@@ -107,16 +127,24 @@ export function createCustomLaunchWebsiteClientV2(input: Readonly<{
         hasMore: response.nextCursor !== null,
       });
     },
-    applicationStatus(applicationHandle: ApplicationHandleV3): Promise<ApplicationStatusViewV2> {
+    applicationStatus(
+      applicationHandle: ApplicationHandleV3,
+      options: RequestOptionsV2 = {},
+    ): Promise<ApplicationStatusViewV2> {
       return read(
         CUSTOM_LAUNCH_WEBSITE_API_V2.applicationStatus(applicationHandle),
         "programmable.application-status-view.v2",
+        options.signal,
       );
     },
-    launchEligibility(applicationHandle: ApplicationHandleV3): Promise<LaunchEligibilityViewV2> {
+    launchEligibility(
+      applicationHandle: ApplicationHandleV3,
+      options: RequestOptionsV2 = {},
+    ): Promise<LaunchEligibilityViewV2> {
       return read(
         CUSTOM_LAUNCH_WEBSITE_API_V2.launchEligibility(applicationHandle),
         "programmable.launch-eligibility-view.v3",
+        options.signal,
       );
     },
     launchAuthorityRefresh(
@@ -139,24 +167,31 @@ export function createCustomLaunchWebsiteClientV2(input: Readonly<{
         options.signal,
       );
     },
-    launchDescriptor(applicationHandle: ApplicationHandleV3): Promise<LaunchDescriptorV2> {
+    launchDescriptor(
+      applicationHandle: ApplicationHandleV3,
+      options: RequestOptionsV2 = {},
+    ): Promise<LaunchDescriptorV2> {
       return read(
         CUSTOM_LAUNCH_WEBSITE_API_V2.launchDescriptor(applicationHandle),
         "programmable.launch-route-discovery.v3",
+        options.signal,
       );
     },
     launchPresentation(
       applicationHandle: ApplicationHandleV3,
+      options: RequestOptionsV2 = {},
     ): Promise<PrincipalLaunchPresentationResponseV1> {
       return read(
         CUSTOM_LAUNCH_WEBSITE_API_V2.launchPresentation(applicationHandle),
         "programmable.principal-launch-presentation-response.v2",
+        options.signal,
       );
     },
     commitLaunchPresentation(
       applicationHandle: ApplicationHandleV3,
       request: PrincipalLaunchPresentationCommitRequestV1,
       idempotencyKey: string,
+      options: RequestOptionsV2 = {},
     ): Promise<PrincipalLaunchPresentationResponseV1> {
       return write(
         CUSTOM_LAUNCH_WEBSITE_API_V2.launchPresentation(applicationHandle),
@@ -164,66 +199,90 @@ export function createCustomLaunchWebsiteClientV2(input: Readonly<{
         request,
         "programmable.principal-launch-presentation-response.v2",
         "PUT",
+        undefined,
+        options.signal,
       );
     },
     launchExecutionStatus(input: Readonly<{
       applicationHandle: ApplicationHandleV3;
       grantId: string;
       sessionId: string;
+      signal?: AbortSignal;
     }>): Promise<LaunchExecutionStatusViewV2> {
       return read(
         CUSTOM_LAUNCH_WEBSITE_API_V2.launchExecutionStatus(input),
         "programmable.launch-execution-status-view.v3",
+        input.signal,
       );
     },
     createChallenge(
       request: CreateLaunchSessionChallengeRequestV2,
+      options: RequestOptionsV2 = {},
     ): Promise<LaunchSessionChallengeViewV2> {
       return write(
         CUSTOM_LAUNCH_WEBSITE_API_V2.createChallenge,
         request.idempotencyKey,
         request,
         "programmable.launch-session-challenge-view.v2",
+        "POST",
+        undefined,
+        options.signal,
       );
     },
     bindPreparation(
       request: BindLaunchSessionPreparationRequestV2,
+      options: RequestOptionsV2 = {},
     ): Promise<LaunchSessionPreparationViewV2> {
       return write(
         CUSTOM_LAUNCH_WEBSITE_API_V2.bindPreparation(request.challengeId),
         request.idempotencyKey,
         request,
         "programmable.launch-session-preparation-view.v2",
+        "POST",
+        undefined,
+        options.signal,
       );
     },
     authenticateWallet(
       input: AuthenticateLaunchSessionWalletHttpRequestV2,
+      options: RequestOptionsV2 = {},
     ): Promise<AuthenticatedLaunchSessionViewV2> {
       return write(
         CUSTOM_LAUNCH_WEBSITE_API_V2.authenticateWallet(input.request.challengeId),
         input.request.idempotencyKey,
         input,
         "programmable.authenticated-launch-session-view.v2",
+        "POST",
+        undefined,
+        options.signal,
       );
     },
     authorizeLaunch(
       request: AuthorizeLaunchSessionRequestV2,
+      options: RequestOptionsV2 = {},
     ): Promise<AuthorizedLaunchPermitViewV2> {
       return write(
         CUSTOM_LAUNCH_WEBSITE_API_V2.authorizeLaunch(request.sessionId),
         request.idempotencyKey,
         request,
         "programmable.authorized-launch-permit-view.v2",
+        "POST",
+        undefined,
+        options.signal,
       );
     },
     createExecutionPreparation(
       input: CreateBrowserWalletLaunchPreparationRequestV2,
+      options: RequestOptionsV2 = {},
     ): Promise<BrowserWalletLaunchPreparationV2> {
       return write(
         CUSTOM_LAUNCH_WEBSITE_API_V2.createExecutionPreparation(input.request.sessionId),
         input.request.idempotencyKey,
         input,
         "programmable.browser-wallet-launch-preparation.v2",
+        "POST",
+        undefined,
+        options.signal,
       );
     },
     reissueLaunchGrant(input: Readonly<{

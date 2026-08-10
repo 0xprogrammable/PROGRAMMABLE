@@ -1233,7 +1233,7 @@ describe("custom launch browser authority", () => {
 
     expect(states.map((state) => customApplicationDisplayState(state))).toHaveLength(13);
     expect(customApplicationDisplayState("approved")).toMatchObject({
-      title: "Ready to launch",
+      title: "Approved",
       tone: "ready",
     });
     expect(customApplicationDisplayState("changes_required")).toMatchObject({
@@ -1280,6 +1280,15 @@ describe("custom launch browser authority", () => {
       controlRepositoryOwnerId: "309941960",
       grandfatheredAtReleaseBindingDigest: null,
     })).toBe(false);
+    expect(customApplicationOpensLaunchExperienceV2({
+      ...application(),
+      receiptDigest: null,
+    })).toBe(false);
+    expect(customApplicationOpensLaunchExperienceV2({
+      ...application(),
+      launchEntitlementBindingHash: null,
+    })).toBe(false);
+    expect(customApplicationOpensLaunchExperienceV2(application())).toBe(true);
   });
 
   it("renders route-specific standard, AEON, and no-market fee summaries", () => {

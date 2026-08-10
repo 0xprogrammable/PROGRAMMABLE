@@ -472,10 +472,10 @@ describe("custom launch Website bridge V2", () => {
       }), { status: 200, headers: { "content-type": "application/json" } });
     });
     const client = createCustomLaunchWebsiteClientV2({
-      session: {
+      getSession: async () => ({
         accessToken: "access-token-value",
         identityToken: "identity-token-value",
-      },
+      }),
       fetch: fetchV2 as typeof fetch,
     });
     await expect(client.launchExecutionStatus({
@@ -487,10 +487,10 @@ describe("custom launch Website bridge V2", () => {
 
   it("derives application pagination state without a redundant wire field", async () => {
     const client = createCustomLaunchWebsiteClientV2({
-      session: {
+      getSession: async () => ({
         accessToken: "access-token-value",
         identityToken: "identity-token-value",
-      },
+      }),
       fetch: vi.fn(async (path: string | URL | Request) => {
         expect(String(path)).toBe("/api/custom-launch/v3/applications?limit=50");
         return new Response(JSON.stringify({
