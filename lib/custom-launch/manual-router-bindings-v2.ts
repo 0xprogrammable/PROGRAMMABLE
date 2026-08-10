@@ -114,7 +114,7 @@ ManualRouterProductionBindingV2 =
     acceptanceSubjectSha256:
       "sha256:948a920b86aa915bc2dfcdcf56b271f41a2843fc1360b734e9221c0533d960b8",
     acceptanceRelease: Object.freeze({
-      commit: "e074d449aa0e60c40ddf05296823f2eb8c67dcc5",
+      commit: "0ec6cd4fdf7c1fc68edd728be22a255b58011c2f",
       tree: "17075bc60f5d997190b6085ce852aac3f73ad7d8",
       reviewedPlanSha256:
         "sha256:cfe926c42918ce1ca23efe8fa7352c2b6ed7090002f62a0d6d64481883205591",
