@@ -45,6 +45,10 @@ contract CompletedGraphCapabilityAdminV2_1Mock {
 contract CompletedGraphParentRouterV2Mock {
     bytes32 private constant SHARDS_PROFILE_KEY = 0xb90e215e0e29c0dacf021e5e778847af4100433ee7d22014b73f8ca4add09d0c;
 
+    address public CAPABILITY_ADMIN = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
+    bytes32 public CAPABILITY_ADMIN_RUNTIME_CODE_HASH =
+        0x2fa86add0aed31f33a762c9d88e807c475bd51d0f52bd0955754b2608f7e4989;
+
     mapping(address component => bytes32 launchId) public launchIdByComponent;
     mapping(address token => bytes32 launchId) public launchIdByToken;
     mapping(bytes32 lookupKey => bytes32 launchId) private _launchIdByPool;
@@ -59,6 +63,11 @@ contract CompletedGraphParentRouterV2Mock {
 
     function setPoolLaunchId(address poolManager, bytes32 poolId, bytes32 launchId) external {
         _launchIdByPool[keccak256(abi.encode(poolManager, poolId))] = launchId;
+    }
+
+    function setCapabilityAdmin(address capabilityAdmin, bytes32 runtimeCodeHash) external {
+        CAPABILITY_ADMIN = capabilityAdmin;
+        CAPABILITY_ADMIN_RUNTIME_CODE_HASH = runtimeCodeHash;
     }
 
     function launchIdByPool(address poolManager, bytes32 poolId) external view returns (bytes32) {
@@ -180,7 +189,7 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1Test is Test {
             router.computePoolKeyHash(fixture.plan.poolKey),
             0x846d2438a39c0b1b919819cde3440f168548be8bb0ad8523de1acde33cbe3c87
         );
-        assertEq(fixture.plan.routeSchemaHash, 0xb440efcbe588f6355ac3c6f12a9b2cd8905c7a6aa0741b59824972ceb903f2be);
+        assertEq(fixture.plan.routeSchemaHash, 0xde9cf676d82f006878a4934e696ff6b4d468319f4c27dd4a7f0d9121f5dc725f);
         assertEq(
             fixture.components[0].configurationHash, 0x25d499d54b28d5fb25382c768845a24b9b196ddc52bf08f9dcd591adc9c5140f
         );
@@ -197,13 +206,13 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1Test is Test {
             fixture.request.currentPoolStateHash, 0x6fa5345100e65eef5bab3092f4ed00ea3256a046615e78842cb96f68b14042a6
         );
         assertEq(fixture.plan.resultHash, 0x79afaa03b1550bc5a3720d007694f3cc9702ddb7e8407b8bbed66e1f71824247);
-        assertEq(fixture.planHash, 0x7076b7dad173db78012e59b71738b8bdbb061d9f92c6687c17887cf0355f1c73);
-        assertEq(fixture.launchId, 0x649a6487c4afec517fb21b892e2a4d4e1915e8772e32fc7fa03452b225880535);
+        assertEq(fixture.planHash, 0xcc01583b967cb93df4af5d247050af7bbe7b9f8690f84b3cc40e0f2f491263b7);
+        assertEq(fixture.launchId, 0x2f82a60be97d1571f1238671f73deac0317e9d7acf95f50d61e352ba0169334d);
         assertEq(
             PoolId.unwrap(fixture.plan.poolKey.toId()),
             0xdef0cbf06fe84fc21c894d2796ac5dd19d27f8ef046114cd67eebfc72b106b21
         );
-        assertEq(fixture.permit.stampRequestHash, 0x0dbea1f4a8c4c8a5f717df049ac46273cdce6e05896bd9843eedddc65c2bc020);
+        assertEq(fixture.permit.stampRequestHash, 0x56b72a02f1d75a264a626aaca7f443dd46ecebba4caac6d29d29b1d80610e4e3);
     }
 
     function test_registrationRejectsAnyOtherProfileOrSchemaAndIsAddOnly() public {
@@ -228,6 +237,22 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1Test is Test {
             )
         );
         otherAdmin.register(otherRouter, exactProfileIdHash, exactProfileVersionHash, exactSchemaHash, policyHash);
+    }
+
+    function test_constructorRequiresParentRegistrationPathPermanentlySealed() public {
+        CompletedGraphParentRouterV2Mock unsealedParent = new CompletedGraphParentRouterV2Mock();
+        unsealedParent.setCapabilityAdmin(address(admin), address(admin).codehash);
+        vm.expectRevert(abi.encodeWithSelector(ProgrammableCompletedGraphAdoptionRouterV2_1.InvalidBinding.selector, 5));
+        new ProgrammableCompletedGraphAdoptionRouterV2_1(address(authority), address(admin), address(unsealedParent));
+
+        CompletedGraphParentRouterV2Mock falseRuntimeParent = new CompletedGraphParentRouterV2Mock();
+        falseRuntimeParent.setCapabilityAdmin(
+            router.SEALED_PARENT_CAPABILITY_ADMIN(), keccak256("wrong-sealed-runtime")
+        );
+        vm.expectRevert(abi.encodeWithSelector(ProgrammableCompletedGraphAdoptionRouterV2_1.InvalidBinding.selector, 5));
+        new ProgrammableCompletedGraphAdoptionRouterV2_1(
+            address(authority), address(admin), address(falseRuntimeParent)
+        );
     }
 
     function test_reviewAdmissionIsMandatoryAndPermitBound() public {

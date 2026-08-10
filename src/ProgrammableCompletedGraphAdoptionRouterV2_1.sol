@@ -16,6 +16,12 @@ import {
 } from "./interfaces/IProgrammableCompletedGraphAdoptionRouterV2_1.sol";
 import { IProgrammableLaunchStampRouterV2 } from "./interfaces/IProgrammableLaunchStampRouterV2.sol";
 
+interface IProgrammableLaunchStampRouterV2RoleView {
+    function CAPABILITY_ADMIN() external view returns (address);
+
+    function CAPABILITY_ADMIN_RUNTIME_CODE_HASH() external view returns (bytes32);
+}
+
 /// @title ProgrammableCompletedGraphAdoptionRouterV2_1
 /// @notice Adoption-only Router for immutable, authority-permitted normal-CREATE component graphs.
 /// @dev This is a separate inactive candidate because the frozen Router V2 runtime has insufficient EIP-170 margin.
@@ -41,6 +47,9 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1 is
     address public constant MAINNET_POOL_MANAGER = 0x000000000004444c5dc75cB358380D2e3dE08A90;
     bytes32 public constant POOL_MANAGER_RUNTIME_CODE_HASH =
         0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293;
+    address public constant SEALED_PARENT_CAPABILITY_ADMIN = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
+    bytes32 public constant SEALED_PARENT_CAPABILITY_ADMIN_RUNTIME_CODE_HASH =
+        0x2fa86add0aed31f33a762c9d88e807c475bd51d0f52bd0955754b2608f7e4989;
 
     bytes32 private constant SHARDS_PROFILE_KEY = 0xb90e215e0e29c0dacf021e5e778847af4100433ee7d22014b73f8ca4add09d0c;
     address private constant SHARDS_FACTORY = 0x9442a520e7b31D10177C75A363355C2C29141ac5;
@@ -55,7 +64,7 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1 is
     bytes32 public constant NORMAL_CREATE_ADOPTION_PROFILE_ID_HASH = keccak256("NORMAL_CREATE_ADOPTION_V1");
     bytes32 public constant NORMAL_CREATE_ADOPTION_PROFILE_VERSION_HASH = keccak256("1.0.0");
     bytes32 public constant NORMAL_CREATE_ADOPTION_SCHEMA_HASH = keccak256(
-        "ProgrammableNormalCreateAdoptionSchemaV1(adoptCompletedGraphV1(LaunchPermitV2_1,CompletedGraphPlanV1,StampRequestV2_1,ComponentV1[],GraphEdgeV1[],bytes),creator=launchWallet,reviewAdmission=immutable,currentPoolState=jit-permit-bound-slot0-liquidity-fee-growth,create=RLP,componentConfig=immutable-code-and-creation-evidence-only,components=2..16,edges=1..32,value=0,allowances=empty,mode=COMPLETED_GRAPH_ADOPTED)"
+        "ProgrammableNormalCreateAdoptionSchemaV1(adoptCompletedGraphV1(LaunchPermitV2_1,CompletedGraphPlanV1,StampRequestV2_1,ComponentV1[],GraphEdgeV1[],bytes),creator=launchWallet,reviewAdmission=immutable,currentPoolState=jit-permit-bound-slot0-liquidity-fee-growth,create=RLP,componentConfig=immutable-code-and-creation-evidence-only,parentCapabilityAdmin=sealed-canonical-create2-proxy,components=2..16,edges=1..32,value=0,allowances=empty,mode=COMPLETED_GRAPH_ADOPTED)"
     );
     bytes32 public constant EMPTY_ALLOWANCE_CAPS_HASH = keccak256("ProgrammableAllowanceCapsV1([])");
 
@@ -208,6 +217,12 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1 is
         ) revert InvalidBinding(5);
 
         IProgrammableLaunchStampRouterV2 typedParent = IProgrammableLaunchStampRouterV2(parentRouter);
+        IProgrammableLaunchStampRouterV2RoleView parentRoles = IProgrammableLaunchStampRouterV2RoleView(parentRouter);
+        if (
+            parentRoles.CAPABILITY_ADMIN() != SEALED_PARENT_CAPABILITY_ADMIN
+                || parentRoles.CAPABILITY_ADMIN_RUNTIME_CODE_HASH() != SEALED_PARENT_CAPABILITY_ADMIN_RUNTIME_CODE_HASH
+        ) revert InvalidBinding(5);
+        _requireRuntime(SEALED_PARENT_CAPABILITY_ADMIN, SEALED_PARENT_CAPABILITY_ADMIN_RUNTIME_CODE_HASH);
         IProgrammableLaunchStampRouterV2.ProfileCapabilityV2 memory shardsCapability =
             typedParent.profileCapability(SHARDS_PROFILE_KEY);
         if (
@@ -528,11 +543,10 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1 is
                 || plan.policyHash != capability.policyHash || plan.sourceCommitHash == bytes32(0)
                 || plan.sourceTreeHash == bytes32(0) || plan.manifestHash == bytes32(0)
                 || plan.reviewAdmissionHash == bytes32(0) || plan.launchWallet == address(0)
-                || plan.creator != plan.launchWallet
-                || plan.creationEvidenceHash == bytes32(0) || plan.componentGraphHash == bytes32(0)
-                || plan.configurationHash == bytes32(0) || plan.initializedSqrtPriceX96 == 0
-                || plan.poolInitializationEvidenceHash == bytes32(0) || plan.poolResultHash == bytes32(0)
-                || plan.resultHash == bytes32(0) || plan.maxNativeValueWei != 0
+                || plan.creator != plan.launchWallet || plan.creationEvidenceHash == bytes32(0)
+                || plan.componentGraphHash == bytes32(0) || plan.configurationHash == bytes32(0)
+                || plan.initializedSqrtPriceX96 == 0 || plan.poolInitializationEvidenceHash == bytes32(0)
+                || plan.poolResultHash == bytes32(0) || plan.resultHash == bytes32(0) || plan.maxNativeValueWei != 0
                 || plan.allowanceCapsHash != EMPTY_ALLOWANCE_CAPS_HASH
         ) revert InvalidBinding(7);
         if (plan.creator.code.length != 0) revert InvalidBinding(8);
