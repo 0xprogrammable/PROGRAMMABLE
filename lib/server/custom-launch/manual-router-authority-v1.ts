@@ -28,9 +28,17 @@ import {
   type ManualRouterFinalityAuthorityV1,
 } from "@/lib/server/custom-launch/manual-router-finality-v1";
 import {
+  SHARDS_MANUAL_ROUTER_ALCHEMY_API_KEY_COMMITMENT_ENV_V1,
+  SHARDS_MANUAL_ROUTER_ALCHEMY_API_KEY_ENV_V1,
+  SHARDS_MANUAL_ROUTER_ALCHEMY_ENDPOINT_V1,
+  createShardsManualRouterAlchemyBearerFetchV1,
   createShardsManualRouterPublishFetchV1,
   isExactShardsManualRouterPublishRequestV1,
 } from "@/lib/server/custom-launch/manual-router-shards-publish-transport-v1";
+import {
+  manualRouterIsExactShardsV1ArtifactV1,
+  manualRouterIsExactShardsV1PointerV1,
+} from "@/lib/server/custom-launch/manual-router-shards-v1-compat-v1";
 import {
   ManualRouterTransactionNotObservedErrorV1,
   type ManualRouterCompleteSignedArtifactViewV1,
@@ -99,15 +107,31 @@ ProductionManualRouterAuthorityV1 {
     // secret. The Applicant identity path is separately bound through Privy.
     githubReadToken: null,
   });
-  const shardsPublishComposition =
-    createPortableManualRouterPublishAuthorityFromEnvV1({
-      env: process.env,
-      fetch: createShardsManualRouterPublishFetchV1({
-        fetch,
-        quickNodeUrl: process.env[MANUAL_ROUTER_QUICKNODE_RPC_ENV_V1],
+  let shardsComposition: PortableManualRouterCompositionV1 | null = null;
+  const exactShardsComposition = (): PortableManualRouterCompositionV1 => {
+    if (shardsComposition !== null) return shardsComposition;
+    const quickNodeFetch = createShardsManualRouterPublishFetchV1({
+      fetch,
+      quickNodeUrl: process.env[MANUAL_ROUTER_QUICKNODE_RPC_ENV_V1],
+    });
+    const alchemyBearerFetch = createShardsManualRouterAlchemyBearerFetchV1({
+      fetch: quickNodeFetch,
+      apiKey: process.env[SHARDS_MANUAL_ROUTER_ALCHEMY_API_KEY_ENV_V1],
+      apiKeyCommitment:
+        process.env[SHARDS_MANUAL_ROUTER_ALCHEMY_API_KEY_COMMITMENT_ENV_V1],
+    });
+    shardsComposition = createPortableManualRouterPublishAuthorityFromEnvV1({
+      env: Object.freeze({
+        [MANUAL_ROUTER_ALCHEMY_RPC_ENV_V1]:
+          SHARDS_MANUAL_ROUTER_ALCHEMY_ENDPOINT_V1,
+        [MANUAL_ROUTER_QUICKNODE_RPC_ENV_V1]:
+          process.env[MANUAL_ROUTER_QUICKNODE_RPC_ENV_V1],
       }),
+      fetch: alchemyBearerFetch,
       githubReadToken: null,
     });
+    return shardsComposition;
+  };
   const website: ManualRouterWebsiteAuthorityV1 = Object.freeze({
     assertCompleteSignedArtifact(raw: unknown) {
       const artifact = assertPortableManualRouterCompleteSignedArtifactV1(raw);
@@ -119,18 +143,28 @@ ProductionManualRouterAuthorityV1 {
       const verifiedRequest = assertPortableManualRouterSignedPublishRequestV1(
         input.request,
       );
+      const exactShards = isExactShardsManualRouterPublishRequestV1(
+        verifiedRequest,
+      ) && manualRouterIsExactShardsV1ArtifactV1(
+        verifiedRequest.signedArtifact as never,
+      );
       return await verifyPortableManualRouterSignedPublishV1({
         ...input,
-        composition: isExactShardsManualRouterPublishRequestV1(verifiedRequest)
-          ? shardsPublishComposition
+        composition: exactShards
+          ? exactShardsComposition()
           : composition,
         request: verifiedRequest,
       }) as unknown as ManualRouterVerifiedPublishV1;
     },
-    async readChainClock(): Promise<ManualRouterChainClockV1> {
+    async readChainClock(
+      selector: Parameters<ManualRouterWebsiteAuthorityV1["readChainClock"]>[0],
+    ): Promise<ManualRouterChainClockV1> {
+      const selected = selectorUsesExactShardsV1(selector)
+        ? exactShardsComposition()
+        : composition;
       const [clock, finalized] = await Promise.all([
-        composition.rpc.observeChainClock(),
-        composition.rpc.collectCommonFinalizedAnchor(),
+        selected.rpc.observeChainClock(),
+        selected.rpc.collectCommonFinalizedAnchor(),
       ]);
       if (BigInt(finalized.timestamp) > BigInt(clock.minimumTimestamp)) {
         throw new TypeError("portable manual Router finality clock is invalid");
@@ -144,10 +178,14 @@ ProductionManualRouterAuthorityV1 {
       });
     },
     async observeExactTransaction({
+      artifact,
       prepared,
       transactionHash,
     }: Parameters<ManualRouterWebsiteAuthorityV1["observeExactTransaction"]>[0]) {
-      const observed = await composition.rpc.readConsensus(
+      const selected = manualRouterIsExactShardsV1ArtifactV1(artifact as never)
+        ? exactShardsComposition()
+        : composition;
+      const observed = await selected.rpc.readConsensus(
         "eth_getTransactionByHash",
         [transactionHash],
       );
@@ -168,16 +206,43 @@ ProductionManualRouterAuthorityV1 {
     async resolveReissueState(input: Parameters<
       ManualRouterWebsiteAuthorityV1["resolveReissueState"]
     >[0]) {
+      const selected = manualRouterIsExactShardsV1ArtifactV1(
+        input.artifact as never,
+      )
+        ? exactShardsComposition()
+        : composition;
       return await resolvePortableManualRouterReissueStateV1({
-        composition,
-        ...input,
+        composition: selected,
+        request: input.request,
+        currentApplicantIndex: input.currentApplicantIndex,
+        currentApplicantPointers: input.currentApplicantPointers,
+        currentStatus: input.currentStatus,
       });
     },
   });
   const finality = new RouterLaunchFinalityVerifierV1({ rpc: composition.rpc });
-  const finalityAuthority = createProductionManualRouterFinalityAuthorityV1({
+  const genericFinalityAuthority = createProductionManualRouterFinalityAuthorityV1({
     finality,
     rpc: composition.rpc,
+  });
+  let shardsFinalityAuthority: ManualRouterFinalityAuthorityV1 | null = null;
+  const exactShardsFinalityAuthority = (): ManualRouterFinalityAuthorityV1 => {
+    if (shardsFinalityAuthority !== null) return shardsFinalityAuthority;
+    const selected = exactShardsComposition();
+    shardsFinalityAuthority = createProductionManualRouterFinalityAuthorityV1({
+      finality: new RouterLaunchFinalityVerifierV1({ rpc: selected.rpc }),
+      rpc: selected.rpc,
+    });
+    return shardsFinalityAuthority;
+  };
+  const finalityAuthority: ManualRouterFinalityAuthorityV1 = Object.freeze({
+    async finalize(
+      input: Parameters<ManualRouterFinalityAuthorityV1["finalize"]>[0],
+    ) {
+      return (manualRouterIsExactShardsV1ArtifactV1(input.artifact as never)
+        ? exactShardsFinalityAuthority()
+        : genericFinalityAuthority).finalize(input);
+    },
   });
   return Object.freeze({
     composition,
@@ -185,6 +250,18 @@ ProductionManualRouterAuthorityV1 {
     finality,
     finalityAuthority,
   });
+}
+
+function selectorUsesExactShardsV1(
+  selector: Parameters<ManualRouterWebsiteAuthorityV1["readChainClock"]>[0],
+): boolean {
+  return (
+    selector?.artifact !== undefined
+      && manualRouterIsExactShardsV1ArtifactV1(selector.artifact as never)
+  ) || (
+    selector?.pointer !== undefined
+      && manualRouterIsExactShardsV1PointerV1(selector.pointer as never)
+  );
 }
 
 const PORTABLE_FINALITY_OBSERVATION_UNAVAILABLE_MESSAGES = new Set([

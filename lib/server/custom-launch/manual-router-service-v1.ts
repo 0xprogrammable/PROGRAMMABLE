@@ -121,7 +121,10 @@ export interface ManualRouterWebsiteAuthorityV1 {
     currentApplicantIndex: ManualRouterApplicantIndexAnyV2 | null;
     currentApplicantPointers: readonly ManualRouterApplicantPointerAnyV2[];
   }>): Promise<ManualRouterVerifiedPublishV1>;
-  readChainClock(): Promise<ManualRouterChainClockV1>;
+  readChainClock(selector?: Readonly<{
+    artifact?: ManualRouterCompleteSignedArtifactViewAnyV2;
+    pointer?: ManualRouterApplicantPointerAnyV2;
+  }>): Promise<ManualRouterChainClockV1>;
   assertV2AcceptanceCurrent?(input: Readonly<{
     artifact: ManualRouterCompleteSignedArtifactViewV2;
     acceptanceHead: ManualRouterApplicantAcceptanceHeadV1;
@@ -141,6 +144,7 @@ export interface ManualRouterWebsiteAuthorityV1 {
     transactionHash: EvmBytes32;
   }>): Promise<void>;
   resolveReissueState(input: Readonly<{
+    artifact: ManualRouterCompleteSignedArtifactViewAnyV2;
     request: unknown;
     currentApplicantIndex: ManualRouterApplicantIndexAnyV2 | null;
     currentApplicantPointers: readonly ManualRouterApplicantPointerAnyV2[];
@@ -280,10 +284,11 @@ export class ManualRouterWebsiteServiceV1 {
     const matching = head.pointers.find((pointer) =>
       pointer.subject.subjectHash
         === artifact.preparationArtifact.subject.subjectHash);
-    const clock = await this.dependencies.authority.readChainClock();
+    const clock = await this.dependencies.authority.readChainClock({ artifact });
     let resolved: Readonly<Record<string, unknown>>;
     try {
       resolved = await this.dependencies.authority.resolveReissueState({
+        artifact,
         request,
         currentApplicantIndex: head.index,
         currentApplicantPointers: head.pointers,
@@ -325,9 +330,11 @@ export class ManualRouterWebsiteServiceV1 {
       approvedGitHubUserId: principal.githubUserId,
       approvedLaunchWallet: principal.launchWallet,
     });
-    const clock = await this.dependencies.authority.readChainClock();
     await Promise.all(head.pointers.map((pointer) =>
       this.#assertShardsV1PointerLineage(pointer)));
+    const clock = await this.dependencies.authority.readChainClock({
+      ...(head.pointers.length === 1 ? { pointer: head.pointers[0] } : {}),
+    });
     await Promise.all(head.pointers.map(async (pointer) => {
       if (
         pointer.schemaVersion
@@ -373,7 +380,7 @@ export class ManualRouterWebsiteServiceV1 {
     });
     const pointer = currentPointer(head, principal.subjectHash);
     await this.#assertShardsV1PointerLineage(pointer);
-    const clock = await this.dependencies.authority.readChainClock();
+    const clock = await this.dependencies.authority.readChainClock({ pointer });
     const status = manualRouterApplicantStatusAnyV2(pointer, clock);
     const common = resolveCommon(pointer);
     if (status === "ready" || status === "permit-not-yet-valid") {
@@ -488,7 +495,7 @@ export class ManualRouterWebsiteServiceV1 {
         false,
       );
     }
-    const clock = await this.dependencies.authority.readChainClock();
+    const clock = await this.dependencies.authority.readChainClock({ artifact });
     const nextPointer = advanceSubmittedPointer(
       pointer,
       clock.maximumTimestamp,
