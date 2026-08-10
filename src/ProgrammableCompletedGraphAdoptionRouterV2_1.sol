@@ -42,12 +42,20 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1 is
     bytes32 public constant POOL_MANAGER_RUNTIME_CODE_HASH =
         0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293;
 
+    bytes32 private constant SHARDS_PROFILE_KEY = 0xb90e215e0e29c0dacf021e5e778847af4100433ee7d22014b73f8ca4add09d0c;
+    address private constant SHARDS_FACTORY = 0x9442a520e7b31D10177C75A363355C2C29141ac5;
+    address private constant SHARDS_RENDERER = 0x090DBD2FaB1a467f90ed82a443eFa9AAb658DE14;
+    address private constant SHARDS_TOKEN = 0x50d17EAaeB52c66E64b918385AbF6523fDAE57CF;
+    address private constant SHARDS_HOOK = 0xbA318baA8649962fD77CC7082d098f2C09Fd60cC;
+    address private constant SHARDS_NFT = 0x9fDA98dE1B7061ae02A9Aec7A6f8ed75a8Feb8F3;
+    bytes32 private constant SHARDS_POOL_ID = 0x075885e47ec15084de91826faafab9c2cd4fda4d24fd9e5ce3af6a4be4ad926d;
+
     bytes32 public constant ROUTE_ID_HASH = keccak256("normal-create-adoption");
     bytes32 public constant ROUTE_VERSION_HASH = keccak256("1.0.0");
     bytes32 public constant NORMAL_CREATE_ADOPTION_PROFILE_ID_HASH = keccak256("NORMAL_CREATE_ADOPTION_V1");
     bytes32 public constant NORMAL_CREATE_ADOPTION_PROFILE_VERSION_HASH = keccak256("1.0.0");
     bytes32 public constant NORMAL_CREATE_ADOPTION_SCHEMA_HASH = keccak256(
-        "ProgrammableNormalCreateAdoptionSchemaV1(adoptCompletedGraphV1(LaunchPermitV2_1,CompletedGraphPlanV1,StampRequestV2_1,ComponentV1[],GraphEdgeV1[],bytes),creator=launchWallet,reviewAdmission=immutable,currentPoolState=jit-permit-bound,create=RLP,components=2..16,edges=1..32,value=0,allowances=empty,mode=COMPLETED_GRAPH_ADOPTED)"
+        "ProgrammableNormalCreateAdoptionSchemaV1(adoptCompletedGraphV1(LaunchPermitV2_1,CompletedGraphPlanV1,StampRequestV2_1,ComponentV1[],GraphEdgeV1[],bytes),creator=launchWallet,reviewAdmission=immutable,currentPoolState=jit-permit-bound-slot0-liquidity-fee-growth,create=RLP,componentConfig=immutable-code-and-creation-evidence-only,components=2..16,edges=1..32,value=0,allowances=empty,mode=COMPLETED_GRAPH_ADOPTED)"
     );
     bytes32 public constant EMPTY_ALLOWANCE_CAPS_HASH = keccak256("ProgrammableAllowanceCapsV1([])");
 
@@ -55,6 +63,9 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1 is
         keccak256("ProgrammableCompletedGraphProfileV1(bytes32 profileIdHash,bytes32 profileVersionHash)");
     bytes32 public constant COMPONENT_TYPEHASH = keccak256(
         "ProgrammableNormalCreateComponentV1(address account,uint8 kind,uint64 createNonce,bytes32 creationCodeHash,bytes32 runtimeCodeHash,bytes32 configurationHash,bytes32 creationEvidenceHash)"
+    );
+    bytes32 public constant IMMUTABLE_COMPONENT_CONFIGURATION_TYPEHASH = keccak256(
+        "ProgrammableImmutableNormalCreateConfigurationV1(address account,uint8 kind,uint64 createNonce,bytes32 creationCodeHash,bytes32 runtimeCodeHash,bytes32 creationEvidenceHash)"
     );
     bytes32 public constant EDGE_TYPEHASH =
         keccak256("ProgrammableCompletedGraphEdgeV1(uint8 fromIndex,uint8 toIndex,uint8 kind,bytes32 relationHash)");
@@ -72,7 +83,7 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1 is
         "ProgrammableCompletedGraphPoolResultV1(address poolManager,bytes32 poolId,bytes32 poolKeyHash,uint160 initializedSqrtPriceX96,bytes32 initializationEvidenceHash)"
     );
     bytes32 public constant POOL_STATE_TYPEHASH = keccak256(
-        "ProgrammableCompletedGraphPoolStateV1(address poolManager,bytes32 poolId,bytes32 poolKeyHash,uint160 sqrtPriceX96,int24 tick,uint24 protocolFee,uint24 lpFee)"
+        "ProgrammableCompletedGraphPoolStateV1(address poolManager,bytes32 poolId,bytes32 poolKeyHash,uint160 sqrtPriceX96,int24 tick,uint24 protocolFee,uint24 lpFee,uint128 activeLiquidity,uint256 feeGrowthGlobal0X128,uint256 feeGrowthGlobal1X128)"
     );
     bytes32 public constant RESULT_TYPEHASH = keccak256(
         "ProgrammableCompletedGraphResultV1(bytes32 componentGraphHash,bytes32 configurationHash,bytes32 poolResultHash)"
@@ -102,6 +113,7 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1 is
     bytes32 public immutable CAPABILITY_ADMIN_RUNTIME_CODE_HASH;
     IProgrammableLaunchStampRouterV2 public immutable PARENT_ROUTER;
     bytes32 public immutable PARENT_ROUTER_RUNTIME_CODE_HASH;
+    address public immutable PARENT_SHARDS_PROFILE;
     IPoolManager public immutable POOL_MANAGER;
 
     mapping(bytes32 profileKey => ProfileCapabilityV2_1 capability) private _profileCapability;
@@ -195,12 +207,22 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1 is
                 || parentRouter == MAINNET_POOL_MANAGER
         ) revert InvalidBinding(5);
 
+        IProgrammableLaunchStampRouterV2 typedParent = IProgrammableLaunchStampRouterV2(parentRouter);
+        IProgrammableLaunchStampRouterV2.ProfileCapabilityV2 memory shardsCapability =
+            typedParent.profileCapability(SHARDS_PROFILE_KEY);
+        if (
+            !shardsCapability.enabled || !shardsCapability.builtin || shardsCapability.module == address(0)
+                || shardsCapability.moduleRuntimeCodeHash == bytes32(0)
+        ) revert InvalidBinding(5);
+        _requireRuntime(shardsCapability.module, shardsCapability.moduleRuntimeCodeHash);
+
         PERMIT_AUTHORITY = permitAuthority;
         PERMIT_AUTHORITY_RUNTIME_CODE_HASH = permitAuthority.codehash;
         CAPABILITY_ADMIN = capabilityAdmin;
         CAPABILITY_ADMIN_RUNTIME_CODE_HASH = capabilityAdmin.codehash;
-        PARENT_ROUTER = IProgrammableLaunchStampRouterV2(parentRouter);
+        PARENT_ROUTER = typedParent;
         PARENT_ROUTER_RUNTIME_CODE_HASH = parentRouter.codehash;
+        PARENT_SHARDS_PROFILE = shardsCapability.module;
         POOL_MANAGER = IPoolManager(MAINNET_POOL_MANAGER);
     }
 
@@ -235,9 +257,9 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1 is
     }
 
     /// @notice Atomically validates and stamps a completed graph. It never calls any applicant component.
-    /// @dev Mutable configuration and historical creation/initialization facts are authority-attested commitments.
-    ///      Runtime code hashes, CREATE addresses, graph shape, PoolKey, initialized pool state, all collisions, and
-    ///      the JIT permit are independently checked onchain at execution.
+    /// @dev This profile admits only security-relevant component configuration committed by immutable runtime and
+    ///      creation evidence; arbitrary mutable-storage configuration is unsupported. Runtime hashes, CREATE
+    ///      addresses, graph shape, PoolKey, exact JIT pool state, all collisions, and the permit are checked onchain.
     function adoptCompletedGraphV1(
         LaunchPermitV2_1 calldata permit,
         CompletedGraphPlanV1 calldata plan,
@@ -329,7 +351,10 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1 is
         uint160 sqrtPriceX96,
         int24 tick,
         uint24 protocolFee,
-        uint24 lpFee
+        uint24 lpFee,
+        uint128 activeLiquidity,
+        uint256 feeGrowthGlobal0X128,
+        uint256 feeGrowthGlobal1X128
     ) public pure override returns (bytes32) {
         return keccak256(
             abi.encode(
@@ -340,7 +365,10 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1 is
                 sqrtPriceX96,
                 tick,
                 protocolFee,
-                lpFee
+                lpFee,
+                activeLiquidity,
+                feeGrowthGlobal0X128,
+                feeGrowthGlobal1X128
             )
         );
     }
@@ -466,10 +494,23 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1 is
         private
         view
     {
-        (uint160 currentSqrtPriceX96, int24 tick, uint24 protocolFee, uint24 lpFee) =
-            POOL_MANAGER.getSlot0(plan.poolKey.toId());
+        PoolId typedPoolId = plan.poolKey.toId();
+        (uint160 currentSqrtPriceX96, int24 tick, uint24 protocolFee, uint24 lpFee) = POOL_MANAGER.getSlot0(typedPoolId);
         if (currentSqrtPriceX96 == 0) revert PoolNotInitialized(address(POOL_MANAGER), poolId);
-        if (computePoolStateHash(plan.poolKey, currentSqrtPriceX96, tick, protocolFee, lpFee) != currentPoolStateHash) {
+        uint128 activeLiquidity = POOL_MANAGER.getLiquidity(typedPoolId);
+        (uint256 feeGrowthGlobal0X128, uint256 feeGrowthGlobal1X128) = POOL_MANAGER.getFeeGrowthGlobals(typedPoolId);
+        if (
+            computePoolStateHash(
+                    plan.poolKey,
+                    currentSqrtPriceX96,
+                    tick,
+                    protocolFee,
+                    lpFee,
+                    activeLiquidity,
+                    feeGrowthGlobal0X128,
+                    feeGrowthGlobal1X128
+                ) != currentPoolStateHash
+        ) {
             revert InvalidBinding(17);
         }
     }
@@ -487,10 +528,11 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1 is
                 || plan.policyHash != capability.policyHash || plan.sourceCommitHash == bytes32(0)
                 || plan.sourceTreeHash == bytes32(0) || plan.manifestHash == bytes32(0)
                 || plan.reviewAdmissionHash == bytes32(0) || plan.launchWallet == address(0)
-                || plan.creator != plan.launchWallet || plan.creationEvidenceHash == bytes32(0)
-                || plan.componentGraphHash == bytes32(0) || plan.configurationHash == bytes32(0)
-                || plan.initializedSqrtPriceX96 == 0 || plan.poolInitializationEvidenceHash == bytes32(0)
-                || plan.poolResultHash == bytes32(0) || plan.resultHash == bytes32(0) || plan.maxNativeValueWei != 0
+                || plan.creator != plan.launchWallet
+                || plan.creationEvidenceHash == bytes32(0) || plan.componentGraphHash == bytes32(0)
+                || plan.configurationHash == bytes32(0) || plan.initializedSqrtPriceX96 == 0
+                || plan.poolInitializationEvidenceHash == bytes32(0) || plan.poolResultHash == bytes32(0)
+                || plan.resultHash == bytes32(0) || plan.maxNativeValueWei != 0
                 || plan.allowanceCapsHash != EMPTY_ALLOWANCE_CAPS_HASH
         ) revert InvalidBinding(7);
         if (plan.creator.code.length != 0) revert InvalidBinding(8);
@@ -521,6 +563,7 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1 is
             ComponentV1 calldata component = components[i];
             if (
                 component.account == address(this) || component.account == address(PARENT_ROUTER)
+                    || component.account == PARENT_SHARDS_PROFILE || _isExactShardsReservedComponent(component.account)
                     || component.account == PERMIT_AUTHORITY || component.account == CAPABILITY_ADMIN
                     || component.account == address(POOL_MANAGER) || component.account == plan.creator
             ) revert InvalidBinding(13);
@@ -634,6 +677,7 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1 is
     }
 
     function _requireAvailable(bytes32 launchId, bytes32 graphHash, bytes32 poolId) private view {
+        if (poolId == SHARDS_POOL_ID) revert InvalidBinding(18);
         if (_launchStamp[launchId].stampHash != bytes32(0)) revert LaunchAlreadyStamped(launchId);
         bytes32 existingLaunchId = launchIdByGraphHash[graphHash];
         if (existingLaunchId != bytes32(0)) revert GraphAlreadyStamped(graphHash, existingLaunchId);
@@ -761,10 +805,22 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1 is
                 component.account == address(0) || kind < uint8(ComponentKindV2_1.Factory)
                     || kind > uint8(ComponentKindV2_1.Auxiliary) || (i != 0 && component.createNonce <= previousNonce)
                     || component.creationCodeHash == bytes32(0) || component.runtimeCodeHash == bytes32(0)
-                    || component.configurationHash == bytes32(0) || component.creationEvidenceHash == bytes32(0)
+                    || component.creationEvidenceHash == bytes32(0)
             ) revert InvalidGraphOrder(i);
             address expected = LibRLP.computeAddress(creator, component.createNonce);
             if (component.account != expected) revert InvalidCreateAddress(i, component.account, expected);
+            bytes32 immutableConfigurationHash = keccak256(
+                abi.encode(
+                    IMMUTABLE_COMPONENT_CONFIGURATION_TYPEHASH,
+                    component.account,
+                    kind,
+                    component.createNonce,
+                    component.creationCodeHash,
+                    component.runtimeCodeHash,
+                    component.creationEvidenceHash
+                )
+            );
+            if (component.configurationHash != immutableConfigurationHash) revert InvalidGraphOrder(i);
             previousNonce = component.createNonce;
             componentHashes[i] = keccak256(
                 abi.encode(
@@ -817,6 +873,11 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1 is
         if (left.toIndex != right.toIndex) return left.toIndex < right.toIndex;
         if (left.kind != right.kind) return uint8(left.kind) < uint8(right.kind);
         return uint256(left.relationHash) < uint256(right.relationHash);
+    }
+
+    function _isExactShardsReservedComponent(address component) private pure returns (bool) {
+        return component == SHARDS_FACTORY || component == SHARDS_RENDERER || component == SHARDS_TOKEN
+            || component == SHARDS_HOOK || component == SHARDS_NFT;
     }
 
     function _stampRequestHash(StampRequestV2_1 memory request) private pure returns (bytes32) {

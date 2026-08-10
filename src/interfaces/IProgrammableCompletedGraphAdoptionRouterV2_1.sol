@@ -44,7 +44,8 @@ interface IProgrammableCompletedGraphAdoptionRouterV2_1 {
     }
 
     /// @dev Components are canonically ordered by strictly increasing CREATE nonce. Every address is independently
-    ///      recomputed from `plan.creator` and `createNonce`; all four hashes are mandatory.
+    ///      recomputed from `plan.creator` and `createNonce`. `configurationHash` is a typed derivation of the other
+    ///      immutable component fields; this profile does not claim to verify arbitrary mutable storage.
     struct ComponentV1 {
         address account;
         ComponentKindV2_1 kind;
@@ -238,7 +239,10 @@ interface IProgrammableCompletedGraphAdoptionRouterV2_1 {
         uint160 sqrtPriceX96,
         int24 tick,
         uint24 protocolFee,
-        uint24 lpFee
+        uint24 lpFee,
+        uint128 activeLiquidity,
+        uint256 feeGrowthGlobal0X128,
+        uint256 feeGrowthGlobal1X128
     ) external pure returns (bytes32);
 
     function computeResultHash(bytes32 componentGraphHash, bytes32 configurationHash, bytes32 poolResultHash)

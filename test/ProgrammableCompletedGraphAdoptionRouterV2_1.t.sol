@@ -13,6 +13,7 @@ import { ProgrammableCompletedGraphAdoptionRouterV2_1 } from "../src/Programmabl
 import {
     IProgrammableCompletedGraphAdoptionRouterV2_1
 } from "../src/interfaces/IProgrammableCompletedGraphAdoptionRouterV2_1.sol";
+import { IProgrammableLaunchStampRouterV2 } from "../src/interfaces/IProgrammableLaunchStampRouterV2.sol";
 
 contract CompletedGraphAuthorityV2_1Mock is IERC1271 {
     mapping(bytes32 digest => bool approved) private _approved;
@@ -42,6 +43,8 @@ contract CompletedGraphCapabilityAdminV2_1Mock {
 }
 
 contract CompletedGraphParentRouterV2Mock {
+    bytes32 private constant SHARDS_PROFILE_KEY = 0xb90e215e0e29c0dacf021e5e778847af4100433ee7d22014b73f8ca4add09d0c;
+
     mapping(address component => bytes32 launchId) public launchIdByComponent;
     mapping(address token => bytes32 launchId) public launchIdByToken;
     mapping(bytes32 lookupKey => bytes32 launchId) private _launchIdByPool;
@@ -60,6 +63,18 @@ contract CompletedGraphParentRouterV2Mock {
 
     function launchIdByPool(address poolManager, bytes32 poolId) external view returns (bytes32) {
         return _launchIdByPool[keccak256(abi.encode(poolManager, poolId))];
+    }
+
+    function profileCapability(bytes32 profileKey)
+        external
+        view
+        returns (IProgrammableLaunchStampRouterV2.ProfileCapabilityV2 memory capability)
+    {
+        if (profileKey != SHARDS_PROFILE_KEY) return capability;
+        capability.module = address(this);
+        capability.moduleRuntimeCodeHash = address(this).codehash;
+        capability.enabled = true;
+        capability.builtin = true;
     }
 }
 
@@ -165,20 +180,30 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1Test is Test {
             router.computePoolKeyHash(fixture.plan.poolKey),
             0x846d2438a39c0b1b919819cde3440f168548be8bb0ad8523de1acde33cbe3c87
         );
-        assertEq(fixture.plan.componentGraphHash, 0x64c9b3b9ce6ca34237557eec0dc29de90dbd6a430b4f307ab7c38723d74fee12);
-        assertEq(fixture.plan.configurationHash, 0xf31ecea88ab27ffd06202139d1267e4bbbd2a25beb0fab6e977290f80080d78c);
+        assertEq(fixture.plan.routeSchemaHash, 0xb440efcbe588f6355ac3c6f12a9b2cd8905c7a6aa0741b59824972ceb903f2be);
+        assertEq(
+            fixture.components[0].configurationHash, 0x25d499d54b28d5fb25382c768845a24b9b196ddc52bf08f9dcd591adc9c5140f
+        );
+        assertEq(
+            fixture.components[1].configurationHash, 0x70c35e107bc8c5bfbc93f66e5770b962ed9f6960958e62550a504f62cf0b3eff
+        );
+        assertEq(
+            fixture.components[2].configurationHash, 0xa923117913eb7d1d2bd63fc92c683137e5ae1fb79bc1673f4b07d0c929fdf86d
+        );
+        assertEq(fixture.plan.componentGraphHash, 0x9d118283efed3e1c18f549dbce88782cfe4bb36c852806f3e65a95dd912b3499);
+        assertEq(fixture.plan.configurationHash, 0x8da89fcd8715cf079da6ae187019b8129e72093ff9cbfc81c2a5b121da939cfe);
         assertEq(fixture.plan.poolResultHash, 0xc5796c08590b5227b779aa4086da99793a346e2f257356bc8f10ca88c560b643);
         assertEq(
-            fixture.request.currentPoolStateHash, 0x9baa6bc84fc98f93f8ba46cc601c30e4d9fd94f9d1d857ef4e993231109be456
+            fixture.request.currentPoolStateHash, 0x6fa5345100e65eef5bab3092f4ed00ea3256a046615e78842cb96f68b14042a6
         );
-        assertEq(fixture.plan.resultHash, 0x82fec3c3c4d95d1469e56ed45700b48b266459e075c85deb9f5c1846f4b3525b);
-        assertEq(fixture.planHash, 0xff5ad0abe49053c017b41b7c3a0788d7a98d0a7d922f6db3ec3e4284882f26a7);
-        assertEq(fixture.launchId, 0xb203a8449aeadda754b80f77849db6bc452125b957c4b3f99e34c173c473f553);
+        assertEq(fixture.plan.resultHash, 0x79afaa03b1550bc5a3720d007694f3cc9702ddb7e8407b8bbed66e1f71824247);
+        assertEq(fixture.planHash, 0x7076b7dad173db78012e59b71738b8bdbb061d9f92c6687c17887cf0355f1c73);
+        assertEq(fixture.launchId, 0x649a6487c4afec517fb21b892e2a4d4e1915e8772e32fc7fa03452b225880535);
         assertEq(
             PoolId.unwrap(fixture.plan.poolKey.toId()),
             0xdef0cbf06fe84fc21c894d2796ac5dd19d27f8ef046114cd67eebfc72b106b21
         );
-        assertEq(fixture.permit.stampRequestHash, 0x234f0611749ad6d465d0859266335c4cd1c9084965301f3e21f240dd9a3e5da2);
+        assertEq(fixture.permit.stampRequestHash, 0x0dbea1f4a8c4c8a5f717df049ac46273cdce6e05896bd9843eedddc65c2bc020);
     }
 
     function test_registrationRejectsAnyOtherProfileOrSchemaAndIsAddOnly() public {
@@ -242,7 +267,7 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1Test is Test {
         assertFalse(router.nonceUsed(fixture.plan.launchWallet, fixture.launchId));
 
         fixture.request.currentPoolStateHash =
-            router.computePoolStateHash(fixture.plan.poolKey, START_SQRT_PRICE_X96 + 1, 0, 0, LP_FEE);
+            router.computePoolStateHash(fixture.plan.poolKey, START_SQRT_PRICE_X96 + 1, 0, 0, LP_FEE, 0, 0, 0);
         fixture = _rebind(fixture);
         bytes32 freshDigest = router.permitDigest(fixture.permit);
         assertEq(fixture.planHash, immutablePlanHash);
@@ -252,6 +277,31 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1Test is Test {
         assertTrue(router.permitDigestUsed(freshDigest));
         assertEq(router.launchStamp(fixture.launchId).currentPoolStateHash, fixture.request.currentPoolStateHash);
         assertEq(admin.registrationCount(), 1);
+    }
+
+    function test_jitPoolStateBindsActiveLiquidityAndGlobalFeeGrowth() public {
+        ApplicantFixture memory fixture = _fixture(address(0xF11D), 55, "pool-liquidity-fee-growth");
+        bytes32 immutablePlanHash = fixture.planHash;
+        bytes32 staleDigest = router.permitDigest(fixture.permit);
+        _writePoolDynamicState(fixture.plan.poolKey, 7, 11, 13);
+
+        authority.setApproved(staleDigest, true);
+        vm.prank(fixture.plan.launchWallet);
+        vm.expectRevert(
+            abi.encodeWithSelector(ProgrammableCompletedGraphAdoptionRouterV2_1.InvalidBinding.selector, 17)
+        );
+        router.adoptCompletedGraphV1(
+            fixture.permit, fixture.plan, fixture.request, fixture.components, fixture.edges, "approved"
+        );
+        assertFalse(router.permitDigestUsed(staleDigest));
+        assertFalse(router.nonceUsed(fixture.plan.launchWallet, fixture.launchId));
+
+        fixture.request.currentPoolStateHash =
+            router.computePoolStateHash(fixture.plan.poolKey, START_SQRT_PRICE_X96, 0, 0, LP_FEE, 7, 11, 13);
+        fixture = _rebind(fixture);
+        assertEq(fixture.planHash, immutablePlanHash);
+        _approveAndAdopt(fixture);
+        assertEq(router.launchStamp(fixture.launchId).currentPoolStateHash, fixture.request.currentPoolStateHash);
     }
 
     function test_parentTokenAndPoolCollisionsFailClosed() public {
@@ -401,7 +451,9 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1Test is Test {
         badComponentConfiguration.components[1].configurationHash = keccak256("wrong-component-configuration");
         authority.setApproved(componentConfigurationDigest, true);
         vm.prank(badComponentConfiguration.plan.launchWallet);
-        vm.expectRevert(abi.encodeWithSelector(ProgrammableCompletedGraphAdoptionRouterV2_1.InvalidBinding.selector, 9));
+        vm.expectRevert(
+            abi.encodeWithSelector(ProgrammableCompletedGraphAdoptionRouterV2_1.InvalidGraphOrder.selector, 1)
+        );
         router.adoptCompletedGraphV1(
             badComponentConfiguration.permit,
             badComponentConfiguration.plan,
@@ -585,7 +637,7 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1Test is Test {
         );
         _writeSlot0(fixture.plan.poolKey, START_SQRT_PRICE_X96, 0, 0, LP_FEE);
         fixture.request.currentPoolStateHash =
-            router.computePoolStateHash(fixture.plan.poolKey, START_SQRT_PRICE_X96, 0, 0, LP_FEE);
+            router.computePoolStateHash(fixture.plan.poolKey, START_SQRT_PRICE_X96, 0, 0, LP_FEE, 0, 0, 0);
         fixture.plan.resultHash = router.computeResultHash(
             fixture.plan.componentGraphHash, fixture.plan.configurationHash, fixture.plan.poolResultHash
         );
@@ -644,15 +696,28 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1Test is Test {
         string memory seed,
         string memory label
     ) private view returns (IProgrammableCompletedGraphAdoptionRouterV2_1.ComponentV1 memory) {
+        bytes32 creationCodeHash = _hash(seed, string.concat(label, "-creation-code"));
+        bytes32 creationEvidenceHash = _hash(seed, string.concat(label, "-creation-evidence"));
+        bytes32 configurationHash = keccak256(
+            abi.encode(
+                router.IMMUTABLE_COMPONENT_CONFIGURATION_TYPEHASH(),
+                account,
+                uint8(kind),
+                nonce,
+                creationCodeHash,
+                componentRuntimeHash,
+                creationEvidenceHash
+            )
+        );
         return IProgrammableCompletedGraphAdoptionRouterV2_1.ComponentV1({
-                account: account,
-                kind: kind,
-                createNonce: nonce,
-                creationCodeHash: _hash(seed, string.concat(label, "-creation-code")),
-                runtimeCodeHash: componentRuntimeHash,
-                configurationHash: _hash(seed, string.concat(label, "-configuration")),
-                creationEvidenceHash: _hash(seed, string.concat(label, "-creation-evidence"))
-            });
+            account: account,
+            kind: kind,
+            createNonce: nonce,
+            creationCodeHash: creationCodeHash,
+            runtimeCodeHash: componentRuntimeHash,
+            configurationHash: configurationHash,
+            creationEvidenceHash: creationEvidenceHash
+        });
     }
 
     function _approveAndAdopt(ApplicantFixture memory fixture) private {
@@ -687,6 +752,18 @@ contract ProgrammableCompletedGraphAdoptionRouterV2_1Test is Test {
         uint256 packed = uint256(sqrtPriceX96) | (uint256(uint24(tick)) << 160) | (uint256(protocolFee) << 184)
             | (uint256(lpFee) << 208);
         vm.store(POOL_MANAGER, poolStateSlot, bytes32(packed));
+    }
+
+    function _writePoolDynamicState(
+        PoolKey memory poolKey,
+        uint128 activeLiquidity,
+        uint256 feeGrowthGlobal0X128,
+        uint256 feeGrowthGlobal1X128
+    ) private {
+        bytes32 poolStateSlot = keccak256(abi.encodePacked(PoolId.unwrap(poolKey.toId()), bytes32(uint256(6))));
+        vm.store(POOL_MANAGER, bytes32(uint256(poolStateSlot) + 1), bytes32(feeGrowthGlobal0X128));
+        vm.store(POOL_MANAGER, bytes32(uint256(poolStateSlot) + 2), bytes32(feeGrowthGlobal1X128));
+        vm.store(POOL_MANAGER, bytes32(uint256(poolStateSlot) + 3), bytes32(uint256(activeLiquidity)));
     }
 
     function _hash(string memory seed, string memory label) private pure returns (bytes32) {
