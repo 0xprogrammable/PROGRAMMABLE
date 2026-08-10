@@ -37,9 +37,12 @@ describe("Night Garden route alignment", () => {
       /\.profileWorkspace\s*\{[^}]*backdrop-filter:\s*none;/s,
     );
     expect(docs).toMatch(
-      /\.workbench\s*\{[^}]*backdrop-filter:\s*none;[^}]*background:\s*var\(--dev-code\);/s,
+      /\.dataList,\s*\.codeList\s*\{[^}]*background:\s*color-mix\(in srgb, var\(--surface-soft\) 72%, transparent\);[^}]*border:\s*1px solid var\(--panel-border-soft\);/s,
     );
-    expect(docs).toContain("--dev-accent: var(--brand-ivory)");
+    expect(docs).toMatch(
+      /\.callout\s*\{[^}]*border-inline-start:\s*2px solid[^}]*var\(--brand-ivory\)/s,
+    );
+    expect(docs).not.toContain("backdrop-filter");
   });
 
   it("keeps Docs search readable and status colors semantic", () => {

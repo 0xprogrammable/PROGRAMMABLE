@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, ListTree, Menu, X } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -9,9 +9,14 @@ import {
   useRef,
   useState,
   type MouseEvent,
+  type ReactNode,
 } from "react";
 
-import { docsCategories, docsNavigation } from "@/components/docs-data";
+import {
+  docsCategories,
+  docsNavigation,
+  type DocsNavigationItem,
+} from "@/components/docs-data";
 import styles from "@/components/docs-experience.module.css";
 
 type SectionPosition = {
@@ -104,6 +109,20 @@ export function isDocsNavigationItemActive({
   return itemPath === currentPath;
 }
 
+export function isDocsNavigationBranchActive({
+  currentPath,
+  item,
+}: {
+  currentPath: string;
+  item: DocsNavigationItem;
+}): boolean {
+  const itemPath = item.href.split("#")[0];
+  return (
+    itemPath === currentPath ||
+    item.relatedPaths?.some((path) => path === currentPath) === true
+  );
+}
+
 export function pickActiveDocsSection({
   atPageEnd,
   marker,
@@ -192,9 +211,7 @@ export function shouldCancelDocsScrollForKey({
   );
 }
 
-function getDocsScrollOffset(
-  mobileNavigation: HTMLDetailsElement | null,
-): number {
+function getDocsScrollOffset(): number {
   const documentStyles = window.getComputedStyle(document.documentElement);
   const measuredScrollPadding = Number.parseFloat(
     documentStyles.scrollPaddingTop,
@@ -206,12 +223,12 @@ function getDocsScrollOffset(
     docsTools && window.getComputedStyle(docsTools).position === "sticky"
       ? docsTools.offsetHeight
       : 0;
-  const mobileNavigationSummary =
-    mobileNavigation?.querySelector<HTMLElement>("summary");
+  const mobileTools = document.querySelector<HTMLElement>(
+    "[data-docs-mobile-tools]",
+  );
   const mobileNavigationHeight =
-    mobileNavigation &&
-    window.getComputedStyle(mobileNavigation).display !== "none"
-      ? (mobileNavigationSummary?.offsetHeight ?? 0)
+    mobileTools && window.getComputedStyle(mobileTools).display !== "none"
+      ? mobileTools.offsetHeight
       : 0;
 
   return calculateDocsReadingOffset({
@@ -223,28 +240,30 @@ function getDocsScrollOffset(
   });
 }
 
-function getDocsSectionTop(
-  section: HTMLElement,
-  mobileNavigation: HTMLDetailsElement | null,
-) {
+function getDocsSectionTop(section: HTMLElement) {
   return Math.max(
     0,
     section.getBoundingClientRect().top +
       window.scrollY -
-      getDocsScrollOffset(mobileNavigation),
+      getDocsScrollOffset(),
   );
 }
 
 export function DocsNavigation({
   currentPath,
+  mobileSearch,
   sections = emptyDocsPageSections,
 }: {
   currentPath: string;
+  mobileSearch?: ReactNode;
   sections?: readonly DocsPageSection[];
 }) {
-  const mobileNavigationRef = useRef<HTMLDetailsElement>(null);
+  const mobileDialogRef = useRef<HTMLDialogElement>(null);
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const mobilePageNavigationRef = useRef<HTMLDetailsElement>(null);
   const locationInitializedRef = useRef(false);
   const scrollAnimationFrameRef = useRef<number | null>(null);
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const trackedSectionIds = useMemo(
     () => sections.map((section) => section.id),
     [sections],
@@ -263,14 +282,16 @@ export function DocsNavigation({
     useState(initialSectionHref);
   const activeHref =
     trackedSectionIds.length > 0 ? activeSectionHref : currentPath;
-  let activeLabel = "Reference";
+
+  let activeLabel = "Documentation";
   for (const group of docsNavigation) {
     for (const item of group.items) {
-      if (item.href === activeHref || item.href === currentPath) {
-        activeLabel = item.label;
-      }
+      if (item.href.split("#")[0] === currentPath) activeLabel = item.label;
     }
   }
+  const activeSectionLabel =
+    sections.find((section) => `${currentPath}#${section.id}` === activeHref)
+      ?.label ?? sections[0]?.label;
 
   const cancelDocsScroll = useCallback(() => {
     if (scrollAnimationFrameRef.current === null) return;
@@ -278,10 +299,25 @@ export function DocsNavigation({
     scrollAnimationFrameRef.current = null;
   }, []);
 
+  const closeMobileNavigation = useCallback(() => {
+    const dialog = mobileDialogRef.current;
+    if (dialog?.open) dialog.close();
+  }, []);
+
+  const openMobileNavigation = useCallback(() => {
+    if (mobilePageNavigationRef.current) {
+      mobilePageNavigationRef.current.open = false;
+    }
+    const dialog = mobileDialogRef.current;
+    if (!dialog || dialog.open) return;
+    dialog.showModal();
+    setMobileNavigationOpen(true);
+  }, []);
+
   const scrollToDocsSection = useCallback(
     (section: HTMLElement, animate: boolean, onComplete?: () => void) => {
       cancelDocsScroll();
-      const targetY = getDocsSectionTop(section, mobileNavigationRef.current);
+      const targetY = getDocsSectionTop(section);
       const startY = window.scrollY;
       const distance = targetY - startY;
 
@@ -364,26 +400,24 @@ export function DocsNavigation({
       if (window.location.pathname + window.location.hash !== itemHref) {
         window.history.pushState(null, "", itemHref);
       }
-      const mobileNavigationWasOpen =
-        mobileNavigationRef.current?.open === true;
-      if (mobileNavigationRef.current) {
-        mobileNavigationRef.current.open = false;
+      closeMobileNavigation();
+      if (mobilePageNavigationRef.current) {
+        mobilePageNavigationRef.current.open = false;
       }
 
-      const scrollToSection = () => {
+      window.requestAnimationFrame(() => {
         scrollToDocsSection(section, animate && shouldAnimateDocsScroll(), () =>
           setActiveSectionHref(itemHref),
         );
-      };
-
-      if (mobileNavigationWasOpen) {
-        window.requestAnimationFrame(scrollToSection);
-      } else {
-        scrollToSection();
-      }
+      });
       return true;
     },
-    [currentPath, scrollToDocsSection, trackedSectionIdSet],
+    [
+      closeMobileNavigation,
+      currentPath,
+      scrollToDocsSection,
+      trackedSectionIdSet,
+    ],
   );
 
   useEffect(() => {
@@ -425,33 +459,7 @@ export function DocsNavigation({
           ? [{ id, top: section.getBoundingClientRect().top + scrollY }]
           : [];
       });
-      const documentStyles = window.getComputedStyle(document.documentElement);
-      const measuredScrollPadding = Number.parseFloat(
-        documentStyles.scrollPaddingTop,
-      );
-      const siteHeaderHeight =
-        document.querySelector<HTMLElement>(".site-header")?.offsetHeight ?? 68;
-      const docsTools =
-        document.querySelector<HTMLElement>("[data-docs-tools]");
-      const stickyToolsHeight =
-        docsTools && window.getComputedStyle(docsTools).position === "sticky"
-          ? docsTools.offsetHeight
-          : 0;
-      const mobileNavigationSummary =
-        mobileNavigationRef.current?.querySelector<HTMLElement>("summary");
-      const mobileNavigationHeight =
-        mobileNavigationRef.current &&
-        window.getComputedStyle(mobileNavigationRef.current).display !== "none"
-          ? (mobileNavigationSummary?.offsetHeight ?? 0)
-          : 0;
-      readingMarkerOffset =
-        calculateDocsReadingOffset({
-          mobileNavigationHeight,
-          scrollPaddingTop: Number.isFinite(measuredScrollPadding)
-            ? measuredScrollPadding
-            : siteHeaderHeight + 20,
-          stickyToolsHeight,
-        }) + 2;
+      readingMarkerOffset = getDocsScrollOffset() + 2;
       scheduleScrollUpdate();
     };
 
@@ -521,6 +529,11 @@ export function DocsNavigation({
       );
   }, [navigateToDocsTopic]);
 
+  useEffect(() => {
+    closeMobileNavigation();
+    return () => closeMobileNavigation();
+  }, [closeMobileNavigation, currentPath]);
+
   function handleNavigation(
     event: MouseEvent<HTMLAnchorElement>,
     itemHref: string,
@@ -535,57 +548,72 @@ export function DocsNavigation({
     if (isSamePageTopic) {
       event.preventDefault();
       navigateToDocsTopic(itemHref, event.detail > 0);
-    } else if (mobileNavigationRef.current?.open) {
-      mobileNavigationRef.current.open = false;
+      return;
+    }
+    closeMobileNavigation();
+    if (mobilePageNavigationRef.current) {
+      mobilePageNavigationRef.current.open = false;
     }
   }
 
   function renderGlobalNavigation() {
     return (
       <>
-        {docsNavigation.map((group) => (
-          <div className={styles.navGroup} key={group.label}>
-            <p className={styles.navLabel}>{group.label}</p>
-            <ul>
-              {group.items.map((item) => {
-                const active = isDocsNavigationItemActive({
-                  activeHref,
-                  currentPath,
-                  itemHref: item.href,
-                });
+        {docsNavigation.map((group) => {
+          const branchActive = group.items.some((item) =>
+            isDocsNavigationBranchActive({ currentPath, item }),
+          );
 
-                return (
-                  <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      data-active={active ? "true" : undefined}
-                      aria-current={
-                        active
-                          ? item.href.includes("#")
-                            ? "location"
-                            : "page"
-                          : undefined
-                      }
-                      onClick={(event) => handleNavigation(event, item.href)}
-                    >
-                      {item.label}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        ))}
+          return (
+            <div
+              className={styles.navGroup}
+              data-branch-active={branchActive ? "true" : undefined}
+              key={group.label}
+            >
+              <p className={styles.navLabel}>{group.label}</p>
+              <ul>
+                {group.items.map((item) => {
+                  const active = isDocsNavigationItemActive({
+                    activeHref,
+                    currentPath,
+                    itemHref: item.href,
+                  });
+                  const itemBranchActive = isDocsNavigationBranchActive({
+                    currentPath,
+                    item,
+                  });
+
+                  return (
+                    <li key={item.href}>
+                      <Link
+                        href={item.href}
+                        data-active={active ? "true" : undefined}
+                        data-branch-active={
+                          !active && itemBranchActive ? "true" : undefined
+                        }
+                        data-depth={item.depth ?? 0}
+                        aria-current={active ? "page" : undefined}
+                        onClick={(event) => handleNavigation(event, item.href)}
+                      >
+                        {item.label}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          );
+        })}
       </>
     );
   }
 
   function renderLocalNavigation() {
-    if (sections.length === 0) return null;
+    if (sections.length < 2) return null;
 
     return (
-      <div className={`${styles.navGroup} ${styles.contextNavGroup}`}>
-        <p className={styles.navLabel}>On this page</p>
+      <div className={styles.mobilePageNavBody}>
+        <p>On this page</p>
         <ul>
           {sections.map((section) => {
             const href = `${currentPath}#${section.id}`;
@@ -609,105 +637,91 @@ export function DocsNavigation({
   }
 
   function renderMobileNavigation() {
-    const activeCategory = docsCategories.find(
-      (category) =>
-        category.href === currentPath ||
-        category.relatedPaths.some((path) => path === currentPath),
-    );
-    const activeGroup = activeCategory
-      ? docsNavigation.find((group) =>
-          group.items.some((item) => {
-            const itemPath = item.href.split("#")[0];
-            return (
-              itemPath === activeCategory.href ||
-              activeCategory.relatedPaths.some((path) => path === itemPath)
-            );
-          }),
-        )
-      : undefined;
-    const relatedItems =
-      activeGroup?.items.filter(
-        (item) => item.href.split("#")[0] !== currentPath,
-      ) ?? [];
-
     return (
-      <>
-        {relatedItems.length > 0 ? (
-          <div className={styles.navGroup}>
-            <p className={styles.navLabel}>{activeGroup?.label}</p>
-            <ul>
-              {relatedItems.map((item) => (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    onClick={(event) => handleNavigation(event, item.href)}
-                  >
-                    {item.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-
-        {renderLocalNavigation()}
-
-        <div className={styles.navGroup}>
-          <p className={styles.navLabel}>Documentation</p>
-          <ul>
-            {docsCategories.map((category) => {
-              const active = category === activeCategory;
-              return (
-                <li key={category.href}>
-                  <Link
-                    href={category.href}
-                    data-active={active ? "true" : undefined}
-                    aria-current={
-                      active
-                        ? category.href === currentPath
-                          ? "page"
-                          : "location"
-                        : undefined
-                    }
-                    onClick={(event) =>
-                      handleNavigation(event, category.href)
-                    }
-                  >
-                    {category.label}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      </>
+      <div className={styles.mobileNavTree}>{renderGlobalNavigation()}</div>
     );
   }
 
+  const activeCategory = docsCategories.find(
+    (category) =>
+      category.href === currentPath ||
+      category.relatedPaths.some((path) => path === currentPath),
+  );
+
   return (
     <>
-      <nav
-        className={styles.desktopNav}
-        aria-label="Documentation navigation"
-      >
+      <nav className={styles.desktopNav} aria-label="Documentation navigation">
         {renderGlobalNavigation()}
       </nav>
 
-      <details className={styles.mobileNav} ref={mobileNavigationRef}>
-        <summary>
-          <span className={styles.mobileNavCurrent}>
-            <span>Docs</span>
-            <strong>{activeLabel}</strong>
-          </span>
-          <ChevronDown aria-hidden="true" size={17} />
-        </summary>
-        <nav
-          className={styles.mobileNavBody}
-          aria-label="Documentation navigation"
+      <div className={styles.mobileTools} data-docs-mobile-tools>
+        <button
+          className={styles.mobileMenuButton}
+          ref={mobileMenuButtonRef}
+          type="button"
+          aria-controls="docs-mobile-navigation"
+          aria-expanded={mobileNavigationOpen}
+          aria-haspopup="dialog"
+          onClick={openMobileNavigation}
         >
-          {renderMobileNavigation()}
-        </nav>
-      </details>
+          <Menu aria-hidden="true" size={18} strokeWidth={1.8} />
+          <span>{activeCategory?.label ?? "Docs"}</span>
+          <strong>{activeLabel}</strong>
+        </button>
+
+        {sections.length >= 2 ? (
+          <details
+            className={styles.mobilePageNav}
+            ref={mobilePageNavigationRef}
+          >
+            <summary aria-label="Open this page's sections">
+              <ListTree aria-hidden="true" size={18} strokeWidth={1.8} />
+              <span>{activeSectionLabel ?? "On this page"}</span>
+              <ChevronDown aria-hidden="true" size={15} strokeWidth={1.8} />
+            </summary>
+            {renderLocalNavigation()}
+          </details>
+        ) : null}
+      </div>
+
+      <dialog
+        className={styles.mobileNavDialog}
+        id="docs-mobile-navigation"
+        ref={mobileDialogRef}
+        aria-label="Documentation navigation"
+        onClick={(event) => {
+          if (event.target === event.currentTarget) closeMobileNavigation();
+        }}
+        onClose={() => {
+          setMobileNavigationOpen(false);
+          mobileMenuButtonRef.current?.focus();
+        }}
+      >
+        <div className={styles.mobileNavPanel}>
+          <div className={styles.mobileNavHeader}>
+            <Link href="/docs" onClick={closeMobileNavigation}>
+              <span>Programmable</span>
+              <strong>Documentation</strong>
+            </Link>
+            <button
+              type="button"
+              aria-label="Close documentation navigation"
+              onClick={closeMobileNavigation}
+            >
+              <X aria-hidden="true" size={19} strokeWidth={1.8} />
+            </button>
+          </div>
+          {mobileSearch ? (
+            <div className={styles.mobileNavSearch}>{mobileSearch}</div>
+          ) : null}
+          <nav
+            className={styles.mobileNavBody}
+            aria-label="Documentation pages"
+          >
+            {renderMobileNavigation()}
+          </nav>
+        </div>
+      </dialog>
     </>
   );
 }
@@ -719,9 +733,7 @@ export function DocsPageNavigation({
   currentPath: string;
   sections?: readonly DocsPageSection[];
 }) {
-  const [activeSectionId, setActiveSectionId] = useState(
-    sections[0]?.id ?? "",
-  );
+  const [activeSectionId, setActiveSectionId] = useState(sections[0]?.id ?? "");
 
   useEffect(() => {
     if (sections.length === 0) return;

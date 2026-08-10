@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, Braces, FileJson2, GitBranch, Network } from "lucide-react";
+import { ArrowRight, ArrowUpRight } from "lucide-react";
 
 import { PROGRAMMABLE_LAUNCH_STAMP_RESOURCES } from "@/components/launch-stamp-docs-contract";
 import styles from "@/components/docs-hub.module.css";
@@ -9,12 +9,12 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Infrastructure · Programmable",
   description:
-    "Understand Programmable launch execution, onchain identity, Router provenance, public resources and verification boundaries.",
+    "Understand how Programmable launches create Uniswap v4 markets, how Router provenance works, and which public resources define the integration.",
   alternates: { canonical: "/docs/infrastructure" },
 };
 
 const sections = [
-  { id: "system", label: "System overview" },
+  { id: "launch", label: "From launch to application" },
   { id: "provenance", label: "Launch provenance" },
   { id: "resources", label: "Public resources" },
   { id: "boundaries", label: "Verification boundaries" },
@@ -22,21 +22,21 @@ const sections = [
 
 const resources = [
   {
-    description: "Read the current Ethereum deployment and Router bindings.",
+    description:
+      "Current Ethereum deployment, Router range, runtime hash and immutable bindings.",
     href: PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.manifestUrl,
-    icon: FileJson2,
     label: "Live manifest",
   },
   {
-    description: "Download the exact interface used for onchain verification.",
+    description:
+      "The exact interface used to read and verify Launch Stamp Router V1.",
     href: PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.abiUrl,
-    icon: Braces,
     label: "Router ABI",
   },
   {
-    description: "Follow the reference algorithm and integration examples.",
+    description:
+      "Verification algorithm, terminal guidance and runnable examples.",
     href: PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.referenceUrl,
-    icon: GitBranch,
     label: "GitHub reference",
   },
 ] as const;
@@ -45,166 +45,135 @@ export default function InfrastructureDocsPage() {
   return (
     <DocsShell
       currentPath="/docs/infrastructure"
-      description="Launch contracts create tokens and markets. The Launch Stamp Router separately records provenance for launches executed through it. This page explains both without requiring contract-level knowledge."
-      heroAside={
-        <div className={styles.systemLine} aria-label="Infrastructure sequence">
-          <span>Router launch</span>
-          <ArrowRight aria-hidden="true" size={16} />
-          <span>Token and market</span>
-          <ArrowRight aria-hidden="true" size={16} />
-          <span>Provenance record</span>
-          <ArrowRight aria-hidden="true" size={16} />
-          <span>Verifier-enabled app</span>
-        </div>
-      }
-      heroId="system-map"
-      kicker="Infrastructure"
+      description="Programmable launch contracts create tokens and Uniswap v4 markets. The Launch Stamp Router separately records provenance for launches executed through it."
       sections={sections}
-      title="Public launch infrastructure"
+      title="How Programmable works"
     >
-      <section id="system">
-        <div className={styles.sectionIntro}>
-          <p className={styles.eyebrow}>System overview</p>
-          <h2>Each infrastructure layer answers a different question</h2>
-          <p>
-            Launch execution, market state, provenance and presentation are
-            related, but they are not interchangeable sources of truth.
-          </p>
-        </div>
+      <section id="launch">
+        <h2>From launch to application</h2>
+        <p>
+          Each layer answers a different question. Do not use market state as
+          proof of origin, or a provenance record as proof of current market
+          behavior.
+        </p>
 
-        <ol className={styles.layerList}>
-          <li>
-            <span>01</span>
-            <div>
-              <strong>Launch execution</strong>
-              <p>
-                Model-specific contracts create the token, initialize its
-                Uniswap v4 market and apply the selected launch rules.
-              </p>
-            </div>
-          </li>
-          <li>
-            <span>02</span>
-            <div>
-              <strong>Onchain market</strong>
-              <p>
-                The PoolManager address and poolId identify the v4 market. Read
-                its currencies, fee, tick spacing, hook and current state
-                separately.
-              </p>
-            </div>
-          </li>
-          <li>
-            <span>03</span>
-            <div>
-              <strong>Launch provenance</strong>
-              <p>
-                The Launch Stamp Router records identity for launches that are
-                executed and stamped through it.
-              </p>
-            </div>
-          </li>
-          <li>
-            <span>04</span>
-            <div>
-              <strong>Public applications</strong>
-              <p>
-                Applications that implement the verifier can identify
-                Router-stamped launches. Historical launches and direct
-                factory calls require separate discovery data.
-              </p>
-            </div>
-          </li>
-        </ol>
+        <div className={styles.topicList}>
+          <div>
+            <h3>Launch execution</h3>
+            <p>
+              Model-specific contracts create the token, initialize its Uniswap
+              v4 market and apply the selected launch rules.
+            </p>
+          </div>
+          <div>
+            <h3>Onchain market</h3>
+            <p>
+              PoolManager and poolId identify the v4 market. Its currencies,
+              fee, tick spacing, hook and current state must be read separately.
+            </p>
+          </div>
+          <div>
+            <h3>Launch provenance</h3>
+            <p>
+              For a launch executed and stamped through Router V1, the Router
+              records the token, hook, market, launch kind and component proofs.
+            </p>
+          </div>
+          <div>
+            <h3>Application label</h3>
+            <p>
+              A terminal, wallet, scanner or indexer can show a Programmable
+              label after it verifies the Router address, runtime, bindings,
+              lookups and record cross-checks.
+            </p>
+          </div>
+        </div>
       </section>
 
       <section id="provenance">
-        <div className={styles.sectionIntro}>
-          <p className={styles.eyebrow}>Launch provenance</p>
-          <h2>Router verification applies only to stamped launches</h2>
-          <p>
-            A terminal can start with a token address or a PoolManager and
-            poolId, resolve the launch ID, and read the recorded stamp from the
-            Router. Historical launches and direct factory calls are outside
-            that Router record. A Router record establishes provenance only
-            after the published address, runtime, binding, lookup and
-            cross-check requirements pass. It is not a safety guarantee.
-          </p>
-        </div>
-
-        <div className={styles.inlineAction}>
+        <h2>Router verification applies only to stamped launches</h2>
+        <p>
+          Start with a token address or with PoolManager and poolId. Resolve the
+          launch ID, read the recorded stamp and cross-check the returned
+          identity at the same canonical block.
+        </p>
+        <p>
+          The published start block is the first block to scan for this Router.
+          It does not add provenance to earlier launches. A direct factory call
+          remains outside the Router record even when it occurs at or after that
+          block. Do not infer a stamp from a name, symbol, shared hook or legacy
+          event.
+        </p>
+        <p className={styles.note}>
+          A verified record establishes Router provenance.{" "}
+          <strong>It is not a safety guarantee.</strong> It is also not an
+          audit, approval or endorsement.
+        </p>
+        <p className={styles.inlineAction}>
           <Link href="/docs/launch-stamps">
-            Read the complete Launch Stamp Router reference
+            Read the Launch Stamp Router reference
             <ArrowRight aria-hidden="true" size={17} strokeWidth={1.8} />
           </Link>
-        </div>
+        </p>
       </section>
 
       <section id="resources">
-        <div className={styles.sectionIntro}>
-          <p className={styles.eyebrow}>Canonical resources</p>
-          <h2>Use the manifest, ABI and public reference together</h2>
-          <p>
-            The manifest identifies the deployment. The ABI defines the
-            available reads. The reference explains how to interpret the
-            result and handle finality or inconsistent data.
-          </p>
-        </div>
+        <h2>Public resources</h2>
+        <p>
+          Use these resources together. The manifest identifies the deployment,
+          the ABI defines the reads, and the reference explains how to verify
+          the result.
+        </p>
 
-        <div className={styles.resourceList}>
-          {resources.map((resource) => {
-            const Icon = resource.icon;
-            return (
-              <a
-                href={resource.href}
-                key={resource.href}
-                rel="noreferrer"
-                target="_blank"
-              >
-                <Icon aria-hidden="true" size={19} strokeWidth={1.7} />
+        <ul className={styles.linkList}>
+          {resources.map((resource) => (
+            <li key={resource.href}>
+              <a href={resource.href} rel="noreferrer" target="_blank">
                 <span>
                   <strong>{resource.label}</strong>
                   <small>{resource.description}</small>
                 </span>
-                <ArrowRight aria-hidden="true" size={17} strokeWidth={1.8} />
+                <ArrowUpRight aria-hidden="true" size={17} strokeWidth={1.8} />
                 <span className="sr-only">Opens in a new tab</span>
               </a>
-            );
-          })}
-        </div>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <section id="boundaries">
-        <div className={styles.sectionIntro}>
-          <p className={styles.eyebrow}>Verification boundaries</p>
-          <h2>What a launch record does and does not establish</h2>
-        </div>
+        <h2>What verification proves</h2>
+        <dl className={styles.boundaryList}>
+          <div>
+            <dt>It establishes</dt>
+            <dd>
+              The recorded Router origin, token, hook, market, launch kind and
+              component proofs for that stamped launch at the verified block.
+            </dd>
+          </div>
+          <div>
+            <dt>It does not establish</dt>
+            <dd>
+              Current safety, tradability, liquidity, price, terminal support,
+              audit coverage or the behavior of an external interface.
+            </dd>
+          </div>
+          <div>
+            <dt>It does not cover</dt>
+            <dd>
+              Launches created before Router activation and every direct factory
+              call outside the canonical Router path, including calls made at or
+              after the published start block.
+            </dd>
+          </div>
+        </dl>
 
-        <div className={styles.proofGrid}>
-          <article>
-            <Network aria-hidden="true" size={20} strokeWidth={1.7} />
-            <strong>It establishes</strong>
-            <p>
-              The recorded launch identity, token, hook, market, launch type
-              and component proofs for a Router-stamped launch.
-            </p>
-          </article>
-          <article>
-            <Braces aria-hidden="true" size={20} strokeWidth={1.7} />
-            <strong>It does not establish</strong>
-            <p>
-              Current safety, tradability, liquidity, price, terminal support
-              or the behavior of an unverified external interface.
-            </p>
-          </article>
-        </div>
-
-        <div className={styles.inlineAction}>
+        <p className={styles.inlineAction}>
           <Link href="/docs/developers">
             Open the developer integration guide
             <ArrowRight aria-hidden="true" size={17} strokeWidth={1.8} />
           </Link>
-        </div>
+        </p>
       </section>
     </DocsShell>
   );

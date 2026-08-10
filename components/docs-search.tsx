@@ -18,7 +18,10 @@ import styles from "@/components/docs-experience.module.css";
 import { docsNavigateEvent } from "@/components/docs-navigation";
 
 function normalizeDocsSearchText(value: string) {
-  return value.trim().toLowerCase().replace(/[\s-]+/g, " ");
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, " ");
 }
 
 export function getDocsSearchResults(query: string) {
@@ -30,20 +33,27 @@ export function getDocsSearchResults(query: string) {
       const title = normalizeDocsSearchText(item.title);
       const description = normalizeDocsSearchText(item.description);
       const titleWords = title.split(" ");
+      const keywords = (item.keywords ?? []).map(normalizeDocsSearchText);
+      const allowLooseSubstring = normalizedQuery.length > 2;
       const rank =
         title === normalizedQuery
           ? 0
-          : title.startsWith(normalizedQuery)
-            ? 1
-            : titleWords.some((word) => word.startsWith(normalizedQuery))
-              ? 2
-              : title.includes(normalizedQuery)
-                ? 3
-                : description.startsWith(normalizedQuery)
-                  ? 4
-                  : description.includes(normalizedQuery)
-                    ? 5
-                    : null;
+          : keywords.some((keyword) => keyword === normalizedQuery)
+            ? 0
+            : title.startsWith(normalizedQuery)
+              ? 1
+              : keywords.some((keyword) => keyword.startsWith(normalizedQuery))
+                ? 1
+                : titleWords.some((word) => word.startsWith(normalizedQuery))
+                  ? 2
+                  : allowLooseSubstring && title.includes(normalizedQuery)
+                    ? 3
+                    : description.startsWith(normalizedQuery)
+                      ? 4
+                      : allowLooseSubstring &&
+                          description.includes(normalizedQuery)
+                        ? 5
+                        : null;
       return { index, item, rank };
     })
     .filter(
@@ -96,7 +106,7 @@ export function shouldFocusDocsSearch({
   );
 }
 
-export function DocsSearch() {
+export function DocsSearch({ id = "docs-search" }: { id?: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const formRef = useRef<HTMLFormElement>(null);
@@ -107,7 +117,7 @@ export function DocsSearch() {
   const normalizedQuery = normalizeDocsSearchText(query);
   const results = getDocsSearchResults(normalizedQuery);
 
-  const listboxId = "docs-search-results";
+  const listboxId = `${id}-results`;
   const resolvedActiveIndex =
     isOpen && results.length > 0
       ? Math.min(Math.max(activeIndex, 0), results.length - 1)
@@ -144,8 +154,10 @@ export function DocsSearch() {
       }
 
       event.preventDefault();
-      inputRef.current?.focus();
-      inputRef.current?.select();
+      const input = inputRef.current;
+      if (!input || input.getClientRects().length === 0) return;
+      input.focus();
+      input.select();
     };
 
     document.addEventListener("keydown", focusWithShortcut);
@@ -256,11 +268,11 @@ export function DocsSearch() {
       onSubmit={submit}
     >
       <Search aria-hidden="true" size={18} strokeWidth={1.8} />
-      <label className="sr-only" htmlFor="docs-search">
+      <label className="sr-only" htmlFor={id}>
         Search Programmable docs
       </label>
       <input
-        id="docs-search"
+        id={id}
         ref={inputRef}
         role="combobox"
         aria-autocomplete="list"
@@ -268,7 +280,7 @@ export function DocsSearch() {
         aria-expanded={isOpen}
         aria-activedescendant={
           isOpen && resolvedActiveIndex >= 0
-            ? `docs-search-result-${resolvedActiveIndex}`
+            ? `${id}-result-${resolvedActiveIndex}`
             : undefined
         }
         value={query}
@@ -302,9 +314,7 @@ export function DocsSearch() {
       )}
       <span className="sr-only" role="status" aria-live="polite">
         {normalizedQuery
-          ? `${results.length} ${
-              results.length === 1 ? "result" : "results"
-            }`
+          ? `${results.length} ${results.length === 1 ? "result" : "results"}`
           : ""}
       </span>
       {isOpen && normalizedQuery ? (
@@ -317,7 +327,7 @@ export function DocsSearch() {
           {results.length > 0 ? (
             results.map((item, index) => (
               <Link
-                id={`docs-search-result-${index}`}
+                id={`${id}-result-${index}`}
                 key={`${item.href}:${item.title}`}
                 href={item.href}
                 role="option"

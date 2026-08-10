@@ -1,12 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import {
-  ArrowRight,
-  BookOpenText,
-  Braces,
-  Coins,
-  Network,
-} from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 import styles from "@/components/docs-hub.module.css";
 import { DocsShell } from "@/components/docs-shell";
@@ -14,61 +8,56 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Documentation · Programmable",
   description:
-    "Understand Programmable, compare its token launch types, inspect the public infrastructure, or integrate launch verification.",
+    "Learn how Programmable launches work, how launch types differ, and how applications can verify Router-stamped launches.",
   alternates: { canonical: "/docs" },
 };
 
 const sections = [
-  { id: "start", label: "Choose a starting point" },
-  { id: "system", label: "How it fits together" },
-  { id: "boundaries", label: "Important distinctions" },
+  { id: "launch-types", label: "Launch types" },
+  { id: "identification", label: "How launches are identified" },
+  { id: "terms", label: "Terms" },
+  { id: "next", label: "Where to go next" },
 ] as const;
 
-const documentationPaths = [
+const launchTypes = [
   {
-    description: "Learn what Programmable is and how these docs are organized.",
-    href: "/docs",
-    icon: BookOpenText,
-    label: "Overview",
+    description:
+      "A fixed-supply token with an ETH market, configurable buy and sell fees, creator rewards and permanently locked one-sided liquidity.",
+    href: "/docs/models/classic",
+    label: "Classic",
   },
   {
-    description: "Compare Classic, Custom and historical Stock-Paired launches.",
+    description:
+      "A launch whose Uniswap v4 market uses release-specific hook logic. Approved applicants can launch an approved release through the gated flow. General public submissions and open public wallet self-service are unavailable.",
+    href: "/docs/models/custom",
+    label: "Custom hooks",
+  },
+  {
+    description:
+      "Historical launches paired with configured Ondo Global Markets quote assets. New Stock-Paired launches are closed.",
+    href: "/docs/models/stock-paired",
+    label: "Stock-Paired",
+  },
+] as const;
+
+const nextSteps = [
+  {
+    description:
+      "Compare launch rules, availability and the current boundaries of each model.",
     href: "/docs/tokens",
-    icon: Coins,
     label: "Tokens and launches",
   },
   {
-    description: "Understand launch execution, onchain identity and Router provenance.",
+    description:
+      "See how launch execution, Uniswap v4 markets and Router provenance relate.",
     href: "/docs/infrastructure",
-    icon: Network,
-    label: "Infrastructure",
+    label: "How Programmable works",
   },
   {
-    description: "Add launch verification to terminals, wallets, scanners and apps.",
+    description:
+      "Verify Router-stamped launches in a terminal, wallet, scanner or indexer.",
     href: "/docs/developers",
-    icon: Braces,
     label: "Developer integration",
-  },
-] as const;
-
-const startingPoints = [
-  {
-    description:
-      "Compare the documented launch types, their economics and their current status.",
-    href: "/docs/tokens",
-    label: "Understand a token or launch",
-  },
-  {
-    description:
-      "See which checks are required before a Router record establishes provenance.",
-    href: "/docs/infrastructure",
-    label: "Understand the infrastructure",
-  },
-  {
-    description:
-      "Add reliable Programmable labels to a terminal, wallet, scanner or indexer.",
-    href: "/docs/developers",
-    label: "Build an integration",
   },
 ] as const;
 
@@ -76,134 +65,95 @@ export default function DocsIndexPage() {
   return (
     <DocsShell
       currentPath="/docs"
-      description="Use this documentation to understand the project, compare token launch types, inspect the public infrastructure, or build an integration. Each section states what is available and what its evidence proves."
-      heroAside={
-        <nav aria-label="Documentation map" className={styles.map}>
-          {documentationPaths.map((path, index) => {
-            const Icon = path.icon;
-            return (
-              <Link
-                aria-current={path.href === "/docs" ? "page" : undefined}
-                className={styles.mapItem}
-                href={path.href}
-                key={path.href}
-              >
-                <span className={styles.mapIndex}>
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-                <Icon aria-hidden="true" size={19} strokeWidth={1.7} />
-                <span className={styles.mapCopy}>
-                  <strong>{path.label}</strong>
-                  <small>{path.description}</small>
+      description="Programmable is an Ethereum launchpad for tokens and markets built on Uniswap v4."
+      sections={sections}
+      title="Programmable"
+    >
+      <section id="launch-types">
+        <h2>Launch types</h2>
+        <p>
+          Programmable documents three launch types. Each type has its own
+          market configuration, fee behavior and current availability.
+        </p>
+
+        <ul className={styles.linkList}>
+          {launchTypes.map((launchType) => (
+            <li key={launchType.href}>
+              <Link href={launchType.href}>
+                <span>
+                  <strong>{launchType.label}</strong>
+                  <small>{launchType.description}</small>
                 </span>
                 <ArrowRight aria-hidden="true" size={17} strokeWidth={1.8} />
               </Link>
-            );
-          })}
-        </nav>
-      }
-      heroId="map"
-      kicker="Overview"
-      sections={sections}
-      title="Programmable documentation"
-    >
-      <section id="start">
-        <div className={styles.sectionIntro}>
-          <p className={styles.eyebrow}>Start here</p>
-          <h2>Choose the question you need answered</h2>
-          <p>
-            The documentation is organized by subject instead of by contract
-            name. You can begin with the product, the infrastructure or the
-            integration work and move into the technical reference when you
-            need it.
-          </p>
-        </div>
-
-        <div className={styles.routeList}>
-          {startingPoints.map((path) => (
-            <Link className={styles.routeLink} href={path.href} key={path.href}>
-              <span>
-                <strong>{path.label}</strong>
-                <small>{path.description}</small>
-              </span>
-              <ArrowRight aria-hidden="true" size={18} strokeWidth={1.8} />
-            </Link>
+            </li>
           ))}
-        </div>
+        </ul>
       </section>
 
-      <section id="system">
-        <div className={styles.sectionIntro}>
-          <p className={styles.eyebrow}>System map</p>
-          <h2>What Programmable covers</h2>
-          <p>
-            Programmable is an Ethereum launchpad built on Uniswap v4. These
-            docs cover Classic launches, individually activated Custom
-            launches and historical Stock-Paired tokens. The terms below
-            describe different parts of that system.
-          </p>
-        </div>
+      <section id="identification">
+        <h2>How launches are identified</h2>
+        <p>
+          Names, symbols and images are not unique identifiers. Start with the
+          chain and token address. A Uniswap v4 market is identified by its
+          PoolManager and poolId.
+        </p>
+        <p>
+          Only launches executed and stamped through the Launch Stamp Router
+          have a public Router provenance record. Applications can verify that
+          record before showing a Programmable label. The published start block
+          is the first block to scan for this Router. It does not cover earlier
+          launches, and direct factory calls remain outside the Router path even
+          when they occur later.
+        </p>
+      </section>
 
+      <section id="terms">
+        <h2>Terms used in these docs</h2>
         <dl className={styles.definitionList}>
           <div>
             <dt>Project</dt>
             <dd>
-              A project contains the creator-provided name, description,
+              Creator-provided information such as the name, description,
               artwork and public links.
             </dd>
           </div>
           <div>
             <dt>Token</dt>
-            <dd>The token is the ERC-20 asset created by a launch.</dd>
+            <dd>The ERC-20 asset created by a launch.</dd>
           </div>
           <div>
             <dt>Launch</dt>
             <dd>
-              A launch is the transaction and configuration that created the
-              token and its Uniswap v4 market.
+              The transaction and configuration that create the token and its
+              Uniswap v4 market.
             </dd>
           </div>
           <div>
-            <dt>Infrastructure</dt>
+            <dt>Provenance</dt>
             <dd>
-              The infrastructure consists of the contracts and public records
-              used to create, discover and verify a launch.
+              Evidence that a launch was executed through the recorded Router
+              path. Provenance is not a safety or market guarantee.
             </dd>
           </div>
         </dl>
       </section>
 
-      <section id="boundaries">
-        <div className={styles.sectionIntro}>
-          <p className={styles.eyebrow}>Reading the data</p>
-          <h2>Keep launch type, provenance and current market data separate</h2>
-        </div>
-
-        <div className={styles.boundaryList}>
-          <article>
-            <strong>Launch type</strong>
-            <p>
-              Classic, Custom and Stock-Paired describe how a token was
-              launched. They do not describe its current market condition.
-            </p>
-          </article>
-          <article>
-            <strong>Provenance</strong>
-            <p>
-              A Router record establishes provenance only after the published
-              address, runtime, binding, lookup and cross-check requirements
-              pass. It is not a safety guarantee.
-            </p>
-          </article>
-          <article>
-            <strong>Current state</strong>
-            <p>
-              Price, liquidity and claimable rewards change over time.
-              Tradability also depends on the current pool, hook and routing
-              state.
-            </p>
-          </article>
-        </div>
+      <section id="next">
+        <h2>Where to go next</h2>
+        <ul className={styles.linkList}>
+          {nextSteps.map((step) => (
+            <li key={step.href}>
+              <Link href={step.href}>
+                <span>
+                  <strong>{step.label}</strong>
+                  <small>{step.description}</small>
+                </span>
+                <ArrowRight aria-hidden="true" size={17} strokeWidth={1.8} />
+              </Link>
+            </li>
+          ))}
+        </ul>
       </section>
     </DocsShell>
   );

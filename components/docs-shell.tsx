@@ -56,7 +56,10 @@ export function DocsShell({
       : category && category.href !== currentPath
         ? { href: category.href, label: category.label }
         : null;
-  const breadcrumbLabel = currentNavigationItem?.label ?? kicker ?? title;
+  const breadcrumbLabel =
+    category?.href === currentPath
+      ? category.label
+      : (currentNavigationItem?.label ?? kicker ?? title);
 
   return (
     <div className={`${styles.page} page-width`} data-docs-shell>
@@ -71,17 +74,17 @@ export function DocsShell({
         </Link>
 
         <div className={styles.sidebarSearch} data-docs-tools>
-          <DocsSearch />
+          <DocsSearch id="docs-search-desktop" />
         </div>
 
-        <DocsNavigation currentPath={currentPath} sections={sections} />
+        <DocsNavigation
+          currentPath={currentPath}
+          mobileSearch={<DocsSearch id="docs-search-mobile" />}
+          sections={sections}
+        />
       </aside>
 
-      <div
-        className={styles.mainColumn}
-        id="docs-content"
-        tabIndex={-1}
-      >
+      <div className={styles.mainColumn} id="docs-content" tabIndex={-1}>
         <header
           className={styles.hero}
           data-docs-hero

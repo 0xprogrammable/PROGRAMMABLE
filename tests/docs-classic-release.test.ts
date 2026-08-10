@@ -37,14 +37,24 @@ describe("Classic docs release binding", () => {
     expect(docsOverview).not.toContain(currentFeeHook);
     expect(docsOverview).not.toContain(legacyLauncher);
     expect(docsOverview).not.toContain(legacyFeeHook);
-    expect(docsOverview).toContain(
-      "Historical launches and direct factory calls are outside this verification path.",
+    expect(docsOverview).toMatch(
+      /startBlock<\/code> is\s+the first block to scan/,
+    );
+    expect(docsOverview).toMatch(
+      /direct factory call remains outside this verification path even when\s+it occurs later/,
     );
     expect(docsOverview).not.toContain("Set buy and sell fees");
-    expect(classicDocs).toContain("Set separately from 1% to 10%");
-    expect(classicDocs).toContain("The 0.10% Programmable share is included.");
+    expect(classicDocs).toContain(
+      "Set separately from 1% to 10% in one-percentage-point steps",
+    );
+    expect(classicDocs).toContain(
+      "The Programmable share is included in the selected fee.",
+    );
+    expect(classicDocs).toContain(
+      "0.10 percentage points of the gross native swap amount accrues to",
+    );
     expect(classicDocs).toContain("between two and five unique wallets");
-    expect(classicDocs).toContain("future recipients and split percentages");
+    expect(classicDocs).toContain("future recipients or split percentages");
     expect(classicDocs).not.toContain("1.00% through the canonical pool");
     expect(classicDocs).not.toContain("0.90% accrues as creator rewards");
   });

@@ -15,8 +15,24 @@ import {
 } from "../lib/developer-docs-content";
 
 const root = process.cwd();
-const pageSource = readFileSync(
+const overviewSource = readFileSync(
   join(root, "app/docs/developers/page.tsx"),
+  "utf8",
+);
+const verifySource = readFileSync(
+  join(root, "app/docs/developers/verify/page.tsx"),
+  "utf8",
+);
+const indexingSource = readFileSync(
+  join(root, "app/docs/developers/indexing/page.tsx"),
+  "utf8",
+);
+const machineReadableSource = readFileSync(
+  join(root, "app/docs/developers/machine-readable/page.tsx"),
+  "utf8",
+);
+const routerReferenceSource = readFileSync(
+  join(root, "app/docs/launch-stamps/page.tsx"),
   "utf8",
 );
 const router = PROGRAMMABLE_LAUNCH_STAMP_MANIFEST.launchStampRouter;
@@ -124,6 +140,38 @@ describe("Router-first public developer-contract facts", () => {
     expect(developerDocsMarkdown).toContain("requireCanonical: true");
   });
 
+  it("closes every canonical verification and event-descriptor gate", () => {
+    for (const value of [
+      "one concrete number and opening hash",
+      "all six immutable address/runtime binding getters",
+      "permit authority, Graph Factory, and PoolManager",
+      "closing hash to equal the opening hash",
+      "valid address encoding",
+      "nonzero `poolId`",
+      "do not invent a Classic immutable",
+      "separate drift signal",
+      "Plain HTTP is accepted only for loopback",
+    ]) {
+      expect(developerDocsMarkdown).toContain(value);
+    }
+    expect(routerReferenceSource).toContain(
+      "return candidate only after every required gate succeeds",
+    );
+    expect(routerReferenceSource).toMatch(
+      /Current component-runtime\s+equality is reported separately/,
+    );
+    expect(indexingSource).toContain("exact downloaded ABI bytes");
+    expect(indexingSource).toContain(
+      "indexed input names in their published order",
+    );
+    expect(indexingSource).toContain(
+      "<code>INDETERMINATE</code> and do not ingest the log",
+    );
+    expect(indexingSource).toContain(
+      "plain HTTP is accepted only for loopback",
+    );
+  });
+
   it("publishes the finalized PCAN vector", () => {
     const canary = router.canaryEvidence;
     for (const value of [
@@ -142,7 +190,12 @@ describe("Router-first public developer-contract facts", () => {
 
   it("keeps the provenance boundary exact on every machine surface", () => {
     for (const surface of [developerDocsMarkdown, programmableLlmsIndex]) {
-      expect(surface).toContain("Historical");
+      expect(surface).toContain(
+        "Only launches executed and stamped through this Router inside its published block range",
+      );
+      expect(surface).toMatch(
+        /Launches before `startBlock`, and direct factory calls outside the Router even when later, do not\./,
+      );
       expect(surface).toMatch(/direct (?:factory|Classic)/i);
       expect(surface).toMatch(/not (?:establish )?safety/i);
       expect(surface).toContain("tradability");
@@ -155,17 +208,43 @@ describe("Router-first public developer-contract facts", () => {
     }
   });
 
-  it("makes the page consume only the shared Router contract", () => {
+  it("makes every human guide consume the shared Router contract", () => {
     for (const exportName of [
       "LAUNCH_KIND_V1",
       "PROGRAMMABLE_LAUNCH_STAMP_MANIFEST",
       "PROGRAMMABLE_LAUNCH_STAMP_RESOURCES",
-      "PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ABI",
     ]) {
-      expect(pageSource).toContain(exportName);
+      expect(overviewSource).toContain(exportName);
     }
-    expect(pageSource).not.toContain("PROGRAMMABLE_ACTIVE_API_BASE");
-    expect(pageSource).not.toContain("PROGRAMMABLE_FEE_POLICY");
-    expect(pageSource).not.toContain("CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH");
+    for (const source of [
+      verifySource,
+      indexingSource,
+      routerReferenceSource,
+    ]) {
+      expect(source).toContain("PROGRAMMABLE_LAUNCH_STAMP_MANIFEST");
+      expect(source).toContain("PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ABI");
+    }
+    expect(verifySource).toContain("router.runtimeCodeHash");
+    expect(verifySource).toContain("router.abiSha256");
+    expect(verifySource).toContain("router.finalityConfirmations");
+    expect(verifySource).toContain("Return one of four results");
+    expect(indexingSource).toContain("Object.values(router.events)");
+    expect(indexingSource).toContain("router.finalityConfirmations");
+    expect(indexingSource).toContain("requireCanonical: true");
+    expect(machineReadableSource).toContain(
+      "PROGRAMMABLE_LAUNCH_STAMP_RESOURCES",
+    );
+
+    for (const source of [
+      overviewSource,
+      verifySource,
+      indexingSource,
+      machineReadableSource,
+      routerReferenceSource,
+    ]) {
+      expect(source).not.toContain("PROGRAMMABLE_ACTIVE_API_BASE");
+      expect(source).not.toContain("PROGRAMMABLE_FEE_POLICY");
+      expect(source).not.toContain("CUSTOM_REGISTRY_PUBLIC_MANIFEST_PATH");
+    }
   });
 });

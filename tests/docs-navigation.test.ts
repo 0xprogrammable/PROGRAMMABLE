@@ -5,6 +5,7 @@ import {
   docsNavigateEvent,
   easeDocsScroll,
   getDocsScrollDuration,
+  isDocsNavigationBranchActive,
   isDocsNavigationItemActive,
   normalizeDocsHash,
   pickActiveDocsSection,
@@ -122,6 +123,40 @@ describe("Docs navigation state", () => {
         activeHref: "/docs/models/classic",
         currentPath: "/docs/models/classic",
         itemHref: "/docs/developers#terminal-contract",
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps every focused developer guide inside the Developers branch", () => {
+    const developerOverview = {
+      href: "/docs/developers",
+      label: "Overview",
+      relatedPaths: [
+        "/docs/developers/verify",
+        "/docs/developers/indexing",
+        "/docs/developers/machine-readable",
+      ],
+    } as const;
+
+    for (const currentPath of developerOverview.relatedPaths) {
+      expect(
+        isDocsNavigationBranchActive({
+          currentPath,
+          item: developerOverview,
+        }),
+      ).toBe(true);
+      expect(
+        isDocsNavigationItemActive({
+          activeHref: currentPath,
+          currentPath,
+          itemHref: currentPath,
+        }),
+      ).toBe(true);
+    }
+    expect(
+      isDocsNavigationBranchActive({
+        currentPath: "/docs/launch-stamps",
+        item: developerOverview,
       }),
     ).toBe(false);
   });
@@ -252,16 +287,40 @@ describe("Docs navigation state", () => {
 
     expect(deepResults).toEqual([]);
     expect(stockResults[0]?.title).toBe("Stock-Paired");
-    expect(getDocsSearchResults("stock paired")[0]?.title).toBe(
-      "Stock-Paired",
-    );
+    expect(getDocsSearchResults("stock paired")[0]?.title).toBe("Stock-Paired");
     expect(classicResults[0]?.title).toBe("Classic");
-    expect(customResults[0]?.title).toBe("Custom");
+    expect(customResults[0]?.title).toBe("Custom hooks");
     expect(
       customResults.some(
         (result) => result.title === "Classic and Custom launch kinds",
       ),
     ).toBe(true);
+  });
+
+  it("finds the three dedicated developer guides", () => {
+    expect(getDocsSearchResults("verify")[0]).toMatchObject({
+      href: "/docs/developers/verify",
+      title: "Verify a token or pool",
+    });
+    expect(getDocsSearchResults("index new launches")[0]).toMatchObject({
+      href: "/docs/developers/indexing",
+      title: "Index new launches",
+    });
+    expect(getDocsSearchResults("machine readable")[0]).toMatchObject({
+      href: "/docs/developers/machine-readable",
+      title: "Machine-readable docs",
+    });
+    for (const query of ["agent", "AI agent", "LLM", "ai"]) {
+      expect(getDocsSearchResults(query)[0]).toMatchObject({
+        href: "/docs/developers/machine-readable",
+        title: "Machine-readable docs",
+      });
+    }
+    expect(getDocsSearchResults("ai")).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ href: "/docs/models/stock-paired" }),
+      ]),
+    );
   });
 
   it("opens keyboard navigation on the first or last result", () => {

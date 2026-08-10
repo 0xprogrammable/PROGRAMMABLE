@@ -17,6 +17,8 @@ import { developerDocsMarkdown } from "../lib/developer-docs-content";
 const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 const page = read("app/docs/launch-stamps/page.tsx");
+const developerOverview = read("app/docs/developers/page.tsx");
+const indexingPage = read("app/docs/developers/indexing/page.tsx");
 const styles = read("components/launch-stamp-docs.module.css");
 const docsData = read("components/docs-data.ts");
 const docsShell = read("components/docs-shell.tsx");
@@ -244,24 +246,29 @@ describe("Launch Stamp developer documentation", () => {
     expect(page).toContain("eth_chainId == 0x1");
     expect(page).toContain('fromBlock: "0x1886b6c"');
     expect(page).not.toContain("chainId,\n    address: router.address");
-    expect(page).toContain(
-      "Backfill from the start block, then follow finalized logs",
-    );
-    expect(page).toContain("1 · Bind");
-    expect(page).toContain("3 · Persist and dedupe");
-    expect(page).toContain("coordinates as the idempotency key");
-    expect(page).toContain("6 · Replay overlap");
-    expect(page).toContain("8 · Hand off to live");
-    expect(page).toContain("overlapping checkpoint");
-    expect(page).toContain("backfill-to-live gap");
     expect(page).toContain("requireCanonical: true");
     expect(page).toContain("last common finalized checkpoint");
-    expect(page).toContain("classify only from");
+    expect(page).toMatch(/Classify only from[\s\S]*record\.kind/);
     expect(page).toContain("record.kind");
     expect(page).toContain("Decode each log by its matched signature");
     expect(page).toContain("correlate the three");
     expect(page).toContain("ProgrammableLaunchStampedV1");
     expect(page).toContain("non-indexed PoolManager, poolId, and stampHash");
+    expect(page).toContain("router.finalityConfirmations");
+
+    expect(indexingPage).toContain("Backfill, verify, then follow live");
+    expect(indexingPage).toContain("Read bounded");
+    expect(indexingPage).toContain(
+      "exact Router emitter and published topic signatures",
+    );
+    expect(indexingPage).toContain("Correlate the three event types by");
+    expect(indexingPage).toContain("identity-specific token or pool lookup");
+    expect(indexingPage).toContain("overlapping checkpoint");
+    expect(indexingPage).toContain(
+      "Deduplicate identical block, transaction and log coordinates",
+    );
+    expect(indexingPage).toContain("last common finalized checkpoint");
+    expect(indexingPage).toContain("ORPHANED");
     const eventContract = JSON.stringify(
       PROGRAMMABLE_LAUNCH_STAMP_MANIFEST.launchStampRouter.events,
     );
@@ -425,9 +432,7 @@ describe("Launch Stamp developer documentation", () => {
   });
 
   it("limits stamps to Router-stamped Classic and Custom provenance", () => {
-    expect(page).toContain(
-      "Historical launches created before Router activation",
-    );
+    expect(page).toMatch(/before (?:this )?Router(?:'s|&apos;s)? start block/i);
     expect(page).toMatch(
       /Safety, tradability, current pool state, current liquidity, audit\s+coverage, review status/,
     );
@@ -440,7 +445,7 @@ describe("Launch Stamp developer documentation", () => {
     expect(page).toContain("The published evidence does not include");
     expect(page).toMatch(/a separate Classic\s+onchain canary/);
     expect(page).toMatch(
-      /Router-stamped Classic launches use\s+the same\s+live Router\s+ABI/,
+      /Router-stamped Classic launches\s+use the same\s+live Router\s+ABI/,
     );
     expect(page).toMatch(
       /Direct Classic Factory, Graph Factory, or Single Factory\s+calls/,
@@ -449,34 +454,33 @@ describe("Launch Stamp developer documentation", () => {
       /does not automatically list a token in GMGN, Axiom, FOMO/,
     );
     expect(page).toMatch(
-      /Generic pool or\s+token discovery in a third-party API is not Router stamp\s+integration/,
+      /Generic pool or token discovery in a third-party API is not Router\s+stamp integration/,
     );
     expect(page).toMatch(
-      /GMGN market\s+numbers are not canonical onchain stamp evidence/,
+      /GMGN market\s+numbers are not canonical onchain stamp\s+evidence/,
     );
     expect(page).toMatch(
-      /read current\s+pool state separately through\s+PoolManager or\s+StateView/,
+      /read current\s+pool state separately through\s+PoolManager\s+or\s+StateView/,
     );
     expect(page).toContain("slot0.sqrtPriceX96 == 0");
     expect(page).toContain("slot0.sqrtPriceX96 != 0");
     expect(page).toMatch(/not current pool state or liquidity/);
     expect(page).toMatch(
-      /does\s+not claim that every recorded component was newly/,
+      /does\s+not claim that every\s+component was newly created/,
     );
     expect(page).toContain("not an Explorer source");
     expect(page).toContain("supplied handoff digests");
     expect(page).toMatch(/PCAN.*token symbol in this test case/s);
     expect(page).toContain("does not replace it");
-    expect(page).toMatch(
-      /General public Custom submission and wallet self-service\s+launching are not live/,
-    );
+    expect(page).toMatch(/General public submission/);
+    expect(page).toMatch(/open wallet self-service/);
+    expect(page).toMatch(/Approved Hookbuilder Applicants/);
     expect(page).not.toContain("Classic onchain canary passed");
   });
 
-  it("keeps the Router reference inside Developer integration", () => {
-    expect(docsData).toContain(
-      '{ href: "/docs/launch-stamps", label: "Router reference" }',
-    );
+  it("keeps the Router reference in Infrastructure and linked from Developers", () => {
+    expect(docsData).toContain('href: "/docs/launch-stamps"');
+    expect(docsData).toContain('label: "Launch Stamp Router"');
     expect(docsData).toContain(
       'relatedPaths: ["/docs/launch-stamps"] as const',
     );
@@ -484,8 +488,7 @@ describe("Launch Stamp developer documentation", () => {
       "item.relatedPaths.some((path) => path === currentPath)",
     );
     expect(page).toContain('currentPath="/docs/launch-stamps"');
-    expect(page).toContain('parentHref="/docs/developers#agents"');
-    expect(page).toContain('parentLabel="Developer integration"');
+    expect(developerOverview).toContain('href="/docs/launch-stamps"');
     expect(docsShell).toContain('aria-label="Breadcrumb"');
     expect(page).toContain('alternates: { canonical: "/docs/launch-stamps" }');
     expect(sitemap).toContain('"/docs/launch-stamps"');
@@ -493,7 +496,10 @@ describe("Launch Stamp developer documentation", () => {
       "[GitHub Router reference](https://github.com/0xprogrammable/developers/blob/main/docs/reference/launch-stamp.md)",
     );
     expect(developerDocsMarkdown).toContain(
-      "Router V1 covers only launches executed and stamped through it",
+      "Only launches executed and stamped through this Router inside its published block range",
+    );
+    expect(developerDocsMarkdown).toContain(
+      "direct factory calls outside the Router even when later, do not",
     );
     expect(developerDocsMarkdown).not.toContain(
       "the binding remains prelaunch until every deployment field is published",
@@ -502,26 +508,28 @@ describe("Launch Stamp developer documentation", () => {
 
   it("keeps the expanded reference semantic and reflow-safe", () => {
     expect(page).toContain('aria-labelledby="trust-root-heading"');
-    expect(page).toContain("<dl className={styles.manifest}>");
-    expect(page).toContain('aria-label="Launch stamp verification flow"');
+    expect(page).toContain("<dl className={styles.definitionList}>");
+    expect(page).toContain(
+      '<pre aria-label="Launch stamp verifier pseudocode using the frozen ABI">',
+    );
     expect(page).toContain('aria-label="StampRecordV1 fields in ABI order"');
     expect(page).toContain("<ol");
     expect(page).not.toContain('role="img"');
     expect(styles).toContain("@media (max-width: 700px)");
     expect(styles).toContain("@media (max-width: 360px)");
     expect(styles).toContain("env(safe-area-inset-bottom)");
-    expect(styles).toContain("var(--body-background) 92%");
+    expect(styles).toContain("var(--body-background) 88%");
     expect(styles).toMatch(
-      /\.abiList dd\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\);/s,
+      /\.signatureList dd\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\);/s,
     );
     expect(styles).toMatch(
-      /\.abiList dt\s*\{[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;[^}]*word-break:\s*break-word;/s,
+      /\.referenceList dt,\s*\.definitionList dt,\s*\.signatureList dt,[\s\S]*?\{[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;/s,
     );
     expect(styles).toMatch(
-      /\.abiList dd > span,\s*\.abiList dd > span code\s*\{[^}]*max-width:\s*100%;[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;[^}]*word-break:\s*break-word;/s,
+      /\.signatureList dd > code,\s*\.signatureList dd > span,\s*\.signatureList dd > span code\s*\{[^}]*max-width:\s*100%;[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;[^}]*word-break:\s*break-word;/s,
     );
     expect(styles).toMatch(
-      /\.detailLine code\s*\{[^}]*overflow-wrap:\s*anywhere;[^}]*word-break:\s*break-word;/s,
+      /\.detailLine code,\s*\.detailLine a\s*\{[^}]*overflow-wrap:\s*anywhere;[^}]*word-break:\s*break-word;/s,
     );
     expect(styles).not.toContain("transition: all");
     expect(styles).not.toMatch(
