@@ -1041,7 +1041,7 @@ function PreviewTokenTrade({ token }: { token: LauncherToken }) {
   const [slippagePercent, setSlippagePercent] = useState("1");
 
   return (
-    <div
+    <section
       className={styles.tradeForm}
       aria-label={`Trade ${token.symbol} preview`}
     >
@@ -1116,7 +1116,7 @@ function PreviewTokenTrade({ token }: { token: LauncherToken }) {
           Trading unavailable in preview
         </button>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -1462,7 +1462,7 @@ function TokenDetailContent({
                 {token.name}
               </h1>
               {projectLinks.length > 0 ? (
-                <div className={styles.links} aria-label={`${token.name} links`}>
+                <nav className={styles.links} aria-label={`${token.name} links`}>
                   {projectLinks.map((link) => {
                     const label = getLinkLabel(link.kind);
                     return (
@@ -1481,7 +1481,7 @@ function TokenDetailContent({
                       </a>
                     );
                   })}
-                </div>
+                </nav>
               ) : null}
               <div className={styles.addressActions}>
                 <button
@@ -1787,7 +1787,7 @@ function CustomProjectDetailContent({
             </div>
             <h1 className={styles.name}>{project.name}</h1>
             {project.links.length > 0 ? (
-              <div className={styles.links} aria-label={`${project.name} links`}>
+              <nav className={styles.links} aria-label={`${project.name} links`}>
                 {project.links.map((link) => (
                   <a
                     className={`${styles.socialLink} ${link.kind === "website" ? styles.websiteLink : ""}`}
@@ -1801,7 +1801,7 @@ function CustomProjectDetailContent({
                     <TokenLinkIcon kind={link.kind} />
                   </a>
                 ))}
-              </div>
+              </nav>
             ) : null}
             {project.tokenAddress ? (
               <div className={styles.addressActions}>

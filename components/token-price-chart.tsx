@@ -955,6 +955,7 @@ export function TokenPriceChart({
       ) : chart ? (
         <div
           className={styles.plot}
+          role="group"
           tabIndex={0}
           aria-label={`${tokenName} interactive price chart. Move the pointer or use arrow keys to inspect exact prices.`}
           aria-describedby={`${instructionId} ${activeValueId}`}

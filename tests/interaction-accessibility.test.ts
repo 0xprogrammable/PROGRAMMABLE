@@ -23,11 +23,16 @@ describe("interaction accessibility", () => {
     expect(chartCss).not.toContain("cursor: crosshair");
     expect(chartSource).toContain("onPointerMove={inspectPointer}");
     expect(chartSource).toContain("onKeyDown={inspectKeyboard}");
+    expect(chartSource).toContain('role="group"');
     expect(chartSource).toContain("tabIndex={0}");
     expect(chartSource).not.toContain("role=\"slider\"");
   });
 
   it("keeps primary token interactions at a reliable touch size", () => {
+    const tokenSource = readFileSync(
+      join(root, "components/token-detail-view.tsx"),
+      "utf8",
+    );
     const tokenCss = readFileSync(
       join(root, "components/token-experience.module.css"),
       "utf8",
@@ -47,6 +52,15 @@ describe("interaction accessibility", () => {
     );
     expect(chartCss).toMatch(
       /\.rangeButton\s*\{[^}]*height:\s*44px;[^}]*min-width:\s*44px;/s,
+    );
+    expect(tokenSource).toContain(
+      '<section\n      className={styles.tradeForm}',
+    );
+    expect(tokenSource).toContain(
+      '<nav className={styles.links} aria-label={`${token.name} links`}>',
+    );
+    expect(tokenSource).toContain(
+      '<nav className={styles.links} aria-label={`${project.name} links`}>',
     );
   });
 
