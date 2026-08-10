@@ -4,6 +4,7 @@ import {
   HOOKBUILDER_APPLICANT_1_1_PUBLIC_MAIN_BINDING_V1,
   MANUAL_ROUTER_ALCHEMY_RPC_ENV_V1,
   MANUAL_ROUTER_QUICKNODE_RPC_ENV_V1,
+  PRODUCTION_SHARDS_ROUTER_V1_DIRECT_SIMULATION_PROFILE_V1,
   RouterLaunchFinalityVerifierV1,
   RouterLaunchTransactionRevertedError,
   assertPortableManualRouterCompleteSignedArtifactV1,
@@ -50,9 +51,9 @@ ProductionManualRouterAuthorityV1 {
   ) throw new TypeError("portable manual Router RPC environment drifted");
   if (
     HOOKBUILDER_APPLICANT_1_1_PUBLIC_MAIN_BINDING_V1.commitSha
-      !== "d928f56218409f8511cec7ab43410b1bdfaa1450"
+      !== "279dd2fc2ea8c488943ca4e60ca889cb00bab40e"
     || HOOKBUILDER_APPLICANT_1_1_PUBLIC_MAIN_BINDING_V1.treeSha
-      !== "f62326ae214669ef67eb2d43ff5700d6a19503c2"
+      !== "48149d436bf222c440980e1fc31a71899b833af7"
     || HOOKBUILDER_APPLICANT_1_1_PUBLIC_MAIN_BINDING_V1.schemaSha256
       !== "sha256:8d250114631d20f42e02ab195d80bd0123ff970cd07f7fd328b874b8abac87b5"
     || HOOKBUILDER_APPLICANT_1_1_PUBLIC_MAIN_BINDING_V1.semanticCoreSha256
@@ -62,6 +63,30 @@ ProductionManualRouterAuthorityV1 {
     || HOOKBUILDER_APPLICANT_1_1_PUBLIC_MAIN_BINDING_V1.requestPathTemplate
       !== "submissions/requests/<source.repositoryId>-<identifiers.hookId>.json"
   ) throw new TypeError("portable Hookbuilder Applicant binding drifted");
+  const {
+    bindingHash: shardsProfileBindingHash,
+    ...shardsProfileCore
+  } = PRODUCTION_SHARDS_ROUTER_V1_DIRECT_SIMULATION_PROFILE_V1;
+  if (
+    PRODUCTION_SHARDS_ROUTER_V1_DIRECT_SIMULATION_PROFILE_V1.schemaVersion
+      !== "programmable.shards-router-v1-direct-simulation-profile.v1"
+    || PRODUCTION_SHARDS_ROUTER_V1_DIRECT_SIMULATION_PROFILE_V1.applicationId
+      !== "shards-v1"
+    || PRODUCTION_SHARDS_ROUTER_V1_DIRECT_SIMULATION_PROFILE_V1.selectionPolicy
+      !== "exact-compile-input-hash-only"
+    || PRODUCTION_SHARDS_ROUTER_V1_DIRECT_SIMULATION_PROFILE_V1.compileInputHash
+      !== "sha256:1d7c191dc3e16ba9967be76622b76269b6ac1673637212fab41594ff1665394a"
+    || PRODUCTION_SHARDS_ROUTER_V1_DIRECT_SIMULATION_PROFILE_V1
+      .genericSimulationGasLimit !== "12000000"
+    || PRODUCTION_SHARDS_ROUTER_V1_DIRECT_SIMULATION_PROFILE_V1
+      .exactSimulationGasLimit !== "16000000"
+    || shardsProfileBindingHash
+      !== "sha256:ffba60e856fb210e11e8b22e27a319378887f99a328b3448fe069962965e98cd"
+    || canonicalSha256(
+      PRODUCTION_SHARDS_ROUTER_V1_DIRECT_SIMULATION_PROFILE_V1.schemaVersion,
+      shardsProfileCore,
+    ) !== shardsProfileBindingHash
+  ) throw new TypeError("portable Shards direct simulation profile drifted");
   const composition = createPortableManualRouterPublishAuthorityFromEnvV1({
     env: process.env,
     fetch,

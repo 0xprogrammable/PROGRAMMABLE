@@ -54,16 +54,20 @@ the current Applicant head.
 ## Frozen cross-surface contract
 
 - Hookbuilder Applicant 1.1 public main: commit
-  `d928f56218409f8511cec7ab43410b1bdfaa1450`, tree
-  `f62326ae214669ef67eb2d43ff5700d6a19503c2`.
+  `279dd2fc2ea8c488943ca4e60ca889cb00bab40e`, tree
+  `48149d436bf222c440980e1fc31a71899b833af7`.
 - Adapter manual-Router export: commit
-  `a8bdd89e55d21aa10d9cc71da6bd5570e5ceb5ca`, tree
-  `7f1ff90c88b9f0e9be21640aa59065f910b17e0a`; portable bundle SHA-256
-  `0a7f85b0559d4cd3dab7431d92d487cc97239c6a3005f18bdb8cb92ea9163597`,
+  `d91d8e90af19acd61e9d46eeb652b418f4186f58`, tree
+  `070dcbc016fe4c053d64e3b918e5afe728c8d02b`; portable bundle SHA-256
+  `9f29b1d00ce602fa8673d7e96574933f1e29f46794718433242e1d5c3fe250f1`,
   closure SHA-256
-  `f07c8fe06799f4e1981dba85c6f014a152ed5ed384001f565de8f08d0b347b07`,
+  `8ab16787174763546439d421f704c03d17a7a5d9c091bb565ac7d1688e13bab0`,
   and Golden v6 SHA-256
-  `abc0077b403c7db1ee370c6a478c37b1bda6cc84db473e4cf3e4451ac9658d09`.
+  `5a50a7c9851d8c42332f4221a5410c56d40b9aee067d7ea4a343bcf334bea73a`.
+- Exact Shards direct-profile compile input:
+  `sha256:1d7c191dc3e16ba9967be76622b76269b6ac1673637212fab41594ff1665394a`;
+  profile binding
+  `sha256:ffba60e856fb210e11e8b22e27a319378887f99a328b3448fe069962965e98cd`.
 - Ceremony contract: commit `9710b7a04363fd26c3eba3c0add2524353059b4d`,
   tree `8528dc6f98e52dfd033a3270c4f4cf94dffa5796`, manifest SHA-256
   `dbcf04360d433ed327901d4e68bed5af36e8424eaf2d20db84496fd8a83d5603`.

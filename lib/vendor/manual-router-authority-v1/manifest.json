@@ -5,14 +5,15 @@
     "packageVersion": "0.1.0",
     "publicExport": "./manual-router",
     "sourceEntry": "src/public-api/manual-router.ts",
-    "commit": "a8bdd89e55d21aa10d9cc71da6bd5570e5ceb5ca",
-    "tree": "7f1ff90c88b9f0e9be21640aa59065f910b17e0a",
+    "commit": "d91d8e90af19acd61e9d46eeb652b418f4186f58",
+    "tree": "070dcbc016fe4c053d64e3b918e5afe728c8d02b",
     "provisionalDirtySource": false
   },
   "exports": [
     "HOOKBUILDER_APPLICANT_1_1_PUBLIC_MAIN_BINDING_V1",
     "MANUAL_ROUTER_ALCHEMY_RPC_ENV_V1",
     "MANUAL_ROUTER_QUICKNODE_RPC_ENV_V1",
+    "PRODUCTION_SHARDS_ROUTER_V1_DIRECT_SIMULATION_PROFILE_V1",
     "RouterLaunchFinalityVerifierV1",
     "RouterLaunchTransactionRevertedError",
     "assertFailedRouterLaunchTransactionEvidenceV1",
@@ -25,14 +26,14 @@
   ],
   "bundle": {
     "path": "lib/vendor/manual-router-authority-v1/manual-router-portable.v1.mjs",
-    "bytes": 213847,
-    "sha256": "0a7f85b0559d4cd3dab7431d92d487cc97239c6a3005f18bdb8cb92ea9163597",
+    "bytes": 216297,
+    "sha256": "9f29b1d00ce602fa8673d7e96574933f1e29f46794718433242e1d5c3fe250f1",
     "sourceMapPath": "lib/vendor/manual-router-authority-v1/manual-router-portable.v1.mjs.map",
-    "sourceMapSha256": "bcc446caa4d8e04a93f3c9fc9c24664fee5ba0a3fadbaba64761bd19faf2c41d",
+    "sourceMapSha256": "3a0491b107ecb578a09114d9e4c5c32910aa362a70feacf637039d0b89f7abca",
     "metafilePath": "lib/vendor/manual-router-authority-v1/manual-router-portable.v1.metafile.json",
-    "metafileSha256": "3250af64281519bbc8493fa0be3219cbc7a5bc01ce28ae8517ddee44f8d60864",
+    "metafileSha256": "eef7d0538e497baf616db3e0f6bf60a54a547918e7aae687a28f959a5f15a384",
     "closurePath": "lib/vendor/manual-router-authority-v1/manual-router-portable.v1.closure.json",
-    "closureSha256": "f07c8fe06799f4e1981dba85c6f014a152ed5ed384001f565de8f08d0b347b07"
+    "closureSha256": "8ab16787174763546439d421f704c03d17a7a5d9c091bb565ac7d1688e13bab0"
   },
   "closure": [
     {
@@ -73,7 +74,7 @@
     {
       "path": "src/internal/router-self-service-v1/hookbuilder-applicant-request.ts",
       "bytes": 18735,
-      "sha256": "9e00e8b3e2445841c19abb81a4e7496eea5182581d5367402425b4b4f73be209"
+      "sha256": "db0af2face6c73231749d88d712c844c1b3d16e311ce0987d2af2a60e22c7f58"
     },
     {
       "path": "src/internal/router-self-service-v1/http-rpc-provider.ts",
@@ -111,14 +112,19 @@
       "sha256": "402eb1a445ce596eb13dd3eb8f29b714e754f2dc7d108992285cd3e93c2ffefd"
     },
     {
+      "path": "src/internal/router-self-service-v1/shards-direct-profile.ts",
+      "bytes": 3345,
+      "sha256": "03a0c9700ee8b2213f08ec0d3ac1fa8e4574908cfecd793e3f47bb35781da998"
+    },
+    {
       "path": "src/internal/router-self-service-v1/signer.ts",
       "bytes": 7089,
       "sha256": "ea851ed8d5e706dbc1b42ed9e5ebc123fa04affa19ec6f48b6682347845ba6c6"
     },
     {
       "path": "src/public-api/manual-router.ts",
-      "bytes": 1751,
-      "sha256": "ca0f0fbb418ee4cb67c5790ae0fb73d757dc355dcde09d429fb32baa0ccce46d"
+      "bytes": 1890,
+      "sha256": "a890eaad8864973e79941481f75c1a82b4160eba1657082b8bfcb36c50fedf9b"
     }
   ],
   "artifacts": [
@@ -180,7 +186,7 @@
       "sourcePath": "artifacts/manual-router-authority-v1/manual-router-authority-golden.v6.json",
       "vendoredPath": "lib/vendor/manual-router-authority-v1/artifacts/manual-router-authority-golden.v6.json",
       "bytes": 609577,
-      "sha256": "abc0077b403c7db1ee370c6a478c37b1bda6cc84db473e4cf3e4451ac9658d09"
+      "sha256": "5a50a7c9851d8c42332f4221a5410c56d40b9aee067d7ea4a343bcf334bea73a"
     },
     {
       "sourcePath": "scripts/generate-manual-router-portable-bundle.mjs",

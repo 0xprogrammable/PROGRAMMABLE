@@ -3,8 +3,8 @@
   "hookbuilderApplicantContract": {
     "schemaVersion": "programmable.hookbuilder-applicant-1.1-public-main-binding.v1",
     "repository": "https://github.com/0xprogrammable/hookbuilder",
-    "commitSha": "d928f56218409f8511cec7ab43410b1bdfaa1450",
-    "treeSha": "f62326ae214669ef67eb2d43ff5700d6a19503c2",
+    "commitSha": "279dd2fc2ea8c488943ca4e60ca889cb00bab40e",
+    "treeSha": "48149d436bf222c440980e1fc31a71899b833af7",
     "schemaPath": "submissions/schema/applicant-submission-v1.schema.json",
     "schemaSha256": "sha256:8d250114631d20f42e02ab195d80bd0123ff970cd07f7fd328b874b8abac87b5",
     "semanticCorePath": "scripts/applicant-submission-core.mjs",
@@ -9081,5 +9081,5 @@
     "privateTokenLookup": "custom-launch/manual-router/v1/private/tokens/1000000000000000000000000000000000000001.json",
     "privatePoolLookup": "custom-launch/manual-router/v1/private/pools/d09cf585b90e4d0339e3b658776225c048637916b336e43f3bb4d5dfa136a4b6.json"
   },
-  "fixtureHash": "sha256:84f914c071021ba5d96dca6251001b22ce96072a7e669073e14914fc04d4976a"
+  "fixtureHash": "sha256:3c2b6490f0b4c18b5e63878960181790d18536bd262cb1fbf4a1010787ad48a6"
 }

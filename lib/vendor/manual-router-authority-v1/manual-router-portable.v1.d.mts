@@ -24,6 +24,19 @@ export const HOOKBUILDER_APPLICANT_1_1_PUBLIC_MAIN_BINDING_V1: Readonly<{
   }>;
 }>;
 
+export const PRODUCTION_SHARDS_ROUTER_V1_DIRECT_SIMULATION_PROFILE_V1: Readonly<{
+  schemaVersion: string;
+  applicationId: string;
+  selectionPolicy: string;
+  compileInputHash: `sha256:${string}`;
+  genericSimulationGasLimit: string;
+  exactSimulationGasLimit: string;
+  review: Readonly<Record<string, string>>;
+  helper: Readonly<Record<string, string>>;
+  gasEvidence: Readonly<Record<string, string>>;
+  bindingHash: `sha256:${string}`;
+}>;
+
 export interface PortableManualRouterRpcV1 {
   collectCommonFinalizedAnchor(): Promise<Readonly<{
     blockNumber: `0x${string}`;

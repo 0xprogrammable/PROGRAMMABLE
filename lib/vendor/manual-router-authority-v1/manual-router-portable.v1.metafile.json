@@ -323,6 +323,11 @@
         }
       ]
     },
+    "src/internal/router-self-service-v1/shards-direct-profile.ts": {
+      "bytes": 3345,
+      "format": "esm",
+      "imports": []
+    },
     "src/internal/router-self-service-v1/signer.ts": {
       "bytes": 7089,
       "format": "esm",
@@ -350,7 +355,7 @@
       ]
     },
     "src/public-api/manual-router.ts": {
-      "bytes": 1751,
+      "bytes": 1890,
       "format": "esm",
       "imports": [
         {
@@ -362,6 +367,11 @@
           "kind": "import-statement",
           "original": "../internal/router-self-service-v1/hookbuilder-applicant-request.js",
           "path": "src/internal/router-self-service-v1/hookbuilder-applicant-request.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../internal/router-self-service-v1/shards-direct-profile.js",
+          "path": "src/internal/router-self-service-v1/shards-direct-profile.ts"
         },
         {
           "kind": "import-statement",
@@ -378,12 +388,13 @@
   },
   "outputs": {
     "artifacts/manual-router-portable-v1/manual-router-portable.v1.mjs": {
-      "bytes": 213847,
+      "bytes": 216297,
       "entryPoint": "src/public-api/manual-router.ts",
       "exports": [
         "HOOKBUILDER_APPLICANT_1_1_PUBLIC_MAIN_BINDING_V1",
         "MANUAL_ROUTER_ALCHEMY_RPC_ENV_V1",
         "MANUAL_ROUTER_QUICKNODE_RPC_ENV_V1",
+        "PRODUCTION_SHARDS_ROUTER_V1_DIRECT_SIMULATION_PROFILE_V1",
         "RouterLaunchFinalityVerifierV1",
         "RouterLaunchTransactionRevertedError",
         "assertFailedRouterLaunchTransactionEvidenceV1",
@@ -462,6 +473,9 @@
         "src/internal/router-self-service-v1/rpc.ts": {
           "bytesInOutput": 40390
         },
+        "src/internal/router-self-service-v1/shards-direct-profile.ts": {
+          "bytesInOutput": 2325
+        },
         "src/internal/router-self-service-v1/signer.ts": {
           "bytesInOutput": 3387
         },
@@ -471,7 +485,7 @@
       }
     },
     "artifacts/manual-router-portable-v1/manual-router-portable.v1.mjs.map": {
-      "bytes": 412104,
+      "bytes": 416435,
       "exports": [],
       "imports": [],
       "inputs": {}

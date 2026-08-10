@@ -1077,7 +1077,7 @@ describe("manual Applicant browser contract", () => {
     expect(component).toContain("titleRef.current?.focus()");
     expect(component).toContain('ref={titleRef} tabIndex={-1}');
     expect(component).toContain(
-      "https://github.com/0xprogrammable/hookbuilder/tree/d928f56218409f8511cec7ab43410b1bdfaa1450/submissions/requests",
+      "https://github.com/0xprogrammable/hookbuilder/tree/279dd2fc2ea8c488943ca4e60ca889cb00bab40e/submissions/requests",
     );
     expect(component).toContain("listManualRouterApplicantSubmissionsV1");
     expect(component).toContain("manualRouterCanClearUncertainNoSendV1");
@@ -1121,5 +1121,21 @@ describe("manual Applicant browser contract", () => {
     expect(changedPaths.join("\n")).not.toMatch(
       /profile|explore|launch-registry/iu,
     );
+  });
+
+  it("pins the exact Shards-only authority profile at the Website boundary", () => {
+    const authority = readFileSync(
+      join(process.cwd(), "lib/server/custom-launch/manual-router-authority-v1.ts"),
+      "utf8",
+    );
+    expect(authority).toContain(
+      "sha256:1d7c191dc3e16ba9967be76622b76269b6ac1673637212fab41594ff1665394a",
+    );
+    expect(authority).toContain(
+      "sha256:ffba60e856fb210e11e8b22e27a319378887f99a328b3448fe069962965e98cd",
+    );
+    expect(authority).toContain('!== "12000000"');
+    expect(authority).toContain('!== "16000000"');
+    expect(authority).toContain("canonicalSha256(");
   });
 });
