@@ -11,7 +11,9 @@ vi.mock("server-only", () => ({}));
 import { LaunchModelPicker } from "../components/launch-entry";
 import {
   acquireManualRouterWebsiteSessionV1,
+  applicantIdentityRequirementForLoginV1,
   manualRouterApplicantDiscoveryReady,
+  runManualRouterRequestWithFreshSessionV1,
 } from "../components/manual-applicant-launch";
 import {
   MANUAL_ROUTER_PRODUCTION_BINDING_V1,
@@ -104,6 +106,20 @@ const WALLET = "0x1111111111111111111111111111111111111111" as const;
 const OTHER_WALLET = "0x2222222222222222222222222222222222222222" as const;
 
 describe("manual Applicant Privy hydration", () => {
+  it("binds refreshed sessions to the exact Shards and Hookemon identities", () => {
+    expect(applicantIdentityRequirementForLoginV1("jesse-stahl")).toEqual({
+      githubUserId: "155705664",
+      githubLogin: "jesse-stahl",
+      launchWallet: "0xceebb3a6543cebeb2ed66963897a0abea52a50cc",
+    });
+    expect(applicantIdentityRequirementForLoginV1("hookemonv4")).toEqual({
+      githubUserId: "312745360",
+      githubLogin: "hookemonv4",
+      launchWallet: "0x5E9a7A24DCCC81cddd10b8a555300E227533c89f",
+    });
+    expect(applicantIdentityRequirementForLoginV1("other-applicant"))
+      .toBeUndefined();
+  });
   it("does not start discovery before Privy is ready and starts once on the ready transition", () => {
     const listAndResolve = vi.fn();
     const runDiscovery = (authReady: boolean) => {
@@ -131,38 +147,81 @@ describe("manual Applicant Privy hydration", () => {
     expect(component).toContain("authReady,\n    authenticated,\n    githubConnected,\n    loadDirectory");
   });
 
-  it("reacquires access once after identity hydration and never retries a request", async () => {
-    const events: string[] = [];
-    let accessCall = 0;
+  it("requires one refreshed Applicant session and never retries a request", async () => {
+    const refreshApplicantSession = vi.fn(async () => ({
+      accessToken: "access-token",
+      identityToken: "identity-token",
+      privyUserId: "did:privy:approved",
+      githubUserId: "155705664",
+      githubLogin: "jesse-stahl",
+      launchWallet: `0x${"a".repeat(40)}` as const,
+    }));
     const session = await acquireManualRouterWebsiteSessionV1({
-      getAccessToken: async () => {
-        accessCall += 1;
-        events.push(`access-${accessCall}`);
-        return accessCall === 1 ? null : "access-token";
-      },
-      getIdentityToken: async () => {
-        events.push("identity");
-        return "identity-token";
-      },
+      refreshApplicantSession,
     });
 
     expect(session).toEqual({
       accessToken: "access-token",
       identityToken: "identity-token",
     });
-    expect(events).toEqual(["access-1", "identity", "access-2"]);
+    expect(refreshApplicantSession).toHaveBeenCalledTimes(1);
+    const component = readFileSync(
+      join(process.cwd(), "components/manual-applicant-launch.tsx"),
+      "utf8",
+    );
+    expect(component).not.toContain("getAccessToken");
+    expect(component).not.toContain("getIdentityToken");
   });
 
   it("keeps unresolved dual-token hydration closed before any request", async () => {
     const request = vi.fn();
     await expect(acquireManualRouterWebsiteSessionV1({
-      getAccessToken: async () => null,
-      getIdentityToken: async () => null,
+      refreshApplicantSession: async () => null,
     })).rejects.toMatchObject({
       status: 401,
       code: "applicant_authentication_required",
     });
     expect(request).not.toHaveBeenCalled();
+  });
+
+  it("refreshes independently before list and resolve without replaying either request", async () => {
+    const events: string[] = [];
+    let refreshCount = 0;
+    const getSession = vi.fn(async () => {
+      refreshCount += 1;
+      events.push(`refresh-${refreshCount}`);
+      return {
+        accessToken: `access-${refreshCount}`,
+        identityToken: `identity-${refreshCount}`,
+      };
+    });
+
+    await runManualRouterRequestWithFreshSessionV1(getSession, async () => {
+      events.push("list");
+    });
+    await runManualRouterRequestWithFreshSessionV1(getSession, async () => {
+      events.push("resolve");
+    });
+
+    expect(events).toEqual(["refresh-1", "list", "refresh-2", "resolve"]);
+    expect(getSession).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not invoke resolve when its dedicated refresh fails", async () => {
+    const getSession = vi.fn()
+      .mockResolvedValueOnce({
+        accessToken: "list-access",
+        identityToken: "list-identity",
+      })
+      .mockRejectedValueOnce(new Error("refresh failed"));
+    const list = vi.fn(async () => undefined);
+    const resolve = vi.fn(async () => undefined);
+
+    await runManualRouterRequestWithFreshSessionV1(getSession, list);
+    await expect(runManualRouterRequestWithFreshSessionV1(getSession, resolve))
+      .rejects.toThrow("refresh failed");
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(resolve).not.toHaveBeenCalled();
   });
 });
 const SUBJECT = `sha256:${"11".repeat(32)}` as const;

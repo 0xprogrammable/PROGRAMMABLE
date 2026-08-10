@@ -24,10 +24,15 @@ import { getAddress } from "viem";
 
 import { GitHubBrandIcon } from "@/components/brand-icons";
 import styles from "@/components/manual-applicant-launch.module.css";
-import { useWallet } from "@/components/wallet-provider";
+import {
+  useWallet,
+  type WalletApplicantIdentityRequirementV1,
+  type WalletApplicantSessionV1,
+} from "@/components/wallet-provider";
 import { getActiveManualRouterProductionBindingV2 } from
   "@/lib/custom-launch/manual-router-bindings-v2";
 import {
+  HOOKEMON_APPLICANT_IDENTITY_V1,
   isExactHookemonApplicantGithubLoginV1,
 } from "@/lib/custom-launch/hookemon-applicant-presentation-v1";
 import {
@@ -69,6 +74,7 @@ import {
   manualRouterDirectoryForApplicantV2,
   manualRouterFreshReadyMatchesCachedV1,
   manualRouterFreshReadyMatchesCachedV2,
+  MANUAL_ROUTER_EXACT_SHARDS_V1_BROWSER_BINDING,
   manualRouterIsExactShardsV1ApplicantDirectory,
   manualRouterResolveForApplicantV2,
   manualRouterRouteFactsV2,
@@ -88,6 +94,18 @@ const LIST_REFRESH_MS = 30_000;
 // Presentation routing only. The server re-observes and authorizes the numeric
 // GitHub identity before it returns or records any Shards acceptance state.
 const SHARDS_GITHUB_LOGIN = "jesse-stahl";
+const SHARDS_APPLICANT_IDENTITY_REQUIREMENT_V1 = Object.freeze({
+  githubUserId:
+    MANUAL_ROUTER_EXACT_SHARDS_V1_BROWSER_BINDING.authenticatedGitHubUserId,
+  githubLogin: SHARDS_GITHUB_LOGIN,
+  launchWallet:
+    MANUAL_ROUTER_EXACT_SHARDS_V1_BROWSER_BINDING.linkedLaunchWallet,
+}) satisfies WalletApplicantIdentityRequirementV1;
+const HOOKEMON_APPLICANT_IDENTITY_REQUIREMENT_V1 = Object.freeze({
+  githubUserId: HOOKEMON_APPLICANT_IDENTITY_V1.githubUserId,
+  githubLogin: HOOKEMON_APPLICANT_IDENTITY_V1.githubLogin,
+  launchWallet: HOOKEMON_APPLICANT_IDENTITY_V1.launchWallet,
+}) satisfies WalletApplicantIdentityRequirementV1;
 const ATTEMPT_STORAGE_PREFIX = "programmable:manual-router-browser-attempt:v1";
 const ATTEMPT_STORAGE_PREFIX_V2 =
   "programmable:manual-router-browser-attempt:v2";
@@ -146,16 +164,23 @@ export function manualRouterApplicantDiscoveryReady(input: Readonly<{
     && input.routeDiscoveryAllowed;
 }
 
-export async function acquireManualRouterWebsiteSessionV1(input: Readonly<{
-  getAccessToken: () => Promise<string | null>;
-  getIdentityToken: () => Promise<string | null>;
-}>): Promise<ManualRouterWebsiteSessionV1> {
-  let accessToken = await input.getAccessToken();
-  const identityToken = await input.getIdentityToken();
-  if (!accessToken && identityToken) {
-    accessToken = await input.getAccessToken();
+export function applicantIdentityRequirementForLoginV1(
+  login: string | null,
+): WalletApplicantIdentityRequirementV1 | undefined {
+  if (isExactShardsGithubLogin(login)) {
+    return SHARDS_APPLICANT_IDENTITY_REQUIREMENT_V1;
   }
-  if (!accessToken || !identityToken) {
+  if (isExactHookemonApplicantGithubLoginV1(login)) {
+    return HOOKEMON_APPLICANT_IDENTITY_REQUIREMENT_V1;
+  }
+  return undefined;
+}
+
+export async function acquireManualRouterWebsiteSessionV1(input: Readonly<{
+  refreshApplicantSession: () => Promise<WalletApplicantSessionV1 | null>;
+}>): Promise<ManualRouterWebsiteSessionV1> {
+  const session = await input.refreshApplicantSession();
+  if (!session) {
     throw new ManualRouterWebsiteRequestErrorV1(
       401,
       "applicant_authentication_required",
@@ -163,7 +188,18 @@ export async function acquireManualRouterWebsiteSessionV1(input: Readonly<{
       false,
     );
   }
-  return { accessToken, identityToken };
+  return {
+    accessToken: session.accessToken,
+    identityToken: session.identityToken,
+  };
+}
+
+export async function runManualRouterRequestWithFreshSessionV1<T>(
+  getSession: () => Promise<ManualRouterWebsiteSessionV1>,
+  request: (session: ManualRouterWebsiteSessionV1) => Promise<T>,
+): Promise<T> {
+  const session = await getSession();
+  return await request(session);
 }
 
 export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
@@ -171,11 +207,10 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     authReady,
     authenticated,
     connectGithub,
-    getAccessToken,
-    getIdentityToken,
     githubConnected,
     githubUsername,
     openWallet,
+    refreshApplicantSession,
     sendBrowserWalletAction,
     wallet,
   } = useWallet();
@@ -239,13 +274,15 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
         NESTED_FACTORY_ACTIVATION !== null
         && routeAcceptance?.state === "accepted"
       );
+  const applicantIdentityRequirement =
+    applicantIdentityRequirementForLoginV1(githubUsername);
 
   const getSession = useCallback(async (): Promise<ManualRouterWebsiteSessionV1> => {
     return acquireManualRouterWebsiteSessionV1({
-      getAccessToken,
-      getIdentityToken,
+      refreshApplicantSession: () =>
+        refreshApplicantSession(applicantIdentityRequirement),
     });
-  }, [getAccessToken, getIdentityToken]);
+  }, [applicantIdentityRequirement, refreshApplicantSession]);
 
   const loadRouteAcceptance = useCallback(async () => {
     if (
@@ -341,14 +378,19 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     setError("");
     setErrorCode("");
     try {
-      const request = {
-        session: await getSession(),
-        launchWallet: wallet.account,
-        signal: controller.signal,
-      } as const;
-      const directoryResponse = NESTED_FACTORY_ACTIVATION === null
-        ? await listManualRouterApplicantSubmissionsV1(request)
-        : await listManualRouterApplicantSubmissionsVersionedV2(request);
+      const directoryResponse = await runManualRouterRequestWithFreshSessionV1(
+        getSession,
+        async (session) => {
+          const request = {
+            session,
+            launchWallet: wallet.account,
+            signal: controller.signal,
+          } as const;
+          return NESTED_FACTORY_ACTIVATION === null
+            ? await listManualRouterApplicantSubmissionsV1(request)
+            : await listManualRouterApplicantSubmissionsVersionedV2(request);
+        },
+      );
       const next = manualRouterDirectoryForApplicantV2({
         directory: directoryResponse,
         requireExactShardsRoute: exactShardsApplicant,
@@ -365,15 +407,20 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
         subjectHash === chosen) ?? null;
       if (chosenSubmission !== null) {
         const chosenSubjectHash = chosenSubmission.subjectHash;
-        const resolveRequest = {
-          session: await getSession(),
-          launchWallet: next.linkedLaunchWallet,
-          subjectHash: chosenSubjectHash,
-          signal: controller.signal,
-        } as const;
-        const rawResolved = isNestedFactorySubmissionV2(chosenSubmission)
-          ? await resolveManualRouterApplicantSubmissionV2(resolveRequest)
-          : await resolveManualRouterApplicantSubmissionV1(resolveRequest);
+        const rawResolved = await runManualRouterRequestWithFreshSessionV1(
+          getSession,
+          async (session) => {
+            const resolveRequest = {
+              session,
+              launchWallet: next.linkedLaunchWallet,
+              subjectHash: chosenSubjectHash,
+              signal: controller.signal,
+            } as const;
+            return isNestedFactorySubmissionV2(chosenSubmission)
+              ? await resolveManualRouterApplicantSubmissionV2(resolveRequest)
+              : await resolveManualRouterApplicantSubmissionV1(resolveRequest);
+          },
+        );
         const nextResolved = manualRouterResolveForApplicantV2({
           directory: next,
           resolved: rawResolved,

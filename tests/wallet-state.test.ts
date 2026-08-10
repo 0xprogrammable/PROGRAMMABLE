@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 import { getCreateAddress, keccak256 } from "viem";
 import * as walletProvider from "../components/wallet-provider";
@@ -84,6 +87,73 @@ type WalletProviderContract = {
 };
 
 const subject = walletProvider as unknown as WalletProviderContract;
+
+const APPLICANT_PRIVY_USER_ID = "did:privy:approved";
+const APPLICANT_GITHUB_USER_ID = "155705664";
+const APPLICANT_GITHUB_LOGIN = "jesse-stahl";
+const APPLICANT_WALLET =
+  "0xceebb3a6543cebeb2ed66963897a0abea52a50cc" as const;
+const OTHER_WALLET = `0x${"b".repeat(40)}` as const;
+const applicantRequirement = Object.freeze({
+  githubUserId: APPLICANT_GITHUB_USER_ID,
+  githubLogin: APPLICANT_GITHUB_LOGIN,
+  launchWallet: APPLICANT_WALLET,
+});
+
+type ApplicantLinkedAccountFixture = {
+  type: string;
+  subject?: string;
+  username?: string | null;
+  address?: string;
+  chainType?: string;
+};
+
+function applicantAuthority(overrides?: Partial<{
+  privyUserId: string | null;
+  githubUserId: string | null;
+  githubLogin: string | null;
+  walletAddress: string | null;
+}>) {
+  return {
+    privyUserId: APPLICANT_PRIVY_USER_ID,
+    githubUserId: APPLICANT_GITHUB_USER_ID,
+    githubLogin: APPLICANT_GITHUB_LOGIN,
+    walletAddress: APPLICANT_WALLET,
+    ...overrides,
+  };
+}
+
+function applicantUser(overrides?: Partial<{
+  id: string;
+  githubUserId: string;
+  githubLogin: string;
+  wallet: `0x${string}`;
+}>) {
+  const id = overrides?.id ?? APPLICANT_PRIVY_USER_ID;
+  const githubUserId = overrides?.githubUserId ?? APPLICANT_GITHUB_USER_ID;
+  const githubLogin = overrides?.githubLogin ?? APPLICANT_GITHUB_LOGIN;
+  const wallet = overrides?.wallet ?? APPLICANT_WALLET;
+  const linkedAccounts: ApplicantLinkedAccountFixture[] = [
+    {
+      type: "github_oauth",
+      subject: githubUserId,
+      username: githubLogin,
+    },
+    {
+      type: "wallet",
+      chainType: "ethereum",
+      address: wallet,
+    },
+  ];
+  return {
+    id,
+    github: {
+      subject: githubUserId,
+      username: githubLogin,
+    },
+    linkedAccounts,
+  };
+}
 
 describe("wallet recovery state", () => {
   it("holds approval and CREATE until exact identifier authority is frozen", () => {
@@ -285,6 +355,228 @@ describe("wallet recovery state", () => {
       loadIdentityToken,
     })).resolves.toBe("hook-identity-token");
     expect(loadIdentityToken).not.toHaveBeenCalled();
+  });
+
+  it("pins Privy 3.35.2 refreshUser to updateUserAndIdToken before Applicant tokens", () => {
+    const packageRoot = join(
+      process.cwd(),
+      "node_modules/@privy-io/react-auth",
+    );
+    const packageJson = JSON.parse(readFileSync(
+      join(packageRoot, "package.json"),
+      "utf8",
+    )) as { version?: unknown };
+    const dts = readFileSync(join(packageRoot, "dist/dts/index.d.ts"), "utf8");
+    const cjsIndex = readFileSync(join(packageRoot, "dist/cjs/index.js"), "utf8");
+    const implementationFile = cjsIndex.match(/require\("\.\/(index-[^"]+\.js)"\)/u)?.[1];
+    expect(packageJson.version).toBe("3.35.2");
+    expect(dts).toContain("refreshUser: () => Promise<User>");
+    expect(implementationFile).toBeTypeOf("string");
+    const implementation = readFileSync(
+      join(packageRoot, "dist/cjs", implementationFile!),
+      "utf8",
+    );
+    expect(implementation).toContain("updateUserAndIdToken");
+    const provider = readFileSync(
+      join(process.cwd(), "components/wallet-provider.tsx"),
+      "utf8",
+    );
+    expect(provider).toContain("const { refreshUser } = useUser();");
+    expect(provider).toContain("getIdentityToken: getPrivyIdentityToken");
+  });
+
+  it("does not refresh or acquire tokens before authentication is current", async () => {
+    const refreshUser = vi.fn(async () => applicantUser());
+    const getAccessToken = vi.fn(async () => "unexpected-access");
+    const getIdentityToken = vi.fn(async () => "unexpected-identity");
+    await expect(walletProvider.refreshWalletApplicantSessionV1({
+      authenticated: false,
+      readCurrentAuthority: applicantAuthority,
+      refreshUser,
+      getAccessToken,
+      getIdentityToken,
+      requirement: applicantRequirement,
+    })).resolves.toBeNull();
+    expect(refreshUser).not.toHaveBeenCalled();
+    expect(getAccessToken).not.toHaveBeenCalled();
+    expect(getIdentityToken).not.toHaveBeenCalled();
+  });
+
+  it("refreshes user before tokens and binds the exact GitHub identity and linked wallet", async () => {
+    const events: string[] = [];
+    const authority = applicantAuthority();
+    const session = await walletProvider.refreshWalletApplicantSessionV1({
+      authenticated: true,
+      readCurrentAuthority: () => authority,
+      refreshUser: async () => {
+        events.push("refresh-user");
+        return applicantUser();
+      },
+      getAccessToken: async () => {
+        events.push("access-token");
+        return "access-token";
+      },
+      getIdentityToken: async () => {
+        events.push("identity-token");
+        return "identity-token";
+      },
+      requirement: applicantRequirement,
+    });
+
+    expect(events).toEqual([
+      "refresh-user",
+      "access-token",
+      "identity-token",
+    ]);
+    expect(session).toEqual({
+      accessToken: "access-token",
+      identityToken: "identity-token",
+      privyUserId: APPLICANT_PRIVY_USER_ID,
+      githubUserId: APPLICANT_GITHUB_USER_ID,
+      githubLogin: APPLICANT_GITHUB_LOGIN,
+      launchWallet: APPLICANT_WALLET,
+    });
+  });
+
+  it("rejects missing refresh results and refresh failures before token acquisition", async () => {
+    for (const refreshUser of [
+      async () => undefined,
+      async () => null,
+      async () => { throw new Error("refresh failed"); },
+    ]) {
+      const getAccessToken = vi.fn(async () => "unexpected-access");
+      const getIdentityToken = vi.fn(async () => "unexpected-identity");
+      await expect(walletProvider.refreshWalletApplicantSessionV1({
+        authenticated: true,
+        readCurrentAuthority: applicantAuthority,
+        refreshUser,
+        getAccessToken,
+        getIdentityToken,
+        requirement: applicantRequirement,
+      })).resolves.toBeNull();
+      expect(getAccessToken).not.toHaveBeenCalled();
+      expect(getIdentityToken).not.toHaveBeenCalled();
+    }
+  });
+
+  it("rejects wrong or missing identity and wallet data before token acquisition", async () => {
+    const candidates = [
+      { id: APPLICANT_PRIVY_USER_ID, linkedAccounts: [] },
+      applicantUser({ id: "did:privy:other" }),
+      applicantUser({ githubUserId: "1" }),
+      applicantUser({ githubLogin: "other-user" }),
+      applicantUser({ wallet: OTHER_WALLET }),
+    ];
+    for (const refreshedUser of candidates) {
+      const getAccessToken = vi.fn(async () => "unexpected-access");
+      const getIdentityToken = vi.fn(async () => "unexpected-identity");
+      await expect(walletProvider.refreshWalletApplicantSessionV1({
+        authenticated: true,
+        readCurrentAuthority: applicantAuthority,
+        refreshUser: async () => refreshedUser,
+        getAccessToken,
+        getIdentityToken,
+        requirement: applicantRequirement,
+      })).resolves.toBeNull();
+      expect(getAccessToken).not.toHaveBeenCalled();
+      expect(getIdentityToken).not.toHaveBeenCalled();
+    }
+  });
+
+  it("rejects a same-DID GitHub switch even without an exact lane requirement", async () => {
+    const getAccessToken = vi.fn(async () => "unexpected-access");
+    const getIdentityToken = vi.fn(async () => "unexpected-identity");
+    await expect(walletProvider.refreshWalletApplicantSessionV1({
+      authenticated: true,
+      readCurrentAuthority: applicantAuthority,
+      refreshUser: async () => applicantUser({
+        githubUserId: "999",
+        githubLogin: "other-user",
+      }),
+      getAccessToken,
+      getIdentityToken,
+    })).resolves.toBeNull();
+    expect(getAccessToken).not.toHaveBeenCalled();
+    expect(getIdentityToken).not.toHaveBeenCalled();
+  });
+
+  it("rejects ambiguous GitHub linkage and account reload drift before any request", async () => {
+    const ambiguous = applicantUser();
+    ambiguous.linkedAccounts.push({
+      type: "github_oauth",
+      subject: "999",
+      username: "other-user",
+    });
+    const getAccessToken = vi.fn(async () => "unexpected-access");
+    const getIdentityToken = vi.fn(async () => "unexpected-identity");
+    await expect(walletProvider.refreshWalletApplicantSessionV1({
+      authenticated: true,
+      readCurrentAuthority: applicantAuthority,
+      refreshUser: async () => ambiguous,
+      getAccessToken,
+      getIdentityToken,
+      requirement: applicantRequirement,
+    })).resolves.toBeNull();
+    expect(getAccessToken).not.toHaveBeenCalled();
+    expect(getIdentityToken).not.toHaveBeenCalled();
+
+    let readCount = 0;
+    await expect(walletProvider.refreshWalletApplicantSessionV1({
+      authenticated: true,
+      readCurrentAuthority: () => {
+        readCount += 1;
+        return readCount === 1
+          ? applicantAuthority()
+          : applicantAuthority({ walletAddress: OTHER_WALLET });
+      },
+      refreshUser: async () => applicantUser(),
+      getAccessToken,
+      getIdentityToken,
+      requirement: applicantRequirement,
+    })).resolves.toBeNull();
+    expect(getAccessToken).not.toHaveBeenCalled();
+    expect(getIdentityToken).not.toHaveBeenCalled();
+  });
+
+  it("acquires each token once after refresh and rejects either null without retry", async () => {
+    for (const tokens of [
+      { access: null, identity: "identity-token" },
+      { access: "access-token", identity: null },
+    ] as const) {
+      const getAccessToken = vi.fn(async () => tokens.access);
+      const getIdentityToken = vi.fn(async () => tokens.identity);
+      await expect(walletProvider.refreshWalletApplicantSessionV1({
+        authenticated: true,
+        readCurrentAuthority: applicantAuthority,
+        refreshUser: async () => applicantUser(),
+        getAccessToken,
+        getIdentityToken,
+        requirement: applicantRequirement,
+      })).resolves.toBeNull();
+      expect(getAccessToken).toHaveBeenCalledTimes(1);
+      expect(getIdentityToken).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("rejects account drift detected only after token acquisition", async () => {
+    let readCount = 0;
+    const getAccessToken = vi.fn(async () => "access-token");
+    const getIdentityToken = vi.fn(async () => "identity-token");
+    await expect(walletProvider.refreshWalletApplicantSessionV1({
+      authenticated: true,
+      readCurrentAuthority: () => {
+        readCount += 1;
+        return readCount < 3
+          ? applicantAuthority()
+          : applicantAuthority({ githubLogin: "other-user" });
+      },
+      refreshUser: async () => applicantUser(),
+      getAccessToken,
+      getIdentityToken,
+      requirement: applicantRequirement,
+    })).resolves.toBeNull();
+    expect(getAccessToken).toHaveBeenCalledTimes(1);
+    expect(getIdentityToken).toHaveBeenCalledTimes(1);
   });
 
   it("fails closed when an external provider mutates chain before a wallet action", async () => {
