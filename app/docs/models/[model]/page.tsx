@@ -49,14 +49,14 @@ const modelMetadata: Record<
       "Configure buy and sell fees, creator rewards and Initial Buy custody for a fixed-supply Uniswap v4 token.",
   },
   custom: {
-    title: "Custom Hook",
+    title: "Custom",
     description:
-      "Product boundary and release requirements for custom launch configuration.",
+      "Release requirements and product boundaries for launches with individual Uniswap v4 hooks.",
   },
   "stock-paired": {
     title: "Stock-Paired",
     description:
-      "Historical Uniswap v4 pools that use a reviewed stock token as their quote asset.",
+      "Historical Uniswap v4 pools that use an allowlisted Ondo Global Markets token as their quote asset.",
   },
 };
 
@@ -78,7 +78,7 @@ export async function generateMetadata({
 
   const metadata = modelMetadata[model];
   return {
-    title: "Programmable",
+    title: `${metadata.title} · Programmable`,
     description: metadata.description,
     alternates: { canonical: `/docs/models/${model}` },
   };
@@ -99,7 +99,7 @@ function ClassicDocs() {
   return (
     <DocsShell
       currentPath="/docs/models/classic"
-      kicker="Launch model · Live"
+      kicker="Classic · Ethereum"
       title="Classic"
       description="A fixed-supply Uniswap v4 launch with configurable fees, creator rewards in ETH and permanent one-sided liquidity."
       sections={classicSections}
@@ -149,7 +149,7 @@ function ClassicDocs() {
           </div>
           <div className={styles.flowItem}>
             <span>Programmable</span>
-            <strong>0.10% accrues to the protocol treasury</strong>
+            <strong>0.10% accrues to the Programmable fee recipient</strong>
           </div>
         </div>
         <div className={styles.callout}>
@@ -196,8 +196,8 @@ function ClassicDocs() {
         </ol>
         <div className={styles.callout}>
           <strong>
-            A disclosed CTO authority can replace the future reward
-            configuration.
+            A disclosed community takeover (CTO) authority can replace the
+            future reward configuration.
           </strong>
           <p>
             It checkpoints the existing configuration first, then can change
@@ -218,7 +218,7 @@ function ClassicDocs() {
       </section>
 
       <section id="launch-transaction">
-        <h2>One confirmation creates the complete launch</h2>
+        <h2>One transaction creates the launch</h2>
         <ol className={styles.steps}>
           <li>
             <strong>Create the fixed-supply token</strong>
@@ -267,7 +267,7 @@ function ClassicDocs() {
           <li>No minting after launch.</li>
           <li>No blacklist, sell restriction, rebase or transfer tax.</li>
           <li>No token allocation for the creator or Programmable.</li>
-          <li>No protocol launch fee beyond Ethereum gas.</li>
+          <li>No separate Programmable launch fee beyond Ethereum gas.</li>
           <li>
             No conventional LP fee. Creator rewards come from the configured
             hook fee.
@@ -280,7 +280,7 @@ function ClassicDocs() {
       </section>
 
       <section id="deployment">
-        <h2>Active public deployment</h2>
+        <h2>Current Ethereum contracts</h2>
         <div className={styles.tableWrap}>
           <table className={styles.table}>
             <thead>
@@ -361,23 +361,25 @@ function CustomDocs() {
   return (
     <DocsShell
       currentPath="/docs/models/custom"
-      title="Custom Hook"
-      description="Framework and release requirements for token-specific Uniswap v4 hook logic."
+      kicker="Custom · Individual activation"
+      title="Custom"
+      description="Release requirements for tokens whose Uniswap v4 markets use individual hook logic."
       sections={customSections}
     >
       <section id="status">
         <h2>Status</h2>
         <p className={styles.lead}>
-          Create links directly to this guide. A public Custom Hook launch path
-          activates only when its configuration, contracts and release
-          evidence match. Until then, the interface does not prepare, simulate
-          or submit a Custom Hook launch.
+          Custom launches are activated individually. Activation is not an
+          audit or safety claim, and general public submission and self-service
+          launching are not available.
         </p>
         <div className={styles.callout}>
-          <strong>The framework is open for review.</strong>
+          <strong>Each Custom release stands on its own.</strong>
           <p>
-            Launch activation requires defined permissions, transaction
-            preparation, deployed contracts and verified release evidence.
+            Do not infer one release&apos;s permissions or behavior from another.
+            Before activation, the release must define its hook permissions,
+            mutable controls, fee and liquidity paths, transaction preparation,
+            deployed contracts and verification evidence.
           </p>
         </div>
       </section>
@@ -396,10 +398,9 @@ function CustomDocs() {
       <section id="project-presentation">
         <h2>Project presentation</h2>
         <p>
-          A released Custom Hook token would use the same square artwork,
-          project description, links, dedicated token page and community
-          surface as other tokens. Those presentation fields do not make an
-          unreleased transaction path available.
+          Project artwork, descriptions and links describe the token. They do
+          not verify the hook, approve a release or make a launch path
+          available.
         </p>
       </section>
     </DocsShell>
@@ -417,23 +418,23 @@ function StockPairedDocs() {
       currentPath="/docs/models/stock-paired"
       kicker="Historical launch model"
       title="Stock-Paired"
-      description="Existing fixed-supply tokens whose Uniswap v4 pools use a reviewed stock token as the quote asset."
+      description="Existing fixed-supply tokens whose Uniswap v4 pools use an allowlisted Ondo Global Markets token as the quote asset."
       sections={stockPairedSections}
     >
       <section id="token-boundary">
         <h2>The launched token is not a share</h2>
         <p className={styles.lead}>
-          Stock-Paired creates a new Programmable token and pairs it with one
-          supported Ondo Global Markets token. The launched token does not
-          represent ownership in the company and is not redeemable for the
+          Stock-Paired launches created a new Programmable token and paired it
+          with one supported Ondo Global Markets token. The launched token does
+          not represent ownership in the company and is not redeemable for the
           selected stock.
         </p>
         <div className={styles.callout}>
           <strong>New Stock-Paired launches are closed.</strong>
           <p>
-            Existing tokens remain in Explore. Their token pages, trading,
-            profile history and reward claims remain supported, and their
-            deployment records stay public.
+            Existing tokens and deployment records remain visible. Trading and
+            reward actions are available only when the route, issuer, network
+            and runtime checks pass.
           </p>
         </div>
       </section>
@@ -442,28 +443,28 @@ function StockPairedDocs() {
         <h2>How the existing pools were created</h2>
         <ol className={styles.steps}>
           <li>
-            <strong>Choose a supported quote asset</strong>
+            <strong>A supported quote asset was selected</strong>
             <span>NVDAon, SPYon, GOOGLon, SLVon, TSLAon or AAPLon.</span>
           </li>
           <li>
-            <strong>Enter the Initial Buy in ETH</strong>
+            <strong>ETH was routed into the quote asset</strong>
             <span>
-              The coordinator routes ETH through reviewed pools into the
+              The coordinator routed ETH through configured pools into the
               selected quote asset.
             </span>
           </li>
           <li>
-            <strong>Create and lock the new token pool</strong>
+            <strong>The new token pool was created and locked</strong>
             <span>
-              The token supply enters a permanently locked one-sided v4
+              The token supply entered a permanently locked one-sided v4
               position against the quote asset.
             </span>
           </li>
           <li>
-            <strong>Complete the Initial Buy</strong>
+            <strong>The quote asset bought the launched token</strong>
             <span>
-              The routed quote asset buys the launched token in the same wallet
-              transaction.
+              The routed quote asset bought the launched token in the same
+              wallet transaction.
             </span>
           </li>
         </ol>
@@ -494,10 +495,11 @@ function StockPairedDocs() {
       <section id="routing">
         <h2>The interface composes the route</h2>
         <p>
-          A buy routes ETH into the reviewed stock token and then into the
+          A buy routes ETH into the configured quote token and then into the
           launched token&apos;s exact v4 pool. A sell reverses that path back to
           ETH. The server checks the current round trip before preparing a
-          transaction and fails closed when the route is too thin.
+          transaction and stops if the configured route fails its liquidity
+          check.
         </p>
         <div className={styles.callout}>
           <strong>External terminals do not inherit this route.</strong>
@@ -525,7 +527,7 @@ function StockPairedDocs() {
             underlying share.
           </li>
           <li>
-            New launch preparation is closed server-side.
+            Programmable does not prepare new Stock-Paired launches.
           </li>
         </ul>
       </section>

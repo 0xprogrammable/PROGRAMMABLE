@@ -52,14 +52,14 @@ describe("topbar and Explore hero polish", () => {
     expect(landing).toContain('aria-label="Programmable on X"');
     expect(landing).toContain('aria-label="Programmable on GitHub"');
     expect(landing).toContain('aria-label="Programmable on Dexscreener"');
-    expect(landing).toContain('href="/docs/developers"');
+    expect(landing).toContain('href="/docs"');
     expect(landing).toMatch(/>\s*Docs\s*</);
     expect(navigation).not.toContain("ThemeToggle");
     expect(navigation).toContain('if (pathname === "/") return null;');
     expect(navigation).toContain("<WalletButton compact />");
     expect(navigation).not.toContain("liquid-glass-surface");
     expect(navigation).not.toContain("lucide-react");
-    expect(navigation).toContain('if (href === "/docs/developers")');
+    expect(navigation).toContain('if (href === "/docs")');
     expect(interfaceCss).toMatch(
       /@media \(min-width: 801px\)[\s\S]*?\.header-inner\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto minmax\(0, 1fr\);[^}]*justify-content:\s*stretch;/s,
     );

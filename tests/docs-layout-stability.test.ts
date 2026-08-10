@@ -72,7 +72,7 @@ describe("Docs rail layout stability", () => {
   it("uses one concise developer guide with a current-page chapter rail", () => {
     expect(docsPage).toContain("sections={developerSections}");
     expect(docsPage).toContain(
-      'title="Verify future Programmable launches through one Router."',
+      'title="Integrate launch verification"',
     );
     expect(docsPage).toContain('id="trust-root"');
     expect(docsPage).toContain('id="identity"');
@@ -82,13 +82,12 @@ describe("Docs rail layout stability", () => {
     expect(docsShell).not.toContain("docsGuides");
     expect(docsShell).not.toContain("Documentation guides");
     expect(docsShell).toContain('aria-label="Documentation categories"');
-    expect(docsShell).toContain("Developer reference");
-    expect(docsShell).toContain("Soon");
+    expect(docsShell).toContain("category.description");
+    expect(docsShell).not.toContain("Soon");
     expect(docsNavigation).toContain(
       "<p className={styles.navLabel}>Contents</p>",
     );
-    expect(docsNavigation).toContain(
-      "const navigationGroups = sections.length === 0 ? docsNavigation : [];",
-    );
+    expect(docsNavigation).toContain("renderMobileNavigation");
+    expect(docsNavigation).toContain("{renderMobileNavigation()}");
   });
 });

@@ -12,14 +12,14 @@ import { WalletButton } from "@/components/wallet-provider";
 const desktopNavItems = [
   { href: "/explore", label: "Explore" },
   { href: "/launch", label: "Create" },
-  { href: "/docs/developers", label: "Docs" },
+  { href: "/docs", label: "Docs" },
   { href: "/profile", label: "Profile" },
 ];
 
 const mobileNavItems = desktopNavItems;
 
 function isCurrent(pathname: string, href: string) {
-  if (href === "/docs/developers") {
+  if (href === "/docs") {
     return pathname === "/docs" || pathname.startsWith("/docs/");
   }
   return pathname === href || pathname.startsWith(`${href}/`);

@@ -14,20 +14,20 @@ import styles from "@/components/launch-stamp-docs.module.css";
 import { DocsShell } from "@/components/docs-shell";
 
 export const metadata: Metadata = {
-  title: "Launch stamps · Programmable",
+  title: "Launch verification · Programmable",
   description:
-    "Verify provenance for future Programmable Classic and Custom launches through the canonical Launch Stamp Router.",
+    "Verify provenance for Router-stamped Programmable Classic and Custom launches through the canonical Launch Stamp Router.",
   alternates: { canonical: "/docs/launch-stamps" },
 };
 
 const sections = [
-  { id: "trust-root", label: "Trust root" },
+  { id: "trust-root", label: "Router binding" },
   { id: "algorithm", label: "Verification algorithm" },
   { id: "abi", label: "Frozen ABI" },
-  { id: "indexing", label: "Terminal indexing" },
+  { id: "indexing", label: "Discover launches" },
   { id: "record", label: "Returned record" },
-  { id: "boundary", label: "Trust boundary" },
-  { id: "integration", label: "Live deployment" },
+  { id: "boundary", label: "What verification proves" },
+  { id: "integration", label: "Router deployment" },
 ] as const;
 
 const abiBoundVerifier = [
@@ -150,7 +150,7 @@ function LiveTrustRoot() {
     >
       <div className={styles.trustRootHeader}>
         <div>
-          <p>Canonical activation binding</p>
+          <p>Canonical Router binding</p>
           <h2 id="trust-root-heading">Launch Stamp Router</h2>
         </div>
         <span className={styles.status}>Status: {router.status}</span>
@@ -167,8 +167,8 @@ function LiveTrustRoot() {
 
       <p className={styles.hashDefinition}>
         <code>runtimeCodeHash</code> means{" "}
-        {LAUNCH_STAMP_RUNTIME_HASH_DEFINITION} The live tuple above activates
-        direct verification for Router stamps at or after{" "}
+        {LAUNCH_STAMP_RUNTIME_HASH_DEFINITION} The tuple above defines the
+        Router binding for stamps at or after{" "}
         <code>startBlock</code>. A terminal must still validate the Router
         runtime and immutable bindings at the same canonical block as each
         lookup.
@@ -184,9 +184,9 @@ export default function LaunchStampDocsPage() {
       description="For launches stamped through the live Router, resolve a token or Uniswap v4 market and read its record from one canonical contract. The result establishes Programmable provenance only."
       heroAside={<LiveTrustRoot />}
       heroId="trust-root"
-      kicker="Developer provenance"
+      kicker="Infrastructure · Router-stamped launches"
       sections={sections}
-      title="Verify future launches at one trust root."
+      title="Verify a Router-stamped launch"
     >
       <section id="algorithm">
         <h2>Use one verification algorithm</h2>
@@ -377,9 +377,9 @@ export default function LaunchStampDocsPage() {
       </section>
 
       <section id="indexing">
-        <h2>Backfill once, then follow finalized logs</h2>
+        <h2>Backfill from the start block, then follow finalized logs</h2>
         <p className={docsStyles.lead}>
-          Terminals can discover every future Router stamp with one Ethereum log
+          Terminals can discover each new Router stamp with one Ethereum log
           stream. The filter is exact; the log is only an index candidate until
           the point verifier reproduces it. Require{" "}
           <code>eth_chainId == 0x1</code> before issuing this standard JSON-RPC
@@ -518,7 +518,7 @@ export default function LaunchStampDocsPage() {
             <dt>Router reference</dt>
             <dd>
               <a href={PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.referenceUrl}>
-                Full verification contract
+                Complete verification procedure
               </a>
             </dd>
           </div>
@@ -619,11 +619,12 @@ export default function LaunchStampDocsPage() {
       </section>
 
       <section id="boundary">
-        <h2>A stamp proves provenance, and only provenance</h2>
+        <h2>A verified stamp establishes Router provenance only</h2>
         <p>
-          A valid record says that the canonical Router recognizes the launch
-          under the returned identity. Keep every other product or risk decision
-          outside this result.
+          A Router record establishes provenance only after the published
+          address, runtime, binding, lookup and cross-check requirements pass.
+          It is not a safety guarantee. Keep every other product or risk
+          decision outside this result.
         </p>
 
         <dl className={styles.boundaryList}>
@@ -675,21 +676,23 @@ export default function LaunchStampDocsPage() {
           <div>
             <dt>Third-party support</dt>
             <dd>
-              A stamp does not automatically list a coin in GMGN, Axiom, FOMO,
+              A stamp does not automatically list a token in GMGN, Axiom, FOMO,
               or any other terminal. Each consumer decides whether and how to
-              integrate this public verification contract. Generic pool or token
-              discovery in a third-party API is not Router stamp integration and
-              must not be presented as Programmable provenance. GMGN market
-              numbers are not canonical onchain stamp evidence; read current
-              pool state separately through PoolManager or StateView.
+              implement the published verification procedure. Generic pool or
+              token discovery in a third-party API is not Router stamp
+              integration and must not be presented as Programmable provenance.
+              GMGN market numbers are not canonical onchain stamp evidence;
+              read current pool state separately through PoolManager or
+              StateView.
             </dd>
           </div>
           <div>
             <dt>Launch operations</dt>
             <dd>
-              The public GitHub approval → permit → wallet self-service flow is
-              not live. This reference activates read-only provenance detection,
-              not public launch authorization.
+              General public Custom submission and wallet self-service
+              launching are not live. This reference documents read-only
+              provenance verification; it does not enable or authorize public
+              launching.
             </dd>
           </div>
         </dl>
@@ -698,9 +701,9 @@ export default function LaunchStampDocsPage() {
       <section className={styles.finalSection} id="integration">
         <h2>Bind to the live Router</h2>
         <p>
-          The activation tuple is live on Ethereum. The deployment evidence
-          identifies the exact Router runtime, and the immutable bindings below
-          must match at the canonical block used for every lookup.
+          The Router deployment is live on Ethereum. The deployment evidence
+          identifies the exact runtime, and the immutable bindings below must
+          match at the canonical block used for every lookup.
         </p>
 
         <h3 className={styles.subheading}>Finalized deployment evidence</h3>
@@ -731,14 +734,15 @@ export default function LaunchStampDocsPage() {
         </dl>
 
         <h3 className={styles.subheading}>
-          Finalized CustomGraph canary (PCAN vector)
+          Finalized CustomGraph test case: PCAN
         </h3>
         <p>
-          The PCAN point-in-time test vector covers the CustomGraph route.
-          <code>PCAN</code> is the human-readable token symbol, not another
-          canary, launch, or trust identifier. There is no separate Classic
-          onchain canary claim. Future Classic stamps use the same live Router
-          ABI and become verifiable when their records exist.
+          This point-in-time test case covers the CustomGraph route.{" "}
+          <code>PCAN</code> is the token symbol in this test case, not a separate
+          trust root or classification. The published evidence does not include
+          a separate Classic onchain canary. Router-stamped Classic launches use
+          the same live Router ABI and become verifiable when their records
+          exist.
         </p>
         <dl className={styles.artifactBinding}>
           {canaryIdentityFields.map(([field, value]) => (

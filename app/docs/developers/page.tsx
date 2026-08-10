@@ -19,16 +19,16 @@ import { DocsAddress } from "@/components/docs-address";
 import { DocsShell } from "@/components/docs-shell";
 
 export const metadata: Metadata = {
-  title: "Developer docs · Programmable",
+  title: "Developer integration · Programmable",
   description:
-    "Integrate the canonical Launch Stamp Router to verify future Programmable Classic and Custom launches on Ethereum.",
+    "Integrate the canonical Launch Stamp Router to verify Router-stamped Programmable Classic and Custom launches on Ethereum.",
   alternates: { canonical: "/docs/developers" },
   openGraph: {
     type: "website",
     siteName: "Programmable",
-    title: "Programmable developer docs",
+    title: "Programmable developer integration",
     description:
-      "Router address, ABI, event stream, verification reads, finality policy and integration guides for future Programmable launches.",
+      "Router address, ABI, event stream, verification reads, finality policy and integration guidance for Router-stamped Programmable launches.",
     url: "/docs/developers",
     images: [
       {
@@ -51,13 +51,13 @@ const reads = PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ABI;
 
 const developerSections = [
   { id: "paths", label: "Start here" },
-  { id: "trust-root", label: "Trust root" },
-  { id: "identity", label: "Launch identity" },
-  { id: "indexing", label: "Optional event discovery" },
+  { id: "trust-root", label: "Router binding" },
+  { id: "identity", label: "Match a token or pool" },
+  { id: "indexing", label: "Discover new launches" },
   { id: "resources", label: "Resources" },
-  { id: "boundary", label: "Trust boundary" },
+  { id: "boundary", label: "What verification proves" },
   { id: "checklist", label: "Checklist" },
-  { id: "agents", label: "AI agents" },
+  { id: "agents", label: "Machine-readable docs" },
 ] as const;
 
 const developerPaths = [
@@ -85,7 +85,8 @@ const developerPaths = [
     external: true,
   },
   {
-    description: "Read the complete contract and finalized PCAN test vector.",
+    description:
+      "Read the full verification reference and its finalized CustomGraph test case (PCAN).",
     href: "/docs/launch-stamps",
     icon: ShieldCheck,
     label: "Read the Router reference",
@@ -122,7 +123,7 @@ export default function DeveloperDocsPage() {
   return (
     <DocsShell
       currentPath="/docs/developers"
-      description="Router V1 is the canonical provenance source for future Programmable Classic and Programmable Custom launches executed and stamped through it on Ethereum. Historical launches and direct factory calls are outside this trust root."
+      description="For launches executed and stamped through Router V1, this guide explains how to verify Programmable provenance from a token or Uniswap v4 pool. Historical launches and direct factory calls are outside this verification path."
       heroAside={
         <nav
           aria-label="Developer integration paths"
@@ -149,9 +150,9 @@ export default function DeveloperDocsPage() {
         </nav>
       }
       heroId="paths"
-      kicker="Developer docs"
+      kicker="Developer integration"
       sections={developerSections}
-      title="Verify future Programmable launches through one Router."
+      title="Integrate launch verification"
     >
       <section id="trust-root">
         <div className={styles.sectionIntro}>
@@ -169,11 +170,11 @@ export default function DeveloperDocsPage() {
           role="table"
         >
           <div role="row">
-            <code role="cell">chainId</code>
+            <code role="rowheader">chainId</code>
             <span role="cell">{chainId} · Ethereum mainnet</span>
           </div>
           <div role="row">
-            <code role="cell">Router</code>
+            <code role="rowheader">Router</code>
             <span role="cell">
               <DocsAddress
                 address={router.address}
@@ -182,27 +183,27 @@ export default function DeveloperDocsPage() {
             </span>
           </div>
           <div role="row">
-            <code role="cell">status</code>
+            <code role="rowheader">status</code>
             <span role="cell">{router.status}</span>
           </div>
           <div role="row">
-            <code role="cell">startBlock</code>
+            <code role="rowheader">startBlock</code>
             <span role="cell">{router.startBlock}</span>
           </div>
           <div role="row">
-            <code role="cell">runtimeCodeHash</code>
+            <code role="rowheader">runtimeCodeHash</code>
             <span className={styles.breakableValue} role="cell">
               {router.runtimeCodeHash}
             </span>
           </div>
           <div role="row">
-            <code role="cell">ABI SHA-256</code>
+            <code role="rowheader">ABI SHA-256</code>
             <span className={styles.breakableValue} role="cell">
               {router.abiSha256}
             </span>
           </div>
           <div role="row">
-            <code role="cell">finality</code>
+            <code role="rowheader">finality</code>
             <span role="cell">
               finalized tag · explicit block reads require at least{" "}
               {router.finalityConfirmations} confirmations
@@ -220,8 +221,8 @@ export default function DeveloperDocsPage() {
             </code>
             <h3>{customKind?.publicLabel}</h3>
             <p>
-              A future Custom graph launched and stamped through the canonical
-              Router. Token, hook and pool can differ for every launch.
+              A CustomGraph launch executed and stamped through this Router.
+              The token, hook and pool can differ between launches.
             </p>
           </article>
           <article>
@@ -233,16 +234,17 @@ export default function DeveloperDocsPage() {
             </code>
             <h3>{classicKind?.publicLabel}</h3>
             <p>
-              A future Classic launch stamped through the same Router. Shared
-              Classic infrastructure does not replace token or pool identity.
+              A Classic launch, when executed and stamped through this Router,
+              uses the same verification path. Shared Classic infrastructure
+              does not replace token or pool identity.
             </p>
           </article>
         </div>
 
         <p className={styles.scopeNote}>
-          This contract is future only. Historical launches and direct Classic,
-          Graph or Single Factory calls outside the Router do not receive
-          Programmable stamp provenance.
+          This Router covers only launches executed and stamped through it from
+          {" "}<code>startBlock</code> onward. Historical launches and direct
+          factory calls are outside its provenance record.
         </p>
       </section>
 
@@ -297,7 +299,7 @@ export default function DeveloperDocsPage() {
         </div>
 
         <div className={styles.statusNote}>
-          <strong>Keep the four point outcomes exact</strong>
+          <strong>Return one of four verification results</strong>
           <p>
             Return stamped, not-stamped, unavailable or indeterminate. Only a
             successful canonical zero lookup is not-stamped. Unavailable means
@@ -311,7 +313,7 @@ export default function DeveloperDocsPage() {
 
       <section id="indexing">
         <div className={styles.sectionIntro}>
-          <h2>Optional event discovery</h2>
+          <h2>Discover new launches when needed</h2>
           <p>
             Point verification needs only an Ethereum provider and the getter
             sequence above. If you need continuous discovery, follow the Router
@@ -325,7 +327,7 @@ export default function DeveloperDocsPage() {
           <li>
             <span className={styles.stepNumber}>1</span>
             <div>
-              <strong>Bind the trust root</strong>
+              <strong>Verify the Router binding</strong>
               <p>
                 Verify chain ID, address, start block, runtime code hash, ABI
                 URL and ABI digest before reading logs.
@@ -387,7 +389,7 @@ export default function DeveloperDocsPage() {
             <p>Use every full signature and topic exactly as published.</p>
           </div>
           <a href="/docs/launch-stamps#indexing">
-            Open the full indexing contract
+            Open the full indexing reference
             <ArrowUpRight aria-hidden="true" size={15} strokeWidth={1.8} />
           </a>
         </div>
@@ -399,7 +401,7 @@ export default function DeveloperDocsPage() {
         >
           {events.map((event) => (
             <div key={event.topic0} role="row">
-              <code role="cell">{event.name}</code>
+              <code role="rowheader">{event.name}</code>
               <span className={styles.eventDetails} role="cell">
                 <code>{event.signature}</code>
                 <small>topic0 {event.topic0}</small>
@@ -411,7 +413,7 @@ export default function DeveloperDocsPage() {
 
       <section id="resources">
         <div className={styles.sectionIntro}>
-          <h2>Use the published files as the contract</h2>
+          <h2>Use the manifest, ABI and verification reference together</h2>
           <p>
             Read the discovery document, follow <code>manifestUrl</code>, and
             use <code>launchStampRouter</code> from the live manifest. Verify
@@ -442,7 +444,7 @@ export default function DeveloperDocsPage() {
           </ExternalResource>
           <ExternalResource
             href={PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.referenceUrl}
-            meta="Normative point-verification contract"
+            meta="Canonical point-verification specification"
           >
             Router reference
           </ExternalResource>
@@ -477,10 +479,11 @@ export default function DeveloperDocsPage() {
         <div className={styles.sectionIntro}>
           <h2>Keep provenance separate from market risk</h2>
           <p>
-            A valid stamp establishes that the canonical Router executed and
-            recorded the returned Classic or Custom launch. It does not
-            establish safety, tradability, current liquidity or pool state,
-            audit coverage, review status, endorsement or terminal support.
+            A Router record establishes provenance only after the address,
+            runtime, binding, lookup and cross-check requirements above pass.
+            It does not establish safety, tradability, current liquidity or
+            pool state, audit coverage, review status, endorsement or terminal
+            support.
           </p>
         </div>
 
@@ -514,9 +517,10 @@ export default function DeveloperDocsPage() {
           <strong>Discovery and provenance are different</strong>
           <p>
             A third-party terminal may discover a token or v4 pool without
-            recognizing its Programmable stamp. Each terminal must implement the
-            public Router contract to add that provenance. Public GitHub
-            approval, permit and wallet self-service are not live.
+            recognizing its Programmable stamp. Each terminal must implement
+            the published Router verification procedure to add that
+            provenance. General public Custom submission and wallet
+            self-service launching are not live.
           </p>
         </div>
       </section>
@@ -584,9 +588,9 @@ export default function DeveloperDocsPage() {
         <div className={styles.sectionIntro}>
           <h2>Give agents the same source set</h2>
           <p>
-            Use the Markdown overview for the short contract and the full Router
-            reference for selectors, events, records, finality and the PCAN test
-            vector.
+            Use the Markdown overview for the short integration guide and the
+            full Router reference for selectors, events, records, finality and
+            the PCAN test case.
           </p>
         </div>
 
@@ -596,25 +600,25 @@ export default function DeveloperDocsPage() {
           role="table"
         >
           <div role="row">
-            <code role="cell">Overview</code>
+            <code role="rowheader">Overview</code>
             <span role="cell">
               <a href="/docs/developers.md">/docs/developers.md</a>
             </span>
           </div>
           <div role="row">
-            <code role="cell">Short context</code>
+            <code role="rowheader">Short context</code>
             <span role="cell">
               <a href="/llms.txt">/llms.txt</a>
             </span>
           </div>
           <div role="row">
-            <code role="cell">Full context</code>
+            <code role="rowheader">Full context</code>
             <span role="cell">
               <a href="/llms-full.txt">/llms-full.txt</a>
             </span>
           </div>
           <div role="row">
-            <code role="cell">Canonical source</code>
+            <code role="rowheader">Canonical source</code>
             <span className={styles.breakableValue} role="cell">
               {PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.referenceUrl}
             </span>

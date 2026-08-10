@@ -6,46 +6,118 @@ export type DocsSearchItem = {
 
 export const docsCategories = [
   {
-    label: "Classic",
-    status: "coming-soon",
+    description: "Overview",
+    href: "/docs",
+    label: "Overview",
+    relatedPaths: [] as const,
   },
   {
-    label: "Custom Hook",
-    status: "coming-soon",
+    description: "Models and status",
+    href: "/docs/tokens",
+    label: "Tokens and launches",
+    relatedPaths: [
+      "/docs/models/classic",
+      "/docs/models/custom",
+      "/docs/models/stock-paired",
+    ] as const,
   },
   {
+    description: "Identity and data",
+    href: "/docs/infrastructure",
+    label: "Infrastructure",
+    relatedPaths: ["/docs/launch-stamps"] as const,
+  },
+  {
+    description: "Integration guide",
     href: "/docs/developers",
-    label: "Developers",
-    relatedPaths: ["/docs/launch-stamps"],
-    status: "available",
+    label: "Developer integration",
+    relatedPaths: [] as const,
   },
 ] as const;
 
 export const docsNavigation = [
   {
-    label: "Developers",
+    label: "Programmable",
+    items: [{ href: "/docs", label: "Overview" }],
+  },
+  {
+    label: "Tokens and launches",
+    items: [
+      { href: "/docs/tokens", label: "Token overview" },
+      { href: "/docs/models/classic", label: "Classic" },
+      { href: "/docs/models/custom", label: "Custom" },
+      { href: "/docs/models/stock-paired", label: "Stock-Paired" },
+    ],
+  },
+  {
+    label: "Infrastructure",
+    items: [
+      { href: "/docs/infrastructure", label: "System overview" },
+      { href: "/docs/launch-stamps", label: "Launch verification" },
+    ],
+  },
+  {
+    label: "Developer integration",
     items: [
       { href: "/docs/developers#paths", label: "Start here" },
-      { href: "/docs/launch-stamps", label: "Launch stamps" },
-      { href: "/docs/developers#trust-root", label: "Trust root" },
-      { href: "/docs/developers#identity", label: "Launch identity" },
-      {
-        href: "/docs/developers#indexing",
-        label: "Optional event discovery",
-      },
+      { href: "/docs/developers#trust-root", label: "Router binding" },
+      { href: "/docs/developers#identity", label: "Match a token or pool" },
+      { href: "/docs/developers#indexing", label: "Discover new launches" },
       { href: "/docs/developers#resources", label: "Resources" },
-      { href: "/docs/developers#boundary", label: "Trust boundary" },
+      { href: "/docs/developers#boundary", label: "What verification proves" },
       { href: "/docs/developers#checklist", label: "Checklist" },
-      { href: "/docs/developers#agents", label: "AI agents" },
+      { href: "/docs/developers#agents", label: "Machine-readable docs" },
     ],
   },
 ] as const;
 
 export const docsSearchItems: DocsSearchItem[] = [
   {
-    title: "Launch stamps",
+    title: "Documentation overview",
     description:
-      "Verify future Classic and Custom provenance through one canonical Router lookup.",
+      "Choose between project context, token models, infrastructure and developer integration.",
+    href: "/docs",
+  },
+  {
+    title: "Tokens and launches",
+    description:
+      "Compare Classic, Custom and historical Stock-Paired launches and the availability rules for each.",
+    href: "/docs/tokens",
+  },
+  {
+    title: "Classic",
+    description:
+      "Understand fixed-supply launches, directional fees, creator rewards and Initial Buy custody.",
+    href: "/docs/models/classic",
+  },
+  {
+    title: "Custom",
+    description:
+      "Learn what must be defined before a launch with an individual Uniswap v4 hook is activated.",
+    href: "/docs/models/custom",
+  },
+  {
+    title: "Stock-Paired",
+    description:
+      "Read the historical token model, quote-asset routing and support boundaries.",
+    href: "/docs/models/stock-paired",
+  },
+  {
+    title: "Infrastructure",
+    description:
+      "See how launch execution, token identity, Router provenance and public resources fit together.",
+    href: "/docs/infrastructure",
+  },
+  {
+    title: "Developer integration",
+    description:
+      "Integrate launch verification in a terminal, wallet, scanner or indexer.",
+    href: "/docs/developers",
+  },
+  {
+    title: "Launch verification",
+    description:
+      "Verify Router-stamped Classic and Custom provenance through one canonical contract.",
     href: "/docs/launch-stamps",
   },
   {
@@ -79,7 +151,7 @@ export const docsSearchItems: DocsSearchItem[] = [
     href: "/docs/developers#identity",
   },
   {
-    title: "Optional event discovery",
+    title: "Discover new launches",
     description:
       "Backfill and follow Router events only when continuous launch discovery is needed.",
     href: "/docs/developers#indexing",
@@ -103,9 +175,9 @@ export const docsSearchItems: DocsSearchItem[] = [
     href: "/docs/developers#boundary",
   },
   {
-    title: "AI agent context",
+    title: "Machine-readable docs",
     description:
-      "Use the concise Markdown contract or the complete machine-readable Router reference.",
+      "Use the concise Markdown guide or the complete machine-readable Router reference.",
     href: "/docs/developers#agents",
   },
   {

@@ -17,15 +17,19 @@ import { docsSearchItems } from "@/components/docs-data";
 import styles from "@/components/docs-experience.module.css";
 import { docsNavigateEvent } from "@/components/docs-navigation";
 
+function normalizeDocsSearchText(value: string) {
+  return value.trim().toLowerCase().replace(/[\s-]+/g, " ");
+}
+
 export function getDocsSearchResults(query: string) {
-  const normalizedQuery = query.trim().toLowerCase();
+  const normalizedQuery = normalizeDocsSearchText(query);
   if (!normalizedQuery) return [];
 
   return docsSearchItems
     .map((item, index) => {
-      const title = item.title.toLowerCase();
-      const description = item.description.toLowerCase();
-      const titleWords = title.split(/[\s-]+/);
+      const title = normalizeDocsSearchText(item.title);
+      const description = normalizeDocsSearchText(item.description);
+      const titleWords = title.split(" ");
       const rank =
         title === normalizedQuery
           ? 0
@@ -100,7 +104,7 @@ export function DocsSearch() {
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
-  const normalizedQuery = query.trim().toLowerCase();
+  const normalizedQuery = normalizeDocsSearchText(query);
   const results = getDocsSearchResults(normalizedQuery);
 
   const listboxId = "docs-search-results";
@@ -179,7 +183,7 @@ export function DocsSearch() {
     if (result) navigateToResult(result.href);
   }
 
-  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+  function handleKeyDown(event: KeyboardEvent<HTMLFormElement>) {
     if (event.key === "Escape") {
       if (!isOpen) return;
       event.preventDefault();
@@ -187,6 +191,8 @@ export function DocsSearch() {
       dismissResults();
       return;
     }
+
+    if (!(event.target instanceof HTMLInputElement)) return;
 
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       if (results.length === 0) return;
@@ -246,6 +252,7 @@ export function DocsSearch() {
       ref={formRef}
       role="search"
       onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
       onSubmit={submit}
     >
       <Search aria-hidden="true" size={18} strokeWidth={1.8} />
@@ -274,7 +281,6 @@ export function DocsSearch() {
           setActiveIndex(0);
         }}
         onFocus={openResults}
-        onKeyDown={handleKeyDown}
       />
       {query ? (
         <button

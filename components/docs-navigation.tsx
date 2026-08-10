@@ -12,7 +12,7 @@ import {
   type MouseEvent,
 } from "react";
 
-import { docsNavigation } from "@/components/docs-data";
+import { docsCategories, docsNavigation } from "@/components/docs-data";
 import styles from "@/components/docs-experience.module.css";
 
 type SectionPosition = {
@@ -671,6 +671,82 @@ export function DocsNavigation({
     );
   }
 
+  function renderMobileNavigation() {
+    const activeCategory = docsCategories.find(
+      (category) =>
+        category.href === currentPath ||
+        category.relatedPaths.some((path) => path === currentPath),
+    );
+    const activeGroup = activeCategory
+      ? docsNavigation.find((group) =>
+          group.items.some((item) => {
+            const itemPath = item.href.split("#")[0];
+            return (
+              itemPath === activeCategory.href ||
+              activeCategory.relatedPaths.some((path) => path === itemPath)
+            );
+          }),
+        )
+      : undefined;
+    const relatedItems =
+      activeGroup?.items.filter(
+        (item) => item.href.split("#")[0] !== currentPath,
+      ) ?? [];
+
+    return (
+      <>
+        {renderNavigation()}
+
+        <div className={styles.navGroup}>
+          <p className={styles.navLabel}>Documentation</p>
+          <ul>
+            {docsCategories.map((category) => {
+              const active = category === activeCategory;
+              return (
+                <li key={category.href}>
+                  <Link
+                    href={category.href}
+                    data-active={active ? "true" : undefined}
+                    aria-current={
+                      active
+                        ? category.href === currentPath
+                          ? "page"
+                          : "location"
+                        : undefined
+                    }
+                    onClick={(event) =>
+                      handleNavigation(event, category.href)
+                    }
+                  >
+                    {category.label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+
+        {relatedItems.length > 0 ? (
+          <div className={styles.navGroup}>
+            <p className={styles.navLabel}>{activeGroup?.label}</p>
+            <ul>
+              {relatedItems.map((item) => (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    onClick={(event) => handleNavigation(event, item.href)}
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </>
+    );
+  }
+
   return (
     <>
       <nav
@@ -693,7 +769,7 @@ export function DocsNavigation({
           className={styles.mobileNavBody}
           aria-label="Documentation navigation"
         >
-          {renderNavigation()}
+          {renderMobileNavigation()}
         </nav>
       </details>
     </>

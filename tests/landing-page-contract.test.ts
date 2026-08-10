@@ -87,7 +87,7 @@ describe("landing page contract", () => {
     expect(landing).toContain('aria-label="Programmable on X"');
     expect(landing).toContain('aria-label="Programmable on GitHub"');
     expect(landing).toContain('aria-label="Programmable on Dexscreener"');
-    expect(landing).toContain('href="/docs/developers"');
+    expect(landing).toContain('href="/docs"');
     expect(navigation).toContain('if (pathname === "/") return null;');
     expect(landing).not.toContain("LandingBackdrop");
     expect(backdrop).not.toContain("<video");

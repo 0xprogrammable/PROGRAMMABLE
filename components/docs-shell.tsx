@@ -32,8 +32,12 @@ export function DocsShell({
 }) {
   return (
     <div className={`${styles.page} page-width`} data-docs-shell>
+      <a className={styles.skipDocsNavigation} href="#docs-content">
+        Skip documentation navigation
+      </a>
+
       <aside className={styles.sidebar} data-docs-sidebar>
-        <Link className={styles.sidebarBrand} href="/docs/developers">
+        <Link className={styles.sidebarBrand} href="/docs">
           <span>Programmable</span>
           <strong>Documentation</strong>
         </Link>
@@ -47,34 +51,22 @@ export function DocsShell({
           className={styles.docsCategories}
         >
           {docsCategories.map((category) => {
-            if (category.status === "available") {
-              const active =
-                currentPath === category.href ||
-                category.relatedPaths.some((path) => path === currentPath);
-              return (
-                <Link
-                  aria-current={active ? "page" : undefined}
-                  className={`${styles.docsCategory} ${
-                    active ? styles.docsCategoryActive : ""
-                  }`}
-                  href={category.href}
-                  key={category.label}
-                >
-                  <strong>{category.label}</strong>
-                  <span>Developer reference</span>
-                </Link>
-              );
-            }
-
+            const exact = currentPath === category.href;
+            const active =
+              exact ||
+              category.relatedPaths.some((path) => path === currentPath);
             return (
-              <span
-                aria-disabled="true"
-                className={`${styles.docsCategory} ${styles.docsCategoryUnavailable}`}
+              <Link
+                aria-current={exact ? "page" : active ? "location" : undefined}
+                className={`${styles.docsCategory} ${
+                  active ? styles.docsCategoryActive : ""
+                }`}
+                href={category.href}
                 key={category.label}
               >
                 <strong>{category.label}</strong>
-                <span>Soon</span>
-              </span>
+                <span>{category.description}</span>
+              </Link>
             );
           })}
         </nav>
@@ -82,7 +74,11 @@ export function DocsShell({
         <DocsNavigation currentPath={currentPath} sections={sections} />
       </aside>
 
-      <div className={styles.mainColumn}>
+      <div
+        className={styles.mainColumn}
+        id="docs-content"
+        tabIndex={-1}
+      >
         <header
           className={styles.hero}
           data-docs-hero

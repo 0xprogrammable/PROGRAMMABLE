@@ -4,9 +4,9 @@ import { ReactNode } from "react";
 import { SiteFooter } from "@/components/site-footer";
 
 export const metadata: Metadata = {
-  title: "Programmable",
+  title: "Documentation · Programmable",
   description:
-    "Developer documentation for discovering and building with Programmable launches.",
+    "Product, token, infrastructure and developer documentation for Programmable on Ethereum.",
 };
 
 export default function DocsLayout({ children }: { children: ReactNode }) {

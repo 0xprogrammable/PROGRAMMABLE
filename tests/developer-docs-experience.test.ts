@@ -23,17 +23,19 @@ const llmsRoute = read("app/llms.txt/route.ts");
 const llmsFullRoute = read("app/llms-full.txt/route.ts");
 
 describe("Developer documentation experience", () => {
-  it("uses one Router-first Developers route with canonical metadata", () => {
-    expect(docsIndex).toContain('redirect("/docs/developers")');
-    expect(siteNavigation).toContain('href: "/docs/developers"');
+  it("uses a real Docs overview and keeps the Router guide canonical", () => {
+    expect(docsIndex).toContain('currentPath="/docs"');
+    expect(docsIndex).toContain('title="Programmable documentation"');
+    expect(docsIndex).not.toContain("redirect(");
+    expect(siteNavigation).toContain('href: "/docs"');
     expect(developerPage).toContain(
-      'title="Verify future Programmable launches through one Router."',
+      'title="Integrate launch verification"',
     );
     expect(developerPage).toContain(
       'alternates: { canonical: "/docs/developers" }',
     );
     expect(developerPage).toContain(
-      "Historical launches and direct factory calls are outside this trust root.",
+      "Historical launches and direct factory calls are outside this verification path.",
     );
   });
 
@@ -91,7 +93,7 @@ describe("Developer documentation experience", () => {
     expect(developerPage).toMatch(
       /The shared\s+Classic hook is not a launch identifier\./,
     );
-    expect(developerPage).toContain("Optional event discovery");
+    expect(developerPage).toContain("Discover new launches when needed");
     expect(developerPage).toMatch(
       /An indexer is an\s+implementation choice, not a trust dependency\./,
     );
@@ -100,10 +102,12 @@ describe("Developer documentation experience", () => {
     );
   });
 
-  it("keeps future-only Classic and Custom scope explicit", () => {
+  it("keeps Router-only Classic and Custom scope explicit", () => {
     expect(developerPage).toContain("LaunchKindV1.{customKind?.name}");
     expect(developerPage).toContain("LaunchKindV1.{classicKind?.name}");
-    expect(developerPage).toContain("This contract is future only.");
+    expect(developerPage).toContain(
+      "This Router covers only launches executed and stamped through it",
+    );
     expect(developerPage).not.toContain("MemeTokenLaunchedV2");
     expect(developerPage).not.toContain(
       "0xC3bd04aAc2fb2ba58efD7Eb673E544E0B80De770",
@@ -117,10 +121,10 @@ describe("Developer documentation experience", () => {
       "It does not establish safety, tradability, current liquidity or pool state",
     );
     expect(developerDocsMarkdown).toContain(
-      "each consumer must implement this public contract",
+      "each consumer must implement the published verification procedure",
     );
     expect(developerDocsMarkdown).toContain(
-      "The public GitHub approval, permit, and wallet self-service flow is not live.",
+      "General public Custom submission and wallet self-service launching are not live.",
     );
     expect(developerDocsMarkdown).toContain(
       "It does not automatically list or label a launch in GMGN, Axiom, FOMO",
