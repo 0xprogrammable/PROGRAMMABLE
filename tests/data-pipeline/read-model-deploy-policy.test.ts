@@ -591,10 +591,40 @@ describe("read-model production deploy policy", () => {
     );
     expect(workflow).toContain("headers: alchemySmokeRequestHeaders");
     expect(workflow).toContain(
-      '!["blob", "blob+postgres"].includes(readSource ?? "")',
+      'const operationalReadSources = Object.freeze([',
     );
     expect(workflow).toContain(
+      '"operational+durable+postgres",',
+    );
+    expect(workflow).toContain(
+      'const operationalRpcProviders = Object.freeze([',
+    );
+    expect(workflow).toContain(
+      '"operational-dual",\n            "operational-primary",',
+    );
+    expect(workflow).toContain(
+      'const alchemyRpcProviders = Object.freeze(["alchemy"]);',
+    );
+    expect(workflow).toContain(
+      'const alchemyReadSources = Object.freeze(["blob"]);',
+    );
+    expect(workflow).toContain(
+      'expectedReadSources,\n            expectedRpcProviders,',
+    );
+    expect(workflow).toContain(
+      '!expectedReadSources.includes(readSource ?? "")',
+    );
+    expect(workflow).toContain(
+      '!expectedRpcProviders.includes(rpcProvider ?? "")',
+    );
+    expect(workflow).not.toContain(
       'response.headers.get("x-programmable-rpc-provider") !== "alchemy"',
+    );
+    expect(workflow).toContain(
+      '"/api/indexers/v1/token-list",\n            alchemyReadSources,\n            alchemyRpcProviders,',
+    );
+    expect(workflow).toContain(
+      '"/api/explore?limit=20&page=1&sort=market-cap",\n            operationalReadSources,\n            operationalRpcProviders,',
     );
     expect(workflow).toContain("entry.launchCategoryProvenance.blockNumber");
     expect(workflow).toContain(
@@ -619,6 +649,8 @@ describe("read-model production deploy policy", () => {
       workflow.indexOf("Smoke staged Alchemy Explore APIs"),
       workflow.indexOf("Record Alchemy-only read path"),
     );
+    expect(alchemySmoke.match(/operationalRpcProviders/g)).toHaveLength(7);
+    expect(alchemySmoke.match(/alchemyRpcProviders/g)).toHaveLength(2);
     expect(alchemySmoke).not.toContain("/api/ops/health");
     expect(alchemySmoke).not.toContain("/api/explore/profile");
     expect(alchemySmoke).not.toMatch(
