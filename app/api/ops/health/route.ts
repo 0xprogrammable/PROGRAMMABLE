@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import {
-  getOperationalOnchainDeployment,
+  getWebsiteReadOnchainDeployment,
   readDurableExploreModel,
   readOperationalRpcHealth,
   type OperationalRpcHealth,
@@ -62,7 +62,7 @@ export async function GET() {
   try {
     const indexedRead = await readIndexedHealth();
     const indexed = indexedRead.health;
-    const deployment = getOperationalOnchainDeployment("production");
+    const deployment = getWebsiteReadOnchainDeployment("production");
     if (deployment.status !== "ready") {
       throw new Error(
         "The verified production release is not operationally eligible",

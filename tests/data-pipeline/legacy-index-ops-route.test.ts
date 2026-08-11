@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../../lib/onchain", () => ({
-  getOperationalOnchainDeployment: mocks.getOperationalOnchainDeployment,
+  getWebsiteReadOnchainDeployment: mocks.getOperationalOnchainDeployment,
   readLiveExploreModel: mocks.readLiveExploreModel,
   writeDurableExploreModel: mocks.writeDurableExploreModel,
 }));

@@ -32,7 +32,7 @@ import {
 } from "@/lib/data-pipeline/action-lookup";
 import { indexedLaunchLookupEnabled } from "@/lib/data-pipeline/route-activation.server";
 import { uerc20ReadAbi } from "@/lib/onchain/abis";
-import { getOperationalOnchainDeployment } from "@/lib/onchain/config";
+import { getWebsiteReadOnchainDeployment } from "@/lib/onchain/config";
 import {
   safeOperationalRpcError,
   isOperationalRpcFailoverEligible,
@@ -660,7 +660,7 @@ async function readRewards(account: Address) {
     };
   }
   try {
-    const deployment = getOperationalOnchainDeployment(environment);
+    const deployment = getWebsiteReadOnchainDeployment(environment);
     return await withOperationalRpcFailover(deployment, (rpcDeployment) =>
       readRewardsFromClient(account, createClient(rpcDeployment.rpcUrl))
     );
@@ -757,7 +757,7 @@ async function readLaunchByTransaction(
   if (!isClassicV3ReleaseVerified(manifest, releaseManifest, chain.id)) {
     return { status: "not-deployed" as const, launch: null };
   }
-  const deployment = getOperationalOnchainDeployment(environment);
+  const deployment = getWebsiteReadOnchainDeployment(environment);
   return withOperationalRpcFailover(deployment, (rpcDeployment) =>
     readLaunchByTransactionFromClient(
       account,

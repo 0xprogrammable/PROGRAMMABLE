@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../lib/onchain/config", () => ({
-  getOperationalOnchainDeployment: mocks.getOperationalOnchainDeployment,
+  getWebsiteReadOnchainDeployment: mocks.getOperationalOnchainDeployment,
 }));
 vi.mock("../lib/onchain/durable-model", () => ({
   readDurableExploreModel: mocks.readDurableExploreModel,

@@ -12,7 +12,7 @@ vi.mock("../../lib/data-pipeline/read-model-health.server", () => ({
 }));
 
 vi.mock("../../lib/onchain", () => ({
-  getOperationalOnchainDeployment: mocks.getOperationalOnchainDeployment,
+  getWebsiteReadOnchainDeployment: mocks.getOperationalOnchainDeployment,
   readDurableExploreModel: mocks.readDurableExploreModel,
   readOperationalRpcHealth: mocks.readOperationalRpcHealth,
 }));

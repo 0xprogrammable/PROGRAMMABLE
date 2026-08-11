@@ -7,10 +7,12 @@ vi.mock("next/cache", () => ({
 
 const mocks = vi.hoisted(() => ({
   getOperationalOnchainDeployment: vi.fn(),
+  getWebsiteReadOnchainDeployment: vi.fn(),
 }));
 
 vi.mock("../lib/onchain/config", () => ({
   getOperationalOnchainDeployment: mocks.getOperationalOnchainDeployment,
+  getWebsiteReadOnchainDeployment: mocks.getWebsiteReadOnchainDeployment,
 }));
 
 import { getAlchemyOnchainDeployment } from "../lib/alchemy/explore.server";
@@ -35,12 +37,13 @@ const operational = {
 } satisfies ReadyOnchainDeployment;
 
 describe("Alchemy-named website consumer deployment", () => {
-  it("retains the validated operational primary and fixed secondary", () => {
-    mocks.getOperationalOnchainDeployment.mockReturnValue(operational);
+  it("uses the fixed independent Website read quorum", () => {
+    mocks.getWebsiteReadOnchainDeployment.mockReturnValue(operational);
 
     expect(getAlchemyOnchainDeployment()).toBe(operational);
-    expect(mocks.getOperationalOnchainDeployment).toHaveBeenCalledWith(
+    expect(mocks.getWebsiteReadOnchainDeployment).toHaveBeenCalledWith(
       "production",
     );
+    expect(mocks.getOperationalOnchainDeployment).not.toHaveBeenCalled();
   });
 });

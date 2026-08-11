@@ -15,7 +15,7 @@ import {
 import { mainnet } from "viem/chains";
 
 import {
-  getOnchainDeployment,
+  getWebsiteReadOnchainDeployment,
   readExploreModel,
   type ExploreReadModel,
 } from "@/lib/onchain";
@@ -509,7 +509,7 @@ async function readRewardsWithClients(
       rpcClients: [] as PublicClient[],
     };
   }
-  const deployment = getOnchainDeployment("production");
+  const deployment = getWebsiteReadOnchainDeployment("production");
   const model = await readExploreModel(deployment);
   if (model.status !== "ready") {
     throw new Error("The verified launch registry is unavailable");
@@ -845,7 +845,7 @@ export async function POST(request: NextRequest) {
       registry = actionTokenAsExploreModel(indexedReward.token);
     } else {
       registry = await readExploreModel(
-        getOnchainDeployment("production"),
+        getWebsiteReadOnchainDeployment("production"),
       );
       if (registry.status !== "ready") {
         return json({ error: "Stock-Paired rewards are not deployed" }, 409);
