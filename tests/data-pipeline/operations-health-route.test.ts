@@ -65,7 +65,10 @@ describe("operations health route", () => {
 
   it("preserves the complete legacy health behavior in legacy-only mode", async () => {
     mocks.readIndexedReadModelHealth.mockResolvedValue(null);
-    mocks.getOperationalOnchainDeployment.mockReturnValue({ status: "ready" });
+    mocks.getOperationalOnchainDeployment.mockReturnValue({
+      status: "ready",
+      chainId: 1,
+    });
     mocks.readDurableExploreModel.mockResolvedValue({
       status: "ready",
       ageMs: 5_500,
@@ -336,5 +339,78 @@ describe("operations health route", () => {
     );
     expect(mocks.readDurableExploreModel).toHaveBeenCalledOnce();
     expect(mocks.readOperationalRpcHealth).toHaveBeenCalledOnce();
+  });
+
+  it("reports a stale durable index as degraded while verified RPC reads stay available", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.readIndexedReadModelHealth.mockResolvedValue(null);
+    mocks.getOperationalOnchainDeployment.mockReturnValue({
+      status: "ready",
+      chainId: 1,
+    });
+    mocks.readDurableExploreModel.mockResolvedValue({
+      status: "unavailable",
+      reason: "stale",
+      detail: "private stale-index detail",
+      ageMs: 7_200_000,
+      envelope: {
+        payload: {
+          model: {
+            snapshot: { blockNumber: "25600000" },
+            tokens: [{}, {}],
+          },
+        },
+      },
+    });
+    mocks.readOperationalRpcHealth.mockResolvedValue(rpcHealth());
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(body).toMatchObject({
+      status: "degraded",
+      chainId: 1,
+      indexSource: "durable",
+      indexedReadModel: { status: "disabled" },
+      index: {
+        status: "stale",
+        ageSeconds: 7_200,
+        blockNumber: "25600000",
+        tokenCount: 2,
+      },
+      rpc: {
+        status: "healthy",
+        quorum: { status: "verified" },
+      },
+    });
+    expect(JSON.stringify(body)).not.toContain("private stale-index detail");
+  });
+
+  it("remains fail-closed when the durable identity index is missing", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.readIndexedReadModelHealth.mockResolvedValue(null);
+    mocks.getOperationalOnchainDeployment.mockReturnValue({
+      status: "ready",
+      chainId: 1,
+    });
+    mocks.readDurableExploreModel.mockResolvedValue({
+      status: "unavailable",
+      reason: "missing",
+      detail: "private missing-index detail",
+    });
+    mocks.readOperationalRpcHealth.mockResolvedValue(rpcHealth());
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(body).toEqual({
+      status: "unhealthy",
+      checkedAt: expect.any(String),
+    });
+    expect(JSON.stringify(body)).not.toContain("private missing-index detail");
   });
 });

@@ -11,6 +11,8 @@ import type { OnchainDeployment } from "./types";
 
 const CAPACITY_MESSAGE =
   /(?:monthly[_\s-]*capacity[_\s-]*(?:exceeded|reached)|capacity[_\s-]*(?:exceeded|reached)|rate[_\s-]*limit(?:ed)?|too many requests)/iu;
+const ARCHIVE_LIMITATION_MESSAGE =
+  /archive requests require a personal token/iu;
 
 function errorChain(error: unknown) {
   const chain: unknown[] = [];
@@ -34,6 +36,15 @@ function rpcCapacityMessage(error: RpcRequestError) {
     error.cause instanceof Error ? error.cause.message : undefined,
   ].filter((value): value is string => Boolean(value));
   return details.some((value) => CAPACITY_MESSAGE.test(value));
+}
+
+function rpcArchiveLimitationMessage(error: RpcRequestError) {
+  const details = [
+    error.details,
+    typeof error.data === "string" ? error.data : undefined,
+    error.cause instanceof Error ? error.cause.message : undefined,
+  ].filter((value): value is string => Boolean(value));
+  return details.some((value) => ARCHIVE_LIMITATION_MESSAGE.test(value));
 }
 
 /**
@@ -63,7 +74,8 @@ export function isOperationalRpcFailoverEligible(error: unknown) {
       return (
         candidate.code === 429 ||
         candidate.code === -32_005 ||
-        rpcCapacityMessage(candidate)
+        rpcCapacityMessage(candidate) ||
+        rpcArchiveLimitationMessage(candidate)
       );
     }
     return false;
