@@ -569,6 +569,7 @@ describe("read-model performance contract", () => {
     ).toEqual([
       "source-cache-exploreList",
       "source-cache-tokenDetail",
+      "source-cache-tokenChart",
       "source-cache-tokenList",
       "source-cache-publicIndexer",
     ]);
@@ -939,8 +940,9 @@ describe("read-model performance contract", () => {
     const exactFalse = deployPolicy.RELEASE_GATED_FLAG_NAMES.map(
       (name: string) => `${name}="false"`,
     ).join("\n");
+    const bitquerySecret = '\nBITQUERY_OAUTH_TOKEN="[Sensitive]"';
     const alchemy = deployPolicy.evaluateReadModelDeployPolicy(
-      `${exactFalse}\nPROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL="${RUNTIME_RPC_ENVIRONMENT.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL}"`,
+      `${exactFalse}\nPROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL="${RUNTIME_RPC_ENVIRONMENT.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL}"${bitquerySecret}`,
       {},
     );
     expect(alchemy).toMatchObject({
@@ -953,7 +955,7 @@ describe("read-model performance contract", () => {
     const indexedEnvironment = `${exactFalse.replace(
       "INDEXED_EXPLORE_TOKEN_READS_ENABLED=\"false\"",
       "INDEXED_EXPLORE_TOKEN_READS_ENABLED=\"true\"",
-    )}\nPROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL="${RUNTIME_RPC_ENVIRONMENT.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL}"\nPROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL="${RUNTIME_RPC_ENVIRONMENT.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL}"`;
+    )}\nPROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL="${RUNTIME_RPC_ENVIRONMENT.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL}"\nPROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL="${RUNTIME_RPC_ENVIRONMENT.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL}"${bitquerySecret}`;
     const indexed = deployPolicy.evaluateReadModelDeployPolicy(
       indexedEnvironment,
       {
@@ -972,7 +974,7 @@ describe("read-model performance contract", () => {
     const sensitiveRuntimeEnvironment = `${exactFalse.replace(
       "INDEXED_EXPLORE_TOKEN_READS_ENABLED=\"false\"",
       "INDEXED_EXPLORE_TOKEN_READS_ENABLED=\"[sensitive]\"",
-    )}\nPROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL="[sensitive]"\nPROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL="[sensitive]"`;
+    )}\nPROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL="[sensitive]"\nPROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL="[sensitive]"${bitquerySecret}`;
     expect(
       deployPolicy.evaluateReadModelDeployPolicy(
         sensitiveRuntimeEnvironment,
@@ -1007,7 +1009,7 @@ describe("read-model performance contract", () => {
     const publicFeedEnvironment = `${exactFalse.replace(
       "INDEXED_PUBLIC_INDEXER_FEED_READS_ENABLED=\"false\"",
       "INDEXED_PUBLIC_INDEXER_FEED_READS_ENABLED=\"true\"",
-    )}\nPROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL="${RUNTIME_RPC_ENVIRONMENT.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL}"\nPROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL="${RUNTIME_RPC_ENVIRONMENT.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL}"`;
+    )}\nPROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL="${RUNTIME_RPC_ENVIRONMENT.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL}"\nPROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL="${RUNTIME_RPC_ENVIRONMENT.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL}"${bitquerySecret}`;
     expect(
       deployPolicy.evaluateReadModelDeployPolicy(publicFeedEnvironment, {
         PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT:
@@ -1290,30 +1292,54 @@ describe("read-model performance contract", () => {
         process.cwd(),
       );
     expect(alchemyResult.ok).toBe(true);
-    expect(alchemyResult.checks).toHaveLength(15);
+    expect(alchemyResult.checks).toHaveLength(18);
 
-    const exploreConsumerPath = "lib/explore-consumer.server.ts";
-    const exploreConsumerSource = readFileSync(
-      resolve(process.cwd(), exploreConsumerPath),
+    const exploreRoutePath = "app/api/explore/route.ts";
+    const exploreRouteSource = readFileSync(
+      resolve(process.cwd(), exploreRoutePath),
       "utf8",
     );
-    const staleProviderProvenance =
+    const staleMarketProvenance =
       alchemySourceContracts.evaluateAlchemyExploreSourceContracts(
         process.cwd(),
         {
           sourceOverrides: {
-            [exploreConsumerPath]: exploreConsumerSource.replace(
-              '? "operational-dual"',
-              '? "alchemy"',
+            [exploreRoutePath]: exploreRouteSource.replaceAll(
+              '"X-Programmable-Market-Source": "bitquery"',
+              '"X-Programmable-Market-Source": "alchemy"',
             ),
           },
         },
       );
     expect(
-      staleProviderProvenance.failures.map(
+      staleMarketProvenance.failures.map(
         (failure: { id: string }) => failure.id,
       ),
-    ).toContain("alchemy-explore-provenance");
+    ).toContain("bitquery-market-provenance");
+
+    const canonicalSupplyPath =
+      "lib/market-data/canonical-token-supply.server.ts";
+    const canonicalSupplySource = readFileSync(
+      resolve(process.cwd(), canonicalSupplyPath),
+      "utf8",
+    );
+    const singleProviderSupply =
+      alchemySourceContracts.evaluateAlchemyExploreSourceContracts(
+        process.cwd(),
+        {
+          sourceOverrides: {
+            [canonicalSupplyPath]: canonicalSupplySource.replace(
+              "group.length >= 2",
+              "group.length >= 1",
+            ),
+          },
+        },
+      );
+    expect(
+      singleProviderSupply.failures.map(
+        (failure: { id: string }) => failure.id,
+      ),
+    ).toContain("canonical-token-supply-quorum");
 
     const result = sourceContracts.evaluateReadModelSourceContracts(
       process.cwd(),
@@ -1322,6 +1348,7 @@ describe("read-model performance contract", () => {
     const disconnectedIndexedFailures = [
       "source-cache-exploreList",
       "source-cache-tokenDetail",
+      "source-cache-tokenChart",
       "source-cache-tokenList",
       "source-cache-publicIndexer",
     ];

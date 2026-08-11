@@ -1,9 +1,6 @@
 name: Stage Production Candidate
 
 on:
-  push:
-    branches:
-      - production
   workflow_dispatch:
     inputs:
       custom_launch_public_enablement:
@@ -29,7 +26,6 @@ on:
 
 permissions:
   contents: read
-  deployments: write
 
 concurrency:
   group: programmable-production
@@ -37,86 +33,111 @@ concurrency:
 
 jobs:
   release-gate:
-    name: Verify exact production commit
+    name: Consume exact full production Verify proof
     if: >-
       github.repository == '0xprogrammable/programmable' &&
+      github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/production'
+    permissions:
+      actions: read
+      attestations: read
+      contents: read
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 10
     outputs:
-      verified_sha: ${{ steps.exact-head.outputs.sha }}
+      verified_sha: ${{ steps.verify-proof.outputs.verified_sha }}
+      verified_tree: ${{ steps.verify-proof.outputs.verified_tree }}
+      verify_run_id: ${{ steps.verify-proof.outputs.verify_run_id }}
+      verify_run_attempt: ${{ steps.verify-proof.outputs.verify_run_attempt }}
+      artifact_id: ${{ steps.resolve-proof.outputs.artifact_id }}
+      proof_sha256: ${{ steps.verify-proof.outputs.proof_sha256 }}
+      artifact_digest: ${{ steps.verify-proof.outputs.artifact_digest }}
 
     steps:
       - name: Check out exact production commit
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 0
           persist-credentials: false
-
-      - name: Scan exact production change history
-        env:
-          PROGRAMMABLE_GITLEAKS_BASE_SHA: ${{ github.event.before }}
-        run: bash scripts/security/run-gitleaks-ci.sh
+          lfs: false
+          submodules: false
 
       - name: Set up Node.js
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24.14.0
-          cache: npm
 
-      - name: Set up Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      - name: Resolve latest exact full production Verify proof
+        id: resolve-proof
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          node scripts/production-verify-proof.mjs resolve
+          --repository-root "$GITHUB_WORKSPACE"
+          --github-output "$GITHUB_OUTPUT"
+
+      - name: Download exact immutable production Verify proof
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          python-version: "3.13"
+          artifact-ids: ${{ steps.resolve-proof.outputs.artifact_id }}
+          path: ${{ runner.temp }}/production-verify-proof
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.resolve-proof.outputs.verify_run_id }}
+          digest-mismatch: error
 
-      - name: Set up Foundry
-        uses: foundry-rs/foundry-toolchain@b00af27efadbc7b4ca8b82abbd903b17cc874d2a # v1
-        with:
-          version: v1.7.1
-
-      - name: Install dependencies
+      - name: Verify Sigstore provenance and exact proof contents
+        id: verify-proof
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_DIGEST: ${{ steps.resolve-proof.outputs.artifact_digest }}
+          VERIFY_RUN_ID: ${{ steps.resolve-proof.outputs.verify_run_id }}
+          VERIFY_RUN_ATTEMPT: ${{ steps.resolve-proof.outputs.verify_run_attempt }}
         run: |
-          npm ci
-          pipx install slither-analyzer==0.11.5
+          set -euo pipefail
+          proof="$RUNNER_TEMP/production-verify-proof/production-verify-proof.json"
+          attestation_result="$RUNNER_TEMP/production-verify-attestation.json"
+          test -f "$proof"
+          gh attestation verify "$proof" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/verify.yml" \
+            --cert-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/verify.yml@$GITHUB_REF" \
+            --source-ref "$GITHUB_REF" \
+            --source-digest "$GITHUB_SHA" \
+            --signer-digest "$GITHUB_SHA" \
+            --deny-self-hosted-runners \
+            --format json > "$attestation_result"
+          ATTESTATION_RESULT="$attestation_result" node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const result = JSON.parse(readFileSync(process.env.ATTESTATION_RESULT, "utf8"));
+            if (!Array.isArray(result) || result.length < 1) {
+              throw new Error("No valid production Verify attestation was returned");
+            }
+          '
+          node scripts/production-verify-proof.mjs verify \
+            --repository-root "$GITHUB_WORKSPACE" \
+            --proof "$proof" \
+            --run-id "$VERIFY_RUN_ID" \
+            --run-attempt "$VERIFY_RUN_ATTEMPT" \
+            --artifact-digest "$ARTIFACT_DIGEST" \
+            --github-output "$GITHUB_OUTPUT"
 
-      - name: Pin pnpm
+      - name: Record consumed production Verify proof
+        env:
+          VERIFY_RUN_URL: ${{ steps.resolve-proof.outputs.verify_run_url }}
+          PROOF_COMPLETED_AT: ${{ steps.resolve-proof.outputs.proof_completed_at }}
+          PROOF_SHA256: ${{ steps.verify-proof.outputs.proof_sha256 }}
+          ARTIFACT_DIGEST: ${{ steps.verify-proof.outputs.artifact_digest }}
         run: |
-          npm install --global pnpm@10.32.0
-          test "$(pnpm --version)" = "10.32.0"
-
-      - name: Verify indexer
-        run: |
-          pnpm --dir indexer install --frozen-lockfile
-          pnpm --dir indexer audit --prod --audit-level high
-          pnpm --dir indexer codegen
-          pnpm --dir indexer typecheck
-          pnpm --dir indexer test
-
-      - name: Audit production dependencies
-        run: npm run audit:prod
-
-      - name: Verify operations source contract
-        run: npm run perf:read-model:ops-gate
-
-      - name: Verify interface and release gates
-        run: npm run verify
-
-      - name: Verify fresh database migrations
-        run: npm run db:test:pglite
-
-      - name: Verify contracts
-        run: |
-          npm run contracts:verify:ci
-          npm run contracts:official-deployments
-          npm run contracts:slither
-
-      - name: Bind verified evidence to exact commit
-        id: exact-head
-        run: |
-          verified_sha="$(git rev-parse HEAD)"
-          test "$verified_sha" = "$GITHUB_SHA"
-          echo "sha=$verified_sha" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Consumed full production Verify proof"
+            echo
+            echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- Verify run: $VERIFY_RUN_URL"
+            echo "- Proof completed: \`$PROOF_COMPLETED_AT\`"
+            echo "- Proof SHA-256: \`$PROOF_SHA256\`"
+            echo "- Immutable artifact digest: \`$ARTIFACT_DIGEST\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
     name: Stage programmable.market candidate
@@ -126,6 +147,11 @@ jobs:
       github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/production' &&
       needs.release-gate.outputs.verified_sha == github.sha
+    permissions:
+      actions: read
+      attestations: read
+      contents: read
+      deployments: write
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment:
@@ -147,6 +173,39 @@ jobs:
         with:
           node-version: 24.14.0
           cache: npm
+
+      - name: Revalidate exact Verify proof after production approval
+        id: revalidate-proof
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          node scripts/production-verify-proof.mjs resolve
+          --repository-root "$GITHUB_WORKSPACE"
+          --github-output "$GITHUB_OUTPUT"
+
+      - name: Confirm consumed Verify proof identity after production approval
+        env:
+          EXPECTED_SHA: ${{ needs.release-gate.outputs.verified_sha }}
+          EXPECTED_TREE: ${{ needs.release-gate.outputs.verified_tree }}
+          EXPECTED_RUN_ID: ${{ needs.release-gate.outputs.verify_run_id }}
+          EXPECTED_RUN_ATTEMPT: ${{ needs.release-gate.outputs.verify_run_attempt }}
+          EXPECTED_ARTIFACT_ID: ${{ needs.release-gate.outputs.artifact_id }}
+          EXPECTED_ARTIFACT_DIGEST: ${{ needs.release-gate.outputs.artifact_digest }}
+          REVALIDATED_SHA: ${{ steps.revalidate-proof.outputs.verified_sha }}
+          REVALIDATED_TREE: ${{ steps.revalidate-proof.outputs.verified_tree }}
+          REVALIDATED_RUN_ID: ${{ steps.revalidate-proof.outputs.verify_run_id }}
+          REVALIDATED_RUN_ATTEMPT: ${{ steps.revalidate-proof.outputs.verify_run_attempt }}
+          REVALIDATED_ARTIFACT_ID: ${{ steps.revalidate-proof.outputs.artifact_id }}
+          REVALIDATED_ARTIFACT_DIGEST: ${{ steps.revalidate-proof.outputs.artifact_digest }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_SHA" = "$EXPECTED_SHA"
+          test "$REVALIDATED_SHA" = "$EXPECTED_SHA"
+          test "$REVALIDATED_TREE" = "$EXPECTED_TREE"
+          test "$REVALIDATED_RUN_ID" = "$EXPECTED_RUN_ID"
+          test "$REVALIDATED_RUN_ATTEMPT" = "$EXPECTED_RUN_ATTEMPT"
+          test "$REVALIDATED_ARTIFACT_ID" = "$EXPECTED_ARTIFACT_ID"
+          test "$REVALIDATED_ARTIFACT_DIGEST" = "$EXPECTED_ARTIFACT_DIGEST"
 
       - name: Install dependencies
         run: npm ci
@@ -465,13 +524,15 @@ jobs:
           node scripts/verify-manual-applicant-staged-runtime.mjs
           --target-url "$STAGED_TARGET_URL"
 
-      - name: Smoke staged Alchemy Explore APIs
-        if: steps.read-model-policy.outputs.mode == 'alchemy-only'
+      - name: Smoke staged Bitquery market APIs
         env:
           STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
           node --input-type=module <<'NODE'
+          const { verifyBitqueryGoldenMarketParityV1 } = await import(
+            "./scripts/perf/bitquery-golden-market-parity.mjs"
+          );
           const origin = new URL(process.env.STAGED_TARGET_URL);
           if (
             origin.protocol !== "https:" ||
@@ -480,7 +541,7 @@ jobs:
             origin.search ||
             origin.hash
           ) {
-            throw new Error("Alchemy smoke target is not an exact Vercel origin");
+            throw new Error("Bitquery smoke target is not an exact Vercel origin");
           }
           const automationBypassSecret =
             process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
@@ -494,33 +555,72 @@ jobs:
             automationBypassSecretLength > 512 ||
             /[\r\n]/.test(automationBypassSecret)
           ) {
-            throw new Error("Alchemy smoke automation bypass is unavailable");
+            throw new Error("Bitquery smoke automation bypass is unavailable");
           }
-          const alchemySmokeRequestHeaders = Object.freeze({
+          const bitquerySmokeRequestHeaders = Object.freeze({
             Accept: "application/json",
             "x-vercel-protection-bypass": automationBypassSecret,
           });
-          const operationalRpcProviders = Object.freeze([
-            "operational-dual",
-            "operational-primary",
+          const bitqueryMarketContract = Object.freeze({
+            readSources: Object.freeze(["operational+durable+postgres"]),
+            rpcProviders: null,
+            marketSources: Object.freeze(["bitquery"]),
+            dataQualities: Object.freeze(["complete", "partial", "stale"]),
+          });
+          const bitqueryChartContract = Object.freeze({
+            readSources: null,
+            rpcProviders: null,
+            marketSources: Object.freeze(["bitquery"]),
+            dataQualities: Object.freeze([
+              "ready",
+              "insufficient-history",
+              "partial",
+            ]),
+          });
+          const unavailableValuationReasons = new Set([
+            "no-market",
+            "supply-unavailable",
+            "liquidity-unavailable",
+            "price-unavailable",
+            "inconsistent-snapshot",
+            "waiting-for-first-trade",
+            "source-unavailable",
           ]);
-          const operationalReadSources = Object.freeze([
-            "operational+durable+postgres",
-          ]);
-          const alchemyRpcProviders = Object.freeze(["alchemy"]);
-          const alchemyReadSources = Object.freeze(["blob"]);
 
-          const requestJson = async (
-            path,
-            expectedReadSources,
-            expectedRpcProviders,
-          ) => {
+          const headerMatches = (value, expected) =>
+            expected === null
+              ? value === null
+              : expected.includes(value ?? "");
+          const positiveInteger = (value) =>
+            typeof value === "string" && /^[1-9][0-9]*$/.test(value);
+          const positiveDecimalToWad = (value) => {
+            const match = /^(0|[1-9][0-9]*)(?:\.([0-9]+))?$/.exec(
+              String(value ?? ""),
+            );
+            if (!match) return null;
+            const wad = BigInt(match[1]) * 10n ** 18n +
+              BigInt((match[2] ?? "").slice(0, 18).padEnd(18, "0") || "0");
+            return wad > 0n ? wad : null;
+          };
+          const validMarketTime = (value) => {
+            const parsed = Date.parse(value ?? "");
+            return Number.isFinite(parsed) &&
+              parsed <= Date.now() + 60_000;
+          };
+          const currentMarketTime = (value) =>
+            validMarketTime(value) &&
+            Date.now() - Date.parse(value) <= 6 * 60_000;
+          const boundedStaleMarketTime = (value) =>
+            validMarketTime(value) &&
+            Date.now() - Date.parse(value) <= 24 * 60 * 60_000;
+
+          const requestJson = async (path, contract) => {
             let lastError;
             for (let attempt = 1; attempt <= 12; attempt += 1) {
               try {
                 const response = await fetch(new URL(path, origin), {
                   redirect: "error",
-                  headers: alchemySmokeRequestHeaders,
+                  headers: bitquerySmokeRequestHeaders,
                   signal: AbortSignal.timeout(30_000),
                 });
                 const text = await response.text();
@@ -536,15 +636,45 @@ jobs:
                 const rpcProvider = response.headers.get(
                   "x-programmable-rpc-provider",
                 );
+                const marketSource = response.headers.get(
+                  "x-programmable-market-source",
+                );
+                const priceSource = response.headers.get(
+                  "x-programmable-price-source",
+                );
+                const marketAsOf = response.headers.get(
+                  "x-programmable-market-as-of",
+                );
+                const dataQuality = response.headers.get(
+                  "x-programmable-data-quality",
+                );
                 if (
-                  !expectedReadSources.includes(readSource ?? "") ||
-                  !expectedRpcProviders.includes(rpcProvider ?? "")
+                  !headerMatches(readSource, contract.readSources) ||
+                  !headerMatches(rpcProvider, contract.rpcProviders) ||
+                  !headerMatches(marketSource, contract.marketSources) ||
+                  !headerMatches(dataQuality, contract.dataQualities) ||
+                  (contract.priceSources !== undefined &&
+                    !headerMatches(priceSource, contract.priceSources))
                 ) {
                   throw new Error(
-                    `${path} did not prove its required read and RPC sources`,
+                    `${path} did not prove its required identity and market sources`,
                   );
                 }
-                return JSON.parse(text);
+                const body = JSON.parse(text);
+                const expectedDataQuality = body?.dataQuality?.status ?? body?.status;
+                if (dataQuality !== expectedDataQuality) {
+                  throw new Error(`${path} has inconsistent data-quality provenance`);
+                }
+                Object.defineProperty(body, "__marketHeaders", {
+                  value: Object.freeze({
+                    dataQuality,
+                    marketAsOf,
+                    marketSource,
+                    priceSource,
+                  }),
+                  enumerable: false,
+                });
+                return body;
               } catch (error) {
                 lastError = error;
                 if (attempt < 12) {
@@ -557,8 +687,7 @@ jobs:
 
           const explore = await requestJson(
             "/api/explore?limit=20&page=1&sort=market-cap",
-            operationalReadSources,
-            operationalRpcProviders,
+            bitqueryMarketContract,
           );
           if (
             explore.status !== "ready" ||
@@ -566,20 +695,135 @@ jobs:
             explore.tokens.length < 1 ||
             explore.tokens.length > 20
           ) {
-            throw new Error("staged Alchemy Explore is not a populated bounded page");
+            throw new Error("staged Bitquery Explore is not a populated bounded page");
           }
           const releaseToken = explore.tokens.find(
             (token) =>
               /^0x[0-9a-fA-F]{40}$/.test(token?.tokenAddress ?? ""),
           );
           if (!releaseToken) {
-            throw new Error("staged Alchemy Explore has no token identity");
+            throw new Error("staged Bitquery Explore has no token identity");
+          }
+          let previousCurrentFdv = null;
+          let currentFdvCount = 0;
+          let availableFdvCount = 0;
+          let staleFdvCount = 0;
+          let waitingForFirstTradeCount = 0;
+          let sawNonCurrentFdv = false;
+          let currentFdvToken = null;
+          for (const token of explore.tokens) {
+            const valuation = token?.valuation;
+            if (valuation?.status === "unavailable") {
+              if (!unavailableValuationReasons.has(valuation.reason)) {
+                throw new Error("staged Bitquery Explore has an untyped unavailable valuation");
+              }
+              if (valuation.reason === "waiting-for-first-trade") {
+                waitingForFirstTradeCount += 1;
+              }
+              sawNonCurrentFdv = true;
+              if (token?.fdvUsdWad !== undefined) {
+                throw new Error(
+                  "staged Bitquery Explore exposed stale or unavailable FDV as current",
+                );
+              }
+              continue;
+            }
+            if (
+              valuation?.status !== "available" ||
+              valuation.metric !== "fdv" ||
+              valuation.supplyBasis !== "total" ||
+              valuation.currency !== "usd" ||
+              !["current", "stale"].includes(valuation.freshness) ||
+              valuation.source !== "bitquery" ||
+              !positiveInteger(valuation.valueWad) ||
+              !validMarketTime(valuation.asOfTime)
+            ) {
+              throw new Error("staged Bitquery Explore has an invalid typed FDV");
+            }
+            availableFdvCount += 1;
+            if (valuation.freshness === "stale") {
+              if (!boundedStaleMarketTime(valuation.asOfTime)) {
+                throw new Error("staged Bitquery Explore stale FDV is too old");
+              }
+              staleFdvCount += 1;
+              sawNonCurrentFdv = true;
+              if (token?.fdvUsdWad !== undefined) {
+                throw new Error(
+                  "staged Bitquery Explore exposed stale or unavailable FDV as current",
+                );
+              }
+              continue;
+            }
+            if (token.fdvUsdWad !== valuation.valueWad) {
+              throw new Error("staged Bitquery Explore did not expose its current FDV");
+            }
+            if (!currentMarketTime(valuation.asOfTime)) {
+              throw new Error("staged Bitquery Explore mislabeled stale FDV as current");
+            }
+            if (sawNonCurrentFdv) {
+              throw new Error(
+                "staged Bitquery Highest FDV placed current data after stale data",
+              );
+            }
+            const value = BigInt(valuation.valueWad);
+            if (previousCurrentFdv !== null && value > previousCurrentFdv) {
+              throw new Error(
+                "staged Bitquery Highest FDV is not monotonically descending",
+              );
+            }
+            const primary = token.marketData?.pools?.find(
+              (pool) => pool.identity?.poolId === token.marketData?.primaryPoolId,
+            );
+            if (
+              !primary ||
+              primary.status !== "current" ||
+              primary.liquidity?.freshness !== "current" ||
+              !positiveInteger(primary.liquidity?.valueUsdWad) ||
+              primary.valuation?.asOfTime !== valuation.asOfTime
+            ) {
+              throw new Error(
+                "staged Bitquery current FDV lacks current trade and liquidity evidence",
+              );
+            }
+            previousCurrentFdv = value;
+            currentFdvCount += 1;
+            currentFdvToken ??= token;
+          }
+          const exploreMarketAsOf =
+            explore.dataQuality?.valuation?.asOfTime ?? null;
+          const valuationQuality = explore.dataQuality?.valuation;
+          if (
+            explore.dataQuality?.schemaVersion !==
+              "programmable.explore-data-quality.v1" ||
+            explore.__marketHeaders?.dataQuality !== explore.dataQuality.status ||
+            !["complete", "partial", "stale"].includes(
+              explore.dataQuality.status,
+            ) ||
+            valuationQuality?.metric !== "fdv" ||
+            !Number.isSafeInteger(valuationQuality.available) ||
+            !Number.isSafeInteger(valuationQuality.unavailable) ||
+            valuationQuality.available + valuationQuality.unavailable !==
+              explore.total ||
+            !Number.isSafeInteger(valuationQuality.stale) ||
+            valuationQuality.stale > valuationQuality.available ||
+            valuationQuality.unknown !== 0 ||
+            ![null, "bitquery"].includes(
+              explore.__marketHeaders?.priceSource ?? null,
+            ) ||
+            (currentFdvCount > 0 &&
+              explore.__marketHeaders?.priceSource !== "bitquery") ||
+            explore.__marketHeaders?.marketAsOf !== exploreMarketAsOf ||
+            (exploreMarketAsOf !== null &&
+              !boundedStaleMarketTime(exploreMarketAsOf))
+          ) {
+            throw new Error(
+              "staged Bitquery Explore has inconsistent market provenance",
+            );
           }
           const newestPageSize = 100;
           const newest = await requestJson(
             `/api/explore?limit=${newestPageSize}&page=1&sort=newest`,
-            operationalReadSources,
-            operationalRpcProviders,
+            bitqueryMarketContract,
           );
           const newestTotal = Number(newest.total);
           const newestTotalPages = Number(newest.totalPages);
@@ -597,7 +841,7 @@ jobs:
             newestTotalPages > 100 ||
             newestTotalPages !== Math.ceil(newestTotal / newestPageSize)
           ) {
-            throw new Error("staged Alchemy newest page is not populated");
+            throw new Error("staged Bitquery newest page is not populated");
           }
           const newestTokens = [];
           const seenNewestIds = new Set();
@@ -606,8 +850,7 @@ jobs:
               ? newest
               : await requestJson(
                    `/api/explore?limit=${newestPageSize}&page=${pageNumber}&sort=newest`,
-                   operationalReadSources,
-                   operationalRpcProviders,
+                   bitqueryMarketContract,
                  );
             if (
               page.status !== "ready" ||
@@ -618,22 +861,22 @@ jobs:
               !Array.isArray(page.tokens) ||
               page.tokens.length < 1
             ) {
-              throw new Error("staged Alchemy newest pagination is not stable");
+              throw new Error("staged Bitquery newest pagination is not stable");
             }
             for (const entry of page.tokens) {
               if (typeof entry?.id !== "string" || seenNewestIds.has(entry.id)) {
-                throw new Error("staged Alchemy newest pagination is not unique");
+                throw new Error("staged Bitquery newest pagination is not unique");
               }
               seenNewestIds.add(entry.id);
               newestTokens.push(entry);
             }
           }
           if (newestTokens.length !== newestTotal) {
-            throw new Error("staged Alchemy newest pagination is incomplete");
+            throw new Error("staged Bitquery newest pagination is incomplete");
           }
           const newestChainId = String(newest.snapshot?.chainId ?? "");
           if (!/^(?:0|[1-9][0-9]*)$/.test(newestChainId)) {
-            throw new Error("staged Alchemy newest snapshot has no canonical chain");
+            throw new Error("staged Bitquery newest snapshot has no canonical chain");
           }
           const launchChainId = (entry) => {
             const value = entry.exploreKind === "token"
@@ -642,7 +885,7 @@ jobs:
                 ? String(entry.chainId ?? "")
                 : "";
             if (!/^(?:0|[1-9][0-9]*)$/.test(value)) {
-              throw new Error("staged Alchemy newest entry has no canonical chain");
+              throw new Error("staged Bitquery newest entry has no canonical chain");
             }
             return value;
           };
@@ -663,14 +906,14 @@ jobs:
                 : null;
             if (coordinates === null || coordinates.length !== 3) {
               throw new Error(
-                "staged Alchemy newest entry has no canonical launch order",
+                "staged Bitquery newest entry has no canonical launch order",
               );
             }
             return coordinates.map((value) => {
               const normalized = String(value ?? "");
               if (!/^(?:0|[1-9][0-9]*)$/.test(normalized)) {
                 throw new Error(
-                  "staged Alchemy newest entry has no canonical launch order",
+                  "staged Bitquery newest entry has no canonical launch order",
                 );
               }
               return BigInt(normalized);
@@ -679,13 +922,13 @@ jobs:
           const launchTime = (entry) => {
             const value = Date.parse(entry.launchedAt ?? "");
             if (!Number.isFinite(value)) {
-              throw new Error("staged Alchemy newest entry has no canonical time");
+              throw new Error("staged Bitquery newest entry has no canonical time");
             }
             return value;
           };
           for (const entry of newestTokens) {
             if (launchChainId(entry) !== newestChainId) {
-              throw new Error("staged Alchemy newest entry is on another chain");
+              throw new Error("staged Bitquery newest entry is on another chain");
             }
             launchOrder(entry);
             launchTime(entry);
@@ -706,13 +949,12 @@ jobs:
                   ),
               )
             ) {
-              throw new Error("staged Alchemy newest page is not ordered newest-first");
+              throw new Error("staged Bitquery newest page is not ordered newest-first");
             }
           }
           const oldest = await requestJson(
             `/api/explore?limit=${newestPageSize}&page=1&sort=oldest`,
-            operationalReadSources,
-            operationalRpcProviders,
+            bitqueryMarketContract,
           );
           const expectedOldestIds = newestTokens
             .slice(-newestPageSize)
@@ -726,14 +968,13 @@ jobs:
             oldest.tokens.map((entry) => entry.id).join("\n") !==
               expectedOldestIds.join("\n")
           ) {
-            throw new Error("staged Alchemy oldest page is not ordered oldest-first");
+            throw new Error("staged Bitquery oldest page is not ordered oldest-first");
           }
           const incrementalLaunchAddress =
             "0x468505087c2dfec4779f2d6a5f8481f03e32e905";
           const incrementalDetail = await requestJson(
             `/api/explore/token?address=${encodeURIComponent(incrementalLaunchAddress)}`,
-            operationalReadSources,
-            operationalRpcProviders,
+            bitqueryMarketContract,
           );
           const incrementalLaunch = incrementalDetail.token;
           const incrementalLaunchBlock = BigInt(
@@ -757,40 +998,217 @@ jobs:
             )
           ) {
             throw new Error(
-              "staged Alchemy Explore did not recover the incremental launch cursor",
+              "staged Bitquery Explore did not recover the incremental launch cursor",
             );
-          }
-          const tokenList = await requestJson(
-            "/api/indexers/v1/token-list",
-            alchemyReadSources,
-            alchemyRpcProviders,
-          );
-          if (
-            !Array.isArray(tokenList.tokens) ||
-            !tokenList.tokens.some(
-              (token) =>
-                String(token?.address ?? token?.tokenAddress ?? "").toLowerCase() ===
-                releaseToken.tokenAddress.toLowerCase(),
-            )
-          ) {
-            throw new Error("staged Alchemy token list does not contain the Explore token");
           }
           const tokenDetail = await requestJson(
             `/api/explore/token?address=${encodeURIComponent(releaseToken.tokenAddress)}`,
-            operationalReadSources,
-            operationalRpcProviders,
+            bitqueryMarketContract,
           );
           if (
             tokenDetail.status !== "ready" ||
             tokenDetail.token?.tokenAddress?.toLowerCase() !==
               releaseToken.tokenAddress.toLowerCase()
           ) {
-            throw new Error("staged Alchemy token lookup did not resolve the Explore token");
+            throw new Error("staged Bitquery token lookup did not resolve the Explore token");
+          }
+          if (currentFdvToken !== null) {
+            const currentFdvDetail = await requestJson(
+              `/api/explore/token?address=${encodeURIComponent(currentFdvToken.tokenAddress)}`,
+              bitqueryMarketContract,
+            );
+            if (
+              currentFdvDetail.token?.valuation?.status !== "available" ||
+              currentFdvDetail.token.valuation.metric !== "fdv" ||
+              currentFdvDetail.token.valuation.supplyBasis !== "total" ||
+              currentFdvDetail.token.valuation.freshness !== "current" ||
+              currentFdvDetail.token.valuation.valueWad !==
+                currentFdvToken.valuation.valueWad ||
+              currentFdvDetail.token.valuation.asOfTime !==
+                currentFdvToken.valuation.asOfTime ||
+              currentFdvDetail.token.fdvUsdWad !==
+                currentFdvToken.fdvUsdWad ||
+              currentFdvDetail.__marketHeaders?.marketAsOf !==
+                currentFdvDetail.token.valuation.asOfTime ||
+              currentFdvDetail.__marketHeaders?.priceSource !== "bitquery"
+            ) {
+              throw new Error(
+                "staged Bitquery current Explore and detail FDV are not identical",
+              );
+            }
+          }
+          const goldenTokenAddress =
+            "0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce";
+          const goldenPoolId =
+            "0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229";
+          const goldenExplore = await requestJson(
+            `/api/explore?limit=20&page=1&q=${goldenTokenAddress}&sort=market-cap`,
+            bitqueryMarketContract,
+          );
+          const goldenExploreToken = goldenExplore.tokens?.find(
+            (token) => token?.tokenAddress?.toLowerCase() === goldenTokenAddress,
+          );
+          if (goldenExplore.status !== "ready" || !goldenExploreToken) {
+            throw new Error("staged Explore did not retain the canonical PCAN identity");
+          }
+          const goldenDetail = await requestJson(
+            `/api/explore/token?address=${goldenTokenAddress}`,
+            bitqueryMarketContract,
+          );
+          const goldenMarket = goldenDetail.token?.marketData;
+          const goldenPool = goldenMarket?.pools?.find(
+            (pool) => pool.identity?.poolId === goldenPoolId,
+          );
+          const goldenPrice = positiveInteger(
+              goldenPool?.latestTrade?.priceUsdWad,
+            )
+            ? BigInt(goldenPool.latestTrade.priceUsdWad)
+            : null;
+          const goldenSupply = positiveDecimalToWad(
+            goldenDetail.token?.valuation?.status === "available"
+              ? goldenPool?.valuation?.totalSupply
+              : null,
+          );
+          const expectedGoldenFdv = goldenPrice !== null && goldenSupply !== null
+            ? (goldenPrice * goldenSupply) / 10n ** 18n
+            : null;
+          const goldenValuation = goldenDetail.token?.valuation;
+          if (
+            goldenDetail.status !== "ready" ||
+            goldenDetail.token?.tokenAddress?.toLowerCase() !==
+              goldenTokenAddress ||
+            goldenMarket?.schemaVersion !== "programmable.market-data.v1" ||
+            goldenMarket?.source !== "bitquery" ||
+            goldenMarket?.primaryPoolId !== goldenPoolId ||
+            !currentMarketTime(goldenMarket?.generatedAt) ||
+            goldenDetail.dataQuality?.schemaVersion !==
+              "programmable.explore-data-quality.v1" ||
+            goldenDetail.__marketHeaders?.dataQuality !==
+              goldenDetail.dataQuality.status ||
+            !["complete", "partial", "stale"].includes(
+              goldenDetail.dataQuality.status,
+            ) ||
+            !["current", "stale"].includes(goldenMarket?.status) ||
+            !["current", "stale"].includes(goldenPool?.status) ||
+            goldenValuation?.status !== "available" ||
+            goldenValuation.source !== "bitquery" ||
+            goldenValuation.metric !== "fdv" ||
+            goldenValuation.supplyBasis !== "total" ||
+            !["current", "stale"].includes(goldenValuation.freshness) ||
+            !validMarketTime(goldenValuation.asOfTime) ||
+            (goldenValuation.freshness === "current" &&
+              !currentMarketTime(goldenValuation.asOfTime)) ||
+            (goldenValuation.freshness === "stale" &&
+              !boundedStaleMarketTime(goldenValuation.asOfTime)) ||
+            goldenPool?.valuation?.metric !== "fdv" ||
+            goldenPool?.valuation?.marketCapUsdWad !== undefined ||
+            expectedGoldenFdv === null ||
+            expectedGoldenFdv <= 0n ||
+            goldenPool?.valuation?.fdvUsdWad !== expectedGoldenFdv.toString() ||
+            goldenValuation.valueWad !== expectedGoldenFdv.toString() ||
+            goldenExploreToken.valuation?.status !== "available" ||
+            goldenExploreToken.valuation.valueWad !== goldenValuation.valueWad ||
+            goldenExploreToken.valuation.freshness !== goldenValuation.freshness ||
+            goldenExploreToken.valuation.asOfTime !== goldenValuation.asOfTime ||
+            goldenDetail.__marketHeaders?.marketAsOf !== goldenValuation.asOfTime ||
+            (goldenValuation.freshness === "current"
+              ? goldenDetail.__marketHeaders?.priceSource !== "bitquery"
+              : goldenDetail.__marketHeaders?.priceSource !== null) ||
+            (goldenValuation.freshness === "current"
+              ? goldenDetail.token.fdvUsdWad !== goldenValuation.valueWad ||
+                goldenExploreToken.fdvUsdWad !== goldenValuation.valueWad
+              : goldenDetail.token.fdvUsdWad !== undefined ||
+                goldenExploreToken.fdvUsdWad !== undefined)
+          ) {
+            throw new Error("staged PCAN market valuation is not Bitquery-bound");
+          }
+          const goldenParity = await verifyBitqueryGoldenMarketParityV1({
+            token: goldenDetail.token,
+          });
+          const goldenChart = await requestJson(
+            `/api/explore/token/chart?address=${goldenTokenAddress}&range=all`,
+            bitqueryChartContract,
+          );
+          if (
+            goldenChart.schemaVersion !== "programmable.market-chart.v1" ||
+            goldenChart.source !== "bitquery" ||
+            goldenChart.readStatus !== "live" ||
+            !currentMarketTime(goldenChart.generatedAt) ||
+            goldenChart.address?.toLowerCase() !== goldenTokenAddress ||
+            goldenChart.identity?.poolId !== goldenPoolId ||
+            !["ready", "insufficient-history", "partial"].includes(
+              goldenChart.status,
+            ) ||
+            !Array.isArray(goldenChart.points) ||
+            goldenChart.points.length < 1 ||
+            goldenChart.valuation?.metric !== "fdv" ||
+            goldenChart.valuation?.supplyBasis !== "total" ||
+            !["current", "stale"].includes(goldenChart.valuation?.freshness) ||
+            (goldenChart.valuation?.freshness === "current" &&
+              !currentMarketTime(goldenChart.valuation?.asOfTime)) ||
+            (goldenChart.valuation?.freshness === "stale" &&
+              !boundedStaleMarketTime(goldenChart.valuation?.asOfTime)) ||
+            goldenChart.asOfTime !== goldenChart.points.at(-1)?.time ||
+            goldenChart.__marketHeaders?.marketAsOf !== goldenChart.asOfTime ||
+            goldenChart.__marketHeaders?.dataQuality !== goldenChart.status ||
+            goldenChart.__marketHeaders?.priceSource !== "bitquery" ||
+            !validMarketTime(goldenChart.asOfTime)
+          ) {
+            throw new Error("staged PCAN price history is not Bitquery-bound");
+          }
+          let previousChartTime = null;
+          let previousChartBlock = null;
+          for (const point of goldenChart.points) {
+            const time = Date.parse(point?.time ?? "");
+            const block = positiveInteger(point?.blockNumber)
+              ? BigInt(point.blockNumber)
+              : null;
+            const price = point?.priceUsd ?? point?.priceQuote;
+            const numericPrice = Number(price);
+            if (
+              !Number.isFinite(time) ||
+              block === null ||
+              !Number.isFinite(numericPrice) ||
+              numericPrice <= 0 ||
+              (previousChartTime !== null && time <= previousChartTime) ||
+              (previousChartBlock !== null && block < previousChartBlock)
+            ) {
+              throw new Error(
+                "staged PCAN chart is not a strictly ordered positive history",
+              );
+            }
+            previousChartTime = time;
+            previousChartBlock = block;
+          }
+          const historicalPaidPathVerified =
+            goldenParity.schemaVersion ===
+              "programmable.bitquery-golden-market-parity.v1" &&
+            goldenParity.tokenAddress === goldenTokenAddress &&
+            goldenParity.poolId === goldenPoolId &&
+            goldenParity.confirmations >= 12 &&
+            goldenChart.points.length >= 1 &&
+            goldenChart.readStatus === "live" &&
+            currentMarketTime(goldenChart.generatedAt) &&
+            goldenChart.__marketHeaders?.dataQuality === goldenChart.status &&
+            goldenChart.__marketHeaders?.marketSource === "bitquery" &&
+            goldenChart.__marketHeaders?.priceSource === "bitquery";
+          if (currentFdvCount < 1 && !historicalPaidPathVerified) {
+            throw new Error(
+              "staged Bitquery market path has no current or independently verified history",
+            );
           }
           process.stdout.write(
             `${JSON.stringify({
-              status: "verified-alchemy-only-staged-public-apis",
+              status: "verified-bitquery-staged-market-apis",
               tokenAddress: releaseToken.tokenAddress,
+              goldenTokenAddress,
+              goldenPoolId,
+              goldenParity,
+              historicalPaidPathVerified,
+              currentFdvCount,
+              availableFdvCount,
+              staleFdvCount,
+              waitingForFirstTradeCount,
               incrementalLaunchAddress,
               launchCursorBlockNumber:
                 incrementalDetail.launchDiscoverySnapshot.blockNumber,
@@ -798,14 +1216,14 @@ jobs:
           );
           NODE
 
-      - name: Record Alchemy-only read path
+      - name: Record registry identity and Bitquery market path
         if: steps.read-model-policy.outputs.mode == 'alchemy-only'
         run: |
           {
             echo "## Read-model release policy"
             echo
-            echo "Alchemy-only: Explore, token detail and token list use the verified durable registry with live Alchemy enrichment."
-            echo "Every non-Alchemy public read path is disabled."
+            echo "Router and Registry remain the launch-identity authority."
+            echo "Explore, token detail and charts use verified Bitquery market data; token identities do not disappear when market data is unavailable."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Capture staged read-model evidence

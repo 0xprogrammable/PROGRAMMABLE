@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
     override name = "AlchemyCreatorProfileIntegrityError";
   },
   coordinatePublicRouteRead: vi.fn(),
-  getAlchemyOnchainDeployment: vi.fn(),
+  getWebsiteChartOnchainDeployment: vi.fn(),
   preparePublicRouteRequest: vi.fn(
     async (value: URLSearchParams, headers: Headers, _route: string) => {
       void _route;
@@ -66,9 +66,13 @@ vi.mock("../lib/data-pipeline/public-route-readiness.server", () => ({
 }));
 
 vi.mock("../lib/alchemy/explore.server", () => ({
-  getAlchemyOnchainDeployment: mocks.getAlchemyOnchainDeployment,
   readAlchemyExploreModel: mocks.readAlchemyExploreModel,
   safeAlchemyError: mocks.safeAlchemyError,
+}));
+
+vi.mock("../lib/onchain/config", () => ({
+  getWebsiteChartOnchainDeployment:
+    mocks.getWebsiteChartOnchainDeployment,
 }));
 
 vi.mock("../lib/alchemy/profile.server", () => ({
@@ -96,7 +100,7 @@ describe("public route coordinator wiring", () => {
     const model = { status: "ready", snapshot };
     const deployment = { status: "ready", chainId: 1 };
     mocks.readAlchemyExploreModel.mockResolvedValue(model);
-    mocks.getAlchemyOnchainDeployment.mockReturnValue(deployment);
+    mocks.getWebsiteChartOnchainDeployment.mockReturnValue(deployment);
     mocks.readAlchemyCreatorProfile.mockResolvedValue({
       status: "ready",
       account: ACCOUNT,
@@ -115,6 +119,9 @@ describe("public route coordinator wiring", () => {
       deployment,
       model,
     });
+    expect(mocks.getWebsiteChartOnchainDeployment).toHaveBeenCalledWith(
+      "production",
+    );
     expect(response.headers.get("Cache-Control")).toBe(
       "private, max-age=0, s-maxage=15",
     );
@@ -137,7 +144,7 @@ describe("public route coordinator wiring", () => {
         blockHash: `0x${"33".repeat(32)}`,
       },
     });
-    mocks.getAlchemyOnchainDeployment.mockReturnValue({
+    mocks.getWebsiteChartOnchainDeployment.mockReturnValue({
       status: "ready",
       chainId: 1,
     });
@@ -172,7 +179,7 @@ describe("public route coordinator wiring", () => {
         blockHash: `0x${"33".repeat(32)}`,
       },
     });
-    mocks.getAlchemyOnchainDeployment.mockReturnValue({
+    mocks.getWebsiteChartOnchainDeployment.mockReturnValue({
       status: "ready",
       chainId: 1,
     });

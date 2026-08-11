@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import {
   DiscordBrandIcon,
+  DuneBrandIcon,
   GitHubBrandIcon,
   XBrandIcon,
 } from "@/components/brand-icons";
@@ -73,15 +74,6 @@ export function LandingPage() {
             </a>
             <a
               className={styles.socialLink}
-              href="https://discord.com/invite/programmable"
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Programmable on Discord"
-            >
-              <DiscordBrandIcon />
-            </a>
-            <a
-              className={styles.socialLink}
               href="https://dexscreener.com/ethereum/0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0"
               target="_blank"
               rel="noreferrer"
@@ -95,6 +87,24 @@ export function LandingPage() {
                 height={256}
                 sizes="28px"
               />
+            </a>
+            <a
+              className={styles.socialLink}
+              href="https://dune.com/0xprogrammable6098/programmable-analytics"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Programmable analytics on Dune"
+            >
+              <DuneBrandIcon />
+            </a>
+            <a
+              className={styles.socialLink}
+              href="https://discord.com/invite/programmable"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Programmable on Discord"
+            >
+              <DiscordBrandIcon />
             </a>
             <span className={styles.utilityDivider} aria-hidden="true" />
             <Link className={styles.docsLink} href="/docs">

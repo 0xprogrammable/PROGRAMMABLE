@@ -18,7 +18,6 @@ import {
 } from "viem";
 
 import {
-  calculateEthVolumeUsdValue,
   PreparedTradeReview,
   TokenTrade,
   type PreparedTokenTrade,
@@ -46,6 +45,10 @@ import {
   type ExploreValuation,
 } from "@/lib/explore-financial-data";
 import {
+  isTokenMarketDataV1,
+  type TokenMarketDataV1,
+} from "@/lib/market-data/market-data-v1";
+import {
   canOptimizeTokenImage,
   getTokenCardImageSource,
 } from "@/lib/token-image";
@@ -60,12 +63,20 @@ import {
 import type { PostLaunchAuthorityInventoryV1 } from "@/lib/custom-launch/contract-v2";
 import styles from "./token-experience.module.css";
 
-type DetailToken = LauncherToken & Readonly<{ valuation: ExploreValuation }>;
+type DetailToken = LauncherToken & Readonly<{
+  valuation: ExploreValuation;
+  marketData?: TokenMarketDataV1;
+}>;
+
+type DetailCustomProject = CustomProjectExploreEntry & Readonly<{
+  valuation?: ExploreValuation;
+  marketData?: TokenMarketDataV1;
+}>;
 
 type DetailPayload = {
   status: "ready" | "not-deployed";
   token: DetailToken | null;
-  customProject: CustomProjectExploreEntry | null;
+  customProject: DetailCustomProject | null;
   snapshot: { chainId: number } | null;
 };
 
@@ -82,7 +93,7 @@ type DetailState =
     }
   | {
       phase: "custom-ready";
-      project: CustomProjectExploreEntry;
+      project: DetailCustomProject;
       chainId: number;
       requestKey: string;
     };
@@ -450,10 +461,21 @@ function parseLauncherToken(value: unknown): DetailToken | null {
     : isExploreValuation(value.valuation)
       ? value.valuation
       : null;
-  return valuation === null ? null : { ...token, valuation };
+  const marketData = value.marketData === undefined
+    ? undefined
+    : isTokenMarketDataV1(value.marketData)
+      ? value.marketData
+      : null;
+  return valuation === null || marketData === null
+    ? null
+    : {
+        ...token,
+        valuation,
+        ...(marketData === undefined ? {} : { marketData }),
+      };
 }
 
-function parseCustomProject(value: unknown): CustomProjectExploreEntry | null {
+function parseCustomProject(value: unknown): DetailCustomProject | null {
   if (!isRecord(value)
     || value.exploreKind !== "custom-project"
     || typeof value.id !== "string"
@@ -576,6 +598,17 @@ function parseCustomProject(value: unknown): CustomProjectExploreEntry | null {
         : { tradeCapability: capability as CustomMarket["tradeCapability"] }),
     });
   }
+  const valuation = value.valuation === undefined
+    ? undefined
+    : isExploreValuation(value.valuation)
+      ? value.valuation
+      : null;
+  const marketData = value.marketData === undefined
+    ? undefined
+    : isTokenMarketDataV1(value.marketData)
+      ? value.marketData
+      : null;
+  if (valuation === null || marketData === null) return null;
   return {
     exploreKind: "custom-project",
     id: value.id,
@@ -605,6 +638,8 @@ function parseCustomProject(value: unknown): CustomProjectExploreEntry | null {
       ? { tokenDecimals: value.tokenDecimals }
       : {}),
     launchCategoryProvenance: value.launchCategoryProvenance as CustomProjectExploreEntry["launchCategoryProvenance"],
+    ...(valuation === undefined ? {} : { valuation }),
+    ...(marketData === undefined ? {} : { marketData }),
   };
 }
 
@@ -818,30 +853,29 @@ export function buildChartVolumeMetric(
 }
 
 export function buildTokenDetailMetrics(
-  token: LauncherToken,
+  token: LauncherToken & Readonly<{
+    valuation?: ExploreValuation;
+    marketData?: TokenMarketDataV1;
+  }>,
   fdvOverride?: string | null,
   volumeOverride?: TokenMetric,
 ): TokenMetric[] {
-  const fallbackVolumeUsd = calculateEthVolumeUsdValue({
-    grossVolumeEth: token.grossVolumeEth,
-    tokenPriceEth: token.tokenPriceEth,
-    tokenPriceUsdWad: token.tokenPriceUsdWad,
-  });
-  const officialVolumeUsd = formatUsdWadAmount(
-    token.uniswapV4Pool?.volumeUsdWad,
+  const primaryMarket = token.marketData?.pools.find(
+    (pool) => pool.identity.poolId === token.marketData?.primaryPoolId,
   );
-  const officialLiquidityUsd = formatUsdWadAmount(
-    token.uniswapV4Pool?.tvlUsdWad,
-  );
-  const stockPairedVolume =
-    token.launchModel === "stock-paired"
-      ? formatStockPairedGrossVolume(token)
-      : null;
+  const marketVolumeUsd = formatUsdWadAmount(primaryMarket?.volume24hUsdWad);
+  const marketLiquidityUsd = primaryMarket?.liquidity?.freshness === "current"
+    ? formatUsdWadAmount(primaryMarket.liquidity.valueUsdWad)
+    : null;
   const explicitValuation = (token as { valuation?: unknown }).valuation;
   const valuation = isExploreValuation(explicitValuation)
     ? explicitValuation
     : exploreValuation(token);
-  const safeFdvOverride = fdvOverride?.trim() ? fdvOverride : null;
+  const safeFdvOverride = valuation.status === "available" &&
+      valuation.metric === "fdv" &&
+      fdvOverride?.trim()
+    ? fdvOverride
+    : null;
   const formattedFdv = valuation.status === "available"
     ? safeFdvOverride ?? (
         valuation.currency === "usd"
@@ -856,7 +890,14 @@ export function buildTokenDetailMetrics(
     : null;
   const values: Array<TokenMetric | null> = [
     {
-      label: "FDV",
+      label:
+        valuation.status === "available" && valuation.freshness === "stale"
+          ? valuation.metric === "market-cap"
+            ? "Last verified market cap"
+            : "Last verified FDV"
+          : valuation.status === "available" && valuation.metric === "market-cap"
+            ? "Market cap"
+            : "FDV",
       value: formattedFdv ?? "Unavailable",
     },
     {
@@ -877,29 +918,16 @@ export function buildTokenDetailMetrics(
               : "Initialized",
         }
       : null,
-    volumeOverride ??
-      (officialVolumeUsd !== null ||
-      token.grossVolumeEth ||
-      token.grossVolumeQuote
-        ? {
-            label: "Volume",
-            value:
-              token.launchModel === "stock-paired"
-                ? (stockPairedVolume ?? "")
-                : (officialVolumeUsd ??
-                  formatUsdAmount(fallbackVolumeUsd) ??
-                  formatEth(token.grossVolumeEth, "amount") ??
-                  formatQuoteAmount(
-                    token.grossVolumeQuote,
-                    token.quoteAssetSymbol,
-                  ) ??
-                  ""),
-          }
-        : null),
-    officialLiquidityUsd !== null
+    volumeOverride ?? (marketVolumeUsd !== null
       ? {
-          label: "Liquidity now",
-          value: officialLiquidityUsd,
+          label: "24h volume",
+          value: marketVolumeUsd,
+        }
+      : null),
+    marketLiquidityUsd !== null
+      ? {
+          label: "Liquidity",
+          value: marketLiquidityUsd,
         }
       : null,
     token.buyHookFeeBps !== undefined &&
@@ -1221,7 +1249,8 @@ function TokenDetailContent({
       token,
       chartFdv
         ? (formatUsdWadAmount(chartFdv.fdvUsdWad) ??
-          formatEth(chartFdv.fdvEth, "amount"))
+          formatEth(chartFdv.fdvEth, "amount") ??
+          "Unavailable")
         : null,
       buildChartVolumeMetric(chartVolume),
     );
@@ -1519,16 +1548,14 @@ function TokenDetailContent({
           </div>
 
           <div className={styles.marketChart}>
-            {isRouterStamped ? null : (
-              <TokenPriceChart
-                tokenAddress={token.tokenAddress}
-                tokenName={token.name}
-                launchModel={classicTradeLaunchModel}
-                preview={preview}
-                onVolumeChange={setChartVolume}
-                onFdvChange={setChartFdv}
-              />
-            )}
+            <TokenPriceChart
+              tokenAddress={token.tokenAddress}
+              tokenName={token.name}
+              launchModel={classicTradeLaunchModel}
+              preview={preview}
+              onVolumeChange={setChartVolume}
+              onFdvChange={setChartFdv}
+            />
             <MetricGrid metrics={metrics} />
           </div>
         </section>
@@ -1718,11 +1745,60 @@ function customMarketStatus(project: CustomProjectExploreEntry): string {
     : status.charAt(0).toUpperCase() + status.slice(1);
 }
 
+function customMarketMetrics(project: DetailCustomProject): TokenMetric[] {
+  const primary = project.marketData?.pools.find(
+    (pool) => pool.identity.poolId === project.marketData?.primaryPoolId,
+  );
+  const valuation = project.valuation;
+  const valuationValue = valuation?.status === "available"
+    ? valuation.currency === "usd"
+      ? formatUsd(valuation.valueWad, "amount")
+      : valuation.currency === "eth"
+        ? formatEth(formatUnits(BigInt(valuation.valueWad), 18), "amount")
+        : formatQuoteAmount(
+            formatUnits(BigInt(valuation.valueWad), 18),
+            valuation.quoteSymbol,
+          )
+    : null;
+  const marketStatus = project.marketData?.status === "waiting-for-first-trade"
+    ? "Waiting for first trade"
+    : project.marketData?.status === "stale"
+      ? "Last verified"
+      : project.marketData?.status === "current"
+        ? "Current"
+        : project.marketData?.status === "partial"
+          ? "Limited"
+          : "Unavailable";
+  return [
+    {
+      label:
+        valuation?.status === "available" && valuation.metric === "market-cap"
+          ? "Market cap"
+          : "FDV",
+      value: valuationValue ?? "Unavailable",
+    },
+    { label: "Market data", value: marketStatus },
+    ...(primary?.volume24hUsdWad
+      ? [{
+          label: "24h volume",
+          value: formatUsdWadAmount(primary.volume24hUsdWad) ?? "Unavailable",
+        }]
+      : []),
+    ...(primary?.liquidity?.freshness === "current"
+      ? [{
+          label: "Liquidity",
+          value: formatUsdWadAmount(primary.liquidity.valueUsdWad) ??
+            "Unavailable",
+        }]
+      : []),
+  ];
+}
+
 function CustomProjectDetailContent({
   project,
   chainId,
 }: {
-  project: CustomProjectExploreEntry;
+  project: DetailCustomProject;
   chainId: number;
 }) {
   const {
@@ -1739,6 +1815,7 @@ function CustomProjectDetailContent({
     || getFallbackTokenImage(project.tokenAddress ?? project.customProjectId);
   const imageSource = getTokenCardImageSource(imageUrl);
   const authorities = project.postLaunchAuthorityInventory.postLaunchAuthorities;
+  const metrics = customMarketMetrics(project);
 
   useEffect(() => () => {
     if (copyResetTimer.current !== null) window.clearTimeout(copyResetTimer.current);
@@ -1827,6 +1904,19 @@ function CustomProjectDetailContent({
             ) : null}
           </div>
         </section>
+
+        {project.tokenAddress ? (
+          <section
+            className={styles.marketChart}
+            aria-label={`${project.name} market data`}
+          >
+            <TokenPriceChart
+              tokenAddress={project.tokenAddress}
+              tokenName={project.name}
+            />
+            <MetricGrid metrics={metrics} />
+          </section>
+        ) : null}
 
         <section className={styles.customMarketPanel} aria-labelledby="custom-market-heading">
           <div className={styles.customPanelHeading}>

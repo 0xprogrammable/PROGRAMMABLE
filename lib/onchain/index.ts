@@ -2,6 +2,7 @@ export {
   getOnchainDeployment,
   getOperationalOnchainDeployment,
   getPublicOnchainDeployment,
+  getWebsiteChartOnchainDeployment,
   getWebsiteReadOnchainDeployment,
 } from "./config";
 export {

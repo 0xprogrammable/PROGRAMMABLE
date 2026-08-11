@@ -9,6 +9,7 @@ import {
   parseDetailPayload,
 } from "../components/token-detail-view";
 import type { PreparedTokenTrade } from "../components/token-trade";
+import type { TokenMarketDataV1 } from "../lib/market-data/market-data-v1";
 import type { CanonicalTokenExploreEntry, LauncherToken } from "../lib/tokens";
 
 const token = {
@@ -47,11 +48,10 @@ const canonicalToken = {
 } satisfies CanonicalTokenExploreEntry;
 
 describe("token detail metrics", () => {
-  it("shows only user-facing market stats and converts volume to USD", () => {
+  it("ignores legacy market volume without Bitquery provenance", () => {
     expect(buildTokenDetailMetrics(token)).toEqual([
       { label: "FDV", value: "$168.56K" },
       { label: "Category", value: "Classic" },
-      { label: "Volume", value: "$900K" },
       { label: "Swap fee", value: "1%" },
     ]);
   });
@@ -88,6 +88,32 @@ describe("token detail metrics", () => {
     expect(buildTokenDetailMetrics(token, "$212.4K")[0]).toEqual({
       label: "FDV",
       value: "$212.4K",
+    });
+  });
+
+  it("shows unavailable for a historical point without evidenced USD or ETH FDV", () => {
+    expect(buildTokenDetailMetrics(token, "Unavailable")[0]).toEqual({
+      label: "FDV",
+      value: "Unavailable",
+    });
+  });
+
+  it("labels a stale value as last verified instead of current FDV", () => {
+    expect(buildTokenDetailMetrics({
+      ...token,
+      valuation: {
+        status: "available",
+        metric: "fdv",
+        supplyBasis: "total",
+        currency: "usd",
+        valueWad: parseEther("168560").toString(),
+        freshness: "stale",
+        source: "bitquery",
+        asOfTime: "2026-08-10T11:50:47.000Z",
+      },
+    })[0]).toEqual({
+      label: "Last verified FDV",
+      value: "$168.56K",
     });
   });
 
@@ -151,7 +177,7 @@ describe("token detail metrics", () => {
     ).toEqual({ label: "Deep fee", value: "1%" });
   });
 
-  it("prefers official Uniswap v4 USD volume and shows pool liquidity", () => {
+  it("ignores legacy subgraph market analytics", () => {
     const enriched = {
       ...token,
       uniswapV4Pool: {
@@ -171,10 +197,94 @@ describe("token detail metrics", () => {
     expect(buildTokenDetailMetrics(enriched)).toEqual([
       { label: "FDV", value: "$168.56K" },
       { label: "Category", value: "Classic" },
-      { label: "Volume", value: "$1.2M" },
-      { label: "Liquidity now", value: "$98.8K" },
       { label: "Swap fee", value: "1%" },
     ]);
+  });
+
+  it("shows only typed Bitquery market cap, volume, and liquidity", () => {
+    const marketData = {
+      schemaVersion: "programmable.market-data.v1",
+      source: "bitquery",
+      generatedAt: "2026-08-11T14:00:00.000Z",
+      status: "current",
+      primaryPoolId: token.poolId,
+      pools: [{
+        identity: {
+          chainId: "1",
+          tokenAddress: token.tokenAddress,
+          poolId: token.poolId,
+          protocol: "uniswap_v4",
+        },
+        source: "bitquery",
+        status: "current",
+        quality: "complete",
+        asOfTime: "2026-08-11T14:00:00.000Z",
+        latestTrade: {
+          transactionHash: `0x${"55".repeat(32)}`,
+          logIndex: 1,
+          blockNumber: "25740000",
+          time: "2026-08-11T14:00:00.000Z",
+          tokenSide: "buy",
+          priceUsdWad: parseEther("2").toString(),
+        },
+        liquidity: {
+          asOfTime: "2026-08-11T14:00:00.000Z",
+          asOfBlock: "25740000",
+          valueUsdWad: parseEther("98765").toString(),
+          freshness: "current",
+        },
+        volume24hUsdWad: parseEther("1234567").toString(),
+        tradeCount24h: 42,
+        valuation: {
+          status: "available",
+          metric: "market-cap",
+          supplyBasis: "circulating",
+          valueUsdWad: parseEther("140000").toString(),
+          marketCapUsdWad: parseEther("140000").toString(),
+          fdvUsdWad: parseEther("168560").toString(),
+          totalSupply: "1000000",
+          circulatingSupply: "830565",
+          asOfTime: "2026-08-11T14:00:00.000Z",
+          freshness: "current",
+        },
+      }],
+    } as const satisfies TokenMarketDataV1;
+
+    expect(buildTokenDetailMetrics({
+      ...token,
+      valuation: {
+        status: "available",
+        metric: "market-cap",
+        supplyBasis: "circulating",
+        currency: "usd",
+        valueWad: parseEther("140000").toString(),
+        freshness: "current",
+        source: "bitquery",
+        asOfTime: "2026-08-11T14:00:00.000Z",
+      },
+      marketData,
+    })).toEqual([
+      { label: "Market cap", value: "$140K" },
+      { label: "Category", value: "Classic" },
+      { label: "24h volume", value: "$1.2M" },
+      { label: "Liquidity", value: "$98.8K" },
+      { label: "Swap fee", value: "1%" },
+    ]);
+
+    const staleLiquidity = {
+      ...marketData,
+      pools: [{
+        ...marketData.pools[0],
+        liquidity: {
+          ...marketData.pools[0].liquidity,
+          freshness: "stale" as const,
+        },
+      }],
+    } satisfies TokenMarketDataV1;
+    expect(buildTokenDetailMetrics({
+      ...token,
+      marketData: staleLiquidity,
+    })).not.toContainEqual(expect.objectContaining({ label: "Liquidity" }));
   });
 
   it("strictly validates optional official Uniswap v4 pool analytics", () => {
@@ -264,7 +374,7 @@ describe("token detail metrics", () => {
       buildTokenDetailMetrics(stockToken).find(
         (metric) => metric.label === "Volume",
       ),
-    ).toEqual({ label: "Volume", value: "$54.90" });
+    ).toBeUndefined();
   });
 
   it("shows Stock-Paired gross volume in its quote unit when no validated USD rate is available", () => {
@@ -284,7 +394,7 @@ describe("token detail metrics", () => {
       buildTokenDetailMetrics(stockToken).find(
         (metric) => metric.label === "Volume",
       ),
-    ).toEqual({ label: "Volume", value: "18.3 SVON" });
+    ).toBeUndefined();
   });
 
   it("labels the canonical Stock-Paired sell output as ETH after unwrap", () => {

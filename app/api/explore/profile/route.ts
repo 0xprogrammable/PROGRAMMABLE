@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAddress, isAddress } from "viem";
 
 import {
-  getAlchemyOnchainDeployment,
   readAlchemyExploreModel,
   safeAlchemyError,
 } from "../../../../lib/alchemy/explore.server";
@@ -11,6 +10,7 @@ import {
   readAlchemyCreatorProfile,
 } from "../../../../lib/alchemy/profile.server";
 import { creatorProfileApiError } from "../../../../lib/profile/onchain-profile";
+import { getWebsiteChartOnchainDeployment } from "../../../../lib/onchain/config";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const account = getAddress(input);
-    const deployment = getAlchemyOnchainDeployment();
+    const deployment = getWebsiteChartOnchainDeployment("production");
     const model = await readAlchemyExploreModel();
     const profile =
       deployment.status === "ready"

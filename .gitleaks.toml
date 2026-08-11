@@ -78,6 +78,38 @@ paths = [
 regexes = ['''(?i)0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce''']
 
 [[allowlists]]
+description = "Bitquery market parity pins the public PCAN golden token address"
+condition = "AND"
+regexTarget = "match"
+paths = [
+  '''scripts/perf/bitquery-golden-market-parity\.mjs''',
+  '''scripts/perf/read-model-post-promotion\.mjs''',
+  '''tests/bitquery-market-data\.test\.ts''',
+  '''tests/data-pipeline/read-model-ops-contract\.test\.ts''',
+]
+regexes = ['''(?i)0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce''']
+
+[[allowlists]]
+description = "Bitquery parity pins public Uniswap StateView and Chainlink feed addresses"
+condition = "AND"
+regexTarget = "match"
+paths = [
+  '''scripts/perf/bitquery-golden-market-parity\.mjs''',
+  '''tests/data-pipeline/read-model-ops-contract\.test\.ts''',
+]
+regexes = [
+  '''(?i)0x7ffe42c4a5deea5b0fec41c94c136cf115597227''',
+  '''(?i)0x5f4ec3df9cbd43714fe2740f5e3616155c5b8419''',
+]
+
+[[allowlists]]
+description = "Bitquery tests pin a public Classic token fixture address"
+condition = "AND"
+regexTarget = "match"
+paths = ['''tests/bitquery-market-data\.test\.ts''']
+regexes = ['''(?i)0x3f2a426365e7a438a7f9f758766cff419d207d51''']
+
+[[allowlists]]
 description = "Manual Router vendor artifacts contain public bytes32 runtime and pool-key hashes"
 condition = "AND"
 regexTarget = "match"
