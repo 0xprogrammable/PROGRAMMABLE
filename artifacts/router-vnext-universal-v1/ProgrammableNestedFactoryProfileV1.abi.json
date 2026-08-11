@@ -1,0 +1,1388 @@
+[
+  {
+    "inputs": [
+      {
+        "internalType": "contract IProgrammableUniversalLaunchKernelV1",
+        "name": "kernel",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "kernelRuntimeCodeHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "provider",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "providerRuntimeCodeHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "postconditionVerifier",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "postconditionVerifierRuntimeCodeHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "verifierBindingHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "profileKey",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "providerBindingHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "providerGasLimit",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "verifierGasLimit",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "ComponentCollision",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "field",
+        "type": "uint256"
+      }
+    ],
+    "name": "InvalidField",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "PostconditionMismatch",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ProviderCallFailed",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ProviderReturnMalformed",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ReentrantExecution",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "RuntimeCodeHashDrift",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "UnauthorizedApplicant",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "UnexpectedValueFlow",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "VerifierCallFailed",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "VerifierReturnMalformed",
+    "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "grantDigest",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "stampLaunchId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "receiptCoreHash",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "providerExecutionId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "NestedFactoryLaunchFinalized",
+    "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "ACTION_ECONOMICS_TYPEHASH",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "ACTION_IDENTITY_TYPEHASH",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "ACTION_TYPEHASH",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "COMPONENT_TYPEHASH",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "EXPECTED_STATE_TYPEHASH",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "KERNEL",
+    "outputs": [
+      {
+        "internalType": "contract IProgrammableUniversalLaunchKernelV1",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "KERNEL_RUNTIME_CODEHASH",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "NESTED_FACTORY_PLAN_TYPEHASH",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "POSTCONDITION_TYPEHASH",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "POSTCONDITION_VERIFIER",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "POSTCONDITION_VERIFIER_RUNTIME_CODEHASH",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "PROFILE_KEY",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "PROVIDER",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "PROVIDER_BINDING_HASH",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "PROVIDER_EXECUTION_ID_TYPEHASH",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "PROVIDER_GAS_LIMIT",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "PROVIDER_RUNTIME_CODEHASH",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "SHARED_COMPONENT_IDENTITY_TYPEHASH",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "VERIFIER_BINDING_HASH",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "VERIFIER_GAS_LIMIT",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint16",
+            "name": "schemaVersion",
+            "type": "uint16"
+          },
+          {
+            "components": [
+              {
+                "internalType": "bytes32",
+                "name": "providerPlanId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "factorySalt",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "address",
+                "name": "applicantWallet",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "sourceLaunchId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "address",
+                "name": "poolManager",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "poolManagerRuntimeCodeHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "poolId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "address",
+                "name": "tokenOwner",
+                "type": "address"
+              },
+              {
+                "internalType": "address",
+                "name": "hookOwner",
+                "type": "address"
+              },
+              {
+                "internalType": "address",
+                "name": "treasury",
+                "type": "address"
+              },
+              {
+                "internalType": "uint256",
+                "name": "tokenSupply",
+                "type": "uint256"
+              },
+              {
+                "internalType": "uint256",
+                "name": "nativeValue",
+                "type": "uint256"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "hookPermissionsHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "configurationHash",
+                "type": "bytes32"
+              }
+            ],
+            "internalType": "struct IProgrammableNestedFactoryProfileV1.NestedFactoryActionV1",
+            "name": "action",
+            "type": "tuple"
+          },
+          {
+            "components": [
+              {
+                "internalType": "uint8",
+                "name": "role",
+                "type": "uint8"
+              },
+              {
+                "internalType": "enum IProgrammableNestedFactoryProfileV1.ComponentScopeV1",
+                "name": "scope",
+                "type": "uint8"
+              },
+              {
+                "internalType": "address",
+                "name": "account",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "runtimeCodeHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "creationProvenanceHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "ownershipBindingHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "configurationHash",
+                "type": "bytes32"
+              }
+            ],
+            "internalType": "struct IProgrammableNestedFactoryProfileV1.ComponentExpectationV1[]",
+            "name": "components",
+            "type": "tuple[]"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "componentGraphHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "componentSetHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "componentRuntimeSetHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedReturnedIdentitiesHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedArchitectureStateHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedPoolStateHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedRevenueStateHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedValueFlowHash",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct IProgrammableNestedFactoryProfileV1.NestedFactoryPlanV1",
+        "name": "plan",
+        "type": "tuple"
+      }
+    ],
+    "name": "computeNestedFactoryPlanHashV1",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "pure",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint16",
+            "name": "schemaVersion",
+            "type": "uint16"
+          },
+          {
+            "components": [
+              {
+                "internalType": "bytes32",
+                "name": "providerPlanId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "factorySalt",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "address",
+                "name": "applicantWallet",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "sourceLaunchId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "address",
+                "name": "poolManager",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "poolManagerRuntimeCodeHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "poolId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "address",
+                "name": "tokenOwner",
+                "type": "address"
+              },
+              {
+                "internalType": "address",
+                "name": "hookOwner",
+                "type": "address"
+              },
+              {
+                "internalType": "address",
+                "name": "treasury",
+                "type": "address"
+              },
+              {
+                "internalType": "uint256",
+                "name": "tokenSupply",
+                "type": "uint256"
+              },
+              {
+                "internalType": "uint256",
+                "name": "nativeValue",
+                "type": "uint256"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "hookPermissionsHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "configurationHash",
+                "type": "bytes32"
+              }
+            ],
+            "internalType": "struct IProgrammableNestedFactoryProfileV1.NestedFactoryActionV1",
+            "name": "action",
+            "type": "tuple"
+          },
+          {
+            "components": [
+              {
+                "internalType": "uint8",
+                "name": "role",
+                "type": "uint8"
+              },
+              {
+                "internalType": "enum IProgrammableNestedFactoryProfileV1.ComponentScopeV1",
+                "name": "scope",
+                "type": "uint8"
+              },
+              {
+                "internalType": "address",
+                "name": "account",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "runtimeCodeHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "creationProvenanceHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "ownershipBindingHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "configurationHash",
+                "type": "bytes32"
+              }
+            ],
+            "internalType": "struct IProgrammableNestedFactoryProfileV1.ComponentExpectationV1[]",
+            "name": "components",
+            "type": "tuple[]"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "componentGraphHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "componentSetHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "componentRuntimeSetHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedReturnedIdentitiesHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedArchitectureStateHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedPoolStateHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedRevenueStateHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedValueFlowHash",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct IProgrammableNestedFactoryProfileV1.NestedFactoryPlanV1",
+        "name": "plan",
+        "type": "tuple"
+      }
+    ],
+    "name": "computeNestedFactoryPreflightHashV1",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "grantDigest",
+        "type": "bytes32"
+      },
+      {
+        "components": [
+          {
+            "internalType": "uint16",
+            "name": "schemaVersion",
+            "type": "uint16"
+          },
+          {
+            "components": [
+              {
+                "internalType": "bytes32",
+                "name": "providerPlanId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "factorySalt",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "address",
+                "name": "applicantWallet",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "sourceLaunchId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "address",
+                "name": "poolManager",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "poolManagerRuntimeCodeHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "poolId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "address",
+                "name": "tokenOwner",
+                "type": "address"
+              },
+              {
+                "internalType": "address",
+                "name": "hookOwner",
+                "type": "address"
+              },
+              {
+                "internalType": "address",
+                "name": "treasury",
+                "type": "address"
+              },
+              {
+                "internalType": "uint256",
+                "name": "tokenSupply",
+                "type": "uint256"
+              },
+              {
+                "internalType": "uint256",
+                "name": "nativeValue",
+                "type": "uint256"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "hookPermissionsHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "configurationHash",
+                "type": "bytes32"
+              }
+            ],
+            "internalType": "struct IProgrammableNestedFactoryProfileV1.NestedFactoryActionV1",
+            "name": "action",
+            "type": "tuple"
+          },
+          {
+            "components": [
+              {
+                "internalType": "uint8",
+                "name": "role",
+                "type": "uint8"
+              },
+              {
+                "internalType": "enum IProgrammableNestedFactoryProfileV1.ComponentScopeV1",
+                "name": "scope",
+                "type": "uint8"
+              },
+              {
+                "internalType": "address",
+                "name": "account",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "runtimeCodeHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "creationProvenanceHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "ownershipBindingHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "configurationHash",
+                "type": "bytes32"
+              }
+            ],
+            "internalType": "struct IProgrammableNestedFactoryProfileV1.ComponentExpectationV1[]",
+            "name": "components",
+            "type": "tuple[]"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "componentGraphHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "componentSetHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "componentRuntimeSetHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedReturnedIdentitiesHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedArchitectureStateHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedPoolStateHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedRevenueStateHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedValueFlowHash",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct IProgrammableNestedFactoryProfileV1.NestedFactoryPlanV1",
+        "name": "plan",
+        "type": "tuple"
+      },
+      {
+        "components": [
+          {
+            "components": [
+              {
+                "internalType": "bytes32",
+                "name": "grantDigest",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "profileKey",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "planHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "enum IProgrammableUniversalLaunchKernelV1.CapabilitySemantics",
+                "name": "executionMode",
+                "type": "uint8"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "kernelPreflightReadbackHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "profilePreflightReadbackHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "dualProviderQuorumEvidenceHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "simulationEvidenceHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "serviceDeploymentBindingHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "currentnessNonce",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "securityControlHeadHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "securityEpoch",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "securityEpochHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "policyEpoch",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "policyEpochHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "reviewGeneration",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "reviewGenerationHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "validAfter",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "deadline",
+                "type": "uint64"
+              }
+            ],
+            "internalType": "struct IProgrammableUniversalLaunchKernelV1.ExecutionCurrentnessV1",
+            "name": "currentness",
+            "type": "tuple"
+          },
+          {
+            "internalType": "bytes",
+            "name": "currentnessSignature",
+            "type": "bytes"
+          },
+          {
+            "components": [
+              {
+                "internalType": "bytes32",
+                "name": "grantDigest",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "stampLaunchId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "antiReplayNonce",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "address",
+                "name": "profileModule",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "intentNonce",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "validAfter",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "deadline",
+                "type": "uint64"
+              }
+            ],
+            "internalType": "struct IProgrammableUniversalLaunchKernelV1.ApplicantWalletIntentV1",
+            "name": "walletIntent",
+            "type": "tuple"
+          },
+          {
+            "internalType": "bytes",
+            "name": "walletSignature",
+            "type": "bytes"
+          }
+        ],
+        "internalType": "struct IProgrammableNestedFactoryProfileV1.LaunchTransportV1",
+        "name": "transport",
+        "type": "tuple"
+      }
+    ],
+    "name": "launchNestedFactoryV1",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "receiptCoreHash",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint16",
+            "name": "schemaVersion",
+            "type": "uint16"
+          },
+          {
+            "components": [
+              {
+                "internalType": "bytes32",
+                "name": "providerPlanId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "factorySalt",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "address",
+                "name": "applicantWallet",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "sourceLaunchId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "address",
+                "name": "poolManager",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "poolManagerRuntimeCodeHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "poolId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "address",
+                "name": "tokenOwner",
+                "type": "address"
+              },
+              {
+                "internalType": "address",
+                "name": "hookOwner",
+                "type": "address"
+              },
+              {
+                "internalType": "address",
+                "name": "treasury",
+                "type": "address"
+              },
+              {
+                "internalType": "uint256",
+                "name": "tokenSupply",
+                "type": "uint256"
+              },
+              {
+                "internalType": "uint256",
+                "name": "nativeValue",
+                "type": "uint256"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "hookPermissionsHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "configurationHash",
+                "type": "bytes32"
+              }
+            ],
+            "internalType": "struct IProgrammableNestedFactoryProfileV1.NestedFactoryActionV1",
+            "name": "action",
+            "type": "tuple"
+          },
+          {
+            "components": [
+              {
+                "internalType": "uint8",
+                "name": "role",
+                "type": "uint8"
+              },
+              {
+                "internalType": "enum IProgrammableNestedFactoryProfileV1.ComponentScopeV1",
+                "name": "scope",
+                "type": "uint8"
+              },
+              {
+                "internalType": "address",
+                "name": "account",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "runtimeCodeHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "creationProvenanceHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "ownershipBindingHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "configurationHash",
+                "type": "bytes32"
+              }
+            ],
+            "internalType": "struct IProgrammableNestedFactoryProfileV1.ComponentExpectationV1[]",
+            "name": "components",
+            "type": "tuple[]"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "componentGraphHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "componentSetHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "componentRuntimeSetHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedReturnedIdentitiesHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedArchitectureStateHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedPoolStateHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedRevenueStateHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedValueFlowHash",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct IProgrammableNestedFactoryProfileV1.NestedFactoryPlanV1",
+        "name": "plan",
+        "type": "tuple"
+      }
+    ],
+    "name": "nestedFactoryReservationsV1",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "enum IProgrammableUniversalLaunchKernelV1.ReservationKind",
+            "name": "kind",
+            "type": "uint8"
+          },
+          {
+            "internalType": "enum IProgrammableUniversalLaunchKernelV1.ReservationScope",
+            "name": "scope",
+            "type": "uint8"
+          },
+          {
+            "internalType": "address",
+            "name": "account",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "manager",
+            "type": "address"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "identifier",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedRuntimeCodeHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedManagerRuntimeCodeHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sharedIdentityHash",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct IProgrammableUniversalLaunchKernelV1.ReservationV1[]",
+        "name": "reservations",
+        "type": "tuple[]"
+      }
+    ],
+    "stateMutability": "pure",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "runtimeBindingHashV1",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]
