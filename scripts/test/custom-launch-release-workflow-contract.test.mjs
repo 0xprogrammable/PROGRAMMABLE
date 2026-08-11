@@ -24,6 +24,84 @@ function workflowFailures(source) {
   };
 
   requireText("dispatch-boolean", "custom_launch_public_enablement:");
+  if (source.includes("\n  push:\n")) failures.push("dispatch-only-stage");
+  requireText(
+    "exact-production-verify-proof-gate",
+    "name: Consume exact full production Verify proof",
+  );
+  requireText(
+    "proof-exact-artifact-download",
+    "artifact-ids: ${{ steps.resolve-proof.outputs.artifact_id }}",
+  );
+  requireText(
+    "proof-exact-artifact-run",
+    "run-id: ${{ steps.resolve-proof.outputs.verify_run_id }}",
+  );
+  requireText("proof-download-digest-fail-closed", "digest-mismatch: error");
+  requireText("proof-sigstore-verification", "gh attestation verify \"$proof\"");
+  requireText(
+    "proof-signer-workflow",
+    '--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/verify.yml"',
+  );
+  requireText(
+    "proof-certificate-identity",
+    '--cert-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/verify.yml@$GITHUB_REF"',
+  );
+  requireText("proof-source-ref", '--source-ref "$GITHUB_REF"');
+  requireText("proof-source-digest", '--source-digest "$GITHUB_SHA"');
+  requireText("proof-signer-digest", '--signer-digest "$GITHUB_SHA"');
+  requireText("proof-hosted-runner", "--deny-self-hosted-runners");
+  requireText(
+    "proof-content-verifier",
+    "node scripts/production-verify-proof.mjs verify",
+  );
+  requireText(
+    "proof-bound-deploy-checkout",
+    "ref: ${{ needs.release-gate.outputs.verified_sha }}",
+  );
+  requireText(
+    "proof-post-approval-revalidation",
+    "name: Revalidate exact Verify proof after production approval",
+  );
+  requireText(
+    "proof-post-approval-artifact-identity",
+    'test "$REVALIDATED_ARTIFACT_ID" = "$EXPECTED_ARTIFACT_ID"',
+  );
+  requireText(
+    "proof-post-approval-artifact-digest",
+    'test "$REVALIDATED_ARTIFACT_DIGEST" = "$EXPECTED_ARTIFACT_DIGEST"',
+  );
+  const releaseGateStart = source.indexOf("  release-gate:");
+  const deployJobStart = source.indexOf("  deploy:");
+  const releaseGateBlock = releaseGateStart >= 0 && deployJobStart > releaseGateStart
+    ? source.slice(releaseGateStart, deployJobStart)
+    : "";
+  if (!releaseGateBlock.includes("actions: read")) failures.push("proof-actions-read");
+  if (!releaseGateBlock.includes("attestations: read")) {
+    failures.push("proof-attestations-read");
+  }
+  if (!releaseGateBlock.includes("node scripts/production-verify-proof.mjs resolve")) {
+    failures.push("proof-resolver");
+  }
+  const deployJobBlock = deployJobStart >= 0 ? source.slice(deployJobStart) : "";
+  if (!deployJobBlock.includes("actions: read")) {
+    failures.push("proof-revalidation-actions-read");
+  }
+  if (!deployJobBlock.includes("attestations: read")) {
+    failures.push("proof-revalidation-attestations-read");
+  }
+  for (const forbidden of [
+    "npm ci",
+    "pnpm --dir indexer",
+    "npm run verify",
+    "npm run db:test:pglite",
+    "npm run contracts:verify:ci",
+    "npm run contracts:slither",
+  ]) {
+    if (releaseGateBlock.includes(forbidden)) {
+      failures.push(`proof-gate-repeats-${forbidden}`);
+    }
+  }
   requireText("dispatch-boolean-type", "type: boolean");
   requireText("dispatch-default-off", "default: false");
   requireText(
@@ -202,6 +280,16 @@ function workflowFailures(source) {
     "record-before-stage",
     "Verify detached Custom Launch release record",
     "Stage production build without assigning domains",
+  );
+  requireOrder(
+    "proof-before-production-configuration",
+    "Verify Sigstore provenance and exact proof contents",
+    "Pull production configuration",
+  );
+  requireOrder(
+    "proof-revalidation-before-install",
+    "Confirm consumed Verify proof identity after production approval",
+    "Install dependencies",
   );
   requireText("candidate-canary", "Gate exact staged Custom Launch candidate");
   requireText(
@@ -382,13 +470,32 @@ test("workflow contract detects weakened record and stage-only gates", async () 
       "custom-launch-candidate-canary-${{ github.run_id }}-${{ github.run_attempt }}",
       "missing-candidate-artifact",
     ),
+    source.replace('--source-digest "$GITHUB_SHA"', ""),
+    source.replace('--signer-digest "$GITHUB_SHA"', ""),
+    source.replace("--deny-self-hosted-runners", ""),
+    source.replace("      attestations: read\n", ""),
+    source.replace(
+      "      attestations: read\n      contents: read\n      deployments: write",
+      "      contents: read\n      deployments: write",
+    ),
+    source.replace("run-id: ${{ steps.resolve-proof.outputs.verify_run_id }}", ""),
+    source.replace(
+      'test "$REVALIDATED_ARTIFACT_DIGEST" = "$EXPECTED_ARTIFACT_DIGEST"',
+      "",
+    ),
+    source.replace("digest-mismatch: error", "digest-mismatch: warn"),
+    source.replace(
+      "node scripts/production-verify-proof.mjs resolve",
+      "node scripts/production-verify-proof.mjs verify",
+    ),
+    source.replace("workflow_dispatch:\n", "push:\n    branches: [production]\n"),
     source.replace(
       "https://programmable.market",
       "https://programmable.family",
     ),
     `${source}\n      - run: vercel promote "$DEPLOYMENT_URL"\n`,
   ];
-  for (const mutation of mutations) {
-    assert.notDeepEqual(workflowFailures(mutation), []);
+  for (const [index, mutation] of mutations.entries()) {
+    assert.notDeepEqual(workflowFailures(mutation), [], `mutation ${index} was not detected`);
   }
 });

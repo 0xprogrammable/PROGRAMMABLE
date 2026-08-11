@@ -23,7 +23,7 @@
     "brand:favicons": "node scripts/generate-programmable-favicons.mjs",
     "audit:prod": "npm audit --omit=dev --audit-level=moderate",
     "release:custom-launch:record:verify": "node scripts/verify-custom-launch-release-record.mjs",
-    "release:custom-launch:record:test": "node --test scripts/test/custom-launch-cross-repository-attestation.test.mjs scripts/test/custom-launch-release-record.test.mjs scripts/test/custom-launch-release-workflow-contract.test.mjs",
+    "release:custom-launch:record:test": "node --test scripts/test/custom-launch-cross-repository-attestation.test.mjs scripts/test/custom-launch-release-record.test.mjs scripts/test/custom-launch-release-workflow-contract.test.mjs scripts/test/production-verify-proof.test.mjs",
     "release:manual-applicant:policy:test": "node --test scripts/test/manual-applicant-launch-policy.test.mjs",
     "release:manual-applicant:vendor:test": "node --test scripts/test/manual-router-authority-vendor.test.mjs scripts/test/router-v2-shared-lifecycle-v3-vendor.test.mjs",
     "release:manual-applicant:vendor:verify": "node scripts/verify-manual-router-authority-vendor.mjs && node scripts/verify-router-v2-shared-lifecycle-v3-vendor.mjs && node scripts/verify-manual-applicant-portable-imports.mjs --entry lib/vendor/manual-router-authority-v1/manual-router-portable.v1.mjs && node scripts/verify-manual-applicant-portable-imports.mjs --entry lib/vendor/router-v2-shared-lifecycle-v3/artifacts/router-v2-shared-lifecycle-v3/router-v2-shared-lifecycle-portable.v3.mjs",
