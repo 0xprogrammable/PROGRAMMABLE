@@ -145,6 +145,12 @@ function rpcClient(estimatedGas: bigint, gasPrice: bigint, balance: bigint) {
   };
 }
 
+function unavailableRpcClient(message = "provider capacity unavailable") {
+  return {
+    getBlockNumber: vi.fn().mockRejectedValue(new Error(message)),
+  };
+}
+
 vi.mock("../lib/data-pipeline/route-activation.server", () => ({
   indexedLaunchLookupEnabled: () => mocks.indexedEnabled,
 }));
@@ -197,10 +203,14 @@ describe("creator claim action identity activation", () => {
     const clients = [
       rpcClient(100_000n, 2_000_000_000n, 10n ** 18n),
       rpcClient(110_000n, 3_000_000_000n, 9n * 10n ** 17n),
+      rpcClient(100_000n, 2_000_000_000n, 10n ** 18n),
+      rpcClient(110_000n, 3_000_000_000n, 9n * 10n ** 17n),
     ];
     mocks.createPublicClient
       .mockImplementationOnce(() => clients[0])
-      .mockImplementationOnce(() => clients[1]);
+      .mockImplementationOnce(() => clients[1])
+      .mockImplementationOnce(() => clients[2])
+      .mockImplementationOnce(() => clients[3]);
   });
 
   it.each([true, false])(
@@ -221,11 +231,60 @@ describe("creator claim action identity activation", () => {
           accountBalanceWei: "900000000000000000",
         },
       });
-      expect(mocks.createPublicClient).toHaveBeenCalledTimes(2);
+      expect(mocks.createPublicClient).toHaveBeenCalledTimes(4);
       expect(mocks.lookup).toHaveBeenCalledTimes(indexedEnabled ? 1 : 0);
       expect(mocks.readLegacy).toHaveBeenCalledTimes(indexedEnabled ? 0 : 1);
     },
   );
+
+  it("uses two agreeing fixed fallback providers when both configured providers are unavailable", async () => {
+    const clients = [
+      unavailableRpcClient("monthly capacity exceeded"),
+      unavailableRpcClient("secondary transport unavailable"),
+      rpcClient(105_000n, 2_500_000_000n, 8n * 10n ** 17n),
+      rpcClient(108_000n, 2_700_000_000n, 7n * 10n ** 17n),
+    ];
+    mocks.createPublicClient.mockReset();
+    for (const client of clients) {
+      mocks.createPublicClient.mockImplementationOnce(() => client);
+    }
+
+    const response = await POST(request());
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      status: "ready",
+      claim: { account: creator, tokenAddress: token, poolId },
+      gas: {
+        estimatedGas: "108000",
+        gasPriceWei: "2700000000",
+        accountBalanceWei: "700000000000000000",
+      },
+    });
+  });
+
+  it("returns a retryable typed error when fewer than two providers can be verified", async () => {
+    mocks.createPublicClient.mockReset();
+    for (let index = 0; index < 4; index += 1) {
+      mocks.createPublicClient.mockImplementationOnce(() =>
+        unavailableRpcClient(),
+      );
+    }
+
+    const response = await POST(request());
+    const payload = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(payload).toMatchObject({
+      status: "blocked",
+      error: {
+        code: "rpc-unavailable",
+        message: "Creator claim reads are temporarily unavailable. Try again",
+      },
+    });
+    expect(JSON.stringify(payload)).not.toContain("capacity");
+  });
 
   it.each([true, false])(
     "fails closed before simulation for same-provider aliases with indexed lookup %s",
@@ -237,7 +296,10 @@ describe("creator claim action identity activation", () => {
       const response = await POST(request());
       const serialized = JSON.stringify(await response.json());
 
-      expect(response.status).toBe(502);
+      expect(response.status).toBe(503);
+      expect(JSON.parse(serialized)).toMatchObject({
+        error: { code: "rpc-unavailable" },
+      });
       expect(mocks.createPublicClient).not.toHaveBeenCalled();
       expect(serialized).not.toContain("alchemy-claim-key");
       expect(serialized).not.toContain("second-claim-secret");
