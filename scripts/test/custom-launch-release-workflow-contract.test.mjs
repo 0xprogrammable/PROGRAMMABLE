@@ -43,10 +43,12 @@ function workflowFailures(source) {
     "proof-signer-workflow",
     '--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/verify.yml"',
   );
-  requireText(
-    "proof-certificate-identity",
-    '--cert-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/verify.yml@$GITHUB_REF"',
-  );
+  if (
+    source.includes('--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/verify.yml"') &&
+    source.includes('--cert-identity ')
+  ) {
+    failures.push("proof-attestation-filters-mutually-exclusive");
+  }
   requireText("proof-source-ref", '--source-ref "$GITHUB_REF"');
   requireText("proof-source-digest", '--source-digest "$GITHUB_SHA"');
   requireText("proof-signer-digest", '--signer-digest "$GITHUB_SHA"');
