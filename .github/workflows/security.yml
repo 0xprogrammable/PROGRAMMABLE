@@ -45,7 +45,10 @@ jobs:
       - name: Install Slither
         run: |
           python3 -m venv .venv
-          .venv/bin/pip install --disable-pip-version-check slither-analyzer==0.11.5
+          .venv/bin/pip install --disable-pip-version-check \
+            slither-analyzer==0.11.5 \
+            eth-abi==5.2.0 \
+            eth-utils==5.3.1
 
       - name: Verify Router V4 owner payloads
         run: >-
