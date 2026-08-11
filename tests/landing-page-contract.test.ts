@@ -86,6 +86,7 @@ describe("landing page contract", () => {
     expect(landing).toContain('aria-label="Programmable links"');
     expect(landing).toContain('aria-label="Programmable on X"');
     expect(landing).toContain('aria-label="Programmable on GitHub"');
+    expect(landing).toContain('aria-label="Programmable on Discord"');
     expect(landing).toContain('aria-label="Programmable on Dexscreener"');
     expect(landing).toContain('href="/docs"');
     expect(navigation).toContain('if (pathname === "/") return null;');

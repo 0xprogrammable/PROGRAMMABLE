@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import {
+  DiscordBrandIcon,
   GitHubBrandIcon,
   XBrandIcon,
 } from "@/components/brand-icons";
@@ -69,6 +70,15 @@ export function LandingPage() {
               aria-label="Programmable on GitHub"
             >
               <GitHubBrandIcon />
+            </a>
+            <a
+              className={styles.socialLink}
+              href="https://discord.com/invite/programmable"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Programmable on Discord"
+            >
+              <DiscordBrandIcon />
             </a>
             <a
               className={styles.socialLink}

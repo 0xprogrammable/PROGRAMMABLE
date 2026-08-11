@@ -11,4 +11,11 @@ describe("Site footer", () => {
     expect(footerSource).toContain('href: "/analytics"');
     expect(footerSource).toContain('label: "Analytics"');
   });
+
+  it("links the official Discord from Resources", () => {
+    expect(footerSource).toContain(
+      'href: "https://discord.com/invite/programmable"',
+    );
+    expect(footerSource).toContain('label: "Discord"');
+  });
 });

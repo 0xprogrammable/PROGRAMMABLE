@@ -51,7 +51,15 @@ describe("topbar and Explore hero polish", () => {
     );
     expect(landing).toContain('aria-label="Programmable on X"');
     expect(landing).toContain('aria-label="Programmable on GitHub"');
+    expect(landing).toContain('aria-label="Programmable on Discord"');
     expect(landing).toContain('aria-label="Programmable on Dexscreener"');
+    expect(landing.indexOf('aria-label="Programmable on GitHub"')).toBeLessThan(
+      landing.indexOf('aria-label="Programmable on Discord"'),
+    );
+    expect(landing.indexOf('aria-label="Programmable on Discord"')).toBeLessThan(
+      landing.indexOf('aria-label="Programmable on Dexscreener"'),
+    );
+    expect(navigation).toContain('aria-label="Programmable on Discord"');
     expect(landing).toContain('href="/docs"');
     expect(landing).toMatch(/>\s*Docs\s*</);
     expect(navigation).not.toContain("ThemeToggle");
