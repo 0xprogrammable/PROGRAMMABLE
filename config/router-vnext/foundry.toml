@@ -1,0 +1,29 @@
+[profile.default]
+src = "src/router_vnext"
+test = "test/router_vnext"
+out = "out-router-vnext"
+cache_path = "cache-router-vnext"
+libs = []
+auto_detect_remappings = false
+remappings = []
+solc_version = "0.8.26"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 1_000
+via_ir = false
+bytecode_hash = "none"
+cbor_metadata = false
+ffi = false
+
+[profile.default.fuzz]
+runs = 1_000
+max_test_rejects = 65_536
+
+[fmt]
+line_length = 120
+tab_width = 4
+bracket_spacing = true
+int_types = "long"
+quote_style = "double"
+number_underscore = "thousands"
+wrap_comments = true
