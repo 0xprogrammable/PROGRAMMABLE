@@ -2,7 +2,7 @@ import "server-only";
 
 import { unstable_cache } from "next/cache";
 
-import { getOperationalOnchainDeployment } from "../onchain/config";
+import { getWebsiteReadOnchainDeployment } from "../onchain/config";
 import {
   safeOperationalRpcError,
   withOperationalRpcFailover,
@@ -102,7 +102,7 @@ function alchemyApiKey(environment: NodeJS.ProcessEnv = process.env) {
 }
 
 export function getAlchemyOnchainDeployment(): OnchainDeployment {
-  return getOperationalOnchainDeployment("production");
+  return getWebsiteReadOnchainDeployment("production");
 }
 
 async function readAlchemyExploreModelUncached(): Promise<ExploreReadModel> {

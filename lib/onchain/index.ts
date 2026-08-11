@@ -2,6 +2,7 @@ export {
   getOnchainDeployment,
   getOperationalOnchainDeployment,
   getPublicOnchainDeployment,
+  getWebsiteReadOnchainDeployment,
 } from "./config";
 export {
   readExploreModel,

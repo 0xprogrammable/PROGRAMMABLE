@@ -3,7 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import {
-  getOperationalOnchainDeployment,
+  getWebsiteReadOnchainDeployment,
   readLiveExploreModel,
   writeDurableExploreModel,
 } from "../../../../lib/onchain";
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
 
   const startedAt = Date.now();
   try {
-    const deployment = getOperationalOnchainDeployment("production");
+    const deployment = getWebsiteReadOnchainDeployment("production");
     if (deployment.status !== "ready") {
       throw new Error(
         "The verified production release is not operationally eligible",

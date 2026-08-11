@@ -4,6 +4,7 @@ import {
   getOnchainDeployment,
   getOperationalOnchainDeployment,
   getPublicOnchainDeployment,
+  getWebsiteReadOnchainDeployment,
 } from "../lib/onchain/config";
 
 describe("onchain deployment manifest boundary", () => {
@@ -92,12 +93,35 @@ describe("onchain deployment manifest boundary", () => {
     });
   });
 
+  it("uses the fixed independent Website read quorum without changing the operational bindings", () => {
+    vi.stubEnv("ETHEREUM_RPC_URL", "https://operational-primary.example");
+    vi.stubEnv(
+      "ETHEREUM_RPC_URL_B",
+      "https://operational-secondary.example",
+    );
+
+    expect(getWebsiteReadOnchainDeployment("production")).toMatchObject({
+      status: "ready",
+      rpcUrl: "https://ethereum-rpc.publicnode.com",
+      rpcUrlSecondary: "https://rpc.mevblocker.io",
+    });
+    expect(getOperationalOnchainDeployment("production")).toMatchObject({
+      rpcUrl: "https://operational-primary.example",
+      rpcUrlSecondary: "https://operational-secondary.example",
+    });
+  });
+
   it("rejects production operations without an independent RPC", () => {
     vi.stubEnv("ETHEREUM_RPC_URL", "https://rpc-a.example");
     vi.stubEnv("ETHEREUM_RPC_URL_B", "https://rpc-a.example");
 
     expect(() =>
       getOperationalOnchainDeployment("production"),
+    ).toThrow(
+      "Production operations require two distinct authenticated RPC URLs",
+    );
+    expect(() =>
+      getWebsiteReadOnchainDeployment("production"),
     ).toThrow(
       "Production operations require two distinct authenticated RPC URLs",
     );
