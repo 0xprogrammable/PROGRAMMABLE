@@ -16,6 +16,8 @@ on:
       - "releases/**"
       - "scripts/verify-mainnet-bytecode.sh"
       - "scripts/generate-router-v4-deployment-artifact.mjs"
+      - "scripts/generate-router-v4-owner-payloads.py"
+      - "scripts/verify-router-v4-cold-outer-transactions.sh"
       - "scripts/verify-router-v4-deployment-v1.sh"
       - ".github/workflows/mainnet-evidence.yml"
 

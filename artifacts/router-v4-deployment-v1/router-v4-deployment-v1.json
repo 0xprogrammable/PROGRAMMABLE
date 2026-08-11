@@ -26,7 +26,12 @@
     "deployment": {
       "optimizerRuns": 1000,
       "standardInputPath": "artifacts/router-v4-deployment-v1/standard-input-deployment.json",
-      "standardInputSha256": "b3ef7b37055f491a68e9b775c5a0e65f0ae4232dc85d5cb080c1411502a3760a"
+      "standardInputSha256": "993caa8069d87300c979d8ca587e591ecd7507befa1d3eb09c7d2aa3f33d6cae"
+    },
+    "registry": {
+      "optimizerRuns": 100,
+      "standardInputPath": "artifacts/router-v4-deployment-v1/standard-input-registry.json",
+      "standardInputSha256": "de51707076a982813f1258ff7730e9a6741aad0f605881c1a5c520f0653ee77f"
     },
     "shared": {
       "evmVersion": "cancun",
@@ -36,9 +41,9 @@
     }
   },
   "compiledContractsPath": "artifacts/router-v4-deployment-v1/compiled-contracts.json",
-  "compiledContractsSha256": "81126e876d74f906e51e6fb942210a158915a34bb32ed400c7769be40c67cd5a",
+  "compiledContractsSha256": "0ee3f0f345925bad29b4f18dec19fa3eb691d4b5aa06c7face6f5f2f9873b3a2",
   "deploymentBytecodesPath": "artifacts/router-v4-deployment-v1/deployment-bytecodes.json",
-  "deploymentBytecodesSha256": "eb10925bdcefd7d041bcfdcf08956e4e9ce0c1c309ac1ee4a77140091738994c",
+  "deploymentBytecodesSha256": "a4c5e7a82af468fbefc95a468af949f63c7aa5644f45e1f4d6081788f927f0e7",
   "deploymentBytecodeFileSha256s": {
     "artifacts/router-v4-deployment-v1/bytecodes/ProgrammableUniversalLaunchKernelV1.json": "17e7cd05216dba06da3728494a2a96e57a9dbd15e692bc4c71a8da280ed150f7",
     "artifacts/router-v4-deployment-v1/bytecodes/ProgrammableUniversalLaunchPreflightV1.json": "aba8cf090711fe28bb42481a8f2988bc3d0c2ee378eaa85a86de5933f4cab692",
@@ -55,9 +60,9 @@
     "artifacts/router-v4-deployment-v1/bytecodes/ProgrammableCompletedGraphAdoptionCompatCodecV1.json": "cdd390fbc9628d29bf0f883970eee37fd8bf4e3eb697fe92d8bf1b14d0f326a5",
     "artifacts/router-v4-deployment-v1/bytecodes/ProgrammableCompletedGraphAdoptionValidatorV1.json": "a6ca76d0d4182bf1d834fb4d117dc66165463306274c0e0476703d6fd568957d",
     "artifacts/router-v4-deployment-v1/bytecodes/ProgrammableCompletedGraphAdoptionPreflightV1.json": "f8329ec6e6e2e2e43047ca3402c8542e890dc8192002fca2671461853dce0166",
-    "artifacts/router-v4-deployment-v1/bytecodes/ProgrammableCompletedGraphAdoptionGrantRegistryV1.json": "d5ade915355cb6b3fa07f431a77607844998237e3c1e2ffe4318f04e30a959b0",
     "artifacts/router-v4-deployment-v1/bytecodes/ProgrammableCompletedGraphRuntimeStateVerifierV1.json": "6f803dc39d5592ae6fc32734ce182830a728e5dfd3a0b9c7d71cc702a0d76c73",
-    "artifacts/router-v4-deployment-v1/bytecodes/ShardLaunchFactoryV1.json": "d88bfd558f6192e04888982c602e5f0ed978142d62b37c57e937bfaf9759dd2f"
+    "artifacts/router-v4-deployment-v1/bytecodes/ShardLaunchFactoryV1.json": "d88bfd558f6192e04888982c602e5f0ed978142d62b37c57e937bfaf9759dd2f",
+    "artifacts/router-v4-deployment-v1/bytecodes/ProgrammableCompletedGraphAdoptionGrantRegistryV1.json": "64fd65af42ea743de3c329dc0af5b1f4275272188771619fd7fced49d1256ef3"
   },
   "sources": {
     "deployment/router-v4/src/ProgrammableCreate2GraphDeployerV1.sol": {
@@ -85,13 +90,13 @@
       "sha256": "fef94269383eb81d5919018b46b9ab0380be7672fac4dbe250c0cb7f6dbe1b99"
     },
     "deployment/router-v4/test/ProgrammableRouterDeploymentMainnetFork.t.sol": {
-      "sha256": "274faed12159e539ee07ad30bc70caaa7143b75e9bbb8a42e3981b01b725bf1b"
+      "sha256": "ad77800b75d092c4be4d96f02a556d386f0479cdf04f7b40d7c749d73b6f46e0"
     },
     "deployment/router-v4/foundry.toml": {
       "sha256": "7e570209ac008baeddb8dec8cedf4c81937b9425b92f38c185d1c6080d76d262"
     },
     "scripts/generate-router-v4-deployment-artifact.mjs": {
-      "sha256": "eb8ae61f1faf3907dc6d1423bcefabd00b6bee9f0300c9b95b8f4d9ac208024a"
+      "sha256": "c95690a948093e399480435578505d6f4fac06c9c897b11f220c1854785b390d"
     },
     "scripts/verify-router-v4-deployment-v1.sh": {
       "sha256": "7952df5b56f181e0f91e9f4f6c8c87f4de587931fd341ccc774ac6f63c9256fe"
@@ -122,14 +127,15 @@
     "genericCallSurface": false,
     "valueSurface": false,
     "clearKillSurface": "ORDERED_ACTIVATION_ONLY",
-    "serviceReleaseBindingTypehash": "0x760729196381f66cf460bc4c1213dfae84b5eaa668da1a26babe6b4d889c32a8",
-    "serviceReleaseBinding": "0xbd4fafda3f5d2cdf3be4e14439d7d80d850c046726785195601d5237263d602a",
+    "serviceReleaseBindingTypehash": "0x87af20a1b6caf58dcd7c93ec1911ae1ebc2d65cc0957e19a7c761722f73da1f4",
+    "serviceReleaseBinding": "0x32379de927d9a3ca4052037f3de19388566f0b79b26ea01b90d76f09c76f74b0",
     "serviceReleaseBindingInputs": {
       "protectedMergeCommit": "7b06469be06a746150545a94ccfb3c4c5e959de3",
       "coreArtifactSha256": "d1b805b0b8165e28105fd331e358fba70c7c0be9db0dcee4023924b84dfcd250",
       "coreStandardInputSha256": "f70c23018261cb4a1715f58f0b7aa666e6ac02479c2592380779357583baee72",
-      "deploymentStandardInputSha256": "b3ef7b37055f491a68e9b775c5a0e65f0ae4232dc85d5cb080c1411502a3760a",
-      "compiledContractsSha256": "81126e876d74f906e51e6fb942210a158915a34bb32ed400c7769be40c67cd5a"
+      "deploymentStandardInputSha256": "993caa8069d87300c979d8ca587e591ecd7507befa1d3eb09c7d2aa3f33d6cae",
+      "registryStandardInputSha256": "de51707076a982813f1258ff7730e9a6741aad0f605881c1a5c520f0653ee77f",
+      "compiledContractsSha256": "0ee3f0f345925bad29b4f18dec19fa3eb691d4b5aa06c7face6f5f2f9873b3a2"
     },
     "controllerCandidate": "0x755509eA6e3F5Ec1aA2E797bb68f1B87DD8b886b",
     "controllerCandidateRuntimeCodeHash": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c",
@@ -156,8 +162,8 @@
     "profileClass": "SOURCE_NEUTRAL_COMPAT_INFRASTRUCTURE",
     "executionSemantics": "ADOPTION_ONLY_NO_EXECUTION",
     "profileKey": "0x7e84ec6d9fd7bbb64e78bfef347234eb667eae84cae181f56d56cc825470aff3",
-    "capabilityHash": "0xc34803fcc1326a99c05995468ec17226e2246148ed371c3c1468002d836fca87",
-    "exactContractBindingHash": "0x24290f9958f654923c482c5658047c14a990130daecbb524fc33568061071a2f",
+    "capabilityHash": "0x4045fce9793987a7d29fd5ace0e96196ac5a9fed983f026cb6d46c521d49aae0",
+    "exactContractBindingHash": "0xdc854c275079604c011bc539cef606d4ad5ea6f71476453f19f2b258ea63828f",
     "requiredIdentityMask": "APPLICATION",
     "forbiddenIdentityMask": "POOL",
     "revenueBinding": "ZERO_REQUIRED_BY_COMPAT_V1",
@@ -189,9 +195,9 @@
         {
           "phase": "FOUNDATIONS",
           "routeNonce": "0x370e484382883f878a35b1841fc9065c1b3a4b21905ee24ca48791ad804c6322",
-          "commitment": "0x9ba7d805cd1675cda327f5dca6625f9f71602de87218dd7f14245de954695f9e",
-          "deploymentCalldataHash": "0xc46ef694ac327dedf6b8f6c4a04a5b81cfa1f42ad27d0087c9d1e7ca1bd10111",
-          "measuredGas": 13790817,
+          "commitment": "0x7da7867e40e7db8e896a45eb9c577344fc932fa4d9e8a4aae663926060e666b9",
+          "deploymentCalldataHash": "0x8a9966e944c36ebe4bf3103ee04d429934917b8864eff2a62c383fba02b3e714",
+          "measuredGas": 13770917,
           "targets": [
             {
               "contract": "ProgrammableShardsHookCodeStoreV1",
@@ -216,8 +222,8 @@
               "targetIdHash": "0xfdc074ef2a08c861522b8d7f65636bffb78c4b059028e5a47151991e27e8e2cb",
               "applicantSalt": "0x1d8fb53e3985727893d0e5baf0efafe509c6b19b5bba181b5c03814bdfc2ace7",
               "effectiveSalt": "0x5f3ca230c9d8b48797e13861244e397d5716172168e6395554e45fbdff7b03a5",
-              "initCodeHash": "0x1d26ce3ac6eee8d1699d570d99d5d099b2c2b60829538c6ec1afb5933ab23248",
-              "address": "0xb55f4173E67BD20191F0A7c6b87918bbC3cDd9Ac",
+              "initCodeHash": "0x32aeb823d963153d1dbe710c88f2f21b3e1940b28657556d0ea74e58d5b1552e",
+              "address": "0x2eA78549C73Cb4208a5eb129d43ebda1203fd768",
               "runtimeCodeHash": "0xe317e1f0ef536c99f12afdd6766e4651ddd20b135b696377355f03dc9389bf4e"
             },
             {
@@ -225,8 +231,8 @@
               "targetIdHash": "0x37492914fbed1e914a629e2b0077e3c8fcf8b064250c3c4414f82fafe54e0157",
               "applicantSalt": "0x937f709afabc1fac3a901e564a07015603c621b7d66c4f64c9c60d52845e841f",
               "effectiveSalt": "0x4824720e90ec281e47dcb2b13931c71065881c5b115adf31589ffca098717fe1",
-              "initCodeHash": "0x45cdca3d680b580995d414781deb50797eca9830eac50d9f4a2e56c4beb599db",
-              "address": "0x77EF72AF28C5D4252899f2fbdd87986291387913",
+              "initCodeHash": "0xd4018ad1eb136f528983d05f01f4abe1566304739e6f8cea34bcbbf138762377",
+              "address": "0x979F9E496AbAB43C1B83286087E30dc3BbaAe9dF",
               "runtimeCodeHash": "0xaf6f91ccd71de2f6523d5c1c7245aaa325242a77ee810c269675aee32969a147"
             }
           ]
@@ -234,9 +240,9 @@
         {
           "phase": "PREFLIGHT_ROOTS",
           "routeNonce": "0xa0dd7885c9f94b4eb76cce0f236742ad58b9e5543bafc41d326ab031dfc5f3f8",
-          "commitment": "0x83f030af31e0844ed7b7e8ff2b326f831ec39fab44df6a19d95af9038b42490b",
-          "deploymentCalldataHash": "0xcaa40e26486adaff05da432c73d1e15850eaf4aa79eab81c3cba3c4013809622",
-          "measuredGas": 8289888,
+          "commitment": "0x4cf9f6829ef2839f73f7a1757ceb9192da37ade127028400aab9d1cd60a8b2ea",
+          "deploymentCalldataHash": "0x92831062e0a74a0418dbc901996881cd10b5c599807b0d1580c109dc42b4fd98",
+          "measuredGas": 8274476,
           "targets": [
             {
               "contract": "ProgrammableUniversalLaunchPreflightV1",
@@ -261,8 +267,8 @@
               "targetIdHash": "0xdfd64287fcca21e325979ee4a374e7f0d085628d73255491a86e381d8a2a1054",
               "applicantSalt": "0xa6b6825daf08717ba86af196c4ee2350f40c5db8115085e93b851bff84bce63e",
               "effectiveSalt": "0xf481f0eb2915c6785bc7b86053bc7e0b187e1721bd41cb0889aaf0db2bec6c96",
-              "initCodeHash": "0x1ea3b195ce07d4c892b1d5fee8ddd89c254290d9f850d388768a4d831ed52725",
-              "address": "0xed6F19A9D41AfcBd7B01a6300A80D86C4A713163",
+              "initCodeHash": "0xc4d8fe37cb4bb224da29c11e84169bc5f447eb9dc6dad2cef3bf7c6440223a11",
+              "address": "0xd8A3b8634cfBddaaB7766Eb54002D82423dF3be1",
               "runtimeCodeHash": "0x56963d4939cd2c0b7818a473e4ddfdb33da1cc28f31bd51495fe486168e8c159"
             },
             {
@@ -270,8 +276,8 @@
               "targetIdHash": "0x6224f45cca49ae2143ce3b4e74a1e631c3497347b7f6860e1695b0bb3e04cc66",
               "applicantSalt": "0x1ab5b5f01b9bca96ff296e9a70c272ddf0da4f7a5ea4d97319cf9f28182cb733",
               "effectiveSalt": "0xcf4dea9fc318a71125e245f363720e8ec3e6b5fe38ac8655f1db79f8be7928b0",
-              "initCodeHash": "0x294ff846d4cd5b6927891edac5b14366e93810796727c2b39fb8b41e0cd45428",
-              "address": "0x72F3548AA12545907E8B2c9Ec38b81D40811Da4D",
+              "initCodeHash": "0xab1613e44d39959c2ab9e3a0aa4982763748ef706902dc791b284d63403ff94d",
+              "address": "0xa091B2Ae533F6DaAEd13EB05d867d816E57c1a73",
               "runtimeCodeHash": "0xeca0f59457b57ebcafef1b91f43633652625283234758dd9410d2ca2dce0e35a"
             }
           ]
@@ -281,7 +287,7 @@
           "routeNonce": "0xf07c2c0ea72cd0ce128db88c364ffdbe8e69763921aa44f794966643b47671e8",
           "commitment": "0x76c5b9f3c16517e6c6e277be94b719eaa3fd15190f1251527dd30330f0a931ac",
           "deploymentCalldataHash": "0xa7e0b7d0f04059c366f4f88a7e5a9c45efb1d02e91472acf4445a056399a3265",
-          "measuredGas": 9959066,
+          "measuredGas": 9943666,
           "targets": [
             {
               "contract": "ProgrammableCompletedGraphAdoptionValidatorV1",
@@ -315,45 +321,45 @@
         {
           "phase": "UNIVERSAL_KERNEL",
           "routeNonce": "0x724e5a978441b2624aaf5a792bfbcef150eac799dbb7f158cacaeade9196f725",
-          "commitment": "0x4ce89d511ec2f6766826c5b8b48b264cd20c6bb9816cbdd1875b367a73653dcf",
-          "deploymentCalldataHash": "0xb5aefbcb3294c0e064c3ddd6422ac4527d17a26145d046ef6d6d7571e9a487d9",
-          "measuredGas": 5547126,
+          "commitment": "0x91bf62106b8881a4aaa3d8da1cfe43a51024eccb23a11f5c7dab8e7d82326916",
+          "deploymentCalldataHash": "0xb78101caf6a087ed38aa0b9ac8b86c47fb50d4964bd2e4ea47410a5a5216d723",
+          "measuredGas": 5541726,
           "targets": [
             {
               "contract": "ProgrammableUniversalLaunchKernelV1",
               "targetIdHash": "0x1fff22a301dda9ce7da76e85394817bec60d35443de67d23f9f412156f97ec5e",
               "applicantSalt": "0x16404b5755094215bc626851d76ef81e2b094c883efc954196a453f70163072e",
               "effectiveSalt": "0xc0ac8fcfbb8459462283820fe82214ecec9b60df726bf99f5132a45b58dc0573",
-              "initCodeHash": "0xbd72b9e62d23824de29364c0a51259ec1e96ae90a120bdf3bea7988aa44cc971",
-              "address": "0xD9aFf00E564705de782c8035AF6896E99A55FaA2",
-              "runtimeCodeHash": "0xcd0a62677e01620c2beddca2a632bfbf024a708a6e7a5e68879a02bb8d331749"
+              "initCodeHash": "0x9c8a48172cca790a218d4e1e2cf266c1c9608afbf55ac0998ee67198aade9b18",
+              "address": "0x25E9DDEB5de79751dB2156D426893d52C8F14DCF",
+              "runtimeCodeHash": "0x316dcd57dcefd06149e3cb2a78a25d2421312c7431df2bdf3c62ca501341f1cf"
             }
           ]
         },
         {
           "phase": "SHARDS_ADAPTERS",
           "routeNonce": "0x05dca18410ba0f097637d974d29c2abc66e7e93d1404e82a92f03995942df5e3",
-          "commitment": "0xf512197e617bf0f339569a8dd412a9d6bdeb41b12f053f022ad2898ec937acf6",
-          "deploymentCalldataHash": "0x7a7b10df22e725855ab090f20895d84573dca65489f8ccf8b1125f3d0fde4500",
-          "measuredGas": 8251171,
+          "commitment": "0x444892eed40ad1c37300b9da0c453ccd2a2edfc81ed8c7b024c4f9abb437862d",
+          "deploymentCalldataHash": "0xd07618729ff04e793019fc0b95e0b74d853bcff666839ed6c5ff6650bd5a6a8c",
+          "measuredGas": 8245759,
           "targets": [
             {
               "contract": "ProgrammableExactShardsNestedFactoryProviderV1",
               "targetIdHash": "0x955041799161c801497fdb5b0281bc510ad2cce2712ada6c0e61c2e244283e44",
               "applicantSalt": "0x86ce819510f9a5ab7dfbba53889aec1005a6e7472a329155d77f9715cb0a8c02",
               "effectiveSalt": "0x40060171bd431c1725f0f372ea96dd59206027ef77a316ada656d98747308329",
-              "initCodeHash": "0xeb0a38ae74e766ec8f39bd2660c1b4ed5fa877119de6700a1a3929a0415a7bea",
-              "address": "0xC2dFDb06F0b24e3b2D270D21718485bc1F10d9d0",
-              "runtimeCodeHash": "0x806f58b55bfe323f9987b7f44a97af43680387dcba41cedd16672ad85e32ef99"
+              "initCodeHash": "0xf5f35d7c72da2a7960fca0bb1cb37c46495d013f56e87ecbbd3ca8e4b0982f36",
+              "address": "0x03385476770CAe102ef673adF9A4631E84258e58",
+              "runtimeCodeHash": "0xb082161b95cd66ce67157900c7c750f1538dd626f3ebc5409930da57032310e2"
             },
             {
               "contract": "ProgrammableExactShardsNestedFactoryVerifierV1",
               "targetIdHash": "0xa698649da813876c67a6d2e72a7b499d19525194bb2064ec76df889e48b087ac",
               "applicantSalt": "0xe69ae3b707af33379435d768491a8613ca636178cab7a38ffe3b26e63565fb23",
               "effectiveSalt": "0x85159c11faab00d8ca4949500b1a8ef3b6513f2e3278aeacc6735b679bcdbb1c",
-              "initCodeHash": "0xc447774b7a017e06ac9322928cad4fb8ca1532b757eb1f4b12c6d6d4c75586fe",
-              "address": "0x747Ed8e8cb97054b3C50adEAd253F6d5ABC439b4",
-              "runtimeCodeHash": "0x22bde33b6a49f4cdde377013f3335d148c7fb6083e207327f0502c348667e6d9"
+              "initCodeHash": "0x5ebaaa6681388bdd590840b5fdb3dcafacba3ebec06c017afa6d59dd985ce471",
+              "address": "0xA4867B0d72bCE8C1db040E91454D562239daF923",
+              "runtimeCodeHash": "0xf2bd06d1ef883820e7c6d6c93dd3e81053448c24e9547cb7fd14a9265b46e5f5"
             }
           ]
         }
@@ -361,19 +367,19 @@
       "directCreate2": {
         "completedGraphAdoptionCompatRegistry": {
           "salt": "0x83be1dd0a96c299978929d8e89c43e26d6c7702fdd0e50ede8bf7bc4624c1a86",
-          "initCodeHash": "0xee13a08e09e9eb8bdf4efdc1b3bfa83a29740ba47839d255c870552e0aad296e",
-          "deploymentCalldataHash": "0x2d5c60eddfe228bd8f1edee2760c23c61b99faf4de28df24c8758db2001a6eb5",
-          "address": "0xE1aefc665833938f903247797903c8e8c8d5da2e",
-          "runtimeCodeHash": "0x96557f03fe5e12442e97487a1a740a6d93d8ed06c5f01b5728a21037eafff190",
-          "measuredGas": 16626817
+          "initCodeHash": "0x68ac41610e2981d0412fc26371aaba58f0a6db2abf655cf1247ee86914caca73",
+          "deploymentCalldataHash": "0x6885496ed9ded4592f401c37988b6b6e359c435f5a8a11634cd80fc6c1b25862",
+          "address": "0x636989978c214d7786d21604d7C225cEbf2240C8",
+          "runtimeCodeHash": "0x8151161ceb2462daad45e747ac8f828be419ea2abd9f763b3353f9a9628abb48",
+          "measuredGas": 16423892
         },
         "nestedFactoryProfile": {
           "salt": "0x6de115629765e5dbc257929d2ce9066519549d02b74bf32b005654526638ffe1",
-          "initCodeHash": "0x858bca7d5a656aafc3098abf8efbed84f488f760d489579e4ee09c9dcf0a64ea",
-          "deploymentCalldataHash": "0x3c55200f7b75ca1083103cdd76e295ad8072b793a6c26c1c2fd3017ac44788c5",
-          "address": "0x3Af16145F9acA5C0534D7042bB6aA2548386F828",
-          "runtimeCodeHash": "0xf46b63ae661427c995648347343bc674ad5795f0ed7c98972db913acbf76cb86",
-          "measuredGas": 16233382
+          "initCodeHash": "0x129f917c7a8b80e46e83608a9b5ef5d0d147ac47881ccef0a158706b487f789a",
+          "deploymentCalldataHash": "0x546fac7a6aca173bfad70275d5dbd394ba4fe720f0348f3083251ad21b66017d",
+          "address": "0x6d2D661Ab0e462E8047597Adc5bece4BCA157C4C",
+          "runtimeCodeHash": "0xc0aa4b63df8ba2c21766c89bfe9c88e6379f6fa23659d7895bba18a6aa80340c",
+          "measuredGas": 16243370
         },
         "shardsFactory": {
           "salt": "0x655a4b5a2b704bef84b4ff94adde0a7ac40ad0366c82ddca5290180fe4c3986d",
@@ -399,39 +405,39 @@
       "safeCalls": [
         {
           "phase": "BIND_REVIEWER",
-          "target": "0xb55f4173E67BD20191F0A7c6b87918bbC3cDd9Ac",
-          "calldataHash": "0xf9719c98f2d975eb026b88753b9ea9d5f10813a649649c76461328bb3da16781",
-          "measuredGas": 197994
+          "target": "0x2eA78549C73Cb4208a5eb129d43ebda1203fd768",
+          "calldataHash": "0xa66c3a33a5c249cc9037d5135e7a3ca0e3e9eedc9460cf62a82190ff9cb8fa79",
+          "measuredGas": 220028
         },
         {
           "phase": "BIND_GOVERNANCE",
-          "target": "0x77EF72AF28C5D4252899f2fbdd87986291387913",
-          "calldataHash": "0x3be974920eac0fd048dafd8133946423ee33d4797ba2ebedc4f63d002c63a8b0",
-          "measuredGas": 146708
+          "target": "0x979F9E496AbAB43C1B83286087E30dc3BbaAe9dF",
+          "calldataHash": "0x4026b2ef4210d4b5e789e4ac714eb9d0925573ee93800b5da8bc8bf26695d1fb",
+          "measuredGas": 169508
         },
         {
           "phase": "BIND_FINALITY",
-          "target": "0xed6F19A9D41AfcBd7B01a6300A80D86C4A713163",
-          "calldataHash": "0xfa8caa890968f138aa81259a341126612ee59b67c6ea34aacc093fb162f2fec3",
-          "measuredGas": 146641
+          "target": "0xd8A3b8634cfBddaaB7766Eb54002D82423dF3be1",
+          "calldataHash": "0x1c1d3d6c270e3e097c418ad79044620e9a7c205e9c75c0b1ba3745c79da88f36",
+          "measuredGas": 169441
         },
         {
           "phase": "BIND_INDEXER",
-          "target": "0x72F3548AA12545907E8B2c9Ec38b81D40811Da4D",
-          "calldataHash": "0x0422105a824b1abfb2340fa51c1f9400c6443adcfe9a02075d798139bdcd26c7",
-          "measuredGas": 146641
+          "target": "0xa091B2Ae533F6DaAEd13EB05d867d816E57c1a73",
+          "calldataHash": "0x69d8fd4257effda7c134d5e8b6f2a3bc695f0c54f9ca46226b3eb576f9f6cbae",
+          "measuredGas": 169441
         },
         {
           "phase": "ACTIVATE_UNIVERSAL",
-          "target": "0x77EF72AF28C5D4252899f2fbdd87986291387913",
-          "calldataHash": "0x7ef4be420b07700ca14f59501d9400156df7bb3b45fc970516e1ca637d830c4e",
-          "measuredGas": 5440618
+          "target": "0x979F9E496AbAB43C1B83286087E30dc3BbaAe9dF",
+          "calldataHash": "0x92a03ae7d5a05d390865f35ef02d16000d51803ac6729bb7a54d28a5fed74435",
+          "measuredGas": 5512018
         },
         {
           "phase": "ACTIVATE_COMPLETED_GRAPH_ADOPTION_COMPAT",
-          "target": "0x77EF72AF28C5D4252899f2fbdd87986291387913",
-          "calldataHash": "0x01bdfca2cc0d64a0c6b03381f446df0e43a1471fdd1bfd309c985731129ca274",
-          "measuredGas": 1262866
+          "target": "0x979F9E496AbAB43C1B83286087E30dc3BbaAe9dF",
+          "calldataHash": "0x25725430b8c464cf36f1a14ff468fffe0ac69b39462dee341a3e776ff04c2fd1",
+          "measuredGas": 1354510
         }
       ],
       "orderedOuterTransactions": [
@@ -456,20 +462,20 @@
       "ProgrammableCreate2GraphDeployerV1": "0xaE682102d893a113EA3891B12953DEc9f66e3082",
       "ProgrammableShardsHookCodeStoreV1": "0x08454733f76112d3a1cE135629cCc19615e868b4",
       "ProgrammableExactShardsProfileV1": "0xfeE9dC855228Aa3BB61D3f9E598A516643f9c6D6",
-      "ProgrammableRouterReviewerAuthorityV4": "0xb55f4173E67BD20191F0A7c6b87918bbC3cDd9Ac",
-      "ProgrammableRouterGovernanceAuthorityV4": "0x77EF72AF28C5D4252899f2fbdd87986291387913",
+      "ProgrammableRouterReviewerAuthorityV4": "0x2eA78549C73Cb4208a5eb129d43ebda1203fd768",
+      "ProgrammableRouterGovernanceAuthorityV4": "0x979F9E496AbAB43C1B83286087E30dc3BbaAe9dF",
       "ProgrammableUniversalLaunchPreflightV1": "0x0bed68Fc3418Eb21FD2C1032C77f87c6aBA566B1",
       "ProgrammableCompletedGraphAdoptionCompatCodecV1": "0x157A2B242197Ba62BEcB92892cA7A1F975457747",
-      "ProgrammableRouterFinalityAuthorityV4": "0xed6F19A9D41AfcBd7B01a6300A80D86C4A713163",
-      "ProgrammableRouterIndexerAuthorityV4": "0x72F3548AA12545907E8B2c9Ec38b81D40811Da4D",
+      "ProgrammableRouterFinalityAuthorityV4": "0xd8A3b8634cfBddaaB7766Eb54002D82423dF3be1",
+      "ProgrammableRouterIndexerAuthorityV4": "0xa091B2Ae533F6DaAEd13EB05d867d816E57c1a73",
       "ProgrammableCompletedGraphAdoptionValidatorV1": "0x077eA1A1da40925f06f8aD1D62C0551E9021B3FF",
       "ProgrammableCompletedGraphAdoptionPreflightV1": "0x84ad8fFE50fc3D7270C76b898411b90d6c88A4C5",
       "ProgrammableCompletedGraphRuntimeStateVerifierV1": "0x4FE9c5f08ec659bef00385C7aea5C3750edb97AD",
-      "ProgrammableUniversalLaunchKernelV1": "0xD9aFf00E564705de782c8035AF6896E99A55FaA2",
-      "ProgrammableExactShardsNestedFactoryProviderV1": "0xC2dFDb06F0b24e3b2D270D21718485bc1F10d9d0",
-      "ProgrammableExactShardsNestedFactoryVerifierV1": "0x747Ed8e8cb97054b3C50adEAd253F6d5ABC439b4",
-      "ProgrammableCompletedGraphAdoptionGrantRegistryV1": "0xE1aefc665833938f903247797903c8e8c8d5da2e",
-      "ProgrammableNestedFactoryProfileV1": "0x3Af16145F9acA5C0534D7042bB6aA2548386F828",
+      "ProgrammableUniversalLaunchKernelV1": "0x25E9DDEB5de79751dB2156D426893d52C8F14DCF",
+      "ProgrammableExactShardsNestedFactoryProviderV1": "0x03385476770CAe102ef673adF9A4631E84258e58",
+      "ProgrammableExactShardsNestedFactoryVerifierV1": "0xA4867B0d72bCE8C1db040E91454D562239daF923",
+      "ProgrammableCompletedGraphAdoptionGrantRegistryV1": "0x636989978c214d7786d21604d7C225cEbf2240C8",
+      "ProgrammableNestedFactoryProfileV1": "0x6d2D661Ab0e462E8047597Adc5bece4BCA157C4C",
       "ShardLaunchFactoryV1": "0x9442a520e7b31D10177C75A363355C2C29141ac5",
       "GeometricRendererV1": "0x090DBD2FaB1a467f90ed82a443eFa9AAb658DE14"
     },
@@ -477,20 +483,20 @@
       "ProgrammableCreate2GraphDeployerV1": "0x84f7cb8e9e445d3322249dbc2b9efc65bb9c7a8ba26902aafef9b0552f4bc208",
       "ProgrammableShardsHookCodeStoreV1": "0xb711304edf75668cf38421eee2bfbc1cc8ca750f437bb7c0263ec268a652b195",
       "ProgrammableExactShardsProfileV1": "0xb4638678498ff8b2da30c1e694245e19802b54efd4f27cb6114595c3ac29b2b8",
-      "ProgrammableRouterReviewerAuthorityV4": "0x1d26ce3ac6eee8d1699d570d99d5d099b2c2b60829538c6ec1afb5933ab23248",
-      "ProgrammableRouterGovernanceAuthorityV4": "0x45cdca3d680b580995d414781deb50797eca9830eac50d9f4a2e56c4beb599db",
+      "ProgrammableRouterReviewerAuthorityV4": "0x32aeb823d963153d1dbe710c88f2f21b3e1940b28657556d0ea74e58d5b1552e",
+      "ProgrammableRouterGovernanceAuthorityV4": "0xd4018ad1eb136f528983d05f01f4abe1566304739e6f8cea34bcbbf138762377",
       "ProgrammableUniversalLaunchPreflightV1": "0xc6eba5b0c088356a777816d79b0e922eb6ff6b3b62b80a5525b959199d35444f",
       "ProgrammableCompletedGraphAdoptionCompatCodecV1": "0x9004c7d193eed73561ab76a1f3723f2201f4137f578c0721a5c933ec17b58627",
-      "ProgrammableRouterFinalityAuthorityV4": "0x1ea3b195ce07d4c892b1d5fee8ddd89c254290d9f850d388768a4d831ed52725",
-      "ProgrammableRouterIndexerAuthorityV4": "0x294ff846d4cd5b6927891edac5b14366e93810796727c2b39fb8b41e0cd45428",
+      "ProgrammableRouterFinalityAuthorityV4": "0xc4d8fe37cb4bb224da29c11e84169bc5f447eb9dc6dad2cef3bf7c6440223a11",
+      "ProgrammableRouterIndexerAuthorityV4": "0xab1613e44d39959c2ab9e3a0aa4982763748ef706902dc791b284d63403ff94d",
       "ProgrammableCompletedGraphAdoptionValidatorV1": "0x09b6e3667d065e76b83036977793514852d932a97abbf92b89f11a0ddf41562f",
       "ProgrammableCompletedGraphAdoptionPreflightV1": "0x4082cefee76895b1cdcd6e27bcc088d1973a0f6d3bccccb5cbc97d183ee5f0a2",
       "ProgrammableCompletedGraphRuntimeStateVerifierV1": "0xa5e51ab7f4d708d977890297cc010b1b7f9b1c394e3b4de3967d112c2ddfdf49",
-      "ProgrammableUniversalLaunchKernelV1": "0xbd72b9e62d23824de29364c0a51259ec1e96ae90a120bdf3bea7988aa44cc971",
-      "ProgrammableExactShardsNestedFactoryProviderV1": "0xeb0a38ae74e766ec8f39bd2660c1b4ed5fa877119de6700a1a3929a0415a7bea",
-      "ProgrammableExactShardsNestedFactoryVerifierV1": "0xc447774b7a017e06ac9322928cad4fb8ca1532b757eb1f4b12c6d6d4c75586fe",
-      "ProgrammableCompletedGraphAdoptionGrantRegistryV1": "0xee13a08e09e9eb8bdf4efdc1b3bfa83a29740ba47839d255c870552e0aad296e",
-      "ProgrammableNestedFactoryProfileV1": "0x858bca7d5a656aafc3098abf8efbed84f488f760d489579e4ee09c9dcf0a64ea",
+      "ProgrammableUniversalLaunchKernelV1": "0x9c8a48172cca790a218d4e1e2cf266c1c9608afbf55ac0998ee67198aade9b18",
+      "ProgrammableExactShardsNestedFactoryProviderV1": "0xf5f35d7c72da2a7960fca0bb1cb37c46495d013f56e87ecbbd3ca8e4b0982f36",
+      "ProgrammableExactShardsNestedFactoryVerifierV1": "0x5ebaaa6681388bdd590840b5fdb3dcafacba3ebec06c017afa6d59dd985ce471",
+      "ProgrammableCompletedGraphAdoptionGrantRegistryV1": "0x68ac41610e2981d0412fc26371aaba58f0a6db2abf655cf1247ee86914caca73",
+      "ProgrammableNestedFactoryProfileV1": "0x129f917c7a8b80e46e83608a9b5ef5d0d147ac47881ccef0a158706b487f789a",
       "ShardLaunchFactoryV1": "0x7d05592489495559b1288f8ad342239b3fb95a6aa005b5b0b1551c9523401585"
     },
     "specializedRuntimeCodeHashes": {
@@ -506,21 +512,21 @@
       "ProgrammableCompletedGraphAdoptionValidatorV1": "0xd45565d6a3e8e3c46404a57e566a6ab7fdf1b3ba6f498a19223f7836c8dcacf1",
       "ProgrammableCompletedGraphAdoptionPreflightV1": "0xf94f6e1be90fd04e482e00f2e0d58bd0a8304be0a0ba65ac96898bdaaecdad8c",
       "ProgrammableCompletedGraphRuntimeStateVerifierV1": "0x59ee58b19e1b2e023cc3684d69ebfbf8b3ac9d1972276762769457459ad5b2b8",
-      "ProgrammableUniversalLaunchKernelV1": "0xcd0a62677e01620c2beddca2a632bfbf024a708a6e7a5e68879a02bb8d331749",
-      "ProgrammableExactShardsNestedFactoryProviderV1": "0x806f58b55bfe323f9987b7f44a97af43680387dcba41cedd16672ad85e32ef99",
-      "ProgrammableExactShardsNestedFactoryVerifierV1": "0x22bde33b6a49f4cdde377013f3335d148c7fb6083e207327f0502c348667e6d9",
-      "ProgrammableCompletedGraphAdoptionGrantRegistryV1": "0x96557f03fe5e12442e97487a1a740a6d93d8ed06c5f01b5728a21037eafff190",
-      "ProgrammableNestedFactoryProfileV1": "0xf46b63ae661427c995648347343bc674ad5795f0ed7c98972db913acbf76cb86",
+      "ProgrammableUniversalLaunchKernelV1": "0x316dcd57dcefd06149e3cb2a78a25d2421312c7431df2bdf3c62ca501341f1cf",
+      "ProgrammableExactShardsNestedFactoryProviderV1": "0xb082161b95cd66ce67157900c7c750f1538dd626f3ebc5409930da57032310e2",
+      "ProgrammableExactShardsNestedFactoryVerifierV1": "0xf2bd06d1ef883820e7c6d6c93dd3e81053448c24e9547cb7fd14a9265b46e5f5",
+      "ProgrammableCompletedGraphAdoptionGrantRegistryV1": "0x8151161ceb2462daad45e747ac8f828be419ea2abd9f763b3353f9a9628abb48",
+      "ProgrammableNestedFactoryProfileV1": "0xc0aa4b63df8ba2c21766c89bfe9c88e6379f6fa23659d7895bba18a6aa80340c",
       "ShardLaunchFactoryV1": "0x134a9e5674f22e62e939c2238693077b8027c553bb26d6a4e9e3d8554e5f85b5",
       "GeometricRendererV1": "0x9b54a61918b2ddf9b7daf41d9bf2d705cbef3a0fd618275762b99e19c53459bf"
     },
     "profileBindings": {
       "universalProfileKey": "0xb90e215e0e29c0dacf021e5e778847af4100433ee7d22014b73f8ca4add09d0c",
-      "universalProviderBinding": "0x62866cd0f4660f9fee3df58b89c23313fffa09504f3dccffc1b0ac27c6214b23",
-      "universalVerifierBinding": "0x5b96ec46bc66ded240b76f84bd81810af36113f28974b5ab180b2c57e3aa2909",
+      "universalProviderBinding": "0x3047b31563fe37b8f0bad52f455460e38749d9216154624b6742aa6f8e4e7e8b",
+      "universalVerifierBinding": "0x6dc07cbf7758838f74bd744f1b30d0cd9a1d59fb0ae54ba18adf469e6599ff64",
       "completedGraphAdoptionCompatProfileKey": "0x7e84ec6d9fd7bbb64e78bfef347234eb667eae84cae181f56d56cc825470aff3",
-      "completedGraphAdoptionCompatCapabilityHash": "0xc34803fcc1326a99c05995468ec17226e2246148ed371c3c1468002d836fca87",
-      "completedGraphAdoptionCompatExactContractBinding": "0x24290f9958f654923c482c5658047c14a990130daecbb524fc33568061071a2f"
+      "completedGraphAdoptionCompatCapabilityHash": "0x4045fce9793987a7d29fd5ace0e96196ac5a9fed983f026cb6d46c521d49aae0",
+      "completedGraphAdoptionCompatExactContractBinding": "0xdc854c275079604c011bc539cef606d4ad5ea6f71476453f19f2b258ea63828f"
     },
     "activationControls": {
       "universal": {
@@ -545,6 +551,29 @@
     "simulations": {
       "exactShardsPinnedFork": "PASS",
       "fullSplitDeployment": "PASS_AT_BLOCK_25731328",
+      "separateSerialOuterTransactions": "PASS_AT_BLOCK_25731328_OSAKA_EIP7825",
+      "separateSerialOuterTransactionForkBlockHash": "0x4357f0c2e03213fd4814067957a6601b284baf9937cf03111fe5bcd9bb1d7b09",
+      "separateSerialOuterTransactionRuntime": "ANVIL_1.7.1_OSAKA_ENABLE_TX_GAS_LIMIT",
+      "separateSerialOuterTransactionCount": 15,
+      "separateSerialOuterTransactionGasUsed": [
+        1668509,
+        13770917,
+        8274476,
+        9943666,
+        5541726,
+        16423892,
+        220028,
+        169508,
+        169441,
+        169441,
+        8245759,
+        16243370,
+        8170490,
+        5512018,
+        1354510
+      ],
+      "separateSerialOuterTransactionGasTotal": 95877751,
+      "minimumTransactionGasMargin": 353324,
       "fullUniversalExecution": "PASS_WITH_SIGNATURE_AND_CURRENTNESS_STUBS",
       "fullCompletedGraphAdoptionCompatRoute": "PASS_WITH_SYNTHETIC_GRAPH_AND_SIGNATURE_CURRENTNESS_STUBS",
       "replayStaleKillAndCollisionNegatives": "PASS",
