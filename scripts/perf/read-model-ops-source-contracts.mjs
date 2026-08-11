@@ -1138,7 +1138,7 @@ export function evaluateReadModelOperationsSourceContracts(
         "STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
       ) &&
       stagedAlchemySmokeBlock.includes(
-        '!["blob", "blob+postgres"].includes(readSource ?? "")',
+        'const operationalReadSources = Object.freeze([\n            "operational+durable+postgres",\n          ]);',
       ) &&
       stagedAlchemySmokeBlock.includes(
         'const operationalRpcProviders = Object.freeze([\n            "operational-dual",\n            "operational-primary",\n          ]);',
@@ -1147,7 +1147,13 @@ export function evaluateReadModelOperationsSourceContracts(
         'const alchemyRpcProviders = Object.freeze(["alchemy"]);',
       ) &&
       stagedAlchemySmokeBlock.includes(
-        "const requestJson = async (path, expectedRpcProviders)",
+        'const alchemyReadSources = Object.freeze(["blob"]);',
+      ) &&
+      stagedAlchemySmokeBlock.includes(
+        "expectedReadSources,\n            expectedRpcProviders,",
+      ) &&
+      stagedAlchemySmokeBlock.includes(
+        '!expectedReadSources.includes(readSource ?? "")',
       ) &&
       stagedAlchemySmokeBlock.includes(
         '!expectedRpcProviders.includes(rpcProvider ?? "")',
@@ -1156,7 +1162,10 @@ export function evaluateReadModelOperationsSourceContracts(
         'response.headers.get("x-programmable-rpc-provider") !== "alchemy"',
       ) &&
       stagedAlchemySmokeBlock.includes(
-        '"/api/indexers/v1/token-list",\n            alchemyRpcProviders,',
+        '"/api/indexers/v1/token-list",\n            alchemyReadSources,\n            alchemyRpcProviders,',
+      ) &&
+      stagedAlchemySmokeBlock.includes(
+        '"/api/explore?limit=20&page=1&sort=market-cap",\n            operationalReadSources,\n            operationalRpcProviders,',
       ) &&
       stagedAlchemySmokeBlock.includes(
         '"/api/explore?limit=20&page=1&sort=market-cap"',

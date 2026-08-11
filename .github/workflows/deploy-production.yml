@@ -504,9 +504,17 @@ jobs:
             "operational-dual",
             "operational-primary",
           ]);
+          const operationalReadSources = Object.freeze([
+            "operational+durable+postgres",
+          ]);
           const alchemyRpcProviders = Object.freeze(["alchemy"]);
+          const alchemyReadSources = Object.freeze(["blob"]);
 
-          const requestJson = async (path, expectedRpcProviders) => {
+          const requestJson = async (
+            path,
+            expectedReadSources,
+            expectedRpcProviders,
+          ) => {
             let lastError;
             for (let attempt = 1; attempt <= 12; attempt += 1) {
               try {
@@ -529,10 +537,12 @@ jobs:
                   "x-programmable-rpc-provider",
                 );
                 if (
-                  !["blob", "blob+postgres"].includes(readSource ?? "") ||
+                  !expectedReadSources.includes(readSource ?? "") ||
                   !expectedRpcProviders.includes(rpcProvider ?? "")
                 ) {
-                  throw new Error(`${path} did not prove its required RPC source`);
+                  throw new Error(
+                    `${path} did not prove its required read and RPC sources`,
+                  );
                 }
                 return JSON.parse(text);
               } catch (error) {
@@ -547,6 +557,7 @@ jobs:
 
           const explore = await requestJson(
             "/api/explore?limit=20&page=1&sort=market-cap",
+            operationalReadSources,
             operationalRpcProviders,
           );
           if (
@@ -567,6 +578,7 @@ jobs:
           const newestPageSize = 100;
           const newest = await requestJson(
             `/api/explore?limit=${newestPageSize}&page=1&sort=newest`,
+            operationalReadSources,
             operationalRpcProviders,
           );
           const newestTotal = Number(newest.total);
@@ -592,8 +604,9 @@ jobs:
           for (let pageNumber = 1; pageNumber <= newestTotalPages; pageNumber += 1) {
             const page = pageNumber === 1
               ? newest
-               : await requestJson(
+              : await requestJson(
                    `/api/explore?limit=${newestPageSize}&page=${pageNumber}&sort=newest`,
+                   operationalReadSources,
                    operationalRpcProviders,
                  );
             if (
@@ -698,6 +711,7 @@ jobs:
           }
           const oldest = await requestJson(
             `/api/explore?limit=${newestPageSize}&page=1&sort=oldest`,
+            operationalReadSources,
             operationalRpcProviders,
           );
           const expectedOldestIds = newestTokens
@@ -718,6 +732,7 @@ jobs:
             "0x468505087c2dfec4779f2d6a5f8481f03e32e905";
           const incrementalDetail = await requestJson(
             `/api/explore/token?address=${encodeURIComponent(incrementalLaunchAddress)}`,
+            operationalReadSources,
             operationalRpcProviders,
           );
           const incrementalLaunch = incrementalDetail.token;
@@ -747,6 +762,7 @@ jobs:
           }
           const tokenList = await requestJson(
             "/api/indexers/v1/token-list",
+            alchemyReadSources,
             alchemyRpcProviders,
           );
           if (
@@ -761,6 +777,7 @@ jobs:
           }
           const tokenDetail = await requestJson(
             `/api/explore/token?address=${encodeURIComponent(releaseToken.tokenAddress)}`,
+            operationalReadSources,
             operationalRpcProviders,
           );
           if (

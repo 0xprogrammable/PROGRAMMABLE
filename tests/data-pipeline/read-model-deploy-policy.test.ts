@@ -591,7 +591,10 @@ describe("read-model production deploy policy", () => {
     );
     expect(workflow).toContain("headers: alchemySmokeRequestHeaders");
     expect(workflow).toContain(
-      '!["blob", "blob+postgres"].includes(readSource ?? "")',
+      'const operationalReadSources = Object.freeze([',
+    );
+    expect(workflow).toContain(
+      '"operational+durable+postgres",',
     );
     expect(workflow).toContain(
       'const operationalRpcProviders = Object.freeze([',
@@ -603,7 +606,13 @@ describe("read-model production deploy policy", () => {
       'const alchemyRpcProviders = Object.freeze(["alchemy"]);',
     );
     expect(workflow).toContain(
-      'const requestJson = async (path, expectedRpcProviders)',
+      'const alchemyReadSources = Object.freeze(["blob"]);',
+    );
+    expect(workflow).toContain(
+      'expectedReadSources,\n            expectedRpcProviders,',
+    );
+    expect(workflow).toContain(
+      '!expectedReadSources.includes(readSource ?? "")',
     );
     expect(workflow).toContain(
       '!expectedRpcProviders.includes(rpcProvider ?? "")',
@@ -612,7 +621,10 @@ describe("read-model production deploy policy", () => {
       'response.headers.get("x-programmable-rpc-provider") !== "alchemy"',
     );
     expect(workflow).toContain(
-      '"/api/indexers/v1/token-list",\n            alchemyRpcProviders,',
+      '"/api/indexers/v1/token-list",\n            alchemyReadSources,\n            alchemyRpcProviders,',
+    );
+    expect(workflow).toContain(
+      '"/api/explore?limit=20&page=1&sort=market-cap",\n            operationalReadSources,\n            operationalRpcProviders,',
     );
     expect(workflow).toContain("entry.launchCategoryProvenance.blockNumber");
     expect(workflow).toContain(
