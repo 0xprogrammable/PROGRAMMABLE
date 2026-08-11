@@ -31,6 +31,9 @@ jobs:
       - name: Bootstrap pinned dependencies
         run: ./scripts/bootstrap-deps.sh
 
+      - name: Verify Router vNext universal artifact
+        run: bash scripts/verify-router-vnext-universal-v1.sh
+
       - name: Install Slither
         run: |
           python3 -m venv .venv
@@ -49,6 +52,8 @@ jobs:
         run: node scripts/check-coverage.mjs /dev/null scripts/coverage-via-ir-exceptions.json --inputs-only
 
       - name: Measure source coverage
+        env:
+          FOUNDRY_OPTIMIZER_RUNS: 100
         run: >-
           forge coverage
           --ir-minimum
