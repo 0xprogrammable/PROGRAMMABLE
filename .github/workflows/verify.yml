@@ -337,3 +337,37 @@ jobs:
             echo "- Artifact SHA-256: \`$ARTIFACT_DIGEST\`"
             echo "- Sigstore attestation: $ATTESTATION_URL"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  aggregate:
+    # Keep one stable, always-run PR context while the lane jobs remain
+    # independently addressable and path-routed. The production proof above
+    # remains separate and still binds the exact full push verification.
+    name: Verify aggregate
+    needs:
+      - scope
+      - secret-scan
+      - indexer
+      - database-pglite
+      - interface
+      - contracts
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Require every protected verification lane to complete
+        env:
+          SCOPE_RESULT: ${{ needs.scope.result }}
+          SECRET_SCAN_RESULT: ${{ needs.secret-scan.result }}
+          INDEXER_RESULT: ${{ needs.indexer.result }}
+          DATABASE_RESULT: ${{ needs.database-pglite.result }}
+          INTERFACE_RESULT: ${{ needs.interface.result }}
+          CONTRACTS_RESULT: ${{ needs.contracts.result }}
+        run: |
+          set -euo pipefail
+          for result in "$SCOPE_RESULT" "$SECRET_SCAN_RESULT" "$INDEXER_RESULT" "$DATABASE_RESULT" "$INTERFACE_RESULT" "$CONTRACTS_RESULT"; do
+            test "$result" = success || {
+              echo "Verification lane did not succeed: $result" >&2
+              exit 1
+            }
+          done

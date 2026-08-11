@@ -172,7 +172,7 @@ test("keeps protected jobs fail closed and production pushes complete", () => {
     workflow,
     /name: Verify affected interface\n        if: needs\.scope\.outputs\.interface == 'true'/u,
   );
-  assert.equal(workflow.match(/^    if: always\(\)$/gmu)?.length, 4);
+  assert.equal(workflow.match(/^    if: always\(\)$/gmu)?.length, 5);
   assert.equal(
     workflow.match(/name: Require successful change classification/gmu)?.length,
     4,
@@ -188,4 +188,17 @@ test("keeps protected jobs fail closed and production pushes complete", () => {
   ]) {
     assert.match(workflow, new RegExp(`name: ${name.replace(/[()]/gu, "\\$&")}`));
   }
+  assert.match(workflow, /name: Verify aggregate/u);
+  for (const dependency of [
+    "scope",
+    "secret-scan",
+    "indexer",
+    "database-pglite",
+    "interface",
+    "contracts",
+  ]) {
+    assert.match(workflow, new RegExp(`      - ${dependency}\\n`, "u"));
+  }
+  assert.match(workflow, /SCOPE_RESULT: \$\{\{ needs\.scope\.result \}\}/u);
+  assert.match(workflow, /test "\$result" = success/u);
 });
