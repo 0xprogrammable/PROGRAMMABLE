@@ -14,6 +14,17 @@
     "inputs": [
       {
         "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "ClosedRuntimeRequired",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
         "name": "kernel",
         "type": "address"
       },
@@ -80,6 +91,40 @@
       {
         "internalType": "bytes32",
         "name": "readbackHash",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "expectedRuntimeCodeHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "expectedRuntimeBindingHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bool",
+        "name": "requireStateless",
+        "type": "bool"
+      }
+    ],
+    "name": "closedRuntimeBindingHashV1",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "attestationHash",
         "type": "bytes32"
       }
     ],

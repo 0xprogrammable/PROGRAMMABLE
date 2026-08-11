@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import { IProgrammableUniversalLaunchKernelV1 } from "./IProgrammableUniversalLaunchKernelV1.sol";
+import {
+    IProgrammableRuntimeBindingV1,
+    IProgrammableUniversalLaunchKernelV1
+} from "./IProgrammableUniversalLaunchKernelV1.sol";
 import { IProgrammableUniversalLaunchPreflightV1 } from "./IProgrammableUniversalLaunchPreflightV1.sol";
 
 /// @notice Side-effect-free typed readiness/currentness readback for the universal launch kernel.
@@ -32,8 +35,12 @@ contract ProgrammableUniversalLaunchPreflightV1 is IProgrammableUniversalLaunchP
     bytes32 private constant PREFLIGHT_READBACK_TYPEHASH = keccak256(
         "UniversalLaunchPreflightReadbackV1(bytes32 runtimeHeadHash,bytes32 controlHeadHash,bytes32 lifecycleHeadHash,bytes32 reservationSetHash,bytes32 reservationStateHash)"
     );
+    bytes32 private constant CLOSED_RUNTIME_BINDING_TYPEHASH = keccak256(
+        "ClosedRuntimeBindingV1(uint256 chainId,address account,bytes32 runtimeCodeHash,bytes32 runtimeBindingHash,bool stateless)"
+    );
 
     error AtomicPreflightUnavailable(uint16 readinessMask);
+    error ClosedRuntimeRequired(address account);
 
     function readbackV1(
         address kernel,
@@ -55,6 +62,64 @@ contract ProgrammableUniversalLaunchPreflightV1 is IProgrammableUniversalLaunchP
             _readback(kernel, expectedKernelRuntimeCodeHash, grantDigest, reservations, bytes32(0));
         if (readback.readinessMask != REQUIRED_ATOMIC_MASK) revert AtomicPreflightUnavailable(readback.readinessMask);
         return readback.readbackHash;
+    }
+
+    function closedRuntimeBindingHashV1(
+        address account,
+        bytes32 expectedRuntimeCodeHash,
+        bytes32 expectedRuntimeBindingHash,
+        bool requireStateless
+    ) external view returns (bytes32 attestationHash) {
+        if (
+            account == address(0) || expectedRuntimeCodeHash == bytes32(0) || expectedRuntimeBindingHash == bytes32(0)
+                || account.code.length == 0 || account.codehash != expectedRuntimeCodeHash
+        ) revert ClosedRuntimeRequired(account);
+        _rejectMutableDispatch(account, requireStateless);
+
+        bytes memory payload = abi.encodeCall(IProgrammableRuntimeBindingV1.runtimeBindingHashV1, ());
+        bool success;
+        uint256 returnedSize;
+        bytes32 actualRuntimeBindingHash;
+        assembly ("memory-safe") {
+            success := staticcall(100000, account, add(payload, 32), mload(payload), 0, 0)
+            returnedSize := returndatasize()
+            if and(success, eq(returnedSize, 32)) {
+                returndatacopy(0, 0, 32)
+                actualRuntimeBindingHash := mload(0)
+            }
+        }
+        if (!success || returnedSize != 32 || actualRuntimeBindingHash != expectedRuntimeBindingHash) {
+            revert ClosedRuntimeRequired(account);
+        }
+        attestationHash = keccak256(
+            abi.encode(
+                CLOSED_RUNTIME_BINDING_TYPEHASH,
+                block.chainid,
+                account,
+                expectedRuntimeCodeHash,
+                expectedRuntimeBindingHash,
+                requireStateless
+            )
+        );
+    }
+
+    function _rejectMutableDispatch(address account, bool requireStateless) private view {
+        bytes memory runtime = account.code;
+        uint256 length = runtime.length;
+        for (uint256 i; i < length;) {
+            uint8 opcode = uint8(runtime[i]);
+            // Solidity places embedded creation/runtime blobs after an INVALID data delimiter.
+            // They are not executable through the reviewed dispatcher and must not be parsed as opcodes.
+            if (opcode == 0xfe) break;
+            if (
+                opcode == 0xf2 || opcode == 0xf4 || opcode == 0xff
+                    || (requireStateless && (opcode == 0x54 || opcode == 0x55))
+            ) revert ClosedRuntimeRequired(account);
+            unchecked {
+                if (opcode >= 0x60 && opcode <= 0x7f) i += opcode - 0x5f;
+                ++i;
+            }
+        }
     }
 
     function _readback(

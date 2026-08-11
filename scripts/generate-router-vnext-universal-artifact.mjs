@@ -55,7 +55,7 @@ const standardInput = {
   language: "Solidity",
   sources: sourceContents,
   settings: {
-    optimizer: { enabled: true, runs: 1000 },
+    optimizer: { enabled: true, runs: 100 },
     evmVersion: "cancun",
     viaIR: false,
     metadata: { bytecodeHash: "none", appendCBOR: false },
@@ -238,7 +238,7 @@ const artifact = {
   },
   sourceReferents: {
     applicantRequestA: "APPLICANT_ID_AND_REVIEWER_ATTESTATION_LINEAGE",
-    executableMeasuredB: "RAW_BYTES20_SOURCE_COMMIT_AND_TREE_IN_PLAN_AND_GRANT",
+    executableMeasuredB: "RAW_BYTES20_SOURCE_COMMIT_AND_TREE_IN_GRANT_COBOUND_WITH_PLAN_HASH",
     carrierEvidenceC: "BUILDER_EVIDENCE_ONLY_NEVER_SUBSTITUTES_A_OR_B",
   },
   deployment: {

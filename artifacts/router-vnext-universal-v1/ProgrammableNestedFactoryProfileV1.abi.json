@@ -33,6 +33,11 @@
       },
       {
         "internalType": "bytes32",
+        "name": "verifierBindingHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
         "name": "profileKey",
         "type": "bytes32"
       },
@@ -383,6 +388,19 @@
   {
     "inputs": [],
     "name": "SHARED_COMPONENT_IDENTITY_TYPEHASH",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "VERIFIER_BINDING_HASH",
     "outputs": [
       {
         "internalType": "bytes32",
@@ -1352,6 +1370,19 @@
       }
     ],
     "stateMutability": "pure",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "runtimeBindingHashV1",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   }
 ]

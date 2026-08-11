@@ -43,4 +43,11 @@ interface IProgrammableUniversalLaunchPreflightV1 {
         bytes32 grantDigest,
         IProgrammableUniversalLaunchKernelV1.ReservationV1[] calldata reservations
     ) external view returns (bytes32 readbackHash);
+
+    function closedRuntimeBindingHashV1(
+        address account,
+        bytes32 expectedRuntimeCodeHash,
+        bytes32 expectedRuntimeBindingHash,
+        bool requireStateless
+    ) external view returns (bytes32 attestationHash);
 }

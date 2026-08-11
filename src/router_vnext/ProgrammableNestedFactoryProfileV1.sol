@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import { IProgrammableUniversalLaunchKernelV1 } from "./IProgrammableUniversalLaunchKernelV1.sol";
+import {
+    IProgrammableRuntimeBindingV1,
+    IProgrammableUniversalLaunchKernelV1
+} from "./IProgrammableUniversalLaunchKernelV1.sol";
 import {
     IProgrammableNestedFactoryProfileV1,
     IProgrammableNestedFactoryProviderV1,
@@ -50,6 +53,7 @@ contract ProgrammableNestedFactoryProfileV1 is IProgrammableNestedFactoryProfile
     bytes32 public immutable PROVIDER_RUNTIME_CODEHASH;
     address public immutable POSTCONDITION_VERIFIER;
     bytes32 public immutable POSTCONDITION_VERIFIER_RUNTIME_CODEHASH;
+    bytes32 public immutable VERIFIER_BINDING_HASH;
     bytes32 public immutable PROFILE_KEY;
     bytes32 public immutable PROVIDER_BINDING_HASH;
     uint32 public immutable PROVIDER_GAS_LIMIT;
@@ -91,24 +95,33 @@ contract ProgrammableNestedFactoryProfileV1 is IProgrammableNestedFactoryProfile
         bytes32 providerRuntimeCodeHash,
         address postconditionVerifier,
         bytes32 postconditionVerifierRuntimeCodeHash,
+        bytes32 verifierBindingHash,
         bytes32 profileKey,
         bytes32 providerBindingHash,
         uint32 providerGasLimit,
         uint32 verifierGasLimit
     ) {
-        if (address(kernel) == address(0) || profileKey == bytes32(0) || providerBindingHash == bytes32(0)) {
+        if (
+            address(kernel) == address(0) || profileKey == bytes32(0) || providerBindingHash == bytes32(0)
+                || verifierBindingHash == bytes32(0)
+        ) {
             revert InvalidField(1);
         }
         if (providerGasLimit < 100_000 || verifierGasLimit < 50_000) revert InvalidField(2);
         _requireRuntime(address(kernel), kernelRuntimeCodeHash);
         _requireRuntime(provider, providerRuntimeCodeHash);
         _requireRuntime(postconditionVerifier, postconditionVerifierRuntimeCodeHash);
+        kernel.assertClosedRuntimeBindingV1(provider, providerRuntimeCodeHash, providerBindingHash, true);
+        kernel.assertClosedRuntimeBindingV1(
+            postconditionVerifier, postconditionVerifierRuntimeCodeHash, verifierBindingHash, true
+        );
         KERNEL = kernel;
         KERNEL_RUNTIME_CODEHASH = kernelRuntimeCodeHash;
         PROVIDER = provider;
         PROVIDER_RUNTIME_CODEHASH = providerRuntimeCodeHash;
         POSTCONDITION_VERIFIER = postconditionVerifier;
         POSTCONDITION_VERIFIER_RUNTIME_CODEHASH = postconditionVerifierRuntimeCodeHash;
+        VERIFIER_BINDING_HASH = verifierBindingHash;
         PROFILE_KEY = profileKey;
         PROVIDER_BINDING_HASH = providerBindingHash;
         PROVIDER_GAS_LIMIT = providerGasLimit;
@@ -122,8 +135,8 @@ contract ProgrammableNestedFactoryProfileV1 is IProgrammableNestedFactoryProfile
     ) external payable returns (bytes32 receiptCoreHash) {
         if (_activeGrantDigest != bytes32(0)) revert ReentrantExecution();
         _requireRuntime(address(KERNEL), KERNEL_RUNTIME_CODEHASH);
-        _requireRuntime(PROVIDER, PROVIDER_RUNTIME_CODEHASH);
-        _requireRuntime(POSTCONDITION_VERIFIER, POSTCONDITION_VERIFIER_RUNTIME_CODEHASH);
+        _requireBoundRuntime(PROVIDER, PROVIDER_RUNTIME_CODEHASH, PROVIDER_BINDING_HASH);
+        _requireBoundRuntime(POSTCONDITION_VERIFIER, POSTCONDITION_VERIFIER_RUNTIME_CODEHASH, VERIFIER_BINDING_HASH);
 
         IProgrammableUniversalLaunchKernelV1.LaunchGrantV1 memory grant = KERNEL.launchGrantV1(grantDigest);
         if (msg.sender != grant.applicantWallet || plan.action.applicantWallet != msg.sender) {
@@ -180,8 +193,12 @@ contract ProgrammableNestedFactoryProfileV1 is IProgrammableNestedFactoryProfile
         return _profilePreflightHash(plan);
     }
 
+    function runtimeBindingHashV1() external view returns (bytes32) {
+        return PROVIDER_BINDING_HASH;
+    }
+
     function _profilePreflightHash(NestedFactoryPlanV1 calldata plan) private view returns (bytes32 readbackHash) {
-        bytes32 verifierCodeHashBefore = POSTCONDITION_VERIFIER.codehash;
+        _requireBoundRuntime(POSTCONDITION_VERIFIER, POSTCONDITION_VERIFIER_RUNTIME_CODEHASH, VERIFIER_BINDING_HASH);
         bytes memory payload = abi.encodeCall(
             IProgrammableNestedFactoryPostconditionVerifierV1.verifyNestedPreflightV1, (address(this), plan)
         );
@@ -199,10 +216,7 @@ contract ProgrammableNestedFactoryProfileV1 is IProgrammableNestedFactoryProfile
         }
         if (!success) revert VerifierCallFailed();
         if (returnedSize != 32 || readbackHash == bytes32(0)) revert VerifierReturnMalformed();
-        if (
-            POSTCONDITION_VERIFIER.codehash != verifierCodeHashBefore
-                || verifierCodeHashBefore != POSTCONDITION_VERIFIER_RUNTIME_CODEHASH
-        ) revert RuntimeCodeHashDrift(POSTCONDITION_VERIFIER);
+        _requireBoundRuntime(POSTCONDITION_VERIFIER, POSTCONDITION_VERIFIER_RUNTIME_CODEHASH, VERIFIER_BINDING_HASH);
     }
 
     function _executeVerifyFinalize(
@@ -267,8 +281,8 @@ contract ProgrammableNestedFactoryProfileV1 is IProgrammableNestedFactoryProfile
                 || plan.componentGraphHash != grant.componentGraphHash
                 || plan.componentRuntimeSetHash != grant.componentRuntimeSetHash
                 || plan.expectedReturnedIdentitiesHash == bytes32(0) || plan.expectedArchitectureStateHash == bytes32(0)
-                || plan.expectedPoolStateHash == bytes32(0) || plan.expectedValueFlowHash == bytes32(0)
-                || _hashPlan(plan) != grant.planHash
+                || plan.expectedPoolStateHash == bytes32(0) || plan.expectedRevenueStateHash == bytes32(0)
+                || plan.expectedValueFlowHash == bytes32(0) || _hashPlan(plan) != grant.planHash
         ) revert InvalidField(3);
         IProgrammableUniversalLaunchKernelV1.ProfileDescriptorV1 memory descriptor =
             KERNEL.profileDescriptorV1(PROFILE_KEY);
@@ -291,11 +305,9 @@ contract ProgrammableNestedFactoryProfileV1 is IProgrammableNestedFactoryProfile
         private
         returns (NestedFactoryResultV1 memory result)
     {
-        bytes32 providerCodeHashBefore = PROVIDER.codehash;
+        _requireBoundRuntime(PROVIDER, PROVIDER_RUNTIME_CODEHASH, PROVIDER_BINDING_HASH);
         result = _callProvider(plan, correlation);
-        if (PROVIDER.codehash != providerCodeHashBefore || providerCodeHashBefore != PROVIDER_RUNTIME_CODEHASH) {
-            revert RuntimeCodeHashDrift(PROVIDER);
-        }
+        _requireBoundRuntime(PROVIDER, PROVIDER_RUNTIME_CODEHASH, PROVIDER_BINDING_HASH);
         _validateProviderResult(plan, correlation, result);
         _validateComponentPoststate(plan.components);
     }
@@ -354,7 +366,7 @@ contract ProgrammableNestedFactoryProfileV1 is IProgrammableNestedFactoryProfile
         view
         returns (NestedPostconditionResultV1 memory postconditions)
     {
-        bytes32 verifierCodeHashBefore = POSTCONDITION_VERIFIER.codehash;
+        _requireBoundRuntime(POSTCONDITION_VERIFIER, POSTCONDITION_VERIFIER_RUNTIME_CODEHASH, VERIFIER_BINDING_HASH);
         bytes memory payload = abi.encodeCall(
             IProgrammableNestedFactoryPostconditionVerifierV1.verifyNestedPostconditionsV1,
             (address(this), plan, providerResult)
@@ -370,10 +382,7 @@ contract ProgrammableNestedFactoryProfileV1 is IProgrammableNestedFactoryProfile
         }
         if (!success) revert VerifierCallFailed();
         if (returnedSize != VERIFIER_RETURN_BYTES) revert VerifierReturnMalformed();
-        if (
-            POSTCONDITION_VERIFIER.codehash != verifierCodeHashBefore
-                || verifierCodeHashBefore != POSTCONDITION_VERIFIER_RUNTIME_CODEHASH
-        ) revert RuntimeCodeHashDrift(POSTCONDITION_VERIFIER);
+        _requireBoundRuntime(POSTCONDITION_VERIFIER, POSTCONDITION_VERIFIER_RUNTIME_CODEHASH, VERIFIER_BINDING_HASH);
         postconditions = abi.decode(output, (NestedPostconditionResultV1));
         if (
             postconditions.architectureStateHash != plan.expectedArchitectureStateHash
@@ -590,5 +599,25 @@ contract ProgrammableNestedFactoryProfileV1 is IProgrammableNestedFactoryProfile
             account == address(0) || expectedCodeHash == bytes32(0) || account.code.length == 0
                 || account.codehash != expectedCodeHash
         ) revert RuntimeCodeHashDrift(account);
+    }
+
+    function _requireBoundRuntime(address account, bytes32 expectedCodeHash, bytes32 expectedBindingHash) private view {
+        _requireRuntime(account, expectedCodeHash);
+        bytes memory payload = abi.encodeCall(IProgrammableRuntimeBindingV1.runtimeBindingHashV1, ());
+        bool success;
+        uint256 returnedSize;
+        bytes32 actualBindingHash;
+        assembly ("memory-safe") {
+            success := staticcall(100000, account, add(payload, 32), mload(payload), 0, 0)
+            returnedSize := returndatasize()
+            if and(success, eq(returnedSize, 32)) {
+                returndatacopy(0, 0, 32)
+                actualBindingHash := mload(0)
+            }
+        }
+        if (!success || returnedSize != 32 || actualBindingHash != expectedBindingHash) {
+            revert RuntimeCodeHashDrift(account);
+        }
+        _requireRuntime(account, expectedCodeHash);
     }
 }

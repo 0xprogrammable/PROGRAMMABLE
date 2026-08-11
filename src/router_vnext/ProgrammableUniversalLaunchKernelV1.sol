@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import { IProgrammableUniversalLaunchKernelV1 } from "./IProgrammableUniversalLaunchKernelV1.sol";
+import {
+    IProgrammableRuntimeBindingV1,
+    IProgrammableUniversalLaunchKernelV1
+} from "./IProgrammableUniversalLaunchKernelV1.sol";
 import { IProgrammableUniversalLaunchPreflightV1 } from "./IProgrammableUniversalLaunchPreflightV1.sol";
 
 /// @notice Stable lifecycle kernel for codehash-pinned, reusable, typed launch profiles.
@@ -182,9 +185,12 @@ contract ProgrammableUniversalLaunchKernelV1 is IProgrammableUniversalLaunchKern
             descriptor.profileKey == bytes32(0) || descriptor.schemaId == bytes32(0) || descriptor.profileVersion == 0
                 || descriptor.capabilitySemantics == CapabilitySemantics.None || descriptor.actionTypeHash == bytes32(0)
                 || descriptor.exactContractBindingHash == bytes32(0) || descriptor.providerBindingHash == bytes32(0)
-                || descriptor.status != ProfileStatus.Active
+                || descriptor.revenuePolicyHash == bytes32(0) || descriptor.status != ProfileStatus.Active
         ) revert InvalidField(2);
         _requireRuntime(descriptor.module, descriptor.moduleRuntimeCodeHash);
+        _requireClosedRuntimeBinding(
+            descriptor.module, descriptor.moduleRuntimeCodeHash, descriptor.providerBindingHash, false
+        );
         _requireControlEquality(descriptor);
         _profiles[descriptor.profileKey] = descriptor;
         emit ProfileRegistered(descriptor.profileKey, descriptor.module, descriptor.moduleRuntimeCodeHash);
@@ -342,6 +348,7 @@ contract ProgrammableUniversalLaunchKernelV1 is IProgrammableUniversalLaunchKern
         LaunchGrantV1 storage grant = _grants[result.grantDigest];
         ProfileDescriptorV1 storage descriptor = _profiles[grant.profileKey];
         _requireRuntime(msg.sender, descriptor.moduleRuntimeCodeHash);
+        _requireRuntimeBinding(msg.sender, descriptor.moduleRuntimeCodeHash, descriptor.providerBindingHash);
         if (
             result.stampLaunchId != grant.stampLaunchId || result.planHash != grant.planHash
                 || result.componentRuntimeSetHash != grant.componentRuntimeSetHash
@@ -388,24 +395,32 @@ contract ProgrammableUniversalLaunchKernelV1 is IProgrammableUniversalLaunchKern
         ) revert InvalidField(4);
         address authority;
         bytes32 authorityCodeHash;
+        bytes32 finalizedDigest;
         if (finalityReceipt.status == ReceiptStatus.Finalized) {
             if (receipt.status != ReceiptStatus.Executed && receipt.status != ReceiptStatus.Adopted) {
                 revert InvalidState();
             }
+            if (finalityReceipt.indexingReceiptHash != bytes32(0)) revert InvalidField(15);
             authority = FINALITY_AUTHORITY;
             authorityCodeHash = FINALITY_AUTHORITY_RUNTIME_CODEHASH;
         } else if (finalityReceipt.status == ReceiptStatus.IndexedPublished) {
             if (receipt.status != ReceiptStatus.Finalized || finalityReceipt.indexingReceiptHash == bytes32(0)) {
                 revert InvalidState();
             }
+            finalizedDigest =
+                _hashTypedData(_hashFinalityIndexing(finalityReceipt, bytes32(0), ReceiptStatus.Finalized));
+            if (receipt.finalityIndexingReceiptHash != finalizedDigest) revert InvalidState();
             authority = INDEXER_AUTHORITY;
             authorityCodeHash = INDEXER_AUTHORITY_RUNTIME_CODEHASH;
         } else {
             revert InvalidState();
         }
-        bytes32 digest = _hashTypedData(_hashFinalityIndexing(finalityReceipt));
+        bytes32 digest = _hashTypedData(
+            _hashFinalityIndexing(finalityReceipt, finalityReceipt.indexingReceiptHash, finalityReceipt.status)
+        );
         _requireSignature(authority, authorityCodeHash, digest, signature);
-        bytes32 appendHash = keccak256(abi.encode(receipt.finalityIndexingReceiptHash, digest));
+        bytes32 appendHash =
+            finalityReceipt.status == ReceiptStatus.Finalized ? digest : keccak256(abi.encode(finalizedDigest, digest));
         receipt.finalityIndexingReceiptHash = appendHash;
         receipt.status = finalityReceipt.status;
         emit FinalityIndexingAdvanced(finalityReceipt.grantDigest, appendHash, finalityReceipt.status);
@@ -495,6 +510,17 @@ contract ProgrammableUniversalLaunchKernelV1 is IProgrammableUniversalLaunchKern
 
     function activeExecutionGrantDigestV1() external view returns (bytes32) {
         return _activeExecutionGrantDigest;
+    }
+
+    function assertClosedRuntimeBindingV1(
+        address account,
+        bytes32 expectedRuntimeCodeHash,
+        bytes32 expectedRuntimeBindingHash,
+        bool requireStateless
+    ) external view returns (bytes32 attestationHash) {
+        return _requireClosedRuntimeBinding(
+            account, expectedRuntimeCodeHash, expectedRuntimeBindingHash, requireStateless
+        );
     }
 
     function _validateGrant(LaunchGrantV1 calldata grant, ProfileDescriptorV1 storage descriptor) private view {
@@ -732,7 +758,11 @@ contract ProgrammableUniversalLaunchKernelV1 is IProgrammableUniversalLaunchKern
         );
     }
 
-    function _hashFinalityIndexing(FinalityIndexingReceiptV1 calldata receipt) private pure returns (bytes32) {
+    function _hashFinalityIndexing(
+        FinalityIndexingReceiptV1 calldata receipt,
+        bytes32 indexingReceiptHash,
+        ReceiptStatus status
+    ) private pure returns (bytes32) {
         return keccak256(
             abi.encode(
                 FINALITY_INDEXING_TYPEHASH,
@@ -745,8 +775,8 @@ contract ProgrammableUniversalLaunchKernelV1 is IProgrammableUniversalLaunchKern
                 receipt.finalizedAt,
                 receipt.deploymentReceiptHash,
                 receipt.sourceVerificationReceiptHash,
-                receipt.indexingReceiptHash,
-                uint8(receipt.status)
+                indexingReceiptHash,
+                uint8(status)
             )
         );
     }
@@ -930,7 +960,58 @@ contract ProgrammableUniversalLaunchKernelV1 is IProgrammableUniversalLaunchKern
         if (descriptor.status != ProfileStatus.Active) revert ProfileUnavailable();
         if (_control.globalKilled) revert GlobalKillActive();
         _requireRuntime(descriptor.module, descriptor.moduleRuntimeCodeHash);
+        _requireRuntimeBinding(descriptor.module, descriptor.moduleRuntimeCodeHash, descriptor.providerBindingHash);
         _requireControlEquality(descriptor);
+    }
+
+    function _requireRuntimeBinding(
+        address account,
+        bytes32 expectedRuntimeCodeHash,
+        bytes32 expectedRuntimeBindingHash
+    ) private view {
+        _requireRuntime(account, expectedRuntimeCodeHash);
+        bytes memory payload = abi.encodeCall(IProgrammableRuntimeBindingV1.runtimeBindingHashV1, ());
+        bool success;
+        uint256 returnedSize;
+        bytes32 actualRuntimeBindingHash;
+        assembly ("memory-safe") {
+            success := staticcall(100000, account, add(payload, 32), mload(payload), 0, 0)
+            returnedSize := returndatasize()
+            if and(success, eq(returnedSize, 32)) {
+                returndatacopy(0, 0, 32)
+                actualRuntimeBindingHash := mload(0)
+            }
+        }
+        if (!success || returnedSize != 32 || actualRuntimeBindingHash != expectedRuntimeBindingHash) {
+            revert InvalidState();
+        }
+        _requireRuntime(account, expectedRuntimeCodeHash);
+    }
+
+    function _requireClosedRuntimeBinding(
+        address account,
+        bytes32 expectedRuntimeCodeHash,
+        bytes32 expectedRuntimeBindingHash,
+        bool requireStateless
+    ) private view returns (bytes32 attestationHash) {
+        _requireRuntime(_PREFLIGHT, _PREFLIGHT_RUNTIME_CODEHASH);
+        bytes memory payload = abi.encodeCall(
+            IProgrammableUniversalLaunchPreflightV1.closedRuntimeBindingHashV1,
+            (account, expectedRuntimeCodeHash, expectedRuntimeBindingHash, requireStateless)
+        );
+        bool success;
+        uint256 returnedSize;
+        address preflight = _PREFLIGHT;
+        assembly ("memory-safe") {
+            success := staticcall(8000000, preflight, add(payload, 32), mload(payload), 0, 0)
+            returnedSize := returndatasize()
+            if and(success, eq(returnedSize, 32)) {
+                returndatacopy(0, 0, 32)
+                attestationHash := mload(0)
+            }
+        }
+        if (!success || returnedSize != 32 || attestationHash == bytes32(0)) revert InvalidState();
+        _requireRuntime(_PREFLIGHT, _PREFLIGHT_RUNTIME_CODEHASH);
     }
 
     function _requireControlEquality(ProfileDescriptorV1 calldata descriptor) private view {

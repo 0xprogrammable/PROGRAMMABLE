@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import { IProgrammableUniversalLaunchKernelV1 } from "./IProgrammableUniversalLaunchKernelV1.sol";
+import {
+    IProgrammableRuntimeBindingV1,
+    IProgrammableUniversalLaunchKernelV1
+} from "./IProgrammableUniversalLaunchKernelV1.sol";
 
 /// @notice Closed typed interfaces for reusable nested-factory launch profiles.
-interface IProgrammableNestedFactoryProfileV1 {
+interface IProgrammableNestedFactoryProfileV1 is IProgrammableRuntimeBindingV1 {
     enum ComponentScopeV1 {
         None,
         ExclusiveCreate,
@@ -93,7 +96,7 @@ interface IProgrammableNestedFactoryProfileV1 {
     function computeNestedFactoryPreflightHashV1(NestedFactoryPlanV1 calldata plan) external view returns (bytes32);
 }
 
-interface IProgrammableNestedFactoryProviderV1 {
+interface IProgrammableNestedFactoryProviderV1 is IProgrammableRuntimeBindingV1 {
     function executeNestedFactoryV1(
         bytes32 executionKey,
         bytes32 grantDigest,
@@ -104,7 +107,7 @@ interface IProgrammableNestedFactoryProviderV1 {
     ) external payable returns (IProgrammableNestedFactoryProfileV1.NestedFactoryResultV1 memory result);
 }
 
-interface IProgrammableNestedFactoryPostconditionVerifierV1 {
+interface IProgrammableNestedFactoryPostconditionVerifierV1 is IProgrammableRuntimeBindingV1 {
     function verifyNestedPreflightV1(
         address profile,
         IProgrammableNestedFactoryProfileV1.NestedFactoryPlanV1 calldata plan

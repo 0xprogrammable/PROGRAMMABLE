@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import { IProgrammableUniversalLaunchKernelV1 } from "../../src/router_vnext/IProgrammableUniversalLaunchKernelV1.sol";
+import {
+    IProgrammableRuntimeBindingV1,
+    IProgrammableUniversalLaunchKernelV1
+} from "../../src/router_vnext/IProgrammableUniversalLaunchKernelV1.sol";
 import { ProgrammableUniversalLaunchKernelV1 } from "../../src/router_vnext/ProgrammableUniversalLaunchKernelV1.sol";
 import {
     IProgrammableNestedFactoryProfileV1,
@@ -99,6 +102,9 @@ contract UniversalPoolManagerV1 {
 }
 
 contract UniversalNestedProviderV1 is IProgrammableNestedFactoryProviderV1 {
+    bytes32 private constant RUNTIME_BINDING_TYPEHASH = keccak256(
+        "UniversalNestedProviderRuntimeBindingV1(bytes32 seed,uint8 failureMode,address controlMutationGovernance,address controlMutationKernel)"
+    );
     bytes32 private constant ACTION_IDENTITY_TYPEHASH = keccak256(
         "NestedFactoryActionIdentityV1(bytes32 providerPlanId,bytes32 factorySalt,address applicantWallet,bytes32 sourceLaunchId,address poolManager,bytes32 poolManagerRuntimeCodeHash,bytes32 poolId,address tokenOwner,address hookOwner,address treasury)"
     );
@@ -115,27 +121,32 @@ contract UniversalNestedProviderV1 is IProgrammableNestedFactoryProviderV1 {
     );
 
     bytes32 private immutable _providerBindingHash;
-    uint8 private _failureMode;
-    address private _controlMutationGovernance;
-    ProgrammableUniversalLaunchKernelV1 private _controlMutationKernel;
-    IProgrammableUniversalLaunchKernelV1.ControlStateV1 private _controlMutation;
+    uint8 private immutable _failureMode;
+    address private immutable _controlMutationGovernance;
+    ProgrammableUniversalLaunchKernelV1 private immutable _controlMutationKernel;
 
-    constructor(bytes32 providerBindingHash) {
-        _providerBindingHash = providerBindingHash;
-    }
-
-    function setFailureMode(uint8 failureMode) external {
+    constructor(
+        bytes32 providerBindingSeed,
+        uint8 failureMode,
+        address controlMutationGovernance,
+        ProgrammableUniversalLaunchKernelV1 controlMutationKernel
+    ) {
         _failureMode = failureMode;
+        _controlMutationGovernance = controlMutationGovernance;
+        _controlMutationKernel = controlMutationKernel;
+        _providerBindingHash = keccak256(
+            abi.encode(
+                RUNTIME_BINDING_TYPEHASH,
+                providerBindingSeed,
+                failureMode,
+                controlMutationGovernance,
+                address(controlMutationKernel)
+            )
+        );
     }
 
-    function configureControlMutation(
-        address governance,
-        ProgrammableUniversalLaunchKernelV1 kernel,
-        IProgrammableUniversalLaunchKernelV1.ControlStateV1 calldata nextControl
-    ) external {
-        _controlMutationGovernance = governance;
-        _controlMutationKernel = kernel;
-        _controlMutation = nextControl;
+    function runtimeBindingHashV1() external view returns (bytes32) {
+        return _providerBindingHash;
     }
 
     function executeNestedFactoryV1(
@@ -147,8 +158,19 @@ contract UniversalNestedProviderV1 is IProgrammableNestedFactoryProviderV1 {
         IProgrammableNestedFactoryProfileV1.ComponentExpectationV1[] calldata components
     ) external payable returns (IProgrammableNestedFactoryProfileV1.NestedFactoryResultV1 memory result) {
         if (_controlMutationGovernance != address(0)) {
+            IProgrammableUniversalLaunchKernelV1.ControlStateV1 memory nextControl =
+                IProgrammableUniversalLaunchKernelV1.ControlStateV1({
+                    securityControlHeadHash: keccak256("universal-security-head-v2"),
+                    securityEpoch: 2,
+                    securityEpochHash: keccak256("universal-security-epoch-v2"),
+                    policyEpoch: 2,
+                    policyEpochHash: keccak256("universal-policy-epoch-v2"),
+                    reviewGeneration: 2,
+                    reviewGenerationHash: keccak256("universal-review-generation-v2"),
+                    globalKilled: false
+                });
             bytes memory mutation =
-                abi.encodeCall(UniversalTestAuthorityV1.advanceControl, (_controlMutationKernel, _controlMutation));
+                abi.encodeCall(UniversalTestAuthorityV1.advanceControl, (_controlMutationKernel, nextControl));
             (bool mutationSucceeded,) = _controlMutationGovernance.call(mutation);
             require(!mutationSucceeded, "control mutation escaped execution lock");
         }
@@ -287,9 +309,14 @@ contract UniversalNestedProviderV1 is IProgrammableNestedFactoryProviderV1 {
 }
 
 contract UniversalNestedVerifierV1 is IProgrammableNestedFactoryPostconditionVerifierV1 {
+    bytes32 private constant RUNTIME_BINDING_HASH = keccak256("universal-nested-verifier-runtime-binding-v1");
     bytes32 private constant PROFILE_PREFLIGHT_TYPEHASH = keccak256(
         "NestedFactoryProfilePreflightV1(address profile,address poolManager,bytes32 poolManagerRuntimeCodeHash,bytes32 poolId,bool poolInitialized,bytes32 configurationHash,bytes32 expectedRevenueStateHash)"
     );
+
+    function runtimeBindingHashV1() external pure returns (bytes32) {
+        return RUNTIME_BINDING_HASH;
+    }
 
     function verifyNestedPreflightV1(
         address profile,
@@ -344,6 +371,48 @@ contract UniversalNestedVerifierV1 is IProgrammableNestedFactoryPostconditionVer
             revenueStateHash: revenueStateHash,
             valueFlowHash: valueFlowHash
         });
+    }
+}
+
+contract UniversalDelegateProxyDependencyV1 is IProgrammableRuntimeBindingV1 {
+    address private immutable _implementation;
+    bytes32 private immutable _bindingHash;
+
+    constructor(address implementation, bytes32 bindingHash) {
+        _implementation = implementation;
+        _bindingHash = bindingHash;
+    }
+
+    function runtimeBindingHashV1() external view returns (bytes32) {
+        return _bindingHash;
+    }
+
+    fallback() external payable {
+        address implementation = _implementation;
+        assembly ("memory-safe") {
+            calldatacopy(0, 0, calldatasize())
+            let ok := delegatecall(gas(), implementation, 0, calldatasize(), 0, 0)
+            returndatacopy(0, 0, returndatasize())
+            switch ok
+            case 0 { revert(0, returndatasize()) }
+            default { return(0, returndatasize()) }
+        }
+    }
+}
+
+contract UniversalStatefulDependencyV1 is IProgrammableRuntimeBindingV1 {
+    bytes32 private _bindingHash;
+
+    constructor(bytes32 bindingHash) {
+        _bindingHash = bindingHash;
+    }
+
+    function setRuntimeBindingHash(bytes32 bindingHash) external {
+        _bindingHash = bindingHash;
+    }
+
+    function runtimeBindingHashV1() external view returns (bytes32) {
+        return _bindingHash;
     }
 }
 
@@ -606,11 +675,10 @@ contract ProgrammableUniversalLaunchKernelV1Test {
     }
 
     function testProviderReturndataBombRollsBackGrantAndReservations() external {
-        Fixture memory fixture = _fixture();
+        Fixture memory fixture = _fixtureWithProvider(3, false);
         UniversalApplicantWalletV1 applicant = new UniversalApplicantWalletV1();
         PreparedLaunch memory prepared =
             _prepareLaunch(fixture, applicant, keccak256("returndata-bomb"), bytes32(uint256(412)), 5200 ether);
-        fixture.provider.setFailureMode(3);
         require(!_tryLaunch(applicant, fixture.profile, prepared), "returndata bomb launched");
         _assertGrantStatus(
             fixture.kernel, prepared.grantDigest, IProgrammableUniversalLaunchKernelV1.LaunchGrantStatus.Active
@@ -622,14 +690,121 @@ contract ProgrammableUniversalLaunchKernelV1Test {
     }
 
     function testProviderCannotMutateControlDuringExecution() external {
-        Fixture memory fixture = _fixture();
+        Fixture memory fixture = _fixtureWithProvider(0, true);
         UniversalApplicantWalletV1 applicant = new UniversalApplicantWalletV1();
-        fixture.provider.configureControlMutation(address(fixture.governance), fixture.kernel, _nextControl());
         bytes32 grantDigest =
             _launch(fixture, applicant, keccak256("control-reentrancy"), bytes32(uint256(413)), 5300 ether);
         require(grantDigest != bytes32(0), "launch failed");
         IProgrammableUniversalLaunchKernelV1.ControlStateV1 memory control = fixture.kernel.controlStateV1();
         require(control.securityEpoch == 1 && control.reviewGeneration == 1, "control mutated mid execution");
+    }
+
+    function testProxyAndMutableDependencyBindingsFailClosed() external {
+        Fixture memory fixture = _fixture();
+        bytes32 bindingHash = keccak256("adversarial-runtime-binding");
+        UniversalDelegateProxyDependencyV1 proxy =
+            new UniversalDelegateProxyDependencyV1(address(fixture.provider), bindingHash);
+        bool proxyAccepted;
+        try new ProgrammableNestedFactoryProfileV1(
+            fixture.kernel,
+            address(fixture.kernel).codehash,
+            address(proxy),
+            address(proxy).codehash,
+            address(fixture.verifier),
+            address(fixture.verifier).codehash,
+            fixture.verifier.runtimeBindingHashV1(),
+            keccak256("PROXY_PROFILE"),
+            bindingHash,
+            2_000_000,
+            500_000
+        ) returns (
+            ProgrammableNestedFactoryProfileV1
+        ) {
+            proxyAccepted = true;
+        } catch { }
+        require(!proxyAccepted, "delegate proxy dependency accepted");
+
+        IProgrammableUniversalLaunchKernelV1.ProfileDescriptorV1 memory proxyDescriptor =
+            fixture.kernel.profileDescriptorV1(PROFILE_KEY);
+        proxyDescriptor.profileKey = keccak256("PROXY_MODULE_PROFILE");
+        proxyDescriptor.module = address(proxy);
+        proxyDescriptor.moduleRuntimeCodeHash = address(proxy).codehash;
+        proxyDescriptor.providerBindingHash = bindingHash;
+        (bool proxyRegistered,) = address(fixture.governance)
+            .call(abi.encodeCall(UniversalTestAuthorityV1.registerProfile, (fixture.kernel, proxyDescriptor)));
+        require(!proxyRegistered, "delegate proxy module registered");
+
+        UniversalStatefulDependencyV1 stateful = new UniversalStatefulDependencyV1(bindingHash);
+        bool statefulAccepted;
+        try new ProgrammableNestedFactoryProfileV1(
+            fixture.kernel,
+            address(fixture.kernel).codehash,
+            address(stateful),
+            address(stateful).codehash,
+            address(fixture.verifier),
+            address(fixture.verifier).codehash,
+            fixture.verifier.runtimeBindingHashV1(),
+            keccak256("STATEFUL_PROFILE"),
+            bindingHash,
+            2_000_000,
+            500_000
+        ) returns (
+            ProgrammableNestedFactoryProfileV1
+        ) {
+            statefulAccepted = true;
+        } catch { }
+        require(!statefulAccepted, "mutable dependency accepted");
+    }
+
+    function testZeroRevenuePolicyAndPlanFailClosed() external {
+        Fixture memory fixture = _fixture();
+        IProgrammableUniversalLaunchKernelV1.ProfileDescriptorV1 memory descriptor =
+            fixture.kernel.profileDescriptorV1(PROFILE_KEY);
+        descriptor.profileKey = keccak256("ZERO_REVENUE_PROFILE");
+        descriptor.revenuePolicyHash = bytes32(0);
+        (bool registered,) = address(fixture.governance)
+            .call(abi.encodeCall(UniversalTestAuthorityV1.registerProfile, (fixture.kernel, descriptor)));
+        require(!registered, "zero revenue policy registered");
+
+        UniversalApplicantWalletV1 applicant = new UniversalApplicantWalletV1();
+        IProgrammableNestedFactoryProfileV1.NestedFactoryPlanV1 memory plan =
+            _plan(fixture, applicant, keccak256("zero-revenue-plan"), bytes32(uint256(415)), 5500 ether);
+        plan.expectedRevenueStateHash = bytes32(0);
+        IProgrammableUniversalLaunchKernelV1.LaunchGrantV1 memory grant = _grantForPlan(fixture, applicant, plan);
+        bytes32 grantDigest = fixture.kernel.activateLaunchGrantV1(grant, hex"01");
+        IProgrammableUniversalLaunchKernelV1.ReservationV1[] memory reservations =
+            fixture.profile.nestedFactoryReservationsV1(plan);
+        bytes32 kernelPreflightHash = fixture.preflight
+            .atomicPreflightHashV1(address(fixture.kernel), address(fixture.kernel).codehash, grantDigest, reservations);
+        bytes32 profilePreflightHash = fixture.profile.computeNestedFactoryPreflightHashV1(plan);
+        IProgrammableUniversalLaunchKernelV1.ExecutionCurrentnessV1 memory currentness = _currentness(
+            grantDigest,
+            grant.planHash,
+            keccak256("zero-revenue-currentness"),
+            kernelPreflightHash,
+            profilePreflightHash
+        );
+        IProgrammableUniversalLaunchKernelV1.ApplicantWalletIntentV1 memory intent =
+            IProgrammableUniversalLaunchKernelV1.ApplicantWalletIntentV1({
+                grantDigest: grantDigest,
+                stampLaunchId: grant.stampLaunchId,
+                antiReplayNonce: grant.antiReplayNonce,
+                profileModule: address(fixture.profile),
+                intentNonce: keccak256("zero-revenue-wallet-intent"),
+                validAfter: uint64(block.timestamp),
+                deadline: uint64(block.timestamp + 300)
+            });
+        (bool launched, bytes memory reason) = address(applicant)
+            .call(
+                abi.encodeCall(
+                    UniversalApplicantWalletV1.launch, (fixture.profile, grantDigest, plan, currentness, intent)
+                )
+            );
+        require(
+            !launched && _revertSelector(reason) == ProgrammableNestedFactoryProfileV1.InvalidField.selector,
+            "zero revenue plan reached provider"
+        );
+        _assertGrantStatus(fixture.kernel, grantDigest, IProgrammableUniversalLaunchKernelV1.LaunchGrantStatus.Active);
     }
 
     function testFinalityAndIndexingAppendAreTypedAndOrdered() external {
@@ -652,12 +827,28 @@ contract ProgrammableUniversalLaunchKernelV1Test {
                 indexingReceiptHash: bytes32(0),
                 status: IProgrammableUniversalLaunchKernelV1.ReceiptStatus.Finalized
             });
+        IProgrammableUniversalLaunchKernelV1.FinalityIndexingReceiptV1 memory invalidFinality = append;
+        invalidFinality.indexingReceiptHash = keccak256("premature-indexing");
+        (bool prematureIndexing,) = address(fixture.kernel)
+            .call(
+                abi.encodeCall(ProgrammableUniversalLaunchKernelV1.appendFinalityIndexingV1, (invalidFinality, hex"01"))
+            );
+        require(!prematureIndexing, "finality accepted indexing payload");
+        append.indexingReceiptHash = bytes32(0);
         fixture.kernel.appendFinalityIndexingV1(append, hex"01");
         receipt = fixture.kernel.canonicalLaunchReceiptV1(grantDigest);
         require(receipt.status == IProgrammableUniversalLaunchKernelV1.ReceiptStatus.Finalized, "not finalized");
         bytes32 finalizedAppendHash = receipt.finalityIndexingReceiptHash;
         append.status = IProgrammableUniversalLaunchKernelV1.ReceiptStatus.IndexedPublished;
         append.indexingReceiptHash = keccak256("indexing-receipt");
+        IProgrammableUniversalLaunchKernelV1.FinalityIndexingReceiptV1 memory poisonedIndex = append;
+        poisonedIndex.transactionHash = keccak256("contradictory-transaction");
+        (bool poisoned,) = address(fixture.kernel)
+            .call(
+                abi.encodeCall(ProgrammableUniversalLaunchKernelV1.appendFinalityIndexingV1, (poisonedIndex, hex"01"))
+            );
+        require(!poisoned, "indexer replaced finality baseline");
+        append.transactionHash = keccak256("launch-transaction");
         fixture.kernel.appendFinalityIndexingV1(append, hex"01");
         receipt = fixture.kernel.canonicalLaunchReceiptV1(grantDigest);
         require(receipt.status == IProgrammableUniversalLaunchKernelV1.ReceiptStatus.IndexedPublished, "not indexed");
@@ -737,6 +928,13 @@ contract ProgrammableUniversalLaunchKernelV1Test {
             );
     }
 
+    function _revertSelector(bytes memory reason) private pure returns (bytes4 selector) {
+        if (reason.length < 4) return bytes4(0);
+        assembly ("memory-safe") {
+            selector := mload(add(reason, 32))
+        }
+    }
+
     function _assertGrantStatus(
         ProgrammableUniversalLaunchKernelV1 kernel,
         bytes32 grantDigest,
@@ -748,11 +946,14 @@ contract ProgrammableUniversalLaunchKernelV1Test {
     }
 
     function _fixture() private returns (Fixture memory fixture) {
+        return _fixtureWithProvider(0, false);
+    }
+
+    function _fixtureWithProvider(uint8 failureMode, bool mutateControl) private returns (Fixture memory fixture) {
         fixture.reviewer = new UniversalTestAuthorityV1();
         fixture.governance = new UniversalTestAuthorityV1();
         fixture.finality = new UniversalTestAuthorityV1();
         fixture.indexer = new UniversalTestAuthorityV1();
-        fixture.provider = new UniversalNestedProviderV1(PROVIDER_BINDING_HASH);
         fixture.verifier = new UniversalNestedVerifierV1();
         fixture.preflight = new ProgrammableUniversalLaunchPreflightV1();
         fixture.poolManager = new UniversalPoolManagerV1();
@@ -770,6 +971,11 @@ contract ProgrammableUniversalLaunchKernelV1Test {
             address(fixture.preflight).codehash,
             control
         );
+        fixture.provider = new UniversalNestedProviderV1(
+            PROVIDER_BINDING_HASH, failureMode, mutateControl ? address(fixture.governance) : address(0), fixture.kernel
+        );
+        bytes32 providerBindingHash = fixture.provider.runtimeBindingHashV1();
+        bytes32 verifierBindingHash = fixture.verifier.runtimeBindingHashV1();
         fixture.profile = new ProgrammableNestedFactoryProfileV1(
             fixture.kernel,
             address(fixture.kernel).codehash,
@@ -777,8 +983,9 @@ contract ProgrammableUniversalLaunchKernelV1Test {
             address(fixture.provider).codehash,
             address(fixture.verifier),
             address(fixture.verifier).codehash,
+            verifierBindingHash,
             PROFILE_KEY,
-            PROVIDER_BINDING_HASH,
+            providerBindingHash,
             2_000_000,
             500_000
         );
@@ -792,7 +999,7 @@ contract ProgrammableUniversalLaunchKernelV1Test {
                 moduleRuntimeCodeHash: address(fixture.profile).codehash,
                 actionTypeHash: fixture.profile.NESTED_FACTORY_PLAN_TYPEHASH(),
                 exactContractBindingHash: CONTRACT_BINDING_HASH,
-                providerBindingHash: PROVIDER_BINDING_HASH,
+                providerBindingHash: providerBindingHash,
                 revenuePolicyHash: REVENUE_POLICY_HASH,
                 securityControlHeadHash: control.securityControlHeadHash,
                 securityEpoch: control.securityEpoch,
@@ -928,19 +1135,19 @@ contract ProgrammableUniversalLaunchKernelV1Test {
             runtimeCodeHash: address(fixture.provider).codehash,
             creationProvenanceHash: keccak256("shared-provider-provenance"),
             ownershipBindingHash: keccak256("shared-provider-ownerless"),
-            configurationHash: PROVIDER_BINDING_HASH
+            configurationHash: fixture.provider.runtimeBindingHashV1()
         });
     }
 
     function _grant(
-        Fixture memory,
+        Fixture memory fixture,
         UniversalApplicantWalletV1 applicant,
         IProgrammableNestedFactoryProfileV1.NestedFactoryPlanV1 memory plan,
         bytes32 planHash,
         bytes32 sourceLaunchId,
         bytes32 antiReplayNonce,
         bytes32 configurationHash
-    ) private pure returns (IProgrammableUniversalLaunchKernelV1.LaunchGrantV1 memory grant) {
+    ) private view returns (IProgrammableUniversalLaunchKernelV1.LaunchGrantV1 memory grant) {
         grant = IProgrammableUniversalLaunchKernelV1.LaunchGrantV1({
             schemaVersion: 1,
             applicantWallet: address(applicant),
@@ -959,7 +1166,7 @@ contract ProgrammableUniversalLaunchKernelV1Test {
             builderEvidenceHash: keccak256(abi.encode(sourceLaunchId, "builder")),
             reviewerAttestationHash: keccak256(abi.encode(sourceLaunchId, "reviewer")),
             exactContractBindingHash: CONTRACT_BINDING_HASH,
-            providerBindingHash: PROVIDER_BINDING_HASH,
+            providerBindingHash: fixture.provider.runtimeBindingHashV1(),
             revenueBindingHash: REVENUE_POLICY_HASH,
             securityControlHeadHash: SECURITY_HEAD,
             securityEpoch: 1,

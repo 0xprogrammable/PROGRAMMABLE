@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+interface IProgrammableRuntimeBindingV1 {
+    function runtimeBindingHashV1() external view returns (bytes32);
+}
+
 /// @notice Closed, versioned lifecycle shared by reusable typed launch profiles.
 /// @dev Profile modules expose their own typed applicant entry points. The kernel never accepts an
 ///      arbitrary target, selector, calldata payload, initcode payload, delegatecall, or generic value cap.
@@ -301,6 +305,13 @@ interface IProgrammableUniversalLaunchKernelV1 {
     function currentnessStatusV1(bytes32 digest) external view returns (bool used, bool revoked);
 
     function activeExecutionGrantDigestV1() external view returns (bytes32);
+
+    function assertClosedRuntimeBindingV1(
+        address account,
+        bytes32 expectedRuntimeCodeHash,
+        bytes32 expectedRuntimeBindingHash,
+        bool requireStateless
+    ) external view returns (bytes32 attestationHash);
 
     function reservationOccupantsV1(ReservationV1 calldata reservation)
         external

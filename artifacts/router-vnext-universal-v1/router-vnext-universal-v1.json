@@ -27,7 +27,7 @@
     "settings": {
       "optimizer": {
         "enabled": true,
-        "runs": 1000
+        "runs": 100
       },
       "evmVersion": "cancun",
       "viaIR": false,
@@ -50,35 +50,35 @@
       }
     },
     "standardInputPath": "artifacts/router-vnext-universal-v1/standard-input.json",
-    "standardInputSha256": "4f76f24c9c4defc43e21e87106004103ca6dc55dfff51a9412b9d499839903b1"
+    "standardInputSha256": "923d24d4cdf17eefad2324ac7e247182b96afa488a34951fc813689ac00faf40"
   },
   "sources": {
     "src/router_vnext/IProgrammableUniversalLaunchKernelV1.sol": {
-      "sha256": "8015e0e3dd71449dea0d1f3dae789b6342864034f7b8119f6644e993af0fedfc"
+      "sha256": "44575d288d3fef6c8c7318f9802e0524f3b16de5679f185efabf644884aace82"
     },
     "src/router_vnext/IProgrammableUniversalLaunchPreflightV1.sol": {
-      "sha256": "78134dbe819db8560412c2ee76905b18a65692585d346f7807bdcd481ebe9f55"
+      "sha256": "88176706ee4ba1434a76f6afdcd1e6bd1c1e356c607be7f93cd3280fa44dcec6"
     },
     "src/router_vnext/IProgrammableNestedFactoryProfileV1.sol": {
-      "sha256": "62dd6efefaf90a8ff18d44bb52ada5337728b9d7b50b77add77f9c3c48be236e"
+      "sha256": "97f3da72e722cea4b15fe0da6b32f71653df59558867231755161877cef2a61f"
     },
     "src/router_vnext/ProgrammableUniversalLaunchKernelV1.sol": {
-      "sha256": "b9b96e6e24da9431a87953105e712662932af68e96a0219165f8d4d1dec83470"
+      "sha256": "22ec3d29bc050c2a7c5934038c08e57585ab08074042c30acec83d9846a39070"
     },
     "src/router_vnext/ProgrammableUniversalLaunchPreflightV1.sol": {
-      "sha256": "09d52ba07fd32d08f9786e936fad9e4c4033072200d136f7fbd3081cceec11fd"
+      "sha256": "734b576e84f9bea124a61edd4a0f95741d57dcf3a47ec4f174497b7e5d750ae3"
     },
     "src/router_vnext/ProgrammableNestedFactoryProfileV1.sol": {
-      "sha256": "8d15e9a2c92bdf09b4f04dfbfa80789a25810999bb7dd3cc2169f215f9711320"
+      "sha256": "52dda71eadc9379b5298b5e35bb7c6b19337e17e86e8c7f330be5f74b547a2ec"
     },
     "test/router_vnext/ProgrammableUniversalLaunchKernelV1.t.sol": {
-      "sha256": "0ff4facd7ee69bbd4aae22e6d9a81ff7cf2e62f8d6ce5ea8ae67e641a514a4f9"
+      "sha256": "0bd2ace49c93e6f88bab77486727d9c5f555769d6b600dfd9d51bba06bfd352f"
     },
     "config/router-vnext/foundry.toml": {
-      "sha256": "0d181cb9a03a01fed67d4d451f818d8925c733b91d7ee6effdffbae20e4944b0"
+      "sha256": "c3bc259b634902cd42245e220e0de69831f3b809eb4341d0a1bb4876cc7f79ac"
     },
     "scripts/generate-router-vnext-universal-artifact.mjs": {
-      "sha256": "450c1db2cc78603b288131e46d4d8d33dee5137ec0bbbf8ae2b1773363f15291"
+      "sha256": "d0b88899e17ac089aba22f789870d33f59a7c004abf73a5dbb651ca68db0cd37"
     },
     "scripts/verify-router-vnext-universal-v1.sh": {
       "sha256": "22be72ffffbc276f2d9a4fd3013bf676689c8add2140125d403a819e18cf8525"
@@ -88,179 +88,199 @@
     "ProgrammableUniversalLaunchKernelV1": {
       "source": "src/router_vnext/ProgrammableUniversalLaunchKernelV1.sol",
       "abiPath": "artifacts/router-vnext-universal-v1/ProgrammableUniversalLaunchKernelV1.abi.json",
-      "abiSha256": "1d90bb9c43368a4599a76894262c96a90115e083c6d98c368e19343bd31d405e",
-      "creationBytes": 25360,
-      "creationSha256": "0bedd7e7485477b0b26ea971ca79d849d36809a46459b1dbfbc4532247ce1aef",
-      "creationKeccak256": "0x77734363177dfc390ea219318c1331c137b83c1a7450096fa6c29b2e6b706f74",
-      "runtimeTemplateBytes": 23714,
-      "runtimeTemplateMarginBytes": 862,
-      "runtimeTemplateSha256": "862cf6a439d70ac3407fd75f2c4dd78b031152504f46d1119b677d2978397b92",
-      "runtimeTemplateKeccak256": "0x47453b6cee1703e594954d2232117ade25e4c277e25dcc82ed2d0a9f48138e1a",
+      "abiSha256": "f42c8b48ecee69fbd8fa9e817a7db2b39945e4e3f2f68f8c68fc95aad0500c27",
+      "creationBytes": 25606,
+      "creationSha256": "b4b74be7093e96e308bc0da396b093e20b536c4bfaa9040fdcc2eb3be836d457",
+      "creationKeccak256": "0xa9fc6c72e21e842d61587dc6793d60e2fa4b2c5f3e5bf7c180c6acc58dd47197",
+      "runtimeTemplateBytes": 23925,
+      "runtimeTemplateMarginBytes": 651,
+      "runtimeTemplateSha256": "9623f9f40e0ba5d4b834822f26ed5a76370a2cfd85a27069e1d1bff0d20408fd",
+      "runtimeTemplateKeccak256": "0x481b3b1a80e727dfdef513caafd23756601ec95d242ac689794c749889106ebb",
       "immutableReferences": {
-        "3191": [
+        "3319": [
           {
             "length": 32,
-            "start": 2914
+            "start": 2876
           },
           {
             "length": 32,
-            "start": 6106
+            "start": 6045
           },
           {
             "length": 32,
-            "start": 8412
+            "start": 8557
           },
           {
             "length": 32,
-            "start": 8538
+            "start": 8683
           },
           {
             "length": 32,
-            "start": 8581
+            "start": 8726
           },
           {
             "length": 32,
-            "start": 16115
+            "start": 16555
           }
         ],
-        "3193": [
+        "3321": [
           {
             "length": 32,
-            "start": 6139
+            "start": 6078
           },
           {
             "length": 32,
-            "start": 8614
+            "start": 8759
           },
           {
             "length": 32,
-            "start": 16148
+            "start": 16588
           }
         ],
-        "3195": [
+        "3323": [
           {
             "length": 32,
-            "start": 2966
+            "start": 2928
           },
           {
             "length": 32,
-            "start": 3133
+            "start": 3095
           },
           {
             "length": 32,
-            "start": 3199
+            "start": 3161
           },
           {
             "length": 32,
-            "start": 3673
+            "start": 3635
           },
           {
             "length": 32,
-            "start": 3739
+            "start": 3701
           },
           {
             "length": 32,
-            "start": 7786
+            "start": 7880
           },
           {
             "length": 32,
-            "start": 7852
+            "start": 7946
           },
           {
             "length": 32,
-            "start": 8464
+            "start": 8609
           },
           {
             "length": 32,
-            "start": 8660
+            "start": 8805
           },
           {
             "length": 32,
-            "start": 9509
+            "start": 9639
           },
           {
             "length": 32,
-            "start": 9575
+            "start": 9705
           }
         ],
-        "3197": [
+        "3325": [
           {
             "length": 32,
-            "start": 3232
+            "start": 3194
           },
           {
             "length": 32,
-            "start": 3772
+            "start": 3734
           },
           {
             "length": 32,
-            "start": 7885
+            "start": 7979
           },
           {
             "length": 32,
-            "start": 8693
+            "start": 8838
           },
           {
             "length": 32,
-            "start": 9608
+            "start": 9738
           }
         ],
-        "3199": [
+        "3327": [
           {
             "length": 32,
-            "start": 7118
+            "start": 7096
           }
         ],
-        "3201": [
+        "3329": [
           {
             "length": 32,
-            "start": 7153
+            "start": 7131
           }
         ],
-        "3203": [
+        "3331": [
           {
             "length": 32,
-            "start": 7307
+            "start": 7339
           }
         ],
-        "3205": [
+        "3333": [
           {
             "length": 32,
-            "start": 7342
+            "start": 7374
           }
         ],
-        "3207": [
+        "3335": [
           {
             "length": 32,
-            "start": 18285
+            "start": 15225
           },
           {
             "length": 32,
-            "start": 18460
+            "start": 15392
           },
           {
             "length": 32,
-            "start": 18587
+            "start": 15519
+          },
+          {
+            "length": 32,
+            "start": 18664
+          },
+          {
+            "length": 32,
+            "start": 18814
+          },
+          {
+            "length": 32,
+            "start": 18941
           }
         ],
-        "3209": [
+        "3337": [
           {
             "length": 32,
-            "start": 18318
+            "start": 15258
           },
           {
             "length": 32,
-            "start": 18620
+            "start": 15552
+          },
+          {
+            "length": 32,
+            "start": 18697
+          },
+          {
+            "length": 32,
+            "start": 18974
           }
         ],
-        "3211": [
+        "3339": [
           {
             "length": 32,
-            "start": 603
+            "start": 554
           },
           {
             "length": 32,
-            "start": 11425
+            "start": 11526
           }
         ]
       },
@@ -270,14 +290,14 @@
     "ProgrammableUniversalLaunchPreflightV1": {
       "source": "src/router_vnext/ProgrammableUniversalLaunchPreflightV1.sol",
       "abiPath": "artifacts/router-vnext-universal-v1/ProgrammableUniversalLaunchPreflightV1.abi.json",
-      "abiSha256": "eafc038b26717ec46eed7d96689d9609fa358caacb816bfd83036653f4f298fa",
-      "creationBytes": 8633,
-      "creationSha256": "55eba4eaa6decbfdf2d948b071b47b803ddfbeb92680e6ea57cfe8f29bc85012",
-      "creationKeccak256": "0x684d5b36a772cceaa193a5aad54ed9424b880f51342542d1267cb637d191859d",
-      "runtimeTemplateBytes": 8605,
-      "runtimeTemplateMarginBytes": 15971,
-      "runtimeTemplateSha256": "1330d1fc553dd22951094238bcf55ebf9e132cfe3c08bb8d473af2d7b1b95e22",
-      "runtimeTemplateKeccak256": "0xe2be8b007e73a41d353f2a40dd316842f034c9f4b03ad0ea9a93bc50d34d22cf",
+      "abiSha256": "c22a46909d0edaecc157a4eebbae0ee621a11482925cf92d76cbbaaa280b63d9",
+      "creationBytes": 8885,
+      "creationSha256": "e01291dd2f18f468f7a3271a03485764b43b6718f871b5175c755629bb3ff440",
+      "creationKeccak256": "0x511f7ac4304ab7f3079255f0471ca33aca0bbde2d1acd737e2e13390e37da4ed",
+      "runtimeTemplateBytes": 8857,
+      "runtimeTemplateMarginBytes": 15719,
+      "runtimeTemplateSha256": "fbc7e42c10d1b84c23c01b5ebc509c89d6ab096bee7c9083c576c43a95ed0598",
+      "runtimeTemplateKeccak256": "0x7f63b99af35d79b09ef8a368cab54827154d89e14e9545c6ccbeb16014ded48a",
       "immutableReferences": {},
       "liveRuntimeCodeHash": null,
       "deploymentAddress": null
@@ -285,197 +305,107 @@
     "ProgrammableNestedFactoryProfileV1": {
       "source": "src/router_vnext/ProgrammableNestedFactoryProfileV1.sol",
       "abiPath": "artifacts/router-vnext-universal-v1/ProgrammableNestedFactoryProfileV1.abi.json",
-      "abiSha256": "c00f701b6b474190930850d09162ae06a88822cc4697db705b1d0a1cc847fa9e",
-      "creationBytes": 15522,
-      "creationSha256": "b8e86d4f0d80f7739a39edd6ac70fc06040361f210c9a7b4cb3d9d402fcbe9ce",
-      "creationKeccak256": "0x1cba0b37a09a63c194aee3c3a22b5a6939b63fb50ba61c1af41874544cdf85ea",
-      "runtimeTemplateBytes": 14583,
-      "runtimeTemplateMarginBytes": 9993,
-      "runtimeTemplateSha256": "3abeaf4dd51733460450fda495309c6645e5f5d706bd0dedeb38877c7cc5ec3d",
-      "runtimeTemplateKeccak256": "0xa95c203e2474f264d9ecc8b2fc2fa03c9a39ec31c71be2a8cd9baa1251a1aa99",
+      "abiSha256": "3b066a930959f06d186651aae0880cd7bf547162f011667fe39baf8383309787",
+      "creationBytes": 15747,
+      "creationSha256": "968f63e2e853eed3b88705dc69e883d39bd250d4ed7c9ef86e9a7e20e49f9924",
+      "creationKeccak256": "0x5d518e4fc0920535b99ea91a3b3e564a84457dcd8988f99e6d3ed5a23cbcf15c",
+      "runtimeTemplateBytes": 14417,
+      "runtimeTemplateMarginBytes": 10159,
+      "runtimeTemplateSha256": "cdeba41316a03281223bfc621081778142840af131ff7a20827ad3964a1ad1aa",
+      "runtimeTemplateKeccak256": "0x6df5ef54c525d14102b0265f5ec0c006f12ca6e2506fcfee98bf91261a3e7fec",
       "immutableReferences": {
-        "953": [
+        "993": [
           {
             "length": 32,
-            "start": 476
+            "start": 431
           },
           {
             "length": 32,
-            "start": 1626
+            "start": 1638
           },
           {
             "length": 32,
-            "start": 1892
+            "start": 1945
           },
           {
             "length": 32,
-            "start": 2259
+            "start": 2287
           },
           {
             "length": 32,
-            "start": 2658
-          },
-          {
-            "length": 32,
-            "start": 4465
-          },
-          {
-            "length": 32,
-            "start": 9310
-          }
-        ],
-        "955": [
-          {
-            "length": 32,
-            "start": 527
-          },
-          {
-            "length": 32,
-            "start": 1659
-          }
-        ],
-        "957": [
-          {
-            "length": 32,
-            "start": 396
-          },
-          {
-            "length": 32,
-            "start": 1700
-          },
-          {
-            "length": 32,
-            "start": 7848
-          },
-          {
-            "length": 32,
-            "start": 7896
-          },
-          {
-            "length": 32,
-            "start": 8010
-          },
-          {
-            "length": 32,
-            "start": 9674
-          }
-        ],
-        "959": [
-          {
-            "length": 32,
-            "start": 1287
-          },
-          {
-            "length": 32,
-            "start": 1733
-          },
-          {
-            "length": 32,
-            "start": 7947
-          }
-        ],
-        "961": [
-          {
-            "length": 32,
-            "start": 1205
-          },
-          {
-            "length": 32,
-            "start": 1774
-          },
-          {
-            "length": 32,
-            "start": 2944
-          },
-          {
-            "length": 32,
-            "start": 3085
-          },
-          {
-            "length": 32,
-            "start": 3267
-          },
-          {
-            "length": 32,
-            "start": 3381
-          },
-          {
-            "length": 32,
-            "start": 8135
-          },
-          {
-            "length": 32,
-            "start": 8302
-          },
-          {
-            "length": 32,
-            "start": 8463
-          },
-          {
-            "length": 32,
-            "start": 8577
-          }
-        ],
-        "963": [
-          {
-            "length": 32,
-            "start": 674
-          },
-          {
-            "length": 32,
-            "start": 1807
-          },
-          {
-            "length": 32,
-            "start": 3318
-          },
-          {
-            "length": 32,
-            "start": 8514
-          }
-        ],
-        "965": [
-          {
-            "length": 32,
-            "start": 1052
-          },
-          {
-            "length": 32,
-            "start": 4425
+            "start": 2661
           },
           {
             "length": 32,
             "start": 4583
-          }
-        ],
-        "967": [
-          {
-            "length": 32,
-            "start": 1408
           },
           {
             "length": 32,
-            "start": 4669
+            "start": 9195
+          }
+        ],
+        "995": [
+          {
+            "length": 32,
+            "start": 547
           },
           {
             "length": 32,
-            "start": 10315
+            "start": 1671
           }
         ],
-        "969": [
+        "997": [
           {
             "length": 32,
-            "start": 1503
+            "start": 358
           },
           {
             "length": 32,
-            "start": 9715
-          }
-        ],
-        "971": [
+            "start": 1712
+          },
           {
             "length": 32,
-            "start": 878
+            "start": 7768
+          },
+          {
+            "length": 32,
+            "start": 7887
+          },
+          {
+            "length": 32,
+            "start": 9478
+          }
+        ],
+        "999": [
+          {
+            "length": 32,
+            "start": 1324
+          },
+          {
+            "length": 32,
+            "start": 1745
+          },
+          {
+            "length": 32,
+            "start": 7801
+          },
+          {
+            "length": 32,
+            "start": 7920
+          }
+        ],
+        "1001": [
+          {
+            "length": 32,
+            "start": 1192
+          },
+          {
+            "length": 32,
+            "start": 1819
+          },
+          {
+            "length": 32,
+            "start": 2949
           },
           {
             "length": 32,
@@ -483,7 +413,139 @@
           },
           {
             "length": 32,
-            "start": 8338
+            "start": 3308
+          },
+          {
+            "length": 32,
+            "start": 8062
+          },
+          {
+            "length": 32,
+            "start": 8268
+          },
+          {
+            "length": 32,
+            "start": 8431
+          }
+        ],
+        "1003": [
+          {
+            "length": 32,
+            "start": 680
+          },
+          {
+            "length": 32,
+            "start": 1852
+          },
+          {
+            "length": 32,
+            "start": 2982
+          },
+          {
+            "length": 32,
+            "start": 3341
+          },
+          {
+            "length": 32,
+            "start": 8095
+          },
+          {
+            "length": 32,
+            "start": 8464
+          }
+        ],
+        "1005": [
+          {
+            "length": 32,
+            "start": 482
+          },
+          {
+            "length": 32,
+            "start": 1885
+          },
+          {
+            "length": 32,
+            "start": 3015
+          },
+          {
+            "length": 32,
+            "start": 3374
+          },
+          {
+            "length": 32,
+            "start": 8128
+          },
+          {
+            "length": 32,
+            "start": 8497
+          }
+        ],
+        "1007": [
+          {
+            "length": 32,
+            "start": 1058
+          },
+          {
+            "length": 32,
+            "start": 4543
+          },
+          {
+            "length": 32,
+            "start": 4701
+          }
+        ],
+        "1009": [
+          {
+            "length": 32,
+            "start": 1271
+          },
+          {
+            "length": 32,
+            "start": 1445
+          },
+          {
+            "length": 32,
+            "start": 1778
+          },
+          {
+            "length": 32,
+            "start": 4787
+          },
+          {
+            "length": 32,
+            "start": 7834
+          },
+          {
+            "length": 32,
+            "start": 7953
+          },
+          {
+            "length": 32,
+            "start": 10069
+          }
+        ],
+        "1011": [
+          {
+            "length": 32,
+            "start": 1540
+          },
+          {
+            "length": 32,
+            "start": 9519
+          }
+        ],
+        "1013": [
+          {
+            "length": 32,
+            "start": 884
+          },
+          {
+            "length": 32,
+            "start": 3163
+          },
+          {
+            "length": 32,
+            "start": 8304
           }
         ]
       },
@@ -497,6 +559,7 @@
       "activeExecutionGrantDigestV1()": "0xbeccb0dd",
       "advanceControlV1((bytes32,uint64,bytes32,uint64,bytes32,uint64,bytes32,bool))": "0x380af258",
       "appendFinalityIndexingV1((bytes32,bytes32,bytes32,bytes32,uint64,bytes32,uint64,bytes32,bytes32,bytes32,uint8),bytes)": "0x9f32b0b8",
+      "assertClosedRuntimeBindingV1(address,bytes32,bytes32,bool)": "0xee4b90f8",
       "beginProfileExecutionV1(bytes32,((bytes32,bytes32,bytes32,uint8,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,uint64,bytes32,uint64,bytes32,uint64,bytes32,uint64,uint64),bytes,(bytes32,bytes32,bytes32,address,bytes32,uint64,uint64),bytes,(uint8,uint8,address,address,bytes32,bytes32,bytes32,bytes32)[]))": "0xd1567f56",
       "canonicalLaunchReceiptV1(bytes32)": "0x16eb5a25",
       "computeExecutionCurrentnessDigestV1((bytes32,bytes32,bytes32,uint8,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,uint64,bytes32,uint64,bytes32,uint64,bytes32,uint64,uint64))": "0x8d088cab",
@@ -526,6 +589,7 @@
     },
     "ProgrammableUniversalLaunchPreflightV1": {
       "atomicPreflightHashV1(address,bytes32,bytes32,(uint8,uint8,address,address,bytes32,bytes32,bytes32,bytes32)[])": "0x7547114e",
+      "closedRuntimeBindingHashV1(address,bytes32,bytes32,bool)": "0xc3dedfb4",
       "readbackV1(address,bytes32,bytes32,(uint8,uint8,address,address,bytes32,bytes32,bytes32,bytes32)[],bytes32)": "0x33c0e6ce"
     },
     "ProgrammableNestedFactoryProfileV1": {
@@ -550,7 +614,9 @@
       "PROVIDER_GAS_LIMIT()": "0xf77a71e6",
       "PROVIDER_RUNTIME_CODEHASH()": "0xd33d07c9",
       "PROVIDER()": "0x00d34411",
+      "runtimeBindingHashV1()": "0xb652ee8d",
       "SHARED_COMPONENT_IDENTITY_TYPEHASH()": "0x84679632",
+      "VERIFIER_BINDING_HASH()": "0x113e2b3a",
       "VERIFIER_GAS_LIMIT()": "0x801579c0"
     }
   },
@@ -657,6 +723,10 @@
       "PREFLIGHT_READBACK_TYPEHASH": {
         "preimage": "UniversalLaunchPreflightReadbackV1(bytes32 runtimeHeadHash,bytes32 controlHeadHash,bytes32 lifecycleHeadHash,bytes32 reservationSetHash,bytes32 reservationStateHash)",
         "value": "0xbad4bdb661e908a8c019b966e8629522b36fb71f1f086e87807af41971e2f3e3"
+      },
+      "CLOSED_RUNTIME_BINDING_TYPEHASH": {
+        "preimage": "ClosedRuntimeBindingV1(uint256 chainId,address account,bytes32 runtimeCodeHash,bytes32 runtimeBindingHash,bool stateless)",
+        "value": "0x91cf64dc70ee13a6cadaa910d2aec955a44decdbb2a939f980ffaadbeafccef8"
       }
     },
     "src/router_vnext/ProgrammableNestedFactoryProfileV1.sol": {
@@ -698,7 +768,7 @@
       }
     }
   },
-  "typehashCount": 34,
+  "typehashCount": 35,
   "profiles": [
     {
       "architecture": "COMPLETED_GRAPH_ADOPTION",
@@ -759,7 +829,7 @@
   },
   "sourceReferents": {
     "applicantRequestA": "APPLICANT_ID_AND_REVIEWER_ATTESTATION_LINEAGE",
-    "executableMeasuredB": "RAW_BYTES20_SOURCE_COMMIT_AND_TREE_IN_PLAN_AND_GRANT",
+    "executableMeasuredB": "RAW_BYTES20_SOURCE_COMMIT_AND_TREE_IN_GRANT_COBOUND_WITH_PLAN_HASH",
     "carrierEvidenceC": "BUILDER_EVIDENCE_ONLY_NEVER_SUBSTITUTES_A_OR_B"
   },
   "deployment": {
