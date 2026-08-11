@@ -383,6 +383,9 @@ describe("wallet recovery state", () => {
     );
     expect(provider).toContain("const { refreshUser } = useUser();");
     expect(provider).toContain("getIdentityToken: getPrivyIdentityToken");
+    expect(provider).toContain("const { reauthorize } = useOAuthTokens();");
+    expect(provider).toContain('await reauthorize({ provider: "github" });');
+    expect(provider).not.toContain("onOAuthTokenGrant");
   });
 
   it("does not refresh or acquire tokens before authentication is current", async () => {
@@ -400,6 +403,33 @@ describe("wallet recovery state", () => {
     expect(refreshUser).not.toHaveBeenCalled();
     expect(getAccessToken).not.toHaveBeenCalled();
     expect(getIdentityToken).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed numeric GitHub subjects before refresh or token I/O", async () => {
+    for (const input of [
+      { readCurrentAuthority: () => applicantAuthority({ githubUserId: "github-user" }) },
+      {
+        readCurrentAuthority: applicantAuthority,
+        requirement: { ...applicantRequirement, githubUserId: "0" },
+      },
+    ]) {
+      const refreshUser = vi.fn(async () => applicantUser());
+      const getAccessToken = vi.fn(async () => "unexpected-access");
+      const getIdentityToken = vi.fn(async () => "unexpected-identity");
+      await expect(walletProvider.refreshWalletApplicantSessionV1({
+        authenticated: true,
+        readCurrentAuthority: input.readCurrentAuthority,
+        refreshUser,
+        getAccessToken,
+        getIdentityToken,
+        requirement: "requirement" in input
+          ? input.requirement
+          : applicantRequirement,
+      })).resolves.toBeNull();
+      expect(refreshUser).not.toHaveBeenCalled();
+      expect(getAccessToken).not.toHaveBeenCalled();
+      expect(getIdentityToken).not.toHaveBeenCalled();
+    }
   });
 
   it("refreshes user before tokens and binds the exact GitHub identity and linked wallet", async () => {

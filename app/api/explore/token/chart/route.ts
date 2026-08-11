@@ -8,12 +8,40 @@ import {
 } from "../../../../../lib/alchemy/explore.server";
 import { enrichTokensWithAlchemyPoolState } from "../../../../../lib/alchemy/live-market.server";
 import {
+  assertTokenChartSupported,
   isTokenChartRange,
   readTokenChartSeries,
+  TokenChartIntegrityError,
+  TokenChartUnavailableError,
+  type TokenChartFreshness,
 } from "../../../../../lib/onchain/chart";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+const TOKEN_CHART_DATA_QUALITY_SCHEMA_VERSION =
+  "programmable.explore-chart-data-quality.v1" as const;
+
+function chartDataQualityStatus(freshness: TokenChartFreshness) {
+  return freshness.history.status === "current" &&
+    freshness.price.status === "current" &&
+    freshness.valuation.status === "current"
+    ? "current" as const
+    : "partial" as const;
+}
+
+function unavailableDataQuality(
+  reason:
+    | "integrity"
+    | "source-unavailable"
+    | "unsupported-pool-orientation",
+) {
+  return {
+    schemaVersion: TOKEN_CHART_DATA_QUALITY_SCHEMA_VERSION,
+    status: "unavailable" as const,
+    reason,
+  };
+}
 
 export async function GET(request: NextRequest) {
   const search = request.nextUrl.searchParams;
@@ -52,18 +80,18 @@ export async function GET(request: NextRequest) {
     if (deployment.status !== "ready" || model.status !== "ready") {
       return NextResponse.json(
         {
-          status: "not-deployed",
+          status: "unavailable",
           address,
-          points: [],
-          swapCount: 0,
-          volumeWei: "0",
-          volumeEth: "0",
+          error: "Onchain chart data is temporarily unavailable",
+          dataQuality: unavailableDataQuality("source-unavailable"),
         },
         {
+          status: 503,
           headers: {
-            "Cache-Control": "public, max-age=0, s-maxage=60",
+            "Cache-Control": "no-store",
+            "Retry-After": "5",
+            "X-Programmable-Data-Quality": "unavailable",
             "X-Programmable-Read-Source": "rpc",
-            "X-Programmable-Rpc-Provider": "alchemy",
           },
         },
       );
@@ -85,11 +113,12 @@ export async function GET(request: NextRequest) {
           headers: {
             "Cache-Control": "no-store",
             "X-Programmable-Read-Source": "rpc",
-            "X-Programmable-Rpc-Provider": "alchemy",
           },
         },
       );
     }
+
+    assertTokenChartSupported(token);
 
     const liveSnapshot = model.launchDiscoverySnapshot ?? model.snapshot;
     const liveToken = (
@@ -106,31 +135,75 @@ export async function GET(request: NextRequest) {
       ethUsdQuote: model.snapshot.ethUsdQuote,
       range: requestedRange,
     });
+    const { freshness, ...publicSeries } = series;
+    const qualityStatus = series.status === "partial"
+      ? "partial" as const
+      : chartDataQualityStatus(freshness);
     return NextResponse.json(
       {
-        ...series,
+        ...publicSeries,
         address,
         range: requestedRange,
+        valuationMetric: "fdv",
+        dataQuality: {
+          schemaVersion: TOKEN_CHART_DATA_QUALITY_SCHEMA_VERSION,
+          status: qualityStatus,
+          asOfBlock: liveSnapshot.blockNumber,
+          blockHash: liveSnapshot.blockHash,
+          finality:
+            liveSnapshot.confirmations > 0 ? "confirmed" : "latest",
+          history: freshness.history,
+          price: freshness.price,
+          valuation: freshness.valuation,
+        },
         snapshotBlock: liveSnapshot.blockNumber,
         snapshotHash: liveSnapshot.blockHash,
       },
       {
         headers: {
           "Cache-Control":
-            "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
+            qualityStatus === "current"
+              ? "public, max-age=0, s-maxage=2, stale-while-revalidate=2"
+              : "no-store",
+          "X-Programmable-Data-Quality": qualityStatus,
+          "X-Programmable-Valuation-Metric": "fdv",
           "X-Programmable-Read-Source": "rpc",
-          "X-Programmable-Rpc-Provider": "alchemy",
         },
       },
     );
   } catch (error) {
-    console.error(
-      "Alchemy token chart read failed",
-      safeAlchemyError(error),
-    );
+    const integrityFailure = error instanceof TokenChartIntegrityError;
+    const unsupportedPool = error instanceof TokenChartUnavailableError;
+    if (!unsupportedPool) {
+      console.error(
+        "Token chart read failed",
+        safeAlchemyError(error),
+      );
+    }
     return NextResponse.json(
-      { error: "Onchain chart data is temporarily unavailable" },
-      { status: 503, headers: { "Cache-Control": "no-store" } },
+      {
+        status: "unavailable",
+        error: unsupportedPool
+          ? "Price history is unavailable for this pool"
+          : "Onchain chart data is temporarily unavailable",
+        dataQuality: unavailableDataQuality(
+          integrityFailure
+            ? "integrity"
+            : unsupportedPool
+              ? error.reason
+              : "source-unavailable",
+        ),
+      },
+      {
+        status: 503,
+        headers: {
+          "Cache-Control": "no-store",
+          ...(integrityFailure || unsupportedPool
+            ? {}
+            : { "Retry-After": "5" }),
+          "X-Programmable-Data-Quality": "unavailable",
+        },
+      },
     );
   }
 }

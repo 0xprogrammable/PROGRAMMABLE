@@ -1,5 +1,3 @@
-import { readFile } from "node:fs/promises";
-
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
@@ -14,6 +12,20 @@ import {
   isExactShardsManualRouterPublishRequestV1,
   shardsManualRouterAlchemyApiKeyCommitmentV1,
 } from "../lib/server/custom-launch/manual-router-shards-publish-transport-v1";
+import { maxDuration as finalityMaxDuration } from
+  "../app/api/custom-launch/manual/finality/route";
+import { maxDuration as reissueStateMaxDuration } from
+  "../app/api/custom-launch/manual/reissue-state/route";
+import { maxDuration as reportTransactionMaxDuration } from
+  "../app/api/custom-launch/manual/report-transaction/route";
+import { maxDuration as resolveMaxDuration } from
+  "../app/api/custom-launch/manual/resolve/route";
+import { maxDuration as routeAcceptanceMaxDuration } from
+  "../app/api/custom-launch/manual/route-acceptance/route";
+import { maxDuration as signedArtifactsMaxDuration } from
+  "../app/api/custom-launch/manual/signed-artifacts/route";
+import { maxDuration as submissionsMaxDuration } from
+  "../app/api/custom-launch/manual/submissions/route";
 
 const QUICKNODE =
   "https://programmable.ethereum.quiknode.pro/exact-shards-test-key/";
@@ -162,13 +174,23 @@ describe("Shards manual Router publish transport", () => {
     expect(waits).toEqual([1_000]);
   });
 
-  it("pins the signed-artifact route above the serialized provider budget", async () => {
-    const route = await readFile(new URL(
-      "../app/api/custom-launch/manual/signed-artifacts/route.ts",
-      import.meta.url,
-    ), "utf8");
-
-    expect(route).toContain("export const maxDuration = 300;");
+  it("budgets every exact-Shards state route for serialized provider reads", () => {
+    expect({
+      finality: finalityMaxDuration,
+      reissueState: reissueStateMaxDuration,
+      reportTransaction: reportTransactionMaxDuration,
+      resolve: resolveMaxDuration,
+      signedArtifacts: signedArtifactsMaxDuration,
+      submissions: submissionsMaxDuration,
+    }).toEqual({
+      finality: 300,
+      reissueState: 300,
+      reportTransaction: 300,
+      resolve: 300,
+      signedArtifacts: 300,
+      submissions: 300,
+    });
+    expect(routeAcceptanceMaxDuration).toBe(60);
   });
 
   it("retries only exact QuickNode HTTP 429 responses with the frozen delays", async () => {

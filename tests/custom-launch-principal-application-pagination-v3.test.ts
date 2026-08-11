@@ -180,10 +180,10 @@ describe("principal Application V3 pagination", () => {
       });
     }) as typeof fetch;
     const client = createCustomLaunchWebsiteClientV2({
-      session: {
+      getSession: async () => ({
         accessToken: "access-token-value",
         identityToken: "identity-token-value",
-      },
+      }),
       fetch: fetchV2,
     });
 

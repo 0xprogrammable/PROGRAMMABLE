@@ -4,6 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 const mocks = vi.hoisted(() => ({
+  AlchemyCreatorProfileIntegrityError: class extends Error {
+    override name = "AlchemyCreatorProfileIntegrityError";
+  },
   coordinatePublicRouteRead: vi.fn(),
   getAlchemyOnchainDeployment: vi.fn(),
   preparePublicRouteRequest: vi.fn(
@@ -69,6 +72,8 @@ vi.mock("../lib/alchemy/explore.server", () => ({
 }));
 
 vi.mock("../lib/alchemy/profile.server", () => ({
+  AlchemyCreatorProfileIntegrityError:
+    mocks.AlchemyCreatorProfileIntegrityError,
   readAlchemyCreatorProfile: mocks.readAlchemyCreatorProfile,
 }));
 
@@ -83,7 +88,7 @@ describe("public route coordinator wiring", () => {
     vi.clearAllMocks();
   });
 
-  it("reads creator profile directly from the current Alchemy model", async () => {
+  it("reports the indexed model and operational RPC profile sources", async () => {
     const snapshot = {
       blockNumber: "25650000",
       blockHash: `0x${"33".repeat(32)}`,
@@ -113,9 +118,83 @@ describe("public route coordinator wiring", () => {
     expect(response.headers.get("Cache-Control")).toBe(
       "private, max-age=0, s-maxage=15",
     );
+    expect(response.headers.get("X-Programmable-Launch-Source")).toBe(
+      "indexed-read-model+operational-rpc",
+    );
     expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
+      "operational-dual",
+    );
+    expect(response.headers.get("X-Programmable-Launch-Source")).not.toBe(
       "alchemy",
     );
+  });
+
+  it("keeps creator reward integrity conflicts non-temporary", async () => {
+    mocks.readAlchemyExploreModel.mockResolvedValue({
+      status: "ready",
+      snapshot: {
+        blockNumber: "25650000",
+        blockHash: `0x${"33".repeat(32)}`,
+      },
+    });
+    mocks.getAlchemyOnchainDeployment.mockReturnValue({
+      status: "ready",
+      chainId: 1,
+    });
+    mocks.readAlchemyCreatorProfile.mockRejectedValue(
+      new mocks.AlchemyCreatorProfileIntegrityError(
+        "deterministic pool mismatch",
+      ),
+    );
+
+    const response = await creatorProfile(
+      new NextRequest(
+        `http://localhost/api/explore/profile?account=${ACCOUNT}`,
+      ),
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      status: "error",
+      error: {
+        kind: "integrity",
+        code: "creator_profile_integrity_conflict",
+        message: "Current creator reward data could not be verified",
+      },
+    });
+  });
+
+  it("keeps creator provider failures temporary", async () => {
+    mocks.readAlchemyExploreModel.mockResolvedValue({
+      status: "ready",
+      snapshot: {
+        blockNumber: "25650000",
+        blockHash: `0x${"33".repeat(32)}`,
+      },
+    });
+    mocks.getAlchemyOnchainDeployment.mockReturnValue({
+      status: "ready",
+      chainId: 1,
+    });
+    mocks.readAlchemyCreatorProfile.mockRejectedValue(
+      new Error("operational provider unavailable"),
+    );
+
+    const response = await creatorProfile(
+      new NextRequest(
+        `http://localhost/api/explore/profile?account=${ACCOUNT}`,
+      ),
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      status: "error",
+      error: {
+        kind: "temporary",
+        code: "creator_profile_temporarily_unavailable",
+        message: "Onchain creator data is temporarily unavailable",
+      },
+    });
   });
 
   it("wires Stock-Paired confirmation through the shared launch lookup gate", async () => {

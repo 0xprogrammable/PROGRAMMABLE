@@ -8,6 +8,7 @@ import {
   useIdentityToken,
   useLinkAccount,
   useLogin,
+  useOAuthTokens,
   usePrivy,
   useSendTransaction as usePrivySendTransaction,
   useSignMessage as usePrivySignMessage,
@@ -113,8 +114,10 @@ type WalletContextValue = {
     requirement?: WalletApplicantIdentityRequirementV1,
   ) => Promise<WalletApplicantSessionV1 | null>;
   githubConnected: boolean;
+  githubUserId: string;
   githubUsername: string;
   connectGithub: () => void;
+  reauthorizeGithub: () => Promise<void>;
   setUsername: (username: string) => void;
   signLaunchMessage: (signingMessageBase64Url: string) => Promise<string>;
   sendBrowserWalletAction: (input: Readonly<{
@@ -139,6 +142,7 @@ const privyAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID?.trim();
 const profileStoragePrefix = "programmable-profile";
 const profileUpdatedEvent = "programmable:profile-updated";
 const usernamePattern = /^[A-Za-z0-9]{3,12}$/;
+const githubUserIdPattern = /^[1-9][0-9]{0,39}$/;
 const appChain =
   process.env.NEXT_PUBLIC_PROGRAMMABLE_ONCHAIN_NETWORK === "rehearsal"
     ? sepolia
@@ -206,12 +210,16 @@ export async function refreshWalletApplicantSessionV1(input: Readonly<{
   requirement?: WalletApplicantIdentityRequirementV1;
 }>): Promise<WalletApplicantSessionV1 | null> {
   if (!input.authenticated) return null;
+  if (
+    input.requirement !== undefined
+    && !githubUserIdPattern.test(input.requirement.githubUserId)
+  ) return null;
   const initial = input.readCurrentAuthority();
   if (
     typeof initial.privyUserId !== "string"
     || initial.privyUserId.length === 0
     || typeof initial.githubUserId !== "string"
-    || initial.githubUserId.length === 0
+    || !githubUserIdPattern.test(initial.githubUserId)
     || typeof initial.githubLogin !== "string"
     || initial.githubLogin.length === 0
     || typeof initial.walletAddress !== "string"
@@ -237,7 +245,7 @@ export async function refreshWalletApplicantSessionV1(input: Readonly<{
     if (
       !github
       || typeof github.subject !== "string"
-      || github.subject.length === 0
+      || !githubUserIdPattern.test(github.subject)
       || typeof github.username !== "string"
       || github.username.length === 0
       || github.subject !== initial.githubUserId
@@ -734,6 +742,7 @@ function ConfiguredWalletProvider({
 function PrivyWalletBridge({ children }: { children: ReactNode }) {
   const { authenticated, getAccessToken, logout, ready, user } = usePrivy();
   const { refreshUser } = useUser();
+  const { reauthorize } = useOAuthTokens();
   const { identityToken } = useIdentityToken();
   const { sendTransaction: sendPrivyTransaction } = usePrivySendTransaction();
   const { signMessage: signPrivyMessage } = usePrivySignMessage();
@@ -777,6 +786,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
   const activeAuthenticated = authenticated && !sessionSuppressed;
   const githubAccount = user?.github;
   const githubConnected = Boolean(activeAuthenticated && githubAccount?.subject);
+  const githubUserId = githubConnected ? githubAccount?.subject ?? "" : "";
   const githubUsername = githubConnected ? githubAccount?.username ?? "" : "";
   const connectedWallet = useMemo(() => {
     if (!activeAuthenticated) return undefined;
@@ -856,6 +866,14 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       }),
     [activeAuthenticated, getAccessToken, ready, refreshUser],
   );
+  const reauthorizeGithub = useCallback(async () => {
+    if (!ready || !activeAuthenticated || !githubConnected) {
+      throw new Error("Sign in with your approved GitHub account");
+    }
+    // No OAuth grant callback is registered: the Website never receives,
+    // stores or logs the provider access token during reauthorization.
+    await reauthorize({ provider: "github" });
+  }, [activeAuthenticated, githubConnected, ready, reauthorize]);
 
   const profileValue = useSyncExternalStore(
     subscribeToProfiles,
@@ -1407,8 +1425,10 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       getIdentityToken: getCurrentIdentityToken,
       refreshApplicantSession,
       githubConnected,
+      githubUserId,
       githubUsername,
       connectGithub,
+      reauthorizeGithub,
       setUsername,
       signLaunchMessage,
       sendBrowserWalletAction,
@@ -1426,6 +1446,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       getAccessToken,
       getCurrentIdentityToken,
       githubConnected,
+      githubUserId,
       githubUsername,
       hasSession,
       openWallet,
@@ -1434,6 +1455,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       readTradeBalances,
       ready,
       refreshApplicantSession,
+      reauthorizeGithub,
       sendBrowserWalletAction,
       sendHookemonBrowserWalletAction,
       sendTransaction,
@@ -1494,8 +1516,12 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
       getIdentityToken: async () => null,
       refreshApplicantSession: async () => null,
       githubConnected: false,
+      githubUserId: "",
       githubUsername: "",
       connectGithub: () => setDialogOpen(true),
+      reauthorizeGithub: async () => {
+        throw new Error("GitHub sign-in is unavailable");
+      },
       setUsername: () => undefined,
       signLaunchMessage: async () => {
         throw new Error("Wallet sign-in is unavailable");

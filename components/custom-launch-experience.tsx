@@ -40,6 +40,20 @@ import {
   CustomLaunchWebsiteRequestErrorV2,
 } from "@/lib/custom-launch/client-v2";
 import {
+  acquireCurrentCustomLaunchWebsiteSessionV2,
+  assertCurrentCustomLaunchPrincipalV2,
+  customApplicationHasDurableApprovalV2,
+  customApplicationHasCurrentLaunchEntitlementV2,
+  customLaunchApplicantRecoveryV2,
+  customLaunchApplicantSessionBoundaryKeyV2,
+  refreshCurrentCustomLaunchApplicantStageV2,
+  runCustomLaunchApplicantReauthorizationV2,
+  runCurrentCustomLaunchApplicantSequenceV2,
+  CustomLaunchApplicantBoundaryGuardV2,
+  CustomLaunchApplicantSingleFlightV2,
+  type CustomLaunchApplicantRecoveryV2,
+} from "@/lib/custom-launch/applicant-session-v2";
+import {
   assertFreshReissuedGrantV1,
   browserWalletGrantReissueIdentityV1,
   BrowserWalletGrantReissueBindingErrorV1,
@@ -156,17 +170,20 @@ const LAUNCH_PERMIT_LOCATOR_KEYS_V2 = [
 ] as const;
 
 type CustomLaunchScreen = "intro" | "applications" | "setup";
-type LaunchProgress =
+export type LaunchProgress =
   | "idle"
   | "preparing"
   | "wallet-proof"
   | "wallet-transaction"
+  | "reconciling"
+  | "ambiguous"
   | "confirmation"
   | "publishing"
   | "complete";
 
-type PreparedLaunchRecoveryV2 = Readonly<{
+export type PreparedLaunchRecoveryV2 = Readonly<{
   stage: "prepared";
+  walletRequestAttempted: false;
   applicationHandle: ApplicationHandleV3;
   githubPrincipalHash: `sha256:${string}`;
   grantId: string;
@@ -181,7 +198,24 @@ type PreparedLaunchRecoveryV2 = Readonly<{
   reservedTransactionHash: `0x${string}`;
 }>;
 
-type BroadcastLaunchRecoveryV2 = Readonly<{
+export type SubmissionUnknownLaunchRecoveryV2 = Readonly<{
+  stage: "submission-unknown";
+  walletRequestAttempted: true;
+  applicationHandle: ApplicationHandleV3;
+  githubPrincipalHash: `sha256:${string}`;
+  grantId: string;
+  grantBindingHash: `sha256:${string}`;
+  sessionId: string;
+  permitId: `sha256:${string}`;
+  chainId: string;
+  executionReservationId: string;
+  browserWalletActionHash: `sha256:${string}`;
+  reportIdempotencyKey: string;
+  expiresAt: string;
+  reservedTransactionHash: `0x${string}`;
+}>;
+
+export type BroadcastLaunchRecoveryV2 = Readonly<{
   stage: "broadcast";
   applicationHandle: ApplicationHandleV3;
   githubPrincipalHash: `sha256:${string}`;
@@ -199,12 +233,89 @@ type BroadcastLaunchRecoveryV2 = Readonly<{
 
 export type PersistedLaunchRecoveryV2 =
   | PreparedLaunchRecoveryV2
+  | SubmissionUnknownLaunchRecoveryV2
   | BroadcastLaunchRecoveryV2;
 
-type LaunchRecoveryReadV2 =
+export function customLaunchSubmissionUnknownRecoveryV2(
+  recovery: PreparedLaunchRecoveryV2,
+): SubmissionUnknownLaunchRecoveryV2 {
+  return Object.freeze({
+    ...recovery,
+    stage: "submission-unknown" as const,
+    walletRequestAttempted: true as const,
+  });
+}
+
+export function customLaunchPersistedRecoveryProgressV2(
+  recovery: Pick<PersistedLaunchRecoveryV2, "stage">,
+): Extract<LaunchProgress, "reconciling" | "ambiguous" | "confirmation"> {
+  if (recovery.stage === "prepared") return "reconciling";
+  return recovery.stage === "submission-unknown" ? "ambiguous" : "confirmation";
+}
+
+export function customLaunchRecoveryDisplayV2(
+  launchProgress: LaunchProgress,
+  statusMessage = "",
+): Readonly<{ title: string; message: string; submitted: boolean | null }> {
+  if (launchProgress === "complete") {
+    return {
+      title: "Launch complete",
+      message: statusMessage || "The launched project is published.",
+      submitted: true,
+    };
+  }
+  if (launchProgress === "confirmation" || launchProgress === "publishing") {
+    return {
+      title: "Launch submitted",
+      message: statusMessage || "The approved transaction is being verified.",
+      submitted: true,
+    };
+  }
+  if (launchProgress === "ambiguous" || launchProgress === "wallet-transaction") {
+    return {
+      title: "Submission status unknown",
+      message: statusMessage
+        || "Checking the reserved launch before another wallet action can start.",
+      submitted: null,
+    };
+  }
+  return {
+    title: "Launch not submitted",
+    message: statusMessage
+      || "Checking the reserved launch before another wallet action can start.",
+    submitted: false,
+  };
+}
+
+export function CustomLaunchRecoveryCopyV2({
+  launchProgress,
+  statusMessage,
+}: Readonly<{
+  launchProgress: LaunchProgress;
+  statusMessage?: string;
+}>) {
+  const display = customLaunchRecoveryDisplayV2(
+    launchProgress,
+    statusMessage,
+  );
+  return (
+    <>
+      <h2>{display.title}</h2>
+      <p>{display.message}</p>
+    </>
+  );
+}
+
+export type LaunchRecoveryReadV2 =
   | Readonly<{ kind: "absent" }>
   | Readonly<{ kind: "unreadable" }>
   | Readonly<{ kind: "valid"; recovery: PersistedLaunchRecoveryV2 }>;
+
+export function customLaunchRecoveryBlocksNewSubmissionV2(
+  recoveryRead: LaunchRecoveryReadV2,
+): boolean {
+  return recoveryRead.kind !== "absent";
+}
 
 type PendingGrantReissueV1 = Readonly<{
   oldDescriptor: LaunchDescriptorV2;
@@ -215,6 +326,17 @@ type PendingGrantReissueV1 = Readonly<{
 class LaunchFlowCancelledError extends Error {}
 export class LaunchExecutionUnavailableError extends Error {}
 export class LaunchBindingMismatchError extends Error {}
+export const LAUNCH_PREPARATION_REFRESH_REQUIRED_V1 =
+  "launch_preparation_refresh_required" as const;
+
+export class LaunchPreparationRefreshRequiredErrorV1 extends Error {
+  readonly code = LAUNCH_PREPARATION_REFRESH_REQUIRED_V1;
+
+  constructor() {
+    super("Launch setup needs to be refreshed. Try again");
+    this.name = "LaunchPreparationRefreshRequiredErrorV1";
+  }
+}
 
 export function shouldClearLaunchRecoveryV2(caught: unknown): boolean {
   return caught instanceof LaunchExecutionUnavailableError;
@@ -263,11 +385,11 @@ export function customApplicationDisplayState(
     changes_required: { title: "Changes needed", action: "Open requested changes", tone: "warning" },
     platform_pending: { title: "Verification still running", action: "View on GitHub", tone: "pending" },
     ready_for_registration: { title: "Ready for final verification", action: "Finish verification", tone: "pending" },
-    approved: { title: "Ready to launch", action: "Set up launch", tone: "ready" },
+    approved: { title: "Approved", action: "Set up launch", tone: "ready" },
     stale: { title: "Source changed", action: "View current source", tone: "warning" },
     rejected: { title: "Not approved", action: "View decision", tone: "warning" },
     superseded: { title: "New version submitted", action: "View current version", tone: "muted" },
-    expired: { title: "Approval expired", action: "View on GitHub", tone: "warning" },
+    expired: { title: "Launch access expired", action: "View current status", tone: "warning" },
     revoked: { title: "Approval revoked", action: "View reason", tone: "warning" },
     launching: { title: "Launch submitted", action: "View launch status", tone: "pending" },
     launched: { title: "Launch complete", action: "View launch status", tone: "complete" },
@@ -287,8 +409,11 @@ export function customApplicationOpensLaunchExperience(
 export function customApplicationOpensLaunchExperienceV2(
   application: PrincipalCustomLaunchApplicationSummaryV2,
 ): boolean {
-  return customApplicationIntakeIsLaunchableV2(application)
-    && customApplicationOpensLaunchExperience(application.state);
+  if (!customApplicationIntakeIsLaunchableV2(application)) return false;
+  if (application.state === "approved") {
+    return customApplicationHasCurrentLaunchEntitlementV2(application);
+  }
+  return customApplicationOpensLaunchExperience(application.state);
 }
 
 export type CustomLaunchFeeReviewV1 = Readonly<{
@@ -685,7 +810,7 @@ export function assertLaunchPermitFreshnessV2(input: Readonly<{
     || actionNotBefore >= preparationExpiresAt
     || validUntil - trustedNow < 5_000
     || preparationExpiresAt - trustedNow < 5_000
-  ) throw new Error("Launch permit or wallet transaction has expired");
+  ) throw new LaunchPreparationRefreshRequiredErrorV1();
 }
 
 export async function fetchTrustedTimeV1(
@@ -1261,13 +1386,15 @@ export function CustomLaunchExperience({
   trustedLaunchPermitSigners: readonly TrustedLaunchPermitSignerV2[];
 }) {
   const {
+    authReady,
     authenticated,
     connectGithub,
-    getAccessToken,
-    getIdentityToken,
     githubConnected,
+    githubUserId,
     githubUsername,
     openWallet,
+    refreshApplicantSession,
+    reauthorizeGithub,
     sendBrowserWalletAction,
     signLaunchMessage,
     wallet,
@@ -1291,23 +1418,34 @@ export function CustomLaunchExperience({
   const [transactionChainId, setTransactionChainId] = useState("");
   const [githubPrincipalHash, setGithubPrincipalHash] = useState<`sha256:${string}` | null>(null);
   const [pendingGrantReissue, setPendingGrantReissue] = useState<PendingGrantReissueV1 | null>(null);
+  const [applicantRecovery, setApplicantRecovery] =
+    useState<CustomLaunchApplicantRecoveryV2>("none");
+  const [applicantReauthorizing, setApplicantReauthorizing] = useState(false);
+  // Keep non-Hook derivation after all state Hooks so the React compiler can
+  // continue recognizing every stable state setter in this large component.
+  const sessionBoundaryKey = customLaunchApplicantSessionBoundaryKeyV2({
+    authReady,
+    authenticated,
+    githubConnected,
+    githubUserId,
+    walletAccount: wallet?.account ?? null,
+  });
   const imageInputRef = useRef<HTMLInputElement>(null);
   const flowGenerationRef = useRef(0);
   const applicationsRequestGenerationRef = useRef(0);
   const applicationsAbortControllerRef = useRef<AbortController | null>(null);
   const flowAbortControllerRef = useRef<AbortController | null>(null);
-  const launchInFlightRef = useRef(false);
+  const launchSingleFlightRef = useRef(new CustomLaunchApplicantSingleFlightV2());
   const grantReissueSingleFlightRef = useRef(new BrowserWalletGrantReissueSingleFlightV1());
   const launchAuthorityRefreshSingleFlightRef = useRef(
     new LaunchAuthorityRefreshSingleFlightV1(),
   );
   const launchAuthorityRefreshAttemptRef = useRef(new Map<string, number>());
-  const githubIdentityRef = useRef(githubUsername);
   const walletAccountRef = useRef(wallet?.account ?? null);
-
-  useEffect(() => {
-    walletAccountRef.current = wallet?.account ?? null;
-  }, [wallet?.account]);
+  const sessionBoundaryGuardRef = useRef(
+    new CustomLaunchApplicantBoundaryGuardV2(sessionBoundaryKey),
+  );
+  const handledSessionBoundaryKeyRef = useRef(sessionBoundaryKey);
 
   const beginFlow = useCallback(() => {
     flowAbortControllerRef.current?.abort();
@@ -1341,15 +1479,26 @@ export function CustomLaunchExperience({
   }, []);
 
   const getSession = useCallback(async (): Promise<CustomLaunchWebsiteSessionV2> => {
-    const [accessToken, identityToken] = await Promise.all([
-      getAccessToken(),
-      getIdentityToken(),
-    ]);
-    if (!accessToken || !identityToken) {
-      throw new Error("Sign in with GitHub and try again");
-    }
-    return { accessToken, identityToken };
-  }, [getAccessToken, getIdentityToken]);
+    const requestBoundary = sessionBoundaryGuardRef.current.snapshot(sessionBoundaryKey);
+    return acquireCurrentCustomLaunchWebsiteSessionV2({
+      expectedGithubUserId: githubUserId,
+      expectedGithubLogin: githubUsername,
+      expectedWalletAccount: wallet?.account ?? "",
+      refreshApplicantSession,
+      isCurrent: () => sessionBoundaryGuardRef.current.isCurrent(requestBoundary),
+    });
+  }, [
+    githubUserId,
+    githubUsername,
+    refreshApplicantSession,
+    sessionBoundaryKey,
+    wallet?.account,
+  ]);
+
+  const setApplicantFailure = useCallback((caught: unknown) => {
+    setApplicantRecovery(customLaunchApplicantRecoveryForErrorV2(caught));
+    setError(customLaunchErrorMessage(caught));
+  }, []);
 
   const loadApplications = useCallback(async () => {
     if (!wallet || !githubConnected) return;
@@ -1358,9 +1507,10 @@ export function CustomLaunchExperience({
     applicationsAbortControllerRef.current = controller;
     const requestGeneration = ++applicationsRequestGenerationRef.current;
     setApplicationsLoading(true);
+    setApplicantRecovery("none");
     setError("");
     try {
-      const client = createCustomLaunchWebsiteClientV2({ session: await getSession() });
+      const client = createCustomLaunchWebsiteClientV2({ getSession });
       const page = await readAllPrincipalApplicationsV3(client, {
         signal: controller.signal,
       });
@@ -1368,10 +1518,11 @@ export function CustomLaunchExperience({
       setApplications(page.applications);
       setGithubPrincipalHash(page.githubPrincipalHash);
       setApplicationsLoaded(true);
+      setApplicantRecovery("none");
       setScreen("applications");
     } catch (caught) {
       if (requestGeneration !== applicationsRequestGenerationRef.current) return;
-      setError(customLaunchErrorMessage(caught));
+      setApplicantFailure(caught);
     } finally {
       if (applicationsAbortControllerRef.current === controller) {
         applicationsAbortControllerRef.current = null;
@@ -1380,7 +1531,7 @@ export function CustomLaunchExperience({
         setApplicationsLoading(false);
       }
     }
-  }, [getSession, githubConnected, wallet]);
+  }, [getSession, githubConnected, setApplicantFailure, wallet]);
 
   useEffect(() => {
     if (screen !== "intro" || !wallet || !githubConnected || applicationsLoaded) return;
@@ -1388,24 +1539,60 @@ export function CustomLaunchExperience({
     return () => window.clearTimeout(timeout);
   }, [applicationsLoaded, githubConnected, loadApplications, screen, wallet]);
 
-  useEffect(() => {
-    const identityChanged = githubIdentityRef.current !== githubUsername;
-    githubIdentityRef.current = githubUsername;
-    if (githubConnected && !identityChanged) return;
+  const commitSessionBoundary = (node: HTMLDivElement | null) => {
+    if (node === null) return;
+    if (!sessionBoundaryGuardRef.current.commit(sessionBoundaryKey)) return;
+    walletAccountRef.current = wallet?.account ?? null;
     applicationsAbortControllerRef.current?.abort();
     applicationsAbortControllerRef.current = null;
     flowAbortControllerRef.current?.abort();
     flowAbortControllerRef.current = null;
     applicationsRequestGenerationRef.current += 1;
     flowGenerationRef.current += 1;
-    setApplications([]);
-    setApplicationsLoading(false);
-    setApplicationsLoaded(false);
-    setGithubPrincipalHash(null);
-    setSelected(null);
-    resetApplicationScopedState();
-    setScreen("intro");
-  }, [githubConnected, githubUsername, resetApplicationScopedState]);
+  };
+
+  useEffect(() => {
+    if (handledSessionBoundaryKeyRef.current === sessionBoundaryKey) return;
+    handledSessionBoundaryKeyRef.current = sessionBoundaryKey;
+    const recovery = wallet === null
+      ? "connect-wallet"
+      : !authenticated || !githubConnected
+        ? "reconnect-github"
+        : "none";
+    const timeout = window.setTimeout(() => {
+      setApplicationsLoading(false);
+      setSetupLoading(false);
+      setLaunchProgress((current) =>
+        current === "reconciling"
+          || current === "ambiguous"
+          || current === "confirmation"
+          || current === "publishing"
+          ? current
+          : "idle",
+      );
+      setApplicantRecovery(recovery);
+      if (recovery !== "none") {
+        setError(recovery === "connect-wallet"
+          ? "Connect your launch wallet to continue. Your last known approval stays visible"
+          : "Reconnect GitHub to continue. Your last known approval stays visible");
+        return;
+      }
+
+      setApplications([]);
+      setApplicationsLoaded(false);
+      setGithubPrincipalHash(null);
+      setSelected(null);
+      resetApplicationScopedState();
+      setScreen("intro");
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [
+    authenticated,
+    githubConnected,
+    resetApplicationScopedState,
+    sessionBoundaryKey,
+    wallet,
+  ]);
 
   useEffect(() => () => {
     flowGenerationRef.current += 1;
@@ -1460,11 +1647,10 @@ export function CustomLaunchExperience({
         signal: input.signal,
       });
       if (!isActive()) throw new LaunchAuthorityRefreshCancelledErrorV1();
-      if (principalApplications.githubPrincipalHash !== githubPrincipalHash) {
-        throw new LaunchAuthorityRefreshBindingErrorV1(
-          "The signed-in GitHub account changed during launch verification",
-        );
-      }
+      assertCurrentCustomLaunchPrincipalV2(
+        githubPrincipalHash,
+        principalApplications.githubPrincipalHash,
+      );
       const freshApplication = principalApplications.applications.find(
         ({ applicationHandle }) =>
           applicationHandle === input.application.applicationHandle,
@@ -1487,9 +1673,15 @@ export function CustomLaunchExperience({
       }
 
       const [eligibility, launchDescriptor, currentPresentation] = await Promise.all([
-        input.client.launchEligibility(currentApplication.applicationHandle),
-        input.client.launchDescriptor(currentApplication.applicationHandle),
-        input.client.launchPresentation(currentApplication.applicationHandle).catch((caught) => {
+        input.client.launchEligibility(currentApplication.applicationHandle, {
+          signal: input.signal,
+        }),
+        input.client.launchDescriptor(currentApplication.applicationHandle, {
+          signal: input.signal,
+        }),
+        input.client.launchPresentation(currentApplication.applicationHandle, {
+          signal: input.signal,
+        }).catch((caught) => {
           if (caught instanceof CustomLaunchWebsiteRequestErrorV2 && caught.status === 404) {
             return null;
           }
@@ -1571,12 +1763,13 @@ export function CustomLaunchExperience({
     resetApplicationScopedState();
     setSelected(application);
     setSetupLoading(true);
+    setApplicantRecovery("none");
     setScreen("setup");
     try {
       if (githubPrincipalHash === null) {
         throw new Error("Sign in again with the GitHub account that opened this submission");
       }
-      const client = createCustomLaunchWebsiteClientV2({ session: await getSession() });
+      const client = createCustomLaunchWebsiteClientV2({ getSession });
       if (generation !== flowGenerationRef.current) return;
       if (application.state === "launched") {
         clearLaunchSession(githubPrincipalHash, application.applicationHandle);
@@ -1593,8 +1786,17 @@ export function CustomLaunchExperience({
       }
       const recovery = recoveryRead.kind === "valid" ? recoveryRead.recovery : null;
       if (application.state === "launching" || recovery !== null) {
-        setLaunchProgress("confirmation");
-        setStatusMessage("Checking launch confirmation");
+        const recoveryProgress = recovery === null
+          ? "confirmation"
+          : customLaunchPersistedRecoveryProgressV2(recovery);
+        setLaunchProgress(recoveryProgress);
+        setStatusMessage(
+          recoveryProgress === "reconciling"
+            ? "Launch not submitted. Checking the reserved launch before retrying"
+            : recoveryProgress === "ambiguous"
+              ? "Submission status unknown. Checking the reserved launch"
+              : "Checking launch confirmation",
+        );
         setSetupLoading(false);
         if (!recovery) {
           setStatusMessage("Launch verification is still in progress");
@@ -1615,9 +1817,11 @@ export function CustomLaunchExperience({
           permitId: recovery.permitId,
           executionReservationId: recovery.executionReservationId,
           chainId: recovery.chainId,
+          submissionWasAttempted: recovery.stage === "submission-unknown",
           ...(recovery.stage === "broadcast"
             ? { launchTransactionId: recovery.transactionHash }
             : {}),
+          signal,
           isActive: () => generation === flowGenerationRef.current,
           onPublishing: () => {
             if (generation !== flowGenerationRef.current) return;
@@ -1647,6 +1851,7 @@ export function CustomLaunchExperience({
       ));
       setPresentation(presentationFormFromResponse(setup.presentation));
       setPresentationVersion(setup.presentation?.version ?? 0);
+      setApplicantRecovery("none");
     } catch (caught) {
       if (generation !== flowGenerationRef.current || caught instanceof LaunchFlowCancelledError) return;
       if (
@@ -1664,7 +1869,7 @@ export function CustomLaunchExperience({
           clearLaunchSession(githubPrincipalHash, application.applicationHandle);
         }
       }
-      setError(customLaunchErrorMessage(caught));
+      setApplicantFailure(caught);
     } finally {
       if (generation === flowGenerationRef.current) setSetupLoading(false);
     }
@@ -1675,6 +1880,7 @@ export function CustomLaunchExperience({
     loadVerifiedLaunchSetup,
     markApplicationFinalized,
     resetApplicationScopedState,
+    setApplicantFailure,
   ]);
 
   async function selectImage(event: ChangeEvent<HTMLInputElement>) {
@@ -1685,6 +1891,7 @@ export function CustomLaunchExperience({
     const applicationHandle = selected.applicationHandle;
     const isCurrent = () => generation === flowGenerationRef.current
       && selected.applicationHandle === applicationHandle;
+    setApplicantRecovery("none");
     setError("");
     setStatusMessage("Preparing image");
     try {
@@ -1721,7 +1928,7 @@ export function CustomLaunchExperience({
       setStatusMessage("Image ready");
     } catch (caught) {
       if (!isCurrent()) return;
-      setError(customLaunchErrorMessage(caught));
+      setApplicantFailure(caught);
       setStatusMessage("");
     }
   }
@@ -1741,7 +1948,7 @@ export function CustomLaunchExperience({
     setPendingGrantReissue(input.context);
     setLaunchProgress("preparing");
     setError("");
-    setStatusMessage("Preparing a new launch approval");
+    setStatusMessage("Refreshing launch preparation");
     const result = await grantReissueSingleFlightRef.current.run(
       `${input.application.applicationHandle}:${input.context.oldDescriptor.grantId}`,
       () =>
@@ -1764,22 +1971,28 @@ export function CustomLaunchExperience({
         expectedIdentity: browserWalletGrantReissueIdentityV1(result.snapshot),
       });
       setLaunchProgress("idle");
-      setStatusMessage("A new launch approval is still being prepared. Check again shortly");
+      setStatusMessage("Launch preparation is still refreshing. Check again shortly");
       return;
     }
     if (result.kind === "failed") {
       setPendingGrantReissue(null);
       setDescriptor(null);
       setLaunchProgress("idle");
-      throw new Error("We couldn't prepare a new launch approval. Check the GitHub review before trying again");
+      throw new Error("Launch preparation could not be refreshed. Check the GitHub review before trying again");
     }
-    setStatusMessage("Checking the new launch approval");
+    setStatusMessage("Checking the refreshed launch preparation");
     const [principalApplications, eligibility, freshDescriptor, currentPresentation] =
       await Promise.all([
         readAllPrincipalApplicationsV3(input.client, { signal: input.signal }),
-        input.client.launchEligibility(input.application.applicationHandle),
-        input.client.launchDescriptor(input.application.applicationHandle),
-        input.client.launchPresentation(input.application.applicationHandle).catch((caught) => {
+        input.client.launchEligibility(input.application.applicationHandle, {
+          signal: input.signal,
+        }),
+        input.client.launchDescriptor(input.application.applicationHandle, {
+          signal: input.signal,
+        }),
+        input.client.launchPresentation(input.application.applicationHandle, {
+          signal: input.signal,
+        }).catch((caught) => {
           if (caught instanceof CustomLaunchWebsiteRequestErrorV2 && caught.status === 404) {
             return null;
           }
@@ -1787,11 +2000,10 @@ export function CustomLaunchExperience({
         }),
       ]);
     if (!isActive()) throw new BrowserWalletGrantReissueCancelledV1();
-    if (principalApplications.githubPrincipalHash !== githubPrincipalHash) {
-      throw new BrowserWalletGrantReissueBindingErrorV1(
-        "The signed-in GitHub account changed while approval was refreshing",
-      );
-    }
+    assertCurrentCustomLaunchPrincipalV2(
+      githubPrincipalHash,
+      principalApplications.githubPrincipalHash,
+    );
     const freshApplication = principalApplications.applications.find(
       ({ applicationHandle }) =>
         applicationHandle === input.application.applicationHandle,
@@ -1835,15 +2047,18 @@ export function CustomLaunchExperience({
     setPresentationVersion(currentPresentation?.version ?? 0);
     setPendingGrantReissue(null);
     setLaunchProgress("idle");
-    setStatusMessage("New approval ready. Review the launch and confirm again");
+    setApplicantRecovery("none");
+    setStatusMessage("Launch preparation refreshed. Review and confirm again");
   }, [githubPrincipalHash]);
 
   async function resumeGrantReissue() {
-    if (!selected || !pendingGrantReissue || launchInFlightRef.current) return;
-    launchInFlightRef.current = true;
+    if (!selected || !pendingGrantReissue || launchSingleFlightRef.current.active) return;
+    const flowOwner = launchSingleFlightRef.current.acquire();
+    if (flowOwner === null) return;
     const { generation, signal } = beginFlow();
+    setApplicantRecovery("none");
     try {
-      const client = createCustomLaunchWebsiteClientV2({ session: await getSession() });
+      const client = createCustomLaunchWebsiteClientV2({ getSession });
       if (generation !== flowGenerationRef.current) return;
       await refreshExpiredGrant({
         application: selected,
@@ -1862,9 +2077,9 @@ export function CustomLaunchExperience({
         setDescriptor(null);
       }
       setLaunchProgress("idle");
-      setError(customLaunchErrorMessage(caught));
+      setApplicantFailure(caught);
     } finally {
-      launchInFlightRef.current = false;
+      launchSingleFlightRef.current.release(flowOwner);
     }
   }
 
@@ -1875,7 +2090,8 @@ export function CustomLaunchExperience({
       setError("Sign in again with the GitHub account that opened this submission");
       return;
     }
-    if (launchInFlightRef.current) return;
+    if (launchSingleFlightRef.current.active) return;
+    setApplicantRecovery("none");
     setError("");
     if (!wallet) {
       openWallet();
@@ -1907,12 +2123,13 @@ export function CustomLaunchExperience({
       githubPrincipalHash,
       selected.applicationHandle,
     );
-    if (recoveryRead.kind !== "absent") {
+    if (customLaunchRecoveryBlocksNewSubmissionV2(recoveryRead)) {
       setError("An existing launch attempt must be resolved before another transaction can be submitted");
       return;
     }
 
-    launchInFlightRef.current = true;
+    const flowOwner = launchSingleFlightRef.current.acquire();
+    if (flowOwner === null) return;
     const { generation, signal } = beginFlow();
     const applicationId = selected.applicationId;
     const applicationHandle = selected.applicationHandle;
@@ -1922,8 +2139,9 @@ export function CustomLaunchExperience({
     setLaunchProgress("preparing");
     setStatusMessage("Preparing approved launch");
     let activeDescriptor = descriptor;
+    let broadcastRecovery: BroadcastLaunchRecoveryV2 | null = null;
     try {
-      const client = createCustomLaunchWebsiteClientV2({ session: await getSession() });
+      const client = createCustomLaunchWebsiteClientV2({ getSession });
       if (!isActive()) return;
       const initialSetup = await loadVerifiedLaunchSetup({
         client,
@@ -1952,6 +2170,7 @@ export function CustomLaunchExperience({
           presentation: presentationDraft,
         },
         idempotencyKey("presentation"),
+        { signal },
       );
       if (!isActive()) return;
       assertLaunchPresentationBinding(
@@ -2003,211 +2222,254 @@ export function CustomLaunchExperience({
         configuration,
         presentationBindingHash: presentationResponse.presentationBindingHash,
       });
-      const challengeRequest = {
-        schemaVersion: "programmable.launch-session-challenge-create-request.v2" as const,
-        audience: "programmable.launch-session.v2" as const,
-        idempotencyKey: idempotencyKey("challenge"),
-        grantId: activeDescriptor.grantId,
-        grantBindingHash: activeDescriptor.grantBindingHash,
-        selection,
-      };
-      const challenge = await client.createChallenge(challengeRequest);
-      if (!isActive()) return;
-      if (
-        challenge.grantId !== activeDescriptor.grantId
-        || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(challenge.challengeId)
-        || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(challenge.sessionId)
-        || !/^sha256:[0-9a-f]{64}$/u.test(challenge.challengeBindingHash)
-        || !Number.isFinite(Date.parse(challenge.expiresAt))
-      ) throw new Error("Launch challenge does not match the exact approved launch");
-      setStatusMessage("Building the exact approved transaction");
-      const preparation = await retryPreparation(client, {
-        schemaVersion: "programmable.launch-session-preparation-bind-request.v2",
-        audience: "programmable.launch-session.v2",
-        idempotencyKey: idempotencyKey("preparation"),
-        grantId: activeDescriptor.grantId,
-        grantBindingHash: activeDescriptor.grantBindingHash,
-        selection,
-        challengeId: challenge.challengeId,
-        challengeBindingHash: challenge.challengeBindingHash,
-      }, isActive);
-      if (!isActive()) return;
       const route = defaultLaunchRoute(activeDescriptor);
-      const walletMessage = preparation.walletMessage;
-      if (
-        preparation.grantId !== activeDescriptor.grantId
-        || preparation.challengeId !== challenge.challengeId
-        || preparation.challengeBindingHash !== challenge.challengeBindingHash
-        || preparation.sessionId !== challenge.sessionId
-        || walletMessage.grantId !== activeDescriptor.grantId
-        || walletMessage.grantBindingHash !== activeDescriptor.grantBindingHash
-        || walletMessage.challengeId !== challenge.challengeId
-        || walletMessage.challengeBindingHash !== challenge.challengeBindingHash
-        || walletMessage.sessionId !== challenge.sessionId
-        || walletMessage.preparationBindingHash !== preparation.preparationBindingHash
-        || walletMessage.launchArtifactCommitmentHash !== preparation.launchArtifactCommitmentHash
-        || walletMessage.launchArtifactManifestHash !== preparation.launchArtifactManifestHash
-        || walletMessage.launchArtifactOutputSetHash !== preparation.launchArtifactOutputSetHash
-        || walletMessage.deploymentCalldataHash !== preparation.deploymentCalldataHash
-        || walletMessage.walletNamespace !== selection.launcherWallet.namespace
-        || walletMessage.walletValue.toLowerCase() !== launchWalletAccount.toLowerCase()
-        || walletMessage.chainId !== route.chainId
-        || walletMessage.chainProfileId !== route.chainProfileId
-        || walletMessage.routeId !== route.launchRouteId
-        || walletMessage.routeBindingHash !== route.launchRouteBindingHash
-        || walletMessage.executionMode !== route.executionMode
-        || walletMessage.transactionValueWei !== route.transactionValuePolicy.valueWei
-      ) throw new Error("Wallet proof does not match the exact approved launch");
-
-      setLaunchProgress("wallet-proof");
-      setStatusMessage("Confirm in your wallet");
-      assertLaunchWalletCurrent();
-      const signatureBase64Url = await signLaunchMessage(
-        preparation.signingMessageBase64Url,
-      );
-      if (!isActive()) return;
-      assertLaunchWalletCurrent();
-      const walletProof = {
-        schemaVersion: "programmable.launch-wallet-proof-transport.v2" as const,
-        signatureScheme: "eip191:personal-sign" as const,
-        signatureBase64Url,
-      };
-      const walletAuthenticationRequest = {
-        schemaVersion: "programmable.launch-session-wallet-authenticate-request.v2" as const,
-        audience: "programmable.launch-session.v2" as const,
-        idempotencyKey: idempotencyKey("wallet-proof"),
-        grantId: activeDescriptor.grantId,
-        grantBindingHash: activeDescriptor.grantBindingHash,
-        selection,
-        challengeId: challenge.challengeId,
-        challengeBindingHash: challenge.challengeBindingHash,
-        preparationBindingHash: preparation.preparationBindingHash,
-        launchArtifactCommitmentHash: preparation.launchArtifactCommitmentHash,
-        launchArtifactManifestHash: preparation.launchArtifactManifestHash,
-        launchArtifactOutputSetHash: preparation.launchArtifactOutputSetHash,
-        deploymentCalldataHash: preparation.deploymentCalldataHash,
-        walletMessageHash: canonicalBrowserSha256V2(
-          "programmable.launch-wallet-ownership-message.v2",
-          preparation.walletMessage,
-        ),
-        walletProofHash: canonicalBrowserSha256V2(
-          "programmable.launch-wallet-proof-transport.v2",
-          walletProof,
-        ),
-      };
-      const authenticatedSession = await client.authenticateWallet({
-        schemaVersion: "programmable.launch-session-wallet-authenticate-http-request.v2",
-        request: walletAuthenticationRequest,
-        walletProof,
+      const sequence = await runCurrentCustomLaunchApplicantSequenceV2({
+        refreshBoundary: async (stage) => {
+          // Server calls refresh through the dynamic client. Only local wallet
+          // effects need a second current-session proof at their exact edge.
+          await refreshCurrentCustomLaunchApplicantStageV2({
+            stage,
+            refreshSession: getSession,
+            assertCurrent: () => {
+              if (!isActive()) throw new LaunchFlowCancelledError();
+              assertLaunchWalletCurrent();
+            },
+          });
+        },
+        assertBoundary: () => {
+          if (!isActive()) throw new LaunchFlowCancelledError();
+          assertLaunchWalletCurrent();
+        },
+        createChallenge: async () => {
+          const challenge = await client.createChallenge({
+            schemaVersion: "programmable.launch-session-challenge-create-request.v2",
+            audience: "programmable.launch-session.v2",
+            idempotencyKey: idempotencyKey("challenge"),
+            grantId: activeDescriptor.grantId,
+            grantBindingHash: activeDescriptor.grantBindingHash,
+            selection,
+          }, { signal });
+          if (
+            challenge.grantId !== activeDescriptor.grantId
+            || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(challenge.challengeId)
+            || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(challenge.sessionId)
+            || !/^sha256:[0-9a-f]{64}$/u.test(challenge.challengeBindingHash)
+            || !Number.isFinite(Date.parse(challenge.expiresAt))
+          ) throw new Error("Launch challenge does not match the exact approved launch");
+          return challenge;
+        },
+        bindPreparation: async (challenge) => {
+          setStatusMessage("Building the exact approved transaction");
+          const preparation = await retryPreparation(client, {
+            schemaVersion: "programmable.launch-session-preparation-bind-request.v2",
+            audience: "programmable.launch-session.v2",
+            idempotencyKey: idempotencyKey("preparation"),
+            grantId: activeDescriptor.grantId,
+            grantBindingHash: activeDescriptor.grantBindingHash,
+            selection,
+            challengeId: challenge.challengeId,
+            challengeBindingHash: challenge.challengeBindingHash,
+          }, isActive, signal);
+          const walletMessage = preparation.walletMessage;
+          if (
+            preparation.grantId !== activeDescriptor.grantId
+            || preparation.challengeId !== challenge.challengeId
+            || preparation.challengeBindingHash !== challenge.challengeBindingHash
+            || preparation.sessionId !== challenge.sessionId
+            || walletMessage.grantId !== activeDescriptor.grantId
+            || walletMessage.grantBindingHash !== activeDescriptor.grantBindingHash
+            || walletMessage.challengeId !== challenge.challengeId
+            || walletMessage.challengeBindingHash !== challenge.challengeBindingHash
+            || walletMessage.sessionId !== challenge.sessionId
+            || walletMessage.preparationBindingHash !== preparation.preparationBindingHash
+            || walletMessage.launchArtifactCommitmentHash !== preparation.launchArtifactCommitmentHash
+            || walletMessage.launchArtifactManifestHash !== preparation.launchArtifactManifestHash
+            || walletMessage.launchArtifactOutputSetHash !== preparation.launchArtifactOutputSetHash
+            || walletMessage.deploymentCalldataHash !== preparation.deploymentCalldataHash
+            || walletMessage.walletNamespace !== selection.launcherWallet.namespace
+            || walletMessage.walletValue.toLowerCase() !== launchWalletAccount.toLowerCase()
+            || walletMessage.chainId !== route.chainId
+            || walletMessage.chainProfileId !== route.chainProfileId
+            || walletMessage.routeId !== route.launchRouteId
+            || walletMessage.routeBindingHash !== route.launchRouteBindingHash
+            || walletMessage.executionMode !== route.executionMode
+            || walletMessage.transactionValueWei !== route.transactionValuePolicy.valueWei
+          ) throw new Error("Wallet proof does not match the exact approved launch");
+          return preparation;
+        },
+        signLaunchMessage: async ({ preparation }) => {
+          setLaunchProgress("wallet-proof");
+          setStatusMessage("Confirm in your wallet");
+          const signatureBase64Url = await signLaunchMessage(
+            preparation.signingMessageBase64Url,
+          );
+          return {
+            schemaVersion: "programmable.launch-wallet-proof-transport.v2" as const,
+            signatureScheme: "eip191:personal-sign" as const,
+            signatureBase64Url,
+          };
+        },
+        authenticateWallet: async ({ challenge, preparation, walletProof }) => {
+          const authenticatedSession = await client.authenticateWallet({
+            schemaVersion: "programmable.launch-session-wallet-authenticate-http-request.v2",
+            request: {
+              schemaVersion: "programmable.launch-session-wallet-authenticate-request.v2",
+              audience: "programmable.launch-session.v2",
+              idempotencyKey: idempotencyKey("wallet-proof"),
+              grantId: activeDescriptor.grantId,
+              grantBindingHash: activeDescriptor.grantBindingHash,
+              selection,
+              challengeId: challenge.challengeId,
+              challengeBindingHash: challenge.challengeBindingHash,
+              preparationBindingHash: preparation.preparationBindingHash,
+              launchArtifactCommitmentHash: preparation.launchArtifactCommitmentHash,
+              launchArtifactManifestHash: preparation.launchArtifactManifestHash,
+              launchArtifactOutputSetHash: preparation.launchArtifactOutputSetHash,
+              deploymentCalldataHash: preparation.deploymentCalldataHash,
+              walletMessageHash: canonicalBrowserSha256V2(
+                "programmable.launch-wallet-ownership-message.v2",
+                preparation.walletMessage,
+              ),
+              walletProofHash: canonicalBrowserSha256V2(
+                "programmable.launch-wallet-proof-transport.v2",
+                walletProof,
+              ),
+            },
+            walletProof,
+          }, { signal });
+          if (
+            authenticatedSession.grantId !== activeDescriptor.grantId
+            || authenticatedSession.challengeId !== challenge.challengeId
+            || authenticatedSession.challengeBindingHash !== challenge.challengeBindingHash
+            || authenticatedSession.sessionId !== challenge.sessionId
+          ) throw new Error("Wallet authentication does not match the exact approved launch");
+          return authenticatedSession;
+        },
+        authorizeLaunch: async ({ challenge, preparation, authentication }) => {
+          const authorizeRequest: AuthorizeLaunchSessionRequestV2 = {
+            schemaVersion: "programmable.launch-session-launch-authorize-request.v2",
+            audience: "programmable.launch-session.v2",
+            idempotencyKey: idempotencyKey("authorization"),
+            grantId: activeDescriptor.grantId,
+            grantBindingHash: activeDescriptor.grantBindingHash,
+            selection,
+            challengeId: challenge.challengeId,
+            challengeBindingHash: challenge.challengeBindingHash,
+            sessionId: authentication.sessionId,
+            sessionBindingHash: authentication.sessionBindingHash,
+            preparationBindingHash: preparation.preparationBindingHash,
+            launchArtifactCommitmentHash: preparation.launchArtifactCommitmentHash,
+            launchArtifactManifestHash: preparation.launchArtifactManifestHash,
+            launchArtifactOutputSetHash: preparation.launchArtifactOutputSetHash,
+            deploymentCalldataHash: preparation.deploymentCalldataHash,
+            permitRequestHash: authentication.permitRequestHash,
+          };
+          const permit = await client.authorizeLaunch(authorizeRequest, { signal });
+          if (
+            permit.grantId !== activeDescriptor.grantId
+            || permit.sessionId !== authentication.sessionId
+            || permit.sessionBindingHash !== authentication.sessionBindingHash
+          ) throw new Error("Launch permit does not match the exact approved launch");
+          const verifiedPermitSigner = await verifyAuthorizedLaunchPermitSignatureV2({
+            permit,
+            trustedSigners: trustedLaunchPermitSigners,
+          });
+          return { authorizeRequest, permit, verifiedPermitSigner };
+        },
+        createExecutionPreparation: async ({ preparation, authentication, authorization }) => {
+          const execution = await client.createExecutionPreparation({
+            schemaVersion: "programmable.browser-wallet-launch-preparation-request.v2",
+            request: authorization.authorizeRequest,
+            authorizationArtifactBase64Url: authorization.permit.canonicalSignedPermitBase64Url,
+          }, { signal });
+          const trustedNow = await fetchTrustedTimeV1(
+            authorization.verifiedPermitSigner,
+          );
+          assertLaunchPermitFreshnessV2({
+            permit: authorization.permit,
+            execution,
+            trustedNow,
+          });
+          const action = assertBrowserWalletExecutionBinding({
+            descriptor: activeDescriptor,
+            execution,
+            deploymentCalldataHash: preparation.deploymentCalldataHash,
+            permit: authorization.permit,
+            permitRequestHash: authentication.permitRequestHash,
+            selection,
+            wallet: launchWalletAccount,
+            now: Date.parse(trustedNow),
+          });
+          const reportIdempotencyKey = idempotencyKey("transaction-report");
+          const preparedRecovery: PreparedLaunchRecoveryV2 = {
+            stage: "prepared",
+            walletRequestAttempted: false,
+            applicationHandle,
+            githubPrincipalHash: launchGithubPrincipalHash,
+            grantId: activeDescriptor.grantId,
+            grantBindingHash: activeDescriptor.grantBindingHash,
+            sessionId: authentication.sessionId,
+            permitId: authorization.permit.permitId,
+            chainId: action.chainId,
+            executionReservationId: execution.executionReservationId,
+            browserWalletActionHash: execution.browserWalletActionHash,
+            reportIdempotencyKey,
+            expiresAt: execution.expiresAt,
+            reservedTransactionHash: `0x${"0".repeat(64)}`,
+          };
+          requirePersistLaunchSession(
+            launchGithubPrincipalHash,
+            applicationHandle,
+            preparedRecovery,
+          );
+          return { execution, action, reportIdempotencyKey, preparedRecovery };
+        },
+        sendBrowserWalletAction: async ({ authentication, authorization, execution }) => {
+          setLaunchProgress("wallet-transaction");
+          setStatusMessage("Submit launch in your wallet");
+          const transaction = execution.action.params[0];
+          const submissionUnknownRecovery = customLaunchSubmissionUnknownRecoveryV2(
+            execution.preparedRecovery,
+          );
+          // Persist ambiguity before invoking the wallet. If the provider loses
+          // the response after a side effect, reload must never enable a resend.
+          requirePersistLaunchSession(
+            launchGithubPrincipalHash,
+            applicationHandle,
+            submissionUnknownRecovery,
+          );
+          const hash = await sendBrowserWalletAction({
+            chainId: execution.action.chainId,
+            from: transaction.from,
+            to: transaction.to,
+            data: transaction.data,
+            value: transaction.value,
+          });
+          return {
+            hash,
+            reportRecovery: {
+              stage: "broadcast" as const,
+              applicationHandle,
+              githubPrincipalHash: launchGithubPrincipalHash,
+              grantId: activeDescriptor.grantId,
+              grantBindingHash: activeDescriptor.grantBindingHash,
+              sessionId: authentication.sessionId,
+              permitId: authorization.permit.permitId,
+              chainId: execution.action.chainId,
+              executionReservationId: execution.execution.executionReservationId,
+              browserWalletActionHash: execution.execution.browserWalletActionHash,
+              reportIdempotencyKey: execution.reportIdempotencyKey,
+              expiresAt: execution.execution.expiresAt,
+              transactionHash: hash,
+            } satisfies PersistedLaunchRecoveryV2,
+          };
+        },
       });
-      if (!isActive()) return;
-      if (
-        authenticatedSession.grantId !== activeDescriptor.grantId
-        || authenticatedSession.challengeId !== challenge.challengeId
-        || authenticatedSession.challengeBindingHash !== challenge.challengeBindingHash
-        || authenticatedSession.sessionId !== challenge.sessionId
-      ) throw new Error("Wallet authentication does not match the exact approved launch");
-      const authorizeRequest: AuthorizeLaunchSessionRequestV2 = {
-        schemaVersion: "programmable.launch-session-launch-authorize-request.v2",
-        audience: "programmable.launch-session.v2",
-        idempotencyKey: idempotencyKey("authorization"),
-        grantId: activeDescriptor.grantId,
-        grantBindingHash: activeDescriptor.grantBindingHash,
-        selection,
-        challengeId: challenge.challengeId,
-        challengeBindingHash: challenge.challengeBindingHash,
-        sessionId: authenticatedSession.sessionId,
-        sessionBindingHash: authenticatedSession.sessionBindingHash,
-        preparationBindingHash: preparation.preparationBindingHash,
-        launchArtifactCommitmentHash: preparation.launchArtifactCommitmentHash,
-        launchArtifactManifestHash: preparation.launchArtifactManifestHash,
-        launchArtifactOutputSetHash: preparation.launchArtifactOutputSetHash,
-        deploymentCalldataHash: preparation.deploymentCalldataHash,
-        permitRequestHash: authenticatedSession.permitRequestHash,
-      };
-      const permit = await client.authorizeLaunch(authorizeRequest);
-      if (!isActive()) return;
-      if (
-        permit.grantId !== activeDescriptor.grantId
-        || permit.sessionId !== authenticatedSession.sessionId
-        || permit.sessionBindingHash !== authenticatedSession.sessionBindingHash
-      ) throw new Error("Launch permit does not match the exact approved launch");
-      const verifiedPermitSigner = await verifyAuthorizedLaunchPermitSignatureV2({
-        permit,
-        trustedSigners: trustedLaunchPermitSigners,
-      });
-      if (!isActive()) return;
-      const execution = await client.createExecutionPreparation({
-        schemaVersion: "programmable.browser-wallet-launch-preparation-request.v2",
-        request: authorizeRequest,
-        authorizationArtifactBase64Url: permit.canonicalSignedPermitBase64Url,
-      });
-      if (!isActive()) return;
-      const trustedNow = await fetchTrustedTimeV1(verifiedPermitSigner);
-      if (!isActive()) return;
-      assertLaunchPermitFreshnessV2({
-        permit,
-        execution,
-        trustedNow,
-      });
-
-      const action = assertBrowserWalletExecutionBinding({
-        descriptor: activeDescriptor,
-        execution,
-        deploymentCalldataHash: preparation.deploymentCalldataHash,
-        permit,
-        permitRequestHash: authenticatedSession.permitRequestHash,
-        selection,
-        wallet: launchWalletAccount,
-        now: Date.parse(trustedNow),
-      });
-      const reportIdempotencyKey = idempotencyKey("transaction-report");
-      const preparedRecovery: PreparedLaunchRecoveryV2 = {
-        stage: "prepared",
-        applicationHandle,
-        githubPrincipalHash: launchGithubPrincipalHash,
-        grantId: activeDescriptor.grantId,
-        grantBindingHash: activeDescriptor.grantBindingHash,
-        sessionId: authenticatedSession.sessionId,
-        permitId: permit.permitId,
-        chainId: action.chainId,
-        executionReservationId: execution.executionReservationId,
-        browserWalletActionHash: execution.browserWalletActionHash,
-        reportIdempotencyKey,
-        expiresAt: execution.expiresAt,
-        reservedTransactionHash: `0x${"0".repeat(64)}`,
-      };
-      requirePersistLaunchSession(
-        launchGithubPrincipalHash,
-        applicationHandle,
-        preparedRecovery,
-      );
-      setLaunchProgress("wallet-transaction");
-      setStatusMessage("Submit launch in your wallet");
-      assertLaunchWalletCurrent();
-      const transaction = action.params[0];
-      const hash = await sendBrowserWalletAction({
-        chainId: action.chainId,
-        from: transaction.from,
-        to: transaction.to,
-        data: transaction.data,
-        value: transaction.value,
-      });
-      const reportRecovery: PersistedLaunchRecoveryV2 = {
-        stage: "broadcast",
-        applicationHandle,
-        githubPrincipalHash: launchGithubPrincipalHash,
-        grantId: activeDescriptor.grantId,
-        grantBindingHash: activeDescriptor.grantBindingHash,
-        sessionId: authenticatedSession.sessionId,
-        permitId: permit.permitId,
-        chainId: action.chainId,
-        executionReservationId: execution.executionReservationId,
-        browserWalletActionHash: execution.browserWalletActionHash,
-        reportIdempotencyKey,
-        expiresAt: execution.expiresAt,
-        transactionHash: hash,
-      };
+      const { authentication: authenticatedSession } = sequence;
+      const { permit } = sequence.authorization;
+      const { action, execution } = sequence.execution;
+      const { hash, reportRecovery } = sequence.send;
+      broadcastRecovery = reportRecovery;
       try {
         requirePersistLaunchSession(
           launchGithubPrincipalHash,
@@ -2215,8 +2477,8 @@ export function CustomLaunchExperience({
           reportRecovery,
         );
       } catch {
-        // The durable prepared lock remains. Report immediately so the server
-        // can recover the broadcast without permitting a second launch.
+        // The durable submission-unknown lock remains. Report immediately so
+        // the server can recover the broadcast without permitting a resend.
       }
       if (isActive()) {
         setTransactionHash(hash);
@@ -2237,6 +2499,7 @@ export function CustomLaunchExperience({
         chainId: action.chainId,
         launchRouteId: route.launchRouteId,
         launchTransactionId: hash,
+        signal,
         isActive,
         onPublishing: () => {
           if (!isActive()) return;
@@ -2272,7 +2535,7 @@ export function CustomLaunchExperience({
             },
             generation,
             signal,
-            client: createCustomLaunchWebsiteClientV2({ session: await getSession() }),
+            client: createCustomLaunchWebsiteClientV2({ getSession }),
           });
           return;
         } catch (reissueFailure) {
@@ -2290,12 +2553,35 @@ export function CustomLaunchExperience({
       if (shouldClearLaunchRecoveryV2(failure)) {
         clearLaunchSession(launchGithubPrincipalHash, applicationHandle);
       }
-      setError(customLaunchErrorMessage(failure));
-      setLaunchProgress((current) =>
-        current === "confirmation" || current === "publishing" ? current : "idle",
+      setApplicantFailure(failure);
+      const recoveryReadAfterFailure = readLaunchSession(
+        launchGithubPrincipalHash,
+        applicationHandle,
       );
+      if (broadcastRecovery !== null) {
+        setTransactionHash(broadcastRecovery.transactionHash);
+        setTransactionChainId(broadcastRecovery.chainId);
+        setLaunchProgress("confirmation");
+        setStatusMessage("Launch submitted. Check confirmation status");
+      } else if (recoveryReadAfterFailure.kind === "valid") {
+        const recoveryProgress = customLaunchPersistedRecoveryProgressV2(
+          recoveryReadAfterFailure.recovery,
+        );
+        setLaunchProgress(recoveryProgress);
+        setStatusMessage(
+          recoveryProgress === "reconciling"
+            ? "Launch not submitted. Check the reserved launch before retrying"
+            : recoveryProgress === "ambiguous"
+              ? "Submission status unknown. Check the reserved launch before retrying"
+              : "Launch submitted. Check confirmation status",
+        );
+      } else {
+        setLaunchProgress((current) =>
+          current === "confirmation" || current === "publishing" ? current : "idle",
+        );
+      }
     } finally {
-      launchInFlightRef.current = false;
+      launchSingleFlightRef.current.release(flowOwner);
     }
   }
 
@@ -2308,14 +2594,66 @@ export function CustomLaunchExperience({
     setScreen("applications");
   };
 
+  const recoverApplicantAccess = async () => {
+    if (applicantReauthorizing) return;
+    if (applicantRecovery === "connect-wallet") {
+      openWallet();
+      return;
+    }
+    if (applicantRecovery === "reconnect-github") {
+      setError("");
+      if (!githubConnected) {
+        setStatusMessage("Connect GitHub, then try again");
+        connectGithub();
+        return;
+      }
+      setApplicantReauthorizing(true);
+      setStatusMessage("Reconnect GitHub to prove the current session");
+      setApplicantRecovery("retry");
+      try {
+        await runCustomLaunchApplicantReauthorizationV2({
+          reauthorizeGithub,
+          refreshCurrent: async () => {
+            setStatusMessage("GitHub reconnected. Refreshing your approved launch");
+            if (screen === "setup" && selected !== null) {
+              await openApplication(selected);
+            } else {
+              await loadApplications();
+            }
+          },
+        });
+      } catch {
+        setError("Unable to reconnect GitHub. Your last known approval stays visible");
+        setStatusMessage("Wallet actions remain unavailable until GitHub reconnects");
+        setApplicantRecovery("reconnect-github");
+      } finally {
+        setApplicantReauthorizing(false);
+      }
+      return;
+    }
+    if (screen === "setup" && selected !== null) {
+      void openApplication(selected);
+      return;
+    }
+    void loadApplications();
+  };
+
+  const applicantRecoveryAction = applicantRecovery === "connect-wallet"
+    ? "Connect wallet"
+    : applicantRecovery === "reconnect-github"
+      ? "Reconnect GitHub"
+      : "Try again";
+
   const approvedRoute = descriptor ? defaultLaunchRoute(descriptor) : null;
   const feeReview = approvedRoute
     ? customLaunchFeeReviewV1(approvedRoute.feePolicy)
     : null;
+  const durableApproval = selected !== null
+    && customApplicationHasDurableApprovalV2(selected, null);
 
   if (screen === "intro") {
     return (
-      <CustomLaunchFrame onBack={onBack} title="Build a custom launch">
+      <CustomLaunchFrame boundaryRef={commitSessionBoundary} onBack={onBack} title="Build a custom launch">
         <div className={styles.introGrid}>
           <section className={styles.introPrimary}>
             <span className={styles.kicker}>Open builder</span>
@@ -2353,11 +2691,21 @@ export function CustomLaunchExperience({
                 <button
                   className={styles.githubButton}
                   type="button"
-                  disabled={applicationsLoading}
-                  onClick={githubConnected ? () => void loadApplications() : connectGithub}
+                  disabled={applicationsLoading || applicantReauthorizing}
+                  onClick={applicantRecovery !== "none"
+                    ? () => void recoverApplicantAccess()
+                    : githubConnected
+                      ? () => void loadApplications()
+                      : connectGithub}
                 >
                   {applicationsLoading ? <LoaderCircle aria-hidden="true" className={styles.spin} size={17} /> : <span className={styles.githubButtonMark} aria-hidden="true"><GitHubBrandIcon /></span>}
-                  {githubConnected ? "Check submission status" : authenticated ? "Link GitHub account" : "Verify with GitHub"}
+                  {applicantRecovery !== "none"
+                    ? applicantRecoveryAction
+                    : githubConnected
+                      ? "Check submission status"
+                      : authenticated
+                        ? "Link GitHub account"
+                        : "Verify with GitHub"}
                 </button>
               </div>
             ) : (
@@ -2375,12 +2723,18 @@ export function CustomLaunchExperience({
 
   if (screen === "applications") {
     return (
-      <CustomLaunchFrame onBack={onBack} title="Custom launches" eyebrow={githubUsername ? `@${githubUsername}` : "GitHub submissions"}>
+      <CustomLaunchFrame boundaryRef={commitSessionBoundary} onBack={onBack} title="Custom launches" eyebrow={githubUsername ? `@${githubUsername}` : "GitHub submissions"}>
         <div className={styles.listToolbar}>
           <p>Every status is tied to one exact GitHub commit.</p>
-          <button className={styles.iconButton} type="button" aria-label="Refresh submissions" disabled={applicationsLoading} onClick={() => void loadApplications()}>
-            <RefreshCw aria-hidden="true" className={applicationsLoading ? styles.spin : undefined} size={17} />
-          </button>
+          {applicantRecovery !== "none" ? (
+            <button className={styles.secondaryButton} type="button" disabled={applicantReauthorizing} onClick={() => void recoverApplicantAccess()}>
+              {applicantRecoveryAction}
+            </button>
+          ) : (
+            <button className={styles.iconButton} type="button" aria-label="Refresh submissions" disabled={applicationsLoading} onClick={() => void loadApplications()}>
+              <RefreshCw aria-hidden="true" className={applicationsLoading ? styles.spin : undefined} size={17} />
+            </button>
+          )}
         </div>
         {applications.length === 0 ? (
           <section className={styles.emptyState}>
@@ -2404,32 +2758,42 @@ export function CustomLaunchExperience({
   }
 
   return (
-    <CustomLaunchFrame onBack={returnToApplications} title={launchProgress === "complete" ? "Launch complete" : setupLoading && selected?.state === "ready_for_registration" ? "Final verification" : launchProgress === "idle" ? "Set up launch" : "Launch status"} eyebrow={selected?.repositoryFullName ?? "Approved project"}>
+    <CustomLaunchFrame boundaryRef={commitSessionBoundary} onBack={returnToApplications} title={launchProgress === "complete" ? "Launch complete" : setupLoading && selected?.state === "ready_for_registration" ? "Final verification" : launchProgress === "idle" ? "Set up launch" : "Launch status"} eyebrow={selected?.repositoryFullName ?? "Approved project"}>
       {setupLoading || !selected ? (
         <div className={styles.loadingPanel} role="status"><LoaderCircle aria-hidden="true" className={styles.spin} size={20} /> {selected?.state === "ready_for_registration" ? "Completing final source verification" : "Loading approved launch"}</div>
       ) : !descriptor && launchProgress === "idle" ? (
         <section className={styles.loadingPanel}>
           <CircleAlert aria-hidden="true" size={20} />
           <div className={styles.recoveryCopy}>
-            <h2>Launch setup could not load</h2>
+            <h2>{durableApproval ? "Approved — launch anytime" : "Launch setup could not load"}</h2>
             <p>{error || "The approved launch details are temporarily unavailable. Nothing was submitted."}</p>
-            <button className={styles.secondaryButton} type="button" onClick={() => void openApplication(selected)}>Try again</button>
+            <button className={styles.secondaryButton} type="button" disabled={applicantReauthorizing} onClick={() => void recoverApplicantAccess()}>{applicantRecoveryAction}</button>
           </div>
         </section>
       ) : !descriptor ? (
         <section className={styles.loadingPanel} aria-live="polite">
-          {launchProgress === "complete" ? <CircleCheck aria-hidden="true" size={20} /> : <LoaderCircle aria-hidden="true" className={styles.spin} size={20} />}
+          {launchProgress === "complete" ? <CircleCheck aria-hidden="true" size={20} /> : launchProgress === "reconciling" || launchProgress === "ambiguous" ? <Clock3 aria-hidden="true" size={20} /> : <LoaderCircle aria-hidden="true" className={styles.spin} size={20} />}
           <div className={styles.recoveryCopy}>
-            <h2>{launchProgress === "complete" ? "Launch complete" : "Launch submitted"}</h2>
-            <p>{statusMessage || "The approved transaction is being verified."}</p>
+            <CustomLaunchRecoveryCopyV2
+              launchProgress={launchProgress}
+              statusMessage={statusMessage}
+            />
             {transactionHash ? <TransactionEvidence chainId={transactionChainId} transactionHash={transactionHash} /> : null}
-            {launchProgress === "complete" ? <Link className={styles.secondaryButton} href="/explore?model=custom">Explore Custom</Link> : <button className={styles.secondaryButton} type="button" onClick={returnToApplications}>View submissions</button>}
+            {launchProgress === "complete" ? (
+              <Link className={styles.secondaryButton} href="/explore?model=custom">Explore Custom</Link>
+            ) : applicantRecovery !== "none" ? (
+              <button className={styles.secondaryButton} type="button" disabled={applicantReauthorizing} onClick={() => void recoverApplicantAccess()}>{applicantRecoveryAction}</button>
+            ) : (launchProgress === "reconciling" || launchProgress === "ambiguous") && selected !== null ? (
+              <button className={styles.secondaryButton} type="button" onClick={() => void openApplication(selected)}>Check reserved launch</button>
+            ) : (
+              <button className={styles.secondaryButton} type="button" onClick={returnToApplications}>View submissions</button>
+            )}
           </div>
           <LiveMessage message={error} error />
         </section>
       ) : (
         <form className={styles.setupSheet} aria-busy={launchProgress !== "idle"} aria-describedby={error ? "custom-launch-form-error" : undefined} onSubmit={launch}>
-          <fieldset disabled={launchProgress !== "idle" || pendingGrantReissue !== null}>
+          <fieldset disabled={launchProgress !== "idle" || pendingGrantReissue !== null || applicantRecovery !== "none"}>
             <section className={styles.formSection}>
               <div className={styles.sectionHeading}><span>01</span><div><h2>Project details</h2><p>These details describe the project. They cannot change the approved code.</p></div></div>
               <div className={styles.identityGrid}>
@@ -2479,7 +2843,6 @@ export function CustomLaunchExperience({
                 <div><dt>Network</dt><dd>{chainLabel(approvedRoute?.chainId)}</dd></div>
                 <div><dt>Approved route</dt><dd>{approvedRoute?.launchRouteId}</dd></div>
                 <div><dt>Native value</dt><dd>{formatNativeValue(approvedRoute?.chainId, approvedRoute?.transactionValuePolicy.valueWei)}</dd></div>
-                <div><dt>Approval valid until</dt><dd>{formatDateTime(descriptor.validUntil)}</dd></div>
                 <div><dt>Fee plan</dt><dd>{feeReview?.summary}</dd></div>
                 <div><dt>Fee identity</dt><dd>{feeReview?.identity}</dd></div>
                 <div><dt>Market path</dt><dd>{feeReview?.marketPath}</dd></div>
@@ -2501,10 +2864,14 @@ export function CustomLaunchExperience({
           <div className={styles.launchFooter}>
             <div className={styles.progressCopy} aria-live="polite">
               {launchProgress === "complete" ? <CircleCheck aria-hidden="true" size={18} /> : launchProgress !== "idle" ? <LoaderCircle aria-hidden="true" className={styles.spin} size={18} /> : <Check aria-hidden="true" size={18} />}
-              <span>{statusMessage || "Exact approved commit ready"}</span>
+              <span>{statusMessage || (durableApproval ? "Approved — launch anytime" : "Launch details verified")}</span>
             </div>
             {launchProgress === "complete" ? (
               <Link className="primary-button" href="/explore?model=custom">Explore Custom <ArrowRight aria-hidden="true" size={16} /></Link>
+            ) : applicantRecovery !== "none" ? (
+              <button className="primary-button" type="button" disabled={applicantReauthorizing} onClick={() => void recoverApplicantAccess()}>
+                {applicantRecoveryAction}
+              </button>
             ) : pendingGrantReissue !== null ? (
               <button
                 className="primary-button"
@@ -2512,7 +2879,7 @@ export function CustomLaunchExperience({
                 disabled={launchProgress !== "idle"}
                 onClick={() => void resumeGrantReissue()}
               >
-                Check approval status
+                Refresh launch setup
               </button>
             ) : (
               <button className="primary-button" type="submit" disabled={launchProgress !== "idle"}>
@@ -2532,9 +2899,9 @@ export function CustomLaunchExperience({
   );
 }
 
-function CustomLaunchFrame({ children, eyebrow = "Custom Hook", onBack, title }: { children: ReactNode; eyebrow?: string; onBack: () => void; title: string }) {
+function CustomLaunchFrame({ boundaryRef, children, eyebrow = "Custom Hook", onBack, title }: { boundaryRef: (node: HTMLDivElement | null) => void; children: ReactNode; eyebrow?: string; onBack: () => void; title: string }) {
   return (
-    <div className={`launch-page page-width ${launchExperience.formPage} ${styles.page}`} data-launch-model="custom">
+    <div ref={boundaryRef} className={`launch-page page-width ${launchExperience.formPage} ${styles.page}`} data-launch-model="custom">
       <header className="launch-page-heading">
         <button className="launch-model-back" type="button" onClick={onBack}><ArrowLeft aria-hidden="true" size={15} />Back</button>
         <div className={`launch-page-title ${launchExperience.formPageTitle}`}><span className={launchExperience.formModelName}>{eyebrow}</span><h1>{title}</h1></div>
@@ -2547,6 +2914,8 @@ function CustomLaunchFrame({ children, eyebrow = "Custom Hook", onBack, title }:
 function ApplicationRow({ application, onOpen }: { application: PrincipalCustomLaunchApplicationSummaryV2; onOpen: () => void }) {
   const display = application.intakeContract === "registry-v3"
     ? { title: "Catalog entry", action: "View on GitHub", tone: "muted" as const }
+    : customApplicationHasDurableApprovalV2(application, null)
+      ? { title: "Approved — launch anytime", action: "Set up launch", tone: "ready" as const }
     : customApplicationDisplayState(application.state);
   const githubUrl = `https://github.com/${application.repositoryFullName}/pull/${application.pullRequestNumber}`;
   const opensSetup = customApplicationOpensLaunchExperienceV2(application);
@@ -2696,11 +3065,12 @@ async function retryPreparation(
   client: ReturnType<typeof createCustomLaunchWebsiteClientV2>,
   request: Parameters<ReturnType<typeof createCustomLaunchWebsiteClientV2>["bindPreparation"]>[0],
   isActive: () => boolean,
+  signal: AbortSignal,
 ) {
   for (let attempt = 0; attempt < 20; attempt += 1) {
     if (!isActive()) throw new LaunchFlowCancelledError();
     try {
-      const preparation = await client.bindPreparation(request);
+      const preparation = await client.bindPreparation(request, { signal });
       if (!isActive()) throw new LaunchFlowCancelledError();
       return preparation;
     } catch (caught) {
@@ -2725,10 +3095,13 @@ async function pollLaunchStatus(
     chainId?: string;
     launchRouteId?: string;
     launchTransactionId?: string;
+    submissionWasAttempted?: boolean;
+    signal?: AbortSignal;
     isActive: () => boolean;
     onPublishing: () => void;
   }>,
 ): Promise<Extract<LaunchExecutionStatusViewV2, { state: "finalized" }>> {
+  let observedBroadcast = input.launchTransactionId !== undefined;
   for (let attempt = 0; attempt < STATUS_POLL_ATTEMPTS; attempt += 1) {
     if (!input.isActive()) throw new LaunchFlowCancelledError();
     let status: LaunchExecutionStatusViewV2;
@@ -2750,10 +3123,17 @@ async function pollLaunchStatus(
     if (status.state === "execution_unavailable") {
       throw new LaunchExecutionUnavailableError("This launch authorization is no longer available. Return to your submissions and verify the current version");
     }
-    if (status.state === "broadcast") input.onPublishing();
+    if (status.state === "broadcast") {
+      observedBroadcast = true;
+      input.onPublishing();
+    }
     await delay(STATUS_POLL_DELAY_MS);
   }
-  throw new Error("The transaction was submitted and is still being verified. Return to this launch to check its status");
+  throw new Error(observedBroadcast
+    ? "The transaction was submitted and is still being verified. Return to this launch to check its status"
+    : input.submissionWasAttempted
+      ? "Submission status remains unknown. The reserved launch must be checked before another wallet action can start"
+      : "Launch was not submitted. The reserved launch must be checked before another wallet action can start");
 }
 
 export function assertLaunchExecutionStatusBinding(
@@ -2794,17 +3174,56 @@ export function assertLaunchExecutionStatusBinding(
   }
 }
 
-function customLaunchErrorMessage(caught: unknown): string {
+export function customLaunchErrorMessage(caught: unknown): string {
   if (caught instanceof LaunchExecutionUnavailableError) return caught.message;
+  if (caught instanceof LaunchPreparationRefreshRequiredErrorV1) {
+    return "Launch setup needs to be refreshed. Try again";
+  }
+  if (isInternalLaunchSetupVerificationErrorV1(caught)) {
+    return "Launch setup could not be verified. Refresh and try again";
+  }
   if (caught instanceof CustomLaunchWebsiteRequestErrorV2) {
-    if (caught.code === "github_account_required") return "Link the GitHub account that opened the submission";
+    if (
+      caught.code === "LAUNCH_PREPARATION_REISSUE_REQUIRED"
+      || caught.code === LAUNCH_PREPARATION_REFRESH_REQUIRED_V1
+    ) return "Launch setup needs to be refreshed. Try again";
+    if (caught.code === "github_account_required") return "Reconnect the GitHub account that opened the submission";
     if (caught.code === "LAUNCH_PRESENTATION_VERSION_CONFLICT") return "Project details changed in another window. Reload and try again";
-    if (caught.status === 401) return "Your sign-in expired. Sign in with GitHub again";
-    if (caught.status === 404) return "This exact submission is no longer available to this GitHub account";
-    if (caught.status >= 500) return "Launch services are temporarily unavailable. Your approval has not been changed";
+    if (caught.status === 401) return "Reconnect GitHub to continue. Your last known approval stays visible";
+    if (caught.status === 403) {
+      return containsInternalLaunchSetupVerificationTermsV1(caught)
+        ? "This launch is not currently available"
+        : caught.publicMessage || "This launch is not currently available";
+    }
+    if (caught.status === 404) return "Reconnect the GitHub account that opened this submission";
+    if ([408, 425, 429].includes(caught.status) || caught.status >= 500) return "Launch services are temporarily unavailable. Your last known approval stays visible";
+    if (containsInternalLaunchSetupVerificationTermsV1(caught)) {
+      return "Launch setup could not be verified. Refresh and try again";
+    }
     return caught.publicMessage || "Unable to continue this launch";
   }
   return caught instanceof Error ? caught.message : "Unable to continue this launch";
+}
+
+export function customLaunchApplicantRecoveryForErrorV2(
+  caught: unknown,
+): CustomLaunchApplicantRecoveryV2 {
+  if (
+    caught instanceof LaunchPreparationRefreshRequiredErrorV1
+    || isInternalLaunchSetupVerificationErrorV1(caught)
+  ) return "retry";
+  return customLaunchApplicantRecoveryV2(caught);
+}
+
+function isInternalLaunchSetupVerificationErrorV1(caught: unknown): boolean {
+  return caught instanceof Error
+    && !(caught instanceof CustomLaunchWebsiteRequestErrorV2)
+    && containsInternalLaunchSetupVerificationTermsV1(caught);
+}
+
+function containsInternalLaunchSetupVerificationTermsV1(caught: Error): boolean {
+  return /(?:\blaunch permit\b|\bsigned launch permit\b|\bpermit signature\b|\bpermit signer\b|\bed25519 permit\b)/iu
+    .test(caught.message);
 }
 
 function isPermanentGrantReissueFailure(caught: unknown): boolean {
@@ -2837,13 +3256,6 @@ function shortAddress(value: string): string {
   return `${value.slice(0, 6)}…${value.slice(-4)}`;
 }
 
-function formatDateTime(value: string): string {
-  const date = new Date(value);
-  return Number.isFinite(date.getTime())
-    ? new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(date)
-    : "Unavailable";
-}
-
 function formatNativeValue(chainId?: string, valueWei?: string): string {
   if (!valueWei || !/^\d+$/u.test(valueWei)) return "Unavailable";
   if (chainId === "1" || chainId === "11155111") {
@@ -2869,7 +3281,7 @@ function applicationGuidance(application: PrincipalCustomLaunchApplicationSummar
   if (application.intakeContract === "registry-v3") return "This legacy registry intake is catalog-only and cannot open a launch session.";
   if (application.state === "platform_pending") return "Platform verification is still running. Refresh this list shortly.";
   if (application.state === "ready_for_registration") return "The review passed and final registry checks are still completing.";
-  if (application.state === "expired") return "This exact approval window ended. Follow the GitHub thread to renew or resubmit it.";
+  if (application.state === "expired") return "This launch access is no longer current. Check the GitHub review for the latest status.";
   if (application.state === "revoked") return "This exact version can no longer launch. The GitHub thread contains the recovery path.";
   if (application.state === "stale") return "The reviewed source tree changed. Submit or select the current exact revision.";
   if (application.state === "rejected") return "This exact revision was not approved. The GitHub decision contains the reason.";
@@ -2945,6 +3357,7 @@ export function parsePersistedLaunchRecoveryV2(value: string | null): PersistedL
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
     const record = parsed as Record<string, unknown>;
     const stage = record.stage;
+    const walletRequestAttempted = record.walletRequestAttempted;
     const applicationHandle = record.applicationHandle;
     const githubPrincipalHash = record.githubPrincipalHash;
     const grantId = record.grantId;
@@ -2963,15 +3376,21 @@ export function parsePersistedLaunchRecoveryV2(value: string | null): PersistedL
       "grantBindingHash", "sessionId", "permitId", "chainId", "executionReservationId",
       "browserWalletActionHash", "reportIdempotencyKey", "expiresAt",
     ];
-    const expectedKeys = stage === "prepared"
-      ? [...commonKeys, "reservedTransactionHash"]
+    const legacyPrepared = stage === "prepared"
+      && walletRequestAttempted === undefined;
+    const expectedKeys = stage === "prepared" || stage === "submission-unknown"
+      ? [
+          ...commonKeys,
+          "reservedTransactionHash",
+          ...(legacyPrepared ? [] : ["walletRequestAttempted"]),
+        ]
       : stage === "broadcast"
         ? [...commonKeys, "transactionHash"]
         : [];
     const actualKeys = Object.keys(record).sort();
     expectedKeys.sort();
     if (
-      (stage !== "prepared" && stage !== "broadcast")
+      (stage !== "prepared" && stage !== "submission-unknown" && stage !== "broadcast")
       || actualKeys.length !== expectedKeys.length
       || actualKeys.some((key, index) => key !== expectedKeys[index])
       || typeof applicationHandle !== "string"
@@ -2987,6 +3406,8 @@ export function parsePersistedLaunchRecoveryV2(value: string | null): PersistedL
       || typeof browserWalletActionHash !== "string" || !/^sha256:[0-9a-f]{64}$/u.test(browserWalletActionHash)
       || typeof reportIdempotencyKey !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:@/+-]{0,255}$/u.test(reportIdempotencyKey)
       || typeof expiresAt !== "string" || !Number.isFinite(Date.parse(expiresAt))
+      || (stage === "prepared" && !legacyPrepared && walletRequestAttempted !== false)
+      || (stage === "submission-unknown" && walletRequestAttempted !== true)
     ) return null;
     const common = {
       applicationHandle: applicationHandle as ApplicationHandleV3,
@@ -3001,13 +3422,22 @@ export function parsePersistedLaunchRecoveryV2(value: string | null): PersistedL
       reportIdempotencyKey,
       expiresAt,
     };
-    if (stage === "prepared") {
+    if (stage === "prepared" || stage === "submission-unknown") {
       if (
         typeof reservedTransactionHash !== "string"
         || !/^0x0{64}$/u.test(reservedTransactionHash)
       ) return null;
+      if (stage === "submission-unknown" || legacyPrepared) {
+        return {
+          stage: "submission-unknown",
+          walletRequestAttempted: true,
+          ...common,
+          reservedTransactionHash: reservedTransactionHash as `0x${string}`,
+        };
+      }
       return {
-        stage,
+        stage: "prepared",
+        walletRequestAttempted: false,
         ...common,
         reservedTransactionHash: reservedTransactionHash as `0x${string}`,
       };

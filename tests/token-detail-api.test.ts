@@ -12,6 +12,10 @@ const mocks = vi.hoisted(() => ({
   enrichTokensWithAlchemyPoolState: vi.fn(),
   getAlchemyOnchainDeployment: vi.fn(),
   readAlchemyExploreModel: vi.fn(),
+  readProductionCustomExploreDirectoryV1: vi.fn(),
+  readExploreReferenceHeadWithinRouteBudget: vi.fn(),
+  getOnchainDeployment: vi.fn(),
+  readDurableExploreModel: vi.fn(),
   safeAlchemyError: vi.fn((error) => error),
 }));
 
@@ -24,6 +28,24 @@ vi.mock("../lib/alchemy/explore.server", () => ({
 
 vi.mock("../lib/alchemy/live-market.server", () => ({
   enrichTokensWithAlchemyPoolState: mocks.enrichTokensWithAlchemyPoolState,
+}));
+
+vi.mock("../lib/server/custom-launch/explore-directory-v1", () => ({
+  readProductionCustomExploreDirectoryV1:
+    mocks.readProductionCustomExploreDirectoryV1,
+}));
+
+vi.mock("../lib/explore-reference-head.server", () => ({
+  readExploreReferenceHeadWithinRouteBudget:
+    mocks.readExploreReferenceHeadWithinRouteBudget,
+}));
+
+vi.mock("../lib/onchain/config", () => ({
+  getOnchainDeployment: mocks.getOnchainDeployment,
+}));
+
+vi.mock("../lib/onchain/durable-model", () => ({
+  readDurableExploreModel: mocks.readDurableExploreModel,
 }));
 
 import { GET } from "../app/api/explore/token/route";
@@ -69,9 +91,26 @@ const launchDiscoverySnapshot = {
 describe("token detail Alchemy read", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getAlchemyOnchainDeployment.mockReturnValue({ status: "ready" });
+    mocks.getAlchemyOnchainDeployment.mockReturnValue({
+      status: "ready",
+      rpcUrlSecondary: "https://secondary.example",
+    });
+    mocks.getOnchainDeployment.mockReturnValue({ status: "ready" });
+    mocks.readProductionCustomExploreDirectoryV1.mockResolvedValue([]);
+    mocks.readExploreReferenceHeadWithinRouteBudget.mockResolvedValue({
+      blockNumber: launchDiscoverySnapshot.blockNumber,
+      blockHash: launchDiscoverySnapshot.blockHash,
+      indexedAt: "2026-08-10T17:55:45.000Z",
+      finality: "confirmed",
+    });
     mocks.enrichTokensWithAlchemyPoolState.mockImplementation(
-      async ({ tokens }: { tokens: readonly LauncherToken[] }) => [...tokens],
+      async ({ tokens }: { tokens: readonly LauncherToken[] }) =>
+        tokens.map((candidate) => ({
+          ...candidate,
+          activeLiquidity: candidate.activeLiquidity ?? "1",
+          indexedValuationBlockNumber:
+            launchDiscoverySnapshot.blockNumber,
+        })),
     );
   });
 
@@ -79,6 +118,12 @@ describe("token detail Alchemy read", () => {
     const canonical = token(TOKEN_ADDRESS, {
       totalSupplyRaw: "1000000000000000000000000",
       tokenDecimals: 18,
+      activeLiquidity: "1",
+      indexedMarketCapEth: "357.14",
+      indexedMarketCapEthWei: "357140000000000000000",
+      indexedMarketCapUsdWad: "1250000000000000000000000",
+      marketCapEth: "350",
+      marketCapEthWei: "350000000000000000000",
     });
     const model = {
       status: "ready",
@@ -117,19 +162,52 @@ describe("token detail Alchemy read", () => {
       tokenAddress: canonical.tokenAddress,
       tokenPriceUsdWad: "1250000000000000000",
       fdvUsdWad: "1250000000000000000000000",
+      valuation: {
+        status: "available",
+        metric: "fdv",
+        supplyBasis: "total",
+        currency: "usd",
+        valueWad: "1250000000000000000000000",
+        freshness: "current",
+        asOfBlock: launchDiscoverySnapshot.blockNumber,
+        lagBlocks: "0",
+      },
     });
+    expect(body.dataQuality).toMatchObject({
+      status: "complete",
+      valuation: {
+        status: "current",
+        metric: "fdv",
+        available: 1,
+        unavailable: 0,
+      },
+    });
+    for (const field of [
+      "marketCapEth",
+      "marketCapEthWei",
+      "indexedMarketCapEth",
+      "indexedMarketCapEthWei",
+      "indexedMarketCapUsdWad",
+      "marketCapQuote",
+      "marketCapQuoteWad",
+    ]) {
+      expect(body.token).not.toHaveProperty(field);
+    }
     expect(body.launchDiscoverySnapshot).toEqual(launchDiscoverySnapshot);
     expect(response.headers.get("X-Programmable-Read-Source")).toBe(
-      "blob",
+      "operational+durable+postgres",
     );
     expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
-      "alchemy",
+      "operational-dual",
     );
     expect(response.headers.get("X-Programmable-Price-Source")).toBe(
       "alchemy",
     );
     expect(response.headers.get("X-Programmable-Launch-Source")).toBe(
-      "alchemy",
+      "operational+durable+registry.custom-launched",
+    );
+    expect(response.headers.get("X-Programmable-Valuation-Metric")).toBe(
+      "fdv",
     );
     expect(response.headers.get("Cache-Control")).toBe(
       "public, max-age=0, s-maxage=2, stale-while-revalidate=5",
@@ -208,6 +286,56 @@ describe("token detail Alchemy read", () => {
     await expect(response.json()).resolves.toMatchObject({
       launchDiscoverySnapshot,
     });
+    expect(response.headers.get("X-Programmable-Launch-Source")).toBe(
+      "operational+durable+registry.custom-launched",
+    );
+    expect(response.headers.get("X-Programmable-Read-Source")).toBe(
+      "operational+durable+postgres",
+    );
     expect(mocks.enrichTokensWithAlchemyPrices).not.toHaveBeenCalled();
+  });
+
+  it("retains canonical identity and reports unavailable FDV when enrichment fails", async () => {
+    const canonical = token(TOKEN_ADDRESS, {
+      totalSupplyRaw: "1000000000000000000000000",
+      tokenDecimals: 18,
+    });
+    mocks.readAlchemyExploreModel.mockResolvedValue({
+      status: "ready",
+      tokens: [canonical],
+      snapshot,
+      launchDiscoverySnapshot,
+      creatorClaims: [],
+      launcherFeesAccruedWei: "0",
+      launcherFeesAccruedEth: "0",
+    } satisfies ExploreReadModel);
+    mocks.enrichTokensWithAlchemyPrices.mockRejectedValue(
+      new Error("price unavailable"),
+    );
+    mocks.enrichTokensWithAlchemyPoolState.mockRejectedValue(
+      new Error("pool unavailable"),
+    );
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/explore/token?address=${TOKEN_ADDRESS}`,
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.token).toMatchObject({
+      tokenAddress: TOKEN_ADDRESS,
+      valuation: {
+        status: "unavailable",
+        reason: "liquidity-unavailable",
+      },
+    });
+    expect(body.token.valuation).not.toHaveProperty("valueWad", "0");
+    expect(body.dataQuality).toMatchObject({
+      status: "partial",
+      valuation: { status: "unavailable", available: 0, unavailable: 1 },
+    });
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
   });
 });

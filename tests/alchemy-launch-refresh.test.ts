@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { HttpRequestError } from "viem";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({
@@ -6,7 +7,7 @@ vi.mock("next/cache", () => ({
 }));
 
 const mocks = vi.hoisted(() => ({
-  getOnchainDeployment: vi.fn(),
+  getOperationalOnchainDeployment: vi.fn(),
   readDurableExploreModel: vi.fn(),
   advanceExploreLaunchDiscovery: vi.fn(),
   advanceLaunchStampRouterSlice: vi.fn(),
@@ -15,7 +16,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../lib/onchain/config", () => ({
-  getOnchainDeployment: mocks.getOnchainDeployment,
+  getOperationalOnchainDeployment: mocks.getOperationalOnchainDeployment,
 }));
 vi.mock("../lib/onchain/durable-model", () => ({
   readDurableExploreModel: mocks.readDurableExploreModel,
@@ -106,7 +107,7 @@ describe("Alchemy launch overlay refresh", () => {
     process.env.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL = deployment.rpcUrl;
     process.env.VERCEL_GIT_COMMIT_SHA = "a".repeat(40);
     Object.values(mocks).forEach((mock) => mock.mockReset());
-    mocks.getOnchainDeployment.mockReturnValue(deployment);
+    mocks.getOperationalOnchainDeployment.mockReturnValue(deployment);
     mocks.readDurableExploreModel.mockResolvedValue({
       status: "ready",
       envelope: { payload: { model: baseModel } },
@@ -185,6 +186,67 @@ describe("Alchemy launch overlay refresh", () => {
       persisted: false,
     });
     expect(mocks.writeAlchemyLaunchRegistry).not.toHaveBeenCalled();
+  });
+
+  it("keeps a healthy operational primary and does not rotate providers", async () => {
+    const dualDeployment = {
+      ...deployment,
+      rpcUrlSecondary: "https://secondary.example/rpc-key",
+    } as const;
+    mocks.getOperationalOnchainDeployment.mockReturnValue(dualDeployment);
+    mocks.advanceExploreLaunchDiscovery.mockResolvedValue({
+      ...baseModel,
+      snapshot: snapshot("100"),
+    });
+
+    await refreshAlchemyExploreRegistry({
+      includeLatest: false,
+      persist: false,
+    });
+
+    expect(mocks.readDurableExploreModel).toHaveBeenCalledTimes(1);
+    expect(mocks.readDurableExploreModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rpcUrl: dualDeployment.rpcUrl,
+        rpcUrlSecondary: null,
+      }),
+      Number.MAX_SAFE_INTEGER,
+    );
+  });
+
+  it("replays the complete refresh on the fixed secondary after primary capacity", async () => {
+    const secondary = "https://secondary.example/rpc-key";
+    mocks.getOperationalOnchainDeployment.mockReturnValue({
+      ...deployment,
+      rpcUrlSecondary: secondary,
+    });
+    mocks.readDurableExploreModel
+      .mockRejectedValueOnce(new HttpRequestError({
+        status: 429,
+        url: deployment.rpcUrl,
+      }))
+      .mockResolvedValue({
+        status: "ready",
+        envelope: { payload: { model: baseModel } },
+      });
+    mocks.advanceExploreLaunchDiscovery.mockResolvedValue({
+      ...baseModel,
+      snapshot: snapshot("100"),
+    });
+
+    await refreshAlchemyExploreRegistry({
+      includeLatest: false,
+      persist: false,
+    });
+
+    expect(mocks.readDurableExploreModel).toHaveBeenCalledTimes(2);
+    expect(mocks.readDurableExploreModel).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        rpcUrl: secondary,
+        rpcUrlSecondary: null,
+      }),
+      Number.MAX_SAFE_INTEGER,
+    );
   });
 
   it("periodically persists cursor progress even when no token launched", async () => {

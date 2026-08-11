@@ -299,7 +299,7 @@ describe("browser-wallet grant reissue Website flow", () => {
     expect(source).toContain('className={styles.progressCopy} aria-live="polite"');
     expect(source).toContain('role={error ? "alert" : "status"}');
     expect(source).toContain('aria-busy={launchProgress !== "idle"}');
-    expect(source).toContain("Check approval status");
+    expect(source).toContain("Refresh launch setup");
     expect(source).toContain('type="button"');
     expect(source).toContain('type="submit" disabled={launchProgress !== "idle"}');
     expect(source).toContain('"Preparing launch"');

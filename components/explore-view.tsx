@@ -30,6 +30,14 @@ import { WebsiteLinkIcon } from "@/components/website-link-icon";
 import { parseDiscoverableMarketTradeCapabilityV1 } from
   "@/lib/custom-launch/trade-capability-v1";
 import {
+  exploreValuation,
+  isExploreDataQuality,
+  isExploreValuation,
+  type ExploreDataQuality,
+  type ExploreValuation,
+  type ValuedExploreEntry,
+} from "@/lib/explore-financial-data";
+import {
   canOptimizeTokenImage,
   getTokenCardImageSource,
 } from "@/lib/token-image";
@@ -48,19 +56,24 @@ type TokenCard = {
   description?: string;
   imageUrl: string;
   links: readonly TokenLink[];
-  marketCap?: MarketCapMetric;
-  marketStatus?: "No market";
+  valuation?: MarketCapMetric;
+  marketStatus?: "No market" | "Unavailable";
   usesFallbackImage: boolean;
   tokenAddress?: `0x${string}`;
   launchCategory: "Classic" | "Custom";
 };
 
 export function exploreMarketStatusLabel(
-  entry: ExploreEntry,
-): "No market" | undefined {
-  return entry.exploreKind === "custom-project" && entry.markets.length === 0
-    ? "No market"
-    : undefined;
+  entry: ExploreEntry | ValuedExploreEntry,
+): "No market" | "Unavailable" | undefined {
+  if (entry.exploreKind === "custom-project" && entry.markets.length === 0) {
+    return "No market";
+  }
+  const explicit = (entry as Partial<ValuedExploreEntry>).valuation;
+  const valuation = isExploreValuation(explicit)
+    ? explicit
+    : exploreValuation(entry);
+  return valuation.status === "unavailable" ? "Unavailable" : undefined;
 }
 
 type TokenSort = "newest" | "oldest" | "market-cap" | "market-cap-asc";
@@ -69,11 +82,12 @@ export type ExploreModelFilter = "all" | "classic" | "custom-hook";
 
 type ExplorePayload = {
   status: "ready" | "not-deployed";
-  tokens: ExploreEntry[];
+  tokens: ValuedExploreEntry[];
   page: number;
   pageSize: number;
   total: number;
   totalPages: number;
+  dataQuality?: ExploreDataQuality;
 };
 
 type ExploreState =
@@ -132,8 +146,8 @@ const fallbackTokenImages = [
 const sortOptions: { id: TokenSort; label: string }[] = [
   { id: "newest", label: "Newest" },
   { id: "oldest", label: "Oldest" },
-  { id: "market-cap", label: "Highest market cap" },
-  { id: "market-cap-asc", label: "Lowest market cap" },
+  { id: "market-cap", label: "Highest FDV" },
+  { id: "market-cap-asc", label: "Lowest FDV" },
 ];
 const socialFilterOptions: {
   id: Exclude<ExploreSocialFilter, "all">;
@@ -548,9 +562,18 @@ function parseCustomExploreEntry(value: unknown): ExploreEntry | null {
   };
 }
 
-function parseExploreEntry(value: unknown): ExploreEntry | null {
+function parseExploreEntry(value: unknown): ValuedExploreEntry | null {
+  const attachValuation = <T extends ExploreEntry>(entry: T) => {
+    const valuation = isRecord(value) && value.valuation === undefined
+      ? exploreValuation(entry)
+      : isRecord(value) && isExploreValuation(value.valuation)
+        ? value.valuation
+        : null;
+    return valuation === null ? null : { ...entry, valuation };
+  };
   if (isRecord(value) && value.exploreKind === "custom-project") {
-    return parseCustomExploreEntry(value);
+    const entry = parseCustomExploreEntry(value);
+    return entry ? attachValuation(entry) : null;
   }
   const token = parseLauncherToken(value);
   const expectedCategory = token?.launchStampProvenance?.kind === "custom-graph"
@@ -589,14 +612,14 @@ function parseExploreEntry(value: unknown): ExploreEntry | null {
   } else if (categoryProvenance.source === "canonical-launch-stamp-router") {
     return null;
   }
-  return {
+  return attachValuation({
     ...token,
     exploreKind: "token",
     launchCategoryProvenance: value.launchCategoryProvenance as Extract<
       ExploreEntry,
       { exploreKind: "token" }
     >["launchCategoryProvenance"],
-  };
+  });
 }
 
 function positiveInteger(value: unknown, fallback: number) {
@@ -615,6 +638,12 @@ function parseExplorePayload(value: unknown): ExplorePayload {
   if (!Array.isArray(value.tokens)) {
     throw new Error("The token registry returned invalid token data");
   }
+  if (
+    value.dataQuality !== undefined &&
+    !isExploreDataQuality(value.dataQuality)
+  ) {
+    throw new Error("The token registry returned invalid data quality");
+  }
 
   const tokens = value.tokens.map(parseExploreEntry);
   if (tokens.some((token) => token === null)) {
@@ -623,7 +652,7 @@ function parseExplorePayload(value: unknown): ExplorePayload {
 
   return {
     status: value.status,
-    tokens: tokens as ExploreEntry[],
+    tokens: tokens as ValuedExploreEntry[],
     page: Math.max(1, positiveInteger(value.page, 1)),
     pageSize: Math.max(
       1,
@@ -631,6 +660,9 @@ function parseExplorePayload(value: unknown): ExplorePayload {
     ),
     total: positiveInteger(value.total, tokens.length),
     totalPages: positiveInteger(value.totalPages, 0),
+    ...(value.dataQuality === undefined
+      ? {}
+      : { dataQuality: value.dataQuality }),
   };
 }
 
@@ -827,8 +859,8 @@ export function tokenLaunchModelGroup(
       : null;
 }
 
-export function filterTokensByLaunchModel(
-  tokens: ExploreEntry[],
+export function filterTokensByLaunchModel<T extends ExploreEntry>(
+  tokens: T[],
   modelFilter: ExploreModelFilter,
 ) {
   if (modelFilter === "all") return tokens;
@@ -837,8 +869,8 @@ export function filterTokensByLaunchModel(
   );
 }
 
-export function paginateTokensByExploreFilters(
-  tokens: ExploreEntry[],
+export function paginateTokensByExploreFilters<T extends ExploreEntry>(
+  tokens: T[],
   socialFilter: ExploreSocialFilter,
   modelFilter: ExploreModelFilter,
   requestedPage: number,
@@ -869,48 +901,23 @@ function getFallbackTokenImage(address: string) {
   return fallbackTokenImages[index];
 }
 
-export function getMarketCap(
-  token: ExploreEntry,
+function valuationForEntry(
+  entry: ExploreEntry | ValuedExploreEntry,
+): ExploreValuation {
+  const explicit = (entry as Partial<ValuedExploreEntry>).valuation;
+  return isExploreValuation(explicit) ? explicit : exploreValuation(entry);
+}
+
+export function getExploreValuationMetric(
+  token: ExploreEntry | ValuedExploreEntry,
 ): MarketCapMetric | undefined {
-  if (token.exploreKind !== "token") return undefined;
-  if (
-    token.indexedMarketCapUsdWad &&
-    /^\d+$/.test(token.indexedMarketCapUsdWad)
-  ) {
-    const value = Number(BigInt(token.indexedMarketCapUsdWad)) / 1e18;
-    if (Number.isFinite(value) && value > 0) {
-      return { kind: "usd", value };
-    }
-  }
-
-  if (token.fdvUsdWad && /^\d+$/.test(token.fdvUsdWad)) {
-    const value = Number(BigInt(token.fdvUsdWad)) / 1e18;
-    if (Number.isFinite(value) && value > 0) {
-      return { kind: "usd", value };
-    }
-  }
-
-  if (
-    token.marketCapQuote &&
-    token.quoteAssetSymbol &&
-    /^\d+(?:\.\d+)?$/.test(token.marketCapQuote)
-  ) {
-    const value = Number(token.marketCapQuote);
-    if (Number.isFinite(value) && value >= 0) {
-      return {
-        kind: "quote",
-        symbol: token.quoteAssetSymbol,
-        value,
-      };
-    }
-  }
-
-  const marketCapEth = token.indexedMarketCapEth ?? token.marketCapEth;
-  if (!marketCapEth) return undefined;
-  const value = Number(marketCapEth);
-  if (!Number.isFinite(value) || value < 0) return undefined;
-
-  return { kind: "eth", value };
+  const valuation = valuationForEntry(token);
+  if (valuation.status !== "available") return undefined;
+  const value = Number(BigInt(valuation.valueWad)) / 1e18;
+  if (!Number.isFinite(value) || value <= 0) return undefined;
+  if (valuation.currency === "usd") return { kind: "usd", value };
+  if (valuation.currency === "eth") return { kind: "eth", value };
+  return { kind: "quote", symbol: valuation.quoteSymbol ?? "", value };
 }
 
 export function getExplorePaginationItems(
@@ -977,7 +984,9 @@ export function exploreTokenCardDescription(token: ExploreEntry) {
     : undefined;
 }
 
-export function getTokenCards(tokens: ExploreEntry[]): TokenCard[] {
+export function getTokenCards(
+  tokens: Array<ExploreEntry | ValuedExploreEntry>,
+): TokenCard[] {
   return tokens.map((token) => ({
     id: token.id,
     name: token.name,
@@ -989,7 +998,7 @@ export function getTokenCards(tokens: ExploreEntry[]): TokenCard[] {
     links: [...(token.links ?? [])].sort(
       (left, right) => tokenLinkOrder[left.kind] - tokenLinkOrder[right.kind],
     ),
-    marketCap: getMarketCap(token),
+    valuation: getExploreValuationMetric(token),
     marketStatus: exploreMarketStatusLabel(token),
     usesFallbackImage: !token.imageUrl?.trim(),
     ...(token.tokenAddress === undefined
@@ -1063,6 +1072,22 @@ function resultRangeLabel(payload: ExplorePayload | null) {
   return `${start}–${end} of ${payload.total} ${
     payload.total === 1 ? "launch" : "launches"
   }`;
+}
+
+export function exploreDataQualityMessage(
+  quality: ExploreDataQuality | undefined,
+) {
+  if (!quality) return null;
+  if (quality.launchIdentity.status === "partial") {
+    return "Some launches may be temporarily unavailable";
+  }
+  if (quality.launchIdentity.status === "last-known-good") {
+    return "Launches may be out of date";
+  }
+  if (quality.valuation.status === "stale") {
+    return "Prices may be out of date";
+  }
+  return null;
 }
 
 export function ExploreView() {
@@ -1253,19 +1278,22 @@ export function ExploreView() {
         const launchComparison = comparePreviewLaunchOrder(left, right);
         return sort === "newest" ? -launchComparison : launchComparison;
       }
-      const leftMarketCap = BigInt(left.indexedMarketCapUsdWad ?? "0");
-      const rightMarketCap = BigInt(right.indexedMarketCapUsdWad ?? "0");
+      const leftFdv = BigInt(left.indexedMarketCapUsdWad ?? "0");
+      const rightFdv = BigInt(right.indexedMarketCapUsdWad ?? "0");
       const delta =
-        leftMarketCap === rightMarketCap
+        leftFdv === rightFdv
           ? 0
-          : leftMarketCap > rightMarketCap
+          : leftFdv > rightFdv
             ? -1
             : 1;
       return sort === "market-cap" ? delta : -delta;
     });
 
     const paginated = paginateTokensByExploreFilters(
-      ranked,
+      ranked.map((entry) => ({
+        ...entry,
+        valuation: exploreValuation(entry),
+      })),
       socialFilter,
       modelFilter,
       currentPage,
@@ -1297,6 +1325,7 @@ export function ExploreView() {
   const paginationItems = getExplorePaginationItems(activePage, pageCount);
   const resultLabel =
     displayState.phase === "error" ? "" : resultRangeLabel(payload);
+  const dataQualityMessage = exploreDataQualityMessage(payload?.dataQuality);
   const busy =
     !preview &&
     (displayState.phase === "loading" ||
@@ -1355,6 +1384,23 @@ export function ExploreView() {
     }
 
     if (cards.length === 0) {
+      if (payload?.dataQuality?.launchIdentity.status === "partial") {
+        return (
+          <div className={`${styles.emptyState} liquid-glass-surface`}>
+            <div>
+              <h2>Launches temporarily unavailable</h2>
+              <p>Try again in a moment.</p>
+            </div>
+            <button
+              className={styles.emptyAction}
+              type="button"
+              onClick={retryTokens}
+            >
+              Refresh
+            </button>
+          </div>
+        );
+      }
       if (
         debouncedQuery ||
         socialFilter !== "all" ||
@@ -1407,8 +1453,8 @@ export function ExploreView() {
             ? `/token/${token.tokenAddress}`
             : null;
           const imageSource = getTokenCardImageSource(token.imageUrl);
-          const marketCapLabel = token.marketCap
-            ? formatMarketCapMetric(token.marketCap)
+          const valuationLabel = token.valuation
+            ? formatMarketCapMetric(token.valuation)
             : null;
           const cardContent = (
             <>
@@ -1462,24 +1508,26 @@ export function ExploreView() {
                   <span className="sr-only">Launch type: </span>
                   {token.launchCategory}
                 </span>
-                {marketCapLabel ? (
+                {valuationLabel ? (
                   <span className={styles.runnerMarketCap}>
-                    <span className="sr-only">Market cap: </span>
+                    <span className="sr-only">
+                      {"Fully diluted valuation: "}
+                    </span>
                     <span
                       className={styles.runnerMarketCapLabel}
                       aria-hidden="true"
                     >
-                      MC
+                      FDV
                     </span>
                     <span className={styles.runnerMarketCapValue}>
-                      {marketCapLabel}
+                      {valuationLabel}
                     </span>
                   </span>
                 ) : null}
                 {token.marketStatus ? (
                   <span
                     className={styles.runnerMarketStatus}
-                    aria-label="Market status No market"
+                    aria-label={`Market status ${token.marketStatus}`}
                   >
                     {token.marketStatus}
                   </span>
@@ -1525,7 +1573,7 @@ export function ExploreView() {
             <span>how you imagine</span>
           </h1>
           <p className={styles.pageDescription}>
-            Browse launches by model, market cap or social presence.
+            Browse launches by model, valuation or social presence.
           </p>
         </header>
 
@@ -1810,9 +1858,13 @@ export function ExploreView() {
           </p>
 
           {displayState.phase === "ready" &&
-          displayState.refreshError ? (
+          (displayState.refreshError || dataQualityMessage) ? (
             <div className="token-refresh-warning" role="status">
-              <span>Prices may be out of date</span>
+              <span>
+                {displayState.refreshError
+                  ? "Prices may be out of date"
+                  : dataQualityMessage}
+              </span>
               <button
                 type="button"
                 onClick={retryTokens}

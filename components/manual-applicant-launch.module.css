@@ -241,6 +241,13 @@
   padding-inline: 9px;
 }
 
+.sessionActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .connectButton {
   min-height: 50px;
   width: 100%;

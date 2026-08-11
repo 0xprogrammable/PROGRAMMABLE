@@ -22,6 +22,7 @@ import { useLiveDataRefresh } from "@/components/use-live-data-refresh";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
 import { prepareAvatarImage } from "@/lib/profile/avatar";
 import {
+  ClassicV3ProfileReadError,
   EMPTY_CLASSIC_V3_PROFILE,
   fetchClassicV3ProfileRewards,
   prepareClassicV3RewardAction,
@@ -52,7 +53,10 @@ import {
   type StockPairedProfileRewards,
   type StockPairedReward,
 } from "@/lib/profile/stock-paired-rewards";
-import { prepareCreatorClaim } from "@/lib/profile/creator-claim";
+import {
+  CreatorClaimClientError,
+  prepareCreatorClaim,
+} from "@/lib/profile/creator-claim";
 import {
   canOptimizeTokenImage,
   getTokenCardImageSource,
@@ -70,6 +74,7 @@ import {
   fetchCreatorProfile,
   isProfileDataForAccount,
   loadingProfileData,
+  ProfileResponseError,
   UNAVAILABLE_PROFILE_DATA,
   type ProfileClaim,
   type ProfileActivity,
@@ -101,8 +106,34 @@ const creatorProfileCache = new Map<
   string,
   Readonly<{ data: ProfileOnchainData; updatedAt: number }>
 >();
-const CREATOR_PROFILE_CACHE_TTL_MS = 30_000;
+const CREATOR_PROFILE_CACHE_TTL_MS = 5 * 60_000;
 const MAX_CREATOR_PROFILE_CACHE_ENTRIES = 8;
+const PROFILE_LIVE_REFRESH_INTERVAL_MS = 30_000;
+type ReadyClassicV3Profile = Extract<
+  ClassicV3ProfileRewards,
+  { status: "ready" }
+>;
+const classicV3ProfileCache = new Map<
+  string,
+  Readonly<{ data: ReadyClassicV3Profile; verifiedAt: number }>
+>();
+const CLASSIC_V3_PROFILE_CACHE_TTL_MS = 5 * 60_000;
+const MAX_CLASSIC_V3_PROFILE_CACHE_ENTRIES = 8;
+
+type ClassicV3ProfileSourceQuality =
+  | "idle"
+  | "current"
+  | "stale"
+  | "unavailable"
+  | "integrity";
+
+type ClassicV3ProfileSourceState = Readonly<{
+  account?: string;
+  quality: ClassicV3ProfileSourceQuality;
+  verifiedAt?: number;
+}>;
+
+export type ProfileRewardDataQuality = "current" | "stale" | "partial";
 
 function readCachedCreatorProfile(account: string) {
   const key = account.toLowerCase();
@@ -112,7 +143,7 @@ function readCachedCreatorProfile(account: string) {
     creatorProfileCache.delete(key);
     return null;
   }
-  return cached.data;
+  return { ...cached.data, sourceQuality: "stale" as const };
 }
 
 function cacheCreatorProfile(data: ProfileOnchainData) {
@@ -125,6 +156,31 @@ function cacheCreatorProfile(data: ProfileOnchainData) {
     if (oldestKey === undefined) return;
     creatorProfileCache.delete(oldestKey);
   }
+}
+
+function readCachedClassicV3Profile(account: string) {
+  const key = account.toLowerCase();
+  const cached = classicV3ProfileCache.get(key);
+  if (!cached) return null;
+  if (Date.now() - cached.verifiedAt >= CLASSIC_V3_PROFILE_CACHE_TTL_MS) {
+    classicV3ProfileCache.delete(key);
+    return null;
+  }
+  return cached;
+}
+
+function cacheClassicV3Profile(data: ClassicV3ProfileRewards) {
+  if (data.status !== "ready") return null;
+  const key = data.account.toLowerCase();
+  const verifiedAt = Date.now();
+  classicV3ProfileCache.delete(key);
+  classicV3ProfileCache.set(key, { data, verifiedAt });
+  while (classicV3ProfileCache.size > MAX_CLASSIC_V3_PROFILE_CACHE_ENTRIES) {
+    const oldestKey = classicV3ProfileCache.keys().next().value;
+    if (oldestKey === undefined) break;
+    classicV3ProfileCache.delete(oldestKey);
+  }
+  return verifiedAt;
 }
 
 type ProfileClaimActionState = {
@@ -275,13 +331,85 @@ export function getProfileSessionView(
 export function getProfileWorkspacePhase(
   statuses: readonly ProfileWorkspaceSourceStatus[],
   terminalErrorReady: boolean,
+  integrityConflict = false,
 ): ProfileWorkspacePhase {
   if (statuses.some((status) => status === "loading")) {
     return "loading";
   }
+  if (integrityConflict) return "error";
   if (statuses.some((status) => status === "ready")) return "ready";
   if (!terminalErrorReady) return "loading";
   return "error";
+}
+
+export function getProfileRewardDataQuality(
+  statuses: readonly ProfileWorkspaceSourceStatus[],
+  classicQuality: ClassicV3ProfileSourceQuality,
+  creatorQuality: "current" | "stale" = "current",
+): ProfileRewardDataQuality {
+  if (classicQuality === "stale" || creatorQuality === "stale") {
+    return "stale";
+  }
+  if (
+    classicQuality === "unavailable" ||
+    statuses.some((status) => status === "error")
+  ) {
+    return "partial";
+  }
+  return "current";
+}
+
+export function resolveCreatorProfileReadFailure(
+  current: ProfileOnchainData,
+  account: string,
+  caught: unknown,
+): ProfileOnchainData {
+  const kind =
+    caught instanceof ProfileResponseError ? caught.kind : "integrity";
+  if (
+    kind === "temporary" &&
+    isProfileDataForAccount(current, account) &&
+    current.status === "ready"
+  ) {
+    return { ...current, sourceQuality: "stale" };
+  }
+  return errorProfileData(
+    account,
+    kind === "temporary"
+      ? "Onchain creator data is temporarily unavailable"
+      : "Current creator reward data could not be verified",
+    kind,
+  );
+}
+
+const walletChangedBeforeSubmission =
+  "The connected wallet changed before submission";
+const insufficientNetworkFee =
+  "This wallet needs more ETH to cover the network fee";
+
+export function profileCreatorClaimErrorMessage(error: unknown) {
+  if (
+    error instanceof CreatorClaimClientError &&
+    error.code !== "invalid-response" &&
+    error.code !== "response-mismatch"
+  ) {
+    return error.message;
+  }
+  if (
+    error instanceof Error &&
+    (error.message === walletChangedBeforeSubmission ||
+      error.message === insufficientNetworkFee)
+  ) {
+    return error.message;
+  }
+  return "The creator claim was not completed. Check your wallet and try again.";
+}
+
+export function profileRewardActionErrorMessage(error: unknown) {
+  return error instanceof Error &&
+    error.message === walletChangedBeforeSubmission
+    ? error.message
+    : "The reward action was not completed. Check your wallet and try again.";
 }
 
 const pendingProfileTransactionStoragePrefix =
@@ -960,10 +1088,13 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   const [profileRefresh, setProfileRefresh] = useState(0);
   const liveProfileRefresh = useLiveDataRefresh({
     enabled: Boolean(account),
+    intervalMs: PROFILE_LIVE_REFRESH_INTERVAL_MS,
   });
   const [terminalErrorReadyKey, setTerminalErrorReadyKey] = useState("");
   const [classicV3Rewards, setClassicV3Rewards] =
     useState<ClassicV3ProfileRewards>(EMPTY_CLASSIC_V3_PROFILE);
+  const [classicV3SourceState, setClassicV3SourceState] =
+    useState<ClassicV3ProfileSourceState>({ quality: "idle" });
   const [deepRewards, setDeepRewards] =
     useState<DeepProfileRewards>(EMPTY_DEEP_PROFILE);
   const [deepV3Profile, setDeepV3Profile] =
@@ -1096,16 +1227,16 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       })
       .catch((caught: unknown) => {
         if (controller.signal.aborted) return;
+        const cached = readCachedCreatorProfile(account);
         setRemoteOnchainData((current) =>
-          isProfileDataForAccount(current, account) &&
-          current.status === "ready"
-            ? current
-            : errorProfileData(
-                account,
-                caught instanceof Error
-                  ? caught.message
-                  : "Onchain profile data could not be loaded",
-              ),
+          resolveCreatorProfileReadFailure(
+            cached ??
+              (current.status === "ready"
+                ? UNAVAILABLE_PROFILE_DATA
+                : current),
+            account,
+            caught,
+          ),
         );
       });
 
@@ -1115,6 +1246,19 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   useEffect(() => {
     if (!account || !classicV3ReleaseAvailable) return;
     const controller = new AbortController();
+    let cancelled = false;
+    const cachedProfile = readCachedClassicV3Profile(account);
+    if (cachedProfile) {
+      queueMicrotask(() => {
+        if (cancelled || controller.signal.aborted) return;
+        setClassicV3Rewards(cachedProfile.data);
+        setClassicV3SourceState({
+          account,
+          quality: "stale",
+          verifiedAt: cachedProfile.verifiedAt,
+        });
+      });
+    }
     const confirmedTransactions = new Map(
       confirmedProfileTransactionsRef.current["classic-v3"],
     );
@@ -1142,26 +1286,49 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
             confirmedProfileTransactionsRef.current["classic-v3"],
             reflectedTransactions,
           );
+          const verifiedAt = cacheClassicV3Profile(data);
+          setClassicV3SourceState({
+            account,
+            quality: "current",
+            ...(verifiedAt ? { verifiedAt } : {}),
+          });
         }
       })
       .catch((caught: unknown) => {
         if (controller.signal.aborted) return;
-        setClassicV3Rewards((current) =>
-          current.status === "ready" &&
-          current.account.toLowerCase() === account.toLowerCase()
-            ? current
-            : {
-                status: "error",
-                account,
-                rewards: [],
-                errorMessage:
-                  caught instanceof Error
-                    ? caught.message
-                    : "Classic rewards could not be loaded",
-              },
-        );
+        const failureKind =
+          caught instanceof ClassicV3ProfileReadError
+            ? caught.kind
+            : "integrity";
+        const cached = readCachedClassicV3Profile(account);
+        if (failureKind === "temporary" && cached) {
+          setClassicV3Rewards(cached.data);
+          setClassicV3SourceState({
+            account,
+            quality: "stale",
+            verifiedAt: cached.verifiedAt,
+          });
+          return;
+        }
+        setClassicV3Rewards({
+          status: "error",
+          account,
+          rewards: [],
+          errorMessage:
+            failureKind === "integrity"
+              ? "Classic reward data could not be verified"
+              : "Classic rewards are temporarily unavailable",
+        });
+        setClassicV3SourceState({
+          account,
+          quality:
+            failureKind === "integrity" ? "integrity" : "unavailable",
+        });
       });
-    return () => controller.abort();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, [account, liveProfileRefresh, profileRefresh]);
 
   useEffect(() => {
@@ -1395,6 +1562,15 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       ? classicV3Rewards
       : { status: "loading", account, rewards: [] };
   }, [account, classicV3Rewards]);
+  const scopedClassicV3SourceState = useMemo<ClassicV3ProfileSourceState>(
+    () => {
+      if (!account || !classicV3ReleaseAvailable) return { quality: "idle" };
+      return classicV3SourceState.account?.toLowerCase() ===
+        account.toLowerCase()
+        ? classicV3SourceState
+        : { account, quality: "idle" };
+    }, [account, classicV3SourceState],
+  );
   const scopedDeepRewards = useMemo<DeepProfileRewards>(() => {
     if (!account || !deepReleaseAvailable) return EMPTY_DEEP_PROFILE;
     return deepRewards.account?.toLowerCase() === account.toLowerCase()
@@ -1651,10 +1827,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         }
         setClaimState({
           status: "error",
-          message:
-            caught instanceof Error
-              ? caught.message
-              : "The creator claim could not be submitted",
+          message: profileCreatorClaimErrorMessage(caught),
         });
       }
     },
@@ -1784,10 +1957,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         }
         setActionState({
           status: "error",
-          message:
-            caught instanceof Error
-              ? caught.message
-              : "The reward action could not be submitted",
+          message: profileRewardActionErrorMessage(caught),
         });
       }
     },
@@ -1912,10 +2082,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         }
         setActionState({
           status: "error",
-          message:
-            caught instanceof Error
-              ? caught.message
-              : "The reward action could not be submitted",
+          message: profileRewardActionErrorMessage(caught),
         });
       }
     },
@@ -2369,27 +2536,6 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
 
   function retryProfileData() {
     if (!account) return;
-    if (!onchainData && scopedOnchainData.status === "error") {
-      setRemoteOnchainData(loadingProfileData(account));
-    }
-    if (
-      classicV3ReleaseAvailable &&
-      scopedClassicV3Rewards.status === "error"
-    ) {
-      setClassicV3Rewards({ status: "loading", account, rewards: [] });
-    }
-    if (deepReleaseAvailable && scopedDeepRewards.status === "error") {
-      setDeepRewards({ status: "loading", account, rewards: [] });
-    }
-    if (deepV3ReleaseAvailable && scopedDeepV3Profile.status === "error") {
-      setDeepV3Profile({ status: "loading", account, tokens: [] });
-    }
-    if (
-      stockPairedReleaseAvailable &&
-      scopedStockPairedRewards.status === "error"
-    ) {
-      setStockPairedRewards({ status: "loading", account, rewards: [] });
-    }
     setProfileRefresh((current) => current + 1);
   }
 
@@ -2576,6 +2722,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         account={account}
         claimActionStates={claimActionStates}
         classicV3Rewards={scopedClassicV3Rewards}
+        classicV3SourceState={scopedClassicV3SourceState}
         classicV3ActionStates={classicV3ActionStates}
         deepRewards={scopedDeepRewards}
         deepActionStates={deepActionStates}
@@ -3365,7 +3512,7 @@ export function ProfileRouterLaunches({
       <header className={styles.launchesHeader}>
         <div>
           <h2 id="profile-launches-title">Launches</h2>
-          <p>Canonical Router records from this wallet.</p>
+          <p>Tokens launched from this wallet.</p>
         </div>
         <span>
           {entries.length} {entries.length === 1 ? "launch" : "launches"}
@@ -3401,7 +3548,6 @@ export function ProfileRouterLaunches({
               </span>
               <span className={styles.launchStatus}>
                 <strong>{category}</strong>
-                <small>Router record</small>
               </span>
             </Link>
           );
@@ -3417,6 +3563,7 @@ function ProfileAccountWorkspace({
   account,
   claimActionStates,
   classicV3Rewards,
+  classicV3SourceState,
   classicV3ActionStates,
   deepRewards,
   deepActionStates,
@@ -3436,6 +3583,7 @@ function ProfileAccountWorkspace({
   account?: string;
   claimActionStates: Record<string, ProfileClaimActionState>;
   classicV3Rewards: ClassicV3ProfileRewards;
+  classicV3SourceState: ClassicV3ProfileSourceState;
   classicV3ActionStates: Record<string, ClassicV3ActionState>;
   deepRewards: DeepProfileRewards;
   deepActionStates: Record<string, DeepActionState>;
@@ -3492,6 +3640,9 @@ function ProfileAccountWorkspace({
     deepRewards.status === "loading" ||
     deepV3Profile.status === "loading" ||
     stockPairedRewards.status === "loading";
+  const integrityConflict =
+    (data.status === "error" && data.errorKind === "integrity") ||
+    classicV3SourceState.quality === "integrity";
   const phase = getProfileWorkspacePhase(
     [
       data.status,
@@ -3501,6 +3652,7 @@ function ProfileAccountWorkspace({
       stockPairedRewards.status,
     ],
     terminalErrorReady,
+    integrityConflict,
   );
 
   if (phase === "loading") {
@@ -3510,23 +3662,15 @@ function ProfileAccountWorkspace({
   if (phase === "error") {
     return (
       <section className={styles.accountState} aria-live="polite">
-        <h2>Profile data unavailable</h2>
+        <h2>
+          {integrityConflict
+            ? "Rewards need verification"
+            : "Profile data unavailable"}
+        </h2>
         <p>
-          {data.status === "error" && data.errorMessage
-              ? data.errorMessage
-              : classicV3Rewards.status === "error" &&
-                  classicV3Rewards.errorMessage
-                ? classicV3Rewards.errorMessage
-                : deepRewards.status === "error" &&
-                    deepRewards.errorMessage
-                  ? deepRewards.errorMessage
-                  : deepV3Profile.status === "error" &&
-                      deepV3Profile.errorMessage
-                    ? deepV3Profile.errorMessage
-                  : stockPairedRewards.status === "error" &&
-                      stockPairedRewards.errorMessage
-                    ? stockPairedRewards.errorMessage
-                    : "Check your connection and try again."}
+          {integrityConflict
+            ? "Current claim totals could not be verified. Try again before claiming."
+            : "Unable to verify current rewards. Check your connection and try again."}
         </p>
         <button
           className={styles.retryButton}
@@ -3614,22 +3758,43 @@ function ProfileAccountWorkspace({
           : stockPairedReady
             ? stockPairedRewards.chainId
             : undefined;
+  const sourceStatuses = [
+    data.status,
+    classicV3Rewards.status,
+    deepRewards.status,
+    deepV3Profile.status,
+    stockPairedRewards.status,
+  ] as const;
+  const rewardDataQuality = getProfileRewardDataQuality(
+    sourceStatuses,
+    classicV3SourceState.quality,
+    data.sourceQuality ?? "current",
+  );
   const sourceWarning =
-    data.status === "error"
-      ? data.errorMessage || "Some token rewards could not be refreshed"
-      : classicV3Rewards.status === "error"
-        ? classicV3Rewards.errorMessage ||
-          "Some Classic rewards could not be refreshed"
-        : deepRewards.status === "error"
-          ? deepRewards.errorMessage ||
-            "Some Deep rewards could not be refreshed"
-          : deepV3Profile.status === "error"
-            ? deepV3Profile.errorMessage ||
-              "Some Deep liquidity state could not be refreshed"
-          : stockPairedRewards.status === "error"
-            ? stockPairedRewards.errorMessage ||
-              "Some Stock-Paired rewards could not be refreshed"
-        : "";
+    data.sourceQuality === "stale"
+      ? "Showing the last verified reward totals. Refresh to check current values."
+      : classicV3SourceState.quality === "stale"
+        ? "Showing the last verified Classic rewards. Refresh to check current values."
+        : classicV3SourceState.quality === "unavailable"
+          ? "Classic rewards are temporarily unavailable. Refresh to check current values."
+          : sourceStatuses.some((status) => status === "error")
+            ? "Some reward values are temporarily unavailable. Refresh to check current totals."
+            : "";
+  const emptyState =
+    rewardDataQuality === "current"
+      ? {
+          title: "No rewards to claim",
+          description: "New claimable rewards will appear here.",
+        }
+      : rewardDataQuality === "stale"
+        ? {
+            title: "No rewards in the last verified check",
+            description: "Refresh to check current rewards.",
+          }
+        : {
+            title: "Current rewards are unavailable",
+            description: "Refresh to check your claimable amount.",
+          };
 
   return (
     <section
@@ -3641,7 +3806,7 @@ function ProfileAccountWorkspace({
         <div className={styles.sourceWarning} role="status">
           <span>{sourceWarning}</span>
           <button type="button" onClick={onRetry}>
-            Retry
+            Refresh
           </button>
         </div>
       ) : null}
@@ -3652,11 +3817,15 @@ function ProfileAccountWorkspace({
         className={`${styles.profileWorkspace} liquid-glass-surface`}
       >
         <FeeEarningsPanel
-          nativeClaimable={nativeClaimable}
-          nativeClaimed={nativeClaimed}
+          nativeClaimable={
+            rewardDataQuality === "partial" ? null : nativeClaimable
+          }
+          nativeClaimed={
+            rewardDataQuality === "partial" ? null : nativeClaimed
+          }
           stockRewardCount={stockRewardCount}
           activity={currentReady ? data.activity : []}
-          sourcesLoading={loading}
+          dataQuality={rewardDataQuality}
         />
 
         <section
@@ -3669,7 +3838,7 @@ function ProfileAccountWorkspace({
             <h2 id="profile-claimable-title">Claimable</h2>
             {loading ? (
               <span className={styles.visuallyHidden} role="status">
-                Refreshing reward sources
+                Refreshing rewards
               </span>
             ) : null}
             {claimPageData.totalPages > 1 ? (
@@ -3732,8 +3901,8 @@ function ProfileAccountWorkspace({
             </div>
           ) : (
             <div className={styles.claimEmpty}>
-              <strong>No rewards ready</strong>
-              <p>Claimable rewards will appear here.</p>
+              <strong>{emptyState.title}</strong>
+              <p>{emptyState.description}</p>
             </div>
           )}
         </section>
@@ -3747,13 +3916,13 @@ function FeeEarningsPanel({
   nativeClaimed,
   stockRewardCount,
   activity,
-  sourcesLoading,
+  dataQuality,
 }: {
-  nativeClaimable: bigint;
-  nativeClaimed: bigint;
+  nativeClaimable: bigint | null;
+  nativeClaimed: bigint | null;
   stockRewardCount: number;
   activity: readonly ProfileActivity[];
-  sourcesLoading: boolean;
+  dataQuality: ProfileRewardDataQuality;
 }) {
   const [chartNowMs, setChartNowMs] = useState<number | null>(null);
   const initialChartReferenceMs = useMemo(
@@ -3773,14 +3942,21 @@ function FeeEarningsPanel({
     return () => window.cancelAnimationFrame(frame);
   }, [activity]);
 
-  const chart = useMemo(
-    () =>
-      buildFeeEarningsChart(activity, nativeClaimed, 0n, {
+  const chart = useMemo(() => {
+    const confirmedFromHistory = timestampedFeeClaims(activity).reduce(
+      (total, claim) => total + claim.valueWei,
+      0n,
+    );
+    return buildFeeEarningsChart(
+      activity,
+      nativeClaimed ?? confirmedFromHistory,
+      0n,
+      {
         nowMs: chartReferenceMs,
         range: "all",
-      }),
-    [activity, chartReferenceMs, nativeClaimed],
-  );
+      },
+    );
+  }, [activity, chartReferenceMs, nativeClaimed]);
   const [activePointIndex, setActivePointIndex] = useState(-1);
   const activePointIndexRef = useRef(-1);
   const gradientId = useId().replaceAll(":", "");
@@ -3790,16 +3966,23 @@ function FeeEarningsPanel({
       ? activePointIndex
       : chart.points.length - 1
     : -1;
-  const activePoint = chart
-    ? chart.points[resolvedActivePointIndex]
+  const activePoint =
+    chart && activePointIndex >= 0 && activePointIndex < chart.points.length
+      ? chart.points[activePointIndex]
+      : undefined;
+  const displayedPoint = chart
+    ? (activePoint ?? chart.points[chart.points.length - 1])
     : undefined;
-  const verifiedTotal = nativeClaimed + nativeClaimable;
+  const verifiedTotal =
+    nativeClaimed === null || nativeClaimable === null
+      ? null
+      : nativeClaimed + nativeClaimable;
   const displayedHistoryMoment =
-    chart && activePoint
-      ? formatFeeChartMoment(activePoint.timestampMs, chart.nowMs)
+    chart && displayedPoint
+      ? formatFeeChartMoment(displayedPoint.timestampMs, chart.nowMs)
       : "Now";
   const claimedShare =
-    verifiedTotal > 0n
+    verifiedTotal !== null && verifiedTotal > 0n && nativeClaimed !== null
       ? Number((nativeClaimed * 10_000n) / verifiedTotal) / 100
       : 0;
 
@@ -3807,6 +3990,13 @@ function FeeEarningsPanel({
     if (activePointIndexRef.current === -1) return;
     activePointIndexRef.current = -1;
     setActivePointIndex(-1);
+  }
+
+  function activateLastPoint() {
+    if (!chart || activePointIndexRef.current >= 0) return;
+    const lastPointIndex = chart.points.length - 1;
+    activePointIndexRef.current = lastPointIndex;
+    setActivePointIndex(lastPointIndex);
   }
 
   function selectPointFromPointer(event: PointerEvent<HTMLDivElement>) {
@@ -3861,46 +4051,68 @@ function FeeEarningsPanel({
         <div>
           <h2 id="fee-earnings-title">Verified ETH fees</h2>
           <p>
-            {sourcesLoading
-              ? "Refreshing reward sources"
-              : "Claimed and currently claimable onchain"}
+            {dataQuality === "current"
+              ? "Claimed and currently claimable onchain"
+              : dataQuality === "stale"
+                ? "Includes the last verified Classic values"
+                : "Current totals are temporarily unavailable"}
           </p>
         </div>
       </header>
 
       <div className={styles.feeSummary}>
         <span className={styles.feeSummaryLabel}>
-          {sourcesLoading
-            ? "Verified from available sources"
-            : "All-time verified total"}
+          {dataQuality === "current"
+            ? "All-time verified total"
+            : dataQuality === "stale"
+              ? "Last verified total"
+              : "Current verified total"}
         </span>
-        <strong>{formatWei(verifiedTotal)}</strong>
-        <div
-          className={styles.feeComposition}
-          role="img"
-          aria-label={`${formatWei(nativeClaimed)} claimed and ${formatWei(nativeClaimable)} claimable now`}
-        >
-          <span
-            className={styles.feeCompositionClaimed}
-            style={{ width: `${claimedShare}%` }}
-          />
-          <span
-            className={styles.feeCompositionClaimable}
-            style={{ width: `${100 - claimedShare}%` }}
-          />
-        </div>
+        <strong>
+          {verifiedTotal === null ? "Unavailable" : formatWei(verifiedTotal)}
+        </strong>
+        {verifiedTotal !== null &&
+        nativeClaimed !== null &&
+        nativeClaimable !== null ? (
+          <div
+            className={styles.feeComposition}
+            role="img"
+            aria-label={`${formatWei(nativeClaimed)} claimed and ${formatWei(nativeClaimable)} ${
+              dataQuality === "stale" ? "last verified claimable" : "claimable now"
+            }`}
+          >
+            <span
+              className={styles.feeCompositionClaimed}
+              style={{ width: `${claimedShare}%` }}
+            />
+            <span
+              className={styles.feeCompositionClaimable}
+              style={{ width: `${100 - claimedShare}%` }}
+            />
+          </div>
+        ) : null}
         <div className={styles.feeBreakdown}>
-          <span>
-            <b>{formatWei(nativeClaimable)}</b> claimable now
-          </span>
-          <span>
-            <b>{formatWei(nativeClaimed)}</b> claimed
-          </span>
-          {stockRewardCount > 0 ? (
-            <span>
-              <b>{stockRewardCount}</b> quote {stockRewardCount === 1 ? "reward" : "rewards"}
-            </span>
-          ) : null}
+          {nativeClaimable === null || nativeClaimed === null ? (
+            <span>Refresh to verify current reward totals.</span>
+          ) : (
+            <>
+              <span>
+                <b>{formatWei(nativeClaimable)}</b>{" "}
+                {dataQuality === "stale"
+                  ? "last verified claimable"
+                  : "claimable now"}
+              </span>
+              <span>
+                <b>{formatWei(nativeClaimed)}</b> claimed
+              </span>
+              {stockRewardCount > 0 ? (
+                <span>
+                  <b>{stockRewardCount}</b> quote{" "}
+                  {stockRewardCount === 1 ? "reward" : "rewards"}
+                </span>
+              ) : null}
+            </>
+          )}
         </div>
       </div>
 
@@ -3910,14 +4122,14 @@ function FeeEarningsPanel({
       >
         <figcaption className={styles.chartHeading}>
           <span>Confirmed claim history</span>
-          {chart && activePoint ? (
+          {chart && displayedPoint ? (
             <strong>
-              {formatWei(activePoint.valueWei)} · {displayedHistoryMoment}
+              {formatWei(displayedPoint.valueWei)} · {displayedHistoryMoment}
             </strong>
           ) : null}
         </figcaption>
         <div className={styles.chartGrid} aria-hidden="true" />
-        {chart && activePoint ? (
+        {chart && displayedPoint ? (
           <>
             <p className={styles.visuallyHidden} id={chartHelpId}>
               Use the arrow keys to inspect each confirmed earnings point.
@@ -3929,12 +4141,20 @@ function FeeEarningsPanel({
               aria-valuemax={chart.points.length - 1}
               aria-valuemin={0}
               aria-valuenow={resolvedActivePointIndex}
-              aria-valuetext={`${formatWei(activePoint.valueWei)} at ${formatFeeChartMoment(activePoint.timestampMs, chart.nowMs)}`}
+              aria-valuetext={`${formatWei(displayedPoint.valueWei)} at ${formatFeeChartMoment(displayedPoint.timestampMs, chart.nowMs)}`}
               className={styles.feeChartInteraction}
               onBlur={resetActivePoint}
+              onFocus={activateLastPoint}
               onKeyDown={handleChartKeyDown}
-              onPointerDown={(event) => event.currentTarget.focus()}
-              onPointerLeave={resetActivePoint}
+              onPointerDown={(event) => {
+                selectPointFromPointer(event);
+                event.currentTarget.focus();
+              }}
+              onPointerLeave={(event) => {
+                if (document.activeElement !== event.currentTarget) {
+                  resetActivePoint();
+                }
+              }}
               onPointerMove={selectPointFromPointer}
               role="slider"
               tabIndex={0}
@@ -3965,19 +4185,15 @@ function FeeEarningsPanel({
                   fill={`url(#${gradientId})`}
                 />
                 <path className={styles.feeLine} d={chart.linePath} />
-                <line
-                  className={styles.feeCursor}
-                  x1={activePoint.x}
-                  x2={activePoint.x}
-                  y1="10"
-                  y2="140"
-                />
-                <circle
-                  className={styles.feeActivePoint}
-                  cx={activePoint.x}
-                  cy={activePoint.y}
-                  r="4.5"
-                />
+                {activePoint ? (
+                  <line
+                    className={styles.feeCursor}
+                    x1={activePoint.x}
+                    x2={activePoint.x}
+                    y1="10"
+                    y2="140"
+                  />
+                ) : null}
               </svg>
             </div>
             <div className={styles.chartScale} aria-hidden="true">
@@ -4279,7 +4495,7 @@ function ProfileClaimDialog({
         <header className={styles.claimDialogHeader}>
           <div>
             <span>Choose how to receive</span>
-            <h3 id={titleId}>Claim Rewards</h3>
+            <h3 id={titleId}>Claim rewards</h3>
             <p>
               {tokenName} <small>${tokenSymbol}</small>
             </p>
@@ -4496,8 +4712,6 @@ function ProfileClaimRow({
           stockQuoteSymbol
         }`
       : "";
-  const hasClaimableReward =
-    totalClaimable > 0n || stockPairedClaimable > 0n;
   const recipient = account ? shortenAddress(account) : "connected wallet";
   const claimGroups: ProfileClaimDialogGroup[] = [];
 
@@ -4658,8 +4872,8 @@ function ProfileClaimRow({
         </Link>
 
         <div className={styles.claimAmount}>
-          <span>{hasClaimableReward ? "Ready" : "Status"}</span>
           <strong>
+            <span className={styles.visuallyHidden}>Claimable: </span>
             {totalClaimable > 0n
               ? formatWei(totalClaimable)
               : formattedStockReward || formatWei(0n)}
@@ -4683,7 +4897,7 @@ function ProfileClaimRow({
           disabled={rowActionPending || claimGroups.length === 0}
           onClick={() => setClaimDialogOpen(true)}
         >
-          Claim Rewards
+          Claim rewards
         </button>
       </div>
 

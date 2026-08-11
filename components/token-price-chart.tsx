@@ -21,18 +21,53 @@ export type TokenChartPoint = {
   priceUsd?: string;
 };
 
+export type TokenChartDataQuality = Readonly<{
+  schemaVersion: "programmable.explore-chart-data-quality.v1";
+  status: "current" | "partial";
+  asOfBlock: string;
+  blockHash: `0x${string}`;
+  finality: "confirmed" | "latest";
+  history: Readonly<{ status: "current"; throughBlock: string }>;
+  price: Readonly<{
+    status: "current";
+    asOfBlock: string;
+    lagBlocks: "0";
+  }>;
+  valuation:
+    | Readonly<{
+        status: "current";
+        metric: "fdv";
+        asOfBlock: string;
+        lagBlocks: "0";
+      }>
+    | Readonly<{
+        status: "stale";
+        metric: "fdv";
+        asOfBlock: string;
+        lagBlocks: string;
+      }>
+    | Readonly<{ status: "unavailable"; metric: "fdv" }>;
+}>;
+
 export type TokenChartPayload = {
-  status: "ready" | "insufficient-history" | "not-deployed";
+  status: "ready" | "insufficient-history" | "partial";
   points: TokenChartPoint[];
   swapCount: number;
   volumeWei: string;
   volumeEth: string;
   volumeUsdWad?: string;
-  marketCapEthWei?: string;
-  marketCapEth?: string;
-  marketCapUsdWad?: string;
+  fdvEthWei?: string;
+  fdvEth?: string;
+  fdvUsdWad?: string;
+  valuationMetric?: "fdv";
+  dataQuality?: TokenChartDataQuality;
 };
 type ChartPayload = TokenChartPayload;
+type ChartRequestState = {
+  key: string;
+  payload: ChartPayload | null;
+  failed: boolean;
+};
 
 type PlottedPoint = TokenChartPoint & {
   x: number;
@@ -47,10 +82,10 @@ export type TokenChartVolume = {
   volumeEth?: string;
   volumeUsdWad?: string;
 };
-export type TokenChartMarketCap = {
-  marketCapEthWei?: string;
-  marketCapEth?: string;
-  marketCapUsdWad?: string;
+export type TokenChartFdv = {
+  fdvEthWei?: string;
+  fdvEth?: string;
+  fdvUsdWad?: string;
 };
 
 type PositiveDecimal = {
@@ -80,10 +115,10 @@ function scaleIntegerByPriceRatio(
   const inspected = parsePositiveDecimal(inspectedPrice);
   const latest = parsePositiveDecimal(latestPrice);
   if (!inspected || !latest) return undefined;
-  return (
+  const scaled =
     (BigInt(value) * inspected.coefficient * latest.scale) /
-    (latest.coefficient * inspected.scale)
-  ).toString();
+    (latest.coefficient * inspected.scale);
+  return scaled > 0n ? scaled.toString() : undefined;
 }
 
 function formatFixedInteger(value: bigint, decimals: number) {
@@ -110,44 +145,45 @@ function scaleDecimalByPriceRatio(
     10n ** BigInt(precision);
   const denominator =
     source.scale * inspected.scale * latest.coefficient;
-  return formatFixedInteger(numerator / denominator, precision);
+  const scaled = numerator / denominator;
+  return scaled > 0n ? formatFixedInteger(scaled, precision) : undefined;
 }
 
-export function getChartMarketCapAtPoint(
+export function getChartFdvAtPoint(
   payload: TokenChartPayload,
   inspectedPoint?: TokenChartPoint,
   latestPoint?: TokenChartPoint,
-): TokenChartMarketCap {
+): TokenChartFdv {
   if (!inspectedPoint || !latestPoint || inspectedPoint === latestPoint) {
     return {
-      marketCapEthWei: payload.marketCapEthWei,
-      marketCapEth: payload.marketCapEth,
-      marketCapUsdWad: payload.marketCapUsdWad,
+      fdvEthWei: payload.fdvEthWei,
+      fdvEth: payload.fdvEth,
+      fdvUsdWad: payload.fdvUsdWad,
     };
   }
 
-  const marketCapEthWei = scaleIntegerByPriceRatio(
-    payload.marketCapEthWei,
+  const fdvEthWei = scaleIntegerByPriceRatio(
+    payload.fdvEthWei,
     inspectedPoint.priceEth,
     latestPoint.priceEth,
   );
-  const marketCapEth = marketCapEthWei
-    ? formatFixedInteger(BigInt(marketCapEthWei), 18)
+  const fdvEth = fdvEthWei
+    ? formatFixedInteger(BigInt(fdvEthWei), 18)
     : scaleDecimalByPriceRatio(
-        payload.marketCapEth,
+        payload.fdvEth,
         inspectedPoint.priceEth,
         latestPoint.priceEth,
       );
-  const marketCapUsdWad = scaleIntegerByPriceRatio(
-    payload.marketCapUsdWad,
-    inspectedPoint.priceUsd ?? inspectedPoint.priceEth,
-    latestPoint.priceUsd ?? latestPoint.priceEth,
+  const fdvUsdWad = scaleIntegerByPriceRatio(
+    payload.fdvUsdWad,
+    inspectedPoint.priceEth,
+    latestPoint.priceEth,
   );
 
   return {
-    marketCapEthWei: marketCapEthWei ?? payload.marketCapEthWei,
-    marketCapEth: marketCapEth ?? payload.marketCapEth,
-    marketCapUsdWad: marketCapUsdWad ?? payload.marketCapUsdWad,
+    fdvEthWei: fdvEthWei ?? payload.fdvEthWei,
+    fdvEth: fdvEth ?? payload.fdvEth,
+    fdvUsdWad: fdvUsdWad ?? payload.fdvUsdWad,
   };
 }
 type ChartLaunchModel = "classic" | "adaptive" | "deep" | "stock-paired";
@@ -169,6 +205,234 @@ function cacheChartPayload(key: string, payload: ChartPayload) {
   }
 }
 
+export function isAuthoritativeChartPayloadStatus(status: unknown) {
+  return status === "ready" || status === "insufficient-history";
+}
+
+function isUnsignedIntegerString(value: unknown): value is string {
+  return typeof value === "string" && /^\d+$/.test(value);
+}
+
+function isCanonicalUnsignedIntegerString(value: unknown): value is string {
+  return typeof value === "string" && /^(?:0|[1-9]\d*)$/.test(value);
+}
+
+function isUnsignedDecimalString(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)
+  );
+}
+
+function isPositiveDecimalString(value: unknown): value is string {
+  if (!isUnsignedDecimalString(value)) return false;
+  const [whole, fraction = ""] = value.split(".");
+  return BigInt(`${whole}${fraction}`) > 0n;
+}
+
+function hasOptionalUnsignedInteger(value: unknown) {
+  return value === undefined || isUnsignedIntegerString(value);
+}
+
+function hasOptionalPositiveUnsignedInteger(value: unknown) {
+  return (
+    value === undefined ||
+    (isUnsignedIntegerString(value) && BigInt(value) > 0n)
+  );
+}
+
+function hasOptionalPositiveDecimal(value: unknown) {
+  return value === undefined || isPositiveDecimalString(value);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isBytes32(value: unknown): value is `0x${string}` {
+  return typeof value === "string" && /^0x[0-9a-f]{64}$/iu.test(value);
+}
+
+function parseChartDataQuality(value: unknown): TokenChartDataQuality | null {
+  if (!isRecord(value)) return null;
+  if (
+    value.schemaVersion !== "programmable.explore-chart-data-quality.v1" ||
+    (value.status !== "current" && value.status !== "partial") ||
+    !isCanonicalUnsignedIntegerString(value.asOfBlock) ||
+    !isBytes32(value.blockHash) ||
+    BigInt(value.blockHash) === 0n ||
+    (value.finality !== "confirmed" && value.finality !== "latest") ||
+    !isRecord(value.history) ||
+    value.history.status !== "current" ||
+    value.history.throughBlock !== value.asOfBlock ||
+    !isRecord(value.price) ||
+    value.price.status !== "current" ||
+    value.price.asOfBlock !== value.asOfBlock ||
+    value.price.lagBlocks !== "0" ||
+    !isRecord(value.valuation) ||
+    value.valuation.metric !== "fdv"
+  ) {
+    return null;
+  }
+
+  if (value.valuation.status === "current") {
+    if (
+      value.status !== "current" ||
+      value.valuation.asOfBlock !== value.asOfBlock ||
+      value.valuation.lagBlocks !== "0"
+    ) {
+      return null;
+    }
+  } else if (value.valuation.status === "stale") {
+    if (
+      value.status !== "partial" ||
+      !isCanonicalUnsignedIntegerString(value.valuation.asOfBlock) ||
+      !isCanonicalUnsignedIntegerString(value.valuation.lagBlocks)
+    ) {
+      return null;
+    }
+    const asOfBlock = BigInt(value.asOfBlock);
+    const valuationBlock = BigInt(value.valuation.asOfBlock);
+    const lagBlocks = BigInt(value.valuation.lagBlocks);
+    if (
+      valuationBlock >= asOfBlock ||
+      lagBlocks === 0n ||
+      asOfBlock - valuationBlock !== lagBlocks
+    ) {
+      return null;
+    }
+  } else if (
+    value.valuation.status !== "unavailable" ||
+    value.status !== "partial"
+  ) {
+    return null;
+  }
+
+  return value as TokenChartDataQuality;
+}
+
+function hasValidChartCardinality(
+  status: TokenChartPayload["status"],
+  pointCount: number,
+) {
+  return status === "ready"
+    ? pointCount >= 2
+    : status === "insufficient-history" && pointCount === 1;
+}
+
+function hasValidChartPointBlocks(
+  points: TokenChartPoint[],
+  asOfBlock: string,
+) {
+  const snapshotBlock = BigInt(asOfBlock);
+  let previousBlock: bigint | null = null;
+  for (const point of points) {
+    const currentBlock = BigInt(point.blockNumber);
+    if (
+      currentBlock > snapshotBlock ||
+      (previousBlock !== null && currentBlock <= previousBlock)
+    ) {
+      return false;
+    }
+    previousBlock = currentBlock;
+  }
+  return previousBlock === snapshotBlock;
+}
+
+function withoutNonCurrentFdv(payload: ChartPayload): ChartPayload {
+  if (payload.dataQuality?.valuation.status === "current") return payload;
+  const sanitized = { ...payload };
+  delete sanitized.fdvEthWei;
+  delete sanitized.fdvEth;
+  delete sanitized.fdvUsdWad;
+  return sanitized;
+}
+
+export function parseAuthoritativeChartPayload(
+  value: unknown,
+): ChartPayload | null {
+  if (!isRecord(value)) return null;
+  if (
+    "marketCapEthWei" in value ||
+    "marketCapEth" in value ||
+    "marketCapUsdWad" in value ||
+    value.valuationMetric !== "fdv"
+  ) {
+    return null;
+  }
+  const dataQuality = parseChartDataQuality(value.dataQuality);
+  if (dataQuality === null) return null;
+  const payload = value as Partial<ChartPayload>;
+  if (
+    !isAuthoritativeChartPayloadStatus(payload.status) ||
+    !Array.isArray(payload.points) ||
+    !hasValidChartCardinality(payload.status, payload.points.length) ||
+    !Number.isSafeInteger(payload.swapCount) ||
+    (payload.swapCount ?? -1) < 0 ||
+    !isUnsignedIntegerString(payload.volumeWei) ||
+    !isUnsignedDecimalString(payload.volumeEth) ||
+    !hasOptionalUnsignedInteger(payload.volumeUsdWad) ||
+    !hasOptionalPositiveUnsignedInteger(payload.fdvEthWei) ||
+    !hasOptionalPositiveDecimal(payload.fdvEth) ||
+    !hasOptionalPositiveUnsignedInteger(payload.fdvUsdWad) ||
+    !payload.points.every(
+      (point) =>
+        isRecord(point) &&
+        isCanonicalUnsignedIntegerString(point.blockNumber) &&
+        isPositiveDecimalString(point.priceEth) &&
+        (point.priceUsd === undefined ||
+          isPositiveDecimalString(point.priceUsd)),
+    )
+  ) {
+    return null;
+  }
+  const points = payload.points as TokenChartPoint[];
+  if (!hasValidChartPointBlocks(points, dataQuality.asOfBlock)) return null;
+
+  return withoutNonCurrentFdv({
+    status: payload.status,
+    points,
+    swapCount: payload.swapCount as number,
+    volumeWei: payload.volumeWei as string,
+    volumeEth: payload.volumeEth as string,
+    ...(payload.volumeUsdWad === undefined
+      ? {}
+      : { volumeUsdWad: payload.volumeUsdWad }),
+    ...(payload.fdvEthWei === undefined ? {} : { fdvEthWei: payload.fdvEthWei }),
+    ...(payload.fdvEth === undefined ? {} : { fdvEth: payload.fdvEth }),
+    ...(payload.fdvUsdWad === undefined ? {} : { fdvUsdWad: payload.fdvUsdWad }),
+    valuationMetric: "fdv",
+    dataQuality,
+  });
+}
+
+export function isAuthoritativeChartPayload(
+  value: unknown,
+): value is ChartPayload {
+  return parseAuthoritativeChartPayload(value) !== null;
+}
+
+export function preserveChartPayloadOnFailure(
+  current: ChartRequestState | null,
+  key: string,
+  cachedPayload: ChartPayload | null,
+): ChartRequestState {
+  const currentPayload =
+    current?.key === key && current.payload ? current.payload : null;
+  return {
+    key,
+    payload: currentPayload ?? cachedPayload,
+    failed: true,
+  };
+}
+
+export function acceptChartPayload(
+  key: string,
+  payload: ChartPayload,
+): ChartRequestState {
+  return { key, payload: withoutNonCurrentFdv(payload), failed: false };
+}
+
 async function requestTokenChartPayload(
   tokenAddress: `0x${string}`,
   range: ChartRange,
@@ -186,7 +450,11 @@ async function requestTokenChartPayload(
   )
     .then(async (response) => {
       if (!response.ok) throw new Error("Chart request failed");
-      const payload = (await response.json()) as ChartPayload;
+      const value: unknown = await response.json();
+      const payload = parseAuthoritativeChartPayload(value);
+      if (payload === null) {
+        throw new Error("Chart source is not ready");
+      }
       cacheChartPayload(key, payload);
       return payload;
     })
@@ -335,6 +603,53 @@ function linePath(points: PlottedPoint[]) {
   );
 }
 
+export function createChartGeometry(points: readonly TokenChartPoint[]) {
+  if (points.length === 0) return null;
+  const usesUsd = points.every(
+    (point) => point.priceUsd && Number(point.priceUsd) > 0,
+  );
+  const unit = usesUsd ? "USD" : "ETH";
+  const validPoints = points
+    .map((point) => ({
+      ...point,
+      value: Number(usesUsd ? point.priceUsd : point.priceEth),
+    }))
+    .filter((point) => Number.isFinite(point.value) && point.value > 0);
+  if (validPoints.length === 0) return null;
+
+  const values = validPoints.map((point) => point.value);
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  const span = maximum - minimum || maximum * 0.02 || 1;
+  const domainMinimum = Math.max(0, minimum - span * 0.1);
+  const domainMaximum = maximum + span * 0.1;
+  const domainSpan = domainMaximum - domainMinimum || 1;
+  const singlePoint = validPoints.length === 1;
+  const plottedPoints: PlottedPoint[] = validPoints.map((point, index) => ({
+    ...point,
+    x: singlePoint
+      ? (PLOT_LEFT + PLOT_RIGHT) / 2
+      : PLOT_LEFT +
+        (index / (validPoints.length - 1)) * (PLOT_RIGHT - PLOT_LEFT),
+    y:
+      PLOT_BOTTOM -
+      ((point.value - domainMinimum) / domainSpan) *
+        (PLOT_BOTTOM - PLOT_TOP),
+  }));
+  const path = singlePoint ? "" : linePath(plottedPoints);
+  const last = plottedPoints.at(-1)?.value ?? plottedPoints[0].value;
+
+  return {
+    unit,
+    points: plottedPoints,
+    path,
+    areaPath: path
+      ? `${path} L${PLOT_RIGHT},${VIEWBOX_HEIGHT} L${PLOT_LEFT},${VIEWBOX_HEIGHT} Z`
+      : "",
+    current: last,
+  } as const;
+}
+
 export function nearestChartPointIndex(
   clientX: number,
   boundsLeft: number,
@@ -360,32 +675,50 @@ export function nearestChartPointIndex(
   return Math.round(normalized * (pointCount - 1));
 }
 
+export function getChartKeyboardInspectionIndex(
+  key: string,
+  activeIndex: number | null,
+  pointCount: number,
+) {
+  if (!Number.isSafeInteger(pointCount) || pointCount < 1) return undefined;
+
+  const lastIndex = pointCount - 1;
+  const current = Math.min(lastIndex, Math.max(0, activeIndex ?? lastIndex));
+
+  if (key === "ArrowLeft" || key === "ArrowDown") {
+    return Math.max(0, current - 1);
+  }
+  if (key === "ArrowRight" || key === "ArrowUp") {
+    return Math.min(lastIndex, current + 1);
+  }
+  if (key === "Home") return 0;
+  if (key === "End") return lastIndex;
+  if (key === "Escape") return null;
+  return undefined;
+}
+
+export function shouldClearChartInspectionAfterPointerUp(
+  pointerType: string,
+) {
+  return pointerType !== "mouse";
+}
+
 export function TokenPriceChart({
   tokenAddress,
   tokenName,
   launchModel,
   preview = false,
-  marketCapEthWei,
-  marketCapEth,
-  marketCapUsdWad,
   onVolumeChange,
-  onMarketCapChange,
+  onFdvChange,
 }: {
   tokenAddress: `0x${string}`;
   tokenName: string;
   launchModel?: ChartLaunchModel;
   preview?: boolean;
-  marketCapEthWei?: string;
-  marketCapEth?: string;
-  marketCapUsdWad?: string;
   onVolumeChange?: (volume: TokenChartVolume | null) => void;
-  onMarketCapChange?: (marketCap: TokenChartMarketCap | null) => void;
+  onFdvChange?: (fdv: TokenChartFdv | null) => void;
 }) {
-  const [request, setRequest] = useState<{
-    key: string;
-    payload: ChartPayload | null;
-    failed: boolean;
-  } | null>(null);
+  const [request, setRequest] = useState<ChartRequestState | null>(null);
   const [range, setRange] = useState<ChartRange>("1d");
   const [activePointIndex, setActivePointIndex] = useState<number | null>(
     null,
@@ -433,11 +766,7 @@ export function TokenPriceChart({
           range,
         );
         if (signal.aborted) return;
-        setRequest({
-          key: requestKey,
-          payload: nextPayload,
-          failed: false,
-        });
+        setRequest(acceptChartPayload(requestKey, nextPayload));
       } catch (error: unknown) {
         if (
           signal.aborted ||
@@ -445,9 +774,11 @@ export function TokenPriceChart({
         )
           return;
         setRequest((current) =>
-          current?.key === requestKey && current.payload
-            ? current
-            : { key: requestKey, payload: null, failed: true },
+          preserveChartPayloadOnFailure(
+            current,
+            requestKey,
+            chartPayloadCache.get(requestKey)?.payload ?? null,
+          ),
         );
       }
     });
@@ -474,46 +805,7 @@ export function TokenPriceChart({
   }, [refreshKey]);
 
   const chart = useMemo(() => {
-    if (!payload || payload.points.length < 2) return null;
-    const usesUsd = payload.points.every(
-      (point) => point.priceUsd && Number(point.priceUsd) > 0,
-    );
-    const unit = usesUsd ? "USD" : "ETH";
-    const validPoints = payload.points
-      .map((point) => ({
-        ...point,
-        value: Number(usesUsd ? point.priceUsd : point.priceEth),
-      }))
-      .filter((point) => Number.isFinite(point.value) && point.value > 0);
-    if (validPoints.length < 2) return null;
-
-    const values = validPoints.map((point) => point.value);
-    const minimum = Math.min(...values);
-    const maximum = Math.max(...values);
-    const span = maximum - minimum || maximum * 0.02 || 1;
-    const domainMinimum = Math.max(0, minimum - span * 0.1);
-    const domainMaximum = maximum + span * 0.1;
-    const domainSpan = domainMaximum - domainMinimum || 1;
-    const points: PlottedPoint[] = validPoints.map((point, index) => ({
-      ...point,
-      x:
-        PLOT_LEFT +
-        (index / (validPoints.length - 1)) * (PLOT_RIGHT - PLOT_LEFT),
-      y:
-        PLOT_BOTTOM -
-        ((point.value - domainMinimum) / domainSpan) *
-          (PLOT_BOTTOM - PLOT_TOP),
-    }));
-    const path = linePath(points);
-    const last = points.at(-1)?.value ?? points[0].value;
-
-    return {
-      unit,
-      points,
-      path,
-      areaPath: `${path} L${PLOT_RIGHT},${VIEWBOX_HEIGHT} L${PLOT_LEFT},${VIEWBOX_HEIGHT} Z`,
-      current: last,
-    } as const;
+    return payload ? createChartGeometry(payload.points) : null;
   }, [payload]);
 
   const emptyMessage = getPriceHistoryEmptyMessage(launchModel, failed);
@@ -522,32 +814,22 @@ export function TokenPriceChart({
       ? chart.points[Math.min(activePointIndex, chart.points.length - 1)]
       : null;
   const displayedPrice = activePoint?.value ?? chart?.current;
-  const inspectedMarketCap = useMemo(() => {
+  const inspectedFdv = useMemo(() => {
     if (!payload) return null;
     const latestPoint = chart?.points.at(-1);
-    return getChartMarketCapAtPoint(
-      {
-        ...payload,
-        marketCapEthWei: payload.marketCapEthWei ?? marketCapEthWei,
-        marketCapEth: payload.marketCapEth ?? marketCapEth,
-        marketCapUsdWad: payload.marketCapUsdWad ?? marketCapUsdWad,
-      },
+    return getChartFdvAtPoint(
+      payload,
       activePoint ?? latestPoint,
       latestPoint,
     );
-  }, [
-    activePoint,
-    chart,
-    marketCapEth,
-    marketCapEthWei,
-    marketCapUsdWad,
-    payload,
-  ]);
+  }, [activePoint, chart, payload]);
   const chartStatus =
     !payload && !failed
       ? "Loading price history"
       : chart
-        ? `Price history loaded with ${chart.points.length} points`
+        ? chart.points.length === 1
+          ? "Current price loaded from 1 point"
+          : `Price history loaded with ${chart.points.length} points`
         : emptyMessage;
 
   useEffect(() => {
@@ -573,8 +855,8 @@ export function TokenPriceChart({
   }, [failed, launchModel, onVolumeChange, payload, range]);
 
   useEffect(() => {
-    onMarketCapChange?.(inspectedMarketCap);
-  }, [inspectedMarketCap, onMarketCapChange]);
+    onFdvChange?.(inspectedFdv);
+  }, [inspectedFdv, onFdvChange]);
 
   function inspectPointer(event: PointerEvent<HTMLDivElement>) {
     if (!chart) return;
@@ -591,24 +873,12 @@ export function TokenPriceChart({
 
   function inspectKeyboard(event: KeyboardEvent<HTMLDivElement>) {
     if (!chart) return;
-    const lastIndex = chart.points.length - 1;
-    const current = activePointIndex ?? lastIndex;
-    let next: number | null = null;
-
-    if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
-      next = Math.max(0, current - 1);
-    } else if (event.key === "ArrowRight" || event.key === "ArrowUp") {
-      next = Math.min(lastIndex, current + 1);
-    } else if (event.key === "Home") {
-      next = 0;
-    } else if (event.key === "End") {
-      next = lastIndex;
-    } else if (event.key === "Escape") {
-      setActivePointIndex(null);
-      return;
-    } else {
-      return;
-    }
+    const next = getChartKeyboardInspectionIndex(
+      event.key,
+      activePointIndex,
+      chart.points.length,
+    );
+    if (next === undefined) return;
 
     event.preventDefault();
     setActivePointIndex(next);
@@ -685,19 +955,29 @@ export function TokenPriceChart({
       ) : chart ? (
         <div
           className={styles.plot}
+          role="group"
           tabIndex={0}
           aria-label={`${tokenName} interactive price chart. Move the pointer or use arrow keys to inspect exact prices.`}
           aria-describedby={`${instructionId} ${activeValueId}`}
           onBlur={() => setActivePointIndex(null)}
+          onFocus={(event) => {
+            if (event.currentTarget.matches(":focus-visible")) {
+              setActivePointIndex(chart.points.length - 1);
+            }
+          }}
           onKeyDown={inspectKeyboard}
           onPointerDown={inspectPointer}
           onPointerEnter={inspectPointer}
           onPointerMove={inspectPointer}
-          onPointerUp={inspectPointer}
-          onPointerCancel={() => setActivePointIndex(null)}
-          onPointerLeave={(event) => {
-            if (event.pointerType !== "touch") setActivePointIndex(null);
+          onPointerUp={(event) => {
+            if (shouldClearChartInspectionAfterPointerUp(event.pointerType)) {
+              setActivePointIndex(null);
+              return;
+            }
+            inspectPointer(event);
           }}
+          onPointerCancel={() => setActivePointIndex(null)}
+          onPointerLeave={() => setActivePointIndex(null)}
         >
           <svg
             viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
@@ -732,43 +1012,49 @@ export function TokenPriceChart({
                 />
               );
             })}
-            <path
-              className={styles.area}
-              d={chart.areaPath}
-              fill={`url(#${gradientId})`}
-            />
-            <path className={styles.line} d={chart.path} />
+            {chart.areaPath ? (
+              <path
+                className={styles.area}
+                d={chart.areaPath}
+                fill={`url(#${gradientId})`}
+              />
+            ) : null}
+            {chart.path ? (
+              <path className={styles.line} d={chart.path} />
+            ) : null}
             {activePoint ? (
-              <>
-                <line
-                  className={styles.hoverGuide}
-                  x1={activePoint.x}
-                  x2={activePoint.x}
-                  y1={PLOT_TOP}
-                  y2={PLOT_BOTTOM}
-                />
-                <circle
-                  className={styles.hoverDot}
-                  cx={activePoint.x}
-                  cy={activePoint.y}
-                  r="4.5"
-                />
-              </>
+              <line
+                className={styles.hoverGuide}
+                x1={activePoint.x}
+                x2={activePoint.x}
+                y1={PLOT_TOP}
+                y2={PLOT_BOTTOM}
+              />
             ) : null}
           </svg>
           {activePoint ? (
-            <div
-              className={styles.tooltip}
-              data-vertical={activePoint.y < 44 ? "below" : "above"}
-              style={{
-                left: `clamp(4.5rem, ${(activePoint.x / VIEWBOX_WIDTH) * 100}%, calc(100% - 4.5rem))`,
-                top: `${(activePoint.y / VIEWBOX_HEIGHT) * 100}%`,
-              }}
-              aria-hidden="true"
-            >
-              <strong>{formatPrice(activePoint.value, chart.unit)}</strong>
-              <span>Block {activePoint.blockNumber}</span>
-            </div>
+            <>
+              <span
+                className={styles.inspectionDot}
+                style={{
+                  left: `${(activePoint.x / VIEWBOX_WIDTH) * 100}%`,
+                  top: `${(activePoint.y / VIEWBOX_HEIGHT) * 100}%`,
+                }}
+                aria-hidden="true"
+              />
+              <div
+                className={styles.tooltip}
+                data-vertical={activePoint.y < 44 ? "below" : "above"}
+                style={{
+                  left: `clamp(4.5rem, ${(activePoint.x / VIEWBOX_WIDTH) * 100}%, calc(100% - 4.5rem))`,
+                  top: `${(activePoint.y / VIEWBOX_HEIGHT) * 100}%`,
+                }}
+                aria-hidden="true"
+              >
+                <strong>{formatPrice(activePoint.value, chart.unit)}</strong>
+                <span>Block {activePoint.blockNumber}</span>
+              </div>
+            </>
           ) : null}
           <span
             className="sr-only"

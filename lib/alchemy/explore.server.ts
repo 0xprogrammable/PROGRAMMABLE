@@ -2,7 +2,11 @@ import "server-only";
 
 import { unstable_cache } from "next/cache";
 
-import { getOnchainDeployment } from "../onchain/config";
+import { getOperationalOnchainDeployment } from "../onchain/config";
+import {
+  safeOperationalRpcError,
+  withOperationalRpcFailover,
+} from "../onchain/operational-rpc-failover.server";
 import { readDurableExploreModel } from "../onchain/durable-model";
 import { advanceExploreLaunchDiscovery } from "../onchain/read-model";
 import type {
@@ -23,8 +27,6 @@ export const ALCHEMY_EXPLORE_CACHE_TAG = "alchemy-explore-v1";
 
 const ALCHEMY_RPC_HOST = "eth-mainnet.g.alchemy.com";
 const ALCHEMY_RPC_PATH = /^\/v2\/([A-Za-z0-9_-]{8,256})$/u;
-const ALCHEMY_RPC_URL_SECRET =
-  /https:\/\/eth-mainnet\.g\.alchemy\.com\/v2\/[A-Za-z0-9_-]{8,256}/gu;
 const ALCHEMY_PRICE_CACHE_TTL_MS = 10_000;
 const MAX_ALCHEMY_PRICE_ADDRESSES = 20;
 const MAX_CONCURRENT_ALCHEMY_PRICE_BATCHES = 5;
@@ -100,12 +102,7 @@ function alchemyApiKey(environment: NodeJS.ProcessEnv = process.env) {
 }
 
 export function getAlchemyOnchainDeployment(): OnchainDeployment {
-  const deployment = getOnchainDeployment("production");
-  return {
-    ...deployment,
-    rpcUrl: requiredAlchemyRpcUrl().toString(),
-    rpcUrlSecondary: null,
-  };
+  return getOperationalOnchainDeployment("production");
 }
 
 async function readAlchemyExploreModelUncached(): Promise<ExploreReadModel> {
@@ -338,8 +335,8 @@ function withoutRouterTokenDuplicates(
 
 async function refreshAlchemyExploreRegistryOnce(
   options: AlchemyRegistryRefreshOptions = {},
+  deployment = getAlchemyOnchainDeployment(),
 ) {
-  const deployment = getAlchemyOnchainDeployment();
   if (deployment.status !== "ready") {
     throw new Error("Alchemy production deployment is not ready");
   }
@@ -460,35 +457,34 @@ async function refreshAlchemyExploreRegistryOnce(
 export async function refreshAlchemyExploreRegistry(
   options: AlchemyRegistryRefreshOptions = {},
 ) {
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
-    try {
-      return await refreshAlchemyExploreRegistryOnce(options);
-    } catch (error) {
-      if (
-        attempt === 1 &&
-        error instanceof Error &&
-        (
-          error.name === "BlobPreconditionFailedError" ||
-          error.name === "AlchemyLaunchRegistryCreateConflictError"
-        )
-      ) {
-        continue;
+  const deployment = getAlchemyOnchainDeployment();
+  return withOperationalRpcFailover(deployment, async (rpcDeployment) => {
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
+        return await refreshAlchemyExploreRegistryOnce(
+          options,
+          rpcDeployment,
+        );
+      } catch (error) {
+        if (
+          attempt === 1 &&
+          error instanceof Error &&
+          (
+            error.name === "BlobPreconditionFailedError" ||
+            error.name === "AlchemyLaunchRegistryCreateConflictError"
+          )
+        ) {
+          continue;
+        }
+        throw error;
       }
-      throw error;
     }
-  }
-  throw new Error("Alchemy registry refresh retry exhausted");
+    throw new Error("Alchemy registry refresh retry exhausted");
+  });
 }
 
 export function safeAlchemyError(error: unknown) {
-  if (!(error instanceof Error)) return { name: "UnknownError" };
-  return {
-    name: error.name,
-    message: error.message.replace(
-      ALCHEMY_RPC_URL_SECRET,
-      "https://eth-mainnet.g.alchemy.com/v2/[redacted]",
-    ),
-  };
+  return safeOperationalRpcError(error);
 }
 
 function decimalUsdToWad(value: string) {

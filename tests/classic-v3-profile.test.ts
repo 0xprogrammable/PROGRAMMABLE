@@ -1,8 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { encodeFunctionData } from "viem";
 
 import { classicRewardVaultAbi } from "../lib/classic-v3";
 import {
+  ClassicV3ProfileReadError,
+  classicV3ProfileApiError,
+  fetchClassicV3ProfileRewards,
   parseClassicV3ProfileRewards,
   validatePreparedClassicV3RewardAction,
 } from "../lib/profile/classic-v3-rewards";
@@ -58,6 +61,180 @@ function rewardResponse() {
 }
 
 describe("Classic V3 profile rewards", () => {
+  it("treats a verified empty reward list as a healthy empty account", async () => {
+    const response = { ...rewardResponse(), rewards: [] };
+    const fetcher = vi.fn(async () =>
+      new Response(JSON.stringify(response), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(
+      fetchClassicV3ProfileRewards(account, undefined, fetcher),
+    ).resolves.toMatchObject({ status: "ready", account, rewards: [] });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries one temporary read failure and recovers with verified rewards", async () => {
+    const responses = [
+      new Response(
+        JSON.stringify({ error: "Classic rewards are temporarily unavailable" }),
+        {
+          status: 503,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+      new Response(JSON.stringify(rewardResponse()), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ];
+    const fetcher = vi.fn(async () => responses.shift()!);
+    const wait = vi.fn(async () => undefined);
+
+    await expect(
+      fetchClassicV3ProfileRewards(account, undefined, fetcher, { wait }),
+    ).resolves.toMatchObject({ status: "ready", account });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(wait).toHaveBeenCalledTimes(1);
+  });
+
+  it("bounds temporary retries and exposes only a calm classified error", async () => {
+    const fetcher = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          error:
+            "RPC https://provider.example/secret failed with an internal stack",
+        }),
+        {
+          status: 503,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    const failure = await fetchClassicV3ProfileRewards(
+      account,
+      undefined,
+      fetcher,
+      { wait: async () => undefined },
+    ).catch((caught: unknown) => caught);
+
+    expect(failure).toBeInstanceOf(ClassicV3ProfileReadError);
+    expect(failure).toMatchObject({
+      kind: "temporary",
+      message: "Classic rewards are temporarily unavailable",
+    });
+    expect(String(failure)).not.toContain("provider.example");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("classifies a non-JSON 503 as temporary without exposing its body", async () => {
+    const fetcher = vi.fn(async () =>
+      new Response("provider gateway secret", {
+        status: 503,
+        headers: { "Content-Type": "text/html" },
+      }),
+    );
+
+    const failure = await fetchClassicV3ProfileRewards(
+      account,
+      undefined,
+      fetcher,
+      { wait: async () => undefined },
+    ).catch((caught: unknown) => caught);
+
+    expect(failure).toMatchObject({
+      kind: "temporary",
+      message: "Classic rewards are temporarily unavailable",
+    });
+    expect(String(failure)).not.toContain("gateway secret");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops retrying when a wallet change aborts the active read", async () => {
+    const controller = new AbortController();
+    const fetcher = vi.fn(async () =>
+      new Response(JSON.stringify({ error: "temporarily unavailable" }), {
+        status: 503,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const wait = vi.fn(async (_delayMs: number, signal?: AbortSignal) => {
+      controller.abort(new DOMException("Wallet changed", "AbortError"));
+      throw signal?.reason;
+    });
+
+    await expect(
+      fetchClassicV3ProfileRewards(account, controller.signal, fetcher, {
+        wait,
+      }),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(wait).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry or turn an invalid accounting response into an empty state", async () => {
+    const mismatched = rewardResponse();
+    mismatched.rewards[0].claimableEth = "0";
+    const fetcher = vi.fn(async () =>
+      new Response(JSON.stringify(mismatched), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const failure = await fetchClassicV3ProfileRewards(
+      account,
+      undefined,
+      fetcher,
+      { wait: async () => undefined },
+    ).catch((caught: unknown) => caught);
+
+    expect(failure).toBeInstanceOf(ClassicV3ProfileReadError);
+    expect(failure).toMatchObject({
+      kind: "integrity",
+      message: "Classic reward data could not be verified",
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("never retries a typed API accounting or integrity conflict", async () => {
+    const fetcher = vi.fn(async () =>
+      new Response(JSON.stringify(classicV3ProfileApiError("integrity")), {
+        status: 409,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const wait = vi.fn(async () => undefined);
+
+    await expect(
+      fetchClassicV3ProfileRewards(account, undefined, fetcher, { wait }),
+    ).rejects.toMatchObject({
+      kind: "integrity",
+      message: "Classic reward data could not be verified",
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(wait).not.toHaveBeenCalled();
+  });
+
+  it("classifies a non-JSON success response as an integrity failure", async () => {
+    const fetcher = vi.fn(async () =>
+      new Response("upstream gateway page", {
+        status: 200,
+        headers: { "Content-Type": "text/html" },
+      }),
+    );
+
+    await expect(
+      fetchClassicV3ProfileRewards(account, undefined, fetcher, {
+        wait: async () => undefined,
+      }),
+    ).rejects.toMatchObject({ kind: "integrity" });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
   it("accepts only rewards owned by the connected immutable beneficiary", () => {
     const profile = parseClassicV3ProfileRewards(rewardResponse(), account);
     expect(profile.status).toBe("ready");

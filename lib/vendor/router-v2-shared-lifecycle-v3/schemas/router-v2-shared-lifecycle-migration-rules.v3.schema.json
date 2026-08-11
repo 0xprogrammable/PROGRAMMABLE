@@ -1,0 +1,105 @@
+{
+  "$id": "https://programmable.market/schemas/router-v2-shared-lifecycle-migration-rules.v3.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "const": {
+    "activationState": "DENY",
+    "canonicalContractTypehash": "0x3b56d205c1923d957a4baf5345745b739502f4a61c6c9c702b86f3bf888cb21a",
+    "deploymentState": "UNDEPLOYED",
+    "lifecycleVersion": "3.0.0",
+    "predecessorVersion": "2.0.0",
+    "rejectedHookemonProvisionalTypehashes": [
+      "0xb8e945789e6dfccb6be72408a59b9f355707ca97305762f749bad2621bfd2f4e",
+      "0x042c0b7e147706935837305012baf028ee5eeedb8d3a573f86139a408e8a1b4b"
+    ],
+    "rules": [
+      "V1_AND_V2_BYTES_REMAIN_IMMUTABLE_AND_ARE_NEVER_REINTERPRETED_AS_V3",
+      "SOURCE_LAUNCH_ID_STAMP_LAUNCH_ID_AND_ANTI_REPLAY_NONCE_ARE_PAIRWISE_DISTINCT",
+      "LEGACY_13_FIELD_PERMIT_AND_NONCE_EQUALS_LAUNCH_ID_ARE_REJECTED",
+      "RAW_OR_PADDED_GIT_OBJECT_EQUALITY_IS_REJECTED_USE_CONTRACT_DOMAIN_COMMITMENTS",
+      "A_APPLICANT_REQUEST_B_EXECUTABLE_SOURCE_C_CARRIER_ARE_NON_SUBSTITUTABLE",
+      "AUTHORITY_SHA256_AND_EVM_KECCAK_IDENTITIES_ARE_EXPLICITLY_SEPARATE",
+      "LAUNCH_GRANT_HAS_NO_APPLICANT_TIME_EXPIRY_CURRENTNESS_IS_INTERNAL_MAX_3600_SECONDS",
+      "NO_SIGNER_PROVIDER_OR_RESERVATION_IO_WHILE_DEPLOYMENT_OR_PROFILE_BINDING_IS_NULL",
+      "V3_0_AUTHORITY_IO_IS_HARD_DENY_AND_REQUIRES_AN_IMMUTABLE_DEPLOYMENT_BOUND_SUCCESSOR",
+      "V3_0_STANDALONE_DEPLOYMENT_AND_PROFILE_SCHEMAS_ARE_HARD_DENY_UNTIL_EXACT_LIVE_BINDING",
+      "V3_0_ONLY_CONST_CLOSED_RELEASE_METADATA_SCHEMAS_ADMIT_ALL_SEMANTIC_ARTIFACT_SCHEMAS_HARD_DENY",
+      "COMPILER_RUNTIME_HASHES_ARE_TEMPLATES_LIVE_CODEHASH_REQUIRES_IMMUTABLE_SPECIALIZATION",
+      "PROVIDER_OUTAGE_IS_PENDING_AND_DOES_NOT_REVOKE_DURABLE_APPROVAL",
+      "CURRENTNESS_SUCCESSOR_REQUIRES_EXPIRED_PREDECESSOR_AND_AUTHENTICATED_DUAL_PROVIDER_NON_USE"
+    ],
+    "rulesHash": "sha256:c0fd2077a261b6468649a0607f2df35259153dd5d457747218fdd09ba4f3ae00",
+    "schemaVersion": "programmable.router-v2-shared-lifecycle-migration-rules.v3",
+    "unversionedPackageExportRemains": "router-v2-shared-lifecycle-v2"
+  },
+  "description": "Generated strict additive V3 schema. Unknown fields fail closed; deployment remains null/DENY.",
+  "properties": {
+    "activationState": {
+      "maxLength": 4096,
+      "minLength": 1,
+      "type": "string"
+    },
+    "canonicalContractTypehash": {
+      "pattern": "^0x[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "deploymentState": {
+      "maxLength": 4096,
+      "minLength": 1,
+      "type": "string"
+    },
+    "lifecycleVersion": {
+      "maxLength": 4096,
+      "minLength": 1,
+      "type": "string"
+    },
+    "predecessorVersion": {
+      "maxLength": 4096,
+      "minLength": 1,
+      "type": "string"
+    },
+    "rejectedHookemonProvisionalTypehashes": {
+      "items": {
+        "pattern": "^0x[0-9a-f]{64}$",
+        "type": "string"
+      },
+      "maxItems": 2000,
+      "type": "array"
+    },
+    "rules": {
+      "items": {
+        "maxLength": 4096,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 2000,
+      "type": "array"
+    },
+    "rulesHash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": "programmable.router-v2-shared-lifecycle-migration-rules.v3"
+    },
+    "unversionedPackageExportRemains": {
+      "maxLength": 4096,
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "activationState",
+    "canonicalContractTypehash",
+    "deploymentState",
+    "lifecycleVersion",
+    "predecessorVersion",
+    "rejectedHookemonProvisionalTypehashes",
+    "rules",
+    "rulesHash",
+    "schemaVersion",
+    "unversionedPackageExportRemains"
+  ],
+  "title": "router-v2-shared-lifecycle-migration-rules.v3",
+  "type": "object"
+}

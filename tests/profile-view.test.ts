@@ -14,6 +14,7 @@ import {
   clearConfirmedProfileActionStates,
   getProfileSessionView,
   getProfileWorkspacePhase,
+  getProfileRewardDataQuality,
   getStockPairedClaimPaths,
   groupPendingProfileTransactionStates,
   groupProfileRewards,
@@ -22,13 +23,16 @@ import {
   paginateProfileClaimableEntries,
   profileClaimableWei,
   profileClaimActionCount,
+  profileCreatorClaimErrorMessage,
   profileEntryHasClaimableReward,
   profileHasRewardSurface,
   profileRouterLaunchEntries,
   ProfileRouterLaunches,
   profileRewardsForAccount,
+  profileRewardActionErrorMessage,
   profileTransactionPollAttempts,
   reflectedConfirmedProfileTransactions,
+  resolveCreatorProfileReadFailure,
   preserveInterruptedTransactionStates,
   removePendingProfileTransactionRecord,
   resolveStockPairedReceiptGate,
@@ -43,10 +47,13 @@ import {
   type StockPairedPendingStage,
 } from "../components/profile-view";
 import type { ClassicV3Reward } from "../lib/profile/classic-v3-rewards";
+import { CreatorClaimClientError } from "../lib/profile/creator-claim";
 import type { DeepV3CreatorToken } from "../lib/profile/deep-v3-profile";
-import type {
-  ProfileClaim,
-  ProfileToken,
+import {
+  ProfileResponseError,
+  type ProfileClaim,
+  type ProfileOnchainData,
+  type ProfileToken,
 } from "../lib/profile/onchain-profile";
 
 const firstAddress = getAddress(
@@ -97,6 +104,39 @@ const claim = {
   claimableEth: "0.001",
   href: `/token/${secondAddress}`,
 } satisfies ProfileClaim;
+
+describe("profile action error copy", () => {
+  it("keeps actionable claim blocks and hides internal response states", () => {
+    expect(
+      profileCreatorClaimErrorMessage(
+        new CreatorClaimClientError(
+          "nothing-to-claim",
+          "There are no creator fees to claim for this pool",
+        ),
+      ),
+    ).toBe("There are no creator fees to claim for this pool");
+    expect(
+      profileCreatorClaimErrorMessage(
+        new CreatorClaimClientError(
+          "invalid-response",
+          "Creator claim preparation was not ready",
+        ),
+      ),
+    ).toBe(
+      "The creator claim was not completed. Check your wallet and try again.",
+    );
+  });
+
+  it("does not expose dormant reward parser details", () => {
+    expect(
+      profileRewardActionErrorMessage(
+        new Error("Deep reward action is not ready"),
+      ),
+    ).toBe(
+      "The reward action was not completed. Check your wallet and try again.",
+    );
+  });
+});
 
 const classicAllocation = {
   allocationIndex: 0,
@@ -212,6 +252,87 @@ describe("profile workspace loading state", () => {
     expect(profileViewSource).toMatch(
       /if \(statuses\.some\(\(status\) => status === "loading"\)\)[\s\S]*?return "loading";[\s\S]*?status === "ready"/,
     );
+  });
+
+  it("keeps temporary reward outages distinct from accounting conflicts", () => {
+    expect(
+      getProfileWorkspacePhase(["ready", "error", "not-deployed"], true),
+    ).toBe("ready");
+    expect(
+      getProfileWorkspacePhase(
+        ["ready", "error", "not-deployed"],
+        true,
+        true,
+      ),
+    ).toBe("error");
+    expect(
+      getProfileRewardDataQuality(
+        ["ready", "error", "not-deployed"],
+        "unavailable",
+      ),
+    ).toBe("partial");
+    expect(
+      getProfileRewardDataQuality(
+        ["ready", "ready", "not-deployed"],
+        "stale",
+      ),
+    ).toBe("stale");
+    expect(profileViewSource).not.toContain(
+      "Classic rewards could not be loaded",
+    );
+    expect(profileViewSource).toContain(
+      "Current claim totals could not be verified",
+    );
+    expect(profileViewSource).toContain(
+      "PROFILE_LIVE_REFRESH_INTERVAL_MS = 30_000",
+    );
+  });
+
+  it("uses LKG only for typed temporary creator reads and marks it stale", () => {
+    const current = {
+      account: firstAddress,
+      status: "ready",
+      tokens,
+      positions: [],
+      claims: [claim],
+      activity: [],
+    } satisfies ProfileOnchainData;
+
+    const stale = resolveCreatorProfileReadFailure(
+      current,
+      firstAddress,
+      new ProfileResponseError(
+        "Onchain creator data is temporarily unavailable",
+        "temporary",
+      ),
+    );
+    expect(stale).toMatchObject({
+      status: "ready",
+      sourceQuality: "stale",
+      claims: [claim],
+    });
+    expect(
+      getProfileRewardDataQuality(
+        ["ready", "ready"],
+        "current",
+        stale.sourceQuality,
+      ),
+    ).toBe("stale");
+
+    const blocked = resolveCreatorProfileReadFailure(
+      current,
+      firstAddress,
+      new ProfileResponseError(
+        "Current creator reward data could not be verified",
+        "integrity",
+      ),
+    );
+    expect(blocked).toMatchObject({
+      status: "error",
+      errorKind: "integrity",
+      tokens: [],
+      claims: [],
+    });
   });
 
   it("contains five desktop claim rows inside the workspace while mobile keeps page flow", () => {
@@ -336,11 +457,61 @@ describe("fee earnings chart", () => {
     expect(profileViewSource).not.toContain("styles.claimHistory");
   });
 
+  it("keeps short and long histories finite without a permanent endpoint marker", () => {
+    const nowMs = Date.parse("2026-08-04T12:00:00.000Z");
+    const oneClaim = buildFeeEarningsChart(
+      [
+        {
+          id: "claim:only",
+          label: "Creator fees claimed",
+          detail: "0.1 ETH from ONE",
+          occurredAt: "Today",
+          occurredAtIso: "2026-08-04T11:30:00.000Z",
+          href: "/token/one",
+        },
+      ],
+      100_000_000_000_000_000n,
+      0n,
+      { nowMs, range: "all" },
+    );
+    const longHistory = buildFeeEarningsChart(
+      Array.from({ length: 80 }, (_, index) => ({
+        id: `claim:${index}`,
+        label: "Creator fees claimed",
+        detail: "0.001 ETH from MANY",
+        occurredAt: "This week",
+        occurredAtIso: new Date(nowMs - (80 - index) * 60_000).toISOString(),
+        href: "/token/many",
+      })),
+      80_000_000_000_000_000n,
+      0n,
+      { nowMs, range: "all" },
+    );
+
+    for (const chart of [oneClaim, longHistory]) {
+      expect(chart).not.toBeNull();
+      expect(
+        chart?.points.every(
+          (point) => Number.isFinite(point.x) && Number.isFinite(point.y),
+        ),
+      ).toBe(true);
+    }
+    expect(profileViewSource).not.toContain("<circle");
+    expect(profileViewSource).not.toContain("styles.feeActivePoint");
+    expect(profileViewSource).toMatch(
+      /\{activePoint \? \([\s\S]*?className=\{styles\.feeCursor\}/,
+    );
+    expect(profileViewSource).toContain("onFocus={activateLastPoint}");
+  });
+
   it("keeps the claim dialog focused on the selected token and actions", () => {
     expect(profileViewSource).not.toContain(">Claimable rewards<");
     expect(profileViewSource).not.toContain(
       "Choose the reward you want to claim.",
     );
+    expect(profileViewSource).not.toContain(">Ready<");
+    expect(profileViewSource).not.toContain("No rewards ready");
+    expect(profileViewSource).toContain("Claimable: ");
   });
 });
 
@@ -814,8 +985,8 @@ describe("profile reward grouping", () => {
     ]);
     expect(profileHasRewardSurface(profileRouterLaunchEntries(portfolio)))
       .toBe(false);
-    expect(profileViewSource).toContain("Canonical Router records from this wallet.");
-    expect(profileViewSource).toContain("Router record");
+    expect(profileViewSource).toContain("Tokens launched from this wallet.");
+    expect(profileViewSource).not.toContain("Router record");
     expect(profileViewSource).toContain(
       'claimableEntries.length ? "" : styles.claimablePanelEmpty',
     );
@@ -829,12 +1000,12 @@ describe("profile reward grouping", () => {
       }),
     );
     expect(html).toContain("Launches");
-    expect(html).toContain("Canonical Router records from this wallet.");
+    expect(html).toContain("Tokens launched from this wallet.");
     expect(html).toContain("Custom Graph");
     expect(html).toContain("$GRAPH");
     expect(html).toContain(`href="/token/${routerCustom.address}"`);
     expect(html).toContain("Custom");
-    expect(html).toContain("Router record");
+    expect(html).not.toContain("Router record");
     expect(html).not.toContain('aria-label="Open Custom Graph"');
     expect(html).not.toMatch(/>\s*Claim\s*</i);
     expect(html).not.toContain("permanently locked");

@@ -23,11 +23,16 @@ describe("interaction accessibility", () => {
     expect(chartCss).not.toContain("cursor: crosshair");
     expect(chartSource).toContain("onPointerMove={inspectPointer}");
     expect(chartSource).toContain("onKeyDown={inspectKeyboard}");
+    expect(chartSource).toContain('role="group"');
     expect(chartSource).toContain("tabIndex={0}");
     expect(chartSource).not.toContain("role=\"slider\"");
   });
 
   it("keeps primary token interactions at a reliable touch size", () => {
+    const tokenSource = readFileSync(
+      join(root, "components/token-detail-view.tsx"),
+      "utf8",
+    );
     const tokenCss = readFileSync(
       join(root, "components/token-experience.module.css"),
       "utf8",
@@ -47,6 +52,15 @@ describe("interaction accessibility", () => {
     );
     expect(chartCss).toMatch(
       /\.rangeButton\s*\{[^}]*height:\s*44px;[^}]*min-width:\s*44px;/s,
+    );
+    expect(tokenSource).toContain(
+      '<section\n      className={styles.tradeForm}',
+    );
+    expect(tokenSource).toContain(
+      '<nav className={styles.links} aria-label={`${token.name} links`}>',
+    );
+    expect(tokenSource).toContain(
+      '<nav className={styles.links} aria-label={`${project.name} links`}>',
     );
   });
 
@@ -186,7 +200,7 @@ describe("interaction accessibility", () => {
     expect(css).toMatch(/\.docsLink\s*\{[^}]*min-height:\s*44px;/s);
   });
 
-  it("keeps all four primary routes semantic and reflow-safe in mobile navigation", () => {
+  it("keeps all five primary routes semantic and reflow-safe in mobile navigation", () => {
     const source = readFileSync(
       join(root, "components/site-navigation.tsx"),
       "utf8",
@@ -209,6 +223,9 @@ describe("interaction accessibility", () => {
     });
 
     expect(source).toContain('const mobileNavItems = desktopNavItems;');
+    expect(source).toMatch(
+      /\{ href: "\/profile", label: "Profile" \},\s*\{ href: "\/hookathon", label: "Hookathon" \}/,
+    );
     expect(source).toContain(
       '<nav className="mobile-nav" aria-label="Primary navigation">',
     );
@@ -220,7 +237,7 @@ describe("interaction accessibility", () => {
     expect(mobileMediaSegments).toEqual(
       expect.arrayContaining([
         expect.stringMatching(
-          /\.mobile-nav\s*\{[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/,
+          /\.mobile-nav\s*\{[^}]*grid-template-columns:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\)/,
         ),
         expect.stringMatching(
           /\.mobile-nav\s*\{[^}]*background:\s*transparent;[^}]*border:\s*0;[^}]*height:\s*56px/,
@@ -254,6 +271,9 @@ describe("interaction accessibility", () => {
     ).toHaveLength(2);
     expect(interfaceCss).toMatch(
       /@media \(max-width: 370px\)[\s\S]*?\.wallet-button-compact\s*\{[^}]*min-width:\s*44px;[^}]*width:\s*44px;[^}]*\}[\s\S]*?\.wallet-button-compact > span,[\s\S]*?display:\s*none;/s,
+    );
+    expect(interfaceCss).toMatch(
+      /@media \(max-width: 370px\)[\s\S]*?\.mobile-nav a\s*\{[^}]*font-size:\s*11px;[^}]*letter-spacing:\s*-0\.025em;/s,
     );
   });
 

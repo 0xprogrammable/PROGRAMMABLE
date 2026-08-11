@@ -54,6 +54,9 @@ describe("token detail layout", () => {
     expect(chartSource).toContain("aria-busy={loading}");
     expect(chartSource).toContain('role="status"');
     expect(chartSource).toContain("{chartStatus}");
+    expect(chartSource).toContain('"Current price loaded from 1 point"');
+    expect(chartSource).not.toContain("payload.points.length < 2");
+    expect(chartSource).toContain("tabIndex={0}");
     expect(chartSource).toMatch(
       /\{loading \? \([\s\S]*?styles\.waitingPlot[\s\S]*?aria-hidden="true"[\s\S]*?\) : chart \? \(/,
     );
@@ -135,16 +138,14 @@ describe("token detail layout", () => {
     expect(detailSource).not.toMatch(/<h2>\s*Trade \$/i);
   });
 
-  it("lets chart inspection scale token-level market cap fallbacks", () => {
-    expect(detailSource).toContain(
-      "token.indexedMarketCapEthWei ?? token.marketCapEthWei",
-    );
-    expect(detailSource).toContain(
-      "token.indexedMarketCapUsdWad ?? token.fdvUsdWad",
-    );
-    expect(chartSource).toContain(
-      "marketCapUsdWad: payload.marketCapUsdWad ?? marketCapUsdWad",
-    );
+  it("uses only typed chart FDV while labeling total-supply value as FDV", () => {
+    expect(detailSource).toContain('label: "FDV"');
+    expect(detailSource).not.toContain('label: "Market cap"');
+    expect(detailSource).not.toContain("fdvEthWei={");
+    expect(detailSource).not.toContain("fdvUsdWad={");
+    expect(chartSource).not.toContain("payload.marketCap");
+    expect(chartSource).not.toContain("payload.fdvUsdWad ?? fdvUsdWad");
+    expect(chartSource).not.toMatch(/marketCap(?:Eth|Usd)\w*\?: string/);
   });
 
   it("omits empty team-profile filler copy", () => {

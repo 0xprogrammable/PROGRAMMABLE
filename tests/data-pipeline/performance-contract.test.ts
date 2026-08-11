@@ -1292,6 +1292,29 @@ describe("read-model performance contract", () => {
     expect(alchemyResult.ok).toBe(true);
     expect(alchemyResult.checks).toHaveLength(15);
 
+    const exploreConsumerPath = "lib/explore-consumer.server.ts";
+    const exploreConsumerSource = readFileSync(
+      resolve(process.cwd(), exploreConsumerPath),
+      "utf8",
+    );
+    const staleProviderProvenance =
+      alchemySourceContracts.evaluateAlchemyExploreSourceContracts(
+        process.cwd(),
+        {
+          sourceOverrides: {
+            [exploreConsumerPath]: exploreConsumerSource.replace(
+              '? "operational-dual"',
+              '? "alchemy"',
+            ),
+          },
+        },
+      );
+    expect(
+      staleProviderProvenance.failures.map(
+        (failure: { id: string }) => failure.id,
+      ),
+    ).toContain("alchemy-explore-provenance");
+
     const result = sourceContracts.evaluateReadModelSourceContracts(
       process.cwd(),
       profile,

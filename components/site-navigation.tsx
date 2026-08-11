@@ -14,6 +14,7 @@ const desktopNavItems = [
   { href: "/launch", label: "Create" },
   { href: "/docs", label: "Docs" },
   { href: "/profile", label: "Profile" },
+  { href: "/hookathon", label: "Hookathon" },
 ];
 
 const mobileNavItems = desktopNavItems;

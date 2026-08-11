@@ -8,7 +8,24 @@ import {
 } from "../../../lib/alchemy/explore.server";
 import { enrichTokensWithAlchemyPoolState } from "../../../lib/alchemy/live-market.server";
 import { suppressRouterBoundCustomProjectDuplicates } from "../../../lib/alchemy/router-custom-collision";
+import {
+  createExploreConsumerSource,
+  exploreLaunchSourceHeader,
+  exploreReadSourceHeader,
+  exploreRpcProviderHeader,
+  type ExploreConsumerSource,
+} from "../../../lib/explore-consumer.server";
 import { canonicalTokenExploreEntryV1 } from "../../../lib/explore-entry-v1";
+import {
+  buildExploreDataQuality,
+  publicExploreEntryV1,
+  valuationSortValue,
+  withExploreValuation,
+  type ValuedExploreEntry,
+} from "../../../lib/explore-financial-data";
+import { readExploreReferenceHeadWithinRouteBudget } from "../../../lib/explore-reference-head.server";
+import { getOnchainDeployment } from "../../../lib/onchain/config";
+import { readDurableExploreModel } from "../../../lib/onchain/durable-model";
 import {
   filterAndSortTokens,
   parseExploreSort,
@@ -22,6 +39,7 @@ import type {
 import { readProductionCustomExploreDirectoryV1 } from "../../../lib/server/custom-launch/explore-directory-v1";
 import type {
   CanonicalTokenExploreEntry,
+  CustomProjectExploreEntry,
   ExploreEntry,
   LauncherToken,
 } from "../../../lib/tokens";
@@ -36,8 +54,62 @@ const EXPLORE_QUERY_PARAMETERS = new Set([
   "socials",
   "sort",
 ]);
-const TOP_MARKET_CAP_LIMIT = 20;
+const TOP_VALUATION_LIMIT = 20;
 const NEWEST_LIVE_MARKET_LIMIT = 20;
+const readCanonicalExploreSource = createExploreConsumerSource<ExploreReadModel>({});
+const readCustomExploreSource = createExploreConsumerSource<
+  readonly CustomProjectExploreEntry[]
+>({});
+
+async function readPrimaryExploreModel() {
+  const model = await readAlchemyExploreModel();
+  if (model.status !== "ready") {
+    throw new Error("Primary Explore model is unavailable");
+  }
+  return model;
+}
+
+async function readDurableExploreFallback() {
+  const deployment = getOnchainDeployment("production");
+  if (deployment.status !== "ready") {
+    throw new Error("Production Explore deployment is not ready");
+  }
+  const read = await readDurableExploreModel(
+    deployment,
+    Number.MAX_SAFE_INTEGER,
+  );
+  if (read.status !== "ready") {
+    throw new Error(`Durable Explore fallback is ${read.reason}`);
+  }
+  return {
+    value: read.envelope.payload.model,
+    ageMs: read.ageMs,
+  };
+}
+
+function greatestBlockNumber(...values: Array<string | null | undefined>) {
+  let greatest: bigint | null = null;
+  for (const value of values) {
+    if (!value || !/^[1-9]\d*$/u.test(value)) continue;
+    const parsed = BigInt(value);
+    if (greatest === null || parsed > greatest) greatest = parsed;
+  }
+  return greatest?.toString() ?? null;
+}
+
+type ExploreSourceAttempt<T> =
+  | Readonly<{ source: ExploreConsumerSource<T>; error: null }>
+  | Readonly<{ source: null; error: unknown }>;
+
+async function settleExploreSource<T>(
+  read: Promise<ExploreConsumerSource<T>>,
+): Promise<ExploreSourceAttempt<T>> {
+  try {
+    return { source: await read, error: null };
+  } catch (error) {
+    return { source: null, error };
+  }
+}
 
 export function inheritExploreEthUsdQuote(
   liveSnapshot: ExploreSnapshot,
@@ -84,13 +156,6 @@ function integerQuery(value: string | null, fallback: number) {
 function positiveInteger(value: number, fallback: number, maximum: number) {
   if (!Number.isSafeInteger(value) || value < 1) return fallback;
   return Math.min(value, maximum);
-}
-
-function entryMarketCap(entry: ExploreEntry): bigint | null {
-  if (entry.exploreKind !== "token") return null;
-  const value = entry.indexedMarketCapUsdWad ?? entry.fdvUsdWad
-    ?? entry.indexedMarketCapEthWei ?? entry.marketCapEthWei;
-  return value && /^(?:0|[1-9][0-9]*)$/u.test(value) ? BigInt(value) : null;
 }
 
 function entryLaunchTime(entry: ExploreEntry): number {
@@ -180,8 +245,8 @@ function sortExploreEntries(
       const comparison = compareNewestEntries(first, second);
       return sort === "newest" ? comparison : -comparison;
     }
-    const firstCap = entryMarketCap(first);
-    const secondCap = entryMarketCap(second);
+    const firstCap = valuationSortValue(first);
+    const secondCap = valuationSortValue(second);
     if (firstCap === null || secondCap === null) {
       if (firstCap === null && secondCap !== null) return 1;
       if (firstCap !== null && secondCap === null) return -1;
@@ -231,6 +296,33 @@ function assertNoExploreCategoryCollision(entries: readonly ExploreEntry[]): voi
   }
 }
 
+export function dedupeExploreEntriesV1(
+  entries: readonly ExploreEntry[],
+): ExploreEntry[] {
+  const byId = new Map<string, ExploreEntry>();
+  const byTokenAddress = new Map<string, ExploreEntry>();
+  const output: ExploreEntry[] = [];
+  for (const entry of entries) {
+    const existingId = byId.get(entry.id);
+    if (existingId !== undefined) {
+      if (JSON.stringify(existingId) === JSON.stringify(entry)) continue;
+      throw new Error(`Canonical Explore sources disagree on ${entry.id}`);
+    }
+    const address = entry.tokenAddress?.toLowerCase();
+    const existingAddress = address ? byTokenAddress.get(address) : undefined;
+    if (existingAddress !== undefined) {
+      if (JSON.stringify(existingAddress) === JSON.stringify(entry)) continue;
+      throw new Error(
+        `Canonical Explore sources disagree on ${entry.tokenAddress}`,
+      );
+    }
+    byId.set(entry.id, entry);
+    if (address) byTokenAddress.set(address, entry);
+    output.push(entry);
+  }
+  return output;
+}
+
 function paginateEntries(
   ordered: readonly ExploreEntry[],
   input: Readonly<{ page: number; pageSize: number }>,
@@ -269,7 +361,7 @@ export function paginateExploreEntriesV1(
     return paginateEntries(sortExploreEntries(filtered, input.sort), input);
   }
   const top = sortExploreEntries(filtered, "market-cap")
-    .slice(0, TOP_MARKET_CAP_LIMIT);
+    .slice(0, TOP_VALUATION_LIMIT);
   const topIds = new Set(top.map(({ id }) => id));
   const newest = sortExploreEntries(filtered, "newest")
     .filter(({ id }) => !topIds.has(id));
@@ -301,33 +393,71 @@ export async function GET(request: NextRequest) {
       pageSize: integerQuery(search.get("limit"), 9),
       socials,
     } as const;
-    const [model, customProjectRecords] = await Promise.all([
-      readAlchemyExploreModel(),
-      readProductionCustomExploreDirectoryV1(request.signal),
-    ]);
-    const customProjects = suppressRouterBoundCustomProjectDuplicates(
-      model.tokens,
-      customProjectRecords,
+    const canonicalRead = settleExploreSource(
+      readCanonicalExploreSource({
+        primary: readPrimaryExploreModel,
+        fallback: readDurableExploreFallback,
+      }),
     );
-    let pricedModel = {
-      ...model,
-      tokens: await enrichTokensWithAlchemyPrices(model.tokens),
-    } satisfies ExploreReadModel;
-    const deployment = getAlchemyOnchainDeployment();
+    const customRead = settleExploreSource(
+      readCustomExploreSource({
+        primary: () => readProductionCustomExploreDirectoryV1(request.signal),
+      }),
+    );
+    const [canonicalAttempt, customAttempt, referenceHead] = await Promise.all([
+      canonicalRead,
+      customRead,
+      readExploreReferenceHeadWithinRouteBudget(),
+    ]);
+    if (canonicalAttempt.source === null && customAttempt.source === null) {
+      throw canonicalAttempt.error ?? customAttempt.error;
+    }
+
+    const canonicalSource = canonicalAttempt.source;
+    const customSource = customAttempt.source;
+    let pricedModel = canonicalSource?.value ?? null;
+    let priceApiApplied = false;
+    if (pricedModel && canonicalSource?.status === "current") {
+      try {
+        const previousTokens = pricedModel.tokens;
+        const enrichedTokens = await enrichTokensWithAlchemyPrices(
+          previousTokens,
+        );
+        priceApiApplied = enrichedTokens.some((token, index) =>
+          token.tokenPriceUsdWad !== previousTokens[index]?.tokenPriceUsdWad ||
+          token.fdvUsdWad !== previousTokens[index]?.fdvUsdWad
+        );
+        pricedModel = {
+          ...pricedModel,
+          tokens: enrichedTokens,
+        } satisfies ExploreReadModel;
+      } catch {
+        // The canonical launch identities remain valid without price enrichment.
+      }
+    }
+
+    let deployment: ReturnType<typeof getAlchemyOnchainDeployment> | null = null;
+    if (canonicalSource?.status === "current") {
+      try {
+        deployment = getAlchemyOnchainDeployment();
+      } catch {
+        // Deployment/provider unavailability must not remove launch identities.
+      }
+    }
     const liveSnapshot =
-      pricedModel.status === "ready"
+      pricedModel?.status === "ready"
         ? inheritExploreEthUsdQuote(
             pricedModel.launchDiscoverySnapshot ?? pricedModel.snapshot,
             pricedModel.snapshot,
           )
         : null;
-    if (deployment.status === "ready" && liveSnapshot) {
+    if (deployment?.status === "ready" && liveSnapshot && pricedModel) {
       const visible = visibleExploreTokens(pricedModel);
       const top = filterAndSortTokens(
         [...visible],
         "",
         "market-cap",
-      ).slice(0, TOP_MARKET_CAP_LIMIT);
+      ).slice(0, TOP_VALUATION_LIMIT);
       const newest = filterAndSortTokens(
         [...visible],
         "",
@@ -339,60 +469,154 @@ export async function GET(request: NextRequest) {
           token,
         ]),
       ).values()];
-      const updates = await enrichTokensWithAlchemyPoolState({
-        deployment,
-        snapshot: liveSnapshot,
-        tokens: warm,
-      });
-      pricedModel = {
-        ...pricedModel,
-        tokens: mergeTokenUpdates(pricedModel.tokens, updates),
-      };
+      try {
+        const updates = await enrichTokensWithAlchemyPoolState({
+          deployment,
+          snapshot: liveSnapshot,
+          tokens: warm,
+        });
+        pricedModel = {
+          ...pricedModel,
+          tokens: mergeTokenUpdates(pricedModel.tokens, updates),
+        };
+      } catch {
+        // Keep the canonical model and mark its valuations below as partial.
+      }
     }
-    const classicEntries = visibleExploreTokens(pricedModel)
-      .map(canonicalTokenExploreEntryV1);
-    const entries: ExploreEntry[] = [...classicEntries, ...customProjects];
+
+    const modelTokens = pricedModel?.tokens ?? [];
+    const customProjects = suppressRouterBoundCustomProjectDuplicates(
+      modelTokens,
+      customSource?.value ?? [],
+    );
+    const identityAsOfBlock =
+      pricedModel?.status === "ready"
+        ? (pricedModel.launchDiscoverySnapshot ?? pricedModel.snapshot).blockNumber
+        : null;
+    const referenceBlock = greatestBlockNumber(
+      identityAsOfBlock,
+      referenceHead?.blockNumber,
+    );
+    const valuationContext = {
+      referenceBlock,
+      forceStale: canonicalSource?.status === "last-known-good",
+    } as const;
+    const classicEntries = pricedModel
+      ? visibleExploreTokens(pricedModel)
+          .map(canonicalTokenExploreEntryV1)
+          .map((entry) => withExploreValuation(entry, valuationContext))
+      : [];
+    const valuedCustomProjects = customProjects.map((entry) =>
+      withExploreValuation(entry, valuationContext)
+    );
+    const entries = dedupeExploreEntriesV1([
+      ...classicEntries,
+      ...valuedCustomProjects,
+    ]) as ValuedExploreEntry[];
     assertNoExploreCategoryCollision(entries);
-    const useTopMarketCapView =
+    const useTopValuationView =
       options.sort === "market-cap" &&
       options.query.length === 0 &&
       options.socials === null;
     const paginated = paginateExploreEntriesV1(entries, {
       ...options,
-      topThenNewest: useTopMarketCapView,
+      topThenNewest: useTopValuationView,
     });
-    let pageEntries = paginated.tokens;
+    let pageEntries = paginated.tokens as ValuedExploreEntry[];
     const pageClassic = pageEntries.filter(
-      (entry): entry is CanonicalTokenExploreEntry => entry.exploreKind === "token",
+      (
+        entry,
+      ): entry is ValuedExploreEntry<CanonicalTokenExploreEntry> =>
+        entry.exploreKind === "token",
     );
-    if (deployment.status === "ready" && liveSnapshot && pageClassic.length) {
-      const updates = await enrichTokensWithAlchemyPoolState({
+    if (deployment?.status === "ready" && liveSnapshot && pageClassic.length) {
+      try {
+        const updates = await enrichTokensWithAlchemyPoolState({
           deployment,
           snapshot: liveSnapshot,
           tokens: pageClassic,
         });
-      const updatedByAddress = new Map(updates.map((token) => [
-        token.tokenAddress.toLowerCase(),
-        canonicalTokenExploreEntryV1(token),
-      ]));
-      pageEntries = pageEntries.map((entry) => entry.exploreKind === "token"
-        ? updatedByAddress.get(entry.tokenAddress.toLowerCase()) ?? entry
-        : entry);
+        const updatedByAddress = new Map(updates.map((token) => [
+          token.tokenAddress.toLowerCase(),
+          withExploreValuation(
+            canonicalTokenExploreEntryV1(token),
+            valuationContext,
+          ),
+        ]));
+        pageEntries = pageEntries.map((entry) => entry.exploreKind === "token"
+          ? updatedByAddress.get(entry.tokenAddress.toLowerCase()) ?? entry
+          : entry);
+      } catch {
+        // Page-level refresh is best effort; last-known values remain visible.
+      }
+    }
+
+    const sourceAges = [canonicalSource?.ageMs, customSource?.ageMs].filter(
+      (value): value is number => value !== undefined,
+    );
+    const dataQuality = buildExploreDataQuality({
+      entries,
+      canonicalStatus: canonicalSource?.status ?? "unavailable",
+      customStatus: customSource?.status ?? "unavailable",
+      identityAsOfBlock,
+      referenceBlock,
+      identityAgeMs: sourceAges.length > 0 ? Math.max(...sourceAges) : null,
+    });
+
+    const sourceHeaders = {
+      "X-Programmable-Launch-Source": exploreLaunchSourceHeader({
+        canonical: canonicalSource,
+        custom: customSource,
+      }),
+      "X-Programmable-Read-Source": exploreReadSourceHeader({
+        canonical: canonicalSource,
+        custom: customSource,
+      }),
+    };
+    const rpcProvider = exploreRpcProviderHeader(deployment);
+
+    if (canonicalSource === null && entries.length === 0) {
+      return NextResponse.json(
+        {
+          status: "unavailable",
+          error: "Launch data is temporarily unavailable",
+          retryable: true,
+          dataQuality,
+        },
+        {
+          status: 503,
+          headers: {
+            "Cache-Control": "no-store",
+            "Retry-After": "5",
+            "X-Programmable-Data-Quality": dataQuality.status,
+            "X-Programmable-Valuation-Metric": "fdv",
+            ...sourceHeaders,
+          },
+        },
+      );
     }
 
     const page = {
-      status: model.status === "ready" || customProjects.length > 0
+      status: pricedModel?.status === "ready" || entries.length > 0
         ? "ready" as const
-        : model.status,
+        : pricedModel?.status ?? "not-deployed" as const,
       ...paginated,
-      tokens: pageEntries,
+      tokens: pageEntries.map(publicExploreEntryV1),
       sort: options.sort,
       query: options.query,
-      snapshot: model.snapshot,
+      sortMetric: "fdv" as const,
+      dataQuality,
+      snapshot: pricedModel?.snapshot ?? null,
       launchDiscoverySnapshot:
-        model.status === "ready" ? model.launchDiscoverySnapshot : undefined,
-      launcherFeesAccruedWei: model.launcherFeesAccruedWei,
-      launcherFeesAccruedEth: model.launcherFeesAccruedEth,
+        pricedModel?.status === "ready"
+          ? pricedModel.launchDiscoverySnapshot
+          : undefined,
+      ...(pricedModel
+        ? {
+            launcherFeesAccruedWei: pricedModel.launcherFeesAccruedWei,
+            launcherFeesAccruedEth: pricedModel.launcherFeesAccruedEth,
+          }
+        : {}),
     };
 
     return NextResponse.json(
@@ -400,24 +624,34 @@ export async function GET(request: NextRequest) {
       {
         headers: {
           "Cache-Control":
-            customProjects.length > 0
+            customProjects.length > 0 || dataQuality.status !== "complete"
               ? "no-store"
               : page.status === "ready"
               ? "public, max-age=0, s-maxage=2, stale-while-revalidate=5"
               : "public, max-age=0, s-maxage=30",
-          "X-Programmable-Price-Source": "alchemy",
-          "X-Programmable-Launch-Source": customProjects.length > 0
-            ? "alchemy+registry.custom-launched"
-            : "alchemy",
-          "X-Programmable-Read-Source": customProjects.length > 0
-            ? "blob+postgres"
-            : "blob",
-          "X-Programmable-Rpc-Provider": "alchemy",
+          "X-Programmable-Data-Quality": dataQuality.status,
+          "X-Programmable-Valuation-Metric": "fdv",
+          ...(dataQuality.valuation.asOfBlock
+            ? {
+                "X-Programmable-Valuation-Block":
+                  dataQuality.valuation.asOfBlock,
+              }
+            : {}),
+          ...(pricedModel
+            ? {
+                "X-Programmable-Price-Source":
+                  priceApiApplied ? "alchemy" : "read-model",
+              }
+            : {}),
+          ...sourceHeaders,
+          ...(rpcProvider === null
+            ? {}
+            : { "X-Programmable-Rpc-Provider": rpcProvider }),
         },
       },
     );
   } catch (error) {
-    console.error("Alchemy Explore read failed", safeAlchemyError(error));
+    console.error("Explore consumer read failed", safeAlchemyError(error));
     return NextResponse.json(
       { error: "Token data is temporarily unavailable" },
       { status: 503, headers: { "Cache-Control": "no-store" } },

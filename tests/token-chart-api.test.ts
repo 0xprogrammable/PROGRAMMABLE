@@ -3,14 +3,33 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-const mocks = vi.hoisted(() => ({
-  getAlchemyOnchainDeployment: vi.fn(),
-  isTokenChartRange: vi.fn(),
-  enrichTokensWithAlchemyPoolState: vi.fn(),
-  readAlchemyExploreModel: vi.fn(),
-  readTokenChartSeries: vi.fn(),
-  safeAlchemyError: vi.fn((error) => error),
-}));
+const mocks = vi.hoisted(() => {
+  class TokenChartIntegrityError extends Error {
+    override name = "TokenChartIntegrityError";
+
+    constructor(readonly reason: string) {
+      super("Token chart inputs failed integrity validation");
+    }
+  }
+  class TokenChartUnavailableError extends Error {
+    override name = "TokenChartUnavailableError";
+
+    constructor(readonly reason: string) {
+      super("Token chart data is unavailable for this pool");
+    }
+  }
+  return {
+    assertTokenChartSupported: vi.fn(),
+    getAlchemyOnchainDeployment: vi.fn(),
+    isTokenChartRange: vi.fn(),
+    enrichTokensWithAlchemyPoolState: vi.fn(),
+    readAlchemyExploreModel: vi.fn(),
+    readTokenChartSeries: vi.fn(),
+    safeAlchemyError: vi.fn((error) => error),
+    TokenChartIntegrityError,
+    TokenChartUnavailableError,
+  };
+});
 
 vi.mock("../lib/alchemy/explore.server", () => ({
   getAlchemyOnchainDeployment: mocks.getAlchemyOnchainDeployment,
@@ -19,8 +38,11 @@ vi.mock("../lib/alchemy/explore.server", () => ({
 }));
 
 vi.mock("../lib/onchain/chart", () => ({
+  assertTokenChartSupported: mocks.assertTokenChartSupported,
   isTokenChartRange: mocks.isTokenChartRange,
   readTokenChartSeries: mocks.readTokenChartSeries,
+  TokenChartIntegrityError: mocks.TokenChartIntegrityError,
+  TokenChartUnavailableError: mocks.TokenChartUnavailableError,
 }));
 
 vi.mock("../lib/alchemy/live-market.server", () => ({
@@ -67,6 +89,13 @@ describe("token chart Alchemy API", () => {
       ["1h", "1d", "1w", "all"].includes(range),
     );
     mocks.getAlchemyOnchainDeployment.mockReturnValue(deployment);
+    mocks.assertTokenChartSupported.mockImplementation((candidate) => {
+      if (candidate.launchModel === "custom-graph") {
+        throw new mocks.TokenChartUnavailableError(
+          "unsupported-pool-orientation",
+        );
+      }
+    });
     mocks.enrichTokensWithAlchemyPoolState.mockResolvedValue([token]);
     mocks.readAlchemyExploreModel.mockResolvedValue({
       status: "ready",
@@ -79,11 +108,34 @@ describe("token chart Alchemy API", () => {
     });
     mocks.readTokenChartSeries.mockResolvedValue({
       status: "ready",
-      points: [],
+      points: [
+        { blockNumber: "25630004", priceEth: "0.49", priceUsd: "1715" },
+        { blockNumber: "25630005", priceEth: "0.5", priceUsd: "1750" },
+      ],
       swapCount: 2,
       volumeWei: "1250000000000000000",
       volumeEth: "1.25",
       volumeUsdWad: "4375000000000000000000",
+      fdvEthWei: "500000000000000000000",
+      fdvEth: "500",
+      fdvUsdWad: "1750000000000000000000000",
+      freshness: {
+        history: {
+          status: "current",
+          throughBlock: launchDiscoverySnapshot.blockNumber,
+        },
+        price: {
+          status: "current",
+          asOfBlock: launchDiscoverySnapshot.blockNumber,
+          lagBlocks: "0",
+        },
+        valuation: {
+          status: "current",
+          metric: "fdv",
+          asOfBlock: launchDiscoverySnapshot.blockNumber,
+          lagBlocks: "0",
+        },
+      },
     });
   });
 
@@ -105,23 +157,179 @@ describe("token chart Alchemy API", () => {
         range: "1h",
       }),
     );
-    await expect(response.json()).resolves.toMatchObject({
+    const body = await response.json();
+    expect(body).toMatchObject({
       address: token.tokenAddress,
       range: "1h",
       swapCount: 2,
       volumeWei: "1250000000000000000",
       volumeEth: "1.25",
       volumeUsdWad: "4375000000000000000000",
+      fdvEthWei: "500000000000000000000",
+      fdvEth: "500",
+      fdvUsdWad: "1750000000000000000000000",
+      valuationMetric: "fdv",
+      dataQuality: {
+        schemaVersion: "programmable.explore-chart-data-quality.v1",
+        status: "current",
+        asOfBlock: launchDiscoverySnapshot.blockNumber,
+        blockHash: launchDiscoverySnapshot.blockHash,
+        finality: "confirmed",
+        history: {
+          status: "current",
+          throughBlock: launchDiscoverySnapshot.blockNumber,
+        },
+        price: {
+          status: "current",
+          asOfBlock: launchDiscoverySnapshot.blockNumber,
+          lagBlocks: "0",
+        },
+        valuation: {
+          status: "current",
+          metric: "fdv",
+          asOfBlock: launchDiscoverySnapshot.blockNumber,
+          lagBlocks: "0",
+        },
+      },
     });
+    expect(body).not.toHaveProperty("marketCapEthWei");
+    expect(body).not.toHaveProperty("marketCapEth");
+    expect(body).not.toHaveProperty("marketCapUsdWad");
     expect(response.headers.get("X-Programmable-Read-Source")).toBe(
       "rpc",
     );
-    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
-      "alchemy",
-    );
+    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBeNull();
     expect(response.headers.get("Cache-Control")).toBe(
       "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
     );
+    expect(response.headers.get("X-Programmable-Valuation-Metric")).toBe(
+      "fdv",
+    );
+  });
+
+  it("returns partial freshness without caching an older price as current", async () => {
+    mocks.readTokenChartSeries.mockResolvedValue({
+      status: "partial",
+      points: [{ blockNumber: "25630000", priceEth: "0.5" }],
+      swapCount: 1,
+      volumeWei: "1",
+      volumeEth: "0.000000000000000001",
+      fdvEthWei: "500000000000000000000",
+      freshness: {
+        history: {
+          status: "current",
+          throughBlock: launchDiscoverySnapshot.blockNumber,
+        },
+        price: {
+          status: "stale",
+          asOfBlock: snapshot.blockNumber,
+          lagBlocks: "5",
+        },
+        valuation: {
+          status: "stale",
+          metric: "fdv",
+          asOfBlock: snapshot.blockNumber,
+          lagBlocks: "5",
+        },
+      },
+    });
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/explore/token/chart?address=${token.tokenAddress}`,
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(response.headers.get("X-Programmable-Data-Quality")).toBe(
+      "partial",
+    );
+    expect(body).toMatchObject({
+      status: "partial",
+      points: [{ blockNumber: "25630000", priceEth: "0.5" }],
+      dataQuality: {
+        status: "partial",
+        price: {
+          status: "stale",
+          asOfBlock: snapshot.blockNumber,
+          lagBlocks: "5",
+        },
+      },
+    });
+  });
+
+  it.each(["deployment", "model"])(
+    "returns unavailable without fabricated zero series when %s is not ready",
+    async (unavailable) => {
+      if (unavailable === "deployment") {
+        mocks.getAlchemyOnchainDeployment.mockReturnValue({
+          status: "not-deployed",
+        });
+      } else {
+        mocks.readAlchemyExploreModel.mockResolvedValue({
+          status: "not-deployed",
+          tokens: [],
+          snapshot: null,
+          creatorClaims: [],
+          launcherFeesAccruedWei: "0",
+          launcherFeesAccruedEth: "0",
+        });
+      }
+
+      const response = await GET(
+        new NextRequest(
+          `http://localhost/api/explore/token/chart?address=${token.tokenAddress}`,
+        ),
+      );
+      const body = await response.json();
+
+      expect(response.status).toBe(503);
+      expect(response.headers.get("Cache-Control")).toBe("no-store");
+      expect(body).toMatchObject({
+        status: "unavailable",
+        error: "Onchain chart data is temporarily unavailable",
+      });
+      expect(body).not.toHaveProperty("points");
+      expect(body).not.toHaveProperty("swapCount");
+      expect(body).not.toHaveProperty("volumeWei");
+      expect(body).not.toHaveProperty("volumeEth");
+      expect(mocks.readTokenChartSeries).not.toHaveBeenCalled();
+    },
+  );
+
+  it("fails closed for Custom Graph before enrichment or chart reads", async () => {
+    mocks.readAlchemyExploreModel.mockResolvedValue({
+      status: "ready",
+      tokens: [{ ...token, launchModel: "custom-graph" }],
+      snapshot,
+      launchDiscoverySnapshot,
+      creatorClaims: [],
+      launcherFeesAccruedWei: "0",
+      launcherFeesAccruedEth: "0",
+    });
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/explore/token/chart?address=${token.tokenAddress}`,
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(response.headers.get("Retry-After")).toBeNull();
+    expect(body).toMatchObject({
+      status: "unavailable",
+      dataQuality: {
+        status: "unavailable",
+        reason: "unsupported-pool-orientation",
+      },
+    });
+    expect(body).not.toHaveProperty("points");
+    expect(mocks.enrichTokensWithAlchemyPoolState).not.toHaveBeenCalled();
+    expect(mocks.readTokenChartSeries).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -136,5 +344,33 @@ describe("token chart Alchemy API", () => {
     expect(response.status).toBe(400);
     expect(mocks.readAlchemyExploreModel).not.toHaveBeenCalled();
     expect(mocks.getAlchemyOnchainDeployment).not.toHaveBeenCalled();
+  });
+
+  it("reports read-model conflicts as integrity-unavailable without zero data", async () => {
+    mocks.readTokenChartSeries.mockRejectedValue(
+      new mocks.TokenChartIntegrityError("invalid-token-decimals"),
+    );
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/explore/token/chart?address=${token.tokenAddress}`,
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(response.headers.get("Retry-After")).toBeNull();
+    expect(body).toMatchObject({
+      status: "unavailable",
+      dataQuality: {
+        schemaVersion: "programmable.explore-chart-data-quality.v1",
+        status: "unavailable",
+        reason: "integrity",
+      },
+    });
+    expect(body).not.toHaveProperty("points");
+    expect(body).not.toHaveProperty("volumeWei");
+    expect(body).not.toHaveProperty("volumeEth");
   });
 });

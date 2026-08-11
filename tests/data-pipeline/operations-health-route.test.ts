@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   readIndexedReadModelHealth: vi.fn(),
   getOperationalOnchainDeployment: vi.fn(),
   readDurableExploreModel: vi.fn(),
-  readIndependentRpcHealth: vi.fn(),
+  readOperationalRpcHealth: vi.fn(),
 }));
 
 vi.mock("../../lib/data-pipeline/read-model-health.server", () => ({
@@ -14,10 +14,49 @@ vi.mock("../../lib/data-pipeline/read-model-health.server", () => ({
 vi.mock("../../lib/onchain", () => ({
   getOperationalOnchainDeployment: mocks.getOperationalOnchainDeployment,
   readDurableExploreModel: mocks.readDurableExploreModel,
-  readIndependentRpcHealth: mocks.readIndependentRpcHealth,
+  readOperationalRpcHealth: mocks.readOperationalRpcHealth,
 }));
 
 import { GET } from "../../app/api/ops/health/route";
+
+function rpcHealth(input?: Readonly<{
+  status?: "healthy" | "degraded" | "unhealthy";
+  chainId?: number;
+  heads?: readonly [string, string];
+}>) {
+  const status = input?.status ?? "healthy";
+  const heads = input?.heads ?? ["25600012", "25600012"];
+  const unavailable = status === "unhealthy";
+  const degraded = status === "degraded";
+  return {
+    status,
+    chainId: input?.chainId ?? 1,
+    read: {
+      status: unavailable ? "unavailable" : "available",
+      servedBy: unavailable ? null : degraded ? "secondary" : "primary",
+      failoverUsed: degraded,
+    },
+    providers: {
+      primary: {
+        status: unavailable || degraded ? "unavailable" : "available",
+        head: unavailable || degraded ? null : heads[0],
+      },
+      secondary: {
+        status: unavailable ? "unavailable" : "available",
+        head: unavailable ? null : heads[1],
+      },
+    },
+    quorum: {
+      status: unavailable || degraded ? "unavailable" : "verified",
+    },
+    confirmedBlock: unavailable
+      ? null
+      : {
+          number: "25600000",
+          hash: `0x${"11".repeat(32)}`,
+        },
+  } as const;
+}
 
 describe("operations health route", () => {
   beforeEach(() => {
@@ -39,14 +78,7 @@ describe("operations health route", () => {
         },
       },
     });
-    mocks.readIndependentRpcHealth.mockResolvedValue({
-      chainId: 1,
-      heads: ["25600012", "25600012"],
-      confirmedBlock: {
-        number: "25600000",
-        hash: `0x${"11".repeat(32)}`,
-      },
-    });
+    mocks.readOperationalRpcHealth.mockResolvedValue(rpcHealth());
 
     const response = await GET();
     const body = await response.json();
@@ -65,7 +97,7 @@ describe("operations health route", () => {
       },
     });
     expect(mocks.readDurableExploreModel).toHaveBeenCalledOnce();
-    expect(mocks.readIndependentRpcHealth).toHaveBeenCalledOnce();
+    expect(mocks.readOperationalRpcHealth).toHaveBeenCalledOnce();
   });
 
   it("binds indexed health to the production deployment and independent RPC chain", async () => {
@@ -81,14 +113,7 @@ describe("operations health route", () => {
       status: "ready",
       chainId: 1,
     });
-    mocks.readIndependentRpcHealth.mockResolvedValue({
-      chainId: 1,
-      heads: ["25600012", "25600012"],
-      confirmedBlock: {
-        number: "25600010",
-        hash: `0x${"22".repeat(32)}`,
-      },
-    });
+    mocks.readOperationalRpcHealth.mockResolvedValue(rpcHealth());
 
     const response = await GET();
     const body = await response.json();
@@ -106,14 +131,97 @@ describe("operations health route", () => {
         tokenCount: 281,
       },
       rpc: {
-        heads: ["25600012", "25600012"],
+        status: "healthy",
+        quorum: { status: "verified" },
       },
     });
     expect(mocks.getOperationalOnchainDeployment).toHaveBeenCalledWith(
       "production",
     );
     expect(mocks.readDurableExploreModel).not.toHaveBeenCalled();
-    expect(mocks.readIndependentRpcHealth).toHaveBeenCalledOnce();
+    expect(mocks.readOperationalRpcHealth).toHaveBeenCalledOnce();
+  });
+
+  it("stays available but explicit when the fixed secondary serves reads", async () => {
+    mocks.readIndexedReadModelHealth.mockResolvedValue({
+      chainId: 1,
+      index: {
+        ageSeconds: 4,
+        blockNumber: "25600010",
+        tokenCount: 281,
+      },
+    });
+    mocks.getOperationalOnchainDeployment.mockReturnValue({
+      status: "ready",
+      chainId: 1,
+    });
+    mocks.readOperationalRpcHealth.mockResolvedValue(
+      rpcHealth({ status: "degraded" }),
+    );
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      status: "healthy",
+      rpc: {
+        status: "degraded",
+        read: {
+          status: "available",
+          servedBy: "secondary",
+          failoverUsed: true,
+        },
+        providers: {
+          primary: { status: "unavailable" },
+          secondary: { status: "available" },
+        },
+        quorum: { status: "unavailable" },
+      },
+    });
+    expect(response.headers.get("cache-control")).toBe(
+      "public, max-age=0, s-maxage=30",
+    );
+  });
+
+  it("returns typed 503 health without endpoint details when all reads fail", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.readIndexedReadModelHealth.mockResolvedValue({
+      chainId: 1,
+      index: {
+        ageSeconds: 4,
+        blockNumber: "25600010",
+        tokenCount: 281,
+      },
+    });
+    mocks.getOperationalOnchainDeployment.mockReturnValue({
+      status: "ready",
+      chainId: 1,
+    });
+    mocks.readOperationalRpcHealth.mockResolvedValue(
+      rpcHealth({ status: "unhealthy" }),
+    );
+
+    const response = await GET();
+    const body = await response.json();
+    const serialized = JSON.stringify(body);
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(body).toMatchObject({
+      status: "unhealthy",
+      rpc: {
+        status: "unhealthy",
+        read: { status: "unavailable", servedBy: null },
+        providers: {
+          primary: { status: "unavailable" },
+          secondary: { status: "unavailable" },
+        },
+        quorum: { status: "unavailable" },
+      },
+    });
+    expect(serialized).not.toContain("example");
+    expect(serialized).not.toContain("http");
   });
 
   it("fails closed when indexed health and the deployment chain differ", async () => {
@@ -138,7 +246,7 @@ describe("operations health route", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(body).toMatchObject({ status: "unhealthy" });
     expect(JSON.stringify(body)).not.toContain("chain binding");
-    expect(mocks.readIndependentRpcHealth).not.toHaveBeenCalled();
+    expect(mocks.readOperationalRpcHealth).not.toHaveBeenCalled();
     expect(mocks.readDurableExploreModel).not.toHaveBeenCalled();
   });
 
@@ -156,14 +264,9 @@ describe("operations health route", () => {
       status: "ready",
       chainId: 1,
     });
-    mocks.readIndependentRpcHealth.mockResolvedValue({
-      chainId: 11_155_111,
-      heads: ["25600012", "25600012"],
-      confirmedBlock: {
-        number: "25600010",
-        hash: `0x${"22".repeat(32)}`,
-      },
-    });
+    mocks.readOperationalRpcHealth.mockResolvedValue(
+      rpcHealth({ chainId: 11_155_111 }),
+    );
 
     const response = await GET();
     const body = await response.json();
@@ -172,7 +275,7 @@ describe("operations health route", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(body).toMatchObject({ status: "unhealthy" });
     expect(JSON.stringify(body)).not.toContain("chain binding");
-    expect(mocks.readIndependentRpcHealth).toHaveBeenCalledOnce();
+    expect(mocks.readOperationalRpcHealth).toHaveBeenCalledOnce();
     expect(mocks.readDurableExploreModel).not.toHaveBeenCalled();
   });
 

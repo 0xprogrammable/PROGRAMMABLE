@@ -1,0 +1,525 @@
+{
+  "artifactBindingHash": "sha256:63dda227162f40e0d7344fc0a4f747ae08fb2eb9011d759734d8516be06de6ca",
+  "artifactPath": "artifacts/hookemon-completed-graph-adoption-compat-v1.json",
+  "artifactSha256": "sha256:f9d110d2850c4934ba0c22493eaa9d0f090bee6f0e6a1339ee3002344da1065a",
+  "artifactStatus": "INDEPENDENT_PASS_UNDEPLOYED_DENY",
+  "canonicalConstants": {
+    "adoptionOnlyReadinessConstraintHash": "0x200d18f90220af00fdadb83b716523e45c4565e83d48533c1a95d6a89ea92d51",
+    "authorityGasReserve": 2000000,
+    "codecIdHash": "0x547425be5bbef0a87c0e12754155a053480cbbbecfcf4863bef3407f8289aa57",
+    "eip712NameHash": "0x97fa37440048567cd094276a4b03a37e41a324c6bafc86796f704d1256adc03b",
+    "eip712VersionHash": "0xc89efdaa54c0f20c7adf612882df0950f5a951637e0307cdcb4c672f298b8bc6",
+    "maxAuthorityStaticcallGas": 500000,
+    "maxComponents": 24,
+    "maxCurrentnessLifetimeSeconds": 3600,
+    "maxCurrentnessSignatureBytes": 4096,
+    "maxEdges": 64,
+    "maxStateVerifierStaticcallGas": 500000,
+    "preflightIdHash": "0xf73375acccc5b87c1eff04c1c39b377a3579361816f36f7524d753d800b898f5",
+    "preflightRequiredRuntimeMask": 511,
+    "stateVerifierGasReserve": 200000,
+    "validatorIdHash": "0x14a76cb1c48208f82ba7cec4f2c6c316357d0a1b840f6d673a35b7ddc4a75c1b"
+  },
+  "commit": "ea0e4424b886a0c1ae928fc73d62bd8e907b44cd",
+  "compatibilityBoundary": {
+    "arbitraryExecution": "FORBIDDEN",
+    "capabilitySemantics": "ADOPT",
+    "hookemonProvisionalTypehashes": "NOT_CONSUMED",
+    "legacyNonceEqualsLaunchIdentity": "FORBIDDEN",
+    "oldThirteenFieldPermit": "REJECTED",
+    "rawGitObjectPaddingEquality": "FORBIDDEN"
+  },
+  "compiler": {
+    "bytecodeHash": "none",
+    "canonicalStandardJsonReceipt": {
+      "notRepositoryArtifact": true,
+      "path": null,
+      "sha256": "sha256:1104c2a0c6c439df6037e368bf60c375ad9e4e0b06ec979f5a37cbad93daef99"
+    },
+    "canonicalStandardJsonSha256": "sha256:1104c2a0c6c439df6037e368bf60c375ad9e4e0b06ec979f5a37cbad93daef99",
+    "cborMetadata": false,
+    "checkerPath": "scripts/check-hookemon-adoption-compat-artifact.sh",
+    "checkerSha256": "sha256:e0aa311a7cb2abb071d7c2c8e218e6d416156a2219402985d91918978ef4332c",
+    "configPath": "config/hookemon-compat/foundry.toml",
+    "configSha256": "sha256:3a16f92f61239374c33b67ba015c84fa372e5743674f655f6395317d5e90fc8a",
+    "detachedBuildInfoReceipt": {
+      "notRepositoryArtifact": true,
+      "path": null,
+      "sha256": "sha256:cb5481447d15406f7a210bca1529368a85cb92902171267136197842a6816683"
+    },
+    "detachedBuildInfoSha256": "sha256:cb5481447d15406f7a210bca1529368a85cb92902171267136197842a6816683",
+    "detachedCompilerReceiptsAreRepositoryArtifacts": false,
+    "evmVersion": "cancun",
+    "generatorPath": "scripts/generate-hookemon-adoption-compat-artifact.sh",
+    "generatorSha256": "sha256:f8ea7733de09d289037620dadf605e1bc7faff301c2e785854310cfff4ee609c",
+    "optimizer": true,
+    "optimizerRuns": 1000,
+    "remappingsPath": "remappings.txt",
+    "remappingsSha256": "sha256:2f87686a246a21832728206395e762da51036a9fdf196ae43f7ead4768694ec0",
+    "solc": "0.8.26",
+    "viaIR": false
+  },
+  "currentnessPolicy": {
+    "applicantApprovalExpiry": "NONE",
+    "dualProviderQuorum": "AUTHORITY_ATTESTED_NOT_ONCHAIN_CLAIM",
+    "maximumInternalTransportSeconds": 3600,
+    "serviceDeploymentBinding": "MANDATORY",
+    "simulationEvidence": "EXACT_PRE_SIGN_VALIDATOR_ETH_CALL"
+  },
+  "deployables": [
+    {
+      "abiSha256": "sha256:52176cb85a9b45f3f61703eb82e4c16a7d2e3d98d52afafed9b85de74fdb6803",
+      "artifactPath": "out-hookemon-compat/ProgrammableCompletedGraphAdoptionCompatCodecV1.sol/ProgrammableCompletedGraphAdoptionCompatCodecV1.json",
+      "creationBytecodeTemplateBytes": 14712,
+      "creationBytecodeTemplateKeccak256": "0x9004c7d193eed73561ab76a1f3723f2201f4137f578c0721a5c933ec17b58627",
+      "creationBytecodeTemplateSha256": "sha256:c5fa9651d93f16a80ba25f4f8bf108e425f308de887fe566b72490fd500a2681",
+      "name": "ProgrammableCompletedGraphAdoptionCompatCodecV1",
+      "source": "src/hookemon/ProgrammableCompletedGraphAdoptionCompatCodecV1.sol",
+      "sourceSha256": "sha256:7e65df29012ddca1d6029a79670a58f9bfa970ddd4fd988b253e52c35736372c",
+      "templateRuntimeBytes": 14684,
+      "templateRuntimeKeccak256": "0x1570eb95011b32da976fe6525c80e79e13cd5e3d186913b5382b210cfcf2eca4",
+      "templateRuntimeMarginToEip170Bytes": 9892,
+      "templateRuntimeSha256": "sha256:486bda47cba85ab9f0845aeb0c62a1aa4f2c1177fbf2aa94cde2b384ca3d7dcb"
+    },
+    {
+      "abiSha256": "sha256:35f69ec571e756712d187400b333ede249c0c78ed1950c3ca2ca2484defb86c5",
+      "artifactPath": "out-hookemon-compat/ProgrammableCompletedGraphAdoptionValidatorV1.sol/ProgrammableCompletedGraphAdoptionValidatorV1.json",
+      "creationBytecodeTemplateBytes": 21207,
+      "creationBytecodeTemplateKeccak256": "0x9b72baa662790129773316dc75d780ca65389bae9bc2357112f1d50c1c0e55e1",
+      "creationBytecodeTemplateSha256": "sha256:aac81492f529b3ea4cd8593fbaf9abe300efe364bad1800fbae2f4f48cb136da",
+      "name": "ProgrammableCompletedGraphAdoptionValidatorV1",
+      "source": "src/hookemon/ProgrammableCompletedGraphAdoptionValidatorV1.sol",
+      "sourceSha256": "sha256:520edfefe273151d354eb20f43aaf1f70b3afd5eac865c4c606b5584822632e4",
+      "templateRuntimeBytes": 20506,
+      "templateRuntimeKeccak256": "0x8731204649667173a497dd43fb183ac2ea01db5337f2c35b6c86af792b417ff8",
+      "templateRuntimeMarginToEip170Bytes": 4070,
+      "templateRuntimeSha256": "sha256:e409c45c92a31567709f4777ed20fbfaeb3976a4ec6d4d83aba86e821d993e0f"
+    },
+    {
+      "abiSha256": "sha256:a60f3f4e10c9b49413108785de4278b244e5687027d95db45dc8e549d6906d5c",
+      "artifactPath": "out-hookemon-compat/ProgrammableCompletedGraphAdoptionGrantRegistryV1.sol/ProgrammableCompletedGraphAdoptionGrantRegistryV1.json",
+      "creationBytecodeTemplateBytes": 26834,
+      "creationBytecodeTemplateKeccak256": "0x87448654a9c51f4c499186bc17d81b9ffc46aa8fbae6e74d04833784c1d47aba",
+      "creationBytecodeTemplateSha256": "sha256:8dd469341e870d04120587079d0c47dc5932580e30242da0b5175dc2ba9dc8d9",
+      "name": "ProgrammableCompletedGraphAdoptionGrantRegistryV1",
+      "source": "src/hookemon/ProgrammableCompletedGraphAdoptionGrantRegistryV1.sol",
+      "sourceSha256": "sha256:9197c7dd7b482525c5755b453bc6d99c673291ee44a5ef67ea70bf6faf6fc330",
+      "templateRuntimeBytes": 23917,
+      "templateRuntimeKeccak256": "0x40b0dbfd17be9051139376ac378c574d063edd90316668884cc5fcaebe0766ec",
+      "templateRuntimeMarginToEip170Bytes": 659,
+      "templateRuntimeSha256": "sha256:b9e7d19e2b6098612fae25ee67febd2adb0a19725798dcd9acedddb5f4a64166"
+    },
+    {
+      "abiSha256": "sha256:e1869e3ad641aded7dd290d53e61e447ea27a382f163e2af2fcbab455ef4b9d4",
+      "artifactPath": "out-hookemon-compat/ProgrammableCompletedGraphAdoptionPreflightV1.sol/ProgrammableCompletedGraphAdoptionPreflightV1.json",
+      "creationBytecodeTemplateBytes": 8711,
+      "creationBytecodeTemplateKeccak256": "0x91be86b2a5fe36bec779db43a63a0b9b2965a41fc05954fa0120a08b4bf69c14",
+      "creationBytecodeTemplateSha256": "sha256:cb455081aa84f3f06fc4335c66f49e5710eefb840a649102cf941e775ae44fb9",
+      "name": "ProgrammableCompletedGraphAdoptionPreflightV1",
+      "source": "src/hookemon/ProgrammableCompletedGraphAdoptionPreflightV1.sol",
+      "sourceSha256": "sha256:dd3292e44d01eaeacea74fb7b686d046516576d494727d5cc253ee3ef038ec9a",
+      "templateRuntimeBytes": 8328,
+      "templateRuntimeKeccak256": "0xe7aedac223b999b55a579a45ad10d8892e90438755ad159c674999f58d5c1cd7",
+      "templateRuntimeMarginToEip170Bytes": 16248,
+      "templateRuntimeSha256": "sha256:21495dce04eb0c66272b8ee777b279988dd413057baabd820c1ae5d7d151d47b"
+    }
+  ],
+  "digestRules": {
+    "contractGrantDigest": "keccak256(0x1901 || EIP712Domain(chainId,registry) || contractGrantStructHash)",
+    "contractGrantStructHash": "keccak256(abi.encode(LAUNCH_GRANT_TYPEHASH, bindingAHash, bindingBHash, reviewHash))",
+    "contractPlanHash": "keccak256(abi.encode(PLAN_TYPEHASH, keccak256(abi.encode(CompletedGraphPlanV1))))",
+    "preflightQueryHash": "candidate currentness digest excluded from signed aggregate",
+    "sourceCommitHash": "keccak256(abi.encode(SOURCE_COMMIT_TYPEHASH, exact raw bytes20 executable-source Git commit object id))",
+    "sourceTreeHash": "keccak256(abi.encode(SOURCE_TREE_TYPEHASH, exact raw bytes20 executable-source Git tree object id))",
+    "stampLaunchId": "keccak256(abi.encode(STAMP_LAUNCH_ID_TYPEHASH, chainId, registry, launchWallet, profileKey, contractPlanHash, sourceLaunchId))",
+    "winnerKeyHash": "keccak256(abi.encode(WINNER_KEY_TYPEHASH, exact 21-axis domain)); antiReplayNonce excluded"
+  },
+  "focusedValidation": {
+    "contractSecurityP0": 0,
+    "contractSecurityP1": 0,
+    "eip170RegistryMarginBytes": 659,
+    "focusedTests": 36,
+    "gasSnapshotPath": ".gas-snapshot",
+    "gasSnapshotSha256": "sha256:3657574a012b3682c74d50a7507357afb3311d5180acd82c3c735402e3b87e6f",
+    "winnerFuzzRuns": 10000
+  },
+  "identitySeparation": {
+    "antiReplayNonce": "INDEPENDENT_TERMINAL_ONE_WINNER_NONCE",
+    "canonicalNames": [
+      "sourceLaunchId",
+      "stampLaunchId",
+      "antiReplayNonce"
+    ],
+    "hookemonComparator": "EXTERNAL_UNFROZEN_NOT_CONSUMED",
+    "pairwiseEquality": "FORBIDDEN",
+    "sourceLaunchId": "SOURCE_DEFINED_GRAPH_IDENTITY",
+    "stampLaunchId": "ROUTER_REGISTRY_CANONICAL_STAMP_IDENTITY"
+  },
+  "independentGateReceipt": {
+    "abiCount": 8,
+    "activationCovered": false,
+    "artifactSha256": "sha256:f9d110d2850c4934ba0c22493eaa9d0f090bee6f0e6a1339ee3002344da1065a",
+    "canonicalConstantCount": 15,
+    "canonicalStandardJsonReceipt": {
+      "notRepositoryArtifact": true,
+      "path": null,
+      "sha256": "sha256:1104c2a0c6c439df6037e368bf60c375ad9e4e0b06ec979f5a37cbad93daef99"
+    },
+    "canonicalStandardJsonSha256": "sha256:1104c2a0c6c439df6037e368bf60c375ad9e4e0b06ec979f5a37cbad93daef99",
+    "commit": "ea0e4424b886a0c1ae928fc73d62bd8e907b44cd",
+    "consumerCompatibility": "PASS",
+    "contractSecurityP0": 0,
+    "contractSecurityP1": 0,
+    "deploymentCovered": false,
+    "detachedBuildInfoReceipt": {
+      "notRepositoryArtifact": true,
+      "path": null,
+      "sha256": "sha256:cb5481447d15406f7a210bca1529368a85cb92902171267136197842a6816683"
+    },
+    "detachedBuildInfoSha256": "sha256:cb5481447d15406f7a210bca1529368a85cb92902171267136197842a6816683",
+    "detachedReproduction": "PASS",
+    "externalAuditReceiptPath": null,
+    "externalAuditReceiptSha256": null,
+    "focusedTests": 36,
+    "gasSnapshotPath": ".gas-snapshot",
+    "gasSnapshotSha256": "sha256:3657574a012b3682c74d50a7507357afb3311d5180acd82c3c735402e3b87e6f",
+    "schemaVersion": "programmable.completed-graph-adoption-independent-gate-receipt.v1",
+    "selectorCount": 30,
+    "tree": "8c5e0822d7ff256cad3d9e0350c980473d36aecc",
+    "typehashCount": 43,
+    "verdict": "CONDITIONAL_SOURCE_ARTIFACT_PASS",
+    "winnerFuzzRuns": 10000
+  },
+  "independentGateReceiptSha256": "sha256:c7e6719ab835e2cd57261bbe6a61c951a33927093bbb28f6e35a461a01df3b2d",
+  "interfaces": [
+    {
+      "abiSha256": "sha256:b62393993aa9163a6611344da16cf92dec84448da8a3ceb9ed2cebd401e49237",
+      "deployment": "interface_only",
+      "name": "IProgrammableCompletedGraphAdoptionCompatV1",
+      "source": "src/hookemon/IProgrammableCompletedGraphAdoptionCompatV1.sol",
+      "sourceSha256": "sha256:75fced51331e2cb262ab622d9b948a587a69e37944d46d0784feaf382d9b63e6"
+    },
+    {
+      "abiSha256": "sha256:06daf1ffab3be85b1b5aa75000c73b1c497261dde262dd3735245a5254269f0e",
+      "deployment": "interface_only",
+      "name": "IProgrammableCompletedGraphAdoptionStateVerifierV1",
+      "source": "src/hookemon/IProgrammableCompletedGraphAdoptionCompatV1.sol",
+      "sourceSha256": null
+    },
+    {
+      "abiSha256": "sha256:c3428ec15e3c46db043be9e72511f9603b4a3f6c437cab5020dab9eff340cdb1",
+      "deployment": "interface_only",
+      "name": "IProgrammableCompletedGraphAdoptionPreflightV1",
+      "source": "src/hookemon/IProgrammableCompletedGraphAdoptionCompatV1.sol",
+      "sourceSha256": "sha256:75fced51331e2cb262ab622d9b948a587a69e37944d46d0784feaf382d9b63e6"
+    }
+  ],
+  "packageName": "PROGRAMMABLE_COMPLETED_GRAPH_ADOPTION_COMPAT_V1",
+  "packageSchemaVersion": "1.4.0",
+  "preflightPolicy": {
+    "applicantTtl": false,
+    "candidateCurrentnessDigestInSignedAggregate": false,
+    "providerOutage": "PENDING_RETRYABLE_APPROVAL_UNCHANGED",
+    "requiredRuntimeMask": 511,
+    "sideEffects": false,
+    "signing": false
+  },
+  "receiptPolicy": {
+    "canonicalIdentifier": "stampLaunchId",
+    "immutableCore": true,
+    "lifecycle": [
+      "Prepared",
+      "Adopted",
+      "Finalized",
+      "Indexed",
+      "Published"
+    ],
+    "sourceIdentifier": "sourceLaunchId"
+  },
+  "repository": "https://github.com/0xprogrammable/programmable.git",
+  "schemaVersion": "programmable.completed-graph-adoption-contract-artifact-binding.v1",
+  "selectors": {
+    "activateLaunchGrantV1": "0x7bef77f0",
+    "adoptCompletedGraphV1": "0x4e0aca2e",
+    "adoptionPreflightReadbackV1": "0xc96dd959",
+    "advanceFinalityIndexingV1": "0xdab904dc",
+    "advanceSecurityPolicyEpochsV1": "0xd34530e0",
+    "canonicalReceiptCore": "0x0542d36f",
+    "computeAdoptionPreflightAggregateV1": "0x711d856f",
+    "computeAdoptionPreflightComponentLeafHash": "0xe0fb2b31",
+    "computeAdoptionPreflightGlobalHeadHash": "0xc0ff2fb5",
+    "computeAdoptionPreflightQueryHash": "0xc88ac9a5",
+    "computeAdoptionPreflightReadbackHash": "0x66dd2481",
+    "computeSourceCommitHash": "0x272bfb97",
+    "computeSourceTreeHash": "0x15e5418e",
+    "computeStampLaunchId": "0x5e75e08c",
+    "computeWinnerKeyHash": "0xa81966af",
+    "executionCurrentnessDigest": "0x6b7fdd60",
+    "launchGrantDigest": "0x71b1fd16",
+    "preflightComponentStateV1": "0x481b029d",
+    "preflightControlStateV1": "0x4b9956b9",
+    "preflightGrantReceiptStateV1": "0x93d83146",
+    "registerAdoptionProfileV1": "0xb35544a4",
+    "revokeExecutionCurrentnessV1": "0x2423590e",
+    "revokeLaunchGrantV1": "0xc53aaad3",
+    "setAdoptionProfileStatusV1": "0xd004d1b8",
+    "setGlobalAdoptionKillV1": "0xa4483ca4",
+    "sourceRevisionMatches": "0x03489345",
+    "validateAdoptionEnvelopeV1": "0xa7461668",
+    "validateLaunchGrantV1": "0xf6722097",
+    "validateProfileCapabilityV1": "0xb0742795",
+    "verifyCurrentStateV1": "0x46e6a40e"
+  },
+  "sourceIdentityReferents": {
+    "applicantRequest": {
+      "authorityFields": [
+        "applicantIdHash",
+        "reviewerAttestationHash"
+      ],
+      "mayReplaceExecutableSource": false,
+      "transitiveFields": [
+        "reviewAdmissionHash",
+        "requestReceiptHash"
+      ]
+    },
+    "carrierEvidenceProvenance": {
+      "authorityField": "builderEvidenceHash",
+      "mayReplaceApplicantRequestOrExecutableSource": false,
+      "referent": "C_OFFCHAIN_CARRIER_PROVENANCE_ONLY"
+    },
+    "executableEvidenceSource": {
+      "grantFields": [
+        "sourceRepositoryHash",
+        "sourceCommitHash",
+        "sourceTreeHash"
+      ],
+      "planFields": [
+        "sourceRepositoryHash",
+        "sourceCommitId",
+        "sourceTreeId"
+      ],
+      "rawGitObjectPaddingEquality": "FORBIDDEN",
+      "referent": "B_EXECUTABLE_AND_MEASURED_SOURCE_REVISION"
+    }
+  },
+  "tree": "8c5e0822d7ff256cad3d9e0350c980473d36aecc",
+  "typehashPreimages": {
+    "adoptionRequest": {
+      "constant": "ADOPTION_REQUEST_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionRequestV1(bytes32 abiEncodedRequestHash)"
+    },
+    "applicationIdentity": {
+      "constant": "APPLICATION_IDENTITY_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphApplicationIdentityV1(address account,bytes32 runtimeCodeHash,bytes32 configurationHash)"
+    },
+    "canonicalReceiptCore": {
+      "constant": "CANONICAL_RECEIPT_CORE_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphCanonicalReceiptCoreV1(bytes32 stampLaunchId,bytes32 sourceLaunchId,bytes32 launchGrantDigest,bytes32 launchGrantHash,bytes32 executionCurrentnessDigest,bytes32 contractPlanHash,bytes32 profileCapabilityHash,bytes32 adoptionRequestHash)"
+    },
+    "component": {
+      "constant": "COMPONENT_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionComponentV1(address account,uint8 kind,uint8 scope,uint8 deploymentKind,address deployer,uint64 createNonce,bytes32 create2Salt,bytes32 initCodeHash,bytes32 creationReceiptEvidenceHash,bytes32 externalCanonicalIdHash,bytes32 runtimeCodeHash,bytes32 configurationHash,bytes32 creationEvidenceHash)"
+    },
+    "componentConfiguration": {
+      "constant": "COMPONENT_CONFIGURATION_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionComponentConfigurationV1(address account,uint8 kind,uint8 scope,uint8 deploymentKind,address deployer,uint64 createNonce,bytes32 create2Salt,bytes32 initCodeHash,bytes32 creationReceiptEvidenceHash,bytes32 externalCanonicalIdHash,bytes32 runtimeCodeHash)"
+    },
+    "componentCreationEvidence": {
+      "constant": "COMPONENT_CREATION_EVIDENCE_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionCreationEvidenceV1(bytes32 sourceBindingHash,bytes32 componentBindingHash)"
+    },
+    "componentCreationEvidenceComponent": {
+      "constant": "COMPONENT_CREATION_EVIDENCE_COMPONENT_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionCreationEvidenceComponentV1(uint256 componentIndex,address account,uint8 kind,uint8 scope,uint8 deploymentKind,address deployer,uint64 createNonce,bytes32 create2Salt,bytes32 initCodeHash,bytes32 creationReceiptEvidenceHash,bytes32 externalCanonicalIdHash,bytes32 runtimeCodeHash)"
+    },
+    "componentCreationEvidenceSource": {
+      "constant": "COMPONENT_CREATION_EVIDENCE_SOURCE_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionCreationEvidenceSourceV1(uint256 chainId,address registry,bytes32 sourceRepositoryHash,bytes32 sourceCommitHash,bytes32 sourceTreeHash,bytes32 sourceLaunchId,bytes32 manifestHash,bytes32 policyHash,bytes32 applicantPlanArtifactHash,address launchWallet)"
+    },
+    "componentGraph": {
+      "constant": "COMPONENT_GRAPH_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionGraphV1(bytes32 componentsHash,bytes32 edgesHash)"
+    },
+    "configuration": {
+      "constant": "CONFIGURATION_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionConfigurationV1(bytes32 componentGraphHash,bytes32 componentConfigurationSetHash,bytes32 policyHash,bytes32 revenueBindingHash,address poolManager,bytes32 poolManagerRuntimeCodeHash,bytes32 poolKeyHash,bytes32 architectureResultHash)"
+    },
+    "configurationSet": {
+      "constant": "CONFIGURATION_SET_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionConfigurationSetV1(bytes32 orderedCommitmentsHash)"
+    },
+    "creationReceiptEvidence": {
+      "constant": "CREATION_RECEIPT_EVIDENCE_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphCreationReceiptEvidenceV1(bytes32 transactionHash,uint64 blockNumber,bytes32 blockHash,uint32 transactionIndex,address transactionSender,uint64 transactionSenderNonce,address transactionTo,uint256 transactionValueWei,bytes32 transactionInputHash,bool receiptSucceeded,address topLevelCreatedAddress,bytes32 internalCreationTraceHash,bytes32 finalityEvidenceHash,bytes32 dualProviderEvidenceHash)"
+    },
+    "edge": {
+      "constant": "EDGE_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionEdgeV1(uint8 fromIndex,uint8 toIndex,uint8 kind,bytes32 relationHash)"
+    },
+    "eip712Domain": {
+      "constant": "EIP712_DOMAIN_TYPEHASH",
+      "preimage": "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+    },
+    "executionCurrentness": {
+      "constant": "EXECUTION_CURRENTNESS_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphExecutionCurrentnessV1(bytes32 abiEncodedCurrentnessHash)"
+    },
+    "finalityIndexingReceipt": {
+      "constant": "FINALITY_INDEXING_RECEIPT_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphFinalityIndexingReceiptV1(bytes32 abiEncodedReceiptWithoutHash)"
+    },
+    "grantStateHead": {
+      "constant": "GRANT_STATE_HEAD_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphGrantStateHeadV1(bytes32 grantDigest,bytes32 grantHash,bytes32 stampLaunchId,uint8 status)"
+    },
+    "launchGrant": {
+      "constant": "LAUNCH_GRANT_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphLaunchGrantV1(bytes32 bindingAHash,bytes32 bindingBHash,bytes32 reviewHash)"
+    },
+    "launchGrantBindingA": {
+      "constant": "LAUNCH_GRANT_BINDING_A_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphLaunchGrantBindingAV1(uint256 chainId,address registry,address launchWallet,bytes32 applicantIdHash,bytes32 profileKey,bytes32 profileDescriptorHash,bytes32 exactContractBindingHash,bytes32 contractPlanHash,bytes32 applicantPlanArtifactHash,bytes32 adoptionIntentHash,uint8 executionReadiness,bytes32 executionReadinessConstraintHash)"
+    },
+    "launchGrantBindingB": {
+      "constant": "LAUNCH_GRANT_BINDING_B_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphLaunchGrantBindingBV1(uint8 executionTimeConstraint,bytes32 executionTimeConstraintEvidenceHash,bytes32 sourceRepositoryHash,bytes32 sourceCommitHash,bytes32 sourceTreeHash,bytes32 sourceLaunchId,bytes32 componentGraphHash,bytes32 exactRuntimeSetHash,bytes32 componentConfigurationSetHash,bytes32 revenueBindingHash,bytes32 resultHash)"
+    },
+    "launchGrantReview": {
+      "constant": "LAUNCH_GRANT_REVIEW_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphLaunchGrantReviewV1(bytes32 builderEvidenceHash,bytes32 reviewerAttestationHash,bytes32 securityControlHeadHash,bytes32 securityEpochHash,bytes32 policyHash,bytes32 policyEpochHash,bytes32 reviewGenerationHash,uint64 securityEpoch,uint64 policyEpoch,uint64 reviewGeneration,bytes32 antiReplayNonce,bytes32 winnerKeyHash)"
+    },
+    "plan": {
+      "constant": "PLAN_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionPlanV1(bytes32 abiEncodedPlanHash)"
+    },
+    "preflightAuthorityRoles": {
+      "constant": "PREFLIGHT_AUTHORITY_ROLES_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionPreflightAuthorityRolesV1(address reviewerAuthority,bytes32 reviewerAuthorityRuntimeCodeHash,address governance,bytes32 governanceRuntimeCodeHash,address finalityAuthority,bytes32 finalityAuthorityRuntimeCodeHash,address indexerAuthority,bytes32 indexerAuthorityRuntimeCodeHash)"
+    },
+    "preflightBaseRuntimeBinding": {
+      "constant": "PREFLIGHT_BASE_RUNTIME_BINDING_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionPreflightBaseRuntimeBindingV1(uint256 chainId,address registry,bytes32 authorityRolesHash,bytes32 coreDependenciesHash,bytes32 dependencyBehaviorEvidenceHash)"
+    },
+    "preflightComponentLeaf": {
+      "constant": "PREFLIGHT_COMPONENT_LEAF_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionPreflightComponentLeafV1(uint8 componentIndex,address component,uint8 componentScope,bytes32 expectedSharedIdentityHash,bytes32 expectedRuntimeCodeHash,bytes32 actualRuntimeCodeHash,bytes32 exclusiveComponentOccupantStampLaunchId,bytes32 sharedComponentIdentityHash)"
+    },
+    "preflightCoreDependencies": {
+      "constant": "PREFLIGHT_CORE_DEPENDENCIES_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionPreflightCoreDependenciesV1(address codec,bytes32 codecRuntimeCodeHash,address validator,bytes32 validatorRuntimeCodeHash,address preflight,bytes32 preflightRuntimeCodeHash)"
+    },
+    "preflightGlobalHead": {
+      "constant": "PREFLIGHT_GLOBAL_HEAD_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionPreflightGlobalHeadV1(bytes32 queryHash,bytes32 runtimeControlHash,bytes32 lifecycleHash,bytes32 reservationHash)"
+    },
+    "preflightLifecycle": {
+      "constant": "PREFLIGHT_LIFECYCLE_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionPreflightLifecycleV1(uint8 profileStatus,bytes32 profileCapabilityHash,bytes32 grantStateHeadHash,bytes32 winnerNonceOccupantGrantDigest,bytes32 winnerKeyOccupantGrantDigest,bool currentnessNonceUsed,uint8 receiptStatus,bytes32 receiptCoreHash,bytes32 finalityIndexingReceiptHash)"
+    },
+    "preflightProfileRuntimeBinding": {
+      "constant": "PREFLIGHT_PROFILE_RUNTIME_BINDING_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionPreflightProfileRuntimeBindingV1(address stateVerifier,bytes32 stateVerifierRuntimeCodeHash,uint256 canonicalPoolManagerChainId,address canonicalPoolManager,bytes32 canonicalPoolManagerRuntimeCodeHash)"
+    },
+    "preflightQuery": {
+      "constant": "PREFLIGHT_QUERY_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionPreflightQueryV1(bytes32 abiEncodedQueryHash)"
+    },
+    "preflightReadback": {
+      "constant": "PREFLIGHT_READBACK_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionPreflightReadbackV1(bytes32 globalReadbackHeadHash,bytes32 orderedComponentLeavesHash)"
+    },
+    "preflightReservation": {
+      "constant": "PREFLIGHT_RESERVATION_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionPreflightReservationV1(bytes32 graphOccupantStampLaunchId,bytes32 exclusiveTokenOccupantStampLaunchId,bytes32 poolOccupantStampLaunchId)"
+    },
+    "preflightRuntimeAuthorityBinding": {
+      "constant": "PREFLIGHT_RUNTIME_AUTHORITY_BINDING_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionPreflightRuntimeAuthorityBindingV1(bytes32 baseRuntimeBindingHash,bytes32 profileRuntimeBindingHash)"
+    },
+    "preflightRuntimeControl": {
+      "constant": "PREFLIGHT_RUNTIME_CONTROL_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionPreflightRuntimeControlV1(uint256 chainId,address registry,bytes32 runtimeAuthorityBindingHash,uint16 liveRuntimeMask,bytes32 dependencyBehaviorEvidenceHash,bytes32 securityControlHeadHash,uint64 securityEpoch,bytes32 securityEpochHash,uint64 policyEpoch,bytes32 policyEpochHash,bytes32 reviewGenerationHash,uint64 reviewGeneration,bool globalAdoptionKilled)"
+    },
+    "profileCapability": {
+      "constant": "PROFILE_CAPABILITY_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionProfileCapabilityV1(bytes32 abiEncodedCapabilityHash)"
+    },
+    "profileKey": {
+      "constant": "PROFILE_KEY_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionProfileV1(bytes32 profileDescriptorHash,bytes32 routeSchemaHash)"
+    },
+    "result": {
+      "constant": "RESULT_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionResultV1(bytes32 componentGraphHash,bytes32 configurationHash,bytes32 architectureResultHash,bytes32 poolResultHash,bytes32 deploymentLineageHash)"
+    },
+    "runtimeSet": {
+      "constant": "RUNTIME_SET_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionRuntimeSetV1(bytes32 orderedCommitmentsHash)"
+    },
+    "sharedComponentIdentity": {
+      "constant": "SHARED_COMPONENT_IDENTITY_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphSharedComponentIdentityV1(address account,uint8 kind,uint8 deploymentKind,address deployer,uint64 createNonce,bytes32 create2Salt,bytes32 initCodeHash,bytes32 creationReceiptEvidenceHash,bytes32 externalCanonicalIdHash,bytes32 runtimeCodeHash,bytes32 intrinsicConfigurationHash)"
+    },
+    "sourceCommit": {
+      "constant": "SOURCE_COMMIT_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphSourceCommitV1(bytes20 gitObjectId)"
+    },
+    "sourceTree": {
+      "constant": "SOURCE_TREE_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphSourceTreeV1(bytes20 gitObjectId)"
+    },
+    "stampLaunchId": {
+      "constant": "STAMP_LAUNCH_ID_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionStampLaunchIdV1(uint256 chainId,address registry,address launchWallet,bytes32 profileKey,bytes32 contractPlanHash,bytes32 sourceLaunchId)"
+    },
+    "winnerKey": {
+      "constant": "WINNER_KEY_TYPEHASH",
+      "preimage": "ProgrammableCompletedGraphAdoptionWinnerKeyV1(uint256 chainId,address registry,address launchWallet,bytes32 applicantIdHash,bytes32 profileKey,bytes32 profileDescriptorHash,bytes32 exactContractBindingHash,bytes32 sourceRepositoryHash,bytes32 sourceCommitHash,bytes32 sourceTreeHash,bytes32 sourceLaunchId,bytes32 contractPlanHash,bytes32 applicantPlanArtifactHash,bytes32 componentGraphHash,bytes32 adoptionIntentHash,uint64 securityEpoch,bytes32 securityEpochHash,uint64 policyEpoch,bytes32 policyEpochHash,uint64 reviewGeneration,bytes32 reviewGenerationHash)"
+    }
+  },
+  "typehashes": {
+    "adoptionRequest": "0xd720a3bb8eaa496619389814b1f5089383d8120cb782f8f8de6a543ae7d65282",
+    "applicationIdentity": "0x53bafaa1f1263dd1de9b54d09d55214a7ce1515141054d4c9d6d16bdfc34d57c",
+    "canonicalReceiptCore": "0xfbc43d14cb32d75fb719805f1b8f5c17519cf9410710ec067d8684b57a646491",
+    "component": "0xcdd03ae75671e4867e6736a6cf24db2bf1aaa356a3a58e1e45a08b648e09af06",
+    "componentConfiguration": "0x1253f0a73a66a5829720d0c57e61e545201c77fcabfb2c1a4440f57c9ec44c3a",
+    "componentCreationEvidence": "0x8e86028956a4e6bb49c599f177ad98ba38ee3bda010b2be4f0c1bb0f56efc8b8",
+    "componentCreationEvidenceComponent": "0xf8363305f8a480f9d253a545605a1a155d3828ba40319347d57a1b5c3f8d969c",
+    "componentCreationEvidenceSource": "0xec9ff60ed640455bd96e6a1d2e1f73413301f333661f6b3b929319e96867ab0b",
+    "componentGraph": "0x12660ca1683041a564455ceef1c1cce5d8be7c40fdb30b82094a1f28f6229e63",
+    "configuration": "0x621f11ade2adc9295784f1796d7d4f0a2ec6cff21f1434f2996b47c8e269a1fd",
+    "configurationSet": "0x8bf0533d8cc244c8aa659dce00c39f372cd19c6e84bd606e1c67378a5fc05463",
+    "creationReceiptEvidence": "0xe98d854764395c75afe4d6f0c7a59ed13212fcc9b8eada07a7ab55ce11e7e530",
+    "edge": "0x6b1c7fd87bcd073750ba10f3065f65834ab49e2c15966de1f932fbeb812ddb1a",
+    "eip712Domain": "0x8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f",
+    "executionCurrentness": "0x80da2016dad2177f0f808bda1cd467a9b4fc95293a112c7e49a7444d861a88db",
+    "finalityIndexingReceipt": "0xa2aedbb59f3b10bfe02c86eb231f70247312a652def209b803045e4ae2a65343",
+    "grantStateHead": "0x8a520d97e0f1b1a0d51f6b781b11b6c579d8bb18382df193606c0b83b30c1b7a",
+    "launchGrant": "0x3b56d205c1923d957a4baf5345745b739502f4a61c6c9c702b86f3bf888cb21a",
+    "launchGrantBindingA": "0x6373614d13166df962b9ca91b7de99c21e0771d33aec15051550c9aa184dcec2",
+    "launchGrantBindingB": "0x868b8ac64fe6e7697770adb355fe0641961e7842b4f63486a14d25015cf4b4ac",
+    "launchGrantReview": "0xd4ece64261d615a8f4898a5b37753589a42dd09302ca03226e5731e5675bf122",
+    "plan": "0x805cdb8d5243266cd4de117238139815637ae34b43729a8e6414cf458404b2bb",
+    "preflightAuthorityRoles": "0xc99ae98599426067f53a7bfe1a2a0a25fe2c820f003793fb5960ff71aa82473b",
+    "preflightBaseRuntimeBinding": "0xc4ee4c70e1f16cf3b57ad669a86b8e38de4efcc7a1ada83d00b5b57634a50b3d",
+    "preflightComponentLeaf": "0x3f43d44bb443a48c7bb43bcaf77f31cd72cca0cad2dda7524b0635157ce252f9",
+    "preflightCoreDependencies": "0x7ddf0274f2363b9d004915645e62d8b4305e5b76c53bb86dd9e29a69ab9f9644",
+    "preflightGlobalHead": "0xdee47b7e5a0efe12953554073a6a17189af47aa9d8a8850417afc4e66e821139",
+    "preflightLifecycle": "0x7c7dca0a5c187e4f351f9b64042e6c481cf2bb1098c61db98ebb10fd2d8b68db",
+    "preflightProfileRuntimeBinding": "0xe0aacb28c0cc4eaa45bbd334b05ad2585658b92d4a01f19c6af2bd9016de99ed",
+    "preflightQuery": "0x1f3f5062fa7410c2f889bdbab98c86b0059a5a1670845167541edbdcae27b8aa",
+    "preflightReadback": "0xe158a2f1ef93fdb06a11589ee27fbfd57218c0325fde089ca4ee45832daeab0e",
+    "preflightReservation": "0xa2ea343354998fbef45ee6b687dbe26bbfe21d57a0cdc0b13dd4852850f610a7",
+    "preflightRuntimeAuthorityBinding": "0x98c82081678d57ea993f328a2ba231ba9677f155689a88c13948064a949a06f2",
+    "preflightRuntimeControl": "0x8f809ecf56042f140caa365c8e024b29949dcb9e77b3c485a19643241c7e89bb",
+    "profileCapability": "0x6d7ab9935123d92d1e8635f5abb4c796e34a83de7cfd44e85499783a54b593e6",
+    "profileKey": "0x9a25d44486e0f5da0c0cc7d5056ed14417af084bed8a0423240224b21873c303",
+    "result": "0x1ba6c743524c56589b68430a5ca12d963859b02bb84811cc1a5b5b2d2bcc2357",
+    "runtimeSet": "0x5280c798edc7ae0d7d38c3ba133d94c61a2320b513bc6285c1feb0812308319d",
+    "sharedComponentIdentity": "0xaf5d15890cdece2279c56c3eb2cb55ebd231ad6b52bf08afe8d12edaf6aa3c14",
+    "sourceCommit": "0x6221b4052987e4949872d24c485f8a71e43870d23253337dd9790a0d1b1eea77",
+    "sourceTree": "0x4502ffc7dd7543b715f1a350448998f257045a66ed8d453f207529cc903318c0",
+    "stampLaunchId": "0x09a20fe5a6d4f9a91cda72ce66220db7fa7e040d190f66422d99c4e7dab72f13",
+    "winnerKey": "0x170be498006d706782775a51221ef03d8caa6029d211c1ab147929da5587e46d"
+  }
+}

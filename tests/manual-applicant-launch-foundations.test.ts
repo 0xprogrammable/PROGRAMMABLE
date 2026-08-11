@@ -12,6 +12,7 @@ import { LaunchModelPicker } from "../components/launch-entry";
 import {
   acquireManualRouterWebsiteSessionV1,
   applicantIdentityRequirementForLoginV1,
+  manualRouterRetainsKnownApprovalV1,
   manualRouterApplicantDiscoveryReady,
   runManualRouterRequestWithFreshSessionV1,
 } from "../components/manual-applicant-launch";
@@ -58,7 +59,11 @@ import {
   parseManualRouterPersistedAttemptStorageV1,
   reconcileManualRouterBrowserAttemptV1,
 } from "../lib/custom-launch/manual-router-browser-state-v1";
-import { listManualRouterApplicantSubmissionsVersionedV2 } from
+import {
+  listManualRouterApplicantSubmissionsVersionedV2,
+  MANUAL_ROUTER_LAUNCH_PREPARATION_REFRESH_REQUIRED_V1,
+  ManualRouterWebsiteRequestErrorV1,
+} from
   "../lib/custom-launch/manual-router-client-v1";
 import {
   createManualRouterApplicantAuthenticatorFromBoundaryV1,
@@ -182,6 +187,104 @@ describe("manual Applicant Privy hydration", () => {
       code: "applicant_authentication_required",
     });
     expect(request).not.toHaveBeenCalled();
+  });
+
+  it("rejects a refreshed session for the wrong numeric principal or wallet", async () => {
+    const requirement = {
+      githubUserId: "155705664",
+      githubLogin: "jesse-stahl",
+      launchWallet: WALLET,
+    } as const;
+    for (const session of [
+      {
+        accessToken: "access-token",
+        identityToken: "identity-token",
+        privyUserId: "did:privy:wrong-github",
+        githubUserId: "987654321",
+        githubLogin: "jesse-stahl",
+        launchWallet: WALLET,
+      },
+      {
+        accessToken: "access-token",
+        identityToken: "identity-token",
+        privyUserId: "did:privy:wrong-wallet",
+        githubUserId: "155705664",
+        githubLogin: "jesse-stahl",
+        launchWallet: OTHER_WALLET,
+      },
+    ] as const) {
+      const refreshApplicantSession = vi.fn(async () => session);
+      await expect(acquireManualRouterWebsiteSessionV1({
+        refreshApplicantSession,
+        requirement,
+      })).rejects.toMatchObject({
+        status: 403,
+        code: "applicant_identity_changed",
+      });
+      expect(refreshApplicantSession).toHaveBeenCalledWith(requirement);
+    }
+  });
+
+  it("retains known approval for auth and provider recovery but not identity drift", () => {
+    expect(manualRouterRetainsKnownApprovalV1(
+      new ManualRouterWebsiteRequestErrorV1(
+        401,
+        "applicant_authentication_required",
+        "Reconnect GitHub",
+        false,
+      ),
+    )).toBe(true);
+    expect(manualRouterRetainsKnownApprovalV1(
+      new ManualRouterWebsiteRequestErrorV1(
+        503,
+        "provider_unavailable",
+        "Try again",
+        true,
+      ),
+    )).toBe(true);
+    expect(manualRouterRetainsKnownApprovalV1(
+      new TypeError("network unavailable"),
+    )).toBe(true);
+    expect(manualRouterRetainsKnownApprovalV1(
+      new ManualRouterWebsiteRequestErrorV1(
+        403,
+        "applicant_identity_changed",
+        "Reconnect the approved account",
+        false,
+      ),
+    )).toBe(false);
+  });
+
+  it("maps legacy transport expiry to a calm launch preparation refresh", async () => {
+    const fetchV1 = vi.fn(async () => Response.json({
+      code: "permit_expired_reissue_required",
+      retryable: false,
+    }, { status: 409 }));
+    vi.stubGlobal("fetch", fetchV1);
+    let failure: unknown;
+    try {
+      await listManualRouterApplicantSubmissionsVersionedV2({
+        session: {
+          accessToken: "access-current",
+          identityToken: "identity-current",
+        },
+        launchWallet: WALLET,
+      });
+    } catch (caught) {
+      failure = caught;
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(fetchV1).toHaveBeenCalledOnce();
+    expect(failure).toBeInstanceOf(ManualRouterWebsiteRequestErrorV1);
+    expect(failure).toMatchObject({
+      status: 409,
+      code: MANUAL_ROUTER_LAUNCH_PREPARATION_REFRESH_REQUIRED_V1,
+      message: "Launch setup is no longer current. Refresh and try again",
+      retryable: true,
+    });
+    expect((failure as Error).message).not.toMatch(/permit|signature|expir|hour/iu);
   });
 
   it("refreshes independently before list and resolve without replaying either request", async () => {
@@ -2052,7 +2155,9 @@ describe("manual Applicant browser contract", () => {
     expect(component).not.toMatch(/FileReader|readJsonFile|importBundle|importPreparation/u);
     expect(component).not.toContain("<main");
     expect(component).toContain('aria-labelledby="applicant-workspace-title"');
-    expect(component).toContain("complete: Boolean(githubConnected && selected)");
+    expect(component).toContain(
+      "complete: Boolean(githubConnected && exactGithubPrincipal && selected)",
+    );
     expect(component).toContain(">Link GitHub</button>");
     expect(component).toContain(">Connect wallet</button>");
     expect(component).toContain("titleRef.current?.focus()");
@@ -2075,7 +2180,16 @@ describe("manual Applicant browser contract", () => {
       .toContain("resolveManualRouterApplicantSubmissionV2(resolveRequest)");
     const durableArm = component.indexOf("persistAttempt(pending)", freshResolve);
     const walletSend = component.indexOf("await sendBrowserWalletAction", freshResolve);
+    const finalCurrentnessRefresh = component.indexOf(
+      "// Re-prove the same refreshed Privy session",
+      freshResolve,
+    );
     expect(freshResolve).toBeGreaterThan(-1);
+    expect(finalCurrentnessRefresh).toBeGreaterThan(freshResolve);
+    expect(component.indexOf(
+      "await getSession(currentRequirement)",
+      finalCurrentnessRefresh,
+    )).toBeLessThan(durableArm);
     expect(durableArm).toBeGreaterThan(freshResolve);
     expect(walletSend).toBeGreaterThan(durableArm);
     expect(component.slice(walletSend, component.indexOf(");", walletSend)))
@@ -2083,6 +2197,11 @@ describe("manual Applicant browser contract", () => {
     expect(component.indexOf("persistAttempt(submitted)")).toBeLessThan(
       component.indexOf("await reportSubmittedTransaction(submitted)"),
     );
+    expect(component).toContain("await reauthorizeGithub()");
+    expect(component).not.toContain("<span>Available until");
+    expect(component).not.toContain("Safe-signed permit");
+    expect(component).not.toContain("Fresh signature");
+    expect(component).not.toContain("signing team");
 
     const entry = readFileSync(
       join(process.cwd(), "components/launch-entry.tsx"),

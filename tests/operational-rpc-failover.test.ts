@@ -1,0 +1,149 @@
+import { describe, expect, it, vi } from "vitest";
+import {
+  HttpRequestError,
+  RpcRequestError,
+  TimeoutError,
+} from "viem";
+
+vi.mock("server-only", () => ({}));
+
+import {
+  isOperationalRpcFailoverEligible,
+  OperationalRpcUnavailableError,
+  safeOperationalRpcError,
+  withOperationalRpcFailover,
+} from "../lib/onchain/operational-rpc-failover.server";
+import type { ReadyOnchainDeployment } from "../lib/onchain/types";
+
+const deployment = {
+  environment: "production",
+  releaseVersion: "classic-v2",
+  chainId: 1,
+  status: "ready",
+  launcher: "0x1111111111111111111111111111111111111111",
+  feeHook: "0x2222222222222222222222222222222222222222",
+  launcherRuntimeCodeHash: `0x${"11".repeat(32)}`,
+  feeHookRuntimeCodeHash: `0x${"22".repeat(32)}`,
+  deploymentBlock: 1n,
+  stateView: "0x3333333333333333333333333333333333333333",
+  stateViewRuntimeCodeHash: `0x${"33".repeat(32)}`,
+  rpcUrl: "https://primary.example/rpc-key",
+  rpcUrlSecondary: "https://secondary.example/rpc-key",
+  confirmations: 12n,
+  logBlockRange: 5_000n,
+} satisfies ReadyOnchainDeployment;
+
+function httpFailure(status: number | undefined, url = deployment.rpcUrl) {
+  return new HttpRequestError({
+    status,
+    url,
+    body: { method: "eth_blockNumber" },
+  });
+}
+
+function rpcFailure(message: string, code = -32_000) {
+  return new RpcRequestError({
+    body: { method: "eth_blockNumber" },
+    error: { code, message },
+    url: deployment.rpcUrl,
+  });
+}
+
+describe("operational RPC failover", () => {
+  it("keeps a healthy primary read byte-for-byte and never calls secondary", async () => {
+    const read = vi.fn(async (candidate: ReadyOnchainDeployment) => ({
+      blockNumber: "25725412",
+      blockHash: `0x${"ab".repeat(32)}`,
+      endpoint: candidate.rpcUrl,
+      secondary: candidate.rpcUrlSecondary,
+    }));
+
+    await expect(
+      withOperationalRpcFailover(deployment, read),
+    ).resolves.toEqual({
+      blockNumber: "25725412",
+      blockHash: `0x${"ab".repeat(32)}`,
+      endpoint: deployment.rpcUrl,
+      secondary: null,
+    });
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the fixed secondary once after primary HTTP 429", async () => {
+    const calls: string[] = [];
+    const read = vi.fn(async (candidate: ReadyOnchainDeployment) => {
+      calls.push(candidate.rpcUrl);
+      if (candidate.rpcUrl === deployment.rpcUrl) throw httpFailure(429);
+      return "secondary-ready";
+    });
+
+    await expect(
+      withOperationalRpcFailover(deployment, read),
+    ).resolves.toBe("secondary-ready");
+    expect(calls).toEqual([
+      deployment.rpcUrl,
+      deployment.rpcUrlSecondary,
+    ]);
+  });
+
+  it("recognizes explicit monthly capacity and transport timeouts", () => {
+    expect(
+      isOperationalRpcFailoverEligible(
+        rpcFailure("monthly_capacity_exceeded"),
+      ),
+    ).toBe(true);
+    expect(
+      isOperationalRpcFailoverEligible(
+        new TimeoutError({
+          body: { method: "eth_getLogs" },
+          url: deployment.rpcUrl,
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it.each([
+    httpFailure(400),
+    rpcFailure("execution reverted"),
+    new Error("Pool identity mismatch"),
+  ])("does not rotate providers for a non-transport read error", async (error) => {
+    const read = vi.fn(async () => {
+      throw error;
+    });
+
+    await expect(
+      withOperationalRpcFailover(deployment, read),
+    ).rejects.toBe(error);
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns one safe unavailable error when both configured RPCs fail", async () => {
+    const read = vi.fn(async (candidate: ReadyOnchainDeployment) => {
+      throw httpFailure(
+        candidate.rpcUrl === deployment.rpcUrl ? 429 : 503,
+        candidate.rpcUrl,
+      );
+    });
+
+    const promise = withOperationalRpcFailover(deployment, read);
+    await expect(promise).rejects.toBeInstanceOf(
+      OperationalRpcUnavailableError,
+    );
+    await expect(promise).rejects.toThrow(
+      "Operational RPC reads are temporarily unavailable",
+    );
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps endpoint URLs and request bodies out of telemetry", () => {
+    const summary = JSON.stringify(
+      safeOperationalRpcError(httpFailure(429)),
+    );
+
+    expect(summary).toBe(
+      '{"name":"HttpRequestError","category":"rpc-unavailable"}',
+    );
+    expect(summary).not.toContain("primary.example");
+    expect(summary).not.toContain("eth_blockNumber");
+  });
+});

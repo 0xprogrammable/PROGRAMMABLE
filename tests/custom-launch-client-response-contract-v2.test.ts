@@ -14,10 +14,10 @@ const APPROVED_PLAN_PROVIDER_RECIPIENT_FIXTURE =
 
 function clientFor(value: unknown, status = 200) {
   return createCustomLaunchWebsiteClientV2({
-    session: {
+    getSession: async () => ({
       accessToken: "access-token-value",
       identityToken: "identity-token-value",
-    },
+    }),
     fetch: vi.fn(async () => new Response(JSON.stringify(value), {
       status,
       headers: { "content-type": "application/json" },
@@ -578,10 +578,10 @@ describe("custom launch client response contracts", () => {
       });
     });
     const client = createCustomLaunchWebsiteClientV2({
-      session: {
+      getSession: async () => ({
         accessToken: "access-token-value",
         identityToken: "identity-token-value",
-      },
+      }),
       fetch: fetchV2 as typeof fetch,
     });
     await expect(client.launchAuthorityRefresh(
@@ -617,10 +617,10 @@ describe("custom launch client response contracts", () => {
       }),
     ]) {
       const client = createCustomLaunchWebsiteClientV2({
-        session: {
+        getSession: async () => ({
           accessToken: "access-token-value",
           identityToken: "identity-token-value",
-        },
+        }),
         fetch: vi.fn(async () => response) as typeof fetch,
       });
       await expectContractMismatch(client.profile({

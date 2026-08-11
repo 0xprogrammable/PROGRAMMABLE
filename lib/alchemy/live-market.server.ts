@@ -13,6 +13,7 @@ import {
   marketCapNativeWadFromSqrtPriceX96,
   nativePriceWadFromSqrtPriceX96,
 } from "../onchain/math";
+import { withOperationalRpcFailover } from "../onchain/operational-rpc-failover.server";
 import type { ExploreSnapshot, ReadyOnchainDeployment } from "../onchain/types";
 import { usdValueFromWei } from "../onchain/usd";
 import {
@@ -157,14 +158,16 @@ function applyLivePoolState(
   state: LivePoolState | null,
   snapshot: ExploreSnapshot,
 ) {
-  if (!state || !validPoolStateToken(token)) {
-    return token;
-  }
+  if (!validPoolStateToken(token)) return token;
+  // Preserve a last-known-good valuation with its original indexed block. The
+  // chart consumer treats that provenance as stale/partial and never relabels
+  // it as the current snapshot while the live read is unavailable.
+  if (!state) return token;
 
   const currentState = {
-    ...(token.launchStampProvenance
-      ? withoutNativeValuation(token)
-      : token),
+    // A successful live read starts a new, single-block valuation set. Never
+    // combine its block provenance with older indexed or price-API values.
+    ...withoutNativeValuation(token),
     currentTick: state.tick,
     activeLiquidity: state.activeLiquidity.toString(),
     protocolFeePips: state.protocolFeePips,
@@ -239,37 +242,39 @@ export async function enrichTokensWithAlchemyPoolState(input: {
   }
 
   if (missing.length > 0) {
-    const client = createPublicClient({
-      chain: input.deployment.chainId === 1 ? mainnet : sepolia,
-      transport: http(input.deployment.rpcUrl, {
-        retryCount: 2,
-        timeout: 12_000,
-      }),
-    });
-    const batch = Promise.all([
-      client.multicall({
-        allowFailure: true,
-        blockNumber,
-        contracts: missing.map((token) => ({
-          address: input.deployment.stateView,
-          abi: stateViewReadAbi,
-          functionName: "getSlot0" as const,
-          args: [token.poolId as Hex],
-        })),
-      }),
-      client.multicall({
-        allowFailure: true,
-        blockNumber,
-        contracts: missing.map((token) => ({
-          address: input.deployment.stateView,
-          abi: stateViewReadAbi,
-          functionName: "getLiquidity" as const,
-          args: [token.poolId as Hex],
-        })),
-      }),
-    ])
-      .then(([slot0Results, liquidityResults]) =>
-        missing.map((_, index): LivePoolState | null => {
+    const batch = withOperationalRpcFailover(
+      input.deployment,
+      async (rpcDeployment) => {
+        const client = createPublicClient({
+          chain: rpcDeployment.chainId === 1 ? mainnet : sepolia,
+          transport: http(rpcDeployment.rpcUrl, {
+            retryCount: 1,
+            timeout: 12_000,
+          }),
+        });
+        const [slot0Results, liquidityResults] = await Promise.all([
+          client.multicall({
+            allowFailure: true,
+            blockNumber,
+            contracts: missing.map((token) => ({
+              address: rpcDeployment.stateView,
+              abi: stateViewReadAbi,
+              functionName: "getSlot0" as const,
+              args: [token.poolId as Hex],
+            })),
+          }),
+          client.multicall({
+            allowFailure: true,
+            blockNumber,
+            contracts: missing.map((token) => ({
+              address: rpcDeployment.stateView,
+              abi: stateViewReadAbi,
+              functionName: "getLiquidity" as const,
+              args: [token.poolId as Hex],
+            })),
+          }),
+        ]);
+        return missing.map((_, index): LivePoolState | null => {
           const slot0 = slot0Results[index];
           const liquidity = liquidityResults[index];
           if (
@@ -288,8 +293,9 @@ export async function enrichTokensWithAlchemyPoolState(input: {
             activeLiquidity: liquidity.result,
             blockNumber,
           };
-        }),
-      )
+        });
+      },
+    )
       .catch(() => missing.map(() => null));
 
     missing.forEach((token, index) => {

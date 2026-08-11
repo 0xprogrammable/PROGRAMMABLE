@@ -94,3 +94,22 @@ regexes = [
   '''EXACT_SHARDS_(?:TOKEN_SALT|TOKEN|TOKEN_RUNTIME_HASH)_V1\s*=\s*"0x[0-9a-fA-F]{64}"''',
   '''(?i)0x50d17eaaeb52c66e64b918385abf6523fdae57cf''',
 ]
+
+[[allowlists]]
+description = "Router V3 vendored artifacts contain public bytes32 profile and winner bindings"
+condition = "AND"
+regexTarget = "match"
+paths = [
+  '''lib/vendor/router-v2-shared-lifecycle-v3/artifacts/router-v2-shared-lifecycle-v3/completed-graph-contract-artifact-binding\.v1\.json''',
+  '''lib/vendor/router-v2-shared-lifecycle-v3/artifacts/router-v2-shared-lifecycle-v3/shared-target-profile-catalog\.v3\.json''',
+  '''lib/vendor/router-v2-shared-lifecycle-v3/artifacts/router-v2-shared-lifecycle-v3/completed-graph-contract-formulas\.v3\.json''',
+  '''lib/vendor/router-v2-shared-lifecycle-v3/artifacts/router-v2-shared-lifecycle-v3/router-v2-shared-lifecycle-portable\.v3\.mjs''',
+  '''lib/vendor/router-v2-shared-lifecycle-v3/artifacts/router-v2-shared-lifecycle-v3/router-v2-shared-lifecycle-portable\.v3\.mjs\.map''',
+  '''lib/vendor/router-v2-shared-lifecycle-v3/schemas/completed-graph-adoption-contract-artifact-binding\.v1\.schema\.json''',
+  '''lib/vendor/router-v2-shared-lifecycle-v3/schemas/router-v2-launch-profile-catalog\.v3\.schema\.json''',
+  '''lib/vendor/router-v2-shared-lifecycle-v3/schemas/router-v2-launch-profile-descriptor\.v3\.schema\.json''',
+]
+regexes = [
+  '''(?:profileKey|winnerKey|winnerKeyHash|winnerKeyOccupantGrantDigest|poolKeyHash|observedProfileKey|contractWinnerKeyHash)["']?\s*[:=]\s*["']?0x[0-9a-fA-F]{64}''',
+  '''(?:profileKey|winnerKey|winnerKeyHash|winnerKeyOccupantGrantDigest|poolKeyHash|observedProfileKey|contractWinnerKeyHash):\s*EvmBytes32V1''',
+]

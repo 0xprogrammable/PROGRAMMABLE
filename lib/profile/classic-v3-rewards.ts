@@ -69,6 +69,208 @@ type FetchLike = (
   init?: RequestInit,
 ) => Promise<Pick<Response, "ok" | "status" | "json">>;
 
+export type ClassicV3ProfileReadErrorKind = "temporary" | "integrity";
+
+export type ClassicV3ProfileApiError =
+  | Readonly<{
+      status: "error";
+      error: Readonly<{
+        kind: "temporary";
+        code: "classic_profile_temporarily_unavailable";
+        message: "Classic rewards are temporarily unavailable";
+      }>;
+    }>
+  | Readonly<{
+      status: "error";
+      error: Readonly<{
+        kind: "integrity";
+        code: "classic_profile_integrity_conflict";
+        message: "Classic reward data could not be verified";
+      }>;
+    }>;
+
+export function classicV3ProfileApiError(
+  kind: ClassicV3ProfileReadErrorKind,
+): ClassicV3ProfileApiError {
+  return kind === "integrity"
+    ? {
+        status: "error",
+        error: {
+          kind,
+          code: "classic_profile_integrity_conflict",
+          message: "Classic reward data could not be verified",
+        },
+      }
+    : {
+        status: "error",
+        error: {
+          kind,
+          code: "classic_profile_temporarily_unavailable",
+          message: "Classic rewards are temporarily unavailable",
+        },
+      };
+}
+
+function parseClassicV3ProfileApiError(
+  value: unknown,
+): ClassicV3ProfileApiError | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const response = value as Record<string, unknown>;
+  if (
+    response.status !== "error" ||
+    !response.error ||
+    typeof response.error !== "object" ||
+    Array.isArray(response.error)
+  ) {
+    return null;
+  }
+  const error = response.error as Record<string, unknown>;
+  if (
+    error.kind === "integrity" &&
+    error.code === "classic_profile_integrity_conflict" &&
+    error.message === "Classic reward data could not be verified"
+  ) {
+    return classicV3ProfileApiError("integrity");
+  }
+  if (
+    error.kind === "temporary" &&
+    error.code === "classic_profile_temporarily_unavailable" &&
+    error.message === "Classic rewards are temporarily unavailable"
+  ) {
+    return classicV3ProfileApiError("temporary");
+  }
+  return null;
+}
+
+export class ClassicV3ProfileReadError extends Error {
+  readonly kind: ClassicV3ProfileReadErrorKind;
+
+  constructor(
+    kind: ClassicV3ProfileReadErrorKind,
+    message: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = "ClassicV3ProfileReadError";
+    this.kind = kind;
+  }
+}
+
+type ClassicV3ProfileFetchOptions = Readonly<{
+  attempts?: number;
+  requestTimeoutMs?: number;
+  retryDelayMs?: number;
+  wait?: (delayMs: number, signal?: AbortSignal) => Promise<void>;
+}>;
+
+const DEFAULT_PROFILE_FETCH_ATTEMPTS = 2;
+const MAX_PROFILE_FETCH_ATTEMPTS = 3;
+const DEFAULT_PROFILE_REQUEST_TIMEOUT_MS = 8_000;
+const DEFAULT_PROFILE_RETRY_DELAY_MS = 350;
+
+function waitForProfileRetry(delayMs: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+      return;
+    }
+    const timeout = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, delayMs);
+    const onAbort = () => {
+      clearTimeout(timeout);
+      reject(signal?.reason ?? new DOMException("Aborted", "AbortError"));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+function temporaryReadError(cause?: unknown) {
+  return new ClassicV3ProfileReadError(
+    "temporary",
+    "Classic rewards are temporarily unavailable",
+    { cause },
+  );
+}
+
+function integrityReadError(cause?: unknown) {
+  return new ClassicV3ProfileReadError(
+    "integrity",
+    "Classic reward data could not be verified",
+    { cause },
+  );
+}
+
+function transientResponseStatus(status: number) {
+  return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
+async function fetchClassicV3ProfileRewardsOnce(
+  account: string,
+  signal: AbortSignal | undefined,
+  fetcher: FetchLike,
+  requestTimeoutMs: number,
+) {
+  const controller = new AbortController();
+  const forwardAbort = () => controller.abort(signal?.reason);
+  if (signal?.aborted) {
+    controller.abort(signal.reason);
+  } else {
+    signal?.addEventListener("abort", forwardAbort, { once: true });
+  }
+  const timeout = setTimeout(() => {
+    controller.abort(new DOMException("Timed out", "TimeoutError"));
+  }, requestTimeoutMs);
+
+  try {
+    let response: Awaited<ReturnType<FetchLike>>;
+    try {
+      response = await fetcher(
+        `/api/profile/classic-v3?account=${encodeURIComponent(account)}`,
+        {
+          method: "GET",
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+        },
+      );
+    } catch (caught) {
+      if (signal?.aborted) throw caught;
+      throw temporaryReadError(caught);
+    }
+
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch (caught) {
+      throw !response.ok && transientResponseStatus(response.status)
+        ? temporaryReadError(caught)
+        : integrityReadError(caught);
+    }
+    if (!response.ok) {
+      const apiError = parseClassicV3ProfileApiError(body);
+      if (apiError?.error.kind === "integrity") {
+        throw integrityReadError();
+      }
+      if (apiError?.error.kind === "temporary") {
+        throw temporaryReadError();
+      }
+      throw transientResponseStatus(response.status)
+        ? temporaryReadError()
+        : integrityReadError();
+    }
+    try {
+      return parseClassicV3ProfileRewards(body, account);
+    } catch (caught) {
+      throw integrityReadError(caught);
+    }
+  } finally {
+    clearTimeout(timeout);
+    signal?.removeEventListener("abort", forwardAbort);
+  }
+}
+
 function configuredEnvironment() {
   return process.env.NEXT_PUBLIC_PROGRAMMABLE_ONCHAIN_NETWORK === "rehearsal"
     ? ("rehearsal" as const)
@@ -276,22 +478,39 @@ export async function fetchClassicV3ProfileRewards(
   account: string,
   signal?: AbortSignal,
   fetcher: FetchLike = fetch,
+  options: ClassicV3ProfileFetchOptions = {},
 ) {
   assertClassicV3ReleaseAvailable();
-  const response = await fetcher(
-    `/api/profile/classic-v3?account=${encodeURIComponent(account)}`,
-    {
-      method: "GET",
-      cache: "no-store",
-      headers: { Accept: "application/json" },
-      signal,
-    },
+  const requestedAttempts = options.attempts ?? DEFAULT_PROFILE_FETCH_ATTEMPTS;
+  const attempts = Math.min(
+    MAX_PROFILE_FETCH_ATTEMPTS,
+    Math.max(1, Math.trunc(requestedAttempts)),
   );
-  const body = await response.json();
-  if (!response.ok) {
-    throw new Error("Classic rewards could not be loaded");
+  const requestTimeoutMs =
+    options.requestTimeoutMs ?? DEFAULT_PROFILE_REQUEST_TIMEOUT_MS;
+  const retryDelayMs = options.retryDelayMs ?? DEFAULT_PROFILE_RETRY_DELAY_MS;
+  const wait = options.wait ?? waitForProfileRetry;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await fetchClassicV3ProfileRewardsOnce(
+        account,
+        signal,
+        fetcher,
+        requestTimeoutMs,
+      );
+    } catch (caught) {
+      if (signal?.aborted) throw caught;
+      const error =
+        caught instanceof ClassicV3ProfileReadError
+          ? caught
+          : integrityReadError(caught);
+      if (error.kind !== "temporary" || attempt === attempts) throw error;
+      await wait(retryDelayMs, signal);
+    }
   }
-  return parseClassicV3ProfileRewards(body, account);
+
+  throw temporaryReadError();
 }
 
 type ClassicV3Action = "claim" | "update-payout";

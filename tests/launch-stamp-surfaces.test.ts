@@ -230,16 +230,18 @@ describe("canonical Router stamp surfaces", () => {
       launchCategory: "Custom",
       description:
         "Canonical Router stamp. v4 pool initialized.",
-      marketCap: undefined,
-      marketStatus: undefined,
+      valuation: undefined,
+      marketStatus: "Unavailable",
     });
     expect(cards[1]).toMatchObject({
       launchCategory: "Classic",
       description:
         "Canonical Router stamp. v4 pool initialized.",
-      marketCap: undefined,
-      marketStatus: undefined,
+      valuation: undefined,
+      marketStatus: "Unavailable",
     });
+    expect(cards[0]).not.toHaveProperty("marketCap");
+    expect(cards[1]).not.toHaveProperty("marketCap");
     expect(cards[2]?.description).toBe(authoredDescription);
     expect(cards[3]?.description).toBeUndefined();
   });

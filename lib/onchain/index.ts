@@ -11,7 +11,8 @@ export {
   readDurableExploreModel,
   writeDurableExploreModel,
 } from "./durable-model";
-export { readIndependentRpcHealth } from "./rpc-health";
+export { readOperationalRpcHealth } from "./rpc-health";
+export type { OperationalRpcHealth } from "./rpc-health";
 export {
   buildIndexerFeed,
   buildUniswapTokenList,

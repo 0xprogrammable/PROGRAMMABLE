@@ -1,16 +1,22 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("server-only", () => ({}));
 
 import {
   collapsePricePointsByBlock,
+  assertTokenChartSupported,
   feeVolumeEventKindForToken,
   findChartRangeStartBlock,
   isTokenChartRange,
   readTokenChartSeries,
   samplePricePoints,
   sumGrossNativeVolume,
+  TokenChartIntegrityError,
+  TokenChartUnavailableError,
 } from "../lib/onchain/chart";
 import type { ReadyOnchainDeployment } from "../lib/onchain/types";
 import type { LauncherToken } from "../lib/tokens";
+import { customGraphToken } from "./launch-stamp-surface-fixture";
 
 const deployment = {
   environment: "production",
@@ -184,11 +190,91 @@ describe("onchain token chart", () => {
         ethUsdQuote: { answer: "350000000000", decimals: 8 },
       }),
     ).resolves.toEqual({
-      status: "insufficient-history",
+      status: "partial",
       points: [],
       swapCount: 0,
       volumeWei: "0",
       volumeEth: "0",
+      freshness: {
+        history: { status: "unavailable" },
+        price: { status: "unavailable" },
+        valuation: { status: "unavailable", metric: "fdv" },
+      },
     });
+  });
+
+  it.each([
+    ["native/token", customGraphToken],
+    [
+      "token/native",
+      {
+        ...customGraphToken,
+        launchStampProvenance: {
+          ...customGraphToken.launchStampProvenance,
+          poolKey: {
+            ...customGraphToken.launchStampProvenance.poolKey,
+            currency0: customGraphToken.tokenAddress,
+            currency1:
+              "0x0000000000000000000000000000000000000000" as const,
+          },
+        },
+      },
+    ],
+  ])("fails closed for Custom Graph %s orientation", async (_orientation, customToken) => {
+    expect(() => assertTokenChartSupported(customToken)).toThrowError(
+      TokenChartUnavailableError,
+    );
+    await expect(
+      readTokenChartSeries({
+        deployment,
+        token: customToken,
+        snapshotBlock: 25_718_017n,
+      }),
+    ).rejects.toMatchObject({
+      name: "TokenChartUnavailableError",
+      reason: "unsupported-pool-orientation",
+    });
+  });
+
+  it.each([undefined, -1, 1.5, 256])(
+    "rejects invalid token decimals as an integrity failure: %s",
+    async (tokenDecimals) => {
+      await expect(
+        readTokenChartSeries({
+          deployment,
+          token: { ...classicToken, tokenDecimals },
+          snapshotBlock: 1_000n,
+        }),
+      ).rejects.toMatchObject({
+        name: "TokenChartIntegrityError",
+        reason: "invalid-token-decimals",
+      } satisfies Partial<TokenChartIntegrityError>);
+    },
+  );
+
+  it("rejects a launch block after the immutable snapshot", async () => {
+    await expect(
+      readTokenChartSeries({
+        deployment,
+        token: { ...classicToken, launchBlockNumber: "1001" },
+        snapshotBlock: 1_000n,
+      }),
+    ).rejects.toMatchObject({
+      name: "TokenChartIntegrityError",
+      reason: "launch-after-snapshot",
+    } satisfies Partial<TokenChartIntegrityError>);
+  });
+
+  it("rejects a malformed launch block instead of returning a zero series", async () => {
+    await expect(
+      readTokenChartSeries({
+        deployment,
+        token: { ...classicToken, launchBlockNumber: "not-a-block" },
+        snapshotBlock: 1_000n,
+      }),
+    ).rejects.toMatchObject({
+      name: "TokenChartIntegrityError",
+      reason: "invalid-launch-block",
+    } satisfies Partial<TokenChartIntegrityError>);
   });
 });

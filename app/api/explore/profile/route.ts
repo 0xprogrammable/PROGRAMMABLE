@@ -6,7 +6,11 @@ import {
   readAlchemyExploreModel,
   safeAlchemyError,
 } from "../../../../lib/alchemy/explore.server";
-import { readAlchemyCreatorProfile } from "../../../../lib/alchemy/profile.server";
+import {
+  AlchemyCreatorProfileIntegrityError,
+  readAlchemyCreatorProfile,
+} from "../../../../lib/alchemy/profile.server";
+import { creatorProfileApiError } from "../../../../lib/profile/onchain-profile";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -56,9 +60,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(profile, {
       headers: {
         "Cache-Control": "private, max-age=0, s-maxage=15",
-        "X-Programmable-Launch-Source": "alchemy",
+        "X-Programmable-Launch-Source":
+          "indexed-read-model+operational-rpc",
         "X-Programmable-Read-Source": "rpc",
-        "X-Programmable-Rpc-Provider": "alchemy",
+        "X-Programmable-Rpc-Provider": "operational-dual",
       },
     });
   } catch (error) {
@@ -66,9 +71,13 @@ export async function GET(request: NextRequest) {
       "Alchemy creator profile read failed",
       safeAlchemyError(error),
     );
+    const integrity = error instanceof AlchemyCreatorProfileIntegrityError;
     return NextResponse.json(
-      { error: "Onchain creator data is temporarily unavailable" },
-      { status: 503, headers: { "Cache-Control": "no-store" } },
+      creatorProfileApiError(integrity ? "integrity" : "temporary"),
+      {
+        status: integrity ? 409 : 503,
+        headers: { "Cache-Control": "no-store" },
+      },
     );
   }
 }

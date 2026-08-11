@@ -1,0 +1,139 @@
+{
+  "abiHash": "sha256:1a856a163cb18011de7721331eb271ba453825d066e80836e4dd7a2fd5ce5ab1",
+  "activationAllowed": false,
+  "activationState": "DENY",
+  "admittedExactSchemaPaths": [
+    "schemas/completed-graph-adoption-contract-artifact-binding.v1.schema.json",
+    "schemas/router-v2-launch-profile-descriptor.v3.schema.json",
+    "schemas/router-v2-launch-profile-catalog.v3.schema.json",
+    "schemas/router-v2-shared-lifecycle-abi.v3.schema.json",
+    "schemas/router-v2-shared-lifecycle-migration-rules.v3.schema.json",
+    "schemas/router-v2-shared-lifecycle-two-plan-golden.v3.schema.json"
+  ],
+  "authorityIoState": "HARD_DENY_REQUIRES_VERSIONED_DEPLOYMENT_BOUND_SUCCESSOR",
+  "contractArtifactBindingHash": "sha256:63dda227162f40e0d7344fc0a4f747ae08fb2eb9011d759734d8516be06de6ca",
+  "contractDeploymentBinding": null,
+  "contractNumericEnums": {
+    "admissionStatus": {
+      "Admitted": 2,
+      "DenyPendingReviewAndDeploymentEvidence": 1,
+      "Invalid": 0
+    },
+    "executionTimeConstraint": {
+      "AdoptionOnlyNoExecution": 1,
+      "ExternalExecutionTimeBound": 2,
+      "Invalid": 0
+    },
+    "grantStatus": {
+      "Active": 1,
+      "Consumed": 3,
+      "Invalid": 0,
+      "Revoked": 2
+    },
+    "profileStatus": {
+      "Active": 1,
+      "Deprecated": 3,
+      "Invalid": 0,
+      "Suspended": 2
+    },
+    "receiptStatus": {
+      "Adopted": 2,
+      "Finalized": 3,
+      "Indexed": 4,
+      "Invalid": 0,
+      "Prepared": 1,
+      "Published": 5
+    }
+  },
+  "deploymentState": "UNDEPLOYED",
+  "hardDenyStandaloneSchemaPaths": [
+    "schemas/completed-graph-adoption-contract-deployment-binding.v1.schema.json",
+    "schemas/completed-graph-adoption-profile-capability-binding.v1.schema.json",
+    "schemas/router-v2-applicant-launch-plan.v3.schema.json",
+    "schemas/router-v2-builder-evidence-commitment.v3.schema.json",
+    "schemas/router-v2-reviewer-authority-attestation.v3.schema.json",
+    "schemas/router-v2-launch-grant.v3.schema.json",
+    "schemas/router-v2-completed-graph-plan-contract.v1.schema.json",
+    "schemas/router-v2-source-identity-referents.v3.schema.json",
+    "schemas/router-v2-completed-graph-launch-grant-contract.v1.schema.json",
+    "schemas/router-v2-completed-graph-launch-grant-digest-binding.v1.schema.json",
+    "schemas/router-v2-completed-graph-execution-currentness-contract.v1.schema.json",
+    "schemas/router-v2-completed-graph-preflight-query-contract.v1.schema.json",
+    "schemas/router-v2-completed-graph-preflight-readback-contract.v1.schema.json",
+    "schemas/router-v2-completed-graph-provider-preflight-observation.v3.schema.json",
+    "schemas/router-v2-completed-graph-preflight-aggregate.v3.schema.json",
+    "schemas/router-v2-canonical-launch-receipt.v3.schema.json",
+    "schemas/router-v2-finality-indexing-receipt.v3.schema.json"
+  ],
+  "internalAuthorityPortsNotExported": [
+    "CompletedGraphWalletIntentVerifierPortV3",
+    "CompletedGraphWinnerReservationStoreV3",
+    "CompletedGraphCurrentnessSignerPortV3",
+    "issueCompletedGraphCurrentnessAfterWinnerV3"
+  ],
+  "lifecycleVersion": "3.0.0",
+  "packageExport": "@programmable/autonomous-approval-v1/router-v2-shared-lifecycle-v3",
+  "packageName": "@programmable/autonomous-approval-v1",
+  "predecessorSchemaDependencies": [
+    "schemas/router-v2-launch-profile-descriptor.v1.schema.json",
+    "schemas/router-v2-applicant-launch-plan.v1.schema.json",
+    "schemas/router-v2-builder-evidence-commitment.v1.schema.json",
+    "schemas/router-v2-reviewer-authority-attestation.v1.schema.json",
+    "schemas/router-v2-launch-profile-descriptor.v2.schema.json",
+    "schemas/router-v2-applicant-launch-plan.v2.schema.json",
+    "schemas/router-v2-builder-evidence-commitment.v2.schema.json",
+    "schemas/router-v2-reviewer-authority-attestation.v2.schema.json"
+  ],
+  "profileCapabilityBinding": null,
+  "publicSourcePath": "src/public-api/router-v2-shared-lifecycle-v3.ts",
+  "publicTypes": [
+    "LaunchProfileDescriptorV3",
+    "LaunchProfileCatalogV3",
+    "SourceIdentityReferentsV3",
+    "ApplicantLaunchPlanV3",
+    "BuilderEvidenceCommitmentV3",
+    "ReviewerAuthorityAttestationV3",
+    "CompletedGraphPlanContractV1",
+    "CompletedGraphLaunchGrantContractV1",
+    "CompletedGraphLaunchGrantDigestBindingV1",
+    "CompletedGraphExecutionCurrentnessContractV1",
+    "CompletedGraphAdoptionPreflightQueryContractV1",
+    "CompletedGraphAdoptionPreflightReadbackContractV1",
+    "CompletedGraphProviderPreflightObservationV3",
+    "CompletedGraphAdoptionPreflightAggregateV3",
+    "LaunchGrantV3",
+    "CanonicalLaunchReceiptV3",
+    "FinalityIndexingReceiptV3"
+  ],
+  "requiredServiceEnvironmentVariableNames": [],
+  "schemaPaths": [
+    "schemas/completed-graph-adoption-contract-artifact-binding.v1.schema.json",
+    "schemas/completed-graph-adoption-contract-deployment-binding.v1.schema.json",
+    "schemas/completed-graph-adoption-profile-capability-binding.v1.schema.json",
+    "schemas/router-v2-applicant-launch-plan.v3.schema.json",
+    "schemas/router-v2-builder-evidence-commitment.v3.schema.json",
+    "schemas/router-v2-canonical-launch-receipt.v3.schema.json",
+    "schemas/router-v2-completed-graph-execution-currentness-contract.v1.schema.json",
+    "schemas/router-v2-completed-graph-launch-grant-contract.v1.schema.json",
+    "schemas/router-v2-completed-graph-launch-grant-digest-binding.v1.schema.json",
+    "schemas/router-v2-completed-graph-plan-contract.v1.schema.json",
+    "schemas/router-v2-completed-graph-preflight-aggregate.v3.schema.json",
+    "schemas/router-v2-completed-graph-preflight-query-contract.v1.schema.json",
+    "schemas/router-v2-completed-graph-preflight-readback-contract.v1.schema.json",
+    "schemas/router-v2-completed-graph-provider-preflight-observation.v3.schema.json",
+    "schemas/router-v2-finality-indexing-receipt.v3.schema.json",
+    "schemas/router-v2-launch-grant.v3.schema.json",
+    "schemas/router-v2-launch-profile-catalog.v3.schema.json",
+    "schemas/router-v2-launch-profile-descriptor.v3.schema.json",
+    "schemas/router-v2-reviewer-authority-attestation.v3.schema.json",
+    "schemas/router-v2-shared-lifecycle-abi.v3.schema.json",
+    "schemas/router-v2-shared-lifecycle-migration-rules.v3.schema.json",
+    "schemas/router-v2-shared-lifecycle-two-plan-golden.v3.schema.json",
+    "schemas/router-v2-source-identity-referents.v3.schema.json"
+  ],
+  "schemaVersion": "programmable.router-v2-shared-lifecycle-abi.v3",
+  "standaloneDeploymentProfileSchemaState": "HARD_DENY_UNTIL_EXACT_DEPLOYMENT_BOUND_SUCCESSOR",
+  "standaloneSchemaAdmissionPolicy": "ONLY_CONST_CLOSED_RELEASE_METADATA_ADMITTED_ALL_SEMANTIC_ARTIFACTS_HARD_DENY",
+  "unversionedPackageExportRemains": "router-v2-shared-lifecycle-v2",
+  "versioning": "ADDITIVE_NEW_BYTE_DOMAIN_NEVER_REINTERPRET_V1_V2"
+}

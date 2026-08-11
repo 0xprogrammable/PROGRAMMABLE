@@ -15,6 +15,10 @@ import {
   creatorFeeHookReadAbi,
   creatorFeesClaimedEvent,
 } from "../onchain/abis";
+import {
+  isOperationalRpcFailoverEligible,
+  withOperationalRpcFailover,
+} from "../onchain/operational-rpc-failover.server";
 import type {
   CreatorClaim,
   CreatorProfile,
@@ -25,6 +29,14 @@ import type { LauncherToken } from "../tokens";
 
 const CLAIM_LOG_BATCH_CONCURRENCY = 4;
 const MAX_PROFILE_CLAIM_CURSORS = 128;
+
+export class AlchemyCreatorProfileIntegrityError extends Error {
+  override name = "AlchemyCreatorProfileIntegrityError";
+
+  constructor(message: string, cause?: unknown) {
+    super(message, { cause });
+  }
+}
 
 type RecentClaimReadInput = Readonly<{
   account: Address;
@@ -110,7 +122,12 @@ async function scanRecentClaims(input: RecentClaimReadInput) {
     client.getLogs({
       address: [...input.hookAddresses],
       event: creatorFeesClaimedEvent,
-      args: { creator: input.account },
+      args: {
+        poolId: [...input.tokenByPool.values()].map(
+          (token) => token.poolId as Hex,
+        ),
+        creator: input.account,
+      },
       fromBlock: range.fromBlock,
       toBlock: range.toBlock,
       strict: true,
@@ -130,8 +147,9 @@ async function scanRecentClaims(input: RecentClaimReadInput) {
     logs.push(...results.flat());
   }
 
+  const canonicalLogs = logs.filter((log) => !log.removed);
   const blockNumbers = [...new Set(
-    logs
+    canonicalLogs
       .map((log) => log.blockNumber)
       .filter((block): block is bigint => block !== null)
       .map(String),
@@ -144,20 +162,30 @@ async function scanRecentClaims(input: RecentClaimReadInput) {
     }),
   );
 
-  return logs.flatMap((log): CreatorClaim[] => {
+  return canonicalLogs.map((log): CreatorClaim => {
     if (
-      log.removed ||
       log.blockNumber === null ||
       !log.transactionHash ||
       log.transactionIndex === null ||
       log.logIndex === null
     ) {
-      return [];
+      throw new AlchemyCreatorProfileIntegrityError(
+        "Creator claim log identity is incomplete",
+      );
     }
     const token = input.tokenByPool.get(log.args.poolId.toLowerCase());
-    if (!token) return [];
-    const timestamp = timestamps.get(log.blockNumber.toString()) ?? 0n;
-    return [{
+    if (!token) {
+      throw new AlchemyCreatorProfileIntegrityError(
+        "Creator claim pool is outside the verified profile",
+      );
+    }
+    const timestamp = timestamps.get(log.blockNumber.toString());
+    if (timestamp === undefined) {
+      throw new AlchemyCreatorProfileIntegrityError(
+        "Creator claim timestamp is unavailable",
+      );
+    }
+    return {
       poolId: log.args.poolId,
       tokenAddress: getAddress(token.tokenAddress),
       creatorAddress: log.args.creator,
@@ -170,16 +198,18 @@ async function scanRecentClaims(input: RecentClaimReadInput) {
       transactionIndex: log.transactionIndex,
       logIndex: log.logIndex,
       claimedAt: new Date(Number(timestamp) * 1_000).toISOString(),
-    }];
+    };
   });
 }
 
 function recentClaimCursorKey(input: RecentClaimReadInput) {
   return [
     input.deployment.chainId,
+    input.deployment.rpcUrl,
     input.account.toLowerCase(),
     input.fromBlock.toString(),
     ...input.hookAddresses.map((address) => address.toLowerCase()).sort(),
+    ...[...input.tokenByPool.keys()].sort(),
   ].join(":");
 }
 
@@ -224,7 +254,7 @@ async function readRecentClaims(input: RecentClaimReadInput) {
   return (await current).claims;
 }
 
-export async function readAlchemyCreatorProfile(input: {
+async function readAlchemyCreatorProfileFromRpc(input: {
   account: Address;
   deployment: ReadyOnchainDeployment;
   model: ExploreReadModel;
@@ -249,6 +279,11 @@ export async function readAlchemyCreatorProfile(input: {
     input.model.launchDiscoverySnapshot ?? input.model.snapshot;
   const liveBlock = BigInt(liveSnapshot.blockNumber);
   const baseBlock = BigInt(input.model.snapshot.blockNumber);
+  if (liveBlock < baseBlock) {
+    throw new AlchemyCreatorProfileIntegrityError(
+      "Creator profile snapshot moved behind its verified base",
+    );
+  }
   const client = createPublicClient({
     chain: input.deployment.chainId === 1 ? mainnet : sepolia,
     transport: http(input.deployment.rpcUrl, {
@@ -268,7 +303,7 @@ export async function readAlchemyCreatorProfile(input: {
             functionName: "poolFeeConfig" as const,
             args: [token.poolId as Hex],
           })),
-        }).catch(() => [])
+        })
       : Promise.resolve([]),
     readRecentClaims({
       account: input.account,
@@ -279,8 +314,14 @@ export async function readAlchemyCreatorProfile(input: {
         directRewardTokens.map((token) => token.hookAddress.toLowerCase()),
       )].map((address) => getAddress(address)),
       tokenByPool,
-    }).catch(() => []),
+    }),
   ]);
+
+  if (poolStates.length !== directRewardTokens.length) {
+    throw new AlchemyCreatorProfileIntegrityError(
+      "Creator reward pool results are incomplete",
+    );
+  }
 
   const claims = new Map(
     [...input.model.creatorClaims, ...recentClaims]
@@ -306,9 +347,18 @@ export async function readAlchemyCreatorProfile(input: {
   const refreshed = new Map<string, LauncherToken>();
   directRewardTokens.forEach((token, index) => {
     const result = poolStates[index];
-    if (result?.status !== "success") return;
+    if (result?.status !== "success") {
+      throw new AlchemyCreatorProfileIntegrityError(
+        "Creator reward pool state could not be verified",
+        result?.error,
+      );
+    }
     const [creator, , , registered, accrued] = result.result;
-    if (!registered || creator.toLowerCase() !== normalizedAccount) return;
+    if (!registered || creator.toLowerCase() !== normalizedAccount) {
+      throw new AlchemyCreatorProfileIntegrityError(
+        "Creator reward pool ownership does not match",
+      );
+    }
     const claimed = claimedByPool.get(token.poolId.toLowerCase()) ?? 0n;
     refreshed.set(token.tokenAddress.toLowerCase(), {
       ...token,
@@ -336,5 +386,30 @@ export async function readAlchemyCreatorProfile(input: {
     scopedModel,
     input.account,
     directRewardPoolIds,
+  );
+}
+
+export async function readAlchemyCreatorProfile(input: {
+  account: Address;
+  deployment: ReadyOnchainDeployment;
+  model: ExploreReadModel;
+}): Promise<CreatorProfile> {
+  return withOperationalRpcFailover(
+    input.deployment,
+    async (deployment) => {
+      try {
+        return await readAlchemyCreatorProfileFromRpc({
+          ...input,
+          deployment,
+        });
+      } catch (error) {
+        if (isOperationalRpcFailoverEligible(error)) throw error;
+        if (error instanceof AlchemyCreatorProfileIntegrityError) throw error;
+        throw new AlchemyCreatorProfileIntegrityError(
+          "Creator reward data could not be verified",
+          error,
+        );
+      }
+    },
   );
 }
