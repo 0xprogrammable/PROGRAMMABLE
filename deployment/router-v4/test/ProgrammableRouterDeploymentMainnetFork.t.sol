@@ -108,24 +108,24 @@ contract ProgrammableRouterDeploymentMainnetForkTest is Test {
     address private constant LAUNCHER = 0x2Bb333d48DFAF1596D9036671d2E43168994249E;
     bytes32 private constant ROUTE_NAMESPACE = keccak256("PROGRAMMABLE_ROUTER_V4_MAINNET_ROUTE_V1");
     bytes32 private constant SERVICE_RELEASE_BINDING =
-        0xbd4fafda3f5d2cdf3be4e14439d7d80d850c046726785195601d5237263d602a;
+        0x32379de927d9a3ca4052037f3de19388566f0b79b26ea01b90d76f09c76f74b0;
     address private constant EXPECTED_GRAPH_DEPLOYER = 0xaE682102d893a113EA3891B12953DEc9f66e3082;
     address private constant EXPECTED_STORE = 0x08454733f76112d3a1cE135629cCc19615e868b4;
     address private constant EXPECTED_EXACT_VALIDATOR = 0xfeE9dC855228Aa3BB61D3f9E598A516643f9c6D6;
-    address private constant EXPECTED_REVIEWER = 0xb55f4173E67BD20191F0A7c6b87918bbC3cDd9Ac;
-    address private constant EXPECTED_GOVERNANCE = 0x77EF72AF28C5D4252899f2fbdd87986291387913;
+    address private constant EXPECTED_REVIEWER = 0x2eA78549C73Cb4208a5eb129d43ebda1203fd768;
+    address private constant EXPECTED_GOVERNANCE = 0x979F9E496AbAB43C1B83286087E30dc3BbaAe9dF;
     address private constant EXPECTED_UNIVERSAL_PREFLIGHT = 0x0bed68Fc3418Eb21FD2C1032C77f87c6aBA566B1;
     address private constant EXPECTED_HOOKEMON_CODEC = 0x157A2B242197Ba62BEcB92892cA7A1F975457747;
     address private constant EXPECTED_HOOKEMON_VALIDATOR = 0x077eA1A1da40925f06f8aD1D62C0551E9021B3FF;
     address private constant EXPECTED_HOOKEMON_PREFLIGHT = 0x84ad8fFE50fc3D7270C76b898411b90d6c88A4C5;
     address private constant EXPECTED_HOOKEMON_STATE_VERIFIER = 0x4FE9c5f08ec659bef00385C7aea5C3750edb97AD;
-    address private constant EXPECTED_FINALITY = 0xed6F19A9D41AfcBd7B01a6300A80D86C4A713163;
-    address private constant EXPECTED_INDEXER = 0x72F3548AA12545907E8B2c9Ec38b81D40811Da4D;
-    address private constant EXPECTED_KERNEL = 0xD9aFf00E564705de782c8035AF6896E99A55FaA2;
-    address private constant EXPECTED_REGISTRY = 0xE1aefc665833938f903247797903c8e8c8d5da2e;
-    address private constant EXPECTED_PROVIDER = 0xC2dFDb06F0b24e3b2D270D21718485bc1F10d9d0;
-    address private constant EXPECTED_VERIFIER = 0x747Ed8e8cb97054b3C50adEAd253F6d5ABC439b4;
-    address private constant EXPECTED_PROFILE = 0x3Af16145F9acA5C0534D7042bB6aA2548386F828;
+    address private constant EXPECTED_FINALITY = 0xd8A3b8634cfBddaaB7766Eb54002D82423dF3be1;
+    address private constant EXPECTED_INDEXER = 0xa091B2Ae533F6DaAEd13EB05d867d816E57c1a73;
+    address private constant EXPECTED_KERNEL = 0x25E9DDEB5de79751dB2156D426893d52C8F14DCF;
+    address private constant EXPECTED_REGISTRY = 0x636989978c214d7786d21604d7C225cEbf2240C8;
+    address private constant EXPECTED_PROVIDER = 0x03385476770CAe102ef673adF9A4631E84258e58;
+    address private constant EXPECTED_VERIFIER = 0xA4867B0d72bCE8C1db040E91454D562239daF923;
+    address private constant EXPECTED_PROFILE = 0x6d2D661Ab0e462E8047597Adc5bece4BCA157C4C;
     address private constant EXPECTED_STORE_PART_0 = 0x2c8B3eCFA689ea2dD481B6C49ACF58281D610887;
     address private constant EXPECTED_STORE_PART_1 = 0x2FD959F0EF9B3CcA7daaf8fDB3C63BC55F5c2Ff8;
     bytes32 private constant EXPECTED_HOOKEMON_PROFILE_KEY =
@@ -256,8 +256,9 @@ contract ProgrammableRouterDeploymentMainnetForkTest is Test {
         emit log_named_bytes32("graph deployer init code hash", keccak256(initCode));
         emit log_named_bytes32("graph deployer calldata hash", keccak256(transactionData));
         uint256 intrinsicGas = _intrinsicGas(transactionData);
+        uint256 outerExecutionGas = MAINNET_TRANSACTION_GAS_LIMIT - intrinsicGas;
         vm.prank(LAUNCHER);
-        (bool success, bytes memory result) = NICK_CREATE2_PROXY.call(transactionData);
+        (bool success, bytes memory result) = NICK_CREATE2_PROXY.call{ gas: outerExecutionGas }(transactionData);
         uint256 transactionGas = uint256(vm.lastCallGas().gasTotalUsed) + intrinsicGas;
         emit log_named_uint("graph deployer deployment gas", transactionGas);
         assertTrue(success);
@@ -1399,8 +1400,12 @@ contract ProgrammableRouterDeploymentMainnetForkTest is Test {
         emit log_named_bytes32(string.concat(label, " init code hash"), keccak256(initCode));
         emit log_named_bytes32(string.concat(label, " calldata hash"), keccak256(transactionData));
         uint256 intrinsicGas = _intrinsicGas(transactionData);
+        // A top-level transaction gives the proxy only gasLimit - intrinsicGas.  Supplying that exact
+        // budget here reproduces the EIP-150 CREATE2 child-call bottleneck that a gas-rich test frame
+        // otherwise hides.
+        uint256 outerExecutionGas = MAINNET_TRANSACTION_GAS_LIMIT - intrinsicGas;
         vm.prank(LAUNCHER);
-        (bool success, bytes memory result) = NICK_CREATE2_PROXY.call(transactionData);
+        (bool success, bytes memory result) = NICK_CREATE2_PROXY.call{ gas: outerExecutionGas }(transactionData);
         uint256 transactionGas = uint256(vm.lastCallGas().gasTotalUsed) + intrinsicGas;
         emit log_named_uint(label, transactionGas);
         assertTrue(success);

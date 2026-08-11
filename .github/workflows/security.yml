@@ -47,6 +47,32 @@ jobs:
           python3 -m venv .venv
           .venv/bin/pip install --disable-pip-version-check slither-analyzer==0.11.5
 
+      - name: Verify Router V4 owner payloads
+        run: >-
+          .venv/bin/python scripts/generate-router-v4-owner-payloads.py
+          --deployment-source-commit "$(git rev-parse HEAD)"
+          --deployment-source-tree "$(git rev-parse 'HEAD^{tree}')"
+          --output "$RUNNER_TEMP/router-v4-owner-payloads.json"
+
+      - name: Verify Router V4 cold outer transaction sequence
+        env:
+          ETHEREUM_RPC_URLS: >-
+            https://rpc.flashbots.net
+            https://eth.drpc.org
+            https://mainnet.gateway.tenderly.co
+        run: |
+          set -euo pipefail
+          for rpc_url in $ETHEREUM_RPC_URLS; do
+            for attempt in 1 2 3; do
+              echo "Cold outer attempt ${attempt} with ${rpc_url}"
+              if ETHEREUM_RPC_URL="${rpc_url}" bash scripts/verify-router-v4-cold-outer-transactions.sh "$RUNNER_TEMP/router-v4-owner-payloads.json"; then
+                exit 0
+              fi
+              sleep $((attempt * 3))
+            done
+          done
+          exit 1
+
       - name: Run Slither
         run: .venv/bin/slither . --config-file slither.config.json --sarif slither.sarif --fail-none
 
