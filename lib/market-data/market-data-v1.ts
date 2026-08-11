@@ -130,6 +130,7 @@ export type MarketOhlcV1 = Readonly<{
 export type MarketChartV1 = Readonly<{
   schemaVersion: typeof PROGRAMMABLE_MARKET_CHART_SCHEMA_VERSION;
   source: "bitquery";
+  readStatus: "live" | "cache-fallback";
   status:
     | "ready"
     | "insufficient-history"
@@ -251,6 +252,7 @@ export function isMarketChartV1(value: unknown): value is MarketChartV1 {
   if (
     value.schemaVersion !== PROGRAMMABLE_MARKET_CHART_SCHEMA_VERSION ||
     value.source !== "bitquery" ||
+    !["live", "cache-fallback"].includes(String(value.readStatus)) ||
     ![
       "ready",
       "insufficient-history",

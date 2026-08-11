@@ -1073,6 +1073,7 @@ jobs:
           if (
             goldenChart.schemaVersion !== "programmable.market-chart.v1" ||
             goldenChart.source !== "bitquery" ||
+            goldenChart.readStatus !== "live" ||
             !currentMarketTime(goldenChart.generatedAt) ||
             goldenChart.address?.toLowerCase() !== goldenTokenAddress ||
             goldenChart.identity?.poolId !== goldenPoolId ||
@@ -1127,6 +1128,7 @@ jobs:
             goldenParity.poolId === goldenPoolId &&
             goldenParity.confirmations >= 12 &&
             goldenChart.points.length >= 1 &&
+            goldenChart.readStatus === "live" &&
             currentMarketTime(goldenChart.generatedAt) &&
             goldenChart.__marketHeaders?.dataQuality === goldenChart.status &&
             goldenChart.__marketHeaders?.marketSource === "bitquery" &&

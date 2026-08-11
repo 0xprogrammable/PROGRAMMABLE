@@ -161,7 +161,10 @@ function honestExploreValuations(response) {
       !validMarketTime(valuation.asOfTime)
     ) return false;
     if (valuation.freshness === "stale") {
-      if (token?.fdvUsdWad !== undefined) return false;
+      if (
+        token?.fdvUsdWad !== undefined ||
+        !boundedStaleMarketTime(valuation.asOfTime)
+      ) return false;
       sawNonCurrent = true;
       continue;
     }
@@ -233,6 +236,7 @@ function exactGoldenChart(response) {
     response.headers.dataQuality !== chart?.status ||
     chart?.schemaVersion !== "programmable.market-chart.v1" ||
     chart.source !== "bitquery" ||
+    chart.readStatus !== "live" ||
     !currentMarketTime(chart.generatedAt) ||
     chart.address?.toLowerCase() !== GOLDEN_TOKEN_ADDRESS ||
     chart.identity?.poolId !== GOLDEN_POOL_ID ||

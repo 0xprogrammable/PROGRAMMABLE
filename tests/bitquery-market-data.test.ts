@@ -894,6 +894,50 @@ describe("Bitquery OHLCV chart and server stream", () => {
     expect(isMarketChartV1(chart)).toBe(true);
   });
 
+  it("never presents a populated chart fallback as a live provider read", async () => {
+    const success = vi.fn(async () => jsonResponse({
+      data: {
+        EVM: {
+          DEXTrades: [tradeRow({
+            block: "25740000",
+            time: "2026-08-11T14:01:00.000Z",
+            transaction: `0x${"44".repeat(32)}`,
+            priceQuote: "1",
+          })],
+        },
+        Trading: { Tokens: [supplyRow()] },
+      },
+    })) as typeof fetch;
+    const live = await readBitqueryMarketChartV1({
+      identity: PCAN,
+      range: "1h",
+      fetchImpl: success,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+    expect(live).toMatchObject({ readStatus: "live", status: "insufficient-history" });
+
+    const failure = vi.fn(async () => {
+      throw new Error("provider unavailable");
+    }) as typeof fetch;
+    const fallback = await readBitqueryMarketChartV1({
+      identity: PCAN,
+      range: "1h",
+      fetchImpl: failure,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:03.000Z"),
+    });
+
+    expect(fallback).toMatchObject({
+      readStatus: "cache-fallback",
+      status: "partial",
+      generatedAt: live.generatedAt,
+      valuation: { status: "available", freshness: "stale" },
+    });
+    expect(fallback.points).toHaveLength(1);
+    expect(isMarketChartV1(fallback)).toBe(true);
+  });
+
   it("builds exact-pool quote candles without promoting raw DEX USD", async () => {
     const trades = [
       tradeRow({

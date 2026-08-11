@@ -125,6 +125,7 @@ function chart(
   return {
     schemaVersion: "programmable.market-chart.v1",
     source: "bitquery",
+    readStatus: "live",
     status: "ready",
     generatedAt: "2026-08-11T14:02:00.000Z",
     identity: marketIdentity,

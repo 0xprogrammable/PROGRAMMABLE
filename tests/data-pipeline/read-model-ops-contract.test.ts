@@ -849,6 +849,7 @@ function publicFetch(healthStatus = "healthy") {
       return Response.json({
         schemaVersion: "programmable.market-chart.v1",
         source: "bitquery",
+        readStatus: "live",
         status: "ready",
         generatedAt: new Date().toISOString(),
         address: GOLDEN_TOKEN_ADDRESS,
@@ -1042,6 +1043,44 @@ describe("post-promotion route verification", () => {
     expect(result.ok).toBe(false);
     expect(result.failures).toContainEqual(
       expect.objectContaining({ id: "production-bitquery-chart" }),
+    );
+  });
+
+  it("rejects a chart served from cache after the live Bitquery read failed", async () => {
+    const base = publicFetch();
+    const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
+      const url = new URL(String(input));
+      const response = await base(input, init);
+      if (url.pathname !== "/api/explore/token/chart") return response;
+      const body = await response.json();
+      body.readStatus = "cache-fallback";
+      return Response.json(body, { headers: response.headers });
+    };
+    const result = await verifyPostPromotion(postPromotionInput(fetchImpl));
+    expect(result.ok).toBe(false);
+    expect(result.failures).toContainEqual(
+      expect.objectContaining({ id: "production-bitquery-chart" }),
+    );
+  });
+
+  it("rejects Explore valuation evidence older than the stale release ceiling", async () => {
+    const base = publicFetch();
+    const tooOld = new Date(Date.now() - 25 * 60 * 60_000).toISOString();
+    const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
+      const url = new URL(String(input));
+      const response = await base(input, init);
+      if (url.pathname !== "/api/explore") return response;
+      const body = await response.json();
+      body.tokens[0].valuation.asOfTime = tooOld;
+      body.dataQuality.valuation.asOfTime = tooOld;
+      const headers = new Headers(response.headers);
+      headers.set("X-Programmable-Market-As-Of", tooOld);
+      return Response.json(body, { headers });
+    };
+    const result = await verifyPostPromotion(postPromotionInput(fetchImpl));
+    expect(result.ok).toBe(false);
+    expect(result.failures).toContainEqual(
+      expect.objectContaining({ id: "production-explore" }),
     );
   });
 

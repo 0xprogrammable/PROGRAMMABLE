@@ -755,6 +755,8 @@ describe("read-model production deploy policy", () => {
     );
     expect(workflow).toContain("const historicalPaidPathVerified =");
     expect(workflow).toContain("goldenParity.confirmations >= 12");
+    expect(workflow).toContain('goldenChart.readStatus !== "live"');
+    expect(workflow).toContain('goldenChart.readStatus === "live"');
     expect(workflow).toContain(
       "currentFdvCount < 1 && !historicalPaidPathVerified",
     );

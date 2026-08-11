@@ -259,7 +259,6 @@ function ageCachedTokenMarketData(
             : "current" as const;
     output.set(address, {
       ...value,
-      generatedAt: now.toISOString(),
       status,
       pools,
     });
@@ -337,6 +336,7 @@ export async function readBitqueryMarketChartV1(input: Readonly<{
       const waiting: MarketChartV1 = {
         schemaVersion: PROGRAMMABLE_MARKET_CHART_SCHEMA_VERSION,
         source: "bitquery",
+        readStatus: "live",
         status: "waiting-for-first-trade",
         generatedAt: now.toISOString(),
         identity,
@@ -385,6 +385,7 @@ export async function readBitqueryMarketChartV1(input: Readonly<{
     const chart: MarketChartV1 = {
       schemaVersion: PROGRAMMABLE_MARKET_CHART_SCHEMA_VERSION,
       source: "bitquery",
+      readStatus: "live",
       status,
       generatedAt: now.toISOString(),
       identity,
@@ -1363,15 +1364,15 @@ function cachedChartOrUnavailable(
     if (cached.value.points.length === 0) {
       return {
         ...cached.value,
+        readStatus: "cache-fallback",
         status: "unavailable",
-        generatedAt: now.toISOString(),
         valuation: { status: "unavailable", reason: "source-unavailable" },
       };
     }
     return {
       ...cached.value,
+      readStatus: "cache-fallback",
       status: "partial",
-      generatedAt: now.toISOString(),
       valuation: cached.value.valuation.status === "available"
         ? { ...cached.value.valuation, freshness: "stale" }
         : cached.value.valuation,
@@ -1380,6 +1381,7 @@ function cachedChartOrUnavailable(
   return {
     schemaVersion: PROGRAMMABLE_MARKET_CHART_SCHEMA_VERSION,
     source: "bitquery",
+    readStatus: "cache-fallback",
     status: "unavailable",
     generatedAt: now.toISOString(),
     identity,

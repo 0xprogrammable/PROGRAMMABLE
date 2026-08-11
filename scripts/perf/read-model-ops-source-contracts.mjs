@@ -1278,6 +1278,12 @@ export function evaluateReadModelOperationsSourceContracts(
       ) &&
       stagedBitquerySmokeBlock.includes("goldenParity.confirmations >= 12") &&
       stagedBitquerySmokeBlock.includes(
+        'goldenChart.readStatus !== "live"',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        'goldenChart.readStatus === "live"',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
         "currentFdvCount < 1 && !historicalPaidPathVerified",
       ) &&
       stagedBitquerySmokeBlock.includes(
@@ -1382,6 +1388,7 @@ export function evaluateReadModelOperationsSourceContracts(
       postPromotion.includes("honestExploreValuations") &&
       postPromotion.includes("exactGoldenDetail") &&
       postPromotion.includes("exactGoldenChart") &&
+      postPromotion.includes('chart.readStatus !== "live"') &&
       postPromotion.includes("verifyBitqueryGoldenMarketParityV1") &&
       postPromotion.includes(
         'id: "production-bitquery-golden-independent-parity"',
