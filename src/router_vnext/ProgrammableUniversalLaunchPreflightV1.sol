@@ -106,20 +106,74 @@ contract ProgrammableUniversalLaunchPreflightV1 is IProgrammableUniversalLaunchP
     function _rejectMutableDispatch(address account, bool requireStateless) private view {
         bytes memory runtime = account.code;
         uint256 length = runtime.length;
+        uint256[] memory jumpTargets = new uint256[](length);
+        bytes memory targetStates = new bytes(length);
+        uint256 targetCount;
+        uint256 invalidOffset = length;
         for (uint256 i; i < length;) {
             uint8 opcode = uint8(runtime[i]);
-            // Solidity places embedded creation/runtime blobs after an INVALID data delimiter.
-            // They are not executable through the reviewed dispatcher and must not be parsed as opcodes.
-            if (opcode == 0xfe) break;
-            if (
-                opcode == 0xf2 || opcode == 0xf4 || opcode == 0xff
-                    || (requireStateless && (opcode == 0x54 || opcode == 0x55))
-            ) revert ClosedRuntimeRequired(account);
+            if (opcode == 0xfe) {
+                invalidOffset = i;
+                break;
+            }
+            if (_isForbiddenRuntimeOpcode(opcode, requireStateless)) revert ClosedRuntimeRequired(account);
             unchecked {
-                if (opcode >= 0x60 && opcode <= 0x7f) i += opcode - 0x5f;
+                if (opcode >= 0x60 && opcode <= 0x7f) {
+                    uint256 pushLength = opcode - 0x5f;
+                    targetCount = _queueStaticJumpTarget(runtime, i, pushLength, jumpTargets, targetStates, targetCount);
+                    i += pushLength;
+                }
                 ++i;
             }
         }
+
+        if (invalidOffset == length) return;
+        for (uint256 cursor; cursor < targetCount; ++cursor) {
+            uint256 target = jumpTargets[cursor];
+            if (target <= invalidOffset || targetStates[target] == 0x02) continue;
+            targetStates[target] = 0x02;
+            for (uint256 i = target; i < length;) {
+                if (i != target && targetStates[i] == 0x02) break;
+                targetStates[i] = 0x02;
+                uint8 opcode = uint8(runtime[i]);
+                if (_isForbiddenRuntimeOpcode(opcode, requireStateless)) revert ClosedRuntimeRequired(account);
+                unchecked {
+                    if (opcode >= 0x60 && opcode <= 0x7f) {
+                        uint256 pushLength = opcode - 0x5f;
+                        targetCount =
+                            _queueStaticJumpTarget(runtime, i, pushLength, jumpTargets, targetStates, targetCount);
+                        i += pushLength;
+                    }
+                    ++i;
+                }
+                if (opcode == 0x00 || opcode == 0x56 || opcode == 0xf3 || opcode == 0xfd || opcode == 0xfe) break;
+            }
+        }
+    }
+
+    function _queueStaticJumpTarget(
+        bytes memory runtime,
+        uint256 opcodeOffset,
+        uint256 pushLength,
+        uint256[] memory jumpTargets,
+        bytes memory targetStates,
+        uint256 targetCount
+    ) private pure returns (uint256) {
+        uint256 length = runtime.length;
+        if (opcodeOffset + pushLength >= length) return targetCount;
+        uint256 target;
+        assembly ("memory-safe") {
+            target := shr(shl(3, sub(32, pushLength)), mload(add(add(runtime, 33), opcodeOffset)))
+        }
+        if (target >= length || uint8(runtime[target]) != 0x5b || targetStates[target] != 0) return targetCount;
+        targetStates[target] = 0x01;
+        jumpTargets[targetCount] = target;
+        return targetCount + 1;
+    }
+
+    function _isForbiddenRuntimeOpcode(uint8 opcode, bool requireStateless) private pure returns (bool) {
+        return opcode == 0xf2 || opcode == 0xf4 || opcode == 0xff
+            || (requireStateless && (opcode == 0x54 || opcode == 0x55 || opcode == 0x5c || opcode == 0x5d));
     }
 
     function _readback(

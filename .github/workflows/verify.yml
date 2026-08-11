@@ -84,7 +84,10 @@ jobs:
         run: forge fmt --check
 
       - name: Build
-        run: forge build --sizes
+        run: forge build --sizes --skip ProgrammableUniversalLaunchKernelV1
+
+      - name: Verify Router vNext universal artifact
+        run: ./scripts/verify-router-vnext-universal-v1.sh
 
       - name: Test
         env:

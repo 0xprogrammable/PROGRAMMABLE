@@ -85,7 +85,7 @@ for (const record of report.split("end_of_record")) {
       throw new Error(`coverage exception is no longer a zero-map and must be retired: ${repositorySource}`);
     }
     observedSourceExceptions.add(repositorySource);
-    console.log(`coverage source-map exception: ${repositorySource} (hash-bound exact fork tests required)`);
+    console.log(`coverage source-map exception: ${repositorySource} (hash-bound alternate test gate required)`);
     continue;
   }
 

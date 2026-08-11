@@ -50,7 +50,7 @@
       }
     },
     "standardInputPath": "artifacts/router-vnext-universal-v1/standard-input.json",
-    "standardInputSha256": "923d24d4cdf17eefad2324ac7e247182b96afa488a34951fc813689ac00faf40"
+    "standardInputSha256": "49bfc15a1ddedcdde4728cffa24b4520f80da0f3443df2b8a2e199fd9eb85527"
   },
   "sources": {
     "src/router_vnext/IProgrammableUniversalLaunchKernelV1.sol": {
@@ -66,13 +66,13 @@
       "sha256": "22ec3d29bc050c2a7c5934038c08e57585ab08074042c30acec83d9846a39070"
     },
     "src/router_vnext/ProgrammableUniversalLaunchPreflightV1.sol": {
-      "sha256": "734b576e84f9bea124a61edd4a0f95741d57dcf3a47ec4f174497b7e5d750ae3"
+      "sha256": "ea0f3f233ec7a5465c5cd16094bee5720e1d1215ac9f683d360b9140a8833de3"
     },
     "src/router_vnext/ProgrammableNestedFactoryProfileV1.sol": {
       "sha256": "52dda71eadc9379b5298b5e35bb7c6b19337e17e86e8c7f330be5f74b547a2ec"
     },
     "test/router_vnext/ProgrammableUniversalLaunchKernelV1.t.sol": {
-      "sha256": "0bd2ace49c93e6f88bab77486727d9c5f555769d6b600dfd9d51bba06bfd352f"
+      "sha256": "6dd0a0740a4dab36a7076df57cfb0398082af824746a044bb59358d146f93925"
     },
     "config/router-vnext/foundry.toml": {
       "sha256": "c3bc259b634902cd42245e220e0de69831f3b809eb4341d0a1bb4876cc7f79ac"
@@ -291,13 +291,13 @@
       "source": "src/router_vnext/ProgrammableUniversalLaunchPreflightV1.sol",
       "abiPath": "artifacts/router-vnext-universal-v1/ProgrammableUniversalLaunchPreflightV1.abi.json",
       "abiSha256": "c22a46909d0edaecc157a4eebbae0ee621a11482925cf92d76cbbaaa280b63d9",
-      "creationBytes": 8885,
-      "creationSha256": "e01291dd2f18f468f7a3271a03485764b43b6718f871b5175c755629bb3ff440",
-      "creationKeccak256": "0x511f7ac4304ab7f3079255f0471ca33aca0bbde2d1acd737e2e13390e37da4ed",
-      "runtimeTemplateBytes": 8857,
-      "runtimeTemplateMarginBytes": 15719,
-      "runtimeTemplateSha256": "fbc7e42c10d1b84c23c01b5ebc509c89d6ab096bee7c9083c576c43a95ed0598",
-      "runtimeTemplateKeccak256": "0x7f63b99af35d79b09ef8a368cab54827154d89e14e9545c6ccbeb16014ded48a",
+      "creationBytes": 9889,
+      "creationSha256": "4e6cc7c186766b0d21836ce9a586222c3d275445e2910a7017e3c7ee7836dc2c",
+      "creationKeccak256": "0xc6eba5b0c088356a777816d79b0e922eb6ff6b3b62b80a5525b959199d35444f",
+      "runtimeTemplateBytes": 9861,
+      "runtimeTemplateMarginBytes": 14715,
+      "runtimeTemplateSha256": "a8f15ad7c2f98593241518c238fcfeeeceb897fd9a8237f6b3c1a939a93bb039",
+      "runtimeTemplateKeccak256": "0x99b31a5c8bf5029cac2e9aa043e9f6123ffc59597fd3e633d7e8d78e656ceb29",
       "immutableReferences": {},
       "liveRuntimeCodeHash": null,
       "deploymentAddress": null

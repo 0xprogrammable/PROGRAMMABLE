@@ -416,6 +416,14 @@ contract UniversalStatefulDependencyV1 is IProgrammableRuntimeBindingV1 {
     }
 }
 
+contract UniversalRawRuntimeDependencyV1 {
+    constructor(bytes memory runtime) {
+        assembly ("memory-safe") {
+            return(add(runtime, 32), mload(runtime))
+        }
+    }
+}
+
 contract ProgrammableUniversalLaunchKernelV1Test {
     bytes32 private constant SECURITY_HEAD = keccak256("universal-security-head-v1");
     bytes32 private constant SECURITY_EPOCH_HASH = keccak256("universal-security-epoch-v1");
@@ -754,6 +762,66 @@ contract ProgrammableUniversalLaunchKernelV1Test {
             statefulAccepted = true;
         } catch { }
         require(!statefulAccepted, "mutable dependency accepted");
+    }
+
+    function testClosedRuntimeScannerContinuesPastInvalidDelimiter() external {
+        ProgrammableUniversalLaunchPreflightV1 preflight = new ProgrammableUniversalLaunchPreflightV1();
+        bytes32 bindingHash = keccak256("reachable-delegatecall-after-invalid");
+        bytes memory runtime = abi.encodePacked(
+            hex"5f3560e01c63",
+            IProgrammableRuntimeBindingV1.runtimeBindingHashV1.selector,
+            hex"14601c57601256fe5b5f5f5f5f5f5ff450005b7f",
+            bindingHash,
+            hex"5f5260205ff3"
+        );
+        address dependency = address(new UniversalRawRuntimeDependencyV1(runtime));
+
+        (bool accepted,) = address(preflight)
+            .staticcall(
+                abi.encodeCall(
+                    ProgrammableUniversalLaunchPreflightV1.closedRuntimeBindingHashV1,
+                    (dependency, dependency.codehash, bindingHash, true)
+                )
+            );
+        require(!accepted, "delegatecall after INVALID accepted");
+    }
+
+    function testClosedRuntimeScannerRejectsTransientStorageOpcodes() external {
+        ProgrammableUniversalLaunchPreflightV1 preflight = new ProgrammableUniversalLaunchPreflightV1();
+        bytes32 bindingHash = keccak256("transient-storage-runtime-binding");
+        bytes memory tloadRuntime = abi.encodePacked(
+            hex"5f3560e01c63",
+            IProgrammableRuntimeBindingV1.runtimeBindingHashV1.selector,
+            hex"14601757601256fe5b5f5c50005b7f",
+            bindingHash,
+            hex"5f5260205ff3"
+        );
+        address tloadDependency = address(new UniversalRawRuntimeDependencyV1(tloadRuntime));
+        bytes memory tstoreRuntime = abi.encodePacked(
+            hex"5f3560e01c63",
+            IProgrammableRuntimeBindingV1.runtimeBindingHashV1.selector,
+            hex"14601757601256fe5b5f5f5d005b7f",
+            bindingHash,
+            hex"5f5260205ff3"
+        );
+        address tstoreDependency = address(new UniversalRawRuntimeDependencyV1(tstoreRuntime));
+
+        (bool tloadAccepted,) = address(preflight)
+            .staticcall(
+                abi.encodeCall(
+                    ProgrammableUniversalLaunchPreflightV1.closedRuntimeBindingHashV1,
+                    (tloadDependency, tloadDependency.codehash, bindingHash, true)
+                )
+            );
+        (bool tstoreAccepted,) = address(preflight)
+            .staticcall(
+                abi.encodeCall(
+                    ProgrammableUniversalLaunchPreflightV1.closedRuntimeBindingHashV1,
+                    (tstoreDependency, tstoreDependency.codehash, bindingHash, true)
+                )
+            );
+        require(!tloadAccepted, "TLOAD dependency accepted");
+        require(!tstoreAccepted, "TSTORE dependency accepted");
     }
 
     function testZeroRevenuePolicyAndPlanFailClosed() external {

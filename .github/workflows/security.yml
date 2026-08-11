@@ -53,6 +53,7 @@ jobs:
           forge coverage
           --ir-minimum
           --no-match-contract ClassicV3MainnetForkTest
+          --no-match-path test/router_vnext/ProgrammableUniversalLaunchKernelV1.t.sol
           --exclude-tests
           --report lcov
           --report-file lcov.info
