@@ -72,7 +72,7 @@ describe("Docs information architecture", () => {
           {
             depth: 1,
             href: "/docs/models/stock-paired",
-            label: "Stock-Paired · Historical",
+            label: "Stock-Paired",
           },
           { depth: 0, href: "/docs/economics", label: "Economics" },
           { depth: 0, href: "/docs/v4-token", label: "V4 token" },
@@ -83,7 +83,7 @@ describe("Docs information architecture", () => {
             label: "Launch Stamp Router",
           },
           { depth: 0, href: "/docs/trust", label: "Trust" },
-          { depth: 0, href: "/docs/status", label: "Status" },
+          { depth: 0, href: "/docs/status", label: "Service health" },
         ],
       },
       {
@@ -98,7 +98,7 @@ describe("Docs information architecture", () => {
           {
             depth: 1,
             href: "/docs/creators/templates",
-            label: "Publish a template · Planned",
+            label: "Publish a template",
           },
           {
             depth: 1,
@@ -190,16 +190,19 @@ describe("Docs information architecture", () => {
     }
   });
 
-  it("keeps lifecycle, availability and service health separate", () => {
+  it("keeps service health separate from launch provenance", () => {
     expect(docsShell).not.toContain('status === "available"');
     expect(docsShell).not.toContain('aria-disabled="true"');
-    expect(tokensPage).toContain("Lifecycle and availability are different");
-    expect(statusPage).toContain("Product availability does not prove");
-    expect(statusPage).toContain("Current status unavailable");
+    expect(tokensPage).not.toContain(
+      "Lifecycle and availability are different",
+    );
+    expect(statusPage).toContain("Service health");
+    expect(statusPage).toContain("Health checks describe");
+    expect(statusPage).not.toContain("Current status unavailable");
     expect(statusPage).toContain('export const dynamic = "force-dynamic"');
   });
 
-  it("publishes a complete creator path without claiming planned templates are open", () => {
+  it("publishes a complete creator path with explicit repository roles", () => {
     for (const [source, path, title] of [
       [creatorsPage, "/docs/creators", "Create with Programmable"],
       [creatorLaunchPage, "/docs/creators/launch", "Launch a project"],
@@ -212,22 +215,30 @@ describe("Docs information architecture", () => {
       expect(source).toContain("<DocsShell");
     }
 
+    expect(creatorsPage).toContain("Hook Builder");
+    expect(creatorsPage).toContain("Submit a Launch");
+    expect(creatorsPage).toContain("Submit a Template");
     expect(creatorTemplatesPage).toContain(
-      "Template submission is not open yet",
+      "Follow the Submit a Template repository",
     );
     expect(creatorTemplatesPage).toMatch(
-      /do not\s+create a template application PR/,
+      /do not accept public template\s+applications/,
     );
-    expect(creatorLaunchPage).toContain(
+    expect(creatorLaunchPage).toMatch(/while the README keeps the\s+intake/);
+    expect(creatorLaunchPage).toContain("Use the repository instructions");
+    expect(creatorLaunchPage).not.toContain(
       "Open public wallet self-service is not active",
     );
   });
 
-  it("keeps current and planned revenue policy explicit", () => {
-    expect(economicsPage).toContain("49.50% of processed");
-    expect(economicsPage).toMatch(/80% of attributable net protocol\s+revenue/);
-    expect(economicsPage).toContain("This policy remains planned");
-    expect(v4TokenPage).toContain("This policy is planned, not live");
+  it("keeps one public revenue allocation policy explicit", () => {
+    expect(economicsPage).not.toContain("49.50% of processed");
+    expect(economicsPage).toMatch(
+      /80% of attributable net\s+protocol\s+revenue/,
+    );
+    expect(economicsPage).not.toContain("This policy remains planned");
+    expect(v4TokenPage).not.toContain("This policy is planned, not live");
+    expect(v4TokenPage).toContain("published protocol allocation");
     expect(v4TokenPage).toContain("No burn in the published revenue policy");
     expect(trustPage).toMatch(
       /have not\s+undergone an external audit or public security contest/,

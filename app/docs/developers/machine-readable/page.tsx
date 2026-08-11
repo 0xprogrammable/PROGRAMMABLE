@@ -91,10 +91,10 @@ export default function MachineReadableDocsPage() {
           </li>
           <li>
             <a href={PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.manifestUrl}>
-              Live manifest
+              Deployment manifest
             </a>
             <span>
-              Chain, Router, live range, runtime, immutable bindings, event
+              Chain, Router, published range, runtime, immutable bindings, event
               topics, ABI URL and digest.
             </span>
           </li>
@@ -127,7 +127,8 @@ export default function MachineReadableDocsPage() {
               Terminal and scanner guide
             </a>
             <span>
-              Backfill, live follow, overlap, reorg and finality handling.
+              Backfill, checkpoint continuation, overlap, reorg and finality
+              handling.
             </span>
           </li>
           <li>
@@ -150,13 +151,13 @@ export default function MachineReadableDocsPage() {
           <h2>Know which source defines what</h2>
           <p>
             The files have different jobs. Do not treat a model-context file as
-            a replacement for the live contract binding.
+            a replacement for the deployed contract binding.
           </p>
         </div>
 
         <dl className={styles.dataList}>
           <div>
-            <dt>Live manifest</dt>
+            <dt>Deployment manifest</dt>
             <dd>
               Supplies the current chain, Router, block range, runtime,
               bindings, topics and ABI digest.

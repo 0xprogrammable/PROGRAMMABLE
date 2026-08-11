@@ -25,7 +25,7 @@ const resources = [
     description:
       "Current Ethereum deployment, Router range, runtime hash and immutable bindings.",
     href: PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.manifestUrl,
-    label: "Live manifest",
+    label: "Deployment manifest",
   },
   {
     description:
@@ -101,7 +101,7 @@ export default function InfrastructureDocsPage() {
           The published start block is the first block to scan for this Router.
           It does not add provenance to earlier launches. A direct factory call
           remains outside the Router record even when it occurs at or after that
-          block. Do not infer a stamp from a name, symbol, shared hook or legacy
+          block. Do not infer a stamp from a name, symbol, shared hook or older
           event.
         </p>
         <p className={styles.note}>

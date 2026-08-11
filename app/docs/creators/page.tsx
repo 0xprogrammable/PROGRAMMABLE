@@ -3,16 +3,13 @@ import Link from "next/link";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
 
 import styles from "@/components/docs-hub.module.css";
-import {
-  PROGRAMMABLE_PRODUCT_STATES,
-  PROGRAMMABLE_PUBLIC_REPOSITORIES,
-} from "@/components/docs-public-policy";
+import { PROGRAMMABLE_PUBLIC_REPOSITORIES } from "@/components/docs-public-policy";
 import { DocsShell } from "@/components/docs-shell";
 
 export const metadata: Metadata = {
   title: "Creators · Programmable",
   description:
-    "Launch a project, understand creator earnings or follow the planned template publishing path.",
+    "Build a project, publish reusable hook logic and understand how creators earn.",
   alternates: { canonical: "/docs/creators" },
 };
 
@@ -20,14 +17,12 @@ const sections = [
   { id: "paths", label: "Choose a creator path" },
   { id: "project", label: "Launch a project" },
   { id: "template", label: "Publish a template" },
+  { id: "review", label: "Review and activation" },
   { id: "earn", label: "How creators earn" },
   { id: "tools", label: "Tools and programs" },
 ] as const;
 
 export default function CreatorsDocsPage() {
-  const custom = PROGRAMMABLE_PRODUCT_STATES.custom;
-  const templates = PROGRAMMABLE_PRODUCT_STATES.publicTemplates;
-
   return (
     <DocsShell
       currentPath="/docs/creators"
@@ -45,48 +40,49 @@ export default function CreatorsDocsPage() {
 
         <div className={styles.pathGrid}>
           <Link className={styles.pathCard} href="/docs/creators/launch">
-            <span>One project</span>
-            <strong>Launch a token and hook</strong>
+            <span>Submit a Launch</span>
+            <strong>Launch one project</strong>
             <small>
-              Build one exact release, submit it for review and launch it from
-              the bound wallet when its path is available.
+              Submit one token and hook configuration for review. The approved
+              revision is tied to one source commit and launch wallet.
             </small>
           </Link>
           <Link className={styles.pathCard} href="/docs/creators/templates">
-            <span>Reusable logic</span>
-            <strong>Publish a template</strong>
+            <span>Submit a Template</span>
+            <strong>Publish reusable logic</strong>
             <small>
-              Prepare one version that other creators can use. The public
-              workflow is planned and not accepting submissions yet.
+              Submit a reusable hook template that other creators can use in
+              their own official launches. The repository currently does not
+              accept public template applications.
             </small>
           </Link>
-          <Link className={styles.pathCard} href="/docs/creators/programs">
-            <span>Programs</span>
-            <strong>Join a Hookathon or partnership</strong>
+          <a
+            className={styles.pathCard}
+            href={PROGRAMMABLE_PUBLIC_REPOSITORIES.hookbuilder}
+            rel="noreferrer"
+            target="_blank"
+          >
+            <span>Hook Builder</span>
+            <strong>Build with the skill and tools</strong>
             <small>
-              Follow the current event page or discuss an exact partner template
-              with Programmable.
+              Use the Hook Builder skill to create a reproducible Uniswap v4
+              project before sending it to Submit a Launch or Submit a Template.
             </small>
-          </Link>
+            <span className="sr-only">Opens Hook Builder on GitHub</span>
+          </a>
         </div>
       </section>
 
       <section id="project">
         <h2>Launch a project</h2>
-        <div className={styles.statusLine}>
-          <span
-            className={styles.statusBadge}
-            data-lifecycle={custom.lifecycle}
-          >
-            {custom.lifecycle}
-          </span>
-          <span className={styles.statusBadge}>{custom.availability}</span>
-        </div>
-        <p>{custom.detail}</p>
         <p>
-          Start with Hookbuilder, freeze the source revision you want reviewed,
-          then follow Submit Launch. Review applies only to that revision and
-          the launch wallet named in the request.
+          Start with Hook Builder, freeze the source revision you want reviewed,
+          then submit the application through Submit a Launch. Review applies
+          only to that revision and the launch wallet named in the request.
+        </p>
+        <p>
+          Submit a Launch is for one concrete project, token and hook. Do not
+          send a reusable template to that repository.
         </p>
         <p className={styles.inlineAction}>
           <Link href="/docs/creators/launch">
@@ -97,25 +93,34 @@ export default function CreatorsDocsPage() {
 
       <section id="template">
         <h2>Publish a template</h2>
-        <div className={styles.statusLine}>
-          <span
-            className={styles.statusBadge}
-            data-lifecycle={templates.lifecycle}
-          >
-            {templates.lifecycle}
-          </span>
-          <span className={styles.statusBadge}>{templates.availability}</span>
-        </div>
-        <p>{templates.detail}</p>
         <p>
-          The intended public template policy uses one 20 bps fee, split evenly
-          between the template creator and Programmable. That policy is not live
-          until the submission, registry and payout path are activated.
+          A public template uses one 20 bps fee: 10 bps goes to the template
+          creator and 10 bps goes to Programmable. The share is tied to the
+          exact template version and its official payout path; no share accrues
+          before the repository, registry and recipient path are activated.
+        </p>
+        <p>
+          Submit a Template is the separate path for reusable hook logic. Do not
+          submit template applications to Hook Builder or Submit a Launch.
         </p>
         <p className={styles.inlineAction}>
-          <Link href="/docs/creators/templates">
-            Read the planned template model
-          </Link>
+          <Link href="/docs/creators/templates">Read the template model</Link>
+        </p>
+      </section>
+
+      <section id="review">
+        <h2>Review and activation</h2>
+        <p>
+          Launch Reviewer checks one concrete project revision. Template
+          Reviewer checks one reusable template version, its parameter range and
+          its payout identity. Both reviewers bind their result to the exact
+          source and artifacts they examined.
+        </p>
+        <p>
+          Authority and activation are separate from review. A review result
+          does not itself deploy a contract, authorize a wallet transaction or
+          create a fee recipient. The matching release record must provide that
+          binding before a launch can use it.
         </p>
       </section>
 
@@ -123,8 +128,9 @@ export default function CreatorsDocsPage() {
         <h2>How creators earn</h2>
         <p>
           Classic creators receive the selected swap fee minus the 10 bps
-          Programmable share. Template and partner shares apply only to an
-          activated version on its official market path.
+          Programmable share. Public templates use a 10/10 bps split, while
+          partner templates use 15 bps for the partner and 5 bps for
+          Programmable.
         </p>
         <p>
           Revenue depends on qualifying activity. Review, publication and
@@ -145,7 +151,7 @@ export default function CreatorsDocsPage() {
               target="_blank"
             >
               <span>
-                <strong>Hookbuilder</strong>
+                <strong>Hook Builder</strong>
                 <small>
                   The skill and local tools for building a reproducible Uniswap
                   v4 project.
@@ -158,9 +164,10 @@ export default function CreatorsDocsPage() {
           <li>
             <Link href="/hookathon">
               <span>
-                <strong>Current Hookathon</strong>
+                <strong>Hookathons</strong>
                 <small>
-                  Read the current deadline, award and submission instructions.
+                  Open the event page for its deadline, award and submission
+                  instructions.
                 </small>
               </span>
               <ArrowRight aria-hidden="true" size={17} strokeWidth={1.8} />

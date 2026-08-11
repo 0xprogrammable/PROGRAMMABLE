@@ -47,14 +47,11 @@ export default function CreatorEarningsDocsPage() {
           role="region"
           tabIndex={0}
         >
-          <table
-            className={`${styles.comparisonTable} ${styles.policyTable}`}
-          >
+          <table className={`${styles.comparisonTable} ${styles.policyTable}`}>
             <thead>
               <tr>
                 <th scope="col">Path</th>
                 <th scope="col">Creator or partner share</th>
-                <th scope="col">Status</th>
               </tr>
             </thead>
             <tbody>
@@ -63,21 +60,18 @@ export default function CreatorEarningsDocsPage() {
                 <td data-label="Creator or partner share">
                   Selected swap fee minus {formatBps(classic.programmableBps)}
                 </td>
-                <td data-label="Status">{classic.status}</td>
               </tr>
               <tr>
                 <th scope="row">Public template</th>
                 <td data-label="Creator or partner share">
                   {formatBps(publicTemplate.creatorBps)}
                 </td>
-                <td data-label="Status">{publicTemplate.status}</td>
               </tr>
               <tr>
                 <th scope="row">Partner template</th>
                 <td data-label="Creator or partner share">
                   {formatBps(partner.partnerBps)}
                 </td>
-                <td data-label="Status">No active partner template</td>
               </tr>
             </tbody>
           </table>
@@ -104,26 +98,27 @@ export default function CreatorEarningsDocsPage() {
       <section id="public-template">
         <h2>Public templates</h2>
         <p>
-          The planned public template fee is 20 bps in total. The exact template
-          creator receives 10 bps and Programmable receives 10 bps from
-          qualifying official launches that use that active version.
+          The public template fee is 20 bps in total. The exact template creator
+          receives 10 bps and Programmable receives 10 bps from qualifying
+          official launches that use that version.
         </p>
         <p>
-          This model is not live. No creator share accrues until the public
-          template registry and payout path are activated.
+          The current template repository does not accept public applications. A
+          share accrues only when the matching template registry and payout path
+          are active for the launch.
         </p>
       </section>
 
       <section id="partner">
         <h2>Partnership templates</h2>
         <p>
-          An activated partner template uses 20 bps in total. The partner
-          receives 15 bps and Programmable receives 5 bps. The normal 10 bps
-          Native Custom fee is not added on top of that partner total.
+          A partner template uses 20 bps in total. The partner receives 15 bps
+          and Programmable receives 5 bps. The normal 10 bps Native Custom fee
+          is not added on top of that partner total.
         </p>
         <p>
-          The policy applies only to an exact activated partner version. No
-          partnership template is currently active.
+          No partner version is assumed active; the exact version and official
+          payout path must be activated before a share can accrue.
         </p>
       </section>
 
@@ -131,9 +126,9 @@ export default function CreatorEarningsDocsPage() {
         <h2>Accrual and claims</h2>
         <p>
           The exact contract and asset determine how a share accrues and how it
-          is claimed. Classic creator rewards accrue in ETH. Template contracts
-          will publish their fee event, asset, recipient and claim method before
-          activation.
+          is claimed. Classic creator rewards accrue in ETH. Each template
+          version defines its fee event, asset, recipient and claim method in
+          its release record.
         </p>
         <p>
           A payout address must be verified before a launch or template version

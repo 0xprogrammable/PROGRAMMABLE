@@ -83,7 +83,7 @@ export const docsNavigation: readonly DocsNavigationGroup[] = [
       {
         depth: 1,
         href: "/docs/models/stock-paired",
-        label: "Stock-Paired · Historical",
+        label: "Stock-Paired",
       },
       { href: "/docs/economics", label: "Economics" },
       { href: "/docs/v4-token", label: "V4 token" },
@@ -94,7 +94,7 @@ export const docsNavigation: readonly DocsNavigationGroup[] = [
         label: "Launch Stamp Router",
       },
       { href: "/docs/trust", label: "Trust" },
-      { href: "/docs/status", label: "Status" },
+      { href: "/docs/status", label: "Service health" },
     ],
   },
   {
@@ -109,7 +109,7 @@ export const docsNavigation: readonly DocsNavigationGroup[] = [
       {
         depth: 1,
         href: "/docs/creators/templates",
-        label: "Publish a template · Planned",
+        label: "Publish a template",
       },
       { depth: 1, href: "/docs/creators/earnings", label: "Earnings" },
       { depth: 1, href: "/docs/creators/programs", label: "Programs" },
@@ -152,7 +152,7 @@ export const docsSearchItems: DocsSearchItem[] = [
   {
     title: "Creator overview",
     description:
-      "Launch a project, understand earnings or follow the planned template path.",
+      "Launch a project, understand earnings and publish reusable hook logic.",
     href: "/docs/creators",
     keywords: ["creator", "earn", "launch"],
   },
@@ -165,7 +165,7 @@ export const docsSearchItems: DocsSearchItem[] = [
   {
     title: "Publish a template",
     description:
-      "Understand the planned reusable template workflow and version binding.",
+      "Publish reusable hook logic with clear version binding and attribution.",
     href: "/docs/creators/templates",
     keywords: ["template", "royalty", "fee share"],
   },
@@ -192,7 +192,7 @@ export const docsSearchItems: DocsSearchItem[] = [
   {
     title: "V4 token and protocol revenue",
     description:
-      "Understand the V4 token, the planned 80/20 policy and its boundaries.",
+      "Understand the V4 token, the 80/20 protocol allocation and its boundaries.",
     href: "/docs/v4-token",
     keywords: ["buyback", "treasury", "80 20"],
   },
@@ -204,15 +204,16 @@ export const docsSearchItems: DocsSearchItem[] = [
     keywords: ["security", "audit", "approval"],
   },
   {
-    title: "Status",
+    title: "Service health",
     description:
-      "See product lifecycle and availability without confusing them with service health.",
+      "Check API availability, data freshness, provider agreement and finality signals.",
     href: "/docs/status",
+    keywords: ["health", "status", "freshness", "indexer"],
   },
   {
     title: "Tokens and launches",
     description:
-      "Compare the launch models and see which ones are currently available.",
+      "Compare the launch models, their markets and their fee paths.",
     href: "/docs/tokens",
   },
   {
@@ -229,7 +230,7 @@ export const docsSearchItems: DocsSearchItem[] = [
   {
     title: "Stock-Paired",
     description:
-      "Read the historical quote-asset model and its current support status.",
+      "Read the historical quote-asset model and its deployment boundaries.",
     href: "/docs/models/stock-paired",
   },
   {
@@ -253,7 +254,7 @@ export const docsSearchItems: DocsSearchItem[] = [
   {
     title: "Index new launches",
     description:
-      "Backfill Router events, follow new launches and handle finality and reorgs.",
+      "Read Router events, verify candidates and handle finality and reorgs.",
     href: "/docs/developers/indexing",
   },
   {
@@ -284,7 +285,7 @@ export const docsSearchItems: DocsSearchItem[] = [
   {
     title: "Manifest, ABI and GitHub",
     description:
-      "Use the live manifest, byte-verified ABI and canonical verifier guides.",
+      "Use the published manifest, byte-verified ABI and canonical verifier guides.",
     href: "/docs/developers#resources",
   },
   {

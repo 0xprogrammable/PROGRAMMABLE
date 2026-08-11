@@ -4,10 +4,7 @@ import Link from "next/link";
 import { DocsExternalLink } from "@/components/docs-external-link";
 import docsStyles from "@/components/docs-experience.module.css";
 import styles from "@/components/docs-hub.module.css";
-import {
-  PROGRAMMABLE_PUBLIC_REPOSITORIES,
-  PROGRAMMABLE_PRODUCT_STATES,
-} from "@/components/docs-public-policy";
+import { PROGRAMMABLE_PUBLIC_REPOSITORIES } from "@/components/docs-public-policy";
 import { DocsShell } from "@/components/docs-shell";
 
 export const metadata: Metadata = {
@@ -25,8 +22,6 @@ const sections = [
 ] as const;
 
 export default function CreatorProgramsDocsPage() {
-  const partnerState = PROGRAMMABLE_PRODUCT_STATES.partnerTemplates;
-
   return (
     <DocsShell
       currentPath="/docs/creators/programs"
@@ -48,28 +43,21 @@ export default function CreatorProgramsDocsPage() {
           Always use the event page for those details.
         </p>
         <p className={styles.inlineAction}>
-          <Link href="/hookathon">Open the current Hookathon</Link>
+          <Link href="/hookathon">Open Hookathon events</Link>
         </p>
       </section>
 
       <section id="partnerships">
         <h2>Partnerships</h2>
-        <div className={styles.statusLine}>
-          <span
-            className={styles.statusBadge}
-            data-lifecycle={partnerState.lifecycle}
-          >
-            {partnerState.lifecycle}
-          </span>
-          <span className={styles.statusBadge}>
-            {partnerState.availability}
-          </span>
-        </div>
-        <p>{partnerState.detail}</p>
         <p>
-          An activated partner template uses one 20 bps fee, split 15 bps to the
-          partner and 5 bps to Programmable. A partnership is bound to the exact
+          A partner template uses one 20 bps fee, split 15 bps to the partner
+          and 5 bps to Programmable. A partnership is bound to the exact
           provider, template version, fee path and payout identity.
+        </p>
+        <p>
+          No partner version is assumed active by this reference. The exact
+          repository and activation record control when a partner path can
+          accrue a share.
         </p>
         <p>
           Partnership support does not replace technical review or create a
@@ -80,7 +68,7 @@ export default function CreatorProgramsDocsPage() {
       <section id="contributions">
         <h2>Contributions</h2>
         <p>
-          Builders can improve the public product, Hookbuilder, developer
+          Builders can improve the public product, Hook Builder, developer
           references and submission workflows through their respective
           repositories. A contribution is reviewed against that
           repository&apos;s scope and rules.
@@ -101,7 +89,7 @@ export default function CreatorProgramsDocsPage() {
             href={PROGRAMMABLE_PUBLIC_REPOSITORIES.hookbuilder}
             variant="chip"
           >
-            Hookbuilder
+            Hook Builder
           </DocsExternalLink>
           <DocsExternalLink
             href={PROGRAMMABLE_PUBLIC_REPOSITORIES.developers}

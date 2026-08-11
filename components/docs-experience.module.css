@@ -1,10 +1,28 @@
 .page {
+  --docs-canvas: #12212b;
+  --surface: #182a35;
+  --surface-raised: #213742;
+  --surface-soft: #29414d;
+  --body-background: var(--docs-canvas);
+  --text: #f7f1ea;
+  --text-soft: #d8d1ca;
+  --muted: #b5afa8;
+  --dim: #9b9894;
+  --panel-border: rgb(247 241 234 / 0.16);
+  --panel-border-soft: rgb(247 241 234 / 0.12);
+  background:
+    radial-gradient(
+      circle at 78% 4%,
+      rgb(231 134 178 / 0.08),
+      transparent 30rem
+    ),
+    var(--docs-canvas);
   --docs-content-width: 680px;
   --docs-main-width: 948px;
   --docs-layout-gap: 32px;
   --docs-article-gap: 48px;
-  --docs-link: #6f594a;
-  --docs-link-soft: rgba(111, 89, 74, 0.09);
+  --docs-link: var(--accent-strong);
+  --docs-link-soft: var(--accent-soft);
   --docs-rail-width: 252px;
   --docs-toc-width: 220px;
   align-items: start;
@@ -26,6 +44,26 @@
 :global(html:has([data-docs-shell])),
 :global(body:has([data-docs-shell])) {
   overflow-x: clip;
+}
+
+:global(html:has([data-docs-shell])) {
+  background: #0b141d;
+}
+
+:global(html:has([data-docs-shell]) body) {
+  background: #0b141d;
+}
+
+:global(body:has([data-docs-shell]) .app-frame) {
+  background: #12212b;
+}
+
+:global(body:has([data-docs-shell]) .atmosphere-backdrop) {
+  display: none;
+}
+
+:global(body:has([data-docs-shell]) .site-header) {
+  background: #12212b;
 }
 
 :global(body:has([data-docs-shell]) .atmosphere-plant) {
@@ -69,13 +107,7 @@
 }
 
 .mainColumn::before {
-  background: rgb(1 1 3 / 0.92);
-  box-shadow: 0 0 46px 28px rgb(1 1 3 / 0.76);
-  content: "";
-  inset: -24px -24px;
-  pointer-events: none;
-  position: absolute;
-  z-index: -1;
+  content: none;
 }
 
 .sidebarBrand {
@@ -189,9 +221,9 @@
 }
 
 .searchResults {
-  -webkit-backdrop-filter: var(--liquid-glass-backdrop);
-  backdrop-filter: var(--liquid-glass-backdrop);
-  background: color-mix(in srgb, #010103 88%, var(--brand-ivory));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: var(--surface-raised);
   border: 1px solid var(--liquid-glass-border);
   border-radius: 14px;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.38);
@@ -350,13 +382,7 @@
 }
 
 .sidebar::before {
-  background: rgb(1 1 3 / 0.96);
-  box-shadow: 0 0 36px 22px rgb(1 1 3 / 0.78);
-  content: "";
-  inset: -18px -28px -22px -24px;
-  pointer-events: none;
-  position: absolute;
-  z-index: -1;
+  content: none;
 }
 
 .desktopNav {
@@ -411,7 +437,7 @@
 }
 
 .navGroup a[data-active="true"] {
-  background: color-mix(in srgb, var(--surface-soft) 72%, transparent);
+  background: var(--docs-link-soft);
   color: var(--text);
   font-weight: 620;
 }
@@ -631,7 +657,7 @@
 }
 
 .callout {
-  background: color-mix(in srgb, var(--surface-soft) 48%, transparent);
+  background: var(--surface-soft);
   border: 1px solid var(--panel-border-soft);
   border-radius: 10px;
   display: grid;
@@ -1360,9 +1386,7 @@
   }
 
   .mainColumn::before {
-    background: rgb(1 1 3 / 0.96);
-    box-shadow: 0 0 36px 22px rgb(1 1 3 / 0.88);
-    inset: -20px 0;
+    content: none;
   }
 
   .sidebar {
@@ -1398,7 +1422,7 @@
 
   .mobileTools {
     align-items: center;
-    background: color-mix(in srgb, #010103 92%, transparent);
+    background: var(--surface-raised);
     border: 1px solid var(--panel-border-soft);
     border-radius: 10px;
     box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
@@ -1478,7 +1502,7 @@
   }
 
   .mobilePageNavBody {
-    background: color-mix(in srgb, #010103 96%, var(--surface));
+    background: var(--surface-raised);
     border: 1px solid var(--panel-border-soft);
     border-radius: 12px;
     box-shadow: 0 18px 46px rgba(0, 0, 0, 0.4);
@@ -1543,11 +1567,11 @@
   .mobileNavDialog::backdrop {
     -webkit-backdrop-filter: blur(2px);
     backdrop-filter: blur(2px);
-    background: rgba(1, 1, 3, 0.72);
+    background: var(--dialog-backdrop);
   }
 
   .mobileNavPanel {
-    background: color-mix(in srgb, #010103 97%, var(--surface));
+    background: var(--surface-raised);
     border: 1px solid var(--panel-border);
     border-block-end: 0;
     border-radius: 18px 18px 0 0;
@@ -1656,6 +1680,25 @@
   .layout {
     display: block;
     margin-top: 44px;
+  }
+}
+
+@media (max-width: 800px) {
+  :global(body:has([data-docs-shell]) .app-frame > main) {
+    padding-bottom: calc(104px + env(safe-area-inset-bottom));
+  }
+
+  :global(body:has([data-docs-shell]) .mobile-nav) {
+    background: #213742;
+    border: 1px solid var(--panel-border-soft);
+    border-radius: 14px;
+    box-shadow: 0 10px 28px rgb(0 0 0 / 0.28);
+    padding: 3px;
+  }
+
+  :global(body:has([data-docs-shell]) .mobile-nav a) {
+    color: var(--text-soft);
+    text-shadow: none;
   }
 }
 

@@ -157,22 +157,6 @@
   outline-offset: 3px;
 }
 
-.status {
-  color: var(--text-soft);
-}
-
-.status[data-tone="current"] {
-  color: var(--text-soft);
-}
-
-.status[data-tone="limited"] {
-  color: var(--accent-strong);
-}
-
-.status[data-tone="historical"] {
-  color: var(--muted);
-}
-
 .plainList {
   display: grid;
   gap: 9px;
@@ -307,31 +291,6 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-.statusBadge {
-  border: 1px solid var(--panel-border-soft);
-  border-radius: 999px;
-  color: var(--text-soft);
-  display: inline-flex;
-  font-size: 13px;
-  font-weight: 620;
-  line-height: 1;
-  padding: 6px 9px;
-}
-
-.statusBadge[data-lifecycle="Live"] {
-  border-color: color-mix(
-    in srgb,
-    var(--success) 34%,
-    var(--panel-border-soft)
-  );
-  color: var(--success);
-}
-
-.statusBadge[data-lifecycle="Planned"],
-.statusBadge[data-lifecycle="Legacy"] {
-  color: var(--muted);
 }
 
 .splitBar {

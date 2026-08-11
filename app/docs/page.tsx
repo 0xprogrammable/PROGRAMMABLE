@@ -4,6 +4,7 @@ import { ArrowRight } from "lucide-react";
 
 import docsStyles from "@/components/docs-experience.module.css";
 import styles from "@/components/docs-hub.module.css";
+import { PROGRAMMABLE_PUBLIC_REPOSITORIES } from "@/components/docs-public-policy";
 import { DocsShell } from "@/components/docs-shell";
 
 export const metadata: Metadata = {
@@ -15,6 +16,7 @@ export const metadata: Metadata = {
 
 const sections = [
   { id: "start", label: "Choose a path" },
+  { id: "vision", label: "What Programmable is" },
   { id: "system", label: "How the system fits together" },
   { id: "launch-types", label: "Launch models" },
   { id: "identity", label: "Public identity" },
@@ -60,7 +62,7 @@ const launchTypes = [
   },
   {
     description:
-      "A historical model paired with supported Ondo Global Markets quote assets. New launches are closed.",
+      "Existing records use supported Ondo Global Markets quote assets; see the reference for its market and integration details.",
     href: "/docs/models/stock-paired",
     label: "Stock-Paired",
   },
@@ -89,6 +91,40 @@ export default function DocsIndexPage() {
               <small>{path.description}</small>
             </Link>
           ))}
+        </div>
+      </section>
+
+      <section id="vision">
+        <h2>What Programmable is</h2>
+        <p>
+          Programmable is the public infrastructure for building, launching and
+          discovering Uniswap v4 markets. The long-term goal is a clear,
+          verifiable home for hook builders, creators, integrators and the
+          communities that use their markets.
+        </p>
+        <div className={styles.topicList}>
+          <div>
+            <h3>Creators</h3>
+            <p>
+              Build a concrete project or publish reusable hook logic, then
+              understand the review, attribution and fee path before launch.
+            </p>
+          </div>
+          <div>
+            <h3>Builders</h3>
+            <p>
+              Use Hook Builder as the skill and tooling layer. It produces the
+              reproducible project that belongs in Submit a Launch or Submit a
+              Template.
+            </p>
+          </div>
+          <div>
+            <h3>Integrators</h3>
+            <p>
+              Read the Router record, token identity and market data through the
+              developer references instead of relying on names or tickers.
+            </p>
+          </div>
         </div>
       </section>
 
@@ -190,15 +226,48 @@ export default function DocsIndexPage() {
             </Link>
           </li>
           <li>
-            <Link href="/docs/status">
+            <Link href="/docs/creators">
               <span>
-                <strong>Product status</strong>
+                <strong>Creator paths</strong>
                 <small>
-                  Keep lifecycle, access and service health separate.
+                  Choose Hook Builder, Submit a Launch or Submit a Template.
                 </small>
               </span>
               <ArrowRight aria-hidden="true" size={17} strokeWidth={1.8} />
             </Link>
+          </li>
+          <li>
+            <a
+              href={PROGRAMMABLE_PUBLIC_REPOSITORIES.submitLaunch}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <span>
+                <strong>Submit a Launch</strong>
+                <small>
+                  Submit one concrete project, token and hook revision.
+                </small>
+              </span>
+              <ArrowRight aria-hidden="true" size={17} strokeWidth={1.8} />
+              <span className="sr-only">Opens GitHub in a new tab</span>
+            </a>
+          </li>
+          <li>
+            <a
+              href={PROGRAMMABLE_PUBLIC_REPOSITORIES.submitTemplate}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <span>
+                <strong>Submit a Template</strong>
+                <small>
+                  Read the requirements; submit only when the repository accepts
+                  applications.
+                </small>
+              </span>
+              <ArrowRight aria-hidden="true" size={17} strokeWidth={1.8} />
+              <span className="sr-only">Opens GitHub in a new tab</span>
+            </a>
           </li>
         </ul>
       </section>

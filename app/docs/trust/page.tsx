@@ -17,7 +17,7 @@ const sections = [
   { id: "review", label: "Review and approval" },
   { id: "router", label: "Router provenance" },
   { id: "roles", label: "Roles and controls" },
-  { id: "audits", label: "Audit status" },
+  { id: "audits", label: "Independent review" },
   { id: "report", label: "Report an issue" },
 ] as const;
 
@@ -129,7 +129,7 @@ export default function TrustDocsPage() {
         <h2>Roles and controls</h2>
         <p>
           Every release should disclose who can change fees, recipients,
-          dependencies, template status and future launch availability. The
+          dependencies, template configuration and future launch controls. The
           creator wallet controls its own launch transaction. Protocol roles do
           not sign that transaction on the creator&apos;s behalf.
         </p>
@@ -145,7 +145,7 @@ export default function TrustDocsPage() {
       </section>
 
       <section id="audits">
-        <h2>Audit status</h2>
+        <h2>Independent review</h2>
         <p>
           The Programmable contracts in the public product repository have not
           undergone an external audit or public security contest. Internal

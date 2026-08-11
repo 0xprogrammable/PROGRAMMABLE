@@ -3,10 +3,7 @@ import type { Metadata } from "next";
 import { DocsExternalLink } from "@/components/docs-external-link";
 import docsStyles from "@/components/docs-experience.module.css";
 import styles from "@/components/docs-hub.module.css";
-import {
-  PROGRAMMABLE_PUBLIC_REPOSITORIES,
-  PROGRAMMABLE_PRODUCT_STATES,
-} from "@/components/docs-public-policy";
+import { PROGRAMMABLE_PUBLIC_REPOSITORIES } from "@/components/docs-public-policy";
 import { DocsShell } from "@/components/docs-shell";
 
 export const metadata: Metadata = {
@@ -17,7 +14,7 @@ export const metadata: Metadata = {
 };
 
 const sections = [
-  { id: "access", label: "Current access" },
+  { id: "access", label: "Start here" },
   { id: "prepare", label: "Prepare the project" },
   { id: "submit", label: "Submit one revision" },
   { id: "review", label: "Review" },
@@ -26,8 +23,6 @@ const sections = [
 ] as const;
 
 export default function CreatorLaunchDocsPage() {
-  const state = PROGRAMMABLE_PRODUCT_STATES.custom;
-
   return (
     <DocsShell
       currentPath="/docs/creators/launch"
@@ -38,20 +33,19 @@ export default function CreatorLaunchDocsPage() {
       title="Launch a project"
     >
       <section id="access">
-        <h2>Current access</h2>
-        <div className={styles.statusLine}>
-          <span className={styles.statusBadge} data-lifecycle={state.lifecycle}>
-            {state.lifecycle}
-          </span>
-          <span className={styles.statusBadge}>{state.availability}</span>
-        </div>
-        <p>{state.detail}</p>
+        <h2>Start here</h2>
+        <p>
+          Use Hook Builder to create the project. When Submit a Launch accepts
+          applications, it packages the exact revision for review. The
+          submission repository defines the request format and required files.
+        </p>
         <div className={docsStyles.callout}>
-          <strong>Open public wallet self-service is not active.</strong>
+          <strong>Use the repository instructions.</strong>
           <p>
-            A program may collect projects before general intake opens. Follow
-            the instructions for that program and the current Submit Launch
-            repository. Do not invent a submission format.
+            Intake rules can change with the review system. Read the current
+            Submit a Launch README before creating a pull request; do not invent
+            a submission format or open a manual PR while the README keeps the
+            intake in prelaunch review.
           </p>
         </div>
       </section>
@@ -92,7 +86,7 @@ export default function CreatorLaunchDocsPage() {
           href={PROGRAMMABLE_PUBLIC_REPOSITORIES.hookbuilder}
           variant="chip"
         >
-          Open Hookbuilder
+          Open Hook Builder
         </DocsExternalLink>
       </section>
 
@@ -104,14 +98,19 @@ export default function CreatorLaunchDocsPage() {
           a new review target.
         </p>
         <p>
-          Submit Launch is the public home for this workflow. Its current README
-          decides whether intake is open and which files to provide.
+          Submit a Launch is the public home for this workflow when its README
+          accepts applications. Its README defines the intake rules and the
+          files to provide.
+        </p>
+        <p>
+          This repository is for one concrete project and token. Reusable hook
+          logic belongs in Submit a Template, not in a project submission.
         </p>
         <DocsExternalLink
           href={PROGRAMMABLE_PUBLIC_REPOSITORIES.submitLaunch}
           variant="chip"
         >
-          Open Submit Launch
+          Open Submit a Launch
         </DocsExternalLink>
       </section>
 

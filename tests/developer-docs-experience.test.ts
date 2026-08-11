@@ -82,7 +82,7 @@ describe("Developer documentation experience", () => {
     expect(developerPage).not.toContain("DeveloperDocsWorkbench");
   });
 
-  it("puts the live manifest, frozen ABI and GitHub reference first", () => {
+  it("puts the deployment manifest, frozen ABI and GitHub reference first", () => {
     expect(developerPage).toContain(
       "PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.manifestUrl",
     );
@@ -93,7 +93,7 @@ describe("Developer documentation experience", () => {
       "PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.referenceUrl",
     );
     expect(developerDocsMarkdown).toContain(
-      `Live manifest: ${PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.manifestUrl}`,
+      `Deployment manifest: ${PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.manifestUrl}`,
     );
     expect(developerDocsMarkdown).toContain(
       `Frozen Router ABI: ${PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.abiUrl}`,
@@ -200,7 +200,7 @@ describe("Developer documentation experience", () => {
       "each consumer must implement the published verification procedure",
     );
     expect(developerDocsMarkdown).toMatch(
-      /Launch access is a separate gated product path/,
+      /Launch access is a separate product path/,
     );
     expect(developerDocsMarkdown).toContain(
       "https://programmable.market/docs/creators/launch",

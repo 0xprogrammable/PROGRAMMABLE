@@ -54,7 +54,7 @@ export default function VerifyLaunchPage() {
           <p>
             Read the stable discovery document, follow its{" "}
             <code>manifestUrl</code> and use the <code>launchStampRouter</code>{" "}
-            entry from the live manifest.
+            entry from the deployment manifest.
           </p>
         </div>
 
@@ -75,7 +75,7 @@ export default function VerifyLaunchPage() {
             </dd>
           </div>
           <div>
-            <dt>Live range</dt>
+            <dt>Published block range</dt>
             <dd>
               <code>{router.startBlock}</code> to{" "}
               <code>{router.endBlock ?? "open"}</code>
@@ -173,7 +173,7 @@ export default function VerifyLaunchPage() {
             before returning <code>STAMPED</code> or <code>NOT_STAMPED</code>.
           </li>
           <li>
-            Require the block to fall inside the Router&apos;s published live
+            Require the block to fall inside the Router&apos;s published block
             range.
           </li>
         </ul>
@@ -357,8 +357,8 @@ export default function VerifyLaunchPage() {
               <code>UNAVAILABLE</code>
             </dt>
             <dd>
-              The Router is not live for the requested block, the chain is
-              inactive or required activation data is incomplete.
+              The Router binding does not cover the requested block, the chain
+              is inactive or required activation data is incomplete.
             </dd>
           </div>
           <div>

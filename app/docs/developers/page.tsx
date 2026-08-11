@@ -6,6 +6,7 @@ import {
   PROGRAMMABLE_LAUNCH_STAMP_MANIFEST,
   PROGRAMMABLE_LAUNCH_STAMP_RESOURCES,
 } from "@/components/launch-stamp-docs-contract";
+import { PROGRAMMABLE_DEVELOPER_ORIGIN } from "@/components/developer-docs-contract";
 import styles from "@/components/developer-docs.module.css";
 import { DocsAddress } from "@/components/docs-address";
 import { DocsShell } from "@/components/docs-shell";
@@ -98,8 +99,8 @@ export default function DeveloperDocsPage() {
         <div className={styles.sectionIntro}>
           <h2>Before you start</h2>
           <p>
-            Bind your integration to the live manifest before you read a token,
-            pool or event.
+            Bind your integration to the published manifest before you read a
+            token, pool or event.
           </p>
         </div>
 
@@ -174,8 +175,8 @@ export default function DeveloperDocsPage() {
               <code>UNAVAILABLE</code>
             </dt>
             <dd>
-              The Router is outside its live block range, the chain is inactive
-              or activation data is incomplete.
+              The Router is outside its published block range, the chain is
+              inactive or activation data is incomplete.
             </dd>
           </div>
           <div>
@@ -211,7 +212,7 @@ export default function DeveloperDocsPage() {
         <ul className={styles.linkList}>
           <li>
             <a href={PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.manifestUrl}>
-              Live manifest
+              Deployment manifest
             </a>
             <span>Current chain, Router, start block and bindings.</span>
           </li>
@@ -237,7 +238,37 @@ export default function DeveloperDocsPage() {
             </Link>
             <span>Selectors, events, records and deployment evidence.</span>
           </li>
+          <li>
+            <a href={`${PROGRAMMABLE_DEVELOPER_ORIGIN}/api/v2/launches`}>
+              Hosted launch feed
+            </a>
+            <span>
+              Paginated Classic and Custom records for applications that need a
+              read API rather than direct event indexing.
+            </span>
+          </li>
+          <li>
+            <a href={`${PROGRAMMABLE_DEVELOPER_ORIGIN}/api/v2/token-list`}>
+              Token list
+            </a>
+            <span>
+              Read the finalized token projection for wallet and terminal
+              integrations.
+            </span>
+          </li>
+          <li>
+            <a href={`${PROGRAMMABLE_DEVELOPER_ORIGIN}/api/v2/status`}>
+              Feed health
+            </a>
+            <span>
+              Check coverage, freshness and finality before ingestion.
+            </span>
+          </li>
         </ul>
+        <p className={styles.detailLine}>
+          The hosted API is a convenience read surface. Router verification and
+          onchain reads remain the authority for Programmable provenance.
+        </p>
       </section>
 
       <section id="checklist">
@@ -246,7 +277,7 @@ export default function DeveloperDocsPage() {
         </div>
 
         <ul className={styles.checkList}>
-          <li>Load the live manifest and verify the Router binding.</li>
+          <li>Load the deployment manifest and verify the Router binding.</li>
           <li>Use one canonical block for every read in a verification.</li>
           <li>
             Return <code>INDETERMINATE</code> when required evidence fails or

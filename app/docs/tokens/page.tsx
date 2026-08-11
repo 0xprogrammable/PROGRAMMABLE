@@ -3,13 +3,12 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
 import styles from "@/components/docs-hub.module.css";
-import { PROGRAMMABLE_PRODUCT_STATES } from "@/components/docs-public-policy";
 import { DocsShell } from "@/components/docs-shell";
 
 export const metadata: Metadata = {
   title: "Tokens and launches · Programmable",
   description:
-    "Compare Programmable Classic, Custom and historical Stock-Paired launches, including the current availability of each type.",
+    "Compare Programmable Classic, Custom and Stock-Paired launches by market, fee path and identity.",
   alternates: { canonical: "/docs/tokens" },
 };
 
@@ -22,28 +21,28 @@ const sections = [
 
 const launchTypes = [
   {
-    availability: `${PROGRAMMABLE_PRODUCT_STATES.classic.lifecycle}. ${PROGRAMMABLE_PRODUCT_STATES.classic.availability}. ${PROGRAMMABLE_PRODUCT_STATES.classic.detail}`,
+    feePath:
+      "Selected buy and sell fees include 10 bps to Programmable; the remainder is creator rewards.",
     href: "/docs/models/classic",
     label: "Classic",
     market:
       "Fixed-supply token with an ETH market, configurable directional fees, creator rewards and permanently locked one-sided liquidity.",
-    tone: "current",
   },
   {
-    availability: `${PROGRAMMABLE_PRODUCT_STATES.custom.lifecycle}. ${PROGRAMMABLE_PRODUCT_STATES.custom.availability}. ${PROGRAMMABLE_PRODUCT_STATES.custom.detail}`,
+    feePath:
+      "A release-specific hook fee with a 10 bps Programmable share on the supported official path.",
     href: "/docs/models/custom",
     label: "Custom hooks",
     market:
       "Token market with Uniswap v4 hook logic and a configuration defined for that release.",
-    tone: "limited",
   },
   {
-    availability: `${PROGRAMMABLE_PRODUCT_STATES.stockPaired.lifecycle}. ${PROGRAMMABLE_PRODUCT_STATES.stockPaired.availability}. ${PROGRAMMABLE_PRODUCT_STATES.stockPaired.detail}`,
+    feePath:
+      "A historical quote-asset path documented for existing records and integrations.",
     href: "/docs/models/stock-paired",
     label: "Stock-Paired",
     market:
       "Existing token paired with a configured Ondo Global Markets quote asset.",
-    tone: "historical",
   },
 ] as const;
 
@@ -51,7 +50,7 @@ export default function TokensDocsPage() {
   return (
     <DocsShell
       currentPath="/docs/tokens"
-      description="Programmable launch types differ in their market configuration, fee path and current availability."
+      description="Programmable launch types differ in their market configuration, fee path and public identity."
       sections={sections}
       title="Tokens and launches"
     >
@@ -61,12 +60,6 @@ export default function TokensDocsPage() {
           Open a launch guide for the complete token structure, fee behavior,
           reward flow and product boundaries.
         </p>
-        <p>
-          Lifecycle and availability are different. A live model can still be
-          gated to exact releases. A legacy model can remain visible after new
-          launches close.
-        </p>
-
         <div
           aria-label="Launch type comparison"
           className={styles.tableWrap}
@@ -78,7 +71,7 @@ export default function TokensDocsPage() {
               <tr>
                 <th scope="col">Launch type</th>
                 <th scope="col">Market</th>
-                <th scope="col">Availability</th>
+                <th scope="col">Fee path</th>
               </tr>
             </thead>
             <tbody>
@@ -88,11 +81,7 @@ export default function TokensDocsPage() {
                     <Link href={launchType.href}>{launchType.label}</Link>
                   </th>
                   <td>{launchType.market}</td>
-                  <td>
-                    <span className={styles.status} data-tone={launchType.tone}>
-                      {launchType.availability}
-                    </span>
-                  </td>
+                  <td>{launchType.feePath}</td>
                 </tr>
               ))}
             </tbody>

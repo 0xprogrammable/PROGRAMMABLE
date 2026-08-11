@@ -6,7 +6,6 @@ import styles from "@/components/docs-hub.module.css";
 import {
   formatBps,
   PROGRAMMABLE_FEE_TABLE,
-  PROGRAMMABLE_PRODUCT_STATES,
   PROGRAMMABLE_PUBLIC_REPOSITORIES,
 } from "@/components/docs-public-policy";
 import { DocsShell } from "@/components/docs-shell";
@@ -14,21 +13,20 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Publish a template · Programmable",
   description:
-    "Understand the planned public template workflow, version binding and creator fee share.",
+    "Publish reusable hook logic with clear version binding, attribution and creator fees.",
   alternates: { canonical: "/docs/creators/templates" },
 };
 
 const sections = [
-  { id: "status", label: "Status" },
+  { id: "overview", label: "Template model" },
   { id: "difference", label: "Template or project" },
   { id: "economics", label: "Template economics" },
   { id: "version", label: "Version and attribution" },
   { id: "requirements", label: "What a template needs" },
-  { id: "next", label: "What happens next" },
+  { id: "next", label: "Repository reference" },
 ] as const;
 
 export default function CreatorTemplateDocsPage() {
-  const state = PROGRAMMABLE_PRODUCT_STATES.publicTemplates;
   const fee = PROGRAMMABLE_FEE_TABLE.publicTemplate;
 
   return (
@@ -40,22 +38,32 @@ export default function CreatorTemplateDocsPage() {
       sections={sections}
       title="Publish a template"
     >
-      <section id="status">
-        <h2>Status</h2>
-        <div className={styles.statusLine}>
-          <span className={styles.statusBadge} data-lifecycle={state.lifecycle}>
-            {state.lifecycle}
-          </span>
-          <span className={styles.statusBadge}>{state.availability}</span>
-        </div>
-        <p>{state.detail}</p>
+      <section id="overview">
+        <h2>Template model</h2>
+        <p>
+          A template is reusable hook logic with a defined parameter range. Each
+          version is reviewed and attributed separately so creators can see
+          exactly which code their launches use.
+        </p>
+        <p>
+          Use Submit a Template for reusable logic. A concrete token and project
+          belong in Submit a Launch, while Hook Builder remains the skill and
+          tooling layer for creating both.
+        </p>
         <div className={docsStyles.callout}>
-          <strong>Template submission is not open yet.</strong>
+          <strong>Follow the Submit a Template repository.</strong>
           <p>
-            The repository exists so the workflow can be published cleanly.
-            Until it contains an active schema and intake instructions, do not
-            create a template application PR.
+            The repository is the source for the schema, examples and intake
+            rules. Its current instructions do not accept public template
+            applications. Read the repository before opening a pull request; the
+            repository controls when that changes.
           </p>
+          <DocsExternalLink
+            href={PROGRAMMABLE_PUBLIC_REPOSITORIES.submitTemplate}
+            variant="chip"
+          >
+            Open Submit a Template
+          </DocsExternalLink>
         </div>
       </section>
 
@@ -67,9 +75,7 @@ export default function CreatorTemplateDocsPage() {
           role="region"
           tabIndex={0}
         >
-          <table
-            className={`${styles.comparisonTable} ${styles.policyTable}`}
-          >
+          <table className={`${styles.comparisonTable} ${styles.policyTable}`}>
             <thead>
               <tr>
                 <th scope="col">Question</th>
@@ -80,7 +86,9 @@ export default function CreatorTemplateDocsPage() {
             <tbody>
               <tr>
                 <th scope="row">Purpose</th>
-                <td data-label="Project launch">Create one token and market.</td>
+                <td data-label="Project launch">
+                  Create one token and market.
+                </td>
                 <td data-label="Public template">
                   Let other creators launch with reusable logic.
                 </td>
@@ -97,7 +105,9 @@ export default function CreatorTemplateDocsPage() {
               </tr>
               <tr>
                 <th scope="row">Creator action</th>
-                <td data-label="Project launch">Launch from the bound wallet.</td>
+                <td data-label="Project launch">
+                  Launch from the bound wallet.
+                </td>
                 <td data-label="Public template">
                   Publish a version for future official launches.
                 </td>
@@ -108,7 +118,7 @@ export default function CreatorTemplateDocsPage() {
                   Defined by the project market.
                 </td>
                 <td data-label="Public template">
-                  Planned fee share from qualifying template usage.
+                  10 bps from qualifying official template usage.
                 </td>
               </tr>
             </tbody>
@@ -119,14 +129,11 @@ export default function CreatorTemplateDocsPage() {
       <section id="economics">
         <h2>Template economics</h2>
         <p>
-          The intended public template policy uses one {formatBps(fee.totalBps)}{" "}
-          fee. {formatBps(fee.creatorBps)} goes to the template creator and{" "}
+          The public template policy uses one {formatBps(fee.totalBps)} fee.{" "}
+          {formatBps(fee.creatorBps)} goes to the template creator and{" "}
           {formatBps(fee.programmableBps)} goes to Programmable.
         </p>
-        <div
-          aria-label="Planned public template fee split"
-          className={styles.splitBar}
-        >
+        <div aria-label="Public template fee split" className={styles.splitBar}>
           <span>10 bps template creator</span>
           <span>10 bps Programmable</span>
         </div>
@@ -134,6 +141,10 @@ export default function CreatorTemplateDocsPage() {
           The share applies only to official Programmable launches that use the
           exact active template version. It does not create a royalty on
           unrelated deployments or forks outside Programmable.
+        </p>
+        <p>
+          This policy is not a payout receipt. Payment requires the matching
+          template registry, contract and recipient activation record.
         </p>
       </section>
 
@@ -165,17 +176,17 @@ export default function CreatorTemplateDocsPage() {
       </section>
 
       <section id="next">
-        <h2>What happens next</h2>
+        <h2>Repository reference</h2>
         <p>
-          Submit Template will publish the schema, examples and review process
-          before intake opens. The repository is the only source for that
-          opening.
+          Submit a Template contains the schema, examples and review process for
+          this path. Use the repository as the source for current intake
+          instructions.
         </p>
         <DocsExternalLink
           href={PROGRAMMABLE_PUBLIC_REPOSITORIES.submitTemplate}
           variant="chip"
         >
-          Follow Submit Template
+          Follow Submit a Template
         </DocsExternalLink>
       </section>
     </DocsShell>

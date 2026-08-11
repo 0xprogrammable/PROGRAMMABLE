@@ -1,6 +1,8 @@
 import { PROGRAMMABLE_FEE_POLICY } from "@/components/developer-docs-contract";
 import { PLATFORM_FEE_BPS } from "@/lib/launch";
 
+// Compatibility data for internal policy tests and machine-readable tooling.
+// Public pages use neutral copy and do not render these lifecycle labels.
 export type DocsLifecycle = "Live" | "Preview" | "Planned" | "Legacy";
 export type DocsAvailability = "Open" | "Gated" | "Unavailable";
 

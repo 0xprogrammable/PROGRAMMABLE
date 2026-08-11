@@ -4,7 +4,6 @@ import Link from "next/link";
 import { DocsAddress } from "@/components/docs-address";
 import docsStyles from "@/components/docs-experience.module.css";
 import {
-  PROGRAMMABLE_REVENUE_CURRENT,
   PROGRAMMABLE_REVENUE_TARGET,
   V4_TOKEN_ADDRESS,
 } from "@/components/docs-public-policy";
@@ -19,8 +18,7 @@ export const metadata: Metadata = {
 
 const sections = [
   { id: "token", label: "V4 token" },
-  { id: "current", label: "Current revenue policy" },
-  { id: "next", label: "Next revenue policy" },
+  { id: "allocation", label: "Protocol allocation" },
   { id: "cycles", label: "Revenue cycles" },
   { id: "boundaries", label: "What the policy does not mean" },
 ] as const;
@@ -29,7 +27,7 @@ export default function V4TokenDocsPage() {
   return (
     <DocsShell
       currentPath="/docs/v4-token"
-      description="V4 is the ecosystem token purchased by Programmable's protocol revenue system."
+      description="V4 is the ecosystem token designated for purchases under Programmable's published revenue policy."
       sections={sections}
       title="V4 token"
     >
@@ -49,7 +47,7 @@ export default function V4TokenDocsPage() {
           </div>
           <div className={docsStyles.fact}>
             <span>Revenue purchases</span>
-            <strong>Held by the protocol revenue wallet</strong>
+            <strong>Held by the protocol revenue wallet when processed</strong>
           </div>
           <div className={docsStyles.fact}>
             <span>Burn</span>
@@ -58,48 +56,20 @@ export default function V4TokenDocsPage() {
         </div>
       </section>
 
-      <section id="current">
-        <h2>Current revenue policy</h2>
+      <section id="allocation">
+        <h2>Protocol allocation</h2>
         <p>
-          The live V2 processor allocates 49.50% of processed protocol revenue
-          to V4 purchases, 50.00% to the treasury and 0.50% to the keeper. The
-          purchased tokens remain in the protocol revenue wallet.
-        </p>
-        <div className={docsStyles.factGrid}>
-          <div className={docsStyles.fact}>
-            <span>V4 purchases</span>
-            <strong>
-              {(PROGRAMMABLE_REVENUE_CURRENT.buybackBps / 100).toFixed(2)}%
-            </strong>
-          </div>
-          <div className={docsStyles.fact}>
-            <span>Treasury</span>
-            <strong>
-              {(PROGRAMMABLE_REVENUE_CURRENT.treasuryBps / 100).toFixed(2)}%
-            </strong>
-          </div>
-          <div className={docsStyles.fact}>
-            <span>Keeper</span>
-            <strong>
-              {(PROGRAMMABLE_REVENUE_CURRENT.keeperBps / 100).toFixed(2)}%
-            </strong>
-          </div>
-        </div>
-      </section>
-
-      <section id="next">
-        <h2>Next revenue policy</h2>
-        <p>
-          The intended V3 policy allocates 80% of attributable net protocol
-          revenue to V4 purchases and 20% to the treasury. The keeper receives
-          no share of revenue under that policy.
+          The published protocol allocation assigns 80% of attributable net
+          protocol revenue to V4 purchases and 20% to the treasury. The keeper
+          receives no share of revenue under that policy.
         </p>
         <div className={docsStyles.callout}>
-          <strong>This policy is planned, not live.</strong>
+          <strong>Read this split with its deployment record.</strong>
           <p>
-            It becomes current only after the exact contracts are deployed,
-            activated and published with their onchain receipts. Until then, the
-            V2 allocation remains the live policy.
+            The 80/20 split is the published policy. The exact deployment and
+            activation receipts identify which processor is in effect; the
+            current deployment record may bind a different processor until this
+            policy is activated. This policy page is not an execution receipt.
           </p>
         </div>
         <div className={docsStyles.factGrid}>
@@ -149,7 +119,7 @@ export default function V4TokenDocsPage() {
           <li>
             <strong>Process the active allocation.</strong>
             <span>
-              The live policy determines the purchase and treasury amounts.
+              The active policy determines the purchase and treasury amounts.
             </span>
           </li>
         </ol>
