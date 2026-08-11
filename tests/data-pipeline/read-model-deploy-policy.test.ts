@@ -666,11 +666,15 @@ describe("read-model production deploy policy", () => {
     expect(workflow).toContain(
       'marketSources: Object.freeze(["bitquery"]),',
     );
+    expect(workflow).toContain(
+      'dataQualities: Object.freeze(["complete", "partial", "stale"]),',
+    );
     expect(workflow).toContain("rpcProviders: null");
     expect(workflow).not.toContain("alchemyIdentityContract");
     expect(workflow).toContain('"x-programmable-market-source",');
     expect(workflow).toContain('"x-programmable-price-source",');
     expect(workflow).toContain('"x-programmable-market-as-of",');
+    expect(workflow).toContain('"x-programmable-data-quality",');
     expect(workflow).toContain(
       "!headerMatches(rpcProvider, contract.rpcProviders)",
     );
@@ -733,7 +737,7 @@ describe("read-model production deploy policy", () => {
     expect(workflow).toContain(
       'valuation.reason === "waiting-for-first-trade"',
     );
-    expect(workflow).not.toContain("currentFdvCount < 1");
+    expect(workflow).not.toContain("if (currentFdvCount < 1) {");
     expect(workflow).toContain(
       "staged Bitquery current Explore and detail FDV are not identical",
     );
@@ -742,6 +746,17 @@ describe("read-model production deploy policy", () => {
     );
     expect(workflow).toContain(
       'goldenValuation.supplyBasis !== "total"',
+    );
+    expect(workflow).toContain(
+      '"./scripts/perf/bitquery-golden-market-parity.mjs"',
+    );
+    expect(workflow).toContain(
+      "await verifyBitqueryGoldenMarketParityV1({",
+    );
+    expect(workflow).toContain("const historicalPaidPathVerified =");
+    expect(workflow).toContain("goldenParity.confirmations >= 12");
+    expect(workflow).toContain(
+      "currentFdvCount < 1 && !historicalPaidPathVerified",
     );
     expect(workflow).toContain(
       "goldenChart.asOfTime !== goldenChart.points.at(-1)?.time",

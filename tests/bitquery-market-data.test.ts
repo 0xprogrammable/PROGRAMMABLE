@@ -50,6 +50,7 @@ function tradeRow(input: Readonly<{
   block?: string;
   time?: string;
   transaction?: string;
+  transactionIndex?: number;
   logIndex?: number;
   priceUsd?: string;
   priceQuote?: string;
@@ -95,6 +96,7 @@ function tradeRow(input: Readonly<{
     },
     Transaction: {
       Hash: input.transaction ?? `0x${"aa".repeat(32)}`,
+      Index: input.transactionIndex ?? 7,
     },
   };
 }
@@ -250,6 +252,14 @@ describe("Bitquery-only market data", () => {
         expect(request.query).toContain(
           "Currency: { SmartContract: { in: $tokenAddresses } }",
         );
+        expect(request.query).toContain(
+          "EVM(network: eth, dataset: combined)",
+        );
+        expect(request.query).toContain(
+          "{ descending: Transaction_Index }",
+        );
+        expect(request.query).toContain("{ descending: Log_Index }");
+        expect(request.query).toContain("Transaction { Hash Index }");
         expect(request.query).toContain(
           "Token: { Address: { in: $tokenAddresses } }",
         );
@@ -648,6 +658,7 @@ describe("Bitquery-only market data", () => {
         },
       }],
     });
+    expect(isTokenMarketDataV1(values.get(PCAN.tokenAddress))).toBe(true);
   });
 
   it("does not turn a partial response into a false first-trade state", async () => {
@@ -667,6 +678,36 @@ describe("Bitquery-only market data", () => {
         valuation: { reason: "source-unavailable" },
       }],
     });
+  });
+
+  it("does not preserve a cached first-trade claim through provider failure", async () => {
+    const success = vi.fn(async () => jsonResponse(marketResponse({
+      trade: null,
+    }))) as typeof fetch;
+    await readBitqueryTokenMarketDataV1([PCAN], {
+      fetchImpl: success,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+    const failure = vi.fn(async () => {
+      throw new Error("provider unavailable");
+    }) as typeof fetch;
+
+    const values = await readBitqueryTokenMarketDataV1([PCAN], {
+      fetchImpl: failure,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:03.000Z"),
+    });
+
+    expect(values.get(PCAN.tokenAddress)).toMatchObject({
+      status: "unavailable",
+      pools: [{
+        status: "unavailable",
+        quality: "partial",
+        valuation: { status: "unavailable", reason: "source-unavailable" },
+      }],
+    });
+    expect(isTokenMarketDataV1(values.get(PCAN.tokenAddress))).toBe(true);
   });
 
   it("uses only Bitquery last-known-good data during a temporary failure", async () => {
@@ -777,32 +818,80 @@ describe("Bitquery-only market data", () => {
 describe("Bitquery OHLCV chart and server stream", () => {
   beforeEach(() => clearBitqueryMarketDataCachesForTests());
 
-  it("uses the paid combined dataset for the all-history chart", async () => {
-    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
-      const request = JSON.parse(String(init?.body));
-      expect(request.query).toContain("EVM(network: eth, dataset: combined)");
-      expect(request.variables).toEqual({
-        poolId: PCAN.poolId,
-        tokenAddress: PCAN.tokenAddress,
+  it.each(["1d", "1w", "all"] as const)(
+    "uses the paid combined dataset for the %s chart",
+    async (range) => {
+      const fetchImpl = vi.fn(async (
+        _url: string | URL | Request,
+        init?: RequestInit,
+      ) => {
+        const request = JSON.parse(String(init?.body));
+        expect(request.query).toContain("EVM(network: eth, dataset: combined)");
+        expect(request.query).toContain("{ descending: Block_Number }");
+        expect(request.query).toContain("{ descending: Transaction_Index }");
+        expect(request.query).toContain("{ descending: Log_Index }");
+        expect(request.variables).toMatchObject({
+          poolId: PCAN.poolId,
+          tokenAddress: PCAN.tokenAddress,
+        });
+        if (range === "all") {
+          expect(request.variables).not.toHaveProperty("since");
+        } else {
+          expect(request.variables.since).toMatch(/^2026-08-/u);
+        }
+        return jsonResponse({
+          data: {
+            EVM: { DEXTrades: [] },
+            Trading: { Tokens: [supplyRow()] },
+          },
+        });
+      }) as typeof fetch;
+
+      const chart = await readBitqueryMarketChartV1({
+        identity: PCAN,
+        range,
+        fetchImpl,
+        token: OAUTH_TOKEN,
+        now: new Date("2026-08-11T14:02:00.000Z"),
       });
-      return jsonResponse({
-        data: {
-          EVM: { DEXTrades: [] },
-          Trading: { Tokens: [supplyRow()] },
-        },
-      });
+
+      expect(chart.status).toBe("waiting-for-first-trade");
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("does not preserve a cached empty chart as confirmed through failure", async () => {
+    const success = vi.fn(async () => jsonResponse({
+      data: {
+        EVM: { DEXTrades: [] },
+        Trading: { Tokens: [supplyRow()] },
+      },
+    })) as typeof fetch;
+    await readBitqueryMarketChartV1({
+      identity: PCAN,
+      range: "1h",
+      fetchImpl: success,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+    const failure = vi.fn(async () => {
+      throw new Error("provider unavailable");
     }) as typeof fetch;
 
     const chart = await readBitqueryMarketChartV1({
       identity: PCAN,
-      range: "all",
-      fetchImpl,
+      range: "1h",
+      fetchImpl: failure,
       token: OAUTH_TOKEN,
-      now: new Date("2026-08-11T14:02:00.000Z"),
+      now: new Date("2026-08-11T14:02:03.000Z"),
     });
 
-    expect(chart.status).toBe("waiting-for-first-trade");
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(chart).toMatchObject({
+      status: "unavailable",
+      points: [],
+      valuation: { status: "unavailable", reason: "source-unavailable" },
+    });
+    expect(isMarketChartV1(chart)).toBe(true);
   });
 
   it("builds exact-pool quote candles without promoting raw DEX USD", async () => {
@@ -844,8 +933,12 @@ describe("Bitquery OHLCV chart and server stream", () => {
       const request = JSON.parse(String(init?.body));
       expect(request.variables.poolId).toBe(PCAN.poolId);
       expect(request.query).toContain("DEXTrades(");
+      expect(request.query).not.toContain("dataset: combined");
       expect(request.query).toContain("PoolId: { is: $poolId }");
-      expect(request.query).toContain("orderBy: { descending: Block_Time }");
+      expect(request.query).toContain("{ descending: Block_Number }");
+      expect(request.query).toContain("{ descending: Transaction_Index }");
+      expect(request.query).toContain("{ descending: Log_Index }");
+      expect(request.query).toContain("Transaction { Hash Index }");
       expect(request.query).toContain("TransactionStatus: { Success: true }");
       return jsonResponse({
         data: {
@@ -937,6 +1030,47 @@ describe("Bitquery OHLCV chart and server stream", () => {
     });
     expect(chart).not.toHaveProperty("volumeUsdWad");
     expect(isMarketChartV1(chart)).toBe(true);
+  });
+
+  it("orders same-block swaps by transaction index and then log index, never hash", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      data: {
+        EVM: {
+          DEXTrades: [
+            tradeRow({
+              block: "25740000",
+              time: "2026-08-11T14:00:01.000Z",
+              transaction: `0x${"ff".repeat(32)}`,
+              transactionIndex: 1,
+              logIndex: 9,
+              priceQuote: "1",
+            }),
+            tradeRow({
+              block: "25740000",
+              time: "2026-08-11T14:00:01.000Z",
+              transaction: `0x${"00".repeat(32)}`,
+              transactionIndex: 2,
+              logIndex: 1,
+              priceQuote: "2",
+            }),
+          ],
+        },
+        Trading: { Tokens: [supplyRow()] },
+      },
+    })) as typeof fetch;
+
+    const chart = await readBitqueryMarketChartV1({
+      identity: PCAN,
+      range: "1h",
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+
+    expect(chart.points[0]).toMatchObject({
+      priceQuote: "2",
+      ohlcQuote: { open: "1", close: "2" },
+    });
   });
 
   it("never promotes raw DEX USD into chart prices or volume", async () => {
@@ -1051,6 +1185,7 @@ describe("Bitquery OHLCV chart and server stream", () => {
     );
     expect(BITQUERY_MARKET_STREAM_QUERY.match(/DEXTrades\(/gu)).toHaveLength(1);
     expect(BITQUERY_MARKET_STREAM_QUERY.match(/DEXPoolEvents\(/gu)).toHaveLength(1);
+    expect(BITQUERY_MARKET_STREAM_QUERY).toContain("Transaction { Hash Index }");
     expect(
       BITQUERY_MARKET_STREAM_QUERY.match(
         /TransactionStatus: \{ Success: true \}/gu,

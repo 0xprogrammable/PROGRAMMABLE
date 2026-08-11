@@ -90,7 +90,7 @@ describe("token price chart inspection", () => {
     expect(shouldClearChartInspectionAfterPointerUp("")).toBe(true);
   });
 
-  it("updates FDV to the inspected historical price", () => {
+  it("updates historical FDV only from matching ETH and USD evidence", () => {
     expect(
       getChartFdvAtPoint(
         {
@@ -103,7 +103,7 @@ describe("token price chart inspection", () => {
           fdvEth: "1000",
           fdvUsdWad: "2000000000000000000000000",
         },
-        { blockNumber: "1", priceEth: "0.5" },
+        { blockNumber: "1", priceEth: "0.5", priceUsd: "1250" },
         { blockNumber: "2", priceEth: "1", priceUsd: "2500" },
       ),
     ).toEqual({
@@ -113,7 +113,7 @@ describe("token price chart inspection", () => {
     });
   });
 
-  it("retains verified FDV when historical integer scaling would underflow", () => {
+  it("does not substitute current FDV when historical scaling underflows", () => {
     expect(
       getChartFdvAtPoint(
         {
@@ -129,10 +129,31 @@ describe("token price chart inspection", () => {
         { blockNumber: "1", priceEth: "0.5" },
         { blockNumber: "2", priceEth: "1" },
       ),
-    ).toEqual({
-      fdvEthWei: "1",
-      fdvEth: "0.000000000000000001",
-      fdvUsdWad: "1",
+    ).toEqual({});
+  });
+
+  it("never derives historical USD FDV from ETH or arbitrary quote ratios", () => {
+    const payload = {
+      status: "ready" as const,
+      points: [],
+      swapCount: 2,
+      fdvEthWei: "1000000000000000000000",
+      fdvEth: "1000",
+      fdvUsdWad: "2000000000000000000000000",
+    };
+
+    expect(getChartFdvAtPoint(
+      payload,
+      { blockNumber: "1", priceQuote: "5", quoteSymbol: "USDC" },
+      { blockNumber: "2", priceQuote: "10", quoteSymbol: "USDC" },
+    )).toEqual({});
+    expect(getChartFdvAtPoint(
+      payload,
+      { blockNumber: "1", priceEth: "0.5" },
+      { blockNumber: "2", priceEth: "1", priceUsd: "2500" },
+    )).toEqual({
+      fdvEthWei: "500000000000000000000",
+      fdvEth: "500",
     });
   });
 

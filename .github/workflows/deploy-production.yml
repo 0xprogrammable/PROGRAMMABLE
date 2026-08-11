@@ -471,6 +471,9 @@ jobs:
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
           node --input-type=module <<'NODE'
+          const { verifyBitqueryGoldenMarketParityV1 } = await import(
+            "./scripts/perf/bitquery-golden-market-parity.mjs"
+          );
           const origin = new URL(process.env.STAGED_TARGET_URL);
           if (
             origin.protocol !== "https:" ||
@@ -503,11 +506,17 @@ jobs:
             readSources: Object.freeze(["operational+durable+postgres"]),
             rpcProviders: null,
             marketSources: Object.freeze(["bitquery"]),
+            dataQualities: Object.freeze(["complete", "partial", "stale"]),
           });
           const bitqueryChartContract = Object.freeze({
             readSources: null,
             rpcProviders: null,
             marketSources: Object.freeze(["bitquery"]),
+            dataQualities: Object.freeze([
+              "ready",
+              "insufficient-history",
+              "partial",
+            ]),
           });
           const unavailableValuationReasons = new Set([
             "no-market",
@@ -542,6 +551,9 @@ jobs:
           const currentMarketTime = (value) =>
             validMarketTime(value) &&
             Date.now() - Date.parse(value) <= 6 * 60_000;
+          const boundedStaleMarketTime = (value) =>
+            validMarketTime(value) &&
+            Date.now() - Date.parse(value) <= 24 * 60 * 60_000;
 
           const requestJson = async (path, contract) => {
             let lastError;
@@ -574,10 +586,14 @@ jobs:
                 const marketAsOf = response.headers.get(
                   "x-programmable-market-as-of",
                 );
+                const dataQuality = response.headers.get(
+                  "x-programmable-data-quality",
+                );
                 if (
                   !headerMatches(readSource, contract.readSources) ||
                   !headerMatches(rpcProvider, contract.rpcProviders) ||
                   !headerMatches(marketSource, contract.marketSources) ||
+                  !headerMatches(dataQuality, contract.dataQualities) ||
                   (contract.priceSources !== undefined &&
                     !headerMatches(priceSource, contract.priceSources))
                 ) {
@@ -586,8 +602,17 @@ jobs:
                   );
                 }
                 const body = JSON.parse(text);
+                const expectedDataQuality = body?.dataQuality?.status ?? body?.status;
+                if (dataQuality !== expectedDataQuality) {
+                  throw new Error(`${path} has inconsistent data-quality provenance`);
+                }
                 Object.defineProperty(body, "__marketHeaders", {
-                  value: Object.freeze({ marketAsOf, marketSource, priceSource }),
+                  value: Object.freeze({
+                    dataQuality,
+                    marketAsOf,
+                    marketSource,
+                    priceSource,
+                  }),
                   enumerable: false,
                 });
                 return body;
@@ -658,6 +683,9 @@ jobs:
             }
             availableFdvCount += 1;
             if (valuation.freshness === "stale") {
+              if (!boundedStaleMarketTime(valuation.asOfTime)) {
+                throw new Error("staged Bitquery Explore stale FDV is too old");
+              }
               staleFdvCount += 1;
               sawNonCurrentFdv = true;
               if (token?.fdvUsdWad !== undefined) {
@@ -704,14 +732,30 @@ jobs:
           }
           const exploreMarketAsOf =
             explore.dataQuality?.valuation?.asOfTime ?? null;
+          const valuationQuality = explore.dataQuality?.valuation;
           if (
+            explore.dataQuality?.schemaVersion !==
+              "programmable.explore-data-quality.v1" ||
+            explore.__marketHeaders?.dataQuality !== explore.dataQuality.status ||
+            !["complete", "partial", "stale"].includes(
+              explore.dataQuality.status,
+            ) ||
+            valuationQuality?.metric !== "fdv" ||
+            !Number.isSafeInteger(valuationQuality.available) ||
+            !Number.isSafeInteger(valuationQuality.unavailable) ||
+            valuationQuality.available + valuationQuality.unavailable !==
+              explore.total ||
+            !Number.isSafeInteger(valuationQuality.stale) ||
+            valuationQuality.stale > valuationQuality.available ||
+            valuationQuality.unknown !== 0 ||
             ![null, "bitquery"].includes(
               explore.__marketHeaders?.priceSource ?? null,
             ) ||
             (currentFdvCount > 0 &&
               explore.__marketHeaders?.priceSource !== "bitquery") ||
             explore.__marketHeaders?.marketAsOf !== exploreMarketAsOf ||
-            (exploreMarketAsOf !== null && !validMarketTime(exploreMarketAsOf))
+            (exploreMarketAsOf !== null &&
+              !boundedStaleMarketTime(exploreMarketAsOf))
           ) {
             throw new Error(
               "staged Bitquery Explore has inconsistent market provenance",
@@ -925,6 +969,8 @@ jobs:
                 currentFdvToken.valuation.asOfTime ||
               currentFdvDetail.token.fdvUsdWad !==
                 currentFdvToken.fdvUsdWad ||
+              currentFdvDetail.__marketHeaders?.marketAsOf !==
+                currentFdvDetail.token.valuation.asOfTime ||
               currentFdvDetail.__marketHeaders?.priceSource !== "bitquery"
             ) {
               throw new Error(
@@ -975,6 +1021,14 @@ jobs:
             goldenMarket?.schemaVersion !== "programmable.market-data.v1" ||
             goldenMarket?.source !== "bitquery" ||
             goldenMarket?.primaryPoolId !== goldenPoolId ||
+            !currentMarketTime(goldenMarket?.generatedAt) ||
+            goldenDetail.dataQuality?.schemaVersion !==
+              "programmable.explore-data-quality.v1" ||
+            goldenDetail.__marketHeaders?.dataQuality !==
+              goldenDetail.dataQuality.status ||
+            !["complete", "partial", "stale"].includes(
+              goldenDetail.dataQuality.status,
+            ) ||
             !["current", "stale"].includes(goldenMarket?.status) ||
             !["current", "stale"].includes(goldenPool?.status) ||
             goldenValuation?.status !== "available" ||
@@ -985,6 +1039,8 @@ jobs:
             !validMarketTime(goldenValuation.asOfTime) ||
             (goldenValuation.freshness === "current" &&
               !currentMarketTime(goldenValuation.asOfTime)) ||
+            (goldenValuation.freshness === "stale" &&
+              !boundedStaleMarketTime(goldenValuation.asOfTime)) ||
             goldenPool?.valuation?.metric !== "fdv" ||
             goldenPool?.valuation?.marketCapUsdWad !== undefined ||
             expectedGoldenFdv === null ||
@@ -995,6 +1051,7 @@ jobs:
             goldenExploreToken.valuation.valueWad !== goldenValuation.valueWad ||
             goldenExploreToken.valuation.freshness !== goldenValuation.freshness ||
             goldenExploreToken.valuation.asOfTime !== goldenValuation.asOfTime ||
+            goldenDetail.__marketHeaders?.marketAsOf !== goldenValuation.asOfTime ||
             (goldenValuation.freshness === "current"
               ? goldenDetail.__marketHeaders?.priceSource !== "bitquery"
               : goldenDetail.__marketHeaders?.priceSource !== null) ||
@@ -1006,6 +1063,9 @@ jobs:
           ) {
             throw new Error("staged PCAN market valuation is not Bitquery-bound");
           }
+          const goldenParity = await verifyBitqueryGoldenMarketParityV1({
+            token: goldenDetail.token,
+          });
           const goldenChart = await requestJson(
             `/api/explore/token/chart?address=${goldenTokenAddress}&range=all`,
             bitqueryChartContract,
@@ -1013,6 +1073,7 @@ jobs:
           if (
             goldenChart.schemaVersion !== "programmable.market-chart.v1" ||
             goldenChart.source !== "bitquery" ||
+            !currentMarketTime(goldenChart.generatedAt) ||
             goldenChart.address?.toLowerCase() !== goldenTokenAddress ||
             goldenChart.identity?.poolId !== goldenPoolId ||
             !["ready", "insufficient-history", "partial"].includes(
@@ -1025,8 +1086,11 @@ jobs:
             !["current", "stale"].includes(goldenChart.valuation?.freshness) ||
             (goldenChart.valuation?.freshness === "current" &&
               !currentMarketTime(goldenChart.valuation?.asOfTime)) ||
+            (goldenChart.valuation?.freshness === "stale" &&
+              !boundedStaleMarketTime(goldenChart.valuation?.asOfTime)) ||
             goldenChart.asOfTime !== goldenChart.points.at(-1)?.time ||
             goldenChart.__marketHeaders?.marketAsOf !== goldenChart.asOfTime ||
+            goldenChart.__marketHeaders?.dataQuality !== goldenChart.status ||
             goldenChart.__marketHeaders?.priceSource !== "bitquery" ||
             !validMarketTime(goldenChart.asOfTime)
           ) {
@@ -1056,12 +1120,30 @@ jobs:
             previousChartTime = time;
             previousChartBlock = block;
           }
+          const historicalPaidPathVerified =
+            goldenParity.schemaVersion ===
+              "programmable.bitquery-golden-market-parity.v1" &&
+            goldenParity.tokenAddress === goldenTokenAddress &&
+            goldenParity.poolId === goldenPoolId &&
+            goldenParity.confirmations >= 12 &&
+            goldenChart.points.length >= 1 &&
+            currentMarketTime(goldenChart.generatedAt) &&
+            goldenChart.__marketHeaders?.dataQuality === goldenChart.status &&
+            goldenChart.__marketHeaders?.marketSource === "bitquery" &&
+            goldenChart.__marketHeaders?.priceSource === "bitquery";
+          if (currentFdvCount < 1 && !historicalPaidPathVerified) {
+            throw new Error(
+              "staged Bitquery market path has no current or independently verified history",
+            );
+          }
           process.stdout.write(
             `${JSON.stringify({
               status: "verified-bitquery-staged-market-apis",
               tokenAddress: releaseToken.tokenAddress,
               goldenTokenAddress,
               goldenPoolId,
+              goldenParity,
+              historicalPaidPathVerified,
               currentFdvCount,
               availableFdvCount,
               staleFdvCount,

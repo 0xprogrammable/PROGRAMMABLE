@@ -211,8 +211,9 @@ export function evaluateAlchemyExploreSourceContracts(
         "limitBy: { by: Token_Address, count: 1 }",
       ) &&
       bitqueryMarketSource.includes(
-        'const dataset = range === "all" ? ", dataset: combined" : "";',
+        'const dataset = range === "1h" ? "" : ", dataset: combined";',
       ) &&
+      bitqueryMarketSource.includes("EVM(network: eth, dataset: combined)") &&
       !bitqueryMarketSource.includes("NEXT_PUBLIC_BITQUERY") &&
       marketSchemaSource.includes('source: "bitquery"') &&
       marketSchemaSource.includes('protocol: "uniswap_v4"'),

@@ -91,6 +91,13 @@ describe("token detail metrics", () => {
     });
   });
 
+  it("shows unavailable for a historical point without evidenced USD or ETH FDV", () => {
+    expect(buildTokenDetailMetrics(token, "Unavailable")[0]).toEqual({
+      label: "FDV",
+      value: "Unavailable",
+    });
+  });
+
   it("labels a stale value as last verified instead of current FDV", () => {
     expect(buildTokenDetailMetrics({
       ...token,

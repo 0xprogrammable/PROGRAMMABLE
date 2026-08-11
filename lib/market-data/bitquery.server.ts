@@ -733,11 +733,15 @@ function marketBatchQuery(identities: readonly MarketDataIdentityV1[]) {
       $pools: [String!]!
       $tokenAddresses: [String!]!
     ) {
-      EVM(network: eth) {
+      EVM(network: eth, dataset: combined) {
         latestTrades: DEXTrades(
           limit: { count: ${rowLimit} }
           limitBy: { by: Trade_PoolId, count: 1 }
-          orderBy: { descending: Block_Time }
+          orderBy: [
+            { descending: Block_Number }
+            { descending: Transaction_Index }
+            { descending: Log_Index }
+          ]
           where: {
             TransactionStatus: { Success: true }
             Trade: {
@@ -749,7 +753,11 @@ function marketBatchQuery(identities: readonly MarketDataIdentityV1[]) {
         latestLiquidity: DEXPoolEvents(
           limit: { count: ${rowLimit} }
           limitBy: { by: PoolEvent_Pool_PoolId, count: 1 }
-          orderBy: { descending: Block_Time }
+          orderBy: [
+            { descending: Block_Number }
+            { descending: Transaction_Index }
+            { descending: Log_Index }
+          ]
           where: {
             TransactionStatus: { Success: true }
             PoolEvent: {
@@ -798,12 +806,16 @@ function marketChartQuery(
   const blockFilter = withSince
     ? "Block: { Time: { since: $since } }"
     : "";
-  const dataset = range === "all" ? ", dataset: combined" : "";
+  const dataset = range === "1h" ? "" : ", dataset: combined";
   return `query ProgrammableMarketChart(${definitions}) {
     EVM(network: eth${dataset}) {
       DEXTrades(
         limit: { count: ${MAXIMUM_CHART_TRADES} }
-        orderBy: { descending: Block_Time }
+        orderBy: [
+          { descending: Block_Number }
+          { descending: Transaction_Index }
+          { descending: Log_Index }
+        ]
         where: {
           TransactionStatus: { Success: true }
           ${blockFilter}
@@ -830,7 +842,7 @@ function tradeSelection() {
       Buy { Currency { SmartContract Symbol } Amount AmountInUSD Price PriceInUSD }
       Sell { Currency { SmartContract Symbol } Amount AmountInUSD Price PriceInUSD }
     }
-    Transaction { Hash }
+    Transaction { Hash Index }
   `;
 }
 
@@ -879,6 +891,7 @@ function parseTrade(
   const trade = record(row?.Trade);
   const transaction = record(row?.Transaction);
   const transactionHash = canonicalTransactionHash(transaction?.Hash);
+  const transactionIndex = nonNegativeSafeInteger(transaction?.Index);
   if (
     !row ||
     !block ||
@@ -888,6 +901,7 @@ function parseTrade(
     canonicalBytes32(trade.PoolId) !== identity.poolId ||
     !canonicalUnsignedInteger(block.Number) ||
     nonNegativeSafeInteger(log.Index) === null ||
+    transactionIndex === null ||
     transactionHash === null
   ) return null;
   const time = isoTime(block.Time);
@@ -912,6 +926,7 @@ function parseTrade(
   if (rawPriceUsdWad === null && priceQuoteWad === null) return null;
   return {
     transactionHash,
+    transactionIndex,
     logIndex: Number(log.Index),
     blockNumber: String(block.Number),
     time,
@@ -1319,11 +1334,17 @@ function cachedOrUnavailable(
   if (!cached || now.getTime() - cached.storedAt > MARKET_CACHE_MAX_AGE_MS) {
     return unavailablePool(identity, "source-unavailable");
   }
+  if (cached.value.status === "waiting-for-first-trade") {
+    return {
+      ...cached.value,
+      status: "unavailable",
+      quality: "partial",
+      valuation: { status: "unavailable", reason: "source-unavailable" },
+    };
+  }
   return {
     ...cached.value,
-    status: cached.value.status === "waiting-for-first-trade"
-      ? "waiting-for-first-trade"
-      : "stale",
+    status: "stale",
     quality: "partial",
     valuation: cached.value.valuation.status === "available"
       ? { ...cached.value.valuation, freshness: "stale" }
@@ -1339,11 +1360,17 @@ function cachedChartOrUnavailable(
 ): MarketChartV1 {
   const cached = chartCache.get(key);
   if (cached && now.getTime() - cached.storedAt <= CHART_CACHE_MAX_AGE_MS) {
+    if (cached.value.points.length === 0) {
+      return {
+        ...cached.value,
+        status: "unavailable",
+        generatedAt: now.toISOString(),
+        valuation: { status: "unavailable", reason: "source-unavailable" },
+      };
+    }
     return {
       ...cached.value,
-      status: cached.value.points.length === 0
-        ? "waiting-for-first-trade"
-        : "partial",
+      status: "partial",
       generatedAt: now.toISOString(),
       valuation: cached.value.valuation.status === "available"
         ? { ...cached.value.valuation, freshness: "stale" }
@@ -1379,12 +1406,14 @@ function canonicalTrades(trades: readonly MarketTradeV1[]): MarketTradeV1[] {
   const sorted = [...trades].sort((first, second) => {
     const block = BigInt(first.blockNumber) - BigInt(second.blockNumber);
     if (block !== 0n) return block < 0n ? -1 : 1;
-    const time = Date.parse(first.time) - Date.parse(second.time);
-    if (time !== 0) return time;
-    const transaction = first.transactionHash.localeCompare(
-      second.transactionHash,
-    );
-    return transaction !== 0 ? transaction : first.logIndex - second.logIndex;
+    const firstTransaction = first.transactionIndex ?? -1;
+    const secondTransaction = second.transactionIndex ?? -1;
+    const transaction = firstTransaction - secondTransaction;
+    if (transaction !== 0) return transaction;
+    const log = first.logIndex - second.logIndex;
+    return log !== 0
+      ? log
+      : first.transactionHash.localeCompare(second.transactionHash);
   });
   const byKey = new Map<string, MarketTradeV1>();
   for (const trade of sorted) {

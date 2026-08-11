@@ -54,6 +54,7 @@ export type MarketValuationV1 =
 
 export type MarketTradeV1 = Readonly<{
   transactionHash: `0x${string}`;
+  transactionIndex?: number;
   logIndex: number;
   blockNumber: string;
   time: string;
@@ -414,6 +415,9 @@ function isMarketTradeV1(value: unknown): value is MarketTradeV1 {
     value.priceUsdAsOfTime !== undefined || value.priceUsdSource !== undefined;
   return typeof value.transactionHash === "string" &&
     TRANSACTION_HASH.test(value.transactionHash) &&
+    (value.transactionIndex === undefined ||
+      (Number.isSafeInteger(value.transactionIndex) &&
+        Number(value.transactionIndex) >= 0)) &&
     Number.isSafeInteger(value.logIndex) &&
     Number(value.logIndex) >= 0 &&
     CANONICAL_UNSIGNED_INTEGER.test(String(value.blockNumber)) &&

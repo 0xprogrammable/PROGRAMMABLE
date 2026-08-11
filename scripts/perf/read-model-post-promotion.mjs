@@ -12,6 +12,7 @@ import {
   fetchVercelDeployment,
   verifyLiveCacheAndKeyContracts,
 } from "./read-model-live-verifier.mjs";
+import { verifyBitqueryGoldenMarketParityV1 } from "./bitquery-golden-market-parity.mjs";
 
 const HEALTH_PATH = "/api/ops/health";
 const EXPLORE_PATH = "/api/explore?limit=6&page=1&sort=market-cap";
@@ -81,6 +82,7 @@ async function request(fetchImpl, targetUrl, path, json = true) {
     body: json ? safeJson(text, url.pathname) : text,
     headers: Object.freeze({
       marketAsOf: response.headers.get("x-programmable-market-as-of"),
+      dataQuality: response.headers.get("x-programmable-data-quality"),
       marketSource: response.headers.get("x-programmable-market-source"),
       priceSource: response.headers.get("x-programmable-price-source"),
       readSource: response.headers.get("x-programmable-read-source"),
@@ -120,10 +122,16 @@ function currentMarketTime(value) {
     Date.now() - Date.parse(value) <= 6 * 60_000;
 }
 
+function boundedStaleMarketTime(value) {
+  return validMarketTime(value) &&
+    Date.now() - Date.parse(value) <= 24 * 60 * 60_000;
+}
+
 function exactBitqueryHeaders(response) {
   return response.headers.marketSource === "bitquery" &&
     response.headers.readSource === "operational+durable+postgres" &&
-    response.headers.rpcProvider === null;
+    response.headers.rpcProvider === null &&
+    response.headers.dataQuality === response.body?.dataQuality?.status;
 }
 
 function honestExploreValuations(response) {
@@ -184,10 +192,16 @@ function exactGoldenDetail(response) {
   return response.ok &&
     exactBitqueryHeaders(response) &&
     response.body?.status === "ready" &&
+    response.body?.dataQuality?.schemaVersion ===
+      "programmable.explore-data-quality.v1" &&
+    ["complete", "partial", "stale"].includes(
+      response.body?.dataQuality?.status,
+    ) &&
     token?.tokenAddress?.toLowerCase() === GOLDEN_TOKEN_ADDRESS &&
     market?.schemaVersion === "programmable.market-data.v1" &&
     market?.source === "bitquery" &&
     market?.primaryPoolId === GOLDEN_POOL_ID &&
+    currentMarketTime(market?.generatedAt) &&
     ["current", "stale"].includes(market?.status) &&
     ["current", "stale"].includes(pool?.status) &&
     valuation?.status === "available" &&
@@ -196,7 +210,10 @@ function exactGoldenDetail(response) {
     valuation.source === "bitquery" &&
     positiveInteger(valuation.valueWad) &&
     validMarketTime(valuation.asOfTime) &&
+    response.headers.marketAsOf === valuation.asOfTime &&
     (valuation.freshness !== "current" || currentMarketTime(valuation.asOfTime)) &&
+    (valuation.freshness !== "stale" || boundedStaleMarketTime(valuation.asOfTime)) &&
+    response.headers.dataQuality === response.body?.dataQuality?.status &&
     (valuation.freshness === "current"
       ? token.fdvUsdWad === valuation.valueWad &&
         response.headers.priceSource === "bitquery"
@@ -210,10 +227,13 @@ function exactGoldenChart(response) {
   if (
     !response.ok ||
     response.headers.marketSource !== "bitquery" ||
+    response.headers.readSource !== null ||
     response.headers.rpcProvider !== null ||
     response.headers.priceSource !== "bitquery" ||
+    response.headers.dataQuality !== chart?.status ||
     chart?.schemaVersion !== "programmable.market-chart.v1" ||
     chart.source !== "bitquery" ||
+    !currentMarketTime(chart.generatedAt) ||
     chart.address?.toLowerCase() !== GOLDEN_TOKEN_ADDRESS ||
     chart.identity?.poolId !== GOLDEN_POOL_ID ||
     !["ready", "insufficient-history", "partial"].includes(chart.status) ||
@@ -224,6 +244,8 @@ function exactGoldenChart(response) {
     !["current", "stale"].includes(chart.valuation?.freshness) ||
     (chart.valuation?.freshness === "current" &&
       !currentMarketTime(chart.valuation?.asOfTime)) ||
+    (chart.valuation?.freshness === "stale" &&
+      !boundedStaleMarketTime(chart.valuation?.asOfTime)) ||
     chart.asOfTime !== chart.points.at(-1)?.time ||
     response.headers.marketAsOf !== chart.asOfTime ||
     !validMarketTime(chart.asOfTime)
@@ -373,6 +395,22 @@ export async function verifyPostPromotion(input) {
     goldenDetail: responses[3],
     goldenChart: responses[4],
   })];
+  let goldenParity = null;
+  try {
+    goldenParity = await verifyBitqueryGoldenMarketParityV1({
+      token: responses[3].body?.token,
+      fetchImpl,
+      rpcUrls: input.marketParityRpcUrls,
+    });
+  } catch {
+    // The public verifier reports only the typed gate, never provider details.
+  }
+  checks.push({
+    id: "production-bitquery-golden-independent-parity",
+    condition: goldenParity?.schemaVersion ===
+      "programmable.bitquery-golden-market-parity.v1",
+    detail: "the public PCAN market price matches two independent same-block reads",
+  });
 
   if (input.evidencePath) {
     const profile = parseReadModelLoadProfile(

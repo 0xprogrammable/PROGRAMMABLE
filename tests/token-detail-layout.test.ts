@@ -32,17 +32,17 @@ describe("token detail layout", () => {
     );
 
     expect(chartSource).toContain(
-      "`${formatPrice(activePoint.value, chart.unit)}, block ${activePoint.blockNumber}`",
+      "`${formatPrice(activePoint.value, chart.unit)}, ${chartPointContext(activePoint)}`",
     );
     expect(chartSource).toMatch(
-      /className=\{styles\.tooltip\}[\s\S]*?aria-hidden="true"[\s\S]*?<strong>\{formatPrice\(activePoint\.value, chart\.unit\)\}<\/strong>[\s\S]*?<span>Block \{activePoint\.blockNumber\}<\/span>/,
+      /className=\{styles\.tooltip\}[\s\S]*?aria-hidden="true"[\s\S]*?<strong>\{formatPrice\(activePoint\.value, chart\.unit\)\}<\/strong>[\s\S]*?<span>\{chartPointContext\(activePoint\)\}<\/span>/,
     );
     expect(activeValueIdIndex).toBeGreaterThan(-1);
     expect(liveRegion).toContain('className="sr-only"');
     expect(liveRegion).toContain('role="status"');
     expect(liveRegion).toContain('aria-live="polite"');
     expect(liveRegion).toContain('aria-atomic="true"');
-    expect(liveRegion).toContain("activePoint.blockNumber");
+    expect(liveRegion).toContain("chartPointContext(activePoint)");
     expect(chartSource).toMatch(
       /style=\{\{[\s\S]*?left:\s*`clamp\([^`]+\)`[\s\S]*?\}\}/,
     );
@@ -139,8 +139,8 @@ describe("token detail layout", () => {
   });
 
   it("uses only typed chart FDV while labeling total-supply value as FDV", () => {
-    expect(detailSource).toContain('label: "FDV"');
-    expect(detailSource).not.toContain('label: "Market cap"');
+    expect(detailSource).toContain(': "FDV",');
+    expect(detailSource).toContain('valuation.metric === "market-cap"');
     expect(detailSource).not.toContain("fdvEthWei={");
     expect(detailSource).not.toContain("fdvUsdWad={");
     expect(chartSource).not.toContain("payload.marketCap");

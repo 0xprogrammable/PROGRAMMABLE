@@ -621,13 +621,21 @@ export function buildExploreDataQuality(input: Readonly<{
   const stale = available.filter((value) => value.freshness === "stale");
   const unknown = available.filter((value) => value.freshness === "unknown");
   const unavailable = valuations.length - available.length;
+  const incompleteMarketData = input.entries.filter((entry) => {
+    const marketData = entry.marketData;
+    if (!marketData) return false;
+    const primary = marketData.pools.find(
+      (pool) => pool.identity.poolId === marketData.primaryPoolId,
+    );
+    return marketData.status !== "current" || primary?.quality !== "complete";
+  }).length;
   const metrics = new Set(available.map((value) => value.metric));
   const valuationStatus =
     available.length === 0
       ? "unavailable" as const
       : stale.length > 0
         ? "stale" as const
-        : unavailable > 0 || unknown.length > 0
+        : unavailable > 0 || unknown.length > 0 || incompleteMarketData > 0
           ? "partial" as const
           : "current" as const;
   const identityAsOf = blockNumber(input.identityAsOfBlock);

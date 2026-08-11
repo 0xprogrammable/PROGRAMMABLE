@@ -974,6 +974,9 @@ export function evaluateReadModelOperationsSourceContracts(
     "scripts/perf/read-model-real-block-sla-operator.mjs",
   ) ?? "";
   const postPromotion = source("scripts/perf/read-model-post-promotion.mjs") ?? "";
+  const bitqueryGoldenParity = source(
+    "scripts/perf/bitquery-golden-market-parity.mjs",
+  ) ?? "";
   const productionBinding = source(
     "scripts/perf/read-model-production-binding.mjs",
   ) ?? "";
@@ -1152,6 +1155,9 @@ export function evaluateReadModelOperationsSourceContracts(
         'marketSources: Object.freeze(["bitquery"]),',
       ) &&
       stagedBitquerySmokeBlock.includes(
+        'dataQualities: Object.freeze(["complete", "partial", "stale"]),',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
         "const bitqueryChartContract = Object.freeze({",
       ) &&
       stagedBitquerySmokeBlock.includes(
@@ -1162,6 +1168,9 @@ export function evaluateReadModelOperationsSourceContracts(
       ) &&
       stagedBitquerySmokeBlock.includes(
         'response.headers.get(\n                  "x-programmable-market-as-of",',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        'response.headers.get(\n                  "x-programmable-data-quality",',
       ) &&
       stagedBitquerySmokeBlock.includes(
         "!headerMatches(rpcProvider, contract.rpcProviders)",
@@ -1238,7 +1247,7 @@ export function evaluateReadModelOperationsSourceContracts(
       stagedBitquerySmokeBlock.includes(
         'valuation.reason === "waiting-for-first-trade"',
       ) &&
-      !stagedBitquerySmokeBlock.includes("currentFdvCount < 1") &&
+      !stagedBitquerySmokeBlock.includes("if (currentFdvCount < 1) {") &&
       stagedBitquerySmokeBlock.includes(
         '"staged Bitquery current Explore and detail FDV are not identical"',
       ) &&
@@ -1247,6 +1256,32 @@ export function evaluateReadModelOperationsSourceContracts(
       ) &&
       stagedBitquerySmokeBlock.includes(
         'goldenValuation.supplyBasis !== "total"',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        '"./scripts/perf/bitquery-golden-market-parity.mjs"',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        "await verifyBitqueryGoldenMarketParityV1({",
+      ) &&
+      bitqueryGoldenParity.includes(
+        '"https://ethereum-rpc.publicnode.com"',
+      ) &&
+      bitqueryGoldenParity.includes('"https://rpc.mevblocker.io"') &&
+      bitqueryGoldenParity.includes("const MAXIMUM_DEVIATION_BPS = 1_500n") &&
+      bitqueryGoldenParity.includes("const MINIMUM_CONFIRMATIONS = 12n") &&
+      bitqueryGoldenParity.includes("sameObservation(first, second)") &&
+      bitqueryGoldenParity.includes(
+        "Bitquery golden price is outside independent onchain tolerance",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        "const historicalPaidPathVerified =",
+      ) &&
+      stagedBitquerySmokeBlock.includes("goldenParity.confirmations >= 12") &&
+      stagedBitquerySmokeBlock.includes(
+        "currentFdvCount < 1 && !historicalPaidPathVerified",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        "staged Bitquery Explore stale FDV is too old",
       ) &&
       stagedBitquerySmokeBlock.includes(
         "goldenChart.asOfTime !== goldenChart.points.at(-1)?.time",
@@ -1347,9 +1382,14 @@ export function evaluateReadModelOperationsSourceContracts(
       postPromotion.includes("honestExploreValuations") &&
       postPromotion.includes("exactGoldenDetail") &&
       postPromotion.includes("exactGoldenChart") &&
+      postPromotion.includes("verifyBitqueryGoldenMarketParityV1") &&
+      postPromotion.includes(
+        'id: "production-bitquery-golden-independent-parity"',
+      ) &&
       postPromotion.includes('response.headers.get("x-programmable-market-source")') &&
       postPromotion.includes('response.headers.get("x-programmable-price-source")') &&
       postPromotion.includes('response.headers.get("x-programmable-market-as-of")') &&
+      postPromotion.includes('response.headers.get("x-programmable-data-quality")') &&
       !postPromotion.includes("/api/indexers/v1/token-list") &&
       postPromotion.includes("verifyLiveCacheAndKeyContracts"),
     "the workflow is stage-only and both operator runbooks require the exact SLA-gated deployment promotion sequence",

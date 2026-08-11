@@ -212,7 +212,7 @@ export const BITQUERY_MARKET_STREAM_QUERY = `
           Buy { Currency { SmartContract Symbol } Amount AmountInUSD Price PriceInUSD }
           Sell { Currency { SmartContract Symbol } Amount AmountInUSD Price PriceInUSD }
         }
-        Transaction { Hash }
+        Transaction { Hash Index }
       }
       DEXPoolEvents(
         where: {

@@ -373,4 +373,54 @@ describe("Explore financial-data semantics", () => {
       asOfTime: "2026-08-11T14:00:00.000Z",
     });
   });
+
+  it("does not call a partial market response complete", () => {
+    const valued = {
+      ...withExploreValuation(
+        canonicalTokenExploreEntryV1(goldenToken()),
+        { referenceBlock: "25725569" },
+      ),
+      marketData: {
+        schemaVersion: "programmable.market-data.v1",
+        source: "bitquery",
+        generatedAt: "2026-08-11T14:00:00.000Z",
+        status: "partial",
+        primaryPoolId: `0x${"33".repeat(32)}`,
+        pools: [{
+          identity: {
+            chainId: "1",
+            tokenAddress: "0x1111111111111111111111111111111111111111",
+            poolId: `0x${"33".repeat(32)}`,
+            protocol: "uniswap_v4",
+          },
+          source: "bitquery",
+          status: "current",
+          quality: "partial",
+          valuation: {
+            status: "available",
+            metric: "fdv",
+            supplyBasis: "total",
+            valueUsdWad: "2779462110000000000000000",
+            fdvUsdWad: "2779462110000000000000000",
+            totalSupply: "1000000000",
+            asOfTime: "2026-08-11T14:00:00.000Z",
+            freshness: "current",
+          },
+        }],
+      },
+    } as ValuedExploreEntry;
+
+    expect(buildExploreDataQuality({
+      entries: [valued],
+      generatedAt: "2026-08-11T14:00:01.000Z",
+      canonicalStatus: "current",
+      customStatus: "current",
+      identityAsOfBlock: "25725569",
+      referenceBlock: "25725569",
+      identityAgeMs: 0,
+    })).toMatchObject({
+      status: "partial",
+      valuation: { status: "partial" },
+    });
+  });
 });

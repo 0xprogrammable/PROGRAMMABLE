@@ -174,15 +174,10 @@ export function getChartFdvAtPoint(
     };
   }
 
-  const ethPrice = comparableChartPricePair(
-    inspectedPoint,
-    latestPoint,
-    "eth",
-  );
-  const usdPrice = comparableChartPricePair(
-    inspectedPoint,
-    latestPoint,
-    "usd",
+  const ethPrice = exactEthChartPricePair(inspectedPoint, latestPoint);
+  const usdPrice = exactChartPricePair(
+    inspectedPoint.priceUsd,
+    latestPoint.priceUsd,
   );
 
   const fdvEthWei = scaleIntegerByPriceRatio(
@@ -204,28 +199,34 @@ export function getChartFdvAtPoint(
   );
 
   return {
-    fdvEthWei: fdvEthWei ?? payload.fdvEthWei,
-    fdvEth: fdvEth ?? payload.fdvEth,
-    fdvUsdWad: fdvUsdWad ?? payload.fdvUsdWad,
+    ...(fdvEthWei === undefined ? {} : { fdvEthWei }),
+    ...(fdvEth === undefined ? {} : { fdvEth }),
+    ...(fdvUsdWad === undefined ? {} : { fdvUsdWad }),
   };
 }
 
-function comparableChartPricePair(
+function exactChartPricePair(
+  inspected: string | undefined,
+  latest: string | undefined,
+): Readonly<{ inspected: string; latest: string }> | null {
+  return inspected && latest ? { inspected, latest } : null;
+}
+
+function exactEthChartPricePair(
   inspected: TokenChartPoint,
   latest: TokenChartPoint,
-  preferred: "usd" | "eth",
 ): Readonly<{ inspected: string; latest: string }> | null {
-  const candidates = preferred === "usd"
-    ? [[inspected.priceUsd, latest.priceUsd],
-      [inspected.priceEth, latest.priceEth],
-      [inspected.priceQuote, latest.priceQuote]]
-    : [[inspected.priceEth, latest.priceEth],
-      [inspected.priceQuote, latest.priceQuote],
-      [inspected.priceUsd, latest.priceUsd]];
-  for (const [inspectedPrice, latestPrice] of candidates) {
-    if (inspectedPrice && latestPrice) {
-      return { inspected: inspectedPrice, latest: latestPrice };
-    }
+  const direct = exactChartPricePair(inspected.priceEth, latest.priceEth);
+  if (direct) return direct;
+  const inspectedQuote = inspected.quoteSymbol?.trim().toUpperCase();
+  const latestQuote = latest.quoteSymbol?.trim().toUpperCase();
+  if (
+    inspectedQuote &&
+    latestQuote &&
+    ["ETH", "WETH"].includes(inspectedQuote) &&
+    ["ETH", "WETH"].includes(latestQuote)
+  ) {
+    return exactChartPricePair(inspected.priceQuote, latest.priceQuote);
   }
   return null;
 }

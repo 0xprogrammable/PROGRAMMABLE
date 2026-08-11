@@ -1249,7 +1249,8 @@ function TokenDetailContent({
       token,
       chartFdv
         ? (formatUsdWadAmount(chartFdv.fdvUsdWad) ??
-          formatEth(chartFdv.fdvEth, "amount"))
+          formatEth(chartFdv.fdvEth, "amount") ??
+          "Unavailable")
         : null,
       buildChartVolumeMetric(chartVolume),
     );
