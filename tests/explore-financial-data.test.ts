@@ -197,6 +197,55 @@ describe("Explore financial-data semantics", () => {
     expect(published).not.toHaveProperty("tokenPriceQuoteWad");
   });
 
+  it("publishes an exact-pool last-trade FDV as stale when liquidity is unavailable", () => {
+    const poolId = `0x${"34".repeat(32)}` as const;
+    const marketData = {
+      schemaVersion: "programmable.market-data.v1",
+      source: "bitquery",
+      generatedAt: "2026-08-11T14:02:00.000Z",
+      status: "stale",
+      primaryPoolId: poolId,
+      pools: [{
+        identity: {
+          chainId: "1",
+          tokenAddress: TOKEN_ADDRESS,
+          poolId,
+          protocol: "uniswap_v4",
+        },
+        source: "bitquery",
+        status: "stale",
+        quality: "partial",
+        asOfTime: "2026-08-10T11:50:47.000Z",
+        latestTrade: {
+          transactionHash: `0x${"12".repeat(32)}`,
+          logIndex: 1,
+          blockNumber: "25724408",
+          time: "2026-08-10T11:50:47.000Z",
+          tokenSide: "buy",
+          priceUsdWad: "44033668556000000",
+          priceUsdAsOfTime: "2026-08-10T11:50:47.000Z",
+          priceUsdSource: "bitquery-token-price-index-v1",
+          rawPriceUsdWad: "44033668556000000",
+        },
+        valuation: { status: "unavailable", reason: "supply-unavailable" },
+      }],
+    } satisfies TokenMarketDataV1;
+    const entry = withBitqueryMarketData(
+      canonicalTokenExploreEntryV1(goldenToken()),
+      marketData,
+    );
+
+    expect(entry.valuation).toMatchObject({
+      status: "available",
+      source: "bitquery",
+      freshness: "stale",
+      metric: "fdv",
+      supplyBasis: "total",
+    });
+    expect(valuationSortValue(entry)).toBeNull();
+    expect(publicExploreEntryV1(entry)).not.toHaveProperty("fdvUsdWad");
+  });
+
   it("keeps the indexed USD timestamp authoritative for public freshness", () => {
     const poolId = `0x${"33".repeat(32)}` as const;
     const marketData = {

@@ -1292,7 +1292,7 @@ describe("read-model performance contract", () => {
         process.cwd(),
       );
     expect(alchemyResult.ok).toBe(true);
-    expect(alchemyResult.checks).toHaveLength(17);
+    expect(alchemyResult.checks).toHaveLength(18);
 
     const exploreRoutePath = "app/api/explore/route.ts";
     const exploreRouteSource = readFileSync(
@@ -1316,6 +1316,30 @@ describe("read-model performance contract", () => {
         (failure: { id: string }) => failure.id,
       ),
     ).toContain("bitquery-market-provenance");
+
+    const canonicalSupplyPath =
+      "lib/market-data/canonical-token-supply.server.ts";
+    const canonicalSupplySource = readFileSync(
+      resolve(process.cwd(), canonicalSupplyPath),
+      "utf8",
+    );
+    const singleProviderSupply =
+      alchemySourceContracts.evaluateAlchemyExploreSourceContracts(
+        process.cwd(),
+        {
+          sourceOverrides: {
+            [canonicalSupplyPath]: canonicalSupplySource.replace(
+              "group.length >= 2",
+              "group.length >= 1",
+            ),
+          },
+        },
+      );
+    expect(
+      singleProviderSupply.failures.map(
+        (failure: { id: string }) => failure.id,
+      ),
+    ).toContain("canonical-token-supply-quorum");
 
     const result = sourceContracts.evaluateReadModelSourceContracts(
       process.cwd(),

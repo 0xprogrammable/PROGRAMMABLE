@@ -19,6 +19,8 @@ import {
   readBitqueryMarketChartV1,
   readBitqueryTokenMarketDataV1,
 } from "../../../../../lib/market-data/bitquery.server";
+import { hydrateMissingCanonicalTokenSupplyV1 } from
+  "../../../../../lib/market-data/canonical-token-supply.server";
 import { exploreEntryMarketIdentitiesV1 } from
   "../../../../../lib/market-data/explore-market-identities";
 import type { MarketChartV1 } from
@@ -140,9 +142,14 @@ export async function GET(request: NextRequest) {
     if (token && customProject) {
       throw new Error("Canonical token chart sources disagree on launch category");
     }
-    const entry: ExploreEntry | null = token
+    const unresolvedEntry: ExploreEntry | null = token
       ? canonicalTokenExploreEntryV1(token)
       : customProject ?? null;
+    const entry = unresolvedEntry
+      ? (await hydrateMissingCanonicalTokenSupplyV1([
+          unresolvedEntry,
+        ]))[0] ?? unresolvedEntry
+      : null;
     if (!entry) {
       if (
         canonicalSource?.status === "current" &&

@@ -45,6 +45,11 @@ const ADDRESS = /^0x[0-9a-f]{40}$/u;
 const BYTES32 = /^0x[0-9a-f]{64}$/u;
 const TRANSACTION_HASH = /^0x[0-9a-f]{64}$/u;
 const CANONICAL_UNSIGNED_INTEGER = /^(?:0|[1-9][0-9]*)$/u;
+const NATIVE_ETH_ADDRESS =
+  "0x0000000000000000000000000000000000000000" as const;
+const WETH_ADDRESS =
+  "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2" as const;
+const WAD = 10n ** 18n;
 
 type FetchImplementation = typeof fetch;
 
@@ -487,24 +492,59 @@ async function readMarketBatch(
   identities: readonly MarketDataIdentityV1[],
   options: BitqueryReaderOptions & Readonly<{ token: string; now: Date }>,
 ): Promise<readonly MarketPoolDataV1[]> {
-  const { query, variables } = marketBatchQuery(identities);
-  const response = await executeBitqueryGraphql(query, variables, options);
-  const evm = record(response.data.EVM);
-  const trading = record(response.data.Trading);
-  if (evm === null || trading === null) {
-    throw new BitqueryMarketDataError("response");
-  }
-
-  const tradesByPool = indexUniqueRows(
-    array(evm.latestTrades),
-    tradeRowPoolId,
+  const coreRequest = marketBatchQuery(identities);
+  const liquidityRequest = marketLiquidityQuery(identities);
+  const statsRequest = marketStatsQuery(identities);
+  const response = await executeBitqueryGraphql(
+    coreRequest.query,
+    coreRequest.variables,
+    options,
   );
+  const evm = record(response.data.EVM);
+  if (evm === null) throw new BitqueryMarketDataError("response");
+  const tradesByPool = indexUniqueRows(array(evm.latestTrades), tradeRowPoolId);
+  const parsedTrades = identities.map((identity) => {
+    const row = tradesByPool.get(identity.poolId);
+    return {
+      row,
+      trade: parseTrade(row, identity),
+    };
+  });
+  const priceRequest = marketPriceQuery(parsedTrades.map(({ trade }) => trade));
+  const [priceResult, liquidityResult, statsResult] = await Promise.allSettled([
+      executeBitqueryGraphql(
+        priceRequest.query,
+        priceRequest.variables,
+        options,
+      ),
+      executeBitqueryGraphql(
+        liquidityRequest.query,
+        liquidityRequest.variables,
+        options,
+      ),
+      executeBitqueryGraphql(
+        statsRequest.query,
+        statsRequest.variables,
+        options,
+      ),
+    ]);
+
+  const priceTrading = priceResult.status === "fulfilled"
+    ? record(priceResult.value.data.Trading)
+    : null;
+  const liquidityEvm = liquidityResult.status === "fulfilled"
+    ? record(liquidityResult.value.data.EVM)
+    : null;
+  const statsEvm = statsResult.status === "fulfilled"
+    ? record(statsResult.value.data.EVM)
+    : null;
+
   const liquidityByPool = indexUniqueRows(
-    array(evm.latestLiquidity),
+    array(liquidityEvm?.latestLiquidity),
     liquidityRowPoolId,
   );
   const statsByMarket = indexUniqueRows(
-    array(evm.stats),
+    array(statsEvm?.stats),
     (row) => {
       const trade = record(record(row)?.Trade);
       const poolId = canonicalBytes32(trade?.PoolId);
@@ -514,22 +554,20 @@ async function readMarketBatch(
       return poolId && address ? marketStatsKey(poolId, address) : null;
     },
   );
-  const supplyByToken = indexUniqueRows(
-    array(trading.tokenSupplies),
-    (row) => canonicalAddress(record(record(row)?.Token)?.Address),
-  );
-  const parsed = identities.map((identity) => {
-    const latestTradeRow = tradesByPool.get(identity.poolId);
+  const parsed = identities.map((identity, index) => {
+    const latestTradeRow = parsedTrades[index]?.row;
     const latestTradeRows = latestTradeRow === undefined
       ? []
       : [latestTradeRow];
-    const tokenRow = supplyByToken.get(identity.tokenAddress);
-    const parsedTrade = parseTrade(latestTradeRows[0], identity);
+    const parsedTrade = parsedTrades[index]?.trade ?? null;
     const latestTrade = parsedTrade === null
       ? null
       : enrichTradeWithIndexedUsd(
           parsedTrade,
-          parseTokenPriceObservation(tokenRow, identity),
+          parseNativeQuotePriceObservation(
+            array(priceTrading?.[`price${index}`])[0],
+            parsedTrade,
+          ),
           options.now,
         );
     return {
@@ -540,7 +578,7 @@ async function readMarketBatch(
       stats: parseStats(statsByMarket.get(
         marketStatsKey(identity.poolId, identity.tokenAddress),
       )),
-      supply: parseSupply(tokenRow, identity),
+      supply: null,
     };
   });
 
@@ -559,7 +597,14 @@ async function readMarketBatch(
       stats: value.stats,
       supply: value.supply,
       now: options.now,
-      partialResponse: response.partial,
+      partialResponse:
+        response.partial ||
+        priceResult.status !== "fulfilled" ||
+        priceResult.value.partial ||
+        liquidityResult.status !== "fulfilled" ||
+        liquidityResult.value.partial ||
+        statsResult.status !== "fulfilled" ||
+        statsResult.value.partial,
     });
   });
 }
@@ -592,6 +637,29 @@ function parseTokenPriceObservation(
     : { time, priceUsdWad: priceUsdWad.toString() };
 }
 
+function parseNativeQuotePriceObservation(
+  value: unknown,
+  trade: MarketTradeV1,
+): TokenPriceObservation | null {
+  const row = record(value);
+  const block = record(row?.Block);
+  const pair = record(row?.Pair);
+  const token = record(pair?.Token);
+  const tokenId = nonEmptyString(token?.Id)?.toLowerCase();
+  if (
+    (trade.quoteAddress !== NATIVE_ETH_ADDRESS &&
+      trade.quoteAddress !== WETH_ADDRESS) ||
+    tokenId !== "bid:eth"
+  ) return null;
+  const time = isoTime(block?.Time);
+  const priceUsdWad = decimalToWad(row?.PriceInUsd);
+  return time !== null && priceUsdWad !== null &&
+      Date.parse(time) <= Date.parse(trade.time) &&
+      Date.parse(trade.time) - Date.parse(time) <= INDEXED_PRICE_MAXIMUM_DISTANCE_MS
+    ? { time, priceUsdWad: priceUsdWad.toString() }
+    : null;
+}
+
 function enrichTradeWithIndexedUsd(
   trade: MarketTradeV1,
   indexed: TokenPriceObservation | null,
@@ -603,24 +671,33 @@ function enrichTradeWithIndexedUsd(
     ? null
     : BigInt(trade.rawPriceUsdWad);
   const indexedPrice = indexed === null ? null : BigInt(indexed.priceUsdWad);
+  const quotePrice = trade.priceQuoteWad === undefined
+    ? null
+    : BigInt(trade.priceQuoteWad);
+  const derivedPrice = quotePrice === null || indexedPrice === null
+    ? null
+    : quotePrice * indexedPrice / WAD;
+  if (trade.priceUsdWad) return trade;
   if (
     indexed === null ||
-    rawPrice === null ||
     indexedPrice === null ||
+    derivedPrice === null ||
+    derivedPrice <= 0n ||
     !Number.isFinite(indexedTime) ||
     !Number.isFinite(tradeTime) ||
     indexedTime > now.getTime() + MAXIMUM_FUTURE_SKEW_MS ||
     Math.abs(indexedTime - tradeTime) > INDEXED_PRICE_MAXIMUM_DISTANCE_MS ||
-    !usdPricesWithinConfidence(rawPrice, indexedPrice)
+    (rawPrice !== null && !usdPricesWithinConfidence(rawPrice, derivedPrice))
   ) return trade;
   const amountUsdWad = trade.tokenAmount
-    ? multiplyWadByDecimal(indexedPrice, trade.tokenAmount)
+    ? multiplyWadByDecimal(derivedPrice, trade.tokenAmount)
     : null;
   return {
     ...trade,
-    priceUsdWad: indexed.priceUsdWad,
+    priceUsdWad: derivedPrice.toString(),
     priceUsdAsOfTime: indexed.time,
     priceUsdSource: MARKET_DATA_USD_PRICE_SOURCE,
+    rawPriceUsdWad: rawPrice?.toString() ?? derivedPrice.toString(),
     ...(amountUsdWad === null ? {} : { amountUsdWad: amountUsdWad.toString() }),
   };
 }
@@ -723,17 +800,10 @@ function marketStatsKey(
 
 function marketBatchQuery(identities: readonly MarketDataIdentityV1[]) {
   const pools = identities.map(({ poolId }) => poolId);
-  const tokenAddresses = [...new Set(
-    identities.map(({ tokenAddress }) => tokenAddress),
-  )].sort();
   const rowLimit = Math.max(1, identities.length);
-  const statsLimit = Math.max(1, identities.length * 2);
 
   return {
-    query: `query ProgrammableMarketSnapshot(
-      $pools: [String!]!
-      $tokenAddresses: [String!]!
-    ) {
+    query: `query ProgrammableMarketSnapshot($pools: [String!]!) {
       EVM(network: eth, dataset: combined) {
         latestTrades: DEXTrades(
           limit: { count: ${rowLimit} }
@@ -751,6 +821,44 @@ function marketBatchQuery(identities: readonly MarketDataIdentityV1[]) {
             }
           }
         ) { ${tradeSelection()} }
+      }
+    }`,
+    variables: { pools },
+  };
+}
+
+function marketPriceQuery(trades: readonly (MarketTradeV1 | null)[]) {
+  const selections = trades.map((trade, index) => `
+    price${index}: Trades(
+      limit: { count: 1 }
+      orderBy: { descending: Block_Time }
+      where: {
+        ${trade ? `Block: { Time: { till: "${trade.time}" } }` : ""}
+        Pair: {
+          Market: { NetworkBid: { is: "bid:eth" } }
+          Token: { Id: { is: "bid:eth" } }
+        }
+      }
+    ) {
+      Block { Time }
+      Pair { Token { Id Address } }
+      PriceInUsd
+    }
+  `).join("\n");
+  return {
+    query: `query ProgrammableMarketPrices {
+      Trading { ${selections} }
+    }`,
+    variables: {},
+  };
+}
+
+function marketLiquidityQuery(identities: readonly MarketDataIdentityV1[]) {
+  const pools = identities.map(({ poolId }) => poolId);
+  const rowLimit = Math.max(1, identities.length);
+  return {
+    query: `query ProgrammableMarketLiquidity($pools: [String!]!) {
+      EVM(network: eth, dataset: combined) {
         latestLiquidity: DEXPoolEvents(
           limit: { count: ${rowLimit} }
           limitBy: { by: PoolEvent_Pool_PoolId, count: 1 }
@@ -767,6 +875,24 @@ function marketBatchQuery(identities: readonly MarketDataIdentityV1[]) {
             }
           }
         ) { ${liquiditySelection()} }
+      }
+    }`,
+    variables: { pools },
+  };
+}
+
+function marketStatsQuery(identities: readonly MarketDataIdentityV1[]) {
+  const pools = identities.map(({ poolId }) => poolId);
+  const tokenAddresses = [...new Set(
+    identities.map(({ tokenAddress }) => tokenAddress),
+  )].sort();
+  const statsLimit = Math.max(1, identities.length * 2);
+  return {
+    query: `query ProgrammableMarketStats(
+      $pools: [String!]!
+      $tokenAddresses: [String!]!
+    ) {
+      EVM(network: eth, dataset: combined) {
         stats: DEXTradeByTokens(
           limit: { count: ${statsLimit} }
           where: {
@@ -783,14 +909,6 @@ function marketBatchQuery(identities: readonly MarketDataIdentityV1[]) {
           count
           volumeUsd: sum(of: Trade_Side_AmountInUSD)
         }
-      }
-      Trading {
-        tokenSupplies: Tokens(
-          limit: { count: ${tokenAddresses.length} }
-          limitBy: { by: Token_Address, count: 1 }
-          orderBy: { descending: Block_Time }
-          where: { Token: { Address: { in: $tokenAddresses } } }
-        ) { ${supplySelection()} }
       }
     }`,
     variables: { pools, tokenAddresses },
@@ -918,12 +1036,28 @@ function parseTrade(
   if (tokenIsBuy === tokenIsSell) return null;
   const tokenSide = tokenIsBuy ? "buy" as const : "sell" as const;
   const token = tokenIsBuy ? buy : sell;
+  const quote = tokenIsBuy ? sell : buy;
   const quoteCurrency = tokenIsBuy ? sellCurrency : buyCurrency;
   const tokenAmount = positiveDecimal(token?.Amount);
   const rawPriceUsdWad = decimalToWad(token?.PriceInUSD);
   const priceQuoteWad = decimalToWad(token?.Price);
   const quoteAddress = canonicalCurrencyAddress(quoteCurrency?.SmartContract);
   const quoteSymbol = nonEmptyString(quoteCurrency?.Symbol);
+  const quotePriceUsdWad = decimalToWad(quote?.PriceInUSD);
+  const sameTradePriceUsdWad =
+    (quoteAddress === NATIVE_ETH_ADDRESS || quoteAddress === WETH_ADDRESS) &&
+      priceQuoteWad !== null && quotePriceUsdWad !== null
+      ? priceQuoteWad * quotePriceUsdWad / WAD
+      : null;
+  const verifiedSameTradePriceUsdWad = sameTradePriceUsdWad !== null &&
+      sameTradePriceUsdWad > 0n &&
+      (rawPriceUsdWad === null ||
+        usdPricesWithinConfidence(rawPriceUsdWad, sameTradePriceUsdWad))
+    ? sameTradePriceUsdWad
+    : null;
+  const amountUsdWad = verifiedSameTradePriceUsdWad !== null && tokenAmount
+    ? multiplyWadByDecimal(verifiedSameTradePriceUsdWad, tokenAmount)
+    : null;
   if (rawPriceUsdWad === null && priceQuoteWad === null) return null;
   return {
     transactionHash,
@@ -934,8 +1068,18 @@ function parseTrade(
     tokenSide,
     ...(tokenAmount === null ? {} : { tokenAmount }),
     ...(rawPriceUsdWad === null
-      ? {}
+      ? verifiedSameTradePriceUsdWad === null
+        ? {}
+        : { rawPriceUsdWad: verifiedSameTradePriceUsdWad.toString() }
       : { rawPriceUsdWad: rawPriceUsdWad.toString() }),
+    ...(verifiedSameTradePriceUsdWad === null
+      ? {}
+      : {
+          priceUsdWad: verifiedSameTradePriceUsdWad.toString(),
+          priceUsdAsOfTime: time,
+          priceUsdSource: MARKET_DATA_USD_PRICE_SOURCE,
+        }),
+    ...(amountUsdWad === null ? {} : { amountUsdWad: amountUsdWad.toString() }),
     ...(priceQuoteWad === null
       ? {}
       : { priceQuoteWad: priceQuoteWad.toString() }),
