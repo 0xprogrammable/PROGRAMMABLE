@@ -3,9 +3,11 @@
 /.vscode/
 /broadcast/
 /cache/
+/cache-hookemon-compat/
 /lib/
 /lcov.info
 /out/
+/out-hookemon-compat/
 /.venv/
 /*.dot
 

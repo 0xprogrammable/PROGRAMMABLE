@@ -1,0 +1,20 @@
+[profile.default]
+src = "src/hookemon"
+test = "test/hookemon"
+out = "out-hookemon-compat"
+cache_path = "cache-hookemon-compat"
+libs = []
+auto_detect_remappings = false
+remappings = []
+solc_version = "0.8.26"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 1_000
+via_ir = false
+bytecode_hash = "none"
+cbor_metadata = false
+ffi = false
+
+[profile.default.fuzz]
+runs = 10_000
+max_test_rejects = 65_536
