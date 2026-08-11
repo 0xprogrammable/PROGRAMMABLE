@@ -322,6 +322,86 @@ describe("Explore API Alchemy boundary", () => {
     }
   });
 
+  it("ranks only current USD FDV and uses newest order for incomparable valuations", () => {
+    const valued = (
+      entry: ExploreEntry,
+      valuation: Readonly<{
+        currency: "usd" | "eth" | "quote";
+        valueWad: string;
+        freshness: "current" | "stale" | "unknown";
+      }>,
+    ) => ({
+      ...entry,
+      valuation: {
+        status: "available" as const,
+        metric: "fdv" as const,
+        supplyBasis: "total" as const,
+        ...valuation,
+      },
+    });
+    const entries = [
+      valued(orderedEntry({
+        id: "1:usd-high",
+        kind: "token",
+        block: "100",
+        transaction: 0,
+        log: 0,
+      }), { currency: "usd", valueWad: "20", freshness: "current" }),
+      valued(orderedEntry({
+        id: "1:usd-low",
+        kind: "token",
+        block: "99",
+        transaction: 0,
+        log: 0,
+      }), { currency: "usd", valueWad: "10", freshness: "current" }),
+      valued(orderedEntry({
+        id: "1:stale-usd",
+        kind: "token",
+        block: "105",
+        transaction: 0,
+        log: 0,
+      }), { currency: "usd", valueWad: "999999", freshness: "stale" }),
+      valued(orderedEntry({
+        id: "1:eth",
+        kind: "token",
+        block: "104",
+        transaction: 0,
+        log: 0,
+      }), { currency: "eth", valueWad: "1", freshness: "current" }),
+      valued(orderedEntry({
+        id: "1:quote",
+        kind: "token",
+        block: "103",
+        transaction: 0,
+        log: 0,
+      }), { currency: "quote", valueWad: "500000", freshness: "current" }),
+    ];
+    const paginate = (sort: "market-cap" | "market-cap-asc") =>
+      paginateExploreEntriesV1(entries, {
+        page: 1,
+        pageSize: entries.length,
+        query: "",
+        socials: null,
+        sort,
+        topThenNewest: false,
+      }).tokens.map(({ id }) => id);
+
+    expect(paginate("market-cap")).toEqual([
+      "1:usd-high",
+      "1:usd-low",
+      "1:stale-usd",
+      "1:eth",
+      "1:quote",
+    ]);
+    expect(paginate("market-cap-asc")).toEqual([
+      "1:usd-low",
+      "1:usd-high",
+      "1:stale-usd",
+      "1:eth",
+      "1:quote",
+    ]);
+  });
+
   it("deduplicates exact canonical records but fails closed on conflicts", () => {
     const entry = orderedEntry({
       id: "1:duplicate",

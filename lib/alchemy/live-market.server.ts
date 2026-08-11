@@ -165,9 +165,9 @@ function applyLivePoolState(
   if (!state) return token;
 
   const currentState = {
-    ...(token.launchStampProvenance
-      ? withoutNativeValuation(token)
-      : token),
+    // A successful live read starts a new, single-block valuation set. Never
+    // combine its block provenance with older indexed or price-API values.
+    ...withoutNativeValuation(token),
     currentTick: state.tick,
     activeLiquidity: state.activeLiquidity.toString(),
     protocolFeePips: state.protocolFeePips,

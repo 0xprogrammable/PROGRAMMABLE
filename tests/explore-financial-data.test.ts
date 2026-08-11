@@ -5,6 +5,7 @@ import {
   buildExploreDataQuality,
   exploreValuation,
   publicExploreEntryV1,
+  valuationSortValue,
   withExploreValuation,
 } from "../lib/explore-financial-data";
 import type { LauncherToken } from "../lib/tokens";
@@ -91,6 +92,32 @@ describe("Explore financial-data semantics", () => {
       freshness: "stale",
       lagBlocks: "65",
     });
+  });
+
+  it("exposes a sort value only for current USD FDV", () => {
+    const valued = (overrides: Partial<LauncherToken>, referenceBlock: string) =>
+      withExploreValuation(
+        canonicalTokenExploreEntryV1(goldenToken(overrides)),
+        { referenceBlock },
+      );
+    const currentUsd = valued({}, "25725569");
+    const staleUsd = valued({}, "25725624");
+    const currentEth = valued({
+      fdvUsdWad: undefined,
+      marketCapEthWei: "900000000000000000000",
+    }, "25725569");
+    const currentQuote = valued({
+      fdvUsdWad: undefined,
+      quoteAssetSymbol: "SPYon",
+      marketCapQuoteWad: "123456789000000000000000",
+    }, "25725569");
+
+    expect(valuationSortValue(currentUsd)).toBe(
+      2_779_462_110_000_000_000_000_000n,
+    );
+    expect(valuationSortValue(staleUsd)).toBeNull();
+    expect(valuationSortValue(currentEth)).toBeNull();
+    expect(valuationSortValue(currentQuote)).toBeNull();
   });
 
   it("publishes total-supply values only through the FDV contract", () => {
