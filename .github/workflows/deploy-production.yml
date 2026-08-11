@@ -1,9 +1,6 @@
 name: Stage Production Candidate
 
 on:
-  push:
-    branches:
-      - production
   workflow_dispatch:
     inputs:
       custom_launch_public_enablement:
