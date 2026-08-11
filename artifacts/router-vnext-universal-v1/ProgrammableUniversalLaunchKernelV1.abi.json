@@ -1,0 +1,2680 @@
+[
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "reviewerAuthority",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "reviewerAuthorityRuntimeCodeHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "governance",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "governanceRuntimeCodeHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "finalityAuthority",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "finalityAuthorityRuntimeCodeHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "indexerAuthority",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "indexerAuthorityRuntimeCodeHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "preflight",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "preflightRuntimeCodeHash",
+        "type": "bytes32"
+      },
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "securityControlHeadHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "securityEpoch",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "securityEpochHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "policyEpoch",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "policyEpochHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "reviewGeneration",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "reviewGenerationHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bool",
+            "name": "globalKilled",
+            "type": "bool"
+          }
+        ],
+        "internalType": "struct IProgrammableUniversalLaunchKernelV1.ControlStateV1",
+        "name": "initialControl",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "inputs": [],
+    "name": "AlreadyExists",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "GlobalKillActive",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InflightMismatch",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "field",
+        "type": "uint256"
+      }
+    ],
+    "name": "InvalidField",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidState",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ProfileUnavailable",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "Replay",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "RuntimeCodeHashDrift",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "SignatureRejected",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "SignatureTooLarge",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "TimeWindowInvalid",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "Unauthorized",
+    "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "securityControlHeadHash",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "securityEpoch",
+        "type": "uint64"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "policyEpoch",
+        "type": "uint64"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "reviewGeneration",
+        "type": "uint64"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "globalKilled",
+        "type": "bool"
+      }
+    ],
+    "name": "ControlAdvanced",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "grantDigest",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "appendHash",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum IProgrammableUniversalLaunchKernelV1.ReceiptStatus",
+        "name": "status",
+        "type": "uint8"
+      }
+    ],
+    "name": "FinalityIndexingAdvanced",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "grantDigest",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "stampLaunchId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "applicantWallet",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "profileKey",
+        "type": "bytes32"
+      }
+    ],
+    "name": "LaunchGrantActivated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "grantDigest",
+        "type": "bytes32"
+      }
+    ],
+    "name": "LaunchGrantRevoked",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "grantDigest",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "executionKey",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "module",
+        "type": "address"
+      }
+    ],
+    "name": "ProfileExecutionBegan",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "grantDigest",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "receiptCoreHash",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum IProgrammableUniversalLaunchKernelV1.ReceiptStatus",
+        "name": "status",
+        "type": "uint8"
+      }
+    ],
+    "name": "ProfileExecutionFinalized",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "profileKey",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "module",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "moduleRuntimeCodeHash",
+        "type": "bytes32"
+      }
+    ],
+    "name": "ProfileRegistered",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "profileKey",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum IProgrammableUniversalLaunchKernelV1.ProfileStatus",
+        "name": "status",
+        "type": "uint8"
+      }
+    ],
+    "name": "ProfileStatusChanged",
+    "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "DOMAIN_SEPARATOR",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint16",
+            "name": "schemaVersion",
+            "type": "uint16"
+          },
+          {
+            "internalType": "address",
+            "name": "applicantWallet",
+            "type": "address"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "applicantIdHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "profileKey",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "planHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sourceRepoHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes20",
+            "name": "sourceCommit",
+            "type": "bytes20"
+          },
+          {
+            "internalType": "bytes20",
+            "name": "sourceTree",
+            "type": "bytes20"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sourceLaunchId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "stampLaunchId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "antiReplayNonce",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "componentGraphHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "componentRuntimeSetHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "configurationHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "builderEvidenceHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "reviewerAttestationHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "exactContractBindingHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "providerBindingHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "revenueBindingHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "securityControlHeadHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "securityEpoch",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "securityEpochHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "policyEpoch",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "policyEpochHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "reviewGeneration",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "reviewGenerationHash",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct IProgrammableUniversalLaunchKernelV1.LaunchGrantV1",
+        "name": "grant",
+        "type": "tuple"
+      },
+      {
+        "internalType": "bytes",
+        "name": "reviewerSignature",
+        "type": "bytes"
+      }
+    ],
+    "name": "activateLaunchGrantV1",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "grantDigest",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "activeExecutionGrantDigestV1",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "securityControlHeadHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "securityEpoch",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "securityEpochHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "policyEpoch",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "policyEpochHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "reviewGeneration",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "reviewGenerationHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bool",
+            "name": "globalKilled",
+            "type": "bool"
+          }
+        ],
+        "internalType": "struct IProgrammableUniversalLaunchKernelV1.ControlStateV1",
+        "name": "next",
+        "type": "tuple"
+      }
+    ],
+    "name": "advanceControlV1",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "grantDigest",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "stampLaunchId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "receiptCoreHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "transactionHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "blockNumber",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "blockHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "finalizedAt",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "deploymentReceiptHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sourceVerificationReceiptHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "indexingReceiptHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "enum IProgrammableUniversalLaunchKernelV1.ReceiptStatus",
+            "name": "status",
+            "type": "uint8"
+          }
+        ],
+        "internalType": "struct IProgrammableUniversalLaunchKernelV1.FinalityIndexingReceiptV1",
+        "name": "finalityReceipt",
+        "type": "tuple"
+      },
+      {
+        "internalType": "bytes",
+        "name": "signature",
+        "type": "bytes"
+      }
+    ],
+    "name": "appendFinalityIndexingV1",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "expectedRuntimeCodeHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "expectedRuntimeBindingHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bool",
+        "name": "requireStateless",
+        "type": "bool"
+      }
+    ],
+    "name": "assertClosedRuntimeBindingV1",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "attestationHash",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "grantDigest",
+        "type": "bytes32"
+      },
+      {
+        "components": [
+          {
+            "components": [
+              {
+                "internalType": "bytes32",
+                "name": "grantDigest",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "profileKey",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "planHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "enum IProgrammableUniversalLaunchKernelV1.CapabilitySemantics",
+                "name": "executionMode",
+                "type": "uint8"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "kernelPreflightReadbackHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "profilePreflightReadbackHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "dualProviderQuorumEvidenceHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "simulationEvidenceHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "serviceDeploymentBindingHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "currentnessNonce",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "securityControlHeadHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "securityEpoch",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "securityEpochHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "policyEpoch",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "policyEpochHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "reviewGeneration",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "reviewGenerationHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "validAfter",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "deadline",
+                "type": "uint64"
+              }
+            ],
+            "internalType": "struct IProgrammableUniversalLaunchKernelV1.ExecutionCurrentnessV1",
+            "name": "currentness",
+            "type": "tuple"
+          },
+          {
+            "internalType": "bytes",
+            "name": "currentnessSignature",
+            "type": "bytes"
+          },
+          {
+            "components": [
+              {
+                "internalType": "bytes32",
+                "name": "grantDigest",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "stampLaunchId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "antiReplayNonce",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "address",
+                "name": "profileModule",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "intentNonce",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "validAfter",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "deadline",
+                "type": "uint64"
+              }
+            ],
+            "internalType": "struct IProgrammableUniversalLaunchKernelV1.ApplicantWalletIntentV1",
+            "name": "walletIntent",
+            "type": "tuple"
+          },
+          {
+            "internalType": "bytes",
+            "name": "walletSignature",
+            "type": "bytes"
+          },
+          {
+            "components": [
+              {
+                "internalType": "enum IProgrammableUniversalLaunchKernelV1.ReservationKind",
+                "name": "kind",
+                "type": "uint8"
+              },
+              {
+                "internalType": "enum IProgrammableUniversalLaunchKernelV1.ReservationScope",
+                "name": "scope",
+                "type": "uint8"
+              },
+              {
+                "internalType": "address",
+                "name": "account",
+                "type": "address"
+              },
+              {
+                "internalType": "address",
+                "name": "manager",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "identifier",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "expectedRuntimeCodeHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "expectedManagerRuntimeCodeHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "sharedIdentityHash",
+                "type": "bytes32"
+              }
+            ],
+            "internalType": "struct IProgrammableUniversalLaunchKernelV1.ReservationV1[]",
+            "name": "reservations",
+            "type": "tuple[]"
+          }
+        ],
+        "internalType": "struct IProgrammableUniversalLaunchKernelV1.ProfileExecutionEnvelopeV1",
+        "name": "envelope",
+        "type": "tuple"
+      }
+    ],
+    "name": "beginProfileExecutionV1",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "executionKey",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "grantDigest",
+        "type": "bytes32"
+      }
+    ],
+    "name": "canonicalLaunchReceiptV1",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "chainId",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "kernel",
+            "type": "address"
+          },
+          {
+            "internalType": "uint32",
+            "name": "routerVersion",
+            "type": "uint32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "profileKey",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "profileVersion",
+            "type": "uint32"
+          },
+          {
+            "internalType": "enum IProgrammableUniversalLaunchKernelV1.CapabilitySemantics",
+            "name": "capabilitySemantics",
+            "type": "uint8"
+          },
+          {
+            "internalType": "address",
+            "name": "applicantWallet",
+            "type": "address"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "applicantIdHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sourceRepoHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sourceCommitment",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sourceTreeCommitment",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sourceLaunchId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "stampLaunchId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "antiReplayNonce",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "planHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "builderEvidenceHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "reviewerAttestationHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "grantDigest",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "componentGraphHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "reservationSetHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "componentSetHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "componentRuntimeSetHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "configurationHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "providerBindingHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "providerResultHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "revenueBindingHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "valueFlowHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "deploymentLineageHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "postconditionHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "securityControlHeadHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "securityEpoch",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "securityEpochHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "policyEpoch",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "policyEpochHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "reviewGeneration",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "reviewGenerationHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "enum IProgrammableUniversalLaunchKernelV1.ReceiptStatus",
+            "name": "status",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "receiptCoreHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "finalityIndexingReceiptHash",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct IProgrammableUniversalLaunchKernelV1.CanonicalLaunchReceiptV1",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "grantDigest",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "profileKey",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "planHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "enum IProgrammableUniversalLaunchKernelV1.CapabilitySemantics",
+            "name": "executionMode",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "kernelPreflightReadbackHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "profilePreflightReadbackHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "dualProviderQuorumEvidenceHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "simulationEvidenceHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "serviceDeploymentBindingHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "currentnessNonce",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "securityControlHeadHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "securityEpoch",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "securityEpochHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "policyEpoch",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "policyEpochHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "reviewGeneration",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "reviewGenerationHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "validAfter",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "deadline",
+            "type": "uint64"
+          }
+        ],
+        "internalType": "struct IProgrammableUniversalLaunchKernelV1.ExecutionCurrentnessV1",
+        "name": "currentness",
+        "type": "tuple"
+      }
+    ],
+    "name": "computeExecutionCurrentnessDigestV1",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint16",
+            "name": "schemaVersion",
+            "type": "uint16"
+          },
+          {
+            "internalType": "address",
+            "name": "applicantWallet",
+            "type": "address"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "applicantIdHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "profileKey",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "planHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sourceRepoHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes20",
+            "name": "sourceCommit",
+            "type": "bytes20"
+          },
+          {
+            "internalType": "bytes20",
+            "name": "sourceTree",
+            "type": "bytes20"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sourceLaunchId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "stampLaunchId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "antiReplayNonce",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "componentGraphHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "componentRuntimeSetHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "configurationHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "builderEvidenceHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "reviewerAttestationHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "exactContractBindingHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "providerBindingHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "revenueBindingHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "securityControlHeadHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "securityEpoch",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "securityEpochHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "policyEpoch",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "policyEpochHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "reviewGeneration",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "reviewGenerationHash",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct IProgrammableUniversalLaunchKernelV1.LaunchGrantV1",
+        "name": "grant",
+        "type": "tuple"
+      }
+    ],
+    "name": "computeLaunchGrantDigestV1",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "enum IProgrammableUniversalLaunchKernelV1.ReservationKind",
+            "name": "kind",
+            "type": "uint8"
+          },
+          {
+            "internalType": "enum IProgrammableUniversalLaunchKernelV1.ReservationScope",
+            "name": "scope",
+            "type": "uint8"
+          },
+          {
+            "internalType": "address",
+            "name": "account",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "manager",
+            "type": "address"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "identifier",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedRuntimeCodeHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedManagerRuntimeCodeHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sharedIdentityHash",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct IProgrammableUniversalLaunchKernelV1.ReservationV1",
+        "name": "reservation",
+        "type": "tuple"
+      }
+    ],
+    "name": "computeReservationKeyV1",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "enum IProgrammableUniversalLaunchKernelV1.ReservationKind",
+            "name": "kind",
+            "type": "uint8"
+          },
+          {
+            "internalType": "enum IProgrammableUniversalLaunchKernelV1.ReservationScope",
+            "name": "scope",
+            "type": "uint8"
+          },
+          {
+            "internalType": "address",
+            "name": "account",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "manager",
+            "type": "address"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "identifier",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedRuntimeCodeHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedManagerRuntimeCodeHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sharedIdentityHash",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct IProgrammableUniversalLaunchKernelV1.ReservationV1[]",
+        "name": "reservations",
+        "type": "tuple[]"
+      }
+    ],
+    "name": "computeReservationSetHashV1",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes20",
+        "name": "sourceCommit",
+        "type": "bytes20"
+      }
+    ],
+    "name": "computeSourceCommitmentV1",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "pure",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes20",
+        "name": "sourceTree",
+        "type": "bytes20"
+      }
+    ],
+    "name": "computeSourceTreeCommitmentV1",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "pure",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint16",
+            "name": "schemaVersion",
+            "type": "uint16"
+          },
+          {
+            "internalType": "address",
+            "name": "applicantWallet",
+            "type": "address"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "applicantIdHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "profileKey",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "planHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sourceRepoHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes20",
+            "name": "sourceCommit",
+            "type": "bytes20"
+          },
+          {
+            "internalType": "bytes20",
+            "name": "sourceTree",
+            "type": "bytes20"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sourceLaunchId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "stampLaunchId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "antiReplayNonce",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "componentGraphHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "componentRuntimeSetHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "configurationHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "builderEvidenceHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "reviewerAttestationHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "exactContractBindingHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "providerBindingHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "revenueBindingHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "securityControlHeadHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "securityEpoch",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "securityEpochHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "policyEpoch",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "policyEpochHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "reviewGeneration",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "reviewGenerationHash",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct IProgrammableUniversalLaunchKernelV1.LaunchGrantV1",
+        "name": "grant",
+        "type": "tuple"
+      }
+    ],
+    "name": "computeStampLaunchIdV1",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "grantDigest",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "stampLaunchId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "antiReplayNonce",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "address",
+            "name": "profileModule",
+            "type": "address"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "intentNonce",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "validAfter",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "deadline",
+            "type": "uint64"
+          }
+        ],
+        "internalType": "struct IProgrammableUniversalLaunchKernelV1.ApplicantWalletIntentV1",
+        "name": "intent",
+        "type": "tuple"
+      }
+    ],
+    "name": "computeWalletIntentDigestV1",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint16",
+            "name": "schemaVersion",
+            "type": "uint16"
+          },
+          {
+            "internalType": "address",
+            "name": "applicantWallet",
+            "type": "address"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "applicantIdHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "profileKey",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "planHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sourceRepoHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes20",
+            "name": "sourceCommit",
+            "type": "bytes20"
+          },
+          {
+            "internalType": "bytes20",
+            "name": "sourceTree",
+            "type": "bytes20"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sourceLaunchId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "stampLaunchId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "antiReplayNonce",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "componentGraphHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "componentRuntimeSetHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "configurationHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "builderEvidenceHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "reviewerAttestationHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "exactContractBindingHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "providerBindingHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "revenueBindingHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "securityControlHeadHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "securityEpoch",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "securityEpochHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "policyEpoch",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "policyEpochHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "reviewGeneration",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "reviewGenerationHash",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct IProgrammableUniversalLaunchKernelV1.LaunchGrantV1",
+        "name": "grant",
+        "type": "tuple"
+      }
+    ],
+    "name": "computeWinnerKeyHashV1",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "controlStateV1",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "securityControlHeadHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "securityEpoch",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "securityEpochHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "policyEpoch",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "policyEpochHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "reviewGeneration",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "reviewGenerationHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bool",
+            "name": "globalKilled",
+            "type": "bool"
+          }
+        ],
+        "internalType": "struct IProgrammableUniversalLaunchKernelV1.ControlStateV1",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "digest",
+        "type": "bytes32"
+      }
+    ],
+    "name": "currentnessStatusV1",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "used",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "revoked",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "grantDigest",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "stampLaunchId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "planHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "componentSetHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "componentRuntimeSetHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "configurationHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "reservationSetHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "providerResultHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "postconditionHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "valueFlowHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "deploymentLineageHash",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct IProgrammableUniversalLaunchKernelV1.ExecutionResultV1",
+        "name": "result",
+        "type": "tuple"
+      }
+    ],
+    "name": "finalizeProfileExecutionV1",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "receiptCoreHash",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "grantDigest",
+        "type": "bytes32"
+      }
+    ],
+    "name": "launchGrantStateHeadV1",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "enum IProgrammableUniversalLaunchKernelV1.LaunchGrantStatus",
+            "name": "status",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "grantHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "winnerKeyHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "stateHeadHash",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct IProgrammableUniversalLaunchKernelV1.LaunchGrantStateHeadV1",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "grantDigest",
+        "type": "bytes32"
+      }
+    ],
+    "name": "launchGrantV1",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint16",
+            "name": "schemaVersion",
+            "type": "uint16"
+          },
+          {
+            "internalType": "address",
+            "name": "applicantWallet",
+            "type": "address"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "applicantIdHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "profileKey",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "planHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sourceRepoHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes20",
+            "name": "sourceCommit",
+            "type": "bytes20"
+          },
+          {
+            "internalType": "bytes20",
+            "name": "sourceTree",
+            "type": "bytes20"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sourceLaunchId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "stampLaunchId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "antiReplayNonce",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "componentGraphHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "componentRuntimeSetHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "configurationHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "builderEvidenceHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "reviewerAttestationHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "exactContractBindingHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "providerBindingHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "revenueBindingHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "securityControlHeadHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "securityEpoch",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "securityEpochHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "policyEpoch",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "policyEpochHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "reviewGeneration",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "reviewGenerationHash",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct IProgrammableUniversalLaunchKernelV1.LaunchGrantV1",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "profileKey",
+        "type": "bytes32"
+      }
+    ],
+    "name": "profileDescriptorV1",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "profileKey",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "schemaId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "profileVersion",
+            "type": "uint32"
+          },
+          {
+            "internalType": "enum IProgrammableUniversalLaunchKernelV1.CapabilitySemantics",
+            "name": "capabilitySemantics",
+            "type": "uint8"
+          },
+          {
+            "internalType": "address",
+            "name": "module",
+            "type": "address"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "moduleRuntimeCodeHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "actionTypeHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "exactContractBindingHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "providerBindingHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "revenuePolicyHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "securityControlHeadHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "securityEpoch",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "securityEpochHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "policyEpoch",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "policyEpochHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "reviewGeneration",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "reviewGenerationHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "enum IProgrammableUniversalLaunchKernelV1.ProfileStatus",
+            "name": "status",
+            "type": "uint8"
+          }
+        ],
+        "internalType": "struct IProgrammableUniversalLaunchKernelV1.ProfileDescriptorV1",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "profileKey",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "schemaId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "profileVersion",
+            "type": "uint32"
+          },
+          {
+            "internalType": "enum IProgrammableUniversalLaunchKernelV1.CapabilitySemantics",
+            "name": "capabilitySemantics",
+            "type": "uint8"
+          },
+          {
+            "internalType": "address",
+            "name": "module",
+            "type": "address"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "moduleRuntimeCodeHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "actionTypeHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "exactContractBindingHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "providerBindingHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "revenuePolicyHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "securityControlHeadHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "securityEpoch",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "securityEpochHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "policyEpoch",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "policyEpochHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "reviewGeneration",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "reviewGenerationHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "enum IProgrammableUniversalLaunchKernelV1.ProfileStatus",
+            "name": "status",
+            "type": "uint8"
+          }
+        ],
+        "internalType": "struct IProgrammableUniversalLaunchKernelV1.ProfileDescriptorV1",
+        "name": "descriptor",
+        "type": "tuple"
+      }
+    ],
+    "name": "registerProfileV1",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "enum IProgrammableUniversalLaunchKernelV1.ReservationKind",
+            "name": "kind",
+            "type": "uint8"
+          },
+          {
+            "internalType": "enum IProgrammableUniversalLaunchKernelV1.ReservationScope",
+            "name": "scope",
+            "type": "uint8"
+          },
+          {
+            "internalType": "address",
+            "name": "account",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "manager",
+            "type": "address"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "identifier",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedRuntimeCodeHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedManagerRuntimeCodeHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sharedIdentityHash",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct IProgrammableUniversalLaunchKernelV1.ReservationV1",
+        "name": "reservation",
+        "type": "tuple"
+      }
+    ],
+    "name": "reservationOccupantsV1",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "reservationKey",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "exclusiveGrantDigest",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "sharedIdentityHash",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "currentnessDigest",
+        "type": "bytes32"
+      }
+    ],
+    "name": "revokeExecutionCurrentnessV1",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "grantDigest",
+        "type": "bytes32"
+      }
+    ],
+    "name": "revokeLaunchGrantV1",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bool",
+        "name": "killed",
+        "type": "bool"
+      }
+    ],
+    "name": "setGlobalKillV1",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "profileKey",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "enum IProgrammableUniversalLaunchKernelV1.ProfileStatus",
+        "name": "status",
+        "type": "uint8"
+      }
+    ],
+    "name": "setProfileStatusV1",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "winnerKeyHash",
+        "type": "bytes32"
+      }
+    ],
+    "name": "winnerByKeyV1",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "antiReplayNonce",
+        "type": "bytes32"
+      }
+    ],
+    "name": "winnerByNonceV1",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "foundryVersion": "1.7.1",
   "coverageMode": "--ir-minimum",
-  "reason": "Foundry cannot attribute coverage source maps for these stack-heavy contracts under --ir-minimum; the exact Mainnet-fork suites below are required on two independent RPC providers instead.",
+  "reason": "Foundry cannot produce representative via-IR coverage execution for these stack-heavy or exact-runtime contracts; the hash-bound alternate test gates below are required instead.",
   "sourceExceptions": [
     {
       "path": "src/ProgrammableLaunchStampRouterV2.sol",
@@ -15,6 +15,18 @@
     {
       "path": "src/ProgrammableCompletedGraphAdoptionRouterV2_1.sol",
       "sha256": "c25196d9901ccea6467058ce9d0c9a88acdf55d366653f07e40955c2a5236840"
+    },
+    {
+      "path": "src/router_vnext/ProgrammableNestedFactoryProfileV1.sol",
+      "sha256": "52dda71eadc9379b5298b5e35bb7c6b19337e17e86e8c7f330be5f74b547a2ec"
+    },
+    {
+      "path": "src/router_vnext/ProgrammableUniversalLaunchKernelV1.sol",
+      "sha256": "22ec3d29bc050c2a7c5934038c08e57585ab08074042c30acec83d9846a39070"
+    },
+    {
+      "path": "src/router_vnext/ProgrammableUniversalLaunchPreflightV1.sol",
+      "sha256": "ea0f3f233ec7a5465c5cd16094bee5720e1d1215ac9f683d360b9140a8833de3"
     }
   ],
   "requiredTests": [
@@ -29,6 +41,10 @@
     {
       "path": "test/ProgrammableCompletedGraphAdoptionRouterV2_1.t.sol",
       "sha256": "3f4febdeeb746f95a31e7f7ee88d5b418b0e633dbd35586a7fe5bd62d01a79d6"
+    },
+    {
+      "path": "test/router_vnext/ProgrammableUniversalLaunchKernelV1.t.sol",
+      "sha256": "6dd0a0740a4dab36a7076df57cfb0398082af824746a044bb59358d146f93925"
     }
   ]
 }
