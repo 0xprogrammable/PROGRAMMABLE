@@ -202,7 +202,12 @@ describe("action-route RPC quorums", () => {
       rpcUrlSecondary: QUICKNODE_MAINNET,
     });
     expectIndependent(providers);
-    expect(providers).toHaveLength(2);
+    expect(providers.map((provider) => provider.vendorGroup)).toEqual([
+      "drpc",
+      "quicknode",
+      "publicnode",
+      "mevblocker",
+    ]);
 
     expectSafeFailure(
       () =>

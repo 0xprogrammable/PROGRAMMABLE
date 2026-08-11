@@ -416,7 +416,19 @@ describe("Explore refresh state", () => {
       liquidityPath: "meme",
     } satisfies LauncherToken;
 
-    expect(getExploreValuationMetric(classicEntry(token))).toEqual({
+    expect(getExploreValuationMetric({
+      ...classicEntry(token),
+      valuation: {
+        status: "available",
+        metric: "fdv",
+        supplyBasis: "total",
+        currency: "usd",
+        valueWad: "125000000000000000000",
+        freshness: "current",
+        asOfBlock: "25730000",
+        lagBlocks: "0",
+      },
+    })).toEqual({
       kind: "usd",
       value: 125,
     });

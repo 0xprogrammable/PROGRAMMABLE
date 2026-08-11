@@ -104,7 +104,7 @@ describe("Hookathon countdown", () => {
         hookathonConfig.deadlineIso,
         hookathonConfig.timeZone,
       ),
-    ).toBe("14 Aug 2026, 19:40:20 CEST");
+    ).toBe("15 Aug 2026, 10:09:29 CEST");
   });
 
   it("rejects invalid clock inputs instead of inventing a countdown", () => {

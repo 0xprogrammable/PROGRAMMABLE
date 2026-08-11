@@ -3,18 +3,28 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 const mocks = vi.hoisted(() => ({
+  getBlock: vi.fn(),
   multicall: vi.fn(),
+  readContract: vi.fn(),
 }));
 
 vi.mock("viem", async (importOriginal) => {
   const actual = await importOriginal<typeof import("viem")>();
   return {
     ...actual,
-    createPublicClient: vi.fn(() => ({ multicall: mocks.multicall })),
+    createPublicClient: vi.fn(() => ({
+      getBlock: mocks.getBlock,
+      multicall: mocks.multicall,
+      readContract: mocks.readContract,
+    })),
   };
 });
 
-import { enrichTokensWithAlchemyPoolState } from "../lib/alchemy/live-market.server";
+import {
+  enrichTokensWithAlchemyPoolState,
+  withSameBlockEthUsdQuote,
+  withoutUnboundEthUsdQuote,
+} from "../lib/alchemy/live-market.server";
 import { exploreValuation } from "../lib/explore-financial-data";
 import type { ReadyOnchainDeployment } from "../lib/onchain/types";
 import type { LauncherToken } from "../lib/tokens";
@@ -44,6 +54,70 @@ const deployment = {
 describe("Alchemy live pool market state", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("replaces an older ETH/USD quote with a verified same-block quote", async () => {
+    const blockHash = `0x${"77".repeat(32)}` as const;
+    mocks.readContract
+      .mockResolvedValueOnce(8)
+      .mockResolvedValueOnce([
+        12n,
+        300_000_000_000n,
+        0n,
+        1_786_400_000n,
+        12n,
+      ]);
+    mocks.getBlock.mockResolvedValue({
+      hash: blockHash,
+      timestamp: 1_786_400_100n,
+    });
+
+    const snapshot = await withSameBlockEthUsdQuote({
+      deployment,
+      snapshot: {
+        chainId: 1,
+        blockNumber: "25680000",
+        blockHash,
+        confirmations: 0,
+        ethUsdQuote: {
+          feedAddress: "0x8888888888888888888888888888888888888888",
+          roundId: "1",
+          answer: "1",
+          decimals: 8,
+          updatedAt: "1",
+        },
+      },
+    });
+
+    expect(snapshot.ethUsdQuote).toEqual({
+      feedAddress: "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
+      roundId: "12",
+      answer: "300000000000",
+      decimals: 8,
+      updatedAt: "1786400000",
+    });
+    expect(mocks.readContract.mock.calls.every(
+      ([request]) => request.blockNumber === 25_680_000n,
+    )).toBe(true);
+    expect(mocks.getBlock).toHaveBeenCalledWith({
+      blockNumber: 25_680_000n,
+    });
+  });
+
+  it("removes a quote that is not bound to the live snapshot", () => {
+    expect(withoutUnboundEthUsdQuote({
+      chainId: 1,
+      blockNumber: "25680000",
+      blockHash: `0x${"77".repeat(32)}`,
+      confirmations: 0,
+      ethUsdQuote: {
+        feedAddress: "0x8888888888888888888888888888888888888888",
+        roundId: "1",
+        answer: "1",
+        decimals: 8,
+        updatedAt: "1",
+      },
+    })).not.toHaveProperty("ethUsdQuote");
   });
 
   it("derives current token price and market cap from StateView and reuses the five-second read", async () => {
@@ -126,6 +200,62 @@ describe("Alchemy live pool market state", () => {
     expect(mocks.multicall.mock.calls.every(
       ([request]) => request.blockNumber === 25_680_000n,
     )).toBe(true);
+  });
+
+  it("matches the public Programmable V4 StateView and Chainlink golden sample", async () => {
+    mocks.multicall.mockResolvedValueOnce([
+      {
+        status: "success",
+        result: [71_024_877_262_306_743_364_511_803_610_105n, 135_975, 0, 0],
+      },
+    ]).mockResolvedValueOnce([
+      {
+        status: "success",
+        result: 41_873_636_805_959_591_033_727n,
+      },
+    ]);
+    const token = {
+      id: "1:0x7987f03462200b3d8a072e02c89a8a41dcb124ee",
+      name: "Programmable",
+      symbol: "V4",
+      tokenAddress: "0x7987f03462200b3D8A072E02C89A8A41dCB124EE",
+      hookAddress: "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC",
+      poolId: "0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0",
+      launchedAt: "2026-07-27T22:12:23.000Z",
+      totalSupplyRaw: "1000000000000000000000000000",
+      tokenDecimals: 18,
+      activeLiquidity: "41873636805959591033727",
+      launchModel: "classic",
+      totalSwapFeeBps: 100,
+      liquidityPath: "meme",
+    } satisfies LauncherToken;
+
+    const [enriched] = await enrichTokensWithAlchemyPoolState({
+      deployment,
+      snapshot: {
+        chainId: 1,
+        blockNumber: "25730555",
+        blockHash: "0x88e3bc3a2ffed82bf413cd16c2bad04d8e5482306b55398ceb791285ff5248b1",
+        confirmations: 0,
+        ethUsdQuote: {
+          feedAddress: "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
+          roundId: "129127208515966893693",
+          answer: "187594280000",
+          decimals: 8,
+          updatedAt: "1786435217",
+        },
+      },
+      tokens: [token],
+    });
+
+    expect(enriched).toMatchObject({
+      currentTick: 135_975,
+      tokenPriceEthWei: "1244337483530",
+      marketCapEthWei: "1244337483530407886719",
+      tokenPriceUsdWad: "2334305942998222",
+      fdvUsdWad: "2334305942998987256153723",
+      indexedValuationBlockNumber: "25730555",
+    });
   });
 
   it("reads every valid stamped PoolId at one block and separates state from valuation", async () => {

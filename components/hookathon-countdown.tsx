@@ -10,7 +10,6 @@ import {
 
 export type HookathonCountdownProps = Readonly<{
   deadlineIso: string;
-  deadlineDisplay: string;
   hookbuilderUrl: string;
   initialNowMs: number;
 }>;
@@ -34,7 +33,6 @@ function paddedUnit(value: number) {
 
 export function HookathonCountdown({
   deadlineIso,
-  deadlineDisplay,
   hookbuilderUrl,
   initialNowMs,
 }: HookathonCountdownProps) {
@@ -114,12 +112,9 @@ export function HookathonCountdown({
       </div>
 
       <p className="sr-only">
-        Submissions close on {deadlineDisplay} in Europe/Zurich.
-      </p>
-      <p className={styles.deadline}>
-        <time dateTime={deadlineIso}>{deadlineDisplay}</time>
-        <span aria-hidden="true"> · </span>
-        <span>Europe/Zurich</span>
+        {countdown.ended
+          ? "Submissions closed"
+          : `${countdown.days} days, ${countdown.hours} hours, ${countdown.minutes} minutes and ${countdown.seconds} seconds remaining`}
       </p>
 
       <div className={styles.actions}>
@@ -135,7 +130,6 @@ export function HookathonCountdown({
             target="_blank"
           >
             Open Hookbuilder
-            <span aria-hidden="true">↗</span>
           </a>
         )}
       </div>

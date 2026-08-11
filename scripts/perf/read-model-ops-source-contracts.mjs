@@ -35,7 +35,7 @@ const APPROVED_OPERATIONS = Object.freeze({
       dependencies: Object.freeze([
         Object.freeze({
           path: "lib/server/action-rpc-quorum.server.ts",
-          sha256: "712d4df420068c20e3456606d87062203b89b4674a363109244175d113b2a413",
+          sha256: "0cb84ff2a409980e84383699f73bfc1941dfe328f39e94d8e3658cc4aa4ed6f3",
         }),
       ]),
       policy: Object.freeze({

@@ -4,6 +4,7 @@ import {
   createPublicClient,
   formatUnits,
   http,
+  parseAbi,
   type Hex,
 } from "viem";
 import { mainnet, sepolia } from "viem/chains";
@@ -14,8 +15,13 @@ import {
   nativePriceWadFromSqrtPriceX96,
 } from "../onchain/math";
 import { withOperationalRpcFailover } from "../onchain/operational-rpc-failover.server";
+import { readOperationalRpcHealth } from "../onchain/rpc-health";
 import type { ExploreSnapshot, ReadyOnchainDeployment } from "../onchain/types";
-import { usdValueFromWei } from "../onchain/usd";
+import {
+  assertValidEthUsdSnapshot,
+  ETH_USD_FEED_ADDRESS,
+  usdValueFromWei,
+} from "../onchain/usd";
 import {
   isLaunchStampProvenanceV1,
   type LauncherToken,
@@ -58,6 +64,10 @@ function trimPoolStateCache() {
 }
 
 const NATIVE_CURRENCY = "0x0000000000000000000000000000000000000000";
+const ethUsdReadAbi = parseAbi([
+  "function decimals() view returns (uint8)",
+  "function latestRoundData() view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)",
+]);
 
 function validLaunchStampForToken(token: LauncherToken) {
   const stamp = token.launchStampProvenance;
@@ -138,6 +148,108 @@ function snapshotBlock(snapshot: ExploreSnapshot) {
     throw new Error("Alchemy live market snapshot block is invalid");
   }
   return BigInt(snapshot.blockNumber);
+}
+
+/**
+ * A launch-discovery snapshot may be newer than the durable market snapshot.
+ * Never carry the durable ETH/USD quote across that block boundary: doing so
+ * combines a current pool ratio with an older FX observation and produces a
+ * plausible but incorrect USD FDV.
+ */
+export function withoutUnboundEthUsdQuote(
+  snapshot: ExploreSnapshot,
+): ExploreSnapshot {
+  const withoutQuote = { ...snapshot };
+  delete withoutQuote.ethUsdQuote;
+  return withoutQuote;
+}
+
+/**
+ * Resolves the market read target from the two configured operational RPCs,
+ * not from the potentially lagging launch-discovery model. Only a fresh
+ * confirmed block with matching hashes from both providers can be labelled as
+ * current market data.
+ */
+export async function readVerifiedOperationalMarketSnapshot(
+  deployment: ReadyOnchainDeployment,
+): Promise<ExploreSnapshot | null> {
+  const health = await readOperationalRpcHealth(deployment);
+  if (
+    health.status !== "healthy" ||
+    health.read.status !== "available" ||
+    health.quorum.status !== "verified" ||
+    health.confirmedBlock === null
+  ) return null;
+
+  return {
+    chainId: deployment.chainId,
+    blockNumber: health.confirmedBlock.number,
+    blockHash: health.confirmedBlock.hash,
+    confirmations: Number(deployment.confirmations),
+  };
+}
+
+/**
+ * Reads Chainlink at the exact pool-state block and verifies the provider's
+ * block hash before the quote can be used. Capacity/transport failures use the
+ * fixed operational secondary through the same bounded failover policy as
+ * StateView reads.
+ */
+export async function withSameBlockEthUsdQuote(input: {
+  deployment: ReadyOnchainDeployment;
+  snapshot: ExploreSnapshot;
+}): Promise<ExploreSnapshot> {
+  const snapshot = withoutUnboundEthUsdQuote(input.snapshot);
+  if (input.deployment.chainId !== 1) return snapshot;
+  const blockNumber = snapshotBlock(snapshot);
+  const quote = await withOperationalRpcFailover(
+    input.deployment,
+    async (rpcDeployment) => {
+      const client = createPublicClient({
+        chain: mainnet,
+        transport: http(rpcDeployment.rpcUrl, {
+          retryCount: 1,
+          timeout: 12_000,
+        }),
+      });
+      const [decimals, roundData, block] = await Promise.all([
+        client.readContract({
+          address: ETH_USD_FEED_ADDRESS,
+          abi: ethUsdReadAbi,
+          functionName: "decimals",
+          blockNumber,
+        }),
+        client.readContract({
+          address: ETH_USD_FEED_ADDRESS,
+          abi: ethUsdReadAbi,
+          functionName: "latestRoundData",
+          blockNumber,
+        }),
+        client.getBlock({ blockNumber }),
+      ]);
+      const [roundId, answer, , updatedAt] = roundData;
+      assertValidEthUsdSnapshot({
+        expectedBlockHash: snapshot.blockHash,
+        actualBlockHash: block.hash,
+        blockTimestamp: block.timestamp,
+        roundId,
+        answer,
+        updatedAt,
+      });
+      return { roundId, answer, decimals, updatedAt };
+    },
+  );
+
+  return {
+    ...snapshot,
+    ethUsdQuote: {
+      feedAddress: ETH_USD_FEED_ADDRESS,
+      roundId: quote.roundId.toString(),
+      answer: quote.answer.toString(),
+      decimals: quote.decimals,
+      updatedAt: quote.updatedAt.toString(),
+    },
+  };
 }
 
 function poolStateCacheKey(input: {

@@ -30,14 +30,15 @@ describe("Hookathon surface", () => {
     expect(html).toContain("$5,000");
     expect(html).toContain("$3,000");
     expect(html).toContain("$2,000");
-    expect(html).toContain(">Build<");
-    expect(html).toContain(">Submit<");
-    expect(html).toContain(">Launch<");
     expect(html).toContain(">Originality<");
     expect(html).toContain(">Usefulness<");
     expect(html).toContain(">Execution<");
     expect(html).toContain("Anyone can enter, with no team size limit");
-    expect(html).toContain("A pull request alone does not qualify");
+    expect(html).not.toContain("How to enter");
+    expect(html).toContain(
+      'href="https://github.com/0xprogrammable/submit-launch"',
+    );
+    expect(html).toContain(">Submit Launch</a>");
   });
 
   it("uses one accessible Hookbuilder action without announcing every second", () => {
@@ -46,12 +47,16 @@ describe("Hookathon surface", () => {
     expect(html).not.toContain("Copy builder prompt");
     expect(html).toContain('href="https://github.com/0xprogrammable/hookbuilder"');
     expect(html).toContain("Open Hookbuilder");
+    expect(html).not.toContain("↗");
     expect(html).toContain('aria-hidden="true"');
     expect(html).toContain('role="status" aria-live="polite"');
     expect(html).not.toContain('role="timer"');
     expect(html).not.toContain('aria-live="assertive"');
+    expect(html).not.toContain("Submissions close on");
+    expect(html).not.toContain("Europe/Zurich");
+    expect(html).not.toContain("<time");
     expect(html).toContain(
-      '<time dateTime="2026-08-14T17:40:20Z">14 Aug 2026, 19:40:20 CEST</time>',
+      "4 days, 0 hours, 0 minutes and 0 seconds remaining",
     );
   });
 

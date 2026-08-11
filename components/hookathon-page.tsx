@@ -1,7 +1,6 @@
 import { HookathonCountdown } from "@/components/hookathon-countdown";
 import styles from "@/components/hookathon-page.module.css";
 import { hookathonConfig } from "@/lib/hookathon/config";
-import { formatHookathonDeadline } from "@/lib/hookathon/time";
 
 const usdFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -14,11 +13,6 @@ export type HookathonPageProps = Readonly<{
 }>;
 
 export function HookathonPage({ initialNowMs }: HookathonPageProps) {
-  const deadlineDisplay = formatHookathonDeadline(
-    hookathonConfig.deadlineIso,
-    hookathonConfig.timeZone,
-  );
-
   return (
     <article
       className={`${styles.page} hookathon-root`}
@@ -28,7 +22,6 @@ export function HookathonPage({ initialNowMs }: HookathonPageProps) {
         <header className={styles.hero}>
           <h1 id="hookathon-title">{hookathonConfig.name}</h1>
           <HookathonCountdown
-            deadlineDisplay={deadlineDisplay}
             deadlineIso={hookathonConfig.deadlineIso}
             hookbuilderUrl={hookathonConfig.hookbuilderUrl}
             initialNowMs={initialNowMs}
@@ -50,45 +43,36 @@ export function HookathonPage({ initialNowMs }: HookathonPageProps) {
           </ol>
         </section>
 
-        <section className={styles.entry} aria-labelledby="hookathon-entry">
-          <h2 id="hookathon-entry">How to enter</h2>
-          <ol className={styles.steps}>
-            {hookathonConfig.entrySteps.map((step) => (
-              <li key={step.id}>
-                <span className={styles.stepNumber} aria-hidden="true">
-                  {step.number}
-                </span>
-                <div>
-                  <h3>{step.title}</h3>
-                  <p>{step.description}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
+        <section
+          className={styles.eligibility}
+          aria-labelledby="hookathon-eligibility"
+        >
+          <h2 id="hookathon-eligibility">Eligibility</h2>
+          <p>
+            {hookathonConfig.eligibility.beforeSubmissionLink}{" "}
+            <a
+              href={hookathonConfig.submissionUrl}
+              rel="noreferrer"
+              target="_blank"
+            >
+              {hookathonConfig.eligibility.submissionLinkLabel}
+            </a>
+            {hookathonConfig.eligibility.afterSubmissionLink}
+          </p>
         </section>
 
-        <div className={styles.conditions}>
-          <section
-            className={styles.eligibility}
-            aria-labelledby="hookathon-eligibility"
-          >
-            <h2 id="hookathon-eligibility">Eligibility</h2>
-            <p>{hookathonConfig.eligibility.description}</p>
-          </section>
-
-          <section
-            className={styles.judging}
-            aria-labelledby="hookathon-judging"
-          >
-            <h2 id="hookathon-judging">Judging</h2>
-            <ul aria-label="Judging criteria">
-              {hookathonConfig.judging.criteria.map((criterion) => (
-                <li key={criterion}>{criterion}</li>
-              ))}
-            </ul>
-            <p>{hookathonConfig.judging.description}</p>
-          </section>
-        </div>
+        <section
+          className={styles.judging}
+          aria-labelledby="hookathon-judging"
+        >
+          <h2 id="hookathon-judging">Judging</h2>
+          <ul aria-label="Judging criteria">
+            {hookathonConfig.judging.criteria.map((criterion) => (
+              <li key={criterion}>{criterion}</li>
+            ))}
+          </ul>
+          <p>{hookathonConfig.judging.description}</p>
+        </section>
       </div>
     </article>
   );

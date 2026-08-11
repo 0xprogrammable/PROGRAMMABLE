@@ -28,10 +28,13 @@ import {
 } from "../../../../../lib/data-pipeline/action-lookup";
 import { indexedLaunchLookupEnabled } from "../../../../../lib/data-pipeline/route-activation.server";
 import {
+  ActionRpcQuorumError,
+  creatorClaimRpcProviders,
+} from "../../../../../lib/server/action-rpc-quorum.server";
+import {
   errorChainIncludesData,
   safeServerErrorSummary,
 } from "../../../../../lib/server/safe-error";
-import { creatorClaimRpcProviders } from "../../../../../lib/server/action-rpc-quorum.server";
 import { computeOfficialV4PoolId } from "../../../../../lib/uniswap/liquidity-launcher-sdk";
 
 export const dynamic = "force-dynamic";
@@ -40,6 +43,8 @@ export const runtime = "nodejs";
 const MAX_REQUEST_BYTES = 2_048;
 const NO_FEES_TO_CLAIM_SELECTOR = "0x846d8c5c";
 const NATIVE_ETH = "0x0000000000000000000000000000000000000000" as Address;
+const CLAIM_RPC_UNAVAILABLE_MESSAGE =
+  "Creator claim reads are temporarily unavailable. Try again";
 
 type CreatorClaimTokenIdentity = Readonly<{
   tokenAddress: Address;
@@ -86,29 +91,207 @@ function claimClient(
   });
 }
 
-async function sharedVerifiedBlock(clients: readonly PublicClient[]) {
-  if (clients.length !== 2) {
-    throw new CreatorClaimUnavailableError(
-      "rpc-unavailable",
-      "Creator claims require two independent Ethereum RPCs",
-    );
-  }
-  const heads = await Promise.all(clients.map((client) => client.getBlockNumber()));
-  const blockNumber = minimum(heads[0]!, heads[1]!);
-  const blocks = await Promise.all(
-    clients.map((client) => client.getBlock({ blockNumber })),
+function claimRpcUnavailable() {
+  return new CreatorClaimUnavailableError(
+    "rpc-unavailable",
+    CLAIM_RPC_UNAVAILABLE_MESSAGE,
   );
-  if (
-    !blocks[0]?.hash ||
-    !blocks[1]?.hash ||
-    blocks[0].hash.toLowerCase() !== blocks[1].hash.toLowerCase()
-  ) {
+}
+
+async function sharedVerifiedBlock(clients: readonly PublicClient[]) {
+  if (clients.length < 2) {
+    throw claimRpcUnavailable();
+  }
+
+  const headResults = await Promise.allSettled(
+    clients.map((client) => client.getBlockNumber()),
+  );
+  const available = headResults.flatMap((result, index) =>
+    result.status === "fulfilled"
+      ? [{ client: clients[index]!, head: result.value }]
+      : [],
+  );
+  if (available.length < 2) {
+    throw claimRpcUnavailable();
+  }
+
+  const descendingHeads = available
+    .map(({ head }) => head)
+    .sort((left, right) => (left > right ? -1 : left < right ? 1 : 0));
+  const candidateBlocks = [...new Set(descendingHeads.slice(1).map(String))]
+    .map((value) => BigInt(value))
+    .sort((left, right) => (left > right ? -1 : left < right ? 1 : 0));
+  let sawBlockDisagreement = false;
+
+  for (const blockNumber of candidateBlocks) {
+    const eligible = available.filter(({ head }) => head >= blockNumber);
+    const blockResults = await Promise.allSettled(
+      eligible.map(async ({ client }) => ({
+        client,
+        block: await client.getBlock({ blockNumber }),
+      })),
+    );
+    const groups = new Map<
+      string,
+      { blockHash: Hex; clients: PublicClient[] }
+    >();
+    for (const result of blockResults) {
+      if (result.status !== "fulfilled" || !result.value.block.hash) continue;
+      const blockHash = result.value.block.hash as Hex;
+      const key = blockHash.toLowerCase();
+      const group = groups.get(key) ?? { blockHash, clients: [] };
+      group.clients.push(result.value.client);
+      groups.set(key, group);
+    }
+    const agreeing = [...groups.values()].sort(
+      (left, right) => right.clients.length - left.clients.length,
+    )[0];
+    if (agreeing && agreeing.clients.length >= 2) {
+      return {
+        blockNumber,
+        blockHash: agreeing.blockHash,
+        clients: agreeing.clients,
+      };
+    }
+    if (groups.size > 1) sawBlockDisagreement = true;
+  }
+
+  if (sawBlockDisagreement) {
     throw new CreatorClaimUnavailableError(
       "rpc-disagreement",
       "Independent Ethereum RPCs disagree on the current claim state",
     );
   }
-  return { blockNumber, blockHash: blocks[0].hash };
+  throw claimRpcUnavailable();
+}
+
+async function sharedCurrentClaimState(input: {
+  clients: readonly PublicClient[];
+  deployment: Extract<ReturnType<typeof getOnchainDeployment>, { status: "ready" }>;
+  token: CreatorClaimTokenIdentity;
+  blockNumber: bigint;
+}) {
+  const results = await Promise.allSettled(
+    input.clients.map(async (client) => ({
+      client,
+      state: await readCurrentClaimState({
+        client,
+        deployment: input.deployment,
+        token: input.token,
+        blockNumber: input.blockNumber,
+      }),
+    })),
+  );
+  const groups = new Map<
+    string,
+    { claimable: bigint; clients: PublicClient[] }
+  >();
+  for (const result of results) {
+    if (result.status !== "fulfilled") continue;
+    const key = result.value.state.claimable.toString();
+    const group = groups.get(key) ?? {
+      claimable: result.value.state.claimable,
+      clients: [],
+    };
+    group.clients.push(result.value.client);
+    groups.set(key, group);
+  }
+  const agreeing = [...groups.values()].sort(
+    (left, right) => right.clients.length - left.clients.length,
+  )[0];
+  if (agreeing && agreeing.clients.length >= 2) return agreeing;
+  if (groups.size > 1) {
+    throw new CreatorClaimUnavailableError(
+      "rpc-disagreement",
+      "Independent Ethereum RPCs disagree on the current claim balance",
+    );
+  }
+
+  const deterministicFailures = new Map<
+    string,
+    CreatorClaimUnavailableError[]
+  >();
+  for (const result of results) {
+    if (
+      result.status !== "rejected" ||
+      !(result.reason instanceof CreatorClaimUnavailableError) ||
+      (result.reason.code !== "runtime-mismatch" &&
+        result.reason.code !== "identity-mismatch")
+    ) {
+      continue;
+    }
+    const failures = deterministicFailures.get(result.reason.code) ?? [];
+    failures.push(result.reason);
+    deterministicFailures.set(result.reason.code, failures);
+  }
+  const verifiedFailure = [...deterministicFailures.values()].find(
+    (failures) => failures.length >= 2,
+  )?.[0];
+  if (verifiedFailure) throw verifiedFailure;
+  throw claimRpcUnavailable();
+}
+
+function revertFingerprint(error: unknown) {
+  const summary = safeServerErrorSummary(error);
+  const selector = summary.chain.find((entry) => entry.dataSelector)
+    ?.dataSelector;
+  if (selector) return `data:${selector}`;
+  const reverted = summary.chain.find(
+    (entry) =>
+      entry.name === "ContractFunctionRevertedError" ||
+      entry.message?.toLowerCase().includes("execution reverted"),
+  );
+  return reverted
+    ? `revert:${reverted.message?.toLowerCase() ?? reverted.name}`
+    : null;
+}
+
+async function simulateCreatorClaim(input: {
+  clients: readonly PublicClient[];
+  transaction: {
+    account: Address;
+    to: Address;
+    data: Hex;
+    value: bigint;
+  };
+  blockNumber: bigint;
+}) {
+  const results = await Promise.allSettled(
+    input.clients.map(async (client) => {
+      await client.call({ ...input.transaction, blockNumber: input.blockNumber });
+      const [estimatedGas, gasPrice, accountBalance] = await Promise.all([
+        client.estimateGas({
+          ...input.transaction,
+          blockNumber: input.blockNumber,
+        }),
+        client.getGasPrice(),
+        client.getBalance({
+          address: input.transaction.account,
+          blockNumber: input.blockNumber,
+        }),
+      ]);
+      return { estimatedGas, gasPrice, accountBalance };
+    }),
+  );
+  const simulations = results.flatMap((result) =>
+    result.status === "fulfilled" ? [result.value] : [],
+  );
+  if (simulations.length >= 2) return simulations;
+
+  const failures = new Map<string, unknown[]>();
+  for (const result of results) {
+    if (result.status !== "rejected") continue;
+    const fingerprint = revertFingerprint(result.reason);
+    if (!fingerprint) continue;
+    const matching = failures.get(fingerprint) ?? [];
+    matching.push(result.reason);
+    failures.set(fingerprint, matching);
+  }
+  const verifiedFailure = [...failures.values()].find(
+    (matching) => matching.length >= 2,
+  )?.[0];
+  if (verifiedFailure) throw verifiedFailure;
+  throw claimRpcUnavailable();
 }
 
 async function readCurrentClaimState(input: {
@@ -381,23 +564,13 @@ export async function POST(request: NextRequest) {
       claimClient(deployment, provider.endpoint),
     );
     const snapshot = await sharedVerifiedBlock(clients);
-    const states = await Promise.all(
-      clients.map((client) =>
-        readCurrentClaimState({
-          client,
-          deployment,
-          token,
-          blockNumber: snapshot.blockNumber,
-        }),
-      ),
-    );
-    if (states[0]!.claimable !== states[1]!.claimable) {
-      throw new CreatorClaimUnavailableError(
-        "rpc-disagreement",
-        "Independent Ethereum RPCs disagree on the current claim balance",
-      );
-    }
-    const claimable = states[0]!.claimable;
+    const state = await sharedCurrentClaimState({
+      clients: snapshot.clients,
+      deployment,
+      token,
+      blockNumber: snapshot.blockNumber,
+    });
+    const claimable = state.claimable;
     if (claimable <= 0n) {
       throw new CreatorClaimUnavailableError(
         "nothing-to-claim",
@@ -410,23 +583,17 @@ export async function POST(request: NextRequest) {
       args: [claimRequest.poolId],
     });
     const value = 0n;
-    const simulations = await Promise.all(
-      clients.map(async (client) => {
-        const transaction = {
-          account: claimRequest.account,
-          to: deployment.feeHook,
-          data,
-          value,
-        };
-        await client.call(transaction);
-        const [estimatedGas, gasPrice, accountBalance] = await Promise.all([
-          client.estimateGas(transaction),
-          client.getGasPrice(),
-          client.getBalance({ address: claimRequest.account }),
-        ]);
-        return { estimatedGas, gasPrice, accountBalance };
-      }),
-    );
+    const transaction = {
+      account: claimRequest.account,
+      to: deployment.feeHook,
+      data,
+      value,
+    };
+    const simulations = await simulateCreatorClaim({
+      clients: state.clients,
+      transaction,
+      blockNumber: snapshot.blockNumber,
+    });
     const intent = {
       account: claimRequest.account,
       poolId: claimRequest.poolId,
@@ -483,14 +650,24 @@ export async function POST(request: NextRequest) {
         400,
       );
     }
-    if (error instanceof CreatorClaimUnavailableError) {
+    if (
+      error instanceof CreatorClaimUnavailableError ||
+      error instanceof ActionRpcQuorumError
+    ) {
+      const unavailable =
+        error instanceof ActionRpcQuorumError
+          ? claimRpcUnavailable()
+          : error;
+      const retryable =
+        unavailable.code === "rpc-unavailable" ||
+        unavailable.code === "rpc-disagreement";
       return json(
         blockedResponse(
-          error.code === "not-deployed" ? "not-deployed" : "blocked",
-          error.code,
-          error.message,
+          unavailable.code === "not-deployed" ? "not-deployed" : "blocked",
+          unavailable.code,
+          unavailable.message,
         ),
-        409,
+        retryable ? 503 : 409,
       );
     }
     if (

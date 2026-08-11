@@ -355,7 +355,7 @@ export function creatorClaimRpcProviders(
             "https://ethereum-sepolia-rpc.publicnode.com",
             "https://rpc.sepolia.org",
           ],
-    maximumProviders: 2,
+    maximumProviders: 4,
   });
 }
 
