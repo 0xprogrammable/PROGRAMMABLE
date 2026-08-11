@@ -8,8 +8,9 @@ import type { LauncherToken } from "../lib/tokens";
 import { customGraphToken } from "./launch-stamp-surface-fixture";
 
 const mocks = vi.hoisted(() => ({
-  enrichTokensWithAlchemyPrices: vi.fn(),
   enrichTokensWithAlchemyPoolState: vi.fn(),
+  readVerifiedOperationalMarketSnapshot: vi.fn(),
+  withSameBlockEthUsdQuote: vi.fn(),
   getAlchemyOnchainDeployment: vi.fn(),
   readAlchemyExploreModel: vi.fn(),
   readProductionCustomExploreDirectoryV1: vi.fn(),
@@ -20,7 +21,6 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../lib/alchemy/explore.server", () => ({
-  enrichTokensWithAlchemyPrices: mocks.enrichTokensWithAlchemyPrices,
   getAlchemyOnchainDeployment: mocks.getAlchemyOnchainDeployment,
   readAlchemyExploreModel: mocks.readAlchemyExploreModel,
   safeAlchemyError: mocks.safeAlchemyError,
@@ -28,6 +28,17 @@ vi.mock("../lib/alchemy/explore.server", () => ({
 
 vi.mock("../lib/alchemy/live-market.server", () => ({
   enrichTokensWithAlchemyPoolState: mocks.enrichTokensWithAlchemyPoolState,
+  readVerifiedOperationalMarketSnapshot:
+    mocks.readVerifiedOperationalMarketSnapshot,
+  withSameBlockEthUsdQuote: mocks.withSameBlockEthUsdQuote,
+  withoutUnboundEthUsdQuote: (snapshot: {
+    ethUsdQuote?: unknown;
+    [key: string]: unknown;
+  }) => {
+    const withoutQuote = { ...snapshot };
+    delete withoutQuote.ethUsdQuote;
+    return withoutQuote;
+  },
 }));
 
 vi.mock("../lib/server/custom-launch/explore-directory-v1", () => ({
@@ -103,6 +114,12 @@ describe("token detail Alchemy read", () => {
       indexedAt: "2026-08-10T17:55:45.000Z",
       finality: "confirmed",
     });
+    mocks.readVerifiedOperationalMarketSnapshot.mockResolvedValue(
+      launchDiscoverySnapshot,
+    );
+    mocks.withSameBlockEthUsdQuote.mockImplementation(
+      async ({ snapshot: value }) => value,
+    );
     mocks.enrichTokensWithAlchemyPoolState.mockImplementation(
       async ({ tokens }: { tokens: readonly LauncherToken[] }) =>
         tokens.map((candidate) => ({
@@ -114,7 +131,7 @@ describe("token detail Alchemy read", () => {
     );
   });
 
-  it("price-enriches only the canonical token from the Alchemy read model", async () => {
+  it("refreshes only the canonical token from current StateView data", async () => {
     const canonical = token(TOKEN_ADDRESS, {
       totalSupplyRaw: "1000000000000000000000000",
       tokenDecimals: 18,
@@ -135,13 +152,6 @@ describe("token detail Alchemy read", () => {
       launcherFeesAccruedEth: "0",
     } satisfies ExploreReadModel;
     mocks.readAlchemyExploreModel.mockResolvedValue(model);
-    mocks.enrichTokensWithAlchemyPrices.mockResolvedValue([
-      {
-        ...canonical,
-        tokenPriceUsdWad: "1250000000000000000",
-        fdvUsdWad: "1250000000000000000000000",
-      },
-    ]);
 
     const response = await GET(
       new NextRequest(
@@ -152,15 +162,14 @@ describe("token detail Alchemy read", () => {
 
     expect(response.status).toBe(200);
     expect(mocks.readAlchemyExploreModel).toHaveBeenCalledTimes(1);
-    expect(mocks.enrichTokensWithAlchemyPrices).toHaveBeenCalledWith([
-      canonical,
-    ]);
+    expect(mocks.enrichTokensWithAlchemyPoolState).toHaveBeenCalledWith(
+      expect.objectContaining({ tokens: [canonical] }),
+    );
     expect(body.token).toMatchObject({
       id: canonical.id,
       name: canonical.name,
       symbol: canonical.symbol,
       tokenAddress: canonical.tokenAddress,
-      tokenPriceUsdWad: "1250000000000000000",
       fdvUsdWad: "1250000000000000000000000",
       valuation: {
         status: "available",
@@ -201,7 +210,7 @@ describe("token detail Alchemy read", () => {
       "operational-dual",
     );
     expect(response.headers.get("X-Programmable-Price-Source")).toBe(
-      "alchemy",
+      "state-view+chainlink",
     );
     expect(response.headers.get("X-Programmable-Launch-Source")).toBe(
       "operational+durable+registry.custom-launched",
@@ -212,6 +221,76 @@ describe("token detail Alchemy read", () => {
     expect(response.headers.get("Cache-Control")).toBe(
       "public, max-age=0, s-maxage=2, stale-while-revalidate=5",
     );
+  });
+
+  it("reports detail FDV at the verified operational block, not the stale launch snapshot", async () => {
+    const canonical = token(TOKEN_ADDRESS, {
+      totalSupplyRaw: "1000000000000000000000000",
+      tokenDecimals: 18,
+      activeLiquidity: "1",
+      indexedMarketCapUsdWad: "1620000000000000000000000",
+      indexedValuationBlockNumber: snapshot.blockNumber,
+    });
+    const operationalSnapshot = {
+      ...launchDiscoverySnapshot,
+      blockNumber: "25632000",
+      blockHash: `0x${"99".repeat(32)}` as const,
+    };
+    mocks.readAlchemyExploreModel.mockResolvedValue({
+      status: "ready",
+      tokens: [canonical],
+      snapshot,
+      launchDiscoverySnapshot,
+      creatorClaims: [],
+      launcherFeesAccruedWei: "0",
+      launcherFeesAccruedEth: "0",
+    } satisfies ExploreReadModel);
+    mocks.readVerifiedOperationalMarketSnapshot.mockResolvedValue(
+      operationalSnapshot,
+    );
+    mocks.readExploreReferenceHeadWithinRouteBudget.mockResolvedValue({
+      blockNumber: operationalSnapshot.blockNumber,
+      blockHash: operationalSnapshot.blockHash,
+      indexedAt: "2026-08-10T18:00:00.000Z",
+      finality: "confirmed",
+    });
+    mocks.enrichTokensWithAlchemyPoolState.mockImplementation(
+      async ({ snapshot: readSnapshot }) => [{
+        ...canonical,
+        indexedMarketCapUsdWad: undefined,
+        indexedValuationBlockNumber: readSnapshot.blockNumber,
+        fdvUsdWad: "2334305942998987256153723",
+      }],
+    );
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/explore/token?address=${TOKEN_ADDRESS}`,
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mocks.withSameBlockEthUsdQuote).toHaveBeenCalledWith(
+      expect.objectContaining({ snapshot: operationalSnapshot }),
+    );
+    expect(mocks.enrichTokensWithAlchemyPoolState).toHaveBeenCalledWith(
+      expect.objectContaining({ snapshot: operationalSnapshot }),
+    );
+    expect(body.token).toMatchObject({
+      fdvUsdWad: "2334305942998987256153723",
+      valuation: {
+        status: "available",
+        freshness: "current",
+        asOfBlock: operationalSnapshot.blockNumber,
+        lagBlocks: "0",
+      },
+    });
+    expect(body.dataQuality.valuation).toMatchObject({
+      status: "current",
+      asOfBlock: operationalSnapshot.blockNumber,
+    });
+    expect(body.launchDiscoverySnapshot).toEqual(launchDiscoverySnapshot);
   });
 
   it("serves Router provenance for a finalized Custom Graph without Classic fields", async () => {
@@ -225,7 +304,6 @@ describe("token detail Alchemy read", () => {
       launcherFeesAccruedEth: "0",
     } satisfies ExploreReadModel;
     mocks.readAlchemyExploreModel.mockResolvedValue(model);
-    mocks.enrichTokensWithAlchemyPrices.mockResolvedValue([customGraphToken]);
 
     const response = await GET(
       new NextRequest(
@@ -262,7 +340,6 @@ describe("token detail Alchemy read", () => {
 
     expect(response.status).toBe(400);
     expect(mocks.readAlchemyExploreModel).not.toHaveBeenCalled();
-    expect(mocks.enrichTokensWithAlchemyPrices).not.toHaveBeenCalled();
   });
 
   it("returns a canonical 404 without price enrichment", async () => {
@@ -292,7 +369,6 @@ describe("token detail Alchemy read", () => {
     expect(response.headers.get("X-Programmable-Read-Source")).toBe(
       "operational+durable+postgres",
     );
-    expect(mocks.enrichTokensWithAlchemyPrices).not.toHaveBeenCalled();
   });
 
   it("retains canonical identity and reports unavailable FDV when enrichment fails", async () => {
@@ -309,9 +385,6 @@ describe("token detail Alchemy read", () => {
       launcherFeesAccruedWei: "0",
       launcherFeesAccruedEth: "0",
     } satisfies ExploreReadModel);
-    mocks.enrichTokensWithAlchemyPrices.mockRejectedValue(
-      new Error("price unavailable"),
-    );
     mocks.enrichTokensWithAlchemyPoolState.mockRejectedValue(
       new Error("pool unavailable"),
     );

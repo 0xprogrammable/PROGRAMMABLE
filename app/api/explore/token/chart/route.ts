@@ -6,7 +6,12 @@ import {
   readAlchemyExploreModel,
   safeAlchemyError,
 } from "../../../../../lib/alchemy/explore.server";
-import { enrichTokensWithAlchemyPoolState } from "../../../../../lib/alchemy/live-market.server";
+import {
+  enrichTokensWithAlchemyPoolState,
+  readVerifiedOperationalMarketSnapshot,
+  withSameBlockEthUsdQuote,
+  withoutUnboundEthUsdQuote,
+} from "../../../../../lib/alchemy/live-market.server";
 import {
   assertTokenChartSupported,
   isTokenChartRange,
@@ -76,8 +81,30 @@ export async function GET(request: NextRequest) {
   try {
     const address = getAddress(input);
     const deployment = getAlchemyOnchainDeployment();
-    const model = await readAlchemyExploreModel();
-    if (deployment.status !== "ready" || model.status !== "ready") {
+    if (deployment.status !== "ready") {
+      return NextResponse.json(
+        {
+          status: "unavailable",
+          address,
+          error: "Onchain chart data is temporarily unavailable",
+          dataQuality: unavailableDataQuality("source-unavailable"),
+        },
+        {
+          status: 503,
+          headers: {
+            "Cache-Control": "no-store",
+            "Retry-After": "5",
+            "X-Programmable-Data-Quality": "unavailable",
+            "X-Programmable-Read-Source": "rpc",
+          },
+        },
+      );
+    }
+    const [model, operationalSnapshot] = await Promise.all([
+      readAlchemyExploreModel(),
+      readVerifiedOperationalMarketSnapshot(deployment),
+    ]);
+    if (model.status !== "ready") {
       return NextResponse.json(
         {
           status: "unavailable",
@@ -120,7 +147,39 @@ export async function GET(request: NextRequest) {
 
     assertTokenChartSupported(token);
 
-    const liveSnapshot = model.launchDiscoverySnapshot ?? model.snapshot;
+    // A lagging launch-discovery snapshot is useful for canonical identity,
+    // but it is never market-currentness authority. Returning unavailable here
+    // lets the client preserve its last verified chart instead of appending a
+    // stale model point as though it were the current price.
+    if (operationalSnapshot === null) {
+      return NextResponse.json(
+        {
+          status: "unavailable",
+          address,
+          error: "Onchain chart data is temporarily unavailable",
+          dataQuality: unavailableDataQuality("source-unavailable"),
+        },
+        {
+          status: 503,
+          headers: {
+            "Cache-Control": "no-store",
+            "Retry-After": "5",
+            "X-Programmable-Data-Quality": "unavailable",
+            "X-Programmable-Read-Source": "rpc",
+          },
+        },
+      );
+    }
+
+    let liveSnapshot = operationalSnapshot;
+    try {
+      liveSnapshot = await withSameBlockEthUsdQuote({
+        deployment,
+        snapshot: liveSnapshot,
+      });
+    } catch {
+      liveSnapshot = withoutUnboundEthUsdQuote(liveSnapshot);
+    }
     const liveToken = (
       await enrichTokensWithAlchemyPoolState({
         deployment,
@@ -132,7 +191,7 @@ export async function GET(request: NextRequest) {
       deployment,
       token: liveToken,
       snapshotBlock: BigInt(liveSnapshot.blockNumber),
-      ethUsdQuote: model.snapshot.ethUsdQuote,
+      ethUsdQuote: liveSnapshot.ethUsdQuote,
       range: requestedRange,
     });
     const { freshness, ...publicSeries } = series;

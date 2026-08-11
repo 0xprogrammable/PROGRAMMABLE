@@ -57,7 +57,7 @@ type TokenCard = {
   imageUrl: string;
   links: readonly TokenLink[];
   valuation?: MarketCapMetric;
-  marketStatus?: "No market" | "Unavailable";
+  marketStatus?: "No market" | "Last verified" | "Unavailable";
   usesFallbackImage: boolean;
   tokenAddress?: `0x${string}`;
   launchCategory: "Classic" | "Custom";
@@ -65,7 +65,7 @@ type TokenCard = {
 
 export function exploreMarketStatusLabel(
   entry: ExploreEntry | ValuedExploreEntry,
-): "No market" | "Unavailable" | undefined {
+): "No market" | "Last verified" | "Unavailable" | undefined {
   if (entry.exploreKind === "custom-project" && entry.markets.length === 0) {
     return "No market";
   }
@@ -73,7 +73,10 @@ export function exploreMarketStatusLabel(
   const valuation = isExploreValuation(explicit)
     ? explicit
     : exploreValuation(entry);
-  return valuation.status === "unavailable" ? "Unavailable" : undefined;
+  if (valuation.status === "unavailable") return "Unavailable";
+  if (valuation.freshness === "stale") return "Last verified";
+  if (valuation.freshness === "unknown") return "Unavailable";
+  return undefined;
 }
 
 type TokenSort = "newest" | "oldest" | "market-cap" | "market-cap-asc";
@@ -912,7 +915,10 @@ export function getExploreValuationMetric(
   token: ExploreEntry | ValuedExploreEntry,
 ): MarketCapMetric | undefined {
   const valuation = valuationForEntry(token);
-  if (valuation.status !== "available") return undefined;
+  if (
+    valuation.status !== "available" ||
+    valuation.freshness !== "current"
+  ) return undefined;
   const value = Number(BigInt(valuation.valueWad)) / 1e18;
   if (!Number.isFinite(value) || value <= 0) return undefined;
   if (valuation.currency === "usd") return { kind: "usd", value };

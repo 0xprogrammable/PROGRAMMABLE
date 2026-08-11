@@ -77,6 +77,7 @@ describe("Explore financial-data semantics", () => {
     [{ activeLiquidity: "0" }, "liquidity-unavailable"],
     [{ fdvUsdWad: "NaN" }, "price-unavailable"],
     [{ fdvUsdWad: "0" }, "price-unavailable"],
+    [{ indexedValuationBlockNumber: undefined }, "inconsistent-snapshot"],
   ] as const)("fails unavailable for unsafe inputs %o", (overrides, reason) => {
     expect(exploreValuation(goldenToken(overrides))).toEqual({
       status: "unavailable",
@@ -94,7 +95,7 @@ describe("Explore financial-data semantics", () => {
     });
   });
 
-  it("sorts every safely parsed USD FDV while keeping freshness separate", () => {
+  it("sorts only reconciled current USD FDV", () => {
     const valued = (overrides: Partial<LauncherToken>, referenceBlock: string) =>
       withExploreValuation(
         canonicalTokenExploreEntryV1(goldenToken(overrides)),
@@ -118,12 +119,8 @@ describe("Explore financial-data semantics", () => {
     expect(valuationSortValue(currentUsd)).toBe(
       2_779_462_110_000_000_000_000_000n,
     );
-    expect(valuationSortValue(staleUsd)).toBe(
-      2_779_462_110_000_000_000_000_000n,
-    );
-    expect(valuationSortValue(unknownUsd)).toBe(
-      2_779_462_110_000_000_000_000_000n,
-    );
+    expect(valuationSortValue(staleUsd)).toBeNull();
+    expect(valuationSortValue(unknownUsd)).toBeNull();
     expect(valuationSortValue(currentEth)).toBeNull();
     expect(valuationSortValue(currentQuote)).toBeNull();
   });

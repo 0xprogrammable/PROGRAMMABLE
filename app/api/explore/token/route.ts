@@ -3,11 +3,15 @@ import { getAddress, isAddress } from "viem";
 
 import {
   getAlchemyOnchainDeployment,
-  enrichTokensWithAlchemyPrices,
   readAlchemyExploreModel,
   safeAlchemyError,
 } from "../../../../lib/alchemy/explore.server";
-import { enrichTokensWithAlchemyPoolState } from "../../../../lib/alchemy/live-market.server";
+import {
+  enrichTokensWithAlchemyPoolState,
+  readVerifiedOperationalMarketSnapshot,
+  withSameBlockEthUsdQuote,
+  withoutUnboundEthUsdQuote,
+} from "../../../../lib/alchemy/live-market.server";
 import { suppressRouterBoundCustomProjectDuplicates } from "../../../../lib/alchemy/router-custom-collision";
 import {
   createExploreConsumerSource,
@@ -106,7 +110,21 @@ export async function GET(request: NextRequest) {
 
   try {
     const address = getAddress(input);
-    const [canonicalAttempt, customAttempt, referenceHead] = await Promise.all([
+    let deployment: ReturnType<typeof getAlchemyOnchainDeployment> | null = null;
+    try {
+      deployment = getAlchemyOnchainDeployment();
+    } catch {
+      // Provider readiness is independent from canonical launch identity.
+    }
+    const operationalSnapshotRead = deployment?.status === "ready"
+      ? readVerifiedOperationalMarketSnapshot(deployment)
+      : Promise.resolve(null);
+    const [
+      canonicalAttempt,
+      customAttempt,
+      referenceHead,
+      operationalSnapshot,
+    ] = await Promise.all([
       settleTokenSource(readCanonicalTokenSource({
         primary: readPrimaryTokenModel,
         fallback: readDurableTokenFallback,
@@ -115,6 +133,7 @@ export async function GET(request: NextRequest) {
         primary: () => readProductionCustomExploreDirectoryV1(request.signal),
       })),
       readExploreReferenceHeadWithinRouteBudget(),
+      operationalSnapshotRead,
     ]);
     if (canonicalAttempt.source === null && customAttempt.source === null) {
       throw canonicalAttempt.error ?? customAttempt.error;
@@ -184,53 +203,44 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    let priced = token;
-    let priceApiApplied = false;
-    if (priced && canonicalSource?.status === "current") {
+    let liveSnapshot = operationalSnapshot;
+    if (liveSnapshot && deployment?.status === "ready") {
       try {
-        const previous = priced;
-        priced = (await enrichTokensWithAlchemyPrices([priced]))[0] ?? priced;
-        priceApiApplied =
-          priced.tokenPriceUsdWad !== previous.tokenPriceUsdWad ||
-          priced.fdvUsdWad !== previous.fdvUsdWad;
+        liveSnapshot = await withSameBlockEthUsdQuote({
+          deployment,
+          snapshot: liveSnapshot,
+        });
       } catch {
-        // Keep the canonical token when price enrichment is unavailable.
+        liveSnapshot = withoutUnboundEthUsdQuote(liveSnapshot);
       }
     }
-    const liveSnapshot =
-      model?.status === "ready"
-        ? (model.launchDiscoverySnapshot ?? model.snapshot)
-        : null;
-    let deployment: ReturnType<typeof getAlchemyOnchainDeployment> | null = null;
-    if (canonicalSource?.status === "current") {
-      try {
-        deployment = getAlchemyOnchainDeployment();
-      } catch {
-        // Provider readiness is independent from canonical launch identity.
-      }
-    }
-    let enriched = priced;
-    if (priced && liveSnapshot && deployment?.status === "ready") {
+    let enriched = token;
+    if (token && liveSnapshot && deployment?.status === "ready") {
       try {
         enriched = (
           await enrichTokensWithAlchemyPoolState({
             deployment,
             snapshot: liveSnapshot,
-            tokens: [priced],
+            tokens: [token],
           })
-        )[0] ?? priced;
+        )[0] ?? token;
       } catch {
         // Preserve the identity and older valuation with explicit freshness.
       }
     }
-    const identityAsOfBlock = liveSnapshot?.blockNumber ?? null;
+    const identityAsOfBlock = model?.status === "ready"
+      ? (model.launchDiscoverySnapshot ?? model.snapshot).blockNumber
+      : null;
     const referenceBlock = greatestBlockNumber(
       identityAsOfBlock,
       referenceHead?.blockNumber,
+      operationalSnapshot?.blockNumber,
     );
     const valuationContext = {
       referenceBlock,
-      forceStale: canonicalSource?.status === "last-known-good",
+      forceStale:
+        canonicalSource?.status === "last-known-good" ||
+        operationalSnapshot === null,
     } as const;
     const valuedToken = enriched
       ? withExploreValuation(
@@ -258,6 +268,14 @@ export async function GET(request: NextRequest) {
     const publicValuedToken = valuedToken
       ? publicExploreEntryV1(valuedToken)
       : null;
+    const livePriceSource =
+      valuedToken?.valuation.status === "available" &&
+        valuedToken.valuation.freshness === "current" &&
+        valuedToken.valuation.asOfBlock === liveSnapshot?.blockNumber
+        ? valuedToken.valuation.currency === "usd"
+          ? "state-view+chainlink"
+          : "state-view"
+        : "read-model";
     const rpcProvider = exploreRpcProviderHeader(deployment);
     const status = "ready" as const;
     return NextResponse.json(
@@ -284,8 +302,7 @@ export async function GET(request: NextRequest) {
           "X-Programmable-Valuation-Metric": "fdv",
           ...(valuedToken
             ? {
-                "X-Programmable-Price-Source":
-                  priceApiApplied ? "alchemy" : "read-model",
+                "X-Programmable-Price-Source": livePriceSource,
               }
             : {}),
           ...sourceHeaders,

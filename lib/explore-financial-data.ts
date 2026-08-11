@@ -140,9 +140,11 @@ function valuationFreshness(
   Extract<ExploreValuation, { status: "available" }>,
   "freshness" | "asOfBlock" | "lagBlocks"
 > | null {
-  if (!asOfBlock) {
-    return { freshness: forceStale ? "stale" : "unknown" };
-  }
+  // A numeric valuation without block provenance cannot be reconciled with
+  // the launch/read snapshot. Treat it as unavailable instead of publishing a
+  // plausible but unprovable USD value (for example an offchain price API
+  // response with no onchain observation block).
+  if (!asOfBlock) return null;
   const asOf = blockNumber(asOfBlock);
   const reference = blockNumber(referenceBlock);
   if (asOf === null || (reference !== null && asOf > reference)) return null;
@@ -290,7 +292,8 @@ export function publicExploreEntryV1(
 export function valuationSortValue(entry: ExploreEntry): bigint | null {
   const value = (entry as Partial<ValuedExploreEntry>).valuation;
   return value?.status === "available" &&
-    value.currency === "usd"
+    value.currency === "usd" &&
+    value.freshness === "current"
     ? positiveUint256(value.valueWad)
     : null;
 }

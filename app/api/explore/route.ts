@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import {
-  enrichTokensWithAlchemyPrices,
   getAlchemyOnchainDeployment,
   readAlchemyExploreModel,
   safeAlchemyError,
 } from "../../../lib/alchemy/explore.server";
-import { enrichTokensWithAlchemyPoolState } from "../../../lib/alchemy/live-market.server";
+import {
+  enrichTokensWithAlchemyPoolState,
+  readVerifiedOperationalMarketSnapshot,
+  withSameBlockEthUsdQuote,
+  withoutUnboundEthUsdQuote,
+} from "../../../lib/alchemy/live-market.server";
 import { suppressRouterBoundCustomProjectDuplicates } from "../../../lib/alchemy/router-custom-collision";
 import {
   createExploreConsumerSource,
@@ -33,7 +37,6 @@ import {
 } from "../../../lib/onchain/query";
 import type {
   ExploreReadModel,
-  ExploreSnapshot,
   ExploreSort,
 } from "../../../lib/onchain/types";
 import { readProductionCustomExploreDirectoryV1 } from "../../../lib/server/custom-launch/explore-directory-v1";
@@ -109,19 +112,6 @@ async function settleExploreSource<T>(
   } catch (error) {
     return { source: null, error };
   }
-}
-
-export function inheritExploreEthUsdQuote(
-  liveSnapshot: ExploreSnapshot,
-  referenceSnapshot: ExploreSnapshot,
-): ExploreSnapshot {
-  if (liveSnapshot.ethUsdQuote || !referenceSnapshot.ethUsdQuote) {
-    return liveSnapshot;
-  }
-  return {
-    ...liveSnapshot,
-    ethUsdQuote: referenceSnapshot.ethUsdQuote,
-  };
 }
 
 function mergeTokenUpdates(
@@ -393,6 +383,12 @@ export async function GET(request: NextRequest) {
       pageSize: integerQuery(search.get("limit"), 9),
       socials,
     } as const;
+    let deployment: ReturnType<typeof getAlchemyOnchainDeployment> | null = null;
+    try {
+      deployment = getAlchemyOnchainDeployment();
+    } catch {
+      // Provider readiness is independent from canonical launch identity.
+    }
     const canonicalRead = settleExploreSource(
       readCanonicalExploreSource({
         primary: readPrimaryExploreModel,
@@ -404,10 +400,19 @@ export async function GET(request: NextRequest) {
         primary: () => readProductionCustomExploreDirectoryV1(request.signal),
       }),
     );
-    const [canonicalAttempt, customAttempt, referenceHead] = await Promise.all([
+    const operationalSnapshotRead = deployment?.status === "ready"
+      ? readVerifiedOperationalMarketSnapshot(deployment)
+      : Promise.resolve(null);
+    const [
+      canonicalAttempt,
+      customAttempt,
+      referenceHead,
+      operationalSnapshot,
+    ] = await Promise.all([
       canonicalRead,
       customRead,
       readExploreReferenceHeadWithinRouteBudget(),
+      operationalSnapshotRead,
     ]);
     if (canonicalAttempt.source === null && customAttempt.source === null) {
       throw canonicalAttempt.error ?? customAttempt.error;
@@ -416,41 +421,21 @@ export async function GET(request: NextRequest) {
     const canonicalSource = canonicalAttempt.source;
     const customSource = customAttempt.source;
     let pricedModel = canonicalSource?.value ?? null;
-    let priceApiApplied = false;
-    if (pricedModel && canonicalSource?.status === "current") {
-      try {
-        const previousTokens = pricedModel.tokens;
-        const enrichedTokens = await enrichTokensWithAlchemyPrices(
-          previousTokens,
-        );
-        priceApiApplied = enrichedTokens.some((token, index) =>
-          token.tokenPriceUsdWad !== previousTokens[index]?.tokenPriceUsdWad ||
-          token.fdvUsdWad !== previousTokens[index]?.fdvUsdWad
-        );
-        pricedModel = {
-          ...pricedModel,
-          tokens: enrichedTokens,
-        } satisfies ExploreReadModel;
-      } catch {
-        // The canonical launch identities remain valid without price enrichment.
-      }
-    }
 
-    let deployment: ReturnType<typeof getAlchemyOnchainDeployment> | null = null;
-    if (canonicalSource?.status === "current") {
+    let liveSnapshot = operationalSnapshot;
+    if (deployment?.status === "ready" && liveSnapshot) {
       try {
-        deployment = getAlchemyOnchainDeployment();
+        liveSnapshot = await withSameBlockEthUsdQuote({
+          deployment,
+          snapshot: liveSnapshot,
+        });
       } catch {
-        // Deployment/provider unavailability must not remove launch identities.
+        // USD conversion is fail-closed. Current StateView values can still be
+        // exposed in ETH, but an older durable quote is never carried forward.
+        liveSnapshot = withoutUnboundEthUsdQuote(liveSnapshot);
       }
     }
-    const liveSnapshot =
-      pricedModel?.status === "ready"
-        ? inheritExploreEthUsdQuote(
-            pricedModel.launchDiscoverySnapshot ?? pricedModel.snapshot,
-            pricedModel.snapshot,
-          )
-        : null;
+    let livePoolStateApplied = false;
     if (deployment?.status === "ready" && liveSnapshot && pricedModel) {
       const visible = visibleExploreTokens(pricedModel);
       const top = filterAndSortTokens(
@@ -463,8 +448,12 @@ export async function GET(request: NextRequest) {
         "",
         "newest",
       ).slice(0, NEWEST_LIVE_MARKET_LIMIT);
+      const warmCandidates =
+        options.sort === "market-cap" || options.sort === "market-cap-asc"
+          ? visible
+          : [...top, ...newest];
       const warm = [...new Map(
-        [...top, ...newest].map((token) => [
+        warmCandidates.map((token) => [
           token.tokenAddress.toLowerCase(),
           token,
         ]),
@@ -474,6 +463,23 @@ export async function GET(request: NextRequest) {
           deployment,
           snapshot: liveSnapshot,
           tokens: warm,
+        });
+        const previousByAddress = new Map(pricedModel.tokens.map((token) => [
+          token.tokenAddress.toLowerCase(),
+          token,
+        ]));
+        livePoolStateApplied = updates.some((token) => {
+          const previous = previousByAddress.get(
+            token.tokenAddress.toLowerCase(),
+          );
+          return token.indexedValuationBlockNumber ===
+              liveSnapshot?.blockNumber &&
+            (
+              previous?.indexedValuationBlockNumber !==
+                token.indexedValuationBlockNumber ||
+              previous?.marketCapEthWei !== token.marketCapEthWei ||
+              previous?.fdvUsdWad !== token.fdvUsdWad
+            );
         });
         pricedModel = {
           ...pricedModel,
@@ -496,10 +502,13 @@ export async function GET(request: NextRequest) {
     const referenceBlock = greatestBlockNumber(
       identityAsOfBlock,
       referenceHead?.blockNumber,
+      operationalSnapshot?.blockNumber,
     );
     const valuationContext = {
       referenceBlock,
-      forceStale: canonicalSource?.status === "last-known-good",
+      forceStale:
+        canonicalSource?.status === "last-known-good" ||
+        operationalSnapshot === null,
     } as const;
     const classicEntries = pricedModel
       ? visibleExploreTokens(pricedModel)
@@ -514,6 +523,11 @@ export async function GET(request: NextRequest) {
       ...valuedCustomProjects,
     ]) as ValuedExploreEntry[];
     assertNoExploreCategoryCollision(entries);
+    const livePriceSource = livePoolStateApplied
+      ? liveSnapshot?.ethUsdQuote
+        ? "state-view+chainlink"
+        : "state-view"
+      : "read-model";
     const useTopValuationView =
       options.sort === "market-cap" &&
       options.query.length === 0 &&
@@ -639,8 +653,7 @@ export async function GET(request: NextRequest) {
             : {}),
           ...(pricedModel
             ? {
-                "X-Programmable-Price-Source":
-                  priceApiApplied ? "alchemy" : "read-model",
+                "X-Programmable-Price-Source": livePriceSource,
               }
             : {}),
           ...sourceHeaders,
