@@ -209,7 +209,10 @@ vi.mock("../lib/onchain", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/onchain")>();
   return {
     ...actual,
-    getOnchainDeployment: () => ({ status: "ready", chainId: 1 }),
+    getWebsiteReadOnchainDeployment: () => ({
+      status: "ready",
+      chainId: 1,
+    }),
     readExploreModel: mocks.readLegacy,
   };
 });

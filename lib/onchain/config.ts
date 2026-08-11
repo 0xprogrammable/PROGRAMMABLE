@@ -244,7 +244,7 @@ export function getOperationalOnchainDeployment(
 export function getWebsiteReadOnchainDeployment(
   environment = selectedDeploymentEnvironment(),
 ): OnchainDeployment {
-  const deployment = getOperationalOnchainDeployment(environment);
+  const deployment = resolveOnchainDeployment(environment, true);
   if (deployment.environment !== "production") return deployment;
 
   return {

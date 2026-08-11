@@ -5,7 +5,7 @@
     "schedule": "*/5 * * * *",
     "retainedUntil": "indexed-read-cutover",
     "route": "app/api/ops/index-v2/route.ts",
-    "sha256": "9638ec482ff66c5f3b1377c60b946e6348fb895769b6f8596fca2dc8cfbac535",
+    "sha256": "38593eaa836e88400311e8a585079a6a81fa84f115d93a72a6ac0fefa01cef43",
     "closedAlias": {
       "path": "/api/ops/index",
       "route": "app/api/ops/index/route.ts",

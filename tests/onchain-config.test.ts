@@ -120,11 +120,11 @@ describe("onchain deployment manifest boundary", () => {
     ).toThrow(
       "Production operations require two distinct authenticated RPC URLs",
     );
-    expect(() =>
-      getWebsiteReadOnchainDeployment("production"),
-    ).toThrow(
-      "Production operations require two distinct authenticated RPC URLs",
-    );
+    expect(getWebsiteReadOnchainDeployment("production")).toMatchObject({
+      status: "ready",
+      rpcUrl: "https://ethereum-rpc.publicnode.com",
+      rpcUrlSecondary: "https://rpc.mevblocker.io",
+    });
   });
 
   it("rejects an implicit public fallback for production operations", () => {
@@ -138,6 +138,11 @@ describe("onchain deployment manifest boundary", () => {
     ).toThrow(
       "Production operations require two distinct authenticated RPC URLs",
     );
+    expect(getWebsiteReadOnchainDeployment("production")).toMatchObject({
+      status: "ready",
+      rpcUrl: "https://ethereum-rpc.publicnode.com",
+      rpcUrlSecondary: "https://rpc.mevblocker.io",
+    });
   });
 
   it("keeps public reads fail-closed when the dual-RPC environment is absent", () => {
