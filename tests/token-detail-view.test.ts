@@ -22,6 +22,7 @@ const token = {
   tokenPriceEth: "0.002",
   tokenPriceUsdWad: parseEther("6").toString(),
   fdvUsdWad: parseEther("168560").toString(),
+  indexedValuationBlockNumber: "25630000",
   totalSupplyRaw: parseEther("1000000").toString(),
   tokenDecimals: 18,
   activeLiquidity: "1",
