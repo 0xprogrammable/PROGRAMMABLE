@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import type { ExploreReadModel } from "../lib/onchain/types";
+import type {
+  MarketDataIdentityV1,
+  TokenMarketDataV1,
+} from "../lib/market-data/market-data-v1";
 import type { LauncherToken } from "../lib/tokens";
 import { customGraphToken } from "./launch-stamp-surface-fixture";
 
@@ -17,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   readExploreReferenceHeadWithinRouteBudget: vi.fn(),
   getOnchainDeployment: vi.fn(),
   readDurableExploreModel: vi.fn(),
+  readBitqueryTokenMarketDataV1: vi.fn(),
   safeAlchemyError: vi.fn((error) => error),
 }));
 
@@ -59,6 +64,10 @@ vi.mock("../lib/onchain/durable-model", () => ({
   readDurableExploreModel: mocks.readDurableExploreModel,
 }));
 
+vi.mock("../lib/market-data/bitquery.server", () => ({
+  readBitqueryTokenMarketDataV1: mocks.readBitqueryTokenMarketDataV1,
+}));
+
 import { GET } from "../app/api/explore/token/route";
 
 const TOKEN_ADDRESS =
@@ -99,7 +108,54 @@ const launchDiscoverySnapshot = {
   blockHash: `0x${"66".repeat(32)}` as const,
 };
 
-describe("token detail Alchemy read", () => {
+function bitqueryMarketData(
+  identities: readonly MarketDataIdentityV1[],
+  valueUsdWad = "1250000000000000000000000",
+): ReadonlyMap<string, TokenMarketDataV1> {
+  return new Map(identities.map((identity) => [identity.tokenAddress, {
+    schemaVersion: "programmable.market-data.v1",
+    source: "bitquery",
+    generatedAt: "2026-08-11T14:00:00.000Z",
+    status: "current",
+    primaryPoolId: identity.poolId,
+    pools: [{
+      identity,
+      source: "bitquery",
+      status: "current",
+      quality: "complete",
+      asOfTime: "2026-08-11T14:00:00.000Z",
+      latestTrade: {
+        transactionHash: `0x${"aa".repeat(32)}`,
+        logIndex: 1,
+        blockNumber: "25740000",
+        time: "2026-08-11T14:00:00.000Z",
+        tokenSide: "buy",
+        priceUsdWad: (BigInt(valueUsdWad) / 1_000_000n).toString(),
+        priceUsdAsOfTime: "2026-08-11T14:00:00.000Z",
+        priceUsdSource: "bitquery-token-price-index-v1",
+        rawPriceUsdWad: (BigInt(valueUsdWad) / 1_000_000n).toString(),
+      },
+      liquidity: {
+        asOfTime: "2026-08-11T14:00:00.000Z",
+        asOfBlock: "25740000",
+        valueUsdWad: "100000000000000000000000",
+        freshness: "current",
+      },
+      valuation: {
+        status: "available",
+        metric: "fdv",
+        supplyBasis: "total",
+        valueUsdWad,
+        fdvUsdWad: valueUsdWad,
+        totalSupply: "1000000",
+        asOfTime: "2026-08-11T14:00:00.000Z",
+        freshness: "current",
+      },
+    }],
+  } satisfies TokenMarketDataV1]));
+}
+
+describe("token detail Bitquery market read", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getAlchemyOnchainDeployment.mockReturnValue({
@@ -129,9 +185,13 @@ describe("token detail Alchemy read", () => {
             launchDiscoverySnapshot.blockNumber,
         })),
     );
+    mocks.readBitqueryTokenMarketDataV1.mockImplementation(
+      async (identities: readonly MarketDataIdentityV1[]) =>
+        bitqueryMarketData(identities),
+    );
   });
 
-  it("refreshes only the canonical token from current StateView data", async () => {
+  it("reads Bitquery market data only for the canonical token PoolId", async () => {
     const canonical = token(TOKEN_ADDRESS, {
       totalSupplyRaw: "1000000000000000000000000",
       tokenDecimals: 18,
@@ -162,8 +222,17 @@ describe("token detail Alchemy read", () => {
 
     expect(response.status).toBe(200);
     expect(mocks.readAlchemyExploreModel).toHaveBeenCalledTimes(1);
-    expect(mocks.enrichTokensWithAlchemyPoolState).toHaveBeenCalledWith(
-      expect.objectContaining({ tokens: [canonical] }),
+    expect(mocks.enrichTokensWithAlchemyPoolState).not.toHaveBeenCalled();
+    expect(mocks.readBitqueryTokenMarketDataV1).toHaveBeenCalledWith(
+      [
+        {
+          chainId: "1",
+          tokenAddress: TOKEN_ADDRESS,
+          poolId: POOL_ID,
+          protocol: "uniswap_v4",
+        },
+      ],
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(body.token).toMatchObject({
       id: canonical.id,
@@ -178,8 +247,8 @@ describe("token detail Alchemy read", () => {
         currency: "usd",
         valueWad: "1250000000000000000000000",
         freshness: "current",
-        asOfBlock: launchDiscoverySnapshot.blockNumber,
-        lagBlocks: "0",
+        source: "bitquery",
+        asOfTime: "2026-08-11T14:00:00.000Z",
       },
     });
     expect(body.dataQuality).toMatchObject({
@@ -206,24 +275,25 @@ describe("token detail Alchemy read", () => {
     expect(response.headers.get("X-Programmable-Read-Source")).toBe(
       "operational+durable+postgres",
     );
-    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
-      "operational-dual",
-    );
+    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBeNull();
     expect(response.headers.get("X-Programmable-Price-Source")).toBe(
-      "state-view+chainlink",
+      "bitquery",
+    );
+    expect(response.headers.get("X-Programmable-Market-As-Of")).toBe(
+      "2026-08-11T14:00:00.000Z",
     );
     expect(response.headers.get("X-Programmable-Launch-Source")).toBe(
       "operational+durable+registry.custom-launched",
     );
-    expect(response.headers.get("X-Programmable-Valuation-Metric")).toBe(
-      "fdv",
+    expect(response.headers.get("X-Programmable-Market-Source")).toBe(
+      "bitquery",
     );
     expect(response.headers.get("Cache-Control")).toBe(
       "public, max-age=0, s-maxage=2, stale-while-revalidate=5",
     );
   });
 
-  it("reports detail FDV at the verified operational block, not the stale launch snapshot", async () => {
+  it("reports detail FDV at the verified Bitquery time, not the stale launch snapshot", async () => {
     const canonical = token(TOKEN_ADDRESS, {
       totalSupplyRaw: "1000000000000000000000000",
       tokenDecimals: 18,
@@ -231,11 +301,6 @@ describe("token detail Alchemy read", () => {
       indexedMarketCapUsdWad: "1620000000000000000000000",
       indexedValuationBlockNumber: snapshot.blockNumber,
     });
-    const operationalSnapshot = {
-      ...launchDiscoverySnapshot,
-      blockNumber: "25632000",
-      blockHash: `0x${"99".repeat(32)}` as const,
-    };
     mocks.readAlchemyExploreModel.mockResolvedValue({
       status: "ready",
       tokens: [canonical],
@@ -245,22 +310,9 @@ describe("token detail Alchemy read", () => {
       launcherFeesAccruedWei: "0",
       launcherFeesAccruedEth: "0",
     } satisfies ExploreReadModel);
-    mocks.readVerifiedOperationalMarketSnapshot.mockResolvedValue(
-      operationalSnapshot,
-    );
-    mocks.readExploreReferenceHeadWithinRouteBudget.mockResolvedValue({
-      blockNumber: operationalSnapshot.blockNumber,
-      blockHash: operationalSnapshot.blockHash,
-      indexedAt: "2026-08-10T18:00:00.000Z",
-      finality: "confirmed",
-    });
-    mocks.enrichTokensWithAlchemyPoolState.mockImplementation(
-      async ({ snapshot: readSnapshot }) => [{
-        ...canonical,
-        indexedMarketCapUsdWad: undefined,
-        indexedValuationBlockNumber: readSnapshot.blockNumber,
-        fdvUsdWad: "2334305942998987256153723",
-      }],
+    mocks.readBitqueryTokenMarketDataV1.mockImplementation(
+      async (identities: readonly MarketDataIdentityV1[]) =>
+        bitqueryMarketData(identities, "2334305942998987256153723"),
     );
 
     const response = await GET(
@@ -271,24 +323,21 @@ describe("token detail Alchemy read", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(mocks.withSameBlockEthUsdQuote).toHaveBeenCalledWith(
-      expect.objectContaining({ snapshot: operationalSnapshot }),
-    );
-    expect(mocks.enrichTokensWithAlchemyPoolState).toHaveBeenCalledWith(
-      expect.objectContaining({ snapshot: operationalSnapshot }),
-    );
+    expect(mocks.withSameBlockEthUsdQuote).not.toHaveBeenCalled();
+    expect(mocks.enrichTokensWithAlchemyPoolState).not.toHaveBeenCalled();
     expect(body.token).toMatchObject({
-      fdvUsdWad: "2334305942998987256153723",
+      fdvUsdWad: "2334305942998987256000000",
       valuation: {
         status: "available",
         freshness: "current",
-        asOfBlock: operationalSnapshot.blockNumber,
-        lagBlocks: "0",
+        source: "bitquery",
+        asOfTime: "2026-08-11T14:00:00.000Z",
       },
     });
     expect(body.dataQuality.valuation).toMatchObject({
       status: "current",
-      asOfBlock: operationalSnapshot.blockNumber,
+      asOfBlock: null,
+      asOfTime: "2026-08-11T14:00:00.000Z",
     });
     expect(body.launchDiscoverySnapshot).toEqual(launchDiscoverySnapshot);
   });
@@ -371,7 +420,7 @@ describe("token detail Alchemy read", () => {
     );
   });
 
-  it("retains canonical identity and reports unavailable FDV when enrichment fails", async () => {
+  it("retains canonical identity and reports unavailable FDV when Bitquery has no data", async () => {
     const canonical = token(TOKEN_ADDRESS, {
       totalSupplyRaw: "1000000000000000000000000",
       tokenDecimals: 18,
@@ -385,9 +434,7 @@ describe("token detail Alchemy read", () => {
       launcherFeesAccruedWei: "0",
       launcherFeesAccruedEth: "0",
     } satisfies ExploreReadModel);
-    mocks.enrichTokensWithAlchemyPoolState.mockRejectedValue(
-      new Error("pool unavailable"),
-    );
+    mocks.readBitqueryTokenMarketDataV1.mockResolvedValue(new Map());
 
     const response = await GET(
       new NextRequest(
@@ -401,7 +448,7 @@ describe("token detail Alchemy read", () => {
       tokenAddress: TOKEN_ADDRESS,
       valuation: {
         status: "unavailable",
-        reason: "liquidity-unavailable",
+        reason: "source-unavailable",
       },
     });
     expect(body.token.valuation).not.toHaveProperty("valueWad", "0");
@@ -410,5 +457,6 @@ describe("token detail Alchemy read", () => {
       valuation: { status: "unavailable", available: 0, unavailable: 1 },
     });
     expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(response.headers.get("X-Programmable-Price-Source")).toBeNull();
   });
 });

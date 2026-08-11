@@ -17,6 +17,12 @@ const ROUTES = Object.freeze([
       "public, max-age=0, s-maxage=2, stale-while-revalidate=5",
   }),
   Object.freeze({
+    id: "token-chart",
+    path: "app/api/explore/token/chart/route.ts",
+    readyCache:
+      "public, max-age=0, s-maxage=2, stale-while-revalidate=5",
+  }),
+  Object.freeze({
     id: "token-list",
     path: "app/api/indexers/v1/token-list/route.ts",
     readyCache:
@@ -117,6 +123,16 @@ export function evaluateAlchemyExploreSourceContracts(
     ".github/workflows/deploy-production.yml",
     sourceOverrides,
   );
+  const bitqueryMarketSource = readSource(
+    rootDirectory,
+    "lib/market-data/bitquery.server.ts",
+    sourceOverrides,
+  );
+  const marketSchemaSource = readSource(
+    rootDirectory,
+    "lib/market-data/market-data-v1.ts",
+    sourceOverrides,
+  );
 
   check(
     "alchemy-durable-registry",
@@ -179,11 +195,28 @@ export function evaluateAlchemyExploreSourceContracts(
     "an authenticated webhook persists the confirmed cursor before invalidating public caches",
   );
   check(
-    "alchemy-complete-price-batching",
-    runtimeSource.includes("MAX_CONCURRENT_ALCHEMY_PRICE_BATCHES") &&
-      !runtimeSource.includes("MAX_ALCHEMY_PRICE_BATCHES") &&
-      !runtimeSource.includes(".slice(0, MAX_ALCHEMY_PRICE_ADDRESSES"),
-    "live Alchemy price enrichment covers the complete registry in bounded concurrent batches",
+    "bitquery-bounded-market-batching",
+    bitqueryMarketSource.includes(
+      "BITQUERY_OAUTH_TOKEN_ENVIRONMENT_VARIABLE =",
+    ) &&
+      bitqueryMarketSource.includes('"BITQUERY_OAUTH_TOKEN" as const') &&
+      bitqueryMarketSource.includes("MARKET_BATCH_SIZE = 100") &&
+      bitqueryMarketSource.includes("MARKET_BATCH_CONCURRENCY = 2") &&
+      bitqueryMarketSource.includes("PoolId: { in: $pools }") &&
+      bitqueryMarketSource.includes("limitBy: { by: Trade_PoolId, count: 1 }") &&
+      bitqueryMarketSource.includes(
+        "limitBy: { by: PoolEvent_Pool_PoolId, count: 1 }",
+      ) &&
+      bitqueryMarketSource.includes(
+        "limitBy: { by: Token_Address, count: 1 }",
+      ) &&
+      bitqueryMarketSource.includes(
+        'const dataset = range === "all" ? ", dataset: combined" : "";',
+      ) &&
+      !bitqueryMarketSource.includes("NEXT_PUBLIC_BITQUERY") &&
+      marketSchemaSource.includes('source: "bitquery"') &&
+      marketSchemaSource.includes('protocol: "uniswap_v4"'),
+    "Bitquery market reads are server-only, PoolId-native, bounded and archive-aware",
   );
 
   for (const route of routeSources) {
@@ -233,34 +266,46 @@ export function evaluateAlchemyExploreSourceContracts(
   );
 
   check(
-    "alchemy-explore-provenance",
+    "bitquery-market-provenance",
     routeSources
       .filter(({ id }) => id !== "token-list")
       .every(
         ({ source }) =>
-          source.includes("exploreLaunchSourceHeader({") &&
-          source.includes("exploreReadSourceHeader({") &&
-          source.includes("exploreRpcProviderHeader(deployment)") &&
-          source.includes('"X-Programmable-Rpc-Provider": rpcProvider') &&
-          !source.includes('"X-Programmable-Rpc-Provider": "alchemy"'),
+          source.includes('"X-Programmable-Market-Source": "bitquery"') &&
+          !source.includes('"X-Programmable-Rpc-Provider"'),
       ) &&
+      routeSources
+        .filter(({ id }) => ["explore", "token-detail"].includes(id))
+        .every(
+          ({ source }) =>
+            source.includes("exploreLaunchSourceHeader({") &&
+            source.includes("exploreReadSourceHeader({") &&
+            source.includes("...sourceHeaders"),
+        ) &&
       exploreConsumerSource.includes('return "operational+durable"') &&
       exploreConsumerSource.includes('return "last-known-good"') &&
       exploreConsumerSource.includes('"registry.custom-launched"') &&
       exploreConsumerSource.includes('?? "partial"') &&
-      exploreConsumerSource.includes(
-        'return deployment.rpcUrlSecondary\n    ? "operational-dual"\n    : "operational-primary";',
+      deployWorkflowSource.includes("Smoke staged Bitquery market APIs") &&
+      deployWorkflowSource.includes(
+        '"0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce"',
       ) &&
-      routeSources
-        .filter(({ id }) => id !== "token-list")
-        .every(({ source }) => source.includes("...sourceHeaders")) &&
+      deployWorkflowSource.includes(
+        '"0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229"',
+      ) &&
+      deployWorkflowSource.includes(
+        'goldenMarket?.schemaVersion !== "programmable.market-data.v1"',
+      ) &&
+      deployWorkflowSource.includes(
+        'goldenChart.schemaVersion !== "programmable.market-chart.v1"',
+      ) &&
       responseSource.includes('"X-Programmable-Read-Source": "blob"') &&
       responseSource.includes('"X-Programmable-Rpc-Provider": "alchemy"') &&
       responseSource.includes('"X-Programmable-Launch-Source": "alchemy"') &&
       responseSource.includes(
         '"X-Programmable-Launch-Source, X-Programmable-Read-Source, X-Programmable-Rpc-Provider"',
       ),
-    "Explore responses expose honest source and operational-provider provenance",
+    "Registry-backed identities and Bitquery-only market responses expose separate source provenance",
   );
 
   return Object.freeze({

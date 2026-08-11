@@ -1062,10 +1062,19 @@ export function evaluateReadModelOperationsSourceContracts(
       deployPolicy.includes(
         "materializeVercelSensitiveRuntimePlaceholders",
       ) &&
+      deployPolicy.includes(
+        'BITQUERY_MARKET_SECRET_ENV_NAME = "BITQUERY_OAUTH_TOKEN"',
+      ) &&
+      exactEmptyEnvironmentKey(environmentExample, "BITQUERY_OAUTH_TOKEN") &&
+      deployPolicy.includes(
+        "...new Set([BITQUERY_MARKET_SECRET_ENV_NAME, ...emptyNames])",
+      ) &&
+      deployPolicy.includes("validateRequiredServerSecrets") &&
+      deployPolicy.includes(": [BITQUERY_MARKET_SECRET_ENV_NAME];") &&
       deployPolicy.includes('matches[0].type !== "sensitive"') &&
       deployPolicy.includes('matches[0].target[0] !== "production"') &&
       deployPolicy.includes('Object.hasOwn(matches[0], "value")'),
-    "Vercel empty sensitive placeholders require exact value-free production metadata",
+    "Bitquery always requires exact value-free sensitive production metadata",
   );
   const stagedWakeGate = deployWorkflow.indexOf(
     "Gate exact staged QuickNode wake route",
@@ -1100,111 +1109,163 @@ export function evaluateReadModelOperationsSourceContracts(
       stagedWakeGateBlock.includes('--target-url "$STAGED_TARGET_URL"'),
     "an active fast lane must pass the exact unaliased staged wake canary before attestation",
   );
-  const stagedAlchemySmoke = deployWorkflow.indexOf(
-    "Smoke staged Alchemy Explore APIs",
+  const stagedBitquerySmoke = deployWorkflow.indexOf(
+    "Smoke staged Bitquery market APIs",
   );
-  const stagedAlchemySmokeEnd = deployWorkflow.indexOf(
-    "Record Alchemy-only read path",
+  const stagedBitquerySmokeEnd = deployWorkflow.indexOf(
+    "Record registry identity and Bitquery market path",
   );
-  const stagedAlchemySmokeBlock =
-    stagedAlchemySmoke >= 0 && stagedAlchemySmokeEnd > stagedAlchemySmoke
-      ? deployWorkflow.slice(stagedAlchemySmoke, stagedAlchemySmokeEnd)
+  const stagedBitquerySmokeBlock =
+    stagedBitquerySmoke >= 0 && stagedBitquerySmokeEnd > stagedBitquerySmoke
+      ? deployWorkflow.slice(stagedBitquerySmoke, stagedBitquerySmokeEnd)
       : "";
   check(
-    "ops-protected-alchemy-stage-smoke",
-    stagedAlchemySmoke > stagedWakeGateEnd &&
-      stagedAlchemySmokeBlock.includes(
-        "if: steps.read-model-policy.outputs.mode == 'alchemy-only'",
-      ) &&
-      stagedAlchemySmokeBlock.includes(
+    "ops-protected-bitquery-stage-smoke",
+    stagedBitquerySmoke > stagedWakeGateEnd &&
+      !stagedBitquerySmokeBlock.includes("if:") &&
+      stagedBitquerySmokeBlock.includes(
         "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
       ) &&
-      stagedAlchemySmokeBlock.includes(
+      stagedBitquerySmokeBlock.includes(
         "process.env.VERCEL_AUTOMATION_BYPASS_SECRET",
       ) &&
-      stagedAlchemySmokeBlock.includes(
+      stagedBitquerySmokeBlock.includes(
         'Buffer.byteLength(\n            automationBypassSecret ?? "",\n            "utf8",\n          )',
       ) &&
-      stagedAlchemySmokeBlock.includes("automationBypassSecretLength < 32") &&
-      stagedAlchemySmokeBlock.includes("automationBypassSecretLength > 512") &&
-      stagedAlchemySmokeBlock.includes(
+      stagedBitquerySmokeBlock.includes("automationBypassSecretLength < 32") &&
+      stagedBitquerySmokeBlock.includes("automationBypassSecretLength > 512") &&
+      stagedBitquerySmokeBlock.includes(
         "/[\\r\\n]/.test(automationBypassSecret)",
       ) &&
-      stagedAlchemySmokeBlock.includes(
+      stagedBitquerySmokeBlock.includes(
         '"x-vercel-protection-bypass": automationBypassSecret',
       ) &&
-      stagedAlchemySmokeBlock.includes("headers: alchemySmokeRequestHeaders") &&
-      stagedAlchemySmokeBlock.includes(
+      stagedBitquerySmokeBlock.includes("headers: bitquerySmokeRequestHeaders") &&
+      stagedBitquerySmokeBlock.includes(
         "STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
       ) &&
-      stagedAlchemySmokeBlock.includes(
-        'const operationalReadSources = Object.freeze([\n            "operational+durable+postgres",\n          ]);',
+      stagedBitquerySmokeBlock.includes(
+        'readSources: Object.freeze(["operational+durable+postgres"]),',
       ) &&
-      stagedAlchemySmokeBlock.includes(
-        'const operationalRpcProviders = Object.freeze([\n            "operational-dual",\n            "operational-primary",\n          ]);',
+      stagedBitquerySmokeBlock.includes("rpcProviders: null") &&
+      stagedBitquerySmokeBlock.includes(
+        'marketSources: Object.freeze(["bitquery"]),',
       ) &&
-      stagedAlchemySmokeBlock.includes(
-        'const alchemyRpcProviders = Object.freeze(["alchemy"]);',
+      stagedBitquerySmokeBlock.includes(
+        "const bitqueryChartContract = Object.freeze({",
       ) &&
-      stagedAlchemySmokeBlock.includes(
-        'const alchemyReadSources = Object.freeze(["blob"]);',
+      stagedBitquerySmokeBlock.includes(
+        'response.headers.get(\n                  "x-programmable-market-source",',
       ) &&
-      stagedAlchemySmokeBlock.includes(
-        "expectedReadSources,\n            expectedRpcProviders,",
+      stagedBitquerySmokeBlock.includes(
+        'response.headers.get(\n                  "x-programmable-price-source",',
       ) &&
-      stagedAlchemySmokeBlock.includes(
-        '!expectedReadSources.includes(readSource ?? "")',
+      stagedBitquerySmokeBlock.includes(
+        'response.headers.get(\n                  "x-programmable-market-as-of",',
       ) &&
-      stagedAlchemySmokeBlock.includes(
-        '!expectedRpcProviders.includes(rpcProvider ?? "")',
+      stagedBitquerySmokeBlock.includes(
+        "!headerMatches(rpcProvider, contract.rpcProviders)",
       ) &&
-      !stagedAlchemySmokeBlock.includes(
+      stagedBitquerySmokeBlock.includes(
+        "!headerMatches(marketSource, contract.marketSources)",
+      ) &&
+      !stagedBitquerySmokeBlock.includes(
         'response.headers.get("x-programmable-rpc-provider") !== "alchemy"',
       ) &&
-      stagedAlchemySmokeBlock.includes(
-        '"/api/indexers/v1/token-list",\n            alchemyReadSources,\n            alchemyRpcProviders,',
+      !stagedBitquerySmokeBlock.includes("alchemyIdentityContract") &&
+      !stagedBitquerySmokeBlock.includes("/api/indexers/v1/token-list") &&
+      stagedBitquerySmokeBlock.includes(
+        '"/api/explore?limit=20&page=1&sort=market-cap",\n            bitqueryMarketContract,',
       ) &&
-      stagedAlchemySmokeBlock.includes(
-        '"/api/explore?limit=20&page=1&sort=market-cap",\n            operationalReadSources,\n            operationalRpcProviders,',
-      ) &&
-      stagedAlchemySmokeBlock.includes(
+      stagedBitquerySmokeBlock.includes(
         '"/api/explore?limit=20&page=1&sort=market-cap"',
       ) &&
-      stagedAlchemySmokeBlock.includes(
+      stagedBitquerySmokeBlock.includes(
         "entry.launchCategoryProvenance.blockNumber",
       ) &&
-      stagedAlchemySmokeBlock.includes(
+      stagedBitquerySmokeBlock.includes(
         "entry.launchCategoryProvenance.transactionIndex",
       ) &&
-      stagedAlchemySmokeBlock.includes(
+      stagedBitquerySmokeBlock.includes(
         "entry.launchCategoryProvenance.logIndex",
       ) &&
-      stagedAlchemySmokeBlock.includes(
-        "staged Alchemy newest entry has no canonical launch order",
+      stagedBitquerySmokeBlock.includes(
+        "staged Bitquery newest entry has no canonical launch order",
       ) &&
-      stagedAlchemySmokeBlock.includes("coordinates === null") &&
-      stagedAlchemySmokeBlock.includes("const newestPageSize = 100") &&
-      stagedAlchemySmokeBlock.includes("seenNewestIds") &&
-      stagedAlchemySmokeBlock.includes("newestTokens.length !== newestTotal") &&
-      stagedAlchemySmokeBlock.includes("launchChainId(entry) !== newestChainId") &&
-      stagedAlchemySmokeBlock.includes("sort=oldest") &&
-      stagedAlchemySmokeBlock.includes(
-        "staged Alchemy oldest page is not ordered oldest-first",
+      stagedBitquerySmokeBlock.includes("coordinates === null") &&
+      stagedBitquerySmokeBlock.includes("const newestPageSize = 100") &&
+      stagedBitquerySmokeBlock.includes("seenNewestIds") &&
+      stagedBitquerySmokeBlock.includes("newestTokens.length !== newestTotal") &&
+      stagedBitquerySmokeBlock.includes("launchChainId(entry) !== newestChainId") &&
+      stagedBitquerySmokeBlock.includes("sort=oldest") &&
+      stagedBitquerySmokeBlock.includes(
+        "staged Bitquery oldest page is not ordered oldest-first",
       ) &&
-      stagedAlchemySmokeBlock.includes('"/api/indexers/v1/token-list"') &&
-      stagedAlchemySmokeBlock.includes("/api/explore/token?address=") &&
-      (stagedAlchemySmokeBlock.match(/\bfetch\(/gu) ?? []).length === 1 &&
-      !stagedAlchemySmokeBlock.includes("/api/ops/health") &&
-      !stagedAlchemySmokeBlock.includes("/api/explore/profile") &&
-      !/(?:database|projector|quicknode|envio|real-block|sla)/iu.test(
-        stagedAlchemySmokeBlock,
+      stagedBitquerySmokeBlock.includes("/api/explore/token?address=") &&
+      stagedBitquerySmokeBlock.includes(
+        "/api/explore?limit=20&page=1&q=${goldenTokenAddress}&sort=market-cap",
       ) &&
-      !stagedAlchemySmokeBlock.includes(
+      stagedBitquerySmokeBlock.includes(
+        "/api/explore/token/chart?address=${goldenTokenAddress}&range=all",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        "`/api/explore/token/chart?address=${goldenTokenAddress}&range=all`,\n            bitqueryChartContract,",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        '"0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce"',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        '"0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229"',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        'goldenMarket?.schemaVersion !== "programmable.market-data.v1"',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        'goldenChart.schemaVersion !== "programmable.market-chart.v1"',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        '"staged Bitquery Highest FDV is not monotonically descending"',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        '"staged Bitquery Explore exposed stale or unavailable FDV as current"',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        '"staged Bitquery Explore mislabeled stale FDV as current"',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        'valuation.freshness === "stale"',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        'valuation.reason === "waiting-for-first-trade"',
+      ) &&
+      !stagedBitquerySmokeBlock.includes("currentFdvCount < 1") &&
+      stagedBitquerySmokeBlock.includes(
+        '"staged Bitquery current Explore and detail FDV are not identical"',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        'goldenValuation.metric !== "fdv"',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        'goldenValuation.supplyBasis !== "total"',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        "goldenChart.asOfTime !== goldenChart.points.at(-1)?.time",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        '"staged PCAN chart is not a strictly ordered positive history"',
+      ) &&
+      (stagedBitquerySmokeBlock.match(/\bfetch\(/gu) ?? []).length === 1 &&
+      !stagedBitquerySmokeBlock.includes("/api/ops/health") &&
+      !stagedBitquerySmokeBlock.includes("/api/explore/profile") &&
+      !/\b(?:database|projector|quicknode|envio|real-block|sla)\b/iu.test(
+        stagedBitquerySmokeBlock,
+      ) &&
+      !stagedBitquerySmokeBlock.includes(
         "NEXT_PUBLIC_VERCEL_AUTOMATION_BYPASS_SECRET",
       ) &&
-      !stagedAlchemySmokeBlock.includes("${automationBypassSecret}") &&
-      !stagedAlchemySmokeBlock.includes("console."),
-    "the Alchemy-only staged API smoke proves durable-registry and live-provider provenance without indexed infrastructure or exposing its deployment bypass",
+      !stagedBitquerySmokeBlock.includes("${automationBypassSecret}") &&
+      !stagedBitquerySmokeBlock.includes("console."),
+    "the staged API smoke proves registry identity plus Bitquery-only market provenance without exposing its deployment bypass",
   );
   const stagedReadModelCapture = deployWorkflow.indexOf(
     "Capture staged read-model evidence",
@@ -1218,7 +1279,7 @@ export function evaluateReadModelOperationsSourceContracts(
       : "";
   check(
     "ops-protected-indexed-stage-capture",
-    stagedReadModelCapture > stagedAlchemySmokeEnd &&
+    stagedReadModelCapture > stagedBitquerySmokeEnd &&
       stagedReadModelCaptureBlock.includes(
         "if: steps.read-model-policy.outputs.mode == 'indexed-or-shadow'",
       ) &&
@@ -1276,6 +1337,20 @@ export function evaluateReadModelOperationsSourceContracts(
       productionBinding.includes("resolveProductionBinding") &&
       postPromotion.includes('"/api/ops/health"') &&
       postPromotion.includes('"/api/explore?limit=6&page=1&sort=market-cap"') &&
+      postPromotion.includes(
+        '"0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce"',
+      ) &&
+      postPromotion.includes(
+        '"0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229"',
+      ) &&
+      postPromotion.includes("exactBitqueryHeaders") &&
+      postPromotion.includes("honestExploreValuations") &&
+      postPromotion.includes("exactGoldenDetail") &&
+      postPromotion.includes("exactGoldenChart") &&
+      postPromotion.includes('response.headers.get("x-programmable-market-source")') &&
+      postPromotion.includes('response.headers.get("x-programmable-price-source")') &&
+      postPromotion.includes('response.headers.get("x-programmable-market-as-of")') &&
+      !postPromotion.includes("/api/indexers/v1/token-list") &&
       postPromotion.includes("verifyLiveCacheAndKeyContracts"),
     "the workflow is stage-only and both operator runbooks require the exact SLA-gated deployment promotion sequence",
   );

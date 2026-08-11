@@ -12,13 +12,20 @@ import {
 
 import { useLiveDataRefresh } from "@/components/use-live-data-refresh";
 import { getExplorePreviewChart } from "@/components/explore-preview-data";
+import {
+  isMarketChartV1,
+  type MarketChartV1,
+} from "@/lib/market-data/market-data-v1";
 
 import styles from "./token-price-chart.module.css";
 
 export type TokenChartPoint = {
   blockNumber: string;
-  priceEth: string;
+  time?: string;
+  priceEth?: string;
   priceUsd?: string;
+  priceQuote?: string;
+  quoteSymbol?: string;
 };
 
 export type TokenChartDataQuality = Readonly<{
@@ -50,17 +57,22 @@ export type TokenChartDataQuality = Readonly<{
 }>;
 
 export type TokenChartPayload = {
-  status: "ready" | "insufficient-history" | "partial";
+  status:
+    | "ready"
+    | "insufficient-history"
+    | "partial"
+    | "waiting-for-first-trade";
   points: TokenChartPoint[];
   swapCount: number;
-  volumeWei: string;
-  volumeEth: string;
+  volumeWei?: string;
+  volumeEth?: string;
   volumeUsdWad?: string;
   fdvEthWei?: string;
   fdvEth?: string;
   fdvUsdWad?: string;
-  valuationMetric?: "fdv";
+  valuationMetric?: "market-cap" | "fdv";
   dataQuality?: TokenChartDataQuality;
+  marketData?: MarketChartV1;
 };
 type ChartPayload = TokenChartPayload;
 type ChartRequestState = {
@@ -162,22 +174,33 @@ export function getChartFdvAtPoint(
     };
   }
 
+  const ethPrice = comparableChartPricePair(
+    inspectedPoint,
+    latestPoint,
+    "eth",
+  );
+  const usdPrice = comparableChartPricePair(
+    inspectedPoint,
+    latestPoint,
+    "usd",
+  );
+
   const fdvEthWei = scaleIntegerByPriceRatio(
     payload.fdvEthWei,
-    inspectedPoint.priceEth,
-    latestPoint.priceEth,
+    ethPrice?.inspected,
+    ethPrice?.latest,
   );
   const fdvEth = fdvEthWei
     ? formatFixedInteger(BigInt(fdvEthWei), 18)
     : scaleDecimalByPriceRatio(
         payload.fdvEth,
-        inspectedPoint.priceEth,
-        latestPoint.priceEth,
+        ethPrice?.inspected,
+        ethPrice?.latest,
       );
   const fdvUsdWad = scaleIntegerByPriceRatio(
     payload.fdvUsdWad,
-    inspectedPoint.priceEth,
-    latestPoint.priceEth,
+    usdPrice?.inspected,
+    usdPrice?.latest,
   );
 
   return {
@@ -185,6 +208,26 @@ export function getChartFdvAtPoint(
     fdvEth: fdvEth ?? payload.fdvEth,
     fdvUsdWad: fdvUsdWad ?? payload.fdvUsdWad,
   };
+}
+
+function comparableChartPricePair(
+  inspected: TokenChartPoint,
+  latest: TokenChartPoint,
+  preferred: "usd" | "eth",
+): Readonly<{ inspected: string; latest: string }> | null {
+  const candidates = preferred === "usd"
+    ? [[inspected.priceUsd, latest.priceUsd],
+      [inspected.priceEth, latest.priceEth],
+      [inspected.priceQuote, latest.priceQuote]]
+    : [[inspected.priceEth, latest.priceEth],
+      [inspected.priceQuote, latest.priceQuote],
+      [inspected.priceUsd, latest.priceUsd]];
+  for (const [inspectedPrice, latestPrice] of candidates) {
+    if (inspectedPrice && latestPrice) {
+      return { inspected: inspectedPrice, latest: latestPrice };
+    }
+  }
+  return null;
 }
 type ChartLaunchModel = "classic" | "adaptive" | "deep" | "stock-paired";
 
@@ -209,7 +252,8 @@ export function isAuthoritativeChartPayloadStatus(status: unknown) {
   return (
     status === "ready" ||
     status === "insufficient-history" ||
-    status === "partial"
+    status === "partial" ||
+    status === "waiting-for-first-trade"
   );
 }
 
@@ -340,7 +384,9 @@ function hasValidChartCardinality(
     ? pointCount >= 2
     : status === "insufficient-history"
       ? pointCount === 1
-      : status === "partial" && pointCount >= 1;
+      : status === "partial"
+        ? pointCount >= 1
+        : status === "waiting-for-first-trade" && pointCount === 0;
 }
 
 function hasValidChartPointBlocks(
@@ -364,6 +410,10 @@ function hasValidChartPointBlocks(
 }
 
 function withoutNonCurrentFdv(payload: ChartPayload): ChartPayload {
+  if (
+    payload.marketData?.valuation.status === "available" &&
+    payload.marketData.valuation.freshness === "current"
+  ) return payload;
   if (payload.dataQuality?.valuation.status === "current") return payload;
   const sanitized = { ...payload };
   delete sanitized.fdvEthWei;
@@ -375,6 +425,23 @@ function withoutNonCurrentFdv(payload: ChartPayload): ChartPayload {
 export function parseAuthoritativeChartPayload(
   value: unknown,
 ): ChartPayload | null {
+  if (isMarketChartV1(value)) {
+    if (value.status === "unavailable") return null;
+    const fdvUsdWad = value.valuation.status === "available"
+      ? value.valuation.fdvUsdWad
+      : undefined;
+    return withoutNonCurrentFdv({
+      status: value.status,
+      points: [...value.points],
+      swapCount: value.swapCount,
+      ...(value.volumeUsdWad ? { volumeUsdWad: value.volumeUsdWad } : {}),
+      ...(fdvUsdWad ? { fdvUsdWad } : {}),
+      ...(value.valuation.status === "available"
+        ? { valuationMetric: value.valuation.metric }
+        : {}),
+      marketData: value,
+    });
+  }
   if (!isRecord(value)) return null;
   if (
     "marketCapEthWei" in value ||
@@ -403,9 +470,15 @@ export function parseAuthoritativeChartPayload(
       (point) =>
         isRecord(point) &&
         isCanonicalUnsignedIntegerString(point.blockNumber) &&
-        isPositiveDecimalString(point.priceEth) &&
+        (point.priceEth === undefined ||
+          isPositiveDecimalString(point.priceEth)) &&
         (point.priceUsd === undefined ||
-          isPositiveDecimalString(point.priceUsd)),
+          isPositiveDecimalString(point.priceUsd)) &&
+        (point.priceQuote === undefined ||
+          isPositiveDecimalString(point.priceQuote)) &&
+        (isPositiveDecimalString(point.priceUsd) ||
+          isPositiveDecimalString(point.priceEth) ||
+          isPositiveDecimalString(point.priceQuote)),
     )
   ) {
     return null;
@@ -561,10 +634,12 @@ const STOCK_PAIRED_EMPTY_CHART: ChartPayload = {
 export function getPriceHistoryEmptyMessage(
   launchModel: ChartLaunchModel | undefined,
   failed: boolean,
+  waitingForFirstTrade = false,
 ) {
   if (launchModel === "stock-paired") {
     return STOCK_PAIRED_HISTORY_MESSAGE;
   }
+  if (waitingForFirstTrade) return "Waiting for first trade";
   return failed
     ? "Price history is temporarily unavailable"
     : "Price history appears after confirmed trades";
@@ -599,7 +674,7 @@ const PLOT_RIGHT = VIEWBOX_WIDTH - 7;
 const PLOT_TOP = 9;
 const PLOT_BOTTOM = VIEWBOX_HEIGHT - 9;
 
-function formatPrice(value: number, unit: "USD" | "ETH") {
+function formatPrice(value: number, unit: string) {
   if (!Number.isFinite(value) || value < 0) return "Unavailable";
   if (unit === "USD") {
     if (value >= 1) {
@@ -617,7 +692,21 @@ function formatPrice(value: number, unit: "USD" | "ETH") {
   return `${value.toLocaleString("en-US", {
     maximumSignificantDigits: 8,
     useGrouping: false,
-  })} ETH`;
+  })} ${unit}`;
+}
+
+function chartPointContext(point: TokenChartPoint): string {
+  if (point.time && Number.isFinite(Date.parse(point.time))) {
+    return new Intl.DateTimeFormat("en", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "UTC",
+      timeZoneName: "short",
+    }).format(new Date(point.time));
+  }
+  return `Block ${point.blockNumber}`;
 }
 
 function linePath(points: PlottedPoint[]) {
@@ -638,11 +727,29 @@ export function createChartGeometry(points: readonly TokenChartPoint[]) {
   const usesUsd = points.every(
     (point) => point.priceUsd && Number(point.priceUsd) > 0,
   );
-  const unit = usesUsd ? "USD" : "ETH";
+  const usesEth = !usesUsd && points.every(
+    (point) => point.priceEth && Number(point.priceEth) > 0,
+  );
+  const quoteSymbols = new Set(
+    points.map((point) => point.quoteSymbol?.trim()).filter(Boolean),
+  );
+  const unit = usesUsd
+    ? "USD"
+    : usesEth
+      ? "ETH"
+      : quoteSymbols.size === 1
+        ? [...quoteSymbols][0] as string
+        : "quote";
   const validPoints = points
     .map((point) => ({
       ...point,
-      value: Number(usesUsd ? point.priceUsd : point.priceEth),
+      value: Number(
+        usesUsd
+          ? point.priceUsd
+          : usesEth
+            ? point.priceEth
+            : point.priceQuote,
+      ),
     }))
     .filter((point) => Number.isFinite(point.value) && point.value > 0);
   if (validPoints.length === 0) return null;
@@ -838,9 +945,16 @@ export function TokenPriceChart({
     return payload ? createChartGeometry(payload.points) : null;
   }, [payload]);
   const hasLimitedHistory =
-    payload?.status === "partial" && payload.dataQuality?.price.status === "stale";
+    payload?.status === "partial" && (
+      payload.marketData !== undefined ||
+      payload.dataQuality?.price.status === "stale"
+    );
 
-  const emptyMessage = getPriceHistoryEmptyMessage(launchModel, failed);
+  const emptyMessage = getPriceHistoryEmptyMessage(
+    launchModel,
+    failed,
+    payload?.status === "waiting-for-first-trade",
+  );
   const activePoint =
     chart && activePointIndex !== null
       ? chart.points[Math.min(activePointIndex, chart.points.length - 1)]
@@ -1088,7 +1202,7 @@ export function TokenPriceChart({
                 aria-hidden="true"
               >
                 <strong>{formatPrice(activePoint.value, chart.unit)}</strong>
-                <span>Block {activePoint.blockNumber}</span>
+                <span>{chartPointContext(activePoint)}</span>
               </div>
             </>
           ) : null}
@@ -1100,7 +1214,7 @@ export function TokenPriceChart({
             aria-atomic="true"
           >
             {activePoint
-              ? `${formatPrice(activePoint.value, chart.unit)}, block ${activePoint.blockNumber}`
+              ? `${formatPrice(activePoint.value, chart.unit)}, ${chartPointContext(activePoint)}`
               : ""}
           </span>
         </div>

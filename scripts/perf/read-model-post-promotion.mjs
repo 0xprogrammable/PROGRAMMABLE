@@ -15,8 +15,23 @@ import {
 
 const HEALTH_PATH = "/api/ops/health";
 const EXPLORE_PATH = "/api/explore?limit=6&page=1&sort=market-cap";
-const TOKEN_LIST_PATH = "/api/indexers/v1/token-list";
+const GOLDEN_TOKEN_ADDRESS =
+  "0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce";
+const GOLDEN_POOL_ID =
+  "0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229";
+const GOLDEN_DETAIL_PATH = `/api/explore/token?address=${GOLDEN_TOKEN_ADDRESS}`;
+const GOLDEN_CHART_PATH =
+  `/api/explore/token/chart?address=${GOLDEN_TOKEN_ADDRESS}&range=all`;
 const MAXIMUM_RESPONSE_BYTES = 2 * 1024 * 1024;
+const UNAVAILABLE_VALUATION_REASONS = new Set([
+  "no-market",
+  "supply-unavailable",
+  "liquidity-unavailable",
+  "price-unavailable",
+  "inconsistent-snapshot",
+  "waiting-for-first-trade",
+  "source-unavailable",
+]);
 
 function argumentsFrom(argv) {
   const result = {};
@@ -64,6 +79,13 @@ async function request(fetchImpl, targetUrl, path, json = true) {
     ok: response.ok,
     status: response.status,
     body: json ? safeJson(text, url.pathname) : text,
+    headers: Object.freeze({
+      marketAsOf: response.headers.get("x-programmable-market-as-of"),
+      marketSource: response.headers.get("x-programmable-market-source"),
+      priceSource: response.headers.get("x-programmable-price-source"),
+      readSource: response.headers.get("x-programmable-read-source"),
+      rpcProvider: response.headers.get("x-programmable-rpc-provider"),
+    }),
   };
 }
 
@@ -82,6 +104,150 @@ async function retry(operation, attempts = 12, delayMs = 5_000) {
     }
   }
   throw lastError ?? new Error("post-promotion verification failed");
+}
+
+function positiveInteger(value) {
+  return typeof value === "string" && /^[1-9][0-9]*$/u.test(value);
+}
+
+function validMarketTime(value) {
+  const parsed = Date.parse(value ?? "");
+  return Number.isFinite(parsed) && parsed <= Date.now() + 60_000;
+}
+
+function currentMarketTime(value) {
+  return validMarketTime(value) &&
+    Date.now() - Date.parse(value) <= 6 * 60_000;
+}
+
+function exactBitqueryHeaders(response) {
+  return response.headers.marketSource === "bitquery" &&
+    response.headers.readSource === "operational+durable+postgres" &&
+    response.headers.rpcProvider === null;
+}
+
+function honestExploreValuations(response) {
+  const tokens = response.body?.tokens;
+  if (!Array.isArray(tokens) || tokens.length === 0) return false;
+  let previousCurrentFdv = null;
+  let sawNonCurrent = false;
+  let currentCount = 0;
+  for (const token of tokens) {
+    const valuation = token?.valuation;
+    if (valuation?.status === "unavailable") {
+      if (
+        !UNAVAILABLE_VALUATION_REASONS.has(valuation.reason) ||
+        token?.fdvUsdWad !== undefined
+      ) return false;
+      sawNonCurrent = true;
+      continue;
+    }
+    if (
+      valuation?.status !== "available" ||
+      valuation.metric !== "fdv" ||
+      valuation.supplyBasis !== "total" ||
+      valuation.currency !== "usd" ||
+      valuation.source !== "bitquery" ||
+      !["current", "stale"].includes(valuation.freshness) ||
+      !positiveInteger(valuation.valueWad) ||
+      !validMarketTime(valuation.asOfTime)
+    ) return false;
+    if (valuation.freshness === "stale") {
+      if (token?.fdvUsdWad !== undefined) return false;
+      sawNonCurrent = true;
+      continue;
+    }
+    if (
+      sawNonCurrent ||
+      token.fdvUsdWad !== valuation.valueWad ||
+      !currentMarketTime(valuation.asOfTime)
+    ) return false;
+    const value = BigInt(valuation.valueWad);
+    if (previousCurrentFdv !== null && value > previousCurrentFdv) return false;
+    previousCurrentFdv = value;
+    currentCount += 1;
+  }
+  const marketAsOf = response.body?.dataQuality?.valuation?.asOfTime ?? null;
+  return [null, "bitquery"].includes(response.headers.priceSource) &&
+    (currentCount === 0 || response.headers.priceSource === "bitquery") &&
+    response.headers.marketAsOf === marketAsOf &&
+    (marketAsOf === null || validMarketTime(marketAsOf));
+}
+
+function exactGoldenDetail(response) {
+  const token = response.body?.token;
+  const market = token?.marketData;
+  const pool = market?.pools?.find(
+    (candidate) => candidate?.identity?.poolId === GOLDEN_POOL_ID,
+  );
+  const valuation = token?.valuation;
+  return response.ok &&
+    exactBitqueryHeaders(response) &&
+    response.body?.status === "ready" &&
+    token?.tokenAddress?.toLowerCase() === GOLDEN_TOKEN_ADDRESS &&
+    market?.schemaVersion === "programmable.market-data.v1" &&
+    market?.source === "bitquery" &&
+    market?.primaryPoolId === GOLDEN_POOL_ID &&
+    ["current", "stale"].includes(market?.status) &&
+    ["current", "stale"].includes(pool?.status) &&
+    valuation?.status === "available" &&
+    valuation.metric === "fdv" &&
+    valuation.supplyBasis === "total" &&
+    valuation.source === "bitquery" &&
+    positiveInteger(valuation.valueWad) &&
+    validMarketTime(valuation.asOfTime) &&
+    (valuation.freshness !== "current" || currentMarketTime(valuation.asOfTime)) &&
+    (valuation.freshness === "current"
+      ? token.fdvUsdWad === valuation.valueWad &&
+        response.headers.priceSource === "bitquery"
+      : valuation.freshness === "stale" &&
+        token.fdvUsdWad === undefined &&
+        response.headers.priceSource === null);
+}
+
+function exactGoldenChart(response) {
+  const chart = response.body;
+  if (
+    !response.ok ||
+    response.headers.marketSource !== "bitquery" ||
+    response.headers.rpcProvider !== null ||
+    response.headers.priceSource !== "bitquery" ||
+    chart?.schemaVersion !== "programmable.market-chart.v1" ||
+    chart.source !== "bitquery" ||
+    chart.address?.toLowerCase() !== GOLDEN_TOKEN_ADDRESS ||
+    chart.identity?.poolId !== GOLDEN_POOL_ID ||
+    !["ready", "insufficient-history", "partial"].includes(chart.status) ||
+    !Array.isArray(chart.points) ||
+    chart.points.length < 1 ||
+    chart.valuation?.metric !== "fdv" ||
+    chart.valuation?.supplyBasis !== "total" ||
+    !["current", "stale"].includes(chart.valuation?.freshness) ||
+    (chart.valuation?.freshness === "current" &&
+      !currentMarketTime(chart.valuation?.asOfTime)) ||
+    chart.asOfTime !== chart.points.at(-1)?.time ||
+    response.headers.marketAsOf !== chart.asOfTime ||
+    !validMarketTime(chart.asOfTime)
+  ) return false;
+  let previousTime = null;
+  let previousBlock = null;
+  for (const point of chart.points) {
+    const time = Date.parse(point?.time ?? "");
+    const block = positiveInteger(point?.blockNumber)
+      ? BigInt(point.blockNumber)
+      : null;
+    const price = Number(point?.priceUsd ?? point?.priceQuote);
+    if (
+      !Number.isFinite(time) ||
+      block === null ||
+      !Number.isFinite(price) ||
+      price <= 0 ||
+      (previousTime !== null && time <= previousTime) ||
+      (previousBlock !== null && block < previousBlock)
+    ) return false;
+    previousTime = time;
+    previousBlock = block;
+  }
+  return true;
 }
 
 function publicChecks(responses) {
@@ -105,17 +271,19 @@ function publicChecks(responses) {
       condition:
         responses.explore.ok &&
         responses.explore.body?.status === "ready" &&
-        Array.isArray(responses.explore.body?.tokens) &&
-        responses.explore.body.tokens.length > 0,
-      detail: "the production Explore route returns a populated ready token page",
+        exactBitqueryHeaders(responses.explore) &&
+        honestExploreValuations(responses.explore),
+      detail: "the production Explore route returns honest Bitquery FDV freshness",
     },
     {
-      id: "production-token-list",
-      condition:
-        responses.tokenList.ok &&
-        Array.isArray(responses.tokenList.body?.tokens) &&
-        responses.tokenList.body.tokens.length > 0,
-      detail: "the production indexed token list remains populated",
+      id: "production-bitquery-detail",
+      condition: exactGoldenDetail(responses.goldenDetail),
+      detail: "the production PCAN detail is bound to its exact Bitquery v4 pool",
+    },
+    {
+      id: "production-bitquery-chart",
+      condition: exactGoldenChart(responses.goldenChart),
+      detail: "the production PCAN chart exposes ordered Bitquery history",
     },
   ];
 }
@@ -195,13 +363,15 @@ export async function verifyPostPromotion(input) {
     request(fetchImpl, targetUrl, "/", false),
     request(fetchImpl, targetUrl, HEALTH_PATH),
     request(fetchImpl, targetUrl, EXPLORE_PATH),
-    request(fetchImpl, targetUrl, TOKEN_LIST_PATH),
+    request(fetchImpl, targetUrl, GOLDEN_DETAIL_PATH),
+    request(fetchImpl, targetUrl, GOLDEN_CHART_PATH),
   ]);
   const checks = [...deploymentChecks, ...publicChecks({
     root: responses[0],
     health: responses[1],
     explore: responses[2],
-    tokenList: responses[3],
+    goldenDetail: responses[3],
+    goldenChart: responses[4],
   })];
 
   if (input.evidencePath) {

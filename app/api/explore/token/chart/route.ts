@@ -2,112 +2,80 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAddress, isAddress } from "viem";
 
 import {
-  getAlchemyOnchainDeployment,
   readAlchemyExploreModel,
   safeAlchemyError,
 } from "../../../../../lib/alchemy/explore.server";
+import { suppressRouterBoundCustomProjectDuplicates } from
+  "../../../../../lib/alchemy/router-custom-collision";
 import {
-  enrichTokensWithAlchemyPoolState,
-  readVerifiedOperationalMarketSnapshot,
-  withSameBlockEthUsdQuote,
-  withoutUnboundEthUsdQuote,
-} from "../../../../../lib/alchemy/live-market.server";
+  createExploreConsumerSource,
+  type ExploreConsumerSource,
+} from "../../../../../lib/explore-consumer.server";
+import { canonicalTokenExploreEntryV1 } from
+  "../../../../../lib/explore-entry-v1";
+import { withBitqueryMarketData } from
+  "../../../../../lib/explore-financial-data";
 import {
-  assertTokenChartSupported,
-  isTokenChartRange,
-  readTokenChartSeries,
-  TokenChartIntegrityError,
-  TokenChartUnavailableError,
-  type TokenChartFreshness,
-} from "../../../../../lib/onchain/chart";
-import { getWebsiteChartOnchainDeployment } from "../../../../../lib/onchain/config";
-import { readDurableExploreModel } from "../../../../../lib/onchain/durable-model";
+  readBitqueryMarketChartV1,
+  readBitqueryTokenMarketDataV1,
+} from "../../../../../lib/market-data/bitquery.server";
+import { exploreEntryMarketIdentitiesV1 } from
+  "../../../../../lib/market-data/explore-market-identities";
+import type { MarketChartV1 } from
+  "../../../../../lib/market-data/market-data-v1";
+import { PROGRAMMABLE_MARKET_CHART_ERROR_SCHEMA_VERSION } from
+  "../../../../../lib/market-data/market-data-v1";
+import { getOnchainDeployment } from "../../../../../lib/onchain/config";
+import { readDurableExploreModel } from
+  "../../../../../lib/onchain/durable-model";
+import { isTokenChartRange } from "../../../../../lib/onchain/chart";
+import type { ExploreReadModel } from "../../../../../lib/onchain/types";
+import { readProductionCustomExploreDirectoryV1 } from
+  "../../../../../lib/server/custom-launch/explore-directory-v1";
 import type {
-  ExploreReadModel,
-  ReadyOnchainDeployment,
-} from "../../../../../lib/onchain/types";
-import type { LauncherToken } from "../../../../../lib/tokens";
+  CustomProjectExploreEntry,
+  ExploreEntry,
+} from "../../../../../lib/tokens";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const TOKEN_CHART_DATA_QUALITY_SCHEMA_VERSION =
-  "programmable.explore-chart-data-quality.v1" as const;
+const readCanonicalChartSource = createExploreConsumerSource<ExploreReadModel>({});
+const readCustomChartSource = createExploreConsumerSource<
+  readonly CustomProjectExploreEntry[]
+>({});
 
-function chartDataQualityStatus(freshness: TokenChartFreshness) {
-  return freshness.history.status === "current" &&
-    freshness.price.status === "current" &&
-    freshness.valuation.status === "current"
-    ? "current" as const
-    : "partial" as const;
-}
-
-function unavailableDataQuality(
-  reason:
-    | "integrity"
-    | "source-unavailable"
-    | "unsupported-pool-orientation",
-) {
-  return {
-    schemaVersion: TOKEN_CHART_DATA_QUALITY_SCHEMA_VERSION,
-    status: "unavailable" as const,
-    reason,
-  };
-}
-
-type ReadyExploreModel = Extract<ExploreReadModel, { status: "ready" }>;
-
-async function readChartIdentityModel(
-  deployment: ReadyOnchainDeployment,
-): Promise<Readonly<{
-  model: ReadyExploreModel;
-  readSource: "rpc" | "durable+rpc";
-}>> {
-  let primaryError: unknown;
-  try {
-    const model = await readAlchemyExploreModel();
-    if (
-      model.status === "ready" &&
-      model.snapshot.chainId === deployment.chainId
-    ) {
-      return { model, readSource: "rpc" };
-    }
-    primaryError = new Error("Live chart identity is unavailable");
-  } catch (error) {
-    primaryError = error;
+async function readPrimaryChartModel() {
+  const model = await readAlchemyExploreModel();
+  if (model.status !== "ready") {
+    throw new Error("Primary Explore model is unavailable");
   }
+  return model;
+}
 
+async function readDurableChartFallback() {
+  const deployment = getOnchainDeployment("production");
+  if (deployment.status !== "ready") {
+    throw new Error("Production Explore deployment is not ready");
+  }
+  const read = await readDurableExploreModel(
+    deployment,
+    Number.MAX_SAFE_INTEGER,
+  );
+  if (read.status !== "ready") {
+    throw new Error(`Durable Explore fallback is ${read.reason}`);
+  }
+  return { value: read.envelope.payload.model, ageMs: read.ageMs };
+}
+
+async function settleSource<T>(
+  read: Promise<ExploreConsumerSource<T>>,
+): Promise<ExploreConsumerSource<T> | null> {
   try {
-    const durable = await readDurableExploreModel(
-      deployment,
-      Number.MAX_SAFE_INTEGER,
-    );
-    if (durable.status === "ready") {
-      const model = durable.envelope.payload.model;
-      if (
-        model.status === "ready" &&
-        model.snapshot.chainId === deployment.chainId
-      ) {
-        return { model, readSource: "durable+rpc" };
-      }
-    }
+    return await read;
   } catch {
-    // The original live-read failure is the useful sanitized telemetry cause.
+    return null;
   }
-
-  throw primaryError ?? new Error("Chart identity is unavailable");
-}
-
-function chartIdentityToken(
-  token: LauncherToken,
-  readSource: "rpc" | "durable+rpc",
-): LauncherToken {
-  if (readSource === "rpc") return token;
-  const identityOnly = { ...token };
-  // An old aggregate is not current chart history. Reconstruct volume from
-  // exact logs when the canonical identity came from the durable snapshot.
-  delete identityOnly.grossVolumeWei;
-  return identityOnly;
 }
 
 export async function GET(request: NextRequest) {
@@ -125,15 +93,14 @@ export async function GET(request: NextRequest) {
     );
   }
   const input = search.get("address")?.trim();
-  const requestedRange =
-    search.get("range")?.trim().toLowerCase() ?? "all";
+  const range = search.get("range")?.trim().toLowerCase() ?? "all";
   if (!input || !isAddress(input)) {
     return NextResponse.json(
       { error: "Enter a valid Ethereum token address" },
       { status: 400, headers: { "Cache-Control": "no-store" } },
     );
   }
-  if (!isTokenChartRange(requestedRange)) {
+  if (!isTokenChartRange(range)) {
     return NextResponse.json(
       { error: "Choose a supported chart range" },
       { status: 400, headers: { "Cache-Control": "no-store" } },
@@ -142,196 +109,168 @@ export async function GET(request: NextRequest) {
 
   try {
     const address = getAddress(input);
-    const deployment = getAlchemyOnchainDeployment();
-    const chartDeployment = getWebsiteChartOnchainDeployment("production");
-    if (
-      deployment.status !== "ready" ||
-      chartDeployment.status !== "ready" ||
-      chartDeployment.chainId !== deployment.chainId
-    ) {
-      return NextResponse.json(
-        {
-          status: "unavailable",
-          address,
-          error: "Onchain chart data is temporarily unavailable",
-          dataQuality: unavailableDataQuality("source-unavailable"),
-        },
-        {
-          status: 503,
-          headers: {
-            "Cache-Control": "no-store",
-            "Retry-After": "5",
-            "X-Programmable-Data-Quality": "unavailable",
-            "X-Programmable-Read-Source": "rpc",
-          },
-        },
-      );
-    }
-    const [identityRead, operationalSnapshot] = await Promise.all([
-      readChartIdentityModel(deployment),
-      readVerifiedOperationalMarketSnapshot(deployment),
+    const [canonicalSource, customSource] = await Promise.all([
+      settleSource(readCanonicalChartSource({
+        primary: readPrimaryChartModel,
+        fallback: readDurableChartFallback,
+      })),
+      settleSource(readCustomChartSource({
+        primary: () => readProductionCustomExploreDirectoryV1(request.signal),
+      })),
     ]);
-    const { model, readSource } = identityRead;
-
-    const token = model.tokens.find(
-      (candidate) =>
-        candidate.tokenAddress.toLowerCase() === address.toLowerCase(),
+    if (canonicalSource === null && customSource === null) {
+      return unavailable(
+        address,
+        range,
+        "identity-unavailable",
+        "Token identity is temporarily unavailable",
+      );
+    }
+    const model = canonicalSource?.value ?? null;
+    const token = model?.tokens.find(
+      (candidate) => candidate.tokenAddress.toLowerCase() === address.toLowerCase(),
     );
-    if (!token && readSource === "durable+rpc") {
-      return NextResponse.json(
-        {
-          status: "unavailable",
-          address,
-          error: "Token identity is temporarily unavailable",
-          dataQuality: unavailableDataQuality("source-unavailable"),
-        },
-        {
-          status: 503,
-          headers: {
-            "Cache-Control": "no-store",
-            "Retry-After": "5",
-            "X-Programmable-Data-Quality": "unavailable",
-            "X-Programmable-Read-Source": readSource,
-          },
-        },
+    const customProjects = suppressRouterBoundCustomProjectDuplicates(
+      model?.tokens ?? [],
+      customSource?.value ?? [],
+    );
+    const customProject = customProjects.find(
+      (candidate) => candidate.tokenAddress?.toLowerCase() === address.toLowerCase(),
+    );
+    if (token && customProject) {
+      throw new Error("Canonical token chart sources disagree on launch category");
+    }
+    const entry: ExploreEntry | null = token
+      ? canonicalTokenExploreEntryV1(token)
+      : customProject ?? null;
+    if (!entry) {
+      if (
+        canonicalSource?.status === "current" &&
+        customSource?.status === "current"
+      ) {
+        return NextResponse.json(
+          { error: "Token not found" },
+          { status: 404, headers: { "Cache-Control": "no-store" } },
+        );
+      }
+      return unavailable(
+        address,
+        range,
+        "identity-unavailable",
+        "Token identity is temporarily unavailable",
       );
     }
-    if (!token) {
-      return NextResponse.json(
-        {
-          error: "Token not found",
-          snapshotBlock: model.snapshot.blockNumber,
-          snapshotHash: model.snapshot.blockHash,
-        },
-        {
-          status: 404,
-          headers: {
-            "Cache-Control": "no-store",
-            "X-Programmable-Read-Source": readSource,
-          },
-        },
+    const identities = exploreEntryMarketIdentitiesV1(entry);
+    if (identities.length === 0) {
+      return unavailable(
+        address,
+        range,
+        "market-data-unavailable",
+        "Price history is unavailable for this market",
       );
     }
-
-    const tokenForChart = chartIdentityToken(token, readSource);
-    assertTokenChartSupported(tokenForChart);
-
-    // A lagging launch-discovery snapshot is useful for canonical identity,
-    // but it is never market-currentness authority. Returning unavailable here
-    // lets the client preserve its last verified chart instead of appending a
-    // stale model point as though it were the current price.
-    if (operationalSnapshot === null) {
-      return NextResponse.json(
-        {
-          status: "unavailable",
-          address,
-          error: "Onchain chart data is temporarily unavailable",
-          dataQuality: unavailableDataQuality("source-unavailable"),
-        },
-        {
-          status: 503,
-          headers: {
-            "Cache-Control": "no-store",
-            "Retry-After": "5",
-            "X-Programmable-Data-Quality": "unavailable",
-            "X-Programmable-Read-Source": readSource,
-          },
-        },
-      );
-    }
-
-    let liveSnapshot = operationalSnapshot;
-    try {
-      liveSnapshot = await withSameBlockEthUsdQuote({
-        deployment,
-        snapshot: liveSnapshot,
-      });
-    } catch {
-      liveSnapshot = withoutUnboundEthUsdQuote(liveSnapshot);
-    }
-    const liveToken = (
-      await enrichTokensWithAlchemyPoolState({
-        deployment,
-        snapshot: liveSnapshot,
-        tokens: [tokenForChart],
-      })
-    )[0] ?? tokenForChart;
-    const series = await readTokenChartSeries({
-      deployment: chartDeployment,
-      token: liveToken,
-      snapshotBlock: BigInt(liveSnapshot.blockNumber),
-      ethUsdQuote: liveSnapshot.ethUsdQuote,
-      range: requestedRange,
+    const marketByToken = await readBitqueryTokenMarketDataV1(identities, {
+      signal: request.signal,
     });
-    const { freshness, ...publicSeries } = series;
-    const qualityStatus = series.status === "partial"
-      ? "partial" as const
-      : chartDataQualityStatus(freshness);
+    const marketDataRead = marketByToken.get(address.toLowerCase());
+    const marketData = marketDataRead
+      ? withBitqueryMarketData(entry, marketDataRead).marketData
+      : undefined;
+    const identity = identities.find(
+      (candidate) => candidate.poolId === marketData?.primaryPoolId,
+    ) ?? identities[0];
+    const primaryMarket = marketData?.pools.find(
+      (candidate) => candidate.identity.poolId === identity.poolId,
+    );
+    const chart = await readBitqueryMarketChartV1({
+      identity,
+      range,
+      ...(primaryMarket ? { valuation: primaryMarket.valuation } : {}),
+      signal: request.signal,
+    });
+    if (chart.status === "unavailable") {
+      return unavailable(
+        address,
+        range,
+        "market-data-unavailable",
+        "Price history is temporarily unavailable",
+        chart,
+      );
+    }
+
+    const fdvUsdWad = chart.valuation.status === "available"
+      ? chart.valuation.fdvUsdWad
+      : undefined;
+    const hasVerifiedPrice = chart.points.some(
+      (point) => point.priceUsd !== undefined || point.priceQuote !== undefined,
+    );
     return NextResponse.json(
       {
-        ...publicSeries,
+        ...chart,
         address,
-        range: requestedRange,
-        valuationMetric: "fdv",
-        dataQuality: {
-          schemaVersion: TOKEN_CHART_DATA_QUALITY_SCHEMA_VERSION,
-          status: qualityStatus,
-          asOfBlock: liveSnapshot.blockNumber,
-          blockHash: liveSnapshot.blockHash,
-          finality:
-            liveSnapshot.confirmations > 0 ? "confirmed" : "latest",
-          history: freshness.history,
-          price: freshness.price,
-          valuation: freshness.valuation,
-        },
-        snapshotBlock: liveSnapshot.blockNumber,
-        snapshotHash: liveSnapshot.blockHash,
+        ...(fdvUsdWad ? { fdvUsdWad } : {}),
+        valuationMetric: chart.valuation.status === "available"
+          ? chart.valuation.metric
+          : null,
       },
       {
         headers: {
           "Cache-Control":
-            qualityStatus === "current"
-              ? "public, max-age=0, s-maxage=2, stale-while-revalidate=2"
+            chart.status === "ready" &&
+                chart.valuation.status === "available" &&
+                chart.valuation.freshness === "current"
+              ? "public, max-age=0, s-maxage=2, stale-while-revalidate=5"
               : "no-store",
-          "X-Programmable-Data-Quality": qualityStatus,
-          "X-Programmable-Valuation-Metric": "fdv",
-          "X-Programmable-Read-Source": readSource,
+          "X-Programmable-Data-Quality": chart.status,
+          "X-Programmable-Market-Source": "bitquery",
+          ...(hasVerifiedPrice
+            ? { "X-Programmable-Price-Source": "bitquery" }
+            : {}),
+          ...(chart.asOfTime
+            ? { "X-Programmable-Market-As-Of": chart.asOfTime }
+            : {}),
         },
       },
     );
   } catch (error) {
-    const integrityFailure = error instanceof TokenChartIntegrityError;
-    const unsupportedPool = error instanceof TokenChartUnavailableError;
-    if (!unsupportedPool) {
-      console.error(
-        "Token chart read failed",
-        safeAlchemyError(error),
-      );
-    }
-    return NextResponse.json(
-      {
-        status: "unavailable",
-        error: unsupportedPool
-          ? "Price history is unavailable for this pool"
-          : "Onchain chart data is temporarily unavailable",
-        dataQuality: unavailableDataQuality(
-          integrityFailure
-            ? "integrity"
-            : unsupportedPool
-              ? error.reason
-              : "source-unavailable",
-        ),
-      },
-      {
-        status: 503,
-        headers: {
-          "Cache-Control": "no-store",
-          ...(integrityFailure || unsupportedPool
-            ? {}
-            : { "Retry-After": "5" }),
-          "X-Programmable-Data-Quality": "unavailable",
-        },
-      },
+    console.error("Token chart read failed", safeAlchemyError(error));
+    return unavailable(
+      getAddress(input),
+      range,
+      "market-data-unavailable",
+      "Price history is temporarily unavailable",
     );
   }
+}
+
+function unavailable(
+  address: `0x${string}`,
+  range: MarketChartV1["range"],
+  reason: "identity-unavailable" | "market-data-unavailable",
+  error: string,
+  chart?: MarketChartV1,
+) {
+  return NextResponse.json(
+    chart
+      ? { ...chart, address, error }
+      : {
+          schemaVersion: PROGRAMMABLE_MARKET_CHART_ERROR_SCHEMA_VERSION,
+          source: "bitquery",
+          status: "unavailable",
+          generatedAt: new Date().toISOString(),
+          address,
+          range,
+          reason,
+          error,
+        },
+    {
+      status: 503,
+      headers: {
+        "Cache-Control": "no-store",
+        "Retry-After": "5",
+        "X-Programmable-Data-Quality": "unavailable",
+        "X-Programmable-Market-Source": "bitquery",
+      },
+    },
+  );
 }

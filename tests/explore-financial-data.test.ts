@@ -6,8 +6,12 @@ import {
   exploreValuation,
   publicExploreEntryV1,
   valuationSortValue,
+  type ValuedExploreEntry,
+  withBitqueryMarketData,
   withExploreValuation,
 } from "../lib/explore-financial-data";
+import type { TokenMarketDataV1 } from
+  "../lib/market-data/market-data-v1";
 import type { LauncherToken } from "../lib/tokens";
 
 const TOKEN_ADDRESS =
@@ -125,6 +129,139 @@ describe("Explore financial-data semantics", () => {
     expect(valuationSortValue(currentQuote)).toBeNull();
   });
 
+  it("keeps last-verified Bitquery FDV out of current sorting and compatibility fields", () => {
+    const poolId = `0x${"33".repeat(32)}` as const;
+    const marketData = {
+      schemaVersion: "programmable.market-data.v1",
+      source: "bitquery",
+      generatedAt: "2026-08-11T14:02:00.000Z",
+      status: "stale",
+      primaryPoolId: poolId,
+      pools: [{
+        identity: {
+          chainId: "1",
+          tokenAddress: TOKEN_ADDRESS,
+          poolId,
+          protocol: "uniswap_v4",
+        },
+        source: "bitquery",
+        status: "stale",
+        quality: "partial",
+        asOfTime: "2026-08-11T13:50:00.000Z",
+        latestTrade: {
+          transactionHash: `0x${"11".repeat(32)}`,
+          logIndex: 1,
+          blockNumber: "25740000",
+          time: "2026-08-11T13:50:00.000Z",
+          tokenSide: "buy",
+          priceUsdWad: "250000000000000000",
+          priceUsdAsOfTime: "2026-08-11T13:50:00.000Z",
+          priceUsdSource: "bitquery-token-price-index-v1",
+          rawPriceUsdWad: "245000000000000000",
+        },
+        liquidity: {
+          asOfTime: "2026-08-11T13:50:00.000Z",
+          asOfBlock: "25740000",
+          valueUsdWad: "50000000000000000000000",
+          freshness: "stale",
+        },
+        valuation: {
+          status: "available",
+          metric: "fdv",
+          supplyBasis: "total",
+          valueUsdWad: "250000000000000000000000",
+          fdvUsdWad: "250000000000000000000000",
+          totalSupply: "1000000",
+          asOfTime: "2026-08-11T13:50:00.000Z",
+          freshness: "stale",
+        },
+      }],
+    } satisfies TokenMarketDataV1;
+    const entry = withBitqueryMarketData(
+      canonicalTokenExploreEntryV1(goldenToken()),
+      marketData,
+    );
+
+    expect(entry.valuation).toMatchObject({
+      status: "available",
+      source: "bitquery",
+      freshness: "stale",
+      metric: "fdv",
+      supplyBasis: "total",
+      valueWad: "250000000000000000000000000",
+    });
+    expect(valuationSortValue(entry)).toBeNull();
+    const published = publicExploreEntryV1(entry);
+    expect(published).not.toHaveProperty("fdvUsdWad");
+    expect(published).not.toHaveProperty("tokenPriceUsdWad");
+    expect(published).not.toHaveProperty("tokenPriceQuoteWad");
+  });
+
+  it("keeps the indexed USD timestamp authoritative for public freshness", () => {
+    const poolId = `0x${"33".repeat(32)}` as const;
+    const marketData = {
+      schemaVersion: "programmable.market-data.v1",
+      source: "bitquery",
+      generatedAt: "2026-08-11T14:02:00.000Z",
+      status: "current",
+      primaryPoolId: poolId,
+      pools: [{
+        identity: {
+          chainId: "1",
+          tokenAddress: TOKEN_ADDRESS,
+          poolId,
+          protocol: "uniswap_v4",
+        },
+        source: "bitquery",
+        status: "current",
+        quality: "complete",
+        asOfTime: "2026-08-11T14:01:00.000Z",
+        latestTrade: {
+          transactionHash: `0x${"22".repeat(32)}`,
+          logIndex: 1,
+          blockNumber: "25740001",
+          time: "2026-08-11T14:01:00.000Z",
+          tokenSide: "buy",
+          priceUsdWad: "250000000000000000",
+          priceUsdAsOfTime: "2026-08-11T13:56:00.000Z",
+          priceUsdSource: "bitquery-token-price-index-v1",
+          rawPriceUsdWad: "245000000000000000",
+        },
+        liquidity: {
+          asOfTime: "2026-08-11T14:01:00.000Z",
+          asOfBlock: "25740001",
+          valueUsdWad: "50000000000000000000000",
+          freshness: "current",
+        },
+        valuation: {
+          status: "available",
+          metric: "fdv",
+          supplyBasis: "total",
+          valueUsdWad: "250000000000000000000000",
+          fdvUsdWad: "250000000000000000000000",
+          totalSupply: "1000000",
+          asOfTime: "2026-08-11T14:01:00.000Z",
+          freshness: "current",
+        },
+      }],
+    } satisfies TokenMarketDataV1;
+    const entry = withBitqueryMarketData(
+      canonicalTokenExploreEntryV1(goldenToken()),
+      marketData,
+    );
+
+    expect(entry.valuation).toMatchObject({
+      status: "available",
+      source: "bitquery",
+      freshness: "stale",
+      asOfTime: "2026-08-11T13:56:00.000Z",
+    });
+    expect(valuationSortValue(entry)).toBeNull();
+    const published = publicExploreEntryV1(entry);
+    expect(published).not.toHaveProperty("fdvUsdWad");
+    expect(published).not.toHaveProperty("tokenPriceUsdWad");
+  });
+
   it("publishes total-supply values only through the FDV contract", () => {
     const entry = withExploreValuation(
       canonicalTokenExploreEntryV1(goldenToken({
@@ -202,6 +339,38 @@ describe("Explore financial-data semantics", () => {
         stale: 0,
         unknown: 0,
       },
+    });
+  });
+
+  it("includes Custom v4 valuations in the shared data-quality summary", () => {
+    const custom = {
+      exploreKind: "custom-project",
+      valuation: {
+        status: "available",
+        metric: "market-cap",
+        supplyBasis: "circulating",
+        currency: "usd",
+        valueWad: "1000000000000000000",
+        freshness: "current",
+        source: "bitquery",
+        asOfTime: "2026-08-11T14:00:00.000Z",
+      },
+    } as ValuedExploreEntry;
+
+    expect(buildExploreDataQuality({
+      entries: [custom],
+      generatedAt: "2026-08-11T14:00:01.000Z",
+      canonicalStatus: "current",
+      customStatus: "current",
+      identityAsOfBlock: "25740000",
+      referenceBlock: "25740000",
+      identityAgeMs: 0,
+    }).valuation).toMatchObject({
+      status: "current",
+      metric: "market-cap",
+      available: 1,
+      unavailable: 0,
+      asOfTime: "2026-08-11T14:00:00.000Z",
     });
   });
 });

@@ -13,6 +13,7 @@ const {
   createStagedReleaseAttestation,
   evaluateReadModelDeployPolicy,
   materializeVercelSensitiveRuntimePlaceholders,
+  BITQUERY_MARKET_SECRET_ENV_NAME,
   PROJECTOR_WAKE_ROUTE,
   readReleasePolicyExpectations,
   validateStagedReleaseAttestation,
@@ -42,6 +43,14 @@ const COMMITMENTS = Object.freeze({
     ).endpointCommitment,
 });
 
+function sensitiveProductionMetadata(name: string) {
+  return {
+    key: name,
+    type: "sensitive",
+    target: ["production"],
+  };
+}
+
 function environmentFile(input: {
   indexed?: Partial<Record<string, string | undefined>>;
   workers?: Partial<Record<string, string | undefined>>;
@@ -62,7 +71,10 @@ function environmentFile(input: {
     ),
     ...EXPECTATIONS,
     ...Object.fromEntries(
-      REQUIRED_SERVER_SECRET_ENV_NAMES.map((name: string) => [name, ""]),
+      REQUIRED_SERVER_SECRET_ENV_NAMES.map((name: string) => [
+        name,
+        name === BITQUERY_MARKET_SECRET_ENV_NAME ? "[Sensitive]" : "",
+      ]),
     ),
     ...(alchemyRuntime === null
       ? {}
@@ -88,6 +100,7 @@ describe("read-model production deploy policy", () => {
     const contents = environmentFile({
       workers: { PROGRAMMABLE_PROJECTOR_ACTIVE: "true" },
       alchemyRuntime: null,
+      serverSecrets: { [BITQUERY_MARKET_SECRET_ENV_NAME]: "" },
     }).concat(
       "\nPROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL=\nPROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL=",
     );
@@ -103,11 +116,7 @@ describe("read-model production deploy policy", () => {
           type: "sensitive",
           target: ["production"],
         },
-        {
-          key: QUICKNODE_STREAM_SECRET_ENV_NAME,
-          type: "sensitive",
-          target: ["production"],
-        },
+        ...REQUIRED_SERVER_SECRET_ENV_NAMES.map(sensitiveProductionMetadata),
       ],
     });
     const materialized = materializeVercelSensitiveRuntimePlaceholders(
@@ -158,11 +167,9 @@ describe("read-model production deploy policy", () => {
           JSON.stringify({
             envs: [
               ...(entry ? [entry] : []),
-              {
-                key: QUICKNODE_STREAM_SECRET_ENV_NAME,
-                type: "sensitive",
-                target: ["production"],
-              },
+              ...REQUIRED_SERVER_SECRET_ENV_NAMES.map(
+                sensitiveProductionMetadata,
+              ),
             ],
           }),
         ),
@@ -172,19 +179,20 @@ describe("read-model production deploy policy", () => {
 
   it("requires exact sensitive QuickNode stream-secret metadata", () => {
     const contents = environmentFile();
-    const exact = {
-      key: QUICKNODE_STREAM_SECRET_ENV_NAME,
-      type: "sensitive",
-      target: ["production"],
-    };
+    const exact = sensitiveProductionMetadata(
+      QUICKNODE_STREAM_SECRET_ENV_NAME,
+    );
+    const otherSecrets = REQUIRED_SERVER_SECRET_ENV_NAMES
+      .filter((name: string) => name !== QUICKNODE_STREAM_SECRET_ENV_NAME)
+      .map(sensitiveProductionMetadata);
     for (const envs of [
-      [],
-      [{ ...exact, type: "plain" }],
-      [{ ...exact, type: "encrypted" }],
-      [{ ...exact, target: ["preview"] }],
-      [{ ...exact, target: ["production", "preview"] }],
-      [{ ...exact, value: "must-not-be-present" }],
-      [exact, exact],
+      otherSecrets,
+      [...otherSecrets, { ...exact, type: "plain" }],
+      [...otherSecrets, { ...exact, type: "encrypted" }],
+      [...otherSecrets, { ...exact, target: ["preview"] }],
+      [...otherSecrets, { ...exact, target: ["production", "preview"] }],
+      [...otherSecrets, { ...exact, value: "must-not-be-present" }],
+      [...otherSecrets, exact, exact],
     ]) {
       expect(() =>
         materializeVercelSensitiveRuntimePlaceholders(
@@ -195,6 +203,63 @@ describe("read-model production deploy policy", () => {
     }
   });
 
+  it("requires Bitquery as exact sensitive production metadata in every mode", () => {
+    expect(BITQUERY_MARKET_SECRET_ENV_NAME).toBe("BITQUERY_OAUTH_TOKEN");
+    expect(REQUIRED_SERVER_SECRET_ENV_NAMES).toContain(
+      BITQUERY_MARKET_SECRET_ENV_NAME,
+    );
+    const otherSecrets = REQUIRED_SERVER_SECRET_ENV_NAMES
+      .filter((name: string) => name !== BITQUERY_MARKET_SECRET_ENV_NAME)
+      .map(sensitiveProductionMetadata);
+    const exact = sensitiveProductionMetadata(BITQUERY_MARKET_SECRET_ENV_NAME);
+    const withoutBitqueryLine = environmentFile({
+      serverSecrets: { [BITQUERY_MARKET_SECRET_ENV_NAME]: undefined },
+    });
+    for (const entry of [
+      undefined,
+      { ...exact, type: "plain" },
+      { ...exact, target: ["preview"] },
+      { ...exact, target: ["production", "preview"] },
+      { ...exact, value: "must-not-be-present" },
+    ]) {
+      expect(() =>
+        materializeVercelSensitiveRuntimePlaceholders(
+          withoutBitqueryLine,
+          JSON.stringify({ envs: [...otherSecrets, ...(entry ? [entry] : [])] }),
+        )
+      ).toThrow(/BITQUERY_OAUTH_TOKEN is not exact sensitive production metadata/u);
+    }
+    expect(() =>
+      materializeVercelSensitiveRuntimePlaceholders(
+        withoutBitqueryLine,
+        JSON.stringify({ envs: [...otherSecrets, exact, exact] }),
+      )
+    ).toThrow(/BITQUERY_OAUTH_TOKEN is not exact sensitive production metadata/u);
+
+    const materialized = materializeVercelSensitiveRuntimePlaceholders(
+      withoutBitqueryLine,
+      JSON.stringify({ envs: [...otherSecrets, exact] }),
+    );
+    expect(materialized).toContain('BITQUERY_OAUTH_TOKEN="[Sensitive]"');
+    expect(
+      evaluateReadModelDeployPolicy(materialized, {}, EXPECTATIONS),
+    ).toMatchObject({
+      mode: "alchemy-only",
+      policyReady: true,
+      invalidServerSecretEnvironmentNames: [],
+    });
+
+    const missingRuntimeToken = evaluateReadModelDeployPolicy(
+      withoutBitqueryLine,
+      {},
+      EXPECTATIONS,
+    );
+    expect(missingRuntimeToken.policyReady).toBe(false);
+    expect(missingRuntimeToken.invalidServerSecretEnvironmentNames).toEqual([
+      BITQUERY_MARKET_SECRET_ENV_NAME,
+    ]);
+  });
+
   it("preserves a materialized QuickNode stream secret byte-for-byte", () => {
     const contents = environmentFile({
       serverSecrets: {
@@ -202,7 +267,12 @@ describe("read-model production deploy policy", () => {
       },
     });
     expect(
-      materializeVercelSensitiveRuntimePlaceholders(contents, "not-json"),
+      materializeVercelSensitiveRuntimePlaceholders(
+        contents,
+        JSON.stringify({
+          envs: [sensitiveProductionMetadata(BITQUERY_MARKET_SECRET_ENV_NAME)],
+        }),
+      ),
     ).toBe(contents);
   });
 
@@ -567,7 +637,7 @@ describe("read-model production deploy policy", () => {
     expect(PROJECTOR_WAKE_ROUTE).toBe("/api/ops/projector-wake");
   });
 
-  it("smokes the Alchemy-only public APIs and stops at a staged candidate", () => {
+  it("smokes registry identity plus Bitquery market APIs and stops at a staged candidate", () => {
     const workflow = readFileSync(
       resolve(ROOT, ".github/workflows/deploy-production.yml"),
       "utf8",
@@ -582,49 +652,40 @@ describe("read-model production deploy policy", () => {
     expect(workflow.match(/--sensitive-env-metadata/g)).toHaveLength(2);
     expect(workflow).toContain("staged-release-attestation.json");
     expect(workflow).toContain("attestation_sha256");
-    expect(workflow).toContain("Smoke staged Alchemy Explore APIs");
+    expect(workflow).toContain("Smoke staged Bitquery market APIs");
     expect(workflow).toContain(
       "if: steps.read-model-policy.outputs.mode == 'alchemy-only'",
     );
     expect(workflow).toContain(
       '"x-vercel-protection-bypass": automationBypassSecret',
     );
-    expect(workflow).toContain("headers: alchemySmokeRequestHeaders");
+    expect(workflow).toContain("headers: bitquerySmokeRequestHeaders");
     expect(workflow).toContain(
-      'const operationalReadSources = Object.freeze([',
+      'readSources: Object.freeze(["operational+durable+postgres"]),',
     );
     expect(workflow).toContain(
-      '"operational+durable+postgres",',
+      'marketSources: Object.freeze(["bitquery"]),',
+    );
+    expect(workflow).toContain("rpcProviders: null");
+    expect(workflow).not.toContain("alchemyIdentityContract");
+    expect(workflow).toContain('"x-programmable-market-source",');
+    expect(workflow).toContain('"x-programmable-price-source",');
+    expect(workflow).toContain('"x-programmable-market-as-of",');
+    expect(workflow).toContain(
+      "!headerMatches(rpcProvider, contract.rpcProviders)",
     );
     expect(workflow).toContain(
-      'const operationalRpcProviders = Object.freeze([',
+      "!headerMatches(marketSource, contract.marketSources)",
     );
     expect(workflow).toContain(
-      '"operational-dual",\n            "operational-primary",',
-    );
-    expect(workflow).toContain(
-      'const alchemyRpcProviders = Object.freeze(["alchemy"]);',
-    );
-    expect(workflow).toContain(
-      'const alchemyReadSources = Object.freeze(["blob"]);',
-    );
-    expect(workflow).toContain(
-      'expectedReadSources,\n            expectedRpcProviders,',
-    );
-    expect(workflow).toContain(
-      '!expectedReadSources.includes(readSource ?? "")',
-    );
-    expect(workflow).toContain(
-      '!expectedRpcProviders.includes(rpcProvider ?? "")',
+      "!headerMatches(priceSource, contract.priceSources)",
     );
     expect(workflow).not.toContain(
       'response.headers.get("x-programmable-rpc-provider") !== "alchemy"',
     );
+    expect(workflow).not.toContain('"/api/indexers/v1/token-list"');
     expect(workflow).toContain(
-      '"/api/indexers/v1/token-list",\n            alchemyReadSources,\n            alchemyRpcProviders,',
-    );
-    expect(workflow).toContain(
-      '"/api/explore?limit=20&page=1&sort=market-cap",\n            operationalReadSources,\n            operationalRpcProviders,',
+      '"/api/explore?limit=20&page=1&sort=market-cap",\n            bitqueryMarketContract,',
     );
     expect(workflow).toContain("entry.launchCategoryProvenance.blockNumber");
     expect(workflow).toContain(
@@ -632,7 +693,7 @@ describe("read-model production deploy policy", () => {
     );
     expect(workflow).toContain("entry.launchCategoryProvenance.logIndex");
     expect(workflow).toContain(
-      "staged Alchemy newest entry has no canonical launch order",
+      "staged Bitquery newest entry has no canonical launch order",
     );
     expect(workflow).toContain("coordinates === null");
     expect(workflow).toContain("const newestPageSize = 100");
@@ -641,20 +702,67 @@ describe("read-model production deploy policy", () => {
     expect(workflow).toContain("launchChainId(entry) !== newestChainId");
     expect(workflow).toContain("sort=oldest");
     expect(workflow).toContain(
-      "staged Alchemy oldest page is not ordered oldest-first",
+      "staged Bitquery oldest page is not ordered oldest-first",
     );
-    expect(workflow).toContain('"/api/indexers/v1/token-list"');
     expect(workflow).toContain("/api/explore/token?address=");
-    const alchemySmoke = workflow.slice(
-      workflow.indexOf("Smoke staged Alchemy Explore APIs"),
-      workflow.indexOf("Record Alchemy-only read path"),
+    expect(workflow).toContain(
+      "/api/explore/token/chart?address=${goldenTokenAddress}&range=all",
     );
-    expect(alchemySmoke.match(/operationalRpcProviders/g)).toHaveLength(7);
-    expect(alchemySmoke.match(/alchemyRpcProviders/g)).toHaveLength(2);
-    expect(alchemySmoke).not.toContain("/api/ops/health");
-    expect(alchemySmoke).not.toContain("/api/explore/profile");
-    expect(alchemySmoke).not.toMatch(
-      /(?:database|projector|quicknode|envio|real-block|sla)/iu,
+    expect(workflow).toContain(
+      '"0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce"',
+    );
+    expect(workflow).toContain(
+      '"0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229"',
+    );
+    expect(workflow).toContain(
+      'goldenMarket?.schemaVersion !== "programmable.market-data.v1"',
+    );
+    expect(workflow).toContain(
+      'goldenChart.schemaVersion !== "programmable.market-chart.v1"',
+    );
+    expect(workflow).toContain(
+      "staged Bitquery Highest FDV is not monotonically descending",
+    );
+    expect(workflow).toContain(
+      "staged Bitquery Explore exposed stale or unavailable FDV as current",
+    );
+    expect(workflow).toContain(
+      "staged Bitquery Explore mislabeled stale FDV as current",
+    );
+    expect(workflow).toContain('valuation.freshness === "stale"');
+    expect(workflow).toContain(
+      'valuation.reason === "waiting-for-first-trade"',
+    );
+    expect(workflow).not.toContain("currentFdvCount < 1");
+    expect(workflow).toContain(
+      "staged Bitquery current Explore and detail FDV are not identical",
+    );
+    expect(workflow).toContain(
+      'goldenValuation.metric !== "fdv"',
+    );
+    expect(workflow).toContain(
+      'goldenValuation.supplyBasis !== "total"',
+    );
+    expect(workflow).toContain(
+      "goldenChart.asOfTime !== goldenChart.points.at(-1)?.time",
+    );
+    expect(workflow).toContain(
+      "staged PCAN chart is not a strictly ordered positive history",
+    );
+    const bitquerySmoke = workflow.slice(
+      workflow.indexOf("Smoke staged Bitquery market APIs"),
+      workflow.indexOf("Record registry identity and Bitquery market path"),
+    );
+    expect(bitquerySmoke).toContain(
+      "/api/explore?limit=20&page=1&q=${goldenTokenAddress}&sort=market-cap",
+    );
+    expect(bitquerySmoke.match(/bitqueryMarketContract/g)).toHaveLength(10);
+    expect(bitquerySmoke.match(/bitqueryChartContract/g)).toHaveLength(2);
+    expect(bitquerySmoke).not.toContain("alchemyIdentityContract");
+    expect(bitquerySmoke).not.toContain("/api/ops/health");
+    expect(bitquerySmoke).not.toContain("/api/explore/profile");
+    expect(bitquerySmoke).not.toMatch(
+      /\b(?:database|projector|quicknode|envio|real-block|sla)\b/iu,
     );
     expect(workflow).toContain("Reverify staged candidate binding");
     expect(workflow).toContain("Record staged candidate handoff");

@@ -465,8 +465,7 @@ jobs:
           node scripts/verify-manual-applicant-staged-runtime.mjs
           --target-url "$STAGED_TARGET_URL"
 
-      - name: Smoke staged Alchemy Explore APIs
-        if: steps.read-model-policy.outputs.mode == 'alchemy-only'
+      - name: Smoke staged Bitquery market APIs
         env:
           STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
@@ -480,7 +479,7 @@ jobs:
             origin.search ||
             origin.hash
           ) {
-            throw new Error("Alchemy smoke target is not an exact Vercel origin");
+            throw new Error("Bitquery smoke target is not an exact Vercel origin");
           }
           const automationBypassSecret =
             process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
@@ -494,33 +493,63 @@ jobs:
             automationBypassSecretLength > 512 ||
             /[\r\n]/.test(automationBypassSecret)
           ) {
-            throw new Error("Alchemy smoke automation bypass is unavailable");
+            throw new Error("Bitquery smoke automation bypass is unavailable");
           }
-          const alchemySmokeRequestHeaders = Object.freeze({
+          const bitquerySmokeRequestHeaders = Object.freeze({
             Accept: "application/json",
             "x-vercel-protection-bypass": automationBypassSecret,
           });
-          const operationalRpcProviders = Object.freeze([
-            "operational-dual",
-            "operational-primary",
+          const bitqueryMarketContract = Object.freeze({
+            readSources: Object.freeze(["operational+durable+postgres"]),
+            rpcProviders: null,
+            marketSources: Object.freeze(["bitquery"]),
+          });
+          const bitqueryChartContract = Object.freeze({
+            readSources: null,
+            rpcProviders: null,
+            marketSources: Object.freeze(["bitquery"]),
+          });
+          const unavailableValuationReasons = new Set([
+            "no-market",
+            "supply-unavailable",
+            "liquidity-unavailable",
+            "price-unavailable",
+            "inconsistent-snapshot",
+            "waiting-for-first-trade",
+            "source-unavailable",
           ]);
-          const operationalReadSources = Object.freeze([
-            "operational+durable+postgres",
-          ]);
-          const alchemyRpcProviders = Object.freeze(["alchemy"]);
-          const alchemyReadSources = Object.freeze(["blob"]);
 
-          const requestJson = async (
-            path,
-            expectedReadSources,
-            expectedRpcProviders,
-          ) => {
+          const headerMatches = (value, expected) =>
+            expected === null
+              ? value === null
+              : expected.includes(value ?? "");
+          const positiveInteger = (value) =>
+            typeof value === "string" && /^[1-9][0-9]*$/.test(value);
+          const positiveDecimalToWad = (value) => {
+            const match = /^(0|[1-9][0-9]*)(?:\.([0-9]+))?$/.exec(
+              String(value ?? ""),
+            );
+            if (!match) return null;
+            const wad = BigInt(match[1]) * 10n ** 18n +
+              BigInt((match[2] ?? "").slice(0, 18).padEnd(18, "0") || "0");
+            return wad > 0n ? wad : null;
+          };
+          const validMarketTime = (value) => {
+            const parsed = Date.parse(value ?? "");
+            return Number.isFinite(parsed) &&
+              parsed <= Date.now() + 60_000;
+          };
+          const currentMarketTime = (value) =>
+            validMarketTime(value) &&
+            Date.now() - Date.parse(value) <= 6 * 60_000;
+
+          const requestJson = async (path, contract) => {
             let lastError;
             for (let attempt = 1; attempt <= 12; attempt += 1) {
               try {
                 const response = await fetch(new URL(path, origin), {
                   redirect: "error",
-                  headers: alchemySmokeRequestHeaders,
+                  headers: bitquerySmokeRequestHeaders,
                   signal: AbortSignal.timeout(30_000),
                 });
                 const text = await response.text();
@@ -536,15 +565,32 @@ jobs:
                 const rpcProvider = response.headers.get(
                   "x-programmable-rpc-provider",
                 );
+                const marketSource = response.headers.get(
+                  "x-programmable-market-source",
+                );
+                const priceSource = response.headers.get(
+                  "x-programmable-price-source",
+                );
+                const marketAsOf = response.headers.get(
+                  "x-programmable-market-as-of",
+                );
                 if (
-                  !expectedReadSources.includes(readSource ?? "") ||
-                  !expectedRpcProviders.includes(rpcProvider ?? "")
+                  !headerMatches(readSource, contract.readSources) ||
+                  !headerMatches(rpcProvider, contract.rpcProviders) ||
+                  !headerMatches(marketSource, contract.marketSources) ||
+                  (contract.priceSources !== undefined &&
+                    !headerMatches(priceSource, contract.priceSources))
                 ) {
                   throw new Error(
-                    `${path} did not prove its required read and RPC sources`,
+                    `${path} did not prove its required identity and market sources`,
                   );
                 }
-                return JSON.parse(text);
+                const body = JSON.parse(text);
+                Object.defineProperty(body, "__marketHeaders", {
+                  value: Object.freeze({ marketAsOf, marketSource, priceSource }),
+                  enumerable: false,
+                });
+                return body;
               } catch (error) {
                 lastError = error;
                 if (attempt < 12) {
@@ -557,8 +603,7 @@ jobs:
 
           const explore = await requestJson(
             "/api/explore?limit=20&page=1&sort=market-cap",
-            operationalReadSources,
-            operationalRpcProviders,
+            bitqueryMarketContract,
           );
           if (
             explore.status !== "ready" ||
@@ -566,20 +611,116 @@ jobs:
             explore.tokens.length < 1 ||
             explore.tokens.length > 20
           ) {
-            throw new Error("staged Alchemy Explore is not a populated bounded page");
+            throw new Error("staged Bitquery Explore is not a populated bounded page");
           }
           const releaseToken = explore.tokens.find(
             (token) =>
               /^0x[0-9a-fA-F]{40}$/.test(token?.tokenAddress ?? ""),
           );
           if (!releaseToken) {
-            throw new Error("staged Alchemy Explore has no token identity");
+            throw new Error("staged Bitquery Explore has no token identity");
+          }
+          let previousCurrentFdv = null;
+          let currentFdvCount = 0;
+          let availableFdvCount = 0;
+          let staleFdvCount = 0;
+          let waitingForFirstTradeCount = 0;
+          let sawNonCurrentFdv = false;
+          let currentFdvToken = null;
+          for (const token of explore.tokens) {
+            const valuation = token?.valuation;
+            if (valuation?.status === "unavailable") {
+              if (!unavailableValuationReasons.has(valuation.reason)) {
+                throw new Error("staged Bitquery Explore has an untyped unavailable valuation");
+              }
+              if (valuation.reason === "waiting-for-first-trade") {
+                waitingForFirstTradeCount += 1;
+              }
+              sawNonCurrentFdv = true;
+              if (token?.fdvUsdWad !== undefined) {
+                throw new Error(
+                  "staged Bitquery Explore exposed stale or unavailable FDV as current",
+                );
+              }
+              continue;
+            }
+            if (
+              valuation?.status !== "available" ||
+              valuation.metric !== "fdv" ||
+              valuation.supplyBasis !== "total" ||
+              valuation.currency !== "usd" ||
+              !["current", "stale"].includes(valuation.freshness) ||
+              valuation.source !== "bitquery" ||
+              !positiveInteger(valuation.valueWad) ||
+              !validMarketTime(valuation.asOfTime)
+            ) {
+              throw new Error("staged Bitquery Explore has an invalid typed FDV");
+            }
+            availableFdvCount += 1;
+            if (valuation.freshness === "stale") {
+              staleFdvCount += 1;
+              sawNonCurrentFdv = true;
+              if (token?.fdvUsdWad !== undefined) {
+                throw new Error(
+                  "staged Bitquery Explore exposed stale or unavailable FDV as current",
+                );
+              }
+              continue;
+            }
+            if (token.fdvUsdWad !== valuation.valueWad) {
+              throw new Error("staged Bitquery Explore did not expose its current FDV");
+            }
+            if (!currentMarketTime(valuation.asOfTime)) {
+              throw new Error("staged Bitquery Explore mislabeled stale FDV as current");
+            }
+            if (sawNonCurrentFdv) {
+              throw new Error(
+                "staged Bitquery Highest FDV placed current data after stale data",
+              );
+            }
+            const value = BigInt(valuation.valueWad);
+            if (previousCurrentFdv !== null && value > previousCurrentFdv) {
+              throw new Error(
+                "staged Bitquery Highest FDV is not monotonically descending",
+              );
+            }
+            const primary = token.marketData?.pools?.find(
+              (pool) => pool.identity?.poolId === token.marketData?.primaryPoolId,
+            );
+            if (
+              !primary ||
+              primary.status !== "current" ||
+              primary.liquidity?.freshness !== "current" ||
+              !positiveInteger(primary.liquidity?.valueUsdWad) ||
+              primary.valuation?.asOfTime !== valuation.asOfTime
+            ) {
+              throw new Error(
+                "staged Bitquery current FDV lacks current trade and liquidity evidence",
+              );
+            }
+            previousCurrentFdv = value;
+            currentFdvCount += 1;
+            currentFdvToken ??= token;
+          }
+          const exploreMarketAsOf =
+            explore.dataQuality?.valuation?.asOfTime ?? null;
+          if (
+            ![null, "bitquery"].includes(
+              explore.__marketHeaders?.priceSource ?? null,
+            ) ||
+            (currentFdvCount > 0 &&
+              explore.__marketHeaders?.priceSource !== "bitquery") ||
+            explore.__marketHeaders?.marketAsOf !== exploreMarketAsOf ||
+            (exploreMarketAsOf !== null && !validMarketTime(exploreMarketAsOf))
+          ) {
+            throw new Error(
+              "staged Bitquery Explore has inconsistent market provenance",
+            );
           }
           const newestPageSize = 100;
           const newest = await requestJson(
             `/api/explore?limit=${newestPageSize}&page=1&sort=newest`,
-            operationalReadSources,
-            operationalRpcProviders,
+            bitqueryMarketContract,
           );
           const newestTotal = Number(newest.total);
           const newestTotalPages = Number(newest.totalPages);
@@ -597,7 +738,7 @@ jobs:
             newestTotalPages > 100 ||
             newestTotalPages !== Math.ceil(newestTotal / newestPageSize)
           ) {
-            throw new Error("staged Alchemy newest page is not populated");
+            throw new Error("staged Bitquery newest page is not populated");
           }
           const newestTokens = [];
           const seenNewestIds = new Set();
@@ -606,8 +747,7 @@ jobs:
               ? newest
               : await requestJson(
                    `/api/explore?limit=${newestPageSize}&page=${pageNumber}&sort=newest`,
-                   operationalReadSources,
-                   operationalRpcProviders,
+                   bitqueryMarketContract,
                  );
             if (
               page.status !== "ready" ||
@@ -618,22 +758,22 @@ jobs:
               !Array.isArray(page.tokens) ||
               page.tokens.length < 1
             ) {
-              throw new Error("staged Alchemy newest pagination is not stable");
+              throw new Error("staged Bitquery newest pagination is not stable");
             }
             for (const entry of page.tokens) {
               if (typeof entry?.id !== "string" || seenNewestIds.has(entry.id)) {
-                throw new Error("staged Alchemy newest pagination is not unique");
+                throw new Error("staged Bitquery newest pagination is not unique");
               }
               seenNewestIds.add(entry.id);
               newestTokens.push(entry);
             }
           }
           if (newestTokens.length !== newestTotal) {
-            throw new Error("staged Alchemy newest pagination is incomplete");
+            throw new Error("staged Bitquery newest pagination is incomplete");
           }
           const newestChainId = String(newest.snapshot?.chainId ?? "");
           if (!/^(?:0|[1-9][0-9]*)$/.test(newestChainId)) {
-            throw new Error("staged Alchemy newest snapshot has no canonical chain");
+            throw new Error("staged Bitquery newest snapshot has no canonical chain");
           }
           const launchChainId = (entry) => {
             const value = entry.exploreKind === "token"
@@ -642,7 +782,7 @@ jobs:
                 ? String(entry.chainId ?? "")
                 : "";
             if (!/^(?:0|[1-9][0-9]*)$/.test(value)) {
-              throw new Error("staged Alchemy newest entry has no canonical chain");
+              throw new Error("staged Bitquery newest entry has no canonical chain");
             }
             return value;
           };
@@ -663,14 +803,14 @@ jobs:
                 : null;
             if (coordinates === null || coordinates.length !== 3) {
               throw new Error(
-                "staged Alchemy newest entry has no canonical launch order",
+                "staged Bitquery newest entry has no canonical launch order",
               );
             }
             return coordinates.map((value) => {
               const normalized = String(value ?? "");
               if (!/^(?:0|[1-9][0-9]*)$/.test(normalized)) {
                 throw new Error(
-                  "staged Alchemy newest entry has no canonical launch order",
+                  "staged Bitquery newest entry has no canonical launch order",
                 );
               }
               return BigInt(normalized);
@@ -679,13 +819,13 @@ jobs:
           const launchTime = (entry) => {
             const value = Date.parse(entry.launchedAt ?? "");
             if (!Number.isFinite(value)) {
-              throw new Error("staged Alchemy newest entry has no canonical time");
+              throw new Error("staged Bitquery newest entry has no canonical time");
             }
             return value;
           };
           for (const entry of newestTokens) {
             if (launchChainId(entry) !== newestChainId) {
-              throw new Error("staged Alchemy newest entry is on another chain");
+              throw new Error("staged Bitquery newest entry is on another chain");
             }
             launchOrder(entry);
             launchTime(entry);
@@ -706,13 +846,12 @@ jobs:
                   ),
               )
             ) {
-              throw new Error("staged Alchemy newest page is not ordered newest-first");
+              throw new Error("staged Bitquery newest page is not ordered newest-first");
             }
           }
           const oldest = await requestJson(
             `/api/explore?limit=${newestPageSize}&page=1&sort=oldest`,
-            operationalReadSources,
-            operationalRpcProviders,
+            bitqueryMarketContract,
           );
           const expectedOldestIds = newestTokens
             .slice(-newestPageSize)
@@ -726,14 +865,13 @@ jobs:
             oldest.tokens.map((entry) => entry.id).join("\n") !==
               expectedOldestIds.join("\n")
           ) {
-            throw new Error("staged Alchemy oldest page is not ordered oldest-first");
+            throw new Error("staged Bitquery oldest page is not ordered oldest-first");
           }
           const incrementalLaunchAddress =
             "0x468505087c2dfec4779f2d6a5f8481f03e32e905";
           const incrementalDetail = await requestJson(
             `/api/explore/token?address=${encodeURIComponent(incrementalLaunchAddress)}`,
-            operationalReadSources,
-            operationalRpcProviders,
+            bitqueryMarketContract,
           );
           const incrementalLaunch = incrementalDetail.token;
           const incrementalLaunchBlock = BigInt(
@@ -757,40 +895,177 @@ jobs:
             )
           ) {
             throw new Error(
-              "staged Alchemy Explore did not recover the incremental launch cursor",
+              "staged Bitquery Explore did not recover the incremental launch cursor",
             );
-          }
-          const tokenList = await requestJson(
-            "/api/indexers/v1/token-list",
-            alchemyReadSources,
-            alchemyRpcProviders,
-          );
-          if (
-            !Array.isArray(tokenList.tokens) ||
-            !tokenList.tokens.some(
-              (token) =>
-                String(token?.address ?? token?.tokenAddress ?? "").toLowerCase() ===
-                releaseToken.tokenAddress.toLowerCase(),
-            )
-          ) {
-            throw new Error("staged Alchemy token list does not contain the Explore token");
           }
           const tokenDetail = await requestJson(
             `/api/explore/token?address=${encodeURIComponent(releaseToken.tokenAddress)}`,
-            operationalReadSources,
-            operationalRpcProviders,
+            bitqueryMarketContract,
           );
           if (
             tokenDetail.status !== "ready" ||
             tokenDetail.token?.tokenAddress?.toLowerCase() !==
               releaseToken.tokenAddress.toLowerCase()
           ) {
-            throw new Error("staged Alchemy token lookup did not resolve the Explore token");
+            throw new Error("staged Bitquery token lookup did not resolve the Explore token");
+          }
+          if (currentFdvToken !== null) {
+            const currentFdvDetail = await requestJson(
+              `/api/explore/token?address=${encodeURIComponent(currentFdvToken.tokenAddress)}`,
+              bitqueryMarketContract,
+            );
+            if (
+              currentFdvDetail.token?.valuation?.status !== "available" ||
+              currentFdvDetail.token.valuation.metric !== "fdv" ||
+              currentFdvDetail.token.valuation.supplyBasis !== "total" ||
+              currentFdvDetail.token.valuation.freshness !== "current" ||
+              currentFdvDetail.token.valuation.valueWad !==
+                currentFdvToken.valuation.valueWad ||
+              currentFdvDetail.token.valuation.asOfTime !==
+                currentFdvToken.valuation.asOfTime ||
+              currentFdvDetail.token.fdvUsdWad !==
+                currentFdvToken.fdvUsdWad ||
+              currentFdvDetail.__marketHeaders?.priceSource !== "bitquery"
+            ) {
+              throw new Error(
+                "staged Bitquery current Explore and detail FDV are not identical",
+              );
+            }
+          }
+          const goldenTokenAddress =
+            "0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce";
+          const goldenPoolId =
+            "0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229";
+          const goldenExplore = await requestJson(
+            `/api/explore?limit=20&page=1&q=${goldenTokenAddress}&sort=market-cap`,
+            bitqueryMarketContract,
+          );
+          const goldenExploreToken = goldenExplore.tokens?.find(
+            (token) => token?.tokenAddress?.toLowerCase() === goldenTokenAddress,
+          );
+          if (goldenExplore.status !== "ready" || !goldenExploreToken) {
+            throw new Error("staged Explore did not retain the canonical PCAN identity");
+          }
+          const goldenDetail = await requestJson(
+            `/api/explore/token?address=${goldenTokenAddress}`,
+            bitqueryMarketContract,
+          );
+          const goldenMarket = goldenDetail.token?.marketData;
+          const goldenPool = goldenMarket?.pools?.find(
+            (pool) => pool.identity?.poolId === goldenPoolId,
+          );
+          const goldenPrice = positiveInteger(
+              goldenPool?.latestTrade?.priceUsdWad,
+            )
+            ? BigInt(goldenPool.latestTrade.priceUsdWad)
+            : null;
+          const goldenSupply = positiveDecimalToWad(
+            goldenDetail.token?.valuation?.status === "available"
+              ? goldenPool?.valuation?.totalSupply
+              : null,
+          );
+          const expectedGoldenFdv = goldenPrice !== null && goldenSupply !== null
+            ? (goldenPrice * goldenSupply) / 10n ** 18n
+            : null;
+          const goldenValuation = goldenDetail.token?.valuation;
+          if (
+            goldenDetail.status !== "ready" ||
+            goldenDetail.token?.tokenAddress?.toLowerCase() !==
+              goldenTokenAddress ||
+            goldenMarket?.schemaVersion !== "programmable.market-data.v1" ||
+            goldenMarket?.source !== "bitquery" ||
+            goldenMarket?.primaryPoolId !== goldenPoolId ||
+            !["current", "stale"].includes(goldenMarket?.status) ||
+            !["current", "stale"].includes(goldenPool?.status) ||
+            goldenValuation?.status !== "available" ||
+            goldenValuation.source !== "bitquery" ||
+            goldenValuation.metric !== "fdv" ||
+            goldenValuation.supplyBasis !== "total" ||
+            !["current", "stale"].includes(goldenValuation.freshness) ||
+            !validMarketTime(goldenValuation.asOfTime) ||
+            (goldenValuation.freshness === "current" &&
+              !currentMarketTime(goldenValuation.asOfTime)) ||
+            goldenPool?.valuation?.metric !== "fdv" ||
+            goldenPool?.valuation?.marketCapUsdWad !== undefined ||
+            expectedGoldenFdv === null ||
+            expectedGoldenFdv <= 0n ||
+            goldenPool?.valuation?.fdvUsdWad !== expectedGoldenFdv.toString() ||
+            goldenValuation.valueWad !== expectedGoldenFdv.toString() ||
+            goldenExploreToken.valuation?.status !== "available" ||
+            goldenExploreToken.valuation.valueWad !== goldenValuation.valueWad ||
+            goldenExploreToken.valuation.freshness !== goldenValuation.freshness ||
+            goldenExploreToken.valuation.asOfTime !== goldenValuation.asOfTime ||
+            (goldenValuation.freshness === "current"
+              ? goldenDetail.__marketHeaders?.priceSource !== "bitquery"
+              : goldenDetail.__marketHeaders?.priceSource !== null) ||
+            (goldenValuation.freshness === "current"
+              ? goldenDetail.token.fdvUsdWad !== goldenValuation.valueWad ||
+                goldenExploreToken.fdvUsdWad !== goldenValuation.valueWad
+              : goldenDetail.token.fdvUsdWad !== undefined ||
+                goldenExploreToken.fdvUsdWad !== undefined)
+          ) {
+            throw new Error("staged PCAN market valuation is not Bitquery-bound");
+          }
+          const goldenChart = await requestJson(
+            `/api/explore/token/chart?address=${goldenTokenAddress}&range=all`,
+            bitqueryChartContract,
+          );
+          if (
+            goldenChart.schemaVersion !== "programmable.market-chart.v1" ||
+            goldenChart.source !== "bitquery" ||
+            goldenChart.address?.toLowerCase() !== goldenTokenAddress ||
+            goldenChart.identity?.poolId !== goldenPoolId ||
+            !["ready", "insufficient-history", "partial"].includes(
+              goldenChart.status,
+            ) ||
+            !Array.isArray(goldenChart.points) ||
+            goldenChart.points.length < 1 ||
+            goldenChart.valuation?.metric !== "fdv" ||
+            goldenChart.valuation?.supplyBasis !== "total" ||
+            !["current", "stale"].includes(goldenChart.valuation?.freshness) ||
+            (goldenChart.valuation?.freshness === "current" &&
+              !currentMarketTime(goldenChart.valuation?.asOfTime)) ||
+            goldenChart.asOfTime !== goldenChart.points.at(-1)?.time ||
+            goldenChart.__marketHeaders?.marketAsOf !== goldenChart.asOfTime ||
+            goldenChart.__marketHeaders?.priceSource !== "bitquery" ||
+            !validMarketTime(goldenChart.asOfTime)
+          ) {
+            throw new Error("staged PCAN price history is not Bitquery-bound");
+          }
+          let previousChartTime = null;
+          let previousChartBlock = null;
+          for (const point of goldenChart.points) {
+            const time = Date.parse(point?.time ?? "");
+            const block = positiveInteger(point?.blockNumber)
+              ? BigInt(point.blockNumber)
+              : null;
+            const price = point?.priceUsd ?? point?.priceQuote;
+            const numericPrice = Number(price);
+            if (
+              !Number.isFinite(time) ||
+              block === null ||
+              !Number.isFinite(numericPrice) ||
+              numericPrice <= 0 ||
+              (previousChartTime !== null && time <= previousChartTime) ||
+              (previousChartBlock !== null && block < previousChartBlock)
+            ) {
+              throw new Error(
+                "staged PCAN chart is not a strictly ordered positive history",
+              );
+            }
+            previousChartTime = time;
+            previousChartBlock = block;
           }
           process.stdout.write(
             `${JSON.stringify({
-              status: "verified-alchemy-only-staged-public-apis",
+              status: "verified-bitquery-staged-market-apis",
               tokenAddress: releaseToken.tokenAddress,
+              goldenTokenAddress,
+              goldenPoolId,
+              currentFdvCount,
+              availableFdvCount,
+              staleFdvCount,
+              waitingForFirstTradeCount,
               incrementalLaunchAddress,
               launchCursorBlockNumber:
                 incrementalDetail.launchDiscoverySnapshot.blockNumber,
@@ -798,14 +1073,14 @@ jobs:
           );
           NODE
 
-      - name: Record Alchemy-only read path
+      - name: Record registry identity and Bitquery market path
         if: steps.read-model-policy.outputs.mode == 'alchemy-only'
         run: |
           {
             echo "## Read-model release policy"
             echo
-            echo "Alchemy-only: Explore, token detail and token list use the verified durable registry with live Alchemy enrichment."
-            echo "Every non-Alchemy public read path is disabled."
+            echo "Router and Registry remain the launch-identity authority."
+            echo "Explore, token detail and charts use verified Bitquery market data; token identities do not disappear when market data is unavailable."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Capture staged read-model evidence

@@ -3,74 +3,49 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-const mocks = vi.hoisted(() => {
-  class TokenChartIntegrityError extends Error {
-    override name = "TokenChartIntegrityError";
+import type {
+  MarketChartV1,
+  MarketDataIdentityV1,
+  TokenMarketDataV1,
+} from "../lib/market-data/market-data-v1";
+import { customGraphToken } from "./launch-stamp-surface-fixture";
 
-    constructor(readonly reason: string) {
-      super("Token chart inputs failed integrity validation");
-    }
-  }
-  class TokenChartUnavailableError extends Error {
-    override name = "TokenChartUnavailableError";
-
-    constructor(readonly reason: string) {
-      super("Token chart data is unavailable for this pool");
-    }
-  }
-  return {
-    assertTokenChartSupported: vi.fn(),
-    getAlchemyOnchainDeployment: vi.fn(),
-    getWebsiteChartOnchainDeployment: vi.fn(),
-    isTokenChartRange: vi.fn(),
-    enrichTokensWithAlchemyPoolState: vi.fn(),
-    readVerifiedOperationalMarketSnapshot: vi.fn(),
-    withSameBlockEthUsdQuote: vi.fn(),
-    readAlchemyExploreModel: vi.fn(),
-    readDurableExploreModel: vi.fn(),
-    readTokenChartSeries: vi.fn(),
-    safeAlchemyError: vi.fn((error) => error),
-    TokenChartIntegrityError,
-    TokenChartUnavailableError,
-  };
-});
+const mocks = vi.hoisted(() => ({
+  getOnchainDeployment: vi.fn(),
+  isTokenChartRange: vi.fn(),
+  readAlchemyExploreModel: vi.fn(),
+  readBitqueryMarketChartV1: vi.fn(),
+  readBitqueryTokenMarketDataV1: vi.fn(),
+  readDurableExploreModel: vi.fn(),
+  readProductionCustomExploreDirectoryV1: vi.fn(),
+  safeAlchemyError: vi.fn((error) => error),
+}));
 
 vi.mock("../lib/alchemy/explore.server", () => ({
-  getAlchemyOnchainDeployment: mocks.getAlchemyOnchainDeployment,
   readAlchemyExploreModel: mocks.readAlchemyExploreModel,
   safeAlchemyError: mocks.safeAlchemyError,
 }));
 
+vi.mock("../lib/market-data/bitquery.server", () => ({
+  readBitqueryMarketChartV1: mocks.readBitqueryMarketChartV1,
+  readBitqueryTokenMarketDataV1: mocks.readBitqueryTokenMarketDataV1,
+}));
+
 vi.mock("../lib/onchain/chart", () => ({
-  assertTokenChartSupported: mocks.assertTokenChartSupported,
   isTokenChartRange: mocks.isTokenChartRange,
-  readTokenChartSeries: mocks.readTokenChartSeries,
-  TokenChartIntegrityError: mocks.TokenChartIntegrityError,
-  TokenChartUnavailableError: mocks.TokenChartUnavailableError,
 }));
 
 vi.mock("../lib/onchain/config", () => ({
-  getWebsiteChartOnchainDeployment:
-    mocks.getWebsiteChartOnchainDeployment,
+  getOnchainDeployment: mocks.getOnchainDeployment,
 }));
 
 vi.mock("../lib/onchain/durable-model", () => ({
   readDurableExploreModel: mocks.readDurableExploreModel,
 }));
 
-vi.mock("../lib/alchemy/live-market.server", () => ({
-  enrichTokensWithAlchemyPoolState: mocks.enrichTokensWithAlchemyPoolState,
-  readVerifiedOperationalMarketSnapshot:
-    mocks.readVerifiedOperationalMarketSnapshot,
-  withSameBlockEthUsdQuote: mocks.withSameBlockEthUsdQuote,
-  withoutUnboundEthUsdQuote: (snapshot: {
-    ethUsdQuote?: unknown;
-    [key: string]: unknown;
-  }) => {
-    const withoutQuote = { ...snapshot };
-    delete withoutQuote.ethUsdQuote;
-    return withoutQuote;
-  },
+vi.mock("../lib/server/custom-launch/explore-directory-v1", () => ({
+  readProductionCustomExploreDirectoryV1:
+    mocks.readProductionCustomExploreDirectoryV1,
 }));
 
 import { GET } from "../app/api/explore/token/chart/route";
@@ -87,23 +62,18 @@ const token = {
   liquidityPath: "meme",
 } as const;
 
-const deployment = {
-  status: "ready",
-  chainId: 1,
-  rpcUrl: "https://eth-mainnet.g.alchemy.com/v2/redacted",
-} as const;
-const chartDeployment = {
-  ...deployment,
-  rpcUrl: "https://ethereum-rpc.publicnode.com",
-  rpcUrlSecondary: "https://rpc.mevblocker.io",
-} as const;
+const identity = {
+  chainId: "1",
+  tokenAddress: token.tokenAddress,
+  poolId: token.poolId,
+  protocol: "uniswap_v4",
+} as const satisfies MarketDataIdentityV1;
 
 const snapshot = {
   chainId: 1,
   blockNumber: "25630000",
   blockHash: `0x${"44".repeat(32)}`,
   confirmations: 12,
-  ethUsdQuote: { answer: "350000000000", decimals: 8 },
 } as const;
 const launchDiscoverySnapshot = {
   ...snapshot,
@@ -111,39 +81,97 @@ const launchDiscoverySnapshot = {
   blockHash: `0x${"55".repeat(32)}`,
 } as const;
 
-describe("token chart Alchemy API", () => {
+function tokenMarketData(
+  marketIdentity: MarketDataIdentityV1 = identity,
+): TokenMarketDataV1 {
+  return {
+    schemaVersion: "programmable.market-data.v1",
+    source: "bitquery",
+    generatedAt: "2026-08-11T14:02:00.000Z",
+    status: "current",
+    primaryPoolId: marketIdentity.poolId,
+    pools: [{
+      identity: marketIdentity,
+      source: "bitquery",
+      status: "current",
+      quality: "complete",
+      asOfTime: "2026-08-11T14:02:00.000Z",
+      latestTrade: {
+        transactionHash: `0x${"66".repeat(32)}`,
+        logIndex: 1,
+        blockNumber: "25740002",
+        time: "2026-08-11T14:02:00.000Z",
+        tokenSide: "buy",
+        priceUsdWad: "2000000000000000000",
+      },
+      valuation: {
+        status: "available",
+        metric: "fdv",
+        supplyBasis: "total",
+        valueUsdWad: "2000000000000000000000000",
+        fdvUsdWad: "2000000000000000000000000",
+        totalSupply: "1000000",
+        asOfTime: "2026-08-11T14:02:00.000Z",
+        freshness: "current",
+      },
+    }],
+  };
+}
+
+function chart(
+  overrides: Partial<MarketChartV1> = {},
+  marketIdentity: MarketDataIdentityV1 = identity,
+): MarketChartV1 {
+  return {
+    schemaVersion: "programmable.market-chart.v1",
+    source: "bitquery",
+    status: "ready",
+    generatedAt: "2026-08-11T14:02:00.000Z",
+    identity: marketIdentity,
+    range: "all",
+    points: [
+      {
+        blockNumber: "25740001",
+        time: "2026-08-11T14:01:00.000Z",
+        priceUsd: "1.5",
+        ohlcUsd: { open: "1.4", high: "1.6", low: "1.3", close: "1.5" },
+        volumeUsdWad: "150000000000000000000",
+        tradeCount: 3,
+      },
+      {
+        blockNumber: "25740002",
+        time: "2026-08-11T14:02:00.000Z",
+        priceUsd: "2",
+        ohlcUsd: { open: "1.5", high: "2.1", low: "1.5", close: "2" },
+        volumeUsdWad: "250000000000000000000",
+        tradeCount: 4,
+      },
+    ],
+    swapCount: 7,
+    volumeUsdWad: "400000000000000000000",
+    valuation: {
+      status: "available",
+      metric: "fdv",
+      supplyBasis: "total",
+      valueUsdWad: "2000000000000000000000000",
+      fdvUsdWad: "2000000000000000000000000",
+      totalSupply: "1000000",
+      asOfTime: "2026-08-11T14:02:00.000Z",
+      freshness: "current",
+    },
+    asOfTime: "2026-08-11T14:02:00.000Z",
+    truncated: false,
+    ...overrides,
+  };
+}
+
+describe("token chart Bitquery API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.isTokenChartRange.mockImplementation((range) =>
       ["1h", "1d", "1w", "all"].includes(range),
     );
-    mocks.getAlchemyOnchainDeployment.mockReturnValue(deployment);
-    mocks.getWebsiteChartOnchainDeployment.mockReturnValue(
-      chartDeployment,
-    );
-    mocks.readVerifiedOperationalMarketSnapshot.mockResolvedValue(
-      launchDiscoverySnapshot,
-    );
-    mocks.assertTokenChartSupported.mockImplementation((candidate) => {
-      if (candidate.launchModel === "custom-graph") {
-        throw new mocks.TokenChartUnavailableError(
-          "unsupported-pool-orientation",
-        );
-      }
-    });
-    mocks.enrichTokensWithAlchemyPoolState.mockResolvedValue([token]);
-    mocks.withSameBlockEthUsdQuote.mockImplementation(
-      async ({ snapshot: value }) => ({
-        ...value,
-        ethUsdQuote: {
-          feedAddress: "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
-          roundId: "12",
-          answer: "350000000000",
-          decimals: 8,
-          updatedAt: "1786400000",
-        },
-      }),
-    );
+    mocks.getOnchainDeployment.mockReturnValue({ status: "ready" });
     mocks.readAlchemyExploreModel.mockResolvedValue({
       status: "ready",
       tokens: [token],
@@ -153,182 +181,53 @@ describe("token chart Alchemy API", () => {
       launcherFeesAccruedWei: "0",
       launcherFeesAccruedEth: "0",
     });
+    mocks.readProductionCustomExploreDirectoryV1.mockResolvedValue([]);
     mocks.readDurableExploreModel.mockResolvedValue({
       status: "unavailable",
       reason: "missing",
       detail: "No durable index snapshot exists",
     });
-    mocks.readTokenChartSeries.mockResolvedValue({
-      status: "ready",
-      points: [
-        { blockNumber: "25630004", priceEth: "0.49", priceUsd: "1715" },
-        { blockNumber: "25630005", priceEth: "0.5", priceUsd: "1750" },
-      ],
-      swapCount: 2,
-      volumeWei: "1250000000000000000",
-      volumeEth: "1.25",
-      volumeUsdWad: "4375000000000000000000",
-      fdvEthWei: "500000000000000000000",
-      fdvEth: "500",
-      fdvUsdWad: "1750000000000000000000000",
-      freshness: {
-        history: {
-          status: "current",
-          throughBlock: launchDiscoverySnapshot.blockNumber,
-        },
-        price: {
-          status: "current",
-          asOfBlock: launchDiscoverySnapshot.blockNumber,
-          lagBlocks: "0",
-        },
-        valuation: {
-          status: "current",
-          metric: "fdv",
-          asOfBlock: launchDiscoverySnapshot.blockNumber,
-          lagBlocks: "0",
-        },
-      },
-    });
+    mocks.readBitqueryTokenMarketDataV1.mockResolvedValue(
+      new Map([[token.tokenAddress, tokenMarketData()]]),
+    );
+    mocks.readBitqueryMarketChartV1.mockResolvedValue(chart());
   });
 
-  it("forwards the selected range through Alchemy and returns exact volume fields", async () => {
-    const response = await GET(
-      new NextRequest(
-        `http://localhost/api/explore/token/chart?address=${token.tokenAddress}&range=1h`,
-      ),
-    );
+  it("forwards the exact v4 identity and selected range to Bitquery", async () => {
+    const response = await GET(new NextRequest(
+      `http://localhost/api/explore/token/chart?address=${token.tokenAddress}&range=1h`,
+    ));
+    const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(mocks.readAlchemyExploreModel).toHaveBeenCalledTimes(1);
-    expect(mocks.getAlchemyOnchainDeployment).toHaveBeenCalledTimes(1);
-    expect(mocks.readTokenChartSeries).toHaveBeenCalledWith(
-      expect.objectContaining({
-        deployment: chartDeployment,
-        token,
-        snapshotBlock: 25_630_005n,
-        ethUsdQuote: expect.objectContaining({
-          roundId: "12",
-          answer: "350000000000",
-        }),
-        range: "1h",
-      }),
+    expect(mocks.readBitqueryTokenMarketDataV1).toHaveBeenCalledWith(
+      [identity],
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
-    const body = await response.json();
+    expect(mocks.readBitqueryMarketChartV1).toHaveBeenCalledWith(
+      expect.objectContaining({ identity, range: "1h", signal: expect.any(AbortSignal) }),
+    );
     expect(body).toMatchObject({
-      address: token.tokenAddress,
-      range: "1h",
-      swapCount: 2,
-      volumeWei: "1250000000000000000",
-      volumeEth: "1.25",
-      volumeUsdWad: "4375000000000000000000",
-      fdvEthWei: "500000000000000000000",
-      fdvEth: "500",
-      fdvUsdWad: "1750000000000000000000000",
-      valuationMetric: "fdv",
-      dataQuality: {
-        schemaVersion: "programmable.explore-chart-data-quality.v1",
-        status: "current",
-        asOfBlock: launchDiscoverySnapshot.blockNumber,
-        blockHash: launchDiscoverySnapshot.blockHash,
-        finality: "confirmed",
-        history: {
-          status: "current",
-          throughBlock: launchDiscoverySnapshot.blockNumber,
-        },
-        price: {
-          status: "current",
-          asOfBlock: launchDiscoverySnapshot.blockNumber,
-          lagBlocks: "0",
-        },
-        valuation: {
-          status: "current",
-          metric: "fdv",
-          asOfBlock: launchDiscoverySnapshot.blockNumber,
-          lagBlocks: "0",
-        },
-      },
-    });
-    expect(body).not.toHaveProperty("marketCapEthWei");
-    expect(body).not.toHaveProperty("marketCapEth");
-    expect(body).not.toHaveProperty("marketCapUsdWad");
-    expect(response.headers.get("X-Programmable-Read-Source")).toBe(
-      "rpc",
-    );
-    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBeNull();
-    expect(response.headers.get("Cache-Control")).toBe(
-      "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
-    );
-    expect(response.headers.get("X-Programmable-Valuation-Metric")).toBe(
-      "fdv",
-    );
-  });
-
-  it("reads price history through the verified operational block instead of the stale model snapshot", async () => {
-    const operationalSnapshot = {
-      ...launchDiscoverySnapshot,
-      blockNumber: "25632000",
-      blockHash: `0x${"99".repeat(32)}` as const,
-    };
-    mocks.readVerifiedOperationalMarketSnapshot.mockResolvedValue(
-      operationalSnapshot,
-    );
-    mocks.readTokenChartSeries.mockResolvedValue({
+      schemaVersion: "programmable.market-chart.v1",
+      source: "bitquery",
       status: "ready",
+      address: token.tokenAddress,
+      fdvUsdWad: "2000000000000000000000000",
+      valuationMetric: "fdv",
       points: [
-        { blockNumber: "25631999", priceEth: "0.49", priceUsd: "1715" },
-        { blockNumber: operationalSnapshot.blockNumber, priceEth: "0.5", priceUsd: "1750" },
+        { priceUsd: "1.5", tradeCount: 3 },
+        { priceUsd: "2", tradeCount: 4 },
       ],
-      swapCount: 2,
-      volumeWei: "1",
-      volumeEth: "0.000000000000000001",
-      freshness: {
-        history: {
-          status: "current",
-          throughBlock: operationalSnapshot.blockNumber,
-        },
-        price: {
-          status: "current",
-          asOfBlock: operationalSnapshot.blockNumber,
-          lagBlocks: "0",
-        },
-        valuation: {
-          status: "current",
-          metric: "fdv",
-          asOfBlock: operationalSnapshot.blockNumber,
-          lagBlocks: "0",
-        },
-      },
     });
-
-    const response = await GET(
-      new NextRequest(
-        `http://localhost/api/explore/token/chart?address=${token.tokenAddress}`,
-      ),
+    expect(response.headers.get("X-Programmable-Market-Source")).toBe("bitquery");
+    expect(response.headers.get("X-Programmable-Price-Source")).toBe("bitquery");
+    expect(response.headers.get("Cache-Control")).toBe(
+      "public, max-age=0, s-maxage=2, stale-while-revalidate=5",
     );
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(mocks.withSameBlockEthUsdQuote).toHaveBeenCalledWith(
-      expect.objectContaining({ snapshot: operationalSnapshot }),
-    );
-    expect(mocks.readTokenChartSeries).toHaveBeenCalledWith(
-      expect.objectContaining({ snapshotBlock: 25_632_000n }),
-    );
-    expect(body.dataQuality).toMatchObject({
-      status: "current",
-      asOfBlock: operationalSnapshot.blockNumber,
-      blockHash: operationalSnapshot.blockHash,
-      history: { throughBlock: operationalSnapshot.blockNumber },
-      price: { asOfBlock: operationalSnapshot.blockNumber },
-      valuation: { asOfBlock: operationalSnapshot.blockNumber },
-    });
-    expect(body.snapshotBlock).toBe(operationalSnapshot.blockNumber);
   });
 
-  it("uses a verified durable identity snapshot when the live registry refresh is unavailable", async () => {
-    mocks.readAlchemyExploreModel.mockRejectedValue(
-      new Error("Operational RPCs are unavailable"),
-    );
+  it("uses a verified durable identity when the primary identity source fails", async () => {
+    mocks.readAlchemyExploreModel.mockRejectedValue(new Error("primary unavailable"));
     mocks.readDurableExploreModel.mockResolvedValue({
       status: "ready",
       ageMs: 60_000,
@@ -336,7 +235,7 @@ describe("token chart Alchemy API", () => {
         payload: {
           model: {
             status: "ready",
-            tokens: [{ ...token, grossVolumeWei: "1000000000000000000" }],
+            tokens: [token],
             snapshot,
             launchDiscoverySnapshot,
             creatorClaims: [],
@@ -347,185 +246,155 @@ describe("token chart Alchemy API", () => {
       },
     });
 
-    const response = await GET(
-      new NextRequest(
-        `http://localhost/api/explore/token/chart?address=${token.tokenAddress}`,
-      ),
-    );
-    const body = await response.json();
+    const response = await GET(new NextRequest(
+      `http://localhost/api/explore/token/chart?address=${token.tokenAddress}`,
+    ));
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("X-Programmable-Read-Source")).toBe(
-      "durable+rpc",
-    );
     expect(mocks.readDurableExploreModel).toHaveBeenCalledWith(
-      deployment,
+      expect.anything(),
       Number.MAX_SAFE_INTEGER,
     );
-    expect(mocks.readTokenChartSeries).toHaveBeenCalledWith(
-      expect.objectContaining({
-        token: expect.objectContaining(token),
-        snapshotBlock: BigInt(launchDiscoverySnapshot.blockNumber),
-      }),
-    );
-    expect(
-      mocks.readTokenChartSeries.mock.calls.at(-1)?.[0]?.token,
-    ).not.toHaveProperty("grossVolumeWei");
-    expect(body).toMatchObject({
-      status: "ready",
-      snapshotBlock: launchDiscoverySnapshot.blockNumber,
-      dataQuality: {
-        status: "current",
-        asOfBlock: launchDiscoverySnapshot.blockNumber,
-      },
-    });
+    expect(mocks.readBitqueryMarketChartV1).toHaveBeenCalledTimes(1);
   });
 
-  it("fails closed when neither live nor durable identity is verified", async () => {
-    mocks.readAlchemyExploreModel.mockRejectedValue(
-      new Error("Operational RPCs are unavailable"),
+  it("fails closed without fabricated points when all identity sources fail", async () => {
+    const unknownAddress = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    mocks.readAlchemyExploreModel.mockRejectedValue(new Error("primary unavailable"));
+    mocks.readProductionCustomExploreDirectoryV1.mockRejectedValue(
+      new Error("registry unavailable"),
     );
 
-    const response = await GET(
-      new NextRequest(
-        `http://localhost/api/explore/token/chart?address=${token.tokenAddress}`,
-      ),
-    );
+    const response = await GET(new NextRequest(
+      `http://localhost/api/explore/token/chart?address=${unknownAddress}`,
+    ));
     const body = await response.json();
 
     expect(response.status).toBe(503);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     expect(body).toMatchObject({
+      schemaVersion: "programmable.market-chart-error.v1",
+      source: "bitquery",
       status: "unavailable",
-      dataQuality: {
-        status: "unavailable",
-        reason: "source-unavailable",
-      },
+      reason: "identity-unavailable",
+      error: "Token identity is temporarily unavailable",
+      address: "0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa",
     });
-    expect(mocks.readTokenChartSeries).not.toHaveBeenCalled();
+    expect(body).not.toHaveProperty("identity");
+    expect(body).not.toHaveProperty("points");
+    expect(body).not.toHaveProperty("swapCount");
+    expect(body).not.toHaveProperty("priceUsd", "0");
+    expect(mocks.readBitqueryMarketChartV1).not.toHaveBeenCalled();
   });
 
-  it("fails closed and leaves the client to preserve its last verified chart without operational quorum", async () => {
-    mocks.readVerifiedOperationalMarketSnapshot.mockResolvedValue(null);
-
-    const response = await GET(
-      new NextRequest(
-        `http://localhost/api/explore/token/chart?address=${token.tokenAddress}`,
-      ),
-    );
-    const body = await response.json();
-
-    expect(response.status).toBe(503);
-    expect(response.headers.get("Cache-Control")).toBe("no-store");
-    expect(body).toMatchObject({
-      status: "unavailable",
-      dataQuality: {
+  it("returns a calm waiting state before the first swap", async () => {
+    mocks.readBitqueryMarketChartV1.mockResolvedValue(chart({
+      status: "waiting-for-first-trade",
+      points: [],
+      swapCount: 0,
+      volumeUsdWad: undefined,
+      valuation: {
         status: "unavailable",
-        reason: "source-unavailable",
+        reason: "waiting-for-first-trade",
       },
-    });
-    expect(body).not.toHaveProperty("snapshotBlock");
-    expect(mocks.withSameBlockEthUsdQuote).not.toHaveBeenCalled();
-    expect(mocks.enrichTokensWithAlchemyPoolState).not.toHaveBeenCalled();
-    expect(mocks.readTokenChartSeries).not.toHaveBeenCalled();
-  });
+      asOfTime: undefined,
+    }));
 
-  it("returns partial freshness without caching an older price as current", async () => {
-    mocks.readTokenChartSeries.mockResolvedValue({
-      status: "partial",
-      points: [{ blockNumber: "25630000", priceEth: "0.5" }],
-      swapCount: 1,
-      volumeWei: "1",
-      volumeEth: "0.000000000000000001",
-      fdvEthWei: "500000000000000000000",
-      freshness: {
-        history: {
-          status: "current",
-          throughBlock: launchDiscoverySnapshot.blockNumber,
-        },
-        price: {
-          status: "stale",
-          asOfBlock: snapshot.blockNumber,
-          lagBlocks: "5",
-        },
-        valuation: {
-          status: "stale",
-          metric: "fdv",
-          asOfBlock: snapshot.blockNumber,
-          lagBlocks: "5",
-        },
-      },
-    });
-
-    const response = await GET(
-      new NextRequest(
-        `http://localhost/api/explore/token/chart?address=${token.tokenAddress}`,
-      ),
-    );
+    const response = await GET(new NextRequest(
+      `http://localhost/api/explore/token/chart?address=${token.tokenAddress}`,
+    ));
     const body = await response.json();
 
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
-    expect(response.headers.get("X-Programmable-Data-Quality")).toBe(
-      "partial",
-    );
     expect(body).toMatchObject({
-      status: "partial",
-      points: [{ blockNumber: "25630000", priceEth: "0.5" }],
-      dataQuality: {
-        status: "partial",
-        price: {
-          status: "stale",
-          asOfBlock: snapshot.blockNumber,
-          lagBlocks: "5",
-        },
-      },
+      status: "waiting-for-first-trade",
+      points: [],
+      swapCount: 0,
+      valuation: { reason: "waiting-for-first-trade" },
+    });
+    expect(body).not.toHaveProperty("fdvUsdWad");
+    expect(response.headers.get("X-Programmable-Price-Source")).toBeNull();
+  });
+
+  it("returns typed unavailable and lets the client preserve its Bitquery LKG", async () => {
+    mocks.readBitqueryMarketChartV1.mockResolvedValue(chart({
+      status: "unavailable",
+      points: [],
+      swapCount: 0,
+      volumeUsdWad: undefined,
+      valuation: { status: "unavailable", reason: "source-unavailable" },
+      asOfTime: undefined,
+    }));
+
+    const response = await GET(new NextRequest(
+      `http://localhost/api/explore/token/chart?address=${token.tokenAddress}`,
+    ));
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(response.headers.get("Retry-After")).toBe("5");
+    expect(body).toMatchObject({
+      status: "unavailable",
+      source: "bitquery",
+      points: [],
+      error: "Price history is temporarily unavailable",
     });
   });
 
-  it.each(["deployment", "model"])(
-    "returns unavailable without fabricated zero series when %s is not ready",
-    async (unavailable) => {
-      if (unavailable === "deployment") {
-        mocks.getAlchemyOnchainDeployment.mockReturnValue({
-          status: "not-deployed",
-        });
-      } else {
-        mocks.readAlchemyExploreModel.mockResolvedValue({
-          status: "not-deployed",
-          tokens: [],
-          snapshot: null,
-          creatorClaims: [],
-          launcherFeesAccruedWei: "0",
-          launcherFeesAccruedEth: "0",
-        });
-      }
-
-      const response = await GET(
-        new NextRequest(
-          `http://localhost/api/explore/token/chart?address=${token.tokenAddress}`,
-        ),
-      );
-      const body = await response.json();
-
-      expect(response.status).toBe(503);
-      expect(response.headers.get("Cache-Control")).toBe("no-store");
-      expect(body).toMatchObject({
-        status: "unavailable",
-        error: "Onchain chart data is temporarily unavailable",
-      });
-      expect(body).not.toHaveProperty("points");
-      expect(body).not.toHaveProperty("swapCount");
-      expect(body).not.toHaveProperty("volumeWei");
-      expect(body).not.toHaveProperty("volumeEth");
-      expect(mocks.readTokenChartSeries).not.toHaveBeenCalled();
-    },
-  );
-
-  it("fails closed for Custom Graph before enrichment or chart reads", async () => {
+  it("supports a Router-stamped Custom v4 pool", async () => {
+    const customIdentity = {
+      chainId: "1",
+      tokenAddress: customGraphToken.tokenAddress.toLowerCase() as `0x${string}`,
+      poolId: customGraphToken.poolId,
+      protocol: "uniswap_v4",
+    } as const satisfies MarketDataIdentityV1;
     mocks.readAlchemyExploreModel.mockResolvedValue({
       status: "ready",
-      tokens: [{ ...token, launchModel: "custom-graph" }],
+      tokens: [customGraphToken],
+      snapshot,
+      launchDiscoverySnapshot,
+      creatorClaims: [],
+      launcherFeesAccruedWei: "0",
+      launcherFeesAccruedEth: "0",
+    });
+    mocks.readBitqueryTokenMarketDataV1.mockResolvedValue(
+      new Map([[customIdentity.tokenAddress, tokenMarketData(customIdentity)]]),
+    );
+    mocks.readBitqueryMarketChartV1.mockResolvedValue(
+      chart({}, customIdentity),
+    );
+
+    const response = await GET(new NextRequest(
+      `http://localhost/api/explore/token/chart?address=${customGraphToken.tokenAddress}`,
+    ));
+
+    expect(response.status).toBe(200);
+    expect(mocks.readBitqueryMarketChartV1).toHaveBeenCalledWith(
+      expect.objectContaining({ identity: customIdentity }),
+    );
+  });
+
+  it.each([
+    `address=${token.tokenAddress}&unused=random`,
+    `address=${token.tokenAddress}&address=0x2222222222222222222222222222222222222222`,
+    `address=${token.tokenAddress}&range=1h&range=1d`,
+    `address=${token.tokenAddress}&range=invalid`,
+  ])("rejects non-canonical query shapes before market reads: %s", async (query) => {
+    const response = await GET(
+      new NextRequest(`http://localhost/api/explore/token/chart?${query}`),
+    );
+
+    expect(response.status).toBe(400);
+    expect(mocks.readAlchemyExploreModel).not.toHaveBeenCalled();
+    expect(mocks.readBitqueryMarketChartV1).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 only when both identity sources are current", async () => {
+    mocks.readAlchemyExploreModel.mockResolvedValue({
+      status: "ready",
+      tokens: [],
       snapshot,
       launchDiscoverySnapshot,
       creatorClaims: [],
@@ -533,67 +402,12 @@ describe("token chart Alchemy API", () => {
       launcherFeesAccruedEth: "0",
     });
 
-    const response = await GET(
-      new NextRequest(
-        `http://localhost/api/explore/token/chart?address=${token.tokenAddress}`,
-      ),
-    );
-    const body = await response.json();
+    const response = await GET(new NextRequest(
+      `http://localhost/api/explore/token/chart?address=${token.tokenAddress}`,
+    ));
 
-    expect(response.status).toBe(503);
-    expect(response.headers.get("Cache-Control")).toBe("no-store");
-    expect(response.headers.get("Retry-After")).toBeNull();
-    expect(body).toMatchObject({
-      status: "unavailable",
-      dataQuality: {
-        status: "unavailable",
-        reason: "unsupported-pool-orientation",
-      },
-    });
-    expect(body).not.toHaveProperty("points");
-    expect(mocks.enrichTokensWithAlchemyPoolState).not.toHaveBeenCalled();
-    expect(mocks.readTokenChartSeries).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    `address=${token.tokenAddress}&unused=random`,
-    `address=${token.tokenAddress}&address=0x2222222222222222222222222222222222222222`,
-    `address=${token.tokenAddress}&range=1h&range=1d`,
-  ])("rejects non-canonical query shapes before the Alchemy read: %s", async (query) => {
-    const response = await GET(
-      new NextRequest(`http://localhost/api/explore/token/chart?${query}`),
-    );
-
-    expect(response.status).toBe(400);
-    expect(mocks.readAlchemyExploreModel).not.toHaveBeenCalled();
-    expect(mocks.getAlchemyOnchainDeployment).not.toHaveBeenCalled();
-  });
-
-  it("reports read-model conflicts as integrity-unavailable without zero data", async () => {
-    mocks.readTokenChartSeries.mockRejectedValue(
-      new mocks.TokenChartIntegrityError("invalid-token-decimals"),
-    );
-
-    const response = await GET(
-      new NextRequest(
-        `http://localhost/api/explore/token/chart?address=${token.tokenAddress}`,
-      ),
-    );
-    const body = await response.json();
-
-    expect(response.status).toBe(503);
-    expect(response.headers.get("Cache-Control")).toBe("no-store");
-    expect(response.headers.get("Retry-After")).toBeNull();
-    expect(body).toMatchObject({
-      status: "unavailable",
-      dataQuality: {
-        schemaVersion: "programmable.explore-chart-data-quality.v1",
-        status: "unavailable",
-        reason: "integrity",
-      },
-    });
-    expect(body).not.toHaveProperty("points");
-    expect(body).not.toHaveProperty("volumeWei");
-    expect(body).not.toHaveProperty("volumeEth");
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({ error: "Token not found" });
+    expect(mocks.readBitqueryMarketChartV1).not.toHaveBeenCalled();
   });
 });

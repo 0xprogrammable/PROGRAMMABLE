@@ -15,6 +15,10 @@ const ROOT = process.cwd();
 const DEPLOYMENT_ID = "dpl_aaaaaaaaaaaaaaaaaaaaaaaa";
 const GIT_HEAD = "b".repeat(40);
 const PROJECT_ID = "prj_programmable_test";
+const GOLDEN_TOKEN_ADDRESS =
+  "0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce";
+const GOLDEN_POOL_ID =
+  "0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229";
 
 const AUTHENTICATED_ROUTE = `
   import { timingSafeEqual } from "node:crypto";
@@ -277,11 +281,10 @@ describe("read-model operations source contract", () => {
     );
   });
 
-  it("fails closed when the protected Alchemy staged smoke bypass is missing", () => {
+  it("fails closed when the protected Bitquery staged smoke bypass is missing", () => {
     const workflowPath = ".github/workflows/deploy-production.yml";
-    const alchemyStep =
-      "      - name: Smoke staged Alchemy Explore APIs\n" +
-      "        if: steps.read-model-policy.outputs.mode == 'alchemy-only'\n" +
+    const bitqueryStep =
+      "      - name: Smoke staged Bitquery market APIs\n" +
       "        env:\n" +
       "          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}\n" +
       "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n";
@@ -289,8 +292,8 @@ describe("read-model operations source contract", () => {
       resolve(ROOT, workflowPath),
       "utf8",
     ).replace(
-      alchemyStep,
-      alchemyStep.replace(
+      bitqueryStep,
+      bitqueryStep.replace(
         "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n",
         "",
       ),
@@ -306,34 +309,54 @@ describe("read-model operations source contract", () => {
       expectedSha256Overrides: fixtureDigests(),
     });
     expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-protected-alchemy-stage-smoke",
+      "ops-protected-bitquery-stage-smoke",
     );
   });
 
-  it("rejects an Alchemy staged smoke bypass relocated to another workflow step", () => {
+  it("fails closed when the Bitquery staged smoke stops proving current FDV order", () => {
+    const workflowPath = ".github/workflows/deploy-production.yml";
+    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
+    const unsafeWorkflow = workflow.replace(
+      '"staged Bitquery Highest FDV is not monotonically descending"',
+      '"staged Bitquery order was not checked"',
+    );
+    expect(unsafeWorkflow).not.toBe(workflow);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [workflowPath]: unsafeWorkflow,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-bitquery-stage-smoke",
+    );
+  });
+
+  it("rejects a Bitquery staged smoke bypass relocated to another workflow step", () => {
     const workflowPath = ".github/workflows/deploy-production.yml";
     const secretLine =
       "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n";
     const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
-    const alchemyStepStart = workflow.indexOf(
-      "      - name: Smoke staged Alchemy Explore APIs",
+    const bitqueryStepStart = workflow.indexOf(
+      "      - name: Smoke staged Bitquery market APIs",
     );
-    const alchemyStepEnd = workflow.indexOf(
-      "      - name: Record Alchemy-only read path",
+    const bitqueryStepEnd = workflow.indexOf(
+      "      - name: Record registry identity and Bitquery market path",
     );
-    expect(alchemyStepStart).toBeGreaterThanOrEqual(0);
-    expect(alchemyStepEnd).toBeGreaterThan(alchemyStepStart);
-    const alchemyStep = workflow.slice(alchemyStepStart, alchemyStepEnd);
-    expect(alchemyStep).toContain(secretLine);
-    const unsafeAlchemyStep = alchemyStep.replace(secretLine, "");
+    expect(bitqueryStepStart).toBeGreaterThanOrEqual(0);
+    expect(bitqueryStepEnd).toBeGreaterThan(bitqueryStepStart);
+    const bitqueryStep = workflow.slice(bitqueryStepStart, bitqueryStepEnd);
+    expect(bitqueryStep).toContain(secretLine);
+    const unsafeBitqueryStep = bitqueryStep.replace(secretLine, "");
     const unsafeWorkflow =
-      workflow.slice(0, alchemyStepStart) +
-      unsafeAlchemyStep +
+      workflow.slice(0, bitqueryStepStart) +
+      unsafeBitqueryStep +
       workflow
-        .slice(alchemyStepEnd)
+        .slice(bitqueryStepEnd)
         .replace(
-          "      - name: Record Alchemy-only read path\n",
-          `      - name: Record Alchemy-only read path\n        env:\n${secretLine}`,
+          "      - name: Record registry identity and Bitquery market path\n",
+          `      - name: Record registry identity and Bitquery market path\n        env:\n${secretLine}`,
         );
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: {
@@ -343,7 +366,7 @@ describe("read-model operations source contract", () => {
       expectedSha256Overrides: fixtureDigests(),
     });
     expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-protected-alchemy-stage-smoke",
+      "ops-protected-bitquery-stage-smoke",
     );
   });
 
@@ -378,7 +401,7 @@ describe("read-model operations source contract", () => {
     );
   });
 
-  it("fails closed when the Alchemy staged smoke drops the bypass header", () => {
+  it("fails closed when the Bitquery staged smoke drops the bypass header", () => {
     const workflowPath = ".github/workflows/deploy-production.yml";
     const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
     const unsafeWorkflow = workflow.replace(
@@ -394,7 +417,7 @@ describe("read-model operations source contract", () => {
       expectedSha256Overrides: fixtureDigests(),
     });
     expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-      "ops-protected-alchemy-stage-smoke",
+      "ops-protected-bitquery-stage-smoke",
     );
   });
 
@@ -613,6 +636,13 @@ describe("read-model operations source contract", () => {
 function publicFetch(healthStatus = "healthy") {
   return async (input: URL | RequestInfo) => {
     const url = new URL(String(input));
+    const marketAsOf = new Date(Date.now() - 60 * 60_000).toISOString();
+    const earlierMarketTime = new Date(Date.now() - 2 * 60 * 60_000).toISOString();
+    const bitqueryHeaders = {
+      "X-Programmable-Market-As-Of": marketAsOf,
+      "X-Programmable-Market-Source": "bitquery",
+      "X-Programmable-Read-Source": "operational+durable+postgres",
+    };
     if (url.hostname === "api.vercel.com") {
       return Response.json({
         id: DEPLOYMENT_ID,
@@ -637,10 +667,91 @@ function publicFetch(healthStatus = "healthy") {
       );
     }
     if (url.pathname === "/api/explore") {
-      return Response.json({ status: "ready", tokens: [{}] });
+      return Response.json({
+        status: "ready",
+        tokens: [{
+          tokenAddress: GOLDEN_TOKEN_ADDRESS,
+          valuation: {
+            status: "available",
+            metric: "fdv",
+            supplyBasis: "total",
+            currency: "usd",
+            source: "bitquery",
+            freshness: "stale",
+            valueWad: "250000000000000000000000",
+            asOfTime: marketAsOf,
+          },
+        }],
+        dataQuality: { valuation: { asOfTime: marketAsOf } },
+      }, { headers: bitqueryHeaders });
     }
-    if (url.pathname === "/api/indexers/v1/token-list") {
-      return Response.json({ tokens: [{}] });
+    if (url.pathname === "/api/explore/token") {
+      return Response.json({
+        status: "ready",
+        token: {
+          tokenAddress: GOLDEN_TOKEN_ADDRESS,
+          valuation: {
+            status: "available",
+            metric: "fdv",
+            supplyBasis: "total",
+            currency: "usd",
+            source: "bitquery",
+            freshness: "stale",
+            valueWad: "250000000000000000000000",
+            asOfTime: marketAsOf,
+          },
+          marketData: {
+            schemaVersion: "programmable.market-data.v1",
+            source: "bitquery",
+            status: "stale",
+            primaryPoolId: GOLDEN_POOL_ID,
+            pools: [{
+              identity: { poolId: GOLDEN_POOL_ID },
+              status: "stale",
+            }],
+          },
+        },
+      }, {
+        headers: {
+          "X-Programmable-Market-Source": "bitquery",
+          "X-Programmable-Read-Source": "operational+durable+postgres",
+        },
+      });
+    }
+    if (url.pathname === "/api/explore/token/chart") {
+      return Response.json({
+        schemaVersion: "programmable.market-chart.v1",
+        source: "bitquery",
+        status: "ready",
+        address: GOLDEN_TOKEN_ADDRESS,
+        identity: { poolId: GOLDEN_POOL_ID },
+        points: [
+          {
+            blockNumber: "25730000",
+            time: earlierMarketTime,
+            priceUsd: "0.2",
+          },
+          {
+            blockNumber: "25731000",
+            time: marketAsOf,
+            priceUsd: "0.25",
+          },
+        ],
+        valuation: {
+          status: "available",
+          metric: "fdv",
+          supplyBasis: "total",
+          freshness: "stale",
+          asOfTime: marketAsOf,
+        },
+        asOfTime: marketAsOf,
+      }, {
+        headers: {
+          "X-Programmable-Market-As-Of": marketAsOf,
+          "X-Programmable-Market-Source": "bitquery",
+          "X-Programmable-Price-Source": "bitquery",
+        },
+      });
     }
     return Response.json({ error: "not found" }, { status: 404 });
   };
@@ -671,7 +782,8 @@ describe("post-promotion route verification", () => {
       "production-root",
       "production-health",
       "production-explore",
-      "production-token-list",
+      "production-bitquery-detail",
+      "production-bitquery-chart",
     ]);
   });
 
@@ -713,6 +825,42 @@ describe("post-promotion route verification", () => {
         return Response.json({ status: "ready", tokens: [] });
       }
       return base(input);
+    };
+    const result = await verifyPostPromotion(postPromotionInput(fetchImpl));
+    expect(result.ok).toBe(false);
+    expect(result.failures).toContainEqual(
+      expect.objectContaining({ id: "production-explore" }),
+    );
+  });
+
+  it("rejects missing public Bitquery provenance", async () => {
+    const base = publicFetch();
+    const fetchImpl = async (input: URL | RequestInfo) => {
+      const url = new URL(String(input));
+      const response = await base(input);
+      if (url.pathname !== "/api/explore/token/chart") return response;
+      const body = await response.json();
+      return Response.json(body, {
+        headers: { "X-Programmable-Market-Source": "bitquery" },
+      });
+    };
+    const result = await verifyPostPromotion(postPromotionInput(fetchImpl));
+    expect(result.ok).toBe(false);
+    expect(result.failures).toContainEqual(
+      expect.objectContaining({ id: "production-bitquery-chart" }),
+    );
+  });
+
+  it("rejects an old FDV mislabeled as current", async () => {
+    const base = publicFetch();
+    const fetchImpl = async (input: URL | RequestInfo) => {
+      const url = new URL(String(input));
+      const response = await base(input);
+      if (url.pathname !== "/api/explore") return response;
+      const body = await response.json();
+      body.tokens[0].valuation.freshness = "current";
+      body.tokens[0].fdvUsdWad = body.tokens[0].valuation.valueWad;
+      return Response.json(body, { headers: response.headers });
     };
     const result = await verifyPostPromotion(postPromotionInput(fetchImpl));
     expect(result.ok).toBe(false);
