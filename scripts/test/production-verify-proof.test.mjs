@@ -8,6 +8,7 @@ import {
   PRODUCTION_VERIFY_PROOF_MAX_AGE_MS,
   REQUIRED_PRODUCTION_VERIFY_CHECKS,
   VERIFY_PROOF_JOB_NAME,
+  VERIFY_SCOPE_JOB_NAME,
   VERIFY_WORKFLOW_PATH,
   buildProductionVerifyProofV1,
   encodeProductionVerifyProofV1,
@@ -49,6 +50,22 @@ function validProofInput() {
 
 function validApiFixtures() {
   const jobs = [
+    {
+      id: 89_999,
+      run_id: RUN_ID,
+      run_attempt: RUN_ATTEMPT,
+      head_sha: COMMIT,
+      name: VERIFY_SCOPE_JOB_NAME,
+      status: "completed",
+      conclusion: "success",
+      started_at: "2026-08-11T17:53:35Z",
+      completed_at: "2026-08-11T17:53:36Z",
+      runner_id: 999_999,
+      runner_name: "GitHub Actions 999999",
+      runner_group_id: 0,
+      runner_group_name: "GitHub Actions",
+      labels: ["ubuntu-latest"],
+    },
     ...REQUIRED_PRODUCTION_VERIFY_CHECKS.map(({ name }, index) => ({
       id: 90_000 + index,
       run_id: RUN_ID,
