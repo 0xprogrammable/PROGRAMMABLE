@@ -55,6 +55,7 @@ anvil \
   --hardfork osaka \
   --enable-tx-gas-limit \
   --steps-tracing \
+  --accounts 0 \
   --host 127.0.0.1 \
   --port "$anvil_port" \
   >"$temp_dir/anvil.log" 2>&1 &
