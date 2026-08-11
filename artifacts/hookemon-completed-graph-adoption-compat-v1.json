@@ -54,7 +54,7 @@
     {
       "name": "ProgrammableCompletedGraphAdoptionCompatCodecV1",
       "source": "src/hookemon/ProgrammableCompletedGraphAdoptionCompatCodecV1.sol",
-      "sourceSha256": "bbe686eea049df4606357516270f9b4f4c228b26d01eb030e8473fba4b95edf3",
+      "sourceSha256": "7e65df29012ddca1d6029a79670a58f9bfa970ddd4fd988b253e52c35736372c",
       "abiSha256": "52176cb85a9b45f3f61703eb82e4c16a7d2e3d98d52afafed9b85de74fdb6803",
       "runtimeBytes": 14684,
       "initcodeBytes": 14712,
@@ -68,7 +68,7 @@
     {
       "name": "ProgrammableCompletedGraphAdoptionValidatorV1",
       "source": "src/hookemon/ProgrammableCompletedGraphAdoptionValidatorV1.sol",
-      "sourceSha256": "23f2a91e78448f1e5a398ab128708f64f48c510a692508d6ff7a3c7f43b3b9e6",
+      "sourceSha256": "520edfefe273151d354eb20f43aaf1f70b3afd5eac865c4c606b5584822632e4",
       "abiSha256": "35f69ec571e756712d187400b333ede249c0c78ed1950c3ca2ca2484defb86c5",
       "runtimeBytes": 20506,
       "initcodeBytes": 21207,
@@ -82,7 +82,7 @@
     {
       "name": "ProgrammableCompletedGraphAdoptionGrantRegistryV1",
       "source": "src/hookemon/ProgrammableCompletedGraphAdoptionGrantRegistryV1.sol",
-      "sourceSha256": "26a32dbf539ab5fbacd6a2371dcc1152878a1ba9006a3dcb6e5c0f436fe6d107",
+      "sourceSha256": "9197c7dd7b482525c5755b453bc6d99c673291ee44a5ef67ea70bf6faf6fc330",
       "abiSha256": "a60f3f4e10c9b49413108785de4278b244e5687027d95db45dc8e549d6906d5c",
       "runtimeBytes": 23917,
       "runtimeMarginToEip170Bytes": 659,
@@ -104,7 +104,7 @@
       "name": "ProgrammableCompletedGraphAdoptionPreflightV1",
       "source": "src/hookemon/ProgrammableCompletedGraphAdoptionPreflightV1.sol",
       "role": "IMMUTABLE_SIDE_EFFECT_FREE_PREFLIGHT_COMPANION",
-      "sourceSha256": "94b53667478b64e5c00702a8846ffe2363d094093288d2c4223978cd06770e19",
+      "sourceSha256": "dd3292e44d01eaeacea74fb7b686d046516576d494727d5cc253ee3ef038ec9a",
       "abiSha256": "e1869e3ad641aded7dd290d53e61e447ea27a382f163e2af2fcbab455ef4b9d4",
       "artifact": "out-hookemon-compat/ProgrammableCompletedGraphAdoptionPreflightV1.sol/ProgrammableCompletedGraphAdoptionPreflightV1.json",
       "runtimeBytes": 8328,

@@ -5,7 +5,7 @@ import {
     IProgrammableCompletedGraphAdoptionCompatV1,
     IProgrammableCompletedGraphAdoptionPreflightV1
 } from "./IProgrammableCompletedGraphAdoptionCompatV1.sol";
-import {ProgrammableCompletedGraphAdoptionCompatCodecV1} from "./ProgrammableCompletedGraphAdoptionCompatCodecV1.sol";
+import { ProgrammableCompletedGraphAdoptionCompatCodecV1 } from "./ProgrammableCompletedGraphAdoptionCompatCodecV1.sol";
 
 /// @notice Immutable side-effect-free preflight projection for the completed-graph ADOPT Registry.
 /// @dev It reads only the exact typed Registry state source, derives canonical hashes with the pinned Codec and has

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {IProgrammableCompletedGraphAdoptionCompatV1} from "./IProgrammableCompletedGraphAdoptionCompatV1.sol";
-import {ProgrammableCompletedGraphAdoptionCompatCodecV1} from "./ProgrammableCompletedGraphAdoptionCompatCodecV1.sol";
-import {ProgrammableCompletedGraphAdoptionPreflightV1} from "./ProgrammableCompletedGraphAdoptionPreflightV1.sol";
-import {ProgrammableCompletedGraphAdoptionValidatorV1} from "./ProgrammableCompletedGraphAdoptionValidatorV1.sol";
+import { IProgrammableCompletedGraphAdoptionCompatV1 } from "./IProgrammableCompletedGraphAdoptionCompatV1.sol";
+import { ProgrammableCompletedGraphAdoptionCompatCodecV1 } from "./ProgrammableCompletedGraphAdoptionCompatCodecV1.sol";
+import { ProgrammableCompletedGraphAdoptionPreflightV1 } from "./ProgrammableCompletedGraphAdoptionPreflightV1.sol";
+import { ProgrammableCompletedGraphAdoptionValidatorV1 } from "./ProgrammableCompletedGraphAdoptionValidatorV1.sol";
 
 /// @dev Minimal local ERC-1271 surface. The implementation is codehash-pinned by the Registry.
 interface IERC1271CompatV1 {

@@ -5,7 +5,7 @@ import {
     IProgrammableCompletedGraphAdoptionCompatV1,
     IProgrammableCompletedGraphAdoptionStateVerifierV1
 } from "./IProgrammableCompletedGraphAdoptionCompatV1.sol";
-import {ProgrammableCompletedGraphAdoptionCompatCodecV1} from "./ProgrammableCompletedGraphAdoptionCompatCodecV1.sol";
+import { ProgrammableCompletedGraphAdoptionCompatCodecV1 } from "./ProgrammableCompletedGraphAdoptionCompatCodecV1.sol";
 
 /// @notice Stateless, codehash-pinnable validator for the closed completed-graph ADOPT ABI.
 /// @dev It has no authority, storage mutations, deployment, target, selector, opaque action, or value surface.

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {IProgrammableCompletedGraphAdoptionCompatV1} from "./IProgrammableCompletedGraphAdoptionCompatV1.sol";
+import { IProgrammableCompletedGraphAdoptionCompatV1 } from "./IProgrammableCompletedGraphAdoptionCompatV1.sol";
 
 /// @notice Pure canonical hash codec for the source-neutral adoption compatibility package.
 /// @dev These hashes are deliberately not EIP-712 domain digests. The Registry applies its own EIP-712 domain to
