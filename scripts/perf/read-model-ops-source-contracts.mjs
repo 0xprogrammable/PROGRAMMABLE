@@ -1338,26 +1338,76 @@ export function evaluateReadModelOperationsSourceContracts(
       ),
     "the indexed staged capture receives the protected deployment bypass only inside its exact step",
   );
+  const exactVerifyProofGateStart = deployWorkflow.indexOf("  release-gate:");
+  const exactVerifyProofGateEnd = deployWorkflow.indexOf("  deploy:");
+  const exactVerifyProofGate =
+    exactVerifyProofGateStart >= 0 && exactVerifyProofGateEnd > exactVerifyProofGateStart
+      ? deployWorkflow.slice(exactVerifyProofGateStart, exactVerifyProofGateEnd)
+      : "";
   check(
     "ops-exact-release-dependency",
     deployWorkflow.includes("needs: release-gate") &&
       deployWorkflow.includes("needs.release-gate.outputs.verified_sha") &&
-      deployWorkflow.includes("pnpm --dir indexer audit --prod --audit-level high") &&
-      deployWorkflow.includes("npm run contracts:verify:ci") &&
-      deployWorkflow.includes("npm run contracts:official-deployments") &&
-      deployWorkflow.includes("npm run contracts:slither") &&
-      deployWorkflow.includes("npm run audit:prod") &&
+      exactVerifyProofGate.includes(
+        "node scripts/production-verify-proof.mjs resolve",
+      ) &&
+      exactVerifyProofGate.includes(
+        "artifact-ids: ${{ steps.resolve-proof.outputs.artifact_id }}",
+      ) &&
+      exactVerifyProofGate.includes(
+        "run-id: ${{ steps.resolve-proof.outputs.verify_run_id }}",
+      ) &&
+      exactVerifyProofGate.includes("attestations: read") &&
+      exactVerifyProofGate.includes("digest-mismatch: error") &&
+      exactVerifyProofGate.includes("gh attestation verify") &&
+      exactVerifyProofGate.includes(
+        '--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/verify.yml"',
+      ) &&
+      exactVerifyProofGate.includes('--source-ref "$GITHUB_REF"') &&
+      exactVerifyProofGate.includes('--source-digest "$GITHUB_SHA"') &&
+      exactVerifyProofGate.includes('--signer-digest "$GITHUB_SHA"') &&
+      exactVerifyProofGate.includes("--deny-self-hosted-runners") &&
+      exactVerifyProofGate.includes(
+        "node scripts/production-verify-proof.mjs verify",
+      ) &&
+      deployWorkflow.includes(
+        "name: Revalidate exact Verify proof after production approval",
+      ) &&
+      deployWorkflow.includes(
+        'test "$REVALIDATED_ARTIFACT_ID" = "$EXPECTED_ARTIFACT_ID"',
+      ) &&
+      deployWorkflow.includes(
+        'test "$REVALIDATED_ARTIFACT_DIGEST" = "$EXPECTED_ARTIFACT_DIGEST"',
+      ) &&
+      !exactVerifyProofGate.includes("npm ci") &&
+      !exactVerifyProofGate.includes("pnpm --dir indexer") &&
+      !exactVerifyProofGate.includes("npm run verify") &&
+      !exactVerifyProofGate.includes("npm run contracts:verify:ci") &&
       deployWorkflow.includes(
         '--meta githubCommitSha="$GITHUB_SHA" --env VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA"',
       ) &&
-      deployWorkflow.indexOf("npm run perf:read-model:ops-gate") <
-        deployWorkflow.indexOf("vercel build --prod"),
-    "production staging reproduces the complete exact-commit release gate",
+      deployWorkflow.indexOf("Verify Sigstore provenance and exact proof contents") <
+        deployWorkflow.indexOf("vercel build --prod") &&
+      deployWorkflow.indexOf(
+        "Confirm consumed Verify proof identity after production approval",
+      ) < deployWorkflow.indexOf("Pull production configuration"),
+    "production staging consumes a fresh exact-SHA full Verify attestation before build",
   );
   check(
     "ops-verify-workflow-binding",
-    verifyWorkflow.includes("npm run perf:read-model:ops-gate"),
-    "pull requests and production pushes run the same operations contract",
+    verifyWorkflow.includes("npm run perf:read-model:ops-gate") &&
+      verifyWorkflow.includes("name: Bind full production Verify proof") &&
+      verifyWorkflow.includes("needs:\n      - secret-scan") &&
+      verifyWorkflow.includes(
+        "PRODUCTION_VERIFY_CONTRACTS_RESULT: ${{ needs.contracts.result }}",
+      ) &&
+      verifyWorkflow.includes(
+        "uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26",
+      ) &&
+      verifyWorkflow.includes(
+        "production-verify-proof-${{ github.run_id }}-${{ github.run_attempt }}",
+      ),
+    "production pushes attest the same complete operations contract consumed by staging",
   );
   check(
     "ops-post-promotion-binding",

@@ -1,9 +1,6 @@
 name: Stage Production Candidate
 
 on:
-  push:
-    branches:
-      - production
   workflow_dispatch:
     inputs:
       custom_launch_public_enablement:
@@ -29,7 +26,6 @@ on:
 
 permissions:
   contents: read
-  deployments: write
 
 concurrency:
   group: programmable-production
@@ -37,86 +33,111 @@ concurrency:
 
 jobs:
   release-gate:
-    name: Verify exact production commit
+    name: Consume exact full production Verify proof
     if: >-
       github.repository == '0xprogrammable/programmable' &&
+      github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/production'
+    permissions:
+      actions: read
+      attestations: read
+      contents: read
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 10
     outputs:
-      verified_sha: ${{ steps.exact-head.outputs.sha }}
+      verified_sha: ${{ steps.verify-proof.outputs.verified_sha }}
+      verified_tree: ${{ steps.verify-proof.outputs.verified_tree }}
+      verify_run_id: ${{ steps.verify-proof.outputs.verify_run_id }}
+      verify_run_attempt: ${{ steps.verify-proof.outputs.verify_run_attempt }}
+      artifact_id: ${{ steps.resolve-proof.outputs.artifact_id }}
+      proof_sha256: ${{ steps.verify-proof.outputs.proof_sha256 }}
+      artifact_digest: ${{ steps.verify-proof.outputs.artifact_digest }}
 
     steps:
       - name: Check out exact production commit
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 0
           persist-credentials: false
-
-      - name: Scan exact production change history
-        env:
-          PROGRAMMABLE_GITLEAKS_BASE_SHA: ${{ github.event.before }}
-        run: bash scripts/security/run-gitleaks-ci.sh
+          lfs: false
+          submodules: false
 
       - name: Set up Node.js
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24.14.0
-          cache: npm
 
-      - name: Set up Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      - name: Resolve latest exact full production Verify proof
+        id: resolve-proof
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          node scripts/production-verify-proof.mjs resolve
+          --repository-root "$GITHUB_WORKSPACE"
+          --github-output "$GITHUB_OUTPUT"
+
+      - name: Download exact immutable production Verify proof
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          python-version: "3.13"
+          artifact-ids: ${{ steps.resolve-proof.outputs.artifact_id }}
+          path: ${{ runner.temp }}/production-verify-proof
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.resolve-proof.outputs.verify_run_id }}
+          digest-mismatch: error
 
-      - name: Set up Foundry
-        uses: foundry-rs/foundry-toolchain@b00af27efadbc7b4ca8b82abbd903b17cc874d2a # v1
-        with:
-          version: v1.7.1
-
-      - name: Install dependencies
+      - name: Verify Sigstore provenance and exact proof contents
+        id: verify-proof
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_DIGEST: ${{ steps.resolve-proof.outputs.artifact_digest }}
+          VERIFY_RUN_ID: ${{ steps.resolve-proof.outputs.verify_run_id }}
+          VERIFY_RUN_ATTEMPT: ${{ steps.resolve-proof.outputs.verify_run_attempt }}
         run: |
-          npm ci
-          pipx install slither-analyzer==0.11.5
+          set -euo pipefail
+          proof="$RUNNER_TEMP/production-verify-proof/production-verify-proof.json"
+          attestation_result="$RUNNER_TEMP/production-verify-attestation.json"
+          test -f "$proof"
+          gh attestation verify "$proof" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/verify.yml" \
+            --cert-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/verify.yml@$GITHUB_REF" \
+            --source-ref "$GITHUB_REF" \
+            --source-digest "$GITHUB_SHA" \
+            --signer-digest "$GITHUB_SHA" \
+            --deny-self-hosted-runners \
+            --format json > "$attestation_result"
+          ATTESTATION_RESULT="$attestation_result" node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const result = JSON.parse(readFileSync(process.env.ATTESTATION_RESULT, "utf8"));
+            if (!Array.isArray(result) || result.length < 1) {
+              throw new Error("No valid production Verify attestation was returned");
+            }
+          '
+          node scripts/production-verify-proof.mjs verify \
+            --repository-root "$GITHUB_WORKSPACE" \
+            --proof "$proof" \
+            --run-id "$VERIFY_RUN_ID" \
+            --run-attempt "$VERIFY_RUN_ATTEMPT" \
+            --artifact-digest "$ARTIFACT_DIGEST" \
+            --github-output "$GITHUB_OUTPUT"
 
-      - name: Pin pnpm
+      - name: Record consumed production Verify proof
+        env:
+          VERIFY_RUN_URL: ${{ steps.resolve-proof.outputs.verify_run_url }}
+          PROOF_COMPLETED_AT: ${{ steps.resolve-proof.outputs.proof_completed_at }}
+          PROOF_SHA256: ${{ steps.verify-proof.outputs.proof_sha256 }}
+          ARTIFACT_DIGEST: ${{ steps.verify-proof.outputs.artifact_digest }}
         run: |
-          npm install --global pnpm@10.32.0
-          test "$(pnpm --version)" = "10.32.0"
-
-      - name: Verify indexer
-        run: |
-          pnpm --dir indexer install --frozen-lockfile
-          pnpm --dir indexer audit --prod --audit-level high
-          pnpm --dir indexer codegen
-          pnpm --dir indexer typecheck
-          pnpm --dir indexer test
-
-      - name: Audit production dependencies
-        run: npm run audit:prod
-
-      - name: Verify operations source contract
-        run: npm run perf:read-model:ops-gate
-
-      - name: Verify interface and release gates
-        run: npm run verify
-
-      - name: Verify fresh database migrations
-        run: npm run db:test:pglite
-
-      - name: Verify contracts
-        run: |
-          npm run contracts:verify:ci
-          npm run contracts:official-deployments
-          npm run contracts:slither
-
-      - name: Bind verified evidence to exact commit
-        id: exact-head
-        run: |
-          verified_sha="$(git rev-parse HEAD)"
-          test "$verified_sha" = "$GITHUB_SHA"
-          echo "sha=$verified_sha" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Consumed full production Verify proof"
+            echo
+            echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- Verify run: $VERIFY_RUN_URL"
+            echo "- Proof completed: \`$PROOF_COMPLETED_AT\`"
+            echo "- Proof SHA-256: \`$PROOF_SHA256\`"
+            echo "- Immutable artifact digest: \`$ARTIFACT_DIGEST\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
     name: Stage programmable.market candidate
@@ -126,6 +147,11 @@ jobs:
       github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/production' &&
       needs.release-gate.outputs.verified_sha == github.sha
+    permissions:
+      actions: read
+      attestations: read
+      contents: read
+      deployments: write
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment:
@@ -147,6 +173,39 @@ jobs:
         with:
           node-version: 24.14.0
           cache: npm
+
+      - name: Revalidate exact Verify proof after production approval
+        id: revalidate-proof
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          node scripts/production-verify-proof.mjs resolve
+          --repository-root "$GITHUB_WORKSPACE"
+          --github-output "$GITHUB_OUTPUT"
+
+      - name: Confirm consumed Verify proof identity after production approval
+        env:
+          EXPECTED_SHA: ${{ needs.release-gate.outputs.verified_sha }}
+          EXPECTED_TREE: ${{ needs.release-gate.outputs.verified_tree }}
+          EXPECTED_RUN_ID: ${{ needs.release-gate.outputs.verify_run_id }}
+          EXPECTED_RUN_ATTEMPT: ${{ needs.release-gate.outputs.verify_run_attempt }}
+          EXPECTED_ARTIFACT_ID: ${{ needs.release-gate.outputs.artifact_id }}
+          EXPECTED_ARTIFACT_DIGEST: ${{ needs.release-gate.outputs.artifact_digest }}
+          REVALIDATED_SHA: ${{ steps.revalidate-proof.outputs.verified_sha }}
+          REVALIDATED_TREE: ${{ steps.revalidate-proof.outputs.verified_tree }}
+          REVALIDATED_RUN_ID: ${{ steps.revalidate-proof.outputs.verify_run_id }}
+          REVALIDATED_RUN_ATTEMPT: ${{ steps.revalidate-proof.outputs.verify_run_attempt }}
+          REVALIDATED_ARTIFACT_ID: ${{ steps.revalidate-proof.outputs.artifact_id }}
+          REVALIDATED_ARTIFACT_DIGEST: ${{ steps.revalidate-proof.outputs.artifact_digest }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_SHA" = "$EXPECTED_SHA"
+          test "$REVALIDATED_SHA" = "$EXPECTED_SHA"
+          test "$REVALIDATED_TREE" = "$EXPECTED_TREE"
+          test "$REVALIDATED_RUN_ID" = "$EXPECTED_RUN_ID"
+          test "$REVALIDATED_RUN_ATTEMPT" = "$EXPECTED_RUN_ATTEMPT"
+          test "$REVALIDATED_ARTIFACT_ID" = "$EXPECTED_ARTIFACT_ID"
+          test "$REVALIDATED_ARTIFACT_DIGEST" = "$EXPECTED_ARTIFACT_DIGEST"
 
       - name: Install dependencies
         run: npm ci

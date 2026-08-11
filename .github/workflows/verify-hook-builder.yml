@@ -1,11 +1,11 @@
 name: Verify hook builder intake feedback
 
-# Non-authoritative default-branch fallback. GitHub requires a
-# pull_request_target workflow to exist on the repository's default branch.
-# This workflow runs only validator code from the default branch, treats the
-# pull-request base and candidate as inert Git data, and can report preflight
-# feedback. It never approves a pull request or issues an admission receipt,
-# launch grant, entitlement, or permit.
+# Trusted default-branch fallback. GitHub requires a pull_request_target
+# workflow to exist on the repository's default branch. Public-intake
+# preflight remains feedback-only, while CI control-plane changes are denied
+# unless the candidate exactly matches the audited commit and tree below.
+# Candidate code never executes here, and this workflow never issues an
+# admission receipt, launch grant, entitlement, or permit.
 
 on:
   pull_request_target:
@@ -13,6 +13,7 @@ on:
       - opened
       - reopened
       - synchronize
+      - edited
       - ready_for_review
       - converted_to_draft
     branches:
@@ -105,6 +106,30 @@ jobs:
             process.stdout.write(report.mergeCommit);
           ' "$fetch_report")"
           echo "merge_commit=$merge_commit" >> "$GITHUB_OUTPUT"
+
+      - name: Enforce trusted main CI control-plane guard
+        shell: bash
+        env:
+          EXPECTED_BASE_COMMIT: ${{ github.event.pull_request.base.sha }}
+          EXPECTED_CANDIDATE_COMMIT: ${{ github.event.pull_request.head.sha }}
+          EXPECTED_MERGE_COMMIT: ${{ steps.candidate_fetch.outputs.merge_commit }}
+          APPROVED_MAIN_CI_CONTROL_COMMIT: 4758c979ce1538eacaa33e35b4f1297809af79e3
+          APPROVED_MAIN_CI_CONTROL_TREE: 990af077adcc3dcdc4f134882f8fac489938474b
+        run: |
+          set -euo pipefail
+
+          guard="$GITHUB_WORKSPACE/trusted/scripts/verify-main-ci-control-change.mjs"
+          if [[ ! -f "$guard" ]]; then
+            echo "::error::The trusted default branch does not contain the main CI control-plane guard."
+            exit 1
+          fi
+          timeout --signal=KILL 30s node "$guard" \
+            --candidate-root "$GITHUB_WORKSPACE/candidate.git" \
+            --expected-base-commit "$EXPECTED_BASE_COMMIT" \
+            --expected-candidate-commit "$EXPECTED_CANDIDATE_COMMIT" \
+            --expected-merge-commit "$EXPECTED_MERGE_COMMIT" \
+            --approved-commit "$APPROVED_MAIN_CI_CONTROL_COMMIT" \
+            --approved-tree "$APPROVED_MAIN_CI_CONTROL_TREE"
 
       - name: Classify candidate data with trusted default-branch code
         id: classify

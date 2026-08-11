@@ -15,6 +15,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  scope:
+    name: Change scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      contracts: ${{ steps.scope.outputs.contracts }}
+      database: ${{ steps.scope.outputs.database }}
+      dependencies: ${{ steps.scope.outputs.dependencies }}
+      indexer: ${{ steps.scope.outputs.indexer }}
+      interface: ${{ steps.scope.outputs.interface }}
+      read_model: ${{ steps.scope.outputs.read_model }}
+
+    steps:
+      - name: Check out complete change history
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+
+      - name: Classify changed paths
+        id: scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          FORCE_ALL: ${{ github.event_name == 'push' }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$FORCE_ALL" == "true" ]] || [[ -z "${BASE_SHA:-}" || "$BASE_SHA" =~ ^0+$ ]] || ! git cat-file -e "$BASE_SHA^{commit}"; then
+            node scripts/ci/classify-verify-paths.mjs --all >> "$GITHUB_OUTPUT"
+          else
+            git diff --no-renames --name-only "$BASE_SHA" "$HEAD_SHA" > "$RUNNER_TEMP/changed-paths.txt"
+
+            if git cat-file -e "$BASE_SHA:scripts/ci/classify-verify-paths.mjs"; then
+              git show "$BASE_SHA:scripts/ci/classify-verify-paths.mjs" > "$RUNNER_TEMP/classify-verify-paths.mjs"
+              node "$RUNNER_TEMP/classify-verify-paths.mjs" "$RUNNER_TEMP/changed-paths.txt" >> "$GITHUB_OUTPUT"
+            else
+              # The bootstrap change has no trusted-base classifier yet, so it
+              # deliberately pays the complete gate once.
+              node scripts/ci/classify-verify-paths.mjs --all >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
   secret-scan:
     name: Credential leak gate
     runs-on: ubuntu-latest
@@ -33,123 +76,264 @@ jobs:
 
   indexer:
     name: Realtime indexer
+    needs: scope
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
+      - name: Require successful change classification
+        if: needs.scope.result != 'success'
+        run: exit 1
+
       - name: Check out repository
+        if: needs.scope.outputs.indexer == 'true'
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Set up Node.js
+        if: needs.scope.outputs.indexer == 'true'
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24.14.0
 
       - name: Pin pnpm
+        if: needs.scope.outputs.indexer == 'true'
         run: |
           npm install --global pnpm@10.32.0
           test "$(pnpm --version)" = "10.32.0"
 
       - name: Install indexer dependencies
+        if: needs.scope.outputs.indexer == 'true'
         run: pnpm --dir indexer install --frozen-lockfile
 
       - name: Audit indexer production dependencies
+        if: needs.scope.outputs.indexer == 'true'
         run: pnpm --dir indexer audit --prod --audit-level high
 
       - name: Generate and verify indexer
+        if: needs.scope.outputs.indexer == 'true'
         run: |
           pnpm --dir indexer codegen
           pnpm --dir indexer typecheck
           pnpm --dir indexer test
 
+      - name: Skip unaffected indexer
+        if: needs.scope.result == 'success' && needs.scope.outputs.indexer != 'true'
+        run: echo "No indexer paths changed."
+
   database-pglite:
     name: Database (PGlite)
+    needs: scope
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
+      - name: Require successful change classification
+        if: needs.scope.result != 'success'
+        run: exit 1
+
       - name: Check out repository
+        if: needs.scope.outputs.database == 'true'
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Set up Node.js
+        if: needs.scope.outputs.database == 'true'
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24.14.0
           cache: npm
 
       - name: Install dependencies
+        if: needs.scope.outputs.database == 'true'
         run: npm ci
 
       - name: Run fresh-database SQL tests
+        if: needs.scope.outputs.database == 'true'
         run: npm run db:test:pglite
+
+      - name: Verify database-backed website runtime
+        if: needs.scope.outputs.database == 'true'
+        run: npm run test:database-runtime:ci
+
+      - name: Skip unaffected database
+        if: needs.scope.result == 'success' && needs.scope.outputs.database != 'true'
+        run: echo "No database paths changed."
 
   interface:
     name: Interface
+    needs: scope
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
+      - name: Require successful change classification
+        if: needs.scope.result != 'success'
+        run: exit 1
+
       - name: Check out repository
+        if: needs.scope.outputs.interface == 'true'
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Set up Node.js
+        if: needs.scope.outputs.interface == 'true'
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24.14.0
           cache: npm
 
-      - name: Set up Foundry
-        uses: foundry-rs/foundry-toolchain@b00af27efadbc7b4ca8b82abbd903b17cc874d2a # v1
-        with:
-          version: v1.7.1
-
       - name: Install dependencies
+        if: needs.scope.outputs.interface == 'true'
         run: npm ci
 
       - name: Audit production dependencies
+        if: needs.scope.outputs.interface == 'true' && needs.scope.outputs.dependencies == 'true'
         run: npm run audit:prod
 
-      - name: Verify operations source contract
+      - name: Verify affected interface
+        if: needs.scope.outputs.interface == 'true'
+        env:
+          PROGRAMMABLE_CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          PROGRAMMABLE_CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: npm run verify:interface:ci
+
+      - name: Verify affected read-model operations contract
+        if: needs.scope.outputs.read_model == 'true'
         run: npm run perf:read-model:ops-gate
 
-      - name: Verify interface
-        run: npm run verify
+      - name: Skip unaffected interface
+        if: needs.scope.result == 'success' && needs.scope.outputs.interface != 'true'
+        run: echo "No interface paths changed."
 
   contracts:
     name: Contracts
+    needs: scope
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
+      - name: Require successful change classification
+        if: needs.scope.result != 'success'
+        run: exit 1
+
       - name: Check out repository
+        if: needs.scope.outputs.contracts == 'true'
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Set up Node.js
+        if: needs.scope.outputs.contracts == 'true'
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24.14.0
           cache: npm
 
       - name: Set up Python
+        if: needs.scope.outputs.contracts == 'true'
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.13"
 
       - name: Set up Foundry
+        if: needs.scope.outputs.contracts == 'true'
         uses: foundry-rs/foundry-toolchain@b00af27efadbc7b4ca8b82abbd903b17cc874d2a # v1
         with:
           version: v1.7.1
 
       - name: Install dependencies
+        if: needs.scope.outputs.contracts == 'true'
         run: |
           npm ci
           pipx install slither-analyzer==0.11.5
 
       - name: Verify contracts
+        if: needs.scope.outputs.contracts == 'true'
         run: npm run contracts:verify:ci
 
       - name: Check official Uniswap deployments
+        if: needs.scope.outputs.contracts == 'true'
         run: npm run contracts:official-deployments
 
       - name: Run Slither
+        if: needs.scope.outputs.contracts == 'true'
         run: npm run contracts:slither
+
+      - name: Verify contract release bindings
+        if: needs.scope.outputs.contracts == 'true'
+        run: npm run test:contract-release:ci
+
+      - name: Skip unaffected contracts
+        if: needs.scope.result == 'success' && needs.scope.outputs.contracts != 'true'
+        run: echo "No contract paths changed."
+
+  production-proof:
+    name: Bind full production Verify proof
+    if: github.event_name == 'push' && github.ref == 'refs/heads/production'
+    needs:
+      - secret-scan
+      - indexer
+      - database-pglite
+      - interface
+      - contracts
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out exact verified production commit
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          lfs: false
+          submodules: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24.14.0
+
+      - name: Create exact full production Verify proof
+        env:
+          PRODUCTION_VERIFY_SECRET_SCAN_RESULT: ${{ needs.secret-scan.result }}
+          PRODUCTION_VERIFY_INDEXER_RESULT: ${{ needs.indexer.result }}
+          PRODUCTION_VERIFY_DATABASE_PGLITE_RESULT: ${{ needs.database-pglite.result }}
+          PRODUCTION_VERIFY_INTERFACE_RESULT: ${{ needs.interface.result }}
+          PRODUCTION_VERIFY_CONTRACTS_RESULT: ${{ needs.contracts.result }}
+        run: >-
+          node scripts/production-verify-proof.mjs create
+          --repository-root "$GITHUB_WORKSPACE"
+          --output "$RUNNER_TEMP/production-verify-proof.json"
+
+      - name: Attest exact full production Verify proof
+        id: attest-proof
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-path: ${{ runner.temp }}/production-verify-proof.json
+
+      - name: Preserve immutable full production Verify proof
+        id: upload-proof
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: production-verify-proof-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/production-verify-proof.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Record exact full production Verify proof
+        env:
+          ATTESTATION_URL: ${{ steps.attest-proof.outputs.attestation-url }}
+          ARTIFACT_DIGEST: ${{ steps.upload-proof.outputs.artifact-digest }}
+        run: |
+          {
+            echo "## Full production Verify proof"
+            echo
+            echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- Run: \`$GITHUB_RUN_ID\` attempt \`$GITHUB_RUN_ATTEMPT\`"
+            echo "- Artifact SHA-256: \`$ARTIFACT_DIGEST\`"
+            echo "- Sigstore attestation: $ATTESTATION_URL"
+          } >> "$GITHUB_STEP_SUMMARY"
