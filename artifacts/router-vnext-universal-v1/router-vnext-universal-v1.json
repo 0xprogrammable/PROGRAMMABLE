@@ -78,7 +78,7 @@
       "sha256": "c3bc259b634902cd42245e220e0de69831f3b809eb4341d0a1bb4876cc7f79ac"
     },
     "scripts/generate-router-vnext-universal-artifact.mjs": {
-      "sha256": "d0b88899e17ac089aba22f789870d33f59a7c004abf73a5dbb651ca68db0cd37"
+      "sha256": "5e20b3ea1979af4bfaf3150f679f825ba7340c91c2f628eee1a0adce3e726eb6"
     },
     "scripts/verify-router-vnext-universal-v1.sh": {
       "sha256": "22be72ffffbc276f2d9a4fd3013bf676689c8add2140125d403a819e18cf8525"

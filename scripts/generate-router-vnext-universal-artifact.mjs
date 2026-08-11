@@ -3,6 +3,7 @@
 import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -48,6 +49,22 @@ const stableJson = (value) => `${JSON.stringify(value, null, 2)}\n`;
 const read = (path) => readFileSync(join(root, path));
 const castKeccak = (value) => execFileSync("cast", ["keccak", value], { encoding: "utf8" }).trim();
 
+const resolveSolc = () => {
+  const pathLookup = spawnSync("which", ["solc"], { encoding: "utf8" });
+  const candidates = [
+    pathLookup.status === 0 ? pathLookup.stdout.trim() : "",
+    join(homedir(), ".svm", "0.8.26", "solc-0.8.26"),
+  ];
+  for (const path of candidates) {
+    if (!path) continue;
+    const probe = spawnSync(path, ["--version"], { encoding: "utf8" });
+    if (probe.status === 0 && probe.stdout.includes("Version: 0.8.26+commit.8a97fa7a")) {
+      return { path, version: probe.stdout.trim() };
+    }
+  }
+  throw new Error("solc 0.8.26 was not found on PATH or in the Foundry SVM cache");
+};
+
 const sourceContents = Object.fromEntries(
   productionSources.map((path) => [path, { content: read(path).toString("utf8") }]),
 );
@@ -76,11 +93,7 @@ const standardInput = {
 };
 const standardInputBytes = Buffer.from(stableJson(standardInput));
 
-const solcPath = execFileSync("which", ["solc"], { encoding: "utf8" }).trim();
-const solcVersion = execFileSync(solcPath, ["--version"], { encoding: "utf8" }).trim();
-if (!solcVersion.includes("Version: 0.8.26+commit.8a97fa7a")) {
-  throw new Error(`unexpected solc: ${solcVersion}`);
-}
+const { path: solcPath, version: solcVersion } = resolveSolc();
 const compilation = spawnSync(solcPath, ["--standard-json"], {
   input: standardInputBytes,
   encoding: "utf8",
