@@ -223,8 +223,8 @@
 .searchResults {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-  background: var(--surface-raised);
-  border: 1px solid var(--liquid-glass-border);
+  background: color-mix(in srgb, var(--surface-raised) 92%, transparent);
+  border: 1px solid var(--panel-border-soft);
   border-radius: 14px;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.38);
   display: grid;
