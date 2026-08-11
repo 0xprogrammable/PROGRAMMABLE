@@ -101,7 +101,6 @@ jobs:
           gh attestation verify "$proof" \
             --repo "$GITHUB_REPOSITORY" \
             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/verify.yml" \
-            --cert-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/verify.yml@$GITHUB_REF" \
             --source-ref "$GITHUB_REF" \
             --source-digest "$GITHUB_SHA" \
             --signer-digest "$GITHUB_SHA" \
