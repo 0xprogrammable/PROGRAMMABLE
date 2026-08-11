@@ -128,6 +128,13 @@ export function evaluateAlchemyExploreSourceContracts(
     "lib/market-data/bitquery.server.ts",
     sourceOverrides,
   );
+  const canonicalSupplyPath =
+    "lib/market-data/canonical-token-supply.server.ts";
+  const canonicalSupplySource = readSource(
+    rootDirectory,
+    canonicalSupplyPath,
+    sourceOverrides,
+  );
   const marketSchemaSource = readSource(
     rootDirectory,
     "lib/market-data/market-data-v1.ts",
@@ -207,9 +214,14 @@ export function evaluateAlchemyExploreSourceContracts(
       bitqueryMarketSource.includes(
         "limitBy: { by: PoolEvent_Pool_PoolId, count: 1 }",
       ) &&
+      bitqueryMarketSource.includes("query ProgrammableMarketPrices") &&
       bitqueryMarketSource.includes(
-        "limitBy: { by: Token_Address, count: 1 }",
+        'Block: { Time: { till: "${trade.time}" } }',
       ) &&
+      bitqueryMarketSource.includes(
+        'Token: { Id: { is: "bid:eth" } }',
+      ) &&
+      bitqueryMarketSource.includes("supply: null") &&
       bitqueryMarketSource.includes(
         'const dataset = range === "1h" ? "" : ", dataset: combined";',
       ) &&
@@ -217,7 +229,44 @@ export function evaluateAlchemyExploreSourceContracts(
       !bitqueryMarketSource.includes("NEXT_PUBLIC_BITQUERY") &&
       marketSchemaSource.includes('source: "bitquery"') &&
       marketSchemaSource.includes('protocol: "uniswap_v4"'),
-    "Bitquery market reads are server-only, PoolId-native, bounded and archive-aware",
+    "Bitquery market reads are server-only, PoolId-native, historically priced, bounded and archive-aware",
+  );
+  check(
+    "canonical-token-supply-quorum",
+    canonicalSupplySource.includes('import "server-only"') &&
+      canonicalSupplySource.includes(
+        'getWebsiteReadOnchainDeployment("production")',
+      ) &&
+      canonicalSupplySource.includes(
+        'getWebsiteChartOnchainDeployment("production").rpcUrlSecondary',
+      ) &&
+      canonicalSupplySource.includes(
+        "rpcUrlSecondary === configured.rpcUrl",
+      ) &&
+      canonicalSupplySource.includes("clients.map((client) =>") &&
+      canonicalSupplySource.includes("client.getBlockNumber()") &&
+      canonicalSupplySource.includes(
+        "lowestHead - deployment.confirmations",
+      ) &&
+      canonicalSupplySource.includes(
+        "observation.blockHash.toLowerCase()",
+      ) &&
+      canonicalSupplySource.includes("observation.decimals") &&
+      canonicalSupplySource.includes("observation.totalSupplyRaw") &&
+      canonicalSupplySource.includes("group.length >= 2") &&
+      canonicalSupplySource.includes("if (!agreed) return entry;") &&
+      routeSources
+        .filter(({ id }) => id !== "token-list")
+        .every(({ source }) => {
+          const supplyHydration = source.indexOf(
+            "await hydrateMissingCanonicalTokenSupplyV1(",
+          );
+          const marketRead = source.indexOf(
+            "await readBitqueryTokenMarketDataV1(",
+          );
+          return supplyHydration >= 0 && marketRead > supplyHydration;
+        }),
+    "missing supply is hydrated before market valuation only after fixed readers agree on block hash, decimals and total supply",
   );
 
   for (const route of routeSources) {
