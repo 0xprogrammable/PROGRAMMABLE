@@ -1,0 +1,61 @@
+{
+  "schemaVersion": "router-v4-owner-package-invalidation-v1",
+  "status": "INVALIDATED_PREBROADCAST_DENY",
+  "reason": "LAUNCHER_NONCE_DRIFT_AFTER_OWNER_PACKAGE_FREEZE",
+  "package": {
+    "path": "releases/router-v4-deployment-v1/owner-transaction-package.json",
+    "sha256": "d10cc16fa38074db2b9a4bf31df5fd4f76ad641c532283b7ba022e6c016042e9",
+    "intentBundleHash": "0xca126215cc39a60d284fa4a095d0671d208546754bf716720da42b3faa89bd6f",
+    "expectedLauncherNonce": 228,
+    "executionAllowed": false
+  },
+  "observedState": {
+    "chainId": 1,
+    "blockNumber": 25732503,
+    "blockHash": "0x84cf03586fa14ac4b455ed6bc2dec37a39998d2e8b7346538321ee67b8f1aea1",
+    "stateRoot": "0x936ad202319274fb5564dec7c30f83feb1cdc103541c16c5d24b195da7cd39e4",
+    "timestamp": 1786460339,
+    "timestampIso": "2026-08-11T14:58:59Z",
+    "providers": [
+      "https://eth.drpc.org",
+      "https://mainnet.gateway.tenderly.co"
+    ],
+    "launcherLatestNonce": 229,
+    "launcherPendingNonce": 229,
+    "safeNonce": 0,
+    "packagePoolStillVacant": true,
+    "packagePoolSlot0": {
+      "sqrtPriceX96": 0,
+      "tick": 0,
+      "protocolFee": 0,
+      "lpFee": 0,
+      "liquidity": 0
+    }
+  },
+  "nonceConsumingTransaction": {
+    "hash": "0x8512423258bd6622f5cd88e92b09b70d0e823904410fc4ab6cb3469d0507affd",
+    "blockNumber": 25732477,
+    "blockHash": "0xaf3c1d6d98e375fc7016fd78dce6da552713f2fab71fbf002abef94ab6feaa3c",
+    "timestampIso": "2026-08-11T14:53:47Z",
+    "from": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+    "to": "0x025a386eaa79f6067d29848fd05ccc71beab20cc",
+    "nonce": 228,
+    "type": 2,
+    "valueWei": "0",
+    "inputKeccak256": "0xc25a50c0c95eebd525698a5ffe4347a95ac346c709af49bf04881fcc215c0f46",
+    "receiptStatus": 1,
+    "gasUsed": 62631,
+    "effectiveGasPriceWei": "2135210308",
+    "matchesAnyRouterPackageOuterTarget": false,
+    "matchesAnyRouterPackageSignedTransactionHash": false,
+    "originatedByThisTask": false
+  },
+  "boundary": {
+    "anyBroadcastOccurredByThisTask": false,
+    "anySignatureOccurredByThisTask": false,
+    "anyFundsActionOccurredByThisTask": false,
+    "anyApplicantActionOccurredByThisTask": false,
+    "sourceOrDeploymentClaim": "UNDEPLOYED_DENY",
+    "requiredNextAuthority": "NEW_EXACT_OWNER_PACKAGE_AND_EXPLICIT_OWNER_AUTHORIZATION_AFTER_NONCE_REBIND"
+  }
+}
