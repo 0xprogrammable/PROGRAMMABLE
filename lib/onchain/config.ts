@@ -67,15 +67,15 @@ function firstNonEmpty(...values: Array<string | undefined>) {
 
 function productionPrimaryRpc() {
   return firstNonEmpty(
-    process.env.ETHEREUM_RPC_URL,
     process.env.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL,
+    process.env.ETHEREUM_RPC_URL,
   );
 }
 
 function productionSecondaryRpc() {
   return firstNonEmpty(
-    process.env.ETHEREUM_RPC_URL_B,
     process.env.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL,
+    process.env.ETHEREUM_RPC_URL_B,
   );
 }
 

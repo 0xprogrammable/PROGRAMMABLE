@@ -192,6 +192,7 @@ describe("interaction accessibility", () => {
     expect(landing).toContain('aria-label="Programmable links"');
     expect(landing).toContain('aria-label="Programmable on X"');
     expect(landing).toContain('aria-label="Programmable on GitHub"');
+    expect(landing).toContain('aria-label="Programmable on Discord"');
     expect(landing).toContain('aria-label="Programmable on Dexscreener"');
     expect(landing).toMatch(/>\s*Docs\s*</);
     expect(css).toMatch(

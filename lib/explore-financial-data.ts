@@ -290,8 +290,7 @@ export function publicExploreEntryV1(
 export function valuationSortValue(entry: ExploreEntry): bigint | null {
   const value = (entry as Partial<ValuedExploreEntry>).valuation;
   return value?.status === "available" &&
-    value.currency === "usd" &&
-    value.freshness === "current"
+    value.currency === "usd"
     ? positiveUint256(value.valueWad)
     : null;
 }

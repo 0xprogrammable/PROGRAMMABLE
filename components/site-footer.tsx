@@ -26,6 +26,11 @@ const resourceLinks = [
     external: true,
   },
   {
+    href: "https://discord.com/invite/programmable",
+    label: "Discord",
+    external: true,
+  },
+  {
     href: "https://x.com/0xProgrammable",
     label: "X",
     external: true,

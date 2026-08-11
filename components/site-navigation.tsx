@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  DiscordBrandIcon,
   GitHubBrandIcon,
   XBrandIcon,
 } from "@/components/brand-icons";
@@ -80,6 +81,15 @@ export function SiteHeader() {
               aria-label="Programmable on GitHub"
             >
               <GitHubBrandIcon />
+            </a>
+            <a
+              className="header-social-link"
+              href="https://discord.com/invite/programmable"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Programmable on Discord"
+            >
+              <DiscordBrandIcon />
             </a>
             <a
               className="header-social-link"

@@ -44,6 +44,7 @@ function rpcCapacityMessage(error: RpcRequestError) {
  */
 export function isOperationalRpcFailoverEligible(error: unknown) {
   return errorChain(error).some((candidate) => {
+    if (candidate instanceof OperationalRpcUnavailableError) return true;
     if (
       candidate instanceof TimeoutError ||
       candidate instanceof SocketClosedError
@@ -83,8 +84,8 @@ function singleRpcDeployment<Deployment extends OnchainDeployment>(
 export class OperationalRpcUnavailableError extends Error {
   override name = "OperationalRpcUnavailableError";
 
-  constructor(cause: unknown) {
-    super("Operational RPC reads are temporarily unavailable", { cause });
+  constructor() {
+    super("Operational RPC reads are temporarily unavailable");
   }
 }
 
@@ -117,7 +118,9 @@ export async function withOperationalRpcFailover<
       return await read(singleRpcDeployment(deployment, secondaryUrl));
     } catch (secondaryError) {
       if (isOperationalRpcFailoverEligible(secondaryError)) {
-        throw new OperationalRpcUnavailableError(secondaryError);
+        // Do not retain transport errors: framework cache logging serializes
+        // nested causes and can otherwise expose authenticated RPC URLs.
+        throw new OperationalRpcUnavailableError();
       }
       throw secondaryError;
     }

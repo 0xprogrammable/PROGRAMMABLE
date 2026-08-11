@@ -37,7 +37,7 @@ export const HOOKATHON_BUILDER_PROMPT =
 export const hookathonConfig = {
   name: "Hookathon",
   confirmationIso: "2026-08-10T19:40:20+02:00",
-  deadlineIso: "2026-08-13T17:40:20Z",
+  deadlineIso: "2026-08-14T17:40:20Z",
   timeZone: "Europe/Zurich",
   totalPrizeUsd: 10_000,
   prizes: [
