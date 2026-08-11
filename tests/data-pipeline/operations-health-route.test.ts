@@ -90,6 +90,8 @@ describe("operations health route", () => {
     expect(body).toMatchObject({
       status: "healthy",
       chainId: 1,
+      indexSource: "durable",
+      indexedReadModel: { status: "disabled" },
       index: {
         ageSeconds: 5,
         blockNumber: "25600000",
@@ -125,6 +127,8 @@ describe("operations health route", () => {
     expect(body).toMatchObject({
       status: "healthy",
       chainId: 1,
+      indexSource: "indexed",
+      indexedReadModel: { status: "available" },
       index: {
         ageSeconds: 4,
         blockNumber: "25600010",
@@ -279,23 +283,58 @@ describe("operations health route", () => {
     expect(mocks.readDurableExploreModel).not.toHaveBeenCalled();
   });
 
-  it("fails closed without details when indexed health validation fails", async () => {
+  it("uses the verified durable path when indexed health is unavailable", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     mocks.readIndexedReadModelHealth.mockRejectedValue(
       new Error("private database detail"),
     );
+    mocks.getOperationalOnchainDeployment.mockReturnValue({
+      status: "ready",
+      chainId: 1,
+    });
+    mocks.readDurableExploreModel.mockResolvedValue({
+      status: "ready",
+      ageMs: 5_500,
+      envelope: {
+        payload: {
+          model: {
+            snapshot: { blockNumber: "25600000" },
+            tokens: [{}, {}],
+          },
+        },
+      },
+    });
+    mocks.readOperationalRpcHealth.mockResolvedValue(rpcHealth());
 
     const response = await GET();
     const body = await response.json();
 
-    expect(response.status).toBe(503);
-    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe(
+      "public, max-age=0, s-maxage=30",
+    );
     expect(body).toMatchObject({
-      status: "unhealthy",
+      status: "healthy",
+      chainId: 1,
+      indexSource: "durable",
+      indexedReadModel: { status: "unavailable" },
+      index: {
+        ageSeconds: 5,
+        blockNumber: "25600000",
+        tokenCount: 2,
+      },
+      rpc: {
+        status: "healthy",
+        quorum: { status: "verified" },
+      },
     });
     expect(JSON.stringify(body)).not.toContain(
       "private database detail",
     );
-    expect(mocks.getOperationalOnchainDeployment).not.toHaveBeenCalled();
+    expect(mocks.getOperationalOnchainDeployment).toHaveBeenCalledWith(
+      "production",
+    );
+    expect(mocks.readDurableExploreModel).toHaveBeenCalledOnce();
+    expect(mocks.readOperationalRpcHealth).toHaveBeenCalledOnce();
   });
 });

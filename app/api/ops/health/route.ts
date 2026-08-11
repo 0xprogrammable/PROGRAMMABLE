@@ -13,6 +13,27 @@ export const runtime = "nodejs";
 
 const MAX_INDEX_AGE_MS = 15 * 60 * 1_000;
 
+type IndexedHealthRead = Readonly<{
+  health: Awaited<ReturnType<typeof readIndexedReadModelHealth>>;
+  status: "available" | "disabled" | "unavailable";
+}>;
+
+async function readIndexedHealth(): Promise<IndexedHealthRead> {
+  try {
+    const health = await readIndexedReadModelHealth();
+    return {
+      health,
+      status: health ? "available" : "disabled",
+    };
+  } catch (error) {
+    console.error("Programmable indexed read-model health is unavailable", {
+      errorName:
+        error instanceof Error ? error.name : "UnknownIndexedHealthError",
+    });
+    return { health: null, status: "unavailable" };
+  }
+}
+
 function unhealthyRpcResponse(
   rpc: OperationalRpcHealth,
   startedAt: number,
@@ -39,7 +60,8 @@ function unhealthyRpcResponse(
 export async function GET() {
   const startedAt = Date.now();
   try {
-    const indexed = await readIndexedReadModelHealth();
+    const indexedRead = await readIndexedHealth();
+    const indexed = indexedRead.health;
     const deployment = getOperationalOnchainDeployment("production");
     if (deployment.status !== "ready") {
       throw new Error(
@@ -65,6 +87,8 @@ export async function GET() {
           status: "healthy",
           chainId: indexed.chainId,
           index: indexed.index,
+          indexSource: "indexed",
+          indexedReadModel: { status: indexedRead.status },
           rpc,
           checkedAt: new Date().toISOString(),
         },
@@ -97,6 +121,8 @@ export async function GET() {
             index.envelope.payload.model.snapshot.blockNumber,
           tokenCount: index.envelope.payload.model.tokens.length,
         },
+        indexSource: "durable",
+        indexedReadModel: { status: indexedRead.status },
         rpc,
         checkedAt: new Date().toISOString(),
       },
