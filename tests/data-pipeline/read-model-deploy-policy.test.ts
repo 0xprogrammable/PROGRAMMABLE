@@ -594,7 +594,25 @@ describe("read-model production deploy policy", () => {
       '!["blob", "blob+postgres"].includes(readSource ?? "")',
     );
     expect(workflow).toContain(
+      'const operationalRpcProviders = Object.freeze([',
+    );
+    expect(workflow).toContain(
+      '"operational-dual",\n            "operational-primary",',
+    );
+    expect(workflow).toContain(
+      'const alchemyRpcProviders = Object.freeze(["alchemy"]);',
+    );
+    expect(workflow).toContain(
+      'const requestJson = async (path, expectedRpcProviders)',
+    );
+    expect(workflow).toContain(
+      '!expectedRpcProviders.includes(rpcProvider ?? "")',
+    );
+    expect(workflow).not.toContain(
       'response.headers.get("x-programmable-rpc-provider") !== "alchemy"',
+    );
+    expect(workflow).toContain(
+      '"/api/indexers/v1/token-list",\n            alchemyRpcProviders,',
     );
     expect(workflow).toContain("entry.launchCategoryProvenance.blockNumber");
     expect(workflow).toContain(
@@ -619,6 +637,8 @@ describe("read-model production deploy policy", () => {
       workflow.indexOf("Smoke staged Alchemy Explore APIs"),
       workflow.indexOf("Record Alchemy-only read path"),
     );
+    expect(alchemySmoke.match(/operationalRpcProviders/g)).toHaveLength(7);
+    expect(alchemySmoke.match(/alchemyRpcProviders/g)).toHaveLength(2);
     expect(alchemySmoke).not.toContain("/api/ops/health");
     expect(alchemySmoke).not.toContain("/api/explore/profile");
     expect(alchemySmoke).not.toMatch(

@@ -1141,7 +1141,22 @@ export function evaluateReadModelOperationsSourceContracts(
         '!["blob", "blob+postgres"].includes(readSource ?? "")',
       ) &&
       stagedAlchemySmokeBlock.includes(
+        'const operationalRpcProviders = Object.freeze([\n            "operational-dual",\n            "operational-primary",\n          ]);',
+      ) &&
+      stagedAlchemySmokeBlock.includes(
+        'const alchemyRpcProviders = Object.freeze(["alchemy"]);',
+      ) &&
+      stagedAlchemySmokeBlock.includes(
+        "const requestJson = async (path, expectedRpcProviders)",
+      ) &&
+      stagedAlchemySmokeBlock.includes(
+        '!expectedRpcProviders.includes(rpcProvider ?? "")',
+      ) &&
+      !stagedAlchemySmokeBlock.includes(
         'response.headers.get("x-programmable-rpc-provider") !== "alchemy"',
+      ) &&
+      stagedAlchemySmokeBlock.includes(
+        '"/api/indexers/v1/token-list",\n            alchemyRpcProviders,',
       ) &&
       stagedAlchemySmokeBlock.includes(
         '"/api/explore?limit=20&page=1&sort=market-cap"',
