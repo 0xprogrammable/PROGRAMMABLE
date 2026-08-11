@@ -264,6 +264,20 @@
   }
 }
 
+@media (max-width: 360px) {
+  .supportingLinks {
+    gap: 0;
+  }
+
+  .utilityDivider {
+    margin-inline: 0;
+  }
+
+  .docsLink {
+    padding-inline: 4px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .primaryAction,
   .secondaryAction,

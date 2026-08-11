@@ -15,6 +15,7 @@ import {
 import { mainnet } from "viem/chains";
 
 import {
+  getWebsiteChartOnchainDeployment,
   getWebsiteReadOnchainDeployment,
   readExploreModel,
   type ExploreReadModel,
@@ -509,7 +510,7 @@ async function readRewardsWithClients(
       rpcClients: [] as PublicClient[],
     };
   }
-  const deployment = getWebsiteReadOnchainDeployment("production");
+  const deployment = getWebsiteChartOnchainDeployment("production");
   const model = await readExploreModel(deployment);
   if (model.status !== "ready") {
     throw new Error("The verified launch registry is unavailable");

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   DiscordBrandIcon,
+  DuneBrandIcon,
   GitHubBrandIcon,
   XBrandIcon,
 } from "@/components/brand-icons";
@@ -84,15 +85,6 @@ export function SiteHeader() {
             </a>
             <a
               className="header-social-link"
-              href="https://discord.com/invite/programmable"
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Programmable on Discord"
-            >
-              <DiscordBrandIcon />
-            </a>
-            <a
-              className="header-social-link"
               href="https://dexscreener.com/ethereum/0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0"
               target="_blank"
               rel="noreferrer"
@@ -106,6 +98,24 @@ export function SiteHeader() {
                 height={256}
                 sizes="22px"
               />
+            </a>
+            <a
+              className="header-social-link"
+              href="https://dune.com/0xprogrammable6098/programmable-analytics"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Programmable analytics on Dune"
+            >
+              <DuneBrandIcon />
+            </a>
+            <a
+              className="header-social-link"
+              href="https://discord.com/invite/programmable"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Programmable on Discord"
+            >
+              <DiscordBrandIcon />
             </a>
           </div>
           <WalletButton compact />

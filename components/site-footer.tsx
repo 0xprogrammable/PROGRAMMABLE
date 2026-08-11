@@ -16,13 +16,18 @@ const resourceLinks = [
     label: "Analytics",
   },
   {
+    href: "https://github.com/0xprogrammable",
+    label: "GitHub",
+    external: true,
+  },
+  {
     href: "https://dexscreener.com/ethereum/0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0",
     label: "Token",
     external: true,
   },
   {
-    href: "https://github.com/0xprogrammable",
-    label: "GitHub",
+    href: "https://dune.com/0xprogrammable6098/programmable-analytics",
+    label: "Dune",
     external: true,
   },
   {

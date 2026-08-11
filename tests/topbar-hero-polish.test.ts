@@ -53,13 +53,27 @@ describe("topbar and Explore hero polish", () => {
     expect(landing).toContain('aria-label="Programmable on GitHub"');
     expect(landing).toContain('aria-label="Programmable on Discord"');
     expect(landing).toContain('aria-label="Programmable on Dexscreener"');
-    expect(landing.indexOf('aria-label="Programmable on GitHub"')).toBeLessThan(
-      landing.indexOf('aria-label="Programmable on Discord"'),
+    expect(landing).toContain('aria-label="Programmable analytics on Dune"');
+    expect(landing).toContain(
+      "https://dune.com/0xprogrammable6098/programmable-analytics",
     );
-    expect(landing.indexOf('aria-label="Programmable on Discord"')).toBeLessThan(
+    expect(landing.indexOf('aria-label="Programmable on GitHub"')).toBeLessThan(
       landing.indexOf('aria-label="Programmable on Dexscreener"'),
     );
+    expect(landing.indexOf('aria-label="Programmable on Dexscreener"')).toBeLessThan(
+      landing.indexOf('aria-label="Programmable analytics on Dune"'),
+    );
+    expect(landing.indexOf('aria-label="Programmable analytics on Dune"')).toBeLessThan(
+      landing.indexOf('aria-label="Programmable on Discord"'),
+    );
     expect(navigation).toContain('aria-label="Programmable on Discord"');
+    expect(navigation).toContain('aria-label="Programmable analytics on Dune"');
+    expect(navigation.indexOf('aria-label="Programmable on Dexscreener"')).toBeLessThan(
+      navigation.indexOf('aria-label="Programmable analytics on Dune"'),
+    );
+    expect(navigation.indexOf('aria-label="Programmable analytics on Dune"')).toBeLessThan(
+      navigation.indexOf('aria-label="Programmable on Discord"'),
+    );
     expect(landing).toContain('href="/docs"');
     expect(landing).toMatch(/>\s*Docs\s*</);
     expect(navigation).not.toContain("ThemeToggle");
@@ -88,6 +102,9 @@ describe("topbar and Explore hero polish", () => {
     );
     expect(landingCss).toMatch(
       /\.docsLink\s*\{[^}]*font-size:\s*17px;/s,
+    );
+    expect(landingCss).toMatch(
+      /@media \(max-width: 360px\)[\s\S]*?\.supportingLinks\s*\{[^}]*gap:\s*0;/s,
     );
   });
 
