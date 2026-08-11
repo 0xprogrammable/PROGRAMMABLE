@@ -56,26 +56,12 @@
   text-wrap: balance;
 }
 
-.deadline {
-  align-items: baseline;
-  color: var(--brand-ivory-muted);
-  display: flex;
-  flex-wrap: wrap;
-  font-family: var(--font-plex-mono), monospace;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  gap: 4px;
-  line-height: 16px;
-  margin: 12px 0 0;
-  justify-content: center;
-}
-
 .actions {
   align-items: center;
   display: flex;
   gap: 16px;
   justify-content: center;
-  margin-top: 20px;
+  margin-top: 24px;
 }
 
 .secondaryAction,
@@ -100,7 +86,6 @@
   background: var(--brand-ivory);
   border: 1px solid var(--brand-ivory);
   color: #010103;
-  gap: 8px;
   min-width: 184px;
   text-decoration: none;
 }
@@ -144,10 +129,6 @@
 }
 
 @media (max-width: 420px) {
-  .deadline {
-    column-gap: 8px;
-  }
-
   .timer {
     gap: 12px;
     grid-template-columns: repeat(4, minmax(42px, 1fr));
