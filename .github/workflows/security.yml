@@ -37,9 +37,9 @@ jobs:
       - name: Verify Router V4 deployment candidate
         env:
           ETHEREUM_RPC_URLS: >-
-            https://rpc.flashbots.net
-            https://eth.drpc.org
             https://mainnet.gateway.tenderly.co
+            https://eth.drpc.org
+            https://rpc.flashbots.net
         run: bash scripts/verify-router-v4-deployment-v1.sh
 
       - name: Install Slither
