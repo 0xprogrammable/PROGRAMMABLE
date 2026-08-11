@@ -13,8 +13,8 @@ try {
   output(
     {
       schemaVersion: 1,
-      profileId: "alchemy-explore-source-v1",
-      mode: "alchemy-only-contract-smoke",
+      profileId: "registry-bitquery-market-source-v1",
+      mode: "registry-bitquery-market-contract-smoke",
       contractValid: source.ok,
       releaseEvidenceAccepted: false,
       checks: source.checks,
@@ -26,7 +26,7 @@ try {
   output(
     {
       schemaVersion: 1,
-      mode: "alchemy-only-contract-smoke",
+      mode: "registry-bitquery-market-contract-smoke",
       contractValid: false,
       releaseEvidenceAccepted: false,
       checks: [],

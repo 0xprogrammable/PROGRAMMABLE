@@ -12,6 +12,8 @@ import { runtimeProductionProviderBindingsFromUrls } from "./read-model-provider
 
 export { PROJECTOR_WAKE_ROUTE, QUICKNODE_STREAM_SECRET_ENV_NAME };
 
+export const BITQUERY_MARKET_SECRET_ENV_NAME = "BITQUERY_OAUTH_TOKEN";
+
 export const RELEASE_GATED_FLAG_NAMES = Object.freeze([
   "INDEXED_EXPLORE_LIST_READS_ENABLED",
   "INDEXED_EXPLORE_TOKEN_READS_ENABLED",
@@ -35,6 +37,7 @@ export const WORKER_ACTIVATION_FLAG_NAMES = Object.freeze([
 
 export const REQUIRED_SERVER_SECRET_ENV_NAMES = Object.freeze([
   QUICKNODE_STREAM_SECRET_ENV_NAME,
+  BITQUERY_MARKET_SECRET_ENV_NAME,
 ]);
 
 export const REQUIRED_NON_SECRET_RUNTIME_ENV_NAMES = Object.freeze([
@@ -123,7 +126,9 @@ export function materializeVercelSensitiveRuntimePlaceholders(
   const emptyNames = sensitiveRuntimeNames.filter(
     (name) => runtimeValues[name] === "",
   );
-  if (emptyNames.length === 0) return contents;
+  const namesRequiringMetadata = [
+    ...new Set([BITQUERY_MARKET_SECRET_ENV_NAME, ...emptyNames]),
+  ];
   let metadata;
   try {
     metadata = JSON.parse(metadataContents);
@@ -138,7 +143,7 @@ export function materializeVercelSensitiveRuntimePlaceholders(
   ) {
     throw new Error("Vercel sensitive environment metadata is invalid");
   }
-  for (const name of emptyNames) {
+  for (const name of namesRequiringMetadata) {
     const matches = metadata.envs.filter(
       (entry) => entry !== null && typeof entry === "object" && entry.key === name,
     );
@@ -153,8 +158,12 @@ export function materializeVercelSensitiveRuntimePlaceholders(
       throw new Error(`${name} is not exact sensitive production metadata`);
     }
   }
-  const materializedNames = new Set(emptyNames);
-  return contents
+  const materializedNames = new Set(
+    namesRequiringMetadata.filter(
+      (name) => runtimeValues[name] === "" || runtimeValues[name] === undefined,
+    ),
+  );
+  const materialized = contents
     .split(/\r?\n/u)
     .map((line) => {
       const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/u.exec(line);
@@ -163,6 +172,14 @@ export function materializeVercelSensitiveRuntimePlaceholders(
         : line;
     })
     .join("\n");
+  const missingNames = [...materializedNames].filter(
+    (name) => runtimeValues[name] === undefined,
+  );
+  if (missingNames.length === 0) return materialized;
+  const separator = materialized === "" || materialized.endsWith("\n") ? "" : "\n";
+  return `${materialized}${separator}${missingNames
+    .map((name) => `${name}="[Sensitive]"`)
+    .join("\n")}`;
 }
 
 export function readReleaseGatedFlags(contents) {
@@ -252,15 +269,15 @@ function validateNonSecretRuntimeEnvironment(contents, expectations) {
   });
 }
 
-function validateWakeTriggerSecret(contents, required) {
-  if (!required) {
-    return Object.freeze({ ready: true, invalidNames: Object.freeze([]) });
-  }
+function validateRequiredServerSecrets(contents, wakeCanaryRequired) {
+  const requiredNames = wakeCanaryRequired
+    ? REQUIRED_SERVER_SECRET_ENV_NAMES
+    : [BITQUERY_MARKET_SECRET_ENV_NAME];
   const configured = readSelectedDotenvValues(
     contents,
-    REQUIRED_SERVER_SECRET_ENV_NAMES,
+    requiredNames,
   );
-  const invalidNames = REQUIRED_SERVER_SECRET_ENV_NAMES.filter((name) => {
+  const invalidNames = requiredNames.filter((name) => {
     const value = configured[name];
     if (typeof value !== "string" || value === "") return true;
     if (VERCEL_SENSITIVE_PLACEHOLDER.test(value)) return false;
@@ -356,7 +373,7 @@ export function evaluateReadModelDeployPolicy(
   const wakeCanaryRequired = WORKER_ACTIVATION_FLAG_NAMES.some(
     (name) => workerFlags.values[name],
   );
-  const secretEnvironmentPreflight = validateWakeTriggerSecret(
+  const secretEnvironmentPreflight = validateRequiredServerSecrets(
     contents,
     wakeCanaryRequired,
   );

@@ -38,6 +38,10 @@ import {
   type ValuedExploreEntry,
 } from "@/lib/explore-financial-data";
 import {
+  isTokenMarketDataV1,
+  marketDataStatusLabel,
+} from "@/lib/market-data/market-data-v1";
+import {
   canOptimizeTokenImage,
   getTokenCardImageSource,
 } from "@/lib/token-image";
@@ -57,7 +61,13 @@ type TokenCard = {
   imageUrl: string;
   links: readonly TokenLink[];
   valuation?: MarketCapMetric;
-  marketStatus?: "No market" | "Last verified" | "Unavailable";
+  valuationMetric?: "Market cap" | "FDV";
+  marketStatus?:
+    | "No market"
+    | "Waiting for first trade"
+    | "Last verified"
+    | "Limited market data"
+    | "Unavailable";
   usesFallbackImage: boolean;
   tokenAddress?: `0x${string}`;
   launchCategory: "Classic" | "Custom";
@@ -65,7 +75,17 @@ type TokenCard = {
 
 export function exploreMarketStatusLabel(
   entry: ExploreEntry | ValuedExploreEntry,
-): "No market" | "Last verified" | "Unavailable" | undefined {
+):
+  | "No market"
+  | "Waiting for first trade"
+  | "Last verified"
+  | "Limited market data"
+  | "Unavailable"
+  | undefined {
+  const marketData = (entry as Partial<ValuedExploreEntry>).marketData;
+  if (marketData && isTokenMarketDataV1(marketData)) {
+    return marketDataStatusLabel(marketData);
+  }
   if (entry.exploreKind === "custom-project" && entry.markets.length === 0) {
     return "No market";
   }
@@ -572,7 +592,18 @@ function parseExploreEntry(value: unknown): ValuedExploreEntry | null {
       : isRecord(value) && isExploreValuation(value.valuation)
         ? value.valuation
         : null;
-    return valuation === null ? null : { ...entry, valuation };
+    const marketData = isRecord(value) && value.marketData !== undefined
+      ? isTokenMarketDataV1(value.marketData)
+        ? value.marketData
+        : null
+      : undefined;
+    return valuation === null || marketData === null
+      ? null
+      : {
+          ...entry,
+          valuation,
+          ...(marketData === undefined ? {} : { marketData }),
+        };
   };
   if (isRecord(value) && value.exploreKind === "custom-project") {
     const entry = parseCustomExploreEntry(value);
@@ -993,7 +1024,9 @@ export function exploreTokenCardDescription(token: ExploreEntry) {
 export function getTokenCards(
   tokens: Array<ExploreEntry | ValuedExploreEntry>,
 ): TokenCard[] {
-  return tokens.map((token) => ({
+  return tokens.map((token) => {
+    const valuation = valuationForEntry(token);
+    return ({
     id: token.id,
     name: token.name,
     description: exploreTokenCardDescription(token),
@@ -1005,6 +1038,12 @@ export function getTokenCards(
       (left, right) => tokenLinkOrder[left.kind] - tokenLinkOrder[right.kind],
     ),
     valuation: getExploreValuationMetric(token),
+    ...(valuation.status === "available"
+      ? {
+          valuationMetric:
+            valuation.metric === "market-cap" ? "Market cap" as const : "FDV" as const,
+        }
+      : {}),
     marketStatus: exploreMarketStatusLabel(token),
     usesFallbackImage: !token.imageUrl?.trim(),
     ...(token.tokenAddress === undefined
@@ -1014,7 +1053,8 @@ export function getTokenCards(
       token.launchCategoryProvenance.category === "classic"
         ? "Classic"
         : "Custom",
-  }));
+    });
+  });
 }
 
 function getTokenLinkLabel(kind: TokenLink["kind"]) {
@@ -1517,13 +1557,13 @@ export function ExploreView() {
                 {valuationLabel ? (
                   <span className={styles.runnerMarketCap}>
                     <span className="sr-only">
-                      {"Fully diluted valuation: "}
+                      {`${token.valuationMetric ?? "Valuation"}: `}
                     </span>
                     <span
                       className={styles.runnerMarketCapLabel}
                       aria-hidden="true"
                     >
-                      FDV
+                      {token.valuationMetric ?? "Value"}
                     </span>
                     <span className={styles.runnerMarketCapValue}>
                       {valuationLabel}

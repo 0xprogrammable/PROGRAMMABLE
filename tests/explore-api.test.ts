@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import type { ExploreReadModel } from "../lib/onchain/types";
+import type {
+  MarketDataIdentityV1,
+  TokenMarketDataV1,
+} from "../lib/market-data/market-data-v1";
 import type { ExploreEntry, LauncherToken } from "../lib/tokens";
 import { customGraphToken } from "./launch-stamp-surface-fixture";
 
@@ -17,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   readExploreReferenceHeadWithinRouteBudget: vi.fn(),
   getOnchainDeployment: vi.fn(),
   readDurableExploreModel: vi.fn(),
+  readBitqueryTokenMarketDataV1: vi.fn(),
   safeAlchemyError: vi.fn((error) => error),
 }));
 
@@ -59,6 +64,10 @@ vi.mock("../lib/onchain/durable-model", () => ({
   readDurableExploreModel: mocks.readDurableExploreModel,
 }));
 
+vi.mock("../lib/market-data/bitquery.server", () => ({
+  readBitqueryTokenMarketDataV1: mocks.readBitqueryTokenMarketDataV1,
+}));
+
 import {
   dedupeExploreEntriesV1,
   GET,
@@ -67,7 +76,6 @@ import {
 
 const HOOK_ADDRESS =
   "0x3333333333333333333333333333333333333333" as const;
-const POOL_ID = `0x${"44".repeat(32)}` as const;
 
 function token(index: number): LauncherToken {
   const tokenAddress = `0x${index.toString(16).padStart(40, "0")}` as const;
@@ -77,7 +85,7 @@ function token(index: number): LauncherToken {
     symbol: `T${index}`,
     tokenAddress,
     hookAddress: HOOK_ADDRESS,
-    poolId: POOL_ID,
+    poolId: `0x${index.toString(16).padStart(64, "0")}`,
     launchedAt: `2026-07-${String(index).padStart(2, "0")}T00:00:00.000Z`,
     launchBlockNumber: String(25_626_490 + index),
     launchTransactionIndex: 0,
@@ -91,6 +99,57 @@ function token(index: number): LauncherToken {
     totalSwapFeeBps: 100,
     liquidityPath: "meme",
   };
+}
+
+function bitqueryMarketData(
+  identities: readonly MarketDataIdentityV1[],
+  options: Readonly<{ freshness?: "current" | "stale" }> = {},
+): ReadonlyMap<string, TokenMarketDataV1> {
+  return new Map(identities.map((identity) => {
+    const value = (BigInt(identity.tokenAddress) * 10n ** 18n).toString();
+    const priceUsdWad = (BigInt(identity.tokenAddress) * 10n ** 9n).toString();
+    return [identity.tokenAddress, {
+      schemaVersion: "programmable.market-data.v1",
+      source: "bitquery",
+      generatedAt: "2026-08-11T14:00:00.000Z",
+      status: options.freshness === "stale" ? "stale" : "current",
+      primaryPoolId: identity.poolId,
+      pools: [{
+        identity,
+        source: "bitquery",
+        status: options.freshness === "stale" ? "stale" : "current",
+        quality: "complete",
+        asOfTime: "2026-08-11T14:00:00.000Z",
+        latestTrade: {
+          transactionHash: `0x${"aa".repeat(32)}`,
+          logIndex: 1,
+          blockNumber: "25740000",
+          time: "2026-08-11T14:00:00.000Z",
+          tokenSide: "buy",
+          priceUsdWad,
+          priceUsdAsOfTime: "2026-08-11T14:00:00.000Z",
+          priceUsdSource: "bitquery-token-price-index-v1",
+          rawPriceUsdWad: priceUsdWad,
+        },
+        liquidity: {
+          asOfTime: "2026-08-11T14:00:00.000Z",
+          asOfBlock: "25740000",
+          valueUsdWad: "100000000000000000000000",
+          freshness: options.freshness ?? "current",
+        },
+        valuation: {
+          status: "available",
+          metric: "fdv",
+          supplyBasis: "total",
+          valueUsdWad: value,
+          fdvUsdWad: value,
+          totalSupply: "1000000",
+          asOfTime: "2026-08-11T14:00:00.000Z",
+          freshness: options.freshness ?? "current",
+        },
+      }],
+    } satisfies TokenMarketDataV1];
+  }));
 }
 
 const snapshot = {
@@ -158,7 +217,7 @@ function orderedEntry(input: Readonly<{
   } as unknown as ExploreEntry;
 }
 
-describe("Explore API Alchemy boundary", () => {
+describe("Explore API Bitquery market boundary", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.readAlchemyExploreModel.mockResolvedValue(readyModel());
@@ -180,6 +239,10 @@ describe("Explore API Alchemy boundary", () => {
     );
     mocks.enrichTokensWithAlchemyPoolState.mockImplementation(
       async ({ tokens }: { tokens: readonly LauncherToken[] }) => [...tokens],
+    );
+    mocks.readBitqueryTokenMarketDataV1.mockImplementation(
+      async (identities: readonly MarketDataIdentityV1[]) =>
+        bitqueryMarketData(identities),
     );
   });
 
@@ -407,7 +470,7 @@ describe("Explore API Alchemy boundary", () => {
     "q=token&q=other",
     "sort=newest&extra=1",
     "socials=maybe",
-  ])("rejects non-canonical query shapes before the Alchemy read: %s", async (query) => {
+  ])("rejects non-canonical query shapes before identity or market reads: %s", async (query) => {
     const response = await GET(
       new NextRequest(`http://localhost/api/explore?${query}`),
     );
@@ -450,6 +513,7 @@ describe("Explore API Alchemy boundary", () => {
     expect(body).not.toHaveProperty("launcherFeesAccruedWei");
     expect(body).not.toHaveProperty("launcherFeesAccruedEth");
     expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(response.headers.get("X-Programmable-Price-Source")).toBeNull();
     expect(response.headers.get("Retry-After")).toBe("5");
     expect(response.headers.get("X-Programmable-Launch-Source")).toBe(
       "partial+registry.custom-launched",
@@ -496,7 +560,8 @@ describe("Explore API Alchemy boundary", () => {
           unavailable: 0,
           stale: 0,
           unknown: 0,
-          asOfBlock: "25630000",
+          asOfBlock: null,
+          asOfTime: "2026-08-11T14:00:00.000Z",
         },
       },
     });
@@ -506,8 +571,8 @@ describe("Explore API Alchemy boundary", () => {
       supplyBasis: "total",
       currency: "usd",
       freshness: "current",
-      asOfBlock: "25630000",
-      lagBlocks: "5",
+      source: "bitquery",
+      asOfTime: "2026-08-11T14:00:00.000Z",
     });
     expect(body.tokens[0].fdvUsdWad).toBe(
       body.tokens[0].valuation.valueWad,
@@ -538,24 +603,22 @@ describe("Explore API Alchemy boundary", () => {
     expect(response.headers.get("X-Programmable-Launch-Source")).toBe(
       "operational+durable+registry.custom-launched",
     );
-    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
-      "operational-dual",
-    );
+    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBeNull();
     expect(response.headers.get("X-Programmable-Price-Source")).toBe(
-      "read-model",
+      "bitquery",
     );
     expect(response.headers.get("X-Programmable-Data-Quality")).toBe(
       "complete",
     );
-    expect(response.headers.get("X-Programmable-Valuation-Metric")).toBe(
-      "fdv",
+    expect(response.headers.get("X-Programmable-Market-Source")).toBe(
+      "bitquery",
     );
     expect(response.headers.get("Cache-Control")).toBe(
       "public, max-age=0, s-maxage=2, stale-while-revalidate=5",
     );
   });
 
-  it("binds current FDV to the verified operational block instead of the lagging model snapshot", async () => {
+  it("binds current FDV to Bitquery time instead of the lagging identity snapshot", async () => {
     const staleModelSnapshot = {
       ...snapshot,
       blockNumber: "25628000",
@@ -607,17 +670,13 @@ describe("Explore API Alchemy boundary", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(mocks.withSameBlockEthUsdQuote).toHaveBeenCalledWith(
-      expect.objectContaining({ snapshot: operationalSnapshot }),
-    );
-    expect(mocks.enrichTokensWithAlchemyPoolState).toHaveBeenCalledWith(
-      expect.objectContaining({ snapshot: operationalSnapshot }),
-    );
+    expect(mocks.withSameBlockEthUsdQuote).not.toHaveBeenCalled();
+    expect(mocks.enrichTokensWithAlchemyPoolState).not.toHaveBeenCalled();
     expect(body.tokens[0].valuation).toMatchObject({
       status: "available",
       freshness: "current",
-      asOfBlock: operationalSnapshot.blockNumber,
-      lagBlocks: "0",
+      source: "bitquery",
+      asOfTime: "2026-08-11T14:00:00.000Z",
     });
     expect(body.dataQuality).toMatchObject({
       launchIdentity: {
@@ -626,7 +685,8 @@ describe("Explore API Alchemy boundary", () => {
       },
       valuation: {
         status: "current",
-        asOfBlock: operationalSnapshot.blockNumber,
+        asOfBlock: null,
+        asOfTime: "2026-08-11T14:00:00.000Z",
       },
     });
   });
@@ -682,10 +742,11 @@ describe("Explore API Alchemy boundary", () => {
     expect(response.headers.get("Cache-Control")).toBe("no-store");
   });
 
-  it("keeps canonical launches visible with honest stale valuation quality during enrichment failure", async () => {
+  it("keeps canonical launches visible with unavailable valuation when Bitquery is down", async () => {
     mocks.enrichTokensWithAlchemyPoolState.mockRejectedValue(
       new Error("provider unavailable"),
     );
+    mocks.readBitqueryTokenMarketDataV1.mockResolvedValue(new Map());
     mocks.readExploreReferenceHeadWithinRouteBudget.mockResolvedValue({
       blockNumber: "25630100",
       blockHash: `0x${"88".repeat(32)}`,
@@ -702,14 +763,12 @@ describe("Explore API Alchemy boundary", () => {
     expect(body.total).toBe(30);
     expect(body.tokens).toHaveLength(30);
     expect(body.tokens.every((entry: {
-      valuation: { status: string; valueWad?: string };
-    }) =>
-      entry.valuation.status === "available" &&
-      entry.valuation.valueWad !== "0"
-    )).toBe(true);
+      valuation: { status: string; reason?: string };
+    }) => entry.valuation.status === "unavailable" &&
+      entry.valuation.reason === "source-unavailable")).toBe(true);
     expect(body.dataQuality).toMatchObject({
       status: "stale",
-      valuation: { status: "stale", stale: 30 },
+      valuation: { status: "unavailable", unavailable: 30 },
     });
     expect(response.headers.get("Cache-Control")).toBe("no-store");
   });
@@ -745,9 +804,7 @@ describe("Explore API Alchemy boundary", () => {
     expect(response.headers.get("X-Programmable-Launch-Source")).toBe(
       "durable+registry.custom-launched",
     );
-    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
-      "operational-dual",
-    );
+    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBeNull();
   });
 
   it.each([
@@ -773,11 +830,9 @@ describe("Explore API Alchemy boundary", () => {
     expect(response.headers.get("X-Programmable-Read-Source")).toBe(
       "operational+durable+postgres",
     );
-    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
-      "operational-dual",
-    );
+    expect(response.headers.get("X-Programmable-Rpc-Provider")).toBeNull();
     expect(response.headers.get("X-Programmable-Price-Source")).toBe(
-      "read-model",
+      "bitquery",
     );
   });
 });

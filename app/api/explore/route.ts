@@ -1,22 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import {
-  getAlchemyOnchainDeployment,
   readAlchemyExploreModel,
   safeAlchemyError,
 } from "../../../lib/alchemy/explore.server";
-import {
-  enrichTokensWithAlchemyPoolState,
-  readVerifiedOperationalMarketSnapshot,
-  withSameBlockEthUsdQuote,
-  withoutUnboundEthUsdQuote,
-} from "../../../lib/alchemy/live-market.server";
 import { suppressRouterBoundCustomProjectDuplicates } from "../../../lib/alchemy/router-custom-collision";
 import {
   createExploreConsumerSource,
   exploreLaunchSourceHeader,
   exploreReadSourceHeader,
-  exploreRpcProviderHeader,
   type ExploreConsumerSource,
 } from "../../../lib/explore-consumer.server";
 import { canonicalTokenExploreEntryV1 } from "../../../lib/explore-entry-v1";
@@ -24,14 +16,19 @@ import {
   buildExploreDataQuality,
   publicExploreEntryV1,
   valuationSortValue,
-  withExploreValuation,
+  withBitqueryMarketData,
   type ValuedExploreEntry,
 } from "../../../lib/explore-financial-data";
+import { readBitqueryTokenMarketDataV1 } from
+  "../../../lib/market-data/bitquery.server";
+import { exploreEntriesMarketIdentitiesV1 } from
+  "../../../lib/market-data/explore-market-identities";
+import type { TokenMarketDataV1 } from
+  "../../../lib/market-data/market-data-v1";
 import { readExploreReferenceHeadWithinRouteBudget } from "../../../lib/explore-reference-head.server";
 import { getOnchainDeployment } from "../../../lib/onchain/config";
 import { readDurableExploreModel } from "../../../lib/onchain/durable-model";
 import {
-  filterAndSortTokens,
   parseExploreSort,
   visibleExploreTokens,
 } from "../../../lib/onchain/query";
@@ -41,10 +38,8 @@ import type {
 } from "../../../lib/onchain/types";
 import { readProductionCustomExploreDirectoryV1 } from "../../../lib/server/custom-launch/explore-directory-v1";
 import type {
-  CanonicalTokenExploreEntry,
   CustomProjectExploreEntry,
   ExploreEntry,
-  LauncherToken,
 } from "../../../lib/tokens";
 
 export const dynamic = "force-dynamic";
@@ -58,7 +53,6 @@ const EXPLORE_QUERY_PARAMETERS = new Set([
   "sort",
 ]);
 const TOP_VALUATION_LIMIT = 20;
-const NEWEST_LIVE_MARKET_LIMIT = 20;
 const readCanonicalExploreSource = createExploreConsumerSource<ExploreReadModel>({});
 const readCustomExploreSource = createExploreConsumerSource<
   readonly CustomProjectExploreEntry[]
@@ -112,18 +106,6 @@ async function settleExploreSource<T>(
   } catch (error) {
     return { source: null, error };
   }
-}
-
-function mergeTokenUpdates(
-  tokens: readonly LauncherToken[],
-  updates: readonly LauncherToken[],
-) {
-  const byAddress = new Map(
-    updates.map((token) => [token.tokenAddress.toLowerCase(), token]),
-  );
-  return tokens.map(
-    (token) => byAddress.get(token.tokenAddress.toLowerCase()) ?? token,
-  );
 }
 
 function hasCanonicalQueryShape(search: URLSearchParams) {
@@ -313,6 +295,38 @@ export function dedupeExploreEntriesV1(
   return output;
 }
 
+function valueExploreEntriesWithMarketData(
+  entries: readonly ExploreEntry[],
+  marketByToken: ReadonlyMap<string, TokenMarketDataV1>,
+): ValuedExploreEntry[] {
+  return entries.map((entry) => {
+    const address = entry.tokenAddress?.toLowerCase();
+    const marketData = address ? marketByToken.get(address) : undefined;
+    if (marketData) return withBitqueryMarketData(entry, marketData);
+    return {
+      ...entry,
+      valuation: {
+        status: "unavailable" as const,
+        reason:
+          entry.exploreKind === "custom-project" && entry.markets.length === 0
+            ? "no-market" as const
+            : "source-unavailable" as const,
+      },
+    };
+  });
+}
+
+function hasVerifiedBitqueryPrice(entries: readonly ValuedExploreEntry[]): boolean {
+  return entries.some((entry) => {
+    const primary = entry.marketData?.pools.find(
+      (pool) => pool.identity.poolId === entry.marketData?.primaryPoolId,
+    );
+    return primary?.status === "current" &&
+      (primary.latestTrade?.priceUsdWad !== undefined ||
+        primary.latestTrade?.priceQuoteWad !== undefined);
+  });
+}
+
 function paginateEntries(
   ordered: readonly ExploreEntry[],
   input: Readonly<{ page: number; pageSize: number }>,
@@ -383,12 +397,6 @@ export async function GET(request: NextRequest) {
       pageSize: integerQuery(search.get("limit"), 9),
       socials,
     } as const;
-    let deployment: ReturnType<typeof getAlchemyOnchainDeployment> | null = null;
-    try {
-      deployment = getAlchemyOnchainDeployment();
-    } catch {
-      // Provider readiness is independent from canonical launch identity.
-    }
     const canonicalRead = settleExploreSource(
       readCanonicalExploreSource({
         primary: readPrimaryExploreModel,
@@ -400,19 +408,14 @@ export async function GET(request: NextRequest) {
         primary: () => readProductionCustomExploreDirectoryV1(request.signal),
       }),
     );
-    const operationalSnapshotRead = deployment?.status === "ready"
-      ? readVerifiedOperationalMarketSnapshot(deployment)
-      : Promise.resolve(null);
     const [
       canonicalAttempt,
       customAttempt,
       referenceHead,
-      operationalSnapshot,
     ] = await Promise.all([
       canonicalRead,
       customRead,
       readExploreReferenceHeadWithinRouteBudget(),
-      operationalSnapshotRead,
     ]);
     if (canonicalAttempt.source === null && customAttempt.source === null) {
       throw canonicalAttempt.error ?? customAttempt.error;
@@ -420,114 +423,35 @@ export async function GET(request: NextRequest) {
 
     const canonicalSource = canonicalAttempt.source;
     const customSource = customAttempt.source;
-    let pricedModel = canonicalSource?.value ?? null;
-
-    let liveSnapshot = operationalSnapshot;
-    if (deployment?.status === "ready" && liveSnapshot) {
-      try {
-        liveSnapshot = await withSameBlockEthUsdQuote({
-          deployment,
-          snapshot: liveSnapshot,
-        });
-      } catch {
-        // USD conversion is fail-closed. Current StateView values can still be
-        // exposed in ETH, but an older durable quote is never carried forward.
-        liveSnapshot = withoutUnboundEthUsdQuote(liveSnapshot);
-      }
-    }
-    let livePoolStateApplied = false;
-    if (deployment?.status === "ready" && liveSnapshot && pricedModel) {
-      const visible = visibleExploreTokens(pricedModel);
-      const top = filterAndSortTokens(
-        [...visible],
-        "",
-        "market-cap",
-      ).slice(0, TOP_VALUATION_LIMIT);
-      const newest = filterAndSortTokens(
-        [...visible],
-        "",
-        "newest",
-      ).slice(0, NEWEST_LIVE_MARKET_LIMIT);
-      const warmCandidates =
-        options.sort === "market-cap" || options.sort === "market-cap-asc"
-          ? visible
-          : [...top, ...newest];
-      const warm = [...new Map(
-        warmCandidates.map((token) => [
-          token.tokenAddress.toLowerCase(),
-          token,
-        ]),
-      ).values()];
-      try {
-        const updates = await enrichTokensWithAlchemyPoolState({
-          deployment,
-          snapshot: liveSnapshot,
-          tokens: warm,
-        });
-        const previousByAddress = new Map(pricedModel.tokens.map((token) => [
-          token.tokenAddress.toLowerCase(),
-          token,
-        ]));
-        livePoolStateApplied = updates.some((token) => {
-          const previous = previousByAddress.get(
-            token.tokenAddress.toLowerCase(),
-          );
-          return token.indexedValuationBlockNumber ===
-              liveSnapshot?.blockNumber &&
-            (
-              previous?.indexedValuationBlockNumber !==
-                token.indexedValuationBlockNumber ||
-              previous?.marketCapEthWei !== token.marketCapEthWei ||
-              previous?.fdvUsdWad !== token.fdvUsdWad
-            );
-        });
-        pricedModel = {
-          ...pricedModel,
-          tokens: mergeTokenUpdates(pricedModel.tokens, updates),
-        };
-      } catch {
-        // Keep the canonical model and mark its valuations below as partial.
-      }
-    }
-
-    const modelTokens = pricedModel?.tokens ?? [];
+    const identityModel = canonicalSource?.value ?? null;
+    const modelTokens = identityModel?.tokens ?? [];
     const customProjects = suppressRouterBoundCustomProjectDuplicates(
       modelTokens,
       customSource?.value ?? [],
     );
     const identityAsOfBlock =
-      pricedModel?.status === "ready"
-        ? (pricedModel.launchDiscoverySnapshot ?? pricedModel.snapshot).blockNumber
+      identityModel?.status === "ready"
+        ? (identityModel.launchDiscoverySnapshot ?? identityModel.snapshot).blockNumber
         : null;
     const referenceBlock = greatestBlockNumber(
       identityAsOfBlock,
       referenceHead?.blockNumber,
-      operationalSnapshot?.blockNumber,
     );
-    const valuationContext = {
-      referenceBlock,
-      forceStale:
-        canonicalSource?.status === "last-known-good" ||
-        operationalSnapshot === null,
-    } as const;
-    const classicEntries = pricedModel
-      ? visibleExploreTokens(pricedModel)
-          .map(canonicalTokenExploreEntryV1)
-          .map((entry) => withExploreValuation(entry, valuationContext))
-      : [];
-    const valuedCustomProjects = customProjects.map((entry) =>
-      withExploreValuation(entry, valuationContext)
+    const identityEntries = dedupeExploreEntriesV1([
+      ...(identityModel
+        ? visibleExploreTokens(identityModel).map(canonicalTokenExploreEntryV1)
+        : []),
+      ...customProjects,
+    ]);
+    const marketByToken = await readBitqueryTokenMarketDataV1(
+      exploreEntriesMarketIdentitiesV1(identityEntries),
+      { signal: request.signal },
     );
-    const entries = dedupeExploreEntriesV1([
-      ...classicEntries,
-      ...valuedCustomProjects,
-    ]) as ValuedExploreEntry[];
+    const entries = valueExploreEntriesWithMarketData(
+      identityEntries,
+      marketByToken,
+    );
     assertNoExploreCategoryCollision(entries);
-    const livePriceSource = livePoolStateApplied
-      ? liveSnapshot?.ethUsdQuote
-        ? "state-view+chainlink"
-        : "state-view"
-      : "read-model";
     const useTopValuationView =
       options.sort === "market-cap" &&
       options.query.length === 0 &&
@@ -536,34 +460,7 @@ export async function GET(request: NextRequest) {
       ...options,
       topThenNewest: useTopValuationView,
     });
-    let pageEntries = paginated.tokens as ValuedExploreEntry[];
-    const pageClassic = pageEntries.filter(
-      (
-        entry,
-      ): entry is ValuedExploreEntry<CanonicalTokenExploreEntry> =>
-        entry.exploreKind === "token",
-    );
-    if (deployment?.status === "ready" && liveSnapshot && pageClassic.length) {
-      try {
-        const updates = await enrichTokensWithAlchemyPoolState({
-          deployment,
-          snapshot: liveSnapshot,
-          tokens: pageClassic,
-        });
-        const updatedByAddress = new Map(updates.map((token) => [
-          token.tokenAddress.toLowerCase(),
-          withExploreValuation(
-            canonicalTokenExploreEntryV1(token),
-            valuationContext,
-          ),
-        ]));
-        pageEntries = pageEntries.map((entry) => entry.exploreKind === "token"
-          ? updatedByAddress.get(entry.tokenAddress.toLowerCase()) ?? entry
-          : entry);
-      } catch {
-        // Page-level refresh is best effort; last-known values remain visible.
-      }
-    }
+    const pageEntries = paginated.tokens as ValuedExploreEntry[];
 
     const sourceAges = [canonicalSource?.ageMs, customSource?.ageMs].filter(
       (value): value is number => value !== undefined,
@@ -587,8 +484,6 @@ export async function GET(request: NextRequest) {
         custom: customSource,
       }),
     };
-    const rpcProvider = exploreRpcProviderHeader(deployment);
-
     if (canonicalSource === null && entries.length === 0) {
       return NextResponse.json(
         {
@@ -603,7 +498,7 @@ export async function GET(request: NextRequest) {
             "Cache-Control": "no-store",
             "Retry-After": "5",
             "X-Programmable-Data-Quality": dataQuality.status,
-            "X-Programmable-Valuation-Metric": "fdv",
+            "X-Programmable-Market-Source": "bitquery",
             ...sourceHeaders,
           },
         },
@@ -611,24 +506,24 @@ export async function GET(request: NextRequest) {
     }
 
     const page = {
-      status: pricedModel?.status === "ready" || entries.length > 0
+      status: identityModel?.status === "ready" || entries.length > 0
         ? "ready" as const
-        : pricedModel?.status ?? "not-deployed" as const,
+        : identityModel?.status ?? "not-deployed" as const,
       ...paginated,
       tokens: pageEntries.map(publicExploreEntryV1),
       sort: options.sort,
       query: options.query,
       sortMetric: "fdv" as const,
       dataQuality,
-      snapshot: pricedModel?.snapshot ?? null,
+      snapshot: identityModel?.snapshot ?? null,
       launchDiscoverySnapshot:
-        pricedModel?.status === "ready"
-          ? pricedModel.launchDiscoverySnapshot
+        identityModel?.status === "ready"
+          ? identityModel.launchDiscoverySnapshot
           : undefined,
-      ...(pricedModel
+      ...(identityModel
         ? {
-            launcherFeesAccruedWei: pricedModel.launcherFeesAccruedWei,
-            launcherFeesAccruedEth: pricedModel.launcherFeesAccruedEth,
+            launcherFeesAccruedWei: identityModel.launcherFeesAccruedWei,
+            launcherFeesAccruedEth: identityModel.launcherFeesAccruedEth,
           }
         : {}),
     };
@@ -644,22 +539,17 @@ export async function GET(request: NextRequest) {
               ? "public, max-age=0, s-maxage=2, stale-while-revalidate=5"
               : "public, max-age=0, s-maxage=30",
           "X-Programmable-Data-Quality": dataQuality.status,
-          "X-Programmable-Valuation-Metric": "fdv",
-          ...(dataQuality.valuation.asOfBlock
+          "X-Programmable-Market-Source": "bitquery",
+          ...(dataQuality.valuation.asOfTime
             ? {
-                "X-Programmable-Valuation-Block":
-                  dataQuality.valuation.asOfBlock,
+                "X-Programmable-Market-As-Of":
+                  dataQuality.valuation.asOfTime,
               }
             : {}),
-          ...(pricedModel
-            ? {
-                "X-Programmable-Price-Source": livePriceSource,
-              }
+          ...(hasVerifiedBitqueryPrice(entries)
+            ? { "X-Programmable-Price-Source": "bitquery" }
             : {}),
           ...sourceHeaders,
-          ...(rpcProvider === null
-            ? {}
-            : { "X-Programmable-Rpc-Provider": rpcProvider }),
         },
       },
     );
