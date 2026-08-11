@@ -1,25 +1,19 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import {
-  writeBuilderPromptToClipboard,
-} from "@/components/hookathon-countdown";
 import {
   getHookathonCountdown,
   formatHookathonDeadline,
   timestampFromIso,
 } from "@/lib/hookathon/time";
-import {
-  HOOKATHON_BUILDER_PROMPT,
-  hookathonConfig,
-} from "@/lib/hookathon/config";
+import { hookathonConfig } from "@/lib/hookathon/config";
 
 const confirmation = timestampFromIso(hookathonConfig.confirmationIso);
 const deadline = timestampFromIso(hookathonConfig.deadlineIso);
 
 describe("Hookathon countdown", () => {
-  it("starts at exactly three days", () => {
+  it("starts at exactly four days", () => {
     expect(getHookathonCountdown(deadline, confirmation)).toMatchObject({
-      days: 3,
+      days: 4,
       hours: 0,
       minutes: 0,
       seconds: 0,
@@ -110,7 +104,7 @@ describe("Hookathon countdown", () => {
         hookathonConfig.deadlineIso,
         hookathonConfig.timeZone,
       ),
-    ).toBe("13 Aug 2026, 19:40:20 CEST");
+    ).toBe("14 Aug 2026, 19:40:20 CEST");
   });
 
   it("rejects invalid clock inputs instead of inventing a countdown", () => {
@@ -122,14 +116,4 @@ describe("Hookathon countdown", () => {
     );
   });
 
-  it("copies the exact builder prompt through the injected clipboard writer", async () => {
-    const writeText = vi.fn(async () => undefined);
-
-    await writeBuilderPromptToClipboard(HOOKATHON_BUILDER_PROMPT, {
-      writeText,
-    });
-
-    expect(writeText).toHaveBeenCalledOnce();
-    expect(writeText).toHaveBeenCalledWith(HOOKATHON_BUILDER_PROMPT);
-  });
 });

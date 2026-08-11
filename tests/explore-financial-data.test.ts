@@ -94,7 +94,7 @@ describe("Explore financial-data semantics", () => {
     });
   });
 
-  it("exposes a sort value only for current USD FDV", () => {
+  it("sorts every safely parsed USD FDV while keeping freshness separate", () => {
     const valued = (overrides: Partial<LauncherToken>, referenceBlock: string) =>
       withExploreValuation(
         canonicalTokenExploreEntryV1(goldenToken(overrides)),
@@ -102,6 +102,9 @@ describe("Explore financial-data semantics", () => {
       );
     const currentUsd = valued({}, "25725569");
     const staleUsd = valued({}, "25725624");
+    const unknownUsd = valued({
+      indexedValuationBlockNumber: undefined,
+    }, "25725569");
     const currentEth = valued({
       fdvUsdWad: undefined,
       marketCapEthWei: "900000000000000000000",
@@ -115,7 +118,12 @@ describe("Explore financial-data semantics", () => {
     expect(valuationSortValue(currentUsd)).toBe(
       2_779_462_110_000_000_000_000_000n,
     );
-    expect(valuationSortValue(staleUsd)).toBeNull();
+    expect(valuationSortValue(staleUsd)).toBe(
+      2_779_462_110_000_000_000_000_000n,
+    );
+    expect(valuationSortValue(unknownUsd)).toBe(
+      2_779_462_110_000_000_000_000_000n,
+    );
     expect(valuationSortValue(currentEth)).toBeNull();
     expect(valuationSortValue(currentQuote)).toBeNull();
   });

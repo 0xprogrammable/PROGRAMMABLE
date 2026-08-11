@@ -1,5 +1,5 @@
 .page {
-  background: var(--body-background);
+  background: transparent;
   color: var(--brand-ivory);
   min-height: calc(100svh - var(--header-height));
   min-width: 0;
@@ -15,15 +15,17 @@
 
 .hero {
   align-items: center;
-  display: grid;
-  gap: clamp(48px, 7vw, 104px);
-  grid-template-columns: minmax(300px, 0.72fr) minmax(620px, 1.28fr);
-  min-height: 218px;
-  padding: 12px 0 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  justify-content: center;
+  min-height: 250px;
+  padding: 18px 0 30px;
+  text-align: center;
 }
 
 .hero h1 {
-  font-size: clamp(72px, 7.8vw, 112px);
+  font-size: clamp(64px, 6.7vw, 96px);
   font-weight: 520;
   letter-spacing: -0.065em;
   line-height: 0.9;
@@ -200,20 +202,7 @@
   max-width: 52ch;
 }
 
-:global(.app-frame):has(.page) > main {
-  background: var(--body-background);
-}
-
-:global(.app-frame):has(.page) > :global(.atmosphere-backdrop) {
-  opacity: 0;
-}
-
 @media (max-width: 1100px) {
-  .hero {
-    gap: 32px;
-    grid-template-columns: minmax(260px, 0.62fr) minmax(560px, 1.38fr);
-  }
-
   .steps {
     gap: 24px;
   }
@@ -230,14 +219,12 @@
   }
 
   .hero {
-    align-items: start;
-    gap: 32px;
-    grid-template-columns: 1fr;
+    gap: 20px;
     padding-top: 8px;
   }
 
   .hero h1 {
-    font-size: 72px;
+    font-size: 68px;
   }
 
   .prizes {

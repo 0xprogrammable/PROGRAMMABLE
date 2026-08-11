@@ -29,9 +29,9 @@ export type TokenChartDataQuality = Readonly<{
   finality: "confirmed" | "latest";
   history: Readonly<{ status: "current"; throughBlock: string }>;
   price: Readonly<{
-    status: "current";
+    status: "current" | "stale";
     asOfBlock: string;
-    lagBlocks: "0";
+    lagBlocks: string;
   }>;
   valuation:
     | Readonly<{
@@ -206,7 +206,11 @@ function cacheChartPayload(key: string, payload: ChartPayload) {
 }
 
 export function isAuthoritativeChartPayloadStatus(status: unknown) {
-  return status === "ready" || status === "insufficient-history";
+  return (
+    status === "ready" ||
+    status === "insufficient-history" ||
+    status === "partial"
+  );
 }
 
 function isUnsignedIntegerString(value: unknown): value is string {
@@ -266,12 +270,29 @@ function parseChartDataQuality(value: unknown): TokenChartDataQuality | null {
     value.history.status !== "current" ||
     value.history.throughBlock !== value.asOfBlock ||
     !isRecord(value.price) ||
-    value.price.status !== "current" ||
-    value.price.asOfBlock !== value.asOfBlock ||
-    value.price.lagBlocks !== "0" ||
+    !isCanonicalUnsignedIntegerString(value.price.asOfBlock) ||
+    !isCanonicalUnsignedIntegerString(value.price.lagBlocks) ||
     !isRecord(value.valuation) ||
     value.valuation.metric !== "fdv"
   ) {
+    return null;
+  }
+
+  const snapshotBlock = BigInt(value.asOfBlock);
+  const priceBlock = BigInt(value.price.asOfBlock);
+  const priceLag = BigInt(value.price.lagBlocks);
+  if (value.price.status === "current") {
+    if (priceBlock !== snapshotBlock || priceLag !== 0n) return null;
+  } else if (value.price.status === "stale") {
+    if (
+      value.status !== "partial" ||
+      priceBlock >= snapshotBlock ||
+      priceLag === 0n ||
+      snapshotBlock - priceBlock !== priceLag
+    ) {
+      return null;
+    }
+  } else {
     return null;
   }
 
@@ -317,12 +338,15 @@ function hasValidChartCardinality(
 ) {
   return status === "ready"
     ? pointCount >= 2
-    : status === "insufficient-history" && pointCount === 1;
+    : status === "insufficient-history"
+      ? pointCount === 1
+      : status === "partial" && pointCount >= 1;
 }
 
 function hasValidChartPointBlocks(
   points: TokenChartPoint[],
   asOfBlock: string,
+  priceAsOfBlock: string,
 ) {
   const snapshotBlock = BigInt(asOfBlock);
   let previousBlock: bigint | null = null;
@@ -336,7 +360,7 @@ function hasValidChartPointBlocks(
     }
     previousBlock = currentBlock;
   }
-  return previousBlock === snapshotBlock;
+  return previousBlock === BigInt(priceAsOfBlock);
 }
 
 function withoutNonCurrentFdv(payload: ChartPayload): ChartPayload {
@@ -387,7 +411,13 @@ export function parseAuthoritativeChartPayload(
     return null;
   }
   const points = payload.points as TokenChartPoint[];
-  if (!hasValidChartPointBlocks(points, dataQuality.asOfBlock)) return null;
+  if (
+    !hasValidChartPointBlocks(
+      points,
+      dataQuality.asOfBlock,
+      dataQuality.price.asOfBlock,
+    )
+  ) return null;
 
   return withoutNonCurrentFdv({
     status: payload.status,
@@ -455,7 +485,7 @@ async function requestTokenChartPayload(
       if (payload === null) {
         throw new Error("Chart source is not ready");
       }
-      cacheChartPayload(key, payload);
+      if (payload.status !== "partial") cacheChartPayload(key, payload);
       return payload;
     })
     .finally(() => {
@@ -807,6 +837,8 @@ export function TokenPriceChart({
   const chart = useMemo(() => {
     return payload ? createChartGeometry(payload.points) : null;
   }, [payload]);
+  const hasLimitedHistory =
+    payload?.status === "partial" && payload.dataQuality?.price.status === "stale";
 
   const emptyMessage = getPriceHistoryEmptyMessage(launchModel, failed);
   const activePoint =
@@ -828,7 +860,9 @@ export function TokenPriceChart({
       ? "Loading price history"
       : chart
         ? chart.points.length === 1
-          ? "Current price loaded from 1 point"
+          ? hasLimitedHistory
+            ? "Last verified price loaded from 1 point"
+            : "Current price loaded from 1 point"
           : `Price history loaded with ${chart.points.length} points`
         : emptyMessage;
 
@@ -915,7 +949,9 @@ export function TokenPriceChart({
       </span>
       <div className={styles.header}>
         <div>
-          <p className={styles.eyebrow}>Price</p>
+          <p className={styles.eyebrow}>
+            {hasLimitedHistory ? "Last verified price" : "Price"}
+          </p>
           <p className={styles.value}>
             {chart && displayedPrice !== undefined
               ? formatPrice(displayedPrice, chart.unit)

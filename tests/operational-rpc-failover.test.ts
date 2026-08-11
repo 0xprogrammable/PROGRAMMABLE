@@ -135,6 +135,25 @@ describe("operational RPC failover", () => {
     expect(read).toHaveBeenCalledTimes(2);
   });
 
+  it("does not retain provider URLs or request bodies in the public error chain", async () => {
+    const read = vi.fn(async (candidate: ReadyOnchainDeployment) => {
+      throw httpFailure(429, candidate.rpcUrl);
+    });
+
+    const error = await withOperationalRpcFailover(deployment, read).catch(
+      (candidate) => candidate,
+    );
+    expect(error).toBeInstanceOf(OperationalRpcUnavailableError);
+    expect(JSON.stringify(error)).not.toContain("primary.example");
+    expect(JSON.stringify(error)).not.toContain("secondary.example");
+    expect(JSON.stringify(error)).not.toContain("eth_blockNumber");
+    expect((error as Error & { cause?: unknown }).cause).toBeUndefined();
+    expect(safeOperationalRpcError(error)).toEqual({
+      name: "OperationalRpcUnavailableError",
+      category: "rpc-unavailable",
+    });
+  });
+
   it("keeps endpoint URLs and request bodies out of telemetry", () => {
     const summary = JSON.stringify(
       safeOperationalRpcError(httpFailure(429)),

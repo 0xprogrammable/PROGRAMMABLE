@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import styles from "@/components/hookathon-countdown.module.css";
 import {
@@ -8,19 +8,12 @@ import {
   type HookathonCountdownParts,
 } from "@/lib/hookathon/time";
 
-type ClipboardWriter = Readonly<{
-  writeText: (text: string) => Promise<void>;
-}>;
-
 export type HookathonCountdownProps = Readonly<{
   deadlineIso: string;
   deadlineDisplay: string;
   hookbuilderUrl: string;
   initialNowMs: number;
-  prompt: string;
 }>;
-
-type CopyState = "idle" | "copied" | "error";
 
 const COUNTDOWN_UNITS = [
   { key: "days", label: "Days" },
@@ -39,34 +32,16 @@ function paddedUnit(value: number) {
   return String(value).padStart(2, "0");
 }
 
-export async function writeBuilderPromptToClipboard(
-  prompt: string,
-  clipboard?: ClipboardWriter,
-) {
-  const writer =
-    clipboard ??
-    (typeof navigator === "undefined" ? undefined : navigator.clipboard);
-
-  if (!writer) {
-    throw new Error("Clipboard access is unavailable");
-  }
-
-  await writer.writeText(prompt);
-}
-
 export function HookathonCountdown({
   deadlineIso,
   deadlineDisplay,
   hookbuilderUrl,
   initialNowMs,
-  prompt,
 }: HookathonCountdownProps) {
   const deadlineMs = Date.parse(deadlineIso);
   const [countdown, setCountdown] = useState(() =>
     getHookathonCountdown(deadlineMs, initialNowMs),
   );
-  const [copyState, setCopyState] = useState<CopyState>("idle");
-  const copyResetTimeoutRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     const monotonicStartMs = performance.now();
@@ -116,49 +91,6 @@ export function HookathonCountdown({
     };
   }, [deadlineMs, initialNowMs]);
 
-  useEffect(
-    () => () => {
-      if (copyResetTimeoutRef.current !== undefined) {
-        window.clearTimeout(copyResetTimeoutRef.current);
-      }
-    },
-    [],
-  );
-
-  async function copyBuilderPrompt() {
-    if (countdown.ended) return;
-
-    if (copyResetTimeoutRef.current !== undefined) {
-      window.clearTimeout(copyResetTimeoutRef.current);
-    }
-
-    try {
-      await writeBuilderPromptToClipboard(prompt);
-      setCopyState("copied");
-      copyResetTimeoutRef.current = window.setTimeout(() => {
-        setCopyState("idle");
-        copyResetTimeoutRef.current = undefined;
-      }, 2_400);
-    } catch {
-      setCopyState("error");
-    }
-  }
-
-  const buttonLabel = countdown.ended
-    ? "Submissions closed"
-    : copyState === "copied"
-      ? "Prompt copied"
-      : copyState === "error"
-        ? "Try copy again"
-        : "Copy builder prompt";
-
-  const copyAnnouncement =
-    copyState === "copied"
-      ? "Builder prompt copied"
-      : copyState === "error"
-        ? "Unable to copy. Try again."
-        : "";
-
   return (
     <div
       className={styles.island}
@@ -191,28 +123,22 @@ export function HookathonCountdown({
       </p>
 
       <div className={styles.actions}>
-        <button
-          className={styles.primaryAction}
-          disabled={countdown.ended}
-          onClick={copyBuilderPrompt}
-          type="button"
-        >
-          {buttonLabel}
-        </button>
-        <a
-          className={styles.secondaryAction}
-          href={hookbuilderUrl}
-          rel="noreferrer"
-          target="_blank"
-        >
-          Open Hookbuilder
-          <span aria-hidden="true">↗</span>
-        </a>
+        {countdown.ended ? (
+          <span className={styles.closedAction} aria-disabled="true">
+            Submissions closed
+          </span>
+        ) : (
+          <a
+            className={styles.secondaryAction}
+            href={hookbuilderUrl}
+            rel="noreferrer"
+            target="_blank"
+          >
+            Open Hookbuilder
+            <span aria-hidden="true">↗</span>
+          </a>
+        )}
       </div>
-
-      <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
-        {copyAnnouncement}
-      </p>
       <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {countdown.ended ? "Submissions closed" : ""}
       </p>

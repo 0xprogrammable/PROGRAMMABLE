@@ -49,6 +49,13 @@ const UNAVAILABLE_VALUATION_DATA_QUALITY = {
   },
 } as const;
 
+const STALE_PRICE_DATA_QUALITY = {
+  ...CURRENT_DATA_QUALITY,
+  status: "partial",
+  price: { status: "stale", asOfBlock: "99", lagBlocks: "1" },
+  valuation: { status: "unavailable", metric: "fdv" },
+} as const;
+
 describe("token price chart inspection", () => {
   it("maps the pointer to the nearest plotted price point", () => {
     expect(nearestChartPointIndex(100, 100, 600, 7)).toBe(0);
@@ -161,7 +168,7 @@ describe("token price chart refresh", () => {
     expect(isAuthoritativeChartPayloadStatus("ready")).toBe(true);
     expect(isAuthoritativeChartPayloadStatus("insufficient-history")).toBe(true);
     expect(isAuthoritativeChartPayloadStatus("not-deployed")).toBe(false);
-    expect(isAuthoritativeChartPayloadStatus("partial")).toBe(false);
+    expect(isAuthoritativeChartPayloadStatus("partial")).toBe(true);
     expect(
       isAuthoritativeChartPayload({
         status: "ready",
@@ -343,10 +350,27 @@ describe("token price chart refresh", () => {
     });
   });
 
-  it("rejects stale price freshness before it can replace last-known-good data", () => {
+  it("accepts an exact stale price as limited history without caching FDV", () => {
     expect(
       isAuthoritativeChartPayload({
-        status: "ready",
+        status: "partial",
+        points: [
+          { blockNumber: "98", priceEth: "0.1" },
+          { blockNumber: "99", priceEth: "0.2" },
+        ],
+        swapCount: 2,
+        volumeWei: "3",
+        volumeEth: "0.000000000000000003",
+        valuationMetric: "fdv",
+        dataQuality: STALE_PRICE_DATA_QUALITY,
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects forged stale-price provenance", () => {
+    expect(
+      isAuthoritativeChartPayload({
+        status: "partial",
         points: [
           { blockNumber: "98", priceEth: "0.1" },
           { blockNumber: "99", priceEth: "0.2" },
@@ -356,25 +380,9 @@ describe("token price chart refresh", () => {
         volumeEth: "0.000000000000000003",
         valuationMetric: "fdv",
         dataQuality: {
-          ...CURRENT_DATA_QUALITY,
-          status: "partial",
-          price: { status: "stale", asOfBlock: "99", lagBlocks: "1" },
-          valuation: STALE_VALUATION_DATA_QUALITY.valuation,
+          ...STALE_PRICE_DATA_QUALITY,
+          price: { status: "stale", asOfBlock: "99", lagBlocks: "2" },
         },
-      }),
-    ).toBe(false);
-    expect(
-      isAuthoritativeChartPayload({
-        status: "ready",
-        points: [
-          { blockNumber: "98", priceEth: "0.1" },
-          { blockNumber: "99", priceEth: "0.2" },
-        ],
-        swapCount: 2,
-        volumeWei: "3",
-        volumeEth: "0.000000000000000003",
-        valuationMetric: "fdv",
-        dataQuality: CURRENT_DATA_QUALITY,
       }),
     ).toBe(false);
   });

@@ -73,6 +73,25 @@ describe("onchain deployment manifest boundary", () => {
     });
   });
 
+  it("prefers the provider-specific production bindings over legacy aliases", () => {
+    vi.stubEnv("ETHEREUM_RPC_URL", "https://legacy-primary.example");
+    vi.stubEnv("ETHEREUM_RPC_URL_B", "https://legacy-secondary.example");
+    vi.stubEnv(
+      "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
+      "https://alchemy.example",
+    );
+    vi.stubEnv(
+      "PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL",
+      "https://quicknode.example",
+    );
+
+    expect(getOperationalOnchainDeployment("production")).toMatchObject({
+      status: "ready",
+      rpcUrl: "https://alchemy.example",
+      rpcUrlSecondary: "https://quicknode.example",
+    });
+  });
+
   it("rejects production operations without an independent RPC", () => {
     vi.stubEnv("ETHEREUM_RPC_URL", "https://rpc-a.example");
     vi.stubEnv("ETHEREUM_RPC_URL_B", "https://rpc-a.example");

@@ -40,12 +40,10 @@ describe("Hookathon surface", () => {
     expect(html).toContain("A pull request alone does not qualify");
   });
 
-  it("uses an accessible native copy action without announcing every second", () => {
+  it("uses one accessible Hookbuilder action without announcing every second", () => {
     const html = renderHookathon(confirmation);
 
-    expect(html).toMatch(
-      /<button[^>]*type="button"[^>]*>Copy builder prompt<\/button>/,
-    );
+    expect(html).not.toContain("Copy builder prompt");
     expect(html).toContain('href="https://github.com/0xprogrammable/hookbuilder"');
     expect(html).toContain("Open Hookbuilder");
     expect(html).toContain('aria-hidden="true"');
@@ -53,17 +51,16 @@ describe("Hookathon surface", () => {
     expect(html).not.toContain('role="timer"');
     expect(html).not.toContain('aria-live="assertive"');
     expect(html).toContain(
-      '<time dateTime="2026-08-13T17:40:20Z">13 Aug 2026, 19:40:20 CEST</time>',
+      '<time dateTime="2026-08-14T17:40:20Z">14 Aug 2026, 19:40:20 CEST</time>',
     );
   });
 
-  it("keeps the ended state stable and disables the entry action", () => {
+  it("keeps the ended state stable and removes the entry link", () => {
     const html = renderHookathon(deadline);
 
     expect(html).toContain("Submissions closed");
-    expect(html).toMatch(
-      /<button[^>]*disabled=""[^>]*type="button"[^>]*>Submissions closed<\/button>/,
-    );
+    expect(html).toContain('aria-disabled="true">Submissions closed</span>');
+    expect(html).not.toContain('href="https://github.com/0xprogrammable/hookbuilder"');
     expect(html).not.toContain("Copy builder prompt");
   });
 

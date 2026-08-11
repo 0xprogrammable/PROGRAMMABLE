@@ -14,9 +14,9 @@ describe("Hookathon configuration", () => {
     expect(hookathonConfig.confirmationIso).toBe(
       "2026-08-10T19:40:20+02:00",
     );
-    expect(hookathonConfig.deadlineIso).toBe("2026-08-13T17:40:20Z");
+    expect(hookathonConfig.deadlineIso).toBe("2026-08-14T17:40:20Z");
     expect(hookathonConfig.timeZone).toBe("Europe/Zurich");
-    expect(deadline - confirmation).toBe(3 * 24 * 60 * 60 * 1_000);
+    expect(deadline - confirmation).toBe(4 * 24 * 60 * 60 * 1_000);
   });
 
   it("keeps the prize pool and split arithmetically exact", () => {

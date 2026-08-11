@@ -322,7 +322,7 @@ describe("Explore API Alchemy boundary", () => {
     }
   });
 
-  it("ranks only current USD FDV and uses newest order for incomparable valuations", () => {
+  it("ranks all USD FDV and uses newest order only for other currencies", () => {
     const valued = (
       entry: ExploreEntry,
       valuation: Readonly<{
@@ -387,9 +387,9 @@ describe("Explore API Alchemy boundary", () => {
       }).tokens.map(({ id }) => id);
 
     expect(paginate("market-cap")).toEqual([
+      "1:stale-usd",
       "1:usd-high",
       "1:usd-low",
-      "1:stale-usd",
       "1:eth",
       "1:quote",
     ]);

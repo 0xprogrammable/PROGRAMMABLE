@@ -32,7 +32,6 @@ export function HookathonPage({ initialNowMs }: HookathonPageProps) {
             deadlineIso={hookathonConfig.deadlineIso}
             hookbuilderUrl={hookathonConfig.hookbuilderUrl}
             initialNowMs={initialNowMs}
-            prompt={hookathonConfig.builderPrompt}
           />
         </header>
 
