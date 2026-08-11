@@ -1,0 +1,391 @@
+[
+  {
+    "inputs": [
+      {
+        "internalType": "uint16",
+        "name": "readinessMask",
+        "type": "uint16"
+      }
+    ],
+    "name": "AtomicPreflightUnavailable",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "ClosedRuntimeRequired",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "kernel",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "expectedKernelRuntimeCodeHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "grantDigest",
+        "type": "bytes32"
+      },
+      {
+        "components": [
+          {
+            "internalType": "enum IProgrammableUniversalLaunchKernelV1.ReservationKind",
+            "name": "kind",
+            "type": "uint8"
+          },
+          {
+            "internalType": "enum IProgrammableUniversalLaunchKernelV1.ReservationScope",
+            "name": "scope",
+            "type": "uint8"
+          },
+          {
+            "internalType": "address",
+            "name": "account",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "manager",
+            "type": "address"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "identifier",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedRuntimeCodeHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedManagerRuntimeCodeHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sharedIdentityHash",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct IProgrammableUniversalLaunchKernelV1.ReservationV1[]",
+        "name": "reservations",
+        "type": "tuple[]"
+      }
+    ],
+    "name": "atomicPreflightHashV1",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "readbackHash",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "expectedRuntimeCodeHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "expectedRuntimeBindingHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bool",
+        "name": "requireStateless",
+        "type": "bool"
+      }
+    ],
+    "name": "closedRuntimeBindingHashV1",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "attestationHash",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "kernel",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "expectedKernelRuntimeCodeHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "grantDigest",
+        "type": "bytes32"
+      },
+      {
+        "components": [
+          {
+            "internalType": "enum IProgrammableUniversalLaunchKernelV1.ReservationKind",
+            "name": "kind",
+            "type": "uint8"
+          },
+          {
+            "internalType": "enum IProgrammableUniversalLaunchKernelV1.ReservationScope",
+            "name": "scope",
+            "type": "uint8"
+          },
+          {
+            "internalType": "address",
+            "name": "account",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "manager",
+            "type": "address"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "identifier",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedRuntimeCodeHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedManagerRuntimeCodeHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sharedIdentityHash",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct IProgrammableUniversalLaunchKernelV1.ReservationV1[]",
+        "name": "reservations",
+        "type": "tuple[]"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "candidateCurrentnessDigest",
+        "type": "bytes32"
+      }
+    ],
+    "name": "readbackV1",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "chainId",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "kernel",
+            "type": "address"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "kernelRuntimeCodeHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "profileKey",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "enum IProgrammableUniversalLaunchKernelV1.ProfileStatus",
+            "name": "profileStatus",
+            "type": "uint8"
+          },
+          {
+            "internalType": "address",
+            "name": "profileModule",
+            "type": "address"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "expectedProfileModuleRuntimeCodeHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "actualProfileModuleRuntimeCodeHash",
+            "type": "bytes32"
+          },
+          {
+            "components": [
+              {
+                "internalType": "bytes32",
+                "name": "securityControlHeadHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "securityEpoch",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "securityEpochHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "policyEpoch",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "policyEpochHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "reviewGeneration",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "reviewGenerationHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bool",
+                "name": "globalKilled",
+                "type": "bool"
+              }
+            ],
+            "internalType": "struct IProgrammableUniversalLaunchKernelV1.ControlStateV1",
+            "name": "control",
+            "type": "tuple"
+          },
+          {
+            "components": [
+              {
+                "internalType": "enum IProgrammableUniversalLaunchKernelV1.LaunchGrantStatus",
+                "name": "status",
+                "type": "uint8"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "grantHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "winnerKeyHash",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "stateHeadHash",
+                "type": "bytes32"
+              }
+            ],
+            "internalType": "struct IProgrammableUniversalLaunchKernelV1.LaunchGrantStateHeadV1",
+            "name": "grantStateHead",
+            "type": "tuple"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "winnerNonceOccupant",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "winnerKeyOccupant",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "activeExecutionGrantDigest",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "reservationSetHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "reservationStateHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "enum IProgrammableUniversalLaunchKernelV1.ReceiptStatus",
+            "name": "receiptStatus",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "receiptCoreHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "finalityIndexingReceiptHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bool",
+            "name": "candidateCurrentnessUsed",
+            "type": "bool"
+          },
+          {
+            "internalType": "bool",
+            "name": "candidateCurrentnessRevoked",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint16",
+            "name": "readinessMask",
+            "type": "uint16"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "readbackHash",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct IProgrammableUniversalLaunchPreflightV1.PreflightReadbackV1",
+        "name": "readback",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]

@@ -11,6 +11,12 @@ optimizer_runs = 1_000
 bytecode_hash = "none"
 cbor_metadata = false
 ffi = false
+additional_compiler_profiles = [
+  { name = "router-vnext", optimizer_runs = 100 }
+]
+compilation_restrictions = [
+  { paths = "src/router_vnext/**", optimizer_runs = 100 }
+]
 fs_permissions = [
   { access = "read", path = "./dependencies" },
   { access = "read", path = "./spec" },
