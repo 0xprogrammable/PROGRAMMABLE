@@ -1,0 +1,306 @@
+{
+  "$id": "https://programmable.market/schemas/router-v2-source-identity-referents.v3.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "V3.0.0 is immutable UNDEPLOYED/DENY. router-v2-source-identity-referents.v3.schema.json is structural documentation only and admits no artifact; a separately frozen deployment-bound successor must publish a new admitting schema.",
+  "not": {},
+  "properties": {
+    "applicantRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "applicantIdHash": {
+          "allOf": [
+            {
+              "pattern": "^0x[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "not": {
+                "const": "0x0000000000000000000000000000000000000000000000000000000000000000"
+              }
+            }
+          ]
+        },
+        "requestReceiptHash": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "reviewAdmissionHash": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "reviewerAttestationHash": {
+          "allOf": [
+            {
+              "pattern": "^0x[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "not": {
+                "const": "0x0000000000000000000000000000000000000000000000000000000000000000"
+              }
+            }
+          ]
+        }
+      },
+      "required": [
+        "applicantIdHash",
+        "requestReceiptHash",
+        "reviewAdmissionHash",
+        "reviewerAttestationHash"
+      ],
+      "type": "object"
+    },
+    "carrierEvidenceProvenance": {
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "properties": {
+            "carrierCommit": {
+              "type": "null"
+            },
+            "carrierTree": {
+              "type": "null"
+            }
+          },
+          "required": [
+            "carrierCommit",
+            "carrierTree"
+          ]
+        },
+        {
+          "properties": {
+            "carrierCommit": {
+              "allOf": [
+                {
+                  "pattern": "^0x[0-9a-f]{40}$",
+                  "type": "string"
+                },
+                {
+                  "not": {
+                    "const": "0x0000000000000000000000000000000000000000"
+                  }
+                }
+              ]
+            },
+            "carrierTree": {
+              "allOf": [
+                {
+                  "pattern": "^0x[0-9a-f]{40}$",
+                  "type": "string"
+                },
+                {
+                  "not": {
+                    "const": "0x0000000000000000000000000000000000000000"
+                  }
+                }
+              ]
+            }
+          },
+          "required": [
+            "carrierCommit",
+            "carrierTree"
+          ]
+        }
+      ],
+      "properties": {
+        "builderEvidenceHash": {
+          "allOf": [
+            {
+              "pattern": "^0x[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "not": {
+                "const": "0x0000000000000000000000000000000000000000000000000000000000000000"
+              }
+            }
+          ]
+        },
+        "carrierArtifactSha256": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "carrierCommit": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "allOf": [
+                {
+                  "pattern": "^0x[0-9a-f]{40}$",
+                  "type": "string"
+                },
+                {
+                  "not": {
+                    "const": "0x0000000000000000000000000000000000000000"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "carrierTree": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "allOf": [
+                {
+                  "pattern": "^0x[0-9a-f]{40}$",
+                  "type": "string"
+                },
+                {
+                  "not": {
+                    "const": "0x0000000000000000000000000000000000000000"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "required": [
+        "builderEvidenceHash",
+        "carrierArtifactSha256",
+        "carrierCommit",
+        "carrierTree"
+      ],
+      "type": "object"
+    },
+    "executableEvidenceSource": {
+      "additionalProperties": false,
+      "properties": {
+        "sourceCommitHash": {
+          "allOf": [
+            {
+              "pattern": "^0x[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "not": {
+                "const": "0x0000000000000000000000000000000000000000000000000000000000000000"
+              }
+            }
+          ]
+        },
+        "sourceCommitId": {
+          "allOf": [
+            {
+              "pattern": "^0x[0-9a-f]{40}$",
+              "type": "string"
+            },
+            {
+              "not": {
+                "const": "0x0000000000000000000000000000000000000000"
+              }
+            }
+          ]
+        },
+        "sourceHeadCommit": {
+          "allOf": [
+            {
+              "pattern": "^0x[0-9a-f]{40}$",
+              "type": "string"
+            },
+            {
+              "not": {
+                "const": "0x0000000000000000000000000000000000000000"
+              }
+            }
+          ]
+        },
+        "sourceLaunchId": {
+          "allOf": [
+            {
+              "pattern": "^0x[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "not": {
+                "const": "0x0000000000000000000000000000000000000000000000000000000000000000"
+              }
+            }
+          ]
+        },
+        "sourceRepository": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "type": "string"
+        },
+        "sourceRepositoryHash": {
+          "allOf": [
+            {
+              "pattern": "^0x[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "not": {
+                "const": "0x0000000000000000000000000000000000000000000000000000000000000000"
+              }
+            }
+          ]
+        },
+        "sourceTreeHash": {
+          "allOf": [
+            {
+              "pattern": "^0x[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "not": {
+                "const": "0x0000000000000000000000000000000000000000000000000000000000000000"
+              }
+            }
+          ]
+        },
+        "sourceTreeId": {
+          "allOf": [
+            {
+              "pattern": "^0x[0-9a-f]{40}$",
+              "type": "string"
+            },
+            {
+              "not": {
+                "const": "0x0000000000000000000000000000000000000000"
+              }
+            }
+          ]
+        }
+      },
+      "required": [
+        "sourceCommitHash",
+        "sourceCommitId",
+        "sourceHeadCommit",
+        "sourceLaunchId",
+        "sourceRepository",
+        "sourceRepositoryHash",
+        "sourceTreeHash",
+        "sourceTreeId"
+      ],
+      "type": "object"
+    },
+    "referentPolicy": {
+      "const": "A_APPLICANT_REQUEST_B_EXECUTABLE_SOURCE_C_CARRIER_NEVER_SUBSTITUTABLE"
+    },
+    "referentsHash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": "programmable.router-v2-source-identity-referents.v3"
+    }
+  },
+  "required": [
+    "applicantRequest",
+    "carrierEvidenceProvenance",
+    "executableEvidenceSource",
+    "referentPolicy",
+    "referentsHash",
+    "schemaVersion"
+  ],
+  "title": "router-v2-source-identity-referents.v3",
+  "type": "object"
+}

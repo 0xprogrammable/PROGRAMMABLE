@@ -1,0 +1,251 @@
+{
+  "inputs": {
+    "src/domain/canonical-json.ts": {
+      "bytes": 11086,
+      "format": "esm",
+      "imports": [
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:util"
+        }
+      ]
+    },
+    "src/domain/hashing.ts": {
+      "bytes": 2288,
+      "format": "esm",
+      "imports": [
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:crypto"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./canonical-json.js",
+          "path": "src/domain/canonical-json.ts"
+        }
+      ]
+    },
+    "src/internal/router-self-service-v1/completed-graph-adoption-contract-binding-v1.ts": {
+      "bytes": 73706,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../../domain/hashing.js",
+          "path": "src/domain/hashing.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./keccak.js",
+          "path": "src/internal/router-self-service-v1/keccak.ts"
+        }
+      ]
+    },
+    "src/internal/router-self-service-v1/keccak.ts": {
+      "bytes": 4158,
+      "format": "esm",
+      "imports": []
+    },
+    "src/internal/router-self-service-v1/router-v2-shared-lifecycle-v1.ts": {
+      "bytes": 149520,
+      "format": "esm",
+      "imports": [
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:crypto"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../domain/canonical-json.js",
+          "path": "src/domain/canonical-json.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../domain/hashing.js",
+          "path": "src/domain/hashing.ts"
+        }
+      ]
+    },
+    "src/internal/router-self-service-v1/router-v2-shared-lifecycle-v2.ts": {
+      "bytes": 311220,
+      "format": "esm",
+      "imports": [
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:crypto"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../domain/canonical-json.js",
+          "path": "src/domain/canonical-json.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../../domain/hashing.js",
+          "path": "src/domain/hashing.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./router-v2-shared-lifecycle-v1.js",
+          "path": "src/internal/router-self-service-v1/router-v2-shared-lifecycle-v1.ts"
+        }
+      ]
+    },
+    "src/internal/router-self-service-v1/router-v2-shared-lifecycle-v3.ts": {
+      "bytes": 153769,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../../domain/hashing.js",
+          "path": "src/domain/hashing.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./keccak.js",
+          "path": "src/internal/router-self-service-v1/keccak.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./completed-graph-adoption-contract-binding-v1.js",
+          "path": "src/internal/router-self-service-v1/completed-graph-adoption-contract-binding-v1.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./router-v2-shared-lifecycle-v2.js",
+          "path": "src/internal/router-self-service-v1/router-v2-shared-lifecycle-v2.ts"
+        }
+      ]
+    },
+    "src/public-api/router-v2-shared-lifecycle-v3.ts": {
+      "bytes": 4680,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../internal/router-self-service-v1/completed-graph-adoption-contract-binding-v1.js",
+          "path": "src/internal/router-self-service-v1/completed-graph-adoption-contract-binding-v1.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../internal/router-self-service-v1/router-v2-shared-lifecycle-v3.js",
+          "path": "src/internal/router-self-service-v1/router-v2-shared-lifecycle-v3.ts"
+        }
+      ]
+    }
+  },
+  "outputs": {
+    "artifacts/router-v2-shared-lifecycle-v3/router-v2-shared-lifecycle-portable.v3.mjs": {
+      "bytes": 243886,
+      "entryPoint": "src/public-api/router-v2-shared-lifecycle-v3.ts",
+      "exports": [
+        "COMPLETED_GRAPH_LAUNCH_GRANT_CONTRACT_ABI_SHA256_V1",
+        "COMPLETED_GRAPH_LAUNCH_GRANT_CONTRACT_ABI_V1",
+        "PROGRAMMABLE_COMPLETED_GRAPH_ADOPTION_CONTRACT_CANDIDATE_V1",
+        "PROGRAMMABLE_COMPLETED_GRAPH_ADOPTION_ENUMS_V1",
+        "ROUTER_V2_INTERNAL_CURRENTNESS_MAXIMUM_SECONDS_V3",
+        "ROUTER_V2_LAUNCH_GRANT_NO_DEFAULT_EXPIRY_V3",
+        "ROUTER_V2_SHARED_LIFECYCLE_ABI_V3",
+        "ROUTER_V2_SHARED_LIFECYCLE_MIGRATION_RULES_V3",
+        "ROUTER_V2_SHARED_LIFECYCLE_VERSION_V3",
+        "ROUTER_V2_SHARED_TARGET_PROFILE_CATALOG_V3",
+        "assertApplicantLaunchPlanV3",
+        "assertBuilderEvidenceCommitmentV3",
+        "assertCanonicalLaunchReceiptV3",
+        "assertCompletedGraphAdoptionArtifactDeploymentCompatibilityV1",
+        "assertCompletedGraphAdoptionArtifactDeploymentProfileCompatibilityV1",
+        "assertCompletedGraphAdoptionContractArtifactBindingV1",
+        "assertCompletedGraphAdoptionContractDeploymentBindingV1",
+        "assertCompletedGraphAdoptionPreflightReadbackContractV1",
+        "assertCompletedGraphAdoptionProfileCapabilityBindingV1",
+        "assertCompletedGraphExecutionCurrentnessContractV1",
+        "assertCompletedGraphLaunchGrantContractV1",
+        "assertCompletedGraphLaunchGrantDigestBindingV1",
+        "assertCompletedGraphPlanContractV1",
+        "assertCompletedGraphProviderPreflightObservationV3",
+        "assertFinalityIndexingReceiptV3",
+        "assertLaunchGrantV3",
+        "assertLaunchIdentitySetV3",
+        "assertLaunchProfileCatalogV3",
+        "assertLaunchProfileDescriptorV3",
+        "assertReviewerAuthorityAttestationV3",
+        "assertSha256ToEvmBytes32BindingV1",
+        "assertSourceIdentityReferentsV3",
+        "computeCompletedGraphAdoptionPreflightComponentLeafHashV3",
+        "computeCompletedGraphAdoptionPreflightGlobalHeadHashV3",
+        "computeCompletedGraphAdoptionPreflightQueryHashV3",
+        "computeCompletedGraphBaseRuntimeAuthorityBindingHashV1",
+        "computeCompletedGraphCanonicalReceiptCoreHashV3",
+        "computeCompletedGraphEip712DomainSeparatorV3",
+        "computeCompletedGraphExecutionCurrentnessDigestV3",
+        "computeCompletedGraphExecutionCurrentnessStructHashV3",
+        "computeCompletedGraphFinalityIndexingReceiptHashV3",
+        "computeCompletedGraphGrantStateHeadHashV3",
+        "computeCompletedGraphLaunchGrantDigestV3",
+        "computeCompletedGraphLaunchGrantHashPartsV3",
+        "computeCompletedGraphPlanHashV3",
+        "computeCompletedGraphProfileRuntimeAuthorityBindingHashV1",
+        "computeCompletedGraphSourceCommitHashV3",
+        "computeCompletedGraphSourceTreeHashV3",
+        "computeCompletedGraphStampLaunchIdV3",
+        "computeCompletedGraphWinnerKeyHashV3",
+        "computeExecutableSourceRepositoryHashV3",
+        "createCompletedGraphAdoptionPreflightAggregateV3",
+        "createCompletedGraphLaunchGrantDigestBindingV1",
+        "createCompletedGraphProviderPreflightObservationV3",
+        "createSha256ToEvmBytes32BindingV1",
+        "createSourceIdentityReferentsV3",
+        "evaluateCompletedGraphGrantCurrentnessV3",
+        "evaluateCompletedGraphPreflightAvailabilityV3"
+      ],
+      "imports": [
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:crypto"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:util"
+        }
+      ],
+      "inputs": {
+        "src/domain/canonical-json.ts": {
+          "bytesInOutput": 3812
+        },
+        "src/domain/hashing.ts": {
+          "bytesInOutput": 1184
+        },
+        "src/internal/router-self-service-v1/completed-graph-adoption-contract-binding-v1.ts": {
+          "bytesInOutput": 58129
+        },
+        "src/internal/router-self-service-v1/keccak.ts": {
+          "bytesInOutput": 3121
+        },
+        "src/internal/router-self-service-v1/router-v2-shared-lifecycle-v1.ts": {
+          "bytesInOutput": 42721
+        },
+        "src/internal/router-self-service-v1/router-v2-shared-lifecycle-v2.ts": {
+          "bytesInOutput": 35347
+        },
+        "src/internal/router-self-service-v1/router-v2-shared-lifecycle-v3.ts": {
+          "bytesInOutput": 96399
+        },
+        "src/public-api/router-v2-shared-lifecycle-v3.ts": {
+          "bytesInOutput": 0
+        }
+      }
+    },
+    "artifacts/router-v2-shared-lifecycle-v3/router-v2-shared-lifecycle-portable.v3.mjs.map": {
+      "bytes": 845226,
+      "exports": [],
+      "imports": [],
+      "inputs": {}
+    }
+  }
+}
