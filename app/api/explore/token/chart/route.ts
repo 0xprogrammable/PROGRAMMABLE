@@ -20,6 +20,12 @@ import {
   TokenChartUnavailableError,
   type TokenChartFreshness,
 } from "../../../../../lib/onchain/chart";
+import { readDurableExploreModel } from "../../../../../lib/onchain/durable-model";
+import type {
+  ExploreReadModel,
+  ReadyOnchainDeployment,
+} from "../../../../../lib/onchain/types";
+import type { LauncherToken } from "../../../../../lib/tokens";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -46,6 +52,61 @@ function unavailableDataQuality(
     status: "unavailable" as const,
     reason,
   };
+}
+
+type ReadyExploreModel = Extract<ExploreReadModel, { status: "ready" }>;
+
+async function readChartIdentityModel(
+  deployment: ReadyOnchainDeployment,
+): Promise<Readonly<{
+  model: ReadyExploreModel;
+  readSource: "rpc" | "durable+rpc";
+}>> {
+  let primaryError: unknown;
+  try {
+    const model = await readAlchemyExploreModel();
+    if (
+      model.status === "ready" &&
+      model.snapshot.chainId === deployment.chainId
+    ) {
+      return { model, readSource: "rpc" };
+    }
+    primaryError = new Error("Live chart identity is unavailable");
+  } catch (error) {
+    primaryError = error;
+  }
+
+  try {
+    const durable = await readDurableExploreModel(
+      deployment,
+      Number.MAX_SAFE_INTEGER,
+    );
+    if (durable.status === "ready") {
+      const model = durable.envelope.payload.model;
+      if (
+        model.status === "ready" &&
+        model.snapshot.chainId === deployment.chainId
+      ) {
+        return { model, readSource: "durable+rpc" };
+      }
+    }
+  } catch {
+    // The original live-read failure is the useful sanitized telemetry cause.
+  }
+
+  throw primaryError ?? new Error("Chart identity is unavailable");
+}
+
+function chartIdentityToken(
+  token: LauncherToken,
+  readSource: "rpc" | "durable+rpc",
+): LauncherToken {
+  if (readSource === "rpc") return token;
+  const identityOnly = { ...token };
+  // An old aggregate is not current chart history. Reconstruct volume from
+  // exact logs when the canonical identity came from the durable snapshot.
+  delete identityOnly.grossVolumeWei;
+  return identityOnly;
 }
 
 export async function GET(request: NextRequest) {
@@ -100,16 +161,22 @@ export async function GET(request: NextRequest) {
         },
       );
     }
-    const [model, operationalSnapshot] = await Promise.all([
-      readAlchemyExploreModel(),
+    const [identityRead, operationalSnapshot] = await Promise.all([
+      readChartIdentityModel(deployment),
       readVerifiedOperationalMarketSnapshot(deployment),
     ]);
-    if (model.status !== "ready") {
+    const { model, readSource } = identityRead;
+
+    const token = model.tokens.find(
+      (candidate) =>
+        candidate.tokenAddress.toLowerCase() === address.toLowerCase(),
+    );
+    if (!token && readSource === "durable+rpc") {
       return NextResponse.json(
         {
           status: "unavailable",
           address,
-          error: "Onchain chart data is temporarily unavailable",
+          error: "Token identity is temporarily unavailable",
           dataQuality: unavailableDataQuality("source-unavailable"),
         },
         {
@@ -118,16 +185,11 @@ export async function GET(request: NextRequest) {
             "Cache-Control": "no-store",
             "Retry-After": "5",
             "X-Programmable-Data-Quality": "unavailable",
-            "X-Programmable-Read-Source": "rpc",
+            "X-Programmable-Read-Source": readSource,
           },
         },
       );
     }
-
-    const token = model.tokens.find(
-      (candidate) =>
-        candidate.tokenAddress.toLowerCase() === address.toLowerCase(),
-    );
     if (!token) {
       return NextResponse.json(
         {
@@ -139,13 +201,14 @@ export async function GET(request: NextRequest) {
           status: 404,
           headers: {
             "Cache-Control": "no-store",
-            "X-Programmable-Read-Source": "rpc",
+            "X-Programmable-Read-Source": readSource,
           },
         },
       );
     }
 
-    assertTokenChartSupported(token);
+    const tokenForChart = chartIdentityToken(token, readSource);
+    assertTokenChartSupported(tokenForChart);
 
     // A lagging launch-discovery snapshot is useful for canonical identity,
     // but it is never market-currentness authority. Returning unavailable here
@@ -165,7 +228,7 @@ export async function GET(request: NextRequest) {
             "Cache-Control": "no-store",
             "Retry-After": "5",
             "X-Programmable-Data-Quality": "unavailable",
-            "X-Programmable-Read-Source": "rpc",
+            "X-Programmable-Read-Source": readSource,
           },
         },
       );
@@ -184,9 +247,9 @@ export async function GET(request: NextRequest) {
       await enrichTokensWithAlchemyPoolState({
         deployment,
         snapshot: liveSnapshot,
-        tokens: [token],
+        tokens: [tokenForChart],
       })
-    )[0] ?? token;
+    )[0] ?? tokenForChart;
     const series = await readTokenChartSeries({
       deployment,
       token: liveToken,
@@ -226,7 +289,7 @@ export async function GET(request: NextRequest) {
               : "no-store",
           "X-Programmable-Data-Quality": qualityStatus,
           "X-Programmable-Valuation-Metric": "fdv",
-          "X-Programmable-Read-Source": "rpc",
+          "X-Programmable-Read-Source": readSource,
         },
       },
     );
