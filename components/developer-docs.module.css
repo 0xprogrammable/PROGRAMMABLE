@@ -316,12 +316,12 @@
 .steps > li {
   color: var(--text-soft);
   counter-increment: step;
-  display: grid;
+  display: block;
   font-size: 16px;
-  gap: 8px;
-  grid-template-columns: 24px minmax(0, 1fr);
   line-height: 1.65;
   min-width: 0;
+  padding-inline-start: 32px;
+  position: relative;
 }
 
 .steps > li::before {
@@ -330,6 +330,10 @@
   font-family: var(--font-plex-mono), monospace;
   font-size: 13px;
   line-height: 2.03;
+  inset-inline-start: 0;
+  position: absolute;
+  inset-block-start: 0;
+  width: 24px;
 }
 
 .subheading {

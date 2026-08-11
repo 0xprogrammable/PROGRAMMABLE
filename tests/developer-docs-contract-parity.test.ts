@@ -201,7 +201,7 @@ describe("Router-first public developer-contract facts", () => {
       expect(surface).toContain("tradability");
       expect(surface).toContain("current liquidity");
       expect(surface).toContain("terminal support");
-      expect(surface).toContain("self-service");
+      expect(surface).toContain("launch authorization");
       expect(surface).not.toContain("Community Custom Registry");
       expect(surface).not.toContain("cursor traversal");
       expect(surface).not.toContain("GET /api/v2/launches");

@@ -256,7 +256,7 @@ describe("Launch Stamp developer documentation", () => {
     expect(page).toContain("non-indexed PoolManager, poolId, and stampHash");
     expect(page).toContain("router.finalityConfirmations");
 
-    expect(indexingPage).toContain("Backfill, verify, then follow live");
+    expect(indexingPage).toContain("Backfill and continue from a checkpoint");
     expect(indexingPage).toContain("Read bounded");
     expect(indexingPage).toContain(
       "exact Router emitter and published topic signatures",
@@ -385,7 +385,7 @@ describe("Launch Stamp developer documentation", () => {
     expect(page).toContain('"          : launchIdByPool(PoolManager, poolId)"');
     expect(page).toContain('"step 2  record := launchStamp(launchId)"');
     expect(page).toContain("ABI-bound read sequence");
-    expect(page).toContain("Live on Ethereum · finalized reads");
+    expect(page).toContain("Ethereum deployment · finalized reads");
     expect(page).toContain("resolve one finalized canonical block");
     expect(page).toContain("immutable bindings to match the manifest");
     expect(page).toContain("launchIdByToken(token)");
@@ -445,7 +445,7 @@ describe("Launch Stamp developer documentation", () => {
     expect(page).toContain("The published evidence does not include");
     expect(page).toMatch(/a separate Classic\s+onchain canary/);
     expect(page).toMatch(
-      /Router-stamped Classic launches\s+use the same\s+live Router\s+ABI/,
+      /Router-stamped Classic launches\s+use the same\s+published\s+Router\s+ABI/,
     );
     expect(page).toMatch(
       /Direct Classic Factory, Graph Factory, or Single Factory\s+calls/,
@@ -472,18 +472,17 @@ describe("Launch Stamp developer documentation", () => {
     expect(page).toContain("supplied handoff digests");
     expect(page).toMatch(/PCAN.*token symbol in this test case/s);
     expect(page).toContain("does not replace it");
-    expect(page).toMatch(/General public submission/);
-    expect(page).toMatch(/open wallet self-service/);
-    expect(page).toMatch(/Approved Hookbuilder Applicants/);
+    expect(page).toMatch(/Custom releases\s+use a review and activation path/);
+    expect(page).toContain('href="/docs/trust"');
+    expect(page).toContain('href="/docs/creators/launch"');
     expect(page).not.toContain("Classic onchain canary passed");
   });
 
   it("keeps the Router reference in Infrastructure and linked from Developers", () => {
     expect(docsData).toContain('href: "/docs/launch-stamps"');
     expect(docsData).toContain('label: "Launch Stamp Router"');
-    expect(docsData).toContain(
-      'relatedPaths: ["/docs/launch-stamps"] as const',
-    );
+    expect(docsData).toContain("const programmablePaths = [");
+    expect(docsData).toContain('"/docs/launch-stamps"');
     expect(docsShell).toContain(
       "item.relatedPaths.some((path) => path === currentPath)",
     );

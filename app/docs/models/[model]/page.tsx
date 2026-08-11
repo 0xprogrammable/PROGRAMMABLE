@@ -23,8 +23,7 @@ const classicSections = [
 ] as const;
 
 const customSections = [
-  { id: "status", label: "What Custom is" },
-  { id: "availability", label: "Current availability" },
+  { id: "overview", label: "What Custom is" },
   { id: "release-scope", label: "Release-specific behavior" },
   { id: "release-requirements", label: "Release requirements" },
   { id: "launch-information", label: "Launch information" },
@@ -33,7 +32,7 @@ const customSections = [
 ] as const;
 
 const stockPairedSections = [
-  { id: "status", label: "Status" },
+  { id: "overview", label: "Historical model" },
   { id: "token-boundary", label: "Token boundary" },
   { id: "quote-assets", label: "Quote assets" },
   { id: "pool-creation", label: "How launches worked" },
@@ -143,7 +142,7 @@ function ClassicDocs() {
           valuation of 1.36 ETH before the Initial Buy. This value is the
           curve&apos;s mathematical starting point, not the amount of liquidity
           or sale proceeds, and it does not describe future market value. The
-          Initial Buy moves the live pool price before public trading begins.
+          Initial Buy moves the pool price before public trading begins.
         </p>
       </section>
 
@@ -370,24 +369,20 @@ function CustomDocs() {
       currentPath="/docs/models/custom"
       kicker="Launch model · Ethereum"
       title="Custom hooks"
-      description="Custom launches use release-specific Uniswap v4 hook logic with behavior and controls defined by each release."
+      description="Custom launches use Uniswap v4 hook logic with behavior and controls defined by each release."
       sections={customSections}
     >
-      <section id="status">
+      <section id="overview">
         <h2>What Custom is</h2>
         <p>
           A Custom launch creates a token whose Uniswap v4 market uses hook
           logic defined for that release. The hook can change how swaps, fees,
           liquidity or other permitted callbacks work.
         </p>
-      </section>
-
-      <section id="availability">
-        <h2>Current availability</h2>
         <p>
-          Custom releases are activated individually. Approved applicants can
-          launch an approved release through the gated flow. General public
-          submissions and open public wallet self-service are unavailable.
+          Each release defines its own review target, execution profile and
+          activation record. Use those records and the program instructions for
+          the launch path you are evaluating.
         </p>
       </section>
 
@@ -511,13 +506,13 @@ function StockPairedDocs() {
       description="Stock-Paired describes existing fixed-supply tokens whose Uniswap v4 pools use a supported Ondo Global Markets token as the quote asset."
       sections={stockPairedSections}
     >
-      <section id="status">
-        <h2>Status</h2>
+      <section id="overview">
+        <h2>Historical model</h2>
         <p>
-          New Stock-Paired launches are closed. Existing tokens and deployment
-          records remain visible. Trading and quote-to-ETH conversion are
-          available only when the route, issuer, network and runtime checks
-          pass. Direct quote-token claims and payout changes use separate vault,
+          Stock-Paired describes existing fixed-supply tokens and their
+          deployment records. Trading and quote-to-ETH conversion depend on the
+          route, issuer, network and runtime checks for the specific record.
+          Direct quote-token claims and payout changes use separate vault,
           runtime and transaction-simulation checks.
         </p>
       </section>
@@ -557,8 +552,8 @@ function StockPairedDocs() {
           V1 and V2 used one fixed start tick for every supported quote asset.
           V3 used an immutable start tick for each asset, calibrated near
           Classic&apos;s 1.3557 ETH initial fully diluted valuation. The
-          calibration was release evidence, not a live price oracle or a fixed
-          dollar valuation.
+          calibration was release evidence, not a current price oracle or a
+          fixed dollar valuation.
         </p>
       </section>
 
@@ -659,8 +654,9 @@ function StockPairedDocs() {
         <p>
           V1, V2 and V3 are separate immutable Ethereum Mainnet deployments.
           Existing launches must be identified by their launcher and fee-hook
-          addresses. V3 was the final release used for new launches before the
-          current application gate closed.
+          addresses. V3 was the final release used for new launches in this
+          historical model. Consult the relevant repository for any successor
+          release and its intake instructions.
         </p>
         <div className={styles.tableWrap}>
           <table className={styles.table}>

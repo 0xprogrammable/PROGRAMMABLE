@@ -66,7 +66,7 @@ export const PROGRAMMABLE_ENDPOINTS = [
     path: "/api/v2/status",
     href: "/api/v2/status",
     label: "Check feed health",
-    note: "Read lifecycle, coverage, freshness and finality before ingestion.",
+    note: "Read service health, coverage, freshness and finality before ingestion.",
   },
   {
     path: "/api/v2/manifest",
@@ -82,8 +82,7 @@ export const PROGRAMMABLE_ENDPOINTS = [
   },
   {
     path: "/api/v2/launches/{launchId}",
-    href:
-      "/api/v2/launches/eip155:1:0xf5e25accf0e4d58b01b56eaacd427b68fbe4daa3",
+    href: "/api/v2/launches/eip155:1:0xf5e25accf0e4d58b01b56eaacd427b68fbe4daa3",
     label: "Fetch one launch",
     note: "Resolve any launch, including project-only and multi-asset records.",
   },

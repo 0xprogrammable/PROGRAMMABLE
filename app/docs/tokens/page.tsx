@@ -8,7 +8,7 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Tokens and launches · Programmable",
   description:
-    "Compare Programmable Classic, Custom and historical Stock-Paired launches, including the current availability of each type.",
+    "Compare Programmable Classic, Custom and Stock-Paired launches by market, fee path and identity.",
   alternates: { canonical: "/docs/tokens" },
 };
 
@@ -21,30 +21,28 @@ const sections = [
 
 const launchTypes = [
   {
-    availability: "Check Create for current Classic availability.",
+    feePath:
+      "Selected buy and sell fees include 10 bps to Programmable; the remainder is creator rewards.",
     href: "/docs/models/classic",
     label: "Classic",
     market:
       "Fixed-supply token with an ETH market, configurable directional fees, creator rewards and permanently locked one-sided liquidity.",
-    tone: "current",
   },
   {
-    availability:
-      "Custom launches are activated individually. Approved applicants can launch an approved release through the gated flow. General public submissions and open public wallet self-service are unavailable.",
+    feePath:
+      "A release-specific hook fee with a 10 bps Programmable share on the supported official path.",
     href: "/docs/models/custom",
     label: "Custom hooks",
     market:
-      "Token market with release-specific Uniswap v4 hook logic and a launch-specific configuration.",
-    tone: "limited",
+      "Token market with Uniswap v4 hook logic and a configuration defined for that release.",
   },
   {
-    availability:
-      "New Stock-Paired launches are closed. Existing launches are historical.",
+    feePath:
+      "A historical quote-asset path documented for existing records and integrations.",
     href: "/docs/models/stock-paired",
     label: "Stock-Paired",
     market:
       "Existing token paired with a configured Ondo Global Markets quote asset.",
-    tone: "historical",
   },
 ] as const;
 
@@ -52,7 +50,7 @@ export default function TokensDocsPage() {
   return (
     <DocsShell
       currentPath="/docs/tokens"
-      description="Programmable launch types differ in their market configuration, fee path and current availability."
+      description="Programmable launch types differ in their market configuration, fee path and public identity."
       sections={sections}
       title="Tokens and launches"
     >
@@ -62,14 +60,6 @@ export default function TokensDocsPage() {
           Open a launch guide for the complete token structure, fee behavior,
           reward flow and product boundaries.
         </p>
-        <p>
-          Availability is action-specific. For Stock-Paired markets, trading and
-          quote-to-ETH conversion require the route, issuer, network and runtime
-          checks. Direct quote-token claims and payout changes instead require
-          their own vault, runtime and transaction-simulation checks; they do
-          not depend on the quote-to-ETH route.
-        </p>
-
         <div
           aria-label="Launch type comparison"
           className={styles.tableWrap}
@@ -79,9 +69,9 @@ export default function TokensDocsPage() {
           <table className={styles.comparisonTable}>
             <thead>
               <tr>
-                <th>Launch type</th>
-                <th>Market</th>
-                <th>Availability</th>
+                <th scope="col">Launch type</th>
+                <th scope="col">Market</th>
+                <th scope="col">Fee path</th>
               </tr>
             </thead>
             <tbody>
@@ -91,11 +81,7 @@ export default function TokensDocsPage() {
                     <Link href={launchType.href}>{launchType.label}</Link>
                   </th>
                   <td>{launchType.market}</td>
-                  <td>
-                    <span className={styles.status} data-tone={launchType.tone}>
-                      {launchType.availability}
-                    </span>
-                  </td>
+                  <td>{launchType.feePath}</td>
                 </tr>
               ))}
             </tbody>
@@ -150,6 +136,18 @@ export default function TokensDocsPage() {
                 <small>
                   Understand launch execution, market identity and Router
                   provenance.
+                </small>
+              </span>
+              <ArrowRight aria-hidden="true" size={17} strokeWidth={1.8} />
+            </Link>
+          </li>
+          <li>
+            <Link href="/docs/economics">
+              <span>
+                <strong>Fees and economics</strong>
+                <small>
+                  Compare the fee basis, creator share and Programmable share
+                  for every path.
                 </small>
               </span>
               <ArrowRight aria-hidden="true" size={17} strokeWidth={1.8} />

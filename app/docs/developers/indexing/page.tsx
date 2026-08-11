@@ -63,8 +63,8 @@ export default function IndexLaunchesPage() {
         <div className={styles.sectionIntro}>
           <h2>Start at the published block</h2>
           <p>
-            Verify the live Router binding before reading logs. Ignore events
-            from every other emitter.
+            Verify the published Router binding before reading logs. Ignore
+            events from every other emitter.
           </p>
         </div>
 
@@ -107,7 +107,7 @@ export default function IndexLaunchesPage() {
         <p className={styles.bodyCopy}>
           Resolve these values from the{" "}
           <a href={PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.manifestUrl}>
-            live manifest
+            deployment manifest
           </a>
           . Also verify the Router runtime, immutable bindings, hosted ABI and
           ABI digest before the backfill begins. Remote RPC URLs must use HTTPS;
@@ -166,7 +166,11 @@ export default function IndexLaunchesPage() {
 
       <section id="verification">
         <div className={styles.sectionIntro}>
-          <h2>Backfill, verify, then follow live</h2>
+          <h2>Backfill and continue from a checkpoint</h2>
+          <p>
+            Import the verified range first, then continue from an overlapping
+            checkpoint so no launch is skipped.
+          </p>
         </div>
 
         <ol className={styles.steps}>
@@ -193,7 +197,7 @@ export default function IndexLaunchesPage() {
           </li>
           <li>
             Begin polling or subscription from an overlapping checkpoint so the
-            backfill and live follow have no gap.
+            backfill and subsequent subscription have no gap.
           </li>
         </ol>
 

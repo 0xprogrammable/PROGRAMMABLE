@@ -28,16 +28,17 @@ The complete directory guide is in [`docs/PROJECT-STRUCTURE.md`](./docs/PROJECT-
 
 ## Public repositories
 
-Programmable uses four public repositories with separate responsibilities.
+Programmable uses five public repositories with separate responsibilities.
 
-| Repository | Purpose |
-| :--- | :--- |
-| [`programmable`](https://github.com/0xprogrammable/programmable) | The application, contract releases, public read model and release evidence |
-| [`hookbuilder`](https://github.com/0xprogrammable/hookbuilder) | The agent skill and local tools used to build reproducible Uniswap v4 projects |
-| [`apply`](https://github.com/0xprogrammable/apply) | Public review rules, checker behavior, applications tied to exact revisions and discovery records |
-| [`developers`](https://github.com/0xprogrammable/developers) | Discovery manifests, API contracts and verification examples for external platforms |
+| Repository                                                             | Purpose                                                                             |
+| :--------------------------------------------------------------------- | :---------------------------------------------------------------------------------- |
+| [`programmable`](https://github.com/0xprogrammable/programmable)       | The application, contract releases, public read model and release evidence          |
+| [`hookbuilder`](https://github.com/0xprogrammable/hookbuilder)         | The agent skill and local tools used to build reproducible Uniswap v4 projects      |
+| [`submit-launch`](https://github.com/0xprogrammable/submit-launch)     | One concrete project, token and hook revision prepared for exact-revision review    |
+| [`submit-template`](https://github.com/0xprogrammable/submit-template) | Reusable hook template requirements, version binding and acceptance rules           |
+| [`developers`](https://github.com/0xprogrammable/developers)           | Discovery manifests, API contracts and verification examples for external platforms |
 
-Use this repository for product, contract and website work. Use `hookbuilder` to build a project, `apply` to follow the public review process and `developers` to integrate Programmable data into another product.
+Use this repository for product, contract and website work. Use `hookbuilder` to build a project, `submit-launch` for one concrete launch submission, `submit-template` for reusable hook logic and `developers` to integrate Programmable data into another product. Review services remain internal; the public repositories describe the inputs and records they consume.
 
 ## How data reaches the application
 
@@ -77,12 +78,12 @@ These are local repository checks. They do not prove that a change has been depl
 
 ## Reference
 
-* [Project structure](./docs/PROJECT-STRUCTURE.md)
-* [Developer documentation](https://programmable.market/docs/developers)
-* [Public indexer feed](./docs/public-indexer-feed.md)
-* [Transaction preflight](./docs/frontend-transaction-preflight.md)
-* [Uniswap source provenance](./docs/uniswap-source-provenance.md)
-* [Mainnet readiness](./contracts/security/MAINNET-READINESS.md)
+- [Project structure](./docs/PROJECT-STRUCTURE.md)
+- [Developer documentation](https://programmable.market/docs/developers)
+- [Public indexer feed](./docs/public-indexer-feed.md)
+- [Transaction preflight](./docs/frontend-transaction-preflight.md)
+- [Uniswap source provenance](./docs/uniswap-source-provenance.md)
+- [Mainnet readiness](./contracts/security/MAINNET-READINESS.md)
 
 ## Release and security boundaries
 

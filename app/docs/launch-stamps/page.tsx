@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { DocsShell } from "@/components/docs-shell";
 import {
@@ -21,7 +22,7 @@ export const metadata: Metadata = {
 
 const sections = [
   { id: "trust-root", label: "Scope" },
-  { id: "integration", label: "Live deployment" },
+  { id: "integration", label: "Deployment record" },
   { id: "launch-kinds", label: "Launch kinds" },
   { id: "algorithm", label: "Token and pool identity" },
   { id: "record", label: "Stamp record" },
@@ -262,14 +263,14 @@ export default function LaunchStampDocsPage() {
       </section>
 
       <section id="integration">
-        <h2>Live Ethereum deployment</h2>
+        <h2>Ethereum deployment record</h2>
         <p className={styles.sectionLead}>
-          The deployment below is live on Ethereum. Validate the full binding at
-          the same canonical block as every launch lookup.
+          The record below describes the Ethereum deployment. Validate the full
+          binding at the same canonical block as every launch lookup.
         </p>
 
         <p className={styles.statusLine}>
-          <span aria-hidden="true" /> Router status:{" "}
+          <span aria-hidden="true" /> Manifest status value:{" "}
           <code>{router.status}</code>
         </p>
         <ReferenceList rows={manifestFields} />
@@ -301,8 +302,8 @@ export default function LaunchStampDocsPage() {
           token symbol in this test case, not a separate trust root or
           classification. The published evidence does not include{" "}
           {"a separate Classic onchain canary"}. Router-stamped Classic launches
-          use the same live Router ABI and become verifiable when their records
-          exist.
+          use the same published Router ABI and become verifiable when their
+          records exist.
         </p>
         <ReferenceList rows={canaryIdentityFields} />
         <p className={styles.detailLine}>
@@ -371,7 +372,7 @@ export default function LaunchStampDocsPage() {
         <div className={styles.codeFrame}>
           <div>
             <span>ABI-bound read sequence</span>
-            <span>Live on Ethereum · finalized reads</span>
+            <span>Ethereum deployment · finalized reads</span>
           </div>
           <pre aria-label="Launch stamp verifier pseudocode using the frozen ABI">
             {abiBoundVerifier}
@@ -610,7 +611,7 @@ export default function LaunchStampDocsPage() {
         </p>
         <p className={styles.detailLine}>
           A matching topic is only a discovery candidate. The full backfill,
-          live-follow, and reorg procedure is in the{" "}
+          checkpoint subscription and reorg procedure is in the{" "}
           <a href={PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.terminalGuideUrl}>
             terminal and scanner guide
           </a>
@@ -719,10 +720,11 @@ export default function LaunchStampDocsPage() {
           <div>
             <dt>Not launch authorization</dt>
             <dd>
-              General public submissions and open wallet self-service are not
-              available. Approved Hookbuilder Applicants can use the gated flow
-              for a prepared release. This reference grants neither access nor
-              launch authorization.
+              A Router reference does not grant launch access. Custom releases
+              use a review and activation path. Check the deployment record and{" "}
+              <Link href="/docs/trust">trust boundaries</Link> before the{" "}
+              <Link href="/docs/creators/launch">creator launch guide</Link> for
+              the separate access rules.
             </dd>
           </div>
         </dl>
@@ -748,7 +750,7 @@ export default function LaunchStampDocsPage() {
           </li>
           <li>
             Launches before this Router&apos;s start block are excluded. Do not
-            backfill them or infer stamps from legacy contracts and events.
+            backfill them or infer stamps from older contracts and events.
           </li>
           <li>
             Direct Classic Factory, Graph Factory, or Single Factory calls
@@ -765,7 +767,7 @@ export default function LaunchStampDocsPage() {
           </li>
           <li>
             <a href={PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.manifestUrl}>
-              Live manifest
+              Deployment manifest
             </a>
           </li>
           <li>
