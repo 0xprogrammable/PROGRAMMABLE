@@ -209,6 +209,10 @@ vi.mock("../lib/onchain", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/onchain")>();
   return {
     ...actual,
+    getWebsiteChartOnchainDeployment: () => ({
+      status: "ready",
+      chainId: 1,
+    }),
     getWebsiteReadOnchainDeployment: () => ({
       status: "ready",
       chainId: 1,

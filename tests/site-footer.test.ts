@@ -18,4 +18,19 @@ describe("Site footer", () => {
     );
     expect(footerSource).toContain('label: "Discord"');
   });
+
+  it("places the Dune dashboard between Dexscreener and Discord", () => {
+    const dexscreener = footerSource.indexOf("https://dexscreener.com/");
+    const dune = footerSource.indexOf(
+      "https://dune.com/0xprogrammable6098/programmable-analytics",
+    );
+    const discord = footerSource.indexOf(
+      "https://discord.com/invite/programmable",
+    );
+
+    expect(dexscreener).toBeGreaterThan(-1);
+    expect(dune).toBeGreaterThan(dexscreener);
+    expect(discord).toBeGreaterThan(dune);
+    expect(footerSource).toContain('label: "Dune"');
+  });
 });
