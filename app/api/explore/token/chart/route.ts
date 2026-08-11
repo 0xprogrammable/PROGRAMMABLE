@@ -20,6 +20,7 @@ import {
   TokenChartUnavailableError,
   type TokenChartFreshness,
 } from "../../../../../lib/onchain/chart";
+import { getWebsiteChartOnchainDeployment } from "../../../../../lib/onchain/config";
 import { readDurableExploreModel } from "../../../../../lib/onchain/durable-model";
 import type {
   ExploreReadModel,
@@ -142,7 +143,12 @@ export async function GET(request: NextRequest) {
   try {
     const address = getAddress(input);
     const deployment = getAlchemyOnchainDeployment();
-    if (deployment.status !== "ready") {
+    const chartDeployment = getWebsiteChartOnchainDeployment("production");
+    if (
+      deployment.status !== "ready" ||
+      chartDeployment.status !== "ready" ||
+      chartDeployment.chainId !== deployment.chainId
+    ) {
       return NextResponse.json(
         {
           status: "unavailable",
@@ -251,7 +257,7 @@ export async function GET(request: NextRequest) {
       })
     )[0] ?? tokenForChart;
     const series = await readTokenChartSeries({
-      deployment,
+      deployment: chartDeployment,
       token: liveToken,
       snapshotBlock: BigInt(liveSnapshot.blockNumber),
       ethUsdQuote: liveSnapshot.ethUsdQuote,

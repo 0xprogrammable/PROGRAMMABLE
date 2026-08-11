@@ -4,6 +4,7 @@ import {
   getOnchainDeployment,
   getOperationalOnchainDeployment,
   getPublicOnchainDeployment,
+  getWebsiteChartOnchainDeployment,
   getWebsiteReadOnchainDeployment,
 } from "../lib/onchain/config";
 
@@ -103,6 +104,11 @@ describe("onchain deployment manifest boundary", () => {
     expect(getWebsiteReadOnchainDeployment("production")).toMatchObject({
       status: "ready",
       rpcUrl: "https://ethereum-rpc.publicnode.com",
+      rpcUrlSecondary: "https://eth.drpc.org",
+    });
+    expect(getWebsiteChartOnchainDeployment("production")).toMatchObject({
+      status: "ready",
+      rpcUrl: "https://ethereum-rpc.publicnode.com",
       rpcUrlSecondary: "https://rpc.mevblocker.io",
     });
     expect(getOperationalOnchainDeployment("production")).toMatchObject({
@@ -123,7 +129,7 @@ describe("onchain deployment manifest boundary", () => {
     expect(getWebsiteReadOnchainDeployment("production")).toMatchObject({
       status: "ready",
       rpcUrl: "https://ethereum-rpc.publicnode.com",
-      rpcUrlSecondary: "https://rpc.mevblocker.io",
+      rpcUrlSecondary: "https://eth.drpc.org",
     });
   });
 
@@ -141,7 +147,7 @@ describe("onchain deployment manifest boundary", () => {
     expect(getWebsiteReadOnchainDeployment("production")).toMatchObject({
       status: "ready",
       rpcUrl: "https://ethereum-rpc.publicnode.com",
-      rpcUrlSecondary: "https://rpc.mevblocker.io",
+      rpcUrlSecondary: "https://eth.drpc.org",
     });
   });
 

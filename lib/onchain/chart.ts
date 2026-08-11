@@ -28,6 +28,7 @@ import type { ReadyOnchainDeployment } from "./types";
 import { usdValueFromWei } from "./usd";
 
 const MAXIMUM_CHART_POINTS = 80;
+const CHART_LOG_RANGE_CONCURRENCY = 4;
 const CHART_RANGE_SECONDS = {
   "1h": 60n * 60n,
   "1d": 24n * 60n * 60n,
@@ -421,54 +422,74 @@ async function readTokenChartSeriesFromRpc(input: {
   const shouldReadFeeVolume = indexedAllTimeVolume === undefined;
   const feeVolumeEvent = feeVolumeEventForToken(token, deployment.chainId);
 
+  const ranges: Array<Readonly<{ fromBlock: bigint; toBlock: bigint }>> = [];
   for (
     let fromBlock = rangeStartBlock;
     fromBlock <= snapshotBlock;
     fromBlock += deployment.logBlockRange
   ) {
-    const toBlock = minimum(
-      snapshotBlock,
-      fromBlock + deployment.logBlockRange - 1n,
-    );
-    const [logs, feeLogs] = await Promise.all([
-      client.getLogs({
-        address: poolManagerAddress(deployment.chainId),
-        event: poolManagerSwapEvent,
-        args: { id: token.poolId as Hex },
-        fromBlock,
-        toBlock,
-        strict: true,
-      }),
-      shouldReadFeeVolume
-        ? client.getLogs({
-            address: getAddress(token.hookAddress),
-            event: feeVolumeEvent,
-            args: { poolId: token.poolId as Hex },
-            fromBlock,
-            toBlock,
-            strict: true,
-          })
-        : Promise.resolve([]),
-    ]);
+    ranges.push({
+      fromBlock,
+      toBlock: minimum(
+        snapshotBlock,
+        fromBlock + deployment.logBlockRange - 1n,
+      ),
+    });
+  }
 
-    for (const log of logs) {
-      if (log.removed || log.blockNumber === null) continue;
-      rawPoints.push({
-        blockNumber: log.blockNumber,
-        logIndex: log.logIndex,
-        sqrtPriceX96: log.args.sqrtPriceX96,
-      });
-    }
-    for (const log of feeLogs) {
-      if (log.removed) continue;
-      const args = log.args;
-      if (
-        args &&
-        typeof args === "object" &&
-        "grossNativeAmount" in args &&
-        typeof args.grossNativeAmount === "bigint"
-      ) {
-        volumeWei += args.grossNativeAmount;
+  for (
+    let offset = 0;
+    offset < ranges.length;
+    offset += CHART_LOG_RANGE_CONCURRENCY
+  ) {
+    const batch = await Promise.all(
+      ranges
+        .slice(offset, offset + CHART_LOG_RANGE_CONCURRENCY)
+        .map(async ({ fromBlock, toBlock }) => {
+          const [logs, feeLogs] = await Promise.all([
+            client.getLogs({
+              address: poolManagerAddress(deployment.chainId),
+              event: poolManagerSwapEvent,
+              args: { id: token.poolId as Hex },
+              fromBlock,
+              toBlock,
+              strict: true,
+            }),
+            shouldReadFeeVolume
+              ? client.getLogs({
+                  address: getAddress(token.hookAddress),
+                  event: feeVolumeEvent,
+                  args: { poolId: token.poolId as Hex },
+                  fromBlock,
+                  toBlock,
+                  strict: true,
+                })
+              : Promise.resolve([]),
+          ]);
+          return { logs, feeLogs };
+        }),
+    );
+
+    for (const { logs, feeLogs } of batch) {
+      for (const log of logs) {
+        if (log.removed || log.blockNumber === null) continue;
+        rawPoints.push({
+          blockNumber: log.blockNumber,
+          logIndex: log.logIndex,
+          sqrtPriceX96: log.args.sqrtPriceX96,
+        });
+      }
+      for (const log of feeLogs) {
+        if (log.removed) continue;
+        const args = log.args;
+        if (
+          args &&
+          typeof args === "object" &&
+          "grossNativeAmount" in args &&
+          typeof args.grossNativeAmount === "bigint"
+        ) {
+          volumeWei += args.grossNativeAmount;
+        }
       }
     }
   }
