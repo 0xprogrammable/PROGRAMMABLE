@@ -54,7 +54,6 @@ anvil \
   --chain-id 1 \
   --hardfork osaka \
   --enable-tx-gas-limit \
-  --steps-tracing \
   --accounts 0 \
   --host 127.0.0.1 \
   --port "$anvil_port" \
@@ -102,6 +101,7 @@ for index in $(seq 0 14); do
     --gas-limit "$transaction_gas_limit" \
     --gas-price 1000000000 \
     --legacy \
+    --rpc-timeout 120 \
     --rpc-url "$local_rpc" \
     --json)
   receipt_status=$(jq -r .status <<<"$receipt")

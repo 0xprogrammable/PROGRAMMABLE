@@ -37,9 +37,9 @@ jobs:
       - name: Verify Router V4 deployment candidate
         env:
           ETHEREUM_RPC_URLS: >-
-            https://mainnet.gateway.tenderly.co
-            https://eth.drpc.org
             https://rpc.flashbots.net
+            https://eth.drpc.org
+            https://mainnet.gateway.tenderly.co
         run: bash scripts/verify-router-v4-deployment-v1.sh
 
       - name: Install Slither
@@ -60,9 +60,9 @@ jobs:
       - name: Verify Router V4 cold outer transaction sequence
         env:
           ETHEREUM_RPC_URLS: >-
-            https://rpc.flashbots.net
-            https://eth.drpc.org
             https://mainnet.gateway.tenderly.co
+            https://eth.drpc.org
+            https://rpc.flashbots.net
         run: |
           set -euo pipefail
           for rpc_url in $ETHEREUM_RPC_URLS; do
