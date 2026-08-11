@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => {
     readVerifiedOperationalMarketSnapshot: vi.fn(),
     withSameBlockEthUsdQuote: vi.fn(),
     readAlchemyExploreModel: vi.fn(),
+    readDurableExploreModel: vi.fn(),
     readTokenChartSeries: vi.fn(),
     safeAlchemyError: vi.fn((error) => error),
     TokenChartIntegrityError,
@@ -45,6 +46,10 @@ vi.mock("../lib/onchain/chart", () => ({
   readTokenChartSeries: mocks.readTokenChartSeries,
   TokenChartIntegrityError: mocks.TokenChartIntegrityError,
   TokenChartUnavailableError: mocks.TokenChartUnavailableError,
+}));
+
+vi.mock("../lib/onchain/durable-model", () => ({
+  readDurableExploreModel: mocks.readDurableExploreModel,
 }));
 
 vi.mock("../lib/alchemy/live-market.server", () => ({
@@ -133,6 +138,11 @@ describe("token chart Alchemy API", () => {
       creatorClaims: [],
       launcherFeesAccruedWei: "0",
       launcherFeesAccruedEth: "0",
+    });
+    mocks.readDurableExploreModel.mockResolvedValue({
+      status: "unavailable",
+      reason: "missing",
+      detail: "No durable index snapshot exists",
     });
     mocks.readTokenChartSeries.mockResolvedValue({
       status: "ready",
@@ -299,6 +309,86 @@ describe("token chart Alchemy API", () => {
       valuation: { asOfBlock: operationalSnapshot.blockNumber },
     });
     expect(body.snapshotBlock).toBe(operationalSnapshot.blockNumber);
+  });
+
+  it("uses a verified durable identity snapshot when the live registry refresh is unavailable", async () => {
+    mocks.readAlchemyExploreModel.mockRejectedValue(
+      new Error("Operational RPCs are unavailable"),
+    );
+    mocks.readDurableExploreModel.mockResolvedValue({
+      status: "ready",
+      ageMs: 60_000,
+      envelope: {
+        payload: {
+          model: {
+            status: "ready",
+            tokens: [{ ...token, grossVolumeWei: "1000000000000000000" }],
+            snapshot,
+            launchDiscoverySnapshot,
+            creatorClaims: [],
+            launcherFeesAccruedWei: "0",
+            launcherFeesAccruedEth: "0",
+          },
+        },
+      },
+    });
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/explore/token/chart?address=${token.tokenAddress}`,
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("X-Programmable-Read-Source")).toBe(
+      "durable+rpc",
+    );
+    expect(mocks.readDurableExploreModel).toHaveBeenCalledWith(
+      deployment,
+      Number.MAX_SAFE_INTEGER,
+    );
+    expect(mocks.readTokenChartSeries).toHaveBeenCalledWith(
+      expect.objectContaining({
+        token: expect.objectContaining(token),
+        snapshotBlock: BigInt(launchDiscoverySnapshot.blockNumber),
+      }),
+    );
+    expect(
+      mocks.readTokenChartSeries.mock.calls.at(-1)?.[0]?.token,
+    ).not.toHaveProperty("grossVolumeWei");
+    expect(body).toMatchObject({
+      status: "ready",
+      snapshotBlock: launchDiscoverySnapshot.blockNumber,
+      dataQuality: {
+        status: "current",
+        asOfBlock: launchDiscoverySnapshot.blockNumber,
+      },
+    });
+  });
+
+  it("fails closed when neither live nor durable identity is verified", async () => {
+    mocks.readAlchemyExploreModel.mockRejectedValue(
+      new Error("Operational RPCs are unavailable"),
+    );
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/explore/token/chart?address=${token.tokenAddress}`,
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(body).toMatchObject({
+      status: "unavailable",
+      dataQuality: {
+        status: "unavailable",
+        reason: "source-unavailable",
+      },
+    });
+    expect(mocks.readTokenChartSeries).not.toHaveBeenCalled();
   });
 
   it("fails closed and leaves the client to preserve its last verified chart without operational quorum", async () => {
