@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { DocsAddress } from "@/components/docs-address";
@@ -370,7 +371,7 @@ function CustomDocs() {
       currentPath="/docs/models/custom"
       kicker="Launch model · Ethereum"
       title="Custom hooks"
-      description="Custom launches use release-specific Uniswap v4 hook logic with behavior and controls defined by each release."
+      description="Custom launches use Uniswap v4 hook logic with behavior and controls defined by each release."
       sections={customSections}
     >
       <section id="status">
@@ -385,9 +386,14 @@ function CustomDocs() {
       <section id="availability">
         <h2>Current availability</h2>
         <p>
-          Custom releases are activated individually. Approved applicants can
-          launch an approved release through the gated flow. General public
-          submissions and open public wallet self-service are unavailable.
+          Custom is live for exact releases that have completed review and
+          activation. Access remains gated by release. Open public wallet
+          self-service is not active.
+        </p>
+        <p>
+          See <Link href="/docs/status">Product status</Link> for the current
+          lifecycle and access terms. Program-specific submissions follow the
+          instructions published by that program.
         </p>
       </section>
 

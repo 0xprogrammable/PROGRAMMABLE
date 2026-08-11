@@ -2,62 +2,67 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
+import docsStyles from "@/components/docs-experience.module.css";
 import styles from "@/components/docs-hub.module.css";
 import { DocsShell } from "@/components/docs-shell";
 
 export const metadata: Metadata = {
   title: "Documentation · Programmable",
   description:
-    "Learn how Programmable launches work, how launch types differ, and how applications can verify Router-stamped launches.",
+    "Understand Programmable, launch a project, publish a template or integrate verified launch data.",
   alternates: { canonical: "/docs" },
 };
 
 const sections = [
-  { id: "launch-types", label: "Launch types" },
-  { id: "identification", label: "How launches are identified" },
-  { id: "terms", label: "Terms" },
-  { id: "next", label: "Where to go next" },
+  { id: "start", label: "Choose a path" },
+  { id: "system", label: "How the system fits together" },
+  { id: "launch-types", label: "Launch models" },
+  { id: "identity", label: "Public identity" },
+  { id: "reference", label: "Reference" },
+] as const;
+
+const paths = [
+  {
+    description:
+      "Compare launch models, fees, protocol revenue and public trust boundaries.",
+    href: "/docs/tokens",
+    label: "Understand Programmable",
+    meta: "Product",
+  },
+  {
+    description:
+      "Build a project, follow the review path and understand how creators earn.",
+    href: "/docs/creators",
+    label: "Create with Programmable",
+    meta: "Creators",
+  },
+  {
+    description:
+      "Verify Router-stamped launches or index them in a terminal, wallet or app.",
+    href: "/docs/developers",
+    label: "Integrate Programmable",
+    meta: "Developers",
+  },
 ] as const;
 
 const launchTypes = [
   {
     description:
-      "A fixed-supply token with an ETH market, configurable buy and sell fees, creator rewards and permanently locked one-sided liquidity.",
+      "A fixed-supply token with an ETH market, creator-selected swap fees and creator rewards.",
     href: "/docs/models/classic",
     label: "Classic",
   },
   {
     description:
-      "A launch whose Uniswap v4 market uses release-specific hook logic. Approved applicants can launch an approved release through the gated flow. General public submissions and open public wallet self-service are unavailable.",
+      "A token market whose behavior is defined by Uniswap v4 hook logic for that release.",
     href: "/docs/models/custom",
     label: "Custom hooks",
   },
   {
     description:
-      "Historical launches paired with configured Ondo Global Markets quote assets. New Stock-Paired launches are closed.",
+      "A historical model paired with supported Ondo Global Markets quote assets. New launches are closed.",
     href: "/docs/models/stock-paired",
     label: "Stock-Paired",
-  },
-] as const;
-
-const nextSteps = [
-  {
-    description:
-      "Compare launch rules, availability and the current boundaries of each model.",
-    href: "/docs/tokens",
-    label: "Tokens and launches",
-  },
-  {
-    description:
-      "See how launch execution, Uniswap v4 markets and Router provenance relate.",
-    href: "/docs/infrastructure",
-    label: "How Programmable works",
-  },
-  {
-    description:
-      "Verify Router-stamped launches in a terminal, wallet, scanner or indexer.",
-    href: "/docs/developers",
-    label: "Developer integration",
   },
 ] as const;
 
@@ -65,15 +70,66 @@ export default function DocsIndexPage() {
   return (
     <DocsShell
       currentPath="/docs"
-      description="Programmable is an Ethereum launchpad for tokens and markets built on Uniswap v4."
+      description="Programmable is infrastructure for creating, launching and discovering token markets built with Uniswap v4."
       sections={sections}
       title="Programmable"
     >
-      <section id="launch-types">
-        <h2>Launch types</h2>
+      <section id="start">
+        <h2>Choose a path</h2>
         <p>
-          Programmable documents three launch types. Each type has its own
-          market configuration, fee behavior and current availability.
+          Start with what you want to do. The product, creator and developer
+          guides share the same launch models and public records.
+        </p>
+
+        <div className={styles.pathGrid}>
+          {paths.map((path) => (
+            <Link className={styles.pathCard} href={path.href} key={path.href}>
+              <span>{path.meta}</span>
+              <strong>{path.label}</strong>
+              <small>{path.description}</small>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section id="system">
+        <h2>How the system fits together</h2>
+        <p>
+          Programmable separates creation, review, execution and verification.
+          Each step has its own evidence and its own result.
+        </p>
+
+        <div className={docsStyles.flow}>
+          <div className={docsStyles.flowItem}>
+            <span>01</span>
+            <strong>Build the hook and project</strong>
+          </div>
+          <div className={docsStyles.flowItem}>
+            <span>02</span>
+            <strong>Review one exact source revision</strong>
+          </div>
+          <div className={docsStyles.flowItem}>
+            <span>03</span>
+            <strong>Launch from the approved path</strong>
+          </div>
+          <div className={docsStyles.flowItem}>
+            <span>04</span>
+            <strong>Verify and index the onchain result</strong>
+          </div>
+        </div>
+
+        <p>
+          A review result applies only to the revision it names. A launch still
+          requires the matching execution path and a wallet transaction. Public
+          applications can then verify the resulting onchain record.
+        </p>
+      </section>
+
+      <section id="launch-types">
+        <h2>Launch models</h2>
+        <p>
+          Each launch model defines a different market, fee path and set of
+          controls. Do not infer one model from another.
         </p>
 
         <ul className={styles.linkList}>
@@ -91,68 +147,59 @@ export default function DocsIndexPage() {
         </ul>
       </section>
 
-      <section id="identification">
-        <h2>How launches are identified</h2>
+      <section id="identity">
+        <h2>Public identity</h2>
         <p>
-          Names, symbols and images are not unique identifiers. Start with the
-          chain and token address. A Uniswap v4 market is identified by its
-          PoolManager and poolId.
+          Names, symbols and images are not unique identifiers. A token starts
+          with its chain and contract address. A Uniswap v4 market starts with
+          its PoolManager and poolId.
         </p>
         <p>
-          Only launches executed and stamped through the Launch Stamp Router
-          have a public Router provenance record. Applications can verify that
-          record before showing a Programmable label. The published start block
-          is the first block to scan for this Router. It does not cover earlier
-          launches, and direct factory calls remain outside the Router path even
-          when they occur later.
+          Launches executed and stamped through the Launch Stamp Router have a
+          public provenance record. That record can identify a Programmable
+          Classic or Programmable Custom launch. It does not promise safety,
+          liquidity, price or support in another application.
         </p>
       </section>
 
-      <section id="terms">
-        <h2>Terms used in these docs</h2>
-        <dl className={styles.definitionList}>
-          <div>
-            <dt>Project</dt>
-            <dd>
-              Creator-provided information such as the name, description,
-              artwork and public links.
-            </dd>
-          </div>
-          <div>
-            <dt>Token</dt>
-            <dd>The ERC-20 asset created by a launch.</dd>
-          </div>
-          <div>
-            <dt>Launch</dt>
-            <dd>
-              The transaction and configuration that create the token and its
-              Uniswap v4 market.
-            </dd>
-          </div>
-          <div>
-            <dt>Provenance</dt>
-            <dd>
-              Evidence that a launch was executed through the recorded Router
-              path. Provenance is not a safety or market guarantee.
-            </dd>
-          </div>
-        </dl>
-      </section>
-
-      <section id="next">
-        <h2>Where to go next</h2>
+      <section id="reference">
+        <h2>Reference</h2>
         <ul className={styles.linkList}>
-          {nextSteps.map((step) => (
-            <li key={step.href}>
-              <Link href={step.href}>
-                <span>
-                  <strong>{step.label}</strong>
-                  <small>{step.description}</small>
-                </span>
-                <ArrowRight aria-hidden="true" size={17} strokeWidth={1.8} />
-              </Link>
-            </li>
-          ))}
+          <li>
+            <Link href="/docs/economics">
+              <span>
+                <strong>Fees and protocol revenue</strong>
+                <small>
+                  See the fee basis, creator share and Programmable share for
+                  each path.
+                </small>
+              </span>
+              <ArrowRight aria-hidden="true" size={17} strokeWidth={1.8} />
+            </Link>
+          </li>
+          <li>
+            <Link href="/docs/trust">
+              <span>
+                <strong>Trust and verification</strong>
+                <small>
+                  Understand what review, activation and Router provenance
+                  establish.
+                </small>
+              </span>
+              <ArrowRight aria-hidden="true" size={17} strokeWidth={1.8} />
+            </Link>
+          </li>
+          <li>
+            <Link href="/docs/status">
+              <span>
+                <strong>Product status</strong>
+                <small>
+                  Keep lifecycle, access and service health separate.
+                </small>
+              </span>
+              <ArrowRight aria-hidden="true" size={17} strokeWidth={1.8} />
+            </Link>
+          </li>
         </ul>
       </section>
     </DocsShell>

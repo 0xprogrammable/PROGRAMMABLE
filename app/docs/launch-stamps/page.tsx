@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { DocsShell } from "@/components/docs-shell";
 import {
@@ -719,10 +720,11 @@ export default function LaunchStampDocsPage() {
           <div>
             <dt>Not launch authorization</dt>
             <dd>
-              General public submissions and open wallet self-service are not
-              available. Approved Hookbuilder Applicants can use the gated flow
-              for a prepared release. This reference grants neither access nor
-              launch authorization.
+              A Router reference does not grant launch access. Custom releases
+              use a gated review and activation path. Check the{" "}
+              <Link href="/docs/status">current product status</Link> and the{" "}
+              <Link href="/docs/creators/launch">creator launch guide</Link> for
+              the separate access rules.
             </dd>
           </div>
         </dl>

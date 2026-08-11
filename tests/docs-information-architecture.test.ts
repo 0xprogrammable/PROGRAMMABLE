@@ -14,6 +14,15 @@ const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 const docsIndex = read("app/docs/page.tsx");
 const tokensPage = read("app/docs/tokens/page.tsx");
+const economicsPage = read("app/docs/economics/page.tsx");
+const v4TokenPage = read("app/docs/v4-token/page.tsx");
+const trustPage = read("app/docs/trust/page.tsx");
+const statusPage = read("app/docs/status/page.tsx");
+const creatorsPage = read("app/docs/creators/page.tsx");
+const creatorLaunchPage = read("app/docs/creators/launch/page.tsx");
+const creatorTemplatesPage = read("app/docs/creators/templates/page.tsx");
+const creatorEarningsPage = read("app/docs/creators/earnings/page.tsx");
+const creatorProgramsPage = read("app/docs/creators/programs/page.tsx");
 const infrastructurePage = read("app/docs/infrastructure/page.tsx");
 const developerOverview = read("app/docs/developers/page.tsx");
 const verifyPage = read("app/docs/developers/verify/page.tsx");
@@ -36,11 +45,10 @@ describe("Docs information architecture", () => {
     );
   });
 
-  it("keeps one global hierarchy for product, launches, infrastructure and developers", () => {
+  it("keeps one global hierarchy for Programmable, creators and developers", () => {
     expect(docsCategories.map(({ href, label }) => ({ href, label }))).toEqual([
-      { href: "/docs", label: "Documentation" },
-      { href: "/docs/tokens", label: "Tokens and launches" },
-      { href: "/docs/infrastructure", label: "Infrastructure" },
+      { href: "/docs", label: "Programmable" },
+      { href: "/docs/creators", label: "Creators" },
       { href: "/docs/developers", label: "Developers" },
     ]);
 
@@ -55,13 +63,10 @@ describe("Docs information architecture", () => {
       })),
     ).toEqual([
       {
-        label: "Documentation",
-        routes: [{ depth: 0, href: "/docs", label: "Overview" }],
-      },
-      {
-        label: "Tokens and launches",
+        label: "Programmable",
         routes: [
-          { depth: 0, href: "/docs/tokens", label: "Overview" },
+          { depth: 0, href: "/docs", label: "Overview" },
+          { depth: 0, href: "/docs/tokens", label: "Launch models" },
           { depth: 1, href: "/docs/models/classic", label: "Classic" },
           { depth: 1, href: "/docs/models/custom", label: "Custom hooks" },
           {
@@ -69,16 +74,41 @@ describe("Docs information architecture", () => {
             href: "/docs/models/stock-paired",
             label: "Stock-Paired · Historical",
           },
-        ],
-      },
-      {
-        label: "Infrastructure",
-        routes: [
-          { depth: 0, href: "/docs/infrastructure", label: "Overview" },
+          { depth: 0, href: "/docs/economics", label: "Economics" },
+          { depth: 0, href: "/docs/v4-token", label: "V4 token" },
+          { depth: 0, href: "/docs/infrastructure", label: "How it works" },
           {
             depth: 1,
             href: "/docs/launch-stamps",
             label: "Launch Stamp Router",
+          },
+          { depth: 0, href: "/docs/trust", label: "Trust" },
+          { depth: 0, href: "/docs/status", label: "Status" },
+        ],
+      },
+      {
+        label: "Creators",
+        routes: [
+          { depth: 0, href: "/docs/creators", label: "Overview" },
+          {
+            depth: 1,
+            href: "/docs/creators/launch",
+            label: "Launch a project",
+          },
+          {
+            depth: 1,
+            href: "/docs/creators/templates",
+            label: "Publish a template · Planned",
+          },
+          {
+            depth: 1,
+            href: "/docs/creators/earnings",
+            label: "Earnings",
+          },
+          {
+            depth: 1,
+            href: "/docs/creators/programs",
+            label: "Programs",
           },
         ],
       },
@@ -111,8 +141,17 @@ describe("Docs information architecture", () => {
       expect.arrayContaining(
         [
           "/docs",
+          "/docs/economics",
+          "/docs/v4-token",
+          "/docs/trust",
+          "/docs/status",
           "/docs/tokens",
           "/docs/infrastructure",
+          "/docs/creators",
+          "/docs/creators/launch",
+          "/docs/creators/templates",
+          "/docs/creators/earnings",
+          "/docs/creators/programs",
           "/docs/developers",
           "/docs/developers/verify",
           "/docs/developers/indexing",
@@ -151,17 +190,48 @@ describe("Docs information architecture", () => {
     }
   });
 
-  it("keeps documentation availability separate from product status", () => {
+  it("keeps lifecycle, availability and service health separate", () => {
     expect(docsShell).not.toContain('status === "available"');
     expect(docsShell).not.toContain('aria-disabled="true"');
-    expect(tokensPage).toContain(
-      "Check Create for current Classic availability",
+    expect(tokensPage).toContain("Lifecycle and availability are different");
+    expect(statusPage).toContain("Product availability does not prove");
+    expect(statusPage).toContain("Current status unavailable");
+    expect(statusPage).toContain('export const dynamic = "force-dynamic"');
+  });
+
+  it("publishes a complete creator path without claiming planned templates are open", () => {
+    for (const [source, path, title] of [
+      [creatorsPage, "/docs/creators", "Create with Programmable"],
+      [creatorLaunchPage, "/docs/creators/launch", "Launch a project"],
+      [creatorTemplatesPage, "/docs/creators/templates", "Publish a template"],
+      [creatorEarningsPage, "/docs/creators/earnings", "Creator earnings"],
+      [creatorProgramsPage, "/docs/creators/programs", "Creator programs"],
+    ] as const) {
+      expect(source).toContain('currentPath="' + path + '"');
+      expect(source).toContain('title="' + title + '"');
+      expect(source).toContain("<DocsShell");
+    }
+
+    expect(creatorTemplatesPage).toContain(
+      "Template submission is not open yet",
     );
-    expect(tokensPage).toContain("Custom launches are activated individually");
-    expect(tokensPage).toContain("Approved applicants");
-    expect(tokensPage).toContain("Existing launches are historical");
-    expect(tokensPage).toMatch(/General public submissions/);
-    expect(tokensPage).toMatch(/wallet self-service/);
+    expect(creatorTemplatesPage).toMatch(
+      /do not\s+create a template application PR/,
+    );
+    expect(creatorLaunchPage).toContain(
+      "Open public wallet self-service is not active",
+    );
+  });
+
+  it("keeps current and planned revenue policy explicit", () => {
+    expect(economicsPage).toContain("49.50% of processed");
+    expect(economicsPage).toMatch(/80% of attributable net protocol\s+revenue/);
+    expect(economicsPage).toContain("This policy remains planned");
+    expect(v4TokenPage).toContain("This policy is planned, not live");
+    expect(v4TokenPage).toContain("No burn in the published revenue policy");
+    expect(trustPage).toMatch(
+      /have not\s+undergone an external audit or public security contest/,
+    );
   });
 
   it("keeps the verification scope precise", () => {

@@ -472,18 +472,19 @@ describe("Launch Stamp developer documentation", () => {
     expect(page).toContain("supplied handoff digests");
     expect(page).toMatch(/PCAN.*token symbol in this test case/s);
     expect(page).toContain("does not replace it");
-    expect(page).toMatch(/General public submission/);
-    expect(page).toMatch(/open wallet self-service/);
-    expect(page).toMatch(/Approved Hookbuilder Applicants/);
+    expect(page).toMatch(
+      /Custom releases\s+use a gated review and activation path/,
+    );
+    expect(page).toContain('href="/docs/status"');
+    expect(page).toContain('href="/docs/creators/launch"');
     expect(page).not.toContain("Classic onchain canary passed");
   });
 
   it("keeps the Router reference in Infrastructure and linked from Developers", () => {
     expect(docsData).toContain('href: "/docs/launch-stamps"');
     expect(docsData).toContain('label: "Launch Stamp Router"');
-    expect(docsData).toContain(
-      'relatedPaths: ["/docs/launch-stamps"] as const',
-    );
+    expect(docsData).toContain("const programmablePaths = [");
+    expect(docsData).toContain('"/docs/launch-stamps"');
     expect(docsShell).toContain(
       "item.relatedPaths.some((path) => path === currentPath)",
     );

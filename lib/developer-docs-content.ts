@@ -170,7 +170,7 @@ export function buildDeveloperDocsMarkdown(): string {
     "",
     "It does not establish safety, tradability, current liquidity or pool state, audit coverage, review status, approval, endorsement, permission to launch, or terminal support. It does not automatically list or label a launch in GMGN, Axiom, FOMO, or any other terminal; each consumer must implement the published verification procedure.",
     "",
-    "These docs define read-only verification. General public submissions and open wallet self-service are not available. Approved Hookbuilder Applicants can use the gated flow for a prepared release. This reference grants neither access nor launch authorization.",
+    "These docs define read-only verification. Launch access is a separate gated product path. Check https://programmable.market/docs/status and https://programmable.market/docs/creators/launch for current access rules. This reference grants neither access nor launch authorization.",
   ].join("\n");
 }
 
@@ -208,7 +208,7 @@ export function buildProgrammableLlmsIndex(): string {
     "- After manifest and ABI bootstrap, point verification needs an Ethereum provider only. Indexing, Supabase, a Programmable launch-feed API, and an application server are not trust dependencies.",
     "- Event backfill and live follow are optional for continuous discovery; logs are candidates until getter verification succeeds.",
     "- A Router record establishes provenance only after the required address, runtime, binding, lookup, and cross-check verification passes. It does not establish safety, tradability, current liquidity, audit coverage, endorsement, terminal support, or launch authorization.",
-    "- General public submissions and open wallet self-service are not available. Approved Hookbuilder Applicants can use the gated flow for a prepared release; this reference grants neither access nor launch authorization.",
+    "- Launch access is a separate gated product path. Check https://programmable.market/docs/status and https://programmable.market/docs/creators/launch for current access rules; this reference grants neither access nor launch authorization.",
   ].join("\n");
 }
 

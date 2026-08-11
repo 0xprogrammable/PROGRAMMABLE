@@ -199,9 +199,12 @@ describe("Developer documentation experience", () => {
     expect(developerDocsMarkdown).toContain(
       "each consumer must implement the published verification procedure",
     );
-    expect(developerDocsMarkdown).toMatch(/General public submissions/);
-    expect(developerDocsMarkdown).toMatch(/open wallet self-service/);
-    expect(developerDocsMarkdown).toMatch(/Approved Hookbuilder Applicants/);
+    expect(developerDocsMarkdown).toMatch(
+      /Launch access is a separate gated product path/,
+    );
+    expect(developerDocsMarkdown).toContain(
+      "https://programmable.market/docs/creators/launch",
+    );
     expect(developerDocsMarkdown).toContain(
       "It does not automatically list or label a launch in GMGN, Axiom, FOMO",
     );

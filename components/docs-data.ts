@@ -29,24 +29,36 @@ const developerReferencePaths = [
   "/docs/developers/machine-readable",
 ] as const;
 
+const programmablePaths = [
+  "/docs/tokens",
+  "/docs/economics",
+  "/docs/v4-token",
+  "/docs/infrastructure",
+  "/docs/trust",
+  "/docs/status",
+  "/docs/launch-stamps",
+  ...tokenModelPaths,
+] as const;
+
+const creatorPaths = [
+  "/docs/creators/launch",
+  "/docs/creators/templates",
+  "/docs/creators/earnings",
+  "/docs/creators/programs",
+] as const;
+
 export const docsCategories = [
   {
-    description: "Project overview",
+    description: "Project, launch models, economics and trust",
     href: "/docs",
-    label: "Documentation",
-    relatedPaths: [] as const,
+    label: "Programmable",
+    relatedPaths: programmablePaths,
   },
   {
-    description: "Launch models and availability",
-    href: "/docs/tokens",
-    label: "Tokens and launches",
-    relatedPaths: tokenModelPaths,
-  },
-  {
-    description: "Launch identity and protocol data",
-    href: "/docs/infrastructure",
-    label: "Infrastructure",
-    relatedPaths: ["/docs/launch-stamps"] as const,
+    description: "Launch, publish and earn",
+    href: "/docs/creators",
+    label: "Creators",
+    relatedPaths: creatorPaths,
   },
   {
     description: "Verification and indexing",
@@ -58,15 +70,12 @@ export const docsCategories = [
 
 export const docsNavigation: readonly DocsNavigationGroup[] = [
   {
-    label: "Documentation",
-    items: [{ href: "/docs", label: "Overview" }],
-  },
-  {
-    label: "Tokens and launches",
+    label: "Programmable",
     items: [
+      { href: "/docs", label: "Overview" },
       {
         href: "/docs/tokens",
-        label: "Overview",
+        label: "Launch models",
         relatedPaths: tokenModelPaths,
       },
       { depth: 1, href: "/docs/models/classic", label: "Classic" },
@@ -76,17 +85,34 @@ export const docsNavigation: readonly DocsNavigationGroup[] = [
         href: "/docs/models/stock-paired",
         label: "Stock-Paired · Historical",
       },
-    ],
-  },
-  {
-    label: "Infrastructure",
-    items: [
-      { href: "/docs/infrastructure", label: "Overview" },
+      { href: "/docs/economics", label: "Economics" },
+      { href: "/docs/v4-token", label: "V4 token" },
+      { href: "/docs/infrastructure", label: "How it works" },
       {
         depth: 1,
         href: "/docs/launch-stamps",
         label: "Launch Stamp Router",
       },
+      { href: "/docs/trust", label: "Trust" },
+      { href: "/docs/status", label: "Status" },
+    ],
+  },
+  {
+    label: "Creators",
+    items: [
+      {
+        href: "/docs/creators",
+        label: "Overview",
+        relatedPaths: creatorPaths,
+      },
+      { depth: 1, href: "/docs/creators/launch", label: "Launch a project" },
+      {
+        depth: 1,
+        href: "/docs/creators/templates",
+        label: "Publish a template · Planned",
+      },
+      { depth: 1, href: "/docs/creators/earnings", label: "Earnings" },
+      { depth: 1, href: "/docs/creators/programs", label: "Programs" },
     ],
   },
   {
@@ -120,8 +146,68 @@ export const docsSearchItems: DocsSearchItem[] = [
   {
     title: "Documentation overview",
     description:
-      "Start with the project, launch models, infrastructure or developer references.",
+      "Start with Programmable, creator paths or developer references.",
     href: "/docs",
+  },
+  {
+    title: "Creator overview",
+    description:
+      "Launch a project, understand earnings or follow the planned template path.",
+    href: "/docs/creators",
+    keywords: ["creator", "earn", "launch"],
+  },
+  {
+    title: "Launch a project",
+    description:
+      "Build, submit, review, launch and verify one exact project revision.",
+    href: "/docs/creators/launch",
+  },
+  {
+    title: "Publish a template",
+    description:
+      "Understand the planned reusable template workflow and version binding.",
+    href: "/docs/creators/templates",
+    keywords: ["template", "royalty", "fee share"],
+  },
+  {
+    title: "Creator earnings",
+    description:
+      "Compare Classic rewards, public template shares and partner template shares.",
+    href: "/docs/creators/earnings",
+    keywords: ["fees", "rewards", "revenue"],
+  },
+  {
+    title: "Creator programs",
+    description:
+      "Find Hookathons, partnerships and contribution opportunities.",
+    href: "/docs/creators/programs",
+    keywords: ["hookathon", "grant", "bounty"],
+  },
+  {
+    title: "Economics",
+    description:
+      "See the fee basis and split for Classic, Custom and template paths.",
+    href: "/docs/economics",
+  },
+  {
+    title: "V4 token and protocol revenue",
+    description:
+      "Understand the V4 token, the planned 80/20 policy and its boundaries.",
+    href: "/docs/v4-token",
+    keywords: ["buyback", "treasury", "80 20"],
+  },
+  {
+    title: "Trust",
+    description:
+      "Understand what reviews, launch stamps and public records prove.",
+    href: "/docs/trust",
+    keywords: ["security", "audit", "approval"],
+  },
+  {
+    title: "Status",
+    description:
+      "See product lifecycle and availability without confusing them with service health.",
+    href: "/docs/status",
   },
   {
     title: "Tokens and launches",
