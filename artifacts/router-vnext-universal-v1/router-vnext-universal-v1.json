@@ -1,0 +1,864 @@
+{
+  "schemaVersion": "router-vnext-universal-artifact-v1",
+  "packageVersion": "1.0.0-source-only",
+  "lifecycle": {
+    "launchGrant": "EVERGREEN_ACTIVE_REVOKED_CONSUMED_NO_APPLICANT_TTL",
+    "currentness": "REVIEWER_AUTHENTICATED_MAX_3600_SECONDS_INTERNAL_TRANSPORT_ONLY",
+    "walletIntent": "APPLICANT_AUTHENTICATED_MAX_900_SECONDS",
+    "signedExecutionMode": true,
+    "globalInTransactionExecutionLock": true,
+    "permanentWinnerNonceAndKey": true,
+    "sourceLaunchIdStampLaunchIdAntiReplayNoncePairwiseDistinct": true,
+    "atomicTypedPreflight": true
+  },
+  "surface": {
+    "arbitraryTarget": false,
+    "arbitrarySelector": false,
+    "arbitraryCalldata": false,
+    "arbitraryInitcode": false,
+    "delegatecall": false,
+    "genericExecutor": false,
+    "onlyPayableApplicantEntry": "launchNestedFactoryV1",
+    "externalCalls": "FIXED_CODEHASH_PINNED_BOUNDED_PROVIDER_VERIFIER_PREFLIGHT_AND_ERC1271_ONLY"
+  },
+  "compiler": {
+    "version": "0.8.26+commit.8a97fa7a",
+    "binarySha256s": {
+      "linux-amd64": "d5f23436f443edb85d8e76906d12f0a86ce0490e7663a9e608efeb7a93f149ef",
+      "macosx-amd64": "0ff016aef2396b12d1fc65429d8ea6cf53c2ee4b041bb8925644615ee1c30ab9"
+    },
+    "settings": {
+      "optimizer": {
+        "enabled": true,
+        "runs": 100
+      },
+      "evmVersion": "cancun",
+      "viaIR": false,
+      "metadata": {
+        "bytecodeHash": "none",
+        "appendCBOR": false
+      },
+      "libraries": {},
+      "remappings": [],
+      "outputSelection": {
+        "*": {
+          "*": [
+            "abi",
+            "evm.bytecode.object",
+            "evm.deployedBytecode.object",
+            "evm.deployedBytecode.immutableReferences",
+            "evm.methodIdentifiers"
+          ]
+        }
+      }
+    },
+    "standardInputPath": "artifacts/router-vnext-universal-v1/standard-input.json",
+    "standardInputSha256": "49bfc15a1ddedcdde4728cffa24b4520f80da0f3443df2b8a2e199fd9eb85527"
+  },
+  "sources": {
+    "src/router_vnext/IProgrammableUniversalLaunchKernelV1.sol": {
+      "sha256": "44575d288d3fef6c8c7318f9802e0524f3b16de5679f185efabf644884aace82"
+    },
+    "src/router_vnext/IProgrammableUniversalLaunchPreflightV1.sol": {
+      "sha256": "88176706ee4ba1434a76f6afdcd1e6bd1c1e356c607be7f93cd3280fa44dcec6"
+    },
+    "src/router_vnext/IProgrammableNestedFactoryProfileV1.sol": {
+      "sha256": "97f3da72e722cea4b15fe0da6b32f71653df59558867231755161877cef2a61f"
+    },
+    "src/router_vnext/ProgrammableUniversalLaunchKernelV1.sol": {
+      "sha256": "22ec3d29bc050c2a7c5934038c08e57585ab08074042c30acec83d9846a39070"
+    },
+    "src/router_vnext/ProgrammableUniversalLaunchPreflightV1.sol": {
+      "sha256": "ea0f3f233ec7a5465c5cd16094bee5720e1d1215ac9f683d360b9140a8833de3"
+    },
+    "src/router_vnext/ProgrammableNestedFactoryProfileV1.sol": {
+      "sha256": "52dda71eadc9379b5298b5e35bb7c6b19337e17e86e8c7f330be5f74b547a2ec"
+    },
+    "test/router_vnext/ProgrammableUniversalLaunchKernelV1.t.sol": {
+      "sha256": "6dd0a0740a4dab36a7076df57cfb0398082af824746a044bb59358d146f93925"
+    },
+    "config/router-vnext/foundry.toml": {
+      "sha256": "c3bc259b634902cd42245e220e0de69831f3b809eb4341d0a1bb4876cc7f79ac"
+    },
+    "scripts/generate-router-vnext-universal-artifact.mjs": {
+      "sha256": "b5082fa645fcbadc70a334f85ee7fbc4603ba1bcf84766abb5b67354b02eaefd"
+    },
+    "scripts/verify-router-vnext-universal-v1.sh": {
+      "sha256": "22be72ffffbc276f2d9a4fd3013bf676689c8add2140125d403a819e18cf8525"
+    }
+  },
+  "codeIdentities": {
+    "ProgrammableUniversalLaunchKernelV1": {
+      "source": "src/router_vnext/ProgrammableUniversalLaunchKernelV1.sol",
+      "abiPath": "artifacts/router-vnext-universal-v1/ProgrammableUniversalLaunchKernelV1.abi.json",
+      "abiSha256": "f42c8b48ecee69fbd8fa9e817a7db2b39945e4e3f2f68f8c68fc95aad0500c27",
+      "creationBytes": 25606,
+      "creationSha256": "b4b74be7093e96e308bc0da396b093e20b536c4bfaa9040fdcc2eb3be836d457",
+      "creationKeccak256": "0xa9fc6c72e21e842d61587dc6793d60e2fa4b2c5f3e5bf7c180c6acc58dd47197",
+      "runtimeTemplateBytes": 23925,
+      "runtimeTemplateMarginBytes": 651,
+      "runtimeTemplateSha256": "9623f9f40e0ba5d4b834822f26ed5a76370a2cfd85a27069e1d1bff0d20408fd",
+      "runtimeTemplateKeccak256": "0x481b3b1a80e727dfdef513caafd23756601ec95d242ac689794c749889106ebb",
+      "immutableReferences": {
+        "3319": [
+          {
+            "length": 32,
+            "start": 2876
+          },
+          {
+            "length": 32,
+            "start": 6045
+          },
+          {
+            "length": 32,
+            "start": 8557
+          },
+          {
+            "length": 32,
+            "start": 8683
+          },
+          {
+            "length": 32,
+            "start": 8726
+          },
+          {
+            "length": 32,
+            "start": 16555
+          }
+        ],
+        "3321": [
+          {
+            "length": 32,
+            "start": 6078
+          },
+          {
+            "length": 32,
+            "start": 8759
+          },
+          {
+            "length": 32,
+            "start": 16588
+          }
+        ],
+        "3323": [
+          {
+            "length": 32,
+            "start": 2928
+          },
+          {
+            "length": 32,
+            "start": 3095
+          },
+          {
+            "length": 32,
+            "start": 3161
+          },
+          {
+            "length": 32,
+            "start": 3635
+          },
+          {
+            "length": 32,
+            "start": 3701
+          },
+          {
+            "length": 32,
+            "start": 7880
+          },
+          {
+            "length": 32,
+            "start": 7946
+          },
+          {
+            "length": 32,
+            "start": 8609
+          },
+          {
+            "length": 32,
+            "start": 8805
+          },
+          {
+            "length": 32,
+            "start": 9639
+          },
+          {
+            "length": 32,
+            "start": 9705
+          }
+        ],
+        "3325": [
+          {
+            "length": 32,
+            "start": 3194
+          },
+          {
+            "length": 32,
+            "start": 3734
+          },
+          {
+            "length": 32,
+            "start": 7979
+          },
+          {
+            "length": 32,
+            "start": 8838
+          },
+          {
+            "length": 32,
+            "start": 9738
+          }
+        ],
+        "3327": [
+          {
+            "length": 32,
+            "start": 7096
+          }
+        ],
+        "3329": [
+          {
+            "length": 32,
+            "start": 7131
+          }
+        ],
+        "3331": [
+          {
+            "length": 32,
+            "start": 7339
+          }
+        ],
+        "3333": [
+          {
+            "length": 32,
+            "start": 7374
+          }
+        ],
+        "3335": [
+          {
+            "length": 32,
+            "start": 15225
+          },
+          {
+            "length": 32,
+            "start": 15392
+          },
+          {
+            "length": 32,
+            "start": 15519
+          },
+          {
+            "length": 32,
+            "start": 18664
+          },
+          {
+            "length": 32,
+            "start": 18814
+          },
+          {
+            "length": 32,
+            "start": 18941
+          }
+        ],
+        "3337": [
+          {
+            "length": 32,
+            "start": 15258
+          },
+          {
+            "length": 32,
+            "start": 15552
+          },
+          {
+            "length": 32,
+            "start": 18697
+          },
+          {
+            "length": 32,
+            "start": 18974
+          }
+        ],
+        "3339": [
+          {
+            "length": 32,
+            "start": 554
+          },
+          {
+            "length": 32,
+            "start": 11526
+          }
+        ]
+      },
+      "liveRuntimeCodeHash": null,
+      "deploymentAddress": null
+    },
+    "ProgrammableUniversalLaunchPreflightV1": {
+      "source": "src/router_vnext/ProgrammableUniversalLaunchPreflightV1.sol",
+      "abiPath": "artifacts/router-vnext-universal-v1/ProgrammableUniversalLaunchPreflightV1.abi.json",
+      "abiSha256": "c22a46909d0edaecc157a4eebbae0ee621a11482925cf92d76cbbaaa280b63d9",
+      "creationBytes": 9889,
+      "creationSha256": "4e6cc7c186766b0d21836ce9a586222c3d275445e2910a7017e3c7ee7836dc2c",
+      "creationKeccak256": "0xc6eba5b0c088356a777816d79b0e922eb6ff6b3b62b80a5525b959199d35444f",
+      "runtimeTemplateBytes": 9861,
+      "runtimeTemplateMarginBytes": 14715,
+      "runtimeTemplateSha256": "a8f15ad7c2f98593241518c238fcfeeeceb897fd9a8237f6b3c1a939a93bb039",
+      "runtimeTemplateKeccak256": "0x99b31a5c8bf5029cac2e9aa043e9f6123ffc59597fd3e633d7e8d78e656ceb29",
+      "immutableReferences": {},
+      "liveRuntimeCodeHash": null,
+      "deploymentAddress": null
+    },
+    "ProgrammableNestedFactoryProfileV1": {
+      "source": "src/router_vnext/ProgrammableNestedFactoryProfileV1.sol",
+      "abiPath": "artifacts/router-vnext-universal-v1/ProgrammableNestedFactoryProfileV1.abi.json",
+      "abiSha256": "3b066a930959f06d186651aae0880cd7bf547162f011667fe39baf8383309787",
+      "creationBytes": 15747,
+      "creationSha256": "968f63e2e853eed3b88705dc69e883d39bd250d4ed7c9ef86e9a7e20e49f9924",
+      "creationKeccak256": "0x5d518e4fc0920535b99ea91a3b3e564a84457dcd8988f99e6d3ed5a23cbcf15c",
+      "runtimeTemplateBytes": 14417,
+      "runtimeTemplateMarginBytes": 10159,
+      "runtimeTemplateSha256": "cdeba41316a03281223bfc621081778142840af131ff7a20827ad3964a1ad1aa",
+      "runtimeTemplateKeccak256": "0x6df5ef54c525d14102b0265f5ec0c006f12ca6e2506fcfee98bf91261a3e7fec",
+      "immutableReferences": {
+        "993": [
+          {
+            "length": 32,
+            "start": 431
+          },
+          {
+            "length": 32,
+            "start": 1638
+          },
+          {
+            "length": 32,
+            "start": 1945
+          },
+          {
+            "length": 32,
+            "start": 2287
+          },
+          {
+            "length": 32,
+            "start": 2661
+          },
+          {
+            "length": 32,
+            "start": 4583
+          },
+          {
+            "length": 32,
+            "start": 9195
+          }
+        ],
+        "995": [
+          {
+            "length": 32,
+            "start": 547
+          },
+          {
+            "length": 32,
+            "start": 1671
+          }
+        ],
+        "997": [
+          {
+            "length": 32,
+            "start": 358
+          },
+          {
+            "length": 32,
+            "start": 1712
+          },
+          {
+            "length": 32,
+            "start": 7768
+          },
+          {
+            "length": 32,
+            "start": 7887
+          },
+          {
+            "length": 32,
+            "start": 9478
+          }
+        ],
+        "999": [
+          {
+            "length": 32,
+            "start": 1324
+          },
+          {
+            "length": 32,
+            "start": 1745
+          },
+          {
+            "length": 32,
+            "start": 7801
+          },
+          {
+            "length": 32,
+            "start": 7920
+          }
+        ],
+        "1001": [
+          {
+            "length": 32,
+            "start": 1192
+          },
+          {
+            "length": 32,
+            "start": 1819
+          },
+          {
+            "length": 32,
+            "start": 2949
+          },
+          {
+            "length": 32,
+            "start": 3124
+          },
+          {
+            "length": 32,
+            "start": 3308
+          },
+          {
+            "length": 32,
+            "start": 8062
+          },
+          {
+            "length": 32,
+            "start": 8268
+          },
+          {
+            "length": 32,
+            "start": 8431
+          }
+        ],
+        "1003": [
+          {
+            "length": 32,
+            "start": 680
+          },
+          {
+            "length": 32,
+            "start": 1852
+          },
+          {
+            "length": 32,
+            "start": 2982
+          },
+          {
+            "length": 32,
+            "start": 3341
+          },
+          {
+            "length": 32,
+            "start": 8095
+          },
+          {
+            "length": 32,
+            "start": 8464
+          }
+        ],
+        "1005": [
+          {
+            "length": 32,
+            "start": 482
+          },
+          {
+            "length": 32,
+            "start": 1885
+          },
+          {
+            "length": 32,
+            "start": 3015
+          },
+          {
+            "length": 32,
+            "start": 3374
+          },
+          {
+            "length": 32,
+            "start": 8128
+          },
+          {
+            "length": 32,
+            "start": 8497
+          }
+        ],
+        "1007": [
+          {
+            "length": 32,
+            "start": 1058
+          },
+          {
+            "length": 32,
+            "start": 4543
+          },
+          {
+            "length": 32,
+            "start": 4701
+          }
+        ],
+        "1009": [
+          {
+            "length": 32,
+            "start": 1271
+          },
+          {
+            "length": 32,
+            "start": 1445
+          },
+          {
+            "length": 32,
+            "start": 1778
+          },
+          {
+            "length": 32,
+            "start": 4787
+          },
+          {
+            "length": 32,
+            "start": 7834
+          },
+          {
+            "length": 32,
+            "start": 7953
+          },
+          {
+            "length": 32,
+            "start": 10069
+          }
+        ],
+        "1011": [
+          {
+            "length": 32,
+            "start": 1540
+          },
+          {
+            "length": 32,
+            "start": 9519
+          }
+        ],
+        "1013": [
+          {
+            "length": 32,
+            "start": 884
+          },
+          {
+            "length": 32,
+            "start": 3163
+          },
+          {
+            "length": 32,
+            "start": 8304
+          }
+        ]
+      },
+      "liveRuntimeCodeHash": null,
+      "deploymentAddress": null
+    }
+  },
+  "selectors": {
+    "ProgrammableUniversalLaunchKernelV1": {
+      "activateLaunchGrantV1((uint16,address,bytes32,bytes32,bytes32,bytes32,bytes20,bytes20,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,uint64,bytes32,uint64,bytes32,uint64,bytes32),bytes)": "0x70173809",
+      "activeExecutionGrantDigestV1()": "0xbeccb0dd",
+      "advanceControlV1((bytes32,uint64,bytes32,uint64,bytes32,uint64,bytes32,bool))": "0x380af258",
+      "appendFinalityIndexingV1((bytes32,bytes32,bytes32,bytes32,uint64,bytes32,uint64,bytes32,bytes32,bytes32,uint8),bytes)": "0x9f32b0b8",
+      "assertClosedRuntimeBindingV1(address,bytes32,bytes32,bool)": "0xee4b90f8",
+      "beginProfileExecutionV1(bytes32,((bytes32,bytes32,bytes32,uint8,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,uint64,bytes32,uint64,bytes32,uint64,bytes32,uint64,uint64),bytes,(bytes32,bytes32,bytes32,address,bytes32,uint64,uint64),bytes,(uint8,uint8,address,address,bytes32,bytes32,bytes32,bytes32)[]))": "0xd1567f56",
+      "canonicalLaunchReceiptV1(bytes32)": "0x16eb5a25",
+      "computeExecutionCurrentnessDigestV1((bytes32,bytes32,bytes32,uint8,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,uint64,bytes32,uint64,bytes32,uint64,bytes32,uint64,uint64))": "0x8d088cab",
+      "computeLaunchGrantDigestV1((uint16,address,bytes32,bytes32,bytes32,bytes32,bytes20,bytes20,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,uint64,bytes32,uint64,bytes32,uint64,bytes32))": "0x9b25c130",
+      "computeReservationKeyV1((uint8,uint8,address,address,bytes32,bytes32,bytes32,bytes32))": "0x09f66040",
+      "computeReservationSetHashV1((uint8,uint8,address,address,bytes32,bytes32,bytes32,bytes32)[])": "0xef08039b",
+      "computeSourceCommitmentV1(bytes20)": "0x9f04729c",
+      "computeSourceTreeCommitmentV1(bytes20)": "0x2bb9981e",
+      "computeStampLaunchIdV1((uint16,address,bytes32,bytes32,bytes32,bytes32,bytes20,bytes20,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,uint64,bytes32,uint64,bytes32,uint64,bytes32))": "0x8df0b3e9",
+      "computeWalletIntentDigestV1((bytes32,bytes32,bytes32,address,bytes32,uint64,uint64))": "0x47058e99",
+      "computeWinnerKeyHashV1((uint16,address,bytes32,bytes32,bytes32,bytes32,bytes20,bytes20,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,uint64,bytes32,uint64,bytes32,uint64,bytes32))": "0x3e57e08d",
+      "controlStateV1()": "0x982ebb7b",
+      "currentnessStatusV1(bytes32)": "0x92a03c1c",
+      "DOMAIN_SEPARATOR()": "0x3644e515",
+      "finalizeProfileExecutionV1((bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32))": "0x53ae42a9",
+      "launchGrantStateHeadV1(bytes32)": "0xa3af3105",
+      "launchGrantV1(bytes32)": "0x99bc1037",
+      "profileDescriptorV1(bytes32)": "0x3c6826b6",
+      "registerProfileV1((bytes32,bytes32,uint32,uint8,address,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,uint64,bytes32,uint64,bytes32,uint64,bytes32,uint8))": "0xa9301d16",
+      "reservationOccupantsV1((uint8,uint8,address,address,bytes32,bytes32,bytes32,bytes32))": "0x7bb77939",
+      "revokeExecutionCurrentnessV1(bytes32)": "0x2423590e",
+      "revokeLaunchGrantV1(bytes32)": "0xc53aaad3",
+      "setGlobalKillV1(bool)": "0xd54b5169",
+      "setProfileStatusV1(bytes32,uint8)": "0x31b0b80b",
+      "winnerByKeyV1(bytes32)": "0x3af8d28d",
+      "winnerByNonceV1(bytes32)": "0xebe2a57b"
+    },
+    "ProgrammableUniversalLaunchPreflightV1": {
+      "atomicPreflightHashV1(address,bytes32,bytes32,(uint8,uint8,address,address,bytes32,bytes32,bytes32,bytes32)[])": "0x7547114e",
+      "closedRuntimeBindingHashV1(address,bytes32,bytes32,bool)": "0xc3dedfb4",
+      "readbackV1(address,bytes32,bytes32,(uint8,uint8,address,address,bytes32,bytes32,bytes32,bytes32)[],bytes32)": "0x33c0e6ce"
+    },
+    "ProgrammableNestedFactoryProfileV1": {
+      "ACTION_ECONOMICS_TYPEHASH()": "0x76aaca9c",
+      "ACTION_IDENTITY_TYPEHASH()": "0x7fa839ed",
+      "ACTION_TYPEHASH()": "0x5a35b84a",
+      "COMPONENT_TYPEHASH()": "0x7e2f6ff9",
+      "computeNestedFactoryPlanHashV1((uint16,(bytes32,bytes32,address,bytes32,address,bytes32,bytes32,address,address,address,uint256,uint256,bytes32,bytes32),(uint8,uint8,address,bytes32,bytes32,bytes32,bytes32)[],bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32))": "0xb1560b09",
+      "computeNestedFactoryPreflightHashV1((uint16,(bytes32,bytes32,address,bytes32,address,bytes32,bytes32,address,address,address,uint256,uint256,bytes32,bytes32),(uint8,uint8,address,bytes32,bytes32,bytes32,bytes32)[],bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32))": "0x3c14026d",
+      "EXPECTED_STATE_TYPEHASH()": "0x8f52bd3c",
+      "KERNEL_RUNTIME_CODEHASH()": "0x21cea567",
+      "KERNEL()": "0x037c6514",
+      "launchNestedFactoryV1(bytes32,(uint16,(bytes32,bytes32,address,bytes32,address,bytes32,bytes32,address,address,address,uint256,uint256,bytes32,bytes32),(uint8,uint8,address,bytes32,bytes32,bytes32,bytes32)[],bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,uint8,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,uint64,bytes32,uint64,bytes32,uint64,bytes32,uint64,uint64),bytes,(bytes32,bytes32,bytes32,address,bytes32,uint64,uint64),bytes))": "0xe6b227ce",
+      "NESTED_FACTORY_PLAN_TYPEHASH()": "0x9fc8ef61",
+      "nestedFactoryReservationsV1((uint16,(bytes32,bytes32,address,bytes32,address,bytes32,bytes32,address,address,address,uint256,uint256,bytes32,bytes32),(uint8,uint8,address,bytes32,bytes32,bytes32,bytes32)[],bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32))": "0xe8d52c2d",
+      "POSTCONDITION_TYPEHASH()": "0xe52a877d",
+      "POSTCONDITION_VERIFIER_RUNTIME_CODEHASH()": "0x65217d0b",
+      "POSTCONDITION_VERIFIER()": "0xb012bbfe",
+      "PROFILE_KEY()": "0x904cf89d",
+      "PROVIDER_BINDING_HASH()": "0xe75239ee",
+      "PROVIDER_EXECUTION_ID_TYPEHASH()": "0xadfda565",
+      "PROVIDER_GAS_LIMIT()": "0xf77a71e6",
+      "PROVIDER_RUNTIME_CODEHASH()": "0xd33d07c9",
+      "PROVIDER()": "0x00d34411",
+      "runtimeBindingHashV1()": "0xb652ee8d",
+      "SHARED_COMPONENT_IDENTITY_TYPEHASH()": "0x84679632",
+      "VERIFIER_BINDING_HASH()": "0x113e2b3a",
+      "VERIFIER_GAS_LIMIT()": "0x801579c0"
+    }
+  },
+  "typehashes": {
+    "src/router_vnext/ProgrammableUniversalLaunchKernelV1.sol": {
+      "SOURCE_COMMIT_TYPEHASH": {
+        "preimage": "ProgrammableExecutableSourceCommitV1(bytes20 sourceCommit)",
+        "value": "0x0f5dd9cd2687736ac37f5455b475a34b212f8b264b59fb2e1319be579b442bcc"
+      },
+      "SOURCE_TREE_TYPEHASH": {
+        "preimage": "ProgrammableExecutableSourceTreeV1(bytes20 sourceTree)",
+        "value": "0x8b196e122b10857057b856aedbf439ccd982cf03c98eb5d64ec0ca371d3c9f5c"
+      },
+      "DOMAIN_TYPEHASH": {
+        "preimage": "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)",
+        "value": "0x8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f"
+      },
+      "GRANT_BINDING_A_TYPEHASH": {
+        "preimage": "LaunchGrantBindingAV1(uint16 schemaVersion,address applicantWallet,bytes32 applicantIdHash,bytes32 profileKey,bytes32 planHash,bytes32 sourceRepoHash,bytes32 sourceCommitment,bytes32 sourceTreeCommitment,bytes32 sourceLaunchId,bytes32 stampLaunchId,bytes32 antiReplayNonce)",
+        "value": "0xbc18f9753dfbd136799448a8d5769ec8642f8dfd79b0dda9be66fc403d9bf9e7"
+      },
+      "GRANT_BINDING_B_TYPEHASH": {
+        "preimage": "LaunchGrantBindingBV1(bytes32 componentGraphHash,bytes32 componentRuntimeSetHash,bytes32 configurationHash,bytes32 builderEvidenceHash,bytes32 reviewerAttestationHash,bytes32 exactContractBindingHash,bytes32 providerBindingHash,bytes32 revenueBindingHash)",
+        "value": "0x4b9d1867ce51631b003c594cebdd0fea3ae04d533487d0a5b5bfcfa6cf1e5526"
+      },
+      "CONTROL_BINDING_TYPEHASH": {
+        "preimage": "ControlBindingV1(bytes32 securityControlHeadHash,uint64 securityEpoch,bytes32 securityEpochHash,uint64 policyEpoch,bytes32 policyEpochHash,uint64 reviewGeneration,bytes32 reviewGenerationHash)",
+        "value": "0x4eb5705bd39db52c4ca24620176d2906ff7230c5c5bc8e6487cd66ebec3e26d9"
+      },
+      "LAUNCH_GRANT_TYPEHASH": {
+        "preimage": "LaunchGrantV1(bytes32 bindingAHash,bytes32 bindingBHash,bytes32 controlHash)",
+        "value": "0x064184110be50d9f3669920199e07d26893c2a0af21b8c27c35169dc3ee59b11"
+      },
+      "STAMP_LAUNCH_ID_TYPEHASH": {
+        "preimage": "StampLaunchIdV1(uint256 chainId,address kernel,address applicantWallet,bytes32 profileKey,bytes32 planHash,bytes32 sourceCommitment,bytes32 sourceTreeCommitment,bytes32 componentGraphHash,bytes32 sourceLaunchId,bytes32 reviewGenerationHash)",
+        "value": "0xbf73859936efb662b94ca99f974d89c1867f5da2f9be6d4393a98e5cc14fb9a4"
+      },
+      "WINNER_IDENTITY_TYPEHASH": {
+        "preimage": "WinnerIdentityV1(uint256 chainId,address kernel,address applicantWallet,bytes32 profileKey,bytes32 planHash,bytes32 sourceCommitment,bytes32 sourceTreeCommitment,bytes32 sourceLaunchId,bytes32 stampLaunchId,bytes32 componentGraphHash,bytes32 configurationHash,bytes32 exactContractBindingHash)",
+        "value": "0xf2a3932d17cc50b2da8ef09ff4b0053ffe4adc0e0e317f8c90897d9976053c1a"
+      },
+      "WINNER_KEY_TYPEHASH": {
+        "preimage": "WinnerKeyV1(bytes32 identityHash,bytes32 controlHash)",
+        "value": "0x0e79d5cf9428d74049277bf996af94914e78ae202165105ffbb1d312d2c59d47"
+      },
+      "CURRENTNESS_BINDING_TYPEHASH": {
+        "preimage": "ExecutionCurrentnessBindingV1(bytes32 grantDigest,bytes32 profileKey,bytes32 planHash,uint8 executionMode,bytes32 kernelPreflightReadbackHash,bytes32 profilePreflightReadbackHash,bytes32 dualProviderQuorumEvidenceHash,bytes32 simulationEvidenceHash,bytes32 serviceDeploymentBindingHash,bytes32 currentnessNonce,uint64 validAfter,uint64 deadline)",
+        "value": "0x81d882708c9aa33e6e18b6aa9961cf75f8db7732840a4162c6ded880fe03642a"
+      },
+      "EXECUTION_CURRENTNESS_TYPEHASH": {
+        "preimage": "ExecutionCurrentnessV1(bytes32 bindingHash,bytes32 controlHash)",
+        "value": "0xb87bf295d75b2338fc2ca66e8640d7f202a844d4435797d11d56f4a4aa2c6f53"
+      },
+      "WALLET_INTENT_TYPEHASH": {
+        "preimage": "ApplicantWalletIntentV1(bytes32 grantDigest,bytes32 stampLaunchId,bytes32 antiReplayNonce,address profileModule,bytes32 intentNonce,uint64 validAfter,uint64 deadline)",
+        "value": "0x59af05528c15fb17c794fa208dedd1cd2eeb8317c6e044d0aab567084ca86b7f"
+      },
+      "GRANT_STATE_HEAD_TYPEHASH": {
+        "preimage": "LaunchGrantStateHeadV1(uint8 status,bytes32 grantHash,bytes32 winnerKeyHash,bytes32 priorStateHeadHash)",
+        "value": "0xf8b6f25a5d3398cc3269ec38238b12eea7155385b18287771e223b660aee491d"
+      },
+      "EXECUTION_KEY_TYPEHASH": {
+        "preimage": "ExecutionKeyV1(bytes32 grantDigest,address module,bytes32 currentnessDigest,bytes32 walletIntentDigest)",
+        "value": "0xd563b2230d442f1b62f9d6cb5542fa2a09b3cc2f4465c28ce05b3af128c3f09a"
+      },
+      "RESERVATION_KEY_TYPEHASH": {
+        "preimage": "ReservationKeyV1(uint256 chainId,address kernel,uint8 kind,address account,address manager,bytes32 identifier)",
+        "value": "0x23ddf5880218054696d97ebaac441512dfb651c4550d2faa1fc3efee1487c4a5"
+      },
+      "RESERVATION_LEAF_TYPEHASH": {
+        "preimage": "ReservationLeafV1(bytes32 reservationKey,uint8 scope,bytes32 expectedRuntimeCodeHash,bytes32 expectedManagerRuntimeCodeHash,bytes32 sharedIdentityHash)",
+        "value": "0x0b2d6a81337cda1a201328467e42fbddf66cc8b1795666096a9b2d18f1d952a8"
+      },
+      "RECEIPT_RESULT_TYPEHASH": {
+        "preimage": "ReceiptResultV1(bytes32 grantDigest,bytes32 stampLaunchId,bytes32 planHash,bytes32 componentSetHash,bytes32 componentRuntimeSetHash,bytes32 configurationHash,bytes32 reservationSetHash,bytes32 providerResultHash,bytes32 postconditionHash,bytes32 valueFlowHash,bytes32 deploymentLineageHash)",
+        "value": "0x0d776995ada1b86ab8632acce8851277dc449654b776095f1b0890bdd45d0289"
+      },
+      "RECEIPT_CORE_TYPEHASH": {
+        "preimage": "CanonicalLaunchReceiptCoreV1(bytes32 preparedIdentityHash,bytes32 executionResultHash,uint8 status)",
+        "value": "0x885c7355ef09cc23cc4942e59a27021e0b0c0ad9c2f214e88a2b18aabda9e39a"
+      },
+      "FINALITY_INDEXING_TYPEHASH": {
+        "preimage": "FinalityIndexingReceiptV1(bytes32 grantDigest,bytes32 stampLaunchId,bytes32 receiptCoreHash,bytes32 transactionHash,uint64 blockNumber,bytes32 blockHash,uint64 finalizedAt,bytes32 deploymentReceiptHash,bytes32 sourceVerificationReceiptHash,bytes32 indexingReceiptHash,uint8 status)",
+        "value": "0x02a160b10dc59664b8796a7c553cd6fce0d0f3edc031524352c6f01af2f34b45"
+      }
+    },
+    "src/router_vnext/ProgrammableUniversalLaunchPreflightV1.sol": {
+      "RUNTIME_HEAD_TYPEHASH": {
+        "preimage": "PreflightRuntimeHeadV1(uint256 chainId,address kernel,bytes32 kernelRuntimeCodeHash,bytes32 profileKey,uint8 profileStatus,address profileModule,bytes32 expectedProfileModuleRuntimeCodeHash,bytes32 actualProfileModuleRuntimeCodeHash)",
+        "value": "0xd24adaa204aef1cbff14e5f28ea114b31956a4a71aa3efdccc3d15955fcccf66"
+      },
+      "CONTROL_HEAD_TYPEHASH": {
+        "preimage": "PreflightControlHeadV1(bytes32 securityControlHeadHash,uint64 securityEpoch,bytes32 securityEpochHash,uint64 policyEpoch,bytes32 policyEpochHash,uint64 reviewGeneration,bytes32 reviewGenerationHash,bool globalKilled)",
+        "value": "0x75259ecff8e4d0b2aec276266c733f31954e2975df013701ff874acdccc59a7f"
+      },
+      "LIFECYCLE_HEAD_TYPEHASH": {
+        "preimage": "PreflightLifecycleHeadV1(uint8 grantStatus,bytes32 grantHash,bytes32 winnerKeyHash,bytes32 grantStateHeadHash,bytes32 winnerNonceOccupant,bytes32 winnerKeyOccupant,bytes32 activeExecutionGrantDigest,uint8 receiptStatus,bytes32 receiptCoreHash,bytes32 finalityIndexingReceiptHash)",
+        "value": "0x832c928350f6ac5a6e9f35827561dfd7ed875245f57de2b207a955b3308586dd"
+      },
+      "RESERVATION_STATE_LEAF_TYPEHASH": {
+        "preimage": "PreflightReservationStateLeafV1(bytes32 reservationKey,uint8 scope,bytes32 exclusiveGrantDigest,bytes32 storedSharedIdentityHash,bytes32 expectedSharedIdentityHash,bytes32 expectedRuntimeCodeHash,bytes32 actualRuntimeCodeHash,bytes32 expectedManagerRuntimeCodeHash,bytes32 actualManagerRuntimeCodeHash)",
+        "value": "0x3f07d24891a07b04a34acd1ef7be3d584a550a1320aed5a604bc844854c523d6"
+      },
+      "PREFLIGHT_READBACK_TYPEHASH": {
+        "preimage": "UniversalLaunchPreflightReadbackV1(bytes32 runtimeHeadHash,bytes32 controlHeadHash,bytes32 lifecycleHeadHash,bytes32 reservationSetHash,bytes32 reservationStateHash)",
+        "value": "0xbad4bdb661e908a8c019b966e8629522b36fb71f1f086e87807af41971e2f3e3"
+      },
+      "CLOSED_RUNTIME_BINDING_TYPEHASH": {
+        "preimage": "ClosedRuntimeBindingV1(uint256 chainId,address account,bytes32 runtimeCodeHash,bytes32 runtimeBindingHash,bool stateless)",
+        "value": "0x91cf64dc70ee13a6cadaa910d2aec955a44decdbb2a939f980ffaadbeafccef8"
+      }
+    },
+    "src/router_vnext/ProgrammableNestedFactoryProfileV1.sol": {
+      "ACTION_IDENTITY_TYPEHASH": {
+        "preimage": "NestedFactoryActionIdentityV1(bytes32 providerPlanId,bytes32 factorySalt,address applicantWallet,bytes32 sourceLaunchId,address poolManager,bytes32 poolManagerRuntimeCodeHash,bytes32 poolId,address tokenOwner,address hookOwner,address treasury)",
+        "value": "0x5a7019b080644da3cfd74665fe20d1a0dde6b5cbd90a92bbd844cbf194f3d6f8"
+      },
+      "ACTION_ECONOMICS_TYPEHASH": {
+        "preimage": "NestedFactoryActionEconomicsV1(uint256 tokenSupply,uint256 nativeValue,bytes32 hookPermissionsHash,bytes32 configurationHash)",
+        "value": "0x27bb339ff94b200ef8b36587d461b9dcab2b875bf5ed6b0bc6605494d97c72a0"
+      },
+      "ACTION_TYPEHASH": {
+        "preimage": "NestedFactoryActionV1(bytes32 identityHash,bytes32 economicsHash)",
+        "value": "0xd05b6d958d3f4d4fc2ad2f783bf4e9d328c193c781cfc0f214df64b78613e42c"
+      },
+      "COMPONENT_TYPEHASH": {
+        "preimage": "NestedFactoryComponentV1(uint8 role,uint8 scope,address account,bytes32 runtimeCodeHash,bytes32 creationProvenanceHash,bytes32 ownershipBindingHash,bytes32 configurationHash)",
+        "value": "0xed3592c0b602d601f0c42a2d36cd0f769ec7582b4e9cb628b7de6ad060e27fa8"
+      },
+      "SHARED_COMPONENT_IDENTITY_TYPEHASH": {
+        "preimage": "NestedFactorySharedComponentIdentityV1(uint8 role,address account,bytes32 runtimeCodeHash,bytes32 creationProvenanceHash,bytes32 ownershipBindingHash,bytes32 configurationHash)",
+        "value": "0x6a348a8e81e6de59078669802ac89eb9e6fe5b304332e8d4d01c6e61f80407ca"
+      },
+      "EXPECTED_STATE_TYPEHASH": {
+        "preimage": "NestedFactoryExpectedStateV1(bytes32 returnedIdentitiesHash,bytes32 architectureStateHash,bytes32 poolStateHash,bytes32 revenueStateHash,bytes32 valueFlowHash)",
+        "value": "0x1fb77e43c06f07363ae72eae328debfbd595615314f72974bc7fbe0de8f48ade"
+      },
+      "NESTED_FACTORY_PLAN_TYPEHASH": {
+        "preimage": "NestedFactoryPlanV1(uint16 schemaVersion,bytes32 actionHash,bytes32 orderedComponentHeadHash,bytes32 componentGraphHash,bytes32 componentSetHash,bytes32 componentRuntimeSetHash,bytes32 expectedStateHash)",
+        "value": "0x1890fcb128a3d30c50769efbefad7ae4bbbd3fcbf69cdcbbf077742e932ed634"
+      },
+      "PROVIDER_EXECUTION_ID_TYPEHASH": {
+        "preimage": "NestedFactoryProviderExecutionIdV1(bytes32 providerBindingHash,bytes32 executionKey,bytes32 grantDigest,bytes32 stampLaunchId,bytes32 antiReplayNonce,bytes32 actionHash,bytes32 orderedComponentHeadHash)",
+        "value": "0xee3d409291be94373985c300a83899bebbcbe484a58372ef53910a2e99fb0308"
+      },
+      "POSTCONDITION_TYPEHASH": {
+        "preimage": "NestedFactoryPostconditionV1(bytes32 providerExecutionId,bytes32 architectureStateHash,bytes32 poolStateHash,bytes32 revenueStateHash,bytes32 valueFlowHash,bytes32 returnedIdentitiesHash)",
+        "value": "0x52be3ba9e239a21d3cde4f48df2f656c51871e7227dda6156b16d9d768af9c54"
+      }
+    }
+  },
+  "typehashCount": 35,
+  "profiles": [
+    {
+      "architecture": "COMPLETED_GRAPH_ADOPTION",
+      "status": "DENY_FROZEN_EA0_CONSUMER_ONLY_NO_SILENT_MIGRATION",
+      "deploymentBinding": null,
+      "profileCapabilityBinding": null,
+      "activationAllowed": false
+    },
+    {
+      "architecture": "DIRECT_GRAPH",
+      "status": "DENY_PENDING_TYPED_PROFILE_ARTIFACT",
+      "deploymentBinding": null,
+      "profileCapabilityBinding": null,
+      "activationAllowed": false
+    },
+    {
+      "architecture": "EXISTING_ASSET_NEW_V4_POOL",
+      "status": "DENY_PENDING_TYPED_PROFILE_ARTIFACT",
+      "deploymentBinding": null,
+      "profileCapabilityBinding": null,
+      "activationAllowed": false
+    },
+    {
+      "architecture": "NESTED_FACTORY",
+      "status": "DENY_SOURCE_ARTIFACT_ONLY_DEPLOYMENT_AND_AUTHORITY_UNBOUND",
+      "deploymentBinding": null,
+      "profileCapabilityBinding": null,
+      "activationAllowed": false
+    },
+    {
+      "architecture": "OPTIONAL_COMPONENT_GRAPH",
+      "status": "DENY_PENDING_TYPED_PROFILE_ARTIFACT",
+      "deploymentBinding": null,
+      "profileCapabilityBinding": null,
+      "activationAllowed": false
+    },
+    {
+      "architecture": "TEMPLATE_PROVIDER_LAUNCH",
+      "status": "DENY_PENDING_TYPED_PROFILE_ARTIFACT",
+      "deploymentBinding": null,
+      "profileCapabilityBinding": null,
+      "activationAllowed": false
+    }
+  ],
+  "frozenPredecessors": {
+    "completedGraphContract": {
+      "commit": "ea0e4424b886a0c1ae928fc73d62bd8e907b44cd",
+      "tree": "8c5e0822d7ff256cad3d9e0350c980473d36aecc",
+      "artifactSha256": "f9d110d2850c4934ba0c22493eaa9d0f090bee6f0e6a1339ee3002344da1065a",
+      "migration": "FORBIDDEN_WITHOUT_NEW_REVIEWED_PROFILE_AND_AUTHORITY_BINDING"
+    },
+    "authorityV3": {
+      "commit": "a017d750fc3ad0805614487a7387c7e195b65bd0",
+      "tree": "e54f9835068973befd79203aad98aee82552996c",
+      "bundleSha256": "7ccb8b73a2c35a803b31c8c4cca25e84b4c138ee5f61510eb182064a041a1886",
+      "compatibility": "PREDECESSOR_EVIDENCE_ONLY_NEW_AUTHORITY_VERSION_REQUIRED"
+    }
+  },
+  "sourceReferents": {
+    "applicantRequestA": "APPLICANT_ID_AND_REVIEWER_ATTESTATION_LINEAGE",
+    "executableMeasuredB": "RAW_BYTES20_SOURCE_COMMIT_AND_TREE_IN_GRANT_COBOUND_WITH_PLAN_HASH",
+    "carrierEvidenceC": "BUILDER_EVIDENCE_ONLY_NEVER_SUBSTITUTES_A_OR_B"
+  },
+  "deployment": {
+    "state": "UNDEPLOYED",
+    "activation": "DENY",
+    "chainId": null,
+    "addresses": null,
+    "specializedRuntimeCodeHashes": null,
+    "creationTransactions": null,
+    "sourceVerificationReceipts": null,
+    "finalityReceipts": null,
+    "profileRegistrationReceipts": null,
+    "authorityV4Binding": null,
+    "requiredEnvironmentNames": []
+  },
+  "consumerBindings": {
+    "website": "HANDOFF_ONLY_NO_WEBSITE_WRITE",
+    "shards": "DENY_REAL_NESTED_FACTORY_PROVIDER_MODULE_AND_DEPLOYMENT_UNBOUND",
+    "hookemon": "DENY_REMAINS_ON_FROZEN_COMPLETED_GRAPH_ADOPT_CONSUMER_NO_MIGRATION",
+    "indexer": "OUT_OF_SCOPE_NO_INDEXER_WRITE"
+  },
+  "releaseCommands": {
+    "artifactWrite": "node scripts/generate-router-vnext-universal-artifact.mjs --write",
+    "artifactCheck": "node scripts/generate-router-vnext-universal-artifact.mjs --check",
+    "frozenGate": "bash scripts/verify-router-vnext-universal-v1.sh"
+  },
+  "gitIdentity": "EXTERNAL_IMMUTABLE_COMMIT_AND_TREE_RECEIPT_REQUIRED",
+  "externalActionOccurred": false
+}
