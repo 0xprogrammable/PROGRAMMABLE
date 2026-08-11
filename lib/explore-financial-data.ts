@@ -378,9 +378,9 @@ function reconcileBitqueryValuations<T extends ExploreEntry>(
       };
     }
     if (
-      !pool.liquidity ||
-      liquidity === null ||
-      liquidity < BigInt(MARKET_DATA_MINIMUM_FDV_LIQUIDITY_USD_WAD)
+      pool.liquidity &&
+      (liquidity === null ||
+        liquidity < BigInt(MARKET_DATA_MINIMUM_FDV_LIQUIDITY_USD_WAD))
     ) {
       return {
         ...pool,
@@ -412,17 +412,20 @@ function reconcileBitqueryValuations<T extends ExploreEntry>(
     }
     const tradeTime = Date.parse(pool.latestTrade?.time ?? "");
     const priceTime = Date.parse(pool.latestTrade.priceUsdAsOfTime);
-    const liquidityTime = Date.parse(pool.liquidity.asOfTime);
+    const liquidityTime = pool.liquidity
+      ? Date.parse(pool.liquidity.asOfTime)
+      : null;
     const generatedTime = Date.parse(marketData.generatedAt);
     if (
       !Number.isFinite(tradeTime) ||
       !Number.isFinite(priceTime) ||
-      !Number.isFinite(liquidityTime) ||
+      (liquidityTime !== null && !Number.isFinite(liquidityTime)) ||
       !Number.isFinite(generatedTime) ||
       Math.abs(tradeTime - priceTime) > MARKET_DATA_CURRENT_MAX_AGE_MS ||
       tradeTime > generatedTime + MAXIMUM_MARKET_FUTURE_SKEW_MS ||
       priceTime > generatedTime + MAXIMUM_MARKET_FUTURE_SKEW_MS ||
-      liquidityTime > generatedTime + MAXIMUM_MARKET_FUTURE_SKEW_MS
+      (liquidityTime !== null &&
+        liquidityTime > generatedTime + MAXIMUM_MARKET_FUTURE_SKEW_MS)
     ) {
       return {
         ...pool,
@@ -433,14 +436,16 @@ function reconcileBitqueryValuations<T extends ExploreEntry>(
         },
       };
     }
-    const asOfTime = new Date(
-      Math.min(tradeTime, priceTime, liquidityTime),
-    ).toISOString();
-    const evidenceIsCurrent = [tradeTime, priceTime, liquidityTime].every(
+    const evidenceTimes = liquidityTime === null
+      ? [tradeTime, priceTime]
+      : [tradeTime, priceTime, liquidityTime];
+    const asOfTime = new Date(Math.min(...evidenceTimes)).toISOString();
+    const evidenceIsCurrent = pool.liquidity !== undefined &&
+      evidenceTimes.every(
       (time) => generatedTime - time <= MARKET_DATA_CURRENT_MAX_AGE_MS,
-    );
+      );
     const freshness = pool.status === "current" &&
-        pool.liquidity.freshness === "current" &&
+        pool.liquidity?.freshness === "current" &&
         evidenceIsCurrent
       ? "current" as const
       : "stale" as const;

@@ -21,6 +21,8 @@ import {
 } from "../../../../lib/explore-financial-data";
 import { readBitqueryTokenMarketDataV1 } from
   "../../../../lib/market-data/bitquery.server";
+import { hydrateMissingCanonicalTokenSupplyV1 } from
+  "../../../../lib/market-data/canonical-token-supply.server";
 import { exploreEntryMarketIdentitiesV1 } from
   "../../../../lib/market-data/explore-market-identities";
 import type { TokenMarketDataV1 } from
@@ -197,9 +199,14 @@ export async function GET(request: NextRequest) {
       identityAsOfBlock,
       referenceHead?.blockNumber,
     );
-    const identityEntry = token
+    const unresolvedIdentityEntry = token
       ? canonicalTokenExploreEntryV1(token)
       : customProject ?? null;
+    const identityEntry = unresolvedIdentityEntry
+      ? (await hydrateMissingCanonicalTokenSupplyV1([
+          unresolvedIdentityEntry,
+        ]))[0] ?? unresolvedIdentityEntry
+      : null;
     const marketByToken = identityEntry
       ? await readBitqueryTokenMarketDataV1(
           exploreEntryMarketIdentitiesV1(identityEntry),
