@@ -20,6 +20,19 @@ export const DATABASE_RUNTIME_TEST_PATHS = Object.freeze([
   "tests/website-projection-target.test.ts",
 ]);
 
+export const DATABASE_RUNTIME_SOURCE_PATHS = Object.freeze([
+  "lib/server/custom-launch/genesis-canary-public-v1.ts",
+  "lib/server/custom-launch/project-read-v2.ts",
+  "lib/server/custom-launch/public-readiness.ts",
+  "lib/server/custom-launch/registry-public-read-v1.ts",
+  "lib/server/custom-launch/registry-public-store-v1.ts",
+]);
+
+export const READ_MODEL_CONTRACT_DOC_PATHS = Object.freeze([
+  "docs/data-pipeline/PRODUCTION-CUTOVER-OPERATOR.md",
+  "docs/operations/read-model-scheduler-cutover.md",
+]);
+
 function markAll(scope) {
   for (const key of Object.keys(scope)) {
     scope[key] = true;
@@ -48,10 +61,17 @@ export function classifyVerifyPaths(paths, { forceAll = false } = {}) {
       continue;
     }
 
+    if (READ_MODEL_CONTRACT_DOC_PATHS.includes(path)) {
+      scope.interface = true;
+      scope.read_model = true;
+      continue;
+    }
+
     if (
-      /^(?:README\.md|AGENTS\.md|CONTRIBUTING\.md|SECURITY\.md|SUPPORT\.md|CODE_OF_CONDUCT\.md|LICENSE|docs\/)/u.test(
+      /^(?:(?:README|AGENTS|CONTRIBUTING|SECURITY|SUPPORT|CODE_OF_CONDUCT)\.md|LICENSE)$/u.test(
         path,
-      )
+      ) ||
+      /^docs\//u.test(path)
     ) {
       continue;
     }
@@ -75,6 +95,7 @@ export function classifyVerifyPaths(paths, { forceAll = false } = {}) {
 
     if (
       DATABASE_RUNTIME_TEST_PATHS.includes(path) ||
+      DATABASE_RUNTIME_SOURCE_PATHS.includes(path) ||
       /^lib\/server\/projection-target\//u.test(path)
     ) {
       scope.database = true;

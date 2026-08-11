@@ -191,19 +191,15 @@ jobs:
         if: needs.scope.outputs.interface == 'true' && needs.scope.outputs.dependencies == 'true'
         run: npm run audit:prod
 
-      - name: Verify complete interface after dependency or CI contract changes
-        if: needs.scope.outputs.interface == 'true' && needs.scope.outputs.dependencies == 'true'
-        run: npm run verify
-
       - name: Verify affected interface
-        if: needs.scope.outputs.interface == 'true' && needs.scope.outputs.dependencies != 'true'
+        if: needs.scope.outputs.interface == 'true'
         env:
           PROGRAMMABLE_CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           PROGRAMMABLE_CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: npm run verify:interface:ci
 
       - name: Verify affected read-model operations contract
-        if: needs.scope.outputs.read_model == 'true' && needs.scope.outputs.dependencies != 'true'
+        if: needs.scope.outputs.read_model == 'true'
         run: npm run perf:read-model:ops-gate
 
       - name: Skip unaffected interface

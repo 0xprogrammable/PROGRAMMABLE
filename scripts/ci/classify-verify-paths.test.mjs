@@ -4,7 +4,9 @@ import test from "node:test";
 import {
   classifyVerifyPaths,
   CONTRACT_RELEASE_TEST_PATHS,
+  DATABASE_RUNTIME_SOURCE_PATHS,
   DATABASE_RUNTIME_TEST_PATHS,
+  READ_MODEL_CONTRACT_DOC_PATHS,
 } from "./classify-verify-paths.mjs";
 
 const none = {
@@ -18,6 +20,25 @@ const none = {
 
 test("keeps documentation changes on the minimal lane", () => {
   assert.deepEqual(classifyVerifyPaths(["docs/guide.md", "README.md"]), none);
+});
+
+test("does not let filename prefixes masquerade as documentation", () => {
+  for (const path of ["README.md.mjs", "AGENTS.md/runtime.ts"]) {
+    assert.deepEqual(
+      classifyVerifyPaths([path]),
+      classifyVerifyPaths([], { forceAll: true }),
+    );
+  }
+});
+
+test("routes source-bound operations documentation through its contract", () => {
+  for (const path of READ_MODEL_CONTRACT_DOC_PATHS) {
+    assert.deepEqual(classifyVerifyPaths([path]), {
+      ...none,
+      interface: true,
+      read_model: true,
+    });
+  }
 });
 
 test("routes ordinary website changes only to the interface lane", () => {
@@ -94,6 +115,7 @@ test("routes artifact-dependent release tests through the contract lane", () => 
 test("routes the PGlite-backed website runtime through the database lane", () => {
   for (const path of [
     ...DATABASE_RUNTIME_TEST_PATHS,
+    ...DATABASE_RUNTIME_SOURCE_PATHS,
     "lib/server/projection-target/postgres-store.ts",
   ]) {
     assert.deepEqual(classifyVerifyPaths([path]), {
@@ -145,6 +167,11 @@ test("keeps protected jobs fail closed and production pushes complete", () => {
   assert.match(workflow, /git diff --no-renames --name-only/u);
   assert.match(workflow, /git show "\$BASE_SHA:scripts\/ci\/classify-verify-paths\.mjs"/u);
   assert.match(workflow, /FORCE_ALL: \$\{\{ github\.event_name == 'push' \}\}/u);
+  assert.doesNotMatch(workflow, /run: npm run verify\n/u);
+  assert.match(
+    workflow,
+    /name: Verify affected interface\n        if: needs\.scope\.outputs\.interface == 'true'/u,
+  );
   assert.equal(workflow.match(/^    if: always\(\)$/gmu)?.length, 4);
   assert.equal(
     workflow.match(/name: Require successful change classification/gmu)?.length,
