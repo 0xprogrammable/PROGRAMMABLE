@@ -1,0 +1,49 @@
+[profile.default]
+src = "src"
+test = "test"
+out = "../../out-router-deployment-v1"
+cache_path = "../../cache-router-deployment-v1"
+libs = ["../../lib", "../../src"]
+auto_detect_remappings = false
+remappings = [
+  "@openzeppelin/contracts/=../../lib/openzeppelin-contracts/contracts/",
+  "@openzeppelin/uniswap-hooks/=../../lib/openzeppelin-uniswap-hooks/",
+  "@solady/=../../lib/solady/",
+  "@uniswap/v4-core/=../../lib/v4-core/",
+  "@uniswap/v4-periphery/=../../lib/v4-periphery/",
+  "forge-std/=../../lib/forge-std/src/",
+  "programmable-src/=../../src/",
+  "shards-v1/=../../lib/shards-v1/",
+  "solady/=../../lib/solady/src/"
+]
+solc_version = "0.8.26"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 1_000
+via_ir = false
+bytecode_hash = "none"
+cbor_metadata = false
+ffi = false
+fs_permissions = [{ access = "read", path = "../../artifacts/router-v4-deployment-v1" }]
+
+[profile.default.fuzz]
+runs = 1_000
+max_test_rejects = 65_536
+
+[profile.default.invariant]
+runs = 256
+depth = 64
+fail_on_revert = false
+
+[profile.ci]
+fuzz = { runs = 10_000, max_test_rejects = 65_536 }
+invariant = { runs = 1_000, depth = 128, fail_on_revert = false }
+
+[fmt]
+line_length = 120
+tab_width = 4
+bracket_spacing = true
+int_types = "long"
+quote_style = "double"
+number_underscore = "thousands"
+wrap_comments = true
