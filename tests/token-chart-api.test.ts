@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => {
   return {
     assertTokenChartSupported: vi.fn(),
     getAlchemyOnchainDeployment: vi.fn(),
+    getWebsiteChartOnchainDeployment: vi.fn(),
     isTokenChartRange: vi.fn(),
     enrichTokensWithAlchemyPoolState: vi.fn(),
     readVerifiedOperationalMarketSnapshot: vi.fn(),
@@ -46,6 +47,11 @@ vi.mock("../lib/onchain/chart", () => ({
   readTokenChartSeries: mocks.readTokenChartSeries,
   TokenChartIntegrityError: mocks.TokenChartIntegrityError,
   TokenChartUnavailableError: mocks.TokenChartUnavailableError,
+}));
+
+vi.mock("../lib/onchain/config", () => ({
+  getWebsiteChartOnchainDeployment:
+    mocks.getWebsiteChartOnchainDeployment,
 }));
 
 vi.mock("../lib/onchain/durable-model", () => ({
@@ -86,6 +92,11 @@ const deployment = {
   chainId: 1,
   rpcUrl: "https://eth-mainnet.g.alchemy.com/v2/redacted",
 } as const;
+const chartDeployment = {
+  ...deployment,
+  rpcUrl: "https://ethereum-rpc.publicnode.com",
+  rpcUrlSecondary: "https://rpc.mevblocker.io",
+} as const;
 
 const snapshot = {
   chainId: 1,
@@ -107,6 +118,9 @@ describe("token chart Alchemy API", () => {
       ["1h", "1d", "1w", "all"].includes(range),
     );
     mocks.getAlchemyOnchainDeployment.mockReturnValue(deployment);
+    mocks.getWebsiteChartOnchainDeployment.mockReturnValue(
+      chartDeployment,
+    );
     mocks.readVerifiedOperationalMarketSnapshot.mockResolvedValue(
       launchDiscoverySnapshot,
     );
@@ -189,7 +203,7 @@ describe("token chart Alchemy API", () => {
     expect(mocks.getAlchemyOnchainDeployment).toHaveBeenCalledTimes(1);
     expect(mocks.readTokenChartSeries).toHaveBeenCalledWith(
       expect.objectContaining({
-        deployment,
+        deployment: chartDeployment,
         token,
         snapshotBlock: 25_630_005n,
         ethUsdQuote: expect.objectContaining({

@@ -128,6 +128,42 @@ describe("token chart operational RPC failover", () => {
     expect(secondaryClient.getLogs).toHaveBeenCalledTimes(2);
   });
 
+  it("reads disjoint chart ranges in bounded parallel batches", async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const releases: Array<() => void> = [];
+    const getLogs = vi.fn().mockImplementation(() =>
+      new Promise<readonly []>((resolve) => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        releases.push(() => {
+          inFlight -= 1;
+          resolve([]);
+        });
+      })
+    );
+    mocks.clients.set(primary, client(getLogs));
+
+    const read = readTokenChartSeries({
+      deployment: { ...deployment, logBlockRange: 10n },
+      token,
+      snapshotBlock: 149n,
+    });
+
+    await vi.waitFor(() => expect(getLogs).toHaveBeenCalledTimes(8));
+    expect(maxInFlight).toBe(8);
+    releases.splice(0).forEach((release) => release());
+
+    await vi.waitFor(() => expect(getLogs).toHaveBeenCalledTimes(10));
+    expect(maxInFlight).toBe(8);
+    releases.splice(0).forEach((release) => release());
+
+    await expect(read).resolves.toMatchObject({
+      status: "partial",
+      points: [],
+    });
+  });
+
   it("stays honestly unavailable when both configured RPCs fail", async () => {
     mocks.clients.set(
       primary,

@@ -81,7 +81,8 @@ function productionSecondaryRpc() {
 
 const WEBSITE_MAINNET_RPC_PRIMARY =
   "https://ethereum-rpc.publicnode.com";
-const WEBSITE_MAINNET_RPC_SECONDARY = "https://rpc.mevblocker.io";
+const WEBSITE_MAINNET_RPC_SECONDARY = "https://eth.drpc.org";
+const WEBSITE_MAINNET_CHART_RPC_SECONDARY = "https://rpc.mevblocker.io";
 
 export function selectedDeploymentEnvironment(
   value = process.env.PROGRAMMABLE_ONCHAIN_NETWORK,
@@ -251,6 +252,23 @@ export function getWebsiteReadOnchainDeployment(
     ...deployment,
     rpcUrl: WEBSITE_MAINNET_RPC_PRIMARY,
     rpcUrlSecondary: WEBSITE_MAINNET_RPC_SECONDARY,
+  };
+}
+
+/**
+ * Historical log reads need one fixed archive-capable fallback. Current
+ * Website reads use the independently verified PublicNode + dRPC pair above;
+ * charts keep MEV Blocker as their narrow, fixed archive secondary.
+ */
+export function getWebsiteChartOnchainDeployment(
+  environment = selectedDeploymentEnvironment(),
+): OnchainDeployment {
+  const deployment = getWebsiteReadOnchainDeployment(environment);
+  if (deployment.environment !== "production") return deployment;
+
+  return {
+    ...deployment,
+    rpcUrlSecondary: WEBSITE_MAINNET_CHART_RPC_SECONDARY,
   };
 }
 
