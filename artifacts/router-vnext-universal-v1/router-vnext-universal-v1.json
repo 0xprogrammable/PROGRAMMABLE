@@ -22,8 +22,11 @@
     "externalCalls": "FIXED_CODEHASH_PINNED_BOUNDED_PROVIDER_VERIFIER_PREFLIGHT_AND_ERC1271_ONLY"
   },
   "compiler": {
-    "version": "solc, the solidity compiler commandline interface\nVersion: 0.8.26+commit.8a97fa7a.Darwin.appleclang",
-    "binarySha256": "24b06eb31fd9db8edf3a57bdf7468d7360d6fc2fb202a6bb577bda089193ef31",
+    "version": "0.8.26+commit.8a97fa7a",
+    "binarySha256s": {
+      "linux-amd64": "d5f23436f443edb85d8e76906d12f0a86ce0490e7663a9e608efeb7a93f149ef",
+      "macosx-amd64": "0ff016aef2396b12d1fc65429d8ea6cf53c2ee4b041bb8925644615ee1c30ab9"
+    },
     "settings": {
       "optimizer": {
         "enabled": true,
@@ -78,7 +81,7 @@
       "sha256": "c3bc259b634902cd42245e220e0de69831f3b809eb4341d0a1bb4876cc7f79ac"
     },
     "scripts/generate-router-vnext-universal-artifact.mjs": {
-      "sha256": "5e20b3ea1979af4bfaf3150f679f825ba7340c91c2f628eee1a0adce3e726eb6"
+      "sha256": "6df501aa4aed5dd2feddf27b74fc147b1af94b10e6637e8bca145da9ec95669c"
     },
     "scripts/verify-router-vnext-universal-v1.sh": {
       "sha256": "22be72ffffbc276f2d9a4fd3013bf676689c8add2140125d403a819e18cf8525"

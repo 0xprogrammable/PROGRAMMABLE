@@ -48,21 +48,37 @@ const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 const stableJson = (value) => `${JSON.stringify(value, null, 2)}\n`;
 const read = (path) => readFileSync(join(root, path));
 const castKeccak = (value) => execFileSync("cast", ["keccak", value], { encoding: "utf8" }).trim();
+const solcRelease = "0.8.26+commit.8a97fa7a";
+// Official release hashes from binaries.soliditylang.org for the two supported CI/developer platforms.
+const solcBinarySha256s = {
+  "linux-amd64": "d5f23436f443edb85d8e76906d12f0a86ce0490e7663a9e608efeb7a93f149ef",
+  "macosx-amd64": "0ff016aef2396b12d1fc65429d8ea6cf53c2ee4b041bb8925644615ee1c30ab9",
+};
 
 const resolveSolc = () => {
   const pathLookup = spawnSync("which", ["solc"], { encoding: "utf8" });
   const candidates = [
-    pathLookup.status === 0 ? pathLookup.stdout.trim() : "",
     join(homedir(), ".svm", "0.8.26", "solc-0.8.26"),
+    join(homedir(), ".solc-select", "artifacts", "solc-0.8.26", "solc-0.8.26"),
+    pathLookup.status === 0 ? pathLookup.stdout.trim() : "",
   ];
   for (const path of candidates) {
     if (!path) continue;
     const probe = spawnSync(path, ["--version"], { encoding: "utf8" });
-    if (probe.status === 0 && probe.stdout.includes("Version: 0.8.26+commit.8a97fa7a")) {
-      return { path, version: probe.stdout.trim() };
+    let binarySha256;
+    try {
+      binarySha256 = sha256(readFileSync(path));
+    } catch {
+      continue;
+    }
+    if (
+      probe.status === 0 && probe.stdout.includes(`Version: ${solcRelease}`)
+        && Object.values(solcBinarySha256s).includes(binarySha256)
+    ) {
+      return path;
     }
   }
-  throw new Error("solc 0.8.26 was not found on PATH or in the Foundry SVM cache");
+  throw new Error("an official solc 0.8.26 binary was not found in a supported cache or on PATH");
 };
 
 const sourceContents = Object.fromEntries(
@@ -93,7 +109,7 @@ const standardInput = {
 };
 const standardInputBytes = Buffer.from(stableJson(standardInput));
 
-const { path: solcPath, version: solcVersion } = resolveSolc();
+const solcPath = resolveSolc();
 const compilation = spawnSync(solcPath, ["--standard-json"], {
   input: standardInputBytes,
   encoding: "utf8",
@@ -223,8 +239,8 @@ const artifact = {
     externalCalls: "FIXED_CODEHASH_PINNED_BOUNDED_PROVIDER_VERIFIER_PREFLIGHT_AND_ERC1271_ONLY",
   },
   compiler: {
-    version: solcVersion,
-    binarySha256: sha256(readFileSync(solcPath)),
+    version: solcRelease,
+    binarySha256s: solcBinarySha256s,
     settings: standardInput.settings,
     standardInputPath: "artifacts/router-vnext-universal-v1/standard-input.json",
     standardInputSha256: sha256(standardInputBytes),
