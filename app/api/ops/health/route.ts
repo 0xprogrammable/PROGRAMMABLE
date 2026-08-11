@@ -104,11 +104,36 @@ export async function GET() {
       readDurableExploreModel(deployment, MAX_INDEX_AGE_MS),
       readOperationalRpcHealth(deployment),
     ]);
-    if (index.status !== "ready") {
-      throw new Error(`Durable index ${index.reason}: ${index.detail}`);
-    }
     if (rpc.status === "unhealthy") {
       return unhealthyRpcResponse(rpc, startedAt);
+    }
+    if (rpc.chainId !== deployment.chainId) {
+      throw new Error("Durable read-model chain binding is unavailable");
+    }
+    if (index.status !== "ready") {
+      if (index.reason === "stale") {
+        const model = index.envelope.payload.model;
+        return NextResponse.json(
+          {
+            status: "degraded",
+            chainId: rpc.chainId,
+            index: {
+              status: "stale",
+              ageSeconds: Math.floor(index.ageMs / 1_000),
+              blockNumber: model.snapshot.blockNumber,
+              tokenCount: model.tokens.length,
+            },
+            indexSource: "durable",
+            indexedReadModel: { status: indexedRead.status },
+            rpc,
+            checkedAt: new Date().toISOString(),
+          },
+          {
+            headers: { "Cache-Control": "no-store" },
+          },
+        );
+      }
+      throw new Error(`Durable index ${index.reason}: ${index.detail}`);
     }
 
     return NextResponse.json(

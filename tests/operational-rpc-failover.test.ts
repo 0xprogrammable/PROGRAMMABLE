@@ -102,9 +102,32 @@ describe("operational RPC failover", () => {
     ).toBe(true);
   });
 
+  it("uses the fixed secondary after an exact archive-read limitation", async () => {
+    const calls: string[] = [];
+    const read = vi.fn(async (candidate: ReadyOnchainDeployment) => {
+      calls.push(candidate.rpcUrl);
+      if (candidate.rpcUrl === deployment.rpcUrl) {
+        throw rpcFailure(
+          "Archive requests require a personal token. Get one at: https://provider.example",
+          -32602,
+        );
+      }
+      return "secondary-archive-ready";
+    });
+
+    await expect(
+      withOperationalRpcFailover(deployment, read),
+    ).resolves.toBe("secondary-archive-ready");
+    expect(calls).toEqual([
+      deployment.rpcUrl,
+      deployment.rpcUrlSecondary,
+    ]);
+  });
+
   it.each([
     httpFailure(400),
     rpcFailure("execution reverted"),
+    rpcFailure("Invalid parameters were provided", -32602),
     new Error("Pool identity mismatch"),
   ])("does not rotate providers for a non-transport read error", async (error) => {
     const read = vi.fn(async () => {
