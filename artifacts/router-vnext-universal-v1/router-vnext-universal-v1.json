@@ -81,7 +81,7 @@
       "sha256": "c3bc259b634902cd42245e220e0de69831f3b809eb4341d0a1bb4876cc7f79ac"
     },
     "scripts/generate-router-vnext-universal-artifact.mjs": {
-      "sha256": "6df501aa4aed5dd2feddf27b74fc147b1af94b10e6637e8bca145da9ec95669c"
+      "sha256": "b5082fa645fcbadc70a334f85ee7fbc4603ba1bcf84766abb5b67354b02eaefd"
     },
     "scripts/verify-router-vnext-universal-v1.sh": {
       "sha256": "22be72ffffbc276f2d9a4fd3013bf676689c8add2140125d403a819e18cf8525"
@@ -857,7 +857,7 @@
   "releaseCommands": {
     "artifactWrite": "node scripts/generate-router-vnext-universal-artifact.mjs --write",
     "artifactCheck": "node scripts/generate-router-vnext-universal-artifact.mjs --check",
-    "frozenGate": "./scripts/verify-router-vnext-universal-v1.sh"
+    "frozenGate": "bash scripts/verify-router-vnext-universal-v1.sh"
   },
   "gitIdentity": "EXTERNAL_IMMUTABLE_COMMIT_AND_TREE_RECEIPT_REQUIRED",
   "externalActionOccurred": false

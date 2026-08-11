@@ -292,7 +292,7 @@ const artifact = {
   releaseCommands: {
     artifactWrite: "node scripts/generate-router-vnext-universal-artifact.mjs --write",
     artifactCheck: "node scripts/generate-router-vnext-universal-artifact.mjs --check",
-    frozenGate: "./scripts/verify-router-vnext-universal-v1.sh",
+    frozenGate: "bash scripts/verify-router-vnext-universal-v1.sh",
   },
   gitIdentity: "EXTERNAL_IMMUTABLE_COMMIT_AND_TREE_RECEIPT_REQUIRED",
   externalActionOccurred: false,
