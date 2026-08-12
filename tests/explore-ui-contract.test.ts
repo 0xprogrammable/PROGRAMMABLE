@@ -5,6 +5,22 @@ import { describe, expect, it } from "vitest";
 const root = process.cwd();
 
 describe("Explore UI contract", () => {
+  it("streams the initial Explore response and suppresses the hydration refetch", () => {
+    const page = readFileSync(join(root, "app/explore/page.tsx"), "utf8");
+    const source = readFileSync(
+      join(root, "components/explore-view.tsx"),
+      "utf8",
+    );
+
+    expect(page).toContain("<Suspense fallback={<ExploreView loadingOnly />}>");
+    expect(page).toContain('"https://programmable.market/api/explore"');
+    expect(page).toContain("<ExploreView initialResponse={initialResponse} />");
+    expect(source).toContain(
+      "if (handledRequestKey.current === requestKey)",
+    );
+    expect(source).toContain("enabled: !preview && !loadingOnly");
+  });
+
   it("keeps sort, socials and model choices in one persistent disclosure", () => {
     const source = readFileSync(
       join(root, "components/explore-view.tsx"),

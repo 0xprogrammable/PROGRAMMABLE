@@ -128,6 +128,11 @@ type ExploreState =
       refreshError?: string;
     };
 
+export type ExploreInitialResponse = Readonly<{
+  ok: boolean;
+  body: unknown;
+}>;
+
 export function preserveExplorePayloadOnRefreshFailure(
   current: ExploreState,
   input: {
@@ -738,6 +743,47 @@ function readApiError(value: unknown) {
     : "Tokens are temporarily unavailable";
 }
 
+export function createExploreInitialState(
+  response: ExploreInitialResponse | undefined,
+  input: Readonly<{
+    requestKey: string;
+    contentKey: string;
+  }>,
+): ExploreState | null {
+  if (response === undefined) return null;
+  if (!response.ok) {
+    return {
+      phase: "error",
+      message: readApiError(response.body),
+      ...input,
+    };
+  }
+
+  try {
+    const payload = parseExplorePayload(response.body);
+    if (
+      payload.page !== 1 ||
+      payload.pageSize !== EXPLORE_TOKENS_PER_PAGE
+    ) {
+      throw new Error("The token registry returned an unexpected first page");
+    }
+    return {
+      phase: "ready",
+      payload,
+      ...input,
+    };
+  } catch (error) {
+    return {
+      phase: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "The token registry returned an invalid response",
+      ...input,
+    };
+  }
+}
+
 type PendingExploreRequest = {
   controller: AbortController;
   promise: Promise<ExplorePayload>;
@@ -1152,7 +1198,13 @@ export function exploreDataQualityMessage(
   return null;
 }
 
-export function ExploreView() {
+export function ExploreView({
+  initialResponse,
+  loadingOnly = false,
+}: Readonly<{
+  initialResponse?: ExploreInitialResponse;
+  loadingOnly?: boolean;
+}> = {}) {
   const preview = useInterfacePreview();
   const [query, setQuery] = useState("");
   const normalizedQuery = query.trim();
@@ -1162,7 +1214,9 @@ export function ExploreView() {
   const [modelFilter, setModelFilter] = useState<ExploreModelFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [retryKey, setRetryKey] = useState(0);
-  const refreshKey = useLiveDataRefresh({ enabled: !preview });
+  const refreshKey = useLiveDataRefresh({
+    enabled: !preview && !loadingOnly,
+  });
   const activeExploreContentKey = useRef<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const resultStatusRef = useRef<HTMLParagraphElement>(null);
@@ -1176,7 +1230,17 @@ export function ExploreView() {
   const modelDatasetKey = `${debouncedQuery}\u0000${sort}\u0000${socialFilter}\u0000${modelFilter}\u0000${retryKey}\u0000${refreshKey}`;
   const activeRequestContentKey =
     modelFilter === "all" ? contentKey : modelDatasetKey;
+  const [initialState] = useState(() =>
+    createExploreInitialState(initialResponse, {
+      requestKey,
+      contentKey,
+    }),
+  );
+  const handledRequestKey = useRef<string | null>(
+    initialState === null ? null : requestKey,
+  );
   const [state, setState] = useState<ExploreState>(() => {
+    if (initialState !== null) return initialState;
     const cached = readResolvedExplorePayload(activeRequestContentKey);
     return cached
       ? {
@@ -1187,7 +1251,6 @@ export function ExploreView() {
         }
       : { phase: "loading" };
   });
-
   useEffect(
     () => () => {
       if (activeExploreContentKey.current) {
@@ -1235,7 +1298,18 @@ export function ExploreView() {
   }, []);
 
   useEffect(() => {
-    if (preview) return;
+    if (preview || loadingOnly) return;
+
+    if (handledRequestKey.current === requestKey) {
+      activeExploreContentKey.current = activeRequestContentKey;
+      if (initialState?.phase === "ready") {
+        cacheResolvedExplorePayload(
+          activeRequestContentKey,
+          initialState.payload,
+        );
+      }
+      return;
+    }
 
     let ignore = false;
     const previousContentKey = activeExploreContentKey.current;
@@ -1288,6 +1362,7 @@ export function ExploreView() {
         if (payload.page !== currentPage) {
           setCurrentPage(payload.page);
         }
+        handledRequestKey.current = requestKey;
         setState({
           phase: "ready",
           payload,
@@ -1321,6 +1396,8 @@ export function ExploreView() {
     activeRequestContentKey,
     modelDatasetKey,
     modelFilter,
+    initialState,
+    loadingOnly,
     preview,
     requestKey,
     socialFilter,
