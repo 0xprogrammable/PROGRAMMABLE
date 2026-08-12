@@ -50,14 +50,14 @@ describe("launch model artwork", () => {
     expect(source).toContain(
       'aria-describedby="launch-model-classic-description"',
     );
-    expect(source).toContain('onClick={() => onChoose("manual-applicant")}');
+    expect(source).toContain('onClick={() => onChoose("custom")}');
     expect(source).toContain(
-      'aria-labelledby="launch-model-manual-applicant-title"',
+      'aria-labelledby="launch-model-custom-title"',
     );
     expect(source).toContain(
-      'aria-describedby="launch-model-manual-applicant-description"',
+      'aria-describedby="launch-model-custom-description"',
     );
-    expect(source).not.toContain('data-launch-model-option="custom"');
+    expect(source).toContain('data-launch-model-option="custom"');
     expect(source).toContain('href="https://x.com/aeonframework"');
     expect(source).toContain(
       'aria-labelledby="launch-model-aeon-title"',

@@ -2168,22 +2168,32 @@ describe("manual Applicant browser contract", () => {
     });
   });
 
-  it("adds the Applicant entry only behind its separate flag and exposes no upload fallback", () => {
+  it("keeps the legacy Applicant implementation out of the public picker", () => {
     const disabled = renderToStaticMarkup(createElement(LaunchModelPicker, {
-      manualApplicantLaunchEnabled: false,
+      customLaunchPublicEnabled: false,
       onChoose: () => undefined,
     }));
     const enabled = renderToStaticMarkup(createElement(LaunchModelPicker, {
-      manualApplicantLaunchEnabled: true,
+      customLaunchPublicEnabled: true,
       onChoose: () => undefined,
     }));
     expect(disabled).not.toContain('data-launch-model-option="manual-applicant"');
-    expect(enabled).toContain('data-launch-model-option="manual-applicant"');
+    expect(disabled).not.toContain('data-launch-model-option="custom"');
+    expect(enabled).toContain('data-launch-model-option="custom"');
+    expect(enabled).not.toContain('data-launch-model-option="manual-applicant"');
     expect(enabled).toContain(
-      'id="launch-model-manual-applicant-title">Custom Hook</strong>',
+      'id="launch-model-custom-title">Custom Hook</strong>',
     );
-    expect(enabled).toContain("Open Custom Hook launch");
-    expect(enabled).not.toContain('data-launch-model-option="custom"');
+    expect(enabled).toContain("Open approved Custom Hook launch");
+    expect(enabled).toContain('data-status="available">Available</small>');
+    expect(enabled).not.toContain(">Ready</small>");
+
+    const entry = readFileSync(
+      join(process.cwd(), "components/launch-entry.tsx"),
+      "utf8",
+    );
+    expect(entry).not.toContain('from "@/components/manual-applicant-launch"');
+    expect(entry).not.toContain('"manual-applicant"');
 
     const component = readFileSync(
       join(process.cwd(), "components/manual-applicant-launch.tsx"),
@@ -2241,12 +2251,6 @@ describe("manual Applicant browser contract", () => {
     expect(component).not.toContain("Fresh signature");
     expect(component).not.toContain("signing team");
 
-    const entry = readFileSync(
-      join(process.cwd(), "components/launch-entry.tsx"),
-      "utf8",
-    );
-    expect(entry).toContain("manualApplicantButtonRef.current?.focus()");
-    expect(entry).toContain("ref={manualApplicantButtonRef}");
   });
 
   it("imports the canonical Router binding instead of creating a second profile producer", () => {

@@ -5,8 +5,6 @@ import {
   configuredLaunchPermitSignersV2,
   isCustomLaunchPublicEnabled,
 } from "@/lib/server/custom-launch/public-readiness";
-import { isManualRouterApplicantLaunchEnabledV1 } from
-  "@/lib/server/custom-launch/manual-router-config-v1";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +21,6 @@ export default function LaunchPage() {
   return (
     <LaunchExperience
       customLaunchPublicEnabled={isCustomLaunchPublicEnabled()}
-      manualApplicantLaunchEnabled={isManualRouterApplicantLaunchEnabledV1()}
       trustedLaunchPermitSigners={configuredLaunchPermitSignersV2()}
     />
   );
