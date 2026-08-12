@@ -696,16 +696,19 @@ function parseNativeQuotePriceObservation(
 ): TokenPriceObservation | null {
   const row = record(value);
   const block = record(row?.Block);
-  const pair = record(row?.Pair);
-  const token = record(pair?.Token);
+  const token = record(row?.Token);
+  const price = record(row?.Price);
+  const ohlc = record(price?.Ohlc);
   const tokenId = nonEmptyString(token?.Id)?.toLowerCase();
   if (
     (trade.quoteAddress !== NATIVE_ETH_ADDRESS &&
       trade.quoteAddress !== WETH_ADDRESS) ||
-    tokenId !== "bid:eth"
+    canonicalAddress(token?.Address) !== WETH_ADDRESS ||
+    tokenId !== `bid:eth:${WETH_ADDRESS}` ||
+    price?.IsQuotedInUsd !== true
   ) return null;
   const time = isoTime(block?.Time);
-  const priceUsdWad = decimalToWad(row?.PriceInUsd);
+  const priceUsdWad = decimalToWad(ohlc?.Close);
   return time !== null && priceUsdWad !== null &&
       Date.parse(time) <= Date.parse(trade.time) &&
       Date.parse(trade.time) - Date.parse(time) <= INDEXED_PRICE_MAXIMUM_DISTANCE_MS
@@ -894,20 +897,18 @@ function marketBatchQuery(identities: readonly MarketDataIdentityV1[]) {
 
 function marketPriceQuery(trades: readonly (MarketTradeV1 | null)[]) {
   const selections = trades.map((trade, index) => `
-    price${index}: Trades(
+    price${index}: Tokens(
       limit: { count: 1 }
       orderBy: { descending: Block_Time }
       where: {
         ${trade ? `Block: { Time: { till: "${trade.time}" } }` : ""}
-        Pair: {
-          Market: { NetworkBid: { is: "bid:eth" } }
-          Token: { Id: { is: "bid:eth" } }
-        }
+        Token: { Id: { is: "bid:eth:${WETH_ADDRESS}" } }
+        Price: { IsQuotedInUsd: true }
       }
     ) {
       Block { Time }
-      Pair { Token { Id Address } }
-      PriceInUsd
+      Token { Id Address }
+      Price { IsQuotedInUsd Ohlc { Close } }
     }
   `).join("\n");
   return {
