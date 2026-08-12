@@ -24,6 +24,7 @@ function workflowFailures(source) {
   };
 
   requireText("dispatch-boolean", "custom_launch_public_enablement:");
+  requireText("dispatch-dark-release-boolean", "custom_launch_dark_release:");
   if (source.includes("\n  push:\n")) failures.push("dispatch-only-stage");
   requireText(
     "exact-production-verify-proof-gate",
@@ -114,6 +115,14 @@ function workflowFailures(source) {
     "production-config-input",
     "CUSTOM_LAUNCH_PUBLIC_ENABLEMENT_REQUESTED: ${{ inputs.custom_launch_public_enablement }}",
   );
+  requireText(
+    "dark-release-config-input",
+    "CUSTOM_LAUNCH_DARK_RELEASE_REQUESTED: ${{ inputs.custom_launch_dark_release }}",
+  );
+  requireText(
+    "dark-release-policy-input",
+    '--dark-release-requested "$CUSTOM_LAUNCH_DARK_RELEASE_REQUESTED"',
+  );
   requireText("canonical-stage-name", "Stage programmable.market candidate");
   requireText(
     "canonical-rollback-target",
@@ -190,7 +199,15 @@ function workflowFailures(source) {
     "record-fixed-path",
     'record_path="release-records/custom-launch-v1/release-record.json"',
   );
-  requireText("record-staging-level", "--require staging");
+  requireText(
+    "record-verification-level-binding",
+    "RECORD_VERIFICATION_LEVEL: ${{ steps.custom-launch-policy.outputs.release_record_verification_level }}",
+  );
+  requireText("record-verification-level-allowlist", "staging|dark-staging) ;;");
+  requireText(
+    "record-verification-level-argument",
+    '--require "$RECORD_VERIFICATION_LEVEL"',
+  );
   requireText(
     "record-website-binding",
     '--expect-website-commit "$GITHUB_SHA"',
@@ -268,6 +285,10 @@ function workflowFailures(source) {
     "candidate-runtime-commit-binding",
     '--env PROGRAMMABLE_RELEASE_COMMIT_SHA="$GITHUB_SHA"',
   );
+  requireText(
+    "stage-skips-domain-assignment",
+    "vercel deploy --prebuilt --prod --skip-domain",
+  );
   requireOrder(
     "record-after-rollback-capture",
     "Capture current production rollback target",
@@ -294,18 +315,27 @@ function workflowFailures(source) {
     "Install dependencies",
   );
   requireText("candidate-canary", "Gate exact staged Custom Launch candidate");
+  const candidateGateStart = source.indexOf(
+    "      - name: Gate exact staged Custom Launch candidate",
+  );
+  const candidateGateEnd = source.indexOf(
+    "      - name: Preserve redacted Custom Launch candidate evidence",
+  );
+  const candidateGateBlock =
+    candidateGateStart >= 0 && candidateGateEnd > candidateGateStart
+      ? source.slice(candidateGateStart, candidateGateEnd)
+      : "";
   requireText(
     "candidate-canary-conditional",
-    "id: custom-launch-canary\n        if: steps.custom-launch-policy.outputs.release_record_required == 'true'",
+    "id: custom-launch-canary\n        if: steps.custom-launch-policy.outputs.staging_mode == 'enabled'",
   );
   requireText(
     "candidate-canary-immutable-target",
     "STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
   );
-  requireText(
-    "candidate-canary-deployment-binding",
-    '"--deployment-id=$STAGED_DEPLOYMENT_ID"',
-  );
+  if (!candidateGateBlock.includes('"--deployment-id=$STAGED_DEPLOYMENT_ID"')) {
+    failures.push("candidate-canary-deployment-binding");
+  }
   requireText(
     "candidate-canary-package-binding",
     "PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH: ${{ secrets.PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH }}",
@@ -333,6 +363,51 @@ function workflowFailures(source) {
     "Resolve exact staged deployment",
     "Gate exact staged Custom Launch candidate",
   );
+  const darkGateStart = source.indexOf(
+    "      - name: Gate exact staged dark Custom Launch candidate",
+  );
+  const darkGateEnd = source.indexOf(
+    "      - name: Preserve redacted Custom Launch dark release evidence",
+  );
+  const darkGateBlock =
+    darkGateStart >= 0 && darkGateEnd > darkGateStart
+      ? source.slice(darkGateStart, darkGateEnd)
+      : "";
+  if (!darkGateBlock.includes("if: steps.custom-launch-policy.outputs.staging_mode == 'dark'")) {
+    failures.push("dark-candidate-conditional");
+  }
+  for (const [id, binding] of [
+    ["dark-candidate-disabled", "--require-disabled"],
+    ["dark-candidate-evidence-output", "--dark-release-evidence-output=$evidence_path"],
+    ["dark-candidate-deployment-binding", "--deployment-id=$STAGED_DEPLOYMENT_ID"],
+    ["dark-candidate-record-subject", "--release-subject-sha256=$RELEASE_SUBJECT_SHA256"],
+    ["dark-candidate-record-digest", "--detached-record-sha256=$DETACHED_RECORD_SHA256"],
+    ["dark-candidate-attestation", "--cross-repository-attestation-commit-sha=$CROSS_REPOSITORY_ATTESTATION_COMMIT_SHA"],
+    ["dark-candidate-binding-document", "--cross-repository-binding-document-sha256=$CROSS_REPOSITORY_BINDING_DOCUMENT_SHA256"],
+  ]) {
+    if (!darkGateBlock.includes(binding)) failures.push(id);
+  }
+  if (darkGateBlock.includes("--require-enabled")) {
+    failures.push("dark-candidate-must-not-enable");
+  }
+  if (darkGateBlock.includes("--authenticated-canary")) {
+    failures.push("dark-candidate-must-not-authenticate");
+  }
+  for (const secret of [
+    "PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_ACCESS_TOKEN",
+    "PROGRAMMABLE_CUSTOM_LAUNCH_CANARY_IDENTITY_TOKEN",
+  ]) {
+    if (darkGateBlock.includes(secret)) failures.push(`dark-candidate-${secret.toLowerCase()}`);
+  }
+  requireText(
+    "dark-candidate-evidence-artifact",
+    "custom-launch-dark-release-${{ github.run_id }}-${{ github.run_attempt }}",
+  );
+  requireOrder(
+    "dark-candidate-after-stage-resolution",
+    "Resolve exact staged deployment",
+    "Gate exact staged dark Custom Launch candidate",
+  );
   if (/\bvercel\s+(?:promote|rollback)(?:\s|$)/mu.test(source)) {
     failures.push("stage-only");
   }
@@ -346,7 +421,12 @@ test("generic production staging remains record-free only while Custom Launch is
       productionEnvSource: "OTHER_FLAG=true\n",
       productionMode: "disabled",
     }),
-    { releaseRecordRequired: false, configuredEnablement: false },
+    {
+      releaseRecordRequired: false,
+      releaseRecordVerificationLevel: "none",
+      configuredEnablement: false,
+      stagingMode: "generic-disabled",
+    },
   );
   assert.deepEqual(
     resolveCustomLaunchStagingPolicy({
@@ -354,8 +434,47 @@ test("generic production staging remains record-free only while Custom Launch is
       productionEnvSource: `${"PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED"}=\"false\"\n`,
       productionMode: "disabled",
     }),
-    { releaseRecordRequired: false, configuredEnablement: false },
+    {
+      releaseRecordRequired: false,
+      releaseRecordVerificationLevel: "none",
+      configuredEnablement: false,
+      stagingMode: "generic-disabled",
+    },
   );
+});
+
+test("dark release requires an explicit disabled record-bound dispatch", () => {
+  assert.deepEqual(
+    resolveCustomLaunchStagingPolicy({
+      requested: "false",
+      darkReleaseRequested: "true",
+      productionEnvSource: "PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED=false\n",
+      productionMode: "disabled",
+    }),
+    {
+      releaseRecordRequired: true,
+      releaseRecordVerificationLevel: "dark-staging",
+      configuredEnablement: false,
+      stagingMode: "dark",
+    },
+  );
+  assert.throws(
+    () => resolveCustomLaunchStagingPolicy({
+      requested: "true",
+      darkReleaseRequested: "true",
+      productionEnvSource: "PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED=true\n",
+      productionMode: "enabled",
+    }),
+    /mutually exclusive/,
+  );
+  for (const darkReleaseRequested of [null, "", "TRUE", "1"]) {
+    assert.throws(() => resolveCustomLaunchStagingPolicy({
+      requested: "false",
+      darkReleaseRequested,
+      productionEnvSource: "PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED=false\n",
+      productionMode: "disabled",
+    }));
+  }
 });
 
 test("enabled production configuration requires an explicit matching dispatch", () => {
@@ -365,7 +484,12 @@ test("enabled production configuration requires an explicit matching dispatch", 
       productionEnvSource: "PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED='true'\n",
       productionMode: "enabled",
     }),
-    { releaseRecordRequired: true, configuredEnablement: true },
+    {
+      releaseRecordRequired: true,
+      releaseRecordVerificationLevel: "staging",
+      configuredEnablement: true,
+      stagingMode: "enabled",
+    },
   );
   assert.throws(
     () =>
@@ -433,7 +557,15 @@ test("workflow contract detects weakened record and stage-only gates", async () 
       "if: steps.custom-launch-policy.outputs.release_record_required == 'true'",
       "if: always()",
     ),
-    source.replace("--require staging", "--require clearance"),
+    source.replace(
+      '--require "$RECORD_VERIFICATION_LEVEL"',
+      "--require clearance",
+    ),
+    source.replace("staging|dark-staging) ;;", "staging) ;;"),
+    source.replace(
+      '--dark-release-requested "$CUSTOM_LAUNCH_DARK_RELEASE_REQUESTED"',
+      "",
+    ),
     source.replace(
       '--expect-package-artifact-hash "$EXPECTED_PACKAGE_ARTIFACT_HASH"',
       "",
@@ -467,11 +599,19 @@ test("workflow contract detects weakened record and stage-only gates", async () 
     source.replace('--production-mode "$CUSTOM_LAUNCH_PRODUCTION_MODE"', ""),
     source.replace('--env PROGRAMMABLE_RELEASE_COMMIT_SHA="$GITHUB_SHA"', ""),
     source.replace("--authenticated-canary", ""),
+    source.replace("--require-disabled", ""),
+    source.replace("--dark-release-evidence-output=$evidence_path", ""),
+    source.replace("--release-subject-sha256=$RELEASE_SUBJECT_SHA256", ""),
     source.replace('"--deployment-id=$STAGED_DEPLOYMENT_ID"', ""),
     source.replace(
       "custom-launch-candidate-canary-${{ github.run_id }}-${{ github.run_attempt }}",
       "missing-candidate-artifact",
     ),
+    source.replace(
+      "custom-launch-dark-release-${{ github.run_id }}-${{ github.run_attempt }}",
+      "missing-dark-release-artifact",
+    ),
+    source.replace("--skip-domain", ""),
     source.replace('--source-digest "$GITHUB_SHA"', ""),
     source.replace('--signer-digest "$GITHUB_SHA"', ""),
     source.replace("--deny-self-hosted-runners", ""),
