@@ -41,6 +41,7 @@ const DURABLE_MARKET_CACHE_SECONDS = 5 * 60;
 const CHART_CACHE_CURRENT_MAX_AGE_MS = 2_000;
 const CHART_CACHE_MAX_AGE_MS = 2 * 60 * 1_000;
 const MAXIMUM_CHART_TRADES = 2_000;
+const CHART_TRADE_PAGE_SIZE = 500;
 const MAXIMUM_CHART_POINTS = 80;
 const SUPPLY_PRICE_MAXIMUM_DISTANCE_MS = 24 * 60 * 60 * 1_000;
 const INDEXED_PRICE_MAXIMUM_DISTANCE_MS = MARKET_DATA_CURRENT_MAX_AGE_MS;
@@ -312,28 +313,43 @@ export async function readBitqueryMarketChartV1(input: Readonly<{
 
   const since = chartRangeStart(input.range, now);
   const deriveValuation = input.valuation === undefined;
-  const query = marketChartQuery(
-    input.range,
-    since !== null,
-    deriveValuation,
-  );
-  const variables: Record<string, unknown> = {
-    poolId: identity.poolId,
-    ...(deriveValuation ? { tokenAddress: identity.tokenAddress } : {}),
-    ...(since === null ? {} : { since: since.toISOString() }),
-  };
-
   try {
-    const response = await executeBitqueryGraphql(query, variables, {
-      ...input,
-      token,
-    });
-    const evm = record(response.data.EVM);
-    const trading = deriveValuation ? record(response.data.Trading) : null;
-    if (evm === null || (deriveValuation && trading === null)) {
-      throw new BitqueryMarketDataError("response");
+    const rows: unknown[] = [];
+    let trading: Record<string, unknown> | null = null;
+    let responseWasPartial = false;
+    for (
+      let offset = 0;
+      offset < MAXIMUM_CHART_TRADES;
+      offset += CHART_TRADE_PAGE_SIZE
+    ) {
+      const withValuation = deriveValuation && offset === 0;
+      const query = marketChartQuery(
+        input.range,
+        since !== null,
+        withValuation,
+      );
+      const variables: Record<string, unknown> = {
+        poolId: identity.poolId,
+        offset,
+        till: now.toISOString(),
+        ...(withValuation ? { tokenAddress: identity.tokenAddress } : {}),
+        ...(since === null ? {} : { since: since.toISOString() }),
+      };
+      const response = await executeBitqueryGraphql(query, variables, {
+        ...input,
+        token,
+      });
+      const evm = record(response.data.EVM);
+      const page = array(evm?.DEXTrades);
+      if (evm === null) throw new BitqueryMarketDataError("response");
+      if (withValuation) {
+        trading = record(response.data.Trading);
+        if (trading === null) throw new BitqueryMarketDataError("response");
+      }
+      rows.push(...page);
+      responseWasPartial ||= response.partial;
+      if (page.length < CHART_TRADE_PAGE_SIZE) break;
     }
-    const rows = array(evm?.DEXTrades);
     const indexedPrice = deriveValuation
       ? parseTokenPriceObservation(array(trading?.Tokens)[0], identity)
       : null;
@@ -350,7 +366,7 @@ export async function readBitqueryMarketChartV1(input: Readonly<{
       throw new BitqueryMarketDataError("integrity");
     }
     if (trades.length === 0) {
-      if (response.partial) throw new BitqueryMarketDataError("response");
+      if (responseWasPartial) throw new BitqueryMarketDataError("response");
       const waiting: MarketChartV1 = {
         schemaVersion: PROGRAMMABLE_MARKET_CHART_SCHEMA_VERSION,
         source: "bitquery",
@@ -394,7 +410,7 @@ export async function readBitqueryMarketChartV1(input: Readonly<{
       (trade) =>
         trade.priceQuoteWad !== undefined && trade.quoteSymbol !== undefined,
     );
-    const partial = truncated || response.partial || !quotePriceComplete;
+    const partial = truncated || responseWasPartial || !quotePriceComplete;
     const status = partial
       ? "partial" as const
       : points.length === 1
@@ -1042,17 +1058,19 @@ function marketChartQuery(
 ) {
   const definitions = [
     "$poolId: String!",
+    "$offset: Int!",
+    "$till: DateTime!",
     ...(withValuation ? ["$tokenAddress: String!"] : []),
     ...(withSince ? ["$since: DateTime!"] : []),
   ].join(", ");
   const blockFilter = withSince
-    ? "Block: { Time: { since: $since } }"
-    : "";
+    ? "Block: { Time: { since: $since, till: $till } }"
+    : "Block: { Time: { till: $till } }";
   const dataset = range === "1h" ? "" : ", dataset: combined";
   return `query ProgrammableMarketChart(${definitions}) {
     EVM(network: eth${dataset}) {
       DEXTrades(
-        limit: { count: ${MAXIMUM_CHART_TRADES} }
+        limit: { count: ${CHART_TRADE_PAGE_SIZE}, offset: $offset }
         orderBy: [
           { descending: Block_Number }
           { descending: Transaction_Index }
