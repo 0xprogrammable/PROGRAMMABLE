@@ -306,10 +306,10 @@ jobs:
           PRODUCTION_VERIFY_SCOPE_INTERFACE: ${{ needs.scope.outputs.interface }}
           PRODUCTION_VERIFY_SCOPE_READ_MODEL: ${{ needs.scope.outputs.read_model }}
           PRODUCTION_VERIFY_SECRET_SCAN_RESULT: ${{ needs.secret-scan.result }}
-          PRODUCTION_VERIFY_INDEXER_RESULT: ${{ needs.indexer.result }}
-          PRODUCTION_VERIFY_DATABASE_PGLITE_RESULT: ${{ needs.database-pglite.result }}
-          PRODUCTION_VERIFY_INTERFACE_RESULT: ${{ needs.interface.result }}
-          PRODUCTION_VERIFY_CONTRACTS_RESULT: ${{ needs.contracts.result }}
+          PRODUCTION_VERIFY_INDEXER_RESULT: ${{ needs.scope.outputs.indexer == 'true' && needs.indexer.result || 'skipped' }}
+          PRODUCTION_VERIFY_DATABASE_PGLITE_RESULT: ${{ needs.scope.outputs.database == 'true' && needs.database-pglite.result || 'skipped' }}
+          PRODUCTION_VERIFY_INTERFACE_RESULT: ${{ needs.scope.outputs.interface == 'true' && needs.interface.result || 'skipped' }}
+          PRODUCTION_VERIFY_CONTRACTS_RESULT: ${{ needs.scope.outputs.contracts == 'true' && needs.contracts.result || 'skipped' }}
         run: >-
           node scripts/production-verify-proof.mjs create
           --repository-root "$GITHUB_WORKSPACE"
