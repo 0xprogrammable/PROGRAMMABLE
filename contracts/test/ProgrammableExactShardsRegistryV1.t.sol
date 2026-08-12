@@ -6,11 +6,15 @@ import { Test } from "forge-std/Test.sol";
 
 import { ProgrammableExactShardsFeePolicyVerifierV1 } from "../src/ProgrammableExactShardsFeePolicyVerifierV1.sol";
 import { ProgrammableExactShardsRegistryV1 } from "../src/ProgrammableExactShardsRegistryV1.sol";
+import {
+    ProgrammableGithubRepositoryLineageRegistryV1
+} from "../src/ProgrammableGithubRepositoryLineageRegistryV1.sol";
 import { IProgrammableCustomRegistryV1 } from "../src/interfaces/IProgrammableCustomRegistryV1.sol";
 import {
     IProgrammableExactShardsFeePolicyVerifierV1
 } from "../src/interfaces/IProgrammableExactShardsFeePolicyVerifierV1.sol";
 import { IProgrammableExactShardsRegistryV1 } from "../src/interfaces/IProgrammableExactShardsRegistryV1.sol";
+import { ProgrammableExactShardsBindingHarnessV1 } from "./utils/ProgrammableExactShardsBindingHarnessV1.sol";
 
 contract ExactShardsRegistryRuntimeTargetV1 {
     function version() external pure returns (uint256) {
@@ -21,6 +25,25 @@ contract ExactShardsRegistryRuntimeTargetV1 {
 contract ExactShardsVerifierImpostorV1 {
     function feePolicyBindingHashV1() external pure returns (bytes32) {
         return 0x5d5d1c46e7627f6e171a18acdbecbfe9e40eca80016fba0142ddca6a054f6169;
+    }
+}
+
+contract ExactShardsAtomicWriterHarnessV1 {
+    bytes32 private constant ROUTE_ID = keccak256("programmable.exact-shards.atomic-launch-route.v1");
+    ProgrammableGithubRepositoryLineageRegistryV1 private immutable _lineageRegistry;
+    ProgrammableExactShardsRegistryV1 private immutable _registry;
+
+    constructor(
+        ProgrammableGithubRepositoryLineageRegistryV1 lineageRegistry,
+        ProgrammableExactShardsRegistryV1 registry
+    ) {
+        _lineageRegistry = lineageRegistry;
+        _registry = registry;
+    }
+
+    function register(IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 calldata registration) external {
+        _lineageRegistry.consume(registration.githubRepositoryId, registration.launchId, ROUTE_ID);
+        _registry.registerLaunch(registration);
     }
 }
 
@@ -35,10 +58,14 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
 
     uint64 internal constant GENERATION = 3;
     uint64 internal constant FINALITY_BLOCKS = 3;
+    uint64 internal constant SHARDS_GITHUB_REPOSITORY_ID = 1_329_073_878;
     uint256 internal constant MAX_REGISTRATION_GAS = 2_200_000;
 
     ProgrammableExactShardsFeePolicyVerifierV1 internal verifier;
     ProgrammableExactShardsRegistryV1 internal registry;
+    ProgrammableGithubRepositoryLineageRegistryV1 internal lineageRegistry;
+    ProgrammableExactShardsBindingHarnessV1 internal bindingHarness;
+    ExactShardsAtomicWriterHarnessV1 internal writerHarness;
     ExactShardsRegistryRuntimeTargetV1 internal runtimeTarget;
 
     function setUp() public {
@@ -46,8 +73,17 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
         vm.roll(100);
         vm.warp(1_800_000_000);
         verifier = new ProgrammableExactShardsFeePolicyVerifierV1();
+        lineageRegistry = new ProgrammableGithubRepositoryLineageRegistryV1(2 days, ADMIN);
         runtimeTarget = new ExactShardsRegistryRuntimeTargetV1();
         registry = _newRegistry(verifier);
+        bindingHarness = new ProgrammableExactShardsBindingHarnessV1(registry, verifier, lineageRegistry);
+        writerHarness = new ExactShardsAtomicWriterHarnessV1(lineageRegistry, registry);
+        bytes32 lineageConsumerRole = lineageRegistry.CONSUMER_ROLE();
+        bytes32 registryWriterRole = registry.WRITER_ROLE();
+        vm.prank(ADMIN);
+        lineageRegistry.grantRole(lineageConsumerRole, address(writerHarness));
+        vm.prank(ADMIN);
+        registry.grantRole(registryWriterRole, address(writerHarness));
     }
 
     function test_constructorPinsExactVerifierInstanceScopeAndLeastPrivilege() public view {
@@ -71,7 +107,9 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
                     registry.REGISTRY_POLICY_HASH(),
                     address(verifier),
                     address(verifier).codehash,
-                    verifier.feePolicyBindingHashV1()
+                    verifier.feePolicyBindingHashV1(),
+                    address(lineageRegistry),
+                    address(lineageRegistry).codehash
                 )
             )
         );
@@ -91,7 +129,9 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
                 address(impostor).codehash
             )
         );
-        new ProgrammableExactShardsRegistryV1(_config(), ProgrammableExactShardsFeePolicyVerifierV1(address(impostor)));
+        new ProgrammableExactShardsRegistryV1(
+            _config(), ProgrammableExactShardsFeePolicyVerifierV1(address(impostor)), lineageRegistry
+        );
     }
 
     function test_machineCheckableSpecMatchesArtifactAndFailClosedBoundary() public view {
@@ -105,6 +145,73 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
         assertEq(vm.parseJsonUint(json, ".exactPolicy.orderedClaims[0].grossVolumeFeeBps"), 10);
         assertEq(vm.parseJsonUint(json, ".exactPolicy.orderedClaims[1].grossVolumeFeeBps"), 10);
         assertEq(vm.parseJsonUint(json, ".exactPolicy.orderedClaims[2].grossVolumeFeeBps"), 80);
+        assertFalse(
+            vm.parseJsonBool(
+                json, ".postApprovalLaunchMetadataBoundary.githubSubmissionApproval.includesSelectedUiMetadata"
+            )
+        );
+        assertFalse(
+            vm.parseJsonBool(
+                json, ".postApprovalLaunchMetadataBoundary.launchDescriptor.presentationValuesAreSourceArtifactInputs"
+            )
+        );
+        assertFalse(
+            vm.parseJsonBool(
+                json, ".postApprovalLaunchMetadataBoundary.launchDescriptor.additionalConfigurationFieldsAllowed"
+            )
+        );
+        string[] memory configurationFields =
+            vm.parseJsonStringArray(json, ".postApprovalLaunchMetadataBoundary.launchDescriptor.configurationFieldIds");
+        assertEq(configurationFields.length, 2);
+        assertEq(configurationFields[0], "tokenName");
+        assertEq(configurationFields[1], "tokenSymbol");
+        assertEq(
+            vm.parseJsonString(
+                json, ".postApprovalLaunchMetadataBoundary.jitLaunchIntentPermit.substitutionAfterPermit"
+            ),
+            "REJECT"
+        );
+        assertTrue(vm.parseJsonBool(json, ".postApprovalLaunchMetadataBoundary.registryFinalRecord.bindsTokenNameHash"));
+        assertTrue(
+            vm.parseJsonBool(json, ".postApprovalLaunchMetadataBoundary.registryFinalRecord.bindsTokenSymbolHash")
+        );
+        assertTrue(
+            vm.parseJsonBool(
+                json, ".postApprovalLaunchMetadataBoundary.registryFinalRecord.bindsPresentationBindingHash"
+            )
+        );
+        assertTrue(
+            vm.parseJsonBool(
+                json,
+                ".postApprovalLaunchMetadataBoundary.executionRouteConformance.factoryLaunchParamsContainTokenNameAndTokenSymbol"
+            )
+        );
+        assertTrue(
+            vm.parseJsonBool(
+                json,
+                ".postApprovalLaunchMetadataBoundary.executionRouteConformance.producedErc20NameAndSymbolMatchSelection"
+            )
+        );
+        assertTrue(
+            vm.parseJsonBool(
+                json,
+                ".postApprovalLaunchMetadataBoundary.executionRouteConformance.upstreamTest.assertsProducedTokenNameAndSymbol"
+            )
+        );
+        assertEq(
+            vm.parseJsonString(
+                json, ".postApprovalLaunchMetadataBoundary.executionRouteConformance.upstreamTest.result"
+            ),
+            "PASS_1_OF_1_EXACT_SOURCE"
+        );
+        assertEq(
+            vm.parseJsonUint(json, ".implementation.sharedRepositoryLineageAuthority.shardsGithubRepositoryId"),
+            SHARDS_GITHUB_REPOSITORY_ID
+        );
+        assertEq(
+            vm.parseJsonBytes32(json, ".implementation.sharedRepositoryLineageAuthority.shardsRepositoryKey"),
+            lineageRegistry.computeRepositoryKey(SHARDS_GITHUB_REPOSITORY_ID)
+        );
         assertEq(
             vm.parseJsonBytes32(json, ".reviewedInputs.feeVerifier.contentBindingHash"),
             registry.FEE_POLICY_BINDING_HASH()
@@ -119,6 +226,9 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
             )
         );
         bytes memory unlinkedRuntime = vm.parseBytes(vm.parseJsonString(buildArtifact, ".deployedBytecode.object"));
+        assertTrue(vm.parseJsonBool(json, ".implementation.compiler.optimizer"));
+        assertEq(vm.parseJsonUint(json, ".implementation.compiler.optimizerRuns"), 1000);
+        assertFalse(vm.parseJsonBool(json, ".implementation.compiler.viaIr"));
         assertEq(
             keccak256(unlinkedRuntime),
             vm.parseJsonBytes32(json, ".implementation.artifact.unlinkedRuntimeCodeKeccak256")
@@ -131,24 +241,25 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
             unlinkedRuntime.length, vm.parseJsonUint(json, ".implementation.artifact.unlinkedRuntimeCodeByteLength")
         );
         assertEq(address(registry).code.length, unlinkedRuntime.length);
+        assertEq(
+            24_576 - unlinkedRuntime.length,
+            vm.parseJsonUint(json, ".implementation.artifact.runtimeCodeLimitMarginBytes")
+        );
     }
 
     function test_registersAndStoresAllThreeClaimsWithExactHashBinding() public {
         IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory registration = _registration("canonical");
-        bytes32 feePolicyRecordHash =
-            registry.computeFeePolicyRecordHash(registration.feePolicy, registration.orderedFeeLegs);
-        bytes32 policyHash = registry.computeFeePolicyHash(registration.feePolicy, registration.orderedFeeLegs);
+        bytes32 policyHash = verifier.verify(registration.feePolicy, registration.orderedFeeLegs);
         _authorize(registration);
 
-        vm.prank(WRITER);
-        registry.registerLaunch(registration);
+        writerHarness.register(registration);
 
         IProgrammableExactShardsRegistryV1.LaunchStateV1 memory state = registry.launchState(registration.launchId);
         IProgrammableExactShardsRegistryV1.StoredFeePolicyV1 memory storedPolicy =
             registry.feePolicyState(registration.launchId);
         assertEq(uint8(state.status), uint8(IProgrammableCustomRegistryV1.LaunchStatus.Observed));
         assertEq(state.feePolicyHash, policyHash);
-        assertEq(state.feePolicyRecordHash, feePolicyRecordHash);
+        bytes32 feePolicyRecordHash = state.feePolicyRecordHash;
         assertEq(storedPolicy.policyHash, policyHash);
         assertEq(storedPolicy.feePolicyRecordHash, feePolicyRecordHash);
         assertEq(storedPolicy.verifierBindingHash, verifier.feePolicyBindingHashV1());
@@ -182,13 +293,86 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
         assertTrue(registry.deploymentConsumed(registration.deploymentId));
     }
 
+    function test_technicalApprovalPreexistsAndJitPermitBindsExactWebsiteMetadata() public {
+        IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory selected = _registration("metadata-bound");
+        bytes32 technicalApprovalBinding = selected.approvalBindingHash;
+        (, bytes32 permittedLaunchIntent,,) = bindingHarness.computeBindings(selected);
+
+        IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory technicalTemplate =
+            _registration("metadata-bound");
+        technicalTemplate.tokenNameHash = bytes32(0);
+        technicalTemplate.tokenSymbolHash = bytes32(0);
+        technicalTemplate.presentationBindingHash = bytes32(0);
+        (bytes32 templateApprovalBinding,,,) = bindingHarness.computeBindings(technicalTemplate);
+        assertEq(templateApprovalBinding, technicalApprovalBinding);
+        _authorizeTechnical(technicalTemplate);
+        assertEq(registry.approvalState(selected.approvalId).registrationBindingHash, technicalApprovalBinding);
+
+        IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory substituted = _registration("metadata-bound");
+        substituted.tokenNameHash = keccak256(bytes("Substituted Shards"));
+        substituted.tokenSymbolHash = keccak256(bytes("FAKE"));
+        substituted.presentationBindingHash = _hash("substituted-description-image-links");
+        _rebindRecordOnly(substituted);
+
+        // GitHub approval remains the same because it binds reviewed technical material, not UI values.
+        (bytes32 substitutedApprovalBinding, bytes32 substitutedIntent,,) = bindingHarness.computeBindings(substituted);
+        assertEq(substitutedApprovalBinding, technicalApprovalBinding);
+        // The one-use just-in-time permit and final Registry record both bind the exact selected values.
+        assertNotEq(substitutedIntent, permittedLaunchIntent);
+        assertNotEq(substituted.registeredRecordCommitment, selected.registeredRecordCommitment);
+
+        _authorizeLaunchIntent(selected);
+        vm.expectPartialRevert(ProgrammableExactShardsRegistryV1.RegistrationBindingMismatch.selector);
+        writerHarness.register(substituted);
+        assertFalse(registry.approvalConsumed(selected.approvalId));
+        assertEq(
+            lineageRegistry.consumption(lineageRegistry.computeRepositoryKey(selected.githubRepositoryId)).launchId,
+            bytes32(0)
+        );
+
+        writerHarness.register(selected);
+        assertTrue(registry.approvalConsumed(selected.approvalId));
+        assertEq(registry.launchState(selected.launchId).latestRecordHash, selected.registeredRecordCommitment);
+    }
+
+    function test_numericGithubRepositoryLineageIsOneLaunchAndExactReceiptRetryIsIdempotent() public {
+        IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory first = _registration("repository-first");
+        _register(first);
+        bytes32 repositoryKey = lineageRegistry.computeRepositoryKey(first.githubRepositoryId);
+        assertEq(lineageRegistry.consumption(repositoryKey).launchId, first.launchId);
+
+        uint64 registrationsBeforeRetry = registry.registrationCount();
+        uint64 transitionsBeforeRetry = registry.transitionCount();
+        writerHarness.register(first);
+        assertEq(registry.registrationCount(), registrationsBeforeRetry);
+        assertEq(registry.transitionCount(), transitionsBeforeRetry);
+
+        IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory second =
+            _registration("repository-second-revision-factory");
+        second.templateVersion = _hash("different-reviewed-factory-revision");
+        _rebind(second);
+        _authorize(second);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ProgrammableGithubRepositoryLineageRegistryV1.RepositoryAlreadyConsumed.selector,
+                repositoryKey,
+                first.launchId,
+                keccak256("programmable.exact-shards.atomic-launch-route.v1"),
+                address(writerHarness)
+            )
+        );
+        writerHarness.register(second);
+        assertFalse(registry.approvalConsumed(second.approvalId));
+        assertFalse(registry.deploymentConsumed(second.deploymentId));
+        assertEq(lineageRegistry.consumption(repositoryKey).launchId, first.launchId);
+    }
+
     function test_registrationGasStaysBelowHardMaximum() public {
         IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory registration = _registration("gas-bound");
         _authorize(registration);
 
-        vm.prank(WRITER);
         uint256 gasBefore = gasleft();
-        registry.registerLaunch(registration);
+        writerHarness.register(registration);
         uint256 registrationGas = gasBefore - gasleft();
 
         assertLe(registrationGas, MAX_REGISTRATION_GAS);
@@ -246,7 +430,7 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
         assertEq(registry.recordHashAtRevision(registration.launchId, 2), correctedHash);
         assertEq(registry.feePolicyState(registration.launchId).feePolicyRecordHash, feePolicyRecordHash);
         assertEq(registry.feeClaim(registration.launchId, 0).storedClaimHash, builderClaimHash);
-        assertEq(registry.transitionCount(), 5);
+        assertEq(registry.transitionCount(), 6);
     }
 
     function test_rejectsWrongLegWrongEconomicsAndTwoClaimCollapseWithoutConsumption() public {
@@ -258,8 +442,7 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
                 IProgrammableExactShardsFeePolicyVerifierV1.InvalidShardsFeePolicy.selector, uint8(5)
             )
         );
-        vm.prank(WRITER);
-        registry.registerLaunch(wrongLeg);
+        writerHarness.register(wrongLeg);
         assertFalse(registry.approvalConsumed(wrongLeg.approvalId));
         assertFalse(registry.deploymentConsumed(wrongLeg.deploymentId));
 
@@ -271,8 +454,7 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
                 IProgrammableExactShardsFeePolicyVerifierV1.InvalidShardsFeePolicy.selector, uint8(4)
             )
         );
-        vm.prank(WRITER);
-        registry.registerLaunch(wrongEconomics);
+        writerHarness.register(wrongEconomics);
         assertFalse(registry.approvalConsumed(wrongEconomics.approvalId));
 
         IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory collapsed = _registration("collapsed");
@@ -285,8 +467,7 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
                 IProgrammableExactShardsFeePolicyVerifierV1.InvalidShardsFeePolicy.selector, uint8(5)
             )
         );
-        vm.prank(WRITER);
-        registry.registerLaunch(collapsed);
+        writerHarness.register(collapsed);
         assertFalse(registry.approvalConsumed(collapsed.approvalId));
     }
 
@@ -331,6 +512,9 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
         IProgrammableCustomRegistryV1.ApprovalAuthorizationV1 memory copiedAuthorization = _authorization(first);
         vm.prank(APPROVER);
         otherRegistry.authorizeApproval(copiedAuthorization);
+        IProgrammableCustomRegistryV1.ApprovalAuthorizationV1 memory copiedIntent = _launchIntentAuthorization(first);
+        vm.prank(APPROVER);
+        otherRegistry.authorizeLaunchIntent(copiedIntent);
         vm.expectPartialRevert(ProgrammableExactShardsRegistryV1.ApprovalBindingMismatch.selector);
         vm.prank(WRITER);
         otherRegistry.registerLaunch(first);
@@ -341,9 +525,8 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
         _authorize(mutation);
         mutation.securityReviewHash = _hash("substituted-review");
         _rebindRecordOnly(mutation);
-        vm.expectPartialRevert(ProgrammableExactShardsRegistryV1.RegistrationBindingMismatch.selector);
-        vm.prank(WRITER);
-        registry.registerLaunch(mutation);
+        vm.expectPartialRevert(ProgrammableExactShardsRegistryV1.ApprovalBindingMismatch.selector);
+        writerHarness.register(mutation);
 
         IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory revoked = _registration("revoked");
         _register(revoked);
@@ -358,8 +541,7 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
             })
         );
         vm.expectPartialRevert(ProgrammableExactShardsRegistryV1.LaunchAlreadyRegistered.selector);
-        vm.prank(WRITER);
-        registry.registerLaunch(revoked);
+        writerHarness.register(revoked);
     }
 
     function test_rejectsApprovedSourceRouteProfileAndProviderDrift() public {
@@ -372,8 +554,7 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
                 ProgrammableExactShardsRegistryV1.InvalidBinding.selector, bytes32("reviewed-source")
             )
         );
-        vm.prank(WRITER);
-        registry.registerLaunch(sourceDrift);
+        writerHarness.register(sourceDrift);
         assertFalse(registry.approvalConsumed(sourceDrift.approvalId));
 
         IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory routeDrift = _registration("route-drift");
@@ -383,8 +564,7 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
         vm.expectRevert(
             abi.encodeWithSelector(ProgrammableExactShardsRegistryV1.InvalidBinding.selector, bytes32("reviewed-route"))
         );
-        vm.prank(WRITER);
-        registry.registerLaunch(routeDrift);
+        writerHarness.register(routeDrift);
 
         IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory profileDrift = _registration("profile-drift");
         profileDrift.marketPathId = _hash("different-profile");
@@ -393,8 +573,7 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
         vm.expectRevert(
             abi.encodeWithSelector(ProgrammableExactShardsRegistryV1.InvalidBinding.selector, bytes32("market-profile"))
         );
-        vm.prank(WRITER);
-        registry.registerLaunch(profileDrift);
+        writerHarness.register(profileDrift);
 
         IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory providerDrift = _registration("provider-drift");
         providerDrift.providerId = _hash("unreviewed-provider");
@@ -403,8 +582,7 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
         vm.expectRevert(
             abi.encodeWithSelector(ProgrammableExactShardsRegistryV1.InvalidBinding.selector, bytes32("provider-id"))
         );
-        vm.prank(WRITER);
-        registry.registerLaunch(providerDrift);
+        writerHarness.register(providerDrift);
     }
 
     function test_finalityFailsClosedOnDepthHashAndEvidenceReplay() public {
@@ -429,14 +607,15 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
         vm.prank(FINALIZER);
         registry.finalizeLaunch(wrongHash);
 
-        IProgrammableCustomRegistryV1.FinalityProofV1 memory valid = _finalityProof(
-            registration, _hash("canonical-100"), _hash("block-103"), _hash("valid-finality-evidence")
-        );
+        IProgrammableCustomRegistryV1.FinalityProofV1 memory valid =
+            _finalityProof(registration, _hash("canonical-100"), _hash("block-103"), _hash("valid-finality-evidence"));
         vm.prank(FINALIZER);
         registry.finalizeLaunch(valid);
         assertTrue(registry.transitionEvidenceConsumed(valid.finalityEvidenceHash));
 
         IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory second = _registration("second-finality");
+        second.githubRepositoryId = SHARDS_GITHUB_REPOSITORY_ID + 1;
+        _rebind(second);
         _register(second);
         vm.roll(108);
         vm.setBlockhash(104, _hash("block-104"));
@@ -482,14 +661,14 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
         registration.orderedFeeLegs[1].feeBps = programmableFee;
         registration.orderedFeeLegs[2].feeBps = holderFee;
         vm.expectRevert();
-        registry.computeFeePolicyRecordHash(registration.feePolicy, registration.orderedFeeLegs);
+        verifier.verify(registration.feePolicy, registration.orderedFeeLegs);
     }
 
     function _newRegistry(ProgrammableExactShardsFeePolicyVerifierV1 verifier_)
         private
         returns (ProgrammableExactShardsRegistryV1)
     {
-        return new ProgrammableExactShardsRegistryV1(_config(), verifier_);
+        return new ProgrammableExactShardsRegistryV1(_config(), verifier_, lineageRegistry);
     }
 
     function _config() private pure returns (ProgrammableExactShardsRegistryV1.RegistryConfigV1 memory config) {
@@ -518,13 +697,16 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
         registration.launchId = _hash(string.concat(label, "-launch-id"));
         registration.projectId = _hash(string.concat(label, "-project-id"));
         registration.approvalId = _hash(string.concat(label, "-approval-id"));
-        registration.repositoryId = _hash("jesse-stahl/shards-v1");
+        registration.githubRepositoryId = SHARDS_GITHUB_REPOSITORY_ID;
         registration.commitId = bytes32(bytes20(hex"91b38f3de64d96cac7e29f127c004f128fc1da59"));
         registration.sourceCommitment = verifier.SOURCE_REVISION_HASH();
         registration.buildCommitment = verifier.NESTED_FACTORY_ARTIFACT_SHA256();
         registration.artifactSetHash = _hash(string.concat(label, "-artifact-set"));
         registration.deploymentConfigurationHash = _hash(string.concat(label, "-deployment-configuration"));
         registration.configurationHash = _hash(string.concat(label, "-configuration"));
+        registration.tokenNameHash = keccak256(bytes("Shards"));
+        registration.tokenSymbolHash = keccak256(bytes("SHARDS"));
+        registration.presentationBindingHash = _hash(string.concat(label, "-description-image-links"));
         registration.permissionsHash = _hash(string.concat(label, "-permissions"));
         registration.deploymentId = _hash(string.concat(label, "-deployment-id"));
         registration.deploymentSetHash = _hash(string.concat(label, "-deployment-set"));
@@ -575,17 +757,17 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
     }
 
     function _rebind(IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory registration) private view {
-        registration.approvalBindingHash = registry.computeApprovalBindingHash(registration);
-        registration.reviewDeploymentBindingHash = registry.computeReviewDeploymentBindingHash(registration);
-        registration.registeredRecordCommitment = registry.computeRegisteredRecordCommitment(registration);
+        (registration.approvalBindingHash,,,) = bindingHarness.computeBindings(registration);
+        (,, registration.reviewDeploymentBindingHash,) = bindingHarness.computeBindings(registration);
+        (,,, registration.registeredRecordCommitment) = bindingHarness.computeBindings(registration);
     }
 
     function _rebindRecordOnly(IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory registration)
         private
         view
     {
-        registration.reviewDeploymentBindingHash = registry.computeReviewDeploymentBindingHash(registration);
-        registration.registeredRecordCommitment = registry.computeRegisteredRecordCommitment(registration);
+        (,, registration.reviewDeploymentBindingHash,) = bindingHarness.computeBindings(registration);
+        (,,, registration.registeredRecordCommitment) = bindingHarness.computeBindings(registration);
     }
 
     function _authorization(IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory registration)
@@ -599,23 +781,62 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
             approvalId: registration.approvalId,
             launchId: registration.launchId,
             approvalBindingHash: registration.approvalBindingHash,
-            registrationBindingHash: registry.computeRegistrationBindingHash(registration),
+            registrationBindingHash: registration.approvalBindingHash,
             validAfterBlock: uint64(block.number),
-            expiresAtBlock: uint64(block.number + 200),
+            expiresAtBlock: type(uint64).max,
             evidenceHash: keccak256(abi.encode("approval-evidence", registration.approvalId))
         });
     }
 
-    function _authorize(IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory registration) private {
+    function _launchIntentAuthorization(IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory registration)
+        private
+        view
+        returns (IProgrammableCustomRegistryV1.ApprovalAuthorizationV1 memory authorization)
+    {
+        authorization = IProgrammableCustomRegistryV1.ApprovalAuthorizationV1({
+            chainId: registration.chainId,
+            registryGeneration: registration.registryGeneration,
+            approvalId: registration.approvalId,
+            launchId: registration.launchId,
+            approvalBindingHash: registration.approvalBindingHash,
+            registrationBindingHash: _launchIntentBinding(registration),
+            validAfterBlock: uint64(block.number),
+            expiresAtBlock: uint64(block.number + 200),
+            evidenceHash: keccak256(abi.encode("launch-intent-evidence", registration.approvalId))
+        });
+    }
+
+    function _launchIntentBinding(IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory registration)
+        private
+        view
+        returns (bytes32 bindingHash)
+    {
+        (, bindingHash,,) = bindingHarness.computeBindings(registration);
+    }
+
+    function _authorizeTechnical(IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory registration) private {
         IProgrammableCustomRegistryV1.ApprovalAuthorizationV1 memory authorization = _authorization(registration);
         vm.prank(APPROVER);
         registry.authorizeApproval(authorization);
     }
 
+    function _authorizeLaunchIntent(IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory registration)
+        private
+    {
+        IProgrammableCustomRegistryV1.ApprovalAuthorizationV1 memory authorization =
+            _launchIntentAuthorization(registration);
+        vm.prank(APPROVER);
+        registry.authorizeLaunchIntent(authorization);
+    }
+
+    function _authorize(IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory registration) private {
+        _authorizeTechnical(registration);
+        _authorizeLaunchIntent(registration);
+    }
+
     function _register(IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory registration) private {
         _authorize(registration);
-        vm.prank(WRITER);
-        registry.registerLaunch(registration);
+        writerHarness.register(registration);
     }
 
     function _finalityProof(

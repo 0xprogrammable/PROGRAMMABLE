@@ -5,21 +5,107 @@
   "launchAllowed": false,
   "externalActionOccurred": false,
   "productionBase": {
-    "commit": "a9260ec54324731226ccf0998a5110760ae1fc20",
-    "tree": "b810409f660d641f9205d6bf31b279133f0bef3b"
+    "commit": "c19e51979500ff9a588eb0093606454d48d68b2a",
+    "tree": "de80e26c9532c5e9a5522a42faca7156de92219f"
   },
   "decision": {
     "existingRegistryV1SupportsExactPolicy": false,
     "existingRegistryGen2CandidateSupportsExactPolicy": false,
     "newShardsExecutionSemanticsAdded": false,
-    "newRouterOrFactorySemanticsAdded": false,
+    "newRouterOrFactorySemanticsAdded": true,
+    "newAtomicExecutionRouteAdded": true,
     "smallestNativeSuccessorImplemented": true,
     "currentContractsCanLaunch": false,
     "reasonCurrentContractsCannotLaunch": [
       "THIS_REGISTRY_SUCCESSOR_AND_ITS_EXACT_VERIFIER_ARE_NOT_DEPLOYED",
+      "THE_SHARED_REPOSITORY_LINEAGE_REGISTRY_AND_ATOMIC_SHARDS_ROUTE_ARE_NOT_DEPLOYED",
       "ROUTER_V4_EXACT_SHARDS_PHASES_ARE_NOT_ACTIVATED",
       "NO_DEPLOYMENT_BOUND_REGISTRATION_OR_FINALITY_RECEIPT_EXISTS"
     ]
+  },
+  "postApprovalLaunchMetadataBoundary": {
+    "githubSubmissionApproval": {
+      "binding": "REVIEWED_TECHNICAL_CODE_SECURITY_AND_EXACT_ECONOMICS_ONLY",
+      "includesSelectedUiMetadata": false,
+      "remainsValidWhenOnlyUiMetadataChanges": true
+    },
+    "launchDescriptor": {
+      "configurationFieldIds": [
+        "tokenName",
+        "tokenSymbol"
+      ],
+      "additionalConfigurationFieldsAllowed": false,
+      "presentationFieldIds": [
+        "description",
+        "image",
+        "links"
+      ],
+      "presentationValuesAreSourceArtifactInputs": false
+    },
+    "canonicalFieldBindings": {
+      "tokenNameHash": "keccak256(bytes(tokenName))",
+      "tokenSymbolHash": "keccak256(bytes(tokenSymbol))",
+      "presentationBindingHash": "EXACT_WEBSITE_PRESENTATION_RECORD_BINDING_FOR_DESCRIPTION_IMAGE_AND_LINKS"
+    },
+    "jitLaunchIntentPermit": {
+      "required": true,
+      "bindingAlgorithm": "TEST_ONLY_BINDING_HARNESS_REPRODUCES_EXACT_ONCHAIN_IDENTITY_HASH",
+      "bindingHarnessPath": "contracts/test/utils/ProgrammableExactShardsBindingHarnessV1.sol",
+      "authorizationField": "ApprovalAuthorizationV1.registrationBindingHash",
+      "boundFields": [
+        "tokenNameHash",
+        "tokenSymbolHash",
+        "presentationBindingHash",
+        "deploymentAndWalletSelection",
+        "registeredRecordCommitment"
+      ],
+      "substitutionAfterPermit": "REJECT"
+    },
+    "registryFinalRecord": {
+      "bindsTokenNameHash": true,
+      "bindsTokenSymbolHash": true,
+      "bindsPresentationBindingHash": true,
+      "registryCommitmentBindsMetadata": true,
+      "atomicRouteEmitsMetadataBindingEvent": true
+    },
+    "executionRouteConformance": {
+      "reviewedSourceCommit": "91b38f3de64d96cac7e29f127c004f128fc1da59",
+      "factorySource": {
+        "path": "src/ShardLaunchFactoryV1.sol",
+        "gitBlob": "dc036527de168bb0505755d3d4cfac98a3cda509",
+        "sha256": "0x22f57deb2bb730b88ab6a1f948675d1cb6fbef0442e982f339e9c716e172e14f"
+      },
+      "tokenSource": {
+        "path": "src/ShardTokenV1.sol",
+        "gitBlob": "962c76971773ef2df5e30fad007084b9403cb535",
+        "sha256": "0x5c53920c52c69a87b38159d8a06285a2006e69773543ad72f2b5eb92f63ee22d"
+      },
+      "upstreamTest": {
+        "path": "test/ShardLaunchFactoryV1.t.sol",
+        "gitBlob": "7d5687974d8426c0637cebb818e4b96b723cf1ea",
+        "sha256": "0x5fc169351aea85703411a72b1ba3e2e8e97d6c329ed0bb65dded10c7dd62c5c6",
+        "testName": "test_launchedTokenAndNftCarryTheSuppliedMetadata",
+        "result": "PASS_1_OF_1_EXACT_SOURCE",
+        "selectedTokenName": "Fragment",
+        "selectedTokenSymbol": "FRAG",
+        "assertsProducedTokenNameAndSymbol": true
+      },
+      "factoryLaunchParamsContainTokenNameAndTokenSymbol": true,
+      "tokenInitCodeReceivesSelectedTokenNameAndTokenSymbol": true,
+      "producedErc20NameAndSymbolMatchSelection": true,
+      "nameMaximumUtf8Bytes": 32,
+      "symbolMaximumUtf8Bytes": 12,
+      "frozenRouteCalldataMayBeReusedForDifferentMetadata": false
+    },
+    "atomicRouteConformance": {
+      "specPath": "contracts/spec/shards-atomic-launch-route-v1.json",
+      "contractPath": "contracts/src/ProgrammableExactShardsAtomicLaunchRouteV1.sol",
+      "testPath": "contracts/test/ProgrammableExactShardsAtomicLaunchRouteV1.t.sol",
+      "consumeFactoryVerifyAndRegisterSameTransaction": true,
+      "downstreamRevertRollsBackDeploymentAndLineage": true,
+      "losingCrossRouteAttemptDeploysNoSecondToken": true,
+      "standaloneConsumeSelector": false
+    }
   },
   "reviewedInputs": {
     "shardsSource": {
@@ -41,17 +127,36 @@
   "implementation": {
     "contract": {
       "path": "contracts/src/ProgrammableExactShardsRegistryV1.sol",
-      "sha256": "0xcbfeeba3c82d3483333c89870004d7a9ddd605eef4ca139f6720af6edd79b867"
+      "sha256": "0x2edefb9eef07a045acb12cba832b2990aee6c3bd93425629acd62b884aca8cf2"
     },
     "interface": {
       "path": "contracts/src/interfaces/IProgrammableExactShardsRegistryV1.sol",
-      "sha256": "0xabb460e5c0cb30a2f875ea4c68f569af6dc9772d0319640fc74b368ac8f638fa"
+      "sha256": "0x9d5a84730dc874f8e2f39c2695d500b28d25a9bceb601e0593350e06f89a3d95"
     },
     "unitTest": {
       "path": "contracts/test/ProgrammableExactShardsRegistryV1.t.sol"
     },
     "invariantTest": {
       "path": "contracts/test/invariant/ProgrammableExactShardsRegistryV1Invariant.t.sol"
+    },
+    "sharedRepositoryLineageAuthority": {
+      "specPath": "contracts/spec/github-repository-lineage-registry-v1.json",
+      "contractPath": "contracts/src/ProgrammableGithubRepositoryLineageRegistryV1.sol",
+      "interfacePath": "contracts/src/interfaces/IProgrammableGithubRepositoryLineageRegistryV1.sol",
+      "deploymentAddress": null,
+      "activationAllowed": false,
+      "repositoryKeyDerivation": "keccak256(abi.encode(\"programmable.github.repository.v1\", uint256(githubRepositoryId)))",
+      "shardsGithubRepositoryId": 1329073878,
+      "shardsRepositoryKey": "0x02ed38e86a7c41d5dea93cf5e3f829420837c4d351d9f4675929c6ce0041e835"
+    },
+    "atomicLaunchRoute": {
+      "specPath": "contracts/spec/shards-atomic-launch-route-v1.json",
+      "contractPath": "contracts/src/ProgrammableExactShardsAtomicLaunchRouteV1.sol",
+      "factoryInterfacePath": "contracts/src/interfaces/IProgrammableExactShardsLaunchFactoryV1.sol",
+      "deploymentAddress": null,
+      "activationAllowed": false,
+      "repositoryLineageConsumerRoleTarget": "EXACT_ATOMIC_ROUTE_ONLY",
+      "registryWriterRoleBeforeActivation": "EXACT_ATOMIC_ROUTE_ONLY"
     },
     "compiler": {
       "solc": "0.8.26",
@@ -63,12 +168,12 @@
       "cborMetadata": false
     },
     "artifact": {
-      "creationCodeByteLength": 25744,
-      "creationCodeKeccak256": "0xc2aea6763ca383a2909fc5cbb189461c3fd72d2043be46b9bdd83cefeb15759b",
-      "unlinkedRuntimeCodeByteLength": 22962,
-      "unlinkedRuntimeCodeKeccak256": "0xb73a272caeb4f9a9c7180f585c49c6ef7731416de4980dcbd62b92bcb09157da",
-      "runtimeCodeLimitMarginBytes": 1614,
-      "canonicalAbiSha256": "0x9406ed38d932dc1533314b6d5752e3aaa1626423c71fedf345d02c4c198acecb"
+      "creationCodeByteLength": 27268,
+      "creationCodeKeccak256": "0x15bc577db8933f8f9985ff77f768faabe62c197b53a1258915fda618f8c3650b",
+      "unlinkedRuntimeCodeByteLength": 24303,
+      "unlinkedRuntimeCodeKeccak256": "0x21c4e08e2471be1119f158021c4d6e426e5c953ea26719381b39fbcd0cc70d77",
+      "runtimeCodeLimitMarginBytes": 273,
+      "canonicalAbiSha256": "0x9492f1b19fe8dba9ebddcb8ae474c01971de51d64fe502bb2277c53f405aed62"
     }
   },
   "exactPolicy": {
@@ -120,7 +225,9 @@
       "registryPolicyHash",
       "feeVerifierAddress",
       "feeVerifierRuntimeCodeHash",
-      "feeVerifierContentBindingHash"
+      "feeVerifierContentBindingHash",
+      "sharedRepositoryLineageRegistryAddress",
+      "sharedRepositoryLineageRegistryRuntimeCodeHash"
     ],
     "feePolicyRecordHashFields": [
       "feePolicyRecordDomain",
@@ -162,13 +269,17 @@
       "providerIdMustBeZero",
       "primaryRuntimeCodeHash",
       "approvalBindingHash",
+      "jitLaunchIntentBindingHash",
+      "tokenNameHash",
+      "tokenSymbolHash",
+      "presentationBindingHash",
       "reviewDeploymentBindingHash",
       "registeredRecordCommitment"
     ]
   },
   "lifecycle": {
-    "approval": "APPEND_ONLY_WINDOWED_INDEPENDENT_APPROVER_AND_WRITER",
-    "registration": "OBSERVED_AND_ONE_USE_BOUND_TO_APPROVAL_DEPLOYMENT_INSTANCE_AND_EXACT_ECONOMICS",
+    "approval": "DURABLE_TECHNICAL_APPROVAL_PLUS_SHORT_WINDOW_EXACT_JIT_LAUNCH_INTENT",
+    "registration": "ATOMIC_WITH_FACTORY_EXECUTION_AND_BOUND_TO_APPROVAL_DEPLOYMENT_METADATA_AND_EXACT_ECONOMICS",
     "finality": "NATIVE_BLOCKHASH_AND_MINIMUM_DEPTH_WITH_ONE_USE_EVIDENCE",
     "correction": "FINALIZED_ONLY_APPEND_ONLY_REVISION_CHAIN",
     "revocation": "OBSERVED_OR_FINALIZED_TO_TERMINAL_REVOKED",
@@ -177,6 +288,7 @@
   "replayProtection": [
     "APPROVAL_ID_ONE_USE",
     "DEPLOYMENT_ID_ONE_USE",
+    "NUMERIC_GITHUB_REPOSITORY_LINEAGE_ONE_SUCCESSFUL_LAUNCH_ACROSS_ALL_AUTHORIZED_ROUTES",
     "TRANSITION_EVIDENCE_HASH_ONE_USE",
     "REGISTRY_INSTANCE_DOMAIN_BINDS_CHAIN_GENERATION_AND_ADDRESS",
     "REGISTERED_LAUNCH_CANNOT_BE_REPLAYED_OR_REVIVED",
@@ -184,7 +296,7 @@
   ],
   "localEvidence": {
     "unitTests": {
-      "count": 13,
+      "count": 15,
       "fuzzRuns": 1000,
       "maximumRegistrationGas": 2200000
     },
@@ -200,6 +312,17 @@
     },
     "feeVerifierTests": {
       "count": 8
+    },
+    "sharedRepositoryLineageTests": {
+      "unitCount": 10,
+      "invariantCount": 1,
+      "invariantCalls": 16384,
+      "handlerReverts": 0
+    },
+    "atomicLaunchRouteTests": {
+      "count": 5,
+      "crossRouteLoserDeploysNoTokenHookOrNft": true,
+      "downstreamRevertRollsBackAllDeploymentsAndLineage": true
     },
     "securityBoundary": [
       "NO_FUNDS_CUSTODY",

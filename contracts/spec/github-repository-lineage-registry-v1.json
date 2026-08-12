@@ -1,0 +1,104 @@
+{
+  "schemaVersion": "programmable.github-repository-lineage-registry.v1",
+  "status": "IMPLEMENTATION_READY_NOT_DEPLOYED",
+  "activationAllowed": false,
+  "externalActionOccurred": false,
+  "deployment": {
+    "addressState": "UNSET",
+    "address": null,
+    "runtimeCodeKeccak256": null,
+    "transactionHash": null,
+    "blockNumber": null
+  },
+  "authority": {
+    "adminModel": "OPENZEPPELIN_ACCESS_CONTROL_DEFAULT_ADMIN_RULES",
+    "consumerRole": "keccak256(bytes(\"programmable.github-repository-lineage.consumer.v1\"))",
+    "authorizedConsumers": [],
+    "authorizedConsumerState": "NONE_UNTIL_CANONICAL_DEPLOYMENT",
+    "rule": "ONLY_EXACT_REVIEWED_ATOMIC_ROUTE_CONTRACTS_ON_ONE_CANONICAL_INSTANCE",
+    "forbiddenConsumers": [
+      "EOA",
+      "REGISTRY_CONTRACT",
+      "DIRECT_FACTORY",
+      "ADAPTER_WITH_STANDALONE_CONSUME_SELECTOR"
+    ],
+    "requiredRoleGrantEvidence": "EXACT_ATOMIC_ROUTE_ADDRESS_RUNTIME_CODE_HASH_AND_ROLE_GRANTED_EVENT"
+  },
+  "repositoryKey": {
+    "githubRepositoryIdType": "uint64",
+    "allowedRange": {
+      "minimum": 1,
+      "maximum": "18446744073709551615",
+      "approvalDatabaseMustEnforceSameRange": true
+    },
+    "derivation": "keccak256(abi.encode(\"programmable.github.repository.v1\", uint256(githubRepositoryId)))",
+    "displayRepositoryNameIsIdentity": false,
+    "knownVectors": [
+      {
+        "githubRepositoryId": 1,
+        "repositoryKey": "0x84f907641e97fb220312430fcf0f98c1d513664a984d99df24aee57c226d174c"
+      },
+      {
+        "project": "Shards",
+        "githubRepositoryId": 1329073878,
+        "repositoryKey": "0x02ed38e86a7c41d5dea93cf5e3f829420837c4d351d9f4675929c6ce0041e835"
+      },
+      {
+        "project": "Hookemon",
+        "githubRepositoryId": 1324982531,
+        "repositoryKey": "0x85af67313879b9844f94b66f3eb6bdc2f200e2647507f73f43242a576580961b"
+      },
+      {
+        "githubRepositoryId": "18446744073709551615",
+        "repositoryKey": "0x97316281428a106b570b0e26031c4ae18b9e959742ea4cc41c1e7cd43b921dfb"
+      }
+    ]
+  },
+  "semantics": {
+    "oneSuccessfulLaunchPerRepositoryLineage": true,
+    "crossRouteAndFactoryAuthority": true,
+    "exactRetry": "IDEMPOTENT_ONLY_FOR_SAME_REPOSITORY_LAUNCH_ROUTE_AND_CONSUMER",
+    "otherDuplicate": "REVERT",
+    "consumeTiming": "IMMEDIATELY_BEFORE_IRREVERSIBLE_ROUTE_EXECUTION_WITH_REGISTRATION_IN_SAME_TRANSACTION",
+    "downstreamRevert": "ROLLS_BACK_CONSUMPTION"
+  },
+  "implementation": {
+    "contractPath": "contracts/src/ProgrammableGithubRepositoryLineageRegistryV1.sol",
+    "interfacePath": "contracts/src/interfaces/IProgrammableGithubRepositoryLineageRegistryV1.sol",
+    "unitTestPath": "contracts/test/ProgrammableGithubRepositoryLineageRegistryV1.t.sol",
+    "invariantTestPath": "contracts/test/invariant/ProgrammableGithubRepositoryLineageRegistryV1Invariant.t.sol",
+    "compiler": {
+      "solc": "0.8.26",
+      "evmVersion": "cancun",
+      "optimizer": true,
+      "optimizerRuns": 1000,
+      "viaIr": false,
+      "bytecodeHash": "none",
+      "cborMetadata": false
+    },
+    "artifact": {
+      "contractSourceSha256": "0xf68617a5b45d6a63287312b8a519bfba7f783e3dad5b9312bc6043dc9880a59b",
+      "interfaceSourceSha256": "0xbeccdffd2a9d6d46af6786bb8d78153c72144013bef67698e33d7f328eb3d512",
+      "canonicalAbiSha256": "0xe90eb2d1c59415f885898e4153e20cef0c7564c9290010740bec7dc3d492d83f",
+      "creationCodeByteLength": 6130,
+      "creationCodeKeccak256": "0xf83413d5efe52fc562c1c1dee048413058a1ca24053c7d2b9f396fc6837b1c36",
+      "unlinkedRuntimeCodeByteLength": 5515,
+      "unlinkedRuntimeCodeKeccak256": "0x0374fd9de2c84fe89522fd3602dd4b0fb2ba2c5ed07fd2130b64e1d5821b7bf4",
+      "runtimeCodeLimitMarginBytes": 19061
+    },
+    "selectors": {
+      "consume(uint64,bytes32,bytes32)": "0xd11fffa9",
+      "computeRepositoryKey(uint64)": "0x74f67ed9",
+      "consumption(bytes32)": "0xca979f28",
+      "repositoryKeyByLaunchId(bytes32)": "0xe1fa2b9e",
+      "consumptionCount()": "0xd2cfddfe"
+    }
+  },
+  "prohibitions": [
+    "NO_ROUTE_LOCAL_MAPPING_AS_SOLE_AUTHORITY",
+    "NO_HASHED_DOMAIN_CONSTANT_SUBSTITUTE",
+    "NO_UINT64_ABI_SLOT_SUBSTITUTE",
+    "NO_DEPLOYMENT_ADDRESS_INVENTION",
+    "NO_ACTIVATION_BEFORE_INDEPENDENT_REVIEW_AND_CANONICAL_DEPLOYMENT"
+  ]
+}

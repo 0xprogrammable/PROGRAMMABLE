@@ -6,11 +6,15 @@ import { Test } from "forge-std/Test.sol";
 
 import { ProgrammableExactShardsFeePolicyVerifierV1 } from "../../src/ProgrammableExactShardsFeePolicyVerifierV1.sol";
 import { ProgrammableExactShardsRegistryV1 } from "../../src/ProgrammableExactShardsRegistryV1.sol";
+import {
+    ProgrammableGithubRepositoryLineageRegistryV1
+} from "../../src/ProgrammableGithubRepositoryLineageRegistryV1.sol";
 import { IProgrammableCustomRegistryV1 } from "../../src/interfaces/IProgrammableCustomRegistryV1.sol";
 import {
     IProgrammableExactShardsFeePolicyVerifierV1
 } from "../../src/interfaces/IProgrammableExactShardsFeePolicyVerifierV1.sol";
 import { IProgrammableExactShardsRegistryV1 } from "../../src/interfaces/IProgrammableExactShardsRegistryV1.sol";
+import { ProgrammableExactShardsBindingHarnessV1 } from "../utils/ProgrammableExactShardsBindingHarnessV1.sol";
 
 contract ExactShardsRegistryInvariantRuntimeV1 {
     function version() external pure returns (uint256) {
@@ -28,6 +32,12 @@ contract ExactShardsRegistryInvariantApprovalActorV1 {
     function authorize(IProgrammableCustomRegistryV1.ApprovalAuthorizationV1 calldata authorization) external {
         registry.authorizeApproval(authorization);
     }
+
+    function authorizeLaunchIntent(IProgrammableCustomRegistryV1.ApprovalAuthorizationV1 calldata authorization)
+        external
+    {
+        registry.authorizeLaunchIntent(authorization);
+    }
 }
 
 contract ProgrammableExactShardsRegistryV1InvariantHandler is Test {
@@ -36,6 +46,8 @@ contract ProgrammableExactShardsRegistryV1InvariantHandler is Test {
         bytes32 launchId;
         bytes32 approvalId;
         bytes32 deploymentId;
+        uint64 githubRepositoryId;
+        bytes32 repositoryKey;
         bytes32 feePolicyRecordHash;
         bytes32 claimSetHash;
         bytes32 builderClaimHash;
@@ -51,6 +63,8 @@ contract ProgrammableExactShardsRegistryV1InvariantHandler is Test {
 
     ProgrammableExactShardsRegistryV1 public immutable registry;
     ProgrammableExactShardsFeePolicyVerifierV1 public immutable verifier;
+    ProgrammableGithubRepositoryLineageRegistryV1 public immutable lineageRegistry;
+    ProgrammableExactShardsBindingHarnessV1 public immutable bindingHarness;
     ExactShardsRegistryInvariantApprovalActorV1 public immutable approvalActor;
     ExactShardsRegistryInvariantRuntimeV1 public immutable runtimeTarget;
 
@@ -66,11 +80,15 @@ contract ProgrammableExactShardsRegistryV1InvariantHandler is Test {
     constructor(
         ProgrammableExactShardsRegistryV1 registry_,
         ProgrammableExactShardsFeePolicyVerifierV1 verifier_,
+        ProgrammableGithubRepositoryLineageRegistryV1 lineageRegistry_,
+        ProgrammableExactShardsBindingHarnessV1 bindingHarness_,
         ExactShardsRegistryInvariantApprovalActorV1 approvalActor_,
         ExactShardsRegistryInvariantRuntimeV1 runtimeTarget_
     ) {
         registry = registry_;
         verifier = verifier_;
+        lineageRegistry = lineageRegistry_;
+        bindingHarness = bindingHarness_;
         approvalActor = approvalActor_;
         runtimeTarget = runtimeTarget_;
     }
@@ -79,19 +97,37 @@ contract ProgrammableExactShardsRegistryV1InvariantHandler is Test {
         if (records.length >= MAX_RECORDS) return;
         bytes32 label = keccak256(abi.encode("exact-shards-registry-invariant", ++sequence, entropy));
         IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory registration = _registration(label);
-        IProgrammableCustomRegistryV1.ApprovalAuthorizationV1 memory authorization =
+        IProgrammableCustomRegistryV1.ApprovalAuthorizationV1 memory technicalAuthorization =
             IProgrammableCustomRegistryV1.ApprovalAuthorizationV1({
                 chainId: block.chainid,
                 registryGeneration: registry.REGISTRY_GENERATION(),
                 approvalId: registration.approvalId,
                 launchId: registration.launchId,
                 approvalBindingHash: registration.approvalBindingHash,
-                registrationBindingHash: registry.computeRegistrationBindingHash(registration),
+                registrationBindingHash: registration.approvalBindingHash,
                 validAfterBlock: uint64(block.number),
-                expiresAtBlock: uint64(block.number + 10_000),
+                expiresAtBlock: type(uint64).max,
                 evidenceHash: _field(label, "approval-evidence")
             });
-        approvalActor.authorize(authorization);
+        approvalActor.authorize(technicalAuthorization);
+        approvalActor.authorizeLaunchIntent(
+            IProgrammableCustomRegistryV1.ApprovalAuthorizationV1({
+                chainId: block.chainid,
+                registryGeneration: registry.REGISTRY_GENERATION(),
+                approvalId: registration.approvalId,
+                launchId: registration.launchId,
+                approvalBindingHash: registration.approvalBindingHash,
+                registrationBindingHash: _launchIntentBinding(registration),
+                validAfterBlock: uint64(block.number),
+                expiresAtBlock: uint64(block.number + 200),
+                evidenceHash: _field(label, "launch-intent-evidence")
+            })
+        );
+        lineageRegistry.consume(
+            registration.githubRepositoryId,
+            registration.launchId,
+            keccak256("programmable.exact-shards.atomic-launch-route.v1")
+        );
         registry.registerLaunch(registration);
 
         IProgrammableExactShardsRegistryV1.StoredFeePolicyV1 memory storedPolicy =
@@ -102,6 +138,8 @@ contract ProgrammableExactShardsRegistryV1InvariantHandler is Test {
                 launchId: registration.launchId,
                 approvalId: registration.approvalId,
                 deploymentId: registration.deploymentId,
+                githubRepositoryId: registration.githubRepositoryId,
+                repositoryKey: lineageRegistry.computeRepositoryKey(registration.githubRepositoryId),
                 feePolicyRecordHash: storedPolicy.feePolicyRecordHash,
                 claimSetHash: storedPolicy.claimSetHash,
                 builderClaimHash: registry.feeClaim(registration.launchId, 0).storedClaimHash,
@@ -190,8 +228,13 @@ contract ProgrammableExactShardsRegistryV1InvariantHandler is Test {
     function replay(uint256 rawIndex) external {
         if (records.length == 0) return;
         Record storage record = records[rawIndex % records.length];
+        uint64 registrationsBefore = registry.registrationCount();
+        uint64 transitionsBefore = registry.transitionCount();
         try registry.registerLaunch(_boundRegistration(record.label)) {
-            replaySucceeded = true;
+            if (registry.registrationCount() != registrationsBefore || registry.transitionCount() != transitionsBefore)
+            {
+                replaySucceeded = true;
+            }
         } catch { }
     }
 
@@ -200,7 +243,9 @@ contract ProgrammableExactShardsRegistryV1InvariantHandler is Test {
         Record storage record = records[rawIndex % records.length];
         if (!record.revoked) return;
         try registry.registerLaunch(_boundRegistration(record.label)) {
-            revokedLaunchRevived = true;
+            if (registry.launchState(record.launchId).status != IProgrammableCustomRegistryV1.LaunchStatus.Revoked) {
+                revokedLaunchRevived = true;
+            }
         } catch { }
     }
 
@@ -230,13 +275,17 @@ contract ProgrammableExactShardsRegistryV1InvariantHandler is Test {
         registration.launchId = _field(label, "launch-id");
         registration.projectId = _field(label, "project-id");
         registration.approvalId = _field(label, "approval-id");
-        registration.repositoryId = keccak256("jesse-stahl/shards-v1");
+        registration.githubRepositoryId = uint64(uint256(label));
+        if (registration.githubRepositoryId == 0) registration.githubRepositoryId = 1;
         registration.commitId = bytes32(bytes20(hex"91b38f3de64d96cac7e29f127c004f128fc1da59"));
         registration.sourceCommitment = verifier.SOURCE_REVISION_HASH();
         registration.buildCommitment = verifier.NESTED_FACTORY_ARTIFACT_SHA256();
         registration.artifactSetHash = _field(label, "artifact-set");
         registration.deploymentConfigurationHash = _field(label, "deployment-configuration");
         registration.configurationHash = _field(label, "configuration");
+        registration.tokenNameHash = keccak256(bytes("Shards"));
+        registration.tokenSymbolHash = keccak256(bytes("SHARDS"));
+        registration.presentationBindingHash = _field(label, "description-image-links");
         registration.permissionsHash = _field(label, "permissions");
         registration.deploymentId = _field(label, "deployment-id");
         registration.deploymentSetHash = _field(label, "deployment-set");
@@ -281,9 +330,17 @@ contract ProgrammableExactShardsRegistryV1InvariantHandler is Test {
             recipient: verifier.HOLDER_ACCUMULATOR(),
             recipientModeHash: verifier.HOLDER_RECIPIENT_MODE_HASH()
         });
-        registration.approvalBindingHash = registry.computeApprovalBindingHash(registration);
-        registration.reviewDeploymentBindingHash = registry.computeReviewDeploymentBindingHash(registration);
-        registration.registeredRecordCommitment = registry.computeRegisteredRecordCommitment(registration);
+        (registration.approvalBindingHash,,,) = bindingHarness.computeBindings(registration);
+        (,, registration.reviewDeploymentBindingHash,) = bindingHarness.computeBindings(registration);
+        (,,, registration.registeredRecordCommitment) = bindingHarness.computeBindings(registration);
+    }
+
+    function _launchIntentBinding(IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory registration)
+        private
+        view
+        returns (bytes32 bindingHash)
+    {
+        (, bindingHash,,) = bindingHarness.computeBindings(registration);
     }
 
     function _field(bytes32 label, string memory field) private pure returns (bytes32) {
@@ -293,16 +350,17 @@ contract ProgrammableExactShardsRegistryV1InvariantHandler is Test {
 
 contract ProgrammableExactShardsRegistryV1InvariantTest is StdInvariant, Test {
     ProgrammableExactShardsRegistryV1 internal registry;
+    ProgrammableGithubRepositoryLineageRegistryV1 internal lineageRegistry;
     ProgrammableExactShardsRegistryV1InvariantHandler internal handler;
 
     uint64 private lastRegistrationCount;
-    uint64 private lastApprovalCount;
     uint64 private lastTransitionCount;
 
     function setUp() public {
         vm.chainId(1);
         vm.roll(100);
         ProgrammableExactShardsFeePolicyVerifierV1 verifier = new ProgrammableExactShardsFeePolicyVerifierV1();
+        lineageRegistry = new ProgrammableGithubRepositoryLineageRegistryV1(2 days, address(this));
         ExactShardsRegistryInvariantRuntimeV1 runtimeTarget = new ExactShardsRegistryInvariantRuntimeV1();
         registry = new ProgrammableExactShardsRegistryV1(
             ProgrammableExactShardsRegistryV1.RegistryConfigV1({
@@ -318,15 +376,20 @@ contract ProgrammableExactShardsRegistryV1InvariantTest is StdInvariant, Test {
                 chainProfileHash: keccak256("ethereum-mainnet-chain-profile"),
                 registryPolicyHash: keccak256("exact-shards-registry-policy")
             }),
-            verifier
+            verifier,
+            lineageRegistry
         );
         ExactShardsRegistryInvariantApprovalActorV1 approvalActor =
             new ExactShardsRegistryInvariantApprovalActorV1(registry);
+        ProgrammableExactShardsBindingHarnessV1 bindingHarness =
+            new ProgrammableExactShardsBindingHarnessV1(registry, verifier, lineageRegistry);
         registry.grantRole(registry.APPROVER_ROLE(), address(approvalActor));
         registry.revokeRole(registry.APPROVER_ROLE(), address(0xA990));
-        handler =
-            new ProgrammableExactShardsRegistryV1InvariantHandler(registry, verifier, approvalActor, runtimeTarget);
+        handler = new ProgrammableExactShardsRegistryV1InvariantHandler(
+            registry, verifier, lineageRegistry, bindingHarness, approvalActor, runtimeTarget
+        );
         registry.grantRole(registry.WRITER_ROLE(), address(handler));
+        lineageRegistry.grantRole(lineageRegistry.CONSUMER_ROLE(), address(handler));
         registry.revokeRole(registry.WRITER_ROLE(), address(0xB001));
         registry.grantRole(registry.FINALIZER_ROLE(), address(handler));
         registry.grantRole(registry.CORRECTOR_ROLE(), address(handler));
@@ -345,20 +408,16 @@ contract ProgrammableExactShardsRegistryV1InvariantTest is StdInvariant, Test {
 
     function invariant_countsAreMonotonicAndMatchSuccessfulTransitions() public {
         uint64 registrations = registry.registrationCount();
-        uint64 approvals = registry.approvalAuthorizationCount();
         uint64 transitions = registry.transitionCount();
         assertGe(registrations, lastRegistrationCount);
-        assertGe(approvals, lastApprovalCount);
         assertGe(transitions, lastTransitionCount);
         assertEq(registrations, handler.successfulRegistrations());
-        assertEq(approvals, handler.successfulRegistrations());
         assertEq(
             transitions,
-            handler.successfulRegistrations() * 2 + handler.successfulFinalizations() + handler.successfulCorrections()
+            handler.successfulRegistrations() * 3 + handler.successfulFinalizations() + handler.successfulCorrections()
                 + handler.successfulRevocations()
         );
         lastRegistrationCount = registrations;
-        lastApprovalCount = approvals;
         lastTransitionCount = transitions;
     }
 
@@ -388,6 +447,8 @@ contract ProgrammableExactShardsRegistryV1InvariantTest is StdInvariant, Test {
             assertTrue(registry.approvalConsumed(record.approvalId));
             assertTrue(registry.approvalState(record.approvalId).consumed);
             assertTrue(registry.deploymentConsumed(record.deploymentId));
+            assertEq(lineageRegistry.consumption(record.repositoryKey).launchId, record.launchId);
+            assertEq(lineageRegistry.computeRepositoryKey(record.githubRepositoryId), record.repositoryKey);
             assertEq(state.latestRecordRevision, record.latestRevision);
             assertEq(state.latestRecordHash, record.latestRecordHash);
             assertEq(registry.recordHashAtRevision(record.launchId, record.latestRevision), record.latestRecordHash);

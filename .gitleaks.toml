@@ -154,6 +154,34 @@ paths = [
 regexes = ['''profileKey"?:\s*"0x[0-9a-fA-F]{64}"''']
 
 [[allowlists]]
+description = "Exact Shards contracts and specs pin the reviewed public Router V4 profile key"
+condition = "AND"
+regexTarget = "match"
+paths = [
+  '''contracts/spec/shards-fee-policy-verifier-v1\.json''',
+  '''contracts/spec/shards-registry-successor-v1\.json''',
+  '''contracts/src/ProgrammableExactShardsFeePolicyVerifierV1\.sol''',
+  '''contracts/src/ProgrammableExactShardsRegistryV1\.sol''',
+]
+regexes = ['''(?i)0xb90e215e0e29c0dacf021e5e778847af4100433ee7d22014b73f8ca4add09d0c''']
+
+[[allowlists]]
+description = "GitHub lineage specs and tests pin public deterministic repository-key vectors"
+condition = "AND"
+regexTarget = "match"
+paths = [
+  '''contracts/spec/github-repository-lineage-registry-v1\.json''',
+  '''contracts/spec/shards-registry-successor-v1\.json''',
+  '''contracts/test/ProgrammableGithubRepositoryLineageRegistryV1\.t\.sol''',
+]
+regexes = [
+  '''(?i)0x84f907641e97fb220312430fcf0f98c1d513664a984d99df24aee57c226d174c''',
+  '''(?i)0x02ed38e86a7c41d5dea93cf5e3f829420837c4d351d9f4675929c6ce0041e835''',
+  '''(?i)0x85af67313879b9844f94b66f3eb6bdc2f200e2647507f73f43242a576580961b''',
+  '''(?i)0x97316281428a106b570b0e26031c4ae18b9e959742ea4cc41c1e7cd43b921dfb''',
+]
+
+[[allowlists]]
 description = "Router V3 vendored artifacts contain public bytes32 profile and winner bindings"
 condition = "AND"
 regexTarget = "match"
