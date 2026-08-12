@@ -878,6 +878,9 @@ export interface PrincipalLaunchPresentationCommitRequestV1 {
   readonly grantBindingHash: Sha256DigestV2;
   readonly expectedVersion: number;
   readonly presentation: LaunchPresentationDraftV1;
+  /** Required when an image is first created or changed; null for no/unchanged image. */
+  readonly imageUploadReceipt: import("./token-image-upload-receipt-v1")
+    .SignedTokenImageUploadReceiptV1 | null;
 }
 
 export interface PrincipalLaunchPresentationResponseV1 {

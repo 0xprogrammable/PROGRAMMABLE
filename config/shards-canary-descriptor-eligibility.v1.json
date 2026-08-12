@@ -70,7 +70,7 @@
     "fileBindings": [
       {
         "path": "lib/custom-launch/contract-v2.ts",
-        "rawSha256": "0ecce91d1871886c54de90b7882c8ef86aa46f48d5894f31d8cb0e046cdd96af"
+        "rawSha256": "dd100161ba26297dcd042c79abd1259167934983c49f6147f0426e84d4a77acc"
       },
       {
         "path": "lib/custom-launch/response-contract-v2.ts",

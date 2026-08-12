@@ -75,6 +75,11 @@ import {
 } from "@/lib/custom-launch/launch-authority-refresh-v1";
 import { readAllPrincipalApplicationsV3 } from "@/lib/custom-launch/principal-application-pagination-v3";
 import {
+  parseSignedTokenImageUploadReceiptV1,
+  tokenImageUploadReceiptMatchesV1,
+  type SignedTokenImageUploadReceiptV1,
+} from "@/lib/custom-launch/token-image-upload-receipt-v1";
+import {
   customApplicationIntakeIsLaunchableV2,
   type ApplicationHandleV3,
   type AuthorizedLaunchPermitViewV2,
@@ -354,6 +359,7 @@ export type PresentationForm = {
   preservedLinks: LaunchPresentationDraftV1["links"];
   image: LaunchPresentationDraftV1["image"];
   imagePreview: string;
+  imageUploadReceipt: SignedTokenImageUploadReceiptV1 | null;
 };
 
 const emptyPresentation: PresentationForm = {
@@ -368,6 +374,7 @@ const emptyPresentation: PresentationForm = {
   preservedLinks: [],
   image: null,
   imagePreview: "",
+  imageUploadReceipt: null,
 };
 
 export type CustomApplicationDisplayState = Readonly<{
@@ -1911,7 +1918,7 @@ export function CustomLaunchExperience({
   async function selectImage(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
-    if (!file || !selected) return;
+    if (!file || !selected || !descriptor) return;
     imageUploadAbortControllerRef.current?.abort();
     const imageController = new AbortController();
     imageUploadAbortControllerRef.current = imageController;
@@ -1933,9 +1940,18 @@ export function CustomLaunchExperience({
       if (!isCurrent()) return;
       const form = new FormData();
       form.append("file", new File([image], "custom-launch.webp", { type: "image/webp" }));
+      form.append("receiptScope", canonicalBrowserJsonV2({
+        applicationId: selected.applicationId,
+        applicationHandle: selected.applicationHandle,
+        grantId: descriptor.grantId,
+        grantBindingHash: descriptor.grantBindingHash,
+      }));
       const response = await fetch("/api/token-image", {
         method: "POST",
-        headers: { authorization: `Bearer ${session.accessToken}` },
+        headers: {
+          authorization: `Bearer ${session.accessToken}`,
+          "x-privy-identity-token": session.identityToken,
+        },
         body: form,
         cache: "no-store",
         credentials: "same-origin",
@@ -1947,7 +1963,11 @@ export function CustomLaunchExperience({
       if (contentType !== "application/json" || response.redirected) {
         throw new Error("Unable to verify the uploaded image");
       }
-      const body = await response.json() as { url?: unknown; error?: unknown };
+      const body = await response.json() as {
+        url?: unknown;
+        receipt?: unknown;
+        error?: unknown;
+      };
       if (!isCurrent()) return;
       if (!response.ok) {
         throw new Error(typeof body.error === "string"
@@ -1962,9 +1982,24 @@ export function CustomLaunchExperience({
         new Uint8Array(await image.arrayBuffer()),
       );
       if (!isCurrent()) return;
+      const imageUploadReceipt = parseSignedTokenImageUploadReceiptV1(body.receipt);
+      if (!tokenImageUploadReceiptMatchesV1(imageUploadReceipt, {
+        launchScope: {
+          applicationId: selected.applicationId,
+          applicationHandle: selected.applicationHandle,
+          grantId: descriptor.grantId,
+          grantBindingHash: descriptor.grantBindingHash,
+        },
+        uri: imageUrl,
+        contentSha256,
+        byteLength: image.size,
+        width: TOKEN_IMAGE_OUTPUT_SIZE,
+        height: TOKEN_IMAGE_OUTPUT_SIZE,
+      })) throw new Error("Unable to verify the uploaded image");
       setPresentation((current) => ({
         ...current,
         imagePreview: imageUrl,
+        imageUploadReceipt,
         image: {
           uri: imageUrl,
           contentSha256,
@@ -2097,6 +2132,13 @@ export function CustomLaunchExperience({
     ));
     if (currentPresentation !== null) {
       setPresentation(presentationFormFromResponse(currentPresentation));
+    } else {
+      setPresentation((current) => ({
+        ...current,
+        image: null,
+        imagePreview: "",
+        imageUploadReceipt: null,
+      }));
     }
     setPresentationVersion(currentPresentation?.version ?? 0);
     setPendingGrantReissue(null);
@@ -2226,6 +2268,7 @@ export function CustomLaunchExperience({
           grantBindingHash: activeDescriptor.grantBindingHash,
           expectedVersion: presentationVersion,
           presentation: presentationDraft,
+          imageUploadReceipt: presentation.imageUploadReceipt,
         },
         idempotencyKey("presentation"),
         { signal },
@@ -2852,7 +2895,7 @@ export function CustomLaunchExperience({
                     {imageUploading ? <><LoaderCircle aria-hidden="true" className={styles.spin} size={22} /><span>Preparing image</span></> : isProgrammableTokenImageUrl(presentation.imagePreview) ? <Image src={getTokenCardImageSource(presentation.imagePreview)} alt="Project image preview" width={150} height={150} unoptimized /> : <><ImagePlus aria-hidden="true" size={22} /><span>Choose image</span></>}
                     <input className={styles.visuallyHidden} type="file" aria-label={presentation.image ? "Change project image" : "Choose project image"} accept="image/png,image/jpeg,image/webp" onChange={(event) => void selectImage(event)} />
                   </label>
-                  {presentation.image ? <button className={styles.removeImageButton} type="button" onClick={() => setPresentation((current) => ({ ...current, image: null, imagePreview: "" }))}>Remove image</button> : null}
+                  {presentation.image ? <button className={styles.removeImageButton} type="button" onClick={() => setPresentation((current) => ({ ...current, image: null, imagePreview: "", imageUploadReceipt: null }))}>Remove image</button> : null}
                 </div>
                 <div className={styles.fieldStack}>
                   <label><span>Short description</span><textarea value={presentation.description} maxLength={4096} onChange={(event) => setPresentation((current) => ({ ...current, description: event.target.value }))} placeholder="What does this project make possible?" /></label>
@@ -3050,6 +3093,7 @@ export function presentationFormFromResponse(response: PrincipalLaunchPresentati
     description: draft.description,
     image: draft.image,
     imagePreview: draft.image?.uri ?? "",
+    imageUploadReceipt: null,
     website: link("website"),
     documentation: link("documentation"),
     x: link("x"),
