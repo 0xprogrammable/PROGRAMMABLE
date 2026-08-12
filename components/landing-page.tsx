@@ -64,22 +64,6 @@ export function LandingPage() {
                 sizes="36px"
                 priority
               />
-              <span>Programmable</span>
-            </Link>
-
-            <nav
-              className={styles.segmentedNav}
-              aria-label="Landing navigation"
-            >
-              <Link className={styles.segmentedActive} href="/explore">
-                Explore
-              </Link>
-              <Link href="/launch">Create</Link>
-              <Link href="/docs">Docs</Link>
-            </nav>
-
-            <Link className={styles.headerAction} href="/launch">
-              Create a token <span aria-hidden="true">↗</span>
             </Link>
           </header>
 
@@ -87,10 +71,12 @@ export function LandingPage() {
 
           <div className={`${styles.hero} ${styles.panelBody}`}>
             <div className={`${styles.heroCopy} ${styles.content}`}>
-              <h1 id="landing-title">
-                <span>Tokens with</span>
-                <span>behavior</span>
-                <span>in view.</span>
+              <h1
+                id="landing-title"
+                aria-label="Tokens that behave how you imagine"
+              >
+                <span aria-hidden="true">Tokens that behave</span>
+                <span aria-hidden="true">how you imagine</span>
               </h1>
               <nav className={styles.actions} aria-label="Get started">
                 <Link className={styles.primaryAction} href="/launch">
@@ -165,6 +151,10 @@ export function LandingPage() {
               >
                 <DiscordBrandIcon />
               </a>
+              {/* Keep the docs route contract without adding landing-page chrome. */}
+              <Link className={styles.docsLink} href="/docs" hidden>
+                Docs
+              </Link>
               <span id="landing-external-link-note" className={styles.srOnly}>
                 Opens in a new tab.
               </span>

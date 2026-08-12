@@ -802,6 +802,100 @@ html[data-theme="dark"] .app-frame::before {
   top: 51.8%;
 }
 
+/* Keep the same sparkle system present in the lower night margin too. */
+.atmosphere-sparkles-lower {
+  opacity: 0.78;
+}
+
+.atmosphere-sparkles-lower i:nth-child(1) {
+  --sparkle-delay: -4.8s;
+  --sparkle-duration: 11.6s;
+  left: 4.8%;
+  top: 64.5%;
+}
+
+.atmosphere-sparkles-lower i:nth-child(2) {
+  --sparkle-delay: -9.2s;
+  --sparkle-duration: 13.4s;
+  --sparkle-size: 1.25px;
+  left: 13.4%;
+  top: 82.5%;
+}
+
+.atmosphere-sparkles-lower i:nth-child(3) {
+  --sparkle-delay: -2.1s;
+  --sparkle-duration: 9.8s;
+  left: 24.7%;
+  top: 69.8%;
+}
+
+.atmosphere-sparkles-lower i:nth-child(4) {
+  --sparkle-delay: -11.4s;
+  --sparkle-duration: 14.6s;
+  --sparkle-size: 1.5px;
+  left: 36.8%;
+  top: 92.2%;
+}
+
+.atmosphere-sparkles-lower i:nth-child(5) {
+  --sparkle-delay: -5.7s;
+  --sparkle-duration: 10.9s;
+  left: 45.2%;
+  top: 77.6%;
+}
+
+.atmosphere-sparkles-lower i:nth-child(6) {
+  --sparkle-delay: -1.6s;
+  --sparkle-duration: 12.8s;
+  left: 56.5%;
+  top: 66.4%;
+}
+
+.atmosphere-sparkles-lower i:nth-child(7) {
+  --sparkle-delay: -8.6s;
+  --sparkle-duration: 9.4s;
+  --sparkle-size: 1.25px;
+  left: 63.9%;
+  top: 87.8%;
+}
+
+.atmosphere-sparkles-lower i:nth-child(8) {
+  --sparkle-delay: -3.3s;
+  --sparkle-duration: 13.9s;
+  left: 74.4%;
+  top: 73.2%;
+}
+
+.atmosphere-sparkles-lower i:nth-child(9) {
+  --sparkle-delay: -10.1s;
+  --sparkle-duration: 11.2s;
+  --sparkle-size: 1.5px;
+  left: 82.6%;
+  top: 94.3%;
+}
+
+.atmosphere-sparkles-lower i:nth-child(10) {
+  --sparkle-delay: -6.5s;
+  --sparkle-duration: 8.8s;
+  left: 89.7%;
+  top: 63.7%;
+}
+
+.atmosphere-sparkles-lower i:nth-child(11) {
+  --sparkle-delay: -12.2s;
+  --sparkle-duration: 14.2s;
+  left: 95.1%;
+  top: 80.6%;
+}
+
+.atmosphere-sparkles-lower i:nth-child(12) {
+  --sparkle-delay: -4.1s;
+  --sparkle-duration: 10.4s;
+  --sparkle-size: 0.8px;
+  left: 31.4%;
+  top: 97.1%;
+}
+
 .atmosphere-botanicals {
   overflow: hidden;
   z-index: 2;
