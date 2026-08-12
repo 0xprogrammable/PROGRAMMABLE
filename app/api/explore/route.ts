@@ -329,6 +329,33 @@ function hasVerifiedBitqueryPrice(entries: readonly ValuedExploreEntry[]): boole
   });
 }
 
+function hasTemporaryMarketSourceFailure(
+  entries: readonly ValuedExploreEntry[],
+): boolean {
+  return entries.some((entry) =>
+    entry.valuation.status === "unavailable" &&
+    entry.valuation.reason === "source-unavailable"
+  );
+}
+
+function exploreResponseCacheControl(input: Readonly<{
+  dataQuality: ReturnType<typeof buildExploreDataQuality>;
+  entries: readonly ValuedExploreEntry[];
+  status: "ready" | "not-deployed";
+}>): string {
+  // Do not cache a degraded source read. Known stale or unavailable market
+  // observations remain honest in the payload and are safe to reuse briefly.
+  if (
+    input.dataQuality.launchIdentity.status !== "current" ||
+    hasTemporaryMarketSourceFailure(input.entries)
+  ) {
+    return "no-store";
+  }
+  return input.status === "ready"
+    ? "public, max-age=0, s-maxage=2, stale-while-revalidate=5"
+    : "public, max-age=0, s-maxage=30";
+}
+
 function paginateEntries(
   ordered: readonly ExploreEntry[],
   input: Readonly<{ page: number; pageSize: number }>,
@@ -372,6 +399,61 @@ export function paginateExploreEntriesV1(
   const newest = sortExploreEntries(filtered, "newest")
     .filter(({ id }) => !topIds.has(id));
   return paginateEntries([...top, ...newest], input);
+}
+
+async function valueExplorePage(input: Readonly<{
+  identityEntries: readonly ExploreEntry[];
+  options: Readonly<{
+    page: number;
+    pageSize: number;
+    query: string;
+    socials: "yes" | "no" | null;
+    sort: ExploreSort;
+  }>;
+  signal: AbortSignal;
+}>) {
+  const requiresGlobalMarketRanking =
+    input.options.sort === "market-cap" ||
+    input.options.sort === "market-cap-asc";
+  const identityPage = requiresGlobalMarketRanking
+    ? null
+    : paginateExploreEntriesV1(input.identityEntries, {
+        ...input.options,
+        query: "",
+        socials: null,
+        topThenNewest: false,
+      });
+  const entriesToValue = identityPage?.tokens ?? input.identityEntries;
+  const [hydratedEntries, marketByToken] = await Promise.all([
+    hydrateMissingCanonicalTokenSupplyV1(entriesToValue),
+    readBitqueryTokenMarketDataV1(
+      exploreEntriesMarketIdentitiesV1(entriesToValue),
+      { signal: input.signal },
+    ),
+  ]);
+  const valuedEntries = valueExploreEntriesWithMarketData(
+    hydratedEntries,
+    marketByToken,
+  );
+  if (identityPage !== null) {
+    return {
+      entries: valuedEntries,
+      paginated: { ...identityPage, tokens: valuedEntries },
+    };
+  }
+  const useTopValuationView =
+    input.options.sort === "market-cap" &&
+    input.options.query.length === 0 &&
+    input.options.socials === null;
+  return {
+    entries: valuedEntries,
+    paginated: paginateExploreEntriesV1(valuedEntries, {
+      ...input.options,
+      query: "",
+      socials: null,
+      topThenNewest: useTopValuationView,
+    }),
+  };
 }
 
 export async function GET(request: NextRequest) {
@@ -451,24 +533,10 @@ export async function GET(request: NextRequest) {
       options.query,
       options.socials,
     );
-    const identityEntries = await hydrateMissingCanonicalTokenSupplyV1(
-      requestedIdentityEntries,
-    );
-    const marketByToken = await readBitqueryTokenMarketDataV1(
-      exploreEntriesMarketIdentitiesV1(identityEntries),
-      { signal: request.signal },
-    );
-    const entries = valueExploreEntriesWithMarketData(
-      identityEntries,
-      marketByToken,
-    );
-    const useTopValuationView =
-      options.sort === "market-cap" &&
-      options.query.length === 0 &&
-      options.socials === null;
-    const paginated = paginateExploreEntriesV1(entries, {
-      ...options,
-      topThenNewest: useTopValuationView,
+    const { entries, paginated } = await valueExplorePage({
+      identityEntries: requestedIdentityEntries,
+      options,
+      signal: request.signal,
     });
     const pageEntries = paginated.tokens as ValuedExploreEntry[];
 
@@ -543,11 +611,11 @@ export async function GET(request: NextRequest) {
       {
         headers: {
           "Cache-Control":
-            customProjects.length > 0 || dataQuality.status !== "complete"
-              ? "no-store"
-              : page.status === "ready"
-              ? "public, max-age=0, s-maxage=2, stale-while-revalidate=5"
-              : "public, max-age=0, s-maxage=30",
+            exploreResponseCacheControl({
+              dataQuality,
+              entries,
+              status: page.status,
+            }),
           "X-Programmable-Data-Quality": dataQuality.status,
           "X-Programmable-Market-Source": "bitquery",
           ...(dataQuality.valuation.asOfTime

@@ -852,6 +852,23 @@ export function buildChartVolumeMetric(
   };
 }
 
+export function getValuationMetricLabel(
+  valuation: ExploreValuation | undefined,
+): string {
+  const isMarketCap = valuation?.status === "available" &&
+    valuation.metric === "market-cap" &&
+    valuation.supplyBasis === "circulating";
+  const currentLabel = isMarketCap ? "Market cap" : "FDV";
+
+  if (valuation?.status !== "available" || valuation.freshness === "current") {
+    return currentLabel;
+  }
+  if (valuation.freshness === "stale") {
+    return isMarketCap ? "Last verified market cap" : "Last verified FDV";
+  }
+  return isMarketCap ? "Unverified market cap" : "Unverified FDV";
+}
+
 export function buildTokenDetailMetrics(
   token: LauncherToken & Readonly<{
     valuation?: ExploreValuation;
@@ -890,14 +907,7 @@ export function buildTokenDetailMetrics(
     : null;
   const values: Array<TokenMetric | null> = [
     {
-      label:
-        valuation.status === "available" && valuation.freshness === "stale"
-          ? valuation.metric === "market-cap"
-            ? "Last verified market cap"
-            : "Last verified FDV"
-          : valuation.status === "available" && valuation.metric === "market-cap"
-            ? "Market cap"
-            : "FDV",
+      label: getValuationMetricLabel(valuation),
       value: formattedFdv ?? "Unavailable",
     },
     {
@@ -1771,10 +1781,7 @@ function customMarketMetrics(project: DetailCustomProject): TokenMetric[] {
           : "Unavailable";
   return [
     {
-      label:
-        valuation?.status === "available" && valuation.metric === "market-cap"
-          ? "Market cap"
-          : "FDV",
+      label: getValuationMetricLabel(valuation),
       value: valuationValue ?? "Unavailable",
     },
     { label: "Market data", value: marketStatus },
@@ -2050,10 +2057,14 @@ export function TokenDetailView({ address }: { address: string }) {
 
   useEffect(() => {
     if (!normalizedAddress || preview) return;
+    void preloadTokenChart(normalizedAddress, "1d");
+  }, [normalizedAddress, preview]);
+
+  useEffect(() => {
+    if (!normalizedAddress || preview) return;
 
     const tokenAddress = normalizedAddress;
     const controller = new AbortController();
-    void preloadTokenChart(tokenAddress, "1d");
 
     async function loadToken() {
       try {

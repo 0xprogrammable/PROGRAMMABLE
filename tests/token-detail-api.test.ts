@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   getOnchainDeployment: vi.fn(),
   readDurableExploreModel: vi.fn(),
   readBitqueryTokenMarketDataV1: vi.fn(),
+  hydrateMissingCanonicalTokenSupplyV1: vi.fn(),
   safeAlchemyError: vi.fn((error) => error),
 }));
 
@@ -66,6 +67,11 @@ vi.mock("../lib/onchain/durable-model", () => ({
 
 vi.mock("../lib/market-data/bitquery.server", () => ({
   readBitqueryTokenMarketDataV1: mocks.readBitqueryTokenMarketDataV1,
+}));
+
+vi.mock("../lib/market-data/canonical-token-supply.server", () => ({
+  hydrateMissingCanonicalTokenSupplyV1:
+    mocks.hydrateMissingCanonicalTokenSupplyV1,
 }));
 
 import { GET } from "../app/api/explore/token/route";
@@ -189,6 +195,9 @@ describe("token detail Bitquery market read", () => {
       async (identities: readonly MarketDataIdentityV1[]) =>
         bitqueryMarketData(identities),
     );
+    mocks.hydrateMissingCanonicalTokenSupplyV1.mockImplementation(
+      async (entries: readonly unknown[]) => [...entries],
+    );
   });
 
   it("reads Bitquery market data only for the canonical token PoolId", async () => {
@@ -291,6 +300,42 @@ describe("token detail Bitquery market read", () => {
     expect(response.headers.get("Cache-Control")).toBe(
       "public, max-age=0, s-maxage=2, stale-while-revalidate=5",
     );
+  });
+
+  it("starts the independent market read while supply hydration is pending", async () => {
+    const canonical = token(TOKEN_ADDRESS);
+    mocks.readAlchemyExploreModel.mockResolvedValue({
+      status: "ready",
+      tokens: [canonical],
+      snapshot,
+      launchDiscoverySnapshot,
+      creatorClaims: [],
+      launcherFeesAccruedWei: "0",
+      launcherFeesAccruedEth: "0",
+    } satisfies ExploreReadModel);
+    let releaseHydration: ((entries: readonly LauncherToken[]) => void)
+      | undefined;
+    mocks.hydrateMissingCanonicalTokenSupplyV1.mockReturnValue(
+      new Promise((resolve) => {
+        releaseHydration = resolve;
+      }),
+    );
+
+    const responseRead = GET(
+      new NextRequest(
+        `http://localhost/api/explore/token?address=${TOKEN_ADDRESS}`,
+      ),
+    );
+    try {
+      await vi.waitFor(() => {
+        expect(mocks.readBitqueryTokenMarketDataV1).toHaveBeenCalledTimes(1);
+      });
+    } finally {
+      releaseHydration?.([canonical]);
+    }
+
+    const response = await responseRead;
+    expect(response.status).toBe(200);
   });
 
   it("reports detail FDV at the verified Bitquery time, not the stale launch snapshot", async () => {

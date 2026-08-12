@@ -202,17 +202,17 @@ export async function GET(request: NextRequest) {
     const unresolvedIdentityEntry = token
       ? canonicalTokenExploreEntryV1(token)
       : customProject ?? null;
-    const identityEntry = unresolvedIdentityEntry
-      ? (await hydrateMissingCanonicalTokenSupplyV1([
-          unresolvedIdentityEntry,
-        ]))[0] ?? unresolvedIdentityEntry
-      : null;
-    const marketByToken = identityEntry
-      ? await readBitqueryTokenMarketDataV1(
-          exploreEntryMarketIdentitiesV1(identityEntry),
-          { signal: request.signal },
-        )
-      : new Map<string, TokenMarketDataV1>();
+    const [identityEntry, marketByToken] = unresolvedIdentityEntry
+      ? await Promise.all([
+          hydrateMissingCanonicalTokenSupplyV1([
+            unresolvedIdentityEntry,
+          ]).then((entries) => entries[0] ?? unresolvedIdentityEntry),
+          readBitqueryTokenMarketDataV1(
+            exploreEntryMarketIdentitiesV1(unresolvedIdentityEntry),
+            { signal: request.signal },
+          ),
+        ])
+      : [null, new Map<string, TokenMarketDataV1>()] as const;
     const marketData = identityEntry?.tokenAddress
       ? marketByToken.get(identityEntry.tokenAddress.toLowerCase())
       : undefined;

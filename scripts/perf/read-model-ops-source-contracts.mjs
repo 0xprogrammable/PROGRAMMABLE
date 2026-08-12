@@ -977,6 +977,9 @@ export function evaluateReadModelOperationsSourceContracts(
   const bitqueryGoldenParity = source(
     "scripts/perf/bitquery-golden-market-parity.mjs",
   ) ?? "";
+  const bitqueryHistoricalRelease = source(
+    "scripts/perf/bitquery-historical-release-gate.mjs",
+  ) ?? "";
   const productionBinding = source(
     "scripts/perf/read-model-production-binding.mjs",
   ) ?? "";
@@ -1217,6 +1220,10 @@ export function evaluateReadModelOperationsSourceContracts(
         "/api/explore?limit=20&page=1&q=${goldenTokenAddress}&sort=market-cap",
       ) &&
       stagedBitquerySmokeBlock.includes(
+        "staged Explore exposed the non-public PCAN release canary",
+      ) &&
+      stagedBitquerySmokeBlock.includes("goldenSearch.total !== 0") &&
+      stagedBitquerySmokeBlock.includes(
         "/api/explore/token/chart?address=${goldenTokenAddress}&range=all",
       ) &&
       stagedBitquerySmokeBlock.includes(
@@ -1249,7 +1256,43 @@ export function evaluateReadModelOperationsSourceContracts(
       stagedBitquerySmokeBlock.includes(
         'valuation.reason === "waiting-for-first-trade"',
       ) &&
-      !stagedBitquerySmokeBlock.includes("if (currentFdvCount < 1) {") &&
+      stagedBitquerySmokeBlock.includes(
+        'tokenAddress === goldenTokenAddress',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        '!/^0x[0-9a-f]{64}$/.test(',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        'token.marketData.primaryPoolId ?? ""',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        'primary.identity?.poolId !== token.marketData.primaryPoolId',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        'primary.identity?.protocol !== "uniswap_v4"',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        '!positiveInteger(primary.liquidity?.valueUsdWad)',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        '!positiveInteger(primary.liquidity?.asOfBlock)',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        'primary.valuation.valueUsdWad !== valuation.valueWad',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        'primary.liquidity?.asOfTime !== valuation.asOfTime',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        '!currentMarketTime(primary.liquidity?.asOfTime)',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        '"staged Bitquery current public FDV lacks exact primary-pool liquidity evidence"',
+      ) &&
+      stagedBitquerySmokeBlock.includes("if (currentFdvCount < 1) {") &&
+      stagedBitquerySmokeBlock.includes(
+        '"staged Bitquery market path has no current public non-PCAN FDV with exact primary-pool liquidity evidence"',
+      ) &&
       stagedBitquerySmokeBlock.includes(
         '"staged Bitquery current Explore and detail FDV are not identical"',
       ) &&
@@ -1263,6 +1306,12 @@ export function evaluateReadModelOperationsSourceContracts(
         '"./scripts/perf/bitquery-golden-market-parity.mjs"',
       ) &&
       stagedBitquerySmokeBlock.includes(
+        '"./scripts/perf/bitquery-historical-release-gate.mjs"',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        "const boundedStaleMarketTime = boundedStaleMarketTimeV1",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
         "await verifyBitqueryGoldenMarketParityV1({",
       ) &&
       bitqueryGoldenParity.includes(
@@ -1273,19 +1322,82 @@ export function evaluateReadModelOperationsSourceContracts(
       bitqueryGoldenParity.includes("const MINIMUM_CONFIRMATIONS = 12n") &&
       bitqueryGoldenParity.includes("sameObservation(first, second)") &&
       bitqueryGoldenParity.includes(
+        'function getLiquidity(bytes32 poolId) view returns (uint128 liquidity)',
+      ) &&
+      bitqueryGoldenParity.includes("observation.poolLiquidity <= 0n") &&
+      bitqueryGoldenParity.includes(
+        "historicalPoolLiquidity: first.poolLiquidity.toString()",
+      ) &&
+      bitqueryGoldenParity.includes(
+        "tradeTime !== Number(first.blockTimestamp) * 1_000",
+      ) &&
+      !bitqueryGoldenParity.includes("pool?.liquidity?.valueUsdWad") &&
+      bitqueryGoldenParity.includes(
         "Bitquery golden price is outside independent onchain tolerance",
       ) &&
+      bitqueryHistoricalRelease.includes(
+        "const MAXIMUM_STALE_AGE_MS = 24 * 60 * 60_000",
+      ) &&
+      bitqueryHistoricalRelease.includes(
+        "const MAXIMUM_DEFERRED_PCAN_AGE_MS = 96 * 60 * 60_000",
+      ) &&
+      bitqueryHistoricalRelease.includes(
+        "maximumDeferredPcanAgeMs: MAXIMUM_DEFERRED_PCAN_AGE_MS",
+      ) &&
+      bitqueryHistoricalRelease.includes(
+        "nowMs - Date.parse(valuation.asOfTime) > MAXIMUM_DEFERRED_PCAN_AGE_MS",
+      ) &&
+      bitqueryHistoricalRelease.includes(
+        'throw new Error("historical PCAN release evidence exceeds the 96 hour ceiling")',
+      ) &&
+      bitqueryHistoricalRelease.includes(
+        "export function classifyBitqueryStaleMarketReleaseV1",
+      ) &&
+      bitqueryHistoricalRelease.includes(
+        "export function verifyBitqueryHistoricalGoldenReleaseV1",
+      ) &&
+      bitqueryHistoricalRelease.includes(
+        'parity?.schemaVersion !== "programmable.bitquery-golden-market-parity.v1"',
+      ) &&
+      bitqueryHistoricalRelease.includes(
+        'market?.schemaVersion !== "programmable.market-data.v1"',
+      ) &&
+      bitqueryHistoricalRelease.includes(
+        "poolValuation.valueUsdWad !== expectedValue",
+      ) &&
+      bitqueryHistoricalRelease.includes(
+        "chartValuation.valueUsdWad !== expectedValue",
+      ) &&
+      bitqueryHistoricalRelease.includes(
+        "!positiveInteger(parity.historicalPoolLiquidity)",
+      ) &&
+      bitqueryHistoricalRelease.includes(
+        "chart?.identity?.poolId !== GOLDEN_POOL_ID",
+      ) &&
+      bitqueryHistoricalRelease.includes(
+        "lastPoint?.blockNumber !== expectedBlock",
+      ) &&
+      bitqueryHistoricalRelease.includes("chartPrice !== expectedPrice") &&
+      bitqueryHistoricalRelease.includes("parity.confirmations < MINIMUM_CONFIRMATIONS") &&
       stagedBitquerySmokeBlock.includes(
         "const historicalPaidPathVerified =",
       ) &&
-      stagedBitquerySmokeBlock.includes("goldenParity.confirmations >= 12") &&
+      stagedBitquerySmokeBlock.includes(
+        "verifyBitqueryHistoricalGoldenReleaseV1({",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        '"programmable.bitquery-historical-release.v1"',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        "historicalGoldenRelease.confirmations >= 12",
+      ) &&
       stagedBitquerySmokeBlock.includes(
         'goldenChart.readStatus !== "live"',
       ) &&
       stagedBitquerySmokeBlock.includes(
         'goldenChart.readStatus === "live"',
       ) &&
-      stagedBitquerySmokeBlock.includes(
+      !stagedBitquerySmokeBlock.includes(
         "currentFdvCount < 1 && !historicalPaidPathVerified",
       ) &&
       stagedBitquerySmokeBlock.includes(
@@ -1450,10 +1562,47 @@ export function evaluateReadModelOperationsSourceContracts(
       ) &&
       postPromotion.includes("exactBitqueryHeaders") &&
       postPromotion.includes("honestExploreValuations") &&
+      postPromotion.includes("exactCurrentPublicFdvLiquidity") &&
       postPromotion.includes("exactGoldenDetail") &&
+      postPromotion.includes("exactGoldenSearch") &&
       postPromotion.includes("exactGoldenChart") &&
+      postPromotion.includes(
+        "const boundedStaleMarketTime = boundedStaleMarketTimeV1",
+      ) &&
       postPromotion.includes('chart.readStatus !== "live"') &&
       postPromotion.includes("verifyBitqueryGoldenMarketParityV1") &&
+      postPromotion.includes("verifyBitqueryHistoricalGoldenReleaseV1") &&
+      postPromotion.includes('id: "production-bitquery-canary-hidden"') &&
+      postPromotion.includes(
+        "return currentCount > 0 &&",
+      ) &&
+      postPromotion.includes(
+        'tokenAddress !== GOLDEN_TOKEN_ADDRESS',
+      ) &&
+      postPromotion.includes(
+        'primary.identity.poolId === market.primaryPoolId',
+      ) &&
+      postPromotion.includes(
+        'primary.identity.protocol === "uniswap_v4"',
+      ) &&
+      postPromotion.includes(
+        'positiveInteger(liquidity.valueUsdWad)',
+      ) &&
+      postPromotion.includes(
+        'positiveInteger(liquidity.asOfBlock)',
+      ) &&
+      postPromotion.includes(
+        'poolValuation.valueUsdWad === valuation.valueWad',
+      ) &&
+      postPromotion.includes(
+        'liquidity.asOfTime === valuation.asOfTime',
+      ) &&
+      postPromotion.includes(
+        'currentMarketTime(liquidity.asOfTime)',
+      ) &&
+      postPromotion.includes(
+        'currentMarketTime(marketAsOf)',
+      ) &&
       postPromotion.includes(
         'id: "production-bitquery-golden-independent-parity"',
       ) &&
