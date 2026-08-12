@@ -61,14 +61,10 @@
   height: 56px;
   justify-content: center;
   overflow: hidden;
-  outline: 1px solid color-mix(in srgb, black 9%, transparent);
+  outline: 1px solid var(--liquid-glass-border);
   outline-offset: -1px;
   position: relative;
   width: 56px;
-}
-
-:global(html[data-theme="dark"]) .avatar {
-  outline-color: color-mix(in srgb, white 10%, transparent);
 }
 
 .avatar img {
@@ -936,15 +932,11 @@
   border-radius: 10px;
   flex: none;
   height: 42px;
-  outline: 1px solid color-mix(in srgb, black 9%, transparent);
+  outline: 1px solid var(--liquid-glass-border);
   outline-offset: -1px;
   overflow: hidden;
   position: relative;
   width: 42px;
-}
-
-:global(html[data-theme="dark"]) .claimArt {
-  outline-color: color-mix(in srgb, white 10%, transparent);
 }
 
 .claimArt img {
@@ -1856,44 +1848,7 @@
   }
 }
 
-/* Quiet, borderless night surfaces. Controls keep their own boundaries and
- * focus rings; large layout containers use depth and spacing instead. */
-.connectCard,
-.profileWorkspace,
-.sessionLoadingWorkspace {
-  border: 0 !important;
-  box-shadow: 0 28px 78px rgb(0 0 0 / 0.34) !important;
-}
-
 .connectCard p,
 .launchesHeader p {
   display: none;
-}
-
-.heroEditing,
-.customProjects,
-.customProjectCard,
-.launchesPanel,
-.claimablePanel,
-.claimDialogSurface {
-  border-color: transparent;
-  box-shadow: 0 20px 56px rgb(0 0 0 / 0.2);
-}
-
-.launchRow {
-  border-color: transparent;
-}
-
-.avatar,
-.claimArt {
-  outline: 0;
-}
-
-.feeComposition {
-  border: 0;
-}
-
-.claimDialogGroup + .claimDialogGroup {
-  border-block-start: 0;
-  padding-block-start: 0;
 }
