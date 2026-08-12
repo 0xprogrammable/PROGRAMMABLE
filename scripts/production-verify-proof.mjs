@@ -9,7 +9,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export const PRODUCTION_VERIFY_PROOF_SCHEMA_VERSION =
-  "programmable.production-verify-proof.v1";
+  "programmable.production-verify-proof.v2";
 export const PRODUCTION_VERIFY_PROOF_MAX_AGE_MS = 6 * 60 * 60 * 1_000;
 export const PRODUCTION_REPOSITORY = "0xprogrammable/programmable";
 export const PRODUCTION_REPOSITORY_ID = 1_314_365_508;
@@ -18,14 +18,23 @@ export const VERIFY_WORKFLOW_PATH = ".github/workflows/verify.yml";
 export const VERIFY_WORKFLOW_NAME = "Verify";
 export const VERIFY_SCOPE_JOB_NAME = "Change scope";
 export const VERIFY_AGGREGATE_JOB_NAME = "Verify aggregate";
-export const VERIFY_PROOF_JOB_NAME = "Bind full production Verify proof";
+export const VERIFY_PROOF_JOB_NAME = "Bind production Verify proof";
+
+export const PRODUCTION_VERIFY_SCOPE_KEYS = Object.freeze([
+  "contracts",
+  "database",
+  "dependencies",
+  "indexer",
+  "interface",
+  "read_model",
+]);
 
 export const REQUIRED_PRODUCTION_VERIFY_CHECKS = Object.freeze([
-  Object.freeze({ id: "secret-scan", name: "Credential leak gate" }),
-  Object.freeze({ id: "indexer", name: "Realtime indexer" }),
-  Object.freeze({ id: "database-pglite", name: "Database (PGlite)" }),
-  Object.freeze({ id: "interface", name: "Interface" }),
-  Object.freeze({ id: "contracts", name: "Contracts" }),
+  Object.freeze({ id: "secret-scan", name: "Credential leak gate", scopeKey: null }),
+  Object.freeze({ id: "indexer", name: "Realtime indexer", scopeKey: "indexer" }),
+  Object.freeze({ id: "database-pglite", name: "Database (PGlite)", scopeKey: "database" }),
+  Object.freeze({ id: "interface", name: "Interface", scopeKey: "interface" }),
+  Object.freeze({ id: "contracts", name: "Contracts", scopeKey: "contracts" }),
 ]);
 
 const COMMIT = /^[0-9a-f]{40}$/u;
@@ -58,13 +67,21 @@ export function buildProductionVerifyProofV1(input) {
   requirePositiveInteger(input.runAttempt, "run attempt");
   requireExact(input.eventName, "push", "workflow event");
 
+  const scope = validateProductionVerifyScope(input.scopeResults);
   const checks = REQUIRED_PRODUCTION_VERIFY_CHECKS.map((check) => {
+    const required = check.scopeKey === null ? true : scope[check.scopeKey];
+    const expectedResult = required ? "success" : "skipped";
     requireExact(
       input.checkResults?.[check.id],
-      "success",
+      expectedResult,
       `${check.name} result`,
     );
-    return Object.freeze({ ...check, conclusion: "success" });
+    return Object.freeze({
+      id: check.id,
+      name: check.name,
+      required,
+      conclusion: expectedResult,
+    });
   });
   assertExactKeys(
     input.checkResults,
@@ -83,6 +100,7 @@ export function buildProductionVerifyProofV1(input) {
       commitSha: input.commitSha,
       treeSha: input.treeSha,
     }),
+    scope,
     workflow: Object.freeze({
       path: VERIFY_WORKFLOW_PATH,
       ref: input.workflowRef,
@@ -132,7 +150,7 @@ export function parseProductionVerifyProofV1(bytes, expected) {
 export function validateProductionVerifyProofV1(proof, expected) {
   assertExactKeys(
     proof,
-    ["schemaVersion", "repository", "source", "workflow", "run", "checks"],
+    ["schemaVersion", "repository", "source", "scope", "workflow", "run", "checks"],
     "proof",
   );
   requireExact(
@@ -157,6 +175,7 @@ export function validateProductionVerifyProofV1(proof, expected) {
   requirePattern(proof.source.treeSha, COMMIT, "proof tree");
   requireExact(proof.source.commitSha, expected.commitSha, "proof commit");
   requireExact(proof.source.treeSha, expected.treeSha, "proof tree");
+  const scope = validateProductionVerifyScope(proof.scope);
   assertExactKeys(
     proof.workflow,
     ["path", "ref", "sourceCommitSha", "fileSha256"],
@@ -193,10 +212,21 @@ export function validateProductionVerifyProofV1(proof, expected) {
   }
   for (const [index, expectedCheck] of REQUIRED_PRODUCTION_VERIFY_CHECKS.entries()) {
     const check = proof.checks[index];
-    assertExactKeys(check, ["id", "name", "conclusion"], "proof check");
+    assertExactKeys(check, ["id", "name", "required", "conclusion"], "proof check");
     requireExact(check.id, expectedCheck.id, "proof check ID");
     requireExact(check.name, expectedCheck.name, "proof check name");
-    requireExact(check.conclusion, "success", `${expectedCheck.name} conclusion`);
+    requireExact(
+      check.required,
+      expectedCheck.scopeKey === null ? true : scope[expectedCheck.scopeKey],
+      `${expectedCheck.name} requirement`,
+    );
+    const expectedRequired =
+      expectedCheck.scopeKey === null ? true : scope[expectedCheck.scopeKey];
+    requireExact(
+      check.conclusion,
+      expectedRequired ? "success" : "skipped",
+      `${expectedCheck.name} conclusion`,
+    );
   }
   return true;
 }
@@ -270,7 +300,7 @@ export async function resolveProductionVerifyProofFromGitHubV1(input) {
   const proofCompletedAt = validateVerifyJobs(jobs, run);
   const ageMs = input.nowMs - proofCompletedAt;
   if (ageMs < 0 || ageMs > input.maxAgeMs) {
-    throw new Error("Latest full production Verify proof is stale.");
+    throw new Error("Latest production Verify proof is stale.");
   }
   const artifact = validateVerifyArtifact(artifacts, run);
 
@@ -319,7 +349,7 @@ function selectLatestExactVerifyRun(response, expected) {
     || !Array.isArray(response.workflow_runs)
     || response.workflow_runs.length < 1
   ) {
-    throw new Error("No full production Verify run exists for the dispatch commit.");
+    throw new Error("No production Verify run exists for the dispatch commit.");
   }
   const runs = [...response.workflow_runs].sort((left, right) => {
     const timeDifference = parseTimestamp(right.run_started_at, "run start")
@@ -348,7 +378,7 @@ function selectLatestExactVerifyRun(response, expected) {
     || run.head_repository?.full_name !== PRODUCTION_REPOSITORY
     || run.html_url !== `${run.repository.html_url}/actions/runs/${run.id}`
   ) {
-    throw new Error("Latest full production Verify run is canceled, incomplete, or mismatched.");
+    throw new Error("Latest production Verify run is canceled, incomplete, or mismatched.");
   }
   parseTimestamp(run.updated_at, "run update");
   return run;
@@ -367,7 +397,7 @@ function validateVerifyJobs(response, run) {
     || !Array.isArray(response.jobs)
     || response.jobs.length !== expectedNames.length
   ) {
-    throw new Error("Full production Verify job inventory is incomplete or unexpected.");
+    throw new Error("Production Verify job inventory is incomplete or unexpected.");
   }
   const jobsByName = new Map();
   for (const job of response.jobs) {
@@ -389,7 +419,7 @@ function validateVerifyJobs(response, run) {
       || job.labels.length !== 1
       || job.labels[0] !== "ubuntu-latest"
     ) {
-      throw new Error("Full production Verify contains a failed or mismatched job.");
+      throw new Error("Production Verify contains a failed or mismatched job.");
     }
     parseTimestamp(job.started_at, `${job.name} start`);
     parseTimestamp(job.completed_at, `${job.name} completion`);
@@ -399,7 +429,7 @@ function validateVerifyJobs(response, run) {
     expectedNames.some((name) => !jobsByName.has(name))
     || [...jobsByName.keys()].some((name) => !expectedNames.includes(name))
   ) {
-    throw new Error("Full production Verify job names do not match the closed inventory.");
+    throw new Error("Production Verify job names do not match the closed inventory.");
   }
   return parseTimestamp(
     jobsByName.get(VERIFY_PROOF_JOB_NAME).completed_at,
@@ -552,6 +582,15 @@ async function runCli() {
         "Actions run attempt",
       ),
       eventName: process.env.GITHUB_EVENT_NAME,
+      scopeResults: Object.fromEntries(
+        PRODUCTION_VERIFY_SCOPE_KEYS.map((key) => [
+          key,
+          parseBoolean(
+            process.env[`PRODUCTION_VERIFY_SCOPE_${key.toUpperCase()}`],
+            `${key} scope`,
+          ),
+        ]),
+      ),
       checkResults: Object.fromEntries(
         REQUIRED_PRODUCTION_VERIFY_CHECKS.map(({ id }) => [
           id,
@@ -607,7 +646,7 @@ async function runCli() {
     const artifactDigest = requiredArgument(argumentsByName, "artifact-digest");
     requirePattern(artifactDigest, SHA256, "resolved artifact digest");
     const proofBytes = readFileSync(proofPath);
-    parseProductionVerifyProofV1(proofBytes, {
+    const proof = parseProductionVerifyProofV1(proofBytes, {
       commitSha: context.commitSha,
       treeSha: context.treeSha,
       workflowFileSha256: context.workflowFileSha256,
@@ -621,6 +660,12 @@ async function runCli() {
       verify_run_attempt: runAttempt,
       proof_sha256: prefixedSha256(proofBytes),
       artifact_digest: artifactDigest,
+      ...Object.fromEntries(
+        PRODUCTION_VERIFY_SCOPE_KEYS.map((key) => [
+          `verified_${key}`,
+          proof.scope[key],
+        ]),
+      ),
     });
     return;
   }
@@ -710,6 +755,24 @@ function parsePositiveInteger(value, name) {
 
 function numeric(value) {
   return Number.isSafeInteger(value) ? value : 0;
+}
+
+function parseBoolean(value, name) {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw new Error(`${name} is invalid.`);
+}
+
+function validateProductionVerifyScope(value) {
+  assertExactKeys(value, PRODUCTION_VERIFY_SCOPE_KEYS, "verification scope");
+  const scope = {};
+  for (const key of PRODUCTION_VERIFY_SCOPE_KEYS) {
+    if (typeof value[key] !== "boolean") {
+      throw new Error(`${key} verification scope is invalid.`);
+    }
+    scope[key] = value[key];
+  }
+  return Object.freeze(scope);
 }
 
 function requirePositiveInteger(value, name) {

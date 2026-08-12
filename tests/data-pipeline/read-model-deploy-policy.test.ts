@@ -654,7 +654,7 @@ describe("read-model production deploy policy", () => {
     expect(workflow).toContain("attestation_sha256");
     expect(workflow).toContain("Smoke staged Bitquery market APIs");
     expect(workflow).toContain(
-      "if: steps.read-model-policy.outputs.mode == 'alchemy-only'",
+      "if: needs.release-gate.outputs.verified_read_model == 'true' && steps.read-model-policy.outputs.mode == 'alchemy-only'",
     );
     expect(workflow).toContain(
       '"x-vercel-protection-bypass": automationBypassSecret',

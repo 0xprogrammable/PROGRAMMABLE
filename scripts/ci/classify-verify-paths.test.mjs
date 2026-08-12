@@ -49,11 +49,17 @@ test("routes ordinary website changes only to the interface lane", () => {
 });
 
 test("routes read-model API changes to interface and operations checks", () => {
-  assert.deepEqual(classifyVerifyPaths(["app/api/explore/route.ts"]), {
-    ...none,
-    interface: true,
-    read_model: true,
-  });
+  for (const path of [
+    "app/api/explore/route.ts",
+    "lib/market-data/bitquery.server.ts",
+    "lib/explore-financial-data.ts",
+  ]) {
+    assert.deepEqual(classifyVerifyPaths([path]), {
+      ...none,
+      interface: true,
+      read_model: true,
+    });
+  }
 });
 
 test("keeps contract, database, and indexer lanes independent", () => {
@@ -161,12 +167,19 @@ test("partitions every database runtime suite out of the concurrent interface ba
   assert.match(verifyCommand, /npm run test:database-runtime:ci/u);
 });
 
-test("keeps protected jobs fail closed and production pushes complete", () => {
+test("keeps protected jobs fail closed and production pushes path scoped", () => {
   const workflow = readFileSync(".github/workflows/verify.yml", "utf8");
 
   assert.match(workflow, /git diff --no-renames --name-only/u);
-  assert.match(workflow, /git show "\$BASE_SHA:scripts\/ci\/classify-verify-paths\.mjs"/u);
-  assert.match(workflow, /FORCE_ALL: \$\{\{ github\.event_name == 'push' \}\}/u);
+  assert.match(
+    workflow,
+    /git show "\$BASE_SHA:scripts\/ci\/classify-verify-paths\.mjs"/u,
+  );
+  assert.doesNotMatch(workflow, /FORCE_ALL:/u);
+  assert.match(
+    workflow,
+    /BASE_SHA: \$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.event\.before \}\}/u,
+  );
   assert.doesNotMatch(workflow, /run: npm run verify\n/u);
   assert.match(
     workflow,
@@ -177,7 +190,10 @@ test("keeps protected jobs fail closed and production pushes complete", () => {
     workflow.match(/name: Require successful change classification/gmu)?.length,
     4,
   );
-  assert.equal(workflow.match(/if: needs\.scope\.result != 'success'/gmu)?.length, 4);
+  assert.equal(
+    workflow.match(/if: needs\.scope\.result != 'success'/gmu)?.length,
+    4,
+  );
 
   for (const name of [
     "Credential leak gate",
@@ -186,9 +202,13 @@ test("keeps protected jobs fail closed and production pushes complete", () => {
     "Interface",
     "Contracts",
   ]) {
-    assert.match(workflow, new RegExp(`name: ${name.replace(/[()]/gu, "\\$&")}`));
+    assert.match(
+      workflow,
+      new RegExp(`name: ${name.replace(/[()]/gu, "\\$&")}`),
+    );
   }
   assert.match(workflow, /name: Verify aggregate/u);
+  assert.match(workflow, /name: Bind production Verify proof/u);
   for (const dependency of [
     "scope",
     "secret-scan",

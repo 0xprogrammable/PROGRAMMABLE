@@ -37,13 +37,12 @@ jobs:
         id: scope
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-          FORCE_ALL: ${{ github.event_name == 'push' }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         shell: bash
         run: |
           set -euo pipefail
 
-          if [[ "$FORCE_ALL" == "true" ]] || [[ -z "${BASE_SHA:-}" || "$BASE_SHA" =~ ^0+$ ]] || ! git cat-file -e "$BASE_SHA^{commit}"; then
+          if [[ -z "${BASE_SHA:-}" || "$BASE_SHA" =~ ^0+$ ]] || ! git cat-file -e "$BASE_SHA^{commit}"; then
             node scripts/ci/classify-verify-paths.mjs --all >> "$GITHUB_OUTPUT"
           else
             git diff --no-renames --name-only "$BASE_SHA" "$HEAD_SHA" > "$RUNNER_TEMP/changed-paths.txt"
@@ -268,9 +267,10 @@ jobs:
         run: echo "No contract paths changed."
 
   production-proof:
-    name: Bind full production Verify proof
+    name: Bind production Verify proof
     if: github.event_name == 'push' && github.ref == 'refs/heads/production'
     needs:
+      - scope
       - secret-scan
       - indexer
       - database-pglite
@@ -297,8 +297,14 @@ jobs:
         with:
           node-version: 24.14.0
 
-      - name: Create exact full production Verify proof
+      - name: Create exact production Verify proof
         env:
+          PRODUCTION_VERIFY_SCOPE_CONTRACTS: ${{ needs.scope.outputs.contracts }}
+          PRODUCTION_VERIFY_SCOPE_DATABASE: ${{ needs.scope.outputs.database }}
+          PRODUCTION_VERIFY_SCOPE_DEPENDENCIES: ${{ needs.scope.outputs.dependencies }}
+          PRODUCTION_VERIFY_SCOPE_INDEXER: ${{ needs.scope.outputs.indexer }}
+          PRODUCTION_VERIFY_SCOPE_INTERFACE: ${{ needs.scope.outputs.interface }}
+          PRODUCTION_VERIFY_SCOPE_READ_MODEL: ${{ needs.scope.outputs.read_model }}
           PRODUCTION_VERIFY_SECRET_SCAN_RESULT: ${{ needs.secret-scan.result }}
           PRODUCTION_VERIFY_INDEXER_RESULT: ${{ needs.indexer.result }}
           PRODUCTION_VERIFY_DATABASE_PGLITE_RESULT: ${{ needs.database-pglite.result }}
@@ -309,13 +315,13 @@ jobs:
           --repository-root "$GITHUB_WORKSPACE"
           --output "$RUNNER_TEMP/production-verify-proof.json"
 
-      - name: Attest exact full production Verify proof
+      - name: Attest exact production Verify proof
         id: attest-proof
         uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
         with:
           subject-path: ${{ runner.temp }}/production-verify-proof.json
 
-      - name: Preserve immutable full production Verify proof
+      - name: Preserve immutable production Verify proof
         id: upload-proof
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -324,13 +330,13 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Record exact full production Verify proof
+      - name: Record exact production Verify proof
         env:
           ATTESTATION_URL: ${{ steps.attest-proof.outputs.attestation-url }}
           ARTIFACT_DIGEST: ${{ steps.upload-proof.outputs.artifact-digest }}
         run: |
           {
-            echo "## Full production Verify proof"
+            echo "## Production Verify proof"
             echo
             echo "- Commit: \`$GITHUB_SHA\`"
             echo "- Run: \`$GITHUB_RUN_ID\` attempt \`$GITHUB_RUN_ATTEMPT\`"
@@ -341,7 +347,7 @@ jobs:
   aggregate:
     # Keep one stable, always-run PR context while the lane jobs remain
     # independently addressable and path-routed. The production proof above
-    # remains separate and still binds the exact full push verification.
+    # remains separate and binds the exact path-scoped push verification.
     name: Verify aggregate
     needs:
       - scope

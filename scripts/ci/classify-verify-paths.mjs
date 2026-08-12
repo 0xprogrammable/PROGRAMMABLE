@@ -54,7 +54,9 @@ export function classifyVerifyPaths(paths, { forceAll = false } = {}) {
         path,
       ) ||
       /^(?:\.github|config|ops|releases|scripts)\//u.test(path) ||
-      /^(?:docs\/(?:operations\/releases|security)|lib\/vendor)\//u.test(path) ||
+      /^(?:docs\/(?:operations\/releases|security)|lib\/vendor)\//u.test(
+        path,
+      ) ||
       /^(?:Dockerfile|docker-compose\.ya?ml)$/u.test(path)
     ) {
       markAll(scope);
@@ -76,11 +78,7 @@ export function classifyVerifyPaths(paths, { forceAll = false } = {}) {
       continue;
     }
 
-    if (
-      /^(?:contracts\/|foundry\.toml$|remappings\.txt$)/u.test(
-        path,
-      )
-    ) {
+    if (/^(?:contracts\/|foundry\.toml$|remappings\.txt$)/u.test(path)) {
       scope.contracts = true;
       scope.interface = true;
       continue;
@@ -127,20 +125,19 @@ export function classifyVerifyPaths(paths, { forceAll = false } = {}) {
     if (/^lib\/onchain\//u.test(path)) {
       scope.contracts = true;
       scope.interface = true;
+      scope.read_model = true;
       continue;
     }
 
     if (
-      /^(?:app|assets|components|lib|public|tests)\//u.test(
-        path,
-      ) ||
+      /^(?:app|assets|components|lib|public|tests)\//u.test(path) ||
       /^(?:next-env\.d\.ts|vercel\.json)$/u.test(path)
     ) {
       scope.interface = true;
       if (
-        /^(?:app\/api\/(?:explore|ops)\/|lib\/data-pipeline\/)/u.test(
-          path,
-        ) ||
+        /^(?:app\/api\/(?:explore|ops)\/|lib\/data-pipeline\/)/u.test(path) ||
+        /^lib\/market-data\//u.test(path) ||
+        path === "lib/explore-financial-data.ts" ||
         path === "vercel.json"
       ) {
         scope.read_model = true;
