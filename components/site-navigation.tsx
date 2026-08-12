@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useId, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -9,7 +10,12 @@ import {
   GitHubBrandIcon,
   XBrandIcon,
 } from "@/components/brand-icons";
+import {
+  NavigationCloseIcon,
+  NavigationMenuIcon,
+} from "@/components/navigation-icons";
 import { WalletButton } from "@/components/wallet-provider";
+import styles from "@/components/site-navigation.module.css";
 
 const desktopNavItems = [
   { href: "/explore", label: "Explore" },
@@ -30,12 +36,47 @@ function isCurrent(pathname: string, href: string) {
 
 export function SiteHeader() {
   const pathname = usePathname();
+  const menuId = useId();
+  const headerRef = useRef<HTMLElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const [menuPath, setMenuPath] = useState<string | null>(null);
+  const menuOpen = menuPath === pathname;
+
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    const closeOnOutsidePress = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        !headerRef.current?.contains(event.target)
+      ) {
+        setMenuPath(null);
+      }
+    };
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setMenuPath(null);
+      menuButtonRef.current?.focus();
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsidePress);
+    document.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePress);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [menuOpen]);
 
   if (pathname === "/") return null;
 
   return (
-    <header className="site-header">
-      <div className="header-inner">
+    <header
+      ref={headerRef}
+      className={`site-header ${styles.siteHeader}`}
+    >
+      <div className={`header-inner ${styles.headerInner}`}>
         <div className="header-brand">
           <Link className="wordmark" href="/" aria-label="Programmable home">
             <Image
@@ -63,8 +104,8 @@ export function SiteHeader() {
           ))}
         </nav>
 
-        <div className="header-actions">
-          <div className="header-socials">
+        <div className={`header-actions ${styles.headerActions}`}>
+          <div className={`header-socials ${styles.headerSocials}`}>
             <a
               className="header-social-link"
               href="https://x.com/0xProgrammable"
@@ -119,16 +160,64 @@ export function SiteHeader() {
             </a>
           </div>
           <WalletButton compact />
+          <button
+            ref={menuButtonRef}
+            className={styles.menuButton}
+            type="button"
+            aria-controls={menuId}
+            aria-expanded={menuOpen}
+            aria-label={menuOpen ? "Close navigation" : "Open navigation"}
+            onClick={() => setMenuPath(menuOpen ? null : pathname)}
+          >
+            <span className={styles.menuIcon} aria-hidden="true">
+              <NavigationMenuIcon
+                className={menuOpen ? styles.iconHidden : styles.iconVisible}
+              />
+              <NavigationCloseIcon
+                className={menuOpen ? styles.iconVisible : styles.iconHidden}
+              />
+            </span>
+            <span>Menu</span>
+          </button>
+        </div>
+      </div>
+
+      <div
+        className={`${styles.mobileSheet} ${
+          menuOpen ? styles.mobileSheetOpen : ""
+        }`}
+      >
+        <div className={styles.mobileSheetSurface} id={menuId}>
+          <MobileNavigation
+            id={menuId}
+            open={menuOpen}
+            onNavigate={() => setMenuPath(null)}
+          />
         </div>
       </div>
     </header>
   );
 }
 
-export function MobileNavigation() {
+type MobileNavigationProps = {
+  id?: string;
+  open?: boolean;
+  onNavigate?: () => void;
+};
+
+export function MobileNavigation({
+  id,
+  open = false,
+  onNavigate,
+}: MobileNavigationProps = {}) {
   const pathname = usePathname();
 
   if (pathname === "/") return null;
+
+  // AppShell retains this export for compatibility. The responsive navigation
+  // is rendered inside SiteHeader so its visual and keyboard order stay at the
+  // top of the page.
+  if (!id) return null;
 
   return (
     <nav className="mobile-nav" aria-label="Primary navigation">
@@ -140,6 +229,8 @@ export function MobileNavigation() {
             className={current ? "active" : undefined}
             href={item.href}
             aria-current={current ? "page" : undefined}
+            tabIndex={open ? undefined : -1}
+            onClick={onNavigate}
           >
             <span>{item.label}</span>
           </Link>

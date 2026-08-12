@@ -1105,11 +1105,18 @@ function ExploreGridSkeleton() {
           key={index}
           aria-hidden="true"
         >
-          <div className={`${styles.runnerArt} ${styles.skeletonArt}`} />
-          <div className={styles.skeletonBody}>
-            <span className={styles.skeletonTitle} />
-            <span className={styles.skeletonDescription} />
+          <div className={`${styles.runnerHitArea} ${styles.skeletonHitArea}`}>
+            <div className={`${styles.runnerArt} ${styles.skeletonArt}`} />
+            <div className={`${styles.runnerBody} ${styles.skeletonBody}`}>
+              <span className={styles.skeletonTitle} />
+              <span className={styles.skeletonDescription} />
+              <span className={styles.skeletonDescriptionShort} />
+            </div>
+          </div>
+          <div className={`${styles.runnerMeta} ${styles.skeletonMetaRow}`}>
+            <span className={styles.skeletonCategory} />
             <span className={styles.skeletonMeta} />
+            <span className={styles.skeletonSocial} />
           </div>
         </article>
       ))}
@@ -1494,7 +1501,10 @@ export function ExploreView() {
     }
 
     return (
-      <div className={styles.runnerGrid}>
+      <div
+        className={`${styles.runnerGrid} ${styles.revealedGrid}`}
+        key={displayState.contentKey}
+      >
         {cards.map((token, index) => {
           const href = token.tokenAddress
             ? `/token/${token.tokenAddress}`

@@ -13,6 +13,7 @@ import {
 import { ArrowLeft, ArrowRight } from "lucide-react";
 
 import { XBrandIcon } from "@/components/brand-icons";
+import { CreateGuide } from "@/components/create-guide";
 import launchExperience from "@/components/launch-experience.module.css";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
 import { resolveImplementedLaunchModel } from "@/lib/launch-model-gating";
@@ -186,6 +187,7 @@ export function LaunchModelPicker({
         className={`launch-model-heading ${launchExperience.pickerHeading}`}
       >
         <h1>Choose your launch model</h1>
+        <CreateGuide />
       </header>
 
       <div className={`launch-model-grid ${launchExperience.modelGrid}`}>
