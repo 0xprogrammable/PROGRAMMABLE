@@ -17,10 +17,16 @@ describe("Explore UI contract", () => {
       'import { GET as readExploreResponse } from "@/app/api/explore/route"',
     );
     expect(page).toContain("await readExploreResponse(new NextRequest(");
+    expect(page).toContain("return await Promise.race([guardedRead, deadline])");
+    expect(page).toContain("controller.abort()");
+    expect(page).not.toContain("AbortSignal.timeout(");
     expect(page).not.toContain('fetch("https://programmable.market');
     expect(page).toContain("<ExploreView initialResponse={initialResponse} />");
     expect(source).toContain(
       "if (handledRequestKey.current === requestKey)",
+    );
+    expect(source).toContain(
+      "handledInitialExploreRequestKey(initialState, requestKey)",
     );
     expect(source).toContain("enabled: !preview && !loadingOnly");
   });

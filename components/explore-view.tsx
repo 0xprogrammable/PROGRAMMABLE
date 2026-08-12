@@ -784,6 +784,13 @@ export function createExploreInitialState(
   }
 }
 
+export function handledInitialExploreRequestKey(
+  state: ExploreState | null,
+  requestKey: string,
+): string | null {
+  return state?.phase === "ready" ? requestKey : null;
+}
+
 type PendingExploreRequest = {
   controller: AbortController;
   promise: Promise<ExplorePayload>;
@@ -1237,7 +1244,7 @@ export function ExploreView({
     }),
   );
   const handledRequestKey = useRef<string | null>(
-    initialState === null ? null : requestKey,
+    handledInitialExploreRequestKey(initialState, requestKey),
   );
   const [state, setState] = useState<ExploreState>(() => {
     if (initialState !== null) return initialState;

@@ -5,6 +5,7 @@ import {
   EXPLORE_TOKENS_PER_PAGE,
   EXPLORE_REFRESH_INTERVAL_MS,
   createExploreInitialState,
+  handledInitialExploreRequestKey,
   filterTokensByLaunchModel,
   filterTokensBySocialPresence,
   getTokenCards,
@@ -133,8 +134,7 @@ describe("Explore refresh state", () => {
   });
 
   it("keeps a server-side Explore failure retryable without inventing data", () => {
-    expect(
-      createExploreInitialState(
+    const initialState = createExploreInitialState(
         {
           ok: false,
           body: { error: "Launch index is catching up" },
@@ -143,13 +143,31 @@ describe("Explore refresh state", () => {
           contentKey: "initial-content-error",
           requestKey: "initial-request-error",
         },
-      ),
-    ).toEqual({
+      );
+
+    expect(initialState).toEqual({
       phase: "error",
       message: "Launch index is catching up",
       contentKey: "initial-content-error",
       requestKey: "initial-request-error",
     });
+    expect(
+      handledInitialExploreRequestKey(initialState, "initial-request-error"),
+    ).toBeNull();
+  });
+
+  it("suppresses only the successful server response hydration request", () => {
+    const initialState = createExploreInitialState(
+      { ok: true, body: payload },
+      { contentKey: "initial-content", requestKey: "initial-request" },
+    );
+
+    expect(
+      handledInitialExploreRequestKey(initialState, "initial-request"),
+    ).toBe("initial-request");
+    expect(
+      handledInitialExploreRequestKey(null, "initial-request"),
+    ).toBeNull();
   });
 
   it("uses a balanced nine-card page and compact desktop pagination", () => {

@@ -4,7 +4,10 @@ import { NextRequest } from "next/server";
 import { Suspense } from "react";
 
 import { GET as readExploreResponse } from "@/app/api/explore/route";
-import { ExploreView } from "@/components/explore-view";
+import {
+  ExploreView,
+  type ExploreInitialResponse,
+} from "@/components/explore-view";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +18,37 @@ const INITIAL_EXPLORE_QUERY = new URLSearchParams({
   page: "1",
   limit: "9",
 }).toString();
+
+function unavailableInitialExploreResponse(): ExploreInitialResponse {
+  return {
+    ok: false,
+    body: { error: "Tokens are temporarily unavailable" },
+  };
+}
+
+export async function readInitialExploreWithinDeadline(
+  read: (signal: AbortSignal) => Promise<ExploreInitialResponse>,
+  timeoutMs = INITIAL_EXPLORE_TIMEOUT_MS,
+): Promise<ExploreInitialResponse> {
+  const controller = new AbortController();
+  const guardedRead = Promise.resolve()
+    .then(() => read(controller.signal))
+    .catch(() => unavailableInitialExploreResponse());
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<ExploreInitialResponse>((resolve) => {
+    timeout = setTimeout(() => {
+      controller.abort();
+      resolve(unavailableInitialExploreResponse());
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([guardedRead, deadline]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+    controller.abort();
+  }
+}
 
 export const metadata: Metadata = {
   title: "Programmable",
@@ -39,23 +73,19 @@ async function InitialExploreView() {
     return <ExploreView />;
   }
 
-  let initialResponse: Readonly<{ ok: boolean; body: unknown }>;
-  try {
-    const response = await readExploreResponse(new NextRequest(
-      `http://programmable.local/api/explore?${INITIAL_EXPLORE_QUERY}`,
-      {
-        headers: { Accept: "application/json" },
-        signal: AbortSignal.timeout(INITIAL_EXPLORE_TIMEOUT_MS),
-      },
-    ));
-    const body: unknown = await response.json().catch(() => null);
-    initialResponse = { ok: response.ok, body };
-  } catch {
-    initialResponse = {
-      ok: false,
-      body: { error: "Tokens are temporarily unavailable" },
-    };
-  }
+  const initialResponse = await readInitialExploreWithinDeadline(
+    async (signal) => {
+      const response = await readExploreResponse(new NextRequest(
+        `http://programmable.local/api/explore?${INITIAL_EXPLORE_QUERY}`,
+        {
+          headers: { Accept: "application/json" },
+          signal,
+        },
+      ));
+      const body: unknown = await response.json().catch(() => null);
+      return { ok: response.ok, body };
+    },
+  );
 
   return <ExploreView initialResponse={initialResponse} />;
 }
