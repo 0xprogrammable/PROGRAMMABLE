@@ -31,6 +31,16 @@ jobs:
         with:
           node-version: 20
 
+      - name: Install Foundry for portable Hookbuilder tests
+        uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1
+        with:
+          version: v1.7.1
+
+      - name: Preload the portable-test Solidity compiler
+        run: |
+          mkdir -p -- "$RUNNER_TEMP/programmable-foundry-bootstrap"
+          forge build --use 0.8.26 --root "$RUNNER_TEMP/programmable-foundry-bootstrap"
+
       - name: Install the schema test validator without lifecycle scripts
         run: npm ci --prefix scripts/test/schema-validator --ignore-scripts --no-audit --no-fund
 
