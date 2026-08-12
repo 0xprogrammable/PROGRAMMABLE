@@ -98,7 +98,7 @@ test("workflow, local action, ownership, submodule, and routing controls are pro
   }
 });
 
-test("candidate Git evidence retains both sides of a protected rename and exact merge identity", (t) => {
+test("candidate Git evidence retains exact merge identity across a shallow fetch boundary", (t) => {
   const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "programmable-main-ci-guard-"));
   t.after(() => fs.rmSync(repositoryRoot, { recursive: true, force: true }));
   git(repositoryRoot, ["init", "--quiet"]);
@@ -122,6 +122,12 @@ test("candidate Git evidence retains both sides of a protected rename and exact 
   git(repositoryRoot, ["checkout", "--quiet", baseBranch]);
   git(repositoryRoot, ["merge", "--quiet", "--no-ff", "candidate", "-m", "merge"]);
   const mergeCommit = git(repositoryRoot, ["rev-parse", "HEAD"]).trim();
+  fs.writeFileSync(path.join(repositoryRoot, ".git", "shallow"), `${mergeCommit}\n`);
+  assert.equal(
+    git(repositoryRoot, ["show", "-s", "--format=%P", mergeCommit]).trim(),
+    "",
+    "the regression fixture must reproduce the traversal-level parent loss"
+  );
 
   const evidence = readCandidateChange({
     candidateRoot: repositoryRoot,
