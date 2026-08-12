@@ -261,12 +261,32 @@ export function evaluateAlchemyExploreSourceContracts(
         .filter(({ id }) => id !== "token-list")
         .every(({ source }) => {
           const supplyHydration = source.indexOf(
-            "await hydrateMissingCanonicalTokenSupplyV1(",
+            "hydrateMissingCanonicalTokenSupplyV1(",
           );
           const marketRead = source.indexOf(
-            "await readBitqueryTokenMarketDataV1(",
+            "readBitqueryTokenMarketDataV1(",
           );
-          return supplyHydration >= 0 && marketRead > supplyHydration;
+          const inputEnd = Math.max(supplyHydration, marketRead);
+          const reconciliation = [
+            "valueExploreEntriesWithMarketData(",
+            "withBitqueryMarketData(",
+          ]
+            .map((needle) => source.indexOf(needle, inputEnd))
+            .filter((position) => position >= 0)
+            .sort((left, right) => left - right)[0] ?? -1;
+          const inputWindow = source.slice(
+            Math.max(0, Math.min(supplyHydration, marketRead) - 160),
+            reconciliation,
+          );
+          const supplyCompletesFirst =
+            source.slice(Math.max(0, supplyHydration - 16), supplyHydration)
+              .includes("await") &&
+            marketRead > supplyHydration;
+          const inputsJoinBeforeValuation = inputWindow.includes("Promise.all");
+          return supplyHydration >= 0 &&
+            marketRead >= 0 &&
+            reconciliation > inputEnd &&
+            (supplyCompletesFirst || inputsJoinBeforeValuation);
         }),
     "missing supply is hydrated before market valuation only after fixed readers agree on block hash, decimals and total supply",
   );
