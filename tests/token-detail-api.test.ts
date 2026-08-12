@@ -289,7 +289,7 @@ describe("token detail Bitquery market read", () => {
       "bitquery",
     );
     expect(response.headers.get("Cache-Control")).toBe(
-      "public, max-age=0, s-maxage=15, stale-while-revalidate=60",
+      "public, max-age=0, s-maxage=2, stale-while-revalidate=5",
     );
   });
 
@@ -456,9 +456,7 @@ describe("token detail Bitquery market read", () => {
       status: "partial",
       valuation: { status: "unavailable", available: 0, unavailable: 1 },
     });
-    expect(response.headers.get("Cache-Control")).toBe(
-      "public, max-age=0, s-maxage=15, stale-while-revalidate=60",
-    );
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
     expect(response.headers.get("X-Programmable-Price-Source")).toBeNull();
   });
 });

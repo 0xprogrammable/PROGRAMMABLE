@@ -896,6 +896,9 @@ function marketBatchQuery(identities: readonly MarketDataIdentityV1[]) {
 }
 
 function marketPriceQuery(trades: readonly (MarketTradeV1 | null)[]) {
+  // The legacy Trades filter `Token: { Id: { is: "bid:eth" } }` did not
+  // provide a reliable USD observation. The Tokens price index requires the
+  // full WETH token identity instead.
   const selections = trades.map((trade, index) => `
     price${index}: Tokens(
       limit: { count: 1 }

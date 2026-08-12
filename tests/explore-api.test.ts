@@ -614,7 +614,7 @@ describe("Explore API Bitquery market boundary", () => {
       "bitquery",
     );
     expect(response.headers.get("Cache-Control")).toBe(
-      "public, max-age=0, s-maxage=15, stale-while-revalidate=60",
+      "public, max-age=0, s-maxage=2, stale-while-revalidate=5",
     );
   });
 
@@ -739,9 +739,7 @@ describe("Explore API Bitquery market boundary", () => {
         status: "last-known-good",
       },
     });
-    expect(response.headers.get("Cache-Control")).toBe(
-      "public, max-age=0, s-maxage=15, stale-while-revalidate=60",
-    );
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
   });
 
   it("keeps canonical launches visible with unavailable valuation when Bitquery is down", async () => {
@@ -772,9 +770,7 @@ describe("Explore API Bitquery market boundary", () => {
       status: "stale",
       valuation: { status: "unavailable", unavailable: 30 },
     });
-    expect(response.headers.get("Cache-Control")).toBe(
-      "public, max-age=0, s-maxage=15, stale-while-revalidate=60",
-    );
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
   });
 
   it("uses the bounded durable model as last known good when the primary read fails", async () => {
@@ -801,9 +797,7 @@ describe("Explore API Bitquery market boundary", () => {
         canonical: "last-known-good",
       },
     });
-    expect(response.headers.get("Cache-Control")).toBe(
-      "public, max-age=0, s-maxage=15, stale-while-revalidate=60",
-    );
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
     expect(response.headers.get("X-Programmable-Read-Source")).toBe(
       "durable+postgres",
     );
