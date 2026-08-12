@@ -864,9 +864,14 @@ jobs:
                 "programmable.market-data.v1" ||
               token.marketData.source !== "bitquery" ||
               !currentMarketTime(token.marketData.generatedAt) ||
+              !/^0x[0-9a-f]{64}$/.test(
+                token.marketData.primaryPoolId ?? "",
+              ) ||
               !primary ||
               primary.identity?.chainId !== "1" ||
               primary.identity?.tokenAddress !== tokenAddress ||
+              primary.identity?.poolId !== token.marketData.primaryPoolId ||
+              primary.identity?.protocol !== "uniswap_v4" ||
               primary.source !== "bitquery" ||
               primary.status !== "current" ||
               primary.liquidity?.freshness !== "current" ||

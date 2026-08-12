@@ -748,6 +748,22 @@ describe("read-model production deploy policy", () => {
     expect(workflow).toContain(
       "primary.liquidity?.asOfTime !== valuation.asOfTime",
     );
+    expect(workflow).toContain('!/^0x[0-9a-f]{64}$/.test(');
+    expect(workflow).toContain(
+      'token.marketData.primaryPoolId ?? ""',
+    );
+    expect(workflow).toContain(
+      "primary.identity?.poolId !== token.marketData.primaryPoolId",
+    );
+    expect(workflow).toContain(
+      'primary.identity?.protocol !== "uniswap_v4"',
+    );
+    expect(workflow).toContain(
+      "!positiveInteger(primary.liquidity?.valueUsdWad)",
+    );
+    expect(workflow).toContain(
+      "!positiveInteger(primary.liquidity?.asOfBlock)",
+    );
     expect(workflow).toContain(
       "!currentMarketTime(primary.liquidity?.asOfTime)",
     );

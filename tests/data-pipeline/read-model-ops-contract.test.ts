@@ -376,6 +376,31 @@ describe("read-model operations source contract", () => {
     );
   });
 
+  it.each([
+    ["positive liquidity", "!positiveInteger(primary.liquidity?.valueUsdWad)"],
+    ["liquidity block", "!positiveInteger(primary.liquidity?.asOfBlock)"],
+    ["Uniswap v4 protocol", 'primary.identity?.protocol !== "uniswap_v4"'],
+    [
+      "canonical primary pool identity",
+      "primary.identity?.poolId !== token.marketData.primaryPoolId",
+    ],
+  ])("fails closed when staged release drops %s binding", (_label, needle) => {
+    const workflowPath = ".github/workflows/deploy-production.yml";
+    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
+    const unsafeWorkflow = workflow.replace(needle, "false");
+    expect(unsafeWorkflow).not.toBe(workflow);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [workflowPath]: unsafeWorkflow,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-bitquery-stage-smoke",
+    );
+  });
+
   it("fails closed when post-promotion permits zero current public FDVs", () => {
     const postPromotionPath =
       "scripts/perf/read-model-post-promotion.mjs";
@@ -387,6 +412,39 @@ describe("read-model operations source contract", () => {
       "  return currentCount > 0 &&",
       "  return currentCount >= 0 &&",
     );
+    expect(unsafePostPromotion).not.toBe(postPromotion);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [postPromotionPath]: unsafePostPromotion,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-post-promotion-binding",
+    );
+  });
+
+  it.each([
+    ["positive liquidity", "positiveInteger(liquidity.valueUsdWad)"],
+    ["liquidity block", "positiveInteger(liquidity.asOfBlock)"],
+    ["Uniswap v4 protocol", 'primary.identity.protocol === "uniswap_v4"'],
+    [
+      "canonical primary pool identity",
+      "primary.identity.poolId === market.primaryPoolId",
+    ],
+    [
+      "valuation equality",
+      "poolValuation.valueUsdWad === valuation.valueWad",
+    ],
+  ])("fails closed when post-promotion drops %s binding", (_label, needle) => {
+    const postPromotionPath =
+      "scripts/perf/read-model-post-promotion.mjs";
+    const postPromotion = readFileSync(
+      resolve(ROOT, postPromotionPath),
+      "utf8",
+    );
+    const unsafePostPromotion = postPromotion.replace(needle, "false");
     expect(unsafePostPromotion).not.toBe(postPromotion);
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: {

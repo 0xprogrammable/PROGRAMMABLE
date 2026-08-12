@@ -1260,6 +1260,27 @@ export function evaluateReadModelOperationsSourceContracts(
         'tokenAddress === goldenTokenAddress',
       ) &&
       stagedBitquerySmokeBlock.includes(
+        '!/^0x[0-9a-f]{64}$/.test(',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        'token.marketData.primaryPoolId ?? ""',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        'primary.identity?.poolId !== token.marketData.primaryPoolId',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        'primary.identity?.protocol !== "uniswap_v4"',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        '!positiveInteger(primary.liquidity?.valueUsdWad)',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        '!positiveInteger(primary.liquidity?.asOfBlock)',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        'primary.valuation.valueUsdWad !== valuation.valueWad',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
         'primary.liquidity?.asOfTime !== valuation.asOfTime',
       ) &&
       stagedBitquerySmokeBlock.includes(
@@ -1557,6 +1578,21 @@ export function evaluateReadModelOperationsSourceContracts(
       ) &&
       postPromotion.includes(
         'tokenAddress !== GOLDEN_TOKEN_ADDRESS',
+      ) &&
+      postPromotion.includes(
+        'primary.identity.poolId === market.primaryPoolId',
+      ) &&
+      postPromotion.includes(
+        'primary.identity.protocol === "uniswap_v4"',
+      ) &&
+      postPromotion.includes(
+        'positiveInteger(liquidity.valueUsdWad)',
+      ) &&
+      postPromotion.includes(
+        'positiveInteger(liquidity.asOfBlock)',
+      ) &&
+      postPromotion.includes(
+        'poolValuation.valueUsdWad === valuation.valueWad',
       ) &&
       postPromotion.includes(
         'liquidity.asOfTime === valuation.asOfTime',

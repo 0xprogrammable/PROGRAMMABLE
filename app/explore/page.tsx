@@ -4,10 +4,8 @@ import { NextRequest } from "next/server";
 import { Suspense } from "react";
 
 import { GET as readExploreResponse } from "@/app/api/explore/route";
-import {
-  ExploreView,
-  type ExploreInitialResponse,
-} from "@/components/explore-view";
+import { ExploreView } from "@/components/explore-view";
+import type { ExploreInitialResponse } from "@/components/explore-view";
 
 export const dynamic = "force-dynamic";
 
@@ -59,9 +57,7 @@ export const metadata: Metadata = {
 };
 
 function isLocalPreviewHost(host: string | null) {
-  const hostname = host
-    ?.replace(/^\[|\](?::\d+)?$|:\d+$/gu, "")
-    .toLowerCase();
+  const hostname = host?.replace(/^\[|\](?::\d+)?$|:\d+$/gu, "").toLowerCase();
   return (
     hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1"
   );
@@ -75,6 +71,7 @@ async function InitialExploreView() {
 
   const initialResponse = await readInitialExploreWithinDeadline(
     async (signal) => {
+      // prettier-ignore
       const response = await readExploreResponse(new NextRequest(
         `http://programmable.local/api/explore?${INITIAL_EXPLORE_QUERY}`,
         {
