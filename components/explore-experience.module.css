@@ -158,6 +158,10 @@
     box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
+.runnersIntro :global(.token-filter summary::marker) {
+  content: "";
+}
+
 .runnersIntro :global(.token-filter[open] summary) {
   background: var(--explore-glass-strong);
   border-color: rgba(255, 253, 249, 0.34);
@@ -525,16 +529,15 @@
 }
 
 .skeletonBody {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-height: 162px;
-  padding: 22px 12px 10px;
+  min-height: 118px;
 }
 
 .skeletonTitle,
 .skeletonDescription,
-.skeletonMeta {
+.skeletonDescriptionShort,
+.skeletonCategory,
+.skeletonMeta,
+.skeletonSocial {
   background: rgba(255, 253, 249, 0.08);
   border-radius: 6px;
   display: block;
@@ -551,10 +554,33 @@
   width: 82%;
 }
 
+.skeletonDescriptionShort {
+  height: 12px;
+  margin-top: 8px;
+  width: 64%;
+}
+
+.skeletonMetaRow {
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+.skeletonCategory {
+  height: 10px;
+  margin-inline-start: 4px;
+  width: 46px;
+}
+
 .skeletonMeta {
   height: 10px;
-  margin-block: auto 16px;
-  width: 38%;
+  width: 72px;
+}
+
+.skeletonSocial {
+  border-radius: 50%;
+  height: 24px;
+  margin-inline-start: auto;
+  width: 24px;
 }
 
 .messageState {
@@ -882,18 +908,22 @@
   }
 
   .skeletonCard {
+    display: flex;
+  }
+
+  .skeletonHitArea {
     display: grid;
     grid-template-columns: 112px minmax(0, 1fr);
   }
 
-  .skeletonCard .skeletonArt {
+  .skeletonHitArea .skeletonArt {
     align-self: start;
     width: 112px;
   }
 
   .skeletonBody {
     min-height: 112px;
-    padding: 16px;
+    padding: 16px 12px 8px 16px;
   }
 
   .emptyState {
@@ -934,12 +964,12 @@
   }
 
   .runnerHitArea,
-  .skeletonCard {
+  .skeletonHitArea {
     grid-template-columns: 104px minmax(0, 1fr);
   }
 
   .runnerArt,
-  .skeletonCard .skeletonArt {
+  .skeletonHitArea .skeletonArt {
     width: 104px;
   }
 
@@ -996,12 +1026,12 @@
   }
 
   .runnerHitArea,
-  .skeletonCard {
+  .skeletonHitArea {
     grid-template-columns: 96px minmax(0, 1fr);
   }
 
   .runnerArt,
-  .skeletonCard .skeletonArt {
+  .skeletonHitArea .skeletonArt {
     width: 96px;
   }
 
@@ -1020,6 +1050,52 @@
 
   .runnerSocials {
     justify-content: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .revealedGrid .runnerCard {
+    animation: explore-card-reveal 440ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  }
+
+  .revealedGrid .runnerCard:nth-child(2) {
+    animation-delay: 45ms;
+  }
+
+  .revealedGrid .runnerCard:nth-child(3),
+  .revealedGrid .runnerCard:nth-child(n + 4) {
+    animation-delay: 90ms;
+  }
+
+  .skeletonArt,
+  .skeletonTitle,
+  .skeletonDescription,
+  .skeletonDescriptionShort,
+  .skeletonCategory,
+  .skeletonMeta,
+  .skeletonSocial {
+    animation: explore-skeleton-breathe 1.2s cubic-bezier(0.32, 0.72, 0, 1)
+      infinite alternate;
+  }
+}
+
+@keyframes explore-card-reveal {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes explore-skeleton-breathe {
+  from {
+    opacity: 0.56;
+  }
+
+  to {
+    opacity: 1;
   }
 }
 
