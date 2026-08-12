@@ -1401,7 +1401,16 @@ export function evaluateReadModelOperationsSourceContracts(
       verifyWorkflow.includes("name: Bind production Verify proof") &&
       verifyWorkflow.includes("needs:\n      - scope\n      - secret-scan") &&
       verifyWorkflow.includes(
-        "PRODUCTION_VERIFY_CONTRACTS_RESULT: ${{ needs.contracts.result }}",
+        "PRODUCTION_VERIFY_INDEXER_RESULT: ${{ needs.scope.outputs.indexer == 'true' && needs.indexer.result || 'skipped' }}",
+      ) &&
+      verifyWorkflow.includes(
+        "PRODUCTION_VERIFY_DATABASE_PGLITE_RESULT: ${{ needs.scope.outputs.database == 'true' && needs.database-pglite.result || 'skipped' }}",
+      ) &&
+      verifyWorkflow.includes(
+        "PRODUCTION_VERIFY_INTERFACE_RESULT: ${{ needs.scope.outputs.interface == 'true' && needs.interface.result || 'skipped' }}",
+      ) &&
+      verifyWorkflow.includes(
+        "PRODUCTION_VERIFY_CONTRACTS_RESULT: ${{ needs.scope.outputs.contracts == 'true' && needs.contracts.result || 'skipped' }}",
       ) &&
       verifyWorkflow.includes(
         "PRODUCTION_VERIFY_SCOPE_READ_MODEL: ${{ needs.scope.outputs.read_model }}",
