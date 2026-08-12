@@ -7,6 +7,12 @@ const workflowPath = path.resolve(".github/workflows/verify-hook-builder.yml");
 const workflow = fs.readFileSync(workflowPath, "utf8");
 const normalWorkflow = fs.readFileSync(path.resolve(".github/workflows/verify.yml"), "utf8");
 const validatorCore = fs.readFileSync(path.resolve("scripts/verify-public-hook-application-core.mjs"), "utf8");
+const skillVerifier = fs.readFileSync(path.resolve(
+  "skills/programmable-v4-hook-builder/scripts/verify-skill.mjs"
+), "utf8");
+const skillVerifierExecution = fs.readFileSync(path.resolve(
+  "skills/programmable-v4-hook-builder/scripts/verify-skill-execution-core.mjs"
+), "utf8");
 const permissionBlock = workflow.slice(
   workflow.indexOf("permissions:"),
   workflow.indexOf("concurrency:")
@@ -254,6 +260,12 @@ test("maintained skill tests run once through the bounded canonical verifier", (
     );
     assert.doesNotMatch(job, /node --test skills\/programmable-v4-hook-builder\/scripts\/test\/\*\.test\.mjs/u);
   }
+  assert.match(skillVerifier, /validateScriptsAndTests/u);
+  assert.match(skillVerifierExecution, /const TEST_BATCH_COUNT = 2;/u);
+  assert.match(skillVerifierExecution, /const TEST_TIMEOUT_MS = 15 \* 60 \* 1000;/u);
+  assert.match(skillVerifierExecution, /const deadline = now\(\) \+ timeoutMs;/u);
+  assert.match(skillVerifierExecution, /args: \["--test", "--test-concurrency=2", \.\.\.batch\]/u);
+  assert.match(skillVerifierExecution, /shared 15-minute aggregate bound/u);
 });
 
 test("workflow bounds job lifetime and cancels superseded pull-request work", () => {

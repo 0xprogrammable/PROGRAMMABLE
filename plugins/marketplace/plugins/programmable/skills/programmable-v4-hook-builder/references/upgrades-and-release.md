@@ -57,9 +57,9 @@ Report the installed version and exact standards:
 node "$SKILL_ROOT/scripts/builder-lifecycle.mjs" version
 ```
 
-This default reports the constants bundled with the checked-out Builder. The v0.5.1 candidate reports
-`publicationState: unpublished-candidate` and `publicationStateVerified: false`; its `stable` channel is the intended
-update channel, not a publication claim. To inspect an explicit pinned installed-state record instead, add
+This default reports the constants bundled with the checked-out Builder. The v0.5.1 package reports
+`publicationState: release-package` and `publicationStateVerified: false`; the bundled constant identifies release
+package bytes but does not independently resolve or authenticate a public tag. To inspect an explicit pinned installed-state record instead, add
 `--state path/to/installed-state.json`; the JSON output marks that source as an installed-state override and keeps
 publication state `not-verified`. Neither path establishes update trust or public release state.
 
@@ -217,8 +217,8 @@ another release byte becomes public earlier, W5 must use that earliest independe
 of the later GitHub timestamp. The planner cannot query GitHub or discover that earlier exposure; its `releasedAt`
 remains a caller declaration.
 
-The candidate's closed `plannedRelease` object binds the intended identity. For the packaged private 0.5.1 candidate it
-declares:
+The example candidate's closed `plannedRelease` object binds the intended identity. For the historical packaged private
+0.5.1 planning example it declares:
 
 - Builder `0.4.0 -> 0.5.1` with semantic classification `minor`;
 - submission standard `1.5.0 -> 1.6.0`;

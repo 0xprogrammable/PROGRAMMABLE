@@ -3,7 +3,7 @@ import { canonicalJson } from "./submission-core.mjs";
 
 export const BUILDER_LIFECYCLE_SCHEMA_VERSION = "1.0.0";
 export const BUNDLED_BUILDER_VERSION = "0.5.1";
-export const BUNDLED_BUILDER_PUBLICATION_STATE = "unpublished-candidate";
+export const BUNDLED_BUILDER_PUBLICATION_STATE = "release-package";
 export const NORMAL_RELEASE_WINDOW_MS = 24 * 60 * 60 * 1_000;
 
 export const SHA256_PATTERN = /^sha256:[0-9a-f]{64}$/u;

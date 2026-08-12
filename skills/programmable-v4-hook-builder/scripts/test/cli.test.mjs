@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const testDirectory = path.dirname(fileURLToPath(import.meta.url));
 const skillRoot = path.resolve(testDirectory, "..", "..");
@@ -94,7 +94,7 @@ test("host-neutral version reports the bundled standalone release without state"
   assert.equal(result.status, 0, result.stdout || result.stderr);
   const output = JSON.parse(result.stdout);
   assert.equal(output.result.installed.releaseVersion, "0.5.1");
-  assert.equal(output.result.installed.publicationState, "unpublished-candidate");
+  assert.equal(output.result.installed.publicationState, "release-package");
   assert.equal(output.result.versionSource, "bundled-code-constants");
   assert.equal(output.result.installedStateOverrideUsed, false);
 });
@@ -275,7 +275,7 @@ test("doctor distinguishes local generation from an actual Git worktree", () => 
     assert.equal(report.githubCli.requiredForPublicBetaApplication, true);
     assert.equal(report.githubCli.authenticationChecked, false);
     assert.equal(report.readyForGitHubApplicationClient, report.githubCli.available);
-    assert.equal(report.runtimeCompatibility.node.minimumMajor, 22);
+    assert.equal(report.runtimeCompatibility.node.minimumMajor, 24);
     assert.equal(report.runtimeCompatibility.node.supported, true);
     assert.deepEqual(report.runtimeCompatibility.applicationV3.supportedPlatforms, ["darwin", "linux"]);
     assert.equal(
@@ -305,6 +305,34 @@ test("doctor distinguishes local generation from an actual Git worktree", () => 
       report.publicBetaBlockers.includes("GITHUB_CLI_REQUIRED"),
       report.githubCli.available === false
     );
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("doctor reports the Node 24 blocker for an unsupported runtime", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "programmable-doctor-node-"));
+  const doctor = path.join(scriptsRoot, "doctor.mjs");
+  try {
+    const bootstrap = [
+      'Object.defineProperty(process.versions, "node", { value: "23.0.0" });',
+      `process.argv = [process.execPath, ${JSON.stringify(doctor)}, "--json", "--repository-root", ${JSON.stringify(directory)}];`,
+      `await import(${JSON.stringify(pathToFileURL(doctor).href)});`
+    ].join("\n");
+    const result = childProcess.spawnSync(
+      process.execPath,
+      ["--input-type=module", "--eval", bootstrap],
+      { cwd: directory, encoding: "utf8", shell: false }
+    );
+    assert.equal(result.status, 1, result.stderr);
+    const report = JSON.parse(result.stdout);
+    assert.deepEqual(report.runtimeCompatibility.node, {
+      minimumMajor: 24,
+      currentMajor: 23,
+      supported: false
+    });
+    assert.ok(report.publicBetaBlockers.includes("NODE_24_OR_NEWER_REQUIRED"));
+    assert.equal(report.publicBetaBlockers.some((blocker) => /^NODE_(?:20|22)_OR_NEWER_REQUIRED$/u.test(blocker)), false);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }

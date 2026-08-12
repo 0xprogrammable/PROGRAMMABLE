@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseCli } from "../cli-args.mjs";
 import { materializeExample } from "../example-materializer-core.mjs";
 
@@ -58,6 +58,37 @@ test("doctor delegates to the existing readiness command and emits JSON", () => 
     assert.ok(output.result.publicBetaBlockers.includes("EXTERNAL_ACCEPTANCE_NOT_CHECKED"));
     assert.equal(output.result.publicBetaGit.publicReachability.status, "notChecked");
     assert.equal(output.result.publicBetaGit.readyForPreparePrLocal, false);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("CLI blocks every non-doctor command below Node 24 without blocking doctor dispatch", () => {
+  const bootstrap = (args) => [
+    'Object.defineProperty(process.versions, "node", { value: "22.23.1" });',
+    `process.argv = [process.execPath, ${JSON.stringify(cli)}, ...${JSON.stringify(args)}];`,
+    `await import(${JSON.stringify(pathToFileURL(cli).href)});`
+  ].join("\n");
+  const blocked = childProcess.spawnSync(
+    process.execPath,
+    ["--input-type=module", "--eval", bootstrap(["context", "--help"])],
+    { cwd: skillRoot, encoding: "utf8", shell: false }
+  );
+  assert.equal(blocked.status, 2, blocked.stdout || blocked.stderr);
+  assert.equal(blocked.stderr, "");
+  assert.equal(JSON.parse(blocked.stdout).error.code, "NODE_24_OR_NEWER_REQUIRED");
+
+  const fixture = createRepository();
+  try {
+    const doctor = childProcess.spawnSync(
+      process.execPath,
+      ["--input-type=module", "--eval", bootstrap(["doctor", "--repository-root", fixture.repository])],
+      { cwd: skillRoot, encoding: "utf8", shell: false }
+    );
+    assert.equal(doctor.status, 0, doctor.stdout || doctor.stderr);
+    const report = JSON.parse(doctor.stdout);
+    assert.equal(report.command, "doctor");
+    assert.equal(report.ok, true);
   } finally {
     fixture.cleanup();
   }

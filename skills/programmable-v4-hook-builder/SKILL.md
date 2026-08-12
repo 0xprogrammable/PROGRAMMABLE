@@ -102,4 +102,4 @@ node "$SKILL_ROOT/scripts/cli.mjs" project require-output --repository-root "$NE
 
 ## Runtime
 
-Require Node.js 22+. Keep compilation, validation and evidence offline. `doctor` proves local capability only. Require host-native receipts; rerun evidence after bound-input changes.
+Require Node.js 24+. Keep compilation, validation and evidence offline. `doctor` proves local capability only. Require host-native receipts; rerun evidence after bound-input changes.

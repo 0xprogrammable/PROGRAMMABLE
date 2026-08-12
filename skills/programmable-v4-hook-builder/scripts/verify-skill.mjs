@@ -17,6 +17,11 @@ import { markdownHeadingAnchors, parseCanonicalYamlMapping, redactInstalledLocal
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const canonicalSkillRoot = path.resolve(scriptDirectory, "..");
+const nodeMajor = Number.parseInt(process.versions.node.split(".", 1)[0], 10);
+if (!Number.isInteger(nodeMajor) || nodeMajor < 24) {
+  console.error("verify-skill.mjs: NODE_24_OR_NEWER_REQUIRED");
+  process.exit(1);
+}
 const MAX_PORTABLE_FILES = 640;
 const MAX_PORTABLE_BYTES = 12_000_000;
 const MAX_PORTABLE_FILE_BYTES = 1_000_000;
