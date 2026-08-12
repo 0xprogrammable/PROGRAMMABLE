@@ -20,6 +20,8 @@ import {
   MANUAL_ROUTER_PRODUCTION_BINDING_V1,
   assertManualRouterProductionBindingV1,
 } from "../lib/custom-launch/manual-router-bindings-v1";
+import { ApplicantRefreshUserUnavailableErrorV1 } from
+  "../lib/custom-launch/applicant-refresh-user-gate-v1";
 import {
   MANUAL_ROUTER_NESTED_FACTORY_BINDING_V2,
   MANUAL_ROUTER_NESTED_FACTORY_PROFILE_TYPE_V2,
@@ -187,6 +189,23 @@ describe("manual Applicant Privy hydration", () => {
       code: "applicant_authentication_required",
     });
     expect(request).not.toHaveBeenCalled();
+  });
+
+  it("renders Privy capacity as retryable without asking for GitHub again", async () => {
+    const request = acquireManualRouterWebsiteSessionV1({
+      refreshApplicantSession: async () => {
+        throw new ApplicantRefreshUserUnavailableErrorV1();
+      },
+    });
+
+    await expect(request).rejects.toMatchObject({
+      code: "applicant_session_rate_limited",
+      retryable: true,
+      status: 429,
+    });
+    await request.catch((error: unknown) => {
+      expect(manualRouterRetainsKnownApprovalV1(error)).toBe(true);
+    });
   });
 
   it("rejects a refreshed session for the wrong numeric principal or wallet", async () => {

@@ -36,6 +36,9 @@ import {
   isExactHookemonApplicantGithubLoginV1,
 } from "@/lib/custom-launch/hookemon-applicant-presentation-v1";
 import {
+  isApplicantRefreshUserUnavailableErrorV1,
+} from "@/lib/custom-launch/applicant-refresh-user-gate-v1";
+import {
   type ManualRouterApplicantListResponseV1,
   type ManualRouterPersistedAttemptV1,
   type ManualRouterResolveResponseV1,
@@ -207,7 +210,20 @@ export async function acquireManualRouterWebsiteSessionV1(input: Readonly<{
   ) => Promise<WalletApplicantSessionV1 | null>;
   requirement?: WalletApplicantIdentityRequirementV1;
 }>): Promise<ManualRouterWebsiteSessionV1> {
-  const session = await input.refreshApplicantSession(input.requirement);
+  let session: WalletApplicantSessionV1 | null;
+  try {
+    session = await input.refreshApplicantSession(input.requirement);
+  } catch (error) {
+    if (isApplicantRefreshUserUnavailableErrorV1(error)) {
+      throw new ManualRouterWebsiteRequestErrorV1(
+        error.status,
+        error.code,
+        error.message,
+        error.retryable,
+      );
+    }
+    throw error;
+  }
   if (!session) {
     throw new ManualRouterWebsiteRequestErrorV1(
       401,
