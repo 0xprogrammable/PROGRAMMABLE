@@ -8,7 +8,7 @@ Custom projects use a public, exact revision workflow. The project stays in its 
 
 ## Prepare the source
 
-Start from a public GitHub repository that contains the code, tests, deployment logic and material project information needed to understand the release. Use the latest stable [Programmable v4 Builder release](https://github.com/0xprogrammable/hookbuilder/releases/latest), currently `v0.4.3`, rather than the moving development branch.
+Start from a public GitHub repository that contains the code, tests, deployment logic and material project information needed to understand the release. Use the latest stable [Programmable v4 Builder release](https://github.com/0xprogrammable/hookbuilder/releases/latest), currently `v0.5.1`, rather than the moving development branch.
 
 The Builder preserves the product intent, chooses the smallest complete architecture and runs the checks that apply to that project. It freezes the repository id, commit and tree used by the application so a later commit cannot be mistaken for the reviewed revision.
 
