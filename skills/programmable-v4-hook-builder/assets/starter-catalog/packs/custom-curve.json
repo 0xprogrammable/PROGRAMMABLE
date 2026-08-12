@@ -1,0 +1,48 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "custom-curve",
+  "label": "Custom curve",
+  "summary": "Replace ordinary price behavior with a fully specified and bounded custom invariant or curve.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "architecture-review-required",
+  "requires": [
+    "custom-hook-behavior"
+  ],
+  "conflictsWith": [
+    "ordinary-launch"
+  ],
+  "capabilities": [
+    "custom-curve",
+    "price-impact"
+  ],
+  "projectSurfaces": [
+    "application",
+    "contract",
+    "indexer"
+  ],
+  "requiredFacts": [
+    "Exact invariant, domain, monotonicity, rounding and boundary behavior",
+    "How liquidity, swaps, fees and withdrawals preserve conservation",
+    "Partial fills, zero liquidity, extreme prices and failure behavior",
+    "Quote-to-execution parity and provider limitations"
+  ],
+  "requiredFiles": [
+    "Curve specification with worked examples",
+    "Hook implementation",
+    "Independent reference model",
+    "Curve property and differential tests"
+  ],
+  "requiredTests": [
+    "Boundary, monotonicity, rounding and overflow properties",
+    "Differential checks against an independent reference model",
+    "Liquidity add, remove, swap and fee conservation invariants",
+    "Adversarial sequences and provider quote mismatch"
+  ],
+  "risks": [
+    "A mathematical edge case can create free value or trap liquidity",
+    "Provider simulation can disagree with nonstandard execution"
+  ]
+}

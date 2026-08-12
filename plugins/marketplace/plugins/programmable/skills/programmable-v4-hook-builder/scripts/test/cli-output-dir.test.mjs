@@ -368,6 +368,7 @@ function makeCentralPackage(label = "content") {
   return {
     generated: true,
     encoding: "utf8",
+    compatibilityResult: "architecture-review-required",
     fileCount: files.length,
     fileOrder: [...CENTRAL_APPLICATION_FILES],
     files

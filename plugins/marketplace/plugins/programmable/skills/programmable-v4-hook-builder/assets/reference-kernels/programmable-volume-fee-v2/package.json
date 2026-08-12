@@ -1,0 +1,22 @@
+{
+  "name": "programmable-volume-fee-v2-standard-amm-reference",
+  "version": "0.0.0-reference",
+  "private": true,
+  "description": "Unaudited standard-AMM reference kernel for Programmable volume-fee policy v2.",
+  "license": "MIT",
+  "scripts": {
+    "build": "forge build",
+    "test": "node --test test/sdk-routing-parity.test.mjs && forge test -vvv"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "5.6.1",
+    "@openzeppelin/uniswap-hooks": "1.1.1",
+    "@uniswap/permit2": "https://codeload.github.com/Uniswap/permit2/tar.gz/cc56ad0f3439c502c246fc5cfcc3db92bb8b7219",
+    "@uniswap/universal-router": "2.1.0",
+    "@uniswap/universal-router-sdk": "5.11.2",
+    "@uniswap/v4-core": "1.0.2",
+    "@uniswap/v4-periphery": "1.0.3",
+    "@uniswap/v4-sdk": "2.3.1",
+    "solmate-permit2": "https://codeload.github.com/transmissions11/solmate/tar.gz/8d910d876f51c3b2585c9109409d601f600e68e1"
+  }
+}

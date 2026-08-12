@@ -128,6 +128,130 @@ test("property names that match schema keywords remain ordinary fields", () => {
   assert.deepEqual(findings, []);
 });
 
+test("every supported composition and conditional keyword is enforced", () => {
+  const schema = {
+    type: "object",
+    required: ["mode", "value"],
+    properties: {
+      mode: { enum: ["text", "number"] },
+      value: {}
+    },
+    allOf: [
+      {
+        if: {
+          properties: { mode: { const: "text" } },
+          required: ["mode"]
+        },
+        then: { properties: { value: { type: "string", minLength: 2 } } },
+        else: { properties: { value: { type: "number", minimum: 1 } } }
+      }
+    ],
+    additionalProperties: false
+  };
+
+  assert.deepEqual(validateAgainstSchema({ mode: "text", value: "ok" }, schema), []);
+  assert.ok(validateAgainstSchema({ mode: "text", value: 2 }, schema).some(({ code }) => code === "SCHEMA_TYPE"));
+  assert.ok(validateAgainstSchema({ mode: "number", value: 0 }, schema).some(({ code }) => code === "SCHEMA_MINIMUM"));
+
+  assert.ok(validateAgainstSchema("x", {
+    anyOf: [{ const: "a" }, { const: "b" }]
+  }).some(({ code }) => code === "SCHEMA_ANY_OF"));
+  assert.ok(validateAgainstSchema(2, {
+    oneOf: [{ type: "number" }, { type: "integer" }]
+  }).some(({ code }) => code === "SCHEMA_ONE_OF"));
+  assert.ok(validateAgainstSchema("forbidden", {
+    not: { const: "forbidden" }
+  }).some(({ code }) => code === "SCHEMA_NOT"));
+});
+
+test("array tuple and contains constraints cannot be silently ignored", () => {
+  const tupleSchema = {
+    type: "array",
+    prefixItems: [{ type: "string" }, { type: "integer" }],
+    items: false
+  };
+  assert.deepEqual(validateAgainstSchema(["scope", 1], tupleSchema), []);
+  assert.ok(validateAgainstSchema(["scope", 1, true], tupleSchema).some(({ code }) => code === "SCHEMA_FALSE"));
+
+  const containsSchema = {
+    type: "array",
+    contains: { const: "covered" },
+    minContains: 2,
+    maxContains: 2
+  };
+  assert.ok(validateAgainstSchema(["covered"], containsSchema).some(({ code }) => code === "SCHEMA_MIN_CONTAINS"));
+  assert.deepEqual(validateAgainstSchema(["covered", "covered"], containsSchema), []);
+  assert.ok(validateAgainstSchema(["covered", "covered", "covered"], containsSchema).some(({ code }) => code === "SCHEMA_MAX_CONTAINS"));
+});
+
+test("object, numeric, format and additional-property constraints are enforced", () => {
+  const objectSchema = {
+    type: "object",
+    minProperties: 1,
+    maxProperties: 2,
+    propertyNames: { type: "string", pattern: "^[a-z][a-z0-9-]*$" },
+    additionalProperties: { type: "integer", minimum: 0 }
+  };
+  assert.ok(validateAgainstSchema({}, objectSchema).some(({ code }) => code === "SCHEMA_MIN_PROPERTIES"));
+  assert.ok(validateAgainstSchema({ Bad: 1 }, objectSchema).some(({ code }) => code === "SCHEMA_PATTERN"));
+  assert.ok(validateAgainstSchema({ valid: -1 }, objectSchema).some(({ code }) => code === "SCHEMA_MINIMUM"));
+  assert.ok(validateAgainstSchema({ a: 1, b: 2, c: 3 }, objectSchema).some(({ code }) => code === "SCHEMA_MAX_PROPERTIES"));
+
+  assert.deepEqual(validateAgainstSchema(0.3, { type: "number", multipleOf: 0.1 }), []);
+  assert.ok(validateAgainstSchema(0.31, { type: "number", multipleOf: 0.1 }).some(({ code }) => code === "SCHEMA_MULTIPLE_OF"));
+  assert.ok(validateAgainstSchema(1e21, { type: "number", multipleOf: 3 }).some(({ code }) => code === "SCHEMA_MULTIPLE_OF"));
+  assert.ok(validateAgainstSchema(1, { exclusiveMinimum: 1 }).some(({ code }) => code === "SCHEMA_EXCLUSIVE_MINIMUM"));
+  assert.ok(validateAgainstSchema(2, { exclusiveMaximum: 2 }).some(({ code }) => code === "SCHEMA_EXCLUSIVE_MAXIMUM"));
+
+  assert.deepEqual(validateAgainstSchema("ipfs://bafybeigdyrzt", { type: "string", format: "uri" }), []);
+  assert.ok(validateAgainstSchema("relative/path", { type: "string", format: "uri" }).some(({ code }) => code === "SCHEMA_URI"));
+  assert.deepEqual(validateAgainstSchema("2024-02-29T23:59:59+01:00", { type: "string", format: "date-time" }), []);
+  assert.ok(validateAgainstSchema("2023-02-29T23:59:59Z", { type: "string", format: "date-time" }).some(({ code }) => code === "SCHEMA_DATE_TIME"));
+});
+
+test("unsupported schema keywords fail closed instead of becoming decorative", () => {
+  const findings = validateAgainstSchema({}, {
+    type: "object",
+    dependentRequired: { feePolicy: ["markets"] }
+  });
+
+  assert.deepEqual(
+    findings.map(({ code }) => code),
+    ["SCHEMA_KEYWORD_UNSUPPORTED"]
+  );
+});
+
+test("validation-budget exhaustion is sticky across conditional branches", () => {
+  const expensiveBranch = () => ({
+    type: "array",
+    allOf: Array.from({ length: 1300 }, () => ({
+      items: { type: "number" }
+    }))
+  });
+  const value = Array.from({ length: 100 }, (_, index) => index);
+
+  for (const schema of [
+    { if: expensiveBranch(), then: false },
+    { oneOf: [expensiveBranch(), true] },
+    { not: expensiveBranch() }
+  ]) {
+    const findings = validateAgainstSchema(value, schema);
+    assert.deepEqual(
+      findings.map(({ code }) => code),
+      ["SCHEMA_VALIDATION_STEP_LIMIT"]
+    );
+  }
+});
+
+test("local references may resolve to a boolean schema", () => {
+  const findings = validateAgainstSchema("anything", {
+    $ref: "#/$defs/denied",
+    $defs: { denied: false }
+  });
+
+  assert.ok(findings.some(({ code }) => code === "SCHEMA_FALSE"));
+});
+
 test("submission traversal has deterministic depth and node limits", () => {
   let deepValue = "leaf";
   for (let index = 0; index < 80; index += 1) deepValue = [deepValue];

@@ -1,0 +1,1136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:trade-capability-manifest:1.0.0",
+  "title": "Programmable trade-capability manifest v1",
+  "description": "A closed, content-addressed declaration of one tradable market route and its reported quote and execution evidence. This contract is inapplicable to projects without a market and never represents Programmable approval.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "contract",
+    "manifestId",
+    "applicationId",
+    "marketRef",
+    "status",
+    "assurance",
+    "chain",
+    "source",
+    "dependencies",
+    "poolKey",
+    "route",
+    "capabilities",
+    "slippage",
+    "deadline",
+    "feeBehavior",
+    "testEvidence"
+  ],
+  "properties": {
+    "$schema": { "const": "urn:programmable:trade-capability-manifest:1.0.0" },
+    "schemaVersion": { "const": "1.0.0" },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "const": "trade-capability-manifest-v1" },
+        "version": { "const": "1.0.0" }
+      }
+    },
+    "manifestId": { "$ref": "#/$defs/slug" },
+    "applicationId": { "$ref": "#/$defs/slug" },
+    "marketRef": { "$ref": "#/$defs/slug" },
+    "status": { "const": "NOT_APPROVED" },
+    "assurance": { "const": "SOURCE_TEST_CONTRACTS_ONLY_NOT_EXECUTION_PROOF" },
+    "chain": { "$ref": "#/$defs/chain" },
+    "source": { "$ref": "#/$defs/source" },
+    "dependencies": { "$ref": "#/$defs/dependencies" },
+    "poolKey": { "$ref": "#/$defs/poolKey" },
+    "route": {
+      "oneOf": [
+        { "$ref": "#/$defs/standardRoute" },
+        { "$ref": "#/$defs/adapterRoute" }
+      ]
+    },
+    "capabilities": { "$ref": "#/$defs/capabilities" },
+    "slippage": { "$ref": "#/$defs/slippage" },
+    "deadline": { "$ref": "#/$defs/deadline" },
+    "feeBehavior": { "$ref": "#/$defs/feeBehavior" },
+    "testEvidence": { "$ref": "#/$defs/testEvidence" }
+  },
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "nonemptyText": {
+      "type": "string",
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "address": { "type": "string", "pattern": "^0x[0-9a-f]{40}$" },
+    "nonzeroAddress": { "type": "string", "pattern": "^0x(?!0{40}$)[0-9a-f]{40}$" },
+    "bytes": { "type": "string", "pattern": "^0x(?:[0-9a-f]{2})*$", "maxLength": 8194 },
+    "bytes32": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$",
+      "not": { "const": "0x0000000000000000000000000000000000000000000000000000000000000000" }
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "not": { "const": "sha256:0000000000000000000000000000000000000000000000000000000000000000" }
+    },
+    "positiveUint256": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$",
+      "maxLength": 78,
+      "description": "Canonical positive uint256 decimal text; semantic validation enforces the uint256 ceiling."
+    },
+    "uint256": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]*)$",
+      "maxLength": 78,
+      "description": "Canonical non-negative uint256 decimal text; semantic validation enforces the uint256 ceiling."
+    },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\)[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "workingDirectory": {
+      "oneOf": [
+        { "const": "." },
+        { "$ref": "#/$defs/repositoryPath" }
+      ]
+    },
+    "chain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chainId", "networkRef", "deploymentProfileSha256", "referenceBlock"],
+      "properties": {
+        "chainId": { "$ref": "#/$defs/positiveUint256" },
+        "networkRef": { "$ref": "#/$defs/slug" },
+        "deploymentProfileSha256": { "$ref": "#/$defs/sha256" },
+        "referenceBlock": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["number", "hash", "timestamp"],
+          "properties": {
+            "number": { "$ref": "#/$defs/uint256" },
+            "hash": { "$ref": "#/$defs/bytes32" },
+            "timestamp": { "$ref": "#/$defs/positiveUint256" }
+          }
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repositoryUri", "identityKind", "routeImplementationPath", "routeImplementationSha256", "routeImplementationClosurePath", "routeImplementationClosureSha256"],
+      "properties": {
+        "repositoryUri": { "type": "string", "format": "uri", "minLength": 1, "maxLength": 500 },
+        "identityKind": {
+          "const": "content-addressed-route-implementation-closure",
+          "description": "The bounded closure is rooted at routeImplementationPath and excludes this manifest and every post-run evidence artifact."
+        },
+        "routeImplementationPath": { "$ref": "#/$defs/repositoryPath" },
+        "routeImplementationSha256": { "$ref": "#/$defs/sha256" },
+        "routeImplementationClosurePath": { "$ref": "#/$defs/repositoryPath" },
+        "routeImplementationClosureSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "dependencies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lockfilePath", "lockfileSha256", "entries"],
+      "properties": {
+        "lockfilePath": { "$ref": "#/$defs/repositoryPath" },
+        "lockfileSha256": { "$ref": "#/$defs/sha256" },
+        "entries": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/dependency" }
+        }
+      }
+    },
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "role", "sourceUri", "resolvedIdentity", "contentSha256"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "role": {
+          "enum": [
+            "v4-core",
+            "v4-periphery",
+            "universal-router",
+            "v4-quoter",
+            "permit2",
+            "trade-integration",
+            "adapter-interface",
+            "other"
+          ]
+        },
+        "sourceUri": { "type": "string", "format": "uri", "minLength": 1, "maxLength": 500 },
+        "resolvedIdentity": { "$ref": "#/$defs/nonemptyText" },
+        "contentSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "poolKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["currency0", "currency1", "fee", "tickSpacing", "hooks", "poolId"],
+      "properties": {
+        "currency0": { "$ref": "#/$defs/address" },
+        "currency1": { "$ref": "#/$defs/address" },
+        "fee": { "type": "integer", "minimum": 0, "maximum": 16777215 },
+        "tickSpacing": { "type": "integer", "minimum": 1, "maximum": 32767 },
+        "hooks": { "$ref": "#/$defs/address" },
+        "poolId": { "$ref": "#/$defs/bytes32" }
+      }
+    },
+    "endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["address", "runtimeCodeKeccak256", "sourceDependencyRef", "deploymentEvidenceRef"],
+      "properties": {
+        "address": { "$ref": "#/$defs/nonzeroAddress" },
+        "runtimeCodeKeccak256": { "$ref": "#/$defs/bytes32" },
+        "sourceDependencyRef": { "$ref": "#/$defs/slug" },
+        "deploymentEvidenceRef": { "$ref": "#/$defs/repositoryPath" }
+      }
+    },
+    "permit2Used": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "address",
+        "runtimeCodeKeccak256",
+        "sourceDependencyRef",
+        "deploymentEvidenceRef",
+        "erc20Input",
+        "nativeInput",
+        "approvalTarget",
+        "spender",
+        "mechanism"
+      ],
+      "properties": {
+        "mode": { "const": "used" },
+        "address": { "$ref": "#/$defs/nonzeroAddress" },
+        "runtimeCodeKeccak256": { "$ref": "#/$defs/bytes32" },
+        "sourceDependencyRef": { "$ref": "#/$defs/slug" },
+        "deploymentEvidenceRef": { "$ref": "#/$defs/repositoryPath" },
+        "erc20Input": { "const": "REQUIRED" },
+        "nativeInput": { "const": "NOT_REQUIRED" },
+        "approvalTarget": { "const": "PERMIT2" },
+        "spender": { "$ref": "#/$defs/nonzeroAddress" },
+        "mechanism": { "enum": ["allowance-transfer", "signature-transfer", "both"] }
+      }
+    },
+    "permit2NotUsed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "reason"],
+      "properties": {
+        "mode": { "const": "not-used" },
+        "reason": { "type": "string", "minLength": 10, "maxLength": 500 }
+      }
+    },
+    "fundingProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "owner", "token", "amount", "nonce", "expiration", "signatureDeadline", "recipient", "permit2"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "type": { "enum": ["native-value", "permit2-allowance-transfer", "permit2-signature-transfer", "adapter-defined"] },
+        "owner": { "enum": ["transaction-sender", "request-envelope", "not-applicable"] },
+        "token": { "enum": ["pool-input-currency", "request-envelope", "not-applicable"] },
+        "amount": { "enum": ["exact-input-or-maximum-input", "request-envelope", "msg-value", "adapter-contract", "not-applicable"] },
+        "nonce": { "enum": ["permit2-allowance", "permit2-signature", "adapter-contract", "not-applicable"] },
+        "expiration": { "enum": ["permit2-allowance", "permit2-signature", "adapter-contract", "not-applicable"] },
+        "signatureDeadline": { "enum": ["execution-deadline-or-earlier", "adapter-contract", "not-applicable"] },
+        "recipient": { "enum": ["router", "adapter", "request-envelope", "not-applicable"] },
+        "permit2": {
+          "oneOf": [
+            { "$ref": "#/$defs/permit2Used" },
+            { "$ref": "#/$defs/permit2NotUsed" }
+          ]
+        }
+      }
+    },
+    "hookData": {
+      "oneOf": [
+        { "$ref": "#/$defs/noHookData" },
+        { "$ref": "#/$defs/boundHookData" }
+      ]
+    },
+    "noHookData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "required", "encoding", "maximumBytes", "example"],
+      "properties": {
+        "mode": { "const": "none" },
+        "required": { "const": false },
+        "encoding": { "const": "empty-bytes" },
+        "maximumBytes": { "const": 0 },
+        "example": { "const": "0x" }
+      }
+    },
+    "boundHookData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "contractId", "contractVersion", "contractSha256", "consumer", "encoding", "solidityType", "required", "maximumBytes", "example"],
+      "properties": {
+        "mode": { "const": "bound" },
+        "contractId": { "$ref": "#/$defs/slug" },
+        "contractVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$", "maxLength": 40 },
+        "contractSha256": { "$ref": "#/$defs/sha256" },
+        "consumer": { "enum": ["hook", "router", "adapter"] },
+        "encoding": { "enum": ["empty-bytes", "abi-v2"] },
+        "solidityType": { "$ref": "#/$defs/nonemptyText" },
+        "required": { "type": "boolean" },
+        "maximumBytes": { "type": "integer", "minimum": 0, "maximum": 4096 },
+        "example": { "$ref": "#/$defs/bytes" }
+      }
+    },
+    "standardRoute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "routeShape", "generationIdentitySha256", "interface", "router", "quoter", "fundingProfiles", "hookData"],
+      "properties": {
+        "type": { "const": "standard-uniswap-v4" },
+        "routeShape": { "const": "single-pool" },
+        "generationIdentitySha256": { "$ref": "#/$defs/sha256" },
+        "interface": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "version", "abiSha256"],
+          "properties": {
+            "id": { "const": "uniswap-v4-universal-router" },
+            "version": { "$ref": "#/$defs/nonemptyText" },
+            "abiSha256": { "$ref": "#/$defs/sha256" }
+          }
+        },
+        "router": { "$ref": "#/$defs/endpoint" },
+        "quoter": { "$ref": "#/$defs/endpoint" },
+        "fundingProfiles": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/fundingProfile" }
+        },
+        "hookData": { "$ref": "#/$defs/hookData" }
+      }
+    },
+    "adapterRoute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "routeShape", "generationIdentitySha256", "canonicalInterface", "adapter", "router", "quoter", "transport", "fundingProfiles", "hookData"],
+      "properties": {
+        "type": { "const": "canonical-programmable-adapter" },
+        "routeShape": { "const": "single-market-adapter" },
+        "generationIdentitySha256": { "$ref": "#/$defs/sha256" },
+        "canonicalInterface": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "version", "schemaId", "schemaPath", "schemaSha256", "abiSha256", "requestEnvelope", "quoteEntrypoint", "buildExecutionEntrypoint", "conformanceArtifact"],
+          "properties": {
+            "id": { "const": "programmable-trade-execution-v1" },
+            "version": { "const": "1.0.0" },
+            "schemaId": { "const": "urn:programmable:trade-execution:1.0.0" },
+            "schemaPath": { "const": "references/programmable-trade-execution-v1.schema.json" },
+            "schemaSha256": { "const": "sha256:0b2307fd6d466ade7b50de204aa571de75db789540c5c47a5714f3d619ee45a2" },
+            "abiSha256": { "const": "sha256:ef821ae58067e7594f866d30fe45dbd940dc87c0c207020ec7f21d4c87695ad3" },
+            "requestEnvelope": { "const": "programmable-trade-request-v1" },
+            "quoteEntrypoint": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["signature", "selector", "inputEnvelope", "outputEnvelope", "semantics"],
+              "properties": {
+                "signature": { "const": "quote(bytes)" },
+                "selector": { "const": "0xedfa3568" },
+                "inputEnvelope": { "const": "programmable-trade-request-v1" },
+                "outputEnvelope": { "const": "programmable-trade-quote-v1" },
+                "semantics": { "const": "read-only-quote-no-state-change" }
+              }
+            },
+            "buildExecutionEntrypoint": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["signature", "selector", "inputEnvelope", "outputEnvelope", "semantics"],
+              "properties": {
+                "signature": { "const": "buildExecution(bytes)" },
+                "selector": { "const": "0x21be7c85" },
+                "inputEnvelope": { "const": "programmable-trade-request-v1" },
+                "outputEnvelope": { "const": "programmable-trade-execution-envelope-v1" },
+                "semantics": { "const": "returns-target-value-calldata-deadline" }
+              }
+            },
+            "conformanceArtifact": { "$ref": "#/$defs/artifact" }
+          }
+        },
+        "adapter": { "$ref": "#/$defs/endpoint" },
+        "router": { "$ref": "#/$defs/endpoint" },
+        "quoter": { "$ref": "#/$defs/endpoint" },
+        "transport": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "router", "quoter"],
+              "properties": {
+                "type": { "const": "uniswap-v4-universal-router" },
+                "router": { "$ref": "#/$defs/endpoint" },
+                "quoter": { "$ref": "#/$defs/endpoint" }
+              }
+            }
+          ]
+        },
+        "fundingProfiles": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/fundingProfile" }
+        },
+        "hookData": { "$ref": "#/$defs/hookData" }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["modeMatrix"],
+      "properties": {
+        "modeMatrix": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "oneOf": [
+              { "$ref": "#/$defs/supportedMode" },
+              { "$ref": "#/$defs/unsupportedMode" }
+            ]
+          }
+        }
+      }
+    },
+    "supportedMode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "direction", "amountMode", "support", "fundingProfileRef", "quoteEntrypoint", "executionEntrypoint"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "direction": { "enum": ["zero-for-one", "one-for-zero"] },
+        "amountMode": { "enum": ["exact-input", "exact-output"] },
+        "support": { "const": "supported" },
+        "fundingProfileRef": { "$ref": "#/$defs/slug" },
+        "quoteEntrypoint": { "$ref": "#/$defs/nonemptyText" },
+        "executionEntrypoint": { "$ref": "#/$defs/nonemptyText" }
+      }
+    },
+    "unsupportedMode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "direction", "amountMode", "support", "fundingProfileRef", "reason"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "direction": { "enum": ["zero-for-one", "one-for-zero"] },
+        "amountMode": { "enum": ["exact-input", "exact-output"] },
+        "support": { "const": "unsupported" },
+        "fundingProfileRef": { "$ref": "#/$defs/slug" },
+        "reason": { "type": "string", "minLength": 10, "maxLength": 500 }
+      }
+    },
+    "slippage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unit", "minimumBps", "defaultBps", "maximumBps", "exactInputGuard", "exactOutputGuard", "enforcement"],
+      "properties": {
+        "unit": { "const": "basis-points" },
+        "minimumBps": { "type": "integer", "minimum": 0, "maximum": 9999 },
+        "defaultBps": { "type": "integer", "minimum": 0, "maximum": 9999 },
+        "maximumBps": { "type": "integer", "minimum": 0, "maximum": 9999 },
+        "exactInputGuard": { "const": "amountOutMinimum" },
+        "exactOutputGuard": { "const": "amountInMaximum" },
+        "enforcement": { "const": "calldata-and-test-bound" }
+      }
+    },
+    "deadline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "unit", "maximumWindowSeconds", "enforcement"],
+      "properties": {
+        "required": { "const": true },
+        "unit": { "const": "seconds" },
+        "maximumWindowSeconds": { "type": "integer", "minimum": 1, "maximum": 604800 },
+        "enforcement": { "const": "execution-calldata" }
+      }
+    },
+    "feeBehavior": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["quoteAmounts", "exactInput", "exactOutput", "rounding", "programmableFeeV2", "components"],
+      "properties": {
+        "quoteAmounts": { "const": "include-all-declared-route-fees" },
+        "exactInput": { "const": "minimum-output-after-declared-fees" },
+        "exactOutput": { "const": "maximum-input-including-declared-fees" },
+        "rounding": { "const": "route-defined-and-tested" },
+        "programmableFeeV2": {
+          "oneOf": [
+            { "$ref": "#/$defs/programmableFeeApplicable" },
+            { "$ref": "#/$defs/programmableFeeNotApplicable" },
+            { "$ref": "#/$defs/programmableFeeUnresolved" }
+          ]
+        },
+        "components": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/feeComponent" }
+        }
+      }
+    },
+    "programmableFeeApplicable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "applicability",
+        "policyId",
+        "policyVersion",
+        "policyHash",
+        "rateDenominator",
+        "minimumPlatformRateHundredthsOfBip",
+        "minimumGrossQuoteUnits",
+        "immutableOwner",
+        "executedGrossQuoteCharge",
+        "conservation",
+        "receiptArtifactId",
+        "receiptPath",
+        "receiptSha256",
+        "feeScopeId",
+        "chainId",
+        "poolId",
+        "quoteCurrency",
+        "collectionProfile"
+      ],
+      "properties": {
+        "applicability": { "const": "applicable" },
+        "policyId": { "const": "programmable-volume-fee-v2" },
+        "policyVersion": { "const": "2.0.0" },
+        "policyHash": { "const": "0x03cd386824b1c0aa152200e0a470aa0c885f802e257f0f46066de508d241811e" },
+        "rateDenominator": { "const": 1000000 },
+        "minimumPlatformRateHundredthsOfBip": { "const": 1000 },
+        "minimumGrossQuoteUnits": { "const": 1000 },
+        "immutableOwner": { "const": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c" },
+        "executedGrossQuoteCharge": { "const": true },
+        "conservation": { "const": "gross-equals-net-plus-platform-plus-project" },
+        "receiptArtifactId": { "$ref": "#/$defs/slug" },
+        "receiptPath": { "$ref": "#/$defs/repositoryPath" },
+        "receiptSha256": { "$ref": "#/$defs/sha256" },
+        "feeScopeId": { "$ref": "#/$defs/slug" },
+        "chainId": { "$ref": "#/$defs/positiveUint256" },
+        "poolId": { "$ref": "#/$defs/bytes32" },
+        "quoteCurrency": { "$ref": "#/$defs/address" },
+        "collectionProfile": { "enum": ["standard-amm", "sync-custom-zero-amm", "async-fill-batch", "custom-reviewed"] }
+      }
+    },
+    "programmableFeeNotApplicable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["applicability", "executionClass", "reason"],
+      "properties": {
+        "applicability": { "const": "not-applicable" },
+        "executionClass": { "enum": ["external", "noncanonical"] },
+        "reason": { "type": "string", "minLength": 10, "maxLength": 500 }
+      }
+    },
+    "programmableFeeUnresolved": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["applicability", "reason"],
+      "properties": {
+        "applicability": { "const": "unresolved" },
+        "reason": { "type": "string", "minLength": 10, "maxLength": 500 }
+      }
+    },
+    "feeComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "chargedOn", "currencyRole", "routeDefinedCurrency", "chargeBase", "calculation", "ratePips", "maximumBps", "quoteInclusion", "recipientBehavior", "policySha256"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "kind": { "enum": ["v4-lp", "hook", "protocol", "adapter"] },
+        "chargedOn": { "enum": ["input", "output", "pool-accounting", "route-defined"] },
+        "currencyRole": { "enum": ["input-currency", "output-currency", "programmable-quote-currency", "route-defined"] },
+        "routeDefinedCurrency": {
+          "oneOf": [
+            { "$ref": "#/$defs/address" },
+            { "type": "null" }
+          ]
+        },
+        "chargeBase": { "enum": ["input-amount", "output-amount", "executed-gross-quote", "route-defined"] },
+        "calculation": { "enum": ["fixed-pips", "dynamic", "protocol-defined", "adapter-defined"] },
+        "ratePips": { "type": ["integer", "null"], "minimum": 0, "maximum": 1000000 },
+        "maximumBps": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "quoteInclusion": { "const": "included" },
+        "recipientBehavior": { "enum": ["lp-provider", "hook-defined", "protocol-defined", "adapter-defined", "burn", "no-recipient"] },
+        "policySha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "testEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract", "semanticAdequacy", "quoteTests", "executionTests"],
+      "properties": {
+        "contract": { "const": "source-test-contracts-v1" },
+        "semanticAdequacy": { "const": "PARTIAL_EVIDENCE" },
+        "quoteTests": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/quoteTest" }
+        },
+        "executionTests": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/executionTest" }
+        }
+      }
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv", "workingDirectory", "environmentSha256"],
+      "properties": {
+        "argv": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": { "type": "string", "minLength": 1, "maxLength": 4096 }
+        },
+        "workingDirectory": { "$ref": "#/$defs/workingDirectory" },
+        "environmentSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "byteLength"],
+      "properties": {
+        "path": { "$ref": "#/$defs/repositoryPath" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "byteLength": { "type": "integer", "minimum": 1, "maximum": 67108864 }
+      }
+    },
+    "testBaseProperties": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "commandId": { "$ref": "#/$defs/slug" },
+        "modeRef": { "$ref": "#/$defs/slug" },
+        "chainId": { "$ref": "#/$defs/positiveUint256" },
+        "targetAddress": { "$ref": "#/$defs/address" },
+        "command": { "$ref": "#/$defs/command" },
+        "testSourceArtifact": { "$ref": "#/$defs/artifact" },
+        "resultArtifactPath": { "$ref": "#/$defs/repositoryPath" },
+        "runnerContract": { "const": "forge-test-json-v1" },
+        "runnerTestSignature": {
+          "type": "string",
+          "minLength": 7,
+          "maxLength": 300
+        },
+        "resultContract": { "enum": ["trade-quote-test-result-v1", "trade-execution-test-result-v1"] }
+      }
+    },
+    "quoteTest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "commandId", "modeRef", "chainId", "environment", "targetAddress", "command", "testSourceArtifact", "resultArtifactPath", "runnerContract", "runnerTestSignature", "resultContract", "expectedOutcome", "resultBindings"],
+      "properties": {
+        "id": { "$ref": "#/$defs/testBaseProperties/properties/id" },
+        "commandId": { "$ref": "#/$defs/testBaseProperties/properties/commandId" },
+        "modeRef": { "$ref": "#/$defs/testBaseProperties/properties/modeRef" },
+        "chainId": { "$ref": "#/$defs/testBaseProperties/properties/chainId" },
+        "environment": { "enum": ["local-v4-integration", "anvil-fork"] },
+        "targetAddress": { "$ref": "#/$defs/testBaseProperties/properties/targetAddress" },
+        "command": { "$ref": "#/$defs/testBaseProperties/properties/command" },
+        "testSourceArtifact": { "$ref": "#/$defs/testBaseProperties/properties/testSourceArtifact" },
+        "resultArtifactPath": { "$ref": "#/$defs/testBaseProperties/properties/resultArtifactPath" },
+        "runnerContract": { "$ref": "#/$defs/testBaseProperties/properties/runnerContract" },
+        "runnerTestSignature": { "$ref": "#/$defs/testBaseProperties/properties/runnerTestSignature" },
+        "resultContract": { "const": "trade-quote-test-result-v1" },
+        "expectedOutcome": { "const": "quote-succeeds" },
+        "resultBindings": {
+          "type": "array",
+          "minItems": 10,
+          "maxItems": 10,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "manifest-sha256",
+              "pool-key",
+              "hook-data",
+              "direction-and-amount-mode",
+              "sender-and-recipient",
+              "chain-and-block",
+              "quoter-or-adapter",
+              "slippage",
+              "fee-conformance",
+              "quoted-amount"
+            ]
+          }
+        }
+      }
+    },
+    "executionTest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "commandId", "modeRef", "chainId", "scenario", "environment", "targetAddress", "command", "testSourceArtifact", "resultArtifactPath", "runnerContract", "runnerTestSignature", "resultContract", "expectedOutcome", "expectedRevertDataSha256", "resultBindings"],
+      "properties": {
+        "id": { "$ref": "#/$defs/testBaseProperties/properties/id" },
+        "commandId": { "$ref": "#/$defs/testBaseProperties/properties/commandId" },
+        "modeRef": { "$ref": "#/$defs/testBaseProperties/properties/modeRef" },
+        "chainId": { "$ref": "#/$defs/testBaseProperties/properties/chainId" },
+        "scenario": {
+          "enum": [
+            "successful-swap",
+            "expired-deadline-revert",
+            "slippage-bound-revert",
+            "funding-requirement-revert",
+            "unsupported-mode-pre-effects-revert"
+          ]
+        },
+        "environment": { "enum": ["local-v4-integration", "anvil-fork"] },
+        "targetAddress": { "$ref": "#/$defs/testBaseProperties/properties/targetAddress" },
+        "command": { "$ref": "#/$defs/testBaseProperties/properties/command" },
+        "testSourceArtifact": { "$ref": "#/$defs/testBaseProperties/properties/testSourceArtifact" },
+        "resultArtifactPath": { "$ref": "#/$defs/testBaseProperties/properties/resultArtifactPath" },
+        "runnerContract": { "$ref": "#/$defs/testBaseProperties/properties/runnerContract" },
+        "runnerTestSignature": { "$ref": "#/$defs/testBaseProperties/properties/runnerTestSignature" },
+        "resultContract": { "const": "trade-execution-test-result-v1" },
+        "expectedOutcome": { "enum": ["swap-succeeds", "reverts-before-effects"] },
+        "expectedRevertDataSha256": {
+          "oneOf": [
+            { "$ref": "#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        },
+        "resultBindings": {
+          "type": "array",
+          "minItems": 16,
+          "maxItems": 18,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "manifest-sha256",
+              "pool-key",
+              "hook-data",
+              "direction-and-amount-mode",
+              "sender-and-recipient",
+              "chain-and-block",
+              "router-or-adapter-generation",
+              "funding",
+              "deadline",
+              "slippage",
+              "fee-conformance",
+              "action-and-calldata",
+              "receipt",
+              "pool-manager-final-deltas",
+              "wallet-final-balances",
+              "refund-and-dust",
+              "adapter-build-and-envelope-execution",
+              "rejection-before-approval-funds-lock-or-state"
+            ]
+          }
+        }
+      }
+    },
+    "resultIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["applicationId", "marketRef", "testId", "commandId"],
+      "properties": {
+        "applicationId": { "$ref": "#/$defs/slug" },
+        "marketRef": { "$ref": "#/$defs/slug" },
+        "testId": { "$ref": "#/$defs/slug" },
+        "commandId": { "$ref": "#/$defs/slug" }
+      }
+    },
+    "modeBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "direction", "amountMode", "fundingProfileRef"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "direction": { "enum": ["zero-for-one", "one-for-zero"] },
+        "amountMode": { "enum": ["exact-input", "exact-output"] },
+        "fundingProfileRef": { "$ref": "#/$defs/slug" }
+      }
+    },
+    "resultChain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chainId", "blockNumber", "blockHash", "blockTimestamp"],
+      "properties": {
+        "chainId": { "$ref": "#/$defs/positiveUint256" },
+        "blockNumber": { "$ref": "#/$defs/uint256" },
+        "blockHash": { "$ref": "#/$defs/bytes32" },
+        "blockTimestamp": { "$ref": "#/$defs/positiveUint256" }
+      }
+    },
+    "resultRoute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "quoteTarget", "executionTarget", "quoteTargetRuntimeCodeKeccak256", "executionTargetRuntimeCodeKeccak256", "generationIdentitySha256", "adapterInterfaceSchemaSha256"],
+      "properties": {
+        "type": { "enum": ["standard-uniswap-v4", "canonical-programmable-adapter"] },
+        "quoteTarget": { "$ref": "#/$defs/address" },
+        "executionTarget": { "$ref": "#/$defs/address" },
+        "quoteTargetRuntimeCodeKeccak256": { "$ref": "#/$defs/bytes32" },
+        "executionTargetRuntimeCodeKeccak256": { "$ref": "#/$defs/bytes32" },
+        "generationIdentitySha256": { "$ref": "#/$defs/sha256" },
+        "adapterInterfaceSchemaSha256": {
+          "oneOf": [
+            { "const": "sha256:0b2307fd6d466ade7b50de204aa571de75db789540c5c47a5714f3d619ee45a2" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "resultHookData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "contractSha256", "encoding", "valueSha256"],
+      "properties": {
+        "mode": { "enum": ["none", "bound"] },
+        "contractSha256": {
+          "oneOf": [
+            { "$ref": "#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        },
+        "encoding": { "enum": ["empty-bytes", "abi-v2"] },
+        "valueSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "resultLimits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slippageBps", "deadline"],
+      "properties": {
+        "slippageBps": { "type": "integer", "minimum": 0, "maximum": 9999 },
+        "deadline": { "$ref": "#/$defs/positiveUint256" }
+      }
+    },
+    "resultFeeComponentAmount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["componentRef", "currency", "chargeBase", "baseAmount", "amount"],
+      "properties": {
+        "componentRef": { "$ref": "#/$defs/slug" },
+        "currency": { "$ref": "#/$defs/address" },
+        "chargeBase": { "enum": ["input-amount", "output-amount", "executed-gross-quote", "route-defined"] },
+        "baseAmount": { "$ref": "#/$defs/positiveUint256" },
+        "amount": { "$ref": "#/$defs/uint256" }
+      }
+    },
+    "resultFeeCurrencyTotal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["currency", "amount"],
+      "properties": {
+        "currency": { "$ref": "#/$defs/address" },
+        "amount": { "$ref": "#/$defs/uint256" }
+      }
+    },
+    "resultFeeAmounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["components", "totalsByCurrency"],
+      "properties": {
+        "components": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/resultFeeComponentAmount" }
+        },
+        "totalsByCurrency": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "items": { "$ref": "#/$defs/resultFeeCurrencyTotal" }
+        }
+      }
+    },
+    "resultFee": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["feeBehaviorSha256", "programmableFeeApplicability", "feeConformanceReceiptSha256", "amounts", "quotedFeesSha256"],
+      "properties": {
+        "feeBehaviorSha256": { "$ref": "#/$defs/sha256" },
+        "programmableFeeApplicability": { "enum": ["applicable", "not-applicable"] },
+        "feeConformanceReceiptSha256": {
+          "oneOf": [
+            { "$ref": "#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        },
+        "amounts": { "$ref": "#/$defs/resultFeeAmounts" },
+        "quotedFeesSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "resultRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sender", "recipient", "amountSpecified", "fundingProfileRef"],
+      "properties": {
+        "sender": { "$ref": "#/$defs/nonzeroAddress" },
+        "recipient": { "$ref": "#/$defs/nonzeroAddress" },
+        "amountSpecified": { "$ref": "#/$defs/positiveUint256" },
+        "fundingProfileRef": { "$ref": "#/$defs/slug" }
+      }
+    },
+    "tradeQuoteCallBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "entrypoint", "poolKeySha256", "direction", "amountMode", "amountSpecified", "hookDataSha256", "slippageBps", "deadline", "fundingProfileRef", "feeBehaviorSha256", "calldataSha256", "reencodedCalldataSha256"],
+      "properties": {
+        "target": { "$ref": "#/$defs/nonzeroAddress" },
+        "entrypoint": { "$ref": "#/$defs/nonemptyText" },
+        "poolKeySha256": { "$ref": "#/$defs/sha256" },
+        "direction": { "enum": ["zero-for-one", "one-for-zero"] },
+        "amountMode": { "enum": ["exact-input", "exact-output"] },
+        "amountSpecified": { "$ref": "#/$defs/positiveUint256" },
+        "hookDataSha256": { "$ref": "#/$defs/sha256" },
+        "slippageBps": { "type": "integer", "minimum": 0, "maximum": 9999 },
+        "deadline": { "$ref": "#/$defs/positiveUint256" },
+        "fundingProfileRef": { "$ref": "#/$defs/slug" },
+        "feeBehaviorSha256": { "$ref": "#/$defs/sha256" },
+        "calldataSha256": { "$ref": "#/$defs/sha256" },
+        "reencodedCalldataSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "tradeExecutionCallBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "entrypoint", "poolKeySha256", "direction", "amountMode", "amountSpecified", "hookDataSha256", "slippageBps", "slippageGuardAmount", "deadline", "fundingProfileRef", "feeBehaviorSha256", "actionPlanSha256", "fundingWitnessSha256", "calldataSha256", "reencodedCalldataSha256", "adapterExecution"],
+      "properties": {
+        "target": { "$ref": "#/$defs/nonzeroAddress" },
+        "entrypoint": { "$ref": "#/$defs/nonemptyText" },
+        "poolKeySha256": { "$ref": "#/$defs/sha256" },
+        "direction": { "enum": ["zero-for-one", "one-for-zero"] },
+        "amountMode": { "enum": ["exact-input", "exact-output"] },
+        "amountSpecified": { "$ref": "#/$defs/positiveUint256" },
+        "hookDataSha256": { "$ref": "#/$defs/sha256" },
+        "slippageBps": { "type": "integer", "minimum": 0, "maximum": 9999 },
+        "slippageGuardAmount": { "$ref": "#/$defs/uint256" },
+        "deadline": { "$ref": "#/$defs/positiveUint256" },
+        "fundingProfileRef": { "$ref": "#/$defs/slug" },
+        "feeBehaviorSha256": { "$ref": "#/$defs/sha256" },
+        "actionPlanSha256": { "$ref": "#/$defs/sha256" },
+        "fundingWitnessSha256": { "$ref": "#/$defs/sha256" },
+        "calldataSha256": { "$ref": "#/$defs/sha256" },
+        "reencodedCalldataSha256": { "$ref": "#/$defs/sha256" },
+        "adapterExecution": {
+          "oneOf": [
+            { "$ref": "#/$defs/adapterExecutionBinding" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "adapterExecutionBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["buildTarget", "buildEntrypoint", "buildCallDataSha256", "buildReturnDataSha256", "returnedTarget", "returnedValue", "returnedCalldataSha256", "returnedDeadline", "returnedEnvelopeDigestContract", "returnedEnvelopeSha256"],
+      "properties": {
+        "buildTarget": { "$ref": "#/$defs/nonzeroAddress" },
+        "buildEntrypoint": { "const": "buildExecution(bytes)" },
+        "buildCallDataSha256": { "$ref": "#/$defs/sha256" },
+        "buildReturnDataSha256": { "$ref": "#/$defs/sha256" },
+        "returnedTarget": { "$ref": "#/$defs/nonzeroAddress" },
+        "returnedValue": { "$ref": "#/$defs/uint256" },
+        "returnedCalldataSha256": { "$ref": "#/$defs/sha256" },
+        "returnedDeadline": { "$ref": "#/$defs/positiveUint256" },
+        "returnedEnvelopeDigestContract": { "const": "sha256-canonical-json-target-value-calldataSha256-deadline" },
+        "returnedEnvelopeSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "tradeExecutionStateWitness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["approvalBeforeSha256", "approvalAfterSha256", "fundingBeforeSha256", "fundingAfterSha256", "walletBeforeSha256", "walletAfterSha256", "lockBeforeSha256", "lockAfterSha256", "applicationBeforeSha256", "applicationAfterSha256"],
+      "properties": {
+        "approvalBeforeSha256": { "$ref": "#/$defs/sha256" },
+        "approvalAfterSha256": { "$ref": "#/$defs/sha256" },
+        "fundingBeforeSha256": { "$ref": "#/$defs/sha256" },
+        "fundingAfterSha256": { "$ref": "#/$defs/sha256" },
+        "walletBeforeSha256": { "$ref": "#/$defs/sha256" },
+        "walletAfterSha256": { "$ref": "#/$defs/sha256" },
+        "lockBeforeSha256": { "$ref": "#/$defs/sha256" },
+        "lockAfterSha256": { "$ref": "#/$defs/sha256" },
+        "applicationBeforeSha256": { "$ref": "#/$defs/sha256" },
+        "applicationAfterSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "resultContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifestSha256", "sourceTestSha256", "mode", "chain", "poolKey", "poolKeySha256", "route", "hookData", "limits", "fee", "request"],
+      "properties": {
+        "manifestSha256": { "$ref": "#/$defs/sha256" },
+        "sourceTestSha256": { "$ref": "#/$defs/sha256" },
+        "mode": { "$ref": "#/$defs/modeBinding" },
+        "chain": { "$ref": "#/$defs/resultChain" },
+        "poolKey": { "$ref": "#/$defs/poolKey" },
+        "poolKeySha256": { "$ref": "#/$defs/sha256" },
+        "route": { "$ref": "#/$defs/resultRoute" },
+        "hookData": { "$ref": "#/$defs/resultHookData" },
+        "limits": { "$ref": "#/$defs/resultLimits" },
+        "fee": { "$ref": "#/$defs/resultFee" },
+        "request": { "$ref": "#/$defs/resultRequest" }
+      }
+    },
+    "quoteTestResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["$schema", "schemaVersion", "contract", "status", "digestContract", "contentSha256", "identity", "context", "observation"],
+      "properties": {
+        "$schema": { "const": "urn:programmable:trade-quote-test-result:1.0.0" },
+        "schemaVersion": { "const": "1.0.0" },
+        "contract": { "const": "trade-quote-test-result-v1" },
+        "status": { "const": "LOCAL_EVIDENCE_NOT_APPROVAL" },
+        "digestContract": { "const": "sha256-canonical-json-with-contentSha256-omitted" },
+        "contentSha256": { "$ref": "#/$defs/sha256" },
+        "identity": { "$ref": "#/$defs/resultIdentity" },
+        "context": { "$ref": "#/$defs/resultContext" },
+        "observation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["callKind", "callSucceeded", "amountQuoted", "callDataSha256", "returnDataSha256", "callBinding", "stateBeforeSha256", "stateAfterSha256", "approvalChanged", "walletBalancesChanged", "applicationStateChanged", "finalPoolManagerDeltas"],
+          "properties": {
+            "callKind": { "const": "eth-call" },
+            "callSucceeded": { "const": true },
+            "amountQuoted": { "$ref": "#/$defs/positiveUint256" },
+            "callDataSha256": { "$ref": "#/$defs/sha256" },
+            "returnDataSha256": { "$ref": "#/$defs/sha256" },
+            "callBinding": { "$ref": "#/$defs/tradeQuoteCallBinding" },
+            "stateBeforeSha256": { "$ref": "#/$defs/sha256" },
+            "stateAfterSha256": { "$ref": "#/$defs/sha256" },
+            "approvalChanged": { "const": false },
+            "walletBalancesChanged": { "const": false },
+            "applicationStateChanged": { "const": false },
+            "finalPoolManagerDeltas": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": { "$ref": "#/$defs/currencyDelta" }
+            }
+          }
+        }
+      }
+    },
+    "signedInteger": {
+      "type": "string",
+      "pattern": "^-?(?:0|[1-9][0-9]*)$",
+      "maxLength": 79
+    },
+    "currencyDelta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["currency", "delta"],
+      "properties": {
+        "currency": { "$ref": "#/$defs/address" },
+        "delta": { "$ref": "#/$defs/signedInteger" }
+      }
+    },
+    "walletBalance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["account", "currency", "before", "after"],
+      "properties": {
+        "account": { "$ref": "#/$defs/nonzeroAddress" },
+        "currency": { "$ref": "#/$defs/address" },
+        "before": { "$ref": "#/$defs/uint256" },
+        "after": { "$ref": "#/$defs/uint256" }
+      }
+    },
+    "executionTestResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["$schema", "schemaVersion", "contract", "status", "digestContract", "contentSha256", "identity", "scenario", "outcome", "context", "observation"],
+      "properties": {
+        "$schema": { "const": "urn:programmable:trade-execution-test-result:1.0.0" },
+        "schemaVersion": { "const": "1.0.0" },
+        "contract": { "const": "trade-execution-test-result-v1" },
+        "status": { "const": "LOCAL_EVIDENCE_NOT_APPROVAL" },
+        "digestContract": { "const": "sha256-canonical-json-with-contentSha256-omitted" },
+        "contentSha256": { "$ref": "#/$defs/sha256" },
+        "identity": { "$ref": "#/$defs/resultIdentity" },
+        "scenario": {
+          "enum": ["successful-swap", "expired-deadline-revert", "slippage-bound-revert", "funding-requirement-revert", "unsupported-mode-pre-effects-revert"]
+        },
+        "outcome": { "enum": ["swap-succeeded", "reverted-before-effects"] },
+        "context": { "$ref": "#/$defs/resultContext" },
+        "observation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["executionKind", "executionDigestSha256", "actionPlanSha256", "calldataSha256", "fundingWitnessSha256", "callBinding", "stateWitness", "transactionHash", "receiptStatus", "gasUsed", "amountIn", "amountOut", "slippageGuardAmount", "executedFeesSha256", "finalPoolManagerDeltas", "walletBalances", "refundAmount", "dustAmount", "approvalChanged", "fundsChangedBeforeExecution", "lockStateChanged", "applicationStateChanged", "revertDataSha256"],
+          "properties": {
+            "executionKind": { "enum": ["foundry-call", "local-rpc-transaction"] },
+            "executionDigestSha256": { "$ref": "#/$defs/sha256" },
+            "actionPlanSha256": { "$ref": "#/$defs/sha256" },
+            "calldataSha256": { "$ref": "#/$defs/sha256" },
+            "fundingWitnessSha256": { "$ref": "#/$defs/sha256" },
+            "callBinding": { "$ref": "#/$defs/tradeExecutionCallBinding" },
+            "stateWitness": { "$ref": "#/$defs/tradeExecutionStateWitness" },
+            "transactionHash": {
+              "oneOf": [
+                { "$ref": "#/$defs/bytes32" },
+                { "type": "null" }
+              ]
+            },
+            "receiptStatus": { "enum": ["success", "reverted-as-specified"] },
+            "gasUsed": { "$ref": "#/$defs/positiveUint256" },
+            "amountIn": { "$ref": "#/$defs/uint256" },
+            "amountOut": { "$ref": "#/$defs/uint256" },
+            "slippageGuardAmount": { "$ref": "#/$defs/uint256" },
+            "executedFeesSha256": { "$ref": "#/$defs/sha256" },
+            "finalPoolManagerDeltas": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": { "$ref": "#/$defs/currencyDelta" }
+            },
+            "walletBalances": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 16,
+              "items": { "$ref": "#/$defs/walletBalance" }
+            },
+            "refundAmount": { "$ref": "#/$defs/uint256" },
+            "dustAmount": { "$ref": "#/$defs/uint256" },
+            "approvalChanged": { "type": "boolean" },
+            "fundsChangedBeforeExecution": { "type": "boolean" },
+            "lockStateChanged": { "type": "boolean" },
+            "applicationStateChanged": { "type": "boolean" },
+            "revertDataSha256": {
+              "oneOf": [
+                { "$ref": "#/$defs/sha256" },
+                { "type": "null" }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

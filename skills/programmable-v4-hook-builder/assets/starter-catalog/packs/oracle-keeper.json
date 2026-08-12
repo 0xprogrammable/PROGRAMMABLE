@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "oracle-keeper",
+  "label": "Oracle and keeper",
+  "summary": "Define attributable external data and automation with bounded freshness and failure behavior.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "architecture-review-required",
+  "requires": [],
+  "conflictsWith": [],
+  "capabilities": [
+    "keeper-automation",
+    "oracle-data"
+  ],
+  "projectSurfaces": [
+    "contract",
+    "keeper",
+    "service"
+  ],
+  "requiredFacts": [
+    "Data origin, units, decimals, update cadence and maximum staleness",
+    "Keeper trigger, authority, incentives, idempotency and rate limits",
+    "Manipulation, fallback, pause-free failure and recovery behavior",
+    "Who can replace the oracle or keeper and with what delay"
+  ],
+  "requiredFiles": [
+    "Oracle adapter source",
+    "Keeper source or interface",
+    "Authority and fallback policy",
+    "Oracle and automation tests"
+  ],
+  "requiredTests": [
+    "Stale, zero, negative, extreme and malformed data",
+    "Missed, duplicate, reordered and adversarial keeper calls",
+    "Manipulation and fallback behavior",
+    "Authority rotation and dependency outage"
+  ],
+  "risks": [
+    "Stale or manipulable data can move value incorrectly",
+    "Keeper liveness can become a hidden user-exit dependency",
+    "Mutable dependency authority can rewrite economics"
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "programmable-implementation-lego",
+  "id": "reward-vault-signed-claims",
+  "label": "Reward vault with signed claims",
+  "summary": "Immutable-signer EIP-712 ERC-20 reward claims with replay protection, deadlines and explicit context binding.",
+  "maturity": "code-ready",
+  "maturityMeaning": "Deterministic reusable source is packaged and hash-bound; project integration, tests and review are still required.",
+  "feeApplicability": "project-scope-declaration-required",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "automaticAdverseDecision": false,
+  "reviewRoute": "custom-review",
+  "activatesFor": {
+    "starterIds": [],
+    "packIds": [
+      "randomness-loot-rewards",
+      "signed-outcome-service"
+    ],
+    "capabilityIds": [
+      "loot-rewards",
+      "signed-claim"
+    ]
+  },
+  "requiresLegos": [],
+  "projectSurfaces": [
+    "contract",
+    "service"
+  ],
+  "dependencyRequirements": [
+    "Exact @openzeppelin/contracts 5.6.1 resolution with Solidity 0.8.26",
+    "Standard ERC-20 reward token or project-specific received-balance accounting"
+  ],
+  "requiredFacts": [
+    "Bind signer custody, outcome provenance, context hash, nonce policy and maximum deadline",
+    "Fund the vault before claims and define exhaustion, cancellation and retirement behavior",
+    "Disclose transfer-tax, rebasing or callback behavior of the reward token"
+  ],
+  "hardConflictPredicates": [
+    "A signature can be replayed across chain, vault, recipient, amount or context",
+    "A claim can transfer more reward value than its signed authorization",
+    "A mutable signer can be replaced without an explicit disclosed delay and user-exit policy"
+  ],
+  "claims": {
+    "audited": false,
+    "deployed": false,
+    "productionReady": false,
+    "providerSupport": "not-claimed"
+  },
+  "files": [
+    {
+      "sourcePath": "templates/reward-vault-signed-claims/SignedRewardVault.sol",
+      "targetPath": "implementation/reward-vault-signed-claims/src/SignedRewardVault.sol",
+      "role": "source",
+      "language": "solidity",
+      "sha256": "ecdfb9ce894c2709b7fd3b6a14a457ff8f8848605367c66fbb953eb69c408bd0"
+    }
+  ]
+}

@@ -1,0 +1,582 @@
+{
+  "$schema": "urn:programmable:contract-registry-source:1.0.0",
+  "schemaVersion": "1.0.0",
+  "contracts": [
+    {
+      "contractId": "application-api-v1",
+      "schemaPath": "references/application-api.schema.json",
+      "schemaId": "https://programmable.family/schemas/custom-hook-application-api-1.0.0.json",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/submission-core.mjs",
+        "exportName": "validateAgainstSchema",
+        "mode": "schema-engine"
+      }
+    },
+    {
+      "contractId": "architecture-candidates-v1",
+      "schemaPath": "references/architecture-candidates-v1.schema.json",
+      "schemaId": "urn:programmable:architecture-candidates:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/project-contracts-core.mjs",
+        "exportName": "validateArchitectureCandidates",
+        "mode": "package-semantic"
+      }
+    },
+    {
+      "contractId": "architecture-decisions-v1",
+      "schemaPath": "references/architecture-decisions-v1.schema.json",
+      "schemaId": "urn:programmable:architecture-decisions:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/open-world-v2-core.mjs",
+        "exportName": "validateOpenWorldV2Package",
+        "mode": "package-semantic"
+      }
+    },
+    {
+      "contractId": "capability-contract-v1",
+      "schemaPath": "references/capability-contract-v1.schema.json",
+      "schemaId": "urn:programmable:capability-contract:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/composition-checker-core.mjs",
+        "exportName": "validateCapabilityContractV1",
+        "mode": "direct"
+      }
+    },
+    {
+      "contractId": "command-receipt-v1",
+      "schemaPath": "references/command-receipt-v1.schema.json",
+      "schemaId": "urn:programmable:project-command-receipt:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/repository-completion-core.mjs",
+        "exportName": "validateRepositoryPlan",
+        "mode": "package-semantic"
+      }
+    },
+    {
+      "contractId": "companion-manifest-v2",
+      "schemaPath": "references/companion-manifest-v2.schema.json",
+      "schemaId": "urn:programmable:companion-manifest-v2",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/companion-manifest-contract.mjs",
+        "exportName": "normalizeCompanionManifest",
+        "mode": "direct"
+      }
+    },
+    {
+      "contractId": "delegated-payer-sponsor-intent-v1",
+      "schemaPath": "references/delegated-payer-sponsor-intent-v1.schema.json",
+      "schemaId": "urn:programmable:delegated-payer-sponsor-intent:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/typed-launch-contracts-v1-core.mjs",
+        "exportName": "validateDelegatedPayerSponsorIntentV1",
+        "mode": "direct"
+      }
+    },
+    {
+      "contractId": "execution-surface-coverage-v1",
+      "schemaPath": "references/execution-surface-coverage-v1.schema.json",
+      "schemaId": "urn:programmable:execution-surface-coverage:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/launch-bundle-v2-core.mjs",
+        "exportName": "validateLaunchBundleV2Input",
+        "mode": "package-semantic"
+      }
+    },
+    {
+      "contractId": "fee-conformance-receipt-v1",
+      "schemaPath": "references/fee-conformance-receipt-v1.schema.json",
+      "schemaId": "urn:programmable:fee-conformance-receipt-v1:1.0.0",
+      "lifecycle": "frozen",
+      "payloadDigestProfile": "canonical-json-legacy-v1-lf",
+      "validator": {
+        "modulePath": "scripts/fee-conformance-receipt-v1-core.mjs",
+        "exportName": "validateFeeConformanceReceiptV1",
+        "mode": "direct"
+      }
+    },
+    {
+      "contractId": "fee-conformance-vector-set-v1",
+      "schemaPath": "references/fee-conformance-vector-set-v1.schema.json",
+      "schemaId": "urn:programmable:fee-conformance-vector-set-v1:1.0.0",
+      "lifecycle": "frozen",
+      "payloadDigestProfile": "canonical-json-legacy-v1-lf",
+      "validator": {
+        "modulePath": "scripts/fee-conformance-vector-set-v1-core.mjs",
+        "exportName": "validateFeeConformanceVectorSetV1",
+        "mode": "direct"
+      }
+    },
+    {
+      "contractId": "fee-policy-v2",
+      "schemaPath": "references/fee-policy-v2.schema.json",
+      "schemaId": "urn:programmable:fee-policy-v2:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/fee-policy-v2-contract.mjs",
+        "exportName": "validateFeePolicyV2",
+        "mode": "direct"
+      }
+    },
+    {
+      "contractId": "github-public-source-contract-v1",
+      "schemaPath": "references/github-public-source-contract-v1.schema.json",
+      "schemaId": "urn:programmable:github-public-source-contract-v1",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/github-public-source-core.mjs",
+        "exportName": "validateGitHubPublicSourceRequestV1",
+        "mode": "direct"
+      }
+    },
+    {
+      "contractId": "idea-source-v1",
+      "schemaPath": "references/idea-source-v1.schema.json",
+      "schemaId": "urn:programmable:idea-source:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/open-world-v2-core.mjs",
+        "exportName": "validateOpenWorldV2Package",
+        "mode": "package-semantic"
+      }
+    },
+    {
+      "contractId": "intent-contract-v1",
+      "schemaPath": "references/intent-contract-v1.schema.json",
+      "schemaId": "urn:programmable:intent-contract:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/open-world-v2-core.mjs",
+        "exportName": "validateOpenWorldV2Package",
+        "mode": "package-semantic"
+      }
+    },
+    {
+      "contractId": "intent-fidelity-v1",
+      "schemaPath": "references/intent-fidelity-v1.schema.json",
+      "schemaId": "urn:programmable:intent-fidelity:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/open-world-v2-core.mjs",
+        "exportName": "validateOpenWorldV2Package",
+        "mode": "package-semantic"
+      }
+    },
+    {
+      "contractId": "launch-admission-decision-v1",
+      "schemaPath": "references/launch-admission-decision-v1.schema.json",
+      "schemaId": "urn:programmable:launch-admission-decision:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/typed-launch-contracts-v1-core.mjs",
+        "exportName": "validateLaunchAdmissionDecisionV1",
+        "mode": "direct"
+      }
+    },
+    {
+      "contractId": "launch-bundle-input-v1",
+      "schemaPath": "references/launch-bundle-input-v1.schema.json",
+      "schemaId": "urn:programmable:launch-bundle-input:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/launch-bundle-core.mjs",
+        "exportName": "buildLaunchBundle",
+        "mode": "builder"
+      }
+    },
+    {
+      "contractId": "launch-bundle-input-v2",
+      "schemaPath": "references/launch-bundle-input-v2.schema.json",
+      "schemaId": "urn:programmable:launch-bundle-input-v2:2.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/launch-bundle-v2-core.mjs",
+        "exportName": "validateLaunchBundleV2Input",
+        "mode": "direct"
+      }
+    },
+    {
+      "contractId": "launch-bundle-output-v1",
+      "schemaPath": "references/launch-bundle-output-v1.schema.json",
+      "schemaId": "urn:programmable:launch-bundle-output:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/launch-bundle-core.mjs",
+        "exportName": "validateLaunchBundleOutput",
+        "mode": "direct"
+      }
+    },
+    {
+      "contractId": "launch-bundle-output-v2",
+      "schemaPath": "references/launch-bundle-output-v2.schema.json",
+      "schemaId": "urn:programmable:launch-bundle-output-v2:2.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/launch-bundle-v2-core.mjs",
+        "exportName": "verifyLaunchBundleV2Report",
+        "mode": "direct"
+      }
+    },
+    {
+      "contractId": "launch-plan-graph-input-v1",
+      "schemaPath": "references/launch-plan-graph-input-v1.schema.json",
+      "schemaId": "urn:programmable:launch-plan-graph-input:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/launch-plan-graph-core.mjs",
+        "exportName": "validateLaunchPlanGraphInput",
+        "mode": "direct"
+      }
+    },
+    {
+      "contractId": "launch-plan-graph-output-v1",
+      "schemaPath": "references/launch-plan-graph-output-v1.schema.json",
+      "schemaId": "urn:programmable:launch-plan-graph-output:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/launch-plan-graph-core.mjs",
+        "exportName": "verifyCompiledLaunchPlanGraph",
+        "mode": "direct"
+      }
+    },
+    {
+      "contractId": "layered-response-v1",
+      "schemaPath": "references/layered-response-v1.schema.json",
+      "schemaId": "urn:programmable:layered-response:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/submission-core.mjs",
+        "exportName": "validateAgainstSchema",
+        "mode": "schema-engine"
+      }
+    },
+    {
+      "contractId": "normative-property-manifest-v1",
+      "schemaPath": "references/normative-property-manifest-v1.schema.json",
+      "schemaId": "urn:programmable:normative-property-manifest-v1:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/submission-core.mjs",
+        "exportName": "validateAgainstSchema",
+        "mode": "schema-engine"
+      }
+    },
+    {
+      "contractId": "open-world-security-v1",
+      "schemaPath": "references/open-world-security-v1.schema.json",
+      "schemaId": "urn:programmable:open-world-security:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/open-world-security-core.mjs",
+        "exportName": "validateOpenWorldSecurityInput",
+        "mode": "direct"
+      }
+    },
+    {
+      "contractId": "permit2-launch-witness-v1",
+      "schemaPath": "references/permit2-launch-witness-v1.schema.json",
+      "schemaId": "urn:programmable:permit2-launch-witness:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/typed-launch-contracts-v1-core.mjs",
+        "exportName": "validatePermit2LaunchWitnessV1",
+        "mode": "direct"
+      }
+    },
+    {
+      "contractId": "product-graph-v1",
+      "schemaPath": "references/product-graph-v1.schema.json",
+      "schemaId": "urn:programmable:product-graph:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/project-contracts-core.mjs",
+        "exportName": "validateProductGraph",
+        "mode": "package-semantic"
+      }
+    },
+    {
+      "contractId": "programmable-trade-execution-v1",
+      "schemaPath": "references/programmable-trade-execution-v1.schema.json",
+      "schemaId": "urn:programmable:trade-execution:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/trade-capability-manifest-core.mjs",
+        "exportName": "validateProgrammableTradeExecutionEnvelopeV1",
+        "mode": "direct"
+      }
+    },
+    {
+      "contractId": "project-spec-v1",
+      "schemaPath": "references/project-spec-v1.schema.json",
+      "schemaId": "urn:programmable:project-spec:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/project-contracts-core.mjs",
+        "exportName": "validateProjectSpec",
+        "mode": "direct"
+      }
+    },
+    {
+      "contractId": "project-state-v1",
+      "schemaPath": "references/project-state-v1.schema.json",
+      "schemaId": "urn:programmable:project-state:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/project-state-core.mjs",
+        "exportName": "validateProjectState",
+        "mode": "package-semantic"
+      }
+    },
+    {
+      "contractId": "project-toolchain-lock-v1",
+      "schemaPath": "references/project-toolchain-lock-v1.schema.json",
+      "schemaId": "urn:programmable:project-toolchain-lock:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/repository-completion-core.mjs",
+        "exportName": "validateRepositoryPlan",
+        "mode": "package-semantic"
+      }
+    },
+    {
+      "contractId": "public-pr-application-v3",
+      "schemaPath": "references/public-pr-application-v3.schema.json",
+      "schemaId": "https://programmable.money/schemas/public-pr-application-v3.json",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/public-pr-application-v3-core.mjs",
+        "exportName": "validatePublicPrApplicationV3",
+        "mode": "direct"
+      }
+    },
+    {
+      "contractId": "public-pr-application-v2",
+      "schemaPath": "references/public-pr-application.schema.json",
+      "schemaId": "https://programmable.money/schemas/public-pr-application-v2.json",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/github-application-core.mjs",
+        "exportName": "normalizePreparedApplication",
+        "mode": "direct"
+      }
+    },
+    {
+      "contractId": "registry-acceptance-v3",
+      "schemaPath": "references/registry-acceptance-v3.schema.json",
+      "schemaId": "urn:programmable:registry-acceptance-v3:3.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/launch-bundle-v2-core.mjs",
+        "exportName": "validateLaunchBundleV2Input",
+        "mode": "package-semantic"
+      }
+    },
+    {
+      "contractId": "repository-plan-v1",
+      "schemaPath": "references/repository-plan-v1.schema.json",
+      "schemaId": "urn:programmable:repository-plan:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/repository-completion-core.mjs",
+        "exportName": "validateRepositoryPlan",
+        "mode": "package-semantic"
+      }
+    },
+    {
+      "contractId": "runtime-assets-v1",
+      "schemaPath": "references/runtime-assets-v1.schema.json",
+      "schemaId": "urn:programmable:runtime-assets:1",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/runtime-assets-core.mjs",
+        "exportName": "buildRuntimeAssetReview",
+        "mode": "builder"
+      }
+    },
+    {
+      "contractId": "rwa-evidence-profile-v1",
+      "schemaPath": "references/rwa-evidence-profile-v1.schema.json",
+      "schemaId": "urn:programmable:rwa-evidence-profile:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/typed-launch-contracts-v1-core.mjs",
+        "exportName": "validateRwaEvidenceProfileV1",
+        "mode": "direct"
+      }
+    },
+    {
+      "contractId": "scientific-data-evidence-profile-v1",
+      "schemaPath": "references/scientific-data-evidence-profile-v1.schema.json",
+      "schemaId": "urn:programmable:scientific-data-evidence-profile:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/typed-launch-contracts-v1-core.mjs",
+        "exportName": "validateScientificDataEvidenceProfileV1",
+        "mode": "direct"
+      }
+    },
+    {
+      "contractId": "semantic-rule-registry-v1",
+      "schemaPath": "references/semantic-rule-registry-v1.schema.json",
+      "schemaId": "urn:programmable:semantic-rule-registry-v1:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/semantic-rule-registry-core.mjs",
+        "exportName": "validateSemanticRuleRegistry",
+        "mode": "direct"
+      }
+    },
+    {
+      "contractId": "source-closure-manifest-v1",
+      "schemaPath": "references/source-closure-manifest-v1.schema.json",
+      "schemaId": "urn:programmable:source-closure-manifest:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/public-pr-application-v3-core.mjs",
+        "exportName": "validateSourceClosureManifestV1",
+        "mode": "direct"
+      }
+    },
+    {
+      "contractId": "submission-v2",
+      "schemaPath": "references/submission-v2.schema.json",
+      "schemaId": "urn:programmable:v4-hook-submission:2.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/open-world-v2-core.mjs",
+        "exportName": "validateOpenWorldV2Package",
+        "mode": "package-semantic"
+      }
+    },
+    {
+      "contractId": "submission-v1-6",
+      "schemaPath": "references/submission.schema.json",
+      "schemaId": "urn:programmable:v4-hook-submission:1.6.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/submission-core.mjs",
+        "exportName": "analyzeSubmission",
+        "mode": "direct"
+      }
+    },
+    {
+      "contractId": "swap-mode-classification-v1",
+      "schemaPath": "references/swap-mode-classification-v1.schema.json",
+      "schemaId": "urn:programmable:swap-mode-classification:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/typed-launch-contracts-v1-core.mjs",
+        "exportName": "validateSwapModeClassificationV1",
+        "mode": "direct"
+      }
+    },
+    {
+      "contractId": "test-evidence-outcome-v1",
+      "schemaPath": "references/test-evidence-outcome-v1.schema.json",
+      "schemaId": "urn:programmable:test-evidence-outcome:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/typed-launch-contracts-v1-core.mjs",
+        "exportName": "validateTestEvidenceOutcomeV1",
+        "mode": "direct"
+      }
+    },
+    {
+      "contractId": "trade-capability-manifest-v1",
+      "schemaPath": "references/trade-capability-manifest-v1.schema.json",
+      "schemaId": "urn:programmable:trade-capability-manifest:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/trade-capability-manifest-core.mjs",
+        "exportName": "validateTradeCapabilityManifestV1",
+        "mode": "direct"
+      }
+    },
+    {
+      "contractId": "upstream-reviewed-drift-v1",
+      "schemaPath": "references/upstream-reviewed-drift-v1.schema.json",
+      "schemaId": "urn:programmable:upstream-reviewed-drift:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/reviewed-drift-receipt-core.mjs",
+        "exportName": "validateReviewedDriftReceipt",
+        "mode": "package-semantic"
+      }
+    },
+    {
+      "contractId": "v4-deployment-evidence-v1",
+      "schemaPath": "references/v4-deployment-evidence-v1.schema.json",
+      "schemaId": "urn:programmable:v4-deployment-evidence:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/v4-deployment-evidence-core.mjs",
+        "exportName": "validateV4DeploymentEvidence",
+        "mode": "package-semantic"
+      }
+    },
+    {
+      "contractId": "v4-deployment-preimage-v1",
+      "schemaPath": "references/v4-deployment-preimage-v1.schema.json",
+      "schemaId": "urn:programmable:v4-deployment-preimage:1.0.0",
+      "lifecycle": "active",
+      "payloadDigestProfile": "contract-defined",
+      "validator": {
+        "modulePath": "scripts/v4-deployment-evidence-core.mjs",
+        "exportName": "validateV4DeploymentEvidence",
+        "mode": "package-semantic"
+      }
+    }
+  ]
+}

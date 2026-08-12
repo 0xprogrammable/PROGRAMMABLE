@@ -1,0 +1,1135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:open-world-security:1.0.0",
+  "title": "Programmable open-world security evidence envelope v1",
+  "description": "A standalone, provenance-preserving security envelope. It combines intent, configuration, source and runtime observations without allowing a later layer to erase an earlier observation. Passing this schema is structural validation only; it is not launch approval or a security proof.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "subject",
+    "assessment",
+    "layers"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "open-world-security-v1"
+    },
+    "subject": {
+      "$ref": "#/$defs/subject"
+    },
+    "assessment": {
+      "$ref": "#/$defs/assessment"
+    },
+    "layers": {
+      "$ref": "#/$defs/layers"
+    },
+    "automatedFindings": {
+      "$ref": "#/$defs/automatedFindings"
+    },
+    "extensions": {
+      "$ref": "#/$defs/customProfiles"
+    }
+  },
+  "$defs": {
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "revision",
+        "stage"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revision": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "stage": {
+          "enum": [
+            "idea",
+            "proposal",
+            "prototype",
+            "candidate",
+            "release",
+            "runtime"
+          ]
+        }
+      }
+    },
+    "assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "reasonCode",
+        "evidenceRefs",
+        "sourceCoverage"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "unassessed",
+            "partial",
+            "source-assessed"
+          ]
+        },
+        "reasonCode": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 120,
+          "pattern": "^[A-Z0-9_]+$"
+        },
+        "evidenceRefs": {
+          "$ref": "#/$defs/evidenceRefs"
+        },
+        "sourceCoverage": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/sourceCoverage"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "unassessed"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          "then": {
+            "properties": {
+              "reasonCode": {
+                "type": "string"
+              },
+              "evidenceRefs": {
+                "maxItems": 0
+              },
+              "sourceCoverage": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "partial"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          "then": {
+            "properties": {
+              "reasonCode": {
+                "type": "string"
+              },
+              "evidenceRefs": {
+                "minItems": 1
+              },
+              "sourceCoverage": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "source-assessed"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          "then": {
+            "properties": {
+              "reasonCode": {
+                "type": "null"
+              },
+              "evidenceRefs": {
+                "minItems": 1
+              },
+              "sourceCoverage": {
+                "$ref": "#/$defs/sourceCoverage"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "sourceCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "primaryRepositoryRef",
+        "repositories"
+      ],
+      "properties": {
+        "primaryRepositoryRef": {
+          "$ref": "#/$defs/openSlug"
+        },
+        "repositories": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/sourceCoverageRepository"
+          }
+        }
+      }
+    },
+    "sourceCoverageRepository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repositoryRef",
+        "revisionObjectId",
+        "treeObjectId",
+        "sourceClosureMode",
+        "sourcePaths",
+        "sourcePathsSha256",
+        "manifestPath",
+        "manifestSha256",
+        "manifestByteLength",
+        "closureSha256",
+        "reportPath",
+        "reportSha256",
+        "reportByteLength",
+        "result"
+      ],
+      "properties": {
+        "repositoryRef": {
+          "$ref": "#/$defs/openSlug"
+        },
+        "revisionObjectId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "treeObjectId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "sourceClosureMode": {
+          "enum": [
+            "inline",
+            "manifest"
+          ]
+        },
+        "sourcePaths": {
+          "type": "array",
+          "maxItems": 4096,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/repositoryPath"
+          }
+        },
+        "sourcePathsSha256": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "manifestPath": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/repositoryPath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "manifestSha256": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "manifestByteLength": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "closureSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "reportPath": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "reportSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "reportByteLength": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "result": {
+          "const": "VERIFIED"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "sourceClosureMode": {
+                "const": "inline"
+              }
+            },
+            "required": [
+              "sourceClosureMode"
+            ]
+          },
+          "then": {
+            "properties": {
+              "sourcePaths": {
+                "minItems": 1
+              },
+              "sourcePathsSha256": {
+                "$ref": "#/$defs/sha256"
+              },
+              "manifestPath": {
+                "type": "null"
+              },
+              "manifestSha256": {
+                "type": "null"
+              },
+              "manifestByteLength": {
+                "type": "null"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "sourcePaths": {
+                "maxItems": 0
+              },
+              "sourcePathsSha256": {
+                "type": "null"
+              },
+              "manifestPath": {
+                "$ref": "#/$defs/repositoryPath"
+              },
+              "manifestSha256": {
+                "$ref": "#/$defs/sha256"
+              },
+              "manifestByteLength": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "openSlug": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "languageIdentifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$",
+      "description": "A lowercase public language identifier. Known verifier profiles may add path checks, but unprofiled languages remain valid and reviewable."
+    },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*(?:^|/)\\.git(?:/|$))(?!.*\\\\)(?!.*(?:%2[fF]|%5[cC]))(?!.*\\/$)[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029\\u202a-\\u202e\\u2066-\\u2069]+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:(?!0{64}$)[0-9a-f]{64}$"
+    },
+    "automatedFindings": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/automatedFinding"
+      }
+    },
+    "automatedFinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "rule",
+        "source",
+        "confidence",
+        "status",
+        "language",
+        "repositoryPath",
+        "category",
+        "message",
+        "evidenceRefs"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/openSlug"
+        },
+        "rule": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "scope"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "scope": {
+              "$ref": "#/$defs/languageIdentifier"
+            }
+          }
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "toolVersion",
+            "reportRef",
+            "reportSha256"
+          ],
+          "properties": {
+            "tool": {
+              "type": "string",
+              "minLength": 1
+            },
+            "toolVersion": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1
+            },
+            "reportRef": {
+              "type": "string",
+              "minLength": 1
+            },
+            "reportSha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "confidence": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "status": {
+          "enum": [
+            "automated",
+            "partial",
+            "disputed",
+            "builder-confirmed",
+            "reviewer-confirmed"
+          ]
+        },
+        "language": {
+          "$ref": "#/$defs/languageIdentifier"
+        },
+        "repositoryPath": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/repositoryPath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "category": {
+          "enum": [
+            "drain",
+            "deception",
+            "authorization",
+            "solvency",
+            "privacy",
+            "secret",
+            "path",
+            "liveness",
+            "accounting",
+            "other"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidenceRefs": {
+          "$ref": "#/$defs/evidenceRefs"
+        }
+      },
+      "description": "One provenance-bound scanner observation. Automated, partial and disputed states remain independent-review holds; only an explicit builder or reviewer confirmation of a correctly scoped drain/deception finding can require safe redesign."
+    },
+    "layers": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "intent": {
+          "$ref": "#/$defs/securityLayer"
+        },
+        "config": {
+          "$ref": "#/$defs/securityLayer"
+        },
+        "source": {
+          "$ref": "#/$defs/securityLayer"
+        },
+        "runtime": {
+          "$ref": "#/$defs/securityLayer"
+        }
+      }
+    },
+    "securityLayer": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidenceRefs": {
+          "$ref": "#/$defs/evidenceRefs"
+        },
+        "customProfiles": {
+          "$ref": "#/$defs/customProfiles"
+        },
+        "callbackAuth": {
+          "$ref": "#/$defs/callbackAuth"
+        },
+        "privilegedValue": {
+          "$ref": "#/$defs/privilegedValue"
+        },
+        "randomness": {
+          "$ref": "#/$defs/randomness"
+        },
+        "gameSettlement": {
+          "$ref": "#/$defs/gameSettlement"
+        },
+        "returnDelta": {
+          "$ref": "#/$defs/returnDelta"
+        },
+        "solvency": {
+          "$ref": "#/$defs/solvency"
+        },
+        "exitLiveness": {
+          "$ref": "#/$defs/exitLiveness"
+        }
+      }
+    },
+    "evidenceRefs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "customProfiles": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/customProfile"
+      }
+    },
+    "customProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "summary",
+        "schemaRef",
+        "facts",
+        "declaredRisks",
+        "controls",
+        "unresolved",
+        "reviewRoute",
+        "evidenceRefs"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "schemaRef": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "facts": {
+          "type": "object"
+        },
+        "declaredRisks": {
+          "$ref": "#/$defs/openTextList"
+        },
+        "controls": {
+          "$ref": "#/$defs/openTextList"
+        },
+        "unresolved": {
+          "$ref": "#/$defs/openTextList"
+        },
+        "resolutions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/customResolution"
+          }
+        },
+        "reviewRoute": {
+          "const": "independent-review"
+        },
+        "evidenceRefs": {
+          "$ref": "#/$defs/evidenceRefs"
+        }
+      }
+    },
+    "customResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "question",
+        "resolution",
+        "evidenceRefs"
+      ],
+      "properties": {
+        "question": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resolution": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidenceRefs": {
+          "$ref": "#/$defs/evidenceRefs"
+        }
+      }
+    },
+    "openTextList": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "nullableBoolean": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "nullableUint": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^(?:0|[1-9][0-9]*)$",
+      "maxLength": 79
+    },
+    "nullableSeconds": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "callbackAuth": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidenceRefs": {
+          "$ref": "#/$defs/evidenceRefs"
+        },
+        "used": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "poolManagerOnly": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "poolManagerImmutable": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "poolBinding": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "exact-pool-key",
+            "pool-id-registry",
+            "custom-reviewed",
+            "none",
+            null
+          ]
+        },
+        "permissionMaskMatchesAddress": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "selectorAndReturnShapeValidated": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "senderTreatedAsEndUser": {
+          "$ref": "#/$defs/nullableBoolean"
+        }
+      }
+    },
+    "privilegedValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidenceRefs": {
+          "$ref": "#/$defs/evidenceRefs"
+        },
+        "used": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "authorityModel": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "none",
+            "immutable-rules",
+            "single-key",
+            "multisig",
+            "governance",
+            "custom-reviewed",
+            null
+          ]
+        },
+        "hidden": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "canMoveUserBacking": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "canMovePlatformLiability": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "canRedirectOtherBeneficiaryPayouts": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "movementAuthorizationBound": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "backingAndLiabilityBoundsEnforced": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "payoutBeneficiaryBindingEnforced": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "canReduceUserBackingBelowEnforceableLiabilities": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "canReduceReservedPlatformLiabilitiesBelowFloor": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "canRedirectPayoutOutsidePriorConsentOrImmutableRule": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "upgradeableValueLogic": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "upgradeCanBypassInvariants": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "sweepEnabled": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "excessOnlySweep": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "timelockSeconds": {
+          "$ref": "#/$defs/nullableSeconds"
+        },
+        "userExitBeforeChange": {
+          "$ref": "#/$defs/nullableBoolean"
+        }
+      }
+    },
+    "randomness": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidenceRefs": {
+          "$ref": "#/$defs/evidenceRefs"
+        },
+        "used": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "economicOutcome": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "participantValueAtRisk": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "sourceBiasDisclosed": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "promisedUnbiasedOutcome": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "manipulationCanReduceEnforceableUserEntitlement": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "vrf",
+            "commit-reveal",
+            "threshold-oracle",
+            "signed-server",
+            "block-timestamp",
+            "blockhash",
+            "prevrandao-only",
+            "custom-reviewed",
+            "none",
+            null
+          ]
+        },
+        "domainBound": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "replayProtected": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "withholdingBounded": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "biasResistance": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "fallback": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "fail-closed",
+            "cancel-and-refund",
+            "bounded-reroll",
+            "custom-reviewed",
+            "none",
+            null
+          ]
+        }
+      }
+    },
+    "gameSettlement": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidenceRefs": {
+          "$ref": "#/$defs/evidenceRefs"
+        },
+        "used": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "movesValue": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "participantConsent": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "perMatchEscrow": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "maxLossPerMatch": {
+          "$ref": "#/$defs/nullableUint"
+        },
+        "maxPayoutPerMatch": {
+          "$ref": "#/$defs/nullableUint"
+        },
+        "matchIdBound": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "participantsBound": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "nonceBound": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "expiryBound": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "singleUse": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "refundOrDispute": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "operatorCanMoveUnescrowedFunds": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "operatorCanChooseRecipientOutsideMatch": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "lossExposureBounded": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "payoutExposureBounded": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "authorizationScopeBound": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "replayProtectionBound": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "livenessBounded": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "failureResolutionDefined": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "custodyModelDisclosed": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "custodyAuthorizationBound": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "operatorCanExceedAuthorizedExposure": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "operatorCanChooseUnauthorizedRecipient": {
+          "$ref": "#/$defs/nullableBoolean"
+        }
+      }
+    },
+    "returnDelta": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidenceRefs": {
+          "$ref": "#/$defs/evidenceRefs"
+        },
+        "used": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "noOpReturnDeltaUsed": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "noOpUsedOnPathClaimingCustomAccounting": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "canConsumeEntireSpecifiedAmount": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "zeroOutputPossible": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "userAuthorizedZeroOutput": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "outputBalanceBacked": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "finalCallerDeltaBound": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "allEnabledQuadrantsCovered": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "partialFillDefined": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "settlementCompletesBeforeUnlockEnd": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "deltaConservationProven": {
+          "$ref": "#/$defs/nullableBoolean"
+        }
+      }
+    },
+    "solvency": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidenceRefs": {
+          "$ref": "#/$defs/evidenceRefs"
+        },
+        "used": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "liabilitiesBoundedByImmediatelyRealizableAssets": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "futureRevenueCountedAsBacking": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "claimIsImmediatelyRedeemableOrGuaranteed": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "contingencyMaturityAndDefaultDisclosed": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "lossAllocationEnforced": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "canCreateUnboundedOrDeceptiveGuaranteedClaim": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "crossPoolNetting": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "crossPoolNettingProven": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "adminCanWithdrawBacking": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "lossAllocationDefined": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "claimAssetsSeparated": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "solvencyInvariantTested": {
+          "$ref": "#/$defs/nullableBoolean"
+        }
+      }
+    },
+    "exitLiveness": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidenceRefs": {
+          "$ref": "#/$defs/evidenceRefs"
+        },
+        "used": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "userExitExists": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "outstandingUserEntitlementExists": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "userAuthorizedIrreversibleDisposition": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "irreversibleDispositionDisclosed": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "managedRedemption": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "managedRedemptionDisclosed": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "managedRedemptionAuthorizationBound": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "managedRedemptionRecourseAvailable": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "authorityCanSeizeOrRedirectOwedValue": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "autonomousExitPromised": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "boundedTime": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "boundedGas": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "independentOfAdmin": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "independentOfKeeper": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "dependencyFailureMode": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "fail-closed-no-new-value",
+            "exit-remains-available",
+            "cancel-and-refund",
+            "custom-reviewed",
+            "none",
+            null
+          ]
+        },
+        "selectiveBlockingPossible": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "selectiveBlockingDisclosed": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "selectiveBlockingScopeBound": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "selectiveBlockingAuthorizationBound": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "blockedValueCannotBeRedirectedByPlatformAuthority": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "selectiveBlockingReviewAvailable": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "recipientFailureIsolated": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "unboundedLoop": {
+          "$ref": "#/$defs/nullableBoolean"
+        }
+      }
+    }
+  }
+}

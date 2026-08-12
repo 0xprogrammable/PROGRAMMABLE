@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "continuous-clearing-auction",
+  "label": "Continuous clearing auction",
+  "summary": "Define continuous or discrete clearing-price discovery with explicit deposits, fills, refunds and settlement invariants.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "architecture-review-required",
+  "requires": [
+    "custom-hook-behavior"
+  ],
+  "conflictsWith": [],
+  "capabilities": [
+    "continuous-clearing-auction",
+    "launch-price-discovery"
+  ],
+  "projectSurfaces": [
+    "application",
+    "contract",
+    "indexer",
+    "keeper",
+    "metadata"
+  ],
+  "requiredFacts": [
+    "Auction opening, closing, tick, epoch and clearing rules including exact time and block sources",
+    "Bid or order commitment, deposit, cancellation, partial fill, finalization, refund and claim lifecycle",
+    "Clearing-price math, rounding, tie breaking, minimums, caps and unsold-inventory treatment",
+    "Who can finalize, pause or recover an auction and the liveness path when automation fails",
+    "Transition from auction accounting into canonical-pool liquidity and ordinary trading"
+  ],
+  "requiredFiles": [
+    "Auction hook and accounting source",
+    "Clearing-price specification",
+    "Bid, refund and claim lifecycle specification",
+    "Finalizer or keeper policy",
+    "Auction-to-pool transition tests"
+  ],
+  "requiredTests": [
+    "Clearing-price differential tests against an independent reference model",
+    "Zero, one, tied, oversubscribed, undersubscribed and boundary-price order books",
+    "Deposit conservation across fills, refunds, claims, rounding and unsold inventory",
+    "Late, duplicate, censored, reordered and adversarial finalization behavior",
+    "MEV, timestamp, block-ordering, sandwich and last-look manipulation scenarios"
+  ],
+  "risks": [
+    "Clearing or rounding errors can misprice every participant in an epoch",
+    "Finalizer liveness or ordering power can censor, delay or manipulate outcomes",
+    "Auction-to-pool transition errors can strand inventory or create discontinuous pricing"
+  ]
+}

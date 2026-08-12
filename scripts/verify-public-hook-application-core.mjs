@@ -22,6 +22,7 @@ import {
   validateCompanionClosureReceipts,
   verifyCompanionManifestV2Closure
 } from "../skills/programmable-v4-hook-builder/scripts/companion-manifest-contract.mjs";
+import { normalizeBuilderTemplate } from "../skills/programmable-v4-hook-builder/scripts/builder-template-contract.mjs";
 
 export const VALIDATOR_VERSION = "2.0.0";
 export const PUBLIC_APPLICATION_SCHEMA_ID = "https://programmable.money/schemas/public-pr-application-v2.json";
@@ -2314,7 +2315,14 @@ function validateApplicationManifest(application, expectedApplicationId, limits)
       "application.json must use the current public-pr-application-v2 contract with the mandatory Programmable fee projection."
     );
   }
-  expectClosedObject(application, [
+  const legacyApplicationContract = !Object.hasOwn(application ?? {}, "builderTemplate")
+    && (
+      !isPlainObject(application?.programmableFee)
+      ||
+      application?.programmableFee?.policyVersion === "1.0.0"
+      || Object.hasOwn(application?.programmableFee?.rates ?? {}, "selectedHundredthsOfBip")
+    );
+  const applicationKeys = [
     "applicationId",
     "applicationRevision",
     "builder",
@@ -2327,7 +2335,12 @@ function validateApplicationManifest(application, expectedApplicationId, limits)
     "stage",
     "summary",
     "title"
-  ], "application.json");
+  ];
+  if (Object.hasOwn(application, "builderTemplate")) applicationKeys.push("builderTemplate");
+  else if (!legacyApplicationContract) {
+    reject("BUILDER_TEMPLATE_MISSING", "Current applications must bind builder-template provenance.");
+  }
+  expectClosedObject(application, applicationKeys, "application.json");
   expectInteger(application.schemaVersion, 2, 2, "application.schemaVersion");
   expectPattern(application.applicationId, APPLICATION_ID_PATTERN, 80, "application.applicationId");
   if (application.applicationId !== expectedApplicationId) {
@@ -2339,6 +2352,18 @@ function validateApplicationManifest(application, expectedApplicationId, limits)
   }
   expectText(application.title, 3, 120, "application.title");
   expectText(application.summary, 20, 1_000, "application.summary");
+
+  if (Object.hasOwn(application, "builderTemplate")) {
+    let normalizedTemplate;
+    try {
+      normalizedTemplate = normalizeBuilderTemplate(application.builderTemplate);
+    } catch {
+      reject("BUILDER_TEMPLATE_INVALID", "builderTemplate is not a canonical manual or catalog selection.");
+    }
+    if (canonicalJson(normalizedTemplate) !== canonicalJson(application.builderTemplate)) {
+      reject("BUILDER_TEMPLATE_NONCANONICAL", "builderTemplate must use canonical ordering and defaults.");
+    }
+  }
 
   expectClosedObject(application.builder, ["contact", "githubLogin", "githubUserId"], "application.builder");
   expectPattern(application.builder.githubUserId, OPAQUE_ID_PATTERN, 64, "application.builder.githubUserId");
@@ -2392,6 +2417,7 @@ function validateProgrammableFeeProjection(fee, source) {
     }
   };
 
+  const latestPolicy = fee?.policyVersion === "1.1.0";
   try {
     expectClosedObject(fee, [
       "accounting",
@@ -2405,7 +2431,19 @@ function validateProgrammableFeeProjection(fee, source) {
       "rates",
       "submissionBinding"
     ], "application.programmableFee");
-    expectClosedObject(fee.rates, [
+    expectClosedObject(fee.rates, latestPolicy ? [
+      "effectiveBuyHundredthsOfBip",
+      "effectiveSellHundredthsOfBip",
+      "formula",
+      "lpFeeExcluded",
+      "minimumEffectiveHundredthsOfBip",
+      "platformHundredthsOfBip",
+      "projectBuyHundredthsOfBip",
+      "projectSellHundredthsOfBip",
+      "selectedBuyHundredthsOfBip",
+      "selectedSellHundredthsOfBip",
+      "unit"
+    ] : [
       "effectiveHundredthsOfBip",
       "formula",
       "lpFeeExcluded",
@@ -2442,7 +2480,19 @@ function validateProgrammableFeeProjection(fee, source) {
       "zeroForOneExactInput",
       "zeroForOneExactOutput"
     ], "application.programmableFee.collection.swapModePaths");
-    expectClosedObject(fee.accounting, [
+    expectClosedObject(fee.accounting, latestPolicy ? [
+      "accrualMode",
+      "claimEvent",
+      "collectionEvent",
+      "crossPoolNetting",
+      "liabilityKeyDimensions",
+      "roundingPolicy",
+      "remainderScope",
+      "claimResetsRemainders",
+      "minimumGrossQuoteUnits",
+      "fragmentationResistant",
+      "valueFlowId"
+    ] : [
       "accrualMode",
       "claimEvent",
       "collectionEvent",
@@ -2458,7 +2508,9 @@ function validateProgrammableFeeProjection(fee, source) {
   }
 
   exact(fee.policyId, "programmable-volume-fee-v1", "Fee policy id");
-  exact(fee.policyVersion, "1.0.0", "Fee policy version");
+  if (!new Set(["1.0.0", "1.1.0"]).has(fee.policyVersion)) {
+    invalidFee("Fee policy version is unsupported.");
+  }
   exact(fee.poolScope, "canonical-launch-pool-key", "PoolKey scope");
   exact(fee.rates.unit, "hundredths-of-bip", "Fee unit");
   exact(
@@ -2473,7 +2525,9 @@ function validateProgrammableFeeProjection(fee, source) {
   );
   exact(
     fee.rates.formula,
-    "effective=max(selected,1000);platform=1000;project=effective-1000",
+    latestPolicy
+      ? "per-side:effective=max(selected,1000);platform=1000;project=effective-1000"
+      : "effective=max(selected,1000);platform=1000;project=effective-1000",
     "Fee allocation formula"
   );
   exact(fee.rates.lpFeeExcluded, true, "LP-fee exclusion");
@@ -2502,6 +2556,13 @@ function validateProgrammableFeeProjection(fee, source) {
   exact(fee.accounting.accrualMode, "claimable-liability", "Fee accrual mode");
   exact(fee.accounting.liabilityKeyDimensions, ["poolId", "currency", "owner"], "Liability-key dimensions");
   exact(fee.accounting.crossPoolNetting, false, "Cross-pool netting policy");
+  if (latestPolicy) {
+    exact(fee.accounting.roundingPolicy, "cumulative-independent-platform-project-remainders", "Rounding policy");
+    exact(fee.accounting.remainderScope, "canonical-pool-lifetime", "Remainder scope");
+    exact(fee.accounting.claimResetsRemainders, false, "Remainder reset policy");
+    exact(fee.accounting.minimumGrossQuoteUnits, 1_000, "Minimum gross quote amount");
+    exact(fee.accounting.fragmentationResistant, true, "Fragmentation resistance");
+  }
   if (!isCanonicalGitHubRepositoryPathV1(fee.submissionBinding.path)) {
     invalidFee("The exact submission binding path is not a canonical repository path.");
   }
@@ -2512,21 +2573,44 @@ function validateProgrammableFeeProjection(fee, source) {
     invalidFee("The exact submission binding must be declared in primary.sourcePaths.");
   }
 
-  const selected = fee.rates.selectedHundredthsOfBip;
-  const effective = fee.rates.effectiveHundredthsOfBip;
-  const project = fee.rates.projectHundredthsOfBip;
-  if (selected === null) {
-    if (effective !== null || project !== null) {
-      invalidFee("Unresolved selected fees must keep effective and project fee projections unresolved.");
+  const validateRate = (selected, effective, project, label, maximumSelected) => {
+    if (selected === null) {
+      if (effective !== null || project !== null) {
+        invalidFee(`Unresolved ${label} fees must keep effective and project fee projections unresolved.`);
+      }
+      return;
     }
-  } else {
-    if (!Number.isInteger(selected) || selected < 0 || selected > 999_999) {
-      invalidFee("The selected total fee must be an integer in hundredths of a basis point.");
+    if (!Number.isInteger(selected) || selected < 0 || selected > maximumSelected) {
+      invalidFee(`The selected ${label} fee must be an integer in hundredths of a basis point.`);
     }
     const expectedEffective = Math.max(selected, PROGRAMMABLE_FEE_RATE_HUNDREDTHS_OF_BIP);
     if (effective !== expectedEffective || project !== expectedEffective - PROGRAMMABLE_FEE_RATE_HUNDREDTHS_OF_BIP) {
-      invalidFee("Effective and project fees must be derived from max(selected, 1000) without adding the platform fee twice.");
+      invalidFee(`Effective and project ${label} fees must be derived from max(selected, 1000) without adding the platform fee twice.`);
     }
+  };
+  if (latestPolicy) {
+    validateRate(
+      fee.rates.selectedBuyHundredthsOfBip,
+      fee.rates.effectiveBuyHundredthsOfBip,
+      fee.rates.projectBuyHundredthsOfBip,
+      "buy",
+      100_000
+    );
+    validateRate(
+      fee.rates.selectedSellHundredthsOfBip,
+      fee.rates.effectiveSellHundredthsOfBip,
+      fee.rates.projectSellHundredthsOfBip,
+      "sell",
+      100_000
+    );
+  } else {
+    validateRate(
+      fee.rates.selectedHundredthsOfBip,
+      fee.rates.effectiveHundredthsOfBip,
+      fee.rates.projectHundredthsOfBip,
+      "total",
+      999_999
+    );
   }
 
   if (!new Set(["pending-hook-integration", "implemented"]).has(fee.collection.status)) {
@@ -2652,16 +2736,17 @@ function validateProgrammableFeeSubmissionObservation({ application, evidenceInd
       "The exact source-bound submission.json is not bounded lossless JSON."
     );
   }
+  const supportedSubmissionVersions = new Set(["1.3.0", "1.5.0", "1.6.0"]);
   if (
     !isPlainObject(submission)
-    || submission.standardVersion !== "1.3.0"
+    || !supportedSubmissionVersions.has(submission.standardVersion)
     || submission.schemaVersion !== 1
     || submission.model?.id !== application.applicationId
     || !isPlainObject(submission.programmableFee)
   ) {
     reject(
       "PROGRAMMABLE_FEE_SOURCE_SUBMISSION_UNSUPPORTED",
-      "The exact source submission must use the current 1.3.0 contract and match the application id."
+      "The exact source submission must use a supported 1.3.0, 1.5.0 or 1.6.0 contract and match the application id."
     );
   }
   const sourceFeeKeys = Object.keys(submission.programmableFee).sort(compareUtf8);
@@ -2680,6 +2765,12 @@ function validateProgrammableFeeSubmissionObservation({ application, evidenceInd
     reject(
       "PROGRAMMABLE_FEE_SOURCE_SUBMISSION_UNSUPPORTED",
       "The source programmableFee record is not closed under the current 1.3.0 contract."
+    );
+  }
+  if (submission.standardVersion === "1.6.0" && !isPlainObject(submission.builderTemplate)) {
+    reject(
+      "PROGRAMMABLE_FEE_SOURCE_SUBMISSION_UNSUPPORTED",
+      "A 1.6.0 source submission must bind builderTemplate provenance."
     );
   }
   const recomputed = {

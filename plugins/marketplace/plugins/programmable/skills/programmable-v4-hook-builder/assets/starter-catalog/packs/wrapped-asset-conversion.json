@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "wrapped-asset-conversion",
+  "label": "wrapped asset conversion",
+  "summary": "Plan a hook that converts between an underlying and wrapped or staked representation with exact rates, rounding, custody, and exits.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "custom-review",
+  "requires": [
+    "custom-hook-behavior"
+  ],
+  "conflictsWith": [],
+  "capabilities": [
+    "asset-wrapper-rate",
+    "wrapped-asset-conversion"
+  ],
+  "projectSurfaces": [
+    "application",
+    "contract"
+  ],
+  "requiredFacts": [
+    "Exact underlying and wrapped asset identities, conversion entry points, rate source, decimals, rounding and minimum output",
+    "Whether wrapping or unwrapping can pause, queue, revert, charge fees, rebase, upgrade, blocklist or depend on an oracle",
+    "Which callback performs conversion and how its deltas, custody, native value, refunds and self-calls settle to zero",
+    "Canonical PoolKey, router and quoter behavior with byte-identical hookData and the same conversion assumptions",
+    "Direct user exit and recovery path when conversion or the external wrapper is unavailable"
+  ],
+  "requiredFiles": [
+    "Pinned wrapper and hook source closure",
+    "Rate, rounding, fee and solvency specification",
+    "Native and ERC-20 value-flow map",
+    "App quote, swap and disclosure integration",
+    "Executable wrapper failure and exit tests"
+  ],
+  "requiredTests": [
+    "Rate movement, zero and boundary amounts, decimals, rounding, fee, rebase and stale quote",
+    "All swap quadrants, partial fills, native value, Permit2, refunds, hookData and final deltas",
+    "Wrapper pause, queue, blocklist, upgrade, insolvency, malicious return value and dependency outage",
+    "Direct and routed wrapping, unwrapping, self-calls, nested actions and reentrancy",
+    "User exit, recovery and no cross-pool or cross-asset liability leakage"
+  ],
+  "risks": [
+    "A wrapped or staked token can add issuer, upgrade, redemption, oracle and legal risks absent from the underlying",
+    "Quote and execution can diverge when conversion rates or fees change in the same block",
+    "Rounding and mixed native or ERC-20 settlement can create unbacked deltas or trapped dust"
+  ]
+}

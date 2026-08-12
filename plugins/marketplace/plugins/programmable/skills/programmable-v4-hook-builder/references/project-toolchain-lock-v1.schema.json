@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:project-toolchain-lock:1.0.0",
+  "title": "Programmable generated-project toolchain lock",
+  "description": "Content-addressed build-tool and Solidity compiler selections for one generated repository and platform. Version text alone is insufficient.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "platform", "tools", "solidityProfiles"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os", "architecture"],
+      "properties": {
+        "os": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "architecture": { "type": "string", "minLength": 1, "maxLength": 120 }
+      }
+    },
+    "tools": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "version", "resolvedExecutableSha256"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 120 },
+          "version": { "type": "string", "minLength": 1, "maxLength": 300 },
+          "resolvedExecutableSha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+        }
+      }
+    },
+    "solidityProfiles": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "componentRefs",
+          "compilerVersion",
+          "resolvedCompilerBinarySha256",
+          "evmTarget",
+          "optimizer",
+          "viaIr",
+          "bytecodeHash",
+          "cborMetadata"
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 120 },
+          "componentRefs": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 128,
+            "uniqueItems": true,
+            "items": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 120 }
+          },
+          "compilerVersion": { "type": "string", "minLength": 1, "maxLength": 300 },
+          "resolvedCompilerBinarySha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+          "evmTarget": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "optimizer": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["enabled", "runs"],
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "runs": { "type": "integer", "minimum": 0, "maximum": 1000000000 }
+            }
+          },
+          "viaIr": { "type": "boolean" },
+          "bytecodeHash": { "enum": ["none", "ipfs", "bzzr1"] },
+          "cborMetadata": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}

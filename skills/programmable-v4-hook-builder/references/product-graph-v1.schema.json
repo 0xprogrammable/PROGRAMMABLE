@@ -1,0 +1,504 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:product-graph:1.0.0",
+  "title": "Programmable typed product graph",
+  "description": "Nine typed, bounded graphs for system, state, value, authority, trust, components, deployment, invariants, and failure/recovery. IDs share one project-wide namespace.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "applicationId", "revision", "projectSpecSha256", "graphs", "extensions"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "applicationId": { "$ref": "#/$defs/slug" },
+    "revision": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+    "projectSpecSha256": { "$ref": "#/$defs/sha256" },
+    "graphs": { "$ref": "#/$defs/graphs" },
+    "extensions": {
+      "type": "array",
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/extension" }
+    }
+  },
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "maxLength": 120
+    },
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\)[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "text": { "type": "string", "minLength": 1, "maxLength": 4000 },
+    "refs": {
+      "type": "array",
+      "maxItems": 256,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/slug" }
+    },
+    "texts": {
+      "type": "array",
+      "maxItems": 128,
+      "items": { "$ref": "#/$defs/text" }
+    },
+    "graphHeader": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["applicability", "justification"],
+      "properties": {
+        "applicability": { "enum": ["applicable", "not-applicable", "unresolved"] },
+        "justification": { "$ref": "#/$defs/text" }
+      }
+    },
+    "systemNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "type", "protocolRole", "implementationStatus", "facetEntryRefs"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "label": { "$ref": "#/$defs/text" },
+        "type": {
+          "enum": [
+            "actor", "asset", "market", "contract", "service", "frontend", "indexer", "oracle",
+            "keeper", "bridge", "game-server", "storage", "external-protocol", "library", "other"
+          ]
+        },
+        "protocolRole": {
+          "enum": [
+            "none", "uniswap-v4-pool", "uniswap-v4-hook", "uniswap-v4-pool-manager",
+            "universal-router", "permit2", "position-manager", "state-view", "quoter",
+            "external-protocol", "other"
+          ]
+        },
+        "implementationStatus": { "enum": ["planned", "existing-verified", "external-unresolved", "not-applicable"] },
+        "facetEntryRefs": { "$ref": "#/$defs/refs" }
+      }
+    },
+    "systemEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "from", "to", "kind", "rationale", "authorityRefs"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "from": { "$ref": "#/$defs/slug" },
+        "to": { "$ref": "#/$defs/slug" },
+        "kind": {
+          "enum": [
+            "owns", "calls", "depends-on", "reads", "writes", "routes-through", "settles-through",
+            "observes", "configures", "triggers", "publishes-to", "other"
+          ]
+        },
+        "rationale": { "$ref": "#/$defs/text" },
+        "authorityRefs": { "$ref": "#/$defs/refs" }
+      }
+    },
+    "systemGraph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["applicability", "justification", "nodes", "edges"],
+      "properties": {
+        "applicability": { "enum": ["applicable", "not-applicable", "unresolved"] },
+        "justification": { "$ref": "#/$defs/text" },
+        "nodes": { "type": "array", "maxItems": 512, "items": { "$ref": "#/$defs/systemNode" } },
+        "edges": { "type": "array", "maxItems": 2048, "items": { "$ref": "#/$defs/systemEdge" } }
+      }
+    },
+    "stateNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "initial", "terminal", "entryAuthorityRefs", "invariantRefs"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "label": { "$ref": "#/$defs/text" },
+        "initial": { "type": "boolean" },
+        "terminal": { "type": "boolean" },
+        "entryAuthorityRefs": { "$ref": "#/$defs/refs" },
+        "invariantRefs": { "$ref": "#/$defs/refs" }
+      }
+    },
+    "stateTransition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "from", "to", "trigger", "guards", "effects", "authorityRefs", "failureRef"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "from": { "$ref": "#/$defs/slug" },
+        "to": { "$ref": "#/$defs/slug" },
+        "trigger": { "$ref": "#/$defs/text" },
+        "guards": { "$ref": "#/$defs/texts" },
+        "effects": { "$ref": "#/$defs/texts" },
+        "authorityRefs": { "$ref": "#/$defs/refs" },
+        "failureRef": {
+          "oneOf": [{ "$ref": "#/$defs/slug" }, { "type": "null" }]
+        }
+      }
+    },
+    "stateGraph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["applicability", "justification", "states", "transitions"],
+      "properties": {
+        "applicability": { "enum": ["applicable", "not-applicable", "unresolved"] },
+        "justification": { "$ref": "#/$defs/text" },
+        "states": { "type": "array", "maxItems": 512, "items": { "$ref": "#/$defs/stateNode" } },
+        "transitions": { "type": "array", "maxItems": 2048, "items": { "$ref": "#/$defs/stateTransition" } }
+      }
+    },
+    "valueNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "type", "assetRefs", "custodyRef"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "label": { "$ref": "#/$defs/text" },
+        "type": { "enum": ["source", "sink", "custody", "liability", "asset-account", "fee-recipient", "external", "other"] },
+        "assetRefs": { "$ref": "#/$defs/refs" },
+        "custodyRef": { "oneOf": [{ "$ref": "#/$defs/slug" }, { "type": "null" }] }
+      }
+    },
+    "valueEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "from", "to", "assetRef", "amountModel", "purpose", "authorityRefs",
+        "liabilityEffect", "backingRef", "failureDestinationRef", "conservationInvariantRef"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "from": { "$ref": "#/$defs/slug" },
+        "to": { "$ref": "#/$defs/slug" },
+        "assetRef": { "$ref": "#/$defs/slug" },
+        "amountModel": { "$ref": "#/$defs/text" },
+        "purpose": { "$ref": "#/$defs/text" },
+        "authorityRefs": { "$ref": "#/$defs/refs" },
+        "liabilityEffect": { "enum": ["none", "creates", "reduces", "transfers", "settles", "unresolved"] },
+        "backingRef": { "oneOf": [{ "$ref": "#/$defs/slug" }, { "type": "null" }] },
+        "failureDestinationRef": { "oneOf": [{ "$ref": "#/$defs/slug" }, { "type": "null" }] },
+        "conservationInvariantRef": { "oneOf": [{ "$ref": "#/$defs/slug" }, { "type": "null" }] }
+      }
+    },
+    "valueGraph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["applicability", "justification", "nodes", "edges"],
+      "properties": {
+        "applicability": { "enum": ["applicable", "not-applicable", "unresolved"] },
+        "justification": { "$ref": "#/$defs/text" },
+        "nodes": { "type": "array", "maxItems": 512, "items": { "$ref": "#/$defs/valueNode" } },
+        "edges": { "type": "array", "maxItems": 2048, "items": { "$ref": "#/$defs/valueEdge" } }
+      }
+    },
+    "authorityNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "type", "mutable", "trustAssumption"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "label": { "$ref": "#/$defs/text" },
+        "type": { "enum": ["user", "admin", "governance", "contract", "keeper", "oracle", "external-service", "none", "other"] },
+        "mutable": { "type": "boolean" },
+        "trustAssumption": { "$ref": "#/$defs/text" }
+      }
+    },
+    "authorityEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "authorityRef", "targetRef", "capability", "scope", "revocable", "delayModel"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "authorityRef": { "$ref": "#/$defs/slug" },
+        "targetRef": { "$ref": "#/$defs/slug" },
+        "capability": { "$ref": "#/$defs/slug" },
+        "scope": { "$ref": "#/$defs/text" },
+        "revocable": { "type": "boolean" },
+        "delayModel": { "$ref": "#/$defs/text" }
+      }
+    },
+    "authorityGraph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["applicability", "justification", "nodes", "edges"],
+      "properties": {
+        "applicability": { "enum": ["applicable", "not-applicable", "unresolved"] },
+        "justification": { "$ref": "#/$defs/text" },
+        "nodes": { "type": "array", "maxItems": 512, "items": { "$ref": "#/$defs/authorityNode" } },
+        "edges": { "type": "array", "maxItems": 2048, "items": { "$ref": "#/$defs/authorityEdge" } }
+      }
+    },
+    "trustZone": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "trustModel", "memberRefs"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "label": { "$ref": "#/$defs/text" },
+        "trustModel": { "$ref": "#/$defs/text" },
+        "memberRefs": { "$ref": "#/$defs/refs" }
+      }
+    },
+    "trustBoundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "fromZone", "toZone", "assumption", "failureRef", "mitigationRefs"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "fromZone": { "$ref": "#/$defs/slug" },
+        "toZone": { "$ref": "#/$defs/slug" },
+        "assumption": { "$ref": "#/$defs/text" },
+        "failureRef": { "$ref": "#/$defs/slug" },
+        "mitigationRefs": { "$ref": "#/$defs/refs" }
+      }
+    },
+    "trustGraph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["applicability", "justification", "zones", "boundaries"],
+      "properties": {
+        "applicability": { "enum": ["applicable", "not-applicable", "unresolved"] },
+        "justification": { "$ref": "#/$defs/text" },
+        "zones": { "type": "array", "maxItems": 256, "items": { "$ref": "#/$defs/trustZone" } },
+        "boundaries": { "type": "array", "maxItems": 1024, "items": { "$ref": "#/$defs/trustBoundary" } }
+      }
+    },
+    "componentNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "type",
+        "disposition",
+        "systemRefs",
+        "responsibilities",
+        "interfaceRefs",
+        "authorityRefs",
+        "valueNodeRefs",
+        "artifactRefs"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "label": { "$ref": "#/$defs/text" },
+        "type": {
+          "enum": [
+            "contract", "hook", "token", "factory", "vault", "escrow", "oracle", "router",
+            "game-contract", "nft-system", "backend", "frontend", "indexer", "keeper", "bridge",
+            "library", "configuration", "external-protocol", "other"
+          ]
+        },
+        "disposition": { "enum": ["build", "reuse-pinned", "external", "not-required", "unresolved"] },
+        "systemRefs": { "$ref": "#/$defs/refs" },
+        "responsibilities": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "items": { "$ref": "#/$defs/text" }
+        },
+        "interfaceRefs": { "$ref": "#/$defs/refs" },
+        "authorityRefs": { "$ref": "#/$defs/refs" },
+        "valueNodeRefs": { "$ref": "#/$defs/refs" },
+        "artifactRefs": {
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/repositoryPath" }
+        }
+      }
+    },
+    "componentEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "from", "to", "kind", "interface", "trustBoundaryRefs", "failureRefs"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "from": { "$ref": "#/$defs/slug" },
+        "to": { "$ref": "#/$defs/slug" },
+        "kind": {
+          "enum": [
+            "calls", "reads", "writes", "configures", "authenticates", "routes", "settles",
+            "quotes", "indexes", "deploys", "upgrades", "depends-on", "other"
+          ]
+        },
+        "interface": { "$ref": "#/$defs/text" },
+        "trustBoundaryRefs": { "$ref": "#/$defs/refs" },
+        "failureRefs": { "$ref": "#/$defs/refs" }
+      }
+    },
+    "componentGraph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["applicability", "justification", "components", "edges"],
+      "properties": {
+        "applicability": { "enum": ["applicable", "not-applicable", "unresolved"] },
+        "justification": { "$ref": "#/$defs/text" },
+        "components": { "type": "array", "maxItems": 512, "items": { "$ref": "#/$defs/componentNode" } },
+        "edges": { "type": "array", "maxItems": 2048, "items": { "$ref": "#/$defs/componentEdge" } }
+      }
+    },
+    "deploymentTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "type", "systemRef", "chainRef", "artifactPath", "addressStatus", "address", "evidenceRefs"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "label": { "$ref": "#/$defs/text" },
+        "type": { "enum": ["contract", "service", "frontend", "indexer", "configuration", "external-dependency", "library", "other"] },
+        "systemRef": { "$ref": "#/$defs/slug" },
+        "chainRef": { "oneOf": [{ "$ref": "#/$defs/slug" }, { "type": "null" }] },
+        "artifactPath": { "oneOf": [{ "$ref": "#/$defs/repositoryPath" }, { "type": "null" }] },
+        "addressStatus": { "enum": ["not-applicable", "unresolved", "planned", "deployed-verified"] },
+        "address": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 300 }, { "type": "null" }] },
+        "evidenceRefs": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/repositoryPath" }
+        }
+      }
+    },
+    "deploymentEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "from", "to", "kind", "rationale"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "from": { "$ref": "#/$defs/slug" },
+        "to": { "$ref": "#/$defs/slug" },
+        "kind": { "enum": ["deploys-before", "configures", "depends-on", "verifies", "binds-to", "other"] },
+        "rationale": { "$ref": "#/$defs/text" }
+      }
+    },
+    "deploymentGraph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["applicability", "justification", "targets", "edges"],
+      "properties": {
+        "applicability": { "enum": ["applicable", "not-applicable", "unresolved"] },
+        "justification": { "$ref": "#/$defs/text" },
+        "targets": { "type": "array", "maxItems": 512, "items": { "$ref": "#/$defs/deploymentTarget" } },
+        "edges": { "type": "array", "maxItems": 2048, "items": { "$ref": "#/$defs/deploymentEdge" } }
+      }
+    },
+    "invariantNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "statement", "scopeRefs", "testRefs", "failureRef"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "kind": { "enum": ["accounting", "security", "authority", "lifecycle", "routing", "deployment", "recovery", "other"] },
+        "statement": { "$ref": "#/$defs/text" },
+        "scopeRefs": { "$ref": "#/$defs/refs" },
+        "testRefs": {
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/repositoryPath" }
+        },
+        "failureRef": { "$ref": "#/$defs/slug" }
+      }
+    },
+    "invariantDependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "from", "to", "kind", "rationale"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "from": { "$ref": "#/$defs/slug" },
+        "to": { "$ref": "#/$defs/slug" },
+        "kind": { "enum": ["depends-on", "strengthens", "conflicts-with", "other"] },
+        "rationale": { "$ref": "#/$defs/text" }
+      }
+    },
+    "invariantGraph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["applicability", "justification", "invariants", "dependencies"],
+      "properties": {
+        "applicability": { "enum": ["applicable", "not-applicable", "unresolved"] },
+        "justification": { "$ref": "#/$defs/text" },
+        "invariants": { "type": "array", "maxItems": 1024, "items": { "$ref": "#/$defs/invariantNode" } },
+        "dependencies": { "type": "array", "maxItems": 2048, "items": { "$ref": "#/$defs/invariantDependency" } }
+      }
+    },
+    "failureNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "severity", "trigger", "affectedRefs", "detection", "recoveryRef"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "label": { "$ref": "#/$defs/text" },
+        "severity": { "enum": ["critical", "high", "medium", "low", "informational"] },
+        "trigger": { "$ref": "#/$defs/text" },
+        "affectedRefs": { "$ref": "#/$defs/refs" },
+        "detection": { "$ref": "#/$defs/text" },
+        "recoveryRef": { "$ref": "#/$defs/slug" }
+      }
+    },
+    "recoveryNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "authorityRefs", "steps", "restoresInvariantRefs", "terminalDisposition"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "label": { "$ref": "#/$defs/text" },
+        "authorityRefs": { "$ref": "#/$defs/refs" },
+        "steps": { "type": "array", "minItems": 1, "maxItems": 128, "items": { "$ref": "#/$defs/text" } },
+        "restoresInvariantRefs": { "$ref": "#/$defs/refs" },
+        "terminalDisposition": { "enum": ["resume", "refund", "exit", "decommission", "manual-review", "unrecoverable"] }
+      }
+    },
+    "failureRecoveryEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "failureRef", "recoveryRef", "preconditions"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "failureRef": { "$ref": "#/$defs/slug" },
+        "recoveryRef": { "$ref": "#/$defs/slug" },
+        "preconditions": { "$ref": "#/$defs/texts" }
+      }
+    },
+    "failureRecoveryGraph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["applicability", "justification", "failures", "recoveries", "edges"],
+      "properties": {
+        "applicability": { "enum": ["applicable", "not-applicable", "unresolved"] },
+        "justification": { "$ref": "#/$defs/text" },
+        "failures": { "type": "array", "maxItems": 1024, "items": { "$ref": "#/$defs/failureNode" } },
+        "recoveries": { "type": "array", "maxItems": 1024, "items": { "$ref": "#/$defs/recoveryNode" } },
+        "edges": { "type": "array", "maxItems": 2048, "items": { "$ref": "#/$defs/failureRecoveryEdge" } }
+      }
+    },
+    "graphs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["system", "state", "value", "authority", "trust", "component", "deployment", "invariant", "failureRecovery"],
+      "properties": {
+        "system": { "$ref": "#/$defs/systemGraph" },
+        "state": { "$ref": "#/$defs/stateGraph" },
+        "value": { "$ref": "#/$defs/valueGraph" },
+        "authority": { "$ref": "#/$defs/authorityGraph" },
+        "trust": { "$ref": "#/$defs/trustGraph" },
+        "component": { "$ref": "#/$defs/componentGraph" },
+        "deployment": { "$ref": "#/$defs/deploymentGraph" },
+        "invariant": { "$ref": "#/$defs/invariantGraph" },
+        "failureRecovery": { "$ref": "#/$defs/failureRecoveryGraph" }
+      }
+    },
+    "extension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "schemaId", "schemaPath", "schemaSha256", "payload"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "kind": { "$ref": "#/$defs/slug" },
+        "schemaId": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "schemaPath": { "$ref": "#/$defs/repositoryPath" },
+        "schemaSha256": { "$ref": "#/$defs/sha256" },
+        "payload": { "description": "Declarative JSON validated against the exact repository schema binding." }
+      }
+    }
+  }
+}

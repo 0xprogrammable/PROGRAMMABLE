@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "signed-outcome-service",
+  "label": "Signed outcome service",
+  "summary": "Turn an offchain result into a bounded, domain-separated and replay-safe onchain claim.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "architecture-review-required",
+  "requires": [],
+  "conflictsWith": [],
+  "capabilities": [
+    "offchain-outcome",
+    "signed-claim"
+  ],
+  "projectSurfaces": [
+    "contract",
+    "service"
+  ],
+  "requiredFacts": [
+    "Canonical signed payload, domain, chain, contract, nonce and expiry",
+    "Signer authority, rotation, revocation, compromise and quorum policy",
+    "Outcome finality, challenge, cancellation and dispute behavior",
+    "Maximum payout and replay key"
+  ],
+  "requiredFiles": [
+    "Signed message schema",
+    "Signer service source or attributable interface",
+    "Verification contract source",
+    "Signer operations and incident plan",
+    "Signature and payout tests"
+  ],
+  "requiredTests": [
+    "Wrong domain, chain, contract, signer, nonce and expiry",
+    "Replay and conflicting outcome rejection",
+    "Signer rotation, revocation and compromise containment",
+    "Maximum payout and service-unavailable behavior"
+  ],
+  "risks": [
+    "A compromised signer can fabricate results",
+    "Weak domain separation enables cross-project replay",
+    "Offchain finality can conflict with onchain payout finality"
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "test-evidence-threat-model",
+  "label": "Tests, evidence and threat model",
+  "summary": "Create project-specific security properties, test obligations and attributable evidence from the start.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "standard-review",
+  "requires": [],
+  "conflictsWith": [],
+  "capabilities": [
+    "evidence-plan",
+    "security-properties"
+  ],
+  "projectSurfaces": [
+    "application",
+    "contract",
+    "game",
+    "indexer",
+    "service"
+  ],
+  "requiredFacts": [
+    "Assets, actors, authorities, trust boundaries and attacker goals",
+    "Safety, solvency, conservation, liveness and user-exit properties",
+    "Exact commands, tool versions, fixtures, seeds, results and skipped checks",
+    "Which claims need maintainer, deployment, provider or onchain evidence"
+  ],
+  "requiredFiles": [
+    "Architecture proposal",
+    "Threat model",
+    "Test plan",
+    "Evidence index",
+    "Pinned build and dependency configuration"
+  ],
+  "requiredTests": [
+    "Unit, integration, fuzz and invariant checks appropriate to the project",
+    "Every authority, boundary, failure and recovery path",
+    "Adversarial dependencies and malformed inputs",
+    "Reproducible clean-environment build and test"
+  ],
+  "risks": [
+    "Template text is not project-specific evidence",
+    "Skipped or unavailable checks cannot be reported as passing",
+    "Local tests do not prove audit, deployment, indexing or availability"
+  ]
+}

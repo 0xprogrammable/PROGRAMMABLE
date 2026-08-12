@@ -14,6 +14,8 @@ import {
   MARKETPLACE_ROOT,
   METADATA_PATH,
   PLUGIN_ROOT,
+  ROOT_CLAUDE_MANIFEST_PATH,
+  ROOT_CODEX_MANIFEST_PATH,
   buildClaudeManifest,
   buildClaudeMarketplace,
   buildCodexManifest,
@@ -27,9 +29,9 @@ import {
 } from "../scripts/generate-plugin.mjs";
 
 const goldenHashes = {
-  skillTree: "92dd44f39c929d2fed15367d514cdc861dfb4973d405d36e6d0a6955374d21c8",
-  codexManifest: "a834b200145d050ac30e0cd8881965c7f87dae6650f49eff72e21ac860f7d353",
-  claudeManifest: "77108bc56ad454fded5bc58722ad1ffadac49f87ca303dc422c9ddade583f1b5",
+  skillTree: "17228e2aea3909e4b59815f766c26bf4f0a7a790ba8ad3ee1b916008dc5a468c",
+  codexManifest: "9d6c0e147f61bc68f48d78c48f3363e03e59129272da3a5fe813abc87d0ca505",
+  claudeManifest: "639e7b39b03d1ec17a3886a79e667768335a8cf392acea903a05fdf537ce2609",
   codexMarketplace: "f51e251087f6d26c75308aeff915485de9493b619c31b5a59baca072d725d0c0",
   claudeMarketplace: "214475551068f84d699cada5adf4518ab3bd2bfe750be6ac4688bcd6ed1ef9c7"
 };
@@ -94,6 +96,14 @@ test("manifests and marketplace have stable golden bytes", () => {
     goldenHashes.claudeManifest
   );
   assert.equal(
+    sha256(fs.readFileSync(ROOT_CODEX_MANIFEST_PATH)),
+    goldenHashes.codexManifest
+  );
+  assert.equal(
+    sha256(fs.readFileSync(ROOT_CLAUDE_MANIFEST_PATH)),
+    goldenHashes.claudeManifest
+  );
+  assert.equal(
     sha256(fs.readFileSync(CODEX_MARKETPLACE_PATH)),
     goldenHashes.codexMarketplace
   );
@@ -113,13 +123,21 @@ test("two clean generations are byte-for-byte deterministic", () => {
     const secondCodexMarketplace = path.join(secondRoot, ".agents", "plugins", "marketplace.json");
     const firstClaudeMarketplace = path.join(firstRoot, ".claude-plugin", "marketplace.json");
     const secondClaudeMarketplace = path.join(secondRoot, ".claude-plugin", "marketplace.json");
+    const firstRootCodexManifest = path.join(firstRoot, ".codex-plugin", "plugin.json");
+    const secondRootCodexManifest = path.join(secondRoot, ".codex-plugin", "plugin.json");
+    const firstRootClaudeManifest = path.join(firstRoot, ".claude-plugin", "plugin.json");
+    const secondRootClaudeManifest = path.join(secondRoot, ".claude-plugin", "plugin.json");
     const first = materializeDistribution({
       pluginRoot: firstPlugin,
+      rootCodexManifestPath: firstRootCodexManifest,
+      rootClaudeManifestPath: firstRootClaudeManifest,
       codexMarketplacePath: firstCodexMarketplace,
       claudeMarketplacePath: firstClaudeMarketplace
     });
     const second = materializeDistribution({
       pluginRoot: secondPlugin,
+      rootCodexManifestPath: secondRootCodexManifest,
+      rootClaudeManifestPath: secondRootClaudeManifest,
       codexMarketplacePath: secondCodexMarketplace,
       claudeMarketplacePath: secondClaudeMarketplace
     });
@@ -133,10 +151,20 @@ test("two clean generations are byte-for-byte deterministic", () => {
       fs.readFileSync(firstClaudeMarketplace),
       fs.readFileSync(secondClaudeMarketplace)
     );
+    assert.deepEqual(
+      fs.readFileSync(firstRootCodexManifest),
+      fs.readFileSync(secondRootCodexManifest)
+    );
+    assert.deepEqual(
+      fs.readFileSync(firstRootClaudeManifest),
+      fs.readFileSync(secondRootClaudeManifest)
+    );
     assert.equal(first.skillTreeDigest, second.skillTreeDigest);
     assert.deepEqual(first, {
       ...second,
       pluginRoot: firstPlugin,
+      rootCodexManifestPath: firstRootCodexManifest,
+      rootClaudeManifestPath: firstRootClaudeManifest,
       codexMarketplacePath: firstCodexMarketplace,
       claudeMarketplacePath: firstClaudeMarketplace
     });
@@ -292,12 +320,26 @@ test("relocated plugin verifies from a clean workspace without npm install", () 
       ".claude-plugin",
       "marketplace.json"
     );
+    const relocatedRootCodexManifest = path.join(
+      temporaryRoot,
+      "bundle",
+      ".codex-plugin",
+      "plugin.json"
+    );
+    const relocatedRootClaudeManifest = path.join(
+      temporaryRoot,
+      "bundle",
+      ".claude-plugin",
+      "plugin.json"
+    );
     const cleanWorkspace = path.join(temporaryRoot, "workspace");
     const emptyCache = path.join(temporaryRoot, "empty-cache");
     fs.mkdirSync(cleanWorkspace, { recursive: true });
     fs.mkdirSync(emptyCache, { recursive: true });
     materializeDistribution({
       pluginRoot: relocatedPlugin,
+      rootCodexManifestPath: relocatedRootCodexManifest,
+      rootClaudeManifestPath: relocatedRootClaudeManifest,
       codexMarketplacePath: relocatedCodexMarketplace,
       claudeMarketplacePath: relocatedClaudeMarketplace
     });

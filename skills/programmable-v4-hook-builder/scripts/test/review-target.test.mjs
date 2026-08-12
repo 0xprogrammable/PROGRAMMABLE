@@ -35,6 +35,29 @@ test("review target binds arbitrary project bytes without requiring Foundry", ()
   }
 });
 
+test("review target containment accepts an in-repository ..x package and rejects a real parent escape", () => {
+  const fixture = createFixture({ source: "contract Hook {}" });
+  try {
+    const renamedPackage = path.join(fixture.repositoryRoot, "submissions", "..x-fixture");
+    fs.renameSync(fixture.packageRoot, renamedPackage);
+    fixture.packageRoot = renamedPackage;
+    fixture.submission.implementation.sourcePaths = ["submissions/..x-fixture/src/Hook.sol"];
+
+    const target = buildReviewTarget(fixture);
+    assert.ok(target.files.some(({ path: filePath }) => filePath === "submissions/..x-fixture/src/Hook.sol"));
+
+    assert.throws(
+      () => buildReviewTarget({
+        ...fixture,
+        packageRoot: path.dirname(fixture.repositoryRoot)
+      }),
+      /submission package resolves outside the repository/u
+    );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 test("unknown-language proposals stay byte-bound with an explicit incomplete semantic closure", () => {
   const fixture = createArbitraryProjectFixture();
   fixture.submission.stage = "proposal";
@@ -176,6 +199,81 @@ test("declared source and test Git LFS pointers are rejected before dependency s
   }
 });
 
+test("prototype launch-plan files are byte-bound and fail closed on omission, symlink or LFS indirection", async (t) => {
+  const launchFiles = {
+    "submissions/fixture/launch/CallEncoder.sol": "contract CallEncoder {}",
+    "submissions/fixture/launch/HookConfiguration.sol": "contract HookConfiguration {}",
+    "submissions/fixture/launch/InitialLiquidity.sol": "contract InitialLiquidity {}",
+    "submissions/fixture/test/LaunchExecutor.t.sol": "contract LaunchExecutorTest {}"
+  };
+  const makeFixture = () => {
+    const fixture = createFixture({ source: "contract Hook {}", additionalFiles: launchFiles });
+    fixture.submission.stage = "prototype";
+    fixture.submission.launchPlan = {
+      targetStrategy: "threejs-location-quest-with-wallet-rewards",
+      callDataSourcePaths: ["submissions/fixture/launch/CallEncoder.sol"],
+      hookConfigurationSourcePaths: ["submissions/fixture/launch/HookConfiguration.sol"],
+      liquiditySourcePaths: ["submissions/fixture/launch/InitialLiquidity.sol"],
+      testPaths: ["submissions/fixture/test/LaunchExecutor.t.sol"]
+    };
+    return fixture;
+  };
+
+  await t.test("all path groups and byte changes", () => {
+    const fixture = makeFixture();
+    try {
+      const first = buildReviewTarget(fixture);
+      for (const expectedPath of Object.keys(launchFiles)) {
+        assert.ok(first.files.some(({ path: filePath }) => filePath === expectedPath), expectedPath);
+      }
+      fs.writeFileSync(
+        path.join(fixture.repositoryRoot, "submissions/fixture/launch/InitialLiquidity.sol"),
+        "pragma solidity 0.8.26;\ncontract InitialLiquidity { uint256 constant MINIMUM = 2; }\n"
+      );
+      assert.notEqual(buildReviewTarget(fixture).reviewTargetHash, first.reviewTargetHash);
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  await t.test("missing launch file", () => {
+    const fixture = makeFixture();
+    try {
+      fs.rmSync(path.join(fixture.repositoryRoot, "submissions/fixture/launch/CallEncoder.sol"));
+      assert.throws(() => buildReviewTarget(fixture), /review target file does not exist: submissions\/fixture\/launch\/CallEncoder\.sol/u);
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  await t.test("symlink launch file", () => {
+    const fixture = makeFixture();
+    try {
+      const target = path.join(fixture.repositoryRoot, "submissions/fixture/launch/HookConfiguration.sol");
+      fs.rmSync(target);
+      fs.symlinkSync("InitialLiquidity.sol", target);
+      assert.throws(() => buildReviewTarget(fixture), /review target contains a symbolic link: submissions\/fixture\/launch\/HookConfiguration\.sol/u);
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  await t.test("LFS launch file", () => {
+    const fixture = makeFixture();
+    try {
+      fs.writeFileSync(path.join(fixture.repositoryRoot, "submissions/fixture/test/LaunchExecutor.t.sol"), [
+        "version https://git-lfs.github.com/spec/v1",
+        `oid sha256:${"a".repeat(64)}`,
+        "size 12345",
+        ""
+      ].join("\n"));
+      assert.throws(() => buildReviewTarget(fixture), /Git LFS pointer is not materialized source\/test content: submissions\/fixture\/test\/LaunchExecutor\.t\.sol/u);
+    } finally {
+      fixture.cleanup();
+    }
+  });
+});
+
 test("arbitrary project byte binding rejects traversal, symlinks and oversized files", async (t) => {
   await t.test("traversal", () => {
     const fixture = createArbitraryProjectFixture();
@@ -292,6 +390,32 @@ test("review target v10 excludes its authority records while retaining gate and 
     assert.notEqual(buildReviewTarget(fixture).reviewTargetHash, first.reviewTargetHash);
   } finally {
     fixture.cleanup();
+  }
+});
+
+test("review-target gate-status discovery rejects same, conflicting and escaped duplicate keys", () => {
+  const gateStatusPath = "submissions/fixture/evidence/gate-status.json";
+  const secret = "gate-status-private-key-must-not-echo";
+  const sources = [
+    `{"gates":[],"gates":[],"privateKey":"${secret}"}`,
+    `{"gates":[],"gates":[{"id":"shadow"}],"privateKey":"${secret}"}`,
+    `{"gates":[],"gat\\u0065s":[{"id":"shadow"}],"privateKey":"${secret}"}`
+  ];
+  for (const source of sources) {
+    const fixture = createFixture({ source: "contract Hook {}" });
+    try {
+      fixture.submission.implementation.gateStatusPath = gateStatusPath;
+      const target = path.join(fixture.repositoryRoot, gateStatusPath);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, source);
+      assert.throws(() => buildReviewTarget(fixture), (error) => {
+        assert.equal(error?.code, "STRICT_JSON_DUPLICATE_KEY");
+        assert.equal(String(error?.message).includes(secret), false);
+        return true;
+      });
+    } finally {
+      fixture.cleanup();
+    }
   }
 });
 
@@ -584,7 +708,7 @@ test("review target rejects bare JavaScript packages that are not bound by the s
   }
 });
 
-test("review target permits Node built-ins and exactly declared package roots and subpaths", () => {
+test("review target permits Node built-ins and exactly declared public package roots", () => {
   const fixture = createFixture({
     source: "contract Hook {}",
     appSourcePaths: ["submissions/fixture/app/entry.ts"],
@@ -597,7 +721,7 @@ test("review target permits Node built-ins and exactly declared package roots an
         'import test from "node:test";',
         'import fs from "fs";',
         'import path from "path";',
-        'import { Pool } from "@uniswap/v4-sdk/entities/pool";',
+        'import { Pool } from "@uniswap/v4-sdk";',
         "export const visible = assert.ok && test && fs.readFile && path.resolve && Pool;"
       ].join("\n")
     }
@@ -605,6 +729,28 @@ test("review target permits Node built-ins and exactly declared package roots an
 
   try {
     assert.doesNotThrow(() => buildReviewTarget(fixture));
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("review target rejects unsupported v4 SDK deep imports", () => {
+  const fixture = createFixture({
+    source: "contract Hook {}",
+    appSourcePaths: ["submissions/fixture/app/entry.ts"],
+    sdkDependencies: [packageDependency("@uniswap/v4-sdk", {
+      repository: "https://github.com/Uniswap/sdks.git"
+    })],
+    additionalFiles: {
+      "submissions/fixture/app/entry.ts": 'import { Pool } from "@uniswap/v4-sdk/entities/pool";\nexport { Pool };\n'
+    }
+  });
+
+  try {
+    assert.throws(
+      () => buildReviewTarget(fixture),
+      /bare JavaScript import is not bound by an exact package dependency: @uniswap\/v4-sdk\/entities\/pool/u
+    );
   } finally {
     fixture.cleanup();
   }

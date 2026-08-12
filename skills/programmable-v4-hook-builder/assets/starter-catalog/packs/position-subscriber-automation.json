@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "position-subscriber-automation",
+  "label": "position subscriber automation",
+  "summary": "Plan position lifecycle automation through a subscriber or keeper while preserving modification liveness, distrust of reported fees, and user exit.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "custom-review",
+  "requires": [
+    "v4-liquidity-position-client"
+  ],
+  "conflictsWith": [],
+  "capabilities": [
+    "keeper-automation",
+    "position-subscriber-automation"
+  ],
+  "projectSurfaces": [
+    "application",
+    "contract",
+    "keeper"
+  ],
+  "requiredFacts": [
+    "Exact PositionManager and subscriber deployments, ownership, upgrade, allowlisting, callback gas and notification behavior",
+    "Which subscribe, modify, transfer, burn and unsubscribe calls can revert and the required PoolManager lock state",
+    "User-controlled unsubscribe and position modification path even when the subscriber is malicious or unavailable",
+    "Why callback feesAccrued is untrusted and which independently reconciled state governs rewards, eligibility or accounting",
+    "Keeper trigger, authentication, funding, duplicate suppression, stale state, fallback, monitoring and retirement"
+  ],
+  "requiredFiles": [
+    "Pinned PositionManager, subscriber and keeper source closure",
+    "Subscription and automation state machine",
+    "Gas, liveness, unsubscribe and user-exit specification",
+    "Independent position and fee reconciliation source",
+    "Executable callback, donation and keeper failure tests"
+  ],
+  "requiredTests": [
+    "Subscriber revert and gas exhaustion on subscribe, modify, burn and unsubscribe",
+    "Donation-inflated feesAccrued and no payout, score or eligibility trust in that callback value",
+    "PoolManager lock-state ordering, transfer, approval, subscriber upgrade, code removal and malicious callback",
+    "Keeper outage, duplicate job, stale block, reorg, unauthorized trigger, depleted funding and recovery",
+    "User unsubscribe, liquidity removal, fee collection, burn, migration and exit under every failure state"
+  ],
+  "risks": [
+    "A subscriber is an execution dependency that can make position operations revert",
+    "Callback feesAccrued can be deliberately inflated through donation and cannot authenticate revenue",
+    "Automation can centralize liveness or authority in a keeper even when the position NFT appears user-owned"
+  ]
+}

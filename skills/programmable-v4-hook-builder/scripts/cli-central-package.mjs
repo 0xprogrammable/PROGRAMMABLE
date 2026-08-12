@@ -1,9 +1,12 @@
 import crypto from "node:crypto";
 import { TextDecoder } from "node:util";
 import { canonicalJson } from "./submission-core.mjs";
+import { normalizeBuilderTemplate } from "./builder-template-contract.mjs";
 import { CliFailure } from "./cli-runtime.mjs";
 import { isClosedReviewTargetClosure } from "./review-target-contract.mjs";
 import { validateCompanionClosureReceipts } from "./companion-manifest-contract.mjs";
+import { hasForbiddenInvisibleOrBidi } from "./metadata-core.mjs";
+import { parseBoundedStrictJsonBytes } from "./strict-json-core.mjs";
 
 export const CENTRAL_APPLICATION_FILES = Object.freeze([
   "application.json",
@@ -18,7 +21,6 @@ const REVIEW_FILES = Object.freeze(CENTRAL_APPLICATION_FILES.slice(1));
 const PUBLIC_BETA_DISCLAIMER =
   "Builder-declared compatibility evidence; not an audit, approval, deployment, Uniswap endorsement, or launch.";
 const decoder = new TextDecoder("utf-8", { fatal: true });
-const CONTROL_OR_BIDI_PATTERN = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u202a-\u202e\u2066-\u2069]/u;
 const GITHUB_LOGIN_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/u;
 const OPAQUE_DECIMAL_PATTERN = /^[1-9][0-9]{0,63}$/u;
 
@@ -76,16 +78,23 @@ export function buildCentralApplicationPackage({
   }
   let committedSubmissionDocument;
   try {
-    committedSubmissionDocument = JSON.parse(decoder.decode(committedSubmission));
+    committedSubmissionDocument = parseBoundedStrictJsonBytes(committedSubmission);
   } catch {
     invalid("the exact committed submission.json cannot be projected");
   }
+  let projectedBuilderTemplate;
+  try {
+    projectedBuilderTemplate = normalizeBuilderTemplate(submission.builderTemplate);
+  } catch {
+    invalid("the submission does not contain valid builder-template provenance");
+  }
   if (
-    committedSubmissionDocument?.standardVersion !== "1.3.0"
+    committedSubmissionDocument?.standardVersion !== "1.6.0"
     || committedSubmissionDocument?.model?.id !== applicationId
     || canonicalJson(committedSubmissionDocument?.programmableFee) !== canonicalJson(submission.programmableFee)
+    || canonicalJson(committedSubmissionDocument?.builderTemplate) !== canonicalJson(projectedBuilderTemplate)
   ) {
-    invalid("the exact committed submission.json does not match the current mandatory fee projection");
+    invalid("the exact committed submission.json does not match the current fee and builder-template projection");
   }
   let normalizedCompanionClosure;
   try {
@@ -112,15 +121,25 @@ export function buildCentralApplicationPackage({
     reviewTarget,
     stage: submission.stage
   });
-  const projectedFindings = [...localCompatibility.findings, ...additionalClosure.findings];
+  const sourceEvidenceProjection = additionalSourceEvidenceProjection({
+    localCompatibility,
+    primary,
+    submission
+  });
+  const projectedFindings = [
+    ...localCompatibility.findings,
+    ...additionalClosure.findings,
+    ...sourceEvidenceProjection.findings
+  ];
   const completedGateIds = submission.stage === "prototype"
     ? readCompletedPrototypeGates(submission, headFiles)
     : new Set();
   const unresolvedGates = [
     ...localCompatibility.requiredGates,
-    ...additionalClosure.requiredGates
+    ...additionalClosure.requiredGates,
+    ...sourceEvidenceProjection.requiredGates
   ].filter((gate) => !completedGateIds.has(gate.id));
-  const centralFindings = buildCentralFindings(projectedFindings, unresolvedGates);
+  const centralFindings = buildCentralFindings(projectedFindings, unresolvedGates, submission.stage);
   const result = centralCompatibilityResult({
     stage: submission.stage,
     decision: localCompatibility.decision,
@@ -135,33 +154,64 @@ export function buildCentralApplicationPackage({
     findings: centralFindings,
     disclaimer: PUBLIC_BETA_DISCLAIMER
   };
+  const evidence = [
+    {
+      id: "compatibility-report",
+      kind: "static-analysis",
+      status: result === "prototype-ready" && centralFindings.length === 0
+        ? "passed"
+        : result === "changes-required"
+          ? "failed"
+          : "blocked",
+      scope: `Deterministic builder compatibility preflight for the exact committed source revision; central result ${result}.`,
+      url: `${primary.repositoryUri}/blob/${primary.revisionObjectId}/${encodeRepositoryPath(compatibilityRepositoryPath)}`,
+      sha256: digest(committedCompatibility)
+    },
+    {
+      id: "zz-programmable-fee-submission",
+      kind: "static-analysis",
+      status: "passed",
+      scope: "Exact builder submission used by trusted intake to recompute the mandatory Programmable fee projection.",
+      url: `${primary.repositoryUri}/blob/${primary.revisionObjectId}/${encodeRepositoryPath(submissionRepositoryPath)}`,
+      sha256: digest(committedSubmission)
+    }
+  ];
+  const feeConformanceManifestPath = submission.implementation?.feeConformanceManifestPath;
+  if (
+    typeof feeConformanceManifestPath === "string"
+    && (!primary.sourcePaths.includes(feeConformanceManifestPath)
+      || !Buffer.isBuffer(headFiles.get(feeConformanceManifestPath)))
+  ) {
+    invalid("the declared fee-conformance manifest is not bound to the exact primary source revision");
+  }
+  addDeclaredEvidence({
+    evidence,
+    id: "fee-conformance-manifest",
+    kind: "static-analysis",
+    repositoryPath: feeConformanceManifestPath,
+    primary,
+    headFiles,
+    status: "passed",
+    scope: "Exact builder-supplied fee-conformance manifest that passed the local structural checker; Registry intake binds the bytes but does not rebuild, rerun, audit, approve, deploy or launch them."
+  });
+  for (const runId of primary.githubActionsRunIds ?? []) {
+    evidence.push({
+      id: `source-workflow-${runId}`,
+      kind: "build",
+      status: "passed",
+      scope: "Exact successful source-repository workflow run resolved for the reviewed commit; workflow quality remains builder-controlled and is not an audit.",
+      url: `${primary.repositoryUri}/actions/runs/${runId}`,
+      sha256: null
+    });
+  }
+  evidence.sort((left, right) => compareUtf8(left.id, right.id));
+  assertUniqueEvidenceTargets(evidence);
   const evidenceIndex = {
     schemaVersion: 1,
     applicationId,
     source: projection,
     attestation: "builder-declared-untrusted",
-    evidence: [
-      {
-        id: "compatibility-report",
-        kind: "static-analysis",
-        status: result === "prototype-ready" && centralFindings.length === 0
-          ? "passed"
-          : result === "changes-required"
-            ? "failed"
-            : "blocked",
-        scope: `Deterministic builder compatibility preflight for the exact committed source revision; central result ${result}.`,
-        url: `${primary.repositoryUri}/blob/${primary.revisionObjectId}/${encodeRepositoryPath(compatibilityRepositoryPath)}`,
-        sha256: digest(committedCompatibility)
-      },
-      {
-        id: "zz-programmable-fee-submission",
-        kind: "static-analysis",
-        status: "passed",
-        scope: "Exact builder submission used by trusted intake to recompute the mandatory Programmable fee projection.",
-        url: `${primary.repositoryUri}/blob/${primary.revisionObjectId}/${encodeRepositoryPath(submissionRepositoryPath)}`,
-        sha256: digest(committedSubmission)
-      }
-    ]
+    evidence
   };
   files.set("compatibility-report.json", jsonBytes(compatibility));
   files.set("evidence-index.json", jsonBytes(evidenceIndex));
@@ -178,6 +228,7 @@ export function buildCentralApplicationPackage({
       githubLogin,
       contact: publicContact(submission.builder.contact, githubLogin)
     },
+    builderTemplate: projectedBuilderTemplate,
     source,
     companionClosure: normalizedCompanionClosure,
     programmableFee: projectProgrammableFee(submission.programmableFee, {
@@ -207,6 +258,7 @@ export function buildCentralApplicationPackage({
     targetDirectory: `submissions/${applicationId}`,
     stage: submission.stage,
     applicationRevision,
+    compatibilityResult: result,
     fileCount: records.length,
     fileOrder: [...CENTRAL_APPLICATION_FILES],
     encoding: "utf8",
@@ -224,11 +276,14 @@ function projectProgrammableFee(fee, submissionBinding) {
     poolScope: fee.poolScope,
     rates: {
       unit: fee.rates?.unit,
-      selectedHundredthsOfBip: fee.rates?.selectedHundredthsOfBip,
+      selectedBuyHundredthsOfBip: fee.rates?.selectedBuyHundredthsOfBip,
+      selectedSellHundredthsOfBip: fee.rates?.selectedSellHundredthsOfBip,
       minimumEffectiveHundredthsOfBip: fee.rates?.minimumEffectiveHundredthsOfBip,
-      effectiveHundredthsOfBip: fee.rates?.effectiveHundredthsOfBip,
+      effectiveBuyHundredthsOfBip: fee.rates?.effectiveBuyHundredthsOfBip,
+      effectiveSellHundredthsOfBip: fee.rates?.effectiveSellHundredthsOfBip,
       platformHundredthsOfBip: fee.rates?.platformHundredthsOfBip,
-      projectHundredthsOfBip: fee.rates?.projectHundredthsOfBip,
+      projectBuyHundredthsOfBip: fee.rates?.projectBuyHundredthsOfBip,
+      projectSellHundredthsOfBip: fee.rates?.projectSellHundredthsOfBip,
       formula: fee.rates?.formula,
       lpFeeExcluded: fee.rates?.lpFeeExcluded
     },
@@ -265,6 +320,11 @@ function projectProgrammableFee(fee, submissionBinding) {
       accrualMode: fee.accounting?.accrualMode,
       liabilityKeyDimensions: [...(fee.accounting?.liabilityKeyDimensions ?? [])],
       crossPoolNetting: fee.accounting?.crossPoolNetting,
+      roundingPolicy: fee.accounting?.roundingPolicy,
+      remainderScope: fee.accounting?.remainderScope,
+      claimResetsRemainders: fee.accounting?.claimResetsRemainders,
+      minimumGrossQuoteUnits: fee.accounting?.minimumGrossQuoteUnits,
+      fragmentationResistant: fee.accounting?.fragmentationResistant,
       valueFlowId: fee.accounting?.valueFlowId,
       collectionEvent: fee.accounting?.collectionEvent,
       claimEvent: fee.accounting?.claimEvent
@@ -319,6 +379,62 @@ function additionalReviewTargetClosureProjection({ localCompatibility, reviewTar
   };
 }
 
+function additionalSourceEvidenceProjection({ localCompatibility, primary, submission }) {
+  if (submission.stage !== "prototype") return { findings: [], requiredGates: [] };
+  const findings = [];
+  const requiredGates = [];
+  const hasFinding = (code, path) => localCompatibility.findings.some((finding) => (
+    finding.code === code && finding.path === path
+  ));
+  const hasGate = (id) => localCompatibility.requiredGates.some((gate) => gate.id === id);
+
+  if (!Array.isArray(primary?.githubActionsRunIds) || primary.githubActionsRunIds.length === 0) {
+    if (!hasFinding("SOURCE_WORKFLOW_EVIDENCE_MISSING", "$.implementation.githubActionsRunIds")) {
+      findings.push({
+        severity: "warning",
+        code: "SOURCE_WORKFLOW_EVIDENCE_MISSING",
+        path: "$.implementation.githubActionsRunIds",
+        message: "The prototype has no successful source-owned workflow run bound to the exact public revision.",
+        remediation: "Run the project workflow for this exact commit and declare its canonical numeric GitHub Actions run id."
+      });
+    }
+    if (!hasGate("source-workflow-evidence")) {
+      requiredGates.push({
+        id: "source-workflow-evidence",
+        stage: "prototype",
+        reason: "A successful source-owned workflow must be bound to the exact public revision."
+      });
+    }
+  }
+
+  if (
+    submission.programmableFee?.collection?.status === "implemented"
+    && typeof submission.implementation?.feeConformanceManifestPath !== "string"
+  ) {
+    if (!hasFinding(
+      "PROGRAMMABLE_FEE_CONFORMANCE_EVIDENCE_MISSING",
+      "$.implementation.feeConformanceManifestPath"
+    )) {
+      findings.push({
+        severity: "warning",
+        code: "PROGRAMMABLE_FEE_CONFORMANCE_EVIDENCE_MISSING",
+        path: "$.implementation.feeConformanceManifestPath",
+        message: "The implemented Programmable fee has no standard structural conformance manifest.",
+        remediation: "Add the standard conformance manifest or keep the custom implementation in architecture review for exact semantic assessment."
+      });
+    }
+    if (!hasGate("custom-programmable-fee-review")) {
+      requiredGates.push({
+        id: "custom-programmable-fee-review",
+        stage: "candidate",
+        reason: "A custom fee implementation without the standard manifest needs attributable semantic review."
+      });
+    }
+  }
+
+  return { findings, requiredGates };
+}
+
 function normalizeMarkdown(bytes, requiredHeading, name) {
   let source;
   try {
@@ -326,7 +442,7 @@ function normalizeMarkdown(bytes, requiredHeading, name) {
   } catch {
     invalid(`${name} is not valid UTF-8`);
   }
-  if (source.includes("\r") || source.includes("\t") || CONTROL_OR_BIDI_PATTERN.test(source)) {
+  if (source.includes("\r") || source.includes("\t") || hasForbiddenInvisibleOrBidi(source.replaceAll("\n", ""))) {
     invalid(`${name} contains text excluded by the central application contract`);
   }
   const lines = source.replace(/\n+$/u, "").split("\n");
@@ -396,7 +512,7 @@ function readCompletedPrototypeGates(submission, headFiles) {
   );
 }
 
-function buildCentralFindings(localFindings, unresolvedGates) {
+function buildCentralFindings(localFindings, unresolvedGates, applicationStage) {
   const findings = [
     ...localFindings.map((finding) => ({
       code: finding.code,
@@ -414,13 +530,15 @@ function buildCentralFindings(localFindings, unresolvedGates) {
         `Complete the attributable ${gate.stage} gate ${gate.id} for this exact revision before advancing.`,
         "Complete the required attributable review gate before advancing."
       ),
-      severity: gate.stage === "prototype"
-        ? "blocker"
-        : gate.stage === "candidate"
-          ? "warning"
-          : "informational",
+      severity: applicationStage === "proposal"
+        ? "informational"
+        : gate.stage === "prototype"
+          ? "blocker"
+          : gate.stage === "candidate"
+            ? "warning"
+            : "informational",
       summary: centralText(
-        `Required ${gate.stage} gate ${gate.id}: ${gate.reason}`,
+        `${applicationStage === "proposal" && gate.stage !== "external" ? "Future " : "Required "}${gate.stage} gate ${gate.id}: ${gate.reason}`,
         "A required review gate remains unresolved for this exact revision."
       )
     }))
@@ -444,8 +562,14 @@ function centralCompatibilityResult({ stage, decision, findings, unresolvedGates
     || findings.some((finding) => finding.severity === "blocker" || finding.severity === "hard")
   ) return "changes-required";
 
-  const toolingBlocked = findings.some((finding) => finding.code === "DECLARED_FILE_TOOLING_REVIEW_REQUIRED")
-    || unresolvedGates.some((gate) => gate.id === "declared-file-tooling-or-manual-review");
+  const toolingBlocked = findings.some((finding) => new Set([
+    "DECLARED_FILE_TOOLING_REVIEW_REQUIRED",
+    "SOURCE_WORKFLOW_EVIDENCE_MISSING"
+  ]).has(finding.code))
+    || unresolvedGates.some((gate) => new Set([
+      "declared-file-tooling-or-manual-review",
+      "source-workflow-evidence"
+    ]).has(gate.id));
   if (stage === "prototype" && toolingBlocked) return "tooling-blocked";
 
   const architectureReviewRequired = stage !== "prototype"
@@ -454,16 +578,42 @@ function centralCompatibilityResult({ stage, decision, findings, unresolvedGates
   return architectureReviewRequired ? "architecture-review-required" : "prototype-ready";
 }
 
+function addDeclaredEvidence({ evidence, id, kind, repositoryPath, primary, headFiles, status, scope }) {
+  if (typeof repositoryPath !== "string" || !primary?.sourcePaths?.includes(repositoryPath)) return;
+  const bytes = headFiles.get(repositoryPath);
+  if (!Buffer.isBuffer(bytes)) return;
+  evidence.push({
+    id,
+    kind,
+    status,
+    scope,
+    url: `${primary.repositoryUri}/blob/${primary.revisionObjectId}/${encodeRepositoryPath(repositoryPath)}`,
+    sha256: digest(bytes)
+  });
+}
+
+function assertUniqueEvidenceTargets(evidence) {
+  const ids = new Set();
+  const urls = new Set();
+  for (const record of evidence) {
+    if (ids.has(record.id) || urls.has(record.url)) {
+      invalid("central evidence records must have unique ids and immutable targets");
+    }
+    ids.add(record.id);
+    urls.add(record.url);
+  }
+}
+
 function parseJsonBytes(bytes, label) {
   try {
-    return JSON.parse(decoder.decode(bytes));
+    return parseBoundedStrictJsonBytes(bytes);
   } catch {
-    invalid(`${label} is not valid UTF-8 JSON`);
+    invalid(`${label} is not valid duplicate-free UTF-8 JSON`);
   }
 }
 
 function centralFindingPath(value) {
-  if (typeof value !== "string" || value.length === 0 || value.length > 240 || CONTROL_OR_BIDI_PATTERN.test(value)) {
+  if (typeof value !== "string" || value.length === 0 || value.length > 240 || hasForbiddenInvisibleOrBidi(value)) {
     invalid("a local finding or gate path cannot be represented by the central compatibility contract");
   }
   return value;
@@ -472,7 +622,7 @@ function centralFindingPath(value) {
 function centralText(value, fallback) {
   const normalized = String(value ?? "").trim().replace(/\s+/gu, " ");
   const selected = normalized.length >= 12 ? normalized : fallback;
-  if (selected.length > 800 || CONTROL_OR_BIDI_PATTERN.test(selected)) {
+  if (selected.length > 800 || hasForbiddenInvisibleOrBidi(selected)) {
     invalid("a local finding or gate message cannot be represented by the central compatibility contract");
   }
   return selected;
@@ -502,7 +652,7 @@ function centralSummary(value) {
 }
 
 function safeText(value, maximum, label) {
-  if (typeof value !== "string" || CONTROL_OR_BIDI_PATTERN.test(value)) invalid(`${label} is invalid`);
+  if (typeof value !== "string" || hasForbiddenInvisibleOrBidi(value)) invalid(`${label} is invalid`);
   const normalized = value.trim().replace(/\s+/gu, " ");
   if (normalized.length > maximum) invalid(`${label} exceeds the central application limit`);
   return normalized;

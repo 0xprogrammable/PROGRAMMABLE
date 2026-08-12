@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "1.0.0",
+  "status": "FROZEN_FROM_BUILDER_0_5_1",
+  "establishedAt": "2026-08-07T08:39:02Z",
+  "historyDisclosure": "The V1 schema and policy were last changed in commit 67e8b69de41224960e59a7ae012f88baa35d5a82 while V3/current-primary boundaries were integrated. They were not immutable before this manifest. This manifest freezes their exact current bytes; future corrections require a new version rather than rewriting V1.",
+  "files": [
+    {
+      "path": "references/programmable-fee-policy.md",
+      "sha256": "sha256:fcf0ebfe450d806d438b3c412da7851cc7c82b25877537a6613a8d57ffb2758c",
+      "lastContentCommit": "67e8b69de41224960e59a7ae012f88baa35d5a82"
+    },
+    {
+      "path": "references/submission.schema.json",
+      "sha256": "sha256:e6ae41dd59a1f83620faa2075032a5b42e64ec233608648101e159940b64a0e7",
+      "lastContentCommit": "67e8b69de41224960e59a7ae012f88baa35d5a82"
+    }
+  ],
+  "migrationRule": "Do not edit these files. Add a new versioned schema or policy and an explicit migration contract."
+}

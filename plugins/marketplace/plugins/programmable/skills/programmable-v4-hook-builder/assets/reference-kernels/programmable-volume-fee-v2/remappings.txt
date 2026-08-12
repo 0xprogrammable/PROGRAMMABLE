@@ -1,0 +1,10 @@
+@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/
+@openzeppelin/uniswap-hooks/=node_modules/@openzeppelin/uniswap-hooks/
+@uniswap/permit2/=node_modules/@uniswap/permit2/
+@uniswap/universal-router/=node_modules/@uniswap/universal-router/
+@uniswap/v4-core/=node_modules/@uniswap/v4-core/
+@uniswap/v4-periphery/=node_modules/@uniswap/v4-periphery/
+forge-std/=node_modules/@uniswap/v4-core/lib/forge-std/src/
+node_modules/@uniswap/permit2/:solmate/=node_modules/solmate-permit2/
+permit2/=node_modules/@uniswap/permit2/
+solmate/=node_modules/@uniswap/v4-core/lib/solmate/

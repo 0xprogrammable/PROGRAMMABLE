@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "multi-pool-hooks",
+  "label": "Multi-pool hooks",
+  "summary": "Use one hook across several PoolKeys with explicit registration, isolation and cross-pool accounting rules.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "architecture-review-required",
+  "requires": [
+    "custom-hook-behavior"
+  ],
+  "conflictsWith": [],
+  "capabilities": [
+    "cross-pool-accounting",
+    "multi-pool-hook"
+  ],
+  "projectSurfaces": [
+    "contract",
+    "indexer",
+    "metadata"
+  ],
+  "requiredFacts": [
+    "Allowed PoolKeys, registration and retirement lifecycle and whether new pools are permissionless",
+    "Every storage, liability, nonce, claim and configuration key that must include pool identity",
+    "Which behavior is isolated per pool and which behavior intentionally reads or moves value across pools",
+    "Cross-pool call ordering, nested unlock behavior, reentrancy boundaries and failure atomicity",
+    "Per-pool metadata, fee, authority, emergency exit and indexer reconstruction"
+  ],
+  "requiredFiles": [
+    "Multi-pool hook source",
+    "Pool registration and configuration policy",
+    "Storage and liability keying specification",
+    "Cross-pool value-flow diagram",
+    "Pool-isolation and nested-callback tests"
+  ],
+  "requiredTests": [
+    "Two or more pools with colliding currencies, fees, ticks and adversarial configuration",
+    "Pool-scoped liability, claim, nonce, authority and accounting isolation",
+    "Nested, reordered and reverted cross-pool operations with atomic failure behavior",
+    "Registration, duplicate registration, retirement and emergency exit per pool",
+    "Indexer reconstruction and metadata identity for every PoolKey"
+  ],
+  "risks": [
+    "Missing PoolKey domain separation can leak authority or liabilities across pools",
+    "Nested cross-pool actions expand reentrancy and partial-failure complexity",
+    "Shared upgrades or emergency controls can affect unrelated pools simultaneously"
+  ]
+}

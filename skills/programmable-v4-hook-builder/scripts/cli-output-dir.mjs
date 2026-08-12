@@ -274,6 +274,8 @@ function validateCentralPackageBytes(centralPackage) {
     || typeof centralPackage !== "object"
     || centralPackage.generated !== true
     || centralPackage.encoding !== "utf8"
+    || !new Set(["prototype-ready", "changes-required", "architecture-review-required", "tooling-blocked"])
+      .has(centralPackage.compatibilityResult)
     || centralPackage.fileCount !== CENTRAL_APPLICATION_FILES.length
     || !arraysEqual(centralPackage.fileOrder, CENTRAL_APPLICATION_FILES)
     || !Array.isArray(centralPackage.files)

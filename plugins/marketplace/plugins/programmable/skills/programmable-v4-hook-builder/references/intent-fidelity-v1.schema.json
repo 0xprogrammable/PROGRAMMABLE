@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:intent-fidelity:1.0.0",
+  "title": "Programmable intent fidelity ledger",
+  "description": "Deterministic traceability from material intent facts through architecture and implementation. It exposes omissions and drift without classifying novel ideas as unsupported.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "applicationId",
+    "revision",
+    "inputDigests",
+    "overallStatus",
+    "traces",
+    "driftEvents",
+    "generatedBy"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "applicationId": { "$ref": "#/$defs/slug" },
+    "revision": { "type": "integer", "minimum": 1 },
+    "inputDigests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ideaSourceSha256",
+        "intentContractSha256",
+        "architectureDecisionsSha256",
+        "architectureSnapshotSha256"
+      ],
+      "properties": {
+        "ideaSourceSha256": { "$ref": "#/$defs/sha256" },
+        "intentContractSha256": { "$ref": "#/$defs/sha256" },
+        "architectureDecisionsSha256": { "$ref": "#/$defs/sha256" },
+        "architectureSnapshotSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "overallStatus": { "enum": ["preserved", "incomplete", "drift"] },
+    "traces": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/trace" }
+    },
+    "driftEvents": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/driftEvent" }
+    },
+    "generatedBy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool", "version", "rulesetSha256"],
+      "properties": {
+        "tool": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "version": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "rulesetSha256": {
+          "oneOf": [
+            { "$ref": "#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "maxLength": 120
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\)[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "localizedText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["language", "text"],
+      "properties": {
+        "language": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "text": { "type": "string", "minLength": 1 }
+      }
+    },
+    "architectureRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["collection", "id"],
+      "properties": {
+        "collection": { "$ref": "#/$defs/slug" },
+        "id": { "$ref": "#/$defs/slug" }
+      }
+    },
+    "trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "factId",
+        "status",
+        "decisionRefs",
+        "architectureRefs",
+        "implementationRefs",
+        "testRefs",
+        "evidenceRefs",
+        "difference",
+        "acceptedChangeIdeaEntryId"
+      ],
+      "properties": {
+        "factId": { "$ref": "#/$defs/slug" },
+        "status": { "enum": ["preserved", "partially-preserved", "unimplemented", "drift", "unassessed"] },
+        "decisionRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "architectureRefs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/architectureRef" }
+        },
+        "implementationRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/repositoryPath" }
+        },
+        "testRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/repositoryPath" }
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 2048 }
+        },
+        "difference": {
+          "oneOf": [
+            { "$ref": "#/$defs/localizedText" },
+            { "type": "null" }
+          ]
+        },
+        "acceptedChangeIdeaEntryId": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "maxLength": 120
+        }
+      }
+    },
+    "driftEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "sequence",
+        "factRefs",
+        "fromSummary",
+        "toSummary",
+        "acceptedChangeIdeaEntryId",
+        "rationale",
+        "recordedAt"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "sequence": { "type": "integer", "minimum": 1 },
+        "factRefs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "fromSummary": { "$ref": "#/$defs/localizedText" },
+        "toSummary": { "$ref": "#/$defs/localizedText" },
+        "acceptedChangeIdeaEntryId": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "maxLength": 120
+        },
+        "rationale": { "$ref": "#/$defs/localizedText" },
+        "recordedAt": { "type": ["string", "null"], "format": "date-time" }
+      }
+    }
+  }
+}

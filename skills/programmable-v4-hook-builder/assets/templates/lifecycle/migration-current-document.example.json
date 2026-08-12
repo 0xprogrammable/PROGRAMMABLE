@@ -1,0 +1,12 @@
+{
+  "standardVersion": "1.3.0",
+  "economics": {
+    "platformRateBps": 10
+  },
+  "wallets": {
+    "platformOwner": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
+  },
+  "evidence": {
+    "localReport": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+}

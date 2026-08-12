@@ -1,0 +1,1369 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://programmable.money/schemas/public-pr-application-v3.json",
+  "title": "Programmable public PR application v3",
+  "description": "Closed application manifest for intent-first, open-world review. Historical bindings are append-only evidence; this contract never rewrites or inherits approval from an older package.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "contract",
+    "applicationId",
+    "applicationRevision",
+    "stage",
+    "title",
+    "summary",
+    "builder",
+    "source",
+    "lineage",
+    "intentCapture",
+    "fidelity",
+    "policyBindings",
+    "securityBindings",
+    "reviewPackage",
+    "reviewState",
+    "declarations"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 3
+    },
+    "contract": {
+      "$ref": "#/$defs/contract"
+    },
+    "applicationId": {
+      "$ref": "#/$defs/slug"
+    },
+    "applicationRevision": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "stage": {
+      "enum": [
+        "proposal",
+        "prototype"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 3
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 20
+    },
+    "builder": {
+      "$ref": "#/$defs/builder"
+    },
+    "source": {
+      "$ref": "#/$defs/sourceClosure"
+    },
+    "lineage": {
+      "$ref": "#/$defs/lineage"
+    },
+    "intentCapture": {
+      "$ref": "#/$defs/intentCapture"
+    },
+    "fidelity": {
+      "$ref": "#/$defs/fidelity"
+    },
+    "policyBindings": {
+      "$ref": "#/$defs/policyBindings"
+    },
+    "securityBindings": {
+      "$ref": "#/$defs/securityBindings"
+    },
+    "reviewPackage": {
+      "$ref": "#/$defs/reviewPackage"
+    },
+    "reviewState": {
+      "$ref": "#/$defs/reviewState"
+    },
+    "declarations": {
+      "$ref": "#/$defs/declarations"
+    },
+    "publicDisclosureAttestations": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/publicDisclosureAttestation"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "lineage": {
+            "properties": {
+              "kind": {
+                "const": "new"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          }
+        },
+        "required": [
+          "lineage"
+        ]
+      },
+      "then": {
+        "properties": {
+          "lineage": {
+            "properties": {
+              "previous": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "lineage": {
+            "properties": {
+              "previous": {
+                "$ref": "#/$defs/previousApplication"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "intentCapture": {
+            "properties": {
+              "captureStatus": {
+                "const": "redacted-sensitive"
+              }
+            },
+            "required": [
+              "captureStatus"
+            ]
+          }
+        },
+        "required": [
+          "intentCapture"
+        ]
+      },
+      "then": {
+        "properties": {
+          "intentCapture": {
+            "properties": {
+              "originalIdeaDisplayExcerpt": {
+                "type": "null"
+              },
+              "agentInterpretationStatus": {
+                "const": "unconfirmed"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "intentCapture": {
+            "properties": {
+              "captureStatus": {
+                "const": "unavailable-legacy"
+              }
+            },
+            "required": [
+              "captureStatus"
+            ]
+          }
+        },
+        "required": [
+          "intentCapture"
+        ]
+      },
+      "then": {
+        "properties": {
+          "intentCapture": {
+            "properties": {
+              "originalIdeaDisplayExcerpt": {
+                "type": "null"
+              },
+              "agentInterpretationStatus": {
+                "const": "unconfirmed"
+              },
+              "facts": {
+                "type": "array",
+                "items": {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/intentFact"
+                    },
+                    {
+                      "properties": {
+                        "confirmationStatus": {
+                          "const": "unconfirmed"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "fidelity": {
+            "properties": {
+              "status": {
+                "const": "unassessed"
+              },
+              "reasonCode": {
+                "const": "ORIGINAL_INTENT_UNAVAILABLE"
+              },
+              "requirementBindings": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "intentCapture": {
+            "properties": {
+              "captureStatus": {
+                "const": "captured-verbatim-public-safe"
+              }
+            },
+            "required": [
+              "captureStatus"
+            ]
+          }
+        },
+        "required": [
+          "intentCapture"
+        ]
+      },
+      "then": {
+        "properties": {
+          "intentCapture": {
+            "properties": {
+              "originalIdeaDisplayExcerpt": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "stage": {
+            "const": "proposal"
+          }
+        },
+        "required": [
+          "stage"
+        ]
+      },
+      "then": {
+        "properties": {
+          "policyBindings": {
+            "properties": {
+              "feeApplicability": { "const": "unresolved" },
+              "feePolicyInstancePath": { "type": "null" },
+              "feePolicyInstanceRepositoryRef": { "type": "null" },
+              "feePolicyInstanceSha256": { "type": "null" }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "policyBindings": {
+            "properties": {
+              "feeApplicability": {
+                "enum": ["applicable", "not-applicable"]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "policyBindings": {
+            "properties": {
+              "feeApplicability": { "const": "applicable" }
+            },
+            "required": ["feeApplicability"]
+          }
+        },
+        "required": ["policyBindings"]
+      },
+      "then": {
+        "properties": {
+          "policyBindings": {
+            "properties": {
+              "feePolicyInstancePath": { "$ref": "#/$defs/repositoryPath" },
+              "feePolicyInstanceRepositoryRef": { "$ref": "#/$defs/slug" },
+              "feePolicyInstanceSha256": { "$ref": "#/$defs/sha256" }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "policyBindings": {
+            "properties": {
+              "feePolicyInstancePath": { "type": "null" },
+              "feePolicyInstanceRepositoryRef": { "type": "null" },
+              "feePolicyInstanceSha256": { "type": "null" }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:(?!0{64}$)[0-9a-f]{64}$"
+    },
+    "gitObject": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "maxLength": 100
+    },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*(?:^|/)\\.git(?:/|$))(?!.*\\\\)(?!.*(?:%2[fF]|%5[cC]))(?!.*\\/$)[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029\\u202a-\\u202e\\u2066-\\u2069]+$"
+    },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "submissionStandard",
+        "validatorProfile"
+      ],
+      "properties": {
+        "id": {
+          "const": "public-pr-application-v3"
+        },
+        "version": {
+          "const": "3.0.0"
+        },
+        "submissionStandard": {
+          "const": "2.0.0"
+        },
+        "validatorProfile": {
+          "const": "intent-open-world-v1"
+        }
+      }
+    },
+    "builder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "githubUserId",
+        "githubLogin",
+        "contact"
+      ],
+      "properties": {
+        "githubUserId": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,63}$",
+          "maxLength": 64
+        },
+        "githubLogin": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$",
+          "maxLength": 39
+        },
+        "contact": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "publicDisclosureAttestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "category",
+        "candidatePointer",
+        "candidateSha256",
+        "subject",
+        "authorization"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/slug"
+        },
+        "category": {
+          "const": "public-financial-identifier"
+        },
+        "candidatePointer": {
+          "type": "string",
+          "minLength": 1,
+          "description": "RFC 6901 JSON Pointer to the exact public string containing the candidate."
+        },
+        "candidateSha256": {
+          "$ref": "#/$defs/sha256",
+          "description": "SHA-256 of the exact UTF-8 candidate substring. The raw identifier is never duplicated here."
+        },
+        "subject": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["applicationId", "purpose"],
+          "properties": {
+            "applicationId": { "$ref": "#/$defs/slug" },
+            "purpose": { "type": "string", "minLength": 1 }
+          }
+        },
+        "authorization": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "provenance",
+            "ownerConfirmation",
+            "evidenceRef",
+            "evidenceSha256",
+            "reviewState",
+            "ownershipProofClaim",
+            "approvalClaim"
+          ],
+          "properties": {
+            "provenance": { "const": "owner-stated" },
+            "ownerConfirmation": { "const": "confirmed" },
+            "evidenceRef": { "$ref": "#/$defs/repositoryPath" },
+            "evidenceSha256": { "$ref": "#/$defs/sha256" },
+            "reviewState": { "const": "human-review-required" },
+            "ownershipProofClaim": { "const": false },
+            "approvalClaim": { "const": false }
+          }
+        }
+      },
+      "description": "Content-bound disclosure request for one intentionally public financial identifier. It never proves ownership or approval and remains subject to human review."
+    },
+    "sourceRepository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "numericRepositoryId",
+        "repositoryUri",
+        "revisionObjectId",
+        "treeObjectId",
+        "sourceClosureMode",
+        "sourcePaths",
+        "sourceManifest",
+        "contractPaths",
+        "githubActionsRunIds"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/slug"
+        },
+        "numericRepositoryId": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,63}$",
+          "maxLength": 64
+        },
+        "repositoryUri": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^https://github\\.com/(?![^/]*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/(?!\\.{1,2}$)(?!.*\\.git$)(?=[A-Za-z0-9._-]*[A-Za-z0-9])[A-Za-z0-9._-]{1,100}$"
+        },
+        "revisionObjectId": {
+          "$ref": "#/$defs/gitObject"
+        },
+        "treeObjectId": {
+          "$ref": "#/$defs/gitObject"
+        },
+        "sourceClosureMode": {
+          "enum": [
+            "inline",
+            "manifest"
+          ]
+        },
+        "sourcePaths": {
+          "$ref": "#/$defs/repositoryPathList"
+        },
+        "sourceManifest": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sourceManifestBinding"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "contractPaths": {
+          "$ref": "#/$defs/repositoryPathList"
+        },
+        "githubActionsRunIds": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,63}$",
+            "maxLength": 64
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "sourceClosureMode": {
+                "const": "inline"
+              }
+            },
+            "required": [
+              "sourceClosureMode"
+            ]
+          },
+          "then": {
+            "properties": {
+              "sourcePaths": {
+                "minItems": 1,
+                "maxItems": 4096
+              },
+              "sourceManifest": {
+                "type": "null"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "sourcePaths": {
+                "maxItems": 0
+              },
+              "sourceManifest": {
+                "$ref": "#/$defs/sourceManifestBinding"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "sourceManifestBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaId",
+        "schemaVersion",
+        "path",
+        "sha256",
+        "byteLength",
+        "blobObjectId",
+        "entryCount",
+        "fragmentCount"
+      ],
+      "properties": {
+        "schemaId": {
+          "const": "urn:programmable:source-closure-manifest:1.0.0"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "path": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "byteLength": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "blobObjectId": {
+          "$ref": "#/$defs/gitObject"
+        },
+        "entryCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fragmentCount": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "repositoryPathList": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/repositoryPath"
+      }
+    },
+    "sourceClosure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "primary",
+        "companions",
+        "verificationReports"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "primary": {
+          "$ref": "#/$defs/sourceRepository"
+        },
+        "companions": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/sourceRepository"
+          }
+        },
+        "verificationReports": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sourceVerificationReportBinding"
+          },
+          "description": "Derived, one-to-one association between every pinned inline or manifest source closure and its exact application-package verification report. Empty is allowed before source assessment; generator materialization requires one VERIFIED binding per repository."
+        }
+      }
+    },
+    "sourceVerificationReportBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repositoryRef",
+        "revisionObjectId",
+        "treeObjectId",
+        "sourceClosureMode",
+        "sourcePaths",
+        "sourcePathsSha256",
+        "manifestPath",
+        "manifestSha256",
+        "manifestByteLength",
+        "closureSha256",
+        "reportPath",
+        "reportSha256",
+        "reportByteLength",
+        "result"
+      ],
+      "properties": {
+        "repositoryRef": { "$ref": "#/$defs/slug" },
+        "revisionObjectId": { "$ref": "#/$defs/gitObject" },
+        "treeObjectId": { "$ref": "#/$defs/gitObject" },
+        "sourceClosureMode": { "enum": ["inline", "manifest"] },
+        "sourcePaths": { "$ref": "#/$defs/repositoryPathList" },
+        "sourcePathsSha256": {
+          "oneOf": [
+            { "$ref": "#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        },
+        "manifestPath": {
+          "oneOf": [
+            { "$ref": "#/$defs/repositoryPath" },
+            { "type": "null" }
+          ]
+        },
+        "manifestSha256": {
+          "oneOf": [
+            { "$ref": "#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        },
+        "manifestByteLength": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "closureSha256": { "$ref": "#/$defs/sha256" },
+        "reportPath": { "$ref": "#/$defs/repositoryPath" },
+        "reportSha256": { "$ref": "#/$defs/sha256" },
+        "reportByteLength": { "type": "integer", "minimum": 1 },
+        "result": { "const": "VERIFIED" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "sourceClosureMode": { "const": "inline" } },
+            "required": ["sourceClosureMode"]
+          },
+          "then": {
+            "properties": {
+              "sourcePaths": { "minItems": 1, "maxItems": 4096 },
+              "sourcePathsSha256": { "$ref": "#/$defs/sha256" },
+              "manifestPath": { "type": "null" },
+              "manifestSha256": { "type": "null" },
+              "manifestByteLength": { "type": "null" }
+            }
+          },
+          "else": {
+            "properties": {
+              "sourcePaths": { "maxItems": 0 },
+              "sourcePathsSha256": { "type": "null" },
+              "manifestPath": { "$ref": "#/$defs/repositoryPath" },
+              "manifestSha256": { "$ref": "#/$defs/sha256" },
+              "manifestByteLength": { "type": "integer", "minimum": 1 }
+            }
+          }
+        }
+      ]
+    },
+    "lineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "previous"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "new",
+            "source-update",
+            "schema-migration",
+            "recheck"
+          ]
+        },
+        "previous": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/previousApplication"
+            }
+          ]
+        }
+      }
+    },
+    "previousApplication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "applicationContract",
+        "applicationSchemaVersion",
+        "applicationRevision",
+        "applicationSha256",
+        "packageSha256",
+        "sourceNumericRepositoryId",
+        "sourceCommit",
+        "sourceTree",
+        "submissionSchemaId",
+        "submissionStandard",
+        "submissionPath",
+        "submissionSha256",
+        "feePolicyId",
+        "feePolicyVersion",
+        "feeApplicability",
+        "feePolicyInstanceSha256"
+      ],
+      "properties": {
+        "applicationContract": {
+          "enum": [
+            "public-pr-application-v2",
+            "public-pr-application-v3"
+          ]
+        },
+        "applicationSchemaVersion": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "applicationRevision": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "applicationSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "packageSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "sourceNumericRepositoryId": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,63}$",
+          "maxLength": 64
+        },
+        "sourceCommit": {
+          "$ref": "#/$defs/gitObject"
+        },
+        "sourceTree": {
+          "$ref": "#/$defs/gitObject"
+        },
+        "submissionSchemaId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "submissionStandard": {
+          "$ref": "#/$defs/semver"
+        },
+        "submissionPath": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "submissionSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "feePolicyId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "feePolicyVersion": {
+          "$ref": "#/$defs/semver"
+        },
+        "feeApplicability": {
+          "enum": [
+            "applicable",
+            "not-applicable",
+            "unresolved"
+          ]
+        },
+        "feePolicyInstanceSha256": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "intentCapture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "captureStatus",
+        "originalIdeaDisplayExcerpt",
+        "ideaSourcePath",
+        "ideaSourceRepositoryRef",
+        "ideaSourceSha256",
+        "language",
+        "agentInterpretationStatus",
+        "facts",
+        "unresolvedMaterialDecisions"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "captureStatus": {
+          "enum": [
+            "captured-verbatim-public-safe",
+            "redacted-sensitive",
+            "unavailable-legacy"
+          ]
+        },
+        "originalIdeaDisplayExcerpt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Non-normative UI excerpt only. The content-addressed idea-source artifact is the sole normative intent source."
+        },
+        "ideaSourcePath": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "ideaSourceRepositoryRef": {
+          "$ref": "#/$defs/slug"
+        },
+        "ideaSourceSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "language": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 100
+        },
+        "agentInterpretationStatus": {
+          "enum": [
+            "unconfirmed",
+            "owner-confirmed"
+          ]
+        },
+        "facts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/intentFact"
+          }
+        },
+        "unresolvedMaterialDecisions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "intentFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "statement",
+        "provenance",
+        "confirmationStatus",
+        "sourceReferences"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/slug"
+        },
+        "statement": {
+          "type": "string",
+          "minLength": 1
+        },
+        "provenance": {
+          "enum": [
+            "owner-stated",
+            "legacy-declared",
+            "agent-derived",
+            "evidence-backed",
+            "unknown"
+          ]
+        },
+        "confirmationStatus": {
+          "enum": [
+            "confirmed",
+            "unconfirmed",
+            "unavailable"
+          ]
+        },
+        "sourceReferences": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "fidelity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "status",
+        "reasonCode",
+        "requirementBindings"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "status": {
+          "enum": [
+            "unassessed",
+            "partial",
+            "complete",
+            "drift-detected"
+          ]
+        },
+        "reasonCode": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 120
+        },
+        "requirementBindings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/requirementBinding"
+          }
+        }
+      }
+    },
+    "requirementBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requirementId",
+        "status",
+        "architectureDecisionIds",
+        "implementationPaths",
+        "testEvidenceIds"
+      ],
+      "properties": {
+        "requirementId": {
+          "$ref": "#/$defs/slug"
+        },
+        "status": {
+          "enum": [
+            "unassessed",
+            "bound",
+            "missing",
+            "drifted"
+          ]
+        },
+        "architectureDecisionIds": {
+          "$ref": "#/$defs/slugList"
+        },
+        "implementationPaths": {
+          "$ref": "#/$defs/repositoryPathList"
+        },
+        "testEvidenceIds": {
+          "$ref": "#/$defs/slugList"
+        }
+      }
+    },
+    "slugList": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/slug"
+      }
+    },
+    "policyBindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "feePolicySchemaId",
+        "programmableFeePolicyId",
+        "programmableFeePolicyVersion",
+        "programmableFeePolicyHashPreimage",
+        "programmableFeePolicyHash",
+        "feeApplicability",
+        "feePolicySchemaPath",
+        "feePolicySchemaRepositoryRef",
+        "feePolicySchemaSha256",
+        "feePolicyInstancePath",
+        "feePolicyInstanceRepositoryRef",
+        "feePolicyInstanceSha256",
+        "submissionPath",
+        "submissionRepositoryRef",
+        "submissionSha256"
+      ],
+      "properties": {
+        "feePolicySchemaId": {
+          "const": "urn:programmable:fee-policy-v2:1.0.0"
+        },
+        "programmableFeePolicyId": {
+          "const": "programmable-volume-fee-v2"
+        },
+        "programmableFeePolicyVersion": {
+          "const": "2.0.0"
+        },
+        "programmableFeePolicyHashPreimage": {
+          "const": "programmable-volume-fee-v2@2.0.0"
+        },
+        "programmableFeePolicyHash": {
+          "const": "0x03cd386824b1c0aa152200e0a470aa0c885f802e257f0f46066de508d241811e"
+        },
+        "feeApplicability": {
+          "enum": [
+            "applicable",
+            "not-applicable",
+            "unresolved"
+          ]
+        },
+        "feePolicySchemaPath": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "feePolicySchemaRepositoryRef": {
+          "$ref": "#/$defs/slug"
+        },
+        "feePolicySchemaSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "feePolicyInstancePath": {
+          "oneOf": [
+            { "$ref": "#/$defs/repositoryPath" },
+            { "type": "null" }
+          ]
+        },
+        "feePolicyInstanceRepositoryRef": {
+          "oneOf": [
+            { "$ref": "#/$defs/slug" },
+            { "type": "null" }
+          ]
+        },
+        "feePolicyInstanceSha256": {
+          "oneOf": [
+            { "$ref": "#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        },
+        "submissionPath": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "submissionRepositoryRef": {
+          "$ref": "#/$defs/slug"
+        },
+        "submissionSha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "securityBindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "securityAssessmentSchemaId",
+        "securityAssessmentSchemaPath",
+        "securityAssessmentSchemaRepositoryRef",
+        "securityAssessmentSchemaSha256",
+        "securityAssessmentSchemaByteLength",
+        "securityAssessmentPath",
+        "securityAssessmentRepositoryRef",
+        "securityAssessmentSha256",
+        "securityAssessmentByteLength"
+      ],
+      "properties": {
+        "securityAssessmentSchemaId": {
+          "const": "urn:programmable:open-world-security:1.0.0"
+        },
+        "securityAssessmentSchemaPath": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "securityAssessmentSchemaRepositoryRef": {
+          "type": "null",
+          "description": "The exact stable schema bytes travel in the derived application package, separate from the pinned builder source commit."
+        },
+        "securityAssessmentSchemaSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "securityAssessmentSchemaByteLength": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "securityAssessmentPath": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "securityAssessmentRepositoryRef": {
+          "type": "null",
+          "description": "A source-assessed instance is derived only after the pinned source commit exists, so it lives in the application package and cannot self-reference that source commit."
+        },
+        "securityAssessmentSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "securityAssessmentByteLength": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "reviewPackage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "requiredKinds",
+        "records"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "requiredKinds": {
+          "type": "array",
+          "minItems": 12,
+          "maxItems": 12,
+          "prefixItems": [
+            { "const": "proposal" },
+            { "const": "test-plan" },
+            { "const": "threat-model" },
+            { "const": "compatibility-report" },
+            { "const": "evidence-index" },
+            { "const": "idea-source" },
+            { "const": "intent-contract" },
+            { "const": "architecture-decisions" },
+            { "const": "intent-fidelity" },
+            { "const": "fee-policy-schema" },
+            { "const": "security-assessment-schema" },
+            { "const": "security-assessment" }
+          ]
+        },
+        "records": {
+          "type": "array",
+          "minItems": 12,
+          "items": {
+            "$ref": "#/$defs/reviewRecord"
+          },
+          "allOf": [
+            { "contains": { "properties": { "kind": { "const": "proposal" } }, "required": ["kind"] }, "minContains": 1 },
+            { "contains": { "properties": { "kind": { "const": "test-plan" } }, "required": ["kind"] }, "minContains": 1 },
+            { "contains": { "properties": { "kind": { "const": "threat-model" } }, "required": ["kind"] }, "minContains": 1 },
+            { "contains": { "properties": { "kind": { "const": "compatibility-report" } }, "required": ["kind"] }, "minContains": 1 },
+            { "contains": { "properties": { "kind": { "const": "evidence-index" } }, "required": ["kind"] }, "minContains": 1 },
+            { "contains": { "properties": { "kind": { "const": "idea-source" } }, "required": ["kind"] }, "minContains": 1 },
+            { "contains": { "properties": { "kind": { "const": "intent-contract" } }, "required": ["kind"] }, "minContains": 1 },
+            { "contains": { "properties": { "kind": { "const": "architecture-decisions" } }, "required": ["kind"] }, "minContains": 1 },
+            { "contains": { "properties": { "kind": { "const": "intent-fidelity" } }, "required": ["kind"] }, "minContains": 1 },
+            { "contains": { "properties": { "kind": { "const": "fee-policy-schema" } }, "required": ["kind"] }, "minContains": 1 },
+            { "contains": { "properties": { "kind": { "const": "security-assessment-schema" } }, "required": ["kind"] }, "minContains": 1 },
+            { "contains": { "properties": { "kind": { "const": "security-assessment" } }, "required": ["kind"] }, "minContains": 1 }
+          ]
+        }
+      }
+    },
+    "reviewRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "path",
+        "mediaType",
+        "byteLength",
+        "sha256",
+        "source",
+        "repositoryRef"
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/slug"
+        },
+        "path": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "byteLength": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "source": {
+          "enum": [
+            "application-package",
+            "source-repository"
+          ]
+        },
+        "repositoryRef": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/slug"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "const": "application-package"
+              }
+            },
+            "required": [
+              "source"
+            ]
+          },
+          "then": {
+            "properties": {
+              "repositoryRef": {
+                "type": "null"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "repositoryRef": {
+                "$ref": "#/$defs/slug"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "reviewState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "inheritedApproval",
+        "acceptancePath",
+        "acceptanceSha256"
+      ],
+      "properties": {
+        "status": {
+          "const": "unreviewed"
+        },
+        "inheritedApproval": {
+          "const": false
+        },
+        "acceptancePath": {
+          "type": "null"
+        },
+        "acceptanceSha256": {
+          "type": "null"
+        }
+      }
+    },
+    "declarations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "publicInformationAcknowledged",
+        "noSecretsDeclared",
+        "noApprovalClaim",
+        "noUniswapEndorsementClaim",
+        "historicalEvidencePreserved",
+        "noInheritedApproval"
+      ],
+      "properties": {
+        "publicInformationAcknowledged": {
+          "const": true
+        },
+        "noSecretsDeclared": {
+          "const": true
+        },
+        "noApprovalClaim": {
+          "const": true
+        },
+        "noUniswapEndorsementClaim": {
+          "const": true
+        },
+        "historicalEvidencePreserved": {
+          "const": true
+        },
+        "noInheritedApproval": {
+          "const": true
+        }
+      }
+    }
+  }
+}

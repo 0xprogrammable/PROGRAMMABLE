@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "programmable-implementation-lego",
+  "id": "game-settlement",
+  "label": "Game settlement types",
+  "summary": "Explicit game, rules, participant, asset, amount, nonce and deadline bindings for a project-specific settlement design.",
+  "maturity": "experimental",
+  "maturityMeaning": "Hash-bound reference scaffold only; project-specific implementation and evidence are required before prototype readiness.",
+  "feeApplicability": "project-scope-declaration-required",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "automaticAdverseDecision": false,
+  "reviewRoute": "architecture-review-required",
+  "activatesFor": {
+    "starterIds": [],
+    "packIds": [
+      "maps-location-quest",
+      "threejs-pvp-rewards",
+      "wallet-transaction-quest"
+    ],
+    "capabilityIds": [
+      "chain-event-quest",
+      "game-outcome-rewards",
+      "location-rewards"
+    ]
+  },
+  "requiresLegos": [],
+  "projectSurfaces": [
+    "contract",
+    "game",
+    "service"
+  ],
+  "dependencyRequirements": [
+    "Solidity 0.8.26",
+    "Project-specific outcome proof or signer architecture"
+  ],
+  "requiredFacts": [
+    "Bind immutable game rules, outcome authority, participants, stake source and payout destination",
+    "Define disconnect, timeout, draw, dispute, replay and duplicate-settlement behavior",
+    "Keep game simulation state outside consensus unless its exact proof is verified"
+  ],
+  "hardConflictPredicates": [
+    "The same game outcome can settle more than once",
+    "An outcome proof does not bind the exact rules, participants, asset and amount",
+    "A privileged actor can redirect a settled payout outside the disclosed game rule"
+  ],
+  "claims": {
+    "audited": false,
+    "deployed": false,
+    "productionReady": false,
+    "providerSupport": "not-claimed"
+  },
+  "files": [
+    {
+      "sourcePath": "templates/game-settlement/GameSettlementTypes.sol",
+      "targetPath": "implementation/game-settlement/src/GameSettlementTypes.sol",
+      "role": "source",
+      "language": "solidity",
+      "sha256": "105a88d1b59975a32392fb576aa4271cd1b56c475a5bfad5dda3f1c60d5ab223"
+    }
+  ]
+}

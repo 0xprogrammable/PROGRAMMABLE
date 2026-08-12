@@ -1,0 +1,682 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "programmable-knowledge-routing",
+  "policy": {
+    "selectionSemantics": "minimum-sufficient-progressive-context",
+    "unknownCapabilityOutcome": "preserve-and-route-to-architecture-review",
+    "automaticAdverseDecision": false,
+    "networkAccess": "forbidden",
+    "estimatedTokenAlgorithm": "ceil-utf8-bytes-divided-by-four",
+    "targetInitialTokens": 4000
+  },
+  "archivalReferences": [
+    {
+      "id": "legacy-v1-reproduction",
+      "reason": "Load for the exact released V1 application transport or an identified historical V1 replay; never use the V1 product schema to constrain an open-world V2 design.",
+      "references": [
+        "compatibility-standard.md",
+        "github-application-journey.md",
+        "output-contract.md",
+        "programmable-fee-policy.md",
+        "standard-fee-kernel.md",
+        "submission-workflow.md",
+        "workflow.md"
+      ]
+    },
+    {
+      "id": "candidate-application-v3-transport",
+      "reason": "Retained only for exact candidate Application V3 work; it must never route a public Applicant away from Submit a Launch.",
+      "references": [
+        "github-application-v3.md"
+      ]
+    }
+  ],
+  "modes": {
+    "explore": {
+      "dynamicRouteTiming": "deferred",
+      "dynamicRouteTrigger": "Load the capability-specific chapters only after the intended outcome and affected product surfaces are clear enough to select an architecture.",
+      "initial": [
+        "business-system-compiler.md"
+      ],
+      "later": [
+        {
+          "reference": "intent-contract.md",
+          "trigger": "Load only when a ProjectSpec fact cannot be bound to the preserved intent or one material owner decision remains unresolved."
+        },
+        {
+          "reference": "project-surfaces-and-capabilities.md",
+          "trigger": "Load after the system graph identifies concrete contract, application, service, provider, runtime, or indexer boundaries."
+        },
+        {
+          "reference": "programmable-fee-policy-v2.md",
+          "trigger": "Load only after a canonical v4 fee surface or an explicit fee-bearing capability is confirmed."
+        },
+        {
+          "reference": "intake-playbook.md",
+          "trigger": "Load after the plain-language intent contract is confirmed and the detailed product, lifecycle, authority, value-flow, or failure intake must be completed."
+        },
+        {
+          "reference": "template-catalog.md",
+          "trigger": "Load only after the plain-language intent contract is confirmed and starter modules or reusable capability packs must be selected."
+        },
+        {
+          "reference": "scenario-matrix.md",
+          "trigger": "Load when the product behavior is still ambiguous or crosses several scenario families."
+        },
+        {
+          "reference": "v4-hook-lego.md",
+          "trigger": "Load after the desired outcome is clear and reusable hook primitives must be selected."
+        },
+        {
+          "reference": "layered-response-contract.md",
+          "trigger": "Load only when rendering the builder-facing Explore result, one material decision, or its evidence-artifact references."
+        }
+      ]
+    },
+    "autopilot": {
+      "dynamicRouteTiming": "deferred",
+      "dynamicRouteTrigger": "The initial compiler carries the productive materialize and require-output path. Load capability-specific chapters only after the selected architecture proves that the capability is used.",
+      "initial": [
+        "business-system-compiler.md"
+      ],
+      "later": [
+        {
+          "reference": "intent-contract.md",
+          "trigger": "Load only when a ProjectSpec fact cannot be bound to the preserved intent or one material owner decision remains unresolved."
+        },
+        {
+          "reference": "project-surfaces-and-capabilities.md",
+          "trigger": "Load after the system graph identifies concrete contract, application, service, provider, runtime, or indexer boundaries."
+        },
+        {
+          "reference": "open-world-v2-workflow.md",
+          "trigger": "Load immediately after the selected architecture and material owner facts are sufficient, before authoring implementation inputs or invoking project materialize."
+        },
+        {
+          "reference": "programmable-fee-policy-v2.md",
+          "trigger": "Load only after a canonical v4 fee surface or another explicit fee-bearing Programmable scope is confirmed."
+        },
+        {
+          "reference": "intake-playbook.md",
+          "trigger": "Load only when the compact intent contract leaves detailed lifecycle, authority, value-flow, or failure semantics unresolved."
+        },
+        {
+          "reference": "template-catalog.md",
+          "trigger": "Load only after the architecture is selected and reusable modules can reduce work without changing product intent."
+        },
+        {
+          "reference": "scenario-matrix.md",
+          "trigger": "Load when the selected architecture triggers one or more capability-specific trust, value, authority, failure, or terminal-state properties."
+        },
+        {
+          "reference": "open-world-v2-output-contract.md",
+          "trigger": "Load when materializing the exact v2 proposal, evidence, predicted review, or integration-pending handoff."
+        },
+        {
+          "reference": "layered-response-contract.md",
+          "trigger": "Load only when rendering the concise builder response and its evidence-artifact references."
+        }
+      ]
+    },
+    "preflight": {
+      "dynamicRouteTiming": "deferred",
+      "dynamicRouteTrigger": "Load capability-specific chapters only after ProjectSpec, product graphs, and architecture candidates prove that the selected design uses the capability.",
+      "initial": [
+        "open-world-v2-workflow.md"
+      ],
+      "later": [
+        {
+          "reference": "programmable-fee-policy-v2.md",
+          "trigger": "Load the full policy only after the Submission V2 graph confirms at least one programmable-canonical execution scope or another explicit fee-bearing capability."
+        },
+        {
+          "reference": "intent-contract.md",
+          "trigger": "Load whenever the original idea, its semantic interpretation, or fidelity between the requested behavior and the proposed architecture is unresolved."
+        },
+        {
+          "reference": "intake-playbook.md",
+          "trigger": "Load after the intent contract when detailed product intake, affected surfaces, or the design card remains unresolved."
+        },
+        {
+          "reference": "open-world-v2-output-contract.md",
+          "trigger": "Load when the design card is confirmed and the exact v2 package or handoff must be created."
+        },
+        {
+          "reference": "submission-v2.schema.json",
+          "trigger": "Load only the relevant schema section while writing or repairing submission.v2.json."
+        },
+        {
+          "reference": "builder-reviewer-alignment.md",
+          "trigger": "Load after design intent is stable, before declaring preflight evidence complete, to align every applicant property with its review proof and allowed N/A route."
+        },
+        {
+          "reference": "layered-response-contract.md",
+          "trigger": "Load only when rendering the builder-facing Build preflight result, one material decision, or its evidence-artifact references."
+        }
+      ]
+    },
+    "prototype": {
+      "dynamicRouteTiming": "deferred",
+      "dynamicRouteTrigger": "Load one capability-specific chapter when the current repository slice begins implementing or verifying that confirmed capability.",
+      "initial": [
+        "open-world-v2-workflow.md"
+      ],
+      "later": [
+        {
+          "reference": "security-and-evidence.md",
+          "trigger": "Load after architecture selection for the exact trust, authority, value, dependency, and failure surfaces being implemented."
+        },
+        {
+          "reference": "project-surfaces-and-capabilities.md",
+          "trigger": "Load when materializing application, service, provider, runtime, indexer, or other non-contract component boundaries."
+        },
+        {
+          "reference": "build-profiles.md",
+          "trigger": "Load when the prototype needs a deterministic language-specific build, test, dependency, artifact, or unsupported-tool profile."
+        },
+        {
+          "reference": "v4-protocol-mechanics.md",
+          "trigger": "Load when the prototype includes a hook, a canonical v4 pool, or another capability whose implementation depends on exact v4 protocol mechanics."
+        },
+        {
+          "reference": "programmable-fee-policy-v2.md",
+          "trigger": "Load when the prototype includes the canonical v4 Programmable fee profile or its exact fee ownership, accounting, collection, or claim behavior."
+        },
+        {
+          "reference": "intent-contract.md",
+          "trigger": "Load before implementation when the original idea has not yet been captured and confirmed, or whenever a proposed technical choice may change product intent."
+        },
+        {
+          "reference": "upstream-sources.md",
+          "trigger": "Load only when selecting, changing, or proving an exact dependency, deployment, source revision, license, or compatibility profile."
+        },
+        {
+          "reference": "upstream-snapshot-2026-08-07.json",
+          "trigger": "Load the bounded 2026-08-07 source snapshot only after upstream-sources.md is needed and an exact current-source candidate must be inspected."
+        },
+        {
+          "reference": "builder-toolchain-lock-v1.json",
+          "trigger": "Load only when selecting or verifying the exact Node, npm, compiler, EVM, dependency, or package-integrity profile for a reproducible build."
+        },
+        {
+          "reference": "open-world-v2-output-contract.md",
+          "trigger": "Load when producing the final v2 machine and human reports."
+        },
+        {
+          "reference": "builder-reviewer-alignment.md",
+          "trigger": "Load before completing implementation evidence so A1-A11 builder obligations match later review semantics."
+        },
+        {
+          "reference": "execution-gates-and-attestation.md",
+          "trigger": "Load when the prototype produces tool evidence, simulations, attestations, deployment plans, or any output that could be confused with authorization or live proof."
+        },
+        {
+          "reference": "submission-regressions.md",
+          "trigger": "Load for the final prototype red team and whenever a change must invalidate prior evidence."
+        },
+        {
+          "reference": "layered-response-contract.md",
+          "trigger": "Load only when rendering the builder-facing Build result, one material decision, or its evidence-artifact references."
+        }
+      ]
+    },
+    "repair": {
+      "dynamicRouteTiming": "deferred",
+      "dynamicRouteTrigger": "Load capability-specific chapters only after the observed root cause identifies the exact component, trust boundary, or protocol behavior under repair.",
+      "initial": [
+        "open-world-v2-workflow.md"
+      ],
+      "later": [
+        {
+          "reference": "v4-protocol-mechanics.md",
+          "trigger": "Load when the repair targets a hook, a canonical v4 pool, or another capability whose behavior depends on exact v4 protocol mechanics."
+        },
+        {
+          "reference": "intent-contract.md",
+          "trigger": "Load when observed code, a proposed repair, or a migration may differ from the builder's original product intent."
+        },
+        {
+          "reference": "security-and-evidence.md",
+          "trigger": "Load when the observed failure crosses a trust boundary or requires exact evidence repair."
+        },
+        {
+          "reference": "upstream-sources.md",
+          "trigger": "Load only when the repair changes or disproves an exact dependency, deployment, source revision, or license."
+        },
+        {
+          "reference": "open-world-v2-output-contract.md",
+          "trigger": "Load after the observed behavior and smallest compatible repair are known."
+        },
+        {
+          "reference": "upgrades-and-release.md",
+          "trigger": "Load if the repair changes a pinned dependency, standard, or released project."
+        },
+        {
+          "reference": "builder-reviewer-alignment.md",
+          "trigger": "Load when assigning a repair to an applicant, platform, provider, or tooling owner."
+        },
+        {
+          "reference": "submission-regressions.md",
+          "trigger": "Load when diagnosing recurring submission failures or determining which earlier evidence the repair invalidates."
+        },
+        {
+          "reference": "layered-response-contract.md",
+          "trigger": "Load only when rendering the builder-facing Repair result, one material decision, or its evidence-artifact references."
+        }
+      ]
+    },
+    "review": {
+      "dynamicRouteTiming": "deferred",
+      "dynamicRouteTrigger": "Load capability-specific chapters only when the pinned evidence reaches that exact protocol, value, authority, runtime, or provider property.",
+      "initial": [
+        "open-world-v2-workflow.md"
+      ],
+      "later": [
+        {
+          "reference": "approval-criteria.md",
+          "trigger": "Load after the exact source and evidence scope is pinned and the user requests a launch-admission or readiness ledger."
+        },
+        {
+          "reference": "v4-protocol-mechanics.md",
+          "trigger": "Load when review reaches a hook, a canonical v4 pool, or another capability whose safety or correctness depends on exact v4 protocol mechanics."
+        },
+        {
+          "reference": "intent-contract.md",
+          "trigger": "Load when review must distinguish an unsafe implementation from a legitimate idea or verify that the implementation still matches confirmed intent."
+        },
+        {
+          "reference": "security-and-evidence.md",
+          "trigger": "Load when reviewing authentication, accounting, external services, evidence, or adversarial behavior."
+        },
+        {
+          "reference": "programmable-fee-policy-v2.md",
+          "trigger": "Load when reviewing fee calculation, ownership, collection, rounding, or claim behavior."
+        },
+        {
+          "reference": "open-world-v2-output-contract.md",
+          "trigger": "Load when rendering the final findings and exact gate ledger."
+        },
+        {
+          "reference": "builder-reviewer-alignment.md",
+          "trigger": "Load before assigning any A1-A11 or P1-P9 result to verify property symmetry, equivalent evidence, and owner boundaries."
+        },
+        {
+          "reference": "execution-gates-and-attestation.md",
+          "trigger": "Load when evaluating tool coverage, independent reproduction, simulation, attestation, authorization, deployment, or runtime verification."
+        },
+        {
+          "reference": "submission-regressions.md",
+          "trigger": "Load for the mandatory launch-admission red team and change-impact analysis."
+        },
+        {
+          "reference": "upstream-sources.md",
+          "trigger": "Load when dependency or official-source provenance is unresolved."
+        },
+        {
+          "reference": "layered-response-contract.md",
+          "trigger": "Load only when rendering the builder-facing readiness or Status result and its evidence-artifact references."
+        }
+      ]
+    },
+    "submit": {
+      "dynamicRouteTiming": "deferred",
+      "dynamicRouteTrigger": "Load a capability-specific chapter only when a concrete package or source-binding failure cannot be resolved from the submission workflow and its exact failing field.",
+      "initial": [
+        "open-world-v2-workflow.md"
+      ],
+      "later": [
+        {
+          "reference": "agent-entry-and-application.md",
+          "trigger": "Load only after local checks pass and exact public source is frozen for the Submit a Launch handoff."
+        },
+        {
+          "reference": "open-world-v2-output-contract.md",
+          "trigger": "Load when rendering the final v3 application, waiting, or status response."
+        },
+        {
+          "reference": "github-public-source-contract-v1.json",
+          "trigger": "Load when exact public GitHub source resolution fails or needs manual diagnosis."
+        },
+        {
+          "reference": "public-pr-application-v3.schema.json",
+          "trigger": "Load only the failing section when creating or repairing application.v3.json."
+        },
+        {
+          "reference": "source-closure-manifest-v1.schema.json",
+          "trigger": "Load only when a large or multi-repository source closure must be represented or diagnosed."
+        },
+        {
+          "reference": "approval-criteria.md",
+          "trigger": "Load before preparing a launch-admission submission result; use it for an agent-prepared gate ledger, never as proof of trusted enforcement."
+        },
+        {
+          "reference": "builder-reviewer-alignment.md",
+          "trigger": "Load before Submit to prove every demanded review property was discoverable and buildable."
+        },
+        {
+          "reference": "submission-regressions.md",
+          "trigger": "Load for the pre-Submit regression red team and evidence invalidation map."
+        },
+        {
+          "reference": "layered-response-contract.md",
+          "trigger": "Load only when rendering the builder-facing Submit or application-Status result and its evidence-artifact references."
+        }
+      ]
+    },
+    "handoff": {
+      "dynamicRouteTiming": "deferred",
+      "dynamicRouteTrigger": "Load a capability-specific chapter only for an accepted capability that is now being mapped to an exact platform integration surface.",
+      "initial": [
+        "open-world-v2-workflow.md"
+      ],
+      "later": [
+        {
+          "reference": "open-world-v2-output-contract.md",
+          "trigger": "Load after the exact accepted revision and next-owner boundary are known and the final handoff ledger must be rendered."
+        },
+        {
+          "reference": "agent-entry-and-application.md",
+          "trigger": "Load when emitting or diagnosing the exact Submit a Launch Applicant review handoff."
+        },
+        {
+          "reference": "launch-bundle-input-v2.schema.json",
+          "trigger": "Load only after canonical Registry acceptance when preparing the exact offline launch-authorization candidate inputs."
+        },
+        {
+          "reference": "launch-bundle-output-v2.schema.json",
+          "trigger": "Load when validating or consuming the exact unsigned Builder launch-bundle candidate output."
+        },
+        {
+          "reference": "approval-criteria.md",
+          "trigger": "Load to verify the accepted exact revision still has a complete A1-A11/P1-P9 ledger before any Website handoff."
+        },
+        {
+          "reference": "execution-gates-and-attestation.md",
+          "trigger": "Load whenever handoff reaches simulation, typed authorization, signer control, receipt verification, or activation boundaries."
+        },
+        {
+          "reference": "official-model-patterns.md",
+          "trigger": "Load when mapping an accepted project to an existing official launch-model pattern."
+        },
+        {
+          "reference": "official-launchpad-deployments.json",
+          "trigger": "Load the exact chain records needed by the approved model only."
+        },
+        {
+          "reference": "upgrades-and-release.md",
+          "trigger": "Load for release trains, migrations, and future skill upgrades."
+        }
+      ]
+    }
+  },
+  "capabilityRoutes": [
+    {
+      "id": "open-world-project-compiler",
+      "matches": [
+        "architecture-comparison",
+        "complete-repository",
+        "product-graph",
+        "project-spec"
+      ],
+      "references": [
+        "architecture-candidates-v1.schema.json",
+        "business-system-compiler.md",
+        "open-world-v2-workflow.md",
+        "product-graph-v1.schema.json",
+        "project-spec-v1.schema.json",
+        "project-state-v1.schema.json",
+        "repository-plan-v1.schema.json"
+      ]
+    },
+    {
+      "id": "capability-composition",
+      "matches": [
+        "capability-composition",
+        "multi-contract-system",
+        "semantic-composition"
+      ],
+      "references": [
+        "capability-contract-v1.schema.json",
+        "open-world-v2-workflow.md",
+        "project-surfaces-and-capabilities.md",
+        "v4-hook-lego.md"
+      ]
+    },
+    {
+      "id": "builder-release-evaluation",
+      "matches": [
+        "builder-release-eval",
+        "fresh-repository-eval",
+        "install-to-submission-eval"
+      ],
+      "references": [
+        "open-world-v2-workflow.md",
+        "upgrades-and-release.md"
+      ]
+    },
+    {
+      "id": "dependency-reproducibility",
+      "matches": [
+        "dependency-upgrade",
+        "reproducible-toolchain",
+        "upstream-drift"
+      ],
+      "references": [
+        "build-profiles.md",
+        "builder-toolchain-lock-v1.json",
+        "upstream-snapshot-2026-08-07.json",
+        "upstream-sources.md"
+      ]
+    },
+    {
+      "id": "v4-semantic-contract",
+      "matches": [
+        "v4-hook-semantic-contract"
+      ],
+      "references": [
+        "open-world-v2-workflow.md",
+        "security-and-evidence.md",
+        "v4-protocol-mechanics.md"
+      ]
+    },
+    {
+      "id": "canonical-v4-fee",
+      "matches": [
+        "canonical-v4-pool",
+        "claimable-platform-fee",
+        "claimable-project-fee",
+        "quote-side-volume-accounting",
+        "settlement-profile-selection",
+        "standard-programmable-fee-hook"
+      ],
+      "references": [
+        "v4-protocol-mechanics.md",
+        "programmable-fee-policy-v2.md"
+      ]
+    },
+    {
+      "id": "hook-implementation",
+      "matches": [
+        "async-swap",
+        "custom-accounting",
+        "custom-curve",
+        "custom-hook-behavior",
+        "dynamic-lp-fee",
+        "hook-owned-liquidity",
+        "multi-pool-hook"
+      ],
+      "references": [
+        "v4-protocol-mechanics.md",
+        "v4-hook-lego.md"
+      ]
+    },
+    {
+      "id": "swap-client",
+      "matches": [
+        "hooked-quote-simulation",
+        "multi-hop-hookdata",
+        "v4-swap-client"
+      ],
+      "references": [
+        "v4-sdk-integration.md",
+        "v4-protocol-mechanics.md"
+      ]
+    },
+    {
+      "id": "liquidity-position",
+      "matches": [
+        "liquidity-position-client",
+        "liquidity-position-custody",
+        "position-discovery",
+        "position-fee-collection",
+        "position-subscriber-automation"
+      ],
+      "references": [
+        "v4-liquidity-and-state.md",
+        "v4-sdk-integration.md"
+      ]
+    },
+    {
+      "id": "advanced-liquidity",
+      "matches": [
+        "active-liquidity-market",
+        "external-liquidity-aggregation",
+        "hook-owned-idle-yield",
+        "wrapped-asset-conversion"
+      ],
+      "references": [
+        "v4-hook-lego.md",
+        "v4-protocol-mechanics.md",
+        "v4-liquidity-and-state.md",
+        "official-model-patterns.md"
+      ]
+    },
+    {
+      "id": "offchain-trust",
+      "matches": [
+        "external-map-service",
+        "external-services",
+        "keeper-automation",
+        "location-evidence",
+        "offchain-outcome",
+        "oracle-data",
+        "randomness",
+        "signed-claim"
+      ],
+      "references": [
+        "project-surfaces-and-capabilities.md",
+        "companion-manifests.md"
+      ]
+    },
+    {
+      "id": "runtime-product",
+      "matches": [
+        "browser-game",
+        "chain-event-quest",
+        "game-outcome-rewards",
+        "loot-rewards",
+        "multi-surface-product",
+        "threejs",
+        "wallet-action-rewards"
+      ],
+      "references": [
+        "project-surfaces-and-capabilities.md",
+        "runtime-assets.md"
+      ]
+    },
+    {
+      "id": "token-behavior",
+      "matches": [
+        "custom-token-behavior",
+        "fee-on-transfer-token",
+        "tax-financed-auto-liquidity",
+        "token-managed-automatic-liquidity",
+        "token-side-special-behavior",
+        "token-tax-accumulator",
+        "token-transfer-tax"
+      ],
+      "references": [
+        "scenario-matrix.md"
+      ]
+    },
+    {
+      "id": "discovery-and-provider",
+      "matches": [
+        "external-asset",
+        "permissioned-asset",
+        "provider-disclosures",
+        "public-metadata"
+      ],
+      "references": [
+        "routing-and-discovery.md"
+      ]
+    },
+    {
+      "id": "permissioned-pool-model",
+      "matches": [
+        "permissioned-asset"
+      ],
+      "references": [
+        "official-model-patterns.md",
+        "routing-and-discovery.md"
+      ]
+    }
+  ],
+  "surfaceRoutes": [
+    {
+      "id": "application",
+      "matches": [
+        "application"
+      ],
+      "references": [
+        "project-surfaces-and-capabilities.md"
+      ]
+    },
+    {
+      "id": "runtime",
+      "matches": [
+        "game"
+      ],
+      "references": [
+        "project-surfaces-and-capabilities.md",
+        "runtime-assets.md"
+      ]
+    },
+    {
+      "id": "indexer",
+      "matches": [
+        "indexer"
+      ],
+      "references": [
+        "project-surfaces-and-capabilities.md",
+        "companion-manifests.md",
+        "routing-and-discovery.md"
+      ]
+    },
+    {
+      "id": "connected-service",
+      "matches": [
+        "keeper",
+        "service"
+      ],
+      "references": [
+        "project-surfaces-and-capabilities.md",
+        "companion-manifests.md"
+      ]
+    },
+    {
+      "id": "external-provider",
+      "matches": [
+        "external-provider"
+      ],
+      "references": [
+        "project-surfaces-and-capabilities.md"
+      ]
+    }
+  ],
+  "unknownCapabilityReferences": [
+    "scenario-matrix.md",
+    "project-surfaces-and-capabilities.md",
+    "security-and-evidence.md"
+  ]
+}

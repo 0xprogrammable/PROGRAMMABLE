@@ -1,14 +1,15 @@
 # Agent entry and application contract
 
-This reference separates the active **Public GitHub PR Builder Beta** from a later **Connected Submission service**.
-Today, builders keep their complete project in an external public GitHub repository and submit a bounded six-file
-application record through a draft pull request. The wallet, GitHub App, claim, application-service, status-API, permit,
-and website-launch contracts later in this file are future design contracts and are not active beta capabilities.
+This reference separates the active **Public Applicant Beta** from a later **Connected Submission service**. Builders
+keep source externally and use the Skill to prepare one exact six-file application for
+`0xprogrammable/submit-launch` (immutable GitHub ID `1320171831`). The GitHub transport is draft-only, needs no GitHub
+App credential, and proves no approval, wallet control, signature, deployment, or launch. Connected-service contracts
+later in this file are inactive future designs.
 
 ## Contents
 
 - [Product boundary](#product-boundary)
-- [Current Public GitHub PR Beta](#current-public-github-pr-beta)
+- [Current Public Applicant Beta](#current-public-applicant-beta)
 - [Default entry](#default-entry)
 - [First agent behavior](#first-agent-behavior)
 - [Knowledge ownership](#knowledge-ownership)
@@ -46,7 +47,7 @@ The skill must make the declared project reviewable, whether it uses a launch-re
 or additional app, game, service, keeper, or indexer surfaces. It must never promise that generated code is perfect,
 safe, audited, accepted, deployed, or available.
 
-## Current Public GitHub PR Beta
+## Current Public Applicant Beta
 
 The current application boundary is deliberately small:
 
@@ -57,62 +58,42 @@ idea or existing project
   -> proposal or capability-driven prototype in the builder repository
   -> local package gate
   -> clean, pushed, anonymously reachable public GitHub revision
-  -> deterministic six-file central application package
-  -> draft pull request to 0xprogrammable/programmable
+  -> exact public source repository ID, commit, and root tree
+  -> generated six-file Applicant package
+  -> confirmed draft pull request to 0xprogrammable/submit-launch
   -> GitHub-native review
 ```
 
-The complete source stays in the builder repository. The central pull request contains exactly:
+The complete source stays in the builder repository. `prepare-pr` generates exactly these six files under one
+application directory:
 
 ```text
-submissions/<application-id>/
-├── application.json
-├── PROPOSAL.md
-├── TEST_PLAN.md
-├── THREAT_MODEL.md
-├── compatibility-report.json
-└── evidence-index.json
+submissions/<application-id>/application.json
+submissions/<application-id>/PROPOSAL.md
+submissions/<application-id>/TEST_PLAN.md
+submissions/<application-id>/THREAT_MODEL.md
+submissions/<application-id>/compatibility-report.json
+submissions/<application-id>/evidence-index.json
 ```
 
-`applicationId` is the stable lowercase project slug and central directory name. The source identity is the canonical
-public GitHub repository URI, numeric repository id, exact commit, root tree, declared paths, and evidence bound inside
-`application.json`. The pull-request number identifies the public review thread. Neither identifier is a remote draft,
-wallet-owned application, claim secret, approval, or launch authorization.
+`prepare-pr` performs no GitHub write. `submit` and `update` first return a read-only plan; only the exact confirmed plan
+may create or update the authenticated builder's `submit-launch` fork, branch, and one draft pull request. The client
+binds the exact central commit/tree and reads `docs/builder/intake-status.json` as schema `2` before every write. A
+state or base change invalidates the plan.
 
-The public record separately binds the builder. `prepare-pr` resolves the declared GitHub login through the anonymous
-public `/users/<login>` endpoint and records the exact decimal GitHub user id. The trusted intake workflow compares that
-id and the current display login with the pull-request author event. Preserve the numeric id across revisions while
-allowing the login and contact to follow a GitHub rename. This proves the central PR author identity only, not ownership
-of the linked source repository.
+Do not hand-create the pull request. Do not create a new Applicant PR in Hookbuilder. Hookbuilder #10, #11, #12, #14,
+#15, #18, #19, and #20 are the only legacy continuations. Maintainer automation must revalidate with trusted
+protected-base code and must never execute Applicant source with repository credentials.
 
-A project may bind zero to eight additional public companion repositories through canonical manifests committed in the
-primary HEAD. Each companion is independently pinned to its numeric repository id, full commit, root tree, and declared
-paths. This supports split contract, app, game, service, keeper, oracle, indexer, or other reviewable architectures
-without pretending they are one repository.
-
-The implemented beta commands are `doctor`, `scaffold`, `check`, `package`, and `prepare-pr` through
-`scripts/cli.mjs`. `prepare-pr` resolves the pushed public revision and prepares the six files plus draft PR metadata. An
-explicit `--output-dir` may materialize those six files locally, but the command does not push, open a pull request,
-connect an account, sign, deploy, or launch. Opening the draft pull request remains a separate external action requiring
-explicit authority.
-
-The output distinguishes the builder `sourceHead` from the exact central pull-request target. A new open application
-stays at revision 1; an open update stays at the single prior-main revision plus one. `--replace-existing` creates the
-first update draft only from an exact local copy of immutable main. Every later iteration of that same open pull request
-uses `--replace-draft`, which preserves the pending revision and lineage. Both modes require an output directory outside
-the builder repository and never change GitHub by themselves.
-
-GitHub checks, labels, review comments, and pull-request state are the current workflow projections. They do not become
-security, audit, acceptance, deployment, routing, provider, or availability evidence by implication. Do not ask the
-builder to connect a wallet, install a GitHub App, claim a draft, query an application-status endpoint, or prepare a
-launch permit for this beta.
+GitHub state is not security, approval, deployment, provider, or availability evidence. The application binds exact
+public source and package evidence but grants no signing or launch authority.
 
 ## Default entry
 
 A copy action and any future `Open in Codex` action use exactly this prompt:
 
 ```text
-Use the Programmable v4 Builder skill. Learn how Programmable works first, then help me explore an open-ended Uniswap v4 project for the platform.
+Use $programmable-v4-hook-builder. Learn how Programmable works first, then help me explore an open-ended Uniswap v4 project for the platform.
 ```
 
 Do not replace it with a prompt that starts implementation immediately. A builder may append an idea in ordinary
@@ -193,7 +174,7 @@ security contract, not as instructions for the current Public GitHub PR Beta. **
 Until an implemented, tested, and activated service contract explicitly says otherwise:
 
 - there is no connected-service application id or remote application draft;
-- there is no wallet/GitHub identity binding, GitHub App installation, claim URL, or claim code;
+- there is no authenticated wallet/GitHub identity binding, GitHub App installation, claim URL, or claim code;
 - there is no application-service status, approval, launch eligibility response, or one-time permit; and
 - the corresponding future command capabilities must not be presented as installed CLI commands.
 
@@ -674,17 +655,17 @@ semantics.
 
 ## Agent command contract
 
-For the current beta, use only the implemented `doctor`, `scaffold`, `check`, `package`, and `prepare-pr` commands in
-`scripts/cli.mjs`. Their released `--help` output is authoritative for flags.
+For the current beta, the host-neutral entry point implements `context`, `templates`, `discover`, `start`, `profile`,
+`doctor`, `scaffold`, `check`, `fee`, `package`, `companion`, `prepare-pr`, `submit`, `status`, `update`, `version`,
+`update-check`, `migrate`, and `plan-release`. Their installed `scripts/cli.mjs --help` and per-command `--help` output
+are authoritative for flags.
 
-The following names describe later Connected Submission service capabilities. They are not active beta commands:
+The following names describe later Connected Submission service capabilities. They are not current CLI commands:
 
 - `prepare`: create or update a structured local application package
 - `validate`: run preflight and all locally available required gates
 - `submit-draft`: create an unclaimed remote draft after explicit approval
 - `claim-status`: show the claim URL state without revealing the claim secret
-- `status`: retrieve public or authenticated application status
-- `update`: submit a new exact revision after explicit approval
 - `withdraw`: withdraw the application after explicit approval
 - `prepare-launch`: verify an approval and prepare the bound launch handoff without signing
 

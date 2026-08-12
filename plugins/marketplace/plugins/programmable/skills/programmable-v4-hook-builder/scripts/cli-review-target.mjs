@@ -7,6 +7,7 @@ import { assertInsideRepository, resolveRepositoryRoot } from "./repository-root
 import { buildReviewTarget } from "./review-target-core.mjs";
 import { canonicalJson } from "./submission-core.mjs";
 import { sanitizeMessage } from "./cli-runtime.mjs";
+import { parseBoundedStrictJsonBytes } from "./strict-json-core.mjs";
 
 const MAX_SUBMISSION_BYTES = 2_000_000;
 const args = process.argv.slice(2);
@@ -33,7 +34,9 @@ try {
   if (submissionStat.size > MAX_SUBMISSION_BYTES) {
     throw new Error(`submission.json exceeds ${MAX_SUBMISSION_BYTES} bytes`);
   }
-  const submission = JSON.parse(fs.readFileSync(submissionPath, "utf8"));
+  const submission = parseBoundedStrictJsonBytes(fs.readFileSync(submissionPath), {
+    maxSourceBytes: MAX_SUBMISSION_BYTES
+  });
   const target = buildReviewTarget({ repositoryRoot, packageRoot, submission });
   process.stdout.write(`${canonicalJson(target)}\n`);
 } catch (error) {

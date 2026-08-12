@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "dynamic-lp-fee",
+  "label": "Dynamic LP fee",
+  "summary": "Vary the pool LP fee from bounded, attributable inputs without confusing it with hook-owned fees.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "custom-review",
+  "requires": [
+    "custom-hook-behavior"
+  ],
+  "conflictsWith": [],
+  "capabilities": [
+    "dynamic-lp-fee"
+  ],
+  "projectSurfaces": [
+    "contract",
+    "indexer"
+  ],
+  "requiredFacts": [
+    "Minimum, maximum, update actor and update cadence",
+    "Input metric, observation window, manipulation resistance and failure rule",
+    "Whether the fee is returned per swap or persisted in PoolManager state",
+    "Clear separation from the mandatory Programmable and project hook-owned fees"
+  ],
+  "requiredFiles": [
+    "Dynamic fee policy",
+    "Hook implementation",
+    "Oracle or measurement dependency evidence",
+    "Fee behavior tests"
+  ],
+  "requiredTests": [
+    "Minimum, maximum and rate-limit boundaries",
+    "Manipulated, stale, unavailable and extreme inputs",
+    "Quote-to-execution parity",
+    "Liquidity decrease and failure behavior"
+  ],
+  "risks": [
+    "A manipulable input can create predatory pricing",
+    "Provider quotes can diverge from dynamic execution"
+  ]
+}

@@ -4,6 +4,10 @@ Programmable publishes one canonical Agent Skills package for designing and revi
 package follows the open [Agent Skills specification](https://agentskills.io/specification), so compatible agents can
 load the same instructions, references, templates, and validation tools without separate prompts for each product.
 
+The canonical package is synchronized with the Hookbuilder `0.5.1` development candidate at commit
+`3f06935a132830f9282b5936452cd562c0c0ad5a`, based on public `main`. The stable Hookbuilder `v0.4.3` release remains
+available for historical reproduction; it is not the newest model.
+
 ## Available skill
 
 ### Programmable v4 Builder
@@ -23,66 +27,74 @@ explicit authorization and the applicable release gates. Maintainers may select 
 candidate.
 
 Read the [builder guide](../docs/builder/AGENT_SKILL.md) before using it on production code.
+The exact source and mirror binding is recorded in [HOOKBUILDER_SYNC.md](../docs/builder/HOOKBUILDER_SYNC.md).
 
 ## Quick install
 
 Install interactively with one command:
 
 ```bash
-gh skill install 0xprogrammable/programmable
+gh skill install 0xprogrammable/hookbuilder \
+  skills/programmable-v4-hook-builder@main \
+  --agent codex \
+  --scope user \
+  --force
 ```
 
 To preselect the Builder while keeping the agent setup interactive:
 
 ```bash
-gh skill install 0xprogrammable/programmable programmable-v4-hook-builder
+gh skill install 0xprogrammable/hookbuilder \
+  skills/programmable-v4-hook-builder@main \
+  --agent codex \
+  --scope user \
+  --force
 ```
 
-Without a version argument, `gh skill` selects the repository's latest tagged release. Use the protected-release
-instructions below only when a review or organization policy requires an exact version pin.
+Without a version argument, `gh skill` selects the repository's latest tagged release. Explicitly select `main` for
+the newest model; use `v0.4.3` only when reproducing a stable historical release.
 
-## Install an exact protected Builder release
+## Install the newest Builder model
 
-Inspect the skill before installing it. The release tag below is protected against update and deletion. A full reviewed
-commit SHA remains an equivalent pin when an organization requires commit-only policy.
+Inspect the skill before installing it. `main` is the newest public development source and is intentionally distinct
+from the latest stable release.
 
 ```bash
-gh skill preview 0xprogrammable/programmable \
-  programmable-v4-hook-builder@programmable-v4-builder-v0.2.1
+gh skill preview 0xprogrammable/hookbuilder \
+  skills/programmable-v4-hook-builder@main
 ```
 
 Install the same revision for one supported host:
 
 ```bash
 # Codex
-gh skill install 0xprogrammable/programmable \
-  skills/programmable-v4-hook-builder \
+gh skill install 0xprogrammable/hookbuilder \
+  skills/programmable-v4-hook-builder@main \
   --agent codex \
   --scope user \
-  --pin programmable-v4-builder-v0.2.1
+  --force
 
 # Claude Code
-gh skill install 0xprogrammable/programmable \
-  skills/programmable-v4-hook-builder \
+gh skill install 0xprogrammable/hookbuilder \
+  skills/programmable-v4-hook-builder@main \
   --agent claude-code \
   --scope user \
-  --pin programmable-v4-builder-v0.2.1
+  --force
 
 # GitHub Copilot
-gh skill install 0xprogrammable/programmable \
-  skills/programmable-v4-hook-builder \
+gh skill install 0xprogrammable/hookbuilder \
+  skills/programmable-v4-hook-builder@main \
   --agent github-copilot \
   --scope user \
-  --pin programmable-v4-builder-v0.2.1
+  --force
 ```
 
 The `gh skill` command chooses the host-specific destination. Its skill commands are currently a preview feature, and
 host behavior still depends on each agent's sandbox, tool permissions, and Agent Skills implementation. Installation
 does not grant wallet access, deployment authority, review approval, or permission to publish external changes.
 
-Builder `v0.1.1` remains available only to reproduce pre-fee legacy records, and `v0.2.0` preserves the first
-fee-policy release. Use `v0.2.1` for new launch applications; it keeps the mandatory Programmable fee policy and adds
-the end-to-end trusted-intake correction for declared Solidity contract paths.
+Builder `v0.2.1` and earlier remain historical beta contracts. New work uses Hookbuilder `0.5.1` development `main`,
+including the open-world compiler, Application V3 preparation and current fee-conformance contracts.
 
 For repository-scoped use, change `--scope user` to `--scope project` only when the generated `.agents/` directory is
 intentionally committed or excluded from Git; otherwise it makes the project worktree dirty and blocks `prepare-pr`.

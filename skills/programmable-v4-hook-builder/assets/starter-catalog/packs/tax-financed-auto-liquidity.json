@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "tax-financed-auto-liquidity",
+  "label": "Tax-financed automatic liquidity",
+  "summary": "Fund bounded automatic liquidity from a disclosed portion of collected token transfer tax.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "architecture-review-required",
+  "requires": [
+    "token-managed-automatic-liquidity",
+    "token-transfer-tax"
+  ],
+  "conflictsWith": [],
+  "capabilities": [
+    "tax-financed-auto-liquidity",
+    "token-tax-accumulator"
+  ],
+  "projectSurfaces": [
+    "contract",
+    "keeper",
+    "metadata"
+  ],
+  "requiredFacts": [
+    "Tax fraction reserved for liquidity, accumulator asset, threshold, cadence and maximum inventory",
+    "Exact swap and add-liquidity sequence, price limits, slippage, deadline and partial-failure behavior",
+    "Who can trigger, pause, rescue or reconfigure execution and how accumulated value exits",
+    "LP position owner, fee beneficiary, lock or removal rules and treatment during retirement",
+    "Ordering between tax accounting, platform liabilities, swaps, settlement and liquidity creation"
+  ],
+  "requiredFiles": [
+    "Tax accumulator source",
+    "Token-managed automatic-liquidity execution source",
+    "LP custody and retirement policy",
+    "Trigger or keeper specification",
+    "Cross-feature solvency tests"
+  ],
+  "requiredTests": [
+    "Accumulator boundaries immediately below, at and above the execution threshold",
+    "Repeated, partial, reverted and adversarially ordered execution without double counting",
+    "Price manipulation, sandwich, slippage, deadline, zero-liquidity and callback-recursion failures",
+    "Conservation across token tax, platform share, project liabilities and liquidity inventory",
+    "LP creation, fee collection, removal, rescue, pause and user-exit lifecycle"
+  ],
+  "risks": [
+    "Predictable tax-funded swaps can be sandwiched or manipulated around thresholds",
+    "Cross-feature reentrancy or accounting order can double spend accumulated tax",
+    "Unclear LP custody or rescue authority can redirect or strand user-funded value"
+  ]
+}

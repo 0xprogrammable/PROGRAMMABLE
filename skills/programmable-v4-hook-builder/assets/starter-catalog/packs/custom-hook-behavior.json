@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "custom-hook-behavior",
+  "label": "Additional project-defined hook behavior",
+  "summary": "Document and test project-defined PoolManager callbacks beyond the mandatory Programmable fee path without assuming any product category.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "custom-review",
+  "requires": [
+    "programmable-volume-fee"
+  ],
+  "conflictsWith": [],
+  "capabilities": [
+    "custom-hook-behavior"
+  ],
+  "projectSurfaces": [
+    "contract",
+    "indexer"
+  ],
+  "requiredFacts": [
+    "Every additional enabled callback beyond mandatory fee collection and why it is necessary",
+    "Canonical PoolManager authentication and PoolKey admission",
+    "Permission bits, HookMiner preimage and deployment address",
+    "Mandatory fee deltas separated from additional project-defined deltas, settlement steps and callback failure effects"
+  ],
+  "requiredFiles": [
+    "Hook source",
+    "Hook address and permission evidence",
+    "Callback and accounting design",
+    "Integration tests"
+  ],
+  "requiredTests": [
+    "Direct non-PoolManager callback rejection",
+    "Permission mask and deployed address bits",
+    "Value conservation and settlement ordering",
+    "Unexpected PoolKey, malformed hookData and reentrancy paths"
+  ],
+  "risks": [
+    "The callback sender is not the end user",
+    "Additional returned deltas create hook liabilities and require explicit conservation beyond mandatory fee accounting",
+    "Every unnecessary permission expands the attack surface"
+  ]
+}

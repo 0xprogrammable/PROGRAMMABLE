@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "starter",
+  "id": "custom-hook",
+  "label": "Custom Uniswap v4 hook",
+  "summary": "Start a canonical v4 pool whose custom hook owns the required pool behavior and fee integration.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "custom-review",
+  "defaultPacks": [
+    "custom-hook-behavior",
+    "metadata-disclosures",
+    "programmable-volume-fee",
+    "test-evidence-threat-model"
+  ],
+  "conflictsWith": [],
+  "capabilities": [
+    "canonical-v4-pool",
+    "custom-hook-behavior"
+  ],
+  "projectSurfaces": [
+    "contract",
+    "indexer",
+    "metadata"
+  ],
+  "requiredFacts": [
+    "Why each enabled callback is necessary",
+    "The exact PoolKey, permission mask and hook address derivation",
+    "All currency flows, settlement rules, authorities and exits",
+    "How custom behavior composes with the mandatory Programmable fee"
+  ],
+  "requiredFiles": [
+    "Hook and launcher source",
+    "Pinned dependency and compiler configuration",
+    "Architecture proposal",
+    "Threat model",
+    "Test plan",
+    "Evidence index"
+  ],
+  "requiredTests": [
+    "PoolManager authentication and PoolKey admission",
+    "Permission-mask and hook-address checks",
+    "Value-conservation fuzzing and stateful invariants",
+    "Complete lifecycle and failure recovery"
+  ],
+  "risks": [
+    "Callback or accounting mistakes can affect every swap",
+    "Custom routing or hookData can narrow provider support"
+  ]
+}

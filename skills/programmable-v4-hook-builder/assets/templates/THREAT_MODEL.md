@@ -1,5 +1,8 @@
 # {{MODEL_NAME}} threat model
 
+> Authoring scaffold: replace every instruction below with project-specific threats, controls, evidence, or an explicit
+> not-applicable reason. Do not retain the instructional prose in the completed artifact.
+
 ## Assets and value at risk
 
 List every stable asset id, token, ETH balance, PoolManager claim, share, LP position, proof, signature, liability, and
@@ -7,11 +10,44 @@ entitlement that exists. Include valuable app or game state, service authority, 
 state, and signing capability where declared, without recording secrets. State origin, custody, owner, exit,
 non-standard behavior, and issuer or upgrade control.
 
+For every ERC-20 interaction, state whether false, no, or malformed returns, fee-on-transfer, rebasing, callbacks,
+pauses, and blocklists are supported or rejected. Reconcile requested, transferred, actually received, credited, and
+settled amounts rather than assuming nominal transfer amounts.
+
 ## Trust boundaries
 
 List the trust boundaries the project actually uses: PoolManager, routers, factories, launchers, external protocols,
 apps or games, browsers, wallets, services, databases, oracles, keepers, signers, issuers, administrators, indexers,
 APIs, interfaces, quote providers, routing providers, and monitoring operators. Explain what each can and cannot do.
+
+Treat the public source authority and review channel as trust boundaries too. Model repository deletion/recreation under
+the same slug, numeric-id changes, private visibility, unreachable commits, missing submodule/LFS objects, mutable refs,
+package-contract drift, a validator/skill/criteria mismatch, editable review projections, and a blank or mixed-revision
+decision. Only the exact retained source and typed immutable final-verification record may cross that boundary.
+
+Treat tool output and deployment execution as separate trust boundaries. Model all scanners unavailable, empty output,
+same-run generated code/tests, stale suppressions, a valid signature over bad evidence, mutable shared artifacts,
+attestation replay, RPC disagreement, secret exposure through argv/logs/artifacts, cross-chain or cross-target
+authorization replay, signer compromise, nonce duplication, gas/value-limit bypass, partial deployment, and wrong
+runtime/configuration at an occupied predicted address. Preserve prepare, analyze, simulate, authorize, broadcast,
+verify, and activate as separate states with separate authorities.
+
+## Launch-plan integrity
+
+For launch admission, identify the bound launch-plan path and hash. Threat-model omitted or reordered targets, wrong ABI
+arguments, wrong compiler settings, unmined hook addresses, wrong PoolKey or initial price, partial initialization,
+allocation drift, missing liquidity or custody transfer, unavailable platform modules, transaction failure between
+atomicity boundaries, and false postconditions.
+
+For mutually wired components, model a public first caller substituting a wrong interface-compatible counterpart before,
+during, and after initialization. For CREATE2, model predicted-address preoccupation, changed deployer runtime or
+authority, salt/initcode/constructor drift, retry, partial deployment, and any metamorphic-code assumption. The launch
+must reject foreign code and preserve rollback or a clean retry without moving value into a partial graph.
+
+Model every caller-selected payer, sponsor, `from`, Permit2 owner, or standing allowance as a separate authority. Give a
+victim an allowance, let an attacker mutate beneficiary, token, amount, launch/configuration hash, PoolKey/hook/router,
+chain, verifying contract, nonce, and deadline, and prove allowance alone cannot authorize the launch. Include direct
+caller funding, typed delegation, Permit2, ERC-1271, revocation, partial spend, residual allowance, refund, and replay.
 
 ## Custom hook boundary, only when `hook.used` is true
 
@@ -39,8 +75,10 @@ pools; never describe PoolManager ingress and egress as buy and sell without thi
 ## Value flows and accounting
 
 Define assets, signs, settlement order, rounding, custody, fee liabilities, and conservation properties for every
-supported value-moving action. For custom swap accounting, define specified and unspecified currencies and have each
-settlement step name actor, currency, delta owner, sign, amount rule, operation, and deadline. When project code controls
+supported value-moving action. For custom swap accounting, classify all four quadrants and define specified and
+unspecified currencies; each settlement step names actor, currency, delta owner, sign, amount rule, operation, and
+deadline. Cover ERC-20/native debt, positive credit, `take`, `settleFor`, and ERC-6909 mint/burn. The current profile
+rejects `clear`; use an explicit claim/transfer/forfeiture path. When project code controls
 a PoolManager unlock or callback delta, state and test the invariant that every PoolManager delta reaches zero before the
 unlock ends. Do not attribute internal PoolManager settlement responsibility to an ordinary no-hook app that never owns
 that execution path.
@@ -51,7 +89,8 @@ mint, burn, transfer, redemption, dust, and aggregate solvency.
 ## Dynamic fees and recipients
 
 For the mandatory Programmable fee, model the canonical-PoolKey binding, executed gross quote-side basis after partial
-fills, all four swap modes, floor and non-additive split, rounding, liability solvency, event reconciliation, and
+fills, every successful supported mode, deterministic pre-movement rejection of unsupported quadrants, floor and
+non-additive split, final combined trader limits, rounding, liability solvency, event reconciliation, and
 alternative-pool/router bypass attempts. The immutable owner and sole claim authority is
 `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`; model unauthorized builder, project, administrator, recipient, rescue,
 sweep, redirect, stored-recipient mutation, owner mutation, and cross-pool-netting attempts. Preserve the owner's
@@ -62,6 +101,9 @@ failed payout destinations, liability decrement ordering, and balance reconcilia
 Model quadrant-dependent before/after return-delta collection and v4 callback skipping on hook-initiated PoolManager
 actions. Forbid same-pool self-swaps or specify and test equivalent internal fee accrual; do not ban unrelated safe
 custom-hook behavior.
+
+Do not equate a zero core-AMM leg with a zero user output. Model a valid fully backed custom-accounting completion and an
+invalid unbacked/no-op returned delta; only the conserved, delivered, slippage-bounded final settlement may pass.
 
 When used, record initial fee, initialization, application and update paths, override rule, persistent actor and call
 sites, rate limit, immutable bounds, metric, observation, cadence, manipulation resistance, liquidity-decrease behavior,
@@ -105,9 +147,23 @@ Third-party discovery may locate a pool or route. It cannot prove deployment rec
 entitlements, claims, or lifecycle completion. State where the product reconciles provider data against confirmed chain
 state.
 
+For measurement- or probability-driven behavior, model raw observation, estimator output, market-implied price and the
+enforced fee, limit, allocation or payout as separate trust and manipulation surfaces. Cover provenance, units, version,
+freshness, replay, correction, extreme values, front-running, post-exposure rule changes and stale or outage behavior.
+When value is staked, add collateral insolvency, dispute, cancellation, refund and terminal-unresolved state.
+
 ## Authorities and recovery
 
 Map each capability to its controller, delay, mutability, user-exit impact, and historical entitlement behavior.
+
+For every claimed LP lock, model a valid decoy position from the authorized depositor and prove that the contract checks
+the canonical token id plus PoolKey or PoolId identity. For every bounded oracle or history buffer, model permissionless
+minimum-spacing writes through repeated wraps, anchor eviction, reset, stale state, delayed keepers, preserved
+liabilities, and eventual recovery.
+
+For cross-chain behavior, record direction, both endpoints, messenger or bridge, proxy implementation and admin,
+custody at each phase, finality, replay, reorg, cancellation, maximum pending time, executor loss, upgrade/pause effects,
+recovery, and solvency. Separate applicant contracts from any unreleased Programmable chain adapter.
 
 ## Known limitations
 

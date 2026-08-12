@@ -1,0 +1,228 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:launch-admission-decision:1.0.0",
+  "title": "Programmable A1-A11 and P1-P9 launch-admission decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "recordId",
+    "recordClass",
+    "reviewIntent",
+    "subject",
+    "policy",
+    "applicantGates",
+    "platformGates",
+    "findings",
+    "reviewTooling",
+    "verdict",
+    "authority",
+    "revalidatedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "recordId": { "$ref": "#/$defs/bytes32" },
+    "recordClass": { "enum": ["agent-prepared-policy-assessment", "maintainer-signed-final-verification"] },
+    "reviewIntent": { "enum": ["architecture-review", "launch-admission"] },
+    "subject": { "$ref": "#/$defs/subject" },
+    "policy": { "$ref": "#/$defs/policy" },
+    "applicantGates": {
+      "type": "array",
+      "minItems": 11,
+      "maxItems": 11,
+      "items": { "$ref": "#/$defs/applicantGate" }
+    },
+    "platformGates": {
+      "type": "array",
+      "minItems": 9,
+      "maxItems": 9,
+      "items": { "$ref": "#/$defs/platformGate" }
+    },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/finding" }
+    },
+    "reviewTooling": { "$ref": "#/$defs/reviewTooling" },
+    "verdict": {
+      "enum": ["CHANGES REQUIRED", "PLATFORM PENDING", "READY FOR FINAL VERIFICATION", "NO DETERMINATION"]
+    },
+    "authority": { "$ref": "#/$defs/authority" },
+    "revalidatedAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "address": { "type": "string", "pattern": "^0x[0-9a-fA-F]{40}$" },
+    "bytes32": { "type": "string", "pattern": "^0x[0-9a-fA-F]{64}$" },
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "gitObject": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "uint": { "type": "string", "minLength": 1, "maxLength": 78, "pattern": "^(?:0|[1-9][0-9]*)$" },
+    "slug": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "ref": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "text": { "type": "string", "minLength": 1, "maxLength": 4096 },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repositoryId", "uri", "revisionObjectId", "treeObjectId"],
+      "properties": {
+        "repositoryId": { "$ref": "#/$defs/uint" },
+        "uri": { "type": "string", "pattern": "^https://github\\.com/(?![^/]*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/(?!\\.{1,2}$)(?!.*\\.git$)(?=[A-Za-z0-9._-]*[A-Za-z0-9])[A-Za-z0-9._-]{1,100}$", "maxLength": 300 },
+        "revisionObjectId": { "$ref": "#/$defs/gitObject" },
+        "treeObjectId": { "$ref": "#/$defs/gitObject" }
+      }
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "applicationId",
+        "centralPullRequest",
+        "centralHeadObjectId",
+        "primary",
+        "companions",
+        "sourceBundleSha256",
+        "submissionSha256",
+        "reviewTargetSha256",
+        "launchPlanPath",
+        "launchPlanSha256",
+        "chainId",
+        "launchConfigurationSha256"
+      ],
+      "properties": {
+        "applicationId": { "$ref": "#/$defs/slug" },
+        "centralPullRequest": { "type": ["integer", "null"], "minimum": 1 },
+        "centralHeadObjectId": { "oneOf": [{ "$ref": "#/$defs/gitObject" }, { "type": "null" }] },
+        "primary": { "$ref": "#/$defs/repository" },
+        "companions": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/repository" }
+        },
+        "sourceBundleSha256": { "$ref": "#/$defs/sha256" },
+        "submissionSha256": { "$ref": "#/$defs/sha256" },
+        "reviewTargetSha256": { "$ref": "#/$defs/sha256" },
+        "launchPlanPath": { "$ref": "#/$defs/ref" },
+        "launchPlanSha256": { "$ref": "#/$defs/sha256" },
+        "chainId": { "$ref": "#/$defs/uint" },
+        "launchConfigurationSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["skillRevisionObjectId", "criteriaSha256", "feePolicySha256", "packageContractSha256", "validatorRevisionObjectId", "toolPolicySha256"],
+      "properties": {
+        "skillRevisionObjectId": { "$ref": "#/$defs/gitObject" },
+        "criteriaSha256": { "$ref": "#/$defs/sha256" },
+        "feePolicySha256": { "$ref": "#/$defs/sha256" },
+        "packageContractSha256": { "$ref": "#/$defs/sha256" },
+        "validatorRevisionObjectId": { "$ref": "#/$defs/gitObject" },
+        "toolPolicySha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "gateResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["result", "decisionMethod", "reason", "evidenceRefs", "findingRefs", "resolutionOwner"],
+      "properties": {
+        "result": { "enum": ["passed", "failed", "pending", "analysis-pending", "not-applicable-with-reason"] },
+        "decisionMethod": { "enum": ["deterministic-reproduction", "manual-review", "human-product-legal"] },
+        "reason": { "$ref": "#/$defs/text" },
+        "evidenceRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/ref" }
+        },
+        "findingRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "resolutionOwner": { "enum": ["applicant", "programmable-platform", "external-provider", "programmable-product-legal", "review-tooling", "none"] }
+      }
+    },
+    "applicantGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "assessment"],
+      "properties": {
+        "id": { "enum": ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A11"] },
+        "assessment": { "$ref": "#/$defs/gateResult" }
+      }
+    },
+    "platformGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "assessment"],
+      "properties": {
+        "id": { "enum": ["P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9"] },
+        "assessment": { "$ref": "#/$defs/gateResult" }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "gateIds", "classification", "artifact", "location", "evidenceRefs", "impact", "smallestRepair", "exactRerun", "resolutionOwner", "preventionCause"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "gateIds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A11", "P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9"] }
+        },
+        "classification": { "enum": ["hard-conflict", "evidence-gap", "platform-gap", "provider-gap", "product-legal-pending", "tooling-blocked"] },
+        "artifact": { "$ref": "#/$defs/ref" },
+        "location": { "$ref": "#/$defs/ref" },
+        "evidenceRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/ref" }
+        },
+        "impact": { "$ref": "#/$defs/text" },
+        "smallestRepair": { "$ref": "#/$defs/text" },
+        "exactRerun": { "$ref": "#/$defs/text" },
+        "resolutionOwner": { "enum": ["applicant", "programmable-platform", "external-provider", "programmable-product-legal", "review-tooling"] },
+        "preventionCause": { "enum": ["skill-gap", "criteria-gap", "verifier-gap", "package-release-drift", "applicant-deviation", "newly-discovered-mechanism"] }
+      }
+    },
+    "reviewTooling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reason", "evidenceRefs"],
+      "properties": {
+        "status": { "enum": ["available", "blocked"] },
+        "reason": { "$ref": "#/$defs/text" },
+        "evidenceRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/ref" }
+        }
+      }
+    },
+    "signedAuthority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["signerRole", "signerIdentity", "signatureScheme", "signature", "signedDigest", "issuedAt", "expiresAt", "supersedesRecordId"],
+      "properties": {
+        "signerRole": { "enum": ["programmable-final-verifier"] },
+        "signerIdentity": { "anyOf": [{ "$ref": "#/$defs/address" }, { "$ref": "#/$defs/ref" }] },
+        "signatureScheme": { "enum": ["eip712-eoa", "erc1271", "sigstore-bundle"] },
+        "signature": { "type": "string", "minLength": 3, "maxLength": 16384 },
+        "signedDigest": { "$ref": "#/$defs/bytes32" },
+        "issuedAt": { "type": "string", "format": "date-time" },
+        "expiresAt": { "type": "string", "format": "date-time" },
+        "supersedesRecordId": { "oneOf": [{ "$ref": "#/$defs/bytes32" }, { "type": "null" }] }
+      }
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["basis", "authorityEffect", "githubProjectionAuthoritative", "signedAuthority"],
+      "properties": {
+        "basis": { "enum": ["agent-prepared", "signed-immutable-final-verification"] },
+        "authorityEffect": { "enum": ["none", "launch-admission-input"] },
+        "githubProjectionAuthoritative": { "const": false },
+        "signedAuthority": { "oneOf": [{ "$ref": "#/$defs/signedAuthority" }, { "type": "null" }] }
+      }
+    }
+  }
+}

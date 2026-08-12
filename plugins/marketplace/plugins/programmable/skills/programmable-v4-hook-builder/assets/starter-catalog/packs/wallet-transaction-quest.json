@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "wallet-transaction-quest",
+  "label": "Wallet transaction quest",
+  "summary": "Reward a clearly defined wallet action using finality-aware, replay-safe chain evidence.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "architecture-review-required",
+  "requires": [],
+  "conflictsWith": [],
+  "capabilities": [
+    "chain-event-quest",
+    "wallet-action-rewards"
+  ],
+  "projectSurfaces": [
+    "application",
+    "contract",
+    "indexer",
+    "service"
+  ],
+  "requiredFacts": [
+    "Exact qualifying chain, action, contract, event, amount and time window",
+    "Wallet identity for EOAs, ERC-1271 accounts and delegated or sponsored execution",
+    "Confirmation depth, reorg handling, replay key and one-time claim rule",
+    "Sybil limits, payout cap and privacy expectations"
+  ],
+  "requiredFiles": [
+    "Quest definition",
+    "Indexer or proof source",
+    "Claim contract source",
+    "Wallet and finality tests"
+  ],
+  "requiredTests": [
+    "EOA, smart-account and sponsored transaction attribution",
+    "Duplicate event, replay, reorg and wrong-chain rejection",
+    "Boundary amount and time-window cases",
+    "Sybil, payout-cap and indexer-outage behavior"
+  ],
+  "risks": [
+    "Transaction sender may not equal the intended user",
+    "Reorgs or duplicate indexing can pay twice",
+    "Public wallet activity can expose user behavior"
+  ]
+}

@@ -11,6 +11,7 @@ import {
   validateGitHubPublicSourceRequestV1
 } from "./github-public-source-core.mjs";
 import { createAnonymousGitHubExactObjectResolverV1 } from "./github-exact-object-resolver.mjs";
+import { extractTopLevelDecimal } from "./cli-github-source-json.mjs";
 import {
   normalizeCompanionManifest,
   verifyCompanionManifestV2Closure
@@ -18,6 +19,7 @@ import {
 import { CliFailure } from "./cli-runtime.mjs";
 import { isCanonicalReviewTargetPath } from "./review-target-contract.mjs";
 import { canonicalJson } from "./submission-core.mjs";
+import { parseBoundedStrictJsonBytes } from "./strict-json-core.mjs";
 
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
 const MAX_BOOTSTRAP_RESPONSE_BYTES = 1_048_576;
@@ -156,6 +158,7 @@ export async function resolvePublicGitHubSource({
   tree,
   sourcePaths = [],
   contractPaths = [],
+  githubActionsRunIds = [],
   primaryBlobBytes = null,
   companions = [],
   exactObjectResolver = undefined,
@@ -237,6 +240,7 @@ export async function resolvePublicGitHubSource({
         tree,
         sourcePaths,
         contractPaths,
+        githubActionsRunIds,
         primaryBlobBytes,
         exactObjectResolver: closureAwareExactObjectResolver,
         companions: normalizedCompanions,
@@ -260,6 +264,7 @@ async function resolveOnce({
   tree,
   sourcePaths,
   contractPaths,
+  githubActionsRunIds,
   primaryBlobBytes,
   exactObjectResolver,
   companions,
@@ -368,7 +373,7 @@ async function resolveOnce({
       treeObjectId: tree,
       sourcePaths,
       contractPaths,
-      githubActionsRunIds: []
+      githubActionsRunIds
     },
     companions: companionRequests
   });
@@ -550,7 +555,12 @@ async function mapInBatches(values, concurrency, operation) {
 function extractCommitTreeObjectId(body) {
   let parsed;
   try {
-    parsed = JSON.parse(decoder.decode(body));
+    parsed = parseBoundedStrictJsonBytes(body, {
+      maxSourceBytes: MAX_BOOTSTRAP_RESPONSE_BYTES,
+      maxDepth: 128,
+      maxNodes: 50_000,
+      maxNumberCharacters: MAX_BOOTSTRAP_RESPONSE_BYTES
+    });
   } catch (error) {
     throw new GitHubPublicSourceError("GITHUB_PROTOCOL_ERROR", "GitHub returned invalid commit metadata", {
       cause: error
@@ -643,84 +653,6 @@ async function requestBootstrapResponse({ transport, url, deadline, resourceKind
     throw new GitHubPublicSourceError("GITHUB_UPSTREAM_REJECTED", "GitHub public API rejected the request", { status: response.status });
   }
   return response;
-}
-
-function extractTopLevelDecimal(source, wantedKey) {
-  let cursor = skipWhitespace(source, 0);
-  if (source[cursor] !== "{") return null;
-  cursor += 1;
-  let found = null;
-  while (cursor < source.length) {
-    cursor = skipWhitespace(source, cursor);
-    if (source[cursor] === "}") return found;
-    const keyToken = readJsonString(source, cursor);
-    if (keyToken === null) return null;
-    cursor = skipWhitespace(source, keyToken.end);
-    if (source[cursor] !== ":") return null;
-    cursor = skipWhitespace(source, cursor + 1);
-    const valueStart = cursor;
-    const valueEnd = skipJsonValue(source, cursor);
-    if (valueEnd === null) return null;
-    if (keyToken.value === wantedKey) {
-      const token = source.slice(valueStart, valueEnd).trim();
-      const candidate = /^[1-9][0-9]*$/u.test(token) ? token : null;
-      if (candidate === null || found !== null) return null;
-      found = candidate;
-    }
-    cursor = skipWhitespace(source, valueEnd);
-    if (source[cursor] === ",") {
-      cursor += 1;
-      continue;
-    }
-    if (source[cursor] === "}") return found;
-    return null;
-  }
-  return null;
-}
-
-function readJsonString(source, start) {
-  if (source[start] !== "\"") return null;
-  for (let cursor = start + 1; cursor < source.length; cursor += 1) {
-    if (source[cursor] === "\\") cursor += 1;
-    else if (source[cursor] === "\"") {
-      const token = source.slice(start, cursor + 1);
-      try {
-        return { value: JSON.parse(token), end: cursor + 1 };
-      } catch {
-        return null;
-      }
-    }
-  }
-  return null;
-}
-
-function skipJsonValue(source, start) {
-  if (source[start] === "\"") return readJsonString(source, start)?.end ?? null;
-  if (["{", "["].includes(source[start])) {
-    const stack = [source[start] === "{" ? "}" : "]"];
-    for (let cursor = start + 1; cursor < source.length; cursor += 1) {
-      if (source[cursor] === "\"") {
-        const token = readJsonString(source, cursor);
-        if (token === null) return null;
-        cursor = token.end - 1;
-      } else if (["{", "["].includes(source[cursor])) {
-        stack.push(source[cursor] === "{" ? "}" : "]");
-      } else if (source[cursor] === stack.at(-1)) {
-        stack.pop();
-        if (stack.length === 0) return cursor + 1;
-      }
-    }
-    return null;
-  }
-  let cursor = start;
-  while (cursor < source.length && ![",", "}"].includes(source[cursor])) cursor += 1;
-  return cursor;
-}
-
-function skipWhitespace(source, start) {
-  let cursor = start;
-  while (/[\t\n\r ]/u.test(source[cursor] ?? "")) cursor += 1;
-  return cursor;
 }
 
 function isRetryable(error) {

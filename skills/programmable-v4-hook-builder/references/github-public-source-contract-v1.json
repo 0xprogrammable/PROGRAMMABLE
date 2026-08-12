@@ -6,7 +6,7 @@
   "canonicalProviderOrigin": "https://github.com",
   "apiOrigin": "https://api.github.com",
   "githubApiVersion": "2026-03-10",
-  "schemaSha256": "sha256:1503cdfbb0fd8d778c3c0e8a5708596f02f73a7542b67632013f0a29476422f9",
+  "schemaSha256": "sha256:24e833898dd8eb09b72f5b7e4c5bd1f233fb0965d8462358316cee206c5777a1",
   "requestSchema": "github-public-source-contract-v1.schema.json#/$defs/GitHubPublicSourceRequestV1",
   "resultSchema": "github-public-source-contract-v1.schema.json#/$defs/GitHubPublicSourceResultV1",
   "errorSchema": "github-public-source-contract-v1.schema.json#/$defs/GitHubPublicSourceErrorV1",
@@ -90,6 +90,7 @@
   },
   "errors": [
     "GITHUB_ACTIONS_RUN_MISMATCH",
+    "GITHUB_ACTIONS_RUN_NOT_SUCCESSFUL",
     "GITHUB_ACTIONS_RUN_NOT_REACHABLE",
     "GITHUB_ACTIONS_WORKFLOW_NOT_IN_TREE",
     "GITHUB_COMMIT_MISMATCH",

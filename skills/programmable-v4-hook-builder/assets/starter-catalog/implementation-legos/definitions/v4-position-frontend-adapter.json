@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "programmable-implementation-lego",
+  "id": "v4-position-frontend-adapter",
+  "label": "v4 position frontend adapter",
+  "summary": "Framework-neutral reconciliation for chain, PositionManager, token, pool, owner, liquidity and block-hash-bound snapshots with same-block fail-closed consistency.",
+  "maturity": "code-ready",
+  "maturityMeaning": "Deterministic reusable source is packaged and hash-bound; project integration, tests and review are still required.",
+  "feeApplicability": "not-a-fee-enforcement-component",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "automaticAdverseDecision": false,
+  "reviewRoute": "standard-review",
+  "activatesFor": {
+    "starterIds": [],
+    "packIds": [
+      "v4-liquidity-position-client"
+    ],
+    "capabilityIds": [
+      "liquidity-position-client"
+    ]
+  },
+  "requiresLegos": [],
+  "projectSurfaces": [
+    "application"
+  ],
+  "dependencyRequirements": [
+    "TypeScript with BigInt support",
+    "Pinned project-specific PositionManager and StateView adapter"
+  ],
+  "requiredFacts": [
+    "Bind chain id, exact PositionManager address and generation, token id, PoolId, owner, read block number and read block hash",
+    "Require two snapshots for the same canonical block and position identity to report identical liquidity",
+    "Reconcile pending modify-liquidity actions against confirmed onchain state",
+    "Present token amounts, liquidity and fees as distinct measurements"
+  ],
+  "hardConflictPredicates": [
+    "A position action can target a different chain, PositionManager, token id, PoolId or owner than the confirmed intent",
+    "Two position snapshots at the same block height but different block hashes are treated as one canonical state",
+    "Two snapshots for the same block hash and position identity can silently disagree on liquidity",
+    "A stale snapshot can overwrite newer confirmed position state",
+    "Displayed liquidity or fee value is represented as a guaranteed withdrawable token amount"
+  ],
+  "claims": {
+    "audited": false,
+    "deployed": false,
+    "productionReady": false,
+    "providerSupport": "not-claimed"
+  },
+  "files": [
+    {
+      "sourcePath": "templates/v4-position-frontend-adapter/positionAdapter.ts",
+      "targetPath": "implementation/v4-position-frontend-adapter/src/positionAdapter.ts",
+      "role": "source",
+      "language": "typescript",
+      "sha256": "ad516e80e4718417dbf99fe06911a99b72fca1f6af24a90226bf7b965aaec235"
+    }
+  ]
+}

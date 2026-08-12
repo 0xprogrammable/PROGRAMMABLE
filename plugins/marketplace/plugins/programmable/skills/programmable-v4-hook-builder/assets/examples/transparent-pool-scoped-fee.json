@@ -76,6 +76,7 @@
           "feeMechanism": {
             "used": true,
             "classification": "hook-owned-fee",
+            "allocationMode": "fixed-ppm",
             "chargedCurrency": "The unspecified swap currency: gross output for exact-input swaps and gross input for exact-output swaps.",
             "swapQuadrants": {
               "zeroForOneExactInput": {
@@ -348,7 +349,6 @@
           "candidate|independent-security-review-one",
           "candidate|independent-specialist-review",
           "candidate|pinned-fork-and-current-head-smoke",
-          "candidate|programmable-fee-architecture-review",
           "candidate|programmable-indexer-integration-review",
           "candidate|programmable-integration-test-review",
           "candidate|programmable-registry-integration-review",
@@ -363,6 +363,7 @@
           "prototype|external-call-reentrancy-and-failure-tests",
           "prototype|fee-four-quadrant-tests",
           "prototype|format-build-size-warnings",
+          "prototype|programmable-fee-implementation",
           "prototype|reserve-reconstruction-and-solvency-tests",
           "prototype|static-analysis",
           "prototype|unit-integration-fuzz-invariant-tests",

@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "programmable-implementation-lego",
+  "id": "oracle-keeper",
+  "label": "Oracle and keeper guard",
+  "summary": "Reusable positive-answer, freshness, future-timestamp and monotonic-round checks for attributed observations.",
+  "maturity": "code-ready",
+  "maturityMeaning": "Deterministic reusable source is packaged and hash-bound; project integration, tests and review are still required.",
+  "feeApplicability": "not-a-fee-enforcement-component",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "automaticAdverseDecision": false,
+  "reviewRoute": "custom-review",
+  "activatesFor": {
+    "starterIds": [],
+    "packIds": [
+      "oracle-keeper"
+    ],
+    "capabilityIds": [
+      "keeper-automation",
+      "oracle-data"
+    ]
+  },
+  "requiresLegos": [],
+  "projectSurfaces": [
+    "contract",
+    "service"
+  ],
+  "dependencyRequirements": [
+    "Solidity 0.8.26",
+    "Project-specific authenticated oracle read adapter"
+  ],
+  "requiredFacts": [
+    "Bind oracle identity, units, decimals, heartbeat, round semantics and fallback",
+    "Bind keeper authorization, idempotency, retry, outage and user-exit behavior",
+    "Choose a maximum age from the actual economic and liveness model"
+  ],
+  "hardConflictPredicates": [
+    "A future, stale, non-positive or regressed observation can change value-bearing state",
+    "Keeper retries can apply the same value-bearing transition twice",
+    "Oracle or keeper outage removes every declared user exit"
+  ],
+  "claims": {
+    "audited": false,
+    "deployed": false,
+    "productionReady": false,
+    "providerSupport": "not-claimed"
+  },
+  "files": [
+    {
+      "sourcePath": "templates/oracle-keeper/OracleKeeperGuard.sol",
+      "targetPath": "implementation/oracle-keeper/src/OracleKeeperGuard.sol",
+      "role": "source",
+      "language": "solidity",
+      "sha256": "29f5bc931fcb9c4d2d4362a1257f08025287a1ab75dd488c987fe16bcf8d171f"
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "programmable-volume-fee",
+  "label": "Mandatory Programmable volume fee",
+  "summary": "Preserve the inclusive 0.1 percent Programmable share on executed canonical swap or fill volume across the project's actual settlement design.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "standard-review",
+  "requires": [],
+  "conflictsWith": [],
+  "capabilities": [
+    "claimable-platform-fee",
+    "quote-side-volume-accounting",
+    "settlement-profile-selection"
+  ],
+  "projectSurfaces": [
+    "contract",
+    "metadata"
+  ],
+  "requiredFacts": [
+    "Whether the project declares any Programmable-canonical execution scope; zero scopes means an empty applicability proof without inventing a token, pool, hook or fee instance",
+    "For every applicable Programmable-canonical execution scope, the effective total is the greater of the selected fee and 10 basis points",
+    "For every applicable Programmable-canonical execution scope, exactly 10 basis points belongs to 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c and the remainder belongs to the project",
+    "Every Programmable-canonical execution scope and its actual standard-AMM, zero-AMM, async/batched or custom-reviewed collection profile",
+    "The executed gross quote-side basis for every applicable swap direction, exactness mode, partial fill and settlement path",
+    "Rounding, carry, dust, funding, custody and same-hook PoolManager-call behavior",
+    "Scope-isolated liabilities and immutable owner-only claims to a selected nonzero per-claim destination"
+  ],
+  "requiredFiles": [
+    "For zero canonical scopes, an explicit applicability record with empty scopes and no fabricated fee-policy instance",
+    "For every canonical scope, fee-enforcing hook or settlement source",
+    "For every canonical scope, a Fee V2 policy instance, selected collection profiles and worked examples",
+    "For every canonical scope, profile-specific fee accounting, custody, claim and reconstruction evidence"
+  ],
+  "requiredTests": [
+    "Zero-scope projects prove that no Programmable-canonical execution path exists and do not fabricate fee behavior",
+    "Applicable scopes prove the ten-basis-point floor and non-additive split",
+    "Applicable scopes cover every direction, exactness mode, fill path, split execution and cancellation or refund path",
+    "Applicable scopes cover lifetime rounding carry, dust, partial fills and self-call policy",
+    "Applicable scopes prove immutable owner-only claims, arbitrary safe per-claim destination, and no bypass, double collection, cross-scope netting or liability leakage"
+  ],
+  "risks": [
+    "Incorrect executed gross-volume basis can overcharge, undercharge or collect twice",
+    "Rounding, batching and partial fills can break exact conservation",
+    "Mutable or shared claim authority can redirect accrued fees"
+  ]
+}

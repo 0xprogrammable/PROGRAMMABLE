@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "launch-distribution-vesting-lp-custody",
+  "label": "Launch distribution, vesting and LP custody",
+  "summary": "Plan initial allocations, vesting claims and liquidity-position custody as one conserved launch value flow.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "architecture-review-required",
+  "requires": [],
+  "conflictsWith": [],
+  "capabilities": [
+    "launch-distribution",
+    "liquidity-position-custody",
+    "vesting-schedules"
+  ],
+  "projectSurfaces": [
+    "application",
+    "contract",
+    "indexer",
+    "metadata"
+  ],
+  "requiredFacts": [
+    "Total supply allocation across sale, liquidity, treasury, team, rewards and every other recipient",
+    "Vesting start, cliff, duration, cadence, revocation, acceleration, transfer and unclaimed-token rules",
+    "Initial-liquidity funding and exact LP position owner, fee beneficiary, lock, removal and migration rules",
+    "Who can change recipients, schedules, custody or claims and which commitments are immutable",
+    "Treatment of failed launches, unsold allocation, rounding dust, retirement and user exits"
+  ],
+  "requiredFiles": [
+    "Supply-allocation table",
+    "Distribution and claim source",
+    "Vesting schedule source and beneficiary snapshot",
+    "LP custody, lock and removal policy",
+    "Public allocation and control disclosure"
+  ],
+  "requiredTests": [
+    "All allocations, claims, liquidity funding and residual balances conserve total supply",
+    "Cliff, linear or stepped vesting boundaries before, at and after every transition",
+    "Duplicate claim, recipient mutation, revocation, acceleration and abandoned-beneficiary cases",
+    "LP creation, fee collection, lock expiry, removal, migration and emergency-exit authority",
+    "Failed launch, unsold allocation, zero beneficiary, rounding dust and retirement behavior"
+  ],
+  "risks": [
+    "Allocation or vesting authority can hide insider control or change circulating supply expectations",
+    "LP custody claims can be misleading when removal, rescue or migration remains possible",
+    "Disconnected distribution and liquidity accounting can overallocate supply"
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "v4-claim-client",
+  "label": "v4 claim client",
+  "summary": "Read and prepare explicit owner-authorized ERC-6909 claim actions without treating a displayed balance as transferable ERC-20 custody.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "custom-review",
+  "requires": [],
+  "conflictsWith": [],
+  "capabilities": [
+    "erc6909-claim-client",
+    "v4-claim-client"
+  ],
+  "projectSurfaces": [
+    "application"
+  ],
+  "requiredFacts": [
+    "Exact claim owner, operator, currency id, amount and PoolManager action",
+    "Which read block and chain produced the displayed claim balance",
+    "How mint and burn authorization differs from ERC-20 approval",
+    "How pending, replaced, reverted and reorged claim actions reconcile"
+  ],
+  "requiredFiles": [
+    "Claim client source",
+    "Typed claim action schema",
+    "Owner and operator authorization tests",
+    "Confirmed-state reconciliation tests"
+  ],
+  "requiredTests": [
+    "Owner, operator, currency-id and amount mismatch rejection",
+    "Burn-above-balance and zero-amount rejection",
+    "Pending, reverted, replaced and reorged transaction handling",
+    "Confirmed PoolManager claim reconciliation at one block"
+  ],
+  "risks": [
+    "An ERC-6909 claim can be displayed or authorized as though it were an ERC-20 balance",
+    "A stale owner, operator or block snapshot can prepare the wrong action",
+    "A claim burn can exceed the confirmed owner balance"
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "starter",
+  "id": "custom-token-standard-fee-hook",
+  "label": "Custom token with standard Programmable fee hook",
+  "summary": "Keep the canonical Programmable fee hook standard while adding explicitly reviewed behavior inside the launched token.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "custom-review",
+  "defaultPacks": [
+    "metadata-disclosures",
+    "programmable-volume-fee",
+    "test-evidence-threat-model"
+  ],
+  "conflictsWith": [
+    "custom-hook-behavior"
+  ],
+  "capabilities": [
+    "canonical-v4-pool",
+    "custom-token-behavior",
+    "standard-programmable-fee-hook"
+  ],
+  "projectSurfaces": [
+    "contract",
+    "indexer",
+    "metadata"
+  ],
+  "requiredFacts": [
+    "Exact token-side behavior across transfer, mint, burn, balance and allowance paths",
+    "Why the behavior belongs in the token rather than a PoolManager callback",
+    "Canonical PoolKey and proof that the standard Programmable fee hook remains unmodified",
+    "Gross and net token balance behavior across swaps, liquidity, claims, exits and integrations",
+    "Every token authority, parameter bound, exemption, rescue path and retirement rule"
+  ],
+  "requiredFiles": [
+    "Custom token source",
+    "Standard-profile Programmable fee-hook source binding",
+    "Token and pool integration specification",
+    "Token authority and lifecycle policy",
+    "Cross-contract threat model and test plan"
+  ],
+  "requiredTests": [
+    "Token behavior matrix across ordinary transfers, swaps, liquidity, claims and exits",
+    "Standard Programmable fee behavior remains unchanged in every swap quadrant",
+    "Pool settlement and router behavior use exact observed token balance deltas",
+    "Authority, parameter-bound, exemption, pause, rescue and retirement adversarial cases",
+    "Token liabilities and fee-hook liabilities remain isolated and solvent"
+  ],
+  "risks": [
+    "Token-side behavior can break pool settlement or integrations even when the fee hook is standard",
+    "Mutable token controls can create hidden confiscation, transfer blocking or economic changes",
+    "Blurring token and hook responsibilities can hide value flows or double charge users"
+  ]
+}

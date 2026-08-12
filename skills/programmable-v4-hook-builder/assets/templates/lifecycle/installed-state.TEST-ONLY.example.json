@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "1.0.0",
+  "releaseVersion": "0.2.1",
+  "releaseSequence": "1",
+  "channel": "stable",
+  "standards": {
+    "skill": "0.2.1",
+    "engine": "0.2.1",
+    "policy": "1.0.0",
+    "schema": "1.0.0",
+    "submission": "1.3.0"
+  },
+  "trustedPinSha256": "sha256:2c011099c5f1bd7dab83cf13dd22d1db945c9b2b0b4614fbe601e722e46b93ab",
+  "trustedKeyId": "56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c"
+}

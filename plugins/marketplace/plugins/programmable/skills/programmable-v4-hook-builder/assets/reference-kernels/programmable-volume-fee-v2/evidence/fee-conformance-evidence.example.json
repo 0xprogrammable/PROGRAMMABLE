@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "1.0.0",
+  "policyId": "programmable-volume-fee-v2",
+  "policyVersion": "2.0.0",
+  "policyHash": "0x03cd386824b1c0aa152200e0a470aa0c885f802e257f0f46066de508d241811e",
+  "collectionProfile": "standard-amm",
+  "collectionProfileHashPreimage": "standard-amm",
+  "sourceCommit": "REPLACE_WITH_FULL_COMMIT_SHA",
+  "compiler": "solc-0.8.26",
+  "chainId": "1",
+  "poolId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "quoteCurrency": "0x0000000000000000000000000000000000000000",
+  "hookAddress": "0x0000000000000000000000000000000000000000",
+  "deploymentTransaction": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "runtimeConfigurationHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "factoryConfigurationHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "receipts": {
+    "forgeTestLogSha256": "REPLACE",
+    "staticAnalysisSha256": "REPLACE",
+    "independentReviewSha256": "REPLACE",
+    "deployedBytecodeSha256": "REPLACE",
+    "explorerVerificationUrl": "REPLACE"
+  },
+  "status": "example-not-evidence"
+}

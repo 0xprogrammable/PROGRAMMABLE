@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "programmable-implementation-lego",
+  "id": "v4-claim-frontend-adapter",
+  "label": "v4 claim frontend adapter",
+  "summary": "Framework-neutral owner, operator, exact per-id allowance, mint-authority, uint160 currency-id and user-confirmed action checks for explicit ERC-6909 claim actions.",
+  "maturity": "code-ready",
+  "maturityMeaning": "Deterministic reusable source is packaged and hash-bound; project integration, tests and review are still required.",
+  "feeApplicability": "not-a-fee-enforcement-component",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "automaticAdverseDecision": false,
+  "reviewRoute": "custom-review",
+  "activatesFor": {
+    "starterIds": [],
+    "packIds": [
+      "v4-claim-client"
+    ],
+    "capabilityIds": [
+      "erc6909-claim-client",
+      "v4-claim-client"
+    ]
+  },
+  "requiresLegos": [],
+  "projectSurfaces": [
+    "application"
+  ],
+  "dependencyRequirements": [
+    "TypeScript with BigInt support",
+    "Pinned project-specific PoolManager claim adapter"
+  ],
+  "requiredFacts": [
+    "Bind owner, global operator, mint authority, uint160 currency id, amount, action and confirmed read block",
+    "Require the executable action kind, owner, currency id and amount to equal the complete user-confirmed action",
+    "Bind every allowance to the exact spender, currency id and confirmed remaining amount; never treat it as an ERC-20 or all-id allowance",
+    "Present claims separately from ERC-20 balances and PositionManager positions",
+    "Reconcile pending mint or burn actions against confirmed PoolManager state"
+  ],
+  "hardConflictPredicates": [
+    "A burn caller is neither the owner, a confirmed global operator nor the spender of a sufficient allowance for the exact currency id",
+    "A per-id allowance for one currency id or spender authorizes a different currency id, spender or mint action",
+    "A mint action can be prepared by a caller other than the explicitly bound mint authority",
+    "Execution can change the action kind, owner, uint160 currency id or amount after user confirmation",
+    "A burn amount can exceed the confirmed claim balance",
+    "A claim action can silently substitute a different owner, currency id or amount"
+  ],
+  "claims": {
+    "audited": false,
+    "deployed": false,
+    "productionReady": false,
+    "providerSupport": "not-claimed"
+  },
+  "files": [
+    {
+      "sourcePath": "templates/v4-claim-frontend-adapter/claimAdapter.ts",
+      "targetPath": "implementation/v4-claim-frontend-adapter/src/claimAdapter.ts",
+      "role": "source",
+      "language": "typescript",
+      "sha256": "5a6d663337f8cb0c1b59fcda9eebf400c586530af9935bac21ee216aec39e2ce"
+    }
+  ]
+}

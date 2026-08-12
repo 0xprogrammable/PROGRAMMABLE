@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "maps-location-quest",
+  "label": "Maps and location quest",
+  "summary": "Use map or location evidence for a game while making spoofing, privacy and service trust explicit.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "architecture-review-required",
+  "requires": [],
+  "conflictsWith": [],
+  "capabilities": [
+    "external-map-service",
+    "location-evidence",
+    "location-rewards"
+  ],
+  "projectSurfaces": [
+    "application",
+    "contract"
+  ],
+  "requiredFacts": [
+    "Location precision, chosen proof architecture, acceptance radius and time window",
+    "Whether evidence uses a physical marker, local or onchain attestation, zero knowledge, or a signed service",
+    "Spoofing and replay resistance",
+    "Which map or geolocation provider is trusted and its outage behavior",
+    "Personal-data collection, retention, deletion and user consent"
+  ],
+  "requiredFiles": [
+    "Map client source",
+    "Location verification service or proof adapter",
+    "Privacy and retention specification",
+    "Reward contract source",
+    "Location and payout tests"
+  ],
+  "requiredTests": [
+    "Spoofed, stale, duplicated and impossible-location evidence",
+    "Boundary precision and time-window behavior",
+    "Provider outage, quota and malformed response handling",
+    "Deletion, minimization and reward replay scenarios"
+  ],
+  "risks": [
+    "Location can reveal sensitive personal behavior",
+    "Commodity GPS evidence is easy to spoof",
+    "External map services can fail or change terms"
+  ]
+}

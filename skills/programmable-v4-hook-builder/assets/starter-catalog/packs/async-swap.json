@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "async-swap",
+  "label": "Asynchronous swap",
+  "summary": "Defer settlement or fulfillment while preserving explicit liabilities, claims and user exits.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "architecture-review-required",
+  "requires": [
+    "custom-hook-behavior"
+  ],
+  "conflictsWith": [
+    "ordinary-launch"
+  ],
+  "capabilities": [
+    "async-swap",
+    "custom-accounting"
+  ],
+  "projectSurfaces": [
+    "application",
+    "contract",
+    "indexer"
+  ],
+  "requiredFacts": [
+    "Which swap leg is deferred and what backs every outstanding claim",
+    "Liability namespace, partial-fill rule, expiry, cancellation and withdrawal ordering",
+    "Fulfiller or auction authority, competition and failure isolation",
+    "Quote, routing and user-interface limitations"
+  ],
+  "requiredFiles": [
+    "Async hook source",
+    "Liability and solvency specification",
+    "Fulfiller or auction interface",
+    "Async lifecycle tests"
+  ],
+  "requiredTests": [
+    "Solvency and conservation under arbitrary operation sequences",
+    "Partial fill, expiry, cancellation and duplicate fulfillment",
+    "Fulfiller outage and malicious fulfillment",
+    "Claims, dust, withdrawal ordering and cross-pool isolation"
+  ],
+  "risks": [
+    "Deferred liabilities can become insolvent",
+    "Users can be trapped if cancellation or exit depends on a keeper",
+    "Standard routers may not support the interaction"
+  ]
+}

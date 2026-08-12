@@ -1,0 +1,222 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:architecture-decisions:1.0.0",
+  "title": "Programmable architecture decision ledger",
+  "description": "Append-only design decisions that connect the builder's intent to an open architecture graph. Product kinds stay open; every extension is explicitly schema-bound.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "applicationId",
+    "revision",
+    "intentContractSha256",
+    "decisions"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "applicationId": { "$ref": "#/$defs/slug" },
+    "revision": { "type": "integer", "minimum": 1 },
+    "intentContractSha256": { "$ref": "#/$defs/sha256" },
+    "decisions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/decision" }
+    }
+  },
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "maxLength": 120
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\)[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "schemaBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "schemaId", "path", "sha256", "byteLength"],
+      "properties": {
+        "kind": { "enum": ["builtin", "repository"] },
+        "schemaId": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "path": {
+          "oneOf": [
+            { "$ref": "#/$defs/repositoryPath" },
+            { "type": "null" }
+          ]
+        },
+        "sha256": {
+          "oneOf": [
+            { "$ref": "#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        },
+        "byteLength": { "type": ["integer", "null"], "minimum": 1 }
+      }
+    },
+    "localizedText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["language", "text"],
+      "properties": {
+        "language": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "text": { "type": "string", "minLength": 1 }
+      }
+    },
+    "architectureRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["collection", "id"],
+      "properties": {
+        "collection": {
+          "$ref": "#/$defs/slug",
+          "description": "Open collection slug. The core v2 submission collections are assets, markets, hooks, lifecycle-phases, components, value-flows, authorities, and capability-profiles."
+        },
+        "id": { "$ref": "#/$defs/slug" }
+      }
+    },
+    "alternative": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "summary",
+        "preservesFactRefs",
+        "changesFactRefs",
+        "trustEffects",
+        "safetyEffects"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "summary": { "$ref": "#/$defs/localizedText" },
+        "preservesFactRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "changesFactRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "trustEffects": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "safetyEffects": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "sequence",
+        "kind",
+        "decisionSchema",
+        "decisionPayload",
+        "status",
+        "factRefs",
+        "ambiguityRefs",
+        "alternatives",
+        "selectedAlternativeId",
+        "rationale",
+        "trustChanges",
+        "safetyConstraints",
+        "reversible",
+        "reversalPlan",
+        "architectureRefs",
+        "sourcePaths",
+        "testRefs",
+        "evidenceRefs",
+        "supersedes"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "sequence": { "type": "integer", "minimum": 1 },
+        "kind": {
+          "$ref": "#/$defs/slug",
+          "description": "Open decision kind such as price-formation, burn-settlement, custody, or an unknown future mechanism."
+        },
+        "decisionSchema": { "$ref": "#/$defs/schemaBinding" },
+        "decisionPayload": {
+          "description": "Declarative JSON validated against decisionSchema. It must never contain executable code."
+        },
+        "status": { "enum": ["proposed", "selected", "superseded", "rejected"] },
+        "factRefs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "ambiguityRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "alternatives": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/alternative" }
+        },
+        "selectedAlternativeId": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "maxLength": 120
+        },
+        "rationale": { "$ref": "#/$defs/localizedText" },
+        "trustChanges": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "safetyConstraints": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "reversible": { "type": "boolean" },
+        "reversalPlan": {
+          "oneOf": [
+            { "$ref": "#/$defs/localizedText" },
+            { "type": "null" }
+          ]
+        },
+        "architectureRefs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/architectureRef" }
+        },
+        "sourcePaths": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/repositoryPath" }
+        },
+        "testRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/repositoryPath" }
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 2048 }
+        },
+        "supersedes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        }
+      }
+    }
+  }
+}

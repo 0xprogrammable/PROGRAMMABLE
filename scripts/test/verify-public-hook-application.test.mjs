@@ -140,6 +140,16 @@ test("trusted package validation rejects legacy and malformed mandatory fee proj
     applicationId: "example-hook",
     packageFiles: zeroSelected
   }));
+
+  const legacyMaximum = makePackage({ mutateApplication(application) {
+    application.programmableFee.rates.selectedHundredthsOfBip = 999999;
+    application.programmableFee.rates.effectiveHundredthsOfBip = 999999;
+    application.programmableFee.rates.projectHundredthsOfBip = 998999;
+  } });
+  assert.doesNotThrow(() => validatePublicApplicationPackageFiles({
+    applicationId: "example-hook",
+    packageFiles: legacyMaximum
+  }));
 });
 
 test("trusted intake recomputes the fee projection from exact source submission bytes", async (t) => {
@@ -2836,6 +2846,37 @@ function compareUtf8(left, right) {
 function makeSchemaApplication() {
   const application = JSON.parse(makePackage().get("application.json").toString("utf8"));
   application.stage = "proposal";
+  application.builderTemplate = {
+    schemaVersion: "1.0.0",
+    source: "manual",
+    templateSelection: null
+  };
+  const legacyRates = application.programmableFee.rates;
+  application.programmableFee = {
+    ...application.programmableFee,
+    policyVersion: "1.1.0",
+    rates: {
+      unit: legacyRates.unit,
+      selectedBuyHundredthsOfBip: legacyRates.selectedHundredthsOfBip,
+      selectedSellHundredthsOfBip: legacyRates.selectedHundredthsOfBip,
+      minimumEffectiveHundredthsOfBip: legacyRates.minimumEffectiveHundredthsOfBip,
+      effectiveBuyHundredthsOfBip: legacyRates.effectiveHundredthsOfBip,
+      effectiveSellHundredthsOfBip: legacyRates.effectiveHundredthsOfBip,
+      platformHundredthsOfBip: legacyRates.platformHundredthsOfBip,
+      projectBuyHundredthsOfBip: legacyRates.projectHundredthsOfBip,
+      projectSellHundredthsOfBip: legacyRates.projectHundredthsOfBip,
+      formula: "per-side:effective=max(selected,1000);platform=1000;project=effective-1000",
+      lpFeeExcluded: legacyRates.lpFeeExcluded
+    },
+    accounting: {
+      ...application.programmableFee.accounting,
+      roundingPolicy: "cumulative-independent-platform-project-remainders",
+      remainderScope: "canonical-pool-lifetime",
+      claimResetsRemainders: false,
+      minimumGrossQuoteUnits: 1000,
+      fragmentationResistant: true
+    }
+  };
   return application;
 }
 

@@ -1,0 +1,282 @@
+{
+  "schemaVersion": 3,
+  "contract": {
+    "id": "public-pr-application-v3",
+    "version": "3.0.0",
+    "submissionStandard": "2.0.0",
+    "validatorProfile": "intent-open-world-v1"
+  },
+  "applicationId": "legacy-open-world-example",
+  "applicationRevision": "2",
+  "stage": "proposal",
+  "title": "Legacy open-world example",
+  "summary": "A migration example that preserves an older application package while requiring the owner intent to be recaptured before fidelity review.",
+  "builder": {
+    "githubUserId": "123456789",
+    "githubLogin": "example-builder",
+    "contact": "https://github.com/example-builder"
+  },
+  "source": {
+    "schemaVersion": "1.0.0",
+    "primary": {
+      "id": "primary",
+      "numericRepositoryId": "987654321",
+      "repositoryUri": "https://github.com/example-builder/legacy-open-world-example",
+      "revisionObjectId": "cccccccccccccccccccccccccccccccccccccccc",
+      "treeObjectId": "dddddddddddddddddddddddddddddddddddddddd",
+      "sourceClosureMode": "inline",
+      "sourcePaths": [
+        "submissions/legacy-open-world-example/submission.v2.json",
+        "submissions/legacy-open-world-example/idea-source.v1.json",
+        "submissions/legacy-open-world-example/intent-contract.v1.json",
+        "submissions/legacy-open-world-example/architecture-decisions.v1.json",
+        "submissions/legacy-open-world-example/intent-fidelity.v1.json",
+        "submissions/legacy-open-world-example/fee-policy-v2.schema.json",
+        "submissions/legacy-open-world-example/custom-risk-model.json"
+      ],
+      "sourceManifest": null,
+      "contractPaths": [],
+      "githubActionsRunIds": []
+    },
+    "companions": [],
+    "verificationReports": []
+  },
+  "lineage": {
+    "kind": "schema-migration",
+    "previous": {
+      "applicationContract": "public-pr-application-v2",
+      "applicationSchemaVersion": 2,
+      "applicationRevision": "1",
+      "applicationSha256": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "packageSha256": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "sourceNumericRepositoryId": "987654321",
+      "sourceCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceTree": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "submissionSchemaId": null,
+      "submissionStandard": "1.6.0",
+      "submissionPath": "submissions/legacy-open-world-example/submission.json",
+      "submissionSha256": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "feePolicyId": "programmable-volume-fee-v1",
+      "feePolicyVersion": "1.1.0",
+      "feeApplicability": "unresolved",
+      "feePolicyInstanceSha256": null
+    }
+  },
+  "intentCapture": {
+    "schemaVersion": "1.0.0",
+    "captureStatus": "unavailable-legacy",
+    "originalIdeaDisplayExcerpt": null,
+    "ideaSourcePath": "submissions/legacy-open-world-example/idea-source.v1.json",
+    "ideaSourceRepositoryRef": "primary",
+    "ideaSourceSha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "language": null,
+    "agentInterpretationStatus": "unconfirmed",
+    "facts": [
+      {
+        "id": "legacy-application-title",
+        "statement": "Legacy open-world example",
+        "provenance": "legacy-declared",
+        "confirmationStatus": "unconfirmed",
+        "sourceReferences": [
+          "application.json#/title"
+        ]
+      },
+      {
+        "id": "legacy-application-summary",
+        "statement": "A migration example that preserves an older application package while requiring the owner intent to be recaptured before fidelity review.",
+        "provenance": "legacy-declared",
+        "confirmationStatus": "unconfirmed",
+        "sourceReferences": [
+          "application.json#/summary"
+        ]
+      }
+    ],
+    "unresolvedMaterialDecisions": [
+      "Recapture or explicitly confirm the original product intent before assessing fidelity."
+    ]
+  },
+  "fidelity": {
+    "schemaVersion": "1.0.0",
+    "status": "unassessed",
+    "reasonCode": "ORIGINAL_INTENT_UNAVAILABLE",
+    "requirementBindings": []
+  },
+  "policyBindings": {
+    "feePolicySchemaId": "urn:programmable:fee-policy-v2:1.0.0",
+    "programmableFeePolicyId": "programmable-volume-fee-v2",
+    "programmableFeePolicyVersion": "2.0.0",
+    "programmableFeePolicyHashPreimage": "programmable-volume-fee-v2@2.0.0",
+    "programmableFeePolicyHash": "0x03cd386824b1c0aa152200e0a470aa0c885f802e257f0f46066de508d241811e",
+    "feeApplicability": "unresolved",
+    "feePolicySchemaPath": "submissions/legacy-open-world-example/fee-policy-v2.schema.json",
+    "feePolicySchemaRepositoryRef": "primary",
+    "feePolicySchemaSha256": "sha256:1212121212121212121212121212121212121212121212121212121212121212",
+    "feePolicyInstancePath": null,
+    "feePolicyInstanceRepositoryRef": null,
+    "feePolicyInstanceSha256": null,
+    "submissionPath": "submissions/legacy-open-world-example/submission.v2.json",
+    "submissionRepositoryRef": "primary",
+    "submissionSha256": "sha256:6666666666666666666666666666666666666666666666666666666666666666"
+  },
+  "securityBindings": {
+    "securityAssessmentSchemaId": "urn:programmable:open-world-security:1.0.0",
+    "securityAssessmentSchemaPath": "security-assessment-v1.schema.json",
+    "securityAssessmentSchemaRepositoryRef": null,
+    "securityAssessmentSchemaSha256": "sha256:1818181818181818181818181818181818181818181818181818181818181818",
+    "securityAssessmentSchemaByteLength": 100,
+    "securityAssessmentPath": "security-assessment.v1.json",
+    "securityAssessmentRepositoryRef": null,
+    "securityAssessmentSha256": "sha256:1414141414141414141414141414141414141414141414141414141414141414",
+    "securityAssessmentByteLength": 100
+  },
+  "reviewPackage": {
+    "schemaVersion": "1.0.0",
+    "requiredKinds": [
+      "proposal",
+      "test-plan",
+      "threat-model",
+      "compatibility-report",
+      "evidence-index",
+      "idea-source",
+      "intent-contract",
+      "architecture-decisions",
+      "intent-fidelity",
+      "fee-policy-schema",
+      "security-assessment-schema",
+      "security-assessment"
+    ],
+    "records": [
+      {
+        "kind": "proposal",
+        "path": "PROPOSAL.md",
+        "mediaType": "text/markdown",
+        "byteLength": 100,
+        "sha256": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+        "source": "application-package",
+        "repositoryRef": null
+      },
+      {
+        "kind": "test-plan",
+        "path": "TEST_PLAN.md",
+        "mediaType": "text/markdown",
+        "byteLength": 100,
+        "sha256": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+        "source": "application-package",
+        "repositoryRef": null
+      },
+      {
+        "kind": "threat-model",
+        "path": "THREAT_MODEL.md",
+        "mediaType": "text/markdown",
+        "byteLength": 100,
+        "sha256": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+        "source": "application-package",
+        "repositoryRef": null
+      },
+      {
+        "kind": "compatibility-report",
+        "path": "compatibility-report.json",
+        "mediaType": "application/json",
+        "byteLength": 100,
+        "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "source": "application-package",
+        "repositoryRef": null
+      },
+      {
+        "kind": "evidence-index",
+        "path": "evidence-index.json",
+        "mediaType": "application/json",
+        "byteLength": 100,
+        "sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "source": "application-package",
+        "repositoryRef": null
+      },
+      {
+        "kind": "idea-source",
+        "path": "submissions/legacy-open-world-example/idea-source.v1.json",
+        "mediaType": "application/json",
+        "byteLength": 100,
+        "sha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "source": "source-repository",
+        "repositoryRef": "primary"
+      },
+      {
+        "kind": "intent-contract",
+        "path": "submissions/legacy-open-world-example/intent-contract.v1.json",
+        "mediaType": "application/json",
+        "byteLength": 100,
+        "sha256": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "source": "source-repository",
+        "repositoryRef": "primary"
+      },
+      {
+        "kind": "architecture-decisions",
+        "path": "submissions/legacy-open-world-example/architecture-decisions.v1.json",
+        "mediaType": "application/json",
+        "byteLength": 100,
+        "sha256": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "source": "source-repository",
+        "repositoryRef": "primary"
+      },
+      {
+        "kind": "intent-fidelity",
+        "path": "submissions/legacy-open-world-example/intent-fidelity.v1.json",
+        "mediaType": "application/json",
+        "byteLength": 100,
+        "sha256": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "source": "source-repository",
+        "repositoryRef": "primary"
+      },
+      {
+        "kind": "fee-policy-schema",
+        "path": "submissions/legacy-open-world-example/fee-policy-v2.schema.json",
+        "mediaType": "application/json",
+        "byteLength": 100,
+        "sha256": "sha256:1212121212121212121212121212121212121212121212121212121212121212",
+        "source": "source-repository",
+        "repositoryRef": "primary"
+      },
+      {
+        "kind": "security-assessment-schema",
+        "path": "security-assessment-v1.schema.json",
+        "mediaType": "application/schema+json",
+        "byteLength": 100,
+        "sha256": "sha256:1818181818181818181818181818181818181818181818181818181818181818",
+        "source": "application-package",
+        "repositoryRef": null
+      },
+      {
+        "kind": "security-assessment",
+        "path": "security-assessment.v1.json",
+        "mediaType": "application/json",
+        "byteLength": 100,
+        "sha256": "sha256:1414141414141414141414141414141414141414141414141414141414141414",
+        "source": "application-package",
+        "repositoryRef": null
+      },
+      {
+        "kind": "custom-risk-model",
+        "path": "submissions/legacy-open-world-example/custom-risk-model.json",
+        "mediaType": "application/json",
+        "byteLength": 100,
+        "sha256": "sha256:1313131313131313131313131313131313131313131313131313131313131313",
+        "source": "source-repository",
+        "repositoryRef": "primary"
+      }
+    ]
+  },
+  "reviewState": {
+    "status": "unreviewed",
+    "inheritedApproval": false,
+    "acceptancePath": null,
+    "acceptanceSha256": null
+  },
+  "declarations": {
+    "publicInformationAcknowledged": true,
+    "noSecretsDeclared": true,
+    "noApprovalClaim": true,
+    "noUniswapEndorsementClaim": true,
+    "historicalEvidencePreserved": true,
+    "noInheritedApproval": true
+  }
+}
