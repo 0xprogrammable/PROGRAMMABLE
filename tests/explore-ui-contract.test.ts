@@ -13,7 +13,11 @@ describe("Explore UI contract", () => {
     );
 
     expect(page).toContain("<Suspense fallback={<ExploreView loadingOnly />}>");
-    expect(page).toContain('"https://programmable.market/api/explore"');
+    expect(page).toContain(
+      'import { GET as readExploreResponse } from "@/app/api/explore/route"',
+    );
+    expect(page).toContain("await readExploreResponse(new NextRequest(");
+    expect(page).not.toContain('fetch("https://programmable.market');
     expect(page).toContain("<ExploreView initialResponse={initialResponse} />");
     expect(source).toContain(
       "if (handledRequestKey.current === requestKey)",

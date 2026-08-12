@@ -1,13 +1,20 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { NextRequest } from "next/server";
 import { Suspense } from "react";
 
+import { GET as readExploreResponse } from "@/app/api/explore/route";
 import { ExploreView } from "@/components/explore-view";
 
 export const dynamic = "force-dynamic";
 
-const INITIAL_EXPLORE_URL = "https://programmable.market/api/explore";
 const INITIAL_EXPLORE_TIMEOUT_MS = 12_000;
+const INITIAL_EXPLORE_QUERY = new URLSearchParams({
+  q: "",
+  sort: "market-cap",
+  page: "1",
+  limit: "9",
+}).toString();
 
 export const metadata: Metadata = {
   title: "Programmable",
@@ -34,10 +41,13 @@ async function InitialExploreView() {
 
   let initialResponse: Readonly<{ ok: boolean; body: unknown }>;
   try {
-    const response = await fetch(INITIAL_EXPLORE_URL, {
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(INITIAL_EXPLORE_TIMEOUT_MS),
-    });
+    const response = await readExploreResponse(new NextRequest(
+      `http://programmable.local/api/explore?${INITIAL_EXPLORE_QUERY}`,
+      {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(INITIAL_EXPLORE_TIMEOUT_MS),
+      },
+    ));
     const body: unknown = await response.json().catch(() => null);
     initialResponse = { ok: response.ok, body };
   } catch {
