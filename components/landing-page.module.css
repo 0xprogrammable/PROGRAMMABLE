@@ -30,14 +30,15 @@
 }
 
 .panel {
-  background: rgba(8, 5, 18, 0.3);
+  background: rgba(232, 217, 237, 0.11);
   border: 0;
   border-radius: clamp(20px, 2.2vw, 32px);
   box-shadow:
-    inset 0 0 86px rgba(181, 109, 208, 0.12),
-    inset 0 -42px 110px rgba(4, 2, 15, 0.28),
-    0 28px 90px rgba(0, 0, 0, 0.52),
-    0 10px 46px rgba(116, 64, 156, 0.12);
+    inset 0 0 0 1px rgba(255, 252, 249, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 -44px 108px rgba(40, 17, 52, 0.16),
+    0 28px 90px rgba(0, 0, 0, 0.48),
+    0 10px 46px rgba(116, 64, 156, 0.1);
   display: flex;
   flex-direction: column;
   height: min(82svh, 780px);
@@ -46,103 +47,41 @@
   overflow: visible;
   position: relative;
   width: 100%;
-  -webkit-backdrop-filter: blur(28px) saturate(1.12);
-  backdrop-filter: blur(28px) saturate(1.12);
+  -webkit-backdrop-filter: blur(34px) saturate(0.94) brightness(1.06);
+  backdrop-filter: blur(34px) saturate(0.94) brightness(1.06);
 }
 
 .panel::after {
-  display: none;
-}
-
-.panelArt,
-.panelTint {
-  border: 0;
+  content: "";
   inset: 0;
   pointer-events: none;
   position: absolute;
-}
-
-.panelArt {
-  border-radius: inherit;
-  overflow: hidden;
-  z-index: 0;
-}
-
-.panelTint {
-  border-radius: inherit;
-  overflow: hidden;
-}
-
-.panelPicture {
-  display: block;
-  inset: 0;
-  position: absolute;
-}
-
-.panelArt::after {
-  background: linear-gradient(
-    90deg,
-    rgba(1, 1, 3, 0.34),
-    rgba(1, 1, 3, 0.18) 58%,
-    rgba(1, 1, 3, 0.28)
-  );
-  content: "";
-  inset: 0;
-  position: absolute;
-}
-
-.panelArt img {
-  filter: blur(1.5px) saturate(0.88) brightness(0.78);
-  object-fit: cover;
-  object-position: center 55%;
-  opacity: 0.9;
-  transform: scale(1.08);
-}
-
-.panelTint {
-  background:
-    linear-gradient(
-      180deg,
-      rgba(4, 2, 15, 0.12),
-      rgba(8, 3, 20, 0.02) 42%,
-      rgba(4, 2, 15, 0.28)
-    ),
-    radial-gradient(
-      circle at 22% 78%,
-      rgba(198, 102, 156, 0.18),
-      transparent 32%
-    ),
-    radial-gradient(
-      circle at 78% 48%,
-      rgba(119, 91, 177, 0.16),
-      transparent 34%
-    );
-  z-index: 1;
+  z-index: 2;
 }
 
 .flowerLeft,
 .flowerRight {
-  bottom: -18%;
-  filter: saturate(0.92) brightness(0.88);
+  bottom: -15%;
+  filter: saturate(0.96) brightness(0.92);
   height: auto;
   max-width: none;
-  opacity: 0.7;
+  opacity: 0.76;
   pointer-events: none;
   position: absolute;
-  width: clamp(240px, 30vw, 420px);
+  width: clamp(260px, 24vw, 360px);
   z-index: 5;
 }
 
 .flowerLeft {
-  left: -14%;
-  transform: translate3d(-2%, 2%, 0) rotate(-14deg);
-  transform-origin: 54% 100%;
+  left: -16%;
+  transform: translate3d(-4%, 3%, 0) rotate(36deg);
+  transform-origin: 50% 100%;
 }
 
 .flowerRight {
-  right: -15%;
-  transform: translate3d(2%, 2%, 0) scaleX(-1) rotate(13deg);
-  transform-origin: 54% 100%;
+  right: -16%;
+  transform: translate3d(4%, 3%, 0) rotate(-36deg);
+  transform-origin: 50% 100%;
 }
 
 .panelHeader,
@@ -315,7 +254,7 @@
   display: block;
   font-size: clamp(58px, 7.2vw, 108px);
   font-weight: 560;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.035em;
   line-height: 0.9;
   margin: 0;
   max-width: none;
@@ -535,8 +474,8 @@
   .scene {
     padding-block: max(24px, env(safe-area-inset-top))
       max(24px, env(safe-area-inset-bottom));
-    padding-inline: max(18px, env(safe-area-inset-left))
-      max(18px, env(safe-area-inset-right));
+    padding-inline: max(clamp(18px, 5.6vw, 24px), env(safe-area-inset-left))
+      max(clamp(18px, 5.6vw, 24px), env(safe-area-inset-right));
   }
 
   .panel {
@@ -545,17 +484,19 @@
 
   .flowerLeft,
   .flowerRight {
-    bottom: -9%;
-    opacity: 0.58;
-    width: 56vw;
+    bottom: -12%;
+    opacity: 0.66;
+    width: clamp(160px, 52vw, 220px);
   }
 
   .flowerLeft {
-    left: -34%;
+    left: -52%;
+    transform: translate3d(-3%, 2%, 0) rotate(48deg);
   }
 
   .flowerRight {
-    right: -34%;
+    right: -52%;
+    transform: translate3d(3%, 2%, 0) rotate(-48deg);
   }
 
   .heroCopy {
@@ -564,7 +505,7 @@
 
   .hero h1 {
     font-size: clamp(32px, 9.2vw, 44px);
-    letter-spacing: -0.04em;
+    letter-spacing: -0.025em;
     line-height: 0.96;
   }
 
@@ -696,11 +637,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .panelArt img {
-    filter: blur(6px) saturate(0.86) brightness(0.76);
-    transform: scale(1.08);
-  }
-
   .primaryAction,
   .secondaryAction,
   .footer a {

@@ -14,21 +14,6 @@ export function LandingPage() {
     <article className={`${styles.page} landing-page-root`}>
       <div className={styles.scene}>
         <section className={styles.panel} aria-labelledby="landing-title">
-          <div className={styles.panelArt} aria-hidden="true">
-            <picture className={styles.panelPicture}>
-              <source
-                media="(max-width: 760px)"
-                srcSet="/brand/atmosphere/night-sky-botanical-mobile-v2.avif"
-              />
-              <Image
-                src="/brand/atmosphere/night-sky-botanical-desktop-v2-1920.avif"
-                alt=""
-                fill
-                priority
-                sizes="(max-width: 760px) 100vw, 82vw"
-              />
-            </picture>
-          </div>
           <Image
             className={styles.flowerLeft}
             src="/brand/atmosphere/programmable-botanical-left-v2.webp"
@@ -47,7 +32,6 @@ export function LandingPage() {
             height={1536}
             sizes="(max-width: 760px) 35vw, 24vw"
           />
-          <div className={styles.panelTint} aria-hidden="true" />
 
           <header className={styles.panelHeader}>
             <Link
@@ -78,7 +62,7 @@ export function LandingPage() {
               </h1>
               <nav className={styles.actions} aria-label="Get started">
                 <Link className={styles.primaryAction} href="/launch">
-                  Create a token <span aria-hidden="true">↗</span>
+                  Create a token
                 </Link>
                 <Link className={styles.secondaryAction} href="/explore">
                   Explore tokens
