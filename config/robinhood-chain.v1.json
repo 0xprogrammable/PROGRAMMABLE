@@ -1,0 +1,115 @@
+{
+  "schemaVersion": "programmable-robinhood-chain-observation-v1",
+  "status": "integration-pending",
+  "network": {
+    "mainnet": {
+      "chainId": "4663",
+      "rpcUrl": "https://rpc.mainnet.chain.robinhood.com",
+      "explorerUrl": "https://robinhoodchain.blockscout.com",
+      "nativeCurrency": "ETH"
+    },
+    "testnet": {
+      "chainId": "46630",
+      "rpcUrl": "https://rpc.testnet.chain.robinhood.com",
+      "explorerUrl": "https://explorer.testnet.chain.robinhood.com",
+      "nativeCurrency": "ETH"
+    }
+  },
+  "officialUniswapDeploymentObservation": {
+    "feedUrl": "https://developers.uniswap.org/deployments.json",
+    "feedVersion": "1.0.0",
+    "feedGeneratedAt": "2026-07-15T22:25:40.000Z",
+    "feedSha256": "639a19691890e6452a0d1acbef4900ae9d18f04631bdec50a0202ce07e317a66",
+    "sourceRepository": "https://github.com/Uniswap/contracts",
+    "sourceCommit": "37936185dee7decf681360ec799c124e0e034672",
+    "records": {
+      "poolManager": {
+        "address": "0x8366a39CC670B4001A1121B8F6A443A643e40951",
+        "sourceRepository": "https://github.com/Uniswap/v4-core",
+        "sourceRef": "56928a9",
+        "sourceCodeUrl": "https://github.com/Uniswap/v4-core/blob/main/src/PoolManager.sol",
+        "sourceRefResolution": "unresolved",
+        "explorerUrl": "https://robinhoodchain.blockscout.com/address/0x8366a39CC670B4001A1121B8F6A443A643e40951",
+        "status": "active"
+      },
+      "positionManager": {
+        "address": "0x58daec3116aae6D93017bAAea7749052E8a04fA7",
+        "sourceRepository": "https://github.com/Uniswap/v4-core",
+        "sourceRef": "56928a9",
+        "sourceCodeUrl": "https://github.com/Uniswap/v4-periphery/blob/main/src/PositionManager.sol",
+        "sourceRefResolution": "unresolved",
+        "explorerUrl": "https://robinhoodchain.blockscout.com/address/0x58daec3116aae6D93017bAAea7749052E8a04fA7",
+        "status": "active"
+      },
+      "stateView": {
+        "address": "0xF3334192D15450CdD385c8B70e03f9A6bD9E673b",
+        "sourceRepository": "https://github.com/Uniswap/v4-core",
+        "sourceRef": "56928a9",
+        "sourceCodeUrl": "https://github.com/Uniswap/v4-periphery/blob/main/src/lens/StateView.sol",
+        "sourceRefResolution": "unresolved",
+        "explorerUrl": "https://robinhoodchain.blockscout.com/address/0xF3334192D15450CdD385c8B70e03f9A6bD9E673b",
+        "status": "active"
+      },
+      "v4Quoter": {
+        "address": "0x8Dc178eFB8111BB0973Dd9d722ebeFF267c98F94",
+        "sourceRepository": "https://github.com/Uniswap/v4-core",
+        "sourceRef": "56928a9",
+        "sourceCodeUrl": "https://github.com/Uniswap/v4-periphery/blob/main/src/lens/V4Quoter.sol",
+        "sourceRefResolution": "unresolved",
+        "explorerUrl": "https://robinhoodchain.blockscout.com/address/0x8Dc178eFB8111BB0973Dd9d722ebeFF267c98F94",
+        "status": "active"
+      },
+      "permit2": {
+        "address": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+        "sourceRepository": "https://github.com/Uniswap/permit2",
+        "sourceRef": "permit2@1.0.0",
+        "sourceCodeUrl": "https://github.com/Uniswap/permit2/blob/main/src/Permit2.sol",
+        "sourceRefResolution": "unresolved",
+        "explorerUrl": "https://robinhoodchain.blockscout.com/address/0x000000000022D473030F116dDEE9F6B43aC78BA3",
+        "status": "active"
+      },
+      "universalRouter": {
+        "address": "0x06AfBA43Fd06227fA663b0DAecF536f6EaA6bf99",
+        "sourceRepository": "https://github.com/Uniswap/universal-router",
+        "sourceRef": "023196a",
+        "sourceCodeUrl": "https://github.com/Uniswap/universal-router/blob/main/contracts/UniversalRouter.sol",
+        "sourceRefResolution": "unresolved",
+        "explorerUrl": "https://robinhoodchain.blockscout.com/address/0x06AfBA43Fd06227fA663b0DAecF536f6EaA6bf99",
+        "status": "active"
+      }
+    }
+  },
+  "runtimeObservation": {
+    "observedAt": "2026-08-11T15:31:17Z",
+    "blockNumber": "33771369",
+    "rpcUrl": "https://rpc.mainnet.chain.robinhood.com",
+    "runtimeCodeKeccak256": {
+      "poolManager": "0xbd3881180b547f5fe817545743cfb4343e96b1bc6640dcd70c106b0066e95626",
+      "positionManager": "0xc873e135dc9aaec88489cfbad146b4cb49d6a32e0d80326377784b7ba17670b2",
+      "stateView": "0x7d9c591e0956fd89d98feb4ffcfe8bf1f7a62bd485edd979fa21d104b49878a6",
+      "v4Quoter": "0xd707b1da8cb165e5ea35a3b4450d971eb562ec171e23492aa117036b78a868f6",
+      "permit2": "0x5208783f52488f7d3493e5e38311ab707c1d75457fe472a19b0b4d57d66a7fca",
+      "registryUniversalRouter": "0xbe8e8191bb42d843c2e948a5a55772eaab864ce01e54dcd47c9d089170b302d5",
+      "installedSdkUniversalRouter": "0x2ce6aaaf9f4151f5e1cbf774668772f17f532ae11b15e9284fd0a072a8b0fbde"
+    }
+  },
+  "routerResolution": {
+    "status": "unresolved",
+    "officialFeedAddress": "0x06AfBA43Fd06227fA663b0DAecF536f6EaA6bf99",
+    "installedSdk": {
+      "package": "@uniswap/universal-router-sdk",
+      "version": "5.11.1",
+      "generation": "V2_1_1",
+      "address": "0x8876789976decbfcbbbe364623c63652db8c0904"
+    },
+    "reason": "The official deployment feed and installed SDK select different live Universal Router addresses. No Robinhood execution route may be emitted until one exact generation is reviewed and bound end to end."
+  },
+  "programmableCapabilities": {
+    "walletConnection": true,
+    "productReads": false,
+    "preparedTransactions": false,
+    "launches": false,
+    "trades": false,
+    "providerAvailability": "unknown"
+  }
+}

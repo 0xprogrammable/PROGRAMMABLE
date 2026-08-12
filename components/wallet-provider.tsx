@@ -45,6 +45,10 @@ import type {
   HookemonBrowserWalletActionV1,
 } from "@/lib/custom-launch/hookemon-applicant-contract-v1";
 import {
+  getWalletChainDisplayName,
+  PROGRAMMABLE_WALLET_CHAINS,
+} from "@/lib/chains/registry";
+import {
   HOOKEMON_BROWSER_ACTION_SCHEMA_V1,
   revalidateHookemonBrowserWalletActionForSendV1,
 } from "@/lib/custom-launch/hookemon-applicant-contract-v1";
@@ -493,7 +497,7 @@ const privyConfig = {
       createOnLogin: "users-without-wallets",
     },
   },
-  supportedChains: [appChain],
+  supportedChains: [...PROGRAMMABLE_WALLET_CHAINS],
   defaultChain: appChain,
 } satisfies PrivyClientConfig;
 
@@ -1636,7 +1640,7 @@ function WalletDialog({
                       onClick={() => onSelectWallet(candidate.account)}
                     >
                       <span>{shortenAddress(candidate.account)}</span>
-                      <small>{candidate.chainId === appChainHex ? appNetworkName : candidate.chainId}</small>
+                      <small>{getWalletChainDisplayName(candidate.chainId)}</small>
                       {active ? <Check aria-hidden="true" size={15} /> : null}
                     </button>
                   );

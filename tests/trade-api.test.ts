@@ -34,6 +34,15 @@ describe("POST /api/trade/prepare", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
+  it("keeps Robinhood trading closed until its route is deployed and verified", async () => {
+    const response = await POST(request({ ...baseBody, chainId: 4_663 }));
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: "Classic trading is not supported on chain 4663",
+    });
+  });
+
   it("rejects custom fee fields instead of silently adding a fee", async () => {
     const response = await POST(
       request({ ...baseBody, integratorFeeBps: 10 }),

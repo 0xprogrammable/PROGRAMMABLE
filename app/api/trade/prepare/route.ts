@@ -7,6 +7,7 @@ import {
 } from "viem";
 import { mainnet, sepolia } from "viem/chains";
 
+import { getPreparedTransactionChain } from "../../../../lib/chains/registry";
 import {
   ActionLookupError,
   actionTokenAsExploreModel,
@@ -54,7 +55,12 @@ function runtimeClient(
   chainId: number,
   endpoint: string,
 ): ClassicTradeRuntimeClient {
-  const chain = chainId === 1 ? mainnet : sepolia;
+  const chain = getPreparedTransactionChain(chainId);
+  if (!chain || (chain.id !== mainnet.id && chain.id !== sepolia.id)) {
+    throw new ClassicTradeUnavailableError(
+      `Classic trading is not supported on chain ${chainId}`,
+    );
+  }
   const client = createPublicClient({
     chain,
     transport: http(endpoint, {
