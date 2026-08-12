@@ -1,0 +1,277 @@
+{
+  "schemaVersion": "programmable.exact-shards-fee-policy-verifier.v1",
+  "status": "IMPLEMENTATION_READY_NOT_DEPLOYED",
+  "activationAllowed": false,
+  "launchAllowed": false,
+  "externalActionOccurred": false,
+  "productionBase": {
+    "commit": "e0851b30d7dfd759ccffea1d4c1acace044c05ad",
+    "tree": "9d79e375b4dea1772b90cb07123581dbd8bf62dc"
+  },
+  "decision": {
+    "existingReviewedVerifierSupportsExactPolicy": false,
+    "currentContractsCanLaunch": false,
+    "reviewedShardsSemanticsChanged": false,
+    "newShardsExecutionContractRequired": false,
+    "smallestMissingLayerImplementedHere": "STATELESS_EXACT_THREE_CLAIM_FEE_POLICY_VERIFIER",
+    "remainingRegistryRequirement": "DEPLOYED_REGISTRY_SUCCESSOR_MUST_BIND_THIS_EXACT_VERIFIER_AND STORE_THREE_DISTINCT_CLAIMS"
+  },
+  "candidateAudit": {
+    "deployedRegistryV1": {
+      "address": "0x17e18c88bda9bfb73924cdc989c07b0707e72671",
+      "runtimeCodeHash": "0xa3276868befc509594adea6c5bd81c3c1bd013686f03fd57914fd39c917185f7",
+      "generation": 1,
+      "feeVerifier": "0x6a57bf3e092626be760d417986e6103c20fdbc3e",
+      "feeVerifierRuntimeCodeHash": "0x2a4182b580725a156c42061dd58b7ed92b4588682ee1b66b356ceff1ddd90882",
+      "feeVerifierBinding": "IMMUTABLE",
+      "feeLegCount": 2,
+      "supportedProfiles": [
+        "NATIVE_CUSTOM_10_BPS_PROGRAMMABLE_ADDED_ON_TOP",
+        "PARTNER_20_BPS_15_5",
+        "NO_QUALIFYING_MARKET_ZERO_BPS"
+      ],
+      "exactShardsSupported": false
+    },
+    "registryGen2Candidate": {
+      "pullRequest": "0xprogrammable/programmable#162",
+      "headCommit": "244e452233a8a1145067308182380fad8e54041f",
+      "headTree": "992e04275c1b70586caf662fc3dabd516cea0247",
+      "statusAtAudit": "OPEN_DRAFT_CONFLICTING",
+      "registryGeneration": 2,
+      "registryAbi": "INHERITED_V1_TWO_LEG_FEE_POLICY",
+      "nativeProfile": "10_BPS_PROGRAMMABLE",
+      "partnerProfile": "20_BPS_15_5_PROVIDER_NEUTRAL",
+      "exactShardsSupported": false
+    },
+    "reviewedThreeClaimSpecification": {
+      "path": "outputs/shards-nested-factory-route-v1.canonical.json",
+      "byteLength": 1287041,
+      "sha256": "0x066475058bfd47b85b4216f95b434756d67d7e289ffb36535c121ef5d7c11bab",
+      "keccak256": "0x8c5521d6796e3e63c3e2cf82e1122c952e6465c345d8a10b3773a70aa2419fb3",
+      "reusedWithoutSemanticChange": true
+    }
+  },
+  "reviewedSource": {
+    "repository": "jesse-stahl/shards-v1",
+    "commit": "91b38f3de64d96cac7e29f127c004f128fc1da59",
+    "tree": "92d6def8609e829487adea66c13901734e43c8c7",
+    "sourceRevisionHash": "0x3352fe14662ce467e98f475cf91f10304ce4d69b6342fae4bf3dc968c494d6dc",
+    "feeDescriptorSha256": "0xd1c911686afc62b70f3d65c9807e89146d119c4e6f4604e72d3dab2b4ef8dc22"
+  },
+  "routerV4": {
+    "repository": "0xprogrammable/programmable",
+    "sourceCommit": "d6cfb78543b159f9e0ed9f193a5b29637bd817fc",
+    "sourceTree": "cbdad7210dee6fac708d2957e9f5288090bb20f8",
+    "exactProfileSource": {
+      "path": "src/ProgrammableExactShardsProfileV1.sol",
+      "gitBlob": "d802fa387505da47a0ac4d65a6e5b5e4efa7026d"
+    },
+    "nestedAdapterSource": {
+      "path": "deployment/router-v4/src/ProgrammableExactShardsNestedFactoryV1.sol",
+      "gitBlob": "cf2b92f67ec00b0c0a844708dd62ab70a32fdf3a"
+    },
+    "profileKey": "0xb90e215e0e29c0dacf021e5e778847af4100433ee7d22014b73f8ca4add09d0c",
+    "existingRevenuePolicyHash": "0xaa78b0bf63fca83fa9b969fbb6b2bb1ecabcbe49908a48f92403e8e51e4adab2",
+    "existingInitialRevenueStateHash": "0xf0bc686422736754322da4ea358a823274df35c35718939d71d339a41b8f9b75",
+    "reusedWithoutNewRouteSemantics": true,
+    "orderedOwnerPackagePhases": [
+      "DEPLOY_GRAPH_DEPLOYER",
+      "FOUNDATIONS",
+      "PREFLIGHT_ROOTS",
+      "COMPLETED_GRAPH_ADOPTION_COMPAT_VALIDATORS",
+      "UNIVERSAL_KERNEL",
+      "DEPLOY_COMPLETED_GRAPH_ADOPTION_COMPAT_REGISTRY",
+      "BIND_REVIEWER",
+      "BIND_GOVERNANCE",
+      "BIND_FINALITY",
+      "BIND_INDEXER",
+      "SHARDS_ADAPTERS",
+      "DEPLOY_NESTED_FACTORY_PROFILE",
+      "DEPLOY_SHARDS_FACTORY",
+      "ACTIVATE_UNIVERSAL",
+      "ACTIVATE_COMPLETED_GRAPH_ADOPTION_COMPAT"
+    ],
+    "shardsRequiredUnfinishedPhasesAtObservedBlock": [
+      "SHARDS_ADAPTERS",
+      "DEPLOY_NESTED_FACTORY_PROFILE",
+      "DEPLOY_SHARDS_FACTORY",
+      "ACTIVATE_UNIVERSAL"
+    ],
+    "liveObservation": {
+      "chainId": 1,
+      "blockNumber": 25739301,
+      "blockHash": "0xeab4a61344592f530644eb86c57a174b06d1d8af1e20f62286e4d0834fceab8e",
+      "independentRpcAgreement": [
+        "publicnode",
+        "drpc"
+      ],
+      "kernel": "0x25e9ddeb5de79751db2156d426893d52c8f14dcf",
+      "kernelRuntimeCodeHash": "0x316dcd57dcefd06149e3cb2a78a25d2421312c7431df2bdf3c62ca501341f1cf",
+      "kernelGlobalKilled": true,
+      "exactShardsProfileRegistered": false,
+      "providerAddress": "0x03385476770cae102ef673adf9a4631e84258e58",
+      "providerStatus": "VACANT",
+      "verifierAddress": "0xa4867b0d72bce8c1db040e91454d562239daf923",
+      "verifierStatus": "VACANT",
+      "nestedProfileAddress": "0x6d2d661ab0e462e8047597adc5bece4bca157c4c",
+      "nestedProfileStatus": "VACANT",
+      "shardsFactoryAddress": "0x9442a520e7b31d10177c75a363355c2c29141ac5",
+      "shardsFactoryStatus": "VACANT"
+    }
+  },
+  "canonicalPolicy": {
+    "feeAsset": "0x0000000000000000000000000000000000000000",
+    "feeAssetSemantic": "NATIVE_ETH",
+    "feeBasisLabel": "ProgrammableRevenueFeeBasisV1:inclusive-gross-eth-moved",
+    "feeBasisHash": "0xfb8110e8ea13fee890a868300dd1a9a5c467acb19a53f63beccc482757a36191",
+    "chargeMode": "INCLUDED_IN_TOTAL",
+    "totalFeeBps": 100,
+    "shareDenominatorBps": 10000,
+    "orderedLegs": [
+      {
+        "role": "BUILDER",
+        "roleHash": "0x36a60a66fdf8fc39bbaab0d3ff46b52ffc8a9b6f3dc94b5fe9836816d72890af",
+        "grossVolumeFeeBps": 10,
+        "shareOfFeeBps": 1000,
+        "initialRecipient": "0xceebb3a6543cebeb2ed66963897a0abea52a50cc",
+        "recipientMode": "CURRENT_BUILDER_MAY_ROTATE_TO_SUCCESSOR",
+        "recipientModeHash": "0xc1ed7eaa8d37d922e99971bb6369533361b226b731cf9677e60e36b376519ea4",
+        "claimSelector": "0x69f9a5f0",
+        "handoffSelector": "0x4ce11d21",
+        "legHash": "0x10c851ca78aa2bf257e924b5b4b1a471b8f091e5d971f1a2422165a60bd325ac"
+      },
+      {
+        "role": "PROGRAMMABLE",
+        "roleHash": "0x069cb8bbaf512d6f3d7fd962d64b67ce531a420f558aa3a2301e77be3640d875",
+        "grossVolumeFeeBps": 10,
+        "shareOfFeeBps": 1000,
+        "recipient": "0x4957f49620aff3adbbe8195a4f633e49cc93376c",
+        "recipientMode": "IMMUTABLE_LAUNCHER_RECIPIENT",
+        "recipientModeHash": "0x496f134b2bbc4d8ae230c1aa1a607788d75231c8ee823312e515b851a927d4f4",
+        "claimSelector": "0x64d46b85",
+        "legHash": "0xccc9d7a84cef40c38d165ba1ce0f1817f77172bc97b49155ac6a14fcc5e6cff5"
+      },
+      {
+        "role": "NFT_HOLDERS",
+        "roleHash": "0x84edd196638e45435db849686913b0ffb528525a1edc3aece78548ed6f2577f1",
+        "grossVolumeFeeBps": 80,
+        "shareOfFeeBps": 8000,
+        "accumulator": "0xba318baa8649962fd77cc7082d098f2c09fd60cc",
+        "recipientMode": "EXACT_SHARDS_HOOK_RUNNING_HOLDER_ACCUMULATOR",
+        "recipientModeHash": "0x9aec909e12714c25df903902800a480772830ed15716e130e797f7447138ba55",
+        "claimSelector": "0x6ba4c138",
+        "legHash": "0x30cf730abcc37ad7db1d6e91abad8c1564fc624c777c456da987f0e006b9ff9e"
+      }
+    ],
+    "legsHash": "0x14e66b725eaebf6f894323565651567cc05a71bbb263db373d1f9f59ea171899",
+    "revenuePolicyHash": "0xaa78b0bf63fca83fa9b969fbb6b2bb1ecabcbe49908a48f92403e8e51e4adab2",
+    "roundingSemantics": [
+      "OUTER_FEE_NUMERATOR_REMAINDER_CARRIED_BY_EXACTNESS",
+      "COMBINED_BUILDER_AND_PROGRAMMABLE_CUT_REMAINDER_CARRIED",
+      "ODD_OPERATOR_WEI_CARRIED_TO_PROGRAMMABLE",
+      "HOLDERS_RECEIVE_REMAINDER",
+      "DONATIONS_BYPASS_OPERATOR_SPLIT"
+    ]
+  },
+  "typedHashSpec": {
+    "legType": "ProgrammableRevenueLegV1(bytes32 roleHash,uint16 feeBps,address recipient,bytes32 recipientModeHash)",
+    "legTypeHash": "0x6b5107011760a096b681164d179eacb4aeae665d02a08c0447d81f87191f09b7",
+    "policyType": "ProgrammableRevenuePolicyV1(bytes32 profileKey,address feeAsset,bytes32 feeBasisHash,uint16 totalFeeBps,bytes32 legsHash)",
+    "policyTypeHash": "0x59529fb66a882121389cebbaa9a4bbbfa4ccf1fe6ce4bcecc00d5f38935f3202",
+    "legsHashEncoding": "keccak256(abi.encode(builderLegHash,programmableLegHash,holderLegHash))",
+    "policyHashEncoding": "keccak256(abi.encode(policyTypeHash,profileKey,feeAsset,feeBasisHash,totalFeeBps,legsHash))",
+    "bindingTypeHashes": {
+      "source": "0x6ebc17cf7d3568ae5dc69cd9ad5e72bfc89ec62ee8a5270b1f1b5a677177fe61",
+      "router": "0xdfb854b0298963df7d738612117ec62c31603fe0109535b0a445b8f7d56c06b7",
+      "economics": "0xa3ea01024027b9ae11ae3183354dc457d781266fc490fe34b0bb1b57aef1bb6c",
+      "final": "0xa27a89fc8c356e6f8be5037157ba922b6128a9ca3775a0aeb6f41fa37759b8c8"
+    },
+    "bindingSubhashes": {
+      "source": "0x245dd60dca506e9cdb0cd8558b50f8bb3ca88af49c4326a5b469ef66c34b0ce2",
+      "router": "0xb4fcef386fdc8274e3ca4a4172f39bbf6aba4b29ddabf31995d9b8d372dd376b",
+      "economics": "0xa81ff847bc15a7a7b10c28917c14e2171d71e1b3bb3977fd594e8c3fa2d4052a"
+    },
+    "feePolicyBindingHash": "0x5d5d1c46e7627f6e171a18acdbecbfe9e40eca80016fba0142ddca6a054f6169"
+  },
+  "implementation": {
+    "contract": {
+      "path": "contracts/src/ProgrammableExactShardsFeePolicyVerifierV1.sol",
+      "sha256": "0xde6d1e23520ef4f77c74dd3487099520908b616afb5ea5457daaffa71516b51f"
+    },
+    "interface": {
+      "path": "contracts/src/interfaces/IProgrammableExactShardsFeePolicyVerifierV1.sol",
+      "sha256": "0xb5b0c02507086952de695803813b864ffbb14f29eb874a6ac18ed859c9e80c12"
+    },
+    "test": {
+      "path": "contracts/test/ProgrammableExactShardsFeePolicyVerifierV1.t.sol"
+    },
+    "compiler": {
+      "solc": "0.8.26",
+      "evmVersion": "cancun",
+      "optimizer": true,
+      "optimizerRuns": 1000,
+      "viaIr": false,
+      "bytecodeHash": "none",
+      "cborMetadata": false
+    },
+    "artifact": {
+      "creationCodeByteLength": 4832,
+      "creationCodeKeccak256": "0xf82a1609d4d5c4491c4b3318973a50d2775874be16414864790f5927e115d95d",
+      "runtimeCodeByteLength": 4804,
+      "runtimeCodeKeccak256": "0xb4af3325444133062ec8382bc29c551ef87e812cbf269712a45ef6ec64db20c0",
+      "canonicalAbiSha256": "0xed07ccf951be118fabda8efb9d01d6ea6c180bf9fb37365c28a88151bb3045f2"
+    },
+    "verificationBoundary": [
+      "PURE_POLICY_HASH_AND_EXACT_FIELD_VALIDATION",
+      "CONTENT_ADDRESS_BINDING_TO_REVIEWED_SOURCE_ROUTE_AND_ROUTER_V4",
+      "NO_APPROVAL_EFFECT",
+      "NO_REGISTRY_WRITE",
+      "NO_DEPLOYMENT_OR_ACTIVATION_EFFECT"
+    ]
+  },
+  "remainingProductionActions": [
+    {
+      "sequence": 1,
+      "action": "INDEPENDENTLY_REVIEW_AND_RECOMPILE_EXACT_VERIFIER",
+      "requiredAuthority": "SECURITY_REVIEW_OWNER"
+    },
+    {
+      "sequence": 2,
+      "action": "DEPLOY_EXACT_VERIFIER_AND_RECORD_SOURCE_RUNTIME_AND_FINALITY_RECEIPTS",
+      "requiredAuthority": "AUTHORIZED_CONTRACT_DEPLOYER"
+    },
+    {
+      "sequence": 3,
+      "action": "DEPLOY_REGISTRY_SUCCESSOR_WITH_NATIVE_THREE_CLAIM_STORAGE_AND_IMMUTABLE_EXACT_VERIFIER_BINDING",
+      "requiredAuthority": "REGISTRY_DEPLOYER_AND_ADMIN_AUTHORITY"
+    },
+    {
+      "sequence": 4,
+      "action": "EXECUTE_REMAINING_ROUTER_V4_SHARDS_PHASES_IN_FROZEN_ORDER",
+      "requiredAuthority": "ROUTER_DEPLOYER_0x2bb333d48dfaf1596d9036671d2e43168994249e_AND_CONTROLLER_SAFE_0x755509ea6e3f5ec1aa2e797bb68f1b87dd8b886b"
+    },
+    {
+      "sequence": 5,
+      "action": "AUTHORIZE_EXACT_SHARDS_GRANT_AND_BIND_REGISTRY_REGISTRATION_BYTES",
+      "requiredAuthority": "ROUTER_REVIEW_GOVERNANCE_AND_REGISTRY_APPROVER"
+    },
+    {
+      "sequence": 6,
+      "action": "REGISTER_OBSERVED_LAUNCH_FINALIZE_AFTER_MINIMUM_FINALITY_AND_PUBLISH_INDEXER_RECEIPT",
+      "requiredAuthority": "REGISTRY_WRITER_FINALIZER_AND_INDEXER_AUTHORITIES"
+    },
+    {
+      "sequence": 7,
+      "action": "ENABLE_WEBSITE_DESCRIPTOR_ONLY_AFTER_ALL_DEPLOYED_BINDINGS_MATCH",
+      "requiredAuthority": "WEBSITE_RELEASE_OWNER"
+    }
+  ],
+  "prohibitions": [
+    "NO_TWO_CLAIM_DOWNCONVERSION",
+    "NO_90_10_COLLAPSE",
+    "NO_ADDED_ON_TOP_REINTERPRETATION",
+    "NO_MUTABLE_PROGRAMMABLE_RECIPIENT",
+    "NO_FIXED_HOLDER_RECIPIENT_REINTERPRETATION",
+    "NO_DEPLOYMENT_SIGNING_GRANT_REGISTRATION_OR_TRANSACTION_FROM_THIS_ARTIFACT"
+  ]
+}
