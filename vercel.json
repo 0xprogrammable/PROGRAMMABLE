@@ -1,5 +1,15 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/docs",
+      "destination": "https://proxy.gitbook.site/sites/site_V93gQ"
+    },
+    {
+      "source": "/docs/:match*",
+      "destination": "https://proxy.gitbook.site/sites/site_V93gQ/:match*"
+    }
+  ],
   "crons": [
     {
       "path": "/api/ops/index-v2",
