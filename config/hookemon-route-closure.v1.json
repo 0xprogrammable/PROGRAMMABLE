@@ -1,0 +1,374 @@
+{
+  "schemaVersion": "programmable.hookemon-route-closure.v1",
+  "artifactId": "hookemon-mainnet-route-closure-2026-08-12",
+  "generatedAt": "2026-08-12T13:14:28Z",
+  "scope": {
+    "chainId": 1,
+    "network": "ethereum-mainnet",
+    "applicant": "Hookemon",
+    "readOnlyChainEvaluation": true,
+    "transactionAuthority": false,
+    "deploymentAuthority": false
+  },
+  "decision": {
+    "admissionVerdict": "CHANGES_REQUIRED",
+    "safetyVerdict": "ANALYSIS_PENDING",
+    "platformRouteVerdict": "NO_EXACT_ACTIVE_COMPATIBLE_ROUTE",
+    "launchAllowed": false,
+    "activationAllowed": false,
+    "canLaunchOnExistingDeployedContracts": false,
+    "routeAdapterImplemented": false,
+    "launchDescriptor": null,
+    "permit": null,
+    "calldata": null,
+    "unsignedTransaction": null,
+    "applicantDeploymentAddresses": null
+  },
+  "sourceSubject": {
+    "repository": "https://github.com/hookemonv4/hookemon",
+    "repositoryId": 1324982531,
+    "defaultBranch": "main",
+    "commit": "23336e60ae5859dbb0ae9c0db3399af4ef4af8e8",
+    "tree": "7624bde3bb09f654e77881880c419e356ed85c29",
+    "newerDefaultBranchRevisionFound": false,
+    "pushedAt": "2026-08-10T12:21:45Z",
+    "localEvaluationWorktree": "fresh-detached-read-only",
+    "currentCi": {
+      "contractsAndAutomation": "SUCCESS",
+      "website": "SUCCESS",
+      "deployHookemonWeb": "FAILURE",
+      "ciIsNotApprovalOrDeploymentEvidence": true
+    }
+  },
+  "platformSourceBindings": {
+    "websiteProduction": {
+      "commit": "32a79b53f99fcf4fa050b327db9a20fc96cf6c66",
+      "tree": "cb4cfea01ed72b5ec4aa11f85c62239f8869ccdc"
+    },
+    "routerV4ContractMain": {
+      "commit": "d6cfb78543b159f9e0ed9f193a5b29637bd817fc",
+      "tree": "cbdad7210dee6fac708d2957e9f5288090bb20f8"
+    }
+  },
+  "currentIngressEvidence": {
+    "hookbuilder": {
+      "mainCommit": "646e8134cf9664ed251a629dac029b911f72f521",
+      "mainTree": "81755730d9a02bfb5c69c383ea01b8ad02a6b507",
+      "legacyPullRequest": {
+        "number": 10,
+        "state": "CLOSED",
+        "draft": true,
+        "headCommit": "1ffc1fd19a9d890760911629942fbb109b7ec183",
+        "currentAuthority": false
+      }
+    },
+    "submitLaunch": {
+      "mainCommit": "2fc99d7504eef3e43a1ac5a9aaaca96c52d2658d",
+      "mainTree": "b90af24539b50ad0df46b5e86e4e2293750bad5a",
+      "hookemonRecordsFound": 0,
+      "currentAcceptedApplicationFound": false
+    },
+    "legacyProgrammableIntake": {
+      "pullRequest": 126,
+      "state": "OPEN_DRAFT_BEHIND",
+      "headCommit": "de33dcaefc9180e72e21130d5f095d50d90212d6",
+      "boundHookemonCommit": "bde2d0e5ac4a060375f6c9e150b5a26d17acb7e2",
+      "boundHookemonTree": "e1fc86b3a209b91eb700065464382d63682f9911",
+      "matchesCurrentSourceSubject": false,
+      "declaredOpenGate": "NORMAL_CREATE_TYPED_PREPARATION_REQUIRED"
+    },
+    "legacyPlatformGateRequest": {
+      "pullRequest": 176,
+      "state": "OPEN_DRAFT_BEHIND",
+      "headCommit": "0f859011a4226dbaabe2f33c076e8504f14c0646",
+      "documentationOnly": true,
+      "currentAuthority": false
+    }
+  },
+  "preservedHookemonContract": {
+    "topLevelLauncher": "HookemonAtomicLauncher",
+    "topLevelDeploymentKind": "NORMAL_CREATE_FROM_LAUNCH_WALLET",
+    "launcherAddressBinding": "EOA_NONCE",
+    "approvalNonceMustImmediatelyPrecedeLauncherNonce": true,
+    "childTokenDeploymentKind": "CREATE2",
+    "childHookDeploymentKind": "CREATE2",
+    "additionalActivatedChildren": 6,
+    "hookPermissionMask": "0x20cc",
+    "hookUsesBeforeSwapReturnDelta": true,
+    "hookUsesAfterSwapReturnDelta": true,
+    "economics": {
+      "quoteSide": true,
+      "inclusive": true,
+      "totalHookFeeHundredthsOfBip": 30000,
+      "totalHookFeeBps": 300,
+      "programmableHundredthsOfBip": 1000,
+      "programmableFeeBps": 10,
+      "projectHundredthsOfBip": 29000,
+      "projectFeeBps": 290,
+      "programmableRecipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+      "lpFeePips": 3000,
+      "lpFeeBps": 30,
+      "lpFeeIsSeparate": true
+    }
+  },
+  "reviewEvidence": {
+    "exactCurrentRevisionReviewState": "NOT_BOUND",
+    "independentReviewState": "NOT_STARTED",
+    "builderEvidenceOnly": true,
+    "repositoryEvidenceIndex": {
+      "path": "submissions/hookemon/EVIDENCE.md",
+      "declaredTestCommit": "3c1503bb8520da61b6c4da637afb93f3d6b7dd7f",
+      "matchesCurrentSourceSubject": false
+    },
+    "gateStatus": {
+      "path": "submissions/hookemon/evidence/gate-status.json",
+      "reviewTargetHash": "sha256:58ea28e0d0f7120de0565b93b8389a4aa9251fbe157ddda29ac4b106ae94ff23",
+      "evidenceCommit": "f43990ae24eaa8fd6b0e99df806a1053d17fd2fa",
+      "matchesCurrentSourceSubject": false
+    },
+    "staticAnalysis": {
+      "path": "submissions/hookemon/evidence/slither-report.json",
+      "tool": "Slither 0.11.6",
+      "reportedFindingCount": 69,
+      "impactCounts": {
+        "High": 3,
+        "Medium": 9,
+        "Low": 40,
+        "Optimization": 7,
+        "Informational": 10
+      },
+      "highImpactDetector": "reentrancy-balance",
+      "highImpactAffectedContracts": [
+        "CycleVault",
+        "CctpReturnAdapter",
+        "CctpForwardingBridgeAdapter"
+      ],
+      "builderDispositionsPresent": true,
+      "independentDispositionPresent": false,
+      "notClassifiedAsUnsafeWithoutIndependentReproduction": true
+    }
+  },
+  "finalizedChainObservation": {
+    "blockTag": "finalized",
+    "blockNumber": 25739033,
+    "blockHash": "0x1d8f37291186c59f42ced859b23e231279aaf573820f6bf14bb07082ea7ffbd5",
+    "blockTimestamp": "2026-08-12T12:51:35Z",
+    "providers": [
+      "eth.drpc.org",
+      "ethereum-rpc.publicnode.com"
+    ],
+    "providerResultsByteEquivalent": true
+  },
+  "evaluatedRoutes": {
+    "customRegistryV1": {
+      "routeState": "DEPLOYED_BUT_INCOMPATIBLE",
+      "sourcePaths": [
+        "contracts/src/ProgrammableCustomAtomicRegistrarV1.sol",
+        "contracts/src/ProgrammableCustomFeePolicyVerifierV1.sol",
+        "contracts/src/ProgrammableCustomRegistryV1.sol"
+      ],
+      "deployments": {
+        "feePolicyVerifier": {
+          "address": "0x6a57bf3e092626be760d417986e6103c20fdbc3e",
+          "runtimeCodeHash": "0x2a4182b580725a156c42061dd58b7ed92b4588682ee1b66b356ceff1ddd90882"
+        },
+        "partnerFactoryRegistry": {
+          "address": "0xf8aef69201621ad20fa256da595426b7e6192dba",
+          "runtimeCodeHash": "0xc059ec5b84a2f4b9a63fe2f4361d92c36e1a0f94af1189f17f70c60844016426"
+        },
+        "registry": {
+          "address": "0x17e18c88bda9bfb73924cdc989c07b0707e72671",
+          "runtimeCodeHash": "0xa3276868befc509594adea6c5bd81c3c1bd013686f03fd57914fd39c917185f7",
+          "registryGeneration": 1
+        },
+        "atomicRegistrar": {
+          "address": "0xcc916e5200d2626edfd918dc219bc4296629e997",
+          "runtimeCodeHash": "0xae00412005beb660afba47767240cf771bf3c65306d68c1a7bfcb8fe2c0450f5",
+          "boundRegistry": "0x17e18c88bda9bfb73924cdc989c07b0707e72671"
+        }
+      },
+      "executionSemantics": {
+        "primaryDeploymentKind": "CREATE2",
+        "primaryContractMustEqualRegistrarPrediction": true,
+        "initializerTarget": "PRIMARY_CONTRACT_ONLY",
+        "initializerCallCount": 1,
+        "registrationOccursInSameTransaction": true,
+        "supportsExactHookemonNormalCreateLauncher": false
+      },
+      "acceptedFeeModes": [
+        {
+          "kind": "NativeCustom",
+          "totalFeeBps": 10,
+          "programmableFeeBps": 10,
+          "projectFeeBps": 0,
+          "chargeMode": "ADDED_ON_TOP"
+        },
+        {
+          "kind": "PartnerTemplate",
+          "provider": "aeon",
+          "totalFeeBps": 20,
+          "programmableFeeBps": 5,
+          "partnerFeeBps": 15,
+          "chargeMode": "INCLUDED"
+        },
+        {
+          "kind": "NoQualifyingMarket",
+          "totalFeeBps": 0,
+          "chargeMode": "NONE"
+        }
+      ],
+      "hookemonCompatibility": {
+        "exactInclusiveFeePolicyAccepted": false,
+        "nativeRouteWouldAddSecondProgrammableFee": true,
+        "nominalCombinedFeeBpsIfHookUnchanged": 310,
+        "noQualifyingMarketWouldMisstateFeeBearingMarket": true,
+        "preservesCurrentSourceAndEconomics": false,
+        "launchAllowed": false
+      }
+    },
+    "routerV4CompletedGraphAdoption": {
+      "routeState": "PARTIALLY_DEPLOYED_UNBOUND_DENY",
+      "contractArtifact": {
+        "sourceCommit": "ea0e4424b886a0c1ae928fc73d62bd8e907b44cd",
+        "sourceTree": "8c5e0822d7ff256cad3d9e0350c980473d36aecc",
+        "sourcePullRequest": 206,
+        "sourcePullRequestState": "OPEN_CONFLICTING",
+        "deploymentArtifactStatus": "SOURCE_TEST_AND_SIMULATION_CANDIDATE",
+        "deploymentArtifactActivation": "DENY",
+        "publishedOwnerRecordPullRequest": 224,
+        "publishedOwnerRecordScope": "FINALIZED_TX1_ONLY",
+        "onchainStateBeyondPublishedRecord": true
+      },
+      "registry": {
+        "address": "0x636989978c214d7786d21604d7C225cEbf2240C8",
+        "runtimeCodeHash": "0x8151161ceb2462daad45e747ac8f828be419ea2abd9f763b3353f9a9628abb48",
+        "profileKey": "0x7e84ec6d9fd7bbb64e78bfef347234eb667eae84cae181f56d56cc825470aff3"
+      },
+      "launcherObservation": {
+        "address": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+        "finalizedNonce": 242
+      },
+      "authorities": [
+        {
+          "role": "REVIEWER",
+          "address": "0x2eA78549C73Cb4208a5eb129d43ebda1203fd768",
+          "initialized": false,
+          "killed": false,
+          "authorityGeneration": 1,
+          "keyEpoch": 1
+        },
+        {
+          "role": "GOVERNANCE",
+          "address": "0x979F9E496AbAB43C1B83286087E30dc3BbaAe9dF",
+          "initialized": false,
+          "killed": false,
+          "authorityGeneration": 1,
+          "keyEpoch": 1
+        },
+        {
+          "role": "FINALITY",
+          "address": "0xd8A3b8634cfBddaaB7766Eb54002D82423dF3be1",
+          "initialized": false,
+          "killed": false,
+          "authorityGeneration": 1,
+          "keyEpoch": 1
+        },
+        {
+          "role": "INDEXER",
+          "address": "0xa091B2Ae533F6DaAEd13EB05d867d816E57c1a73",
+          "initialized": false,
+          "killed": false,
+          "authorityGeneration": 1,
+          "keyEpoch": 1
+        }
+      ],
+      "authorityConsumerBindings": {
+        "universalKernel": "0x0000000000000000000000000000000000000000",
+        "universalKernelRuntimeCodeHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "hookemonRegistry": "0x0000000000000000000000000000000000000000",
+        "hookemonRegistryRuntimeCodeHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "serviceReleaseBindingHash": "0x32379de927d9a3ca4052037f3de19388566f0b79b26ea01b90d76f09c76f74b0"
+      },
+      "profileControlState": {
+        "runtimeAuthorityBindingHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "liveRuntimeMask": 447,
+        "requiredRuntimeMask": 511,
+        "missingRuntimeBit": "PROFILE_STATE_VERIFIER_BINDING",
+        "securityEpoch": 1,
+        "policyEpoch": 1,
+        "reviewGeneration": 1,
+        "globalAdoptionKilled": false,
+        "profileStatus": "INVALID",
+        "profileCapabilityHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "executionSemantics": {
+        "mode": "ADOPTION_ONLY_NO_EXECUTION",
+        "revenueBinding": "ZERO_REQUIRED_BY_COMPAT_V1",
+        "hookemonSpecificGraphEvidence": false,
+        "applicantApprovalRepresented": false,
+        "deploysHookemon": false,
+        "preservesHookemonInclusiveRevenue": false
+      },
+      "websiteBinding": {
+        "hookemonState": "DENY",
+        "adoptionDecoder": "UNAVAILABLE_FAIL_CLOSED",
+        "actionIdentifierAuthority": "UNAVAILABLE_FAIL_CLOSED"
+      },
+      "hookemonCompatibility": {
+        "profileActive": false,
+        "capabilityPresent": false,
+        "grantCanBeIssued": false,
+        "launchAllowed": false
+      }
+    }
+  },
+  "irreducibleBlockers": [
+    {
+      "id": "CURRENT_EXACT_ADMISSION_SUBJECT_ABSENT",
+      "owner": "APPLICANT_AND_REVIEW_INGRESS",
+      "launchBlocking": true,
+      "evidence": [
+        "Submit Launch contains no Hookemon record at its evaluated main revision.",
+        "Hookbuilder PR 10 is closed and does not bind the current Hookemon source subject.",
+        "Programmable PR 126 binds an older Hookemon commit and remains draft and behind."
+      ]
+    },
+    {
+      "id": "EXACT_REVISION_INDEPENDENT_SECURITY_REVIEW_INCOMPLETE",
+      "owner": "INDEPENDENT_REVIEW",
+      "launchBlocking": true,
+      "evidence": [
+        "Repository evidence and gate records are not bound to Hookemon commit 23336e60ae5859dbb0ae9c0db3399af4ef4af8e8.",
+        "Independent review is recorded as not started.",
+        "The builder-supplied Slither report contains 69 findings, including three High-impact reentrancy-balance detector results, without an independent exact-revision disposition."
+      ]
+    },
+    {
+      "id": "CUSTOM_REGISTRY_V1_CANNOT_EXECUTE_OR_REPRESENT_EXACT_HOOKEMON_ROUTE",
+      "owner": "PLATFORM_CONTRACT_RELEASE",
+      "launchBlocking": true,
+      "evidence": [
+        "The deployed Atomic Registrar creates one CREATE2 primary, while Hookemon binds a normal-CREATE launcher address to the launch wallet nonce.",
+        "The deployed native Custom policy adds 10 bps on top, while Hookemon already includes the same 10 bps inside its 300 bps total.",
+        "No deployed V1 fee mode represents Hookemon's exact inclusive 290/10 split."
+      ]
+    },
+    {
+      "id": "ROUTER_V4_COMPLETED_GRAPH_ROUTE_INACTIVE_AND_SEMANTICALLY_INCOMPATIBLE",
+      "owner": "PLATFORM_ROUTER_AUTHORITY_AND_RELEASE",
+      "launchBlocking": true,
+      "evidence": [
+        "All four deployed authorities are uninitialized and have zero consumer bindings at the common finalized block.",
+        "The completed-graph profile is Invalid with no capability and a 447/511 runtime mask.",
+        "The route is adoption-only and requires zero revenue, so activation alone would neither deploy Hookemon nor preserve its inclusive fee split."
+      ]
+    }
+  ],
+  "integrityBoundary": {
+    "unknownDoesNotMeanUnsafe": true,
+    "noApplicantAddressWasInferred": true,
+    "noPermitWasSynthesized": true,
+    "noTransactionWasPrepared": true,
+    "noSigningBroadcastDeploymentOrFundsActionOccurred": true
+  }
+}
