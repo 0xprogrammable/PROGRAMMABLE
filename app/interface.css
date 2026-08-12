@@ -197,8 +197,23 @@ code,
 }
 
 /* The home scene owns the viewport; it does not need the mobile nav reserve. */
+.app-frame:has(.landing-page-root) {
+  height: 100svh;
+  min-height: 100svh;
+  overflow: hidden;
+}
+
 .app-frame:has(.landing-page-root) > main {
   padding-bottom: 0;
+  height: 100svh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-frame:has(.landing-page-root) .route-transition {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* Keep the botanical edge detail atmospheric on the home scene without
