@@ -47,7 +47,6 @@ jobs:
       - name: Verify trusted intake and canonical skill
         run: |
           node --test --test-concurrency=1 scripts/test/verify-public-hook-application*.test.mjs
-          node --test skills/programmable-v4-hook-builder/scripts/test/*.test.mjs
           node skills/programmable-v4-hook-builder/scripts/verify-skill.mjs
           node skills/programmable-v4-hook-builder/scripts/verify-skill.mjs --installed
 

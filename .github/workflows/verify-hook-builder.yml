@@ -189,7 +189,7 @@ jobs:
   trusted-post-merge:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout trusted revision
@@ -225,7 +225,6 @@ jobs:
 
           npm ci --prefix scripts/test/schema-validator --ignore-scripts --no-audit --no-fund
           node --test --test-concurrency=1 scripts/test/verify-public-hook-application*.test.mjs
-          node --test skills/programmable-v4-hook-builder/scripts/test/*.test.mjs
           node skills/programmable-v4-hook-builder/scripts/verify-skill.mjs
           node skills/programmable-v4-hook-builder/scripts/verify-skill.mjs --installed
 

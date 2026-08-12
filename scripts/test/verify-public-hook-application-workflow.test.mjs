@@ -242,10 +242,24 @@ test("builder maintenance runs only in normal read-only CI with closed offline c
   assert.doesNotMatch(normalMaintenanceJob, /ANTHROPIC_API_KEY|--require-provider|github\.token/u);
 });
 
+test("maintained skill tests run once through the bounded canonical verifier", () => {
+  for (const job of [normalMaintenanceJob, postMergeJob]) {
+    assert.equal(
+      (job.match(/^\s*node skills\/programmable-v4-hook-builder\/scripts\/verify-skill\.mjs$/gmu) ?? []).length,
+      1
+    );
+    assert.equal(
+      (job.match(/^\s*node skills\/programmable-v4-hook-builder\/scripts\/verify-skill\.mjs --installed$/gmu) ?? []).length,
+      1
+    );
+    assert.doesNotMatch(job, /node --test skills\/programmable-v4-hook-builder\/scripts\/test\/\*\.test\.mjs/u);
+  }
+});
+
 test("workflow bounds job lifetime and cancels superseded pull-request work", () => {
   assert.match(workflow, /concurrency:[\s\S]*?cancel-in-progress: true/u);
   assert.match(publicJob, /timeout-minutes: 10/u);
-  assert.match(postMergeJob, /timeout-minutes: 15/u);
+  assert.match(postMergeJob, /timeout-minutes: 20/u);
 });
 
 test("post-merge validation does not impose a repository-global application cap", () => {
