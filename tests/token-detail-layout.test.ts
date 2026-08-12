@@ -139,8 +139,13 @@ describe("token detail layout", () => {
   });
 
   it("uses only typed chart FDV while labeling total-supply value as FDV", () => {
-    expect(detailSource).toContain(': "FDV",');
+    expect(detailSource).toContain(
+      'const currentLabel = isMarketCap ? "Market cap" : "FDV";',
+    );
     expect(detailSource).toContain('valuation.metric === "market-cap"');
+    expect(detailSource).toContain(
+      'valuation.supplyBasis === "circulating"',
+    );
     expect(detailSource).not.toContain("fdvEthWei={");
     expect(detailSource).not.toContain("fdvUsdWad={");
     expect(chartSource).not.toContain("payload.marketCap");
