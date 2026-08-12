@@ -1,5 +1,8 @@
 import { CustomLaunchWebsiteRequestErrorV2 } from "./client-v2";
 import {
+  isApplicantRefreshUserUnavailableErrorV1,
+} from "./applicant-refresh-user-gate-v1";
+import {
   customApplicationIntakeIsLaunchableV2,
   type CustomLaunchWebsiteSessionV2,
   type PrincipalCustomLaunchApplicationSummaryV2,
@@ -309,7 +312,14 @@ export async function acquireCurrentCustomLaunchWebsiteSessionV2(input: Readonly
       githubLogin: input.expectedGithubLogin,
       launchWallet: expectedWalletAccount as `0x${string}`,
     });
-  } catch {
+  } catch (error) {
+    if (isApplicantRefreshUserUnavailableErrorV1(error)) {
+      throw new CustomLaunchWebsiteRequestErrorV2(
+        error.status,
+        error.code,
+        error.message,
+      );
+    }
     refreshed = null;
   }
   assertCurrentApplicantBoundaryV2(input.isCurrent);

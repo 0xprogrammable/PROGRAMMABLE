@@ -158,10 +158,10 @@ describe("unreleased launch model gating", () => {
     ).toEqual([-1, -1, 0, -1, -1, -1]);
   });
 
-  it("opens the approved Custom Hook launcher without the legacy Custom card", () => {
+  it("opens the generic Custom Hook launcher only behind the public readiness gate", () => {
     const html = renderToStaticMarkup(
       createElement(LaunchModelPicker, {
-        manualApplicantLaunchEnabled: true,
+        customLaunchPublicEnabled: true,
         onChoose: () => undefined,
       }),
     );
@@ -177,17 +177,19 @@ describe("unreleased launch model gating", () => {
     expect(html).toContain(
       'id="launch-model-classic-title">Classic</strong>',
     );
-    expect(html).toContain('data-launch-model-option="manual-applicant"');
+    expect(html).toContain('data-launch-model-option="custom"');
     const customCard = html.match(
-      /<button[^>]*data-launch-model-option="manual-applicant"[^>]*>/,
+      /<button[^>]*data-launch-model-option="custom"[^>]*>/,
     )?.[0];
     expect(customCard).toContain('data-launch-model-launchable="true"');
     expect(html).toContain(
-      'id="launch-model-manual-applicant-title">Custom Hook</strong>',
+      'id="launch-model-custom-title">Custom Hook</strong>',
     );
     expect(html).toContain("Create a Classic coin");
-    expect(html).toContain("Open Custom Hook launch");
-    expect(html).not.toContain('data-launch-model-option="custom"');
+    expect(html).toContain("Open approved Custom Hook launch");
+    expect(html).toContain('data-status="available">Available</small>');
+    expect(html).not.toContain('data-launch-model-option="manual-applicant"');
+    expect(html).not.toContain(">Ready</small>");
     expect(html).not.toContain("Build or resume");
     expect(html).not.toContain("Coming soon");
     expect(html).toContain('data-launch-model-option="aeon"');
@@ -242,7 +244,9 @@ describe("unreleased launch model gating", () => {
       }),
     );
     expect(html).not.toContain('data-launch-model-option="custom"');
+    expect(html).not.toContain('data-launch-model-option="manual-applicant"');
     expect(html).not.toContain('id="launch-model-custom-title"');
+    expect(html).not.toContain('id="launch-model-manual-applicant-title"');
     expect(html).not.toContain("Coming soon");
     expect(html).not.toContain("Build or resume");
   });
