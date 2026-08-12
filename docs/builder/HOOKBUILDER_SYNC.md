@@ -7,8 +7,8 @@ The canonical `programmable-v4-hook-builder` package in this repository is synch
 | --- | --- |
 | source repository | `https://github.com/0xprogrammable/hookbuilder` |
 | source ref | `codex/hookbuilder-latest-main-20260812` (candidate for `main`) |
-| source commit | `3548e942161a5439666fc8b3870320644124926e` |
-| source commit tree | `c32ae2ce994b49fe6ce22db3e33ab50a1ee077b9` |
+| source commit | `e44538ca554530485cb7ac46677c42599b21887b` |
+| source commit tree | `7d135cb8279e542615c227b1a24e992f3424b2b2` |
 | package version | `0.5.1` (development scope) |
 | canonical skill files | `640` |
 | generated skill tree digest | `dbeda5fad8a32e0c6dea24b0d5e00266c0d58b7ef155c9f8ff244e2c60b16ac8` |

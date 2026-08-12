@@ -5,7 +5,7 @@ package follows the open [Agent Skills specification](https://agentskills.io/spe
 load the same instructions, references, templates, and validation tools without separate prompts for each product.
 
 The canonical package is synchronized with the Hookbuilder `0.5.1` development candidate at commit
-`3548e942161a5439666fc8b3870320644124926e`, based on public `main`. The stable Hookbuilder `v0.4.3` release remains
+`e44538ca554530485cb7ac46677c42599b21887b`, based on public `main`. The stable Hookbuilder `v0.4.3` release remains
 available for historical reproduction; it is not the newest model.
 
 ## Available skill
