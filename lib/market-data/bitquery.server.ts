@@ -503,6 +503,7 @@ async function readMarketBatch(
     options,
   );
   const evm = record(response.data.EVM);
+  const trading = record(response.data.Trading);
   if (evm === null) throw new BitqueryMarketDataError("response");
   const tradesByPool = indexUniqueRows(array(evm.latestTrades), tradeRowPoolId);
   const parsedTrades = identities.map((identity) => {
@@ -556,23 +557,27 @@ async function readMarketBatch(
       return poolId && address ? marketStatsKey(poolId, address) : null;
     },
   );
+  const suppliesByAddress = new Map<string, unknown>();
+  for (const row of array(trading?.tokenSupplies)) {
+    const address = canonicalAddress(record(row)?.Token &&
+      record(record(row)?.Token)?.Address);
+    if (address !== null && !suppliesByAddress.has(address)) {
+      suppliesByAddress.set(address, row);
+    }
+  }
   const indexedPricesByIndex = new Map<number, TokenPriceObservation | null>();
-  const priceLookupWasPartial = priceResult.status !== "fulfilled" ||
-    priceResult.value.partial;
-  const missingIndexedPrices = priceLookupWasPartial
-    ? parsedTrades.flatMap(({ trade }, index) => {
-        if (!trade) return [];
-        const observation = parseNativeQuotePriceObservation(
-          array(priceTrading?.[`price${index}`])[0],
-          trade,
-        );
-        if (observation !== null) {
-          indexedPricesByIndex.set(index, observation);
-          return [];
-        }
-        return [{ index, trade }];
-      }).slice(0, MAXIMUM_INDEXED_PRICE_RECOVERIES_PER_BATCH)
-    : [];
+  const missingIndexedPrices = parsedTrades.flatMap(({ trade }, index) => {
+    if (!trade || trade.priceUsdWad !== undefined) return [];
+    const observation = parseNativeQuotePriceObservation(
+      array(priceTrading?.[`price${index}`])[0],
+      trade,
+    );
+    if (observation !== null) {
+      indexedPricesByIndex.set(index, observation);
+      return [];
+    }
+    return [{ index, trade }];
+  }).slice(0, MAXIMUM_INDEXED_PRICE_RECOVERIES_PER_BATCH);
   await mapWithConcurrency(
     missingIndexedPrices,
     INDEXED_PRICE_RECOVERY_CONCURRENCY,
@@ -626,7 +631,7 @@ async function readMarketBatch(
       stats: parseStats(statsByMarket.get(
         marketStatsKey(identity.poolId, identity.tokenAddress),
       )),
-      supply: null,
+      supply: parseSupply(suppliesByAddress.get(identity.tokenAddress), identity),
     };
   });
 
@@ -848,10 +853,14 @@ function marketStatsKey(
 
 function marketBatchQuery(identities: readonly MarketDataIdentityV1[]) {
   const pools = identities.map(({ poolId }) => poolId);
+  const tokenAddresses = identities.map(({ tokenAddress }) => tokenAddress);
   const rowLimit = Math.max(1, identities.length);
 
   return {
-    query: `query ProgrammableMarketSnapshot($pools: [String!]!) {
+    query: `query ProgrammableMarketSnapshot(
+      $pools: [String!]!
+      $tokenAddresses: [String!]!
+    ) {
       EVM(network: eth, dataset: combined) {
         latestTrades: DEXTrades(
           limit: { count: ${rowLimit} }
@@ -870,8 +879,16 @@ function marketBatchQuery(identities: readonly MarketDataIdentityV1[]) {
           }
         ) { ${tradeSelection()} }
       }
+      Trading {
+        tokenSupplies: Tokens(
+          limit: { count: ${rowLimit} }
+          limitBy: { by: Token_Address, count: 1 }
+          orderBy: { descending: Block_Time }
+          where: { Token: { Address: { in: $tokenAddresses } } }
+        ) { ${supplySelection()} }
+      }
     }`,
-    variables: { pools },
+    variables: { pools, tokenAddresses },
   };
 }
 
