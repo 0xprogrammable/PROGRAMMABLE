@@ -151,6 +151,24 @@ describe("manual Applicant Privy hydration", () => {
     expect(component).toContain("NESTED_FACTORY_ACTIVATION === null\n      || !authReady");
     expect(component).toContain("authReady,\n    authenticated,\n    githubConnected,\n    loadDirectory");
   });
+  it("keeps selection changes out of the discovery effect dependency", () => {
+    const component = readFileSync(
+      join(process.cwd(), "components/manual-applicant-launch.tsx"),
+      "utf8",
+    );
+    const loadStart = component.indexOf(
+      "const loadDirectory = useCallback(async",
+    );
+    const loadEnd = component.indexOf("\n  useEffect(() => {", loadStart);
+    const loadSource = component.slice(loadStart, loadEnd);
+
+    expect(loadSource).toContain("selectedSubjectHashRef.current");
+    expect(loadSource.match(/runManualRouterRequestWithFreshSessionV1/gu))
+      .toHaveLength(2);
+    expect(loadSource).not.toContain(
+      "selectedSubjectHash,\n",
+    );
+  });
 
   it("requires one refreshed Applicant session and never retries a request", async () => {
     const refreshApplicantSession = vi.fn(async () => ({
