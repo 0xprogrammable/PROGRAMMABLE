@@ -83,8 +83,10 @@ condition = "AND"
 regexTarget = "match"
 paths = [
   '''scripts/perf/bitquery-golden-market-parity\.mjs''',
+  '''scripts/perf/bitquery-historical-release-gate\.mjs''',
   '''scripts/perf/read-model-post-promotion\.mjs''',
   '''tests/bitquery-market-data\.test\.ts''',
+  '''tests/data-pipeline/bitquery-historical-release-gate\.test\.ts''',
   '''tests/data-pipeline/read-model-ops-contract\.test\.ts''',
 ]
 regexes = ['''(?i)0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce''']
