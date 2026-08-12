@@ -1,0 +1,1692 @@
+{
+  "schemaVersion": "programmable.exact-shards-security-properties.v2",
+  "descriptorId": "programmable.exact-shards.security-properties.v2",
+  "status": "SECURITY_PROPERTIES_RELEASE_GATE_PASSED",
+  "activationAllowed": false,
+  "launchAllowed": false,
+  "externalActionOccurred": false,
+  "assurance": {
+    "externalAuditClaim": false,
+    "externalAuditReport": null,
+    "selfVerifiedMachineProperties": true,
+    "slitherGatePassed": true,
+    "releaseReady": true
+  },
+  "reviewedInput": {
+    "path": "contracts/spec/shards-security-properties-input-v2.json",
+    "rawBytesSha256": "0x75a9549d28080f0c49e0b0899b3e0fee610cb41fc2cdc5ba17f8379b47d4f16a",
+    "canonicalJsonSha256": "0xf23fca65941e4261505c7ec3c9df9d598a4126e7063e7588cf93cc15411ed825"
+  },
+  "baseManifestBindings": {
+    "fee": {
+      "path": "contracts/spec/shards-fee-policy-verifier-v2.json",
+      "schemaVersion": "programmable.exact-shards-fee-policy-verifier.v2",
+      "rawBytesSha256": "0xfac8f79d7e8b803d728668cdf04f5ef3fcae5da786fe212128f0aa0311ccbec6",
+      "canonicalJsonSha256": "0xb53d28624828135379eaaa638a25df60af555f04f57dd1908734b19ca5a2c89b",
+      "contentCommitment": {
+        "canonicalization": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+        "sha256": "0xe577882bbfdbeec47ef0471569e7f8b5835575d3c9153b01bf5fbf674a5d0d7e"
+      },
+      "activationAllowed": false
+    },
+    "registry": {
+      "path": "contracts/spec/shards-registry-successor-v2.json",
+      "schemaVersion": "programmable.exact-shards-registry-successor.v2",
+      "rawBytesSha256": "0xfde63ed956d7f7c88257205755b38a39ea7ec5360f7c402c9f94a2156f139795",
+      "canonicalJsonSha256": "0xab699e0daf57757ac881166e4754bb68bdfc18bf7aa1a09dd8d2dfe5a74534ea",
+      "contentCommitment": {
+        "canonicalization": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+        "sha256": "0xe9441d641e67d95976239cbf768e1637f7e75134e44641bdcb9271745748a5aa"
+      },
+      "activationAllowed": false
+    },
+    "route": {
+      "path": "contracts/spec/shards-atomic-launch-route-v2.json",
+      "schemaVersion": "programmable.exact-shards-atomic-launch-route.v2",
+      "rawBytesSha256": "0xb33b3e84966fa341ea3646983d619d8fd06dec47a7ffe25f40be96e94cf9c35a",
+      "canonicalJsonSha256": "0x2083e2bea14f8fa445d27e74fd38872ae7cf596455dc833830bd8b090c79d2aa",
+      "contentCommitment": {
+        "canonicalization": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+        "sha256": "0xcee4b90f10e5cdd86fd2bf6fb5fbd729d9596d3f119441da94ad9d16c93f3337"
+      },
+      "activationAllowed": false
+    }
+  },
+  "externalGitObjectResolutions": {
+    "repository": "https://github.com/0xprogrammable/programmable.git",
+    "recordedBy": "independent-public-identity-lane",
+    "crossCheckedAgainstGolden": "contracts/spec/exact-shards-public-identity-golden.json",
+    "goldenRawBytesSha256": "0x5961ebdca79a17fc3443e75b2352941b1a359c363b4eabc37c8cd8284cb3bf16",
+    "goldenCanonicalJsonSha256": "0xb7026edf8ca39176674c64fe59a494bf6aca65781f5c905985591b6e64f5088d",
+    "commit": {
+      "oidSha1": "e59bce4fabe43369ebc5a0ef9718fdd73b747c81",
+      "objectType": "commit"
+    },
+    "tree": {
+      "oidSha1": "fec89669b681b1f26789583e65c754a88797d6b7",
+      "objectType": "tree"
+    },
+    "blobs": [
+      {
+        "label": "sourceModule",
+        "path": "services/autonomous-approval-v1/src/adapters/custom-launch-public-identity-v2.ts",
+        "oidSha1": "f6ebcd5de53115c573e5ebc3137d621d5b49987f",
+        "objectType": "blob"
+      },
+      {
+        "label": "canonicalHashModule",
+        "path": "services/autonomous-approval-v1/src/domain/hashing.ts",
+        "oidSha1": "292e01e357a6f27500cf51eba17cf873026de213",
+        "objectType": "blob"
+      },
+      {
+        "label": "canonicalJsonModule",
+        "path": "services/autonomous-approval-v1/src/domain/canonical-json.ts",
+        "oidSha1": "464f15cb080b36ddf3e1ed8687e55d53e404973d",
+        "objectType": "blob"
+      },
+      {
+        "label": "identityValidatorModule",
+        "path": "services/autonomous-approval-v1/src/rpc/finalized-launch-verifier.ts",
+        "oidSha1": "700fb4e4596351db964e07df659d7da186b9ca38",
+        "objectType": "blob"
+      },
+      {
+        "label": "projectionFixtureModule",
+        "path": "services/autonomous-approval-v1/test/adapters/custom-launch-public-identity-v2.test.ts",
+        "oidSha1": "6b1a5fd84d68d914a2801185ea32c1cdbc4fdd24",
+        "objectType": "blob"
+      }
+    ],
+    "finalSourceRevisionRegenerationRequired": false,
+    "liveRemoteResolutionPerformedByThisGenerator": false
+  },
+  "compiler": {
+    "version": "0.8.26+commit.8a97fa7a",
+    "evmVersion": "cancun",
+    "optimizerEnabled": true,
+    "optimizerRuns": 1000,
+    "viaIR": false,
+    "bytecodeHash": "none",
+    "appendCBOR": false
+  },
+  "threatModel": {
+    "protectedAssets": [
+      "one successful launch graph per GitHub repository lineage",
+      "permit, release, route, configuration, wallet and execution bindings",
+      "exact CREATE2 token, hook and NFT graph and its runtime identities",
+      "permanently locked v4 liquidity and canonical pool identity",
+      "ETH fee custody and conservative builder, Programmable and holder accounting",
+      "append-only registry identity, revision-one record and terminal revocation state",
+      "canonical-block finality evidence and public Website-to-registry identity mapping"
+    ],
+    "adversaries": [
+      "arbitrary EOA or contract without an assigned authority role",
+      "applicant attempting post-approval metadata, wallet, salt, calldata or runtime substitution",
+      "permit replay across repository, chain, authority, signer epoch, release or route",
+      "direct caller of the reviewed factory implementation or wrapper fallback",
+      "front-runner attempting foreign-pool or wrong-price initialization",
+      "swapper attempting fee bypass, partial-fill overcharge, oversized swap or negative-delta accounting",
+      "reentrant recipient or callback during permit consumption, atomic launch or fee payout",
+      "operational role holder attempting authority-class collapse or evidence reuse",
+      "finalizer supplying stale, noncanonical, shallow or replayed block evidence"
+    ],
+    "trustedAssumptions": [
+      "the exact compiler settings, source closure and normalized artifacts bound by this descriptor are reproduced",
+      "the pinned PoolManager and renderer runtime code hashes identify the reviewed dependencies",
+      "the EIP-712 signer key and separated governance keys remain uncompromised within their documented powers",
+      "the chain implements Cancun EIP-1153 semantics required by ReentrancyGuardTransient",
+      "the GitHub technical approval and just-in-time Website intent evidence are produced by their documented offchain authorities",
+      "the native blockhash window is used before historical hashes become unavailable"
+    ],
+    "outOfScope": [
+      "consensus failure, validator censorship and canonical-chain failure",
+      "market price, liquidity demand, MEV and economic profitability",
+      "Website hosting availability and wallet user-interface compromise",
+      "loss or malicious use of a governance key within that role's explicit authority",
+      "security of any source, artifact, dependency runtime or deployment not exactly bound by this descriptor"
+    ]
+  },
+  "accessControlMatrix": [
+    {
+      "id": "permit-default-admin",
+      "component": "permitAuthority",
+      "authorityClass": "DEFAULT_ADMIN",
+      "power": "delayed role administration only",
+      "forbiddenWith": [
+        "SIGNER_GOVERNOR",
+        "RELEASE_GOVERNOR",
+        "PAUSER",
+        "CANCELLER",
+        "CONSUMER",
+        "SIGNER"
+      ]
+    },
+    {
+      "id": "permit-signer-governor",
+      "component": "permitAuthority",
+      "authorityClass": "SIGNER_GOVERNOR",
+      "power": "rotate to a fresh EOA signer epoch",
+      "forbiddenWith": [
+        "DEFAULT_ADMIN",
+        "RELEASE_GOVERNOR",
+        "PAUSER",
+        "CANCELLER",
+        "CONSUMER",
+        "SIGNER"
+      ]
+    },
+    {
+      "id": "permit-release-governor",
+      "component": "permitAuthority",
+      "authorityClass": "RELEASE_GOVERNOR",
+      "power": "activate, schedule retirement, deactivate releases and unpause",
+      "forbiddenWith": [
+        "DEFAULT_ADMIN",
+        "SIGNER_GOVERNOR",
+        "PAUSER",
+        "CANCELLER",
+        "CONSUMER",
+        "SIGNER"
+      ]
+    },
+    {
+      "id": "permit-pauser",
+      "component": "permitAuthority",
+      "authorityClass": "PAUSER",
+      "power": "pause new permit consumption",
+      "forbiddenWith": [
+        "DEFAULT_ADMIN",
+        "SIGNER_GOVERNOR",
+        "RELEASE_GOVERNOR",
+        "CANCELLER",
+        "CONSUMER",
+        "SIGNER"
+      ]
+    },
+    {
+      "id": "permit-canceller",
+      "component": "permitAuthority",
+      "authorityClass": "CANCELLER",
+      "power": "cancel permits or approval generations and disable signer epochs",
+      "forbiddenWith": [
+        "DEFAULT_ADMIN",
+        "SIGNER_GOVERNOR",
+        "RELEASE_GOVERNOR",
+        "PAUSER",
+        "CONSUMER",
+        "SIGNER"
+      ]
+    },
+    {
+      "id": "permit-consumer",
+      "component": "permitAuthority",
+      "authorityClass": "CONSUMER",
+      "power": "consume a valid one-use permit from an authorized contract route",
+      "forbiddenWith": [
+        "DEFAULT_ADMIN",
+        "SIGNER_GOVERNOR",
+        "RELEASE_GOVERNOR",
+        "PAUSER",
+        "CANCELLER",
+        "SIGNER"
+      ]
+    },
+    {
+      "id": "permit-signer",
+      "component": "permitAuthority",
+      "authorityClass": "SIGNER",
+      "power": "sign the exact current-epoch EIP-712 permit only",
+      "forbiddenWith": [
+        "DEFAULT_ADMIN",
+        "SIGNER_GOVERNOR",
+        "RELEASE_GOVERNOR",
+        "PAUSER",
+        "CANCELLER",
+        "CONSUMER"
+      ]
+    },
+    {
+      "id": "registry-default-admin",
+      "component": "registry",
+      "authorityClass": "DEFAULT_ADMIN",
+      "power": "delayed role administration subject to permanent role-lineage separation",
+      "forbiddenWith": [
+        "TECHNICAL_APPROVER",
+        "LAUNCH_INTENT_APPROVER",
+        "WRITER",
+        "FINALIZER",
+        "REVOKER"
+      ]
+    },
+    {
+      "id": "registry-technical-approver",
+      "component": "registry",
+      "authorityClass": "TECHNICAL_APPROVER",
+      "power": "authorize the durable source, technical configuration, economics and finality policy",
+      "forbiddenWith": [
+        "DEFAULT_ADMIN",
+        "LAUNCH_INTENT_APPROVER",
+        "WRITER",
+        "FINALIZER",
+        "REVOKER"
+      ]
+    },
+    {
+      "id": "registry-launch-intent-approver",
+      "component": "registry",
+      "authorityClass": "LAUNCH_INTENT_APPROVER",
+      "power": "authorize a short-lived exact registration binding for Website-selected launch data",
+      "forbiddenWith": [
+        "DEFAULT_ADMIN",
+        "TECHNICAL_APPROVER",
+        "WRITER",
+        "FINALIZER",
+        "REVOKER"
+      ]
+    },
+    {
+      "id": "registry-writer",
+      "component": "registry",
+      "authorityClass": "WRITER",
+      "power": "the immutable atomic route alone may register the postcondition-checked graph",
+      "forbiddenWith": [
+        "DEFAULT_ADMIN",
+        "TECHNICAL_APPROVER",
+        "LAUNCH_INTENT_APPROVER",
+        "FINALIZER",
+        "REVOKER"
+      ]
+    },
+    {
+      "id": "registry-finalizer",
+      "component": "registry",
+      "authorityClass": "FINALIZER",
+      "power": "finalize an observed launch with canonical depth and blockhash evidence",
+      "forbiddenWith": [
+        "DEFAULT_ADMIN",
+        "TECHNICAL_APPROVER",
+        "LAUNCH_INTENT_APPROVER",
+        "WRITER",
+        "REVOKER"
+      ]
+    },
+    {
+      "id": "registry-revoker",
+      "component": "registry",
+      "authorityClass": "REVOKER",
+      "power": "terminally revoke an observed or finalized record with one-use evidence",
+      "forbiddenWith": [
+        "DEFAULT_ADMIN",
+        "TECHNICAL_APPROVER",
+        "LAUNCH_INTENT_APPROVER",
+        "WRITER",
+        "FINALIZER"
+      ]
+    },
+    {
+      "id": "factory-authorized-route",
+      "component": "routeGatedFactory",
+      "authorityClass": "IMMUTABLE_ROUTE",
+      "power": "invoke the sole supported launch selector through the reviewed delegatecall implementation",
+      "forbiddenWith": []
+    },
+    {
+      "id": "launch-wallet",
+      "component": "atomicLaunchRoute",
+      "authorityClass": "BOUND_APPLICANT_WALLET",
+      "power": "submit only its own fully bound launch transaction",
+      "forbiddenWith": []
+    }
+  ],
+  "componentBinding": {
+    "canonicalSha256": "0x097e5d7e5e490a16febe309c7c057aa3be48d61cbd037c1e651ee3cf80191a91",
+    "sourceAbiArtifactHashReferencesPresent": true,
+    "rawForgeArtifactShaIsBinding": false,
+    "components": [
+      {
+        "id": "permitVerifier",
+        "contract": "ProgrammableLaunchPermitVerifierV1",
+        "source": {
+          "path": "contracts/src/ProgrammableLaunchPermitVerifierV1.sol",
+          "sha256": "0x240f369621917dcf99793d0c45023b8da45124790f826b331217d7b979c61201",
+          "keccak256": "0x4351b9eaa6937a32c6736a97508c9313ad80d507045a6af91b07c7e70e5c37e7"
+        },
+        "artifact": {
+          "path": "contracts/out/ProgrammableLaunchPermitVerifierV1.sol/ProgrammableLaunchPermitVerifierV1.json",
+          "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+          "canonicalAbiSha256": "0x417bada87c742b2a1bde7a735db7fe31e415da1266d7c57262bbce89c7dfd94a",
+          "normalizedArtifactSha256": "0x89806422babdba99c08ba743427e3d7ef51d681ba8098377c217e03746d44be4",
+          "rawForgeArtifactIsBinding": false,
+          "sourceClosureSha256": "0x9cdb12a82d1969a4e9827c138e61e5d9ab6d4ef722e7707d653dcad306d1e62b",
+          "sourceClosureFileCount": 11,
+          "creationTemplateByteLength": 12622,
+          "creationTemplateKeccak256": "0x202cbe6382c630a08e7ac10c01b818dfd03e13ead6f0e9e32333935a40da7afb",
+          "constructorEncodingByteLength": 0,
+          "eip3860LengthFixtureInitcodeByteLength": 12622,
+          "constructorEncodingFixtureIsDeploymentInput": false,
+          "initcodeLimitMarginBytes": 36530,
+          "runtimeTemplateByteLength": 12594,
+          "runtimeTemplateKeccak256": "0xe5a8bfe3a5cae5ce28e1a9424a09051f850a1d6ef79a5a1519c475636228a4a4",
+          "runtimeCodeLimitMarginBytes": 11982,
+          "runtimeTemplateContainsImmutables": false
+        },
+        "deployment": {
+          "address": null,
+          "transactionHash": null,
+          "blockNumber": null,
+          "activation": false
+        }
+      },
+      {
+        "id": "permitAuthority",
+        "contract": "ProgrammableLaunchPermitAuthorityV1",
+        "source": {
+          "path": "contracts/src/ProgrammableLaunchPermitAuthorityV1.sol",
+          "sha256": "0xd64e40876c1727849f19527ea4f0718e34f30f93ac103b67fe6bac677b1fd3d1",
+          "keccak256": "0x4469b69482ff24d631eddacb9b33789159047276f24734c5d332567050bf52de"
+        },
+        "artifact": {
+          "path": "contracts/out/ProgrammableLaunchPermitAuthorityV1.sol/ProgrammableLaunchPermitAuthorityV1.json",
+          "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+          "canonicalAbiSha256": "0xa5486b4b955e7a8dd05177e65f23f75ef369a3c4f35f9ea9bdda200ac40510f8",
+          "normalizedArtifactSha256": "0xe68f137bf60786b726bbbc84c5cc68e73206271ace98b44b1a34c92a4d11d242",
+          "rawForgeArtifactIsBinding": false,
+          "sourceClosureSha256": "0xf4e3f8c3135aec51ed0a76eb0cdf8f1f114e1092d3c8d1407f52f35f77d51ee1",
+          "sourceClosureFileCount": 16,
+          "creationTemplateByteLength": 26899,
+          "creationTemplateKeccak256": "0xa093a6de17364c5655876dc00e2e4dc92243f3d2250ba34422df21731bbeaf6c",
+          "constructorEncodingByteLength": 320,
+          "eip3860LengthFixtureInitcodeByteLength": 27219,
+          "constructorEncodingFixtureIsDeploymentInput": false,
+          "initcodeLimitMarginBytes": 21933,
+          "runtimeTemplateByteLength": 23047,
+          "runtimeTemplateKeccak256": "0x89d9d2bdc459c202bf975f8dafb8a49753b31b05046a41eb4e7f0dabfa521cb7",
+          "runtimeCodeLimitMarginBytes": 1529,
+          "runtimeTemplateContainsImmutables": true
+        },
+        "deployment": {
+          "address": null,
+          "transactionHash": null,
+          "blockNumber": null,
+          "activation": false
+        }
+      },
+      {
+        "id": "feePolicyVerifier",
+        "contract": "ProgrammableExactShardsFeePolicyVerifierV2",
+        "source": {
+          "path": "contracts/src/ProgrammableExactShardsFeePolicyVerifierV2.sol",
+          "sha256": "0xe612287816b92d7beae1f4c80107469db27a076f81cec1d266f5493734e252e2",
+          "keccak256": "0xdbc5882504e6467b1d5eb5ad6012cef7715c28ab9f7737c7e110ef1ee6f67834"
+        },
+        "artifact": {
+          "path": "contracts/out/ProgrammableExactShardsFeePolicyVerifierV2.sol/ProgrammableExactShardsFeePolicyVerifierV2.json",
+          "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+          "canonicalAbiSha256": "0x2958741a9dd8a65fa94b9c40e7b7f4e2e51c312486d57ebc0bc650dffeafc57f",
+          "normalizedArtifactSha256": "0xf54ee74a0d11db2c3be986ebee0fd2b012eeace3dab937313e6e6ff95e219300",
+          "rawForgeArtifactIsBinding": false,
+          "sourceClosureSha256": "0x147094c1a32d42d1c264c3644318b36dce529a978f4cc2403fdb376fa5ec1d6c",
+          "sourceClosureFileCount": 3,
+          "creationTemplateByteLength": 4675,
+          "creationTemplateKeccak256": "0x6538ad322ad1b9af3f6196fba080c6896a79b2a0f2f16e7e6e1ef40cb2f5196c",
+          "constructorEncodingByteLength": 0,
+          "eip3860LengthFixtureInitcodeByteLength": 4675,
+          "constructorEncodingFixtureIsDeploymentInput": false,
+          "initcodeLimitMarginBytes": 44477,
+          "runtimeTemplateByteLength": 4647,
+          "runtimeTemplateKeccak256": "0xa07652baf4a500d08456f193c6117fde69eb0c04ed21116555ec289abdc3c5ac",
+          "runtimeCodeLimitMarginBytes": 19929,
+          "runtimeTemplateContainsImmutables": false
+        },
+        "deployment": {
+          "address": null,
+          "transactionHash": null,
+          "blockNumber": null,
+          "activation": false
+        }
+      },
+      {
+        "id": "registry",
+        "contract": "ProgrammableExactShardsRegistryV1",
+        "source": {
+          "path": "contracts/src/ProgrammableExactShardsRegistryV1.sol",
+          "sha256": "0xe172d3ef56fd15d586f7f3cd173b8c8c12d8cf5687e4d6a1517b8932a657919a",
+          "keccak256": "0x7448fd549bb8063d099e42cea39975a4357948994df27fc1d3ebdce8f7624738"
+        },
+        "artifact": {
+          "path": "contracts/out/ProgrammableExactShardsRegistryV1.sol/ProgrammableExactShardsRegistryV1.json",
+          "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+          "canonicalAbiSha256": "0xd27a3881d5cf874c71a23c833a2ec0cd6f892491b6575973a53a07a0d5d72a0c",
+          "normalizedArtifactSha256": "0xb355b1236b11f820026f74a1c008b572f6684c1134c2aaebd0aee5d8ce3dbac2",
+          "rawForgeArtifactIsBinding": false,
+          "sourceClosureSha256": "0x011f6e94c278eb2a12d4c61aca5e7b9444a9b20d08ab38cf75f4d8af7f1ab437",
+          "sourceClosureFileCount": 18,
+          "creationTemplateByteLength": 26862,
+          "creationTemplateKeccak256": "0xe43983bf70f32d3814a7388fbeebe4b2f036639f7eb0e05ce16f87b8d85b8217",
+          "constructorEncodingByteLength": 416,
+          "eip3860LengthFixtureInitcodeByteLength": 27278,
+          "constructorEncodingFixtureIsDeploymentInput": false,
+          "initcodeLimitMarginBytes": 21874,
+          "runtimeTemplateByteLength": 23471,
+          "runtimeTemplateKeccak256": "0x7c31b0c52f59b716a1a7cfd1cde93e739697e7d9b8f25e863cc16d9b5c4aa83c",
+          "runtimeCodeLimitMarginBytes": 1105,
+          "runtimeTemplateContainsImmutables": true
+        },
+        "deployment": {
+          "address": null,
+          "transactionHash": null,
+          "blockNumber": null,
+          "activation": false
+        }
+      },
+      {
+        "id": "poolManager",
+        "contract": "PoolManager",
+        "source": {
+          "path": "contracts/lib/v4-core/src/PoolManager.sol",
+          "sha256": "0x3b6ab111dadf613e3cfd617e4b1c6ab75b5445cd15cbe52d7c6207fc02449717",
+          "keccak256": "0xf9ff5d5e261a21a5e72a01c5badd988beeff437e0f6b82fd56f80be42d727c07"
+        },
+        "artifact": {
+          "path": "contracts/out/PoolManager.sol/PoolManager.json",
+          "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+          "canonicalAbiSha256": "0xb072eae166f323623396ef08fcdc398b9a959031a644fba52e0adcea891059b4",
+          "normalizedArtifactSha256": "0x8dc30dedd9ee0b045e5e87cef576b7719463791ac474a3abb01a2949cb3bd8ac",
+          "rawForgeArtifactIsBinding": false,
+          "sourceClosureSha256": "0x5aa3530c096c0eddcdb9a271de33d7c17e8dcfb14301c276955536ee8dcca8d5",
+          "sourceClosureFileCount": 45,
+          "creationTemplateByteLength": 21951,
+          "creationTemplateKeccak256": "0x13c7a914bd5544f85796170e889d96c229d5fa179efb82fc8d783882e1cb92d5",
+          "constructorEncodingByteLength": 32,
+          "eip3860LengthFixtureInitcodeByteLength": 21983,
+          "constructorEncodingFixtureIsDeploymentInput": false,
+          "initcodeLimitMarginBytes": 27169,
+          "runtimeTemplateByteLength": 21757,
+          "runtimeTemplateKeccak256": "0x76064aa15cbfe3e4209106c21abd8ae2dbf1f1f273b42c36cc3fcbc4308c7386",
+          "runtimeCodeLimitMarginBytes": 2819,
+          "runtimeTemplateContainsImmutables": true
+        },
+        "deployment": {
+          "address": null,
+          "transactionHash": null,
+          "blockNumber": null,
+          "activation": false
+        }
+      },
+      {
+        "id": "defaultRenderer",
+        "contract": "GeometricRendererV1",
+        "source": {
+          "path": "contracts/lib/shards-v1/src/GeometricRendererV1.sol",
+          "sha256": "0x2f9549dba22296486f90f17746dd862caafe1a8b2c17854cf54788a7ce43d785",
+          "keccak256": "0xe70bcc675d62669682888072639e1df70222fd84e73932bacec8d5b8ba60196f"
+        },
+        "artifact": {
+          "path": "contracts/out/GeometricRendererV1.sol/GeometricRendererV1.json",
+          "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+          "canonicalAbiSha256": "0xa3b19f8d901f2222363c6f5dab48ff83c1b6db899fbc6e4edab301f51cf29376",
+          "normalizedArtifactSha256": "0x0ee40e11cdea7cfe75c64a95687e6011548a919cbfd43728aeaa7cf5fd3a8e99",
+          "rawForgeArtifactIsBinding": false,
+          "sourceClosureSha256": "0x3354ead8fb67bffe4f1a0ec596a03d60770bf041fa4e3096901b11774aafa9db",
+          "sourceClosureFileCount": 4,
+          "creationTemplateByteLength": 16805,
+          "creationTemplateKeccak256": "0x910d02d740c71d608b1dc3f49e26288b0f8a62abda0c7767e251d53520a6b51e",
+          "constructorEncodingByteLength": 0,
+          "eip3860LengthFixtureInitcodeByteLength": 16805,
+          "constructorEncodingFixtureIsDeploymentInput": false,
+          "initcodeLimitMarginBytes": 32347,
+          "runtimeTemplateByteLength": 16777,
+          "runtimeTemplateKeccak256": "0x9b54a61918b2ddf9b7daf41d9bf2d705cbef3a0fd618275762b99e19c53459bf",
+          "runtimeCodeLimitMarginBytes": 7799,
+          "runtimeTemplateContainsImmutables": false
+        },
+        "deployment": {
+          "address": null,
+          "transactionHash": null,
+          "blockNumber": null,
+          "activation": false
+        }
+      },
+      {
+        "id": "reviewedFactoryImplementation",
+        "contract": "ShardLaunchFactoryV1",
+        "source": {
+          "path": "contracts/lib/shards-v1/src/ShardLaunchFactoryV1.sol",
+          "sha256": "0x22f57deb2bb730b88ab6a1f948675d1cb6fbef0442e982f339e9c716e172e14f",
+          "keccak256": "0x235fafc23f0b7e093278cd2c297dbed90bf4638c651675cfde874ccc71a5afe9"
+        },
+        "artifact": {
+          "path": "contracts/out/ShardLaunchFactoryV1.sol/ShardLaunchFactoryV1.json",
+          "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+          "canonicalAbiSha256": "0x469ca96407970a7a9f262e17dd1b9fd6063e9c7c0573f5e16f812993e74b2c42",
+          "normalizedArtifactSha256": "0x29582d185f3e9c81693c4a149f94bc1c708f8802c5115d2e4c7196d6df724a46",
+          "rawForgeArtifactIsBinding": false,
+          "sourceClosureSha256": "0xde234fc6590e9c80c1378e01dddf447d8d26c501c6e41a0e00c2f7b8c6333101",
+          "sourceClosureFileCount": 69,
+          "creationTemplateByteLength": 37878,
+          "creationTemplateKeccak256": "0xc6b8a2cd51ccf198c4e6e41f668c4e4f558f81de0e677ef27373c614bf4c02f8",
+          "constructorEncodingByteLength": 64,
+          "eip3860LengthFixtureInitcodeByteLength": 37942,
+          "constructorEncodingFixtureIsDeploymentInput": false,
+          "initcodeLimitMarginBytes": 11210,
+          "runtimeTemplateByteLength": 20730,
+          "runtimeTemplateKeccak256": "0x5875d3528e57eb0a97807aa896a2e2385ebbaed0e21253255d6c79e91aabea50",
+          "runtimeCodeLimitMarginBytes": 3846,
+          "runtimeTemplateContainsImmutables": true
+        },
+        "deployment": {
+          "address": null,
+          "transactionHash": null,
+          "blockNumber": null,
+          "activation": false
+        }
+      },
+      {
+        "id": "routeGatedFactory",
+        "contract": "ProgrammableExactShardsRouteGatedFactoryV2",
+        "source": {
+          "path": "contracts/src/ProgrammableExactShardsRouteGatedFactoryV2.sol",
+          "sha256": "0x8a90452ccdf74865b040e657e66e0470fec2aaf5766e4cba61c2eb3b927414f0",
+          "keccak256": "0xf142c7b77119935bca99618fd678a0f0a8eacbecec57336b9fd136c86c394435"
+        },
+        "artifact": {
+          "path": "contracts/out/ProgrammableExactShardsRouteGatedFactoryV2.sol/ProgrammableExactShardsRouteGatedFactoryV2.json",
+          "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+          "canonicalAbiSha256": "0x7ed601f202154da5e381409446a26981c719d765ada398ea898ee7758dbad4b8",
+          "normalizedArtifactSha256": "0x259c689767f5f5661cb89941e21bcd0e06abd7979f35f2686428fb27ec4a39ef",
+          "rawForgeArtifactIsBinding": false,
+          "sourceClosureSha256": "0x5e62fc0ddaa7b5b06ea6965a184df09b648b381c400f0deebf0b7083d9473d7b",
+          "sourceClosureFileCount": 72,
+          "creationTemplateByteLength": 19466,
+          "creationTemplateKeccak256": "0xa1e7575d45796d9a440bc68b2b370db49cebe2bbb531a0eb912dec8fc4b0006e",
+          "constructorEncodingByteLength": 96,
+          "eip3860LengthFixtureInitcodeByteLength": 19562,
+          "constructorEncodingFixtureIsDeploymentInput": false,
+          "initcodeLimitMarginBytes": 29590,
+          "runtimeTemplateByteLength": 18953,
+          "runtimeTemplateKeccak256": "0xac768c0767edb21fd5bff2e64c40f2503d55d34c983b449336d0df11fac479da",
+          "runtimeCodeLimitMarginBytes": 5623,
+          "runtimeTemplateContainsImmutables": true
+        },
+        "deployment": {
+          "address": null,
+          "transactionHash": null,
+          "blockNumber": null,
+          "activation": false
+        }
+      },
+      {
+        "id": "atomicLaunchRoute",
+        "contract": "ProgrammableExactShardsAtomicLaunchRouteV1",
+        "source": {
+          "path": "contracts/src/ProgrammableExactShardsAtomicLaunchRouteV1.sol",
+          "sha256": "0x380e9bf80d61025fa79da870073e106820161aab08691287e10a4f993da1609f",
+          "keccak256": "0x1cc9b5bc64081e19f8bc0c21216c2f02d1ddaec49735153e53ee98f5c515bccc"
+        },
+        "artifact": {
+          "path": "contracts/out/ProgrammableExactShardsAtomicLaunchRouteV1.sol/ProgrammableExactShardsAtomicLaunchRouteV1.json",
+          "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+          "canonicalAbiSha256": "0x187467d3256e138fba87f892f562976e86e6942fe56d943c99b17337b32dc1d7",
+          "normalizedArtifactSha256": "0xfce707ae273c1e2ba269c3a9a4ab0377854d36c75a0185874e1e90a0aba1be2d",
+          "rawForgeArtifactIsBinding": false,
+          "sourceClosureSha256": "0x4d4030bed181a58c19de3887c5c104dd7d204b9ae27969bec15ce514044a6afe",
+          "sourceClosureFileCount": 75,
+          "creationTemplateByteLength": 24715,
+          "creationTemplateKeccak256": "0xce8ef04719656263a2b27e7330d149dfaed63e29d2e26115e9ac52c6d354a86d",
+          "constructorEncodingByteLength": 128,
+          "eip3860LengthFixtureInitcodeByteLength": 24843,
+          "constructorEncodingFixtureIsDeploymentInput": false,
+          "initcodeLimitMarginBytes": 24309,
+          "runtimeTemplateByteLength": 22423,
+          "runtimeTemplateKeccak256": "0xf59687e15e5699074f9864ff667dee32f475b2f030e5b77571fb43f7c434a0e7",
+          "runtimeCodeLimitMarginBytes": 2153,
+          "runtimeTemplateContainsImmutables": true
+        },
+        "deployment": {
+          "address": null,
+          "transactionHash": null,
+          "blockNumber": null,
+          "activation": false
+        }
+      },
+      {
+        "id": "pairDeploymentCoordinator",
+        "contract": "ProgrammableExactShardsPairDeploymentCoordinatorV1",
+        "source": {
+          "path": "contracts/src/ProgrammableExactShardsPairDeploymentCoordinatorV1.sol",
+          "sha256": "0x9e54cdc99cd7c48828905ba0e65d989d6558de2a7efdbe8116d67fd87acd7958",
+          "keccak256": "0x427db7f4c49439a7566e2706764d62f9bbf4266c71dae3960fed948baabdae76"
+        },
+        "artifact": {
+          "path": "contracts/out/ProgrammableExactShardsPairDeploymentCoordinatorV1.sol/ProgrammableExactShardsPairDeploymentCoordinatorV1.json",
+          "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+          "canonicalAbiSha256": "0x1b5d37953af15c2e5536ddd082cd4f4d5cafd7917ec5df747999e372ab3db65e",
+          "normalizedArtifactSha256": "0x780811e32afbc7c7f0f31ff92301f868da4da500dcec1ba045a52c0e3f996485",
+          "rawForgeArtifactIsBinding": false,
+          "sourceClosureSha256": "0xada472ff9da17214a8ff14dec948676c7039dd6646c9d348721056b194a2db0a",
+          "sourceClosureFileCount": 81,
+          "creationTemplateByteLength": 47243,
+          "creationTemplateKeccak256": "0x0f0774227ccc0738aaa88e305a45cf96e589c195edc83de1c0f30ef8cd98e66f",
+          "constructorEncodingByteLength": 128,
+          "eip3860LengthFixtureInitcodeByteLength": 47371,
+          "constructorEncodingFixtureIsDeploymentInput": false,
+          "initcodeLimitMarginBytes": 1781,
+          "runtimeTemplateByteLength": 664,
+          "runtimeTemplateKeccak256": "0x60d6d432212d8835acb4acb4877889ff7ea6a2c9c09f115d1bad6a76119a6554",
+          "runtimeCodeLimitMarginBytes": 23912,
+          "runtimeTemplateContainsImmutables": true
+        },
+        "deployment": {
+          "address": null,
+          "transactionHash": null,
+          "blockNumber": null,
+          "activation": false
+        }
+      },
+      {
+        "id": "shardToken",
+        "contract": "ShardTokenV1",
+        "source": {
+          "path": "contracts/lib/shards-v1/src/ShardTokenV1.sol",
+          "sha256": "0x5c53920c52c69a87b38159d8a06285a2006e69773543ad72f2b5eb92f63ee22d",
+          "keccak256": "0x707126f31c57621082232f8697ce6a2fe4e9450a02ef47459700162de8e8ad6b"
+        },
+        "artifact": {
+          "path": "contracts/out/ShardTokenV1.sol/ShardTokenV1.json",
+          "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+          "canonicalAbiSha256": "0xcd37a85ab3755240710e6058c665091c05bf9636fb276789eb4a93d472e715f6",
+          "normalizedArtifactSha256": "0xfc73a72ef4686b3b327b90922d1147ce9033462bae24e4f75656ba5ce67f6229",
+          "rawForgeArtifactIsBinding": false,
+          "sourceClosureSha256": "0x70f137955fc2545a91f127ac0b2c845b41d5758f6dd5aea0fb36057137bad9fa",
+          "sourceClosureFileCount": 7,
+          "creationTemplateByteLength": 3001,
+          "creationTemplateKeccak256": "0xa6461c32c0121f0090519945d9c22ed6406a783994e020f72a20e85796cad107",
+          "constructorEncodingByteLength": 192,
+          "eip3860LengthFixtureInitcodeByteLength": 3193,
+          "constructorEncodingFixtureIsDeploymentInput": false,
+          "initcodeLimitMarginBytes": 45959,
+          "runtimeTemplateByteLength": 1875,
+          "runtimeTemplateKeccak256": "0xb2737fd93f2ff31e850e2be773e6e7a92a239b28091be1d4b122ff864cd7aae8",
+          "runtimeCodeLimitMarginBytes": 22701,
+          "runtimeTemplateContainsImmutables": false
+        },
+        "deployment": {
+          "address": null,
+          "transactionHash": null,
+          "blockNumber": null,
+          "activation": false
+        }
+      },
+      {
+        "id": "shardHook",
+        "contract": "ShardHookV1",
+        "source": {
+          "path": "contracts/lib/shards-v1/src/ShardHookV1.sol",
+          "sha256": "0x29065fb2418a681cb9bf5e2b4622ef5e7fa0692efa887ba69f6d4d6e2aa8d663",
+          "keccak256": "0xd321ab373d8f81b2267f388990cb5d6bcebb60336255aa5e93a0d7eab7eeeeef"
+        },
+        "artifact": {
+          "path": "contracts/out/ShardHookV1.sol/ShardHookV1.json",
+          "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+          "canonicalAbiSha256": "0xbbdd0618235ffac75ef87f3bdb11694be02e67c5d8c572c06465ab68b3da1ae4",
+          "normalizedArtifactSha256": "0x3e8b0ac8b39355c7d9d0f041f2d802b33bcd38892bd0faa086ea9e5e4a35bc4c",
+          "rawForgeArtifactIsBinding": false,
+          "sourceClosureSha256": "0x6976d934cfd8f520f8a57a87f8e1c547515f358fd7fc4a4b339e5f74e7f1df43",
+          "sourceClosureFileCount": 50,
+          "creationTemplateByteLength": 26402,
+          "creationTemplateKeccak256": "0x3fbdbc069ee5bfcb1ded77a8d4e550f1bb0692a488b6eb5d23dac090fbca0716",
+          "constructorEncodingByteLength": 288,
+          "eip3860LengthFixtureInitcodeByteLength": 26690,
+          "constructorEncodingFixtureIsDeploymentInput": false,
+          "initcodeLimitMarginBytes": 22462,
+          "runtimeTemplateByteLength": 24465,
+          "runtimeTemplateKeccak256": "0x07d1d8a50ed58bb22231105094735b54c2da15903fedfb7a4237cadc264ec601",
+          "runtimeCodeLimitMarginBytes": 111,
+          "runtimeTemplateContainsImmutables": true
+        },
+        "deployment": {
+          "address": null,
+          "transactionHash": null,
+          "blockNumber": null,
+          "activation": false
+        }
+      },
+      {
+        "id": "shardNft",
+        "contract": "ShardNFTV1",
+        "source": {
+          "path": "contracts/lib/shards-v1/src/ShardNFTV1.sol",
+          "sha256": "0x5aa93ba415fad5763a4e84819fb89b5226b918c682c56db73dec05540e2bea4f",
+          "keccak256": "0x427641c4d443e1d25dfc4ffda6aefb41c5d4cef0bb9c6a1e041911c2829cb342"
+        },
+        "artifact": {
+          "path": "contracts/out/ShardNFTV1.sol/ShardNFTV1.json",
+          "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+          "canonicalAbiSha256": "0xfa411058dbd6216124248e3123caafc0eae016340d07a4e6542a768471de75aa",
+          "normalizedArtifactSha256": "0xa1909df8dfa7ffcc6766ca015d411ffc7d54e657890bd00df1fd51538b58c78d",
+          "rawForgeArtifactIsBinding": false,
+          "sourceClosureSha256": "0xf69d1e21f4f3bac4e5f9da094ba08dcb764a0b3a3ebb507da9b5ca4f6a05f447",
+          "sourceClosureFileCount": 23,
+          "creationTemplateByteLength": 8240,
+          "creationTemplateKeccak256": "0x888e18b33ff193b65eb61f44bc578d8d9365b505014af3782762a9d61fa39150",
+          "constructorEncodingByteLength": 256,
+          "eip3860LengthFixtureInitcodeByteLength": 8496,
+          "constructorEncodingFixtureIsDeploymentInput": false,
+          "initcodeLimitMarginBytes": 40656,
+          "runtimeTemplateByteLength": 7318,
+          "runtimeTemplateKeccak256": "0x82f9916598d254c7f16bf5d8bcd324906c832d47eb69f88fc88a32accad5d1cd",
+          "runtimeCodeLimitMarginBytes": 17258,
+          "runtimeTemplateContainsImmutables": true
+        },
+        "deployment": {
+          "address": null,
+          "transactionHash": null,
+          "blockNumber": null,
+          "activation": false
+        }
+      }
+    ]
+  },
+  "sourceRequirements": [
+    {
+      "id": "source-eip712",
+      "componentId": "permitVerifier",
+      "sourcePath": "contracts/src/ProgrammableLaunchPermitVerifierV1.sol",
+      "sourceSha256": "0x240f369621917dcf99793d0c45023b8da45124790f826b331217d7b979c61201",
+      "requiredLiteralCount": 3,
+      "allRequiredLiteralsPresent": true
+    },
+    {
+      "id": "source-permit-replay",
+      "componentId": "permitAuthority",
+      "sourcePath": "contracts/src/ProgrammableLaunchPermitAuthorityV1.sol",
+      "sourceSha256": "0xd64e40876c1727849f19527ea4f0718e34f30f93ac103b67fe6bac677b1fd3d1",
+      "requiredLiteralCount": 4,
+      "allRequiredLiteralsPresent": true
+    },
+    {
+      "id": "source-delegatecall",
+      "componentId": "routeGatedFactory",
+      "sourcePath": "contracts/src/ProgrammableExactShardsRouteGatedFactoryV2.sol",
+      "sourceSha256": "0x8a90452ccdf74865b040e657e66e0470fec2aaf5766e4cba61c2eb3b927414f0",
+      "requiredLiteralCount": 4,
+      "allRequiredLiteralsPresent": true
+    },
+    {
+      "id": "source-atomic-transient-guard",
+      "componentId": "atomicLaunchRoute",
+      "sourcePath": "contracts/src/ProgrammableExactShardsAtomicLaunchRouteV1.sol",
+      "sourceSha256": "0x380e9bf80d61025fa79da870073e106820161aab08691287e10a4f993da1609f",
+      "requiredLiteralCount": 5,
+      "allRequiredLiteralsPresent": true
+    },
+    {
+      "id": "source-v4-deltas",
+      "componentId": "shardHook",
+      "sourcePath": "contracts/lib/shards-v1/src/ShardHookV1.sol",
+      "sourceSha256": "0x29065fb2418a681cb9bf5e2b4622ef5e7fa0692efa887ba69f6d4d6e2aa8d663",
+      "requiredLiteralCount": 6,
+      "allRequiredLiteralsPresent": true
+    },
+    {
+      "id": "source-finality-reorg",
+      "componentId": "registry",
+      "sourcePath": "contracts/src/ProgrammableExactShardsRegistryV1.sol",
+      "sourceSha256": "0xe172d3ef56fd15d586f7f3cd173b8c8c12d8cf5687e4d6a1517b8932a657919a",
+      "requiredLiteralCount": 5,
+      "allRequiredLiteralsPresent": true
+    }
+  ],
+  "properties": [
+    {
+      "id": "SP-EIP712-DOMAIN",
+      "category": "signatures",
+      "enforcement": "ONCHAIN_AND_GOLDEN_VECTOR",
+      "statement": "The permit digest uses EIP-712 name, version, chainId and permit-authority verifying contract and binds all 26 permit fields, the 17-field release and three-field kernel envelope.",
+      "componentIds": [
+        "permitVerifier",
+        "permitAuthority"
+      ],
+      "evidenceIds": [
+        "permit-golden",
+        "permit-authority"
+      ],
+      "invariantIds": [
+        "INV-PERMIT-DIGEST"
+      ],
+      "bindingSha256": "0xa89e68e992cf8f7bbf7b84d64e3757007d7057d02439fe463a904ee9eafc07ea",
+      "gatePassed": true
+    },
+    {
+      "id": "SP-PERMIT-REPLAY",
+      "category": "signatures",
+      "enforcement": "ONCHAIN",
+      "statement": "A successful consume requires the current signer epoch and exact per-repository nonce, permanently consumes the repository lineage and launchId, and advances the nonce only on success.",
+      "componentIds": [
+        "permitAuthority",
+        "permitVerifier"
+      ],
+      "evidenceIds": [
+        "permit-authority",
+        "cross-route-e2e"
+      ],
+      "invariantIds": [
+        "INV-PERMIT-REPLAY",
+        "INV-REPOSITORY-ONCE"
+      ],
+      "bindingSha256": "0x61994e84fc9842361965f79ae92a8d1ee51bc8df508801dadf458ac765051ed4",
+      "gatePassed": true
+    },
+    {
+      "id": "SP-PERMIT-CANCELLATION",
+      "category": "signatures",
+      "enforcement": "ONCHAIN",
+      "statement": "Permit cancellation, approval-generation cancellation, signer disabling, time bounds and release retirement/deactivation fail closed without consuming a reusable nonce before one successful launch.",
+      "componentIds": [
+        "permitAuthority",
+        "permitVerifier"
+      ],
+      "evidenceIds": [
+        "permit-authority"
+      ],
+      "invariantIds": [
+        "INV-CANCELLATION"
+      ],
+      "bindingSha256": "0x6f5803d84062febb7999e81482a53f9c179ed9e2f390cd66f4a9afb4849cc41a",
+      "gatePassed": true
+    },
+    {
+      "id": "SP-RELEASE-BINDING",
+      "category": "signatures",
+      "enforcement": "ONCHAIN",
+      "statement": "Release generations are monotonic and bind exact authority, verifier, registry, profile, route, runtime code hashes, route writer authority and execution authority.",
+      "componentIds": [
+        "permitVerifier",
+        "permitAuthority",
+        "registry",
+        "atomicLaunchRoute"
+      ],
+      "evidenceIds": [
+        "permit-authority",
+        "real-graph-e2e"
+      ],
+      "invariantIds": [
+        "INV-RELEASE-GRAPH"
+      ],
+      "bindingSha256": "0x9b098bee56fc315684eb8eabab1b34290e4e28321bdd64856150805f449308fb",
+      "gatePassed": true
+    },
+    {
+      "id": "SP-CREATE2-GRAPH",
+      "category": "deployment",
+      "enforcement": "ONCHAIN",
+      "statement": "CREATE2 predictions bind wrapper deployer, salts, initcode, token and derived NFT metadata, renderer, ticks, price and recipients; direct implementation deployment cannot occupy the wrapper graph.",
+      "componentIds": [
+        "reviewedFactoryImplementation",
+        "routeGatedFactory",
+        "shardToken",
+        "shardHook",
+        "shardNft"
+      ],
+      "evidenceIds": [
+        "route-factory",
+        "shard-launch-factory"
+      ],
+      "invariantIds": [
+        "INV-CREATE2-PREDICTION"
+      ],
+      "bindingSha256": "0xdc02dcd2a9047bd98f0160f067d43ba956cbc019aee1e72941a6c5892005ef0a",
+      "gatePassed": true
+    },
+    {
+      "id": "SP-DELEGATECALL-GATE",
+      "category": "deployment",
+      "enforcement": "ONCHAIN_AND_ARTIFACT_BINDING",
+      "statement": "The wrapper accepts only launch from its immutable route, verifies the implementation runtime hash again before delegatecall, rejects fallback selectors and preserves the reviewed slot-zero mapping layout.",
+      "componentIds": [
+        "reviewedFactoryImplementation",
+        "routeGatedFactory",
+        "atomicLaunchRoute"
+      ],
+      "evidenceIds": [
+        "route-factory"
+      ],
+      "invariantIds": [
+        "INV-DELEGATECALL-SURFACE"
+      ],
+      "bindingSha256": "0x48c4804c1cf87d26a3048e5393a99729a34bb7493382ca9bd94a7ae322564e63",
+      "gatePassed": true
+    },
+    {
+      "id": "SP-TRANSIENT-REENTRANCY",
+      "category": "reentrancy",
+      "enforcement": "ONCHAIN_AND_EVM_PROFILE",
+      "statement": "Permit consumption and the full atomic launch entrypoint are guarded by Cancun transient-storage reentrancy locks; external effects revert atomically on callback failure.",
+      "componentIds": [
+        "permitAuthority",
+        "atomicLaunchRoute"
+      ],
+      "evidenceIds": [
+        "real-graph-e2e",
+        "hook-attacks"
+      ],
+      "invariantIds": [
+        "INV-ATOMIC-ROLLBACK"
+      ],
+      "bindingSha256": "0xb139c2fdb5813dfbe4f41785a8640546551eea89eec4818f63edd44cf0d375d8",
+      "gatePassed": true
+    },
+    {
+      "id": "SP-V4-RETURN-DELTA",
+      "category": "uniswap-v4",
+      "enforcement": "ONCHAIN_AND_UPSTREAM_V4_TESTS",
+      "statement": "The canonical hook declares both beforeSwapReturnDelta and afterSwapReturnDelta and uses signed hook deltas to retain only the ETH fee while preserving PoolManager delta settlement.",
+      "componentIds": [
+        "poolManager",
+        "shardHook"
+      ],
+      "evidenceIds": [
+        "hook-fees"
+      ],
+      "invariantIds": [
+        "INV-V4-NONNEGATIVE-DELTA"
+      ],
+      "bindingSha256": "0x56f9e81ab9b08e1be2b4de470f735d55e851f01a794848569c7bd14dd485322e",
+      "gatePassed": true
+    },
+    {
+      "id": "SP-V4-PARTIAL-FILL",
+      "category": "uniswap-v4",
+      "enforcement": "ONCHAIN",
+      "statement": "When ETH is specified and a beforeSwap fee cannot be corrected on the unspecified return-delta side, any partial fill is rejected and leaves no fee; complete fills at the limit remain valid.",
+      "componentIds": [
+        "shardHook"
+      ],
+      "evidenceIds": [
+        "hook-fees"
+      ],
+      "invariantIds": [
+        "INV-PARTIAL-FILL"
+      ],
+      "bindingSha256": "0x2410d1c6179e4f34d586b3cb5f7725da45a3b1298000bb219617f42aad652827",
+      "gatePassed": true
+    },
+    {
+      "id": "SP-V4-CANONICAL-POOL",
+      "category": "uniswap-v4",
+      "enforcement": "ONCHAIN",
+      "statement": "The hook permits only native ETH versus its immutable SHARD token, exact pool fee, tick spacing, hook address and reviewed start price, and rejects swaps before one-shot initialization or through a foreign pool.",
+      "componentIds": [
+        "poolManager",
+        "shardHook"
+      ],
+      "evidenceIds": [
+        "hook-fees",
+        "hook-attacks"
+      ],
+      "invariantIds": [
+        "INV-CANONICAL-POOL"
+      ],
+      "bindingSha256": "0x574e5fe3769a62a5d5edda44687952c6e28ac3b2f80e3eb7c52f18b96f48b531",
+      "gatePassed": true
+    },
+    {
+      "id": "SP-V4-FEE-ACCOUNTING",
+      "category": "uniswap-v4",
+      "enforcement": "ONCHAIN_AND_FUZZ",
+      "statement": "Every swap quadrant charges the inclusive ETH fee with carried remainders; builder plus Programmable plus holder accounting conserves every wei and fees remain covered by ETH or ERC-6909 claims.",
+      "componentIds": [
+        "feePolicyVerifier",
+        "registry",
+        "shardHook"
+      ],
+      "evidenceIds": [
+        "fee-policy",
+        "hook-fees",
+        "fee-split"
+      ],
+      "invariantIds": [
+        "INV-FEE-CONSERVATION",
+        "INV-FEE-CUMULATIVE",
+        "INV-FEE-POLICY-IMMUTABLE"
+      ],
+      "bindingSha256": "0xc596061e2b667c15d3327aaa1143ba6a3dbf0f4fe1f23f8b25d4426b6028a1a5",
+      "gatePassed": true
+    },
+    {
+      "id": "SP-ROLLBACK-ATOMICITY",
+      "category": "lifecycle",
+      "enforcement": "EVM_ATOMICITY_AND_E2E",
+      "statement": "Permit consumption, repository marking, factory deployment, graph validation and registry registration occur in one transaction so any downstream failure rolls every effect back and permits an exact retry.",
+      "componentIds": [
+        "permitAuthority",
+        "atomicLaunchRoute",
+        "routeGatedFactory",
+        "registry"
+      ],
+      "evidenceIds": [
+        "real-graph-e2e",
+        "registry-lifecycle"
+      ],
+      "invariantIds": [
+        "INV-ATOMIC-ROLLBACK"
+      ],
+      "bindingSha256": "0xd7688f9033ec30b719595ce52bf6f2fdc655400abc7126a66621f0d5aff3540b",
+      "gatePassed": true
+    },
+    {
+      "id": "SP-REPOSITORY-ONCE",
+      "category": "lifecycle",
+      "enforcement": "ONCHAIN_AND_CROSS_ROUTE_E2E",
+      "statement": "Repository uniqueness lives permanently in the stable Permit Authority across signer epochs, release generations and competing real route stacks; registry retry idempotence does not weaken it.",
+      "componentIds": [
+        "permitAuthority",
+        "registry",
+        "atomicLaunchRoute"
+      ],
+      "evidenceIds": [
+        "permit-authority",
+        "cross-route-e2e",
+        "registry-lifecycle"
+      ],
+      "invariantIds": [
+        "INV-REPOSITORY-ONCE"
+      ],
+      "bindingSha256": "0xf2c5b7c7f1d850181ee27c997a543b4a4e11469f18330997e569c3900a80874f",
+      "gatePassed": true
+    },
+    {
+      "id": "SP-FINALITY",
+      "category": "lifecycle",
+      "enforcement": "ONCHAIN",
+      "statement": "Finalization requires the observed block, transaction identity, configured minimum depth, nonzero one-use evidence and canonical observed and confirmed-head block hashes inside the native blockhash window.",
+      "componentIds": [
+        "registry"
+      ],
+      "evidenceIds": [
+        "registry-lifecycle"
+      ],
+      "invariantIds": [
+        "INV-REGISTRY-MONOTONIC"
+      ],
+      "bindingSha256": "0x22f258fd9788be9f51127cb8cd97d5d27ea56f36572977b48bf332234b1d4009",
+      "gatePassed": true
+    },
+    {
+      "id": "SP-REORG",
+      "category": "lifecycle",
+      "enforcement": "ONCHAIN",
+      "statement": "A reorg or stale proof fails closed when either supplied historical block hash differs from blockhash; unavailable history beyond 256 blocks cannot be treated as canonical evidence.",
+      "componentIds": [
+        "registry"
+      ],
+      "evidenceIds": [
+        "registry-lifecycle"
+      ],
+      "invariantIds": [
+        "INV-REGISTRY-MONOTONIC"
+      ],
+      "bindingSha256": "0xe4576057d4b2a502230de6877739991fb967c263730ad37ab3c651f313ce86a9",
+      "gatePassed": true
+    },
+    {
+      "id": "SP-REGISTRY-LIFECYCLE",
+      "category": "lifecycle",
+      "enforcement": "ONCHAIN_AND_INVARIANT",
+      "statement": "Observed becomes finalized or terminally revoked; revision one and fee claims remain immutable, approval, deployment and evidence are one-use, and revocation cannot be repaired by record rewrite.",
+      "componentIds": [
+        "registry"
+      ],
+      "evidenceIds": [
+        "registry-lifecycle",
+        "registry-invariants"
+      ],
+      "invariantIds": [
+        "INV-REGISTRY-MONOTONIC",
+        "INV-FEE-POLICY-IMMUTABLE",
+        "INV-ONE-USE-REGISTRY",
+        "INV-REVOCATION-TERMINAL"
+      ],
+      "bindingSha256": "0x8b88c6ac6fadd10d67a3c0f5eedfc147a80fcb1998349a9bcadf733f99a27f98",
+      "gatePassed": true
+    },
+    {
+      "id": "SP-ROLE-SEPARATION",
+      "category": "access-control",
+      "enforcement": "ONCHAIN_AND_INVARIANT",
+      "statement": "Permit and registry authority classes are distinct at construction and permanently lineage-separated; the immutable route is the sole registry writer and wrapper launch caller.",
+      "componentIds": [
+        "permitAuthority",
+        "registry",
+        "routeGatedFactory"
+      ],
+      "evidenceIds": [
+        "permit-authority",
+        "registry-lifecycle",
+        "route-factory"
+      ],
+      "invariantIds": [
+        "INV-ROLE-SEPARATION"
+      ],
+      "bindingSha256": "0xd6a19cea9f00980b40d78ac016eff5485bc80e18d201cdebdcb5c0400f236d5b",
+      "gatePassed": true
+    }
+  ],
+  "invariants": [
+    {
+      "id": "INV-PERMIT-DIGEST",
+      "evidenceId": "permit-golden",
+      "function": "test_javascriptGoldenMatchesAll26Permit17ReleaseAnd3KernelFields"
+    },
+    {
+      "id": "INV-PERMIT-REPLAY",
+      "evidenceId": "permit-authority",
+      "function": "test_signedPermitConsumesCanonicalDigestAndHardRejectsReplay"
+    },
+    {
+      "id": "INV-CANCELLATION",
+      "evidenceId": "permit-authority",
+      "function": "test_cancelledAndExpiredGenerationsReuseNonceUntilOneSuccess"
+    },
+    {
+      "id": "INV-RELEASE-GRAPH",
+      "evidenceId": "permit-authority",
+      "function": "test_releaseValidationBindsExactProfileGraphAndRegistryAuthority"
+    },
+    {
+      "id": "INV-CREATE2-PREDICTION",
+      "evidenceId": "shard-launch-factory",
+      "function": "test_deployedAddressesEqualPredictions"
+    },
+    {
+      "id": "INV-DELEGATECALL-SURFACE",
+      "evidenceId": "route-factory",
+      "function": "test_copiedLaunchAndArbitraryImplementationSelectorsCannotReachDelegateExecution"
+    },
+    {
+      "id": "INV-V4-NONNEGATIVE-DELTA",
+      "evidenceId": "hook-fees",
+      "function": "testFuzz_poolIsNeverLeftWithNegativeDelta"
+    },
+    {
+      "id": "INV-PARTIAL-FILL",
+      "evidenceId": "hook-fees",
+      "function": "test_partialFillIsRejectedNotOvercharged"
+    },
+    {
+      "id": "INV-CANONICAL-POOL",
+      "evidenceId": "hook-attacks",
+      "function": "test_ATTACK_cannotInitialiseForeignPool"
+    },
+    {
+      "id": "INV-FEE-CONSERVATION",
+      "evidenceId": "hook-fees",
+      "function": "testFuzz_theSplitConservesEveryFee"
+    },
+    {
+      "id": "INV-FEE-CUMULATIVE",
+      "evidenceId": "fee-split",
+      "function": "testFuzz_outerFeeIsCumulative"
+    },
+    {
+      "id": "INV-ATOMIC-ROLLBACK",
+      "evidenceId": "real-graph-e2e",
+      "function": "test_downstreamRuntimeSetFailureRollsBackPermitRepoFactoryGraphAndRegistryThenRetrySucceeds"
+    },
+    {
+      "id": "INV-REPOSITORY-ONCE",
+      "evidenceId": "cross-route-e2e",
+      "function": "test_twoRealReleaseStacksCanProduceOnlyOneGraphForOneRepositoryLineage"
+    },
+    {
+      "id": "INV-REGISTRY-MONOTONIC",
+      "evidenceId": "registry-invariants",
+      "function": "invariant_countsAreMonotonicAndMatchSuccessfulTransitions"
+    },
+    {
+      "id": "INV-FEE-POLICY-IMMUTABLE",
+      "evidenceId": "registry-invariants",
+      "function": "invariant_feePolicyAndThreeClaimsRemainImmutable"
+    },
+    {
+      "id": "INV-ONE-USE-REGISTRY",
+      "evidenceId": "registry-invariants",
+      "function": "invariant_approvalDeploymentAndRevisionAreOneUseBound"
+    },
+    {
+      "id": "INV-REVOCATION-TERMINAL",
+      "evidenceId": "registry-invariants",
+      "function": "invariant_revocationIsTerminal"
+    },
+    {
+      "id": "INV-ROLE-SEPARATION",
+      "evidenceId": "registry-lifecycle",
+      "function": "test_roleSeparationAndWrongCallerFailClosed"
+    }
+  ],
+  "testEvidence": [
+    {
+      "id": "permit-golden",
+      "path": "contracts/test/ProgrammableLaunchPermitV1Golden.t.sol",
+      "sourceSha256": "0xddcd468352e545f7d8f519c314ff253d33abd7003810a149faad4e0b82cc7438",
+      "requiredFunctions": [
+        "test_javascriptGoldenMatchesAll26Permit17ReleaseAnd3KernelFields"
+      ],
+      "requiredFunctionCount": 1,
+      "exactFunctionsPresent": true
+    },
+    {
+      "id": "permit-authority",
+      "path": "contracts/test/ProgrammableLaunchPermitAuthorityV1.t.sol",
+      "sourceSha256": "0x745f7a9a0dc78e9984064db29111ac20164fdd014e955caccf7cb9a54efb72d0",
+      "requiredFunctions": [
+        "test_signedPermitConsumesCanonicalDigestAndHardRejectsReplay",
+        "test_cancelledAndExpiredGenerationsReuseNonceUntilOneSuccess",
+        "test_repositoryConsumptionSurvivesSignerAndReleaseRotation",
+        "test_signerRotationInvalidatesOldEpochAndNewEpochCanReissue",
+        "test_crossProductActivationDoesNotRetireAndExplicitRetirementHasExactBoundary",
+        "test_approvalGenerationCancellationUsesNumericRepositoryAndBlocksEveryPermitGeneration",
+        "test_releaseValidationBindsExactProfileGraphAndRegistryAuthority",
+        "test_rolesStayDisjointIncludingDelayedDefaultAdminTransfer"
+      ],
+      "requiredFunctionCount": 8,
+      "exactFunctionsPresent": true
+    },
+    {
+      "id": "fee-policy",
+      "path": "contracts/test/ProgrammableExactShardsFeePolicyVerifierV2.t.sol",
+      "sourceSha256": "0x1b5089b41988dc282fab0981bc730064337f7215c996e10ae74cc05fdb99e900",
+      "requiredFunctions": [
+        "test_exactReviewedEconomicTemplateAndBindingMatchV2Manifest",
+        "test_everyEconomicTemplateFieldMutationFailsClosed"
+      ],
+      "requiredFunctionCount": 2,
+      "exactFunctionsPresent": true
+    },
+    {
+      "id": "registry-lifecycle",
+      "path": "contracts/test/ProgrammableExactShardsRegistryV1.t.sol",
+      "sourceSha256": "0x19f8e951eb647083b562e4f2516030e4401d1b9e9cf646ca6ce4fb2ff04e0068",
+      "requiredFunctions": [
+        "test_exactRegistryReceiptRetryIsIdempotentWhileRepositoryOnceLivesInPermitAuthority",
+        "test_completeLifecycleFinalityImmutableRecordAndRevocation",
+        "test_finalityFailsClosedOnDepthHashAndEvidenceReplay",
+        "test_roleSeparationAndWrongCallerFailClosed"
+      ],
+      "requiredFunctionCount": 4,
+      "exactFunctionsPresent": true
+    },
+    {
+      "id": "registry-invariants",
+      "path": "contracts/test/invariant/ProgrammableExactShardsRegistryV1Invariant.t.sol",
+      "sourceSha256": "0x0f51e7a2583be68d19a1a10ecddd665f7a85adcd0ac7604f3d0d54b971d8e8ed",
+      "requiredFunctions": [
+        "invariant_countsAreMonotonicAndMatchSuccessfulTransitions",
+        "invariant_feePolicyAndThreeClaimsRemainImmutable",
+        "invariant_approvalDeploymentAndRevisionAreOneUseBound",
+        "invariant_revocationIsTerminal"
+      ],
+      "requiredFunctionCount": 4,
+      "exactFunctionsPresent": true
+    },
+    {
+      "id": "route-factory",
+      "path": "contracts/test/ProgrammableExactShardsRouteGatedFactoryV2.t.sol",
+      "sourceSha256": "0x43223e61cbe354778e3c49eeb241b9be14e4daf58e7ce9062237947953998bd2",
+      "requiredFunctions": [
+        "test_exactReviewedImplementationExecutesOnlyThroughPinnedCallerAndPersistsConfiguration",
+        "test_copiedLaunchAndArbitraryImplementationSelectorsCannotReachDelegateExecution",
+        "test_directImplementationGraphCannotOccupyWrapperGraph",
+        "test_implementationRuntimeMutationFailsBeforeAnyGraphDeployment"
+      ],
+      "requiredFunctionCount": 4,
+      "exactFunctionsPresent": true
+    },
+    {
+      "id": "real-graph-e2e",
+      "path": "contracts/test/ProgrammableExactShardsRealGraphE2EV1.t.sol",
+      "sourceSha256": "0x110dbd43286f690d9aab8ddff0f04fc679520e979972d4d0ce23aab3048b0d49",
+      "requiredFunctions": [
+        "test_realAuthorityRegistryCoordinatorAndReviewedFactoryLaunchOneExactGraph",
+        "test_downstreamRuntimeSetFailureRollsBackPermitRepoFactoryGraphAndRegistryThenRetrySucceeds",
+        "test_postPermitPresentationNameOrSymbolSubstitutionFailsBeforeConsumeOrDeployment",
+        "test_postPermitTechnicalAndDerivationMutationsCannotConsumeOrDeployRealGraph"
+      ],
+      "requiredFunctionCount": 4,
+      "exactFunctionsPresent": true
+    },
+    {
+      "id": "cross-route-e2e",
+      "path": "contracts/test/ProgrammableExactShardsCrossRouteRealGraphE2EV1.t.sol",
+      "sourceSha256": "0xa34ddf60d7883d487629989c907fcfc1b463f3c557fa60b16547a1892d6dd26c",
+      "requiredFunctions": [
+        "test_twoRealReleaseStacksCanProduceOnlyOneGraphForOneRepositoryLineage"
+      ],
+      "requiredFunctionCount": 1,
+      "exactFunctionsPresent": true
+    },
+    {
+      "id": "hook-fees",
+      "path": "contracts/lib/shards-v1/test/ShardHookFeesV1.t.sol",
+      "sourceSha256": "0xf9c6a4286a109c8beb19777187f8eb1d47c0645befd260e4dea1f043ffe3b408",
+      "requiredFunctions": [
+        "test_feeIsExactlyOnePercent_zeroForOne_exactIn",
+        "test_feeIsExactlyOnePercent_zeroForOne_exactOut",
+        "test_feeIsExactlyOnePercent_oneForZero_exactIn",
+        "test_feeIsExactlyOnePercent_oneForZero_exactOut",
+        "test_partialFillIsRejectedNotOvercharged",
+        "test_partialFillIsRejectedOnExactOutputEthToo",
+        "test_completeFillLandingExactlyOnTheLimitSucceeds",
+        "testFuzz_theSplitConservesEveryFee",
+        "testFuzz_poolIsNeverLeftWithNegativeDelta"
+      ],
+      "requiredFunctionCount": 9,
+      "exactFunctionsPresent": true
+    },
+    {
+      "id": "hook-attacks",
+      "path": "contracts/lib/shards-v1/test/ShardHookAttackV1.t.sol",
+      "sourceSha256": "0x4ae7cba7389fec0b1e7bbd86611d3555cf2e01751bf53d7e93b2074175e5fecf",
+      "requiredFunctions": [
+        "test_ATTACK_cannotInitialiseForeignPool",
+        "test_ATTACK_cannotFrontRunInitialiseAtDifferentPrice",
+        "test_ATTACK_reentrantTransferDuringReleasingFails",
+        "test_ATTACK_reentrantBuyDuringUnlockFails",
+        "test_ATTACK_reentrantSellDuringUnlockFails",
+        "test_ATTACK_reentrantClaimFails"
+      ],
+      "requiredFunctionCount": 6,
+      "exactFunctionsPresent": true
+    },
+    {
+      "id": "fee-split",
+      "path": "contracts/lib/shards-v1/test/ShardFeeSplitV1.t.sol",
+      "sourceSha256": "0x6029c56ced0a297116f9b02779582a83c6e5ba3d136b159150c7b37ab4143b18",
+      "requiredFunctions": [
+        "testFuzz_split_conserves",
+        "testFuzz_splitIsConservativeAndCumulative",
+        "testFuzz_outerFeeIsCumulative",
+        "test_builderClaimRevertsAndRestoresAccrualForRejectingRecipient",
+        "test_launcherClaimRevertsAndRestoresAccrualForRejectingRecipient"
+      ],
+      "requiredFunctionCount": 5,
+      "exactFunctionsPresent": true
+    },
+    {
+      "id": "shard-launch-factory",
+      "path": "contracts/lib/shards-v1/test/ShardLaunchFactoryV1.t.sol",
+      "sourceSha256": "0x5fc169351aea85703411a72b1ba3e2e8e97d6c329ed0bb65dded10c7dd62c5c6",
+      "requiredFunctions": [
+        "test_predictionHelpersAreDeterministicAndUseExactInitCode",
+        "test_effectiveTokenSaltBindsHookSaltAndEveryLaunchParameter",
+        "test_deployedAddressesEqualPredictions",
+        "test_duplicateTokenSaltForSameMetadataRevertsWithoutChangingFirstLaunch",
+        "test_failureAfterDeploymentsRollsBackTokenHookNftMappingAndEvent"
+      ],
+      "requiredFunctionCount": 5,
+      "exactFunctionsPresent": true
+    }
+  ],
+  "slitherEvidence": {
+    "requiredForRelease": true,
+    "status": "COMPLETE",
+    "evidencePath": "contracts/security/shards-slither-evidence-v2.json",
+    "evidenceSha256": "0xd1e45d6cc0a380c4a74e0c18e13086fa786e880a056906df85015ca50f0065c9",
+    "analyzedComponentBindingSha256": "0x097e5d7e5e490a16febe309c7c057aa3be48d61cbd037c1e651ee3cf80191a91",
+    "exactCommand": "audit_tmp_dir=$(mktemp -d /tmp/shards-secure-workflow.XXXXXX); slither . --compile-force-framework foundry --exclude-dependencies --filter-paths 'lib/|test/|script/' --json \"$audit_tmp_dir/slither.json\" 2>&1 | tee \"$audit_tmp_dir/slither.txt\"; slither_code=${pipestatus[1]}",
+    "toolchain": {
+      "slither": "0.11.5",
+      "forge": "1.7.1",
+      "forgeCommit": "4072e487",
+      "solc": "0.8.26+commit.8a97fa7a",
+      "foundryProfile": "default",
+      "optimizerEnabled": true,
+      "optimizerRuns": 1000,
+      "evmVersion": "cancun",
+      "bytecodeHash": "none",
+      "cborMetadata": false
+    },
+    "rawReport": {
+      "committed": false,
+      "ephemeralPathAtReview": "/tmp/shards-secure-workflow.2DhSHO/slither.json",
+      "sha256": "0x249dafd8882da2390c21bd87d97552ada008834eb9ce27cdb8d0e75e60198bcc",
+      "byteLength": 10372959,
+      "success": true,
+      "totalDetectorInstances": 286,
+      "wholeReportImpactCounts": {
+        "high": 8,
+        "medium": 87,
+        "low": 91,
+        "informational": 100
+      }
+    },
+    "rawHighInstances": 0,
+    "rawMediumInstances": 9,
+    "actionableHighFindings": 0,
+    "actionableMediumFindings": 0,
+    "untriagedFindings": 0,
+    "mediumCountSemantics": "actionableMediumFindings and untriagedMediumFindings never erase rawMediumInstances",
+    "rawMediumTriage": [
+      {
+        "id": "SLITHER-M-001",
+        "detector": "incorrect-equality",
+        "componentId": "permitAuthority",
+        "sourcePath": "contracts/src/ProgrammableLaunchPermitAuthorityV1.sol",
+        "function": "_grantRole",
+        "lineRange": [
+          612,
+          638
+        ],
+        "findingLines": [
+          614
+        ],
+        "rawInstance": "role == CONSUMER_ROLE && account.code.length == 0",
+        "rawDetectorFingerprintSha256": "0x99a07c81703ca215f4ded91b42ca72bd17f5a2cce1a538b5ce59491a2424f34a",
+        "classification": "INTENTIONAL_EXACT_PREDICATE",
+        "rationale": "Only the exact consumer role requires contract code; exact role equality is the authorization boundary.",
+        "actionable": false
+      },
+      {
+        "id": "SLITHER-M-002",
+        "detector": "incorrect-equality",
+        "componentId": "permitAuthority",
+        "sourcePath": "contracts/src/ProgrammableLaunchPermitAuthorityV1.sol",
+        "function": "_requirePermitUnspentAndApprovalActive",
+        "lineRange": [
+          533,
+          551
+        ],
+        "findingLines": [
+          540
+        ],
+        "rawInstance": "status.state == PermitStateV1.CANCELLED",
+        "rawDetectorFingerprintSha256": "0xe6b9c856ddd3472c0badfac8f357de4316eb99dfda50707b8a6938ab8453fcb1",
+        "classification": "INTENTIONAL_EXACT_PREDICATE",
+        "rationale": "Permit status is an enum and the exact terminal CANCELLED state requires a distinct error.",
+        "actionable": false
+      },
+      {
+        "id": "SLITHER-M-003",
+        "detector": "incorrect-equality",
+        "componentId": "permitAuthority",
+        "sourcePath": "contracts/src/ProgrammableLaunchPermitAuthorityV1.sol",
+        "function": "_requirePermitUnspentAndApprovalActive",
+        "lineRange": [
+          533,
+          551
+        ],
+        "findingLines": [
+          539
+        ],
+        "rawInstance": "status.state == PermitStateV1.CONSUMED",
+        "rawDetectorFingerprintSha256": "0x41e1b5dbf80ddf5aa5dbe1d7b1148af365652e15611cdb98b43e4332b65ac833",
+        "classification": "INTENTIONAL_EXACT_PREDICATE",
+        "rationale": "Permit status is an enum and the exact terminal CONSUMED state requires a distinct error.",
+        "actionable": false
+      },
+      {
+        "id": "SLITHER-M-004",
+        "detector": "locked-ether",
+        "componentId": "routeGatedFactory",
+        "sourcePath": "contracts/src/ProgrammableExactShardsRouteGatedFactoryV2.sol",
+        "function": "receive",
+        "lineRange": [
+          20,
+          294
+        ],
+        "findingLines": [
+          208,
+          209,
+          210
+        ],
+        "rawInstance": "receive() external payable",
+        "rawDetectorFingerprintSha256": "0x849ea651c3fea90767972dc15912ab04fba98b2159fe134e70b3dac20439016a",
+        "classification": "FALSE_POSITIVE",
+        "rationale": "The receive function unconditionally reverts DirectEtherTransferUnsupported, so the wrapper cannot accept or lock ETH through it.",
+        "actionable": false
+      },
+      {
+        "id": "SLITHER-M-005",
+        "detector": "uninitialized-local",
+        "componentId": "permitVerifier",
+        "sourcePath": "contracts/src/ProgrammableLaunchPermitVerifierV1.sol",
+        "function": "generationBindingHash",
+        "lineRange": [
+          100,
+          100
+        ],
+        "findingLines": [
+          100
+        ],
+        "rawInstance": "GenerationBindingPreimageV1 memory preimage",
+        "rawDetectorFingerprintSha256": "0xd0bc975c3405180eec6f72b98e4d9752975ee18434e0d82ffb041943469de011",
+        "classification": "FALSE_POSITIVE",
+        "rationale": "Solidity zero-initializes the memory struct and every field included in the final hash is explicitly assigned before use.",
+        "actionable": false
+      },
+      {
+        "id": "SLITHER-M-006",
+        "detector": "uninitialized-local",
+        "componentId": "atomicLaunchRoute",
+        "sourcePath": "contracts/src/ProgrammableExactShardsAtomicLaunchRouteV1.sol",
+        "function": "_runtimeCodeSetHash",
+        "lineRange": [
+          681,
+          681
+        ],
+        "findingLines": [
+          681
+        ],
+        "rawInstance": "RuntimeCodeSetV1 memory runtimeSet",
+        "rawDetectorFingerprintSha256": "0xa9399cd40279c7ff527d8f85486129fabcc5a7d5e68c00a83770691a7ef25c21",
+        "classification": "FALSE_POSITIVE",
+        "rationale": "Solidity zero-initializes the memory struct and every runtime-set field included in the final hash is explicitly assigned before use.",
+        "actionable": false
+      },
+      {
+        "id": "SLITHER-M-007",
+        "detector": "uninitialized-local",
+        "componentId": "routeGatedFactory",
+        "sourcePath": "contracts/src/ProgrammableExactShardsRouteGatedFactoryV2.sol",
+        "function": "_configurationHash",
+        "lineRange": [
+          257,
+          257
+        ],
+        "findingLines": [
+          257
+        ],
+        "rawInstance": "ConfigurationDataV2 memory data",
+        "rawDetectorFingerprintSha256": "0xf971a61ce7d0ab6bbb7959f21be7997d1e9f3e815341ba79760e22cc96e4230e",
+        "classification": "FALSE_POSITIVE",
+        "rationale": "Solidity zero-initializes the memory struct and every configuration field included in the final hash is explicitly assigned before use.",
+        "actionable": false
+      },
+      {
+        "id": "SLITHER-M-008",
+        "detector": "unused-return",
+        "componentId": "permitVerifier",
+        "sourcePath": "contracts/src/ProgrammableLaunchPermitVerifierV1.sol",
+        "function": "validEOASignature",
+        "lineRange": [
+          324,
+          328
+        ],
+        "findingLines": [
+          326
+        ],
+        "rawInstance": "(address recovered, ECDSA.RecoverError error,) = ECDSA.tryRecover(digest, signature)",
+        "rawDetectorFingerprintSha256": "0xa00f9873ef51a0309130716087d4b210c55031b6278043f9c31f4de53f62eb9b",
+        "classification": "INTENTIONAL_UNUSED_AUXILIARY_RETURN",
+        "rationale": "The recovered signer and error enum are both checked; the third return is auxiliary error data not needed for the boolean verifier result.",
+        "actionable": false
+      },
+      {
+        "id": "SLITHER-M-009",
+        "detector": "unused-return",
+        "componentId": "atomicLaunchRoute",
+        "sourcePath": "contracts/src/ProgrammableExactShardsAtomicLaunchRouteV1.sol",
+        "function": "launch",
+        "lineRange": [
+          201,
+          277
+        ],
+        "findingLines": [
+          236,
+          237,
+          238,
+          239,
+          240,
+          241,
+          242
+        ],
+        "rawInstance": "(, bytes32 repositoryKey,) = PERMIT_AUTHORITY.consumePermit(...) ",
+        "rawDetectorFingerprintSha256": "0xd9e411a2df069353d635bcb808c05ce63b8dc8275aaff39b5eb204c5d497e7b5",
+        "classification": "INTENTIONAL_UNUSED_AUXILIARY_RETURN",
+        "rationale": "The route uses repositoryKey for its completion event; Permit Authority internally validates, records and emits the digest and nonce consumption before returning them.",
+        "actionable": false
+      }
+    ],
+    "manualV4HookReview": {
+      "reviewedBy": "independent-security-workflow",
+      "componentId": "shardHook",
+      "allFourEthFeeQuadrantsCorrect": true,
+      "ethSpecifiedChargedBeforeAndFullFillEnforced": true,
+      "ethUnspecifiedChargedAfterOnActualDelta": true,
+      "selfSwapsSkipCallbacksAndChargeExplicitly": true,
+      "externalFeeRecipientCallInsideCallbacks": false,
+      "pairedCallbackScratchReentrancyReachable": false,
+      "requiredSourceFixFound": false,
+      "exactHookSourceApprovalRemainsValid": true
+    },
+    "suppressionsReviewed": true,
+    "gatePassed": true,
+    "blocker": null
+  },
+  "verificationSummary": {
+    "componentCount": 13,
+    "propertyCount": 17,
+    "invariantCount": 18,
+    "testEvidenceFileCount": 12,
+    "requiredTestFunctionCount": 53,
+    "sourceRequirementCount": 6,
+    "structuralGatePassed": true,
+    "sourceAbiArtifactBindingGatePassed": true,
+    "exactTestEvidenceGatePassed": true,
+    "externalGitObjectResolutionGatePassed": true,
+    "slitherGatePassed": true,
+    "releaseReady": true
+  },
+  "deployment": {
+    "addresses": null,
+    "transactions": null,
+    "deployedRuntimeEvidence": null,
+    "activation": false
+  },
+  "contentCommitment": {
+    "canonicalization": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+    "sha256": "0x0c24da969d0ceb4effb306652986cef789be9ea95398bf284768ca42588d2ca4",
+    "keccak256": "0xd41dc529c282f28e0d94c2cc50f1ec48cfb91b7c97ddd9bb0619262f59fa67dc"
+  }
+}

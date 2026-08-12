@@ -1,21 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import { ProgrammableExactShardsFeePolicyVerifierV1 } from "../../src/ProgrammableExactShardsFeePolicyVerifierV1.sol";
+import { ProgrammableExactShardsFeePolicyVerifierV2 } from "../../src/ProgrammableExactShardsFeePolicyVerifierV2.sol";
 import { ProgrammableExactShardsRegistryV1 } from "../../src/ProgrammableExactShardsRegistryV1.sol";
 import {
     IProgrammableExactShardsFeePolicyVerifierV1
 } from "../../src/interfaces/IProgrammableExactShardsFeePolicyVerifierV1.sol";
 import { IProgrammableExactShardsRegistryV1 } from "../../src/interfaces/IProgrammableExactShardsRegistryV1.sol";
-import {
-    IProgrammableGithubRepositoryLineageRegistryV1
-} from "../../src/interfaces/IProgrammableGithubRepositoryLineageRegistryV1.sol";
+import { IProgrammableLaunchPermitAuthorityV1 } from "../../src/interfaces/IProgrammableLaunchPermitAuthorityV1.sol";
 
 /// @dev Test-only independent reproduction of the offchain binding algorithm. It is never a deployment artifact.
 contract ProgrammableExactShardsBindingHarnessV1 {
     ProgrammableExactShardsRegistryV1 public immutable REGISTRY;
-    ProgrammableExactShardsFeePolicyVerifierV1 public immutable VERIFIER;
-    IProgrammableGithubRepositoryLineageRegistryV1 public immutable LINEAGE_REGISTRY;
+    ProgrammableExactShardsFeePolicyVerifierV2 public immutable VERIFIER;
+    IProgrammableLaunchPermitAuthorityV1 public immutable PERMIT_AUTHORITY;
 
     bytes32 private constant APPROVAL_DOMAIN = keccak256("programmable.exact-shards-approval-binding.v1");
     bytes32 private constant REVIEW_DEPLOYMENT_DOMAIN =
@@ -24,6 +22,10 @@ contract ProgrammableExactShardsBindingHarnessV1 {
     bytes32 private constant RECORD_DOMAIN = keccak256("programmable.exact-shards-registered-record.v1");
     bytes32 private constant METADATA_DOMAIN = keccak256("programmable.exact-shards-launch-metadata-binding.v1");
     bytes32 private constant FEE_RECORD_DOMAIN = keccak256("programmable.exact-shards-fee-policy-record.v1");
+    bytes32 private constant PROJECT_ID_DOMAIN = keccak256("programmable.project-id.v1");
+    bytes32 private constant APPROVAL_ID_DOMAIN = keccak256("programmable.target-approval-id.v1");
+    bytes32 private constant LAUNCH_ID_DOMAIN = keccak256("programmable.target-launch-id.v1");
+    bytes32 private constant EXPECTED_ROUTE_ID = keccak256("programmable.exact-shards.atomic-launch-route.v1");
     bytes32 private constant LEG_TYPEHASH = keccak256(
         "ProgrammableRevenueLegV1(bytes32 roleHash,uint16 feeBps,address recipient,bytes32 recipientModeHash)"
     );
@@ -33,12 +35,12 @@ contract ProgrammableExactShardsBindingHarnessV1 {
 
     constructor(
         ProgrammableExactShardsRegistryV1 registry,
-        ProgrammableExactShardsFeePolicyVerifierV1 verifier,
-        IProgrammableGithubRepositoryLineageRegistryV1 lineageRegistry
+        ProgrammableExactShardsFeePolicyVerifierV2 verifier,
+        IProgrammableLaunchPermitAuthorityV1 permitAuthority
     ) {
         REGISTRY = registry;
         VERIFIER = verifier;
-        LINEAGE_REGISTRY = lineageRegistry;
+        PERMIT_AUTHORITY = permitAuthority;
     }
 
     function computeBindings(IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory registration)
@@ -52,11 +54,35 @@ contract ProgrammableExactShardsBindingHarnessV1 {
         )
     {
         bytes32 feePolicyRecordHash = _feePolicyRecordHash(registration);
-        approvalBindingHash = _approvalBindingHash(registration, feePolicyRecordHash);
+        approvalBindingHash = _approvalBindingHash(registration);
         reviewDeploymentBindingHash = _reviewDeploymentBindingHash(registration, feePolicyRecordHash);
         registeredRecordCommitment = _registeredRecordCommitment(registration, feePolicyRecordHash);
         launchIntentBindingHash =
             keccak256(abi.encode(IDENTITY_DOMAIN, REGISTRY.REGISTRY_INSTANCE_HASH(), registeredRecordCommitment));
+    }
+
+    function computeProjectId(uint64 githubRepositoryId) external view returns (bytes32 projectId) {
+        projectId = keccak256(abi.encode(PROJECT_ID_DOMAIN, PERMIT_AUTHORITY.computeRepositoryKey(githubRepositoryId)));
+    }
+
+    function computeCanonicalTargetIds(bytes32 projectId, uint64 approvalGeneration, bytes32 technicalApprovalHash)
+        external
+        view
+        returns (bytes32 approvalId, bytes32 launchId)
+    {
+        approvalId = keccak256(
+            abi.encode(
+                APPROVAL_ID_DOMAIN,
+                projectId,
+                approvalGeneration,
+                technicalApprovalHash,
+                block.chainid,
+                address(REGISTRY),
+                REGISTRY.REGISTRY_GENERATION(),
+                EXPECTED_ROUTE_ID
+            )
+        );
+        launchId = keccak256(abi.encode(LAUNCH_ID_DOMAIN, projectId, approvalId));
     }
 
     function _feePolicyRecordHash(IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory registration)
@@ -74,25 +100,25 @@ contract ProgrammableExactShardsBindingHarnessV1 {
                 REGISTRY.REGISTRY_INSTANCE_HASH(),
                 address(VERIFIER),
                 address(VERIFIER).codehash,
-                VERIFIER.feePolicyBindingHashV1(),
+                VERIFIER.feePolicyBindingHashV2(),
                 policyHash,
                 keccak256(abi.encode(builder, programmable, holder))
             )
         );
     }
 
-    function _approvalBindingHash(
-        IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory registration,
-        bytes32 feePolicyRecordHash
-    ) private view returns (bytes32) {
+    function _approvalBindingHash(IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory registration)
+        private
+        view
+        returns (bytes32)
+    {
         bytes32 reviewedSourceHash = keccak256(
             abi.encode(
                 registration.githubRepositoryId,
-                LINEAGE_REGISTRY.computeRepositoryKey(registration.githubRepositoryId),
+                PERMIT_AUTHORITY.computeRepositoryKey(registration.githubRepositoryId),
                 registration.commitId,
                 registration.sourceCommitment,
-                registration.buildCommitment,
-                registration.artifactSetHash
+                registration.buildCommitment
             )
         );
         bytes32 reviewedModelHash = keccak256(
@@ -107,29 +133,21 @@ contract ProgrammableExactShardsBindingHarnessV1 {
                 registration.capabilitySetHash
             )
         );
-        bytes32 scopeHash = keccak256(
-            abi.encode(
-                REGISTRY.REGISTRY_INSTANCE_HASH(),
-                registration.chainId,
-                registration.registryGeneration,
-                registration.launchId,
-                registration.projectId,
-                registration.approvalId
-            )
-        );
         bytes32 reviewedSecurityAndEconomicsHash = keccak256(
             abi.encode(
                 registration.reviewPolicyHash,
                 registration.securityReviewHash,
                 registration.reviewResultId,
-                feePolicyRecordHash
+                VERIFIER.economicTemplateHashV1(),
+                registration.configurationHash,
+                registration.finalityPolicyHash
             )
         );
         return keccak256(
             abi.encode(
                 APPROVAL_DOMAIN,
-                REGISTRY.REGISTRY_INSTANCE_HASH(),
-                scopeHash,
+                registration.projectId,
+                registration.approvalGeneration,
                 reviewedSourceHash,
                 reviewedModelHash,
                 reviewedSecurityAndEconomicsHash
@@ -218,7 +236,7 @@ contract ProgrammableExactShardsBindingHarnessV1 {
     {
         bytes32[15] memory words;
         words[0] = bytes32(uint256(registration.githubRepositoryId));
-        words[1] = LINEAGE_REGISTRY.computeRepositoryKey(registration.githubRepositoryId);
+        words[1] = PERMIT_AUTHORITY.computeRepositoryKey(registration.githubRepositoryId);
         words[2] = registration.commitId;
         words[3] = registration.sourceCommitment;
         words[4] = registration.buildCommitment;
@@ -281,7 +299,10 @@ contract ProgrammableExactShardsBindingHarnessV1 {
                 registration.registryGeneration,
                 registration.launchId,
                 registration.projectId,
+                registration.websiteProjectIdSha256,
+                registration.websiteLaunchIdSha256,
                 registration.approvalId,
+                registration.approvalGeneration,
                 registration.approvalBindingHash
             )
         );

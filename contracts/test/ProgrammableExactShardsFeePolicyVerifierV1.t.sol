@@ -76,7 +76,9 @@ contract ProgrammableExactShardsFeePolicyVerifierV1Test is Test {
         string memory json = vm.readFile(string.concat(root, "/spec/shards-fee-policy-verifier-v1.json"));
 
         assertEq(vm.parseJsonString(json, ".schemaVersion"), "programmable.exact-shards-fee-policy-verifier.v1");
-        assertEq(vm.parseJsonString(json, ".status"), "IMPLEMENTATION_READY_NOT_DEPLOYED");
+        assertEq(vm.parseJsonString(json, ".status"), "HISTORICAL_SUPERSEDED_NOT_DEPLOYED");
+        assertTrue(vm.parseJsonBool(json, ".historical"));
+        assertEq(vm.parseJsonString(json, ".supersededBy"), "contracts/spec/shards-fee-policy-verifier-v2.json");
         assertFalse(vm.parseJsonBool(json, ".activationAllowed"));
         assertFalse(vm.parseJsonBool(json, ".launchAllowed"));
         assertFalse(vm.parseJsonBool(json, ".decision.currentContractsCanLaunch"));

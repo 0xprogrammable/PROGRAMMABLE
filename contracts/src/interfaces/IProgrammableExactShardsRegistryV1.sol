@@ -13,10 +13,17 @@ interface IProgrammableExactShardsRegistryV1 {
         uint64 registryGeneration;
         bytes32 launchId;
         bytes32 projectId;
+        /// @dev Raw digest of the canonical public Website project ID, displayed as sha256:... offchain.
+        bytes32 websiteProjectIdSha256;
+        /// @dev Raw digest of the canonical public Website launch ID, displayed as sha256:... offchain.
+        bytes32 websiteLaunchIdSha256;
         bytes32 approvalId;
         bytes32 approvalBindingHash;
         /// @dev Stable numeric GitHub repository ID; independent of owner/name, transfer and rename.
         uint64 githubRepositoryId;
+        /// @dev Durable repository approval generation. It changes only after an explicit reapproval and is the
+        ///      canonical onchain cancellation namespace shared with the Launch Permit Authority.
+        uint64 approvalGeneration;
         bytes32 commitId;
         bytes32 sourceCommitment;
         bytes32 buildCommitment;
@@ -107,11 +114,27 @@ interface IProgrammableExactShardsRegistryV1 {
         bytes32 evidenceHash
     );
 
+    event ExactShardsLaunchIntentAuthorizedV1(
+        bytes32 indexed approvalId,
+        bytes32 indexed launchId,
+        bytes32 indexed bindingHash,
+        bytes32 evidenceHash,
+        uint64 transitionSequence,
+        uint64 validAfterBlock,
+        uint64 expiresAtBlock
+    );
+
     struct LaunchIntentStateV1 {
         bytes32 bindingHash;
         bytes32 evidenceHash;
         uint64 validAfterBlock;
         uint64 expiresAtBlock;
+    }
+
+    struct PublicIdentityStateV1 {
+        bytes32 websiteProjectIdSha256;
+        bytes32 websiteLaunchIdSha256;
+        bytes32 identityMappingHash;
     }
 
     event ExactShardsLaunchRegisteredV1(
@@ -126,6 +149,13 @@ interface IProgrammableExactShardsRegistryV1 {
         bytes32 feePolicyHash,
         bytes32 feePolicyRecordHash,
         uint64 observedAtBlock
+    );
+
+    event ExactShardsPublicIdentityBoundV1(
+        bytes32 indexed launchId,
+        bytes32 indexed websiteLaunchIdSha256,
+        bytes32 indexed websiteProjectIdSha256,
+        bytes32 identityMappingHash
     );
 
     event ExactShardsFeePolicyBoundV1(
@@ -171,16 +201,6 @@ interface IProgrammableExactShardsRegistryV1 {
         uint64 finalizedAtTimestamp
     );
 
-    event ExactShardsLaunchRecordCorrectedV1(
-        bytes32 indexed launchId,
-        uint64 indexed revision,
-        bytes32 indexed correctedRecordHash,
-        uint64 transitionSequence,
-        bytes32 previousRecordHash,
-        bytes32 reasonCode,
-        bytes32 evidenceHash
-    );
-
     event ExactShardsLaunchRevokedV1(
         bytes32 indexed launchId,
         bytes32 indexed reasonCode,
@@ -197,7 +217,6 @@ interface IProgrammableExactShardsRegistryV1 {
         external;
     function registerLaunch(LaunchRegistrationV1 calldata registration) external;
     function finalizeLaunch(IProgrammableCustomRegistryV1.FinalityProofV1 calldata proof) external;
-    function correctLaunchRecord(IProgrammableCustomRegistryV1.RecordCorrectionV1 calldata correction) external;
     function revokeLaunch(IProgrammableCustomRegistryV1.LaunchRevocationV1 calldata revocation) external;
 
     function launchState(bytes32 launchId) external view returns (LaunchStateV1 memory);
@@ -209,9 +228,17 @@ interface IProgrammableExactShardsRegistryV1 {
         external
         view
         returns (IProgrammableCustomRegistryV1.ApprovalStateV1 memory);
+    function launchIntentState(bytes32 approvalId) external view returns (LaunchIntentStateV1 memory);
+    function publicIdentityState(bytes32 launchId) external view returns (PublicIdentityStateV1 memory);
     function feePolicyState(bytes32 launchId) external view returns (StoredFeePolicyV1 memory);
     function feeClaim(bytes32 launchId, uint8 ordinal) external view returns (StoredFeeClaimV1 memory);
     function recordHashAtRevision(bytes32 launchId, uint64 revision) external view returns (bytes32);
+    function REGISTRY_GENERATION() external view returns (uint64);
+    function CHAIN_PROFILE_HASH() external view returns (bytes32);
+    function REGISTRY_INSTANCE_HASH() external view returns (bytes32);
+    function LAUNCH_PERMIT_AUTHORITY() external view returns (address);
+    function LAUNCH_ROUTE() external view returns (address);
+    function ECONOMIC_TEMPLATE_HASH() external view returns (bytes32);
 
     /// @dev Deterministic binding helpers are deliberately offchain/test-only so the production Registry
     ///      remains below EIP-170. Every submitted binding is recomputed and checked during registration.

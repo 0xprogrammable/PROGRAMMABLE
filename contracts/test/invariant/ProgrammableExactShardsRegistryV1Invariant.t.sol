@@ -4,21 +4,26 @@ pragma solidity 0.8.26;
 import { StdInvariant } from "forge-std/StdInvariant.sol";
 import { Test } from "forge-std/Test.sol";
 
-import { ProgrammableExactShardsFeePolicyVerifierV1 } from "../../src/ProgrammableExactShardsFeePolicyVerifierV1.sol";
+import { ProgrammableExactShardsFeePolicyVerifierV2 } from "../../src/ProgrammableExactShardsFeePolicyVerifierV2.sol";
 import { ProgrammableExactShardsRegistryV1 } from "../../src/ProgrammableExactShardsRegistryV1.sol";
-import {
-    ProgrammableGithubRepositoryLineageRegistryV1
-} from "../../src/ProgrammableGithubRepositoryLineageRegistryV1.sol";
 import { IProgrammableCustomRegistryV1 } from "../../src/interfaces/IProgrammableCustomRegistryV1.sol";
 import {
     IProgrammableExactShardsFeePolicyVerifierV1
 } from "../../src/interfaces/IProgrammableExactShardsFeePolicyVerifierV1.sol";
 import { IProgrammableExactShardsRegistryV1 } from "../../src/interfaces/IProgrammableExactShardsRegistryV1.sol";
+import { IProgrammableLaunchPermitAuthorityV1 } from "../../src/interfaces/IProgrammableLaunchPermitAuthorityV1.sol";
 import { ProgrammableExactShardsBindingHarnessV1 } from "../utils/ProgrammableExactShardsBindingHarnessV1.sol";
 
 contract ExactShardsRegistryInvariantRuntimeV1 {
     function version() external pure returns (uint256) {
         return 1;
+    }
+}
+
+contract ExactShardsRegistryInvariantPermitAuthorityV1 {
+    function computeRepositoryKey(uint64 githubRepositoryId) external pure returns (bytes32) {
+        require(githubRepositoryId != 0, "repository-id");
+        return keccak256(abi.encode("programmable.github.repository.v1", uint256(githubRepositoryId)));
     }
 }
 
@@ -41,11 +46,18 @@ contract ExactShardsRegistryInvariantApprovalActorV1 {
 }
 
 contract ProgrammableExactShardsRegistryV1InvariantHandler is Test {
+    address private constant WRITER = address(0xB001);
+    address private constant FINALIZER = address(0xF1A1);
+    address private constant REVOKER = address(0xDEAD);
+
     struct Record {
         bytes32 label;
         bytes32 launchId;
         bytes32 approvalId;
         bytes32 deploymentId;
+        bytes32 websiteProjectIdSha256;
+        bytes32 websiteLaunchIdSha256;
+        bytes32 identityMappingHash;
         uint64 githubRepositoryId;
         bytes32 repositoryKey;
         bytes32 feePolicyRecordHash;
@@ -62,34 +74,36 @@ contract ProgrammableExactShardsRegistryV1InvariantHandler is Test {
     uint256 private constant MAX_RECORDS = 16;
 
     ProgrammableExactShardsRegistryV1 public immutable registry;
-    ProgrammableExactShardsFeePolicyVerifierV1 public immutable verifier;
-    ProgrammableGithubRepositoryLineageRegistryV1 public immutable lineageRegistry;
+    ProgrammableExactShardsFeePolicyVerifierV2 public immutable verifier;
+    IProgrammableLaunchPermitAuthorityV1 public immutable permitAuthority;
     ProgrammableExactShardsBindingHarnessV1 public immutable bindingHarness;
     ExactShardsRegistryInvariantApprovalActorV1 public immutable approvalActor;
+    ExactShardsRegistryInvariantApprovalActorV1 public immutable launchIntentActor;
     ExactShardsRegistryInvariantRuntimeV1 public immutable runtimeTarget;
 
     Record[] private records;
     uint256 public sequence;
     uint64 public successfulRegistrations;
     uint64 public successfulFinalizations;
-    uint64 public successfulCorrections;
     uint64 public successfulRevocations;
     bool public replaySucceeded;
     bool public revokedLaunchRevived;
 
     constructor(
         ProgrammableExactShardsRegistryV1 registry_,
-        ProgrammableExactShardsFeePolicyVerifierV1 verifier_,
-        ProgrammableGithubRepositoryLineageRegistryV1 lineageRegistry_,
+        ProgrammableExactShardsFeePolicyVerifierV2 verifier_,
+        IProgrammableLaunchPermitAuthorityV1 permitAuthority_,
         ProgrammableExactShardsBindingHarnessV1 bindingHarness_,
         ExactShardsRegistryInvariantApprovalActorV1 approvalActor_,
+        ExactShardsRegistryInvariantApprovalActorV1 launchIntentActor_,
         ExactShardsRegistryInvariantRuntimeV1 runtimeTarget_
     ) {
         registry = registry_;
         verifier = verifier_;
-        lineageRegistry = lineageRegistry_;
+        permitAuthority = permitAuthority_;
         bindingHarness = bindingHarness_;
         approvalActor = approvalActor_;
+        launchIntentActor = launchIntentActor_;
         runtimeTarget = runtimeTarget_;
     }
 
@@ -110,7 +124,7 @@ contract ProgrammableExactShardsRegistryV1InvariantHandler is Test {
                 evidenceHash: _field(label, "approval-evidence")
             });
         approvalActor.authorize(technicalAuthorization);
-        approvalActor.authorizeLaunchIntent(
+        launchIntentActor.authorizeLaunchIntent(
             IProgrammableCustomRegistryV1.ApprovalAuthorizationV1({
                 chainId: block.chainid,
                 registryGeneration: registry.REGISTRY_GENERATION(),
@@ -123,23 +137,24 @@ contract ProgrammableExactShardsRegistryV1InvariantHandler is Test {
                 evidenceHash: _field(label, "launch-intent-evidence")
             })
         );
-        lineageRegistry.consume(
-            registration.githubRepositoryId,
-            registration.launchId,
-            keccak256("programmable.exact-shards.atomic-launch-route.v1")
-        );
+        vm.prank(WRITER);
         registry.registerLaunch(registration);
 
         IProgrammableExactShardsRegistryV1.StoredFeePolicyV1 memory storedPolicy =
             registry.feePolicyState(registration.launchId);
+        IProgrammableExactShardsRegistryV1.PublicIdentityStateV1 memory publicIdentity =
+            registry.publicIdentityState(registration.launchId);
         records.push(
             Record({
                 label: label,
                 launchId: registration.launchId,
                 approvalId: registration.approvalId,
                 deploymentId: registration.deploymentId,
+                websiteProjectIdSha256: registration.websiteProjectIdSha256,
+                websiteLaunchIdSha256: registration.websiteLaunchIdSha256,
+                identityMappingHash: publicIdentity.identityMappingHash,
                 githubRepositoryId: registration.githubRepositoryId,
-                repositoryKey: lineageRegistry.computeRepositoryKey(registration.githubRepositoryId),
+                repositoryKey: permitAuthority.computeRepositoryKey(registration.githubRepositoryId),
                 feePolicyRecordHash: storedPolicy.feePolicyRecordHash,
                 claimSetHash: storedPolicy.claimSetHash,
                 builderClaimHash: registry.feeClaim(registration.launchId, 0).storedClaimHash,
@@ -165,6 +180,7 @@ contract ProgrammableExactShardsRegistryV1InvariantHandler is Test {
         bytes32 confirmedHash = _field(record.label, "confirmed-block");
         vm.setBlockhash(state.observedAtBlock, observedHash);
         vm.setBlockhash(confirmedHead, confirmedHash);
+        vm.prank(FINALIZER);
         registry.finalizeLaunch(
             IProgrammableCustomRegistryV1.FinalityProofV1({
                 chainId: block.chainid,
@@ -185,33 +201,11 @@ contract ProgrammableExactShardsRegistryV1InvariantHandler is Test {
         successfulFinalizations += 1;
     }
 
-    function correct(uint256 rawIndex, uint256 entropy) external {
-        if (records.length == 0) return;
-        Record storage record = records[rawIndex % records.length];
-        if (!record.finalized || record.revoked) return;
-        uint64 revision = record.latestRevision + 1;
-        bytes32 correctedHash = keccak256(abi.encode(record.label, "corrected-record", revision, entropy));
-        registry.correctLaunchRecord(
-            IProgrammableCustomRegistryV1.RecordCorrectionV1({
-                chainId: block.chainid,
-                registryGeneration: registry.REGISTRY_GENERATION(),
-                launchId: record.launchId,
-                revision: revision,
-                previousRecordHash: record.latestRecordHash,
-                correctedRecordHash: correctedHash,
-                reasonCode: keccak256(abi.encode(record.label, "correction-reason", revision)),
-                evidenceHash: keccak256(abi.encode(record.label, "correction-evidence", revision))
-            })
-        );
-        record.latestRevision = revision;
-        record.latestRecordHash = correctedHash;
-        successfulCorrections += 1;
-    }
-
     function revoke(uint256 rawIndex) external {
         if (records.length == 0) return;
         Record storage record = records[rawIndex % records.length];
         if (record.revoked) return;
+        vm.prank(REVOKER);
         registry.revokeLaunch(
             IProgrammableCustomRegistryV1.LaunchRevocationV1({
                 chainId: block.chainid,
@@ -230,6 +224,7 @@ contract ProgrammableExactShardsRegistryV1InvariantHandler is Test {
         Record storage record = records[rawIndex % records.length];
         uint64 registrationsBefore = registry.registrationCount();
         uint64 transitionsBefore = registry.transitionCount();
+        vm.prank(WRITER);
         try registry.registerLaunch(_boundRegistration(record.label)) {
             if (registry.registrationCount() != registrationsBefore || registry.transitionCount() != transitionsBefore)
             {
@@ -242,6 +237,7 @@ contract ProgrammableExactShardsRegistryV1InvariantHandler is Test {
         if (records.length == 0) return;
         Record storage record = records[rawIndex % records.length];
         if (!record.revoked) return;
+        vm.prank(WRITER);
         try registry.registerLaunch(_boundRegistration(record.label)) {
             if (registry.launchState(record.launchId).status != IProgrammableCustomRegistryV1.LaunchStatus.Revoked) {
                 revokedLaunchRevived = true;
@@ -272,17 +268,18 @@ contract ProgrammableExactShardsRegistryV1InvariantHandler is Test {
     {
         registration.chainId = block.chainid;
         registration.registryGeneration = registry.REGISTRY_GENERATION();
-        registration.launchId = _field(label, "launch-id");
-        registration.projectId = _field(label, "project-id");
-        registration.approvalId = _field(label, "approval-id");
         registration.githubRepositoryId = uint64(uint256(label));
         if (registration.githubRepositoryId == 0) registration.githubRepositoryId = 1;
+        registration.approvalGeneration = 1;
         registration.commitId = bytes32(bytes20(hex"91b38f3de64d96cac7e29f127c004f128fc1da59"));
         registration.sourceCommitment = verifier.SOURCE_REVISION_HASH();
-        registration.buildCommitment = verifier.NESTED_FACTORY_ARTIFACT_SHA256();
+        registration.buildCommitment = verifier.REVIEWED_TECHNICAL_BUILD_SHA256();
         registration.artifactSetHash = _field(label, "artifact-set");
         registration.deploymentConfigurationHash = _field(label, "deployment-configuration");
         registration.configurationHash = _field(label, "configuration");
+        registration.projectId = bindingHarness.computeProjectId(registration.githubRepositoryId);
+        registration.websiteProjectIdSha256 = keccak256(abi.encode(label, "website-project-id"));
+        registration.websiteLaunchIdSha256 = keccak256(abi.encode(label, "website-launch-id"));
         registration.tokenNameHash = keccak256(bytes("Shards"));
         registration.tokenSymbolHash = keccak256(bytes("SHARDS"));
         registration.presentationBindingHash = _field(label, "description-image-links");
@@ -308,10 +305,9 @@ contract ProgrammableExactShardsRegistryV1InvariantHandler is Test {
         registration.reviewResultId = _field(label, "review-result");
         registration.finalityPolicyHash = _field(label, "finality-policy");
         registration.feePolicy.profileKey = verifier.PROFILE_KEY();
-        registration.feePolicy.feeAsset = verifier.FEE_ASSET();
+        registration.feePolicy.feeAsset = address(0);
         registration.feePolicy.feeBasisHash = verifier.FEE_BASIS_HASH();
         registration.feePolicy.totalFeeBps = verifier.TOTAL_FEE_BPS();
-        registration.feePolicy.legsHash = verifier.LEGS_HASH();
         registration.orderedFeeLegs[0] = IProgrammableExactShardsFeePolicyVerifierV1.ProgrammableRevenueLegV1({
             roleHash: verifier.BUILDER_ROLE_HASH(),
             feeBps: verifier.BUILDER_FEE_BPS(),
@@ -327,10 +323,20 @@ contract ProgrammableExactShardsRegistryV1InvariantHandler is Test {
         registration.orderedFeeLegs[2] = IProgrammableExactShardsFeePolicyVerifierV1.ProgrammableRevenueLegV1({
             roleHash: verifier.HOLDER_ROLE_HASH(),
             feeBps: verifier.HOLDER_FEE_BPS(),
-            recipient: verifier.HOLDER_ACCUMULATOR(),
+            recipient: address(runtimeTarget),
             recipientModeHash: verifier.HOLDER_RECIPIENT_MODE_HASH()
         });
+        registration.feePolicy.legsHash = keccak256(
+            abi.encode(
+                verifier.hashLeg(registration.orderedFeeLegs[0]),
+                verifier.hashLeg(registration.orderedFeeLegs[1]),
+                verifier.hashLeg(registration.orderedFeeLegs[2])
+            )
+        );
         (registration.approvalBindingHash,,,) = bindingHarness.computeBindings(registration);
+        (registration.approvalId, registration.launchId) = bindingHarness.computeCanonicalTargetIds(
+            registration.projectId, registration.approvalGeneration, registration.approvalBindingHash
+        );
         (,, registration.reviewDeploymentBindingHash,) = bindingHarness.computeBindings(registration);
         (,,, registration.registeredRecordCommitment) = bindingHarness.computeBindings(registration);
     }
@@ -350,7 +356,7 @@ contract ProgrammableExactShardsRegistryV1InvariantHandler is Test {
 
 contract ProgrammableExactShardsRegistryV1InvariantTest is StdInvariant, Test {
     ProgrammableExactShardsRegistryV1 internal registry;
-    ProgrammableGithubRepositoryLineageRegistryV1 internal lineageRegistry;
+    IProgrammableLaunchPermitAuthorityV1 internal permitAuthority;
     ProgrammableExactShardsRegistryV1InvariantHandler internal handler;
 
     uint64 private lastRegistrationCount;
@@ -359,49 +365,49 @@ contract ProgrammableExactShardsRegistryV1InvariantTest is StdInvariant, Test {
     function setUp() public {
         vm.chainId(1);
         vm.roll(100);
-        ProgrammableExactShardsFeePolicyVerifierV1 verifier = new ProgrammableExactShardsFeePolicyVerifierV1();
-        lineageRegistry = new ProgrammableGithubRepositoryLineageRegistryV1(2 days, address(this));
+        ProgrammableExactShardsFeePolicyVerifierV2 verifier = new ProgrammableExactShardsFeePolicyVerifierV2();
+        permitAuthority =
+            IProgrammableLaunchPermitAuthorityV1(address(new ExactShardsRegistryInvariantPermitAuthorityV1()));
         ExactShardsRegistryInvariantRuntimeV1 runtimeTarget = new ExactShardsRegistryInvariantRuntimeV1();
         registry = new ProgrammableExactShardsRegistryV1(
             ProgrammableExactShardsRegistryV1.RegistryConfigV1({
                 initialAdminDelay: 2 days,
                 initialAdmin: address(this),
                 initialApprover: address(0xA990),
+                initialLaunchIntentApprover: address(0xA991),
                 initialWriter: address(0xB001),
-                initialFinalizer: address(this),
-                initialCorrector: address(this),
-                initialRevoker: address(this),
+                initialFinalizer: address(0xF1A1),
+                initialRevoker: address(0xDEAD),
                 registryGeneration: 3,
                 minimumFinalityBlocks: 3,
                 chainProfileHash: keccak256("ethereum-mainnet-chain-profile"),
                 registryPolicyHash: keccak256("exact-shards-registry-policy")
             }),
             verifier,
-            lineageRegistry
+            permitAuthority
         );
         ExactShardsRegistryInvariantApprovalActorV1 approvalActor =
             new ExactShardsRegistryInvariantApprovalActorV1(registry);
+        ExactShardsRegistryInvariantApprovalActorV1 launchIntentActor =
+            new ExactShardsRegistryInvariantApprovalActorV1(registry);
         ProgrammableExactShardsBindingHarnessV1 bindingHarness =
-            new ProgrammableExactShardsBindingHarnessV1(registry, verifier, lineageRegistry);
-        registry.grantRole(registry.APPROVER_ROLE(), address(approvalActor));
-        registry.revokeRole(registry.APPROVER_ROLE(), address(0xA990));
-        handler = new ProgrammableExactShardsRegistryV1InvariantHandler(
-            registry, verifier, lineageRegistry, bindingHarness, approvalActor, runtimeTarget
+            new ProgrammableExactShardsBindingHarnessV1(registry, verifier, permitAuthority);
+        registry.grantRole(keccak256("programmable.custom-registry.approver.v1"), address(approvalActor));
+        registry.revokeRole(keccak256("programmable.custom-registry.approver.v1"), address(0xA990));
+        registry.grantRole(
+            keccak256("programmable.exact-shards-registry.launch-intent-approver.v1"), address(launchIntentActor)
         );
-        registry.grantRole(registry.WRITER_ROLE(), address(handler));
-        lineageRegistry.grantRole(lineageRegistry.CONSUMER_ROLE(), address(handler));
-        registry.revokeRole(registry.WRITER_ROLE(), address(0xB001));
-        registry.grantRole(registry.FINALIZER_ROLE(), address(handler));
-        registry.grantRole(registry.CORRECTOR_ROLE(), address(handler));
-        registry.grantRole(registry.REVOKER_ROLE(), address(handler));
+        registry.revokeRole(keccak256("programmable.exact-shards-registry.launch-intent-approver.v1"), address(0xA991));
+        handler = new ProgrammableExactShardsRegistryV1InvariantHandler(
+            registry, verifier, permitAuthority, bindingHarness, approvalActor, launchIntentActor, runtimeTarget
+        );
 
-        bytes4[] memory selectors = new bytes4[](6);
+        bytes4[] memory selectors = new bytes4[](5);
         selectors[0] = handler.register.selector;
         selectors[1] = handler.finalize.selector;
-        selectors[2] = handler.correct.selector;
-        selectors[3] = handler.revoke.selector;
-        selectors[4] = handler.replay.selector;
-        selectors[5] = handler.attemptRevive.selector;
+        selectors[2] = handler.revoke.selector;
+        selectors[3] = handler.replay.selector;
+        selectors[4] = handler.attemptRevive.selector;
         targetSelector(FuzzSelector({ addr: address(handler), selectors: selectors }));
         targetContract(address(handler));
     }
@@ -414,8 +420,7 @@ contract ProgrammableExactShardsRegistryV1InvariantTest is StdInvariant, Test {
         assertEq(registrations, handler.successfulRegistrations());
         assertEq(
             transitions,
-            handler.successfulRegistrations() * 3 + handler.successfulFinalizations() + handler.successfulCorrections()
-                + handler.successfulRevocations()
+            handler.successfulRegistrations() * 3 + handler.successfulFinalizations() + handler.successfulRevocations()
         );
         lastRegistrationCount = registrations;
         lastTransitionCount = transitions;
@@ -447,11 +452,15 @@ contract ProgrammableExactShardsRegistryV1InvariantTest is StdInvariant, Test {
             assertTrue(registry.approvalConsumed(record.approvalId));
             assertTrue(registry.approvalState(record.approvalId).consumed);
             assertTrue(registry.deploymentConsumed(record.deploymentId));
-            assertEq(lineageRegistry.consumption(record.repositoryKey).launchId, record.launchId);
-            assertEq(lineageRegistry.computeRepositoryKey(record.githubRepositoryId), record.repositoryKey);
+            assertEq(permitAuthority.computeRepositoryKey(record.githubRepositoryId), record.repositoryKey);
             assertEq(state.latestRecordRevision, record.latestRevision);
             assertEq(state.latestRecordHash, record.latestRecordHash);
             assertEq(registry.recordHashAtRevision(record.launchId, record.latestRevision), record.latestRecordHash);
+            IProgrammableExactShardsRegistryV1.PublicIdentityStateV1 memory publicIdentity =
+                registry.publicIdentityState(record.launchId);
+            assertEq(publicIdentity.websiteProjectIdSha256, record.websiteProjectIdSha256);
+            assertEq(publicIdentity.websiteLaunchIdSha256, record.websiteLaunchIdSha256);
+            assertEq(publicIdentity.identityMappingHash, record.identityMappingHash);
         }
         assertFalse(handler.replaySucceeded());
     }

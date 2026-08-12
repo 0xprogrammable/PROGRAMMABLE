@@ -1,0 +1,471 @@
+{
+  "schemaVersion": "programmable.exact-shards-registry-successor.v2",
+  "status": "SOURCE_CANDIDATE_NOT_DEPLOYED",
+  "activationAllowed": false,
+  "launchAllowed": false,
+  "externalActionOccurred": false,
+  "reviewedInput": {
+    "path": "contracts/spec/shards-successor-manifest-input-v2.json",
+    "rawBytesSha256": "0xbf17f2cb85bb22a7439a3e1d63dc1accd6dcd161e6ac1b244fb1380cf200bf6a",
+    "canonicalJsonSha256": "0x2fab4bdaf8567003e22e349a7ee8ca4071ea9de49af801eb333951c385bd7b23",
+    "semanticAssertionCount": 29
+  },
+  "reviewedSource": {
+    "repository": "https://github.com/jesse-stahl/shards-v1",
+    "commit": "91b38f3de64d96cac7e29f127c004f128fc1da59",
+    "tree": "92d6def8609e829487adea66c13901734e43c8c7",
+    "sourceRevisionHash": "0x3352fe14662ce467e98f475cf91f10304ce4d69b6342fae4bf3dc968c494d6dc",
+    "reviewedTechnicalBuild": {
+      "path": "contracts/spec/shards-reviewed-technical-build-v1.json",
+      "sha256": "0x2ad4194f0ff2d12245e8c933c02ceda6508bad03832a3f070dc426b35e9eb0ed"
+    }
+  },
+  "compiler": {
+    "version": "0.8.26+commit.8a97fa7a",
+    "evmVersion": "cancun",
+    "optimizerEnabled": true,
+    "optimizerRuns": 1000,
+    "viaIR": false,
+    "bytecodeHash": "none",
+    "appendCBOR": false
+  },
+  "eipLimits": {
+    "eip170RuntimeBytes": 24576,
+    "eip3860InitcodeBytes": 49152,
+    "minimumRegistryRuntimeMarginBytes": 1024,
+    "minimumCoordinatorInitcodeMarginBytes": 1024
+  },
+  "constructorEncodingFixturePolicy": "DETERMINISTIC_LENGTH_ONLY_NOT_A_DEPLOYMENT_INPUT_OR_ADDRESS_PLAN",
+  "productBoundary": {
+    "durableTechnicalInputs": [
+      "hookCreationCodeHash",
+      "tickLower",
+      "tickBand",
+      "tickUpper",
+      "startSqrtPriceX96",
+      "canonicalRendererPolicy",
+      "nftMetadataDerivationPolicy",
+      "economicTemplateHash",
+      "finalityPolicyHash"
+    ],
+    "websiteSelectedInputs": [
+      "tokenName",
+      "tokenSymbol",
+      "presentationBindingHash",
+      "launchWallet"
+    ],
+    "deterministicallyDerivedMetadata": {
+      "nftName": "tokenName + ASCII_SPACE + Pieces",
+      "nftSymbol": "tokenSymbol + ASCII_N",
+      "websiteMayOverride": false
+    },
+    "jitDeploymentInputs": [
+      "tokenSalt",
+      "hookSalt",
+      "predictedShardAddress",
+      "predictedHookAddress",
+      "predictedNftAddress",
+      "artifactSetHash",
+      "deploymentConfigurationHash",
+      "deploymentSetHash",
+      "runtimeCodeSetHash",
+      "concreteFeePolicyRecord",
+      "holderAccumulator = predictedHook then exactReturnedHook"
+    ],
+    "presentationIsSourceInput": false,
+    "technicalApprovalSurvivesPresentationOnlyChange": true,
+    "jitPermitBindsSelectedDerivedAndPredictedValues": true
+  },
+  "reviewedBuildBoundaryCorrection": {
+    "appliesToHistoricalReviewedBuildSha256": "0x2ad4194f0ff2d12245e8c933c02ceda6508bad03832a3f070dc426b35e9eb0ed",
+    "historicalMisclassification": [
+      "nftName",
+      "nftSymbol"
+    ],
+    "correctClassification": "DETERMINISTICALLY_DERIVED_METADATA_NOT_WEBSITE_SELECTED_OR_INDEPENDENT_JIT_INPUT",
+    "normativeBoundary": "productBoundary",
+    "changesReviewedSourceOrEconomics": false
+  },
+  "deployment": {
+    "addresses": null,
+    "transactions": null,
+    "deployedRuntimeEvidence": null,
+    "activation": false
+  },
+  "components": [
+    {
+      "id": "permitVerifier",
+      "contract": "ProgrammableLaunchPermitVerifierV1",
+      "source": {
+        "path": "contracts/src/ProgrammableLaunchPermitVerifierV1.sol",
+        "sha256": "0x240f369621917dcf99793d0c45023b8da45124790f826b331217d7b979c61201",
+        "keccak256": "0x4351b9eaa6937a32c6736a97508c9313ad80d507045a6af91b07c7e70e5c37e7"
+      },
+      "artifact": {
+        "path": "contracts/out/ProgrammableLaunchPermitVerifierV1.sol/ProgrammableLaunchPermitVerifierV1.json",
+        "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+        "canonicalAbiSha256": "0x417bada87c742b2a1bde7a735db7fe31e415da1266d7c57262bbce89c7dfd94a",
+        "normalizedArtifactSha256": "0x89806422babdba99c08ba743427e3d7ef51d681ba8098377c217e03746d44be4",
+        "rawForgeArtifactIsBinding": false,
+        "sourceClosureSha256": "0x9cdb12a82d1969a4e9827c138e61e5d9ab6d4ef722e7707d653dcad306d1e62b",
+        "sourceClosureFileCount": 11,
+        "creationTemplateByteLength": 12622,
+        "creationTemplateKeccak256": "0x202cbe6382c630a08e7ac10c01b818dfd03e13ead6f0e9e32333935a40da7afb",
+        "constructorEncodingByteLength": 0,
+        "eip3860LengthFixtureInitcodeByteLength": 12622,
+        "constructorEncodingFixtureIsDeploymentInput": false,
+        "initcodeLimitMarginBytes": 36530,
+        "runtimeTemplateByteLength": 12594,
+        "runtimeTemplateKeccak256": "0xe5a8bfe3a5cae5ce28e1a9424a09051f850a1d6ef79a5a1519c475636228a4a4",
+        "runtimeCodeLimitMarginBytes": 11982,
+        "runtimeTemplateContainsImmutables": false
+      },
+      "deployment": {
+        "address": null,
+        "transactionHash": null,
+        "blockNumber": null,
+        "activation": false
+      }
+    },
+    {
+      "id": "permitAuthority",
+      "contract": "ProgrammableLaunchPermitAuthorityV1",
+      "source": {
+        "path": "contracts/src/ProgrammableLaunchPermitAuthorityV1.sol",
+        "sha256": "0xd64e40876c1727849f19527ea4f0718e34f30f93ac103b67fe6bac677b1fd3d1",
+        "keccak256": "0x4469b69482ff24d631eddacb9b33789159047276f24734c5d332567050bf52de"
+      },
+      "artifact": {
+        "path": "contracts/out/ProgrammableLaunchPermitAuthorityV1.sol/ProgrammableLaunchPermitAuthorityV1.json",
+        "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+        "canonicalAbiSha256": "0xa5486b4b955e7a8dd05177e65f23f75ef369a3c4f35f9ea9bdda200ac40510f8",
+        "normalizedArtifactSha256": "0xe68f137bf60786b726bbbc84c5cc68e73206271ace98b44b1a34c92a4d11d242",
+        "rawForgeArtifactIsBinding": false,
+        "sourceClosureSha256": "0xf4e3f8c3135aec51ed0a76eb0cdf8f1f114e1092d3c8d1407f52f35f77d51ee1",
+        "sourceClosureFileCount": 16,
+        "creationTemplateByteLength": 26899,
+        "creationTemplateKeccak256": "0xa093a6de17364c5655876dc00e2e4dc92243f3d2250ba34422df21731bbeaf6c",
+        "constructorEncodingByteLength": 320,
+        "eip3860LengthFixtureInitcodeByteLength": 27219,
+        "constructorEncodingFixtureIsDeploymentInput": false,
+        "initcodeLimitMarginBytes": 21933,
+        "runtimeTemplateByteLength": 23047,
+        "runtimeTemplateKeccak256": "0x89d9d2bdc459c202bf975f8dafb8a49753b31b05046a41eb4e7f0dabfa521cb7",
+        "runtimeCodeLimitMarginBytes": 1529,
+        "runtimeTemplateContainsImmutables": true
+      },
+      "deployment": {
+        "address": null,
+        "transactionHash": null,
+        "blockNumber": null,
+        "activation": false
+      }
+    },
+    {
+      "id": "feePolicyVerifier",
+      "contract": "ProgrammableExactShardsFeePolicyVerifierV2",
+      "source": {
+        "path": "contracts/src/ProgrammableExactShardsFeePolicyVerifierV2.sol",
+        "sha256": "0xe612287816b92d7beae1f4c80107469db27a076f81cec1d266f5493734e252e2",
+        "keccak256": "0xdbc5882504e6467b1d5eb5ad6012cef7715c28ab9f7737c7e110ef1ee6f67834"
+      },
+      "artifact": {
+        "path": "contracts/out/ProgrammableExactShardsFeePolicyVerifierV2.sol/ProgrammableExactShardsFeePolicyVerifierV2.json",
+        "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+        "canonicalAbiSha256": "0x2958741a9dd8a65fa94b9c40e7b7f4e2e51c312486d57ebc0bc650dffeafc57f",
+        "normalizedArtifactSha256": "0xf54ee74a0d11db2c3be986ebee0fd2b012eeace3dab937313e6e6ff95e219300",
+        "rawForgeArtifactIsBinding": false,
+        "sourceClosureSha256": "0x147094c1a32d42d1c264c3644318b36dce529a978f4cc2403fdb376fa5ec1d6c",
+        "sourceClosureFileCount": 3,
+        "creationTemplateByteLength": 4675,
+        "creationTemplateKeccak256": "0x6538ad322ad1b9af3f6196fba080c6896a79b2a0f2f16e7e6e1ef40cb2f5196c",
+        "constructorEncodingByteLength": 0,
+        "eip3860LengthFixtureInitcodeByteLength": 4675,
+        "constructorEncodingFixtureIsDeploymentInput": false,
+        "initcodeLimitMarginBytes": 44477,
+        "runtimeTemplateByteLength": 4647,
+        "runtimeTemplateKeccak256": "0xa07652baf4a500d08456f193c6117fde69eb0c04ed21116555ec289abdc3c5ac",
+        "runtimeCodeLimitMarginBytes": 19929,
+        "runtimeTemplateContainsImmutables": false
+      },
+      "deployment": {
+        "address": null,
+        "transactionHash": null,
+        "blockNumber": null,
+        "activation": false
+      }
+    },
+    {
+      "id": "registry",
+      "contract": "ProgrammableExactShardsRegistryV1",
+      "source": {
+        "path": "contracts/src/ProgrammableExactShardsRegistryV1.sol",
+        "sha256": "0xe172d3ef56fd15d586f7f3cd173b8c8c12d8cf5687e4d6a1517b8932a657919a",
+        "keccak256": "0x7448fd549bb8063d099e42cea39975a4357948994df27fc1d3ebdce8f7624738"
+      },
+      "artifact": {
+        "path": "contracts/out/ProgrammableExactShardsRegistryV1.sol/ProgrammableExactShardsRegistryV1.json",
+        "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+        "canonicalAbiSha256": "0xd27a3881d5cf874c71a23c833a2ec0cd6f892491b6575973a53a07a0d5d72a0c",
+        "normalizedArtifactSha256": "0xb355b1236b11f820026f74a1c008b572f6684c1134c2aaebd0aee5d8ce3dbac2",
+        "rawForgeArtifactIsBinding": false,
+        "sourceClosureSha256": "0x011f6e94c278eb2a12d4c61aca5e7b9444a9b20d08ab38cf75f4d8af7f1ab437",
+        "sourceClosureFileCount": 18,
+        "creationTemplateByteLength": 26862,
+        "creationTemplateKeccak256": "0xe43983bf70f32d3814a7388fbeebe4b2f036639f7eb0e05ce16f87b8d85b8217",
+        "constructorEncodingByteLength": 416,
+        "eip3860LengthFixtureInitcodeByteLength": 27278,
+        "constructorEncodingFixtureIsDeploymentInput": false,
+        "initcodeLimitMarginBytes": 21874,
+        "runtimeTemplateByteLength": 23471,
+        "runtimeTemplateKeccak256": "0x7c31b0c52f59b716a1a7cfd1cde93e739697e7d9b8f25e863cc16d9b5c4aa83c",
+        "runtimeCodeLimitMarginBytes": 1105,
+        "runtimeTemplateContainsImmutables": true
+      },
+      "deployment": {
+        "address": null,
+        "transactionHash": null,
+        "blockNumber": null,
+        "activation": false
+      }
+    }
+  ],
+  "semanticAssertions": [
+    {
+      "id": "permit-authority-release-lifecycle",
+      "status": "PASS",
+      "component": "permitAuthority",
+      "evidenceKind": "abiHasFunctions",
+      "meaning": "One-use permits, approval-generation cancellation and governed release lifecycle are materialized onchain."
+    },
+    {
+      "id": "permit-verifier-domain-separation",
+      "status": "PASS",
+      "component": "permitVerifier",
+      "evidenceKind": "abiHasFunctions",
+      "meaning": "Permit identity, release binding and kernel envelope are independently validated."
+    },
+    {
+      "id": "registry-separated-approvers-and-sole-route",
+      "status": "PASS",
+      "component": "registry",
+      "evidenceKind": "sourceIncludesAll",
+      "meaning": "Durable approval, JIT launch-intent approval and the immutable sole launch route are separate authorities."
+    },
+    {
+      "id": "registry-immutable-revision-one-terminal-revoke",
+      "status": "PASS",
+      "component": "registry",
+      "evidenceKind": "sourceIncludesAll",
+      "meaning": "Registration creates immutable revision 1; finality is a state transition and faults terminate in revocation."
+    },
+    {
+      "id": "registry-no-record-correction",
+      "status": "PASS",
+      "component": "registry",
+      "evidenceKind": "abiLacksSymbols",
+      "meaning": "No correction function or correction event can rewrite a registered record."
+    },
+    {
+      "id": "registry-public-identity-state",
+      "status": "PASS",
+      "component": "registry",
+      "evidenceKind": "abiTupleHasFields",
+      "meaning": "Canonical Website SHA-256 identifiers are stored alongside Registry Keccak identifiers."
+    },
+    {
+      "id": "registry-public-identity-event",
+      "status": "PASS",
+      "component": "registry",
+      "evidenceKind": "abiEventHasFields",
+      "meaning": "Indexers receive an explicit, filterable Website-to-Registry identity mapping."
+    },
+    {
+      "id": "registry-public-identity-domain-binding",
+      "status": "PASS",
+      "component": "registry",
+      "evidenceKind": "sourceIncludesAll",
+      "meaning": "The cross-domain identity mapping is domain-separated and part of the exact registration binding."
+    },
+    {
+      "id": "registry-authorize-approval-exact-abi",
+      "status": "PASS",
+      "component": "registry",
+      "evidenceKind": "abiExact",
+      "meaning": "Durable approval ABI order, types, tuple shape, arity, outputs and mutability are exact."
+    },
+    {
+      "id": "registry-authorize-intent-exact-abi",
+      "status": "PASS",
+      "component": "registry",
+      "evidenceKind": "abiExact",
+      "meaning": "JIT launch-intent ABI order, types, tuple shape, arity, outputs and mutability are exact."
+    },
+    {
+      "id": "registry-approval-state-exact-abi",
+      "status": "PASS",
+      "component": "registry",
+      "evidenceKind": "abiExact",
+      "meaning": "Durable approval state readback order, types, tuple shape, arity and mutability are exact."
+    },
+    {
+      "id": "registry-intent-state-exact-abi",
+      "status": "PASS",
+      "component": "registry",
+      "evidenceKind": "abiExact",
+      "meaning": "JIT intent state readback order, types, tuple shape, arity and mutability are exact."
+    },
+    {
+      "id": "registry-register-launch-exact-abi",
+      "status": "PASS",
+      "component": "registry",
+      "evidenceKind": "abiExact",
+      "meaning": "The complete registration record, including public identity and three claims, has an exact ABI."
+    },
+    {
+      "id": "registry-public-identity-readback-exact-abi",
+      "status": "PASS",
+      "component": "registry",
+      "evidenceKind": "abiExact",
+      "meaning": "Public identity readback order, types, tuple shape, arity and view mutability are exact."
+    },
+    {
+      "id": "registry-finalize-exact-abi",
+      "status": "PASS",
+      "component": "registry",
+      "evidenceKind": "abiExact",
+      "meaning": "Finality proof ABI order, widths, tuple shape, arity and mutability are exact."
+    },
+    {
+      "id": "registry-launch-state-exact-abi",
+      "status": "PASS",
+      "component": "registry",
+      "evidenceKind": "abiExact",
+      "meaning": "Observed/finalized/revoked launch state readback order, widths, tuple shape and mutability are exact."
+    },
+    {
+      "id": "registry-approval-event-exact-abi",
+      "status": "PASS",
+      "component": "registry",
+      "evidenceKind": "abiExact",
+      "meaning": "Approval event topic positions, data order, exact types and arity are fixed."
+    },
+    {
+      "id": "registry-intent-event-exact-abi",
+      "status": "PASS",
+      "component": "registry",
+      "evidenceKind": "abiExact",
+      "meaning": "Intent event topic positions, data order, exact types and arity are fixed."
+    },
+    {
+      "id": "registry-public-identity-event-exact-abi",
+      "status": "PASS",
+      "component": "registry",
+      "evidenceKind": "abiExact",
+      "meaning": "Public identity event topic positions, data order, exact types and arity are fixed."
+    },
+    {
+      "id": "registry-finality-event-exact-abi",
+      "status": "PASS",
+      "component": "registry",
+      "evidenceKind": "abiExact",
+      "meaning": "Finality event topic positions, data order, exact widths and arity are fixed."
+    }
+  ],
+  "roles": {
+    "classes": [
+      "DEFAULT_ADMIN",
+      "DURABLE_APPROVER",
+      "JIT_LAUNCH_INTENT_APPROVER",
+      "IMMUTABLE_ROUTE_WRITER",
+      "FINALIZER",
+      "REVOKER"
+    ],
+    "sameAddressAcrossOperationalClassesAllowed": false,
+    "launchRouteIsSoleWriter": true
+  },
+  "lifecycle": {
+    "states": [
+      "UNREGISTERED",
+      "OBSERVED_REVISION_1",
+      "FINALIZED_REVISION_1",
+      "REVOKED_TERMINAL"
+    ],
+    "allowedTransitions": [
+      "UNREGISTERED_TO_OBSERVED_REVISION_1",
+      "OBSERVED_REVISION_1_TO_FINALIZED_REVISION_1",
+      "OBSERVED_REVISION_1_TO_REVOKED_TERMINAL",
+      "FINALIZED_REVISION_1_TO_REVOKED_TERMINAL"
+    ],
+    "recordCorrectionAllowed": false
+  },
+  "publicIdentity": {
+    "websiteProjectIdEncoding": "RAW_SHA256_DIGEST_OF_CANONICAL_WEBSITE_PROJECT_ID",
+    "websiteLaunchIdEncoding": "RAW_SHA256_DIGEST_OF_CANONICAL_WEBSITE_LAUNCH_ID",
+    "registryProjectIdEncoding": "KECCAK256_PROGRAMMABLE_PROJECT_ID_V1",
+    "registryApprovalIdEncoding": "KECCAK256_PROGRAMMABLE_TARGET_APPROVAL_ID_V1",
+    "registryLaunchIdEncoding": "KECCAK256_PROGRAMMABLE_TARGET_LAUNCH_ID_V1",
+    "mappingEvent": "ExactShardsPublicIdentityBoundV1",
+    "readback": "publicIdentityState(bytes32)",
+    "mappingIsPartOfRegistrationBinding": true
+  },
+  "exactPolicy": {
+    "chargeMode": "INCLUDED_IN_TOTAL",
+    "feeAsset": "0x0000000000000000000000000000000000000000",
+    "feeAssetSemantic": "NATIVE_ETH",
+    "feeBasisHash": "0xfb8110e8ea13fee890a868300dd1a9a5c467acb19a53f63beccc482757a36191",
+    "profileKey": "0xb90e215e0e29c0dacf021e5e778847af4100433ee7d22014b73f8ca4add09d0c",
+    "totalFeeBps": 100,
+    "shareDenominatorBps": 10000,
+    "economicTemplateHash": "0x898f3bc526249e1917752c322011f2fae8729496fe410398b3745b9972f897fd",
+    "feePolicyBindingHash": "0xfad5a3fbf661221cdfc8cb96f6df69b46b97775692bed2521c652db678e15e0d",
+    "orderedClaims": [
+      {
+        "ordinal": 0,
+        "role": "BUILDER",
+        "roleHash": "0x36a60a66fdf8fc39bbaab0d3ff46b52ffc8a9b6f3dc94b5fe9836816d72890af",
+        "grossVolumeFeeBps": 10,
+        "shareOfFeeBps": 1000,
+        "initialRecipient": "0xceebb3a6543cebeb2ed66963897a0abea52a50cc",
+        "recipientMode": "CURRENT_BUILDER_MAY_ROTATE_TO_SUCCESSOR",
+        "claimSelector": "0x69f9a5f0",
+        "handoffSelector": "0x4ce11d21"
+      },
+      {
+        "ordinal": 1,
+        "role": "PROGRAMMABLE",
+        "roleHash": "0x069cb8bbaf512d6f3d7fd962d64b67ce531a420f558aa3a2301e77be3640d875",
+        "grossVolumeFeeBps": 10,
+        "shareOfFeeBps": 1000,
+        "initialRecipient": "0x4957f49620aff3adbbe8195a4f633e49cc93376c",
+        "recipientMode": "IMMUTABLE_LAUNCHER_RECIPIENT",
+        "claimSelector": "0x64d46b85",
+        "handoffSelector": "0x00000000"
+      },
+      {
+        "ordinal": 2,
+        "role": "NFT_HOLDERS",
+        "roleHash": "0x84edd196638e45435db849686913b0ffb528525a1edc3aece78548ed6f2577f1",
+        "grossVolumeFeeBps": 80,
+        "shareOfFeeBps": 8000,
+        "initialRecipient": "JIT_ACTUAL_LAUNCHED_SHARD_HOOK",
+        "recipientMode": "EXACT_SHARDS_HOOK_RUNNING_HOLDER_ACCUMULATOR",
+        "claimSelector": "0x6ba4c138",
+        "handoffSelector": "0x00000000"
+      }
+    ]
+  },
+  "registryBinding": {
+    "permitAuthorityAndVerifierRequired": true,
+    "launchRouteImmutable": true,
+    "launchRouteSoleWriter": true,
+    "durableApproverSeparatedFromJitIntentApprover": true,
+    "registeredRecordRevision": 1,
+    "correctionAllowed": false,
+    "revocationIsTerminal": true
+  },
+  "contentCommitment": {
+    "canonicalization": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+    "sha256": "0xe9441d641e67d95976239cbf768e1637f7e75134e44641bdcb9271745748a5aa"
+  }
+}

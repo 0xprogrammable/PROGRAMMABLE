@@ -1,0 +1,109 @@
+{
+  "schemaVersion": "programmable.exact-shards-public-identity-golden.v1",
+  "hashNamespaces": {
+    "websiteIds": "sha256(domain || 0x00 || RFC-8785-compatible-canonical-json-utf8)",
+    "onchainIdentityMapping": "keccak256(abi.encode(typehash, twelve typed fields))"
+  },
+  "approvalFormula": {
+    "sourceFormulaObservedAtCommit": "e59bce4fabe43369ebc5a0ef9718fdd73b747c81",
+    "sourceFormulaObservedAtTree": "fec89669b681b1f26789583e65c754a88797d6b7",
+    "finalSourceRevisionRegenerationRequired": false,
+    "sourceModule": "services/autonomous-approval-v1/src/adapters/custom-launch-public-identity-v2.ts",
+    "sourceModuleGitBlobSha1": "f6ebcd5de53115c573e5ebc3137d621d5b49987f",
+    "canonicalHashModule": "services/autonomous-approval-v1/src/domain/hashing.ts",
+    "canonicalHashModuleGitBlobSha1": "292e01e357a6f27500cf51eba17cf873026de213",
+    "canonicalJsonModuleGitBlobSha1": "464f15cb080b36ddf3e1ed8687e55d53e404973d",
+    "identityValidatorModule": "services/autonomous-approval-v1/src/rpc/finalized-launch-verifier.ts",
+    "identityValidatorModuleGitBlobSha1": "700fb4e4596351db964e07df659d7da186b9ca38",
+    "projectionFixtureModule": "services/autonomous-approval-v1/test/adapters/custom-launch-public-identity-v2.test.ts",
+    "projectionFixtureModuleGitBlobSha1": "6b1a5fd84d68d914a2801185ea32c1cdbc4fdd24",
+    "projectDomain": "programmable.custom-launch-project-id.v2",
+    "projectFields": [
+      "launchFamily",
+      "grantId",
+      "grantBindingHash"
+    ],
+    "launchDomain": "programmable.custom-launch-id.v2",
+    "launchFields": [
+      "launchFamily",
+      "projectId",
+      "chainId",
+      "launchIdentity"
+    ]
+  },
+  "project": {
+    "input": {
+      "launchFamily": "custom",
+      "grantId": "11111111-1111-4111-8111-111111111111",
+      "grantBindingHash": "sha256:f34c6d9d683f81ac44f9966fcbd2529c036f94f261cbdd60245677f4e2e87ec8"
+    },
+    "canonicalJsonUtf8": "{\"grantBindingHash\":\"sha256:f34c6d9d683f81ac44f9966fcbd2529c036f94f261cbdd60245677f4e2e87ec8\",\"grantId\":\"11111111-1111-4111-8111-111111111111\",\"launchFamily\":\"custom\"}",
+    "digest": "sha256:e33d0fb2770fef54416133287dac2bc43bdb88a0391775b07ce19287039035c2",
+    "rawBytes32": "0xe33d0fb2770fef54416133287dac2bc43bdb88a0391775b07ce19287039035c2"
+  },
+  "launch": {
+    "input": {
+      "launchFamily": "custom",
+      "projectId": "sha256:e33d0fb2770fef54416133287dac2bc43bdb88a0391775b07ce19287039035c2",
+      "chainId": "1",
+      "launchIdentity": {
+        "namespace": "eip155:1:contract",
+        "value": "0xcccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    "canonicalJsonUtf8": "{\"chainId\":\"1\",\"launchFamily\":\"custom\",\"launchIdentity\":{\"namespace\":\"eip155:1:contract\",\"value\":\"0xcccccccccccccccccccccccccccccccccccccccc\"},\"projectId\":\"sha256:e33d0fb2770fef54416133287dac2bc43bdb88a0391775b07ce19287039035c2\"}",
+    "digest": "sha256:b87d5eac727a56d93f9f53a8f02f54dc1a67b3bca2f00694ec46d1f83500cc26",
+    "rawBytes32": "0xb87d5eac727a56d93f9f53a8f02f54dc1a67b3bca2f00694ec46d1f83500cc26"
+  },
+  "exactShardsFormula": {
+    "repositoryDomain": "programmable.github.repository.v1",
+    "projectIdDomain": "0x4fa0ae35da6b43ca2e5bd51635b32c072bcd2e4cfb9f65c03b1b6b6069e841b4",
+    "approvalIdDomain": "0x5e9f160793c808ca3f7bdcad892fda47ff40df23f6003434dfe04b04a4b94413",
+    "launchIdDomain": "0x43422cb1e64441d3e905301f644720cc17c297817130fde0bbcf3318f8c97b52",
+    "repositoryKeyFormula": "keccak256(abi.encode(string repositoryDomain,uint256 githubRepositoryId))",
+    "projectIdFormula": "keccak256(abi.encode(bytes32 projectIdDomain,bytes32 repositoryKey))",
+    "approvalIdFormula": "keccak256(abi.encode(bytes32 approvalIdDomain,bytes32 projectId,uint64 approvalGeneration,bytes32 approvalBindingHash,uint256 chainId,address registry,uint64 registryGeneration,bytes32 routeId))",
+    "launchIdFormula": "keccak256(abi.encode(bytes32 launchIdDomain,bytes32 projectId,bytes32 approvalId))",
+    "inputs": {
+      "githubRepositoryId": "1329073878",
+      "approvalGeneration": "4",
+      "technicalApprovalHashFixtureSource": "contracts/spec/launch-permit-v1-golden.json",
+      "technicalApprovalHash": "0x51117b520b79582e79c9152c7a7a9bf675fa64f5441c4d62e63a96e5fc768bc5",
+      "registryApprovalBindingHash": "0x51117b520b79582e79c9152c7a7a9bf675fa64f5441c4d62e63a96e5fc768bc5",
+      "chainId": "1",
+      "registry": "0x3000000000000000000000000000000000000003",
+      "registryGeneration": "3",
+      "routeId": "0xe82ee94c42c7b2173be0d7915d887f813837a51b40af7fe20c1d2accb6f10db8"
+    },
+    "repositoryKey": "0x02ed38e86a7c41d5dea93cf5e3f829420837c4d351d9f4675929c6ce0041e835",
+    "projectId": "0xb11d95a57cbb89efa14a7554610bcd18338125f7cccea1c5861dd0cf19665002",
+    "approvalId": "0x83a06f241ab7c70c53c5818506502a35a577534cecbcbe84d1d6638f225401e9",
+    "launchId": "0xee922fb508355bd1b097d4588bdcee9b1a2929c62513e67b1afeaf81e670f497"
+  },
+  "registryBinding": {
+    "typeString": "ExactShardsPublicIdentityBindingV1(bytes32 websiteProjectIdSha256,bytes32 websiteLaunchIdSha256,bytes32 registryProjectId,bytes32 registryApprovalId,bytes32 registryLaunchId,uint64 githubRepositoryId,uint64 approvalGeneration,uint256 chainId,address registry,uint64 registryGeneration,bytes32 routeId,address primaryContract)",
+    "typehash": "0x498832eeb344297e6fe6a4ca913f12e0905a46029de4db75a154328c57427b94",
+    "input": {
+      "websiteProjectIdSha256": "0xe33d0fb2770fef54416133287dac2bc43bdb88a0391775b07ce19287039035c2",
+      "websiteLaunchIdSha256": "0xb87d5eac727a56d93f9f53a8f02f54dc1a67b3bca2f00694ec46d1f83500cc26",
+      "registryProjectId": "0xb11d95a57cbb89efa14a7554610bcd18338125f7cccea1c5861dd0cf19665002",
+      "registryApprovalId": "0x83a06f241ab7c70c53c5818506502a35a577534cecbcbe84d1d6638f225401e9",
+      "registryLaunchId": "0xee922fb508355bd1b097d4588bdcee9b1a2929c62513e67b1afeaf81e670f497",
+      "githubRepositoryId": "1329073878",
+      "approvalGeneration": "4",
+      "chainId": "1",
+      "registry": "0x3000000000000000000000000000000000000003",
+      "registryGeneration": "3",
+      "routeId": "0xe82ee94c42c7b2173be0d7915d887f813837a51b40af7fe20c1d2accb6f10db8",
+      "primaryContract": "0x5000000000000000000000000000000000000005"
+    },
+    "identityMappingHash": "0xcbf79bbad2b430f2abab9daf294c77b370789d2061fc4df8faa7379e38362ac0"
+  },
+  "oneBitMutation": {
+    "field": "websiteLaunchIdSha256",
+    "operation": "xor-lowest-bit",
+    "mutatedValue": "0xb87d5eac727a56d93f9f53a8f02f54dc1a67b3bca2f00694ec46d1f83500cc27",
+    "mutatedIdentityMappingHash": "0x483d42cffc85c33b57e15efffb32a71c041ee8c3b62e09c084e84b9c57b54ad9",
+    "exactMappingAccepted": false
+  }
+}
