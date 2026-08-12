@@ -14,7 +14,7 @@ Fetch `https://developers.programmable.family/api/v2/manifest`, require Ethereum
 
 Backfill Router events from the manifest start block and follow new blocks with the published finality policy. Extract the launch id, token, hook, PoolManager and pool id, then cross check the appropriate point lookup and read `launchStamp` and `stampProof` at the same canonical block.
 
-The token lookup is the primary interoperable path for a token page. Pool identity is the stronger route for market integrations. Component lookup can corroborate an exclusive component but should not be used to identify one launch when the component is shared infrastructure.
+The token lookup is the primary interoperable path for a token page. Pool identity is the stronger route for trading integrations. Component lookup can confirm an exclusive component but should not be used to identify one launch when the component is shared infrastructure.
 
 ## Preserve the boundary
 

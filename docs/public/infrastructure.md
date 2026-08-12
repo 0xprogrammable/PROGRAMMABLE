@@ -4,7 +4,7 @@ description: How Programmable separates launch creation, review, execution, fina
 
 # How Programmable works
 
-Programmable is built as a sequence of narrow evidence layers rather than one opaque approval state. The product interface prepares a launch, the creator wallet signs its transaction, Ethereum finalizes it, and the public data layer projects the resulting token and market into Explore and the developer feeds.
+Programmable records each part of a launch separately. The product interface prepares the launch, the creator wallet signs its transaction, Ethereum finalizes it, and the public data service adds the resulting token and pool to Explore and the developer feeds.
 
 ## Classic execution
 
@@ -20,7 +20,7 @@ The Launch Stamp Router provides a canonical provenance record for future Router
 
 ## Public discovery
 
-The website combines canonical launch records with market data where it is available. The read only developer service publishes normalized Classic and Custom records for terminals, scanners, explorers and applications. Integrators should treat provenance, indexing freshness, chart availability and transaction support as separate capabilities.
+The website combines verified launch records with price and liquidity data when those values are available. The read only developer service publishes consistent Classic and Custom records for terminals, scanners, explorers and applications. Integrators should treat origin, indexing freshness, chart availability and transaction support as separate capabilities.
 
 {% content-ref url="launch-stamps.md" %}
 [launch-stamps.md](launch-stamps.md)

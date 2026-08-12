@@ -16,4 +16,4 @@ The current public status is available from the website and the read only develo
 
 The status response reports the Ethereum head, finalized block, scan coverage, feed freshness and current Classic and Custom discovery counts. Consumers should inspect those fields rather than relying only on the top level service label.
 
-When market data is unavailable or stale, the token and launch provenance can still be valid. Price, market capitalization, liquidity and chart support should remain unavailable rather than being filled with guessed values.
+When price or liquidity data is unavailable or stale, the token and launch record can still be valid. Price, token valuation, liquidity and chart support should remain unavailable rather than being filled with guessed values.

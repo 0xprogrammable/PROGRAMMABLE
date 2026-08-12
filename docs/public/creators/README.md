@@ -8,7 +8,7 @@ Creators can use the direct Classic flow or prepare a project specific Custom re
 
 ## Launch Classic
 
-Classic is available from [Create](https://programmable.market/launch). The launch wallet supplies token metadata, selects buy and sell fees, chooses reward recipients and Initial Buy custody, then reviews one Ethereum transaction. No source repository or public review application is required for the standard model.
+Classic is available from [Create](https://programmable.market/launch). The launch wallet supplies token metadata, selects buy and sell transaction fees, chooses reward recipients and Initial Buy custody, then reviews one Ethereum transaction. No source repository or public review application is required for the standard model.
 
 ## Build a Custom project
 

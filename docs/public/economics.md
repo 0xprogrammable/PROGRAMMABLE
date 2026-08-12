@@ -1,26 +1,26 @@
 ---
-description: Programmable fee paths, creator rewards and protocol revenue boundaries
+description: Transaction fees, creator rewards and Programmable revenue
 ---
 
-# Economics
+# Fees and revenue
 
-Programmable fees are defined by the market path that actually executes. A category name alone is not enough to infer a fee, and a planned template policy should not be displayed as though it already applies to a live pool.
+Programmable fees depend on the transaction that actually executes. A launch model alone does not determine the fee. Each release must state the complete rate, how it is divided and which transactions pay it.
 
-| Path            | Programmable share                             | Treatment                                              |
-| --------------- | ---------------------------------------------- | ------------------------------------------------------ |
-| Classic         | 10 bps of gross native swap amount             | Included in the selected buy or sell fee               |
-| Standard Custom | 10 bps on a verified official market path      | Added according to the accepted release                |
-| Public template | Intended 10 bps inside one 20 bps template fee | Not active while public template intake remains closed |
+| Path            | Programmable share                                       | How it is charged                                      |
+| --------------- | -------------------------------------------------------- | ------------------------------------------------------ |
+| Classic         | 0.1% of the gross ETH amount exchanged                   | Included in the selected buy or sell transaction fee   |
+| Standard Custom | 0.1% of the gross amount exchanged on the approved route | Defined by the exact accepted release                  |
+| Public template | Intended 0.1% share inside a 0.2% total transaction fee  | Not active while public template intake remains closed |
 
-One basis point is 0.01%, so 10 basis points are 0.10%. The active release, contract and market path determine the basis and recipient.
+In these docs, transaction fee means the percentage charged when a token is bought or sold. It is separate from Ethereum gas and from the Uniswap pool fee. The active contract and release determine the exact rate and recipient.
 
 ## Classic rewards
 
-Classic creators select buy and sell fees from 1% through 10%. The 0.10% Programmable share is part of the selected rate, while the remainder accrues as creator rewards. Normal token transfers do not pay the hook fee.
+Classic creators select buy and sell transaction fees from 1% through 10%. Programmable receives 0.1% of the gross ETH amount exchanged. That share is already included in the selected rate, while the remainder accrues as creator rewards. An ordinary wallet transfer does not pay this transaction fee.
 
 ## Custom releases
 
-Custom economics are release specific. Standard Native Custom paths use a 10 basis point Programmable policy, while a named partner release can define a different total and split. The accepted release must disclose the complete fee rather than presenting only one recipient's share.
+Custom fees are specific to each release. The standard Native Custom policy assigns 0.1% of the gross amount exchanged to Programmable. A named partner release can define a different total and division. The accepted release must state the complete transaction fee rather than showing only one recipient's share.
 
 ## Protocol revenue
 

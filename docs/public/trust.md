@@ -16,7 +16,7 @@ An accepted project receives launch authority only when a matching execution pro
 
 ## Finality and public projection
 
-A transaction is not complete merely because a wallet submitted it. The receipt must succeed, reach the required finality and agree with the canonical launch identity. The website and APIs can then project the record, but stale market data or an unavailable chart remains a separate limitation.
+A transaction is not complete merely because a wallet submitted it. The receipt must succeed, reach the required finality and agree with the canonical launch identity. The website and APIs can then publish the record, but stale price data or an unavailable chart remains a separate limitation.
 
 ## Independent review
 
@@ -24,6 +24,6 @@ The Programmable contracts in the public product repository have not undergone a
 
 ## User risk
 
-Token transactions can be irreversible. Tokens can be volatile, illiquid or lose all value. Verify the connected wallet, network, contract address, transaction destination and value before signing. Programmable does not provide financial advice or guarantee a token's quality or future market.
+Token transactions can be irreversible. Tokens can be volatile, illiquid or lose all value. Verify the connected wallet, network, contract address, transaction destination and value before signing. Programmable does not provide financial advice or guarantee a token's quality, future price or trading activity.
 
 Security sensitive reports belong in the private reporting path of the affected [0xprogrammable repository](https://github.com/0xprogrammable). Do not post private keys, access tokens, signatures or unpublished exploit details in a public issue.
