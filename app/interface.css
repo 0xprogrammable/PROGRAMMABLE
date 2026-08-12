@@ -13,15 +13,15 @@
   --radius-control: 18px;
   --radius-control-inner: 14px;
   --radius-panel: 28px;
-  --liquid-glass-surface-background: oklch(0.94 0.012 76 / 0.135);
-  --liquid-glass-surface-background-strong: oklch(0.94 0.012 76 / 0.2);
-  --liquid-glass-inner-background: oklch(0.96 0.009 76 / 0.08);
-  --liquid-glass-control-background: oklch(0.96 0.009 76 / 0.11);
-  --liquid-glass-control-background-hover: oklch(0.96 0.009 76 / 0.19);
+  --liquid-glass-surface-background: oklch(0.94 0.012 76 / 0.18);
+  --liquid-glass-surface-background-strong: oklch(0.94 0.012 76 / 0.25);
+  --liquid-glass-inner-background: oklch(0.96 0.009 76 / 0.11);
+  --liquid-glass-control-background: oklch(0.96 0.009 76 / 0.15);
+  --liquid-glass-control-background-hover: oklch(0.96 0.009 76 / 0.22);
   --liquid-glass-border: oklch(0.96 0.009 76 / 0.19);
   --liquid-glass-border-strong: oklch(0.97 0.007 76 / 0.27);
   --liquid-glass-highlight: oklch(0.99 0.004 76 / 0.23);
-  --liquid-glass-backdrop: blur(24px) saturate(1.12);
+  --liquid-glass-backdrop: blur(20px) saturate(1.08);
   --liquid-glass-shadow:
     inset 0 1px 0 oklch(0.99 0.004 76 / 0.18),
     inset 0 -1px 0 oklch(0.08 0.018 264 / 0.24),
@@ -36,8 +36,8 @@
   --liquid-glass-inner-shadow:
     inset 0 1px 0 oklch(0.99 0.004 85 / 0.07),
     0 0 0 1px oklch(0.08 0.02 264 / 0.12);
-  --navigation-glass-background: oklch(0.16 0.025 264 / 0.8);
-  --navigation-glass-background-hover: oklch(0.24 0.027 264 / 0.74);
+  --navigation-glass-background: oklch(0.94 0.012 76 / 0.14);
+  --navigation-glass-background-hover: oklch(0.94 0.012 76 / 0.2);
   --navigation-glass-border: oklch(0.95 0.008 85 / 0.11);
   --navigation-glass-highlight: oklch(0.99 0.004 85 / 0.13);
   --navigation-glass-ink: var(--brand-ivory);
@@ -214,32 +214,6 @@ code,
   height: 100%;
   min-height: 0;
   overflow: hidden;
-}
-
-/* Keep the botanical edge detail atmospheric on the home scene without
- * competing with the launch copy and artwork. */
-.app-frame:has(.landing-page-root) .atmosphere-plant {
-  bottom: -320px;
-  opacity: 0.58;
-}
-
-body:not(:has(.landing-page-root)):not(:has([data-docs-shell]))
-  .atmosphere-plant {
-  opacity: 0.18;
-  bottom: -220px;
-}
-
-@media (max-width: 520px) {
-  .app-frame:has(.landing-page-root) .atmosphere-plant {
-    bottom: -112px;
-    opacity: 0.54;
-  }
-
-  body:not(:has(.landing-page-root)):not(:has([data-docs-shell]))
-    .atmosphere-plant {
-    bottom: -220px;
-    opacity: 0.2;
-  }
 }
 
 .site-header {
@@ -523,7 +497,7 @@ html[data-theme="dark"] .app-frame::before {
   height: var(--sparkle-size);
   opacity: 0.12;
   position: absolute;
-  transform: scale(0.72);
+  transform: none;
   width: var(--sparkle-size);
 }
 
@@ -902,23 +876,24 @@ html[data-theme="dark"] .app-frame::before {
 }
 
 .atmosphere-plant {
-  bottom: -42px;
+  bottom: -170px;
   display: block;
-  filter: saturate(1.18) brightness(1.04);
+  filter: saturate(1.08) brightness(0.88);
   height: auto;
-  opacity: 0.94;
+  opacity: 0.24;
   position: absolute;
-  transform: translate3d(0, 0, 0) rotate(0deg);
-  width: clamp(210px, 22vw, 330px);
+  width: clamp(190px, 20vw, 300px);
 }
 
 .atmosphere-plant-left {
-  left: max(-18px, calc((100vw - 1680px) / 2));
+  left: clamp(-120px, -7vw, -72px);
+  transform: rotate(-13deg);
   transform-origin: 54% 101%;
 }
 
 .atmosphere-plant-right {
-  right: max(-20px, calc((100vw - 1680px) / 2));
+  right: clamp(-120px, -7vw, -72px);
+  transform: rotate(13deg);
   transform-origin: 68% 101%;
 }
 
@@ -938,17 +913,14 @@ html[data-theme="dark"] .app-frame::before {
   62%,
   100% {
     opacity: 0.12;
-    transform: scale(0.72);
   }
 
   69% {
     opacity: 0.96;
-    transform: scale(1.42);
   }
 
   77% {
     opacity: 0.26;
-    transform: scale(0.9);
   }
 }
 
@@ -957,17 +929,14 @@ html[data-theme="dark"] .app-frame::before {
   38%,
   100% {
     opacity: 0.08;
-    transform: scale(0.68);
   }
 
   48% {
     opacity: 0.74;
-    transform: scale(1.18);
   }
 
   57% {
     opacity: 0.18;
-    transform: scale(0.84);
   }
 }
 
@@ -977,30 +946,27 @@ html[data-theme="dark"] .app-frame::before {
   47%,
   100% {
     opacity: 0.1;
-    transform: scale(0.7);
   }
 
   28% {
     opacity: 0.64;
-    transform: scale(1.12);
   }
 
   72% {
     opacity: 0.12;
-    transform: scale(0.76);
   }
 
   79% {
     opacity: 0.9;
-    transform: scale(1.34);
   }
 
   88% {
     opacity: 0.2;
-    transform: scale(0.86);
   }
 }
 
+/* Kept as stable motion contracts for older clients. The live night garden
+ * overrides both animations below so its botanical silhouettes stay fixed. */
 @keyframes atmosphere-plant-left {
   0%,
   100% {
@@ -1056,13 +1022,17 @@ html[data-theme="dark"] .app-frame::before {
   .atmosphere-plant-left {
     animation: atmosphere-plant-left 13.6s
       cubic-bezier(0.45, 0.05, 0.55, 0.95) -7.9s infinite;
-    will-change: transform;
   }
 
   .atmosphere-plant-right {
     animation: atmosphere-plant-right 11.9s
       cubic-bezier(0.45, 0.05, 0.55, 0.95) -3.1s infinite;
-    will-change: transform;
+  }
+
+  .atmosphere-plant-left,
+  .atmosphere-plant-right {
+    animation: none;
+    will-change: auto;
   }
 }
 
@@ -1077,17 +1047,17 @@ html[data-theme="dark"] .app-frame::before {
   }
 
   .atmosphere-plant {
-    bottom: -18px;
-    opacity: 0.92;
-    width: clamp(150px, 46vw, 184px);
+    bottom: -94px;
+    opacity: 0.22;
+    width: clamp(170px, 50vw, 210px);
   }
 
   .atmosphere-plant-left {
-    left: -38px;
+    left: -82px;
   }
 
   .atmosphere-plant-right {
-    right: -42px;
+    right: -86px;
   }
 }
 
@@ -2140,6 +2110,14 @@ body:has([data-docs-shell]) .site-header::before {
     animation: none;
     transform: none;
     will-change: auto;
+  }
+
+  .atmosphere-plant-left {
+    transform: rotate(-13deg);
+  }
+
+  .atmosphere-plant-right {
+    transform: rotate(13deg);
   }
 
   .theme-toggle-icons,
