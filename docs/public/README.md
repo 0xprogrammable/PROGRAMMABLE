@@ -6,7 +6,7 @@ coverY: 0
 
 # Programmable
 
-Programmable is a launch platform for tokens whose market behavior is part of the product. Classic gives a creator a fixed supply token, a permanently locked Uniswap v4 position and separately configured buy and sell fees. Custom releases use individually reviewed hooks and execution paths when the standard model is not enough.
+Programmable is a launch platform for tokens whose trading rules are part of the product. Classic gives a creator a fixed supply token, a permanently locked Uniswap v4 position and separately configured buy and sell transaction fees. Custom releases use individually reviewed hooks when the standard model is not enough.
 
 The public interface runs on Ethereum. A creator can launch Classic directly from the website, while a Custom project moves through public source review and an exact release binding before its creator wallet receives an executable launch path. The wallet still reviews and signs the final transaction. Programmable does not sign it on the creator's behalf.
 
@@ -34,7 +34,7 @@ Readers who are checking an existing token should begin with [Explore](https://p
 
 ## What Programmable records
 
-Each supported launch has a token, market identity and launch model. New Router based launches can also carry a launch stamp that binds the token, hook, PoolManager and pool to one canonical execution record. Historical launches remain discoverable through the public read model even when they predate the Router.
+Each supported launch has a token, pool identity and launch model. New Router based launches can also carry a launch stamp that binds the token, hook, PoolManager and pool to one canonical execution record. Historical launches remain discoverable through the public data service even when they predate the Router.
 
 Programmable keeps source review, launch authority, wallet execution, chain finality and public indexing separate. That separation is deliberate: it makes it possible to say exactly what has been proven without turning one green check into a broader claim.
 

@@ -8,15 +8,15 @@ coverY: 0
 
 Classic is the direct public launch model. It creates the token, initializes the ETH pool, locks the complete token supply in a one sided Uniswap v4 position and completes the Initial Buy in one transaction signed by the launch wallet.
 
-## Supply and market
+## Supply and liquidity
 
 Every Classic token has a fixed supply of one billion tokens with 18 decimals. There is no transfer tax, blacklist, rebase, post launch minting or creator allocation. The launch wallet receives only the tokens it buys during the Initial Buy.
 
-The position is permanently locked and has no liquidity removal path. This describes custody of the original position; it does not promise future market depth, price stability or third party routing support.
+The position is permanently locked and has no liquidity removal path. This describes custody of the original position. It does not promise future liquidity, price stability or support from an external trading service.
 
-## Buy and sell fees
+## Buy and sell transaction fees
 
-The launch wallet chooses the buy fee and sell fee separately from 1% through 10% in one percentage point steps. The selected rate already includes the Programmable share of 0.10 percentage points. A 1% buy fee therefore leaves 0.90% for creator rewards and 0.10% for Programmable rather than charging a second fee on top.
+The launch wallet chooses the buy transaction fee and sell transaction fee separately from 1% through 10% in steps of one percentage point. The selected rate already includes the Programmable share of 0.1% of the gross ETH amount exchanged. A 1% buy transaction fee therefore leaves 0.9% for creator rewards and 0.1% for Programmable rather than charging a second fee.
 
 Creator rewards accrue in ETH. They can go to the launch wallet, another wallet or a split between two and five unique wallets. Each beneficiary claims independently, and an update to a payout wallet affects future accrual without moving rewards that have already accrued.
 

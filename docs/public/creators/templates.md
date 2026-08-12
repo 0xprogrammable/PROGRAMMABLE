@@ -18,6 +18,6 @@ Each template version identifies the source repository, commit, artifacts, param
 
 ## Published fee model
 
-The intended public template policy is one 20 basis point fee on the supported template market path. Ten basis points go to the template creator and ten basis points go to Programmable. This fee is not active until the exact version and payout route are activated, and it is not described as 20 basis points plus another unnamed Programmable charge.
+The intended public template policy is one 0.2% transaction fee on the supported trading route. The template creator receives 0.1% and Programmable receives 0.1%. This fee is not active until the exact version and payout route are activated. It is one complete fee, not a published rate followed by another unnamed Programmable charge.
 
 Partnership templates use a separate policy and review path. They are not submitted through the public repository.

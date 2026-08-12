@@ -4,7 +4,7 @@
 
 Programmable documentation serves token creators, hook developers, integrators, researchers and people verifying a launch. A reader should be able to understand what is public now, what an interface does, where a fact comes from and which action still belongs to a wallet or maintainer.
 
-The documentation explains the product without turning technical evidence into a marketing claim. It separates source availability, review, release activation, wallet execution, chain finality, indexing and market data because those states prove different things.
+The documentation explains the product without turning technical evidence into a marketing claim. It separates source availability, review, release activation, wallet execution, chain finality, indexing, price data and liquidity data because those states prove different things.
 
 ## Voice
 
@@ -16,21 +16,27 @@ Use restrained language. Do not describe the product as revolutionary, effortles
 
 Write in the present tense when a capability is publicly available and supported by current evidence. Write “planned,” “not public” or “not activated” when that is the current state. Never move a future capability into the present tense to make the product sound further along.
 
-Treat a green check, merged pull request, repository release, wallet transaction, finalized receipt, public index entry and fresh market-data response as separate facts. A successful check does not prove launch authority or chain execution. A visible token does not prove fresh valuation data. A published policy does not prove that every current contract already implements it.
+Treat a green check, merged pull request, repository release, wallet transaction, finalized receipt, public index entry and fresh price response as separate facts. A successful check does not prove launch authority or chain execution. A visible token does not prove fresh valuation data. A published policy does not prove that every current contract already implements it.
 
 When a fact can drift, link readers to the live status endpoint, developer manifest, contract address, release or canonical repository instead of copying an unqualified claim.
 
 ## Product terminology
 
-Use “Programmable” with this capitalization. Use “Classic,” “Custom” and “Stock paired” for the documented launch models. Use “Custom hook project” when referring to a project submitted through the public Custom Launch intake.
+Use “Programmable” with this capitalization. Use “Classic” and “Custom” for the documented launch models. Use “Custom project” when referring to a project submitted through the public Custom Launch intake. Use “hook” only when the technical mechanism matters, and explain it in plain English when it first appears on a reader facing page.
 
-Identify a token by contract address when identity matters. Distinguish a token contract from its pool, hook, launcher, registry record and market-data record.
+Identify a token by contract address when identity matters. Distinguish a token contract from its pool, hook, launcher, Registry record, price record and liquidity record.
+
+Use percentages in explanations written for creators and token holders. Write “0.1% of the amount exchanged,” not “10 bps.” When a contract or API field uses basis points, keep the literal field name in code formatting and translate its value into a percentage in the surrounding sentence.
+
+Do not use “market” as a general substitute for a token, pool, trade, price, valuation or liquidity. Name the exact thing. Keep the word only when it is part of an official name, domain or unavoidable established term.
 
 Use “protocol revenue” for revenue attributed under the published Programmable policy. Do not call it trading volume, token rewards or creator earnings. State the active processor split separately from a newer published target when they differ.
 
 ## Structure
 
-Use sentence-case headings without terminal punctuation. Start each page with the decision or understanding the reader needs, then provide the evidence, process and relevant boundary.
+Use sentence case headings without terminal punctuation. Start each page with the decision or understanding the reader needs, then provide the evidence, process and relevant boundary.
+
+Do not use an em dash, en dash or hyphen as sentence punctuation. Prefer a comma, a full stop or a complete sentence. Keep hyphens only where they are required by code, a URL or an official name.
 
 Keep navigation categories small. Prefer one complete page over several thin pages that repeat the same introduction. Use tables for exact mappings, addresses, status comparisons and repeated fields. Use ordered steps only when order changes the outcome.
 
