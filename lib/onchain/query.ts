@@ -1,4 +1,5 @@
 import type { LauncherToken } from "../tokens";
+import { isPublicExploreIdentityV1 } from "../explore-public-visibility";
 
 import type {
   ExplorePage,
@@ -127,6 +128,7 @@ export function visibleExploreTokens(model: ExploreReadModel) {
     ? model.tokens.filter((token) => {
         const launchBlock = token.launchBlockNumber;
         return (
+          isPublicExploreIdentityV1(token) &&
           typeof launchBlock === "string" &&
           /^\d+$/u.test(launchBlock) &&
           BigInt(launchBlock) >= MAINNET_PUBLIC_EXPLORE_START_BLOCK

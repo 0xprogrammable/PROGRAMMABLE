@@ -5,6 +5,7 @@ import {
   filterAndSortTokens,
   paginateExplore,
   parseExploreSort,
+  visibleExploreTokens,
 } from "../lib/onchain/query";
 import type { ExploreReadModel } from "../lib/onchain/types";
 
@@ -321,6 +322,39 @@ describe("Explore query", () => {
     expect(page.total).toBe(1);
     expect(page.tokens.map((entry) => entry.id)).toEqual([
       "first-public-launch",
+    ]);
+  });
+
+  it("keeps evidence-bound canaries out without guessing from display metadata", () => {
+    const canonicalCanary = {
+      ...tokens[0],
+      id: "canonical-canary",
+      tokenAddress:
+        "0xFA5D9694D9f8fa47b8A6c15Df4510b76cb844e2c" as const,
+      launchBlockNumber: "25639700",
+    };
+    const similarlyNamedPublicLaunch = {
+      ...tokens[1],
+      id: "public-canary-name",
+      name: "Community Canary",
+      launchBlockNumber: "25639701",
+    };
+    const model: ExploreReadModel = {
+      status: "ready",
+      tokens: [canonicalCanary, similarlyNamedPublicLaunch],
+      snapshot: {
+        chainId: 1,
+        blockNumber: "25639720",
+        blockHash: `0x${"55".repeat(32)}`,
+        confirmations: 12,
+      },
+      creatorClaims: [],
+      launcherFeesAccruedWei: "0",
+      launcherFeesAccruedEth: "0",
+    };
+
+    expect(visibleExploreTokens(model).map(({ id }) => id)).toEqual([
+      "public-canary-name",
     ]);
   });
 });
