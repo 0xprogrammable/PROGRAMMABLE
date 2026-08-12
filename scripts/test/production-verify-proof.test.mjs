@@ -6,6 +6,7 @@ import {
   PRODUCTION_REPOSITORY,
   PRODUCTION_REPOSITORY_ID,
   PRODUCTION_VERIFY_PROOF_MAX_AGE_MS,
+  PRODUCTION_VERIFY_SCOPE_KEYS,
   REQUIRED_PRODUCTION_VERIFY_CHECKS,
   VERIFY_AGGREGATE_JOB_NAME,
   VERIFY_PROOF_JOB_NAME,
@@ -43,6 +44,9 @@ function validProofInput() {
     runId: RUN_ID,
     runAttempt: RUN_ATTEMPT,
     eventName: "push",
+    scopeResults: Object.fromEntries(
+      PRODUCTION_VERIFY_SCOPE_KEYS.map((key) => [key, true]),
+    ),
     checkResults: Object.fromEntries(
       REQUIRED_PRODUCTION_VERIFY_CHECKS.map(({ id }) => [id, "success"]),
     ),
@@ -237,6 +241,69 @@ test("full production Verify proof is deterministic and exact", () => {
       runAttempt: RUN_ATTEMPT,
     }),
     proof,
+  );
+});
+
+test("proof binds the path scope and distinguishes skipped lanes", () => {
+  const input = validProofInput();
+  input.scopeResults = {
+    contracts: false,
+    database: false,
+    dependencies: false,
+    indexer: false,
+    interface: true,
+    read_model: false,
+  };
+  input.checkResults = {
+    "secret-scan": "success",
+    indexer: "skipped",
+    "database-pglite": "skipped",
+    interface: "success",
+    contracts: "skipped",
+  };
+  const proof = buildProductionVerifyProofV1(input);
+  assert.deepEqual(proof.scope, input.scopeResults);
+  assert.deepEqual(
+    Object.fromEntries(proof.checks.map(({ id, required }) => [id, required])),
+    {
+      "secret-scan": true,
+      indexer: false,
+      "database-pglite": false,
+      interface: true,
+      contracts: false,
+    },
+  );
+  assert.doesNotThrow(() =>
+    parseProductionVerifyProofV1(
+      encodeProductionVerifyProofV1(proof),
+      {
+        commitSha: COMMIT,
+        treeSha: TREE,
+        workflowFileSha256: WORKFLOW_SHA256,
+        runId: RUN_ID,
+        runAttempt: RUN_ATTEMPT,
+      },
+    ),
+  );
+});
+
+test("path-scoped proof rejects a skipped required lane", () => {
+  const input = validProofInput();
+  input.scopeResults = {
+    contracts: false,
+    database: false,
+    dependencies: false,
+    indexer: false,
+    interface: true,
+    read_model: false,
+  };
+  input.checkResults.interface = "skipped";
+  input.checkResults.indexer = "skipped";
+  input.checkResults["database-pglite"] = "skipped";
+  input.checkResults.contracts = "skipped";
+  assert.throws(
+    () => buildProductionVerifyProofV1(input),
+    /Interface result does not match/,
   );
 });
 

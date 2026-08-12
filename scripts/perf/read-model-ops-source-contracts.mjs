@@ -1097,7 +1097,7 @@ export function evaluateReadModelOperationsSourceContracts(
       stagedWakeGate > deployWorkflow.indexOf("Resolve exact staged deployment") &&
       stagedWakeGate < stagedWakeGateEnd &&
       stagedWakeGateBlock.includes(
-        "if: steps.read-model-policy.outputs.wake_canary_required == 'true'",
+        "if: needs.release-gate.outputs.verified_read_model == 'true' && steps.read-model-policy.outputs.wake_canary_required == 'true'",
       ) &&
       stagedWakeGateBlock.includes(
         "PROGRAMMABLE_QUICKNODE_STREAM_SECRET: ${{ secrets.PROGRAMMABLE_QUICKNODE_STREAM_SECRET }}",
@@ -1125,7 +1125,9 @@ export function evaluateReadModelOperationsSourceContracts(
   check(
     "ops-protected-bitquery-stage-smoke",
     stagedBitquerySmoke > stagedWakeGateEnd &&
-      !stagedBitquerySmokeBlock.includes("if:") &&
+      stagedBitquerySmokeBlock.includes(
+        "if: needs.release-gate.outputs.verified_read_model == 'true'",
+      ) &&
       stagedBitquerySmokeBlock.includes(
         "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
       ) &&
@@ -1322,7 +1324,7 @@ export function evaluateReadModelOperationsSourceContracts(
     "ops-protected-indexed-stage-capture",
     stagedReadModelCapture > stagedBitquerySmokeEnd &&
       stagedReadModelCaptureBlock.includes(
-        "if: steps.read-model-policy.outputs.mode == 'indexed-or-shadow'",
+        "if: needs.release-gate.outputs.verified_read_model == 'true' && steps.read-model-policy.outputs.mode == 'indexed-or-shadow'",
       ) &&
       stagedReadModelCaptureBlock.includes(
         "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
@@ -1396,10 +1398,13 @@ export function evaluateReadModelOperationsSourceContracts(
   check(
     "ops-verify-workflow-binding",
     verifyWorkflow.includes("npm run perf:read-model:ops-gate") &&
-      verifyWorkflow.includes("name: Bind full production Verify proof") &&
-      verifyWorkflow.includes("needs:\n      - secret-scan") &&
+      verifyWorkflow.includes("name: Bind production Verify proof") &&
+      verifyWorkflow.includes("needs:\n      - scope\n      - secret-scan") &&
       verifyWorkflow.includes(
         "PRODUCTION_VERIFY_CONTRACTS_RESULT: ${{ needs.contracts.result }}",
+      ) &&
+      verifyWorkflow.includes(
+        "PRODUCTION_VERIFY_SCOPE_READ_MODEL: ${{ needs.scope.outputs.read_model }}",
       ) &&
       verifyWorkflow.includes(
         "uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26",

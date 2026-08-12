@@ -52,6 +52,12 @@ jobs:
       artifact_id: ${{ steps.resolve-proof.outputs.artifact_id }}
       proof_sha256: ${{ steps.verify-proof.outputs.proof_sha256 }}
       artifact_digest: ${{ steps.verify-proof.outputs.artifact_digest }}
+      verified_contracts: ${{ steps.verify-proof.outputs.verified_contracts }}
+      verified_database: ${{ steps.verify-proof.outputs.verified_database }}
+      verified_dependencies: ${{ steps.verify-proof.outputs.verified_dependencies }}
+      verified_indexer: ${{ steps.verify-proof.outputs.verified_indexer }}
+      verified_interface: ${{ steps.verify-proof.outputs.verified_interface }}
+      verified_read_model: ${{ steps.verify-proof.outputs.verified_read_model }}
 
     steps:
       - name: Check out exact production commit
@@ -129,13 +135,14 @@ jobs:
           ARTIFACT_DIGEST: ${{ steps.verify-proof.outputs.artifact_digest }}
         run: |
           {
-            echo "## Consumed full production Verify proof"
+            echo "## Consumed production Verify proof"
             echo
             echo "- Commit: \`$GITHUB_SHA\`"
             echo "- Verify run: $VERIFY_RUN_URL"
             echo "- Proof completed: \`$PROOF_COMPLETED_AT\`"
             echo "- Proof SHA-256: \`$PROOF_SHA256\`"
             echo "- Immutable artifact digest: \`$ARTIFACT_DIGEST\`"
+            echo "- Read-model lane required: \`${{ steps.verify-proof.outputs.verified_read_model }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
@@ -458,7 +465,7 @@ jobs:
           retention-days: 90
 
       - name: Gate exact staged QuickNode wake route
-        if: steps.read-model-policy.outputs.wake_canary_required == 'true'
+        if: needs.release-gate.outputs.verified_read_model == 'true' && steps.read-model-policy.outputs.wake_canary_required == 'true'
         env:
           PROGRAMMABLE_QUICKNODE_STREAM_SECRET: ${{ secrets.PROGRAMMABLE_QUICKNODE_STREAM_SECRET }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
@@ -524,6 +531,7 @@ jobs:
           --target-url "$STAGED_TARGET_URL"
 
       - name: Smoke staged Bitquery market APIs
+        if: needs.release-gate.outputs.verified_read_model == 'true'
         env:
           STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
@@ -1216,7 +1224,7 @@ jobs:
           NODE
 
       - name: Record registry identity and Bitquery market path
-        if: steps.read-model-policy.outputs.mode == 'alchemy-only'
+        if: needs.release-gate.outputs.verified_read_model == 'true' && steps.read-model-policy.outputs.mode == 'alchemy-only'
         run: |
           {
             echo "## Read-model release policy"
@@ -1227,7 +1235,7 @@ jobs:
 
       - name: Capture staged read-model evidence
         id: read-model-capture
-        if: steps.read-model-policy.outputs.mode == 'indexed-or-shadow'
+        if: needs.release-gate.outputs.verified_read_model == 'true' && steps.read-model-policy.outputs.mode == 'indexed-or-shadow'
         env:
           PROGRAMMABLE_PERFORMANCE_PROBE_TOKEN: ${{ secrets.PROGRAMMABLE_PERFORMANCE_PROBE_TOKEN }}
           PROGRAMMABLE_SHADOW_PROBE_TOKEN: ${{ secrets.PROGRAMMABLE_SHADOW_PROBE_TOKEN }}
@@ -1243,7 +1251,7 @@ jobs:
           --github-output "$GITHUB_OUTPUT"
 
       - name: Preserve staged read-model evidence
-        if: steps.read-model-policy.outputs.mode == 'indexed-or-shadow'
+        if: needs.release-gate.outputs.verified_read_model == 'true' && steps.read-model-policy.outputs.mode == 'indexed-or-shadow'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: read-model-evidence-${{ github.run_id }}-${{ github.run_attempt }}
@@ -1252,7 +1260,7 @@ jobs:
           retention-days: 7
 
       - name: Gate indexed or shadow read path
-        if: steps.read-model-policy.outputs.mode == 'indexed-or-shadow'
+        if: needs.release-gate.outputs.verified_read_model == 'true' && steps.read-model-policy.outputs.mode == 'indexed-or-shadow'
         env:
           PROGRAMMABLE_READ_MODEL_PERF_EVIDENCE_PATH: ${{ steps.read-model-capture.outputs.evidence_path }}
           PROGRAMMABLE_READ_MODEL_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
@@ -1283,6 +1291,7 @@ jobs:
           PREVIOUS_DEPLOYMENT_ID: ${{ steps.production-before.outputs.deployment_id }}
           PREVIOUS_GIT_HEAD: ${{ steps.production-before.outputs.git_head }}
           POLICY_MODE: ${{ steps.read-model-policy.outputs.mode }}
+          READ_MODEL_REQUIRED: ${{ needs.release-gate.outputs.verified_read_model }}
         run: |
           {
             echo "## Staged production candidate"
@@ -1293,9 +1302,13 @@ jobs:
             echo "- Previous production deployment: \`$PREVIOUS_DEPLOYMENT_ID\`"
             echo "- Previous production commit: \`$PREVIOUS_GIT_HEAD\`"
             echo "- Read model: ${{ steps.read-model-policy.outputs.mode }}"
+            echo "- Read-model verification required by this commit: \`$READ_MODEL_REQUIRED\`"
             echo
             echo "Stage-only: no production promotion was attempted."
-            if [ "$POLICY_MODE" = "indexed-or-shadow" ]; then
+            if [ "$READ_MODEL_REQUIRED" != "true" ]; then
+              echo "This source-only UI/docs candidate leaves read-model bytes unchanged; the provider-specific release lane was not rerun."
+              echo "Before any separately authorized promotion, reverify this exact staged deployment ID and commit binding."
+            elif [ "$POLICY_MODE" = "indexed-or-shadow" ]; then
               echo "The manual operator must next capture and verify the DB-authored real-block SLA attestation, reverify this exact staged binding, promote this exact deployment ID, and run the post-promotion binding gate."
             elif [ "$POLICY_MODE" = "alchemy-only" ]; then
               echo "Before any separately authorized promotion, reverify this exact staged deployment ID and commit binding."

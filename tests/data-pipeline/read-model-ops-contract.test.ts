@@ -240,7 +240,7 @@ describe("read-model operations source contract", () => {
       "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n";
     const quickNodeStep =
       "      - name: Gate exact staged QuickNode wake route\n" +
-      "        if: steps.read-model-policy.outputs.wake_canary_required == 'true'\n" +
+      "        if: needs.release-gate.outputs.verified_read_model == 'true' && steps.read-model-policy.outputs.wake_canary_required == 'true'\n" +
       "        env:\n" +
       "          PROGRAMMABLE_QUICKNODE_STREAM_SECRET: ${{ secrets.PROGRAMMABLE_QUICKNODE_STREAM_SECRET }}\n" +
       secretLine;
@@ -303,6 +303,7 @@ describe("read-model operations source contract", () => {
     const workflowPath = ".github/workflows/deploy-production.yml";
     const bitqueryStep =
       "      - name: Smoke staged Bitquery market APIs\n" +
+      "        if: needs.release-gate.outputs.verified_read_model == 'true'\n" +
       "        env:\n" +
       "          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}\n" +
       "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n";
