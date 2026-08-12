@@ -1,5 +1,7 @@
 import {
   CLAIMS,
+  CUSTOM_EVENT_TOPICS,
+  CUSTOM_REGISTRY,
   HOOKS,
   MAINNET_CHAIN_ID,
   SELECTORS,
@@ -7,7 +9,10 @@ import {
   atomicCapabilityStatus,
   buildClaimTransaction,
   buildWalletSendCalls,
+  customLaunchClassification,
+  customLaunchStateData,
   decodeAddress,
+  decodeCustomLaunchState,
   decodeUint256,
   formatEth,
   formatUnits,
@@ -15,6 +20,7 @@ import {
   keccak256Hex,
   normalizeBatchId,
   readAccruedData,
+  reduceCustomRegistryLogs,
   shortAddress,
   toQuantityHex,
 } from "./logic.mjs";
@@ -26,6 +32,12 @@ const state = {
   capability: null,
   claims: new Map(),
   hooks: new Map(),
+  custom: {
+    status: "idle",
+    registryVerified: false,
+    launches: [],
+    error: null,
+  },
   busy: false,
 };
 
@@ -104,6 +116,90 @@ function buildRow(claim) {
   return row;
 }
 
+function customStatusLabel(launch) {
+  const classification = customLaunchClassification(launch);
+  if (classification === "no-market") return "Kein Fee-Markt";
+  if (classification === "pending") return "Noch nicht finalisiert";
+  if (classification === "revoked") return "Widerrufen";
+  if (classification === "adapter-required")
+    return "Claim-Adapter noch nicht live";
+  return "Onchain-Bindung unvollständig";
+}
+
+function buildCustomRow(launch) {
+  const row = document.createElement("li");
+  row.className = "claim-row custom-row";
+  row.dataset.state = customLaunchClassification(launch);
+
+  const identity = document.createElement("div");
+  identity.className = "claim-identity";
+  const name = document.createElement("strong");
+  name.textContent = `Custom Launch ${launch.registrationSequence.toString()}`;
+  const detail = document.createElement("span");
+  detail.textContent = `${shortAddress(launch.launchId)} · ${shortAddress(launch.primaryContract)}`;
+  identity.append(name, detail);
+
+  const value = document.createElement("div");
+  value.className = "claim-value";
+  const fee = document.createElement("strong");
+  fee.textContent = `${launch.feePolicy?.programmableShareBps ?? 0} bps`;
+  const status = document.createElement("span");
+  status.textContent = customStatusLabel(launch);
+  value.append(fee, status);
+  row.append(identity, value);
+  return row;
+}
+
+function buildCustomGroup() {
+  const group = document.createElement("li");
+  group.className = "asset-group custom-group";
+  const details = document.createElement("details");
+  const summary = document.createElement("summary");
+  const identity = document.createElement("span");
+  identity.className = "asset-group-identity";
+  const name = document.createElement("strong");
+  name.textContent = "Custom-v4-Gebühren";
+  const detail = document.createElement("span");
+  detail.textContent = "Automatisch aus der Mainnet Registry";
+  identity.append(name, detail);
+
+  const value = document.createElement("span");
+  value.className = "asset-group-value";
+  const count = document.createElement("strong");
+  const hint = document.createElement("span");
+  if (state.account === null) {
+    count.textContent = "Registry";
+    hint.textContent = "Nach Verbindung";
+  } else if (state.custom.status === "loading") {
+    count.textContent = "Wird gelesen";
+    hint.textContent = "Finalisierte Launches";
+  } else if (state.custom.error) {
+    count.textContent = "Nicht verfügbar";
+    hint.textContent = "Claims gesperrt";
+  } else {
+    const feeBearing = state.custom.launches.filter(
+      (launch) => customLaunchClassification(launch) === "adapter-required",
+    ).length;
+    count.textContent = `${state.custom.launches.length} erkannt`;
+    hint.textContent =
+      feeBearing > 0
+        ? `${feeBearing} Feequelle${feeBearing === 1 ? "" : "n"}`
+        : "Keine Custom-Fees offen";
+  }
+  value.append(count, hint);
+  summary.append(identity, value);
+  details.append(summary);
+
+  if (state.custom.launches.length > 0) {
+    const list = document.createElement("ul");
+    list.className = "asset-list";
+    list.replaceChildren(...state.custom.launches.map(buildCustomRow));
+    details.append(list);
+  }
+  group.append(details);
+  return group;
+}
+
 function renderRows() {
   const claims = CLAIMS.map((claim) => ({
     ...claim,
@@ -163,7 +259,11 @@ function renderRows() {
   }
 
   assetGroup.append(details);
-  elements.claimRows.replaceChildren(...nativeRows, assetGroup);
+  elements.claimRows.replaceChildren(
+    ...nativeRows,
+    assetGroup,
+    buildCustomGroup(),
+  );
 }
 
 function claimableClaims() {
@@ -189,6 +289,12 @@ function renderSummary() {
   const verifiedHooks = HOOKS.filter(
     ({ id }) => state.hooks.get(id)?.verified === true,
   ).length;
+  const customAdapterBlockers = state.custom.launches.filter(
+    (launch) => customLaunchClassification(launch) === "adapter-required",
+  );
+  const customBindingBlockers = state.custom.launches.filter(
+    (launch) => customLaunchClassification(launch) === "blocked",
+  );
 
   elements.total.textContent = `${formatEth(nativeTotal)} ETH${assetCount > 0 ? ` + ${assetCount} Assets` : ""}`;
   elements.claimCount.textContent = `${claimable.length} ${claimable.length === 1 ? "Claim" : "Claims"}`;
@@ -223,6 +329,21 @@ function renderSummary() {
     elements.actionLabel.textContent = "Treasury-Wallet verwenden";
     elements.actionDetail.textContent = shortAddress(TREASURY);
     elements.action.disabled = true;
+  } else if (
+    state.custom.status === "failed" ||
+    state.custom.registryVerified !== true
+  ) {
+    elements.actionLabel.textContent = "Custom Registry nicht verifiziert";
+    elements.actionDetail.textContent = "Neu laden oder RPC-Verbindung prüfen";
+    elements.action.disabled = true;
+  } else if (customBindingBlockers.length > 0) {
+    elements.actionLabel.textContent = "Custom-Quelle nicht verifiziert";
+    elements.actionDetail.textContent = `${customBindingBlockers.length} Onchain-Bindung${customBindingBlockers.length === 1 ? "" : "en"} gesperrt`;
+    elements.action.disabled = true;
+  } else if (customAdapterBlockers.length > 0) {
+    elements.actionLabel.textContent = "Custom-Claimadapter fehlt";
+    elements.actionDetail.textContent = `${customAdapterBlockers.length} finalisierte Feequelle${customAdapterBlockers.length === 1 ? "" : "n"} gesperrt`;
+    elements.action.disabled = true;
   } else if (verifiedHooks !== HOOKS.length) {
     elements.actionLabel.textContent = "Contract-Prüfung fehlgeschlagen";
     elements.actionDetail.textContent = `${verifiedHooks} von ${HOOKS.length} verifiziert`;
@@ -233,14 +354,124 @@ function renderSummary() {
     elements.action.disabled = true;
   } else {
     elements.actionLabel.textContent = "Alle Fees claimen";
+    const claimLabel = `${claimable.length} ${claimable.length === 1 ? "Claim" : "Claims"}`;
     elements.actionDetail.textContent = state.capability
-      ? `${claimable.length} Claims · 1 Bestätigung`
-      : `${claimable.length} einzelne Bestätigungen`;
+      ? `${claimLabel} · 1 Bestätigung`
+      : `${claimLabel} · einzelne Bestätigungen`;
     elements.action.disabled = state.busy;
   }
 
   elements.refresh.disabled = state.busy || !connected;
   renderRows();
+}
+
+async function readCustomRegistryLogs(blockTag) {
+  const latest = BigInt(blockTag);
+  const topics = [Object.values(CUSTOM_EVENT_TOPICS)];
+  const logs = [];
+  for (
+    let fromBlock = CUSTOM_REGISTRY.startBlock;
+    fromBlock <= latest;
+    fromBlock += 4_000n
+  ) {
+    const toBlock = fromBlock + 3_999n < latest ? fromBlock + 3_999n : latest;
+    logs.push(
+      ...(await request("eth_getLogs", [
+        {
+          address: CUSTOM_REGISTRY.address,
+          fromBlock: toQuantityHex(fromBlock),
+          toBlock: toQuantityHex(toBlock),
+          topics,
+        },
+      ])),
+    );
+  }
+  return logs;
+}
+
+async function readCustomLaunch(launch, blockTag) {
+  const [runtimeCode, launchStateWord] = await Promise.all([
+    request("eth_getCode", [launch.primaryContract, blockTag]),
+    request("eth_call", [
+      {
+        to: CUSTOM_REGISTRY.address,
+        data: customLaunchStateData(launch.launchId),
+      },
+      blockTag,
+    ]),
+  ]);
+  const current = decodeCustomLaunchState(launchStateWord);
+  return {
+    ...launch,
+    currentStatus: current.status,
+    stateVerified:
+      current.feePolicyHash === launch.feePolicy?.feePolicyHash &&
+      ((current.status === 2 && launch.finalized && !launch.revoked) ||
+        (current.status === 3 && launch.revoked) ||
+        (current.status === 1 && !launch.finalized && !launch.revoked)),
+    runtimeVerified:
+      typeof launch.primaryRuntimeCodeHash === "string" &&
+      keccak256Hex(runtimeCode).toLowerCase() ===
+        launch.primaryRuntimeCodeHash.toLowerCase(),
+  };
+}
+
+async function readCustomRegistry(blockTag) {
+  state.custom = {
+    status: "loading",
+    registryVerified: false,
+    launches: [],
+    error: null,
+  };
+  renderSummary();
+  try {
+    const [registryCode, registrationCountWord, logs] = await Promise.all([
+      request("eth_getCode", [CUSTOM_REGISTRY.address, blockTag]),
+      request("eth_call", [
+        {
+          to: CUSTOM_REGISTRY.address,
+          data: SELECTORS.customRegistrationCount,
+        },
+        blockTag,
+      ]),
+      readCustomRegistryLogs(blockTag),
+    ]);
+    const registryVerified =
+      keccak256Hex(registryCode).toLowerCase() ===
+      CUSTOM_REGISTRY.runtimeCodeHash.toLowerCase();
+    const launches = reduceCustomRegistryLogs(logs);
+    const registrationCount = decodeUint256(registrationCountWord);
+    const scopedLaunches = launches.every(
+      ({ chainId, registryGeneration }) =>
+        chainId === 1n && registryGeneration === 1n,
+    );
+    if (
+      !registryVerified ||
+      !scopedLaunches ||
+      BigInt(launches.length) !== registrationCount
+    )
+      throw new Error("Custom Registry oder Event-Historie stimmt nicht");
+
+    const verifiedLaunches = await Promise.all(
+      launches.map((launch) => readCustomLaunch(launch, blockTag)),
+    );
+    state.custom = {
+      status: "ready",
+      registryVerified: true,
+      launches: verifiedLaunches,
+      error: null,
+    };
+  } catch (error) {
+    state.custom = {
+      status: "failed",
+      registryVerified: false,
+      launches: [],
+      error:
+        error instanceof Error
+          ? error.message
+          : "Custom Registry konnte nicht gelesen werden",
+    };
+  }
 }
 
 async function readHook(hook, blockTag) {
@@ -299,6 +530,8 @@ async function refreshClaims() {
   const blockTag = await request("eth_blockNumber");
   state.blockTag = blockTag;
 
+  await readCustomRegistry(blockTag);
+
   const hookResults = await Promise.allSettled(
     HOOKS.map((hook) => readHook(hook, blockTag)),
   );
@@ -335,10 +568,16 @@ async function refreshClaims() {
     setError(
       "Mindestens eine Contract-Bindung stimmt nicht. Claims bleiben gesperrt.",
     );
+  if (state.custom.error)
+    setError(
+      "Die Custom Registry konnte nicht vollständig verifiziert werden. Claims bleiben gesperrt.",
+    );
   setStatus(
-    failedClaims === 0
-      ? `Stand Block ${BigInt(blockTag).toString()} · ${verified}/${HOOKS.length} Contracts verifiziert`
-      : `${failedClaims} Guthaben konnten nicht gelesen werden`,
+    state.custom.error
+      ? "Custom Registry konnte nicht vollständig gelesen werden"
+      : failedClaims === 0
+        ? `Stand Block ${BigInt(blockTag).toString()} · ${verified}/${HOOKS.length} feste Contracts · ${state.custom.launches.length} Custom-Launch${state.custom.launches.length === 1 ? "" : "es"}`
+        : `${failedClaims} Guthaben konnten nicht gelesen werden`,
   );
   renderSummary();
 }

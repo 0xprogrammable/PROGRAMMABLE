@@ -25,6 +25,7 @@
   --pink-dark: #884464;
   --pink-soft: #f9e9f1;
   --success: #277554;
+  --warning: #80531d;
   --danger: #a33945;
 }
 
@@ -231,6 +232,17 @@ h1 {
 .claim-row[data-state="failed"] .claim-value span {
   color: var(--danger);
 }
+.custom-row[data-state="no-market"] .claim-value span {
+  color: var(--success);
+}
+.custom-row[data-state="adapter-required"] .claim-value span,
+.custom-row[data-state="pending"] .claim-value span {
+  color: var(--warning);
+}
+.custom-row[data-state="blocked"] .claim-value span,
+.custom-row[data-state="revoked"] .claim-value span {
+  color: var(--danger);
+}
 
 .asset-group summary {
   align-items: center;
@@ -425,6 +437,12 @@ h1 {
   }
   .meta-grid {
     grid-template-columns: 1fr 1fr;
+  }
+  .meta-grid strong {
+    overflow: visible;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal;
   }
   .refresh {
     grid-column: 1 / -1;

@@ -8,6 +8,33 @@ export const SELECTORS = Object.freeze({
   launcherFeeRecipient: "0x4c50e2c4",
   claimLauncherFees: "0x64d46b85",
   claimLauncherAssetFees: "0xaee8cd6f",
+  customRegistrationCount: "0x0d3eafd6",
+  customLaunchState: "0x2b76b49c",
+});
+
+export const CUSTOM_REGISTRY = Object.freeze({
+  address: "0x17e18c88bda9bfb73924cdc989c07b0707e72671",
+  startBlock: 25_701_139n,
+  runtimeCodeHash:
+    "0xa3276868befc509594adea6c5bd81c3c1bd013686f03fd57914fd39c917185f7",
+});
+
+export const CUSTOM_EVENT_TOPICS = Object.freeze({
+  registered:
+    "0x8ee074138114415a92a0797b4f1f4c6353f8bd15d8031433abf0cc42c2dc274a",
+  provenance:
+    "0x9593acf43b1c8e03c6742d49b67008f3c05841d3cfa43389d12f98e8b9c66cb9",
+  feePolicy:
+    "0xb889df8572071d751e87d3e2a46c54093a55a9bc5a4697440cd29c90255dc5bf",
+  finalized:
+    "0xab930c1c165bba36257b8079ae38b6869f604910f6ffa40c956e31eb1b8ce38f",
+  revoked: "0x195a188d2c49d5e643afbcfd959edbf2ed1d6cd9216c5d99f3ad08c1010a9744",
+});
+
+export const CUSTOM_FEE_POLICY_KIND = Object.freeze({
+  native: 0,
+  partner: 1,
+  noQualifyingMarket: 2,
 });
 
 export const HOOKS = Object.freeze([
@@ -246,6 +273,171 @@ export function decodeUint256(value) {
   if (typeof value !== "string" || !/^0x[0-9a-fA-F]{1,64}$/.test(value))
     throw new Error("Ungültiger Fee-Betrag");
   return BigInt(value);
+}
+
+function abiWord(data, index) {
+  if (typeof data !== "string" || !/^0x(?:[0-9a-fA-F]{64})+$/.test(data))
+    throw new Error("Ungültige Custom-Eventdaten");
+  const start = 2 + index * 64;
+  const word = data.slice(start, start + 64);
+  if (word.length !== 64) throw new Error("Custom-Event ist unvollständig");
+  return `0x${word}`;
+}
+
+function topicAddress(topic) {
+  if (typeof topic !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(topic))
+    throw new Error("Ungültige Custom-Eventadresse");
+  return `0x${topic.slice(-40)}`;
+}
+
+function wordAddress(word) {
+  return topicAddress(word);
+}
+
+function customLogPosition(log) {
+  return [BigInt(log.blockNumber ?? 0), BigInt(log.logIndex ?? 0)];
+}
+
+function compareCustomLogs(left, right) {
+  const [leftBlock, leftIndex] = customLogPosition(left);
+  const [rightBlock, rightIndex] = customLogPosition(right);
+  if (leftBlock !== rightBlock) return leftBlock < rightBlock ? -1 : 1;
+  return leftIndex === rightIndex ? 0 : leftIndex < rightIndex ? -1 : 1;
+}
+
+export function decodeCustomRegistryLog(log) {
+  if (!log || !Array.isArray(log.topics) || typeof log.topics[0] !== "string")
+    throw new Error("Ungültiges Custom-Registry-Event");
+  if (
+    log.removed === true ||
+    normalizeAddress(log.address) !== normalizeAddress(CUSTOM_REGISTRY.address)
+  )
+    throw new Error("Custom-Registry-Event ist nicht kanonisch");
+
+  const topic = log.topics[0].toLowerCase();
+  const launchId = log.topics[1]?.toLowerCase();
+  if (!/^0x[0-9a-f]{64}$/.test(launchId ?? ""))
+    throw new Error("Custom-Launch-ID fehlt");
+
+  if (topic === CUSTOM_EVENT_TOPICS.registered) {
+    if (log.topics.length !== 4)
+      throw new Error("Custom-Registrierung hat falsche Topics");
+    return {
+      type: "registered",
+      launchId,
+      projectId: log.topics[2].toLowerCase(),
+      primaryContract: topicAddress(log.topics[3]),
+      registrationSequence: decodeUint256(abiWord(log.data, 0)),
+      chainId: decodeUint256(abiWord(log.data, 1)),
+      registryGeneration: decodeUint256(abiWord(log.data, 2)),
+      transactionHash: log.transactionHash,
+    };
+  }
+
+  if (topic === CUSTOM_EVENT_TOPICS.provenance) {
+    return {
+      type: "provenance",
+      launchId,
+      primaryRuntimeCodeHash: abiWord(log.data, 6).toLowerCase(),
+    };
+  }
+
+  if (topic === CUSTOM_EVENT_TOPICS.feePolicy) {
+    return {
+      type: "feePolicy",
+      launchId,
+      feePolicyHash: log.topics[2].toLowerCase(),
+      kind: Number(decodeUint256(abiWord(log.data, 0))),
+      totalFeeBps: Number(decodeUint256(abiWord(log.data, 1))),
+      nativeCustomFeeBps: Number(decodeUint256(abiWord(log.data, 2))),
+      partnerShareBps: Number(decodeUint256(abiWord(log.data, 3))),
+      programmableShareBps: Number(decodeUint256(abiWord(log.data, 4))),
+      partnerRecipient: wordAddress(abiWord(log.data, 5)),
+      programmableRecipient: wordAddress(abiWord(log.data, 6)),
+    };
+  }
+
+  if (topic === CUSTOM_EVENT_TOPICS.finalized)
+    return { type: "finalized", launchId };
+  if (topic === CUSTOM_EVENT_TOPICS.revoked)
+    return { type: "revoked", launchId };
+  throw new Error("Unbekanntes Custom-Registry-Event");
+}
+
+export function reduceCustomRegistryLogs(logs) {
+  if (!Array.isArray(logs)) throw new Error("Custom-Events fehlen");
+  const launches = new Map();
+  const getLaunch = (launchId) => {
+    const existing = launches.get(launchId) ?? {
+      launchId,
+      finalized: false,
+      revoked: false,
+    };
+    launches.set(launchId, existing);
+    return existing;
+  };
+
+  for (const log of [...logs].sort(compareCustomLogs)) {
+    const event = decodeCustomRegistryLog(log);
+    const launch = getLaunch(event.launchId);
+    if (event.type === "registered") {
+      if (launch.primaryContract)
+        throw new Error("Doppelte Custom-Registrierung");
+      Object.assign(launch, event);
+    } else if (event.type === "provenance") {
+      if (launch.primaryRuntimeCodeHash)
+        throw new Error("Doppelte Custom-Provenance");
+      launch.primaryRuntimeCodeHash = event.primaryRuntimeCodeHash;
+    } else if (event.type === "feePolicy") {
+      if (launch.feePolicy) throw new Error("Doppelte Custom-Fee-Policy");
+      launch.feePolicy = event;
+    } else if (event.type === "finalized") {
+      if (launch.finalized) throw new Error("Doppelte Custom-Finalisierung");
+      launch.finalized = true;
+    } else if (event.type === "revoked") {
+      if (launch.revoked) throw new Error("Doppelter Custom-Widerruf");
+      launch.revoked = true;
+    }
+  }
+
+  return [...launches.values()]
+    .filter(({ primaryContract }) => Boolean(primaryContract))
+    .sort((left, right) =>
+      left.registrationSequence < right.registrationSequence ? -1 : 1,
+    );
+}
+
+export function customLaunchStateData(launchId) {
+  if (typeof launchId !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(launchId))
+    throw new Error("Ungültige Custom-Launch-ID");
+  return `${SELECTORS.customLaunchState}${launchId.slice(2).toLowerCase()}`;
+}
+
+export function decodeCustomLaunchState(value) {
+  return {
+    status: Number(decodeUint256(abiWord(value, 0))),
+    feePolicyHash: abiWord(value, 6).toLowerCase(),
+  };
+}
+
+export function customLaunchClassification(launch) {
+  const policy = launch?.feePolicy;
+  if (
+    !policy ||
+    launch?.stateVerified !== true ||
+    launch?.runtimeVerified !== true
+  )
+    return "blocked";
+  if (launch.revoked || launch.currentStatus === 3) return "revoked";
+  if (!launch.finalized || launch.currentStatus !== 2) return "pending";
+  if (policy.kind === CUSTOM_FEE_POLICY_KIND.noQualifyingMarket)
+    return "no-market";
+  if (
+    policy.programmableShareBps === 0 ||
+    !isTreasury(policy.programmableRecipient)
+  )
+    return "blocked";
+  return "adapter-required";
 }
 
 export function formatEth(value, maximumFractionDigits = 6) {
