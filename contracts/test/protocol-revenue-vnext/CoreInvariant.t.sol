@@ -46,18 +46,18 @@ contract CoreRevenueInvariantHandler is Test {
     }
 
     function claimA() external {
-        _callExecutor(abi.encodeWithSignature("claimSource(bytes32)", sourceIdA));
+        _claimRecorded(_single(sourceIdA));
     }
 
     function claimB() external {
-        _callExecutor(abi.encodeWithSignature("claimSource(bytes32)", sourceIdB));
+        _claimRecorded(_single(sourceIdB));
     }
 
     function claimBatch(bool reverseOrder) external {
         bytes32[] memory sourceIds = new bytes32[](2);
         sourceIds[reverseOrder ? 1 : 0] = sourceIdA;
         sourceIds[reverseOrder ? 0 : 1] = sourceIdB;
-        _callExecutor(abi.encodeWithSignature("claimBatch(bytes32[])", sourceIds));
+        _claimRecorded(sourceIds);
     }
 
     function claimADirectly() external {
@@ -69,11 +69,25 @@ contract CoreRevenueInvariantHandler is Test {
     }
 
     function observeA() external {
-        _callExecutor(abi.encodeWithSignature("observeSource(bytes32)", sourceIdA));
+        _claimRecorded(_single(sourceIdA));
     }
 
     function observeB() external {
-        _callExecutor(abi.encodeWithSignature("observeSource(bytes32)", sourceIdB));
+        _claimRecorded(_single(sourceIdB));
+    }
+
+    function _claimRecorded(bytes32[] memory sourceIds) private {
+        vm.warp(block.timestamp + 1 days);
+        _callExecutor(
+            abi.encodeWithSignature(
+                "claimBatchAndRecord(uint64,bytes32[])", uint64(block.timestamp / 1 days), sourceIds
+            )
+        );
+    }
+
+    function _single(bytes32 sourceId) private pure returns (bytes32[] memory sourceIds) {
+        sourceIds = new bytes32[](1);
+        sourceIds[0] = sourceId;
     }
 
     function _callExecutor(bytes memory callData) private {
@@ -101,6 +115,9 @@ contract CoreRevenueInvariantTest is StdInvariant, CoreTestBase {
         sourceIdB = _register(address(sourceB), address(0));
         handler = new CoreRevenueInvariantHandler(sourceA, sourceB, address(executor), sourceIdA, sourceIdB);
         targetContract(address(handler));
+        // The recipient is external to protocol accounting and may spend its balance, but must not do so as an
+        // invariant-fuzzer transaction sender while this suite asserts exact inbound conservation.
+        excludeSender(REWARD_WALLET);
     }
 
     function invariant_eachNativeSourceIsConservedExactly() public view {

@@ -12,6 +12,9 @@ import {
 import { ProtocolRevenueCollectorV1 } from "../../src/protocol-revenue-vnext/ProtocolRevenueCollectorV1.sol";
 import { ProtocolRevenueSourceRegistryV1 } from "../../src/protocol-revenue-vnext/ProtocolRevenueSourceRegistryV1.sol";
 import { ProtocolRevenueClaimExecutorV1 } from "../../src/protocol-revenue-vnext/ProtocolRevenueClaimExecutorV1.sol";
+import {
+    ProtocolRevenueCustomClaimRecorderV1
+} from "../../src/protocol-revenue-vnext/custom/ProtocolRevenueCustomClaimRecorderV1.sol";
 
 contract CoreStandardFeeSource is ProgrammableProtocolFeeSourceBaseV1 {
     using Address for address payable;
@@ -32,6 +35,29 @@ contract CoreStandardFeeSource is ProgrammableProtocolFeeSourceBaseV1 {
 contract CoreStandardFeeSourceV2 is CoreStandardFeeSource {
     function sourceVersion() external pure returns (uint256) {
         return 2;
+    }
+}
+
+contract CoreCustomEligibilityMock {
+    uint256 public constant SUPPORTED_CHAIN_ID = 1;
+    address public constant REWARD_WALLET = 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c;
+    address public immutable SOURCE_REGISTRY;
+    mapping(bytes32 sourceId => bytes32 launchId) public launchIdForSource;
+
+    constructor(address sourceRegistry) {
+        SOURCE_REGISTRY = sourceRegistry;
+    }
+
+    function finalize(bytes32 sourceId) external {
+        launchIdForSource[sourceId] = keccak256(abi.encode("test-custom-launch", sourceId));
+    }
+
+    function revoke(bytes32 sourceId) external {
+        delete launchIdForSource[sourceId];
+    }
+
+    function isFinalizedExecutable(bytes32 launchId) external pure returns (bool) {
+        return launchId != bytes32(0);
     }
 }
 
@@ -197,9 +223,12 @@ abstract contract CoreTestBase is Test {
     ProtocolRevenueCollectorV1 internal collector;
     ProtocolRevenueSourceRegistryV1 internal registry;
     ProtocolRevenueClaimExecutorV1 internal executor;
+    ProtocolRevenueCustomClaimRecorderV1 internal claimRecorder;
+    CoreCustomEligibilityMock internal customEligibility;
 
     uint64 internal constant ACTIVATION_DELAY = 64;
     uint32 internal constant ISOLATED_CALL_GAS = 600_000;
+    bytes32 internal constant CLAIM_RECORDER_ACTIVATION_ID = keccak256("test-custom-claim-recorder-activation");
 
     function setUp() public virtual {
         vm.chainId(1);
@@ -210,7 +239,20 @@ abstract contract CoreTestBase is Test {
         collector = new ProtocolRevenueCollectorV1();
         registry =
             new ProtocolRevenueSourceRegistryV1(2 days, admin, proposer, activator, quarantiner, address(collector));
-        executor = new ProtocolRevenueClaimExecutorV1(address(registry), address(collector), ISOLATED_CALL_GAS);
+        customEligibility = new CoreCustomEligibilityMock(address(registry));
+        uint256 recorderNonce = vm.getNonce(address(this));
+        address predictedExecutor = vm.computeCreateAddress(address(this), recorderNonce + 1);
+        claimRecorder = new ProtocolRevenueCustomClaimRecorderV1(predictedExecutor, CLAIM_RECORDER_ACTIVATION_ID);
+        executor = new ProtocolRevenueClaimExecutorV1(
+            address(registry),
+            address(collector),
+            ISOLATED_CALL_GAS,
+            address(claimRecorder),
+            address(claimRecorder).codehash,
+            address(customEligibility),
+            address(customEligibility).codehash
+        );
+        assertEq(address(executor), predictedExecutor);
         vm.deal(REWARD_WALLET, 0);
     }
 
@@ -241,6 +283,40 @@ abstract contract CoreTestBase is Test {
         vm.etch(source, runtime);
         vm.prank(activator);
         registry.activateSource(config.sourceId);
+        customEligibility.finalize(config.sourceId);
         return config.sourceId;
+    }
+
+    function _currentCycleId() internal view returns (uint64) {
+        return uint64(block.timestamp / 1 days);
+    }
+
+    function _recordedClaim(bytes32[] memory sourceIds) internal returns (bytes32 recordHash) {
+        return executor.claimBatchAndRecord(_currentCycleId(), sourceIds);
+    }
+
+    function _recordedClaim(bytes32 sourceId) internal returns (bytes32 recordHash) {
+        bytes32[] memory sourceIds = new bytes32[](1);
+        sourceIds[0] = sourceId;
+        return _recordedClaim(sourceIds);
+    }
+
+    function _recordTotal(bytes32 recordHash) internal view returns (uint256 totalClaimedWei) {
+        (
+            bool exists,
+            uint64 cycleId,
+            uint256 total,
+            bytes32 sourceTotalsHash,
+            bytes32 claimBatchCommitment,
+            bytes32 sourceBindingHash,
+            uint256 claimBlockNumber
+        ) = claimRecorder.claimRecord(recordHash);
+        assertTrue(exists);
+        assertEq(cycleId, _currentCycleId());
+        assertNotEq(sourceTotalsHash, bytes32(0));
+        assertNotEq(claimBatchCommitment, bytes32(0));
+        assertEq(sourceBindingHash, claimRecorder.sourceBindingHash());
+        assertEq(claimBlockNumber, block.number);
+        return total;
     }
 }

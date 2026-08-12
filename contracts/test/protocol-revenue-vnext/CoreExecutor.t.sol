@@ -8,6 +8,9 @@ import {
 } from "../../src/protocol-revenue-vnext/IProgrammableProtocolFeeSourceV1.sol";
 import { ProtocolRevenueCollectorV1 } from "../../src/protocol-revenue-vnext/ProtocolRevenueCollectorV1.sol";
 import { ProtocolRevenueClaimExecutorV1 } from "../../src/protocol-revenue-vnext/ProtocolRevenueClaimExecutorV1.sol";
+import {
+    ProtocolRevenueCustomClaimRecorderV1
+} from "../../src/protocol-revenue-vnext/custom/ProtocolRevenueCustomClaimRecorderV1.sol";
 import { CoreBombFeeSource, CoreFaultyFeeSource, CoreStandardFeeSource, CoreTestBase } from "./CoreTestBase.t.sol";
 
 contract CoreReentrantRewardWallet {
@@ -24,7 +27,9 @@ contract CoreReentrantRewardWallet {
 
     receive() external payable {
         ++attempts;
-        try EXECUTOR.claimSource(SOURCE_ID) returns (uint256) { }
+        bytes32[] memory sourceIds = new bytes32[](1);
+        sourceIds[0] = SOURCE_ID;
+        try EXECUTOR.claimBatchAndRecord(uint64(block.timestamp / 1 days), sourceIds) returns (bytes32) { }
         catch (bytes memory reason) {
             if (reason.length >= 4) {
                 bytes4 selector;
@@ -78,9 +83,9 @@ contract CoreExecutorTest is CoreTestBase {
         bytes32 sourceId = _register(address(source), address(0));
         source.accrueNative{ value: 0.35 ether }();
 
-        uint256 claimed = executor.claimSource(sourceId);
+        bytes32 recordHash = _recordedClaim(sourceId);
 
-        assertEq(claimed, 0.35 ether);
+        assertEq(_recordTotal(recordHash), 0.35 ether);
         assertEq(REWARD_WALLET.balance, 0.35 ether);
         assertEq(address(collector).balance, 0);
         assertEq(source.accruedProgrammableFees(address(0)), 0);
@@ -129,12 +134,11 @@ contract CoreExecutorTest is CoreTestBase {
         assertEq(REWARD_WALLET.balance, 0.42 ether);
         assertEq(executor.totalObservedBySource(sourceId), 0);
 
-        uint256 observed = executor.observeSource(sourceId);
-        assertEq(observed, 0.42 ether);
+        bytes32 recordHash = _recordedClaim(sourceId);
+        assertEq(_recordTotal(recordHash), 0.42 ether);
         assertEq(executor.lastObservedCumulative(sourceId), 0.42 ether);
         assertEq(executor.totalObservedBySource(sourceId), 0.42 ether);
         assertEq(executor.totalExecutedBySource(sourceId), 0);
-        assertEq(executor.observeSource(sourceId), 0);
     }
 
     function test_batchIsolatesRevertingSourceAndStillClaimsHealthySource() public {
@@ -149,10 +153,9 @@ contract CoreExecutorTest is CoreTestBase {
         bytes32[] memory sourceIds = new bytes32[](2);
         sourceIds[0] = faultyId;
         sourceIds[1] = healthyId;
-        (uint256 succeeded, uint256 failed) = executor.claimBatch(sourceIds);
+        bytes32 recordHash = _recordedClaim(sourceIds);
 
-        assertEq(succeeded, 1);
-        assertEq(failed, 1);
+        assertEq(_recordTotal(recordHash), 0.3 ether);
         assertEq(REWARD_WALLET.balance, 0.3 ether);
         assertEq(faulty.accruedProgrammableFees(address(0)), 0.2 ether);
         assertEq(healthy.accruedProgrammableFees(address(0)), 0);
@@ -172,10 +175,9 @@ contract CoreExecutorTest is CoreTestBase {
         bytes32[] memory sourceIds = new bytes32[](2);
         sourceIds[0] = partialId;
         sourceIds[1] = healthyId;
-        (uint256 succeeded, uint256 failed) = executor.claimBatch(sourceIds);
+        bytes32 recordHash = _recordedClaim(sourceIds);
 
-        assertEq(succeeded, 1);
-        assertEq(failed, 1);
+        assertEq(_recordTotal(recordHash), 0.1 ether);
         assertEq(partialSource.accruedProgrammableFees(address(0)), 0.4 ether);
         assertEq(partialSource.totalProgrammableFeesClaimed(address(0)), 0);
         assertEq(REWARD_WALLET.balance, 0.1 ether);
@@ -200,10 +202,8 @@ contract CoreExecutorTest is CoreTestBase {
         sourceIds[0] = misreportId;
         sourceIds[1] = noTransferId;
         sourceIds[2] = counterMismatchId;
-        (uint256 succeeded, uint256 failed) = executor.claimBatch(sourceIds);
-
-        assertEq(succeeded, 0);
-        assertEq(failed, 3);
+        vm.expectRevert(ProtocolRevenueCustomClaimRecorderV1.NoClaimedRevenue.selector);
+        _recordedClaim(sourceIds);
         assertEq(REWARD_WALLET.balance, 0);
         assertEq(misreport.accruedProgrammableFees(address(0)), 0.11 ether);
         assertEq(noTransfer.accruedProgrammableFees(address(0)), 0.12 ether);
@@ -227,10 +227,9 @@ contract CoreExecutorTest is CoreTestBase {
         sourceIds[0] = returnBombId;
         sourceIds[1] = revertBombId;
         sourceIds[2] = healthyId;
-        (uint256 succeeded, uint256 failed) = executor.claimBatch(sourceIds);
+        bytes32 recordHash = _recordedClaim(sourceIds);
 
-        assertEq(succeeded, 1);
-        assertEq(failed, 2);
+        assertEq(_recordTotal(recordHash), 0.13 ether);
         assertEq(REWARD_WALLET.balance, 0.13 ether);
         assertEq(returnBomb.accruedProgrammableFees(address(0)), 0.11 ether);
         assertEq(revertBomb.accruedProgrammableFees(address(0)), 0.12 ether);
@@ -249,10 +248,9 @@ contract CoreExecutorTest is CoreTestBase {
         bytes32[] memory sourceIds = new bytes32[](2);
         sourceIds[0] = malformedId;
         sourceIds[1] = healthyId;
-        (uint256 succeeded, uint256 failed) = executor.claimBatch(sourceIds);
+        bytes32 recordHash = _recordedClaim(sourceIds);
 
-        assertEq(succeeded, 1);
-        assertEq(failed, 1);
+        assertEq(_recordTotal(recordHash), 0.15 ether);
         assertEq(REWARD_WALLET.balance, 0.15 ether);
         assertEq(malformed.accruedProgrammableFees(address(0)), 0.14 ether);
     }
@@ -265,12 +263,11 @@ contract CoreExecutorTest is CoreTestBase {
         sourceIds[0] = sourceId;
         sourceIds[1] = sourceId;
 
-        (uint256 succeeded, uint256 failed) = executor.claimBatch(sourceIds);
+        vm.expectRevert(abi.encodeWithSelector(ProtocolRevenueClaimExecutorV1.DuplicateSource.selector, sourceId));
+        _recordedClaim(sourceIds);
 
-        assertEq(succeeded, 1);
-        assertEq(failed, 1);
-        assertEq(REWARD_WALLET.balance, 0.17 ether);
-        assertEq(executor.totalExecutedBySource(sourceId), 0.17 ether);
+        assertEq(REWARD_WALLET.balance, 0);
+        assertEq(executor.totalExecutedBySource(sourceId), 0);
     }
 
     function test_batchRejectsMoreThanEightEntries() public {
@@ -280,7 +277,7 @@ contract CoreExecutorTest is CoreTestBase {
                 ProtocolRevenueClaimExecutorV1.BatchTooLarge.selector, sourceIds.length, executor.MAX_BATCH_SIZE()
             )
         );
-        executor.claimBatch(sourceIds);
+        executor.claimBatchAndRecord(_currentCycleId(), sourceIds);
     }
 
     function test_quarantineStopsClaimsWithoutMutatingSourceBinding() public {
@@ -290,8 +287,8 @@ contract CoreExecutorTest is CoreTestBase {
         vm.prank(quarantiner);
         registry.quarantineSource(sourceId, keccak256("runtime-review"));
 
-        vm.expectRevert(abi.encodeWithSelector(ProtocolRevenueClaimExecutorV1.SourceQuarantined.selector, sourceId));
-        executor.claimSource(sourceId);
+        vm.expectRevert(ProtocolRevenueCustomClaimRecorderV1.NoClaimedRevenue.selector);
+        _recordedClaim(sourceId);
         assertEq(source.accruedProgrammableFees(address(0)), 0.09 ether);
         assertEq(REWARD_WALLET.balance, 0);
     }
@@ -300,18 +297,10 @@ contract CoreExecutorTest is CoreTestBase {
         CoreStandardFeeSource source = new CoreStandardFeeSource();
         bytes32 sourceId = _register(address(source), address(0));
         source.accrueNative{ value: 0.16 ether }();
-        bytes32 expectedCodeHash = address(source).codehash;
         vm.etch(address(source), hex"60006000fd");
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                ProtocolRevenueClaimExecutorV1.SourceRuntimeCodeHashMismatch.selector,
-                sourceId,
-                expectedCodeHash,
-                address(source).codehash
-            )
-        );
-        executor.claimSource(sourceId);
+        vm.expectRevert(ProtocolRevenueCustomClaimRecorderV1.NoClaimedRevenue.selector);
+        _recordedClaim(sourceId);
         assertEq(REWARD_WALLET.balance, 0);
     }
 
@@ -322,7 +311,8 @@ contract CoreExecutorTest is CoreTestBase {
         vm.etch(REWARD_WALLET, address(implementation).code);
         source.accrueNative{ value: 0.19 ether }();
 
-        assertEq(executor.claimSource(sourceId), 0.19 ether);
+        bytes32 recordHash = _recordedClaim(sourceId);
+        assertEq(_recordTotal(recordHash), 0.19 ether);
 
         CoreReentrantRewardWallet wallet = CoreReentrantRewardWallet(payable(REWARD_WALLET));
         assertEq(wallet.attempts(), 1);
@@ -359,7 +349,8 @@ contract CoreExecutorTest is CoreTestBase {
         CoreStandardFeeSource source = new CoreStandardFeeSource();
         bytes32 sourceId = _register(address(source), address(0));
         assertEq(source.claimProgrammableFees(address(0)), 0);
-        assertEq(executor.claimSource(sourceId), 0);
+        vm.expectRevert(ProtocolRevenueCustomClaimRecorderV1.NoClaimedRevenue.selector);
+        _recordedClaim(sourceId);
         assertEq(executor.totalObservedBySource(sourceId), 0);
         assertEq(executor.totalExecutedBySource(sourceId), 0);
     }
@@ -370,7 +361,8 @@ contract CoreExecutorTest is CoreTestBase {
         bytes32 sourceId = _register(address(source), address(0));
         source.accrueNative{ value: amount }();
 
-        assertEq(executor.claimSource(sourceId), amount);
+        bytes32 recordHash = _recordedClaim(sourceId);
+        assertEq(_recordTotal(recordHash), amount);
         assertEq(REWARD_WALLET.balance, amount);
         assertEq(executor.totalObservedByAsset(address(0)), amount);
         assertEq(executor.totalExecutedByAsset(address(0)), amount);

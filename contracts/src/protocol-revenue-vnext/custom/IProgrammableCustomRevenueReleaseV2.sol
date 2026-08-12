@@ -34,6 +34,7 @@ struct CustomRevenueApprovalStateV2 {
     bytes32 launchClassId;
     bytes32 approvalBindingHash;
     bytes32 registrationBindingHash;
+    bytes32 expectedLaunchStampHash;
     address approvedFactory;
     bytes32 approvedFactoryRuntimeCodeHash;
     address create2Deployer;

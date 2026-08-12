@@ -463,6 +463,9 @@ contract ProtocolRevenueCustomLaunchRegistrarV1 is AccessControlDefaultAdminRule
         if (approval.registrationBindingHash != proposal.registrationBindingHash) {
             revert ApprovalBindingMismatch("registration-binding");
         }
+        if (approval.expectedLaunchStampHash != proposal.expectedLaunchStampHash) {
+            revert ApprovalBindingMismatch("launch-stamp-hash");
+        }
         if (approval.evidenceHash == bytes32(0)) revert ApprovalBindingMismatch("approval-evidence");
         if (
             approval.approvedFactory != proposal.approvedFactory

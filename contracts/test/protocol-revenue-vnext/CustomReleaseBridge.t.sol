@@ -148,6 +148,7 @@ contract ProtocolRevenueCustomReleaseBridgeTest is Test {
     bytes32 internal constant FIELD_CUSTOM_REGISTRY_V2_POLICY = "custom-registry-v2-policy";
     bytes32 internal constant FIELD_CREATE2_PREDICTION = "create2-prediction";
     bytes32 internal constant FIELD_DEPLOYMENT_RUNTIME = "deployment-runtime-code-hash";
+    bytes32 internal constant FIELD_LAUNCH_STAMP_HASH = "launch-stamp-hash";
 
     ProtocolRevenueSourceRegistryV1 internal sourceRegistry;
     CustomRevenueRegistryV2Mock internal customRegistry;
@@ -343,6 +344,19 @@ contract ProtocolRevenueCustomReleaseBridgeTest is Test {
         registrar.proposeFutureCustom(proposal);
     }
 
+    function test_rejectsProposalWhoseLaunchStampWasNotApproved() public {
+        ProtocolRevenueCustomLaunchRegistrarV1.FutureCustomProposalV1 memory proposal = _proposal(_sourceConfig());
+        proposal.expectedLaunchStampHash = keccak256("unapproved-launch-stamp");
+
+        vm.prank(launchAdmitter);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ProtocolRevenueCustomLaunchRegistrarV1.ApprovalBindingMismatch.selector, FIELD_LAUNCH_STAMP_HASH
+            )
+        );
+        registrar.proposeFutureCustom(proposal);
+    }
+
     function _finalizeOne() internal returns (ProtocolRevenueSourceConfigV1 memory source) {
         source = _deployActivateAndPrepare();
         uint64 stampBlock = uint64(block.number + 1);
@@ -409,6 +423,7 @@ contract ProtocolRevenueCustomReleaseBridgeTest is Test {
             launchClassId: registrar.CUSTOM_LAUNCH_CLASS_ID(),
             approvalBindingHash: APPROVAL_BINDING,
             registrationBindingHash: REGISTRATION_BINDING,
+            expectedLaunchStampHash: STAMP_HASH,
             approvedFactory: address(approvedFactory),
             approvedFactoryRuntimeCodeHash: address(approvedFactory).codehash,
             create2Deployer: address(create2Deployer),
