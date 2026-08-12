@@ -20,6 +20,7 @@ import {
   customLaunchApplicantRecoveryForErrorV2,
   customLaunchErrorMessage,
   customLaunchFeeReviewV1,
+  customLaunchFixedTokenIdentityCopyV1,
   defaultLaunchRoute,
   assertLaunchPermitFreshnessV2,
   fetchTrustedTimeV1,
@@ -630,6 +631,85 @@ describe("custom launch browser authority", () => {
         ],
       },
     });
+  });
+
+  it("changes the exact selection commitment for any website-chosen launch detail", () => {
+    const launchSelection = (input: Readonly<{
+      tokenName: string;
+      tokenSymbol: string;
+      presentationBindingHash: `sha256:${string}`;
+    }>) => buildCustomLaunchSelection({
+      descriptor: descriptor(),
+      wallet: "0x1111111111111111111111111111111111111111",
+      configuration: {
+        tokenName: input.tokenName,
+        tokenSymbol: input.tokenSymbol,
+      },
+      presentationBindingHash: input.presentationBindingHash,
+    });
+    const baseline = launchSelection({
+      tokenName: "Wild Game",
+      tokenSymbol: "WILD",
+      presentationBindingHash: digest("9"),
+    });
+    const commitment = (selection: ReturnType<typeof launchSelection>) =>
+      canonicalBrowserSha256V2(
+        "programmable.untrusted-launch-wallet-selection.v2",
+        selection,
+      );
+
+    expect(commitment(launchSelection({
+      tokenName: "Wild Game Two",
+      tokenSymbol: "WILD",
+      presentationBindingHash: digest("9"),
+    }))).not.toBe(commitment(baseline));
+    expect(commitment(launchSelection({
+      tokenName: "Wild Game",
+      tokenSymbol: "WILD2",
+      presentationBindingHash: digest("9"),
+    }))).not.toBe(commitment(baseline));
+    expect(commitment(launchSelection({
+      tokenName: "Wild Game",
+      tokenSymbol: "WILD",
+      presentationBindingHash: digest("8"),
+    }))).not.toBe(commitment(baseline));
+  });
+
+  it("edits token identity only when the approved descriptor exposes it", () => {
+    const editable = descriptor();
+    expect(customLaunchFixedTokenIdentityCopyV1(editable)).toBeNull();
+
+    const sourceFixed: LaunchDescriptorV2 = {
+      ...editable,
+      configurationSchema: {
+        ...editable.configurationSchema,
+        fields: [],
+      },
+    };
+    expect(customLaunchFixedTokenIdentityCopyV1(sourceFixed)).toBe(
+      "Token identity is fixed by the approved source",
+    );
+    expect(buildCustomLaunchSelection({
+      descriptor: sourceFixed,
+      wallet: "0x1111111111111111111111111111111111111111",
+      configuration: {
+        tokenName: "Must not cross",
+        tokenSymbol: "NOPE",
+      },
+    })).not.toHaveProperty("launchConfiguration");
+
+    const fixedTicker: LaunchDescriptorV2 = {
+      ...editable,
+      configurationSchema: {
+        ...editable.configurationSchema,
+        fields: editable.configurationSchema.fields.filter(
+          ({ fieldId }) => fieldId === "tokenName",
+        ),
+      },
+    };
+    expect(customLaunchFixedTokenIdentityCopyV1(fixedTicker)).toBe(
+      "Token ticker is fixed by the approved source",
+    );
   });
 
   it("uses the exact default route even when it is not the first route", () => {

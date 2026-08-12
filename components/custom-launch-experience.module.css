@@ -390,6 +390,7 @@
   border: 1px dashed var(--control-border);
   border-radius: 17px;
   color: var(--text-soft);
+  cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -477,11 +478,38 @@
   margin-top: 19px;
 }
 
+.fixedParameterList {
+  display: grid;
+  margin: 19px 0 0;
+}
+
+.fixedParameterList > div {
+  background: var(--surface-soft);
+  border: 1px solid var(--control-border);
+  border-radius: 13px;
+  display: grid;
+  gap: 5px;
+  padding: 12px 13px;
+}
+
+.fixedParameterList dt {
+  color: color-mix(in srgb, var(--text) 86%, var(--text-soft));
+  font-size: 12px;
+  font-weight: 630;
+}
+
+.fixedParameterList dd {
+  color: var(--text-soft);
+  font-size: 13px;
+  margin: 0;
+}
+
 .fieldStack textarea:focus-visible,
 .fieldStack input:focus-visible,
 .parameterGrid input:focus-visible,
 .parameterGrid textarea:focus-visible,
 .imageButton:focus-visible,
+.imageButton:focus-within,
 .removeImageButton:focus-visible,
 .secondaryButton:focus-visible,
 .githubButton:focus-visible,
