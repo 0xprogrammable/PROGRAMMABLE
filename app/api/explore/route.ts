@@ -445,8 +445,14 @@ export async function GET(request: NextRequest) {
         : []),
       ...customProjects,
     ]);
-    const identityEntries = await hydrateMissingCanonicalTokenSupplyV1(
+    assertNoExploreCategoryCollision(unresolvedIdentityEntries);
+    const requestedIdentityEntries = filterExploreEntries(
       unresolvedIdentityEntries,
+      options.query,
+      options.socials,
+    );
+    const identityEntries = await hydrateMissingCanonicalTokenSupplyV1(
+      requestedIdentityEntries,
     );
     const marketByToken = await readBitqueryTokenMarketDataV1(
       exploreEntriesMarketIdentitiesV1(identityEntries),
@@ -456,7 +462,6 @@ export async function GET(request: NextRequest) {
       identityEntries,
       marketByToken,
     );
-    assertNoExploreCategoryCollision(entries);
     const useTopValuationView =
       options.sort === "market-cap" &&
       options.query.length === 0 &&
@@ -489,7 +494,7 @@ export async function GET(request: NextRequest) {
         custom: customSource,
       }),
     };
-    if (canonicalSource === null && entries.length === 0) {
+    if (canonicalSource === null && unresolvedIdentityEntries.length === 0) {
       return NextResponse.json(
         {
           status: "unavailable",
