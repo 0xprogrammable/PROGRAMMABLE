@@ -9,6 +9,7 @@ vi.mock("server-only", () => ({}));
 
 import {
   isOperationalRpcFailoverEligible,
+  OperationalRpcReadError,
   OperationalRpcUnavailableError,
   safeOperationalRpcError,
   withOperationalRpcFailover,
@@ -41,11 +42,15 @@ function httpFailure(status: number | undefined, url = deployment.rpcUrl) {
   });
 }
 
-function rpcFailure(message: string, code = -32_000) {
+function rpcFailure(
+  message: string,
+  code = -32_000,
+  url = deployment.rpcUrl,
+) {
   return new RpcRequestError({
     body: { method: "eth_blockNumber" },
     error: { code, message },
-    url: deployment.rpcUrl,
+    url,
   });
 }
 
@@ -124,12 +129,48 @@ describe("operational RPC failover", () => {
     ]);
   });
 
+  it("uses the fixed secondary after dRPC reports code 12 routing unavailability", async () => {
+    const calls: string[] = [];
+    const read = vi.fn(async (candidate: ReadyOnchainDeployment) => {
+      calls.push(candidate.rpcUrl);
+      if (candidate.rpcUrl === deployment.rpcUrl) {
+        throw rpcFailure(
+          "Can't route your request to suitable provider, if you specified certain providers revise the list",
+          12,
+        );
+      }
+      return "secondary-ready";
+    });
+
+    await expect(
+      withOperationalRpcFailover(deployment, read),
+    ).resolves.toBe("secondary-ready");
+    expect(calls).toEqual([
+      deployment.rpcUrl,
+      deployment.rpcUrlSecondary,
+    ]);
+  });
+
   it.each([
     httpFailure(400),
     rpcFailure("execution reverted"),
     rpcFailure("Invalid parameters were provided", -32602),
-    new Error("Pool identity mismatch"),
-  ])("does not rotate providers for a non-transport read error", async (error) => {
+  ])("redacts a non-failover RPC error without rotating providers", async (error) => {
+    const read = vi.fn(async () => {
+      throw error;
+    });
+
+    const received = await withOperationalRpcFailover(deployment, read).catch(
+      (candidate) => candidate,
+    );
+    expect(received).toBeInstanceOf(OperationalRpcReadError);
+    expect(JSON.stringify(received)).not.toContain("primary.example");
+    expect(JSON.stringify(received)).not.toContain("eth_blockNumber");
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves a provider-independent integrity error without rotating", async () => {
+    const error = new Error("Pool identity mismatch");
     const read = vi.fn(async () => {
       throw error;
     });
@@ -155,6 +196,25 @@ describe("operational RPC failover", () => {
     await expect(promise).rejects.toThrow(
       "Operational RPC reads are temporarily unavailable",
     );
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  it("redacts a code 12 routing failure from the fixed secondary", async () => {
+    const read = vi.fn(async (candidate: ReadyOnchainDeployment) => {
+      throw rpcFailure(
+        "Can't route your request to suitable provider, if you specified certain providers revise the list",
+        12,
+        candidate.rpcUrl,
+      );
+    });
+
+    const error = await withOperationalRpcFailover(deployment, read).catch(
+      (candidate) => candidate,
+    );
+    expect(error).toBeInstanceOf(OperationalRpcUnavailableError);
+    expect(JSON.stringify(error)).not.toContain("primary.example");
+    expect(JSON.stringify(error)).not.toContain("secondary.example");
+    expect(JSON.stringify(error)).not.toContain("eth_blockNumber");
     expect(read).toHaveBeenCalledTimes(2);
   });
 
