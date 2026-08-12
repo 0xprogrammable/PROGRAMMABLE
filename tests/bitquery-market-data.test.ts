@@ -652,6 +652,80 @@ describe("Bitquery-only market data", () => {
     expect(values.get(CLASSIC.tokenAddress)?.pools[0]?.identity).toEqual(CLASSIC);
   });
 
+  it("recovers missing indexed prices from bounded singleton queries", async () => {
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body));
+      if (request.query.includes("ProgrammableMarketSnapshot")) {
+        return jsonResponse({
+          data: {
+            EVM: {
+              latestTrades: [
+                tradeRow({ identity: PCAN }),
+                tradeRow({ identity: CLASSIC }),
+              ],
+            },
+          },
+        });
+      }
+      if (request.query.includes("ProgrammableMarketPrices")) {
+        if (request.query.includes("price1:")) {
+          return jsonResponse({
+            data: { Trading: { price0: [], price1: [] } },
+            errors: [{ message: "bounded batch price lookup was partial" }],
+          });
+        }
+        return jsonResponse({
+          data: { Trading: { price0: [tradingPriceRow()] } },
+        });
+      }
+      if (request.query.includes("ProgrammableMarketLiquidity")) {
+        return jsonResponse({
+          data: {
+            EVM: {
+              latestLiquidity: [
+                liquidityRow(PCAN),
+                liquidityRow(CLASSIC),
+              ],
+            },
+          },
+        });
+      }
+      if (request.query.includes("ProgrammableMarketStats")) {
+        return jsonResponse({
+          data: {
+            EVM: {
+              stats: [PCAN, CLASSIC].map((identity) => ({
+                Trade: {
+                  PoolId: identity.poolId,
+                  Currency: { SmartContract: identity.tokenAddress },
+                },
+                count: "1",
+                volumeUsd: "10",
+              })),
+            },
+          },
+        });
+      }
+      throw new Error("unexpected market request");
+    }) as typeof fetch;
+
+    const values = await readBitqueryTokenMarketDataV1([PCAN, CLASSIC], {
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(6);
+    expect(values.get(PCAN.tokenAddress)?.pools[0]?.latestTrade).toMatchObject({
+      priceUsdWad: "250000000000000000",
+      priceUsdSource: "bitquery-token-price-index-v1",
+    });
+    expect(values.get(CLASSIC.tokenAddress)?.pools[0]?.latestTrade).toMatchObject({
+      priceUsdWad: "250000000000000000",
+      priceUsdSource: "bitquery-token-price-index-v1",
+    });
+  });
+
   it("does not use Bitquery supply when circulating supply is absent", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(marketResponse({
       supply: supplyRow({ circulating: null }),

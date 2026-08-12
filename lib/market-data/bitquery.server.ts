@@ -31,6 +31,8 @@ const REQUEST_TIMEOUT_MS = 8_000;
 const MAXIMUM_RESPONSE_BYTES = 1_500_000;
 const MARKET_BATCH_SIZE = 100;
 const MARKET_BATCH_CONCURRENCY = 2;
+const INDEXED_PRICE_RECOVERY_CONCURRENCY = 4;
+const MAXIMUM_INDEXED_PRICE_RECOVERIES_PER_BATCH = 20;
 const MARKET_CACHE_CURRENT_MAX_AGE_MS = 2_000;
 const MARKET_CACHE_MAX_AGE_MS = 15 * 60 * 1_000;
 const DURABLE_MARKET_CACHE_SECONDS = 5 * 60;
@@ -554,20 +556,66 @@ async function readMarketBatch(
       return poolId && address ? marketStatsKey(poolId, address) : null;
     },
   );
+  const indexedPricesByIndex = new Map<number, TokenPriceObservation | null>();
+  const priceLookupWasPartial = priceResult.status !== "fulfilled" ||
+    priceResult.value.partial;
+  const missingIndexedPrices = priceLookupWasPartial
+    ? parsedTrades.flatMap(({ trade }, index) => {
+        if (!trade) return [];
+        const observation = parseNativeQuotePriceObservation(
+          array(priceTrading?.[`price${index}`])[0],
+          trade,
+        );
+        if (observation !== null) {
+          indexedPricesByIndex.set(index, observation);
+          return [];
+        }
+        return [{ index, trade }];
+      }).slice(0, MAXIMUM_INDEXED_PRICE_RECOVERIES_PER_BATCH)
+    : [];
+  await mapWithConcurrency(
+    missingIndexedPrices,
+    INDEXED_PRICE_RECOVERY_CONCURRENCY,
+    async ({ index, trade }) => {
+      try {
+        const request = marketPriceQuery([trade]);
+        const response = await executeBitqueryGraphql(
+          request.query,
+          request.variables,
+          options,
+        );
+        const trading = record(response.data.Trading);
+        indexedPricesByIndex.set(
+          index,
+          parseNativeQuotePriceObservation(
+            array(trading?.price0)[0],
+            trade,
+          ),
+        );
+      } catch {
+        indexedPricesByIndex.set(index, null);
+      }
+    },
+  );
   const parsed = identities.map((identity, index) => {
     const latestTradeRow = parsedTrades[index]?.row;
     const latestTradeRows = latestTradeRow === undefined
       ? []
       : [latestTradeRow];
     const parsedTrade = parsedTrades[index]?.trade ?? null;
+    const indexedPrice = indexedPricesByIndex.has(index)
+      ? indexedPricesByIndex.get(index) ?? null
+      : parsedTrade
+        ? parseNativeQuotePriceObservation(
+            array(priceTrading?.[`price${index}`])[0],
+            parsedTrade,
+          )
+        : null;
     const latestTrade = parsedTrade === null
       ? null
       : enrichTradeWithIndexedUsd(
           parsedTrade,
-          parseNativeQuotePriceObservation(
-            array(priceTrading?.[`price${index}`])[0],
-            parsedTrade,
-          ),
+          indexedPrice,
           options.now,
         );
     return {
