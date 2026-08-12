@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   getOnchainDeployment: vi.fn(),
   readDurableExploreModel: vi.fn(),
   readBitqueryTokenMarketDataV1: vi.fn(),
+  hydrateMissingCanonicalTokenSupplyV1: vi.fn(),
   safeAlchemyError: vi.fn((error) => error),
 }));
 
@@ -66,6 +67,11 @@ vi.mock("../lib/onchain/durable-model", () => ({
 
 vi.mock("../lib/market-data/bitquery.server", () => ({
   readBitqueryTokenMarketDataV1: mocks.readBitqueryTokenMarketDataV1,
+}));
+
+vi.mock("../lib/market-data/canonical-token-supply.server", () => ({
+  hydrateMissingCanonicalTokenSupplyV1:
+    mocks.hydrateMissingCanonicalTokenSupplyV1,
 }));
 
 import {
@@ -243,6 +249,9 @@ describe("Explore API Bitquery market boundary", () => {
     mocks.readBitqueryTokenMarketDataV1.mockImplementation(
       async (identities: readonly MarketDataIdentityV1[]) =>
         bitqueryMarketData(identities),
+    );
+    mocks.hydrateMissingCanonicalTokenSupplyV1.mockImplementation(
+      async (entries: readonly ExploreEntry[]) => [...entries],
     );
   });
 
@@ -616,6 +625,67 @@ describe("Explore API Bitquery market boundary", () => {
     expect(response.headers.get("Cache-Control")).toBe(
       "public, max-age=0, s-maxage=2, stale-while-revalidate=5",
     );
+    expect(mocks.readBitqueryTokenMarketDataV1).toHaveBeenCalledTimes(1);
+    expect(
+      mocks.readBitqueryTokenMarketDataV1.mock.calls[0]?.[0],
+    ).toHaveLength(30);
+  });
+
+  it.each([
+    ["newest", [10, 9, 8, 7, 6, 5, 4, 3, 2, 1]],
+    ["oldest", [21, 22, 23, 24, 25, 26, 27, 28, 29, 30]],
+  ] as const)(
+    "values only the requested identity page for %s ordering",
+    async (sort, expectedIndexes) => {
+      const response = await GET(
+        new NextRequest(
+          `http://localhost/api/explore?sort=${sort}&page=3&limit=10`,
+        ),
+      );
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body).toMatchObject({
+        status: "ready",
+        page: 3,
+        pageSize: 10,
+        total: 30,
+        totalPages: 3,
+      });
+      expect(body.tokens.map((entry: LauncherToken) => entry.symbol)).toEqual(
+        expectedIndexes.map((index) => `T${index}`),
+      );
+      expect(mocks.hydrateMissingCanonicalTokenSupplyV1).toHaveBeenCalledTimes(1);
+      expect(
+        mocks.hydrateMissingCanonicalTokenSupplyV1.mock.calls[0]?.[0],
+      ).toHaveLength(10);
+      expect(mocks.readBitqueryTokenMarketDataV1).toHaveBeenCalledTimes(1);
+      expect(
+        mocks.readBitqueryTokenMarketDataV1.mock.calls[0]?.[0],
+      ).toHaveLength(10);
+    },
+  );
+
+  it("briefly edge caches explicitly stale market data", async () => {
+    mocks.readBitqueryTokenMarketDataV1.mockImplementation(
+      async (identities: readonly MarketDataIdentityV1[]) =>
+        bitqueryMarketData(identities, { freshness: "stale" }),
+    );
+
+    const response = await GET(
+      new NextRequest("http://localhost/api/explore?sort=market-cap"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.dataQuality).toMatchObject({
+      status: "stale",
+      valuation: { status: "stale", stale: 30 },
+    });
+    expect(response.headers.get("X-Programmable-Data-Quality")).toBe("stale");
+    expect(response.headers.get("Cache-Control")).toBe(
+      "public, max-age=0, s-maxage=2, stale-while-revalidate=5",
+    );
   });
 
   it("binds current FDV to Bitquery time instead of the lagging identity snapshot", async () => {
@@ -838,7 +908,6 @@ describe("Explore API Bitquery market boundary", () => {
   });
 
   it.each([
-    ["newest", "sort=newest&page=3&limit=10"],
     ["lowest FDV", "sort=lowest-market-cap&page=3&limit=10"],
     ["social filter", "socials=yes&page=3&limit=10"],
     ["search", "q=token&page=3&limit=10"],
