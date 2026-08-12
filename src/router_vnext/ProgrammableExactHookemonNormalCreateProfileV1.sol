@@ -20,29 +20,32 @@ interface IExactHookemonLineageRegistryAuthorizationV1 {
     function hasRole(bytes32 role, address account) external view returns (bool);
 }
 
-/// @notice Fixed one-shot Router-V4 Execute profile for the reviewed Hookemon atomic NORMAL_CREATE launcher.
+/// @notice Shared implementation for the one-shot Hookemon atomic NORMAL_CREATE profile and its test harness.
 /// @dev There is no arbitrary target, selector, calldata, initcode, value-forwarding, delegatecall or sweep surface.
-///      The only created initcode is reconstructed from the immutable two-part store and the typed 38-word
+///      The only created initcode is reconstructed from the immutable two-part store and the bounded typed
 ///      Hookemon constructor tuple. Kernel begin, CREATE, exact postflight and Kernel finalize share one transaction.
-contract ProgrammableExactHookemonNormalCreateProfileV1 is IProgrammableExactHookemonNormalCreateProfileV1 {
-    uint16 public constant PLAN_SCHEMA_VERSION = 1;
-    uint256 public constant CONSTRUCTOR_ARGUMENT_BYTES = 1216;
-    uint256 public constant MAXIMUM_INITCODE_BYTES = 49_152;
-    uint64 public constant EXPECTED_CREATE_NONCE = 1;
-    bytes20 public constant SOURCE_COMMIT_ID = bytes20(hex"23336e60ae5859dbb0ae9c0db3399af4ef4af8e8");
-    bytes20 public constant SOURCE_TREE_ID = bytes20(hex"7624bde3bb09f654e77881880c419e356ed85c29");
-    uint64 public constant GITHUB_REPOSITORY_ID = 1_324_982_531;
-    bytes32 public constant SOURCE_REPOSITORY_KEY =
+abstract contract ProgrammableExactHookemonNormalCreateProfileBaseV1 is
+    IProgrammableExactHookemonNormalCreateProfileV1
+{
+    uint16 internal constant PLAN_SCHEMA_VERSION = 1;
+    uint256 internal constant MINIMUM_CONSTRUCTOR_ARGUMENT_BYTES = 1440;
+    uint256 internal constant MAXIMUM_CONSTRUCTOR_ARGUMENT_BYTES = 1472;
+    uint256 internal constant MAXIMUM_INITCODE_BYTES = 49_152;
+    uint64 internal constant EXPECTED_CREATE_NONCE = 1;
+    bytes20 internal constant SOURCE_COMMIT_ID = bytes20(hex"55fd47cec3ed8e61e59d5a919d98aeec2e269549");
+    bytes20 internal constant SOURCE_TREE_ID = bytes20(hex"2667ff1bee70dd082596d5f65b3ed4cb2c1ce387");
+    bytes32 public constant REVIEWED_LAUNCHER_CREATION_CODE_HASH =
+        0xc2314bf561f2304acb421eefb441e3a908542629cc6fd910896cbc48dbd1664e;
+    uint256 public constant REVIEWED_LAUNCHER_CREATION_CODE_LENGTH = 45_393;
+    uint64 internal constant GITHUB_REPOSITORY_ID = 1_324_982_531;
+    bytes32 internal constant SOURCE_REPOSITORY_KEY =
         keccak256(abi.encode("programmable.github.repository.v1", GITHUB_REPOSITORY_ID));
-    bytes32 public constant REPOSITORY_LINEAGE_CONSUMER_ROLE =
+    bytes32 internal constant REPOSITORY_LINEAGE_CONSUMER_ROLE =
         keccak256("programmable.github-repository-lineage.consumer.v1");
-    address public constant PROGRAMMABLE_FEE_OWNER = 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c;
-    uint32 public constant SELECTED_TOTAL_HUNDREDTHS_OF_BIP = 30_000;
-    uint32 public constant PROJECT_HUNDREDTHS_OF_BIP = 29_000;
-    uint32 public constant PROGRAMMABLE_HUNDREDTHS_OF_BIP = 1000;
-    uint24 public constant LP_FEE_PIPS = 3000;
-    bytes32 public constant TOKEN_IDENTITY_POLICY_HASH = keccak256("fixed_by_approved_source");
-    bytes32 public constant FIXED_TOKEN_IDENTITY_HASH = keccak256(abi.encode("Hookemon", "HOOKEMON"));
+    uint24 internal constant LP_FEE_PIPS = 3000;
+    bytes32 public constant TOKEN_IDENTITY_POLICY_HASH = keccak256("platform_selected_bounded_identity_v1");
+    bytes32 internal constant TOKEN_IDENTITY_CONSTRAINTS_HASH =
+        0xbaa83b5dc37144910dc459fa3d6f6dfded2b4ef536f5f1a952b2e521c81f7160;
 
     bytes32 public constant REVENUE_POLICY_HASH = keccak256(
         "HookemonInclusiveQuoteFeeV1(totalHundredthsOfBip=30000,projectHundredthsOfBip=29000,programmableHundredthsOfBip=1000,programmableFeeOwner=0x4957f49620AFf3Adbbe8195a4f633E49cc93376c,lpFeePips=3000,lpFeeSeparate=true,externalAdditiveFee=false)"
@@ -64,7 +67,7 @@ contract ProgrammableExactHookemonNormalCreateProfileV1 is IProgrammableExactHoo
         "ExactHookemonGraphV1(bytes32 exclusiveHead,bytes32 sharedHead,address poolManager,bytes32 poolManagerRuntimeCodeHash,bytes32 canonicalPoolId)"
     );
     bytes32 private constant CONFIGURATION_TYPEHASH = keccak256(
-        "ExactHookemonConfigurationV1(uint64 githubRepositoryId,bytes32 repositoryKey,address repositoryLineageRegistry,bytes32 presentationBindingHash,bytes32 launchConfigHash,bytes32 completeInitCodeHash,bytes32 expectedLaunchConfigHash,bytes32 expectedLaunchId,bytes32 expectedLaunchHash)"
+        "ExactHookemonConfigurationV1(uint64 githubRepositoryId,bytes32 repositoryKey,address repositoryLineageRegistry,bytes32 presentationBindingHash,bytes32 tokenNameHash,bytes32 tokenSymbolHash,bytes32 launchConfigHash,bytes32 completeInitCodeHash,bytes32 expectedLaunchConfigHash,bytes32 expectedLaunchId,bytes32 expectedLaunchHash)"
     );
     bytes32 private constant EXPECTED_STATE_TYPEHASH = keccak256(
         "ExactHookemonExpectedStateV1(bytes32 architectureStateHash,bytes32 poolStateHash,bytes32 revenueStateHash)"
@@ -73,7 +76,7 @@ contract ProgrammableExactHookemonNormalCreateProfileV1 is IProgrammableExactHoo
         "ExactHookemonValueFlowV1(address fundingWallet,address usdc,address launcher,uint256 liquidityUsdcAmount,uint256 cycleBootstrapUsdcAmount,uint256 exactApproval,uint256 nativeValue)"
     );
     bytes32 private constant EXACT_CONTRACT_BINDING_TYPEHASH = keccak256(
-        "ExactHookemonContractBindingV1(bytes20 sourceCommit,bytes20 sourceTree,uint64 githubRepositoryId,bytes32 repositoryKey,bytes32 launcherCreationCodeHash,uint256 launcherCreationCodeLength,uint256 constructorArgumentBytes,uint64 createNonce,bytes32 tokenIdentityPolicyHash,bytes32 fixedTokenIdentityHash)"
+        "ExactHookemonContractBindingV1(bytes20 sourceCommit,bytes20 sourceTree,uint64 githubRepositoryId,bytes32 repositoryKey,bytes32 launcherCreationCodeHash,uint256 launcherCreationCodeLength,uint256 minimumConstructorArgumentBytes,uint256 maximumConstructorArgumentBytes,uint64 createNonce,bytes32 tokenIdentityPolicyHash,bytes32 tokenIdentityConstraintsHash)"
     );
     bytes32 private constant PROFILE_DEPENDENCY_BINDING_TYPEHASH = keccak256(
         "ExactHookemonProfileDependencyBindingV1(address kernel,bytes32 kernelRuntimeCodeHash,address codeStore,bytes32 codeStoreRuntimeCodeHash,bytes32 codeStoreBindingHash,address verifier,bytes32 verifierRuntimeCodeHash,bytes32 verifierBindingHash,bytes32 verifierModuleSetHash,address repositoryLineageRegistry,bytes32 repositoryLineageRegistryRuntimeCodeHash)"
@@ -171,7 +174,11 @@ contract ProgrammableExactHookemonNormalCreateProfileV1 is IProgrammableExactHoo
         bytes32 indexed grantDigest, bytes32 indexed stampLaunchId, bytes32 indexed receiptCoreHash, address launcher
     );
 
-    constructor(DeploymentConfigV1 memory deployment) {
+    constructor(
+        DeploymentConfigV1 memory deployment,
+        bytes32 expectedLauncherCreationCodeHash,
+        uint256 expectedLauncherCreationCodeLength
+    ) {
         if (
             address(deployment.kernel) == address(0) || address(deployment.codeStore) == address(0)
                 || address(deployment.postconditionVerifier) == address(0) || deployment.profileKey == bytes32(0)
@@ -179,6 +186,9 @@ contract ProgrammableExactHookemonNormalCreateProfileV1 is IProgrammableExactHoo
                 || deployment.codeStoreBindingHash == bytes32(0) || deployment.verifierBindingHash == bytes32(0)
                 || deployment.verifierGasLimit < 300_000
         ) revert InvalidField(1);
+        if (deployment.postconditionVerifier.tokenIdentityConstraintsHashV1() != TOKEN_IDENTITY_CONSTRAINTS_HASH) {
+            revert InvalidField(1);
+        }
         _requireRuntime(address(deployment.kernel), deployment.kernelRuntimeCodeHash);
         _requireRuntime(address(deployment.codeStore), deployment.codeStoreRuntimeCodeHash);
         _requireRuntime(address(deployment.postconditionVerifier), deployment.postconditionVerifierRuntimeCodeHash);
@@ -223,8 +233,10 @@ contract ProgrammableExactHookemonNormalCreateProfileV1 is IProgrammableExactHoo
         bytes32 creationCodeHash = deployment.codeStore.creationCodeHashV1();
         uint256 creationCodeLength = deployment.codeStore.creationCodeLengthV1();
         if (
-            creationCodeHash == bytes32(0) || creationCodeLength == 0
-                || creationCodeLength + CONSTRUCTOR_ARGUMENT_BYTES > MAXIMUM_INITCODE_BYTES
+            expectedLauncherCreationCodeHash == bytes32(0) || expectedLauncherCreationCodeLength == 0
+                || creationCodeHash != expectedLauncherCreationCodeHash
+                || creationCodeLength != expectedLauncherCreationCodeLength
+                || creationCodeLength + MAXIMUM_CONSTRUCTOR_ARGUMENT_BYTES > MAXIMUM_INITCODE_BYTES
         ) revert InvalidField(2);
         bytes32 exactBindingHash = keccak256(
             abi.encode(
@@ -235,10 +247,11 @@ contract ProgrammableExactHookemonNormalCreateProfileV1 is IProgrammableExactHoo
                 SOURCE_REPOSITORY_KEY,
                 creationCodeHash,
                 creationCodeLength,
-                CONSTRUCTOR_ARGUMENT_BYTES,
+                MINIMUM_CONSTRUCTOR_ARGUMENT_BYTES,
+                MAXIMUM_CONSTRUCTOR_ARGUMENT_BYTES,
                 EXPECTED_CREATE_NONCE,
                 TOKEN_IDENTITY_POLICY_HASH,
-                FIXED_TOKEN_IDENTITY_HASH
+                TOKEN_IDENTITY_CONSTRAINTS_HASH
             )
         );
         bytes32 verifierModuleSetHash = keccak256(
@@ -363,11 +376,11 @@ contract ProgrammableExactHookemonNormalCreateProfileV1 is IProgrammableExactHoo
     }
 
     function tokenIdentityPolicyV1() external pure returns (TokenIdentityPolicyV1 policy) {
-        return TokenIdentityPolicyV1.FixedByApprovedSource;
+        return TokenIdentityPolicyV1.PlatformSelectedBounded;
     }
 
-    function fixedTokenIdentityHashV1() external pure returns (bytes32 identityHash) {
-        return FIXED_TOKEN_IDENTITY_HASH;
+    function tokenIdentityConstraintsHashV1() external pure returns (bytes32 constraintsHash) {
+        return TOKEN_IDENTITY_CONSTRAINTS_HASH;
     }
 
     function computeExactHookemonPlanCommitmentsV1(ExactHookemonPlanV1 calldata plan)
@@ -410,7 +423,8 @@ contract ProgrammableExactHookemonNormalCreateProfileV1 is IProgrammableExactHoo
                 || grant.sourceTree != SOURCE_TREE_ID || plan.githubRepositoryId != GITHUB_REPOSITORY_ID
                 || plan.repositoryKey != SOURCE_REPOSITORY_KEY || grant.sourceRepoHash != plan.repositoryKey
                 || plan.repositoryLineageRegistry != address(REPOSITORY_LINEAGE_REGISTRY)
-                || plan.presentationBindingHash == bytes32(0) || plan.exclusive.accounts[0] != predicted
+                || plan.presentationBindingHash == bytes32(0) || plan.tokenNameHash == bytes32(0)
+                || plan.tokenSymbolHash == bytes32(0) || plan.exclusive.accounts[0] != predicted
                 || plan.completeInitCodeHash == bytes32(0) || plan.canonicalPoolId == bytes32(0)
                 || plan.poolManagerRuntimeCodeHash == bytes32(0) || plan.expectedPositionTokenId == 0
                 || plan.expectedLaunchConfigHash == bytes32(0) || plan.expectedLaunchId == bytes32(0)
@@ -442,10 +456,13 @@ contract ProgrammableExactHookemonNormalCreateProfileV1 is IProgrammableExactHoo
         _validatePrestate(plan);
     }
 
-    function _validateConfiguration(ExactHookemonPlanV1 calldata plan) private pure {
+    function _validateConfiguration(ExactHookemonPlanV1 calldata plan) private view {
         LaunchConfigV1 calldata config = plan.config;
+        (bytes32 tokenNameHash, bytes32 tokenSymbolHash) =
+            POSTCONDITION_VERIFIER.validateTokenIdentityV1(config.tokenName, config.tokenSymbol);
         if (
-            config.poolManager == address(0) || config.positionManager == address(0) || config.usdc == address(0)
+            plan.tokenNameHash != tokenNameHash || plan.tokenSymbolHash != tokenSymbolHash
+                || config.poolManager == address(0) || config.positionManager == address(0) || config.usdc == address(0)
                 || config.tokenMessengerV2 == address(0) || config.messageTransmitterV2 == address(0)
                 || config.fundingWallet == address(0) || config.approvedMultisig == address(0)
                 || config.executor == address(0) || config.artifactAuthorizer == address(0)
@@ -519,7 +536,10 @@ contract ProgrammableExactHookemonNormalCreateProfileV1 is IProgrammableExactHoo
                 || keccak256(creationCode) != CODE_STORE.creationCodeHashV1()
         ) revert CodeReconstructionMismatch();
         bytes memory constructorArguments = abi.encode(plan.shared.accounts[0], plan.shared.accounts[1], plan.config);
-        if (constructorArguments.length != CONSTRUCTOR_ARGUMENT_BYTES) revert CodeReconstructionMismatch();
+        if (
+            constructorArguments.length < MINIMUM_CONSTRUCTOR_ARGUMENT_BYTES
+                || constructorArguments.length > MAXIMUM_CONSTRUCTOR_ARGUMENT_BYTES
+        ) revert CodeReconstructionMismatch();
         bytes memory initCode = bytes.concat(creationCode, constructorArguments);
         if (initCode.length > MAXIMUM_INITCODE_BYTES || keccak256(initCode) != plan.completeInitCodeHash) {
             revert CodeReconstructionMismatch();
@@ -635,6 +655,8 @@ contract ProgrammableExactHookemonNormalCreateProfileV1 is IProgrammableExactHoo
                 || POSTCONDITION_VERIFIER.expectedArchitectureStateHashV1() != plan.expectedArchitectureStateHash
                 || POSTCONDITION_VERIFIER.expectedPoolStateHashV1() != plan.expectedPoolStateHash
                 || POSTCONDITION_VERIFIER.expectedRevenueStateHashV1() != plan.expectedRevenueStateHash
+                || POSTCONDITION_VERIFIER.expectedTokenNameHashV1() != plan.tokenNameHash
+                || POSTCONDITION_VERIFIER.expectedTokenSymbolHashV1() != plan.tokenSymbolHash
         ) revert PostconditionMismatch();
     }
 
@@ -816,6 +838,8 @@ contract ProgrammableExactHookemonNormalCreateProfileV1 is IProgrammableExactHoo
                 plan.repositoryKey,
                 plan.repositoryLineageRegistry,
                 plan.presentationBindingHash,
+                plan.tokenNameHash,
+                plan.tokenSymbolHash,
                 keccak256(abi.encode(plan.config)),
                 plan.completeInitCodeHash,
                 plan.expectedLaunchConfigHash,
@@ -953,4 +977,15 @@ contract ProgrammableExactHookemonNormalCreateProfileV1 is IProgrammableExactHoo
         }
         _requireRuntime(account, expectedCodeHash);
     }
+}
+
+/// @notice Exact configurable-identity Hookemon Router-V4 candidate.
+/// @dev Its production constructor can only bind the reviewed 55fd47ce normal-compiler launcher artifact. The source
+///      revision remains ANALYSIS_PENDING and this contract is not an activation or deployment authorization.
+contract ProgrammableExactHookemonNormalCreateProfileV1 is ProgrammableExactHookemonNormalCreateProfileBaseV1 {
+    constructor(DeploymentConfigV1 memory deployment)
+        ProgrammableExactHookemonNormalCreateProfileBaseV1(
+            deployment, REVIEWED_LAUNCHER_CREATION_CODE_HASH, REVIEWED_LAUNCHER_CREATION_CODE_LENGTH
+        )
+    { }
 }

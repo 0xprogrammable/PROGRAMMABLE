@@ -1,0 +1,22 @@
+{
+  "status": "ANALYSIS_PENDING",
+  "activationAllowed": false,
+  "sourceCommit": "55fd47cec3ed8e61e59d5a919d98aeec2e269549",
+  "sourceTree": "2667ff1bee70dd082596d5f65b3ed4cb2c1ce387",
+  "sourcePath": "packages/contracts/src/HookemonAtomicLauncher.sol",
+  "compiler": {
+    "version": "0.8.26",
+    "evmVersion": "cancun",
+    "viaIR": true,
+    "optimizer": true,
+    "optimizerRuns": 200,
+    "bytecodeHash": "none",
+    "cborMetadata": false
+  },
+  "creationCodeFile": "HookemonAtomicLauncher.creation.bin",
+  "creationCodeLength": 45393,
+  "creationCodeHash": "0xc2314bf561f2304acb421eefb441e3a908542629cc6fd910896cbc48dbd1664e",
+  "minimumConstructorArgumentBytes": 1440,
+  "maximumConstructorArgumentBytes": 1472,
+  "maximumCompleteInitCodeBytes": 46865
+}

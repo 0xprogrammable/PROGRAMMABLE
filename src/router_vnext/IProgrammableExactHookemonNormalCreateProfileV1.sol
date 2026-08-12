@@ -6,15 +6,13 @@ import {
     IProgrammableUniversalLaunchKernelV1
 } from "./IProgrammableUniversalLaunchKernelV1.sol";
 
-/// @notice Closed typed ABI for the reviewed Hookemon atomic launcher constructor.
-/// @dev Every field is static. `abi.encode(hookFactory, childFactoryRegistry, config)` is therefore exactly
-///      38 words / 1,216 bytes, matching HookemonAtomicLauncher at source 23336e60 / tree 7624bde3.
+/// @notice Closed typed ABI for the configurable-identity Hookemon atomic launcher review candidate.
+/// @dev Only `tokenName` and `tokenSymbol` are dynamic. Both remain typed and bounded; there is no arbitrary bytes
+///      payload. The exact constructor encoding is 1,440-1,472 bytes at source 55fd47ce / tree 2667ff1b.
 interface IProgrammableExactHookemonNormalCreateProfileV1 is IProgrammableRuntimeBindingV1 {
-    /// @dev The approved source hardcodes `Hookemon` / `HOOKEMON`. A future configurable identity requires a new
-    ///      source revision, compiler artifacts and review; it cannot be smuggled through arbitrary Router bytes.
     enum TokenIdentityPolicyV1 {
         None,
-        FixedByApprovedSource
+        PlatformSelectedBounded
     }
 
     struct LaunchConfigV1 {
@@ -54,6 +52,8 @@ interface IProgrammableExactHookemonNormalCreateProfileV1 is IProgrammableRuntim
         uint256 positionRoundingDust;
         uint64 positionUnlockAt;
         uint128 expectedPositionLiquidity;
+        string tokenName;
+        string tokenSymbol;
     }
 
     /// @dev Exclusive roles, in order: launcher, token, hook, distributor, outbound bridge, return adapter,
@@ -78,6 +78,8 @@ interface IProgrammableExactHookemonNormalCreateProfileV1 is IProgrammableRuntim
         bytes32 repositoryKey;
         address repositoryLineageRegistry;
         bytes32 presentationBindingHash;
+        bytes32 tokenNameHash;
+        bytes32 tokenSymbolHash;
         bytes32 completeInitCodeHash;
         bytes32 poolManagerRuntimeCodeHash;
         bytes32 canonicalPoolId;
@@ -119,7 +121,7 @@ interface IProgrammableExactHookemonNormalCreateProfileV1 is IProgrammableRuntim
 
     function tokenIdentityPolicyV1() external pure returns (TokenIdentityPolicyV1 policy);
 
-    function fixedTokenIdentityHashV1() external pure returns (bytes32 identityHash);
+    function tokenIdentityConstraintsHashV1() external pure returns (bytes32 constraintsHash);
 
     function computeExactHookemonPlanCommitmentsV1(ExactHookemonPlanV1 calldata plan)
         external
@@ -148,6 +150,13 @@ interface IProgrammableExactHookemonLauncherCodeStoreV1 is IProgrammableRuntimeB
 }
 
 interface IProgrammableExactHookemonPostconditionVerifierV1 is IProgrammableRuntimeBindingV1 {
+    function tokenIdentityConstraintsHashV1() external pure returns (bytes32 constraintsHash);
+
+    function validateTokenIdentityV1(string calldata tokenName, string calldata tokenSymbol)
+        external
+        pure
+        returns (bytes32 tokenNameHash, bytes32 tokenSymbolHash);
+
     function expectedLauncherRuntimeCodeHashV1() external view returns (bytes32);
 
     function expectedArchitectureStateHashV1() external view returns (bytes32);
@@ -155,6 +164,10 @@ interface IProgrammableExactHookemonPostconditionVerifierV1 is IProgrammableRunt
     function expectedPoolStateHashV1() external view returns (bytes32);
 
     function expectedRevenueStateHashV1() external view returns (bytes32);
+
+    function expectedTokenNameHashV1() external view returns (bytes32);
+
+    function expectedTokenSymbolHashV1() external view returns (bytes32);
 
     function verifierModulesV1()
         external

@@ -4,11 +4,14 @@ pragma solidity 0.8.26;
 import {
     IProgrammableExactHookemonPostconditionVerifierV1
 } from "./IProgrammableExactHookemonNormalCreateProfileV1.sol";
+import { ProgrammableTokenIdentityPolicyV1 } from "./ProgrammableTokenIdentityPolicyV1.sol";
 
 interface IExactHookemonERC20ViewV1 {
     function allowance(address owner, address spender) external view returns (uint256);
     function balanceOf(address account) external view returns (uint256);
     function totalSupply() external view returns (uint256);
+    function name() external view returns (string memory);
+    function symbol() external view returns (string memory);
 }
 
 interface IExactHookemonAtomicLauncherViewV1 {
@@ -43,6 +46,8 @@ interface IExactHookemonAtomicLauncherViewV1 {
     function launchId() external view returns (bytes32);
     function launchConfigHash() external view returns (bytes32);
     function launchHash() external view returns (bytes32);
+    function tokenNameHash() external view returns (bytes32);
+    function tokenSymbolHash() external view returns (bytes32);
     function poolKey() external view returns (PoolKeyV1 memory key);
 }
 
@@ -127,7 +132,7 @@ interface IExactHookemonCycleVaultViewV1 {
     function availableProjectFeesMicroUsdc() external view returns (uint256);
 }
 
-/// @notice Closed stateless architecture module for Hookemon source 23336e60 / tree 7624bde3.
+/// @notice Closed architecture module for Hookemon source 55fd47ce / tree 2667ff1b.
 /// @dev Kept below the Kernel's per-runtime closed-bytecode scan bound. The coordinator and profile bind this exact
 ///      module address, runtime codehash and self-attested binding hash before any launch can begin.
 contract ProgrammableExactHookemonArchitectureVerifierModuleV1 {
@@ -137,16 +142,25 @@ contract ProgrammableExactHookemonArchitectureVerifierModuleV1 {
         bytes32 launchConfigHash;
     }
 
-    bytes20 private constant SOURCE_COMMIT_ID = bytes20(hex"23336e60ae5859dbb0ae9c0db3399af4ef4af8e8");
-    bytes20 private constant SOURCE_TREE_ID = bytes20(hex"7624bde3bb09f654e77881880c419e356ed85c29");
+    bytes20 private constant SOURCE_COMMIT_ID = bytes20(hex"55fd47cec3ed8e61e59d5a919d98aeec2e269549");
+    bytes20 private constant SOURCE_TREE_ID = bytes20(hex"2667ff1bee70dd082596d5f65b3ed4cb2c1ce387");
     bytes32 private constant RUNTIME_BINDING_TYPEHASH = keccak256(
-        "ProgrammableExactHookemonArchitectureVerifierModuleBindingV1(uint256 chainId,address module,bytes20 sourceCommit,bytes20 sourceTree,bytes32 architectureTypeHash)"
+        "ProgrammableExactHookemonArchitectureVerifierModuleBindingV1(uint256 chainId,address module,bytes20 sourceCommit,bytes20 sourceTree,bytes32 architectureTypeHash,bytes32 expectedTokenNameHash,bytes32 expectedTokenSymbolHash)"
     );
     bytes32 private constant ARCHITECTURE_TYPEHASH = keccak256(
         "ExactHookemonArchitectureV1(bytes20 sourceCommit,bytes20 sourceTree,address launcher,bytes32 launcherRuntimeCodeHash,bytes32 identityHead,bytes32 exclusiveHead,bytes32 sharedHead,bytes32 factoryHead)"
     );
 
+    bytes32 private immutable EXPECTED_TOKEN_NAME_HASH;
+    bytes32 private immutable EXPECTED_TOKEN_SYMBOL_HASH;
+
     error InvalidState(uint256 field);
+
+    constructor(bytes32 expectedTokenNameHash, bytes32 expectedTokenSymbolHash) {
+        if (expectedTokenNameHash == bytes32(0) || expectedTokenSymbolHash == bytes32(0)) revert InvalidState(1);
+        EXPECTED_TOKEN_NAME_HASH = expectedTokenNameHash;
+        EXPECTED_TOKEN_SYMBOL_HASH = expectedTokenSymbolHash;
+    }
 
     function runtimeBindingHashV1() external view returns (bytes32) {
         return keccak256(
@@ -156,7 +170,9 @@ contract ProgrammableExactHookemonArchitectureVerifierModuleV1 {
                 address(this),
                 SOURCE_COMMIT_ID,
                 SOURCE_TREE_ID,
-                ARCHITECTURE_TYPEHASH
+                ARCHITECTURE_TYPEHASH,
+                EXPECTED_TOKEN_NAME_HASH,
+                EXPECTED_TOKEN_SYMBOL_HASH
             )
         );
     }
@@ -168,6 +184,14 @@ contract ProgrammableExactHookemonArchitectureVerifierModuleV1 {
 
     function _architectureStateHash(address launcher) private view returns (bytes32) {
         IExactHookemonAtomicLauncherViewV1 target = IExactHookemonAtomicLauncherViewV1(launcher);
+        IExactHookemonERC20ViewV1 token = IExactHookemonERC20ViewV1(target.token());
+        bytes32 observedNameHash = keccak256(bytes(token.name()));
+        bytes32 observedSymbolHash = keccak256(bytes(token.symbol()));
+        if (
+            observedNameHash != EXPECTED_TOKEN_NAME_HASH || observedSymbolHash != EXPECTED_TOKEN_SYMBOL_HASH
+                || target.tokenNameHash() != EXPECTED_TOKEN_NAME_HASH
+                || target.tokenSymbolHash() != EXPECTED_TOKEN_SYMBOL_HASH
+        ) revert InvalidState(2);
         address[9] memory exclusive = _exclusiveAccounts(target, launcher);
         bytes32 exclusiveHead;
         for (uint256 i; i < 9; ++i) {
@@ -175,20 +199,7 @@ contract ProgrammableExactHookemonArchitectureVerifierModuleV1 {
             exclusiveHead = keccak256(abi.encode(exclusiveHead, i, exclusive[i], exclusive[i].codehash));
         }
         (bytes32 sharedHead, bytes32 factoryHead) = _sharedAndFactoryHeads(target, launcher, exclusive);
-        bytes32 identityHead = keccak256(
-            abi.encode(
-                target.launchConfigHash(),
-                target.launchId(),
-                target.launchHash(),
-                target.launchTimestamp(),
-                target.positionManager(),
-                target.usdc(),
-                target.fundingWallet(),
-                target.approvedMultisig(),
-                target.executor(),
-                target.artifactAuthorizer()
-            )
-        );
+        bytes32 identityHead = _identityHead(target, observedNameHash, observedSymbolHash);
         return keccak256(
             abi.encode(
                 ARCHITECTURE_TYPEHASH,
@@ -202,6 +213,29 @@ contract ProgrammableExactHookemonArchitectureVerifierModuleV1 {
                 factoryHead
             )
         );
+    }
+
+    function _identityHead(
+        IExactHookemonAtomicLauncherViewV1 target,
+        bytes32 observedNameHash,
+        bytes32 observedSymbolHash
+    ) private view returns (bytes32) {
+        bytes32 launchHead = keccak256(
+            abi.encode(
+                target.launchConfigHash(),
+                target.launchId(),
+                target.launchHash(),
+                target.launchTimestamp(),
+                target.positionManager(),
+                target.usdc()
+            )
+        );
+        bytes32 authorityHead = keccak256(
+            abi.encode(
+                target.fundingWallet(), target.approvedMultisig(), target.executor(), target.artifactAuthorizer()
+            )
+        );
+        return keccak256(abi.encode(launchHead, authorityHead, observedNameHash, observedSymbolHash));
     }
 
     function _exclusiveAccounts(IExactHookemonAtomicLauncherViewV1 target, address launcher)
@@ -305,8 +339,8 @@ contract ProgrammableExactHookemonEconomicVerifierModuleV1 {
     uint256 private constant FIXED_TOKEN_SUPPLY = 420_690_000_000 ether;
     uint256 private constant TREASURY_TOKEN_AMOUNT = 42_069_000_000 ether;
     uint256 private constant OPERATIONAL_RESERVE_FLOOR_MICRO_USDC = 50e6;
-    bytes20 private constant SOURCE_COMMIT_ID = bytes20(hex"23336e60ae5859dbb0ae9c0db3399af4ef4af8e8");
-    bytes20 private constant SOURCE_TREE_ID = bytes20(hex"7624bde3bb09f654e77881880c419e356ed85c29");
+    bytes20 private constant SOURCE_COMMIT_ID = bytes20(hex"55fd47cec3ed8e61e59d5a919d98aeec2e269549");
+    bytes20 private constant SOURCE_TREE_ID = bytes20(hex"2667ff1bee70dd082596d5f65b3ed4cb2c1ce387");
     bytes32 private constant RUNTIME_BINDING_TYPEHASH = keccak256(
         "ProgrammableExactHookemonEconomicVerifierModuleBindingV1(uint256 chainId,address module,bytes20 sourceCommit,bytes20 sourceTree,bytes32 economicsHead)"
     );
@@ -502,12 +536,12 @@ contract ProgrammableExactHookemonEconomicVerifierModuleV1 {
     }
 }
 
-/// @notice Plan-bound, stateless postflight coordinator for Hookemon source 23336e60 / tree 7624bde3.
+/// @notice Plan-bound postflight coordinator for Hookemon source 55fd47ce / tree 2667ff1b.
 /// @dev Architecture and economic verification are split solely to fit the immutable Kernel closed-runtime scan cap.
 ///      The coordinator deploys both modules, and the profile independently closes and rechecks every module codehash.
 contract ProgrammableExactHookemonPostconditionVerifierV1 is IProgrammableExactHookemonPostconditionVerifierV1 {
-    bytes20 private constant SOURCE_COMMIT_ID = bytes20(hex"23336e60ae5859dbb0ae9c0db3399af4ef4af8e8");
-    bytes20 private constant SOURCE_TREE_ID = bytes20(hex"7624bde3bb09f654e77881880c419e356ed85c29");
+    bytes20 private constant SOURCE_COMMIT_ID = bytes20(hex"55fd47cec3ed8e61e59d5a919d98aeec2e269549");
+    bytes20 private constant SOURCE_TREE_ID = bytes20(hex"2667ff1bee70dd082596d5f65b3ed4cb2c1ce387");
     bytes32 private constant RUNTIME_BINDING_TYPEHASH = keccak256(
         "ProgrammableExactHookemonPostconditionVerifierBindingV1(uint256 chainId,address verifier,bytes20 sourceCommit,bytes20 sourceTree,bytes32 expectedStateHead,bytes32 moduleHead)"
     );
@@ -516,6 +550,8 @@ contract ProgrammableExactHookemonPostconditionVerifierV1 is IProgrammableExactH
     bytes32 private immutable EXPECTED_ARCHITECTURE_STATE_HASH;
     bytes32 private immutable EXPECTED_POOL_STATE_HASH;
     bytes32 private immutable EXPECTED_REVENUE_STATE_HASH;
+    bytes32 private immutable EXPECTED_TOKEN_NAME_HASH;
+    bytes32 private immutable EXPECTED_TOKEN_SYMBOL_HASH;
     ProgrammableExactHookemonArchitectureVerifierModuleV1 private immutable ARCHITECTURE_MODULE;
     bytes32 private immutable ARCHITECTURE_MODULE_RUNTIME_CODE_HASH;
     bytes32 private immutable ARCHITECTURE_MODULE_BINDING_HASH;
@@ -525,23 +561,40 @@ contract ProgrammableExactHookemonPostconditionVerifierV1 is IProgrammableExactH
 
     error InvalidState(uint256 field);
 
+    function tokenIdentityConstraintsHashV1() external pure returns (bytes32 constraintsHash) {
+        return ProgrammableTokenIdentityPolicyV1.constraintsHash();
+    }
+
+    function validateTokenIdentityV1(string calldata tokenName, string calldata tokenSymbol)
+        external
+        pure
+        returns (bytes32 tokenNameHash, bytes32 tokenSymbolHash)
+    {
+        return ProgrammableTokenIdentityPolicyV1.validate(tokenName, tokenSymbol);
+    }
+
     constructor(
         bytes32 expectedLauncherRuntimeCodeHash,
         bytes32 expectedArchitectureStateHash,
         bytes32 expectedPoolStateHash,
-        bytes32 expectedRevenueStateHash
+        bytes32 expectedRevenueStateHash,
+        bytes32 expectedTokenNameHash,
+        bytes32 expectedTokenSymbolHash
     ) {
         if (
             expectedLauncherRuntimeCodeHash == bytes32(0) || expectedArchitectureStateHash == bytes32(0)
                 || expectedPoolStateHash == bytes32(0) || expectedRevenueStateHash == bytes32(0)
+                || expectedTokenNameHash == bytes32(0) || expectedTokenSymbolHash == bytes32(0)
         ) revert InvalidState(1);
         EXPECTED_LAUNCHER_RUNTIME_CODE_HASH = expectedLauncherRuntimeCodeHash;
         EXPECTED_ARCHITECTURE_STATE_HASH = expectedArchitectureStateHash;
         EXPECTED_POOL_STATE_HASH = expectedPoolStateHash;
         EXPECTED_REVENUE_STATE_HASH = expectedRevenueStateHash;
+        EXPECTED_TOKEN_NAME_HASH = expectedTokenNameHash;
+        EXPECTED_TOKEN_SYMBOL_HASH = expectedTokenSymbolHash;
 
         ProgrammableExactHookemonArchitectureVerifierModuleV1 architectureModule =
-            new ProgrammableExactHookemonArchitectureVerifierModuleV1();
+            new ProgrammableExactHookemonArchitectureVerifierModuleV1(expectedTokenNameHash, expectedTokenSymbolHash);
         ProgrammableExactHookemonEconomicVerifierModuleV1 economicModule =
             new ProgrammableExactHookemonEconomicVerifierModuleV1();
         ARCHITECTURE_MODULE = architectureModule;
@@ -566,6 +619,14 @@ contract ProgrammableExactHookemonPostconditionVerifierV1 is IProgrammableExactH
 
     function expectedRevenueStateHashV1() external view returns (bytes32) {
         return EXPECTED_REVENUE_STATE_HASH;
+    }
+
+    function expectedTokenNameHashV1() external view returns (bytes32) {
+        return EXPECTED_TOKEN_NAME_HASH;
+    }
+
+    function expectedTokenSymbolHashV1() external view returns (bytes32) {
+        return EXPECTED_TOKEN_SYMBOL_HASH;
     }
 
     function verifierModulesV1()
@@ -596,7 +657,9 @@ contract ProgrammableExactHookemonPostconditionVerifierV1 is IProgrammableExactH
                 EXPECTED_LAUNCHER_RUNTIME_CODE_HASH,
                 EXPECTED_ARCHITECTURE_STATE_HASH,
                 EXPECTED_POOL_STATE_HASH,
-                EXPECTED_REVENUE_STATE_HASH
+                EXPECTED_REVENUE_STATE_HASH,
+                EXPECTED_TOKEN_NAME_HASH,
+                EXPECTED_TOKEN_SYMBOL_HASH
             )
         );
         bytes32 moduleHead = keccak256(

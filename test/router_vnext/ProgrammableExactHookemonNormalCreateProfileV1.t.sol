@@ -18,12 +18,25 @@ import {
     ProgrammableExactHookemonLauncherCodeStoreV1
 } from "../../src/router_vnext/ProgrammableExactHookemonLauncherCodeStoreV1.sol";
 import {
+    ProgrammableExactHookemonNormalCreateProfileBaseV1,
     ProgrammableExactHookemonNormalCreateProfileV1
 } from "../../src/router_vnext/ProgrammableExactHookemonNormalCreateProfileV1.sol";
 import {
     IExactHookemonAtomicLauncherViewV1,
     ProgrammableExactHookemonPostconditionVerifierV1
 } from "../../src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol";
+
+contract HookemonNormalCreateProfileHarnessV1 is ProgrammableExactHookemonNormalCreateProfileBaseV1 {
+    constructor(
+        DeploymentConfigV1 memory deployment,
+        bytes32 expectedLauncherCreationCodeHash,
+        uint256 expectedLauncherCreationCodeLength
+    )
+        ProgrammableExactHookemonNormalCreateProfileBaseV1(
+            deployment, expectedLauncherCreationCodeHash, expectedLauncherCreationCodeLength
+        )
+    { }
+}
 
 library HookemonLifecycleMockTypesV1 {
     struct ComponentContextV1 {
@@ -53,6 +66,10 @@ library HookemonLifecycleMockTypesV1 {
         uint128 expectedPositionLiquidity;
         uint256 cycleBootstrapUsdcAmount;
         uint32 selectedTotalFee;
+        string tokenName;
+        string tokenSymbol;
+        bytes32 tokenNameHash;
+        bytes32 tokenSymbolHash;
     }
 }
 
@@ -79,7 +96,7 @@ contract HookemonApplicantWalletV1 {
     }
 
     function launch(
-        ProgrammableExactHookemonNormalCreateProfileV1 profile,
+        IProgrammableExactHookemonNormalCreateProfileV1 profile,
         bytes32 grantDigest,
         IProgrammableExactHookemonNormalCreateProfileV1.ExactHookemonPlanV1 calldata plan,
         IProgrammableUniversalLaunchKernelV1.ExecutionCurrentnessV1 calldata currentness,
@@ -259,6 +276,14 @@ contract HookemonExactComponentMockV1 {
 
     function totalSupply() external view returns (uint256) {
         return _kind == 1 ? 420_690_000_000 ether : 0;
+    }
+
+    function name() external view returns (string memory) {
+        return _kind == 1 ? _context.tokenName : "";
+    }
+
+    function symbol() external view returns (string memory) {
+        return _kind == 1 ? _context.tokenSymbol : "";
     }
 
     function balanceOf(address account) external view returns (uint256) {
@@ -571,6 +596,8 @@ contract HookemonAtomicLauncherLifecycleMockV1 {
     bytes32 public launchId;
     bytes32 public launchConfigHash;
     bytes32 public launchHash;
+    bytes32 public tokenNameHash;
+    bytes32 public tokenSymbolHash;
 
     constructor(
         HookemonHookFactoryMockV1 hookFactory_,
@@ -587,6 +614,8 @@ contract HookemonAtomicLauncherLifecycleMockV1 {
         artifactAuthorizer = config.artifactAuthorizer;
         launchTimestamp = config.scheduleAnchor;
         tokenRoundingDust = config.positionRoundingDust;
+        tokenNameHash = keccak256(bytes(config.tokenName));
+        tokenSymbolHash = keccak256(bytes(config.tokenSymbol));
 
         launchConfigHash = configurationHashFor(address(this), config);
         launchId = launchIdFor(address(this), config.scheduleAnchor, launchConfigHash);
@@ -691,12 +720,16 @@ contract HookemonAtomicLauncherLifecycleMockV1 {
         context.expectedPositionLiquidity = config.expectedPositionLiquidity;
         context.cycleBootstrapUsdcAmount = config.cycleBootstrapUsdcAmount;
         context.selectedTotalFee = HookemonHookFactoryMockV1(hookFactory).selectedTotalFee();
+        context.tokenName = config.tokenName;
+        context.tokenSymbol = config.tokenSymbol;
+        context.tokenNameHash = tokenNameHash;
+        context.tokenSymbolHash = tokenSymbolHash;
     }
 }
 
 contract HookemonExpectedStateCalculatorV1 {
-    bytes20 private constant SOURCE_COMMIT_ID = bytes20(hex"23336e60ae5859dbb0ae9c0db3399af4ef4af8e8");
-    bytes20 private constant SOURCE_TREE_ID = bytes20(hex"7624bde3bb09f654e77881880c419e356ed85c29");
+    bytes20 private constant SOURCE_COMMIT_ID = bytes20(hex"55fd47cec3ed8e61e59d5a919d98aeec2e269549");
+    bytes20 private constant SOURCE_TREE_ID = bytes20(hex"2667ff1bee70dd082596d5f65b3ed4cb2c1ce387");
     address private constant PROGRAMMABLE_FEE_OWNER = 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c;
     bytes32 private constant ARCHITECTURE_TYPEHASH = keccak256(
         "ExactHookemonArchitectureV1(bytes20 sourceCommit,bytes20 sourceTree,address launcher,bytes32 launcherRuntimeCodeHash,bytes32 identityHead,bytes32 exclusiveHead,bytes32 sharedHead,bytes32 factoryHead)"
@@ -784,20 +817,20 @@ contract HookemonExpectedStateCalculatorV1 {
         pure
         returns (bytes32)
     {
-        return keccak256(
+        bytes32 launchHead = keccak256(
             abi.encode(
                 context.launchConfigHash,
                 context.launchId,
                 context.launchHash,
                 context.launchTimestamp,
                 context.positionManager,
-                context.usdc,
-                context.fundingWallet,
-                context.approvedMultisig,
-                context.executor,
-                context.artifactAuthorizer
+                context.usdc
             )
         );
+        bytes32 authorityHead = keccak256(
+            abi.encode(context.fundingWallet, context.approvedMultisig, context.executor, context.artifactAuthorizer)
+        );
+        return keccak256(abi.encode(launchHead, authorityHead, context.tokenNameHash, context.tokenSymbolHash));
     }
 
     function _economicStateHashes(HookemonLifecycleMockTypesV1.ComponentContextV1 calldata context)
@@ -889,8 +922,8 @@ contract ProgrammableExactHookemonNormalCreateProfileV1Test is Test {
     bytes32 private constant REVIEW_GENERATION_HASH = keccak256("hookemon-review-generation-v1");
     bytes32 private constant PROFILE_KEY = keccak256("HOOKEMON:EXACT_NORMAL_CREATE:v1");
     bytes32 private constant SOURCE_LAUNCH_ID = keccak256("hookemon-source-launch-v1");
-    bytes20 private constant SOURCE_COMMIT_ID = bytes20(hex"23336e60ae5859dbb0ae9c0db3399af4ef4af8e8");
-    bytes20 private constant SOURCE_TREE_ID = bytes20(hex"7624bde3bb09f654e77881880c419e356ed85c29");
+    bytes20 private constant SOURCE_COMMIT_ID = bytes20(hex"55fd47cec3ed8e61e59d5a919d98aeec2e269549");
+    bytes20 private constant SOURCE_TREE_ID = bytes20(hex"2667ff1bee70dd082596d5f65b3ed4cb2c1ce387");
     uint256 private constant LIQUIDITY_USDC = 100e6;
     uint256 private constant CYCLE_BOOTSTRAP_USDC = 75e6;
     uint256 private constant EXACT_APPROVAL = LIQUIDITY_USDC + CYCLE_BOOTSTRAP_USDC;
@@ -901,7 +934,7 @@ contract ProgrammableExactHookemonNormalCreateProfileV1Test is Test {
         ProgrammableUniversalLaunchPreflightV1 preflight;
         ProgrammableExactHookemonLauncherCodeStoreV1 codeStore;
         ProgrammableExactHookemonPostconditionVerifierV1 verifier;
-        ProgrammableExactHookemonNormalCreateProfileV1 profile;
+        HookemonNormalCreateProfileHarnessV1 profile;
         HookemonApplicantWalletV1 applicant;
         HookemonUsdcMockV1 usdc;
         HookemonHookFactoryMockV1 hookFactory;
@@ -933,6 +966,8 @@ contract ProgrammableExactHookemonNormalCreateProfileV1Test is Test {
         assertLt(launchGas, REVIEWED_EXACT_LAUNCHER_GAS_GATE, "wrapped lifecycle gas gate");
         assertTrue(receiptHash != bytes32(0), "receipt");
         assertEq(fixture.profile.launched(), fixture.profile.predictedLauncherV1(), "nonce-one launcher");
+        assertEq(HookemonExactComponentMockV1(prepared.plan.exclusive.accounts[1]).name(), "Hookemon Community");
+        assertEq(HookemonExactComponentMockV1(prepared.plan.exclusive.accounts[1]).symbol(), "HKMN");
         assertEq(vm.getNonce(address(fixture.profile)), 2, "one create consumed");
         IProgrammableUniversalLaunchKernelV1.CanonicalLaunchReceiptV1 memory receipt =
             fixture.kernel.canonicalLaunchReceiptV1(prepared.grantDigest);
@@ -945,6 +980,77 @@ contract ProgrammableExactHookemonNormalCreateProfileV1Test is Test {
         assertEq(consumption.launchId, prepared.grant.stampLaunchId, "repository launch id");
         assertEq(consumption.routeId, PROFILE_KEY, "repository route id");
         assertEq(consumption.consumer, address(fixture.profile), "repository consumer");
+    }
+
+    function testReviewedConfigurableLauncherArtifactReconstructsExactly() external {
+        ProgrammableExactHookemonLauncherCodeStoreV1 codeStore = _reviewedCodeStore();
+        assertEq(codeStore.creationCodeLengthV1(), 45_393, "reviewed creation length");
+        assertEq(
+            codeStore.creationCodeHashV1(),
+            0xc2314bf561f2304acb421eefb441e3a908542629cc6fd910896cbc48dbd1664e,
+            "reviewed creation hash"
+        );
+        bytes memory creationCode = codeStore.readCreationCodeV1();
+        assertEq(creationCode.length, 45_393, "reconstructed creation length");
+        assertEq(keccak256(creationCode), codeStore.creationCodeHashV1(), "reconstructed creation hash");
+        assertEq(creationCode.length + 1472, 46_865, "maximum reviewed complete initcode bytes");
+    }
+
+    function testMaximumWebsiteIdentityUsesExactDynamicConstructorEncoding() external {
+        string memory maximumName = unicode"AAAAAAAAAAAAAAAAéééééééééééééééé";
+        (Fixture memory fixture, PreparedLaunch memory prepared) = _fixtureWithIdentity(maximumName, "ABCDEFGHIJ");
+        bytes memory constructorArguments =
+            abi.encode(prepared.plan.shared.accounts[0], prepared.plan.shared.accounts[1], prepared.plan.config);
+        assertEq(constructorArguments.length, 1472, "maximum constructor argument bytes");
+        bytes memory mockInitCode =
+            bytes.concat(type(HookemonAtomicLauncherLifecycleMockV1).creationCode, constructorArguments);
+        assertEq(keccak256(mockInitCode), prepared.plan.completeInitCodeHash, "dynamic initcode binding");
+        _launch(fixture, prepared);
+        assertEq(HookemonExactComponentMockV1(prepared.plan.exclusive.accounts[1]).name(), maximumName);
+        assertEq(HookemonExactComponentMockV1(prepared.plan.exclusive.accounts[1]).symbol(), "ABCDEFGHIJ");
+    }
+
+    function testProductionProfileBindsOnlyReviewedConfigurableLauncherArtifact() external {
+        HookemonGithubRepositoryLineageRegistryMockV1 lineageRegistry =
+            new HookemonGithubRepositoryLineageRegistryMockV1();
+        IProgrammableExactHookemonNormalCreateProfileV1.SharedComponentsV1 memory ignored;
+        Fixture memory fixture;
+        (fixture, ignored) = _baseFixture(30_000, lineageRegistry);
+        fixture.codeStore = _reviewedCodeStore();
+        bytes32 nameHash = keccak256("Hookemon Community");
+        bytes32 symbolHash = keccak256("HKMN");
+        fixture.verifier = new ProgrammableExactHookemonPostconditionVerifierV1(
+            keccak256("reviewed-launcher-runtime"),
+            keccak256("architecture"),
+            keccak256("pool"),
+            keccak256("revenue"),
+            nameHash,
+            symbolHash
+        );
+        ProgrammableExactHookemonNormalCreateProfileV1 productionProfile =
+            new ProgrammableExactHookemonNormalCreateProfileV1(_deploymentConfig(fixture));
+        assertEq(productionProfile.REVIEWED_LAUNCHER_CREATION_CODE_LENGTH(), 45_393);
+        assertEq(
+            productionProfile.REVIEWED_LAUNCHER_CREATION_CODE_HASH(),
+            0xc2314bf561f2304acb421eefb441e3a908542629cc6fd910896cbc48dbd1664e
+        );
+
+        Fixture memory wrongFixture;
+        (wrongFixture, ignored) = _baseFixture(30_000, new HookemonGithubRepositoryLineageRegistryMockV1());
+        wrongFixture.verifier = new ProgrammableExactHookemonPostconditionVerifierV1(
+            keccak256("reviewed-launcher-runtime"),
+            keccak256("architecture"),
+            keccak256("pool"),
+            keccak256("revenue"),
+            nameHash,
+            symbolHash
+        );
+        ProgrammableExactHookemonNormalCreateProfileBaseV1.DeploymentConfigV1 memory wrongDeployment =
+            _deploymentConfig(wrongFixture);
+        vm.expectRevert(
+            abi.encodeWithSelector(ProgrammableExactHookemonNormalCreateProfileBaseV1.InvalidField.selector, uint256(2))
+        );
+        new ProgrammableExactHookemonNormalCreateProfileV1(wrongDeployment);
     }
 
     function testReplayAndReentryFailClosed() external {
@@ -993,7 +1099,9 @@ contract ProgrammableExactHookemonNormalCreateProfileV1Test is Test {
         _launch(first, firstPrepared);
         (bool secondLaunch,) = _tryLaunch(second, secondPrepared);
         assertFalse(secondLaunch, "second launch from same repository accepted");
-        assertEq(second.profile.predictedLauncherV1().code.length, 0, "second launcher survived");
+        for (uint256 i; i < secondPrepared.plan.exclusive.accounts.length; ++i) {
+            assertEq(secondPrepared.plan.exclusive.accounts[i].code.length, 0, "second launcher/token/graph survived");
+        }
         _assertActive(second.kernel, secondPrepared.grantDigest);
         assertEq(first.repositoryLineageRegistry.consumptionCount(), 1, "repository consumed twice");
     }
@@ -1007,14 +1115,16 @@ contract ProgrammableExactHookemonNormalCreateProfileV1Test is Test {
         _assertActive(fixture.kernel, prepared.grantDigest);
     }
 
-    function testFixedTokenIdentityAndPresentationHashOnlyBinding() external {
+    function testWebsiteSelectedTokenIdentityAndPresentationHashBinding() external {
         (Fixture memory fixture, PreparedLaunch memory prepared) = _fixture(30_000);
         assertEq(
             uint8(fixture.profile.tokenIdentityPolicyV1()),
-            uint8(IProgrammableExactHookemonNormalCreateProfileV1.TokenIdentityPolicyV1.FixedByApprovedSource)
+            uint8(IProgrammableExactHookemonNormalCreateProfileV1.TokenIdentityPolicyV1.PlatformSelectedBounded)
         );
-        assertEq(fixture.profile.TOKEN_IDENTITY_POLICY_HASH(), keccak256("fixed_by_approved_source"));
-        assertEq(fixture.profile.fixedTokenIdentityHashV1(), keccak256(abi.encode("Hookemon", "HOOKEMON")));
+        assertEq(fixture.profile.TOKEN_IDENTITY_POLICY_HASH(), keccak256("platform_selected_bounded_identity_v1"));
+        assertTrue(fixture.profile.tokenIdentityConstraintsHashV1() != bytes32(0), "identity constraints missing");
+        assertEq(prepared.plan.tokenNameHash, keccak256(bytes(prepared.plan.config.tokenName)));
+        assertEq(prepared.plan.tokenSymbolHash, keccak256(bytes(prepared.plan.config.tokenSymbol)));
         bytes4 nameSelector = bytes4(keccak256("setTokenName(string)"));
         bytes4 symbolSelector = bytes4(keccak256("setTokenSymbol(string)"));
         bytes4 metadataSelector = bytes4(keccak256("setPresentationMetadata(bytes)"));
@@ -1025,9 +1135,35 @@ contract ProgrammableExactHookemonNormalCreateProfileV1Test is Test {
         assertTrue(prepared.plan.presentationBindingHash != bytes32(0), "presentation binding missing");
 
         bytes32 priorPlanHash = fixture.profile.computeExactHookemonPlanCommitmentsV1(prepared.plan).planHash;
+        prepared.plan.config.tokenName = "Other Monsters";
+        prepared.plan.tokenNameHash = keccak256(bytes(prepared.plan.config.tokenName));
+        bytes32 identityMutatedPlanHash = fixture.profile.computeExactHookemonPlanCommitmentsV1(prepared.plan).planHash;
+        assertTrue(priorPlanHash != identityMutatedPlanHash, "token name selection not bound");
+        prepared.plan.config.tokenName = "Hookemon Community";
+        prepared.plan.tokenNameHash = keccak256(bytes(prepared.plan.config.tokenName));
         prepared.plan.presentationBindingHash = keccak256("different-image-description-and-links");
         bytes32 mutatedPlanHash = fixture.profile.computeExactHookemonPlanCommitmentsV1(prepared.plan).planHash;
         assertTrue(priorPlanHash != mutatedPlanHash, "presentation selection not bound");
+    }
+
+    function testTokenIdentityTamperAndWebsitePolicyViolationsFailClosed() external {
+        (Fixture memory fixture, PreparedLaunch memory prepared) = _fixture(30_000);
+        prepared.plan.tokenNameHash = keccak256("wrong-name");
+        (bool wrongHash,) = _tryLaunch(fixture, prepared);
+        assertFalse(wrongHash, "name hash tamper accepted");
+        assertEq(fixture.profile.predictedLauncherV1().code.length, 0, "tamper launcher survived");
+
+        (fixture, prepared) = _fixture(30_000);
+        prepared.plan.config.tokenName = " Leading";
+        prepared.plan.tokenNameHash = keccak256(bytes(prepared.plan.config.tokenName));
+        (bool leadingSpace,) = _tryLaunch(fixture, prepared);
+        assertFalse(leadingSpace, "trim boundary accepted");
+
+        (fixture, prepared) = _fixture(30_000);
+        prepared.plan.config.tokenSymbol = "lowercase";
+        prepared.plan.tokenSymbolHash = keccak256(bytes(prepared.plan.config.tokenSymbol));
+        (bool invalidSymbol,) = _tryLaunch(fixture, prepared);
+        assertFalse(invalidSymbol, "invalid symbol class accepted");
     }
 
     function _fixture(uint32 selectedTotalFee)
@@ -1044,6 +1180,17 @@ contract ProgrammableExactHookemonNormalCreateProfileV1Test is Test {
         IProgrammableExactHookemonNormalCreateProfileV1.SharedComponentsV1 memory shared;
         (fixture, shared) = _baseFixture(selectedTotalFee, repositoryLineageRegistry);
         (fixture, prepared.plan) = _deployProfile(fixture, shared);
+        fixture.governance.registerProfile(fixture.kernel, _descriptor(fixture, _control()));
+        prepared = _prepareLaunch(fixture, prepared.plan);
+    }
+
+    function _fixtureWithIdentity(string memory tokenName, string memory tokenSymbol)
+        private
+        returns (Fixture memory fixture, PreparedLaunch memory prepared)
+    {
+        IProgrammableExactHookemonNormalCreateProfileV1.SharedComponentsV1 memory shared;
+        (fixture, shared) = _baseFixture(30_000, new HookemonGithubRepositoryLineageRegistryMockV1());
+        (fixture, prepared.plan) = _deployProfileWithIdentity(fixture, shared, tokenName, tokenSymbol);
         fixture.governance.registerProfile(fixture.kernel, _descriptor(fixture, _control()));
         prepared = _prepareLaunch(fixture, prepared.plan);
     }
@@ -1077,8 +1224,22 @@ contract ProgrammableExactHookemonNormalCreateProfileV1Test is Test {
         private
         returns (Fixture memory, IProgrammableExactHookemonNormalCreateProfileV1.ExactHookemonPlanV1 memory plan)
     {
+        return _deployProfileWithIdentity(fixture, shared, "Hookemon Community", "HKMN");
+    }
+
+    function _deployProfileWithIdentity(
+        Fixture memory fixture,
+        IProgrammableExactHookemonNormalCreateProfileV1.SharedComponentsV1 memory shared,
+        string memory tokenName,
+        string memory tokenSymbol
+    )
+        private
+        returns (Fixture memory, IProgrammableExactHookemonNormalCreateProfileV1.ExactHookemonPlanV1 memory plan)
+    {
         HookemonExpectedStateCalculatorV1 calculator = new HookemonExpectedStateCalculatorV1();
         IProgrammableExactHookemonNormalCreateProfileV1.LaunchConfigV1 memory config = _fixtureConfig(fixture, shared);
+        config.tokenName = tokenName;
+        config.tokenSymbol = tokenSymbol;
         uint256 nextNonce = vm.getNonce(address(this));
         address predictedProfile = vm.computeCreateAddress(address(this), nextNonce + 1);
         address predictedLauncher = vm.computeCreateAddress(predictedProfile, 1);
@@ -1089,27 +1250,37 @@ contract ProgrammableExactHookemonNormalCreateProfileV1Test is Test {
             plan.exclusive.runtimeCodeHashes[0],
             plan.expectedArchitectureStateHash,
             plan.expectedPoolStateHash,
-            plan.expectedRevenueStateHash
+            plan.expectedRevenueStateHash,
+            plan.tokenNameHash,
+            plan.tokenSymbolHash
         );
-        fixture.profile = new ProgrammableExactHookemonNormalCreateProfileV1(
-            ProgrammableExactHookemonNormalCreateProfileV1.DeploymentConfigV1({
-                kernel: fixture.kernel,
-                kernelRuntimeCodeHash: address(fixture.kernel).codehash,
-                codeStore: fixture.codeStore,
-                codeStoreRuntimeCodeHash: address(fixture.codeStore).codehash,
-                codeStoreBindingHash: fixture.codeStore.runtimeBindingHashV1(),
-                postconditionVerifier: fixture.verifier,
-                postconditionVerifierRuntimeCodeHash: address(fixture.verifier).codehash,
-                verifierBindingHash: fixture.verifier.runtimeBindingHashV1(),
-                repositoryLineageRegistry: fixture.repositoryLineageRegistry,
-                repositoryLineageRegistryRuntimeCodeHash: address(fixture.repositoryLineageRegistry).codehash,
-                profileKey: PROFILE_KEY,
-                verifierGasLimit: 2_000_000
-            })
+        fixture.profile = new HookemonNormalCreateProfileHarnessV1(
+            _deploymentConfig(fixture), fixture.codeStore.creationCodeHashV1(), fixture.codeStore.creationCodeLengthV1()
         );
         assertEq(address(fixture.profile), predictedProfile, "profile prediction");
         assertEq(fixture.profile.predictedLauncherV1(), predictedLauncher, "launcher prediction");
         return (fixture, plan);
+    }
+
+    function _deploymentConfig(Fixture memory fixture)
+        private
+        view
+        returns (ProgrammableExactHookemonNormalCreateProfileBaseV1.DeploymentConfigV1 memory deployment)
+    {
+        deployment = ProgrammableExactHookemonNormalCreateProfileBaseV1.DeploymentConfigV1({
+            kernel: fixture.kernel,
+            kernelRuntimeCodeHash: address(fixture.kernel).codehash,
+            codeStore: fixture.codeStore,
+            codeStoreRuntimeCodeHash: address(fixture.codeStore).codehash,
+            codeStoreBindingHash: fixture.codeStore.runtimeBindingHashV1(),
+            postconditionVerifier: fixture.verifier,
+            postconditionVerifierRuntimeCodeHash: address(fixture.verifier).codehash,
+            verifierBindingHash: fixture.verifier.runtimeBindingHashV1(),
+            repositoryLineageRegistry: fixture.repositoryLineageRegistry,
+            repositoryLineageRegistryRuntimeCodeHash: address(fixture.repositoryLineageRegistry).codehash,
+            profileKey: PROFILE_KEY,
+            verifierGasLimit: 2_000_000
+        });
     }
 
     function _fixtureConfig(
@@ -1211,6 +1382,16 @@ contract ProgrammableExactHookemonNormalCreateProfileV1Test is Test {
         assertEq(codeStore.creationCodeHashV1(), keccak256(creationCode), "creation code reconstruction");
     }
 
+    function _reviewedCodeStore() private returns (ProgrammableExactHookemonLauncherCodeStoreV1 codeStore) {
+        bytes memory creationCode =
+            vm.parseBytes(vm.trim(vm.readFile("dependencies/hookemon/HookemonAtomicLauncher.creation.bin")));
+        uint256 split = creationCode.length / 2;
+        HookemonRawCodeChunkV1 part0 = new HookemonRawCodeChunkV1(_slice(creationCode, 0, split));
+        HookemonRawCodeChunkV1 part1 =
+            new HookemonRawCodeChunkV1(_slice(creationCode, split, creationCode.length - split));
+        codeStore = new ProgrammableExactHookemonLauncherCodeStoreV1(address(part0), address(part1));
+    }
+
     function _config(
         Fixture memory fixture,
         HookemonRuntimeDependencyMockV1 poolManager,
@@ -1254,6 +1435,8 @@ contract ProgrammableExactHookemonNormalCreateProfileV1Test is Test {
         config.positionRoundingDust = 1000;
         config.positionUnlockAt = config.scheduleAnchor + 2 * 365 days;
         config.expectedPositionLiquidity = 123_456;
+        config.tokenName = "Hookemon Community";
+        config.tokenSymbol = "HKMN";
     }
 
     function _plan(
@@ -1285,6 +1468,8 @@ contract ProgrammableExactHookemonNormalCreateProfileV1Test is Test {
         plan.repositoryKey = keccak256(abi.encode("programmable.github.repository.v1", uint256(1_324_982_531)));
         plan.repositoryLineageRegistry = address(0);
         plan.presentationBindingHash = keccak256("hookemon-presentation:image-description-links:v1");
+        plan.tokenNameHash = keccak256(bytes(config.tokenName));
+        plan.tokenSymbolHash = keccak256(bytes(config.tokenSymbol));
         plan.poolManagerRuntimeCodeHash = config.poolManager.codehash;
         plan.canonicalPoolId = poolId;
         plan.expectedPositionTokenId = HookemonPositionManagerMockV1(config.positionManager).nextTokenId();
@@ -1336,7 +1521,11 @@ contract ProgrammableExactHookemonNormalCreateProfileV1Test is Test {
             tokenRoundingDust: config.positionRoundingDust,
             expectedPositionLiquidity: config.expectedPositionLiquidity,
             cycleBootstrapUsdcAmount: config.cycleBootstrapUsdcAmount,
-            selectedTotalFee: 30_000
+            selectedTotalFee: 30_000,
+            tokenName: config.tokenName,
+            tokenSymbol: config.tokenSymbol,
+            tokenNameHash: plan.tokenNameHash,
+            tokenSymbolHash: plan.tokenSymbolHash
         });
         (plan.expectedArchitectureStateHash, plan.expectedPoolStateHash, plan.expectedRevenueStateHash) =
             _expectedStateHashes(calculator, context, plan);
