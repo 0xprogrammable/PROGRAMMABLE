@@ -118,6 +118,9 @@ function liquidityRow(
     omitSecondUsd?: boolean;
     quoteAddress?: string;
     time?: string;
+    transaction?: string;
+    amountFirst?: string;
+    amountSecond?: string;
     amountFirstUsd?: string;
     amountSecondUsd?: string;
   }> = {},
@@ -126,6 +129,9 @@ function liquidityRow(
     Block: {
       Number: "25740000",
       Time: options.time ?? "2026-08-11T14:00:00.000Z",
+    },
+    Transaction: {
+      Hash: options.transaction ?? `0x${"aa".repeat(32)}`,
     },
     PoolEvent: {
       Pool: {
@@ -140,8 +146,8 @@ function liquidityRow(
         },
       },
       Liquidity: {
-        AmountCurrencyA: "100",
-        AmountCurrencyB: "20",
+        AmountCurrencyA: options.amountFirst ?? "100",
+        AmountCurrencyB: options.amountSecond ?? "20",
         ...(options.omitFirstUsd
           ? {}
           : { AmountCurrencyAInUSD: options.amountFirstUsd ?? "100000" }),
@@ -330,6 +336,10 @@ describe("Bitquery-only market data", () => {
       if (request.query.includes("ProgrammableMarketLiquidity")) {
         expect(request.variables).toEqual({ pools: [PCAN.poolId] });
         expect(request.query).toContain("latestLiquidity: DEXPoolEvents(");
+        expect(request.query).toContain("CurrencyA { SmartContract Symbol }");
+        expect(request.query).toContain("AmountCurrencyA");
+        expect(request.query).toContain("AmountCurrencyB");
+        expect(request.query).toContain("Transaction { Hash }");
         expect(request.query).not.toContain("latestTrades: DEXTrades(");
         return jsonResponse({
           data: { EVM: { latestLiquidity: [liquidityRow(PCAN)] } },
@@ -609,7 +619,7 @@ describe("Bitquery-only market data", () => {
     });
   });
 
-  it("normalizes native ETH without inventing missing liquidity USD", async () => {
+  it("derives exact-pool USD liquidity from event reserves and the bound native trade", async () => {
     const nativeEth = "0x0000000000000000000000000000000000000000";
     const fetchImpl = vi.fn(async () => jsonResponse(marketResponse({
       trade: tradeRow({
@@ -634,7 +644,115 @@ describe("Bitquery-only market data", () => {
         priceUsdWad: "250000000000000000",
         quoteAddress: nativeEth,
       },
+      liquidity: {
+        valueUsdWad: "50025000000000000000000",
+        asOfBlock: "25740000",
+      },
     });
+  });
+
+  it("does not treat an indexed native price as transaction-bound liquidity evidence", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(marketResponse({
+      trade: tradeRow({
+        omitPriceUsd: true,
+        omitQuotePriceUsd: true,
+        omitAmountUsd: true,
+      }),
+      liquidity: liquidityRow(PCAN, {
+        omitFirstUsd: true,
+        omitSecondUsd: true,
+      }),
+    }))) as typeof fetch;
+    const values = await readBitqueryTokenMarketDataV1([PCAN], {
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+
+    expect(values.get(PCAN.tokenAddress)?.pools[0]?.latestTrade).toHaveProperty(
+      "priceUsdWad",
+    );
+    expect(values.get(PCAN.tokenAddress)?.pools[0]).not.toHaveProperty(
+      "liquidity",
+    );
+  });
+
+  it("keeps a legitimate zero reserve while requiring positive total liquidity", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(marketResponse({
+      liquidity: liquidityRow(PCAN, {
+        amountFirst: "0",
+        amountFirstUsd: "0",
+        amountSecond: "20",
+        amountSecondUsd: "50000",
+      }),
+    }))) as typeof fetch;
+    const values = await readBitqueryTokenMarketDataV1([PCAN], {
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+
+    expect(values.get(PCAN.tokenAddress)?.pools[0]?.liquidity).toMatchObject({
+      valueUsdWad: "50000000000000000000000",
+      freshness: "current",
+    });
+  });
+
+  it("does not publish zero total liquidity", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(marketResponse({
+      liquidity: liquidityRow(PCAN, {
+        amountFirst: "0",
+        amountFirstUsd: "0",
+        amountSecond: "0",
+        amountSecondUsd: "0",
+      }),
+    }))) as typeof fetch;
+    const values = await readBitqueryTokenMarketDataV1([PCAN], {
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+
+    expect(values.get(PCAN.tokenAddress)?.pools[0]).not.toHaveProperty(
+      "liquidity",
+    );
+  });
+
+  it("does not derive missing liquidity USD for an unverified quote asset", async () => {
+    const unknownQuote = "0x2222222222222222222222222222222222222222";
+    const fetchImpl = vi.fn(async () => jsonResponse(marketResponse({
+      trade: tradeRow({ quoteAddress: unknownQuote, quoteSymbol: "QUOTE" }),
+      liquidity: liquidityRow(PCAN, {
+        omitFirstUsd: true,
+        omitSecondUsd: true,
+        quoteAddress: unknownQuote,
+      }),
+    }))) as typeof fetch;
+    const values = await readBitqueryTokenMarketDataV1([PCAN], {
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+
+    expect(values.get(PCAN.tokenAddress)?.pools[0]).not.toHaveProperty(
+      "liquidity",
+    );
+  });
+
+  it("does not derive liquidity USD across different transactions", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(marketResponse({
+      liquidity: liquidityRow(PCAN, {
+        omitFirstUsd: true,
+        omitSecondUsd: true,
+        transaction: `0x${"bb".repeat(32)}`,
+      }),
+    }))) as typeof fetch;
+    const values = await readBitqueryTokenMarketDataV1([PCAN], {
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+
     expect(values.get(PCAN.tokenAddress)?.pools[0]).not.toHaveProperty(
       "liquidity",
     );
@@ -1025,7 +1143,10 @@ describe("Bitquery-only market data", () => {
 
   it("does not invent total USD liquidity when one pool side is missing", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(marketResponse({
-      liquidity: liquidityRow(PCAN, { omitSecondUsd: true }),
+      liquidity: liquidityRow(PCAN, {
+        omitSecondUsd: true,
+        transaction: `0x${"bb".repeat(32)}`,
+      }),
     }))) as typeof fetch;
     const values = await readBitqueryTokenMarketDataV1([PCAN], {
       fetchImpl,
@@ -1888,6 +2009,11 @@ describe("Bitquery OHLCV chart and server stream", () => {
     expect(BITQUERY_MARKET_STREAM_QUERY).toContain(
       "Pool: { PoolId: { in: $poolIds } }",
     );
+    expect(BITQUERY_MARKET_STREAM_QUERY).toContain(
+      "CurrencyA { SmartContract Symbol }",
+    );
+    expect(BITQUERY_MARKET_STREAM_QUERY).toContain("AmountCurrencyA");
+    expect(BITQUERY_MARKET_STREAM_QUERY).toContain("AmountCurrencyB");
     expect(BITQUERY_MARKET_STREAM_QUERY.match(/DEXTrades\(/gu)).toHaveLength(1);
     expect(BITQUERY_MARKET_STREAM_QUERY.match(/DEXPoolEvents\(/gu)).toHaveLength(1);
     expect(BITQUERY_MARKET_STREAM_QUERY).toContain("Transaction { Hash Index }");

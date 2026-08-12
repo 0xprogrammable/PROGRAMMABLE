@@ -465,14 +465,14 @@ export function ingestBitqueryMarketStreamPayloadV1(input: Readonly<{
   if (parsedTrades.length !== tradeRows.length) {
     throw new BitqueryMarketDataError("integrity");
   }
+  const latestTrade = canonicalTrades(parsedTrades).at(-1) ?? null;
   const parsedLiquidity = liquidityRows.flatMap((row) => {
-    const liquidity = parseLiquidity(row, identity, now);
+    const liquidity = parseLiquidity(row, identity, now, latestTrade);
     return liquidity === null ? [] : [liquidity];
   });
   if (parsedLiquidity.length !== liquidityRows.length) {
     throw new BitqueryMarketDataError("integrity");
   }
-  const latestTrade = canonicalTrades(parsedTrades).at(-1) ?? null;
   const latestLiquidity = parsedLiquidity.sort((first, second) => {
     const left = BigInt(first.asOfBlock);
     const right = BigInt(second.asOfBlock);
@@ -620,6 +620,7 @@ async function readMarketBatch(
       identity,
       latestTradeRows,
       latestTrade,
+      liquidityPriceTrade: parsedTrade,
       liquidityRow: liquidityByPool.get(identity.poolId),
       stats: parseStats(statsByMarket.get(
         marketStatsKey(identity.poolId, identity.tokenAddress),
@@ -633,7 +634,7 @@ async function readMarketBatch(
       value.liquidityRow,
       value.identity,
       options.now,
-      value.latestTrade,
+      value.liquidityPriceTrade,
     );
     return marketPoolData({
       identity: value.identity,
@@ -1115,6 +1116,7 @@ function tradeSelection() {
 function liquiditySelection() {
   return `
     Block { Number Time }
+    Transaction { Hash }
     PoolEvent {
       Pool {
         PoolId
@@ -1239,10 +1241,11 @@ function parseLiquidity(
   value: unknown,
   identity: MarketDataIdentityV1,
   now: Date,
-  latestTrade: MarketTradeV1 | null = null,
+  sameEventTrade: MarketTradeV1 | null = null,
 ): MarketLiquidityV1 | null {
   const row = record(value);
   const block = record(row?.Block);
+  const transaction = record(row?.Transaction);
   const event = record(row?.PoolEvent);
   const pool = record(event?.Pool);
   const liquidity = record(event?.Liquidity);
@@ -1257,38 +1260,62 @@ function parseLiquidity(
   const time = isoTime(block.Time);
   const currencyA = record(pool.CurrencyA);
   const currencyB = record(pool.CurrencyB);
+  const eventBlockNumber = String(block.Number);
+  const eventTransactionHash = canonicalTransactionHash(transaction?.Hash);
   const addressA = canonicalCurrencyAddress(currencyA?.SmartContract);
   const addressB = canonicalCurrencyAddress(currencyB?.SmartContract);
-  const amountA = positiveDecimal(liquidity.AmountCurrencyA);
-  const amountB = positiveDecimal(liquidity.AmountCurrencyB);
-  const observedA = decimalToWad(liquidity.AmountCurrencyAInUSD);
-  const observedB = decimalToWad(liquidity.AmountCurrencyBInUSD);
-  const tradePrice = latestTrade?.priceUsdWad
-    ? BigInt(latestTrade.priceUsdWad)
+  const amountA = decimalString(liquidity.AmountCurrencyA);
+  const amountB = decimalString(liquidity.AmountCurrencyB);
+  const observedA = liquidityUsdWad(
+    liquidity.AmountCurrencyAInUSD,
+    amountA,
+  );
+  const observedB = liquidityUsdWad(
+    liquidity.AmountCurrencyBInUSD,
+    amountB,
+  );
+  const tradePrice = sameEventTrade?.priceUsdWad
+    ? BigInt(sameEventTrade.priceUsdWad)
+    : null;
+  const tradeQuotePrice = sameEventTrade?.priceQuoteWad
+    ? BigInt(sameEventTrade.priceQuoteWad)
     : null;
   const first = observedA ?? deriveLiquiditySideUsd({
     address: addressA,
     amount: amountA,
     identity,
     eventTime: time,
+    eventBlockNumber,
+    eventTransactionHash,
     tokenPriceUsdWad: tradePrice,
-    tokenPriceTime: latestTrade?.priceUsdAsOfTime,
+    tokenPriceTime: sameEventTrade?.priceUsdAsOfTime,
+    tokenPriceBlockNumber: sameEventTrade?.blockNumber,
+    tokenPriceTransactionHash: sameEventTrade?.transactionHash,
+    tokenPriceQuoteWad: tradeQuotePrice,
+    quoteAddress: sameEventTrade?.quoteAddress,
   });
   const second = observedB ?? deriveLiquiditySideUsd({
     address: addressB,
     amount: amountB,
     identity,
     eventTime: time,
+    eventBlockNumber,
+    eventTransactionHash,
     tokenPriceUsdWad: tradePrice,
-    tokenPriceTime: latestTrade?.priceUsdAsOfTime,
+    tokenPriceTime: sameEventTrade?.priceUsdAsOfTime,
+    tokenPriceBlockNumber: sameEventTrade?.blockNumber,
+    tokenPriceTransactionHash: sameEventTrade?.transactionHash,
+    tokenPriceQuoteWad: tradeQuotePrice,
+    quoteAddress: sameEventTrade?.quoteAddress,
   });
   if (time === null || first === null || second === null) return null;
   const total = first + second;
+  if (total <= 0n) return null;
   const age = now.getTime() - Date.parse(time);
   if (age < -MAXIMUM_FUTURE_SKEW_MS) return null;
   return {
     asOfTime: time,
-    asOfBlock: String(block.Number),
+    asOfBlock: eventBlockNumber,
     valueUsdWad: total.toString(),
     freshness: age > MARKET_DATA_CURRENT_MAX_AGE_MS ? "stale" : "current",
   };
@@ -1299,22 +1326,62 @@ function deriveLiquiditySideUsd(input: Readonly<{
   amount: string | null;
   identity: MarketDataIdentityV1;
   eventTime: string | null;
+  eventBlockNumber: string;
+  eventTransactionHash: `0x${string}` | null;
   tokenPriceUsdWad: bigint | null;
   tokenPriceTime?: string;
+  tokenPriceBlockNumber?: string;
+  tokenPriceTransactionHash?: `0x${string}`;
+  tokenPriceQuoteWad: bigint | null;
+  quoteAddress?: `0x${string}`;
 }>): bigint | null {
   if (input.address === null || input.amount === null || input.eventTime === null) {
     return null;
   }
+  if (/^0(?:\.0+)?$/u.test(input.amount)) return 0n;
+  const priceIsEventBound = input.tokenPriceTime === input.eventTime &&
+    input.tokenPriceBlockNumber === input.eventBlockNumber &&
+    input.eventTransactionHash !== null &&
+    input.tokenPriceTransactionHash === input.eventTransactionHash;
   if (
     input.address === input.identity.tokenAddress &&
     input.tokenPriceUsdWad !== null &&
-    input.tokenPriceTime &&
-    Math.abs(Date.parse(input.tokenPriceTime) - Date.parse(input.eventTime)) <=
-      INDEXED_PRICE_MAXIMUM_DISTANCE_MS
+    priceIsEventBound
   ) {
     return multiplyWadByDecimal(input.tokenPriceUsdWad, input.amount);
   }
+  if (
+    input.address === input.quoteAddress &&
+    (input.quoteAddress === NATIVE_ETH_ADDRESS ||
+      input.quoteAddress === WETH_ADDRESS) &&
+    input.tokenPriceUsdWad !== null &&
+    input.tokenPriceQuoteWad !== null &&
+    input.tokenPriceQuoteWad > 0n &&
+    priceIsEventBound
+  ) {
+    const quotePriceUsdWad = input.tokenPriceUsdWad * WAD /
+      input.tokenPriceQuoteWad;
+    return quotePriceUsdWad > 0n
+      ? multiplyWadByDecimal(quotePriceUsdWad, input.amount)
+      : null;
+  }
   return null;
+}
+
+function liquidityUsdWad(
+  value: unknown,
+  rawAmount: string | null,
+): bigint | null {
+  const normalized = decimalString(value);
+  if (normalized === null) return null;
+  const [whole, fraction = ""] = normalized.split(".");
+  const wad = BigInt(whole) * WAD +
+    BigInt(fraction.slice(0, 18).padEnd(18, "0") || "0");
+  if (
+    wad === 0n &&
+    (rawAmount === null || !/^0(?:\.0+)?$/u.test(rawAmount))
+  ) return null;
+  return wad;
 }
 
 function parseStats(value: unknown): Readonly<{
