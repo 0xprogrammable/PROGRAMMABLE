@@ -6,7 +6,7 @@ description: Transaction fees, creator rewards and Programmable revenue
 
 Programmable fees depend on the transaction that actually executes. A launch model alone does not determine the fee. Each release must state the complete rate, how it is divided and which transactions pay it.
 
-| Path            | Programmable                                             | How it works                                           |
+| Path            | Share                                                    | How it works                                           |
 | --------------- | -------------------------------------------------------- | ------------------------------------------------------ |
 | Classic         | 0.1% of the gross ETH amount exchanged                   | Included in the selected buy or sell transaction fee   |
 | Standard Custom | 0.1% of the gross amount exchanged on the approved route | Defined by the exact accepted release                  |
