@@ -39,8 +39,8 @@ test("CI control guard executes only exact default-branch code over inert candid
 });
 
 test("trusted guard is bound to the exact audited main candidate commit and tree", () => {
-  assert.match(workflow, /APPROVED_MAIN_CI_CONTROL_COMMIT: 4758c979ce1538eacaa33e35b4f1297809af79e3/u);
-  assert.match(workflow, /APPROVED_MAIN_CI_CONTROL_TREE: 990af077adcc3dcdc4f134882f8fac489938474b/u);
+  assert.match(workflow, /APPROVED_MAIN_CI_CONTROL_COMMIT: 6520f1c4af583bd9420549dd811db8e1e301696e/u);
+  assert.match(workflow, /APPROVED_MAIN_CI_CONTROL_TREE: e5104254109e7c0f58a59c0cc5b9ad8fddd04f6c/u);
   assert.match(workflow, /--approved-commit "\$APPROVED_MAIN_CI_CONTROL_COMMIT"/u);
   assert.match(workflow, /--approved-tree "\$APPROVED_MAIN_CI_CONTROL_TREE"/u);
 });
