@@ -107,6 +107,17 @@ test("Hookbuilder maintenance and trusted intake run on the current Node 24 LTS 
   }
 });
 
+test("trusted post-merge installs pinned Foundry before executing maintained skill tests", () => {
+  const foundryPin = "foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09";
+  const installIndex = postMergeJob.indexOf("- name: Install Foundry for maintained skill tests");
+  const preloadIndex = postMergeJob.indexOf("- name: Preload the portable-test Solidity compiler");
+  const executeIndex = postMergeJob.indexOf("- name: Execute maintained skill tests");
+  assert.ok(installIndex > 0 && installIndex < preloadIndex && preloadIndex < executeIndex);
+  assert.match(postMergeJob, new RegExp(foundryPin, "u"));
+  assert.match(postMergeJob, /version: v1\.7\.1/u);
+  assert.match(postMergeJob, /forge build --use 0\.8\.26/u);
+});
+
 test("candidate data is an exact base-repository PR merge in a bare blobless object store", () => {
   assert.match(candidateFetchStep, /--fetch-candidate/u);
   assert.match(candidateFetchStep, /--repository "\$\{\{ github\.repository \}\}"/u);
