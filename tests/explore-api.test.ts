@@ -742,6 +742,36 @@ describe("Explore API Bitquery market boundary", () => {
     expect(response.headers.get("Cache-Control")).toBe("no-store");
   });
 
+  it("scopes an exact token search to the matching Bitquery market", async () => {
+    const target = token(30);
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/explore?q=${target.tokenAddress}&sort=market-cap`,
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.total).toBe(1);
+    expect(body.tokens).toHaveLength(1);
+    expect(body.tokens[0]).toMatchObject({
+      tokenAddress: target.tokenAddress,
+      valuation: {
+        status: "available",
+        source: "bitquery",
+      },
+    });
+    expect(mocks.readBitqueryTokenMarketDataV1).toHaveBeenCalledTimes(1);
+    const identities = mocks.readBitqueryTokenMarketDataV1.mock.calls[0]?.[0];
+    expect(identities).toHaveLength(1);
+    expect(identities?.[0]).toEqual({
+      chainId: "1",
+      tokenAddress: target.tokenAddress,
+      poolId: target.poolId,
+      protocol: "uniswap_v4",
+    });
+  });
+
   it("keeps canonical launches visible with unavailable valuation when Bitquery is down", async () => {
     mocks.enrichTokensWithAlchemyPoolState.mockRejectedValue(
       new Error("provider unavailable"),
