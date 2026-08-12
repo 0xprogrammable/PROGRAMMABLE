@@ -275,7 +275,7 @@ test("doctor distinguishes local generation from an actual Git worktree", () => 
     assert.equal(report.githubCli.requiredForPublicBetaApplication, true);
     assert.equal(report.githubCli.authenticationChecked, false);
     assert.equal(report.readyForGitHubApplicationClient, report.githubCli.available);
-    assert.equal(report.runtimeCompatibility.node.minimumMajor, 20);
+    assert.equal(report.runtimeCompatibility.node.minimumMajor, 22);
     assert.equal(report.runtimeCompatibility.node.supported, true);
     assert.deepEqual(report.runtimeCompatibility.applicationV3.supportedPlatforms, ["darwin", "linux"]);
     assert.equal(

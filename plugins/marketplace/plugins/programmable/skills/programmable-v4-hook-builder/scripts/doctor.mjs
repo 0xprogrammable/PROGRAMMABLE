@@ -52,7 +52,7 @@ const checks = tools.map(([name, toolArgs, deterministic, publicBeta]) => {
   };
 });
 const nodeMajor = Number.parseInt(process.versions.node.split(".", 1)[0], 10);
-const nodeSupported = Number.isInteger(nodeMajor) && nodeMajor >= 20;
+const nodeSupported = Number.isInteger(nodeMajor) && nodeMajor >= 22;
 const applicationV3Platforms = ["darwin", "linux"];
 const applicationV3PlatformSupported = applicationV3Platforms.includes(process.platform);
 const exactObjectGit = inspectExactObjectGitTooling();
@@ -144,7 +144,7 @@ const report = {
   },
   runtimeCompatibility: {
     node: {
-      minimumMajor: 20,
+      minimumMajor: 22,
       currentMajor: nodeMajor,
       supported: nodeSupported
     },
@@ -195,7 +195,7 @@ const report = {
 if (asJson) console.log(JSON.stringify(report, null, 2));
 else {
   for (const check of checks) console.log(`${check.available ? "ok" : "missing"} ${check.name}${check.version ? `: ${check.version}` : ""}`);
-  console.log(`${nodeSupported ? "ok" : "unsupported"} Node.js major version ${nodeMajor}; deterministic preflight requires Node.js 20 or newer`);
+  console.log(`${nodeSupported ? "ok" : "unsupported"} Node.js major version ${nodeMajor}; deterministic preflight requires Node.js 22 or newer`);
   console.log(`${report.readyForRepositoryWork ? "ok" : "unavailable"} repository worktree`);
   if (!report.gitWorktreeChecks.available) console.log(`unavailable Git-only checks: ${report.gitWorktreeChecks.reason}`);
   console.log(`${report.cleanWorktree === true ? "ok" : report.cleanWorktree === false ? "dirty" : "unknown"} git worktree`);

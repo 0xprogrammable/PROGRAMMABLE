@@ -20,6 +20,7 @@ const templates = [
       "npm test",
     ],
     actions: ["actions/checkout", "actions/setup-node"],
+    nodeVersion: "24.19.0",
   },
 ];
 
@@ -41,6 +42,10 @@ for (const fixture of templates) {
     const checkout = job.steps.find((step) => step.uses?.startsWith("actions/checkout@"));
     assert.equal(checkout.with["persist-credentials"], false);
     assert.equal(checkout.with["fetch-depth"], 1);
+    if (fixture.nodeVersion) {
+      const setupNode = job.steps.find((step) => step.uses?.startsWith("actions/setup-node@"));
+      assert.equal(setupNode.with["node-version"], fixture.nodeVersion);
+    }
     const commands = job.steps.filter((step) => step.run).map((step) => step.run);
     assert.deepEqual(commands, fixture.commands);
     assert.ok(commands.every((command) => !/(?:curl|wget|--if-present|\$\{\{|sudo)/u.test(command)));

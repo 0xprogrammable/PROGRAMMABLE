@@ -632,7 +632,7 @@
         "mode": "direct",
         "moduleByteLength": 1070,
         "moduleSha256": "sha256:c4561640a691f3cf383ad5b5dd04d58bd9a809e93a3a462e36e8cfe564f5d6c4",
-        "closureSha256": "sha256:103694d58c1482b6ef2cf2fd5e285db835733f988d45765e6b8739f1eb3ab5f6"
+        "closureSha256": "sha256:2ea7643e70cbad3dec39bbfab43abd8e11b9090a0eadc0f15f00e5d0e79fa941"
       }
     },
     {
@@ -1819,7 +1819,7 @@
         {
           "path": "scripts/github-application-constants.mjs",
           "byteLength": 3373,
-          "sha256": "sha256:4c094828aa3a59087ea716e1326578836e9e5e5bf89b06b22fa43b44262ab0ca",
+          "sha256": "sha256:3850eb323442c9518fcc68c0d8cc155df6c6db560ba174fb92ce691a7cc1dd2a",
           "localImports": [
             "scripts/registry-intake-contract.mjs"
           ]
@@ -2494,7 +2494,7 @@
           ]
         }
       ],
-      "closureSha256": "sha256:103694d58c1482b6ef2cf2fd5e285db835733f988d45765e6b8739f1eb3ab5f6"
+      "closureSha256": "sha256:2ea7643e70cbad3dec39bbfab43abd8e11b9090a0eadc0f15f00e5d0e79fa941"
     },
     {
       "profile": "static-local-esm-import-closure-v1",
@@ -10596,8 +10596,8 @@
     "validatorClosureModuleBindingCount": 1010,
     "validatorClosureDistinctModuleCount": 171,
     "schemaPathsSha256": "sha256:610762ddd56550d2852596417842b753d32d5ed509433439435fd492aa3110ab",
-    "validatorBindingsSha256": "sha256:0e9af48e96ddbedf7e0b8abf02df77486628e4f7e5e9e63dfd42d61da1ffe26c",
-    "validatorClosuresSha256": "sha256:c716e5d77eef3c539fd80e1f42da0d32808b2bd48be6c9d420a38bedb9cf4bda"
+    "validatorBindingsSha256": "sha256:16629c67eb119305456fbb266b40f26c73e36961fd340f6fa6b38820e5e41861",
+    "validatorClosuresSha256": "sha256:fca0133e045871db99dce696e3e58fab95ae86f2e53044a8f49b7345191d6156"
   },
-  "registrySha256": "sha256:8190c71ef973732d2629bd8908bc1850b8e54203a02a6c02d667913496159220"
+  "registrySha256": "sha256:0af0f808095d779b32b727b51d1b3e687c1a7470a9291c6ae5f3dbba1c199679"
 }
