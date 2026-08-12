@@ -1,0 +1,253 @@
+{
+  "schemaVersion": "programmable.exact-shards-registry-successor.v1",
+  "status": "IMPLEMENTATION_READY_NOT_DEPLOYED",
+  "activationAllowed": false,
+  "launchAllowed": false,
+  "externalActionOccurred": false,
+  "productionBase": {
+    "commit": "c05b2df79ea18dfafe8d190183fc4ecbac143087",
+    "tree": "45c776cbe39e78bcb00e70bcab78d6aed50235e3"
+  },
+  "decision": {
+    "existingRegistryV1SupportsExactPolicy": false,
+    "existingRegistryGen2CandidateSupportsExactPolicy": false,
+    "newShardsExecutionSemanticsAdded": false,
+    "newRouterOrFactorySemanticsAdded": false,
+    "smallestNativeSuccessorImplemented": true,
+    "currentContractsCanLaunch": false,
+    "reasonCurrentContractsCannotLaunch": [
+      "THIS_REGISTRY_SUCCESSOR_AND_ITS_EXACT_VERIFIER_ARE_NOT_DEPLOYED",
+      "ROUTER_V4_EXACT_SHARDS_PHASES_ARE_NOT_ACTIVATED",
+      "NO_DEPLOYMENT_BOUND_REGISTRATION_OR_FINALITY_RECEIPT_EXISTS"
+    ]
+  },
+  "reviewedInputs": {
+    "shardsSource": {
+      "repository": "jesse-stahl/shards-v1",
+      "commit": "91b38f3de64d96cac7e29f127c004f128fc1da59",
+      "tree": "92d6def8609e829487adea66c13901734e43c8c7",
+      "sourceRevisionHash": "0x3352fe14662ce467e98f475cf91f10304ce4d69b6342fae4bf3dc968c494d6dc"
+    },
+    "routeArtifact": {
+      "sha256": "0x066475058bfd47b85b4216f95b434756d67d7e289ffb36535c121ef5d7c11bab"
+    },
+    "feeVerifier": {
+      "path": "contracts/src/ProgrammableExactShardsFeePolicyVerifierV1.sol",
+      "contentBindingHash": "0x5d5d1c46e7627f6e171a18acdbecbfe9e40eca80016fba0142ddca6a054f6169",
+      "runtimeCodeKeccak256": "0xb4af3325444133062ec8382bc29c551ef87e812cbf269712a45ef6ec64db20c0",
+      "policyHash": "0xaa78b0bf63fca83fa9b969fbb6b2bb1ecabcbe49908a48f92403e8e51e4adab2"
+    }
+  },
+  "implementation": {
+    "contract": {
+      "path": "contracts/src/ProgrammableExactShardsRegistryV1.sol",
+      "sha256": "0xcbfeeba3c82d3483333c89870004d7a9ddd605eef4ca139f6720af6edd79b867"
+    },
+    "interface": {
+      "path": "contracts/src/interfaces/IProgrammableExactShardsRegistryV1.sol",
+      "sha256": "0xabb460e5c0cb30a2f875ea4c68f569af6dc9772d0319640fc74b368ac8f638fa"
+    },
+    "unitTest": {
+      "path": "contracts/test/ProgrammableExactShardsRegistryV1.t.sol"
+    },
+    "invariantTest": {
+      "path": "contracts/test/invariant/ProgrammableExactShardsRegistryV1Invariant.t.sol"
+    },
+    "compiler": {
+      "solc": "0.8.26",
+      "evmVersion": "cancun",
+      "optimizer": true,
+      "optimizerRuns": 1000,
+      "viaIr": false,
+      "bytecodeHash": "none",
+      "cborMetadata": false
+    },
+    "artifact": {
+      "creationCodeByteLength": 25744,
+      "creationCodeKeccak256": "0xc2aea6763ca383a2909fc5cbb189461c3fd72d2043be46b9bdd83cefeb15759b",
+      "unlinkedRuntimeCodeByteLength": 22962,
+      "unlinkedRuntimeCodeKeccak256": "0xb73a272caeb4f9a9c7180f585c49c6ef7731416de4980dcbd62b92bcb09157da",
+      "runtimeCodeLimitMarginBytes": 1614,
+      "canonicalAbiSha256": "0x9406ed38d932dc1533314b6d5752e3aaa1626423c71fedf345d02c4c198acecb"
+    }
+  },
+  "exactPolicy": {
+    "profileKey": "0xb90e215e0e29c0dacf021e5e778847af4100433ee7d22014b73f8ca4add09d0c",
+    "feeAsset": "0x0000000000000000000000000000000000000000",
+    "feeAssetSemantic": "NATIVE_ETH",
+    "chargeMode": "INCLUDED_IN_TOTAL",
+    "feeBasisHash": "0xfb8110e8ea13fee890a868300dd1a9a5c467acb19a53f63beccc482757a36191",
+    "totalFeeBps": 100,
+    "orderedClaims": [
+      {
+        "ordinal": 0,
+        "role": "BUILDER",
+        "grossVolumeFeeBps": 10,
+        "shareOfFeeBps": 1000,
+        "claimSelector": "0x69f9a5f0",
+        "handoffSelector": "0x4ce11d21",
+        "recipientMode": "CURRENT_BUILDER_MAY_ROTATE_TO_SUCCESSOR"
+      },
+      {
+        "ordinal": 1,
+        "role": "PROGRAMMABLE",
+        "grossVolumeFeeBps": 10,
+        "shareOfFeeBps": 1000,
+        "claimSelector": "0x64d46b85",
+        "handoffSelector": "0x00000000",
+        "recipientMode": "IMMUTABLE_LAUNCHER_RECIPIENT"
+      },
+      {
+        "ordinal": 2,
+        "role": "NFT_HOLDERS",
+        "grossVolumeFeeBps": 80,
+        "shareOfFeeBps": 8000,
+        "claimSelector": "0x6ba4c138",
+        "handoffSelector": "0x00000000",
+        "recipientMode": "EXACT_SHARDS_HOOK_RUNNING_HOLDER_ACCUMULATOR"
+      }
+    ],
+    "legsHash": "0x14e66b725eaebf6f894323565651567cc05a71bbb263db373d1f9f59ea171899",
+    "policyHash": "0xaa78b0bf63fca83fa9b969fbb6b2bb1ecabcbe49908a48f92403e8e51e4adab2"
+  },
+  "storageAndHashBinding": {
+    "registryInstanceHashFields": [
+      "registrySchemaId",
+      "chainId",
+      "registryGeneration",
+      "registryAddress",
+      "chainProfileHash",
+      "registryPolicyHash",
+      "feeVerifierAddress",
+      "feeVerifierRuntimeCodeHash",
+      "feeVerifierContentBindingHash"
+    ],
+    "feePolicyRecordHashFields": [
+      "feePolicyRecordDomain",
+      "registryInstanceHash",
+      "feeVerifierAddress",
+      "feeVerifierRuntimeCodeHash",
+      "feeVerifierContentBindingHash",
+      "exactPolicyHash",
+      "orderedClaimSetHash"
+    ],
+    "storedPolicyFields": [
+      "profileKey",
+      "feeAsset",
+      "feeBasisHash",
+      "totalFeeBps",
+      "legsHash",
+      "policyHash",
+      "claimSetHash",
+      "verifierBindingHash",
+      "verifierRuntimeCodeHash",
+      "feePolicyRecordHash"
+    ],
+    "storedPerClaimFields": [
+      "ordinal",
+      "roleHash",
+      "grossVolumeFeeBps",
+      "shareOfFeeBps",
+      "initialRecipientOrAccumulator",
+      "recipientModeHash",
+      "claimSelector",
+      "handoffSelector",
+      "legHash",
+      "storedClaimHash"
+    ],
+    "registrationAlsoPins": [
+      "reviewedSourceRevisionHash",
+      "reviewedRouteArtifactSha256",
+      "exactProfileKey",
+      "providerIdMustBeZero",
+      "primaryRuntimeCodeHash",
+      "approvalBindingHash",
+      "reviewDeploymentBindingHash",
+      "registeredRecordCommitment"
+    ]
+  },
+  "lifecycle": {
+    "approval": "APPEND_ONLY_WINDOWED_INDEPENDENT_APPROVER_AND_WRITER",
+    "registration": "OBSERVED_AND_ONE_USE_BOUND_TO_APPROVAL_DEPLOYMENT_INSTANCE_AND_EXACT_ECONOMICS",
+    "finality": "NATIVE_BLOCKHASH_AND_MINIMUM_DEPTH_WITH_ONE_USE_EVIDENCE",
+    "correction": "FINALIZED_ONLY_APPEND_ONLY_REVISION_CHAIN",
+    "revocation": "OBSERVED_OR_FINALIZED_TO_TERMINAL_REVOKED",
+    "feePolicyAfterCorrectionOrRevocation": "IMMUTABLE"
+  },
+  "replayProtection": [
+    "APPROVAL_ID_ONE_USE",
+    "DEPLOYMENT_ID_ONE_USE",
+    "TRANSITION_EVIDENCE_HASH_ONE_USE",
+    "REGISTRY_INSTANCE_DOMAIN_BINDS_CHAIN_GENERATION_AND_ADDRESS",
+    "REGISTERED_LAUNCH_CANNOT_BE_REPLAYED_OR_REVIVED",
+    "FEE_POLICY_RECORD_BINDS_ORDERED_CLAIM_SET"
+  ],
+  "localEvidence": {
+    "unitTests": {
+      "count": 13,
+      "fuzzRuns": 1000,
+      "maximumRegistrationGas": 2200000
+    },
+    "statefulInvariants": {
+      "count": 4,
+      "runsPerInvariant": 256,
+      "depthPerRun": 64,
+      "callsPerInvariant": 16384,
+      "handlerReverts": 0
+    },
+    "registryV1RegressionTests": {
+      "count": 40
+    },
+    "feeVerifierTests": {
+      "count": 8
+    },
+    "securityBoundary": [
+      "NO_FUNDS_CUSTODY",
+      "NO_ROUTER_CALLBACK_OR_V4_DELTA_PATH",
+      "NO_DEPLOYMENT",
+      "NO_APPROVAL_SELF_ISSUANCE",
+      "NO_ACTIVATION",
+      "NO_REGISTRY_MIGRATION"
+    ]
+  },
+  "remainingProductionActions": [
+    {
+      "sequence": 1,
+      "action": "INDEPENDENTLY_REVIEW_AND_RECOMPILE_EXACT_VERIFIER_AND_REGISTRY_SUCCESSOR",
+      "requiredAuthority": "SECURITY_REVIEW_OWNER"
+    },
+    {
+      "sequence": 2,
+      "action": "DEPLOY_EXACT_VERIFIER_AND_REGISTRY_SUCCESSOR_WITH_FINAL_CONSTRUCTOR_AUTHORITIES",
+      "requiredAuthority": "AUTHORIZED_CONTRACT_DEPLOYER_AND_REGISTRY_ADMIN_AUTHORITY"
+    },
+    {
+      "sequence": 3,
+      "action": "RECORD_SOURCE_RUNTIME_CONFIGURATION_AND_FINALITY_RECEIPTS",
+      "requiredAuthority": "DEPLOYMENT_EVIDENCE_OWNER"
+    },
+    {
+      "sequence": 4,
+      "action": "EXECUTE_REMAINING_FROZEN_ROUTER_V4_SHARDS_PHASES",
+      "requiredAuthority": "ROUTER_DEPLOYER_AND_CONTROLLER_SAFE"
+    },
+    {
+      "sequence": 5,
+      "action": "AUTHORIZE_REGISTER_FINALIZE_AND_PUBLISH_INDEXER_RECEIPT",
+      "requiredAuthority": "INDEPENDENT_APPROVER_WRITER_FINALIZER_AND_INDEXER_AUTHORITIES"
+    },
+    {
+      "sequence": 6,
+      "action": "ENABLE_WEBSITE_DESCRIPTOR_ONLY_AFTER_ALL_DEPLOYED_BINDINGS_MATCH",
+      "requiredAuthority": "WEBSITE_RELEASE_OWNER"
+    }
+  ],
+  "prohibitions": [
+    "NO_TWO_CLAIM_DOWNCONVERSION",
+    "NO_90_10_COLLAPSE",
+    "NO_ADDED_ON_TOP_REINTERPRETATION",
+    "NO_UNREVIEWED_SOURCE_ROUTE_PROFILE_OR_PROVIDER",
+    "NO_DEPLOYMENT_ADDRESS_INVENTION",
+    "NO_DEPLOYMENT_SIGNING_REGISTRATION_OR_TRANSACTION_FROM_THIS_ARTIFACT"
+  ]
+}
