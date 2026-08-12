@@ -1,21 +1,33 @@
-# Protocol fee claim
+# Programmable Fee Claim
 
-Private local interface for claiming native ETH and stock-asset protocol revenue to the immutable Programmable treasury.
+Privates lokales Fenster für alle aktuell deployten Programmable Launcher-Fees:
 
-## Run
+- Classic V1, V2 und V3 in ETH
+- Stock V1 sowie der gemeinsame Stock-V2/V3-Hook für alle freigegebenen Quote Assets
 
-From the repository root:
+Deep und nicht deployte Modelle sind absichtlich ausgeschlossen.
+
+## Starten
+
+Im Repository-Root:
 
 ```sh
-python3 -m http.server 4178
+python3 -m http.server 4178 --bind 127.0.0.1
 ```
 
-Open:
+Dann öffnen:
 
 ```text
 http://127.0.0.1:4178/ops/protocol-fee-claim/
 ```
 
-The page verifies each hook's `launcherFeeRecipient()` before enabling a claim. It sends one direct claim transaction per non-empty hook or quote asset because the current contracts require the treasury EOA to be `msg.sender`.
+Oder auf macOS `ops/protocol-fee-claim/Programmable Fees.command` doppelklicken.
 
-No private key or seed phrase is read, stored or transmitted. MetaMask signs and broadcasts every transaction.
+## Sicherheitsgrenzen
+
+- Die Seite läuft ausschließlich lokal und liest keinen Private Key oder Seed.
+- MetaMask signiert und sendet jede Transaktion.
+- Vor dem Freischalten werden Runtime-Codehash, `launcherFeeRecipient()` und offene Guthaben am selben Mainnet-Block geprüft.
+- Der verbundene Account muss die unveränderliche Treasury `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c` sein.
+- Unterstützt MetaMask atomare EIP-5792-Batches, werden alle offenen Claims in einer Bestätigung gesendet. Andernfalls zeigt die Seite die Zahl der notwendigen Einzelbestätigungen vor dem Start an.
+- Es werden nur Beträge größer null gesendet; die Seite hat keine Redirect-, Buyback- oder Split-Funktion.

@@ -1,10 +1,11 @@
 <!doctype html>
-<html lang="en">
+<html lang="de">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex,nofollow,noarchive" />
-    <title>Programmable fee claim</title>
+    <meta name="color-scheme" content="light" />
+    <title>Programmable Fee Claim</title>
     <link rel="icon" href="/public/brand/loop/programmable-loop-mark-64.png" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -15,45 +16,69 @@
           <img
             src="/public/brand/loop/programmable-loop-mark-512.png"
             alt=""
-            width="34"
-            height="34"
+            width="32"
+            height="32"
           />
-          <strong>Programmable</strong>
+          <span>Programmable</span>
         </div>
         <div class="network" data-network>Ethereum</div>
       </header>
 
       <section class="content" aria-labelledby="claim-title">
-        <p class="eyebrow">Protocol revenue</p>
-        <h1 id="claim-title">Claim fees</h1>
-        <p class="intro">
-          Collect ETH and stock-asset balances from every verified Programmable fee hook. Each transaction pays the immutable treasury directly.
-        </p>
+        <div class="intro-grid">
+          <div>
+            <p class="eyebrow">Privates Claim-Fenster</p>
+            <h1 id="claim-title">Alle Fees<br />claimen</h1>
+          </div>
+          <p class="intro">
+            Liest alle aktiven Classic- und Stock-Feequellen. Jeder Claim zahlt
+            direkt an die fest eingetragene Programmable Treasury.
+          </p>
+        </div>
 
-        <div class="total-line">
-          <span data-claim-count>0 claims</span>
+        <div class="total-line" aria-label="Offene Gebühren">
+          <span data-claim-count>0 Claims</span>
           <strong data-total>0 ETH</strong>
         </div>
 
-        <ul class="claim-list" data-claim-rows aria-label="Protocol fee hooks"></ul>
+        <ul
+          class="claim-list"
+          data-claim-rows
+          aria-label="Programmable Feequellen"
+        ></ul>
 
-        <div class="wallet-line">
-          <span>Wallet <strong data-account>Not connected</strong></span>
-          <button class="refresh" type="button" data-refresh disabled>Refresh balances</button>
+        <div class="meta-grid">
+          <div>
+            <span>Wallet</span>
+            <strong data-account>Nicht verbunden</strong>
+          </div>
+          <div>
+            <span>Bestätigung</span>
+            <strong data-batch-mode>Batch wird geprüft</strong>
+          </div>
+          <button class="refresh" type="button" data-refresh disabled>
+            Neu laden
+          </button>
         </div>
 
         <button class="primary" type="button" data-action>
-          <strong>Connect wallet</strong>
-          <span data-action-detail>Connect the Programmable treasury</span>
+          <strong data-action-label>Wallet verbinden</strong>
+          <span data-action-detail>MetaMask · Programmable Treasury</span>
         </button>
 
         <p class="status" role="status" aria-live="polite" data-status>
-          Connect MetaMask to read claimable fees
+          MetaMask verbinden, um offene Fees zu lesen
         </p>
         <p class="error" role="alert" data-error hidden></p>
-        <p class="trust">
-          This local page can only call the published launcher-fee claim functions. It never requests a private key and cannot redirect the payout.
-        </p>
+
+        <footer class="trust">
+          <span class="trust-mark" aria-hidden="true"></span>
+          <p>
+            Lokal und ohne Private Key. Vor jedem Claim werden Contract-Code,
+            Treasury-Empfänger und Guthaben am selben Ethereum-Block geprüft.
+            Deep und nicht deployte Quellen sind ausgeschlossen.
+          </p>
+        </footer>
       </section>
     </main>
 

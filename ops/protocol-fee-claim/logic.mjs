@@ -10,59 +10,55 @@ export const SELECTORS = Object.freeze({
   claimLauncherAssetFees: "0xaee8cd6f",
 });
 
-const NATIVE_CLAIMS = [
+export const HOOKS = Object.freeze([
   {
     id: "classic-v3",
-    name: "Classic",
-    detail: "Current release",
-    unit: "ETH",
-    decimals: 18,
+    name: "Classic V3",
+    detail: "Aktuell",
     kind: "native",
     address: "0x35Fe236EA82F7cF525c9719d7df8F49F94D720CC",
+    runtimeCodeHash:
+      "0x3eba781023d3146ed9b502ac5b402d39cea4c34a14f64c878cb9ea62149590f1",
   },
   {
     id: "classic-v2",
-    name: "Classic",
-    detail: "Legacy release 2",
-    unit: "ETH",
-    decimals: 18,
+    name: "Classic V2",
+    detail: "Frühere Version",
     kind: "native",
     address: "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC",
+    runtimeCodeHash:
+      "0x274e29fb8d19f0607533ac7582827db0236ab546bb393d52049229b2ffe74381",
   },
   {
     id: "classic-v1",
-    name: "Classic",
-    detail: "Legacy release 1",
-    unit: "ETH",
-    decimals: 18,
+    name: "Classic V1",
+    detail: "Frühere Version",
     kind: "native",
     address: "0x48bB2672c7fd2a12e7fb5D46c441ccD3726520Cc",
+    runtimeCodeHash:
+      "0x60fd96af952730792036d43d806046675817a5a2de609d87c06203a8d6037650",
   },
   {
-    id: "deep-v1",
-    name: "Deep",
-    detail: "Canary release",
-    unit: "ETH",
-    decimals: 18,
-    kind: "native",
-    address: "0x48dC3009eC1d3298BBA31f718A9A29d02fC9B0cC",
+    id: "stock-current",
+    name: "Stock V2/V3",
+    detail: "Gemeinsamer Hook",
+    kind: "asset",
+    address: "0x90c67C1E866f86526F0e338459cD435E1F23A0cc",
+    runtimeCodeHash:
+      "0x3e292c9ddc64cc3a9c45f79d9d239ab2b8196f10efbdbc74b4f9b37dba53981d",
   },
-];
+  {
+    id: "stock-v1",
+    name: "Stock V1",
+    detail: "Frühere Version",
+    kind: "asset",
+    address: "0x7773D183fe7B60d4F1885047fa42b815a62Fe0Cc",
+    runtimeCodeHash:
+      "0x4da04b13565c195132988b3b96e3c43b9f199c0324f18fee616f888b775a2230",
+  },
+]);
 
-const STOCK_V1_HOOK = "0x7773D183fe7B60d4F1885047fa42b815a62Fe0Cc";
-const STOCK_CURRENT_HOOK = "0x90c67C1E866f86526F0e338459cD435E1F23A0cc";
-
-const STOCK_V1_ASSETS = [
-  ["NVDAon", "0x2D1F7226Bd1F780AF6B9A49DCC0aE00E8Df4bDEE"],
-  ["SPYon", "0xFeDC5f4a6c38211c1338aa411018DFAf26612c08"],
-  ["GOOGLon", "0xbA47214eDd2bb43099611b208f75E4b42FDcfEDc"],
-  ["SLVon", "0xF3e4872e6a4cF365888D93b6146a2bAA7348F1A4"],
-  ["QQQon", "0x0e397938C1aa0680954093495B70a9f5E2249aBA"],
-  ["TSLAon", "0xf6b1117ec07684D3958caD8BEb1b302bfD21103f"],
-  ["AAPLon", "0x14c3abF95Cb9C93a8b82C1CdCB76D72Cb87b2d4c"],
-];
-
-const STOCK_CURRENT_ASSETS = [
+const CURRENT_STOCK_ASSETS = [
   ["NVDAon", "0x2D1F7226Bd1F780AF6B9A49DCC0aE00E8Df4bDEE"],
   ["SPYon", "0xFeDC5f4a6c38211c1338aa411018DFAf26612c08"],
   ["GOOGLon", "0xbA47214eDd2bb43099611b208f75E4b42FDcfEDc"],
@@ -76,24 +72,161 @@ const STOCK_CURRENT_ASSETS = [
   ["USOon", "0x1f5Fc5C3c8b0f15c7e21af623936fF2b210b6415"],
 ];
 
-function stockClaims(release, hook, assets) {
+const LEGACY_STOCK_ASSETS = [
+  ["NVDAon", "0x2D1F7226Bd1F780AF6B9A49DCC0aE00E8Df4bDEE"],
+  ["SPYon", "0xFeDC5f4a6c38211c1338aa411018DFAf26612c08"],
+  ["GOOGLon", "0xbA47214eDd2bb43099611b208f75E4b42FDcfEDc"],
+  ["SLVon", "0xF3e4872e6a4cF365888D93b6146a2bAA7348F1A4"],
+  ["QQQon", "0x0e397938C1Aa0680954093495B70A9F5e2249aBa"],
+  ["TSLAon", "0xf6b1117ec07684D3958caD8BEb1b302bfD21103f"],
+  ["AAPLon", "0x14c3abF95Cb9C93a8b82C1CdCB76D72Cb87b2d4c"],
+];
+
+function stockClaims(hookId, assets) {
   return assets.map(([unit, asset]) => ({
-    id: `stock-${release}-${unit.toLowerCase()}`,
-    name: "Stock-Paired",
-    detail: `${release} · ${unit}`,
+    id: `${hookId}-${unit.toLowerCase()}`,
+    hookId,
+    name: HOOKS.find(({ id }) => id === hookId)?.name ?? hookId,
+    detail: unit,
     unit,
     decimals: 18,
     kind: "asset",
-    address: hook,
+    address: HOOKS.find(({ id }) => id === hookId)?.address,
     asset,
   }));
 }
 
 export const CLAIMS = Object.freeze([
-  ...NATIVE_CLAIMS,
-  ...stockClaims("Current", STOCK_CURRENT_HOOK, STOCK_CURRENT_ASSETS),
-  ...stockClaims("Legacy", STOCK_V1_HOOK, STOCK_V1_ASSETS),
+  ...HOOKS.filter(({ kind }) => kind === "native").map((hook) => ({
+    id: hook.id,
+    hookId: hook.id,
+    name: hook.name,
+    detail: hook.detail,
+    unit: "ETH",
+    decimals: 18,
+    kind: "native",
+    address: hook.address,
+  })),
+  ...stockClaims("stock-current", CURRENT_STOCK_ASSETS),
+  ...stockClaims("stock-v1", LEGACY_STOCK_ASSETS),
 ]);
+
+const MASK_64 = (1n << 64n) - 1n;
+const ROTATIONS = [
+  0, 1, 62, 28, 27, 36, 44, 6, 55, 20, 3, 10, 43, 25, 39, 41, 45, 15, 21, 8, 18,
+  2, 61, 56, 14,
+];
+const ROUND_CONSTANTS = [
+  0x0000000000000001n,
+  0x0000000000008082n,
+  0x800000000000808an,
+  0x8000000080008000n,
+  0x000000000000808bn,
+  0x0000000080000001n,
+  0x8000000080008081n,
+  0x8000000000008009n,
+  0x000000000000008an,
+  0x0000000000000088n,
+  0x0000000080008009n,
+  0x000000008000000an,
+  0x000000008000808bn,
+  0x800000000000008bn,
+  0x8000000000008089n,
+  0x8000000000008003n,
+  0x8000000000008002n,
+  0x8000000000000080n,
+  0x000000000000800an,
+  0x800000008000000an,
+  0x8000000080008081n,
+  0x8000000000008080n,
+  0x0000000080000001n,
+  0x8000000080008008n,
+];
+
+function rotateLeft64(value, shift) {
+  if (shift === 0) return value & MASK_64;
+  const bits = BigInt(shift);
+  return ((value << bits) | (value >> (64n - bits))) & MASK_64;
+}
+
+function keccakPermutation(state) {
+  for (const constant of ROUND_CONSTANTS) {
+    const columns = Array(5).fill(0n);
+    for (let x = 0; x < 5; x += 1) {
+      for (let y = 0; y < 5; y += 1) columns[x] ^= state[x + 5 * y];
+    }
+
+    for (let x = 0; x < 5; x += 1) {
+      const delta =
+        columns[(x + 4) % 5] ^ rotateLeft64(columns[(x + 1) % 5], 1);
+      for (let y = 0; y < 5; y += 1)
+        state[x + 5 * y] = (state[x + 5 * y] ^ delta) & MASK_64;
+    }
+
+    const moved = Array(25).fill(0n);
+    for (let x = 0; x < 5; x += 1) {
+      for (let y = 0; y < 5; y += 1) {
+        const index = x + 5 * y;
+        moved[y + 5 * ((2 * x + 3 * y) % 5)] = rotateLeft64(
+          state[index],
+          ROTATIONS[index],
+        );
+      }
+    }
+
+    for (let x = 0; x < 5; x += 1) {
+      for (let y = 0; y < 5; y += 1) {
+        const index = x + 5 * y;
+        state[index] =
+          (moved[index] ^
+            (~moved[((x + 1) % 5) + 5 * y] & moved[((x + 2) % 5) + 5 * y])) &
+          MASK_64;
+      }
+    }
+    state[0] ^= constant;
+  }
+}
+
+function hexToBytes(value) {
+  if (typeof value !== "string" || !/^0x(?:[0-9a-fA-F]{2})*$/.test(value)) {
+    throw new Error("Ungültige Hex-Daten");
+  }
+  const bytes = new Uint8Array((value.length - 2) / 2);
+  for (let index = 0; index < bytes.length; index += 1)
+    bytes[index] = Number.parseInt(
+      value.slice(2 + index * 2, 4 + index * 2),
+      16,
+    );
+  return bytes;
+}
+
+export function keccak256Hex(value) {
+  const source = hexToBytes(value);
+  const rate = 136;
+  const paddedLength = Math.ceil((source.length + 1) / rate) * rate;
+  const padded = new Uint8Array(paddedLength);
+  padded.set(source);
+  padded[source.length] = 0x01;
+  padded[padded.length - 1] |= 0x80;
+
+  const state = Array(25).fill(0n);
+  for (let offset = 0; offset < padded.length; offset += rate) {
+    for (let index = 0; index < rate; index += 1) {
+      state[Math.floor(index / 8)] ^=
+        BigInt(padded[offset + index]) << BigInt((index % 8) * 8);
+    }
+    keccakPermutation(state);
+  }
+
+  let output = "0x";
+  for (let index = 0; index < 32; index += 1) {
+    const byte = Number(
+      (state[Math.floor(index / 8)] >> BigInt((index % 8) * 8)) & 0xffn,
+    );
+    output += byte.toString(16).padStart(2, "0");
+  }
+  return output;
+}
 
 export function normalizeAddress(value) {
   return typeof value === "string" ? value.toLowerCase() : "";
@@ -104,18 +237,14 @@ export function isTreasury(value) {
 }
 
 export function decodeAddress(value) {
-  if (typeof value !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(value)) {
-    throw new Error("The hook returned an invalid treasury address");
-  }
-
+  if (typeof value !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(value))
+    throw new Error("Ungültige Empfängeradresse");
   return `0x${value.slice(-40)}`;
 }
 
 export function decodeUint256(value) {
-  if (typeof value !== "string" || !/^0x[0-9a-fA-F]{1,64}$/.test(value)) {
-    throw new Error("The hook returned an invalid fee balance");
-  }
-
+  if (typeof value !== "string" || !/^0x[0-9a-fA-F]{1,64}$/.test(value))
+    throw new Error("Ungültiger Fee-Betrag");
   return BigInt(value);
 }
 
@@ -128,19 +257,18 @@ export function formatUnits(value, decimals, maximumFractionDigits = 6) {
   const whole = value / base;
   const fraction = value % base;
   const precision = Math.max(0, Math.min(decimals, maximumFractionDigits));
-
   if (precision === 0 || fraction === 0n) return whole.toString();
-
-  const padded = fraction.toString().padStart(decimals, "0").slice(0, precision);
+  const padded = fraction
+    .toString()
+    .padStart(decimals, "0")
+    .slice(0, precision);
   const trimmed = padded.replace(/0+$/, "");
   return trimmed.length > 0 ? `${whole}.${trimmed}` : whole.toString();
 }
 
 export function encodeAddressArgument(address) {
-  if (typeof address !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(address)) {
-    throw new Error("Expected an Ethereum address");
-  }
-
+  if (typeof address !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(address))
+    throw new Error("Ethereum-Adresse erwartet");
   return address.slice(2).toLowerCase().padStart(64, "0");
 }
 
@@ -157,14 +285,56 @@ export function claimData(claim) {
 }
 
 export function toQuantityHex(value) {
-  if (typeof value !== "bigint" || value < 0n) {
-    throw new Error("Expected a non-negative bigint");
-  }
-
+  if (typeof value !== "bigint" || value < 0n)
+    throw new Error("Nichtnegative Ganzzahl erwartet");
   return `0x${value.toString(16)}`;
 }
 
 export function shortAddress(value) {
   if (typeof value !== "string" || value.length < 12) return value;
   return `${value.slice(0, 6)}…${value.slice(-4)}`;
+}
+
+export function atomicCapabilityStatus(
+  capabilities,
+  chainId = MAINNET_CHAIN_ID,
+) {
+  const status = capabilities?.[chainId]?.atomic?.status;
+  return status === "supported" || status === "ready" ? status : null;
+}
+
+export function buildClaimTransaction(account, claim) {
+  if (!isTreasury(account))
+    throw new Error("Die Treasury-Wallet muss verbunden sein");
+  return {
+    from: account,
+    to: claim.address,
+    data: claimData(claim),
+    value: "0x0",
+  };
+}
+
+export function buildWalletSendCalls(account, claims) {
+  if (!isTreasury(account))
+    throw new Error("Die Treasury-Wallet muss verbunden sein");
+  if (!Array.isArray(claims) || claims.length === 0)
+    throw new Error("Keine Claims verfügbar");
+  return {
+    version: "2.0.0",
+    from: account,
+    chainId: MAINNET_CHAIN_ID,
+    atomicRequired: true,
+    calls: claims.map((claim) => ({
+      to: claim.address,
+      data: claimData(claim),
+      value: "0x0",
+    })),
+  };
+}
+
+export function normalizeBatchId(result) {
+  const id = typeof result === "string" ? result : result?.id;
+  if (typeof id !== "string" || !/^0x[0-9a-fA-F]+$/.test(id))
+    throw new Error("MetaMask hat keine gültige Batch-ID geliefert");
+  return id;
 }
