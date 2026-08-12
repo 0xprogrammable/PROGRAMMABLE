@@ -209,6 +209,14 @@ export function evaluateAlchemyExploreSourceContracts(
       bitqueryMarketSource.includes('"BITQUERY_OAUTH_TOKEN" as const') &&
       bitqueryMarketSource.includes("MARKET_BATCH_SIZE = 100") &&
       bitqueryMarketSource.includes("MARKET_BATCH_CONCURRENCY = 2") &&
+      bitqueryMarketSource.includes("INDEXED_PRICE_BATCH_SIZE = 20") &&
+      bitqueryMarketSource.includes("INDEXED_PRICE_BATCH_CONCURRENCY = 2") &&
+      bitqueryMarketSource.includes(
+        "offset += INDEXED_PRICE_BATCH_SIZE",
+      ) &&
+      bitqueryMarketSource.includes(
+        "readIndexedPriceObservations(priceCandidates, options)",
+      ) &&
       bitqueryMarketSource.includes("PoolId: { in: $pools }") &&
       bitqueryMarketSource.includes("limitBy: { by: Trade_PoolId, count: 1 }") &&
       bitqueryMarketSource.includes(
@@ -222,7 +230,7 @@ export function evaluateAlchemyExploreSourceContracts(
         'Block: { Time: { till: "${trade.time}" } }',
       ) &&
       bitqueryMarketSource.includes(
-        'Token: { Id: { is: "bid:eth" } }',
+        'Token: { Id: { is: "bid:eth:${WETH_ADDRESS}" } }',
       ) &&
       bitqueryMarketSource.includes(
         'const dataset = range === "1h" ? "" : ", dataset: combined";',

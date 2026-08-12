@@ -1209,7 +1209,7 @@ export function ExploreView({
   const [query, setQuery] = useState("");
   const normalizedQuery = query.trim();
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [sort, setSort] = useState<TokenSort>("market-cap");
+  const [sort, setSort] = useState<TokenSort>("newest");
   const [socialFilter, setSocialFilter] = useState<ExploreSocialFilter>("all");
   const [modelFilter, setModelFilter] = useState<ExploreModelFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);

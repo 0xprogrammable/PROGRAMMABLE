@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 const INITIAL_EXPLORE_TIMEOUT_MS = 12_000;
 const INITIAL_EXPLORE_QUERY = new URLSearchParams({
   q: "",
-  sort: "market-cap",
+  sort: "newest",
   page: "1",
   limit: "9",
 }).toString();

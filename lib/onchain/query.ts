@@ -22,7 +22,7 @@ export function parseExploreSort(value: string | null): ExploreSort {
   if (value === "market-cap-asc" || value === "lowest-market-cap") {
     return "market-cap-asc";
   }
-  return "market-cap";
+  return "newest";
 }
 
 function launchOrder(token: LauncherToken) {

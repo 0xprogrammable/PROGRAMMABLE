@@ -162,7 +162,7 @@ describe("Explore query", () => {
   });
 
   it("supports the public sort aliases and bounded pagination", () => {
-    expect(parseExploreSort(null)).toBe("market-cap");
+    expect(parseExploreSort(null)).toBe("newest");
     expect(parseExploreSort("newest")).toBe("newest");
     expect(parseExploreSort("highest-market-cap")).toBe("market-cap");
     expect(parseExploreSort("lowest-market-cap")).toBe("market-cap-asc");

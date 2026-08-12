@@ -31,6 +31,8 @@ const REQUEST_TIMEOUT_MS = 8_000;
 const MAXIMUM_RESPONSE_BYTES = 1_500_000;
 const MARKET_BATCH_SIZE = 100;
 const MARKET_BATCH_CONCURRENCY = 2;
+const INDEXED_PRICE_BATCH_SIZE = 20;
+const INDEXED_PRICE_BATCH_CONCURRENCY = 2;
 const INDEXED_PRICE_RECOVERY_CONCURRENCY = 4;
 const MAXIMUM_INDEXED_PRICE_RECOVERIES_PER_BATCH = 20;
 const MARKET_CACHE_CURRENT_MAX_AGE_MS = 2_000;
@@ -522,13 +524,15 @@ async function readMarketBatch(
       trade: parseTrade(row, identity),
     };
   });
-  const priceRequest = marketPriceQuery(parsedTrades.map(({ trade }) => trade));
+  const priceCandidates = parsedTrades.flatMap(({ trade }, index) =>
+    trade && trade.priceUsdWad === undefined &&
+        (trade.quoteAddress === NATIVE_ETH_ADDRESS ||
+          trade.quoteAddress === WETH_ADDRESS)
+      ? [{ index, trade }]
+      : []
+  );
   const [priceResult, liquidityResult, statsResult] = await Promise.allSettled([
-      executeBitqueryGraphql(
-        priceRequest.query,
-        priceRequest.variables,
-        options,
-      ),
+      readIndexedPriceObservations(priceCandidates, options),
       executeBitqueryGraphql(
         liquidityRequest.query,
         liquidityRequest.variables,
@@ -541,9 +545,11 @@ async function readMarketBatch(
       ),
     ]);
 
-  const priceTrading = priceResult.status === "fulfilled"
-    ? record(priceResult.value.data.Trading)
-    : null;
+  const indexedPricesByIndex = priceResult.status === "fulfilled"
+    ? priceResult.value.observations
+    : new Map<number, TokenPriceObservation | null>();
+  const priceLookupWasPartial = priceResult.status !== "fulfilled" ||
+    priceResult.value.partial;
   const liquidityEvm = liquidityResult.status === "fulfilled"
     ? record(liquidityResult.value.data.EVM)
     : null;
@@ -574,57 +580,13 @@ async function readMarketBatch(
       suppliesByAddress.set(address, row);
     }
   }
-  const indexedPricesByIndex = new Map<number, TokenPriceObservation | null>();
-  const missingIndexedPrices = parsedTrades.flatMap(({ trade }, index) => {
-    if (!trade || trade.priceUsdWad !== undefined) return [];
-    const observation = parseNativeQuotePriceObservation(
-      array(priceTrading?.[`price${index}`])[0],
-      trade,
-    );
-    if (observation !== null) {
-      indexedPricesByIndex.set(index, observation);
-      return [];
-    }
-    return [{ index, trade }];
-  }).slice(0, MAXIMUM_INDEXED_PRICE_RECOVERIES_PER_BATCH);
-  await mapWithConcurrency(
-    missingIndexedPrices,
-    INDEXED_PRICE_RECOVERY_CONCURRENCY,
-    async ({ index, trade }) => {
-      try {
-        const request = marketPriceQuery([trade]);
-        const response = await executeBitqueryGraphql(
-          request.query,
-          request.variables,
-          options,
-        );
-        const trading = record(response.data.Trading);
-        indexedPricesByIndex.set(
-          index,
-          parseNativeQuotePriceObservation(
-            array(trading?.price0)[0],
-            trade,
-          ),
-        );
-      } catch {
-        indexedPricesByIndex.set(index, null);
-      }
-    },
-  );
   const parsed = identities.map((identity, index) => {
     const latestTradeRow = parsedTrades[index]?.row;
     const latestTradeRows = latestTradeRow === undefined
       ? []
       : [latestTradeRow];
     const parsedTrade = parsedTrades[index]?.trade ?? null;
-    const indexedPrice = indexedPricesByIndex.has(index)
-      ? indexedPricesByIndex.get(index) ?? null
-      : parsedTrade
-        ? parseNativeQuotePriceObservation(
-            array(priceTrading?.[`price${index}`])[0],
-            parsedTrade,
-          )
-        : null;
+    const indexedPrice = indexedPricesByIndex.get(index) ?? null;
     const latestTrade = parsedTrade === null
       ? null
       : enrichTradeWithIndexedUsd(
@@ -661,14 +623,94 @@ async function readMarketBatch(
       now: options.now,
       partialResponse:
         response.partial ||
-        priceResult.status !== "fulfilled" ||
-        priceResult.value.partial ||
+        priceLookupWasPartial ||
         liquidityResult.status !== "fulfilled" ||
         liquidityResult.value.partial ||
         statsResult.status !== "fulfilled" ||
         statsResult.value.partial,
     });
   });
+}
+
+type IndexedPriceCandidate = Readonly<{
+  index: number;
+  trade: MarketTradeV1;
+}>;
+
+async function readIndexedPriceObservations(
+  candidates: readonly IndexedPriceCandidate[],
+  options: BitqueryReaderOptions & Readonly<{ token: string }>,
+): Promise<Readonly<{
+  observations: Map<number, TokenPriceObservation | null>;
+  partial: boolean;
+}>> {
+  const observations = new Map<number, TokenPriceObservation | null>();
+  const batches: IndexedPriceCandidate[][] = [];
+  for (let offset = 0; offset < candidates.length; offset += INDEXED_PRICE_BATCH_SIZE) {
+    batches.push(candidates.slice(offset, offset + INDEXED_PRICE_BATCH_SIZE));
+  }
+  let partial = false;
+  await mapWithConcurrency(
+    batches,
+    INDEXED_PRICE_BATCH_CONCURRENCY,
+    async (batch) => {
+      try {
+        const request = marketPriceQuery(batch.map(({ trade }) => trade));
+        const response = await executeBitqueryGraphql(
+          request.query,
+          request.variables,
+          options,
+        );
+        const trading = record(response.data.Trading);
+        if (trading === null) {
+          partial = true;
+          return;
+        }
+        if (response.partial) partial = true;
+        for (let index = 0; index < batch.length; index += 1) {
+          const candidate = batch[index];
+          const observation = parseNativeQuotePriceObservation(
+            array(trading[`price${index}`])[0],
+            candidate.trade,
+          );
+          if (observation !== null) {
+            observations.set(candidate.index, observation);
+          }
+        }
+      } catch {
+        partial = true;
+      }
+    },
+  );
+
+  const missing = candidates.filter(
+    ({ index }) => !observations.has(index),
+  ).slice(0, MAXIMUM_INDEXED_PRICE_RECOVERIES_PER_BATCH);
+  await mapWithConcurrency(
+    missing,
+    INDEXED_PRICE_RECOVERY_CONCURRENCY,
+    async ({ index, trade }) => {
+      try {
+        const request = marketPriceQuery([trade]);
+        const response = await executeBitqueryGraphql(
+          request.query,
+          request.variables,
+          options,
+        );
+        const trading = record(response.data.Trading);
+        observations.set(
+          index,
+          parseNativeQuotePriceObservation(
+            array(trading?.price0)[0],
+            trade,
+          ),
+        );
+      } catch {
+        observations.set(index, null);
+      }
+    },
+  );
+  return { observations, partial };
 }
 
 type TokenPriceObservation = Readonly<{
@@ -904,7 +946,7 @@ function marketBatchQuery(identities: readonly MarketDataIdentityV1[]) {
   };
 }
 
-function marketPriceQuery(trades: readonly (MarketTradeV1 | null)[]) {
+function marketPriceQuery(trades: readonly MarketTradeV1[]) {
   // The legacy Trades filter `Token: { Id: { is: "bid:eth" } }` did not
   // provide a reliable USD observation. The Tokens price index requires the
   // full WETH token identity instead.
@@ -913,7 +955,7 @@ function marketPriceQuery(trades: readonly (MarketTradeV1 | null)[]) {
       limit: { count: 1 }
       orderBy: { descending: Block_Time }
       where: {
-        ${trade ? `Block: { Time: { till: "${trade.time}" } }` : ""}
+        Block: { Time: { till: "${trade.time}" } }
         Token: { Id: { is: "bid:eth:${WETH_ADDRESS}" } }
         Price: { IsQuotedInUsd: true }
       }
