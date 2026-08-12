@@ -190,13 +190,16 @@ function tradingPriceRow(
 ) {
   return {
     Block: { Time: input.time ?? "2026-08-11T14:00:00.000Z" },
-    Pair: {
-      Token: {
-        Id: input.tokenId ?? "bid:eth",
-        Address: input.tokenAddress ?? "0x",
+    Token: {
+      Id: input.tokenId ?? `bid:eth:${WETH}`,
+      Address: input.tokenAddress ?? WETH,
+    },
+    Price: {
+      IsQuotedInUsd: true,
+      Ohlc: {
+        Close: input.priceUsd === undefined ? "2500" : input.priceUsd,
       },
     },
-    PriceInUsd: input.priceUsd === undefined ? "2500" : input.priceUsd,
   };
 }
 
@@ -305,8 +308,9 @@ describe("Bitquery-only market data", () => {
       if (request.query.includes("ProgrammableMarketPrices")) {
         expect(request.variables).toEqual({});
         expect(request.query).toContain(
-          `Token: { Id: { is: "bid:eth" } }`,
+          `Token: { Id: { is: "bid:eth:${WETH}" } }`,
         );
+        expect(request.query).toContain("Price: { IsQuotedInUsd: true }");
         expect(request.query).toContain(
           `Block: { Time: { till: "2026-08-11T14:00:00.000Z" } }`,
         );
