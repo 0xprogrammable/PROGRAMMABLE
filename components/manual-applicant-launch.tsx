@@ -285,6 +285,7 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     useState<ManualRouterDirectory | null>(null);
   const [selectedSubjectHash, setSelectedSubjectHash] =
     useState<ManualRouterSha256V1 | "">("");
+  const selectedSubjectHashRef = useRef<ManualRouterSha256V1 | "">("");
   const [resolved, setResolved] =
     useState<ManualRouterResolved | null>(null);
   const [routeAcceptance, setRouteAcceptance] =
@@ -466,11 +467,13 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
         requireExactShardsRoute: exactShardsApplicant,
       });
       if (controller.signal.aborted || sequence !== loadSequenceRef.current) return;
-      const preferred = options?.preferredSubjectHash || selectedSubjectHash;
+      const preferred = options?.preferredSubjectHash
+        || selectedSubjectHashRef.current;
       const chosen = next.submissions.some(({ subjectHash }) =>
         subjectHash === preferred)
         ? preferred
         : preferredSubmission(next.submissions)?.subjectHash ?? "";
+      selectedSubjectHashRef.current = chosen;
       setSelectedSubjectHash(chosen);
       const chosenSubmission = next.submissions.find(({ subjectHash }) =>
         subjectHash === chosen) ?? null;
@@ -635,7 +638,6 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
     githubConnected,
     githubUsername,
     exactShardsApplicant,
-    selectedSubjectHash,
     routeDiscoveryAllowed,
     wallet,
   ]);
@@ -677,6 +679,7 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
 
   const chooseSubmission = useCallback(async (subjectHash: string) => {
     if (!/^sha256:[0-9a-f]{64}$/u.test(subjectHash)) return;
+    selectedSubjectHashRef.current = subjectHash as ManualRouterSha256V1;
     setSelectedSubjectHash(subjectHash as ManualRouterSha256V1);
     setResolved(null);
     setAttempt(null);
