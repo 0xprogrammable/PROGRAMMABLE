@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "programmable.exact-shards-successor-descriptor.v1",
+  "lane": "registry.exact-shards-v2",
+  "status": "unconfigured",
+  "activationAllowed": false,
+  "chainId": 1,
+  "minimumConfirmations": null,
+  "consumerAbis": {
+    "registry": "sha256:2a8b0913f687b67721b00098311c8dca9f917ed9b433f92a000fc40460e3cdf0",
+    "route": "sha256:acdda24763565c1dc53ad1c334f3cdbb23a663bc7033030156fc849fd01a203f",
+    "permitAuthority": "sha256:23b1dfdb0f987a286925ace1d632479c4730f8e9f5e6dc8a6c65276bc0f9a3ba"
+  },
+  "contracts": {
+    "registry": null,
+    "route": null,
+    "permitAuthority": null
+  }
+}

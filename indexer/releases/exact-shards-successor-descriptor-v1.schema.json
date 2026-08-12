@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://developers.programmable.family/schemas/exact-shards-successor-descriptor-v1.schema.json",
+  "title": "Programmable ExactShards successor descriptor V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "lane",
+    "status",
+    "activationAllowed",
+    "chainId",
+    "minimumConfirmations",
+    "consumerAbis",
+    "contracts"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "programmable.exact-shards-successor-descriptor.v1"
+    },
+    "lane": {
+      "const": "registry.exact-shards-v2"
+    },
+    "status": {
+      "enum": ["unconfigured", "bound"]
+    },
+    "activationAllowed": {
+      "const": false
+    },
+    "chainId": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "minimumConfirmations": {
+      "type": ["integer", "null"],
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "consumerAbis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["registry", "route", "permitAuthority"],
+      "properties": {
+        "registry": {
+          "const": "sha256:2a8b0913f687b67721b00098311c8dca9f917ed9b433f92a000fc40460e3cdf0"
+        },
+        "route": {
+          "const": "sha256:acdda24763565c1dc53ad1c334f3cdbb23a663bc7033030156fc849fd01a203f"
+        },
+        "permitAuthority": {
+          "const": "sha256:23b1dfdb0f987a286925ace1d632479c4730f8e9f5e6dc8a6c65276bc0f9a3ba"
+        }
+      }
+    },
+    "contracts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["registry", "route", "permitAuthority"],
+      "properties": {
+        "registry": {
+          "$ref": "#/$defs/nullableContract"
+        },
+        "route": {
+          "$ref": "#/$defs/nullableContract"
+        },
+        "permitAuthority": {
+          "$ref": "#/$defs/nullableContract"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "unconfigured"
+          }
+        },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "minimumConfirmations": {
+            "const": null
+          },
+          "contracts": {
+            "properties": {
+              "registry": {
+                "const": null
+              },
+              "route": {
+                "const": null
+              },
+              "permitAuthority": {
+                "const": null
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "minimumConfirmations": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "contracts": {
+            "properties": {
+              "registry": {
+                "$ref": "#/$defs/contract"
+              },
+              "route": {
+                "$ref": "#/$defs/contract"
+              },
+              "permitAuthority": {
+                "$ref": "#/$defs/contract"
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "nullableContract": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/contract"
+        }
+      ]
+    },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "address",
+        "runtimeCodeHash",
+        "startBlock",
+        "consumerAbiSha256"
+      ],
+      "properties": {
+        "address": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{40}$",
+          "not": {
+            "const": "0x0000000000000000000000000000000000000000"
+          }
+        },
+        "runtimeCodeHash": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$",
+          "not": {
+            "const": "0x0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        "startBlock": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "consumerAbiSha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

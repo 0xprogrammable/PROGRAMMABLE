@@ -1,0 +1,957 @@
+import { readFileSync } from "node:fs";
+
+import { PGlite } from "@electric-sql/pglite";
+import {
+  encodeAbiParameters,
+  encodeEventTopics,
+  encodeFunctionData,
+  getAbiItem,
+  type Abi,
+  type AbiEvent,
+  type Address,
+  type Hex,
+} from "viem";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("server-only", () => ({}));
+
+import { PostgresExactShardsSuccessorStoreV1 } from
+  "../lib/server/custom-launch/exact-shards-successor-postgres-v1";
+import type {
+  ProjectionTargetPostgresClientV1,
+  ProjectionTargetPostgresPoolV1,
+  ProjectionTargetPostgresQueryResultV1,
+} from "../lib/server/projection-target/postgres-store";
+
+import {
+  EXACT_SHARDS_CONSUMER_ABI_SHA256_V1,
+  ExactShardsSuccessorProjectionLedgerV1,
+  createExactShardsSuccessorPublicReadHandlersV1,
+  deriveExactShardsCanonicalIdentitiesV1,
+  exactShardsAuthorityConsumerAbiV1,
+  exactShardsRegistryConsumerAbiV1,
+  exactShardsRouteConsumerAbiV1,
+  parseExactShardsSuccessorDescriptorV1,
+  projectExactShardsRevocationV1,
+  projectFinalizedExactShardsPublicRecordV1,
+  type BoundExactShardsSuccessorDescriptorV1,
+  type ExactShardsAuthenticatedRpcObservationV1,
+  type ExactShardsLogV1,
+  type ExactShardsReceiptV1,
+} from "../lib/server/custom-launch/exact-shards-successor-projection-v1";
+
+const address = (digit: string) => `0x${digit.repeat(40)}` as Address;
+const hash = (digit: string) => `0x${digit.repeat(64)}` as Hex;
+const REGISTRY = address("1");
+const ROUTE = address("2");
+const AUTHORITY = address("3");
+const WALLET = address("4");
+const SHARD = address("5");
+const NFT = address("6");
+const HOOK = address("7");
+const BUILDER = address("8");
+const PROGRAMMABLE = address("9");
+const RENDERER = address("a");
+const ROUTE_ID =
+  "0xe82ee94c42c7b2173be0d7915d887f813837a51b40af7fe20c1d2accb6f10db8";
+const BUILDER_ROLE =
+  "0x36a60a66fdf8fc39bbaab0d3ff46b52ffc8a9b6f3dc94b5fe9836816d72890af";
+const PROGRAMMABLE_ROLE =
+  "0x069cb8bbaf512d6f3d7fd962d64b67ce531a420f558aa3a2301e77be3640d875";
+const HOLDER_ROLE =
+  "0x84edd196638e45435db849686913b0ffb528525a1edc3aece78548ed6f2577f1";
+const ZERO_HASH = hash("0");
+const ZERO_ADDRESS = address("0");
+const WEBSITE_PROJECT_ID = hash("3");
+const WEBSITE_LAUNCH_ID = hash("4");
+const APPROVAL_BINDING_HASH = hash("6");
+const GITHUB_REPOSITORY_ID = 1_329_073_878n;
+const canonicalIdentities = deriveExactShardsCanonicalIdentitiesV1({
+  websiteProjectIdSha256: WEBSITE_PROJECT_ID,
+  websiteLaunchIdSha256: WEBSITE_LAUNCH_ID,
+  githubRepositoryId: GITHUB_REPOSITORY_ID,
+  approvalGeneration: 1n,
+  approvalBindingHash: APPROVAL_BINDING_HASH,
+  chainId: 1n,
+  registry: REGISTRY,
+  registryGeneration: 1n,
+  primaryContract: SHARD,
+});
+
+function descriptor(): BoundExactShardsSuccessorDescriptorV1 {
+  return {
+    schemaVersion: "programmable.exact-shards-successor-descriptor.v1",
+    lane: "registry.exact-shards-v2",
+    status: "bound",
+    activationAllowed: false,
+    chainId: 1,
+    minimumConfirmations: 12,
+    consumerAbis: EXACT_SHARDS_CONSUMER_ABI_SHA256_V1,
+    contracts: {
+      registry: {
+        address: REGISTRY,
+        runtimeCodeHash: hash("a"),
+        startBlock: 900n,
+        consumerAbiSha256: EXACT_SHARDS_CONSUMER_ABI_SHA256_V1.registry,
+      },
+      route: {
+        address: ROUTE,
+        runtimeCodeHash: hash("b"),
+        startBlock: 901n,
+        consumerAbiSha256: EXACT_SHARDS_CONSUMER_ABI_SHA256_V1.route,
+      },
+      permitAuthority: {
+        address: AUTHORITY,
+        runtimeCodeHash: hash("c"),
+        startBlock: 899n,
+        consumerAbiSha256: EXACT_SHARDS_CONSUMER_ABI_SHA256_V1.permitAuthority,
+      },
+    },
+  };
+}
+
+const feeLegs = [
+  {
+    roleHash: BUILDER_ROLE,
+    feeBps: 10,
+    recipient: BUILDER,
+    recipientModeHash: hash("d"),
+  },
+  {
+    roleHash: PROGRAMMABLE_ROLE,
+    feeBps: 10,
+    recipient: PROGRAMMABLE,
+    recipientModeHash: hash("e"),
+  },
+  {
+    roleHash: HOLDER_ROLE,
+    feeBps: 80,
+    recipient: HOOK,
+    recipientModeHash: hash("f"),
+  },
+] as const;
+
+const registration = {
+  chainId: 1n,
+  registryGeneration: 1n,
+  launchId: canonicalIdentities.launchId,
+  projectId: canonicalIdentities.projectId,
+  websiteProjectIdSha256: WEBSITE_PROJECT_ID,
+  websiteLaunchIdSha256: WEBSITE_LAUNCH_ID,
+  approvalId: canonicalIdentities.approvalId,
+  approvalBindingHash: APPROVAL_BINDING_HASH,
+  githubRepositoryId: GITHUB_REPOSITORY_ID,
+  approvalGeneration: 1n,
+  commitId: hash("7"),
+  sourceCommitment: hash("8"),
+  buildCommitment: hash("9"),
+  artifactSetHash: hash("a"),
+  deploymentConfigurationHash: hash("b"),
+  configurationHash: hash("c"),
+  tokenNameHash: hash("d"),
+  tokenSymbolHash: hash("e"),
+  presentationBindingHash: hash("f"),
+  permissionsHash: hash("1"),
+  deploymentId: hash("2"),
+  deploymentSetHash: hash("3"),
+  runtimeCodeSetHash: hash("4"),
+  primaryContract: SHARD,
+  primaryRuntimeCodeHash: hash("5"),
+  launchWallet: WALLET,
+  modelId: hash("6"),
+  modelVersion: hash("7"),
+  templateId: hash("8"),
+  templateVersion: hash("9"),
+  providerId: hash("a"),
+  builderAttributionHash: hash("b"),
+  originHash: hash("c"),
+  assetSetHash: hash("d"),
+  marketSetHash: hash("e"),
+  marketPathId: hash("f"),
+  capabilitySetHash: hash("1"),
+  reviewPolicyHash: hash("2"),
+  securityReviewHash: hash("3"),
+  reviewResultId: hash("4"),
+  reviewDeploymentBindingHash: hash("5"),
+  finalityPolicyHash: hash("6"),
+  registeredRecordCommitment: hash("7"),
+  feePolicy: {
+    profileKey: hash("8"),
+    feeAsset: ZERO_ADDRESS,
+    feeBasisHash: hash("9"),
+    totalFeeBps: 100,
+    legsHash: hash("a"),
+  },
+  orderedFeeLegs: feeLegs,
+} as const;
+
+const permit = {
+  githubRepositoryId: registration.githubRepositoryId,
+  approvalGeneration: registration.approvalGeneration,
+  permitGeneration: 1n,
+  notBefore: 990n,
+  deadline: 1_010n,
+  signerEpoch: 2n,
+  nonce: 0n,
+  chainId: 1n,
+  repositoryKey: canonicalIdentities.repositoryKey,
+  route: ROUTE,
+  routeId: ROUTE_ID,
+  applicantWallet: WALLET,
+  launchId: registration.launchId,
+  approvalId: registration.approvalId,
+  technicalApprovalHash: hash("9"),
+  descriptorHash: hash("a"),
+  presentationBindingHash: registration.presentationBindingHash,
+  configurationHash: registration.configurationHash,
+  walletOwnershipBindingHash: hash("b"),
+  executionPlanHash: hash("c"),
+  executionCoreHash: hash("d"),
+  executionCalldataKeccak256: hash("e"),
+  generationBindingHash: hash("f"),
+  executionValue: 0n,
+  releaseBindingHash: hash("1"),
+  kernelExecutionEnvelopeHash: hash("2"),
+} as const;
+
+function launchInput(): Hex {
+  return encodeFunctionData({
+    abi: exactShardsRouteConsumerAbiV1,
+    functionName: "launch",
+    args: [
+      {
+        permit,
+        releaseBinding: {
+          authorityGeneration: 1n,
+          releaseGeneration: 1n,
+          permitAuthority: AUTHORITY,
+          permitAuthorityRuntimeCodeHash: descriptor().contracts.permitAuthority.runtimeCodeHash,
+          launchRegistry: REGISTRY,
+          launchRegistryGeneration: 1n,
+          launchRegistryRuntimeCodeHash: descriptor().contracts.registry.runtimeCodeHash,
+          chainProfileHash: hash("3"),
+          profile: ROUTE,
+          profileId: ROUTE_ID,
+          profileRuntimeCodeHash: descriptor().contracts.route.runtimeCodeHash,
+          profileBindingHash: hash("4"),
+          route: ROUTE,
+          routeId: ROUTE_ID,
+          routeRuntimeCodeHash: descriptor().contracts.route.runtimeCodeHash,
+          executionAuthorityHash: hash("5"),
+          kernelEnvelopeMode: 1,
+        },
+        kernelEnvelope: {
+          kernelGrantDigest: hash("6"),
+          reviewerCurrentnessDigest: hash("7"),
+          applicantWalletIntentDigest: hash("8"),
+        },
+        permitSignature: "0x1234",
+      },
+      {
+        registration,
+        tokenSalt: hash("9"),
+        hookSalt: hash("a"),
+        hookCreationCode: "0x60006000",
+        params: {
+          tickLower: -887_200,
+          tickBand: 600,
+          tickUpper: 887_200,
+          startSqrtPriceX96: 79_228_162_514_264_337_593_543_950_336n,
+          renderer: RENDERER,
+          tokenName: "Shards",
+          tokenSymbol: "SHARD",
+          nftName: "Shards Pieces",
+          nftSymbol: "SHARDN",
+        },
+      },
+    ],
+  });
+}
+
+function eventLog(
+  abi: Abi,
+  eventName: string,
+  source: Address,
+  args: Record<string, unknown>,
+  logIndex: number,
+): ExactShardsLogV1 {
+  const event = getAbiItem({ abi, name: eventName }) as AbiEvent;
+  const topics = encodeEventTopics({
+    abi,
+    eventName,
+    args,
+  } as never) as Hex[];
+  const dataInputs = event.inputs.filter(({ indexed }) => indexed !== true);
+  const data = encodeAbiParameters(
+    dataInputs,
+    dataInputs.map(({ name }) => {
+      if (name === undefined || name === "") {
+        throw new TypeError("fixture event input is unnamed");
+      }
+      return args[name];
+    }),
+  );
+  return { address: source, topics, data, logIndex };
+}
+
+function launchReceipt(claim2Bps = 80): ExactShardsReceiptV1 {
+  const logs = [
+    eventLog(exactShardsAuthorityConsumerAbiV1, "LaunchPermitConsumedV1", AUTHORITY, {
+      permitKey: hash("b"),
+      repositoryKey: permit.repositoryKey,
+      launchId: registration.launchId,
+      approvalGeneration: 1n,
+      permitGeneration: 1n,
+      nonce: 0n,
+      signerEpoch: 2n,
+      route: ROUTE,
+      routeId: ROUTE_ID,
+      applicantWallet: WALLET,
+      consumedAtBlock: 1_000n,
+    }, 1),
+    eventLog(exactShardsAuthorityConsumerAbiV1, "RepositoryLineageConsumedV1", AUTHORITY, {
+      repositoryKey: permit.repositoryKey,
+      launchId: registration.launchId,
+      routeId: ROUTE_ID,
+      permitKey: hash("b"),
+      githubRepositoryId: registration.githubRepositoryId,
+      route: ROUTE,
+      applicantWallet: WALLET,
+      nonce: 0n,
+      consumedAtBlock: 1_000n,
+    }, 2),
+    eventLog(exactShardsRegistryConsumerAbiV1, "ExactShardsFeePolicyBoundV1", REGISTRY, {
+      launchId: registration.launchId,
+      policyHash: hash("c"),
+      feePolicyRecordHash: hash("d"),
+      claimSetHash: hash("e"),
+      verifierBindingHash: hash("f"),
+      profileKey: registration.feePolicy.profileKey,
+      feeAsset: ZERO_ADDRESS,
+      feeBasisHash: registration.feePolicy.feeBasisHash,
+      totalFeeBps: 100,
+      legsHash: registration.feePolicy.legsHash,
+    }, 10),
+    ...feeLegs.map((leg, ordinal) => eventLog(
+      exactShardsRegistryConsumerAbiV1,
+      "ExactShardsFeeClaimBoundV1",
+      REGISTRY,
+      {
+        launchId: registration.launchId,
+        ordinal,
+        roleHash: leg.roleHash,
+        grossVolumeFeeBps: ordinal === 2 ? claim2Bps : 10,
+        shareOfFeeBps: ordinal === 2 ? 8_000 : 1_000,
+        initialRecipientOrAccumulator: leg.recipient,
+        recipientModeHash: leg.recipientModeHash,
+        claimSelector: ordinal === 0 ? "0x11111111" : ordinal === 1 ? "0x22222222" : "0x33333333",
+        handoffSelector: ordinal === 0 ? "0x44444444" : "0x00000000",
+        legHash: hash(String(ordinal + 1)),
+        storedClaimHash: hash(String(ordinal + 4)),
+      },
+      11 + ordinal,
+    )),
+    eventLog(exactShardsRegistryConsumerAbiV1, "ExactShardsLaunchRegisteredV1", REGISTRY, {
+      launchId: registration.launchId,
+      projectId: registration.projectId,
+      primaryContract: SHARD,
+      registrationSequence: 1n,
+      approvalId: registration.approvalId,
+      deploymentId: registration.deploymentId,
+      identityHash: hash("f"),
+      registeredRecordCommitment: registration.registeredRecordCommitment,
+      feePolicyHash: hash("c"),
+      feePolicyRecordHash: hash("d"),
+      observedAtBlock: 1_000n,
+    }, 14),
+    eventLog(exactShardsRegistryConsumerAbiV1, "ExactShardsPublicIdentityBoundV1", REGISTRY, {
+      launchId: registration.launchId,
+      websiteLaunchIdSha256: registration.websiteLaunchIdSha256,
+      websiteProjectIdSha256: registration.websiteProjectIdSha256,
+      identityMappingHash: canonicalIdentities.identityMappingHash,
+    }, 15),
+    eventLog(exactShardsRouteConsumerAbiV1, "ExactShardsAtomicLaunchCompletedV1", ROUTE, {
+      launchId: registration.launchId,
+      repositoryKey: permit.repositoryKey,
+      shard: SHARD,
+      hook: HOOK,
+      nft: NFT,
+    }, 20),
+    eventLog(exactShardsRouteConsumerAbiV1, "ExactShardsLaunchMetadataBoundV1", ROUTE, {
+      launchId: registration.launchId,
+      tokenNameHash: registration.tokenNameHash,
+      tokenSymbolHash: registration.tokenSymbolHash,
+      presentationBindingHash: registration.presentationBindingHash,
+    }, 21),
+  ];
+  return {
+    transactionHash: hash("d"),
+    status: "success",
+    blockNumber: 1_000n,
+    blockHash: hash("e"),
+    transactionIndex: 3,
+    logs,
+  };
+}
+
+function finalizationReceipt(): ExactShardsReceiptV1 {
+  return {
+    transactionHash: hash("f"),
+    status: "success",
+    blockNumber: 1_013n,
+    blockHash: hash("1"),
+    transactionIndex: 1,
+    logs: [eventLog(
+      exactShardsRegistryConsumerAbiV1,
+      "ExactShardsLaunchFinalizedV1",
+      REGISTRY,
+      {
+        launchId: registration.launchId,
+        observedTransactionHash: hash("d"),
+        finalityEvidenceHash: hash("2"),
+        transitionSequence: 10n,
+        observedBlockNumber: 1_000n,
+        observedBlockHash: hash("e"),
+        observedTransactionIndex: 3,
+        observedLogIndex: 14,
+        confirmedHeadBlockNumber: 1_012n,
+        confirmedHeadBlockHash: hash("3"),
+        finalityPolicyHash: registration.finalityPolicyHash,
+        finalizedAtBlock: 1_013n,
+        finalizedAtTimestamp: 1_900_000_013n,
+      },
+      4,
+    )],
+  };
+}
+
+function observation(
+  providerId: string,
+  trustDomain: string,
+  claim2Bps = 80,
+): ExactShardsAuthenticatedRpcObservationV1 {
+  return {
+    provider: {
+      providerId,
+      trustDomain,
+      authentication: "authenticated-server-rpc-v1",
+    },
+    chainId: 1,
+    launchTransaction: {
+      hash: hash("d"),
+      from: WALLET,
+      to: ROUTE,
+      input: launchInput(),
+    },
+    launchReceipt: launchReceipt(claim2Bps),
+    finalizationReceipt: finalizationReceipt(),
+    snapshot: {
+      blockNumber: 1_013n,
+      blockHash: hash("1"),
+      registryRuntimeCodeHash: descriptor().contracts.registry.runtimeCodeHash,
+      routeRuntimeCodeHash: descriptor().contracts.route.runtimeCodeHash,
+      permitAuthorityRuntimeCodeHash: descriptor().contracts.permitAuthority.runtimeCodeHash,
+      primaryRuntimeCodeHash: registration.primaryRuntimeCodeHash,
+      hookRuntimeCodeHash: hash("6"),
+      nftRuntimeCodeHash: hash("7"),
+      launchState: {
+        status: 2,
+        observedAtBlock: 1_000n,
+        finalizedAtBlock: 1_013n,
+        latestRecordRevision: 1n,
+        latestRecordHash: registration.registeredRecordCommitment,
+        identityHash: hash("f"),
+        feePolicyHash: hash("c"),
+        feePolicyRecordHash: hash("d"),
+        finalityEvidenceHash: hash("2"),
+      },
+      publicIdentity: {
+        websiteProjectIdSha256: registration.websiteProjectIdSha256,
+        websiteLaunchIdSha256: registration.websiteLaunchIdSha256,
+        identityMappingHash: canonicalIdentities.identityMappingHash,
+      },
+      recordHashAtRevision1: registration.registeredRecordCommitment,
+      recordHashAtRevision2: ZERO_HASH,
+    },
+  };
+}
+
+function observations(claim2Bps = 80) {
+  return [
+    observation("rpc-alpha", "alpha.example", claim2Bps),
+    observation("rpc-beta", "beta.example", claim2Bps),
+  ] as const;
+}
+
+class ExactShardsPGlitePool implements ProjectionTargetPostgresPoolV1 {
+  constructor(readonly database: PGlite) {}
+
+  async connect(): Promise<ProjectionTargetPostgresClientV1> {
+    return Object.freeze({
+      query: <Row extends Record<string, unknown>>(
+        text: string,
+        values: readonly unknown[] = [],
+      ) => this.query<Row>(text, values),
+      release() {},
+    });
+  }
+
+  async query<Row extends Record<string, unknown> = Record<string, unknown>>(
+    text: string,
+    values: readonly unknown[] = [],
+  ): Promise<ProjectionTargetPostgresQueryResultV1<Row>> {
+    const result = await this.database.query<Row>(text, [...values]);
+    return Object.freeze({
+      rows: result.rows,
+      rowCount: result.affectedRows ?? result.rows.length,
+    });
+  }
+}
+
+async function exactShardsPGlitePool() {
+  const database = new PGlite();
+  await database.exec(`
+    CREATE ROLE programmable_website_projection_runtime NOLOGIN;
+    CREATE ROLE anon NOLOGIN;
+    CREATE ROLE authenticated NOLOGIN;
+    CREATE ROLE service_role NOLOGIN;
+  `);
+  await database.exec(readFileSync(new URL(
+    "../ops/website-projection-target/migrations/0001_projection_records_v1.sql",
+    import.meta.url,
+  ), "utf8"));
+  await database.exec(readFileSync(new URL(
+    "../ops/website-projection-target/migrations/0004_exact_shards_successor_public_v1.sql",
+    import.meta.url,
+  ), "utf8"));
+  await database.exec(`
+    GRANT USAGE ON SCHEMA programmable_website_projection_v1
+      TO programmable_website_projection_runtime;
+    GRANT SELECT, INSERT, UPDATE
+      ON programmable_website_projection_v1.registry_exact_shards_events,
+         programmable_website_projection_v1.registry_exact_shards_records
+      TO programmable_website_projection_runtime;
+    GRANT USAGE, SELECT
+      ON SEQUENCE programmable_website_projection_v1.registry_exact_shards_events_event_sequence_seq
+      TO programmable_website_projection_runtime;
+    SET ROLE programmable_website_projection_runtime;
+  `);
+  return new ExactShardsPGlitePool(database);
+}
+
+describe("ExactShards successor projection V1", () => {
+  it("keeps the checked-in lane unconfigured and fail-closed", () => {
+    const checkedIn = JSON.parse(readFileSync(
+      new URL(
+        "../indexer/releases/exact-shards-successor-mainnet-v1.json",
+        import.meta.url,
+      ),
+      "utf8",
+    )) as unknown;
+    expect(parseExactShardsSuccessorDescriptorV1(checkedIn)).toEqual({
+      schemaVersion: "programmable.exact-shards-successor-descriptor.v1",
+      lane: "registry.exact-shards-v2",
+      status: "unconfigured",
+      activationAllowed: false,
+      chainId: 1,
+      minimumConfirmations: null,
+      consumerAbis: EXACT_SHARDS_CONSUMER_ABI_SHA256_V1,
+      contracts: { registry: null, route: null, permitAuthority: null },
+    });
+    expect(() => parseExactShardsSuccessorDescriptorV1({
+      ...descriptor(),
+      activationAllowed: true,
+    })).toThrow(/descriptor is invalid/i);
+    expect(() => parseExactShardsSuccessorDescriptorV1({
+      ...descriptor(),
+      contracts: {
+        ...descriptor().contracts,
+        registry: {
+          ...descriptor().contracts.registry,
+          consumerAbiSha256: `sha256:${"0".repeat(64)}`,
+        },
+      },
+    })).toThrow(/deployment binding is invalid/i);
+  });
+
+  it("reconstructs one finalized immutable public record from dual authenticated evidence", () => {
+    const record = projectFinalizedExactShardsPublicRecordV1({
+      descriptor: descriptor(),
+      observations: observations(),
+    });
+    expect(record).toMatchObject({
+      lifecycle: {
+        state: "finalized",
+        revision: "1",
+        correctionSupported: false,
+        refinalizationSupported: false,
+      },
+      publicIdentity: {
+        websiteProjectId: `sha256:${registration.websiteProjectIdSha256.slice(2)}`,
+        websiteLaunchId: `sha256:${registration.websiteLaunchIdSha256.slice(2)}`,
+        registryProjectId: registration.projectId,
+        registryLaunchId: registration.launchId,
+      },
+      source: {
+        githubRepositoryId: "1329073878",
+        repositoryKey: permit.repositoryKey,
+      },
+      launch: {
+        wallet: WALLET,
+        primaryContract: SHARD,
+        shard: SHARD,
+        hook: HOOK,
+        nft: NFT,
+      },
+      economics: {
+        totalFeeBps: 100,
+        claims: [
+          { ordinal: 0, role: "builder", grossVolumeFeeBps: 10, shareOfFeeBps: 1_000 },
+          { ordinal: 1, role: "programmable", grossVolumeFeeBps: 10, shareOfFeeBps: 1_000 },
+          { ordinal: 2, role: "holder", grossVolumeFeeBps: 80, shareOfFeeBps: 8_000, recipient: HOOK },
+        ],
+      },
+      finality: {
+        providerIds: ["rpc-alpha", "rpc-beta"],
+        trustDomains: ["alpha.example", "beta.example"],
+      },
+    });
+    expect(record.recordBindingSha256).toMatch(/^sha256:[0-9a-f]{64}$/u);
+    expect(Object.isFrozen(record)).toBe(true);
+  });
+
+  it("rejects noncanonical fee splits, provider dependence and state drift", () => {
+    expect(() => projectFinalizedExactShardsPublicRecordV1({
+      descriptor: descriptor(),
+      observations: observations(79),
+    })).toThrow(/receipt, calldata, events and state|fee claim/i);
+
+    const [first] = observations();
+    expect(() => projectFinalizedExactShardsPublicRecordV1({
+      descriptor: descriptor(),
+      observations: [first, {
+        ...first,
+        provider: {
+          providerId: "rpc-alpha-two",
+          trustDomain: "alpha.example",
+          authentication: "authenticated-server-rpc-v1",
+        },
+      }],
+    })).toThrow(/not independent/i);
+
+    const drifted = {
+      ...observation("rpc-beta", "beta.example"),
+      snapshot: {
+        ...observation("rpc-beta", "beta.example").snapshot,
+        recordHashAtRevision2: hash("f"),
+      },
+    } as const;
+    expect(() => projectFinalizedExactShardsPublicRecordV1({
+      descriptor: descriptor(),
+      observations: [first, drifted],
+    })).toThrow(/observations disagree/i);
+
+    const wrongCanonicalBlock = observations().map((item) => ({
+      ...item,
+      snapshot: { ...item.snapshot, blockHash: hash("f") },
+    })) as never;
+    expect(() => projectFinalizedExactShardsPublicRecordV1({
+      descriptor: descriptor(),
+      observations: wrongCanonicalBlock,
+    })).toThrow(/authenticated RPC observation is invalid/i);
+  });
+
+  it("publishes finalized only, rolls reorgs back, and makes revocation terminal", () => {
+    const record = projectFinalizedExactShardsPublicRecordV1({
+      descriptor: descriptor(),
+      observations: observations(),
+    });
+    const ledger = new ExactShardsSuccessorProjectionLedgerV1();
+    expect(ledger.read(registration.launchId)).toEqual({ state: "absent", record: null });
+    expect(ledger.applyFinalized(record).state).toBe("finalized");
+
+    const revocationReceipt: ExactShardsReceiptV1 = {
+      transactionHash: hash("8"),
+      status: "success",
+      blockNumber: 1_020n,
+      blockHash: hash("9"),
+      transactionIndex: 2,
+      logs: [eventLog(
+        exactShardsRegistryConsumerAbiV1,
+        "ExactShardsLaunchRevokedV1",
+        REGISTRY,
+        {
+          launchId: registration.launchId,
+          reasonCode: hash("a"),
+          evidenceHash: hash("b"),
+          transitionSequence: 11n,
+          latestRecordRevision: 1n,
+          latestRecordHash: registration.registeredRecordCommitment,
+          revokedAtBlock: 1_020n,
+          revokedAtTimestamp: 1_900_000_020n,
+        },
+        5,
+      )],
+    };
+    const revokedSnapshot = {
+      ...observations()[0].snapshot,
+      blockNumber: 1_020n,
+      blockHash: hash("9"),
+      launchState: {
+        ...observations()[0].snapshot.launchState,
+        status: 3 as const,
+      },
+    };
+    const revocationObservations = [
+      {
+        provider: observations()[0].provider,
+        chainId: 1,
+        receipt: revocationReceipt,
+        snapshot: revokedSnapshot,
+      },
+      {
+        provider: observations()[1].provider,
+        chainId: 1,
+        receipt: revocationReceipt,
+        snapshot: revokedSnapshot,
+      },
+    ] as const;
+    const revocation = projectExactShardsRevocationV1({
+      descriptor: descriptor(),
+      launchId: registration.launchId,
+      latestRecordHash: registration.registeredRecordCommitment,
+      observations: revocationObservations,
+    });
+    expect(() => projectExactShardsRevocationV1({
+      descriptor: descriptor(),
+      launchId: registration.launchId,
+      latestRecordHash: registration.registeredRecordCommitment,
+      observations: revocationObservations.map((item) => ({
+        ...item,
+        receipt: { ...item.receipt, status: "failure" },
+      })) as never,
+    })).toThrow(/receipt is invalid/i);
+    expect(() => projectExactShardsRevocationV1({
+      descriptor: descriptor(),
+      launchId: registration.launchId,
+      latestRecordHash: registration.registeredRecordCommitment,
+      observations: revocationObservations.map((item) => ({
+        ...item,
+        receipt: {
+          ...item.receipt,
+          logs: item.receipt.logs.map((log) => ({ ...log, logIndex: -1 })),
+        },
+      })) as never,
+    })).toThrow(/log placement is invalid/i);
+    expect(() => projectExactShardsRevocationV1({
+      descriptor: descriptor(),
+      launchId: registration.launchId,
+      latestRecordHash: registration.registeredRecordCommitment,
+      observations: revocationObservations.map((item) => ({
+        ...item,
+        snapshot: { ...item.snapshot, registryRuntimeCodeHash: hash("f") },
+      })) as never,
+    })).toThrow(/snapshot is invalid/i);
+    expect(ledger.applyRevocation(revocation)).toEqual({ state: "revoked", record: null });
+    expect(() => ledger.applyFinalized(record)).toThrow(/cannot be refinalized/i);
+
+    ledger.rollbackCanonicalBlock(revocation.blockHash);
+    expect(ledger.read(registration.launchId).state).toBe("finalized");
+    ledger.rollbackCanonicalBlock(record.finality.finalizedBlockHash);
+    expect(ledger.read(registration.launchId)).toEqual({ state: "reorged", record: null });
+  });
+
+  it("persists finalized publication and restores canonical state across reorgs", async () => {
+    const record = projectFinalizedExactShardsPublicRecordV1({
+      descriptor: descriptor(),
+      observations: observations(),
+    });
+    const revocationReceipt: ExactShardsReceiptV1 = {
+      transactionHash: hash("8"),
+      status: "success",
+      blockNumber: 1_020n,
+      blockHash: hash("9"),
+      transactionIndex: 2,
+      logs: [eventLog(
+        exactShardsRegistryConsumerAbiV1,
+        "ExactShardsLaunchRevokedV1",
+        REGISTRY,
+        {
+          launchId: registration.launchId,
+          reasonCode: hash("a"),
+          evidenceHash: hash("b"),
+          transitionSequence: 11n,
+          latestRecordRevision: 1n,
+          latestRecordHash: registration.registeredRecordCommitment,
+          revokedAtBlock: 1_020n,
+          revokedAtTimestamp: 1_900_000_020n,
+        },
+        5,
+      )],
+    };
+    const revokedSnapshot = {
+      ...observations()[0].snapshot,
+      blockNumber: 1_020n,
+      blockHash: hash("9"),
+      launchState: { ...observations()[0].snapshot.launchState, status: 3 as const },
+    };
+    const revocation = projectExactShardsRevocationV1({
+      descriptor: descriptor(),
+      launchId: registration.launchId,
+      latestRecordHash: registration.registeredRecordCommitment,
+      observations: [
+        {
+          provider: observations()[0].provider,
+          chainId: 1,
+          receipt: revocationReceipt,
+          snapshot: revokedSnapshot,
+        },
+        {
+          provider: observations()[1].provider,
+          chainId: 1,
+          receipt: revocationReceipt,
+          snapshot: revokedSnapshot,
+        },
+      ],
+    });
+    const pool = await exactShardsPGlitePool();
+    const store = new PostgresExactShardsSuccessorStoreV1({
+      pool,
+      descriptor: descriptor(),
+    });
+    const signal = new AbortController().signal;
+    try {
+      await expect(store.materializeFinalized({ record, signal })).resolves.toEqual({
+        kind: "created",
+      });
+      await expect(store.materializeFinalized({ record, signal })).resolves.toEqual({
+        kind: "existing",
+      });
+      await expect(store.findPublic({ signal })).resolves.toHaveLength(1);
+      await expect(store.findByWebsiteProjectId({
+        projectId: record.publicIdentity.websiteProjectId,
+        signal,
+      })).resolves.toMatchObject({ recordBindingSha256: record.recordBindingSha256 });
+      await expect(store.materializeRevocation({ record: revocation, signal }))
+        .resolves.toEqual({ kind: "updated" });
+      await expect(store.findPublic({ signal })).resolves.toEqual([]);
+      await expect(store.materializeFinalized({ record, signal })).resolves.toEqual({
+        kind: "conflict",
+      });
+      await expect(store.rollbackCanonicalBlock({
+        blockHash: revocation.blockHash,
+        signal,
+      })).resolves.toEqual({ affectedLaunches: 1 });
+      await expect(store.findPublic({ signal })).resolves.toHaveLength(1);
+      await expect(store.rollbackCanonicalBlock({
+        blockHash: record.finality.finalizedBlockHash,
+        signal,
+      })).resolves.toEqual({ affectedLaunches: 1 });
+      await expect(store.findPublic({ signal })).resolves.toEqual([]);
+    } finally {
+      await pool.database.close();
+    }
+  });
+
+  it("contains no legacy correction event or CustomRegistryV1 contract surface", () => {
+    const names = [
+      ...exactShardsRegistryConsumerAbiV1,
+      ...exactShardsRouteConsumerAbiV1,
+      ...exactShardsAuthorityConsumerAbiV1,
+    ].flatMap((item) => "name" in item ? [String(item.name)] : []);
+    expect(names).not.toContain("CustomLaunchRecordCorrectedV1");
+    expect(names.every((name) => !name.startsWith("CustomLaunch"))).toBe(true);
+  });
+
+  it("fails Website reads closed while unconfigured, then serves only finalized SHA identity", async () => {
+    const record = projectFinalizedExactShardsPublicRecordV1({
+      descriptor: descriptor(),
+      observations: observations(),
+    });
+    const store = {
+      sourceLane: "registry.exact-shards-v2" as const,
+      async findByWebsiteProjectId({ projectId }: { projectId: string }) {
+        return projectId === record.publicIdentity.websiteProjectId ? record : null;
+      },
+      async findPublic() {
+        return [record];
+      },
+    };
+    const request = () => new Request("https://website.invalid/api/exact-shards/v1/projects", {
+      headers: { accept: "application/json" },
+    });
+    const unconfigured = createExactShardsSuccessorPublicReadHandlersV1({
+      descriptor: JSON.parse(readFileSync(
+        new URL(
+          "../indexer/releases/exact-shards-successor-mainnet-v1.json",
+          import.meta.url,
+        ),
+        "utf8",
+      )),
+      publicationAuthorized: false,
+      store,
+    });
+    expect((await unconfigured.feed(request())).status).toBe(503);
+
+    const frozenBound = createExactShardsSuccessorPublicReadHandlersV1({
+      descriptor: descriptor(),
+      publicationAuthorized: false,
+      store,
+    });
+    expect((await frozenBound.feed(request())).status).toBe(503);
+
+    const bound = createExactShardsSuccessorPublicReadHandlersV1({
+      descriptor: descriptor(),
+      publicationAuthorized: true,
+      store,
+    });
+    const feed = await bound.feed(request());
+    expect(feed.status).toBe(200);
+    expect(feed.headers.get("cache-control")).toBe("no-store");
+    await expect(feed.json()).resolves.toMatchObject({
+      schemaVersion: "programmable.exact-shards-public-feed.v1",
+      records: [{ lifecycle: { state: "finalized", revision: "1" } }],
+    });
+    const detail = await bound.detail(
+      new Request("https://website.invalid/api/exact-shards/v1/projects/id", {
+        headers: { accept: "application/json" },
+      }),
+      record.publicIdentity.websiteProjectId,
+    );
+    expect(detail.status).toBe(200);
+    await expect(detail.json()).resolves.toMatchObject({
+      schemaVersion: "programmable.exact-shards-public-view.v1",
+      record: {
+        sourceLane: "registry.exact-shards-v2",
+        publicIdentity: {
+          websiteProjectId: record.publicIdentity.websiteProjectId,
+          registryProjectId: registration.projectId,
+        },
+      },
+    });
+    expect((await bound.detail(request(), `sha256:${"0".repeat(64)}`)).status).toBe(404);
+    const staleStore = {
+      ...store,
+      async findByWebsiteProjectId() {
+        return { ...record, lifecycle: { ...record.lifecycle, state: "revoked" } };
+      },
+      async findPublic() {
+        return [{ ...record, lifecycle: { ...record.lifecycle, revision: "2" } }];
+      },
+    } as never;
+    const rejecting = createExactShardsSuccessorPublicReadHandlersV1({
+      descriptor: descriptor(),
+      publicationAuthorized: true,
+      store: staleStore,
+    });
+    expect((await rejecting.feed(request())).status).toBe(503);
+    expect((await rejecting.detail(
+      new Request("https://website.invalid/api/exact-shards/v1/projects/id", {
+        headers: { accept: "application/json" },
+      }),
+      record.publicIdentity.websiteProjectId,
+    )).status).toBe(503);
+    expect((await bound.feed(new Request("https://website.invalid/api/exact-shards/v1/projects"))).status)
+      .toBe(400);
+  });
+});
