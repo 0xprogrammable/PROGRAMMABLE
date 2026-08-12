@@ -722,17 +722,19 @@ function publicFetch(
   healthStatus = "healthy",
   goldenMarketAgeMs = 60 * 60_000,
 ) {
+  const fixtureNow = Date.now();
+  const goldenMarketAsOf = new Date(
+    Math.floor((fixtureNow - goldenMarketAgeMs) / 1_000) * 1_000,
+  ).toISOString();
+  const publicMarketAsOf = new Date(
+    Math.floor((fixtureNow - 60 * 60_000) / 1_000) * 1_000,
+  ).toISOString();
+  const earlierMarketTime = new Date(
+    Date.parse(goldenMarketAsOf) - 60 * 60_000,
+  ).toISOString();
+
   return async (input: URL | RequestInfo, init?: RequestInit) => {
     const url = new URL(String(input));
-    const goldenMarketAsOf = new Date(
-      Math.floor((Date.now() - goldenMarketAgeMs) / 1_000) * 1_000,
-    ).toISOString();
-    const publicMarketAsOf = new Date(
-      Math.floor((Date.now() - 60 * 60_000) / 1_000) * 1_000,
-    ).toISOString();
-    const earlierMarketTime = new Date(
-      Date.parse(goldenMarketAsOf) - 60 * 60_000,
-    ).toISOString();
     const publicBitqueryHeaders = {
       "X-Programmable-Data-Quality": "stale",
       "X-Programmable-Market-As-Of": publicMarketAsOf,
