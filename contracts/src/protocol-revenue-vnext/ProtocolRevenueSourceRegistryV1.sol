@@ -16,10 +16,11 @@ interface IProtocolRevenueCollectorBindingV1 {
 }
 
 /// @title ProtocolRevenueSourceRegistryV1
-/// @notice Two-stage, append-only registry for exact protocol-revenue source and asset bindings.
-/// @dev Proposals may bind a predicted CREATE2 source before deployment. Activation is a separate role and succeeds
-///      only after the delay, deployed-code verification and standard-interface checks. Activated records are
-/// immutable; a quarantined source cannot be reactivated or replaced under the same source ID.
+/// @notice Two-stage, append-only registry for exact future Custom native-revenue source bindings.
+/// @dev Proposals bind a predicted CREATE2 source before deployment. Activation is a separate role and succeeds
+///      only after 64 blocks, deployed-code verification and standard-interface checks. Quote assets, ERC-20 sources,
+///      Stocks and provenance-only Custom V1 records cannot enter this registry. Activated records are immutable; a
+///      quarantined source cannot be reactivated or replaced under the same source ID.
 contract ProtocolRevenueSourceRegistryV1 is AccessControlDefaultAdminRules {
     using SafeCast for uint256;
 
@@ -29,10 +30,12 @@ contract ProtocolRevenueSourceRegistryV1 is AccessControlDefaultAdminRules {
     bytes32 public constant SOURCE_ACTIVATOR_ROLE = keccak256("programmable.protocol-revenue.source-activator.v1");
     bytes32 public constant SOURCE_QUARANTINER_ROLE = keccak256("programmable.protocol-revenue.source-quarantiner.v1");
     uint64 public constant REGISTRY_GENERATION = 1;
+    uint64 public constant MIN_ACTIVATION_DELAY_BLOCKS = 64;
+    uint256 public constant SUPPORTED_CHAIN_ID = 1;
+    address public constant NATIVE_ASSET = address(0);
 
     bytes32 private constant FIELD_COLLECTOR = "collector";
     bytes32 private constant FIELD_ROLE_ACCOUNT = "role-account";
-    bytes32 private constant FIELD_ACTIVATION_DELAY = "activation-delay";
     bytes32 private constant FIELD_SOURCE_ID = "source-id";
     bytes32 private constant FIELD_SOURCE = "source";
     bytes32 private constant FIELD_RUNTIME_CODE_HASH = "runtime-code-hash";
@@ -50,7 +53,6 @@ contract ProtocolRevenueSourceRegistryV1 is AccessControlDefaultAdminRules {
 
     uint256 public immutable CHAIN_ID;
     address public immutable collector;
-    uint64 public immutable MIN_ACTIVATION_DELAY_BLOCKS;
 
     struct PendingSourceV1 {
         ProtocolRevenueSourceConfigV1 config;
@@ -76,7 +78,7 @@ contract ProtocolRevenueSourceRegistryV1 is AccessControlDefaultAdminRules {
     error ProposalAlreadyExists(bytes32 sourceId);
     error ProposalNotFound(bytes32 sourceId);
     error SourceAlreadyRegistered(bytes32 sourceId);
-    error SourceAssetCodeMissing(address asset);
+    error SourceAlreadyDeployedAtProposal(address source);
     error SourceAssetAlreadyActive(address source, address asset, bytes32 activeSourceId);
     error SourceCodeMissing(address source);
     error SourceIdMismatch(bytes32 supplied, bytes32 expected);
@@ -85,6 +87,7 @@ contract ProtocolRevenueSourceRegistryV1 is AccessControlDefaultAdminRules {
     error SourcePreviouslyClaimed(address source, address asset, uint256 amount);
     error SourceQuarantinedAlready(bytes32 sourceId);
     error SourceRuntimeCodeHashMismatch(address source, bytes32 expected, bytes32 actual);
+    error UnsupportedChain(uint256 supplied, uint256 expected);
 
     event SourceProposed(
         bytes32 indexed sourceId,
@@ -113,9 +116,11 @@ contract ProtocolRevenueSourceRegistryV1 is AccessControlDefaultAdminRules {
         address initialProposer,
         address initialActivator,
         address initialQuarantiner,
-        address collector_,
-        uint64 minimumActivationDelayBlocks
+        address collector_
     ) AccessControlDefaultAdminRules(initialAdminDelay, initialAdmin) {
+        if (block.chainid != SUPPORTED_CHAIN_ID) {
+            revert UnsupportedChain(block.chainid, SUPPORTED_CHAIN_ID);
+        }
         if (collector_ == address(0) || collector_.code.length == 0) {
             revert InvalidSourceBinding(FIELD_COLLECTOR);
         }
@@ -128,8 +133,6 @@ contract ProtocolRevenueSourceRegistryV1 is AccessControlDefaultAdminRules {
                 || initialProposer == initialActivator || initialProposer == initialQuarantiner
                 || initialActivator == initialQuarantiner
         ) revert IncompatibleOperationalRoles(initialAdmin);
-        if (minimumActivationDelayBlocks == 0) revert InvalidSourceBinding(FIELD_ACTIVATION_DELAY);
-
         address boundRewardWallet = IProtocolRevenueCollectorBindingV1(collector_).rewardWallet();
         if (boundRewardWallet != REWARD_WALLET) {
             revert CollectorBindingMismatch(collector_, REWARD_WALLET, boundRewardWallet);
@@ -137,7 +140,6 @@ contract ProtocolRevenueSourceRegistryV1 is AccessControlDefaultAdminRules {
 
         CHAIN_ID = block.chainid;
         collector = collector_;
-        MIN_ACTIVATION_DELAY_BLOCKS = minimumActivationDelayBlocks;
         _grantRole(SOURCE_PROPOSER_ROLE, initialProposer);
         _grantRole(SOURCE_ACTIVATOR_ROLE, initialActivator);
         _grantRole(SOURCE_QUARANTINER_ROLE, initialQuarantiner);
@@ -152,13 +154,12 @@ contract ProtocolRevenueSourceRegistryV1 is AccessControlDefaultAdminRules {
         _validateBinding(config);
         if (_registered[config.sourceId]) revert SourceAlreadyRegistered(config.sourceId);
         if (_pendingSources[config.sourceId].exists) revert ProposalAlreadyExists(config.sourceId);
+        if (config.source.code.length != 0) revert SourceAlreadyDeployedAtProposal(config.source);
 
         uint256 minimumActivationBlock = block.number + uint256(MIN_ACTIVATION_DELAY_BLOCKS);
         if (uint256(config.activationBlock) < minimumActivationBlock) {
             revert ActivationBlockTooEarly(config.activationBlock, minimumActivationBlock);
         }
-        if (config.source.code.length != 0) _assertSourceCode(config.source, config.runtimeCodeHash);
-
         proposalHash = computeProposalHash(config);
         _pendingSources[config.sourceId] = PendingSourceV1({
             config: config, proposalHash: proposalHash, proposedAtBlock: block.number.toUint64(), exists: true
@@ -179,7 +180,6 @@ contract ProtocolRevenueSourceRegistryV1 is AccessControlDefaultAdminRules {
             revert ActivationNotReached(config.activationBlock, block.number);
         }
         _assertSourceCode(config.source, config.runtimeCodeHash);
-        _assertAssetCode(config.asset);
         _assertStandardSource(config);
 
         bytes32 sourceAssetKey = computeSourceAssetKey(config.source, config.asset);
@@ -255,8 +255,8 @@ contract ProtocolRevenueSourceRegistryV1 is AccessControlDefaultAdminRules {
         if (!_registered[sourceId] || _quarantined[sourceId]) return false;
         ProtocolRevenueSourceConfigV1 storage config = _sources[sourceId];
         if (
-            block.number < uint256(config.activationBlock) || config.source.codehash != config.runtimeCodeHash
-                || (config.asset != address(0) && config.asset.code.length == 0)
+            config.asset != NATIVE_ASSET || block.number < uint256(config.activationBlock)
+                || config.source.codehash != config.runtimeCodeHash
         ) {
             return false;
         }
@@ -292,6 +292,7 @@ contract ProtocolRevenueSourceRegistryV1 is AccessControlDefaultAdminRules {
     }
 
     function computeSourceAssetKey(address source, address asset) public view returns (bytes32) {
+        if (asset != NATIVE_ASSET) revert InvalidSourceBinding(FIELD_ASSET);
         return keccak256(abi.encode(CHAIN_ID, source, asset));
     }
 
@@ -303,9 +304,7 @@ contract ProtocolRevenueSourceRegistryV1 is AccessControlDefaultAdminRules {
         if (config.runtimeCodeHash == bytes32(0)) revert InvalidSourceBinding(FIELD_RUNTIME_CODE_HASH);
         if (config.claimSelector != CLAIM_SELECTOR) revert InvalidSourceBinding(FIELD_CLAIM_SELECTOR);
         if (config.recipient != REWARD_WALLET) revert InvalidSourceBinding(FIELD_RECIPIENT);
-        if (config.asset != address(0) && config.asset.code.length == 0) {
-            revert InvalidSourceBinding(FIELD_ASSET);
-        }
+        if (config.asset != NATIVE_ASSET) revert InvalidSourceBinding(FIELD_ASSET);
         bytes32 expectedSourceId = computeSourceId(config);
         if (config.sourceId != expectedSourceId) revert SourceIdMismatch(config.sourceId, expectedSourceId);
     }
@@ -316,10 +315,6 @@ contract ProtocolRevenueSourceRegistryV1 is AccessControlDefaultAdminRules {
         if (actualCodeHash != expectedCodeHash) {
             revert SourceRuntimeCodeHashMismatch(source, expectedCodeHash, actualCodeHash);
         }
-    }
-
-    function _assertAssetCode(address asset) private view {
-        if (asset != address(0) && asset.code.length == 0) revert SourceAssetCodeMissing(asset);
     }
 
     function _assertStandardSource(ProtocolRevenueSourceConfigV1 memory config) private view {

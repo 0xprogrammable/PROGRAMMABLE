@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { Test } from "forge-std/Test.sol";
 
@@ -16,69 +13,8 @@ import { ProtocolRevenueCollectorV1 } from "../../src/protocol-revenue-vnext/Pro
 import { ProtocolRevenueSourceRegistryV1 } from "../../src/protocol-revenue-vnext/ProtocolRevenueSourceRegistryV1.sol";
 import { ProtocolRevenueClaimExecutorV1 } from "../../src/protocol-revenue-vnext/ProtocolRevenueClaimExecutorV1.sol";
 
-contract CoreMockERC20 is ERC20 {
-    constructor() ERC20("Core Mock Token", "CORE") { }
-
-    function mint(address recipient, uint256 amount) external {
-        _mint(recipient, amount);
-    }
-}
-
-contract CoreFeeOnTransferERC20 is ERC20 {
-    constructor() ERC20("Core Fee Token", "CFEE") { }
-
-    function mint(address recipient, uint256 amount) external {
-        _mint(recipient, amount);
-    }
-
-    function _update(address from, address to, uint256 value) internal override {
-        if (from == address(0) || to == address(0)) {
-            super._update(from, to, value);
-            return;
-        }
-        uint256 fee = value / 100;
-        if (fee != 0) super._update(from, address(0), fee);
-        super._update(from, to, value - fee);
-    }
-}
-
-contract CoreBombBalanceERC20 is ERC20 {
-    enum Mode {
-        Valid,
-        ReturnBomb,
-        RevertBomb
-    }
-
-    Mode public mode;
-
-    constructor() ERC20("Core Balance Bomb", "CBOMB") { }
-
-    function mint(address recipient, uint256 amount) external {
-        _mint(recipient, amount);
-    }
-
-    function setMode(Mode mode_) external {
-        mode = mode_;
-    }
-
-    function balanceOf(address account) public view override returns (uint256) {
-        if (mode == Mode.ReturnBomb) {
-            assembly ("memory-safe") {
-                return(0, 0x10000)
-            }
-        }
-        if (mode == Mode.RevertBomb) {
-            assembly ("memory-safe") {
-                revert(0, 0x10000)
-            }
-        }
-        return super.balanceOf(account);
-    }
-}
-
 contract CoreStandardFeeSource is ProgrammableProtocolFeeSourceBaseV1 {
     using Address for address payable;
-    using SafeERC20 for IERC20;
 
     receive() external payable { }
 
@@ -86,19 +22,10 @@ contract CoreStandardFeeSource is ProgrammableProtocolFeeSourceBaseV1 {
         _accrueProgrammableFee(address(0), msg.value);
     }
 
-    function accrueToken(address asset, uint256 amount) external {
-        IERC20(asset).safeTransferFrom(msg.sender, address(this), amount);
-        _accrueProgrammableFee(asset, amount);
-    }
-
     function claimProgrammableFees(address asset) external returns (uint256 amount) {
         amount = _consumeProgrammableFees(asset);
         if (amount == 0) return 0;
-        if (asset == address(0)) {
-            payable(PROGRAMMABLE_REWARD_WALLET).sendValue(amount);
-        } else {
-            IERC20(asset).safeTransfer(PROGRAMMABLE_REWARD_WALLET, amount);
-        }
+        payable(PROGRAMMABLE_REWARD_WALLET).sendValue(amount);
     }
 }
 
@@ -271,18 +198,18 @@ abstract contract CoreTestBase is Test {
     ProtocolRevenueSourceRegistryV1 internal registry;
     ProtocolRevenueClaimExecutorV1 internal executor;
 
-    uint64 internal constant ACTIVATION_DELAY = 5;
+    uint64 internal constant ACTIVATION_DELAY = 64;
     uint32 internal constant ISOLATED_CALL_GAS = 600_000;
 
     function setUp() public virtual {
+        vm.chainId(1);
         admin = makeAddr("coreAdmin");
         proposer = makeAddr("coreProposer");
         activator = makeAddr("coreActivator");
         quarantiner = makeAddr("coreQuarantiner");
         collector = new ProtocolRevenueCollectorV1();
-        registry = new ProtocolRevenueSourceRegistryV1(
-            2 days, admin, proposer, activator, quarantiner, address(collector), ACTIVATION_DELAY
-        );
+        registry =
+            new ProtocolRevenueSourceRegistryV1(2 days, admin, proposer, activator, quarantiner, address(collector));
         executor = new ProtocolRevenueClaimExecutorV1(address(registry), address(collector), ISOLATED_CALL_GAS);
         vm.deal(REWARD_WALLET, 0);
     }
@@ -305,10 +232,13 @@ abstract contract CoreTestBase is Test {
     }
 
     function _register(address source, address asset) internal returns (bytes32 sourceId) {
+        bytes memory runtime = source.code;
         ProtocolRevenueSourceConfigV1 memory config = _config(source, asset, uint64(block.number + ACTIVATION_DELAY));
+        vm.etch(source, bytes(""));
         vm.prank(proposer);
         registry.proposeSource(config);
         vm.roll(config.activationBlock);
+        vm.etch(source, runtime);
         vm.prank(activator);
         registry.activateSource(config.sourceId);
         return config.sourceId;

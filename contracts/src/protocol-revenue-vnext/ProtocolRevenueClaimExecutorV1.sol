@@ -16,11 +16,11 @@ interface IProtocolRevenueCollectorViewV1 {
 }
 
 /// @title ProtocolRevenueClaimExecutorV1
-/// @notice Permissionless, bounded executor for approved Programmable protocol-fee sources.
+/// @notice Permissionless, bounded executor for approved future Custom native-fee sources.
 /// @dev Every source and asset comes from the immutable registry binding. The executor can only invoke the canonical
 ///      `claimProgrammableFees(address)` selector, and every successful claim is proven by the actual balance delta at
-///      the fixed reward wallet plus the source's cumulative counter delta. A bounded self-call isolates ordinary
-///      source reverts and gas exhaustion from the other entries in a batch.
+///      the fixed reward wallet plus the source's cumulative counter delta. This release accepts only native ETH. A
+///      bounded self-call isolates ordinary source reverts and gas exhaustion from the other entries in a batch.
 contract ProtocolRevenueClaimExecutorV1 is ReentrancyGuardTransient {
     uint256 public constant MAX_BATCH_SIZE = 8;
     uint32 public constant MIN_ISOLATED_CALL_GAS = 150_000;
@@ -58,7 +58,7 @@ contract ProtocolRevenueClaimExecutorV1 is ReentrancyGuardTransient {
     error ResidualAccrual(bytes32 sourceId, uint256 remaining);
     error RewardBalanceDecreased(bytes32 sourceId, address asset, uint256 beforeBalance, uint256 afterBalance);
     error SourceActivationPending(bytes32 sourceId, uint64 activationBlock, uint256 currentBlock);
-    error SourceAssetCodeMissing(bytes32 sourceId, address asset);
+    error SourceAssetNotNative(bytes32 sourceId, address asset);
     error SourceBindingInvalid(bytes32 sourceId);
     error SourceCallFailed(bytes32 sourceId, bytes4 selector);
     error SourceNotRegistered(bytes32 sourceId);
@@ -266,9 +266,7 @@ contract ProtocolRevenueClaimExecutorV1 is ReentrancyGuardTransient {
         if (config.claimSelector != CLAIM_SELECTOR || config.recipient != REWARD_WALLET) {
             revert SourceBindingInvalid(sourceId);
         }
-        if (config.asset != address(0) && config.asset.code.length == 0) {
-            revert SourceAssetCodeMissing(sourceId, config.asset);
-        }
+        if (config.asset != address(0)) revert SourceAssetNotNative(sourceId, config.asset);
         if (block.number < uint256(config.activationBlock)) {
             revert SourceActivationPending(sourceId, config.activationBlock, block.number);
         }

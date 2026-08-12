@@ -1,20 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { Vm } from "forge-std/Vm.sol";
 
+import {
+    ProgrammableProtocolFeeSourceBaseV1
+} from "../../src/protocol-revenue-vnext/IProgrammableProtocolFeeSourceV1.sol";
 import { ProtocolRevenueCollectorV1 } from "../../src/protocol-revenue-vnext/ProtocolRevenueCollectorV1.sol";
 import { ProtocolRevenueClaimExecutorV1 } from "../../src/protocol-revenue-vnext/ProtocolRevenueClaimExecutorV1.sol";
-import {
-    CoreBombFeeSource,
-    CoreBombBalanceERC20,
-    CoreFaultyFeeSource,
-    CoreFeeOnTransferERC20,
-    CoreMockERC20,
-    CoreStandardFeeSource,
-    CoreTestBase
-} from "./CoreTestBase.t.sol";
+import { CoreBombFeeSource, CoreFaultyFeeSource, CoreStandardFeeSource, CoreTestBase } from "./CoreTestBase.t.sol";
 
 contract CoreReentrantRewardWallet {
     ProtocolRevenueClaimExecutorV1 internal immutable EXECUTOR;
@@ -98,21 +92,30 @@ contract CoreExecutorTest is CoreTestBase {
         assertEq(executor.totalExecutedByAsset(address(0)), 0.35 ether);
     }
 
-    function test_claimsErc20RevenueUsingActualRewardWalletDelta() public {
+    function test_nativeSourceBaseRejectsEveryNonNativeAssetArgument() public {
         CoreStandardFeeSource source = new CoreStandardFeeSource();
-        CoreMockERC20 token = new CoreMockERC20();
-        bytes32 sourceId = _register(address(source), address(token));
-        token.mint(address(this), 900 ether);
-        token.approve(address(source), 900 ether);
-        source.accrueToken(address(token), 900 ether);
+        address unsupportedAsset = makeAddr("unsupportedAsset");
 
-        uint256 claimed = executor.claimSource(sourceId);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ProgrammableProtocolFeeSourceBaseV1.UnsupportedProtocolRevenueAsset.selector, unsupportedAsset
+            )
+        );
+        source.accruedProgrammableFees(unsupportedAsset);
 
-        assertEq(claimed, 900 ether);
-        assertEq(token.balanceOf(REWARD_WALLET), 900 ether);
-        assertEq(token.balanceOf(address(collector)), 0);
-        assertEq(executor.totalExecutedByAsset(address(token)), 900 ether);
-        assertEq(executor.totalObservedByAsset(address(token)), 900 ether);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ProgrammableProtocolFeeSourceBaseV1.UnsupportedProtocolRevenueAsset.selector, unsupportedAsset
+            )
+        );
+        source.totalProgrammableFeesClaimed(unsupportedAsset);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ProgrammableProtocolFeeSourceBaseV1.UnsupportedProtocolRevenueAsset.selector, unsupportedAsset
+            )
+        );
+        source.claimProgrammableFees(unsupportedAsset);
     }
 
     function test_observesPermissionlessThirdPartyClaimCounterWithoutDoubleCounting() public {
@@ -254,29 +257,6 @@ contract CoreExecutorTest is CoreTestBase {
         assertEq(malformed.accruedProgrammableFees(address(0)), 0.14 ether);
     }
 
-    function test_batchBoundsMaliciousTokenBalanceReturnDataAndContinues() public {
-        CoreStandardFeeSource malformedAssetSource = new CoreStandardFeeSource();
-        CoreStandardFeeSource healthy = new CoreStandardFeeSource();
-        CoreBombBalanceERC20 malformedAsset = new CoreBombBalanceERC20();
-        bytes32 malformedId = _register(address(malformedAssetSource), address(malformedAsset));
-        bytes32 healthyId = _register(address(healthy), address(0));
-        malformedAsset.mint(address(this), 20 ether);
-        malformedAsset.approve(address(malformedAssetSource), 20 ether);
-        malformedAssetSource.accrueToken(address(malformedAsset), 20 ether);
-        healthy.accrueNative{ value: 0.16 ether }();
-        malformedAsset.setMode(CoreBombBalanceERC20.Mode.ReturnBomb);
-
-        bytes32[] memory sourceIds = new bytes32[](2);
-        sourceIds[0] = malformedId;
-        sourceIds[1] = healthyId;
-        (uint256 succeeded, uint256 failed) = executor.claimBatch(sourceIds);
-
-        assertEq(succeeded, 1);
-        assertEq(failed, 1);
-        assertEq(malformedAssetSource.accruedProgrammableFees(address(malformedAsset)), 20 ether);
-        assertEq(REWARD_WALLET.balance, 0.16 ether);
-    }
-
     function test_batchTreatsDuplicateAsFailureWithoutSecondClaim() public {
         CoreStandardFeeSource source = new CoreStandardFeeSource();
         bytes32 sourceId = _register(address(source), address(0));
@@ -335,46 +315,6 @@ contract CoreExecutorTest is CoreTestBase {
         assertEq(REWARD_WALLET.balance, 0);
     }
 
-    function test_postActivationAssetCodeLossIsIntegrityFailureNotEmptyClaim() public {
-        CoreStandardFeeSource source = new CoreStandardFeeSource();
-        CoreMockERC20 token = new CoreMockERC20();
-        bytes32 sourceId = _register(address(source), address(token));
-        vm.etch(address(token), bytes(""));
-
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                ProtocolRevenueClaimExecutorV1.SourceAssetCodeMissing.selector, sourceId, address(token)
-            )
-        );
-        executor.claimSource(sourceId);
-        assertEq(executor.totalObservedBySource(sourceId), 0);
-        assertEq(executor.totalExecutedBySource(sourceId), 0);
-    }
-
-    function test_feeOnTransferAssetFailsClosedWithoutBlockingHealthySource() public {
-        CoreStandardFeeSource unsupportedSource = new CoreStandardFeeSource();
-        CoreStandardFeeSource healthy = new CoreStandardFeeSource();
-        CoreFeeOnTransferERC20 feeToken = new CoreFeeOnTransferERC20();
-        bytes32 unsupportedId = _register(address(unsupportedSource), address(feeToken));
-        bytes32 healthyId = _register(address(healthy), address(0));
-        feeToken.mint(address(this), 100 ether);
-        feeToken.approve(address(unsupportedSource), 100 ether);
-        unsupportedSource.accrueToken(address(feeToken), 100 ether);
-        healthy.accrueNative{ value: 0.18 ether }();
-        assertEq(feeToken.balanceOf(address(unsupportedSource)), 99 ether);
-
-        bytes32[] memory sourceIds = new bytes32[](2);
-        sourceIds[0] = unsupportedId;
-        sourceIds[1] = healthyId;
-        (uint256 succeeded, uint256 failed) = executor.claimBatch(sourceIds);
-
-        assertEq(succeeded, 1);
-        assertEq(failed, 1);
-        assertEq(unsupportedSource.accruedProgrammableFees(address(feeToken)), 100 ether);
-        assertEq(feeToken.balanceOf(REWARD_WALLET), 0);
-        assertEq(REWARD_WALLET.balance, 0.18 ether);
-    }
-
     function test_rewardWalletCallbackCannotReenterClaimExecutor() public {
         CoreStandardFeeSource source = new CoreStandardFeeSource();
         bytes32 sourceId = _register(address(source), address(0));
@@ -392,7 +332,7 @@ contract CoreExecutorTest is CoreTestBase {
         assertEq(source.totalProgrammableFeesClaimed(address(0)), 0.19 ether);
     }
 
-    function test_collectorForwardsForcedNativeAndStrayTokenOnlyToRewardWallet() public {
+    function test_collectorForwardsForcedNativeAndRejectsNonNativeAssets() public {
         CoreForceNative forceNative = new CoreForceNative{ value: 0.25 ether }();
         forceNative.force(payable(address(collector)));
         assertEq(address(collector).balance, 0.25 ether);
@@ -400,11 +340,19 @@ contract CoreExecutorTest is CoreTestBase {
         assertEq(address(collector).balance, 0);
         assertEq(REWARD_WALLET.balance, 0.25 ether);
 
-        CoreMockERC20 token = new CoreMockERC20();
-        token.mint(address(collector), 15 ether);
-        collector.forwardStrayAsset(address(token));
-        assertEq(token.balanceOf(address(collector)), 0);
-        assertEq(token.balanceOf(REWARD_WALLET), 15 ether);
+        address unsupportedAsset = makeAddr("unsupportedCollectorAsset");
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ProtocolRevenueCollectorV1.UnsupportedProtocolRevenueAsset.selector, unsupportedAsset
+            )
+        );
+        collector.forwardStrayAsset(unsupportedAsset);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ProtocolRevenueCollectorV1.UnsupportedProtocolRevenueAsset.selector, unsupportedAsset
+            )
+        );
+        collector.rewardWalletBalance(unsupportedAsset);
     }
 
     function test_emptyStandardClaimIsIdempotent() public {

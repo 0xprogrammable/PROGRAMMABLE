@@ -8,13 +8,7 @@ import {
     ProtocolRevenueSourceConfigV1
 } from "../../src/protocol-revenue-vnext/IProgrammableProtocolFeeSourceV1.sol";
 import { ProtocolRevenueSourceRegistryV1 } from "../../src/protocol-revenue-vnext/ProtocolRevenueSourceRegistryV1.sol";
-import {
-    CoreBombFeeSource,
-    CoreMockERC20,
-    CoreStandardFeeSource,
-    CoreStandardFeeSourceV2,
-    CoreTestBase
-} from "./CoreTestBase.t.sol";
+import { CoreBombFeeSource, CoreStandardFeeSource, CoreStandardFeeSourceV2, CoreTestBase } from "./CoreTestBase.t.sol";
 
 contract CoreRegistryTest is CoreTestBase {
     function test_exactFrozenConstantsAndIdentityDomains() public view {
@@ -32,10 +26,19 @@ contract CoreRegistryTest is CoreTestBase {
         assertEq(registry.SOURCE_INTERFACE_ID(), bytes4(0x808cb67a));
         assertEq(registry.CLAIM_SELECTOR(), bytes4(0xb9d2fad0));
         assertEq(registry.REGISTRY_GENERATION(), 1);
+        assertEq(registry.MIN_ACTIVATION_DELAY_BLOCKS(), 64);
+        assertEq(registry.SUPPORTED_CHAIN_ID(), 1);
+        assertEq(registry.NATIVE_ASSET(), address(0));
         assertEq(registry.CHAIN_ID(), block.chainid);
         assertEq(registry.REWARD_WALLET(), REWARD_WALLET);
         assertEq(collector.REWARD_WALLET(), REWARD_WALLET);
         assertEq(executor.REWARD_WALLET(), REWARD_WALLET);
+    }
+
+    function test_registryDeploymentRejectsNonMainnetChain() public {
+        vm.chainId(8453);
+        vm.expectRevert(abi.encodeWithSelector(ProtocolRevenueSourceRegistryV1.UnsupportedChain.selector, 8453, 1));
+        new ProtocolRevenueSourceRegistryV1(2 days, admin, proposer, activator, quarantiner, address(collector));
     }
 
     function test_sourceAndProposalHashesUseExactFrozenFormulas() public {
@@ -75,6 +78,8 @@ contract CoreRegistryTest is CoreTestBase {
         CoreStandardFeeSource source = new CoreStandardFeeSource();
         ProtocolRevenueSourceConfigV1 memory config =
             _config(address(source), address(0), uint64(block.number + ACTIVATION_DELAY));
+        bytes memory runtime = address(source).code;
+        vm.etch(address(source), bytes(""));
 
         vm.prank(proposer);
         bytes32 proposalHash = registry.proposeSource(config);
@@ -101,6 +106,7 @@ contract CoreRegistryTest is CoreTestBase {
         registry.activateSource(config.sourceId);
 
         vm.roll(config.activationBlock);
+        vm.etch(address(source), runtime);
         vm.prank(activator);
         registry.activateSource(config.sourceId);
 
@@ -143,10 +149,25 @@ contract CoreRegistryTest is CoreTestBase {
         assertTrue(registry.isExecutable(config.sourceId));
     }
 
+    function test_proposalRejectsAlreadyDeployedSource() public {
+        CoreStandardFeeSource source = new CoreStandardFeeSource();
+        ProtocolRevenueSourceConfigV1 memory config =
+            _config(address(source), address(0), uint64(block.number + ACTIVATION_DELAY));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ProtocolRevenueSourceRegistryV1.SourceAlreadyDeployedAtProposal.selector, address(source)
+            )
+        );
+        vm.prank(proposer);
+        registry.proposeSource(config);
+    }
+
     function test_activationRejectsRuntimeCodeDrift() public {
         CoreStandardFeeSource source = new CoreStandardFeeSource();
         ProtocolRevenueSourceConfigV1 memory config =
             _config(address(source), address(0), uint64(block.number + ACTIVATION_DELAY));
+        vm.etch(address(source), bytes(""));
         vm.prank(proposer);
         registry.proposeSource(config);
         vm.roll(config.activationBlock);
@@ -168,8 +189,11 @@ contract CoreRegistryTest is CoreTestBase {
         CoreBombFeeSource source = new CoreBombFeeSource();
         ProtocolRevenueSourceConfigV1 memory config =
             _config(address(source), address(0), uint64(block.number + ACTIVATION_DELAY));
+        bytes memory runtime = address(source).code;
+        vm.etch(address(source), bytes(""));
         vm.prank(proposer);
         registry.proposeSource(config);
+        vm.etch(address(source), runtime);
         source.setMode(CoreBombFeeSource.Mode.OverlongViews);
         vm.roll(config.activationBlock);
 
@@ -192,21 +216,23 @@ contract CoreRegistryTest is CoreTestBase {
         assertFalse(registry.isExecutable(config.sourceId));
     }
 
-    function test_activationRechecksErc20AssetCode() public {
+    function test_registrationAndLookupRejectNonNativeAsset() public {
         CoreStandardFeeSource source = new CoreStandardFeeSource();
-        CoreMockERC20 token = new CoreMockERC20();
+        address quoteAsset = makeAddr("unsupportedQuoteAsset");
         ProtocolRevenueSourceConfigV1 memory config =
-            _config(address(source), address(token), uint64(block.number + ACTIVATION_DELAY));
-        vm.prank(proposer);
-        registry.proposeSource(config);
-        vm.etch(address(token), bytes(""));
-        vm.roll(config.activationBlock);
+            _config(address(source), quoteAsset, uint64(block.number + ACTIVATION_DELAY));
+        bytes32 assetField = "asset";
 
         vm.expectRevert(
-            abi.encodeWithSelector(ProtocolRevenueSourceRegistryV1.SourceAssetCodeMissing.selector, address(token))
+            abi.encodeWithSelector(ProtocolRevenueSourceRegistryV1.InvalidSourceBinding.selector, assetField)
         );
-        vm.prank(activator);
-        registry.activateSource(config.sourceId);
+        vm.prank(proposer);
+        registry.proposeSource(config);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(ProtocolRevenueSourceRegistryV1.InvalidSourceBinding.selector, assetField)
+        );
+        registry.sourceIdFor(address(source), quoteAsset);
     }
 
     function test_activationRejectsSourceWithHistoricalClaims() public {
@@ -215,9 +241,12 @@ contract CoreRegistryTest is CoreTestBase {
         source.claimProgrammableFees(address(0));
         ProtocolRevenueSourceConfigV1 memory config =
             _config(address(source), address(0), uint64(block.number + ACTIVATION_DELAY));
+        bytes memory runtime = address(source).code;
+        vm.etch(address(source), bytes(""));
         vm.prank(proposer);
         registry.proposeSource(config);
         vm.roll(config.activationBlock);
+        vm.etch(address(source), runtime);
 
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -254,13 +283,16 @@ contract CoreRegistryTest is CoreTestBase {
         assertEq(registry.sourceIdFor(address(source), address(0)), originalSourceId);
 
         CoreStandardFeeSourceV2 replacementImplementation = new CoreStandardFeeSourceV2();
-        vm.etch(address(source), address(replacementImplementation).code);
+        bytes memory replacementRuntime = address(replacementImplementation).code;
+        vm.etch(address(source), replacementRuntime);
         ProtocolRevenueSourceConfigV1 memory replacement =
             _config(address(source), address(0), uint64(block.number + ACTIVATION_DELAY));
         assertNotEq(replacement.sourceId, originalSourceId);
+        vm.etch(address(source), bytes(""));
         vm.prank(proposer);
         registry.proposeSource(replacement);
         vm.roll(replacement.activationBlock);
+        vm.etch(address(source), replacementRuntime);
 
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -332,6 +364,7 @@ contract CoreRegistryTest is CoreTestBase {
         // forge-lint: disable-next-line(unsafe-typecast)
         uint64 supplied = uint64(block.number + ACTIVATION_DELAY - missing);
         ProtocolRevenueSourceConfigV1 memory config = _config(address(source), address(0), supplied);
+        vm.etch(address(source), bytes(""));
         vm.expectRevert(
             abi.encodeWithSelector(
                 ProtocolRevenueSourceRegistryV1.ActivationBlockTooEarly.selector,
