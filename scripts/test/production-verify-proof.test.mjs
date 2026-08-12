@@ -7,6 +7,7 @@ import {
   PRODUCTION_REPOSITORY_ID,
   PRODUCTION_VERIFY_PROOF_MAX_AGE_MS,
   REQUIRED_PRODUCTION_VERIFY_CHECKS,
+  VERIFY_AGGREGATE_JOB_NAME,
   VERIFY_PROOF_JOB_NAME,
   VERIFY_SCOPE_JOB_NAME,
   VERIFY_WORKFLOW_PATH,
@@ -94,6 +95,22 @@ function validApiFixtures() {
       completed_at: "2026-08-11T18:04:40Z",
       runner_id: 1_000_010,
       runner_name: "GitHub Actions 1000010",
+      runner_group_id: 0,
+      runner_group_name: "GitHub Actions",
+      labels: ["ubuntu-latest"],
+    },
+    {
+      id: 90_101,
+      run_id: RUN_ID,
+      run_attempt: RUN_ATTEMPT,
+      head_sha: COMMIT,
+      name: VERIFY_AGGREGATE_JOB_NAME,
+      status: "completed",
+      conclusion: "success",
+      started_at: "2026-08-11T18:04:41Z",
+      completed_at: "2026-08-11T18:04:42Z",
+      runner_id: 1_000_011,
+      runner_name: "GitHub Actions 1000011",
       runner_group_id: 0,
       runner_group_name: "GitHub Actions",
       labels: ["ubuntu-latest"],
@@ -329,6 +346,12 @@ test("resolver rejects branch, workflow, and run identity drift", async () => {
 test("resolver rejects missing, failed, skipped, unexpected, or self-hosted jobs", async () => {
   const mutations = [
     (fixtures) => { fixtures.jobs.jobs.pop(); fixtures.jobs.total_count -= 1; },
+    (fixtures) => {
+      fixtures.jobs.jobs = fixtures.jobs.jobs.filter(
+        ({ name }) => name !== VERIFY_AGGREGATE_JOB_NAME,
+      );
+      fixtures.jobs.total_count -= 1;
+    },
     (fixtures) => { fixtures.jobs.jobs[0].conclusion = "failure"; },
     (fixtures) => { fixtures.jobs.jobs[1].conclusion = "skipped"; },
     (fixtures) => { fixtures.jobs.jobs[2].name = "Unexpected"; },

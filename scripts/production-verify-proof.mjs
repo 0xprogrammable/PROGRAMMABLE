@@ -17,6 +17,7 @@ export const PRODUCTION_REF = "refs/heads/production";
 export const VERIFY_WORKFLOW_PATH = ".github/workflows/verify.yml";
 export const VERIFY_WORKFLOW_NAME = "Verify";
 export const VERIFY_SCOPE_JOB_NAME = "Change scope";
+export const VERIFY_AGGREGATE_JOB_NAME = "Verify aggregate";
 export const VERIFY_PROOF_JOB_NAME = "Bind full production Verify proof";
 
 export const REQUIRED_PRODUCTION_VERIFY_CHECKS = Object.freeze([
@@ -358,6 +359,7 @@ function validateVerifyJobs(response, run) {
     VERIFY_SCOPE_JOB_NAME,
     ...REQUIRED_PRODUCTION_VERIFY_CHECKS.map(({ name }) => name),
     VERIFY_PROOF_JOB_NAME,
+    VERIFY_AGGREGATE_JOB_NAME,
   ];
   if (
     !isObject(response)
