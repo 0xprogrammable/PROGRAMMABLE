@@ -807,6 +807,14 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
   }, [applicantRefreshUserGate, refreshUser]);
   const { reauthorize } = useOAuthTokens();
   const { identityToken } = useIdentityToken();
+  // Keep the latest hook value available to stable Applicant callbacks. The
+  // callback must not depend on the token itself: Privy updates this value
+  // after `refreshUser()`, and changing the callback identity would restart
+  // the discovery effect while its first request is still settling.
+  const applicantIdentityTokenRef = useRef<string | null>(identityToken);
+  useEffect(() => {
+    applicantIdentityTokenRef.current = identityToken;
+  }, [identityToken]);
   const { sendTransaction: sendPrivyTransaction } = usePrivySendTransaction();
   const { signMessage: signPrivyMessage } = usePrivySignMessage();
   const { ready: walletsReady, wallets } = useWallets();
@@ -960,11 +968,23 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
         readCurrentAuthority: () => applicantAuthorityRef.current,
         refreshUser: () => applicantRefreshUserGate.refresh(authorityKey),
         getAccessToken,
-        getIdentityToken: getPrivyIdentityToken,
+        // `refreshUser()` already performs Privy's `/users/me` read and updates
+        // its identity-token store. Calling the exported global
+        // `getIdentityToken()` here would perform a second `/users/me` read and
+        // deterministically hit Privy's one-request rate bucket. Applicant
+        // sessions therefore consume only the hook-cached token; if hydration
+        // has not exposed it yet, the session fails closed and the next retry
+        // can use the updated hook value.
+        getIdentityToken: async () => applicantIdentityTokenRef.current,
         requirement,
       });
     },
-    [activeAuthenticated, applicantRefreshUserGate, getAccessToken, ready],
+    [
+      activeAuthenticated,
+      applicantRefreshUserGate,
+      getAccessToken,
+      ready,
+    ],
   );
   const reauthorizeGithub = useCallback(async () => {
     if (!ready || !activeAuthenticated || !githubConnected) {

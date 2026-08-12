@@ -386,7 +386,16 @@ describe("wallet recovery state", () => {
       "utf8",
     );
     expect(provider).toContain("const { refreshUser } = useUser();");
-    expect(provider).toContain("getIdentityToken: getPrivyIdentityToken");
+    expect(provider).toContain(
+      "getIdentityToken: async () => applicantIdentityTokenRef.current",
+    );
+    expect(provider).toContain(
+      "changing the callback identity would restart\n  // the discovery effect",
+    );
+    expect(provider).toContain("perform a second `/users/me` read");
+    expect(provider).not.toContain(
+      "getIdentityToken: getPrivyIdentityToken,\n        requirement,",
+    );
     expect(provider).toContain("const { reauthorize } = useOAuthTokens();");
     expect(provider).toContain('await reauthorize({ provider: "github" });');
     expect(provider).not.toContain("onOAuthTokenGrant");
