@@ -30,12 +30,14 @@
 }
 
 .panel {
-  background: rgba(8, 5, 18, 0.18);
-  border: 1px solid rgba(248, 240, 233, 0.32);
+  background: rgba(8, 5, 18, 0.3);
+  border: 0;
   border-radius: clamp(20px, 2.2vw, 32px);
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.16) inset,
-    0 24px 80px rgba(0, 0, 0, 0.34);
+    inset 0 0 86px rgba(181, 109, 208, 0.12),
+    inset 0 -42px 110px rgba(4, 2, 15, 0.28),
+    0 28px 90px rgba(0, 0, 0, 0.52),
+    0 10px 46px rgba(116, 64, 156, 0.12);
   display: flex;
   flex-direction: column;
   height: min(82svh, 780px);
@@ -49,13 +51,7 @@
 }
 
 .panel::after {
-  border: 1px solid rgba(248, 240, 233, 0.25);
-  border-radius: inherit;
-  content: "";
-  inset: 10px;
-  pointer-events: none;
-  position: absolute;
-  z-index: 7;
+  display: none;
 }
 
 .panelArt,
@@ -105,14 +101,20 @@
 
 .panelTint {
   background:
+    linear-gradient(
+      180deg,
+      rgba(4, 2, 15, 0.12),
+      rgba(8, 3, 20, 0.02) 42%,
+      rgba(4, 2, 15, 0.28)
+    ),
     radial-gradient(
       circle at 22% 78%,
-      rgba(198, 102, 156, 0.12),
+      rgba(198, 102, 156, 0.18),
       transparent 32%
     ),
     radial-gradient(
       circle at 78% 48%,
-      rgba(119, 91, 177, 0.12),
+      rgba(119, 91, 177, 0.16),
       transparent 34%
     );
   z-index: 1;
@@ -133,13 +135,13 @@
 
 .flowerLeft {
   left: -14%;
-  transform: rotate(-8deg);
+  transform: translate3d(-2%, 2%, 0) rotate(-14deg);
   transform-origin: 54% 100%;
 }
 
 .flowerRight {
   right: -15%;
-  transform: scaleX(-1) rotate(-9deg);
+  transform: translate3d(2%, 2%, 0) scaleX(-1) rotate(13deg);
   transform-origin: 54% 100%;
 }
 
@@ -275,9 +277,7 @@
 }
 
 .panelRule {
-  background: rgba(248, 240, 233, 0.22);
-  flex: 0 0 1px;
-  margin-inline: clamp(20px, 4.6vw, 72px);
+  display: none;
 }
 
 .hero {
@@ -315,7 +315,7 @@
   display: block;
   font-size: clamp(58px, 7.2vw, 108px);
   font-weight: 560;
-  letter-spacing: -0.075em;
+  letter-spacing: -0.045em;
   line-height: 0.9;
   margin: 0;
   max-width: none;
@@ -365,44 +365,41 @@
 .primaryAction,
 .secondaryAction {
   align-items: center;
-  border-radius: 999px;
   cursor: pointer;
   display: inline-flex;
   font-size: 16px;
   font-weight: 600;
   justify-content: center;
-  min-height: 48px;
-  padding: 12px 20px;
+  min-height: 44px;
+  padding: 10px 6px;
   transition:
-    background 180ms var(--ease-standard),
-    border-color 180ms var(--ease-standard),
     color 180ms var(--ease-standard),
+    filter 180ms var(--ease-standard),
     transform 180ms var(--ease-standard);
 }
 
 .primaryAction {
-  background: var(--ivory);
-  color: #17101b;
-}
-
-.primaryAction:hover {
-  background: #fffaf5;
-  transform: translateY(-2px);
-}
-
-.secondaryAction {
-  border: 1px solid var(--line-strong);
   color: var(--ivory);
 }
 
+.primaryAction:hover {
+  color: #fffaf5;
+  filter: drop-shadow(0 0 12px rgba(231, 134, 178, 0.34));
+  transform: translateY(-1px);
+}
+
+.secondaryAction {
+  color: var(--ivory-soft);
+}
+
 .secondaryAction:hover {
-  background: rgba(248, 240, 233, 0.12);
-  border-color: rgba(248, 240, 233, 0.52);
-  transform: translateY(-2px);
+  color: var(--ivory);
+  filter: drop-shadow(0 0 12px rgba(231, 134, 178, 0.22));
+  transform: translateY(-1px);
 }
 
 .footer {
-  border-top: 1px solid rgba(248, 240, 233, 0.28);
+  border-top: 0;
   flex: 0 0 auto;
   gap: 20px;
   justify-content: center;
@@ -441,8 +438,12 @@
   color: var(--ivory-dim);
   display: inline-flex;
   justify-content: center;
-  min-height: 44px;
-  padding: 8px;
+  min-height: 48px;
+  padding: 6px;
+  transition:
+    color 180ms var(--ease-standard),
+    filter 180ms var(--ease-standard),
+    transform 180ms var(--ease-standard);
 }
 
 /* Retained as a compatibility hook for shared landing-page contracts. */
@@ -454,20 +455,26 @@
 }
 
 .socialLink {
-  height: 44px;
-  width: 44px;
+  height: 48px;
+  width: 48px;
 }
 
 .socialLink svg,
 .socialLogo {
   display: block;
-  height: 28px;
-  width: 28px;
+  height: 32px;
+  width: 32px;
 }
 
 .socialLogo {
-  opacity: 0.76;
+  opacity: 0.88;
   object-fit: contain;
+}
+
+.socialLink:hover {
+  color: var(--ivory);
+  filter: drop-shadow(0 0 11px rgba(231, 134, 178, 0.38));
+  transform: translateY(-2px);
 }
 
 .srOnly {
@@ -557,6 +564,7 @@
 
   .hero h1 {
     font-size: clamp(32px, 9.2vw, 44px);
+    letter-spacing: -0.04em;
     line-height: 0.96;
   }
 
@@ -655,8 +663,14 @@
   }
 
   .socialLink {
-    height: 40px;
-    width: 40px;
+    height: 44px;
+    width: 44px;
+  }
+
+  .socialLink svg,
+  .socialLogo {
+    height: 28px;
+    width: 28px;
   }
 }
 
@@ -698,8 +712,7 @@
     transform: none;
   }
 
-  .flowerLeft,
-  .flowerRight {
+  .socialLink:hover {
     transform: none;
   }
 }

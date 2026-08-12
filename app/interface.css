@@ -260,7 +260,7 @@ body:not(:has(.landing-page-root)):not(:has([data-docs-shell]))
   outline: 0;
 }
 
-.route-transition h1[tabindex="-1"]:focus {
+.route-transition h1[tabindex="-1"]:focus-visible {
   outline: 2px solid var(--brand-ivory);
   outline-offset: 6px;
 }

@@ -2,9 +2,9 @@
   -webkit-backdrop-filter: var(--liquid-glass-backdrop);
   backdrop-filter: var(--liquid-glass-backdrop);
   background: var(--liquid-glass-surface-background);
-  border: 1px solid var(--liquid-glass-border);
+  border: 0;
   border-radius: 24px;
-  box-shadow: var(--liquid-glass-shadow);
+  box-shadow: 0 20px 56px rgb(1 1 3 / 0.22);
   display: flex;
   flex-direction: column;
   height: 100%;

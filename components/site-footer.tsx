@@ -67,9 +67,6 @@ export function SiteFooter() {
             />
             <span>Programmable</span>
           </Link>
-          <p className={styles.tagline}>
-            Explore, create, and track tokens built on Uniswap v4.
-          </p>
           <p className={styles.copyright}>© 2026 Programmable</p>
         </section>
 

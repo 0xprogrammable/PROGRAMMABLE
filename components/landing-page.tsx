@@ -67,8 +67,6 @@ export function LandingPage() {
             </Link>
           </header>
 
-          <div className={styles.panelRule} aria-hidden="true" />
-
           <div className={`${styles.hero} ${styles.panelBody}`}>
             <div className={`${styles.heroCopy} ${styles.content}`}>
               <h1

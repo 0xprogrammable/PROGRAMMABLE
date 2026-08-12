@@ -1612,14 +1612,10 @@ export function ExploreView() {
     <>
       <div className={`${styles.page} explore-page page-width`}>
         <header className={styles.pageHeading}>
-          <p className={styles.pageEyebrow}>Programmable / Explore</p>
           <h1 aria-label="Explore programmable launches">
             <span>Explore programmable</span>
             <span>launches</span>
           </h1>
-          <p className={styles.pageDescription}>
-            Find tokens by name, model, valuation or social presence.
-          </p>
         </header>
 
         <section
@@ -1630,7 +1626,7 @@ export function ExploreView() {
           <div className={styles.runnersIntro}>
             {hasPublicTokens ? (
               <div className="token-section-heading">
-                <h2 className={styles.sectionTitle}>Launch index</h2>
+                <h2 className="sr-only">Launches</h2>
                 <div className="token-toolbar">
                   <div
                     className="token-search liquid-glass-control"

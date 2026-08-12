@@ -25,22 +25,11 @@
   justify-content: center;
   margin-inline: auto;
   max-width: 1080px;
-  min-height: clamp(216px, 25svh, 240px);
-  padding: clamp(32px, 4svh, 48px) 0 32px;
+  min-height: clamp(164px, 19svh, 196px);
+  padding: clamp(28px, 4svh, 42px) 0 28px;
   position: relative;
   text-align: center;
   width: 100%;
-}
-
-.pageEyebrow {
-  color: var(--explore-ivory-muted);
-  font-family: var(--font-instrument), sans-serif;
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.12em;
-  line-height: 1.2;
-  margin: 0 0 16px;
-  text-transform: uppercase;
 }
 
 .pageHeading h1 {
@@ -50,7 +39,7 @@
   flex-direction: column;
   font-size: clamp(48px, 4.7vw, 68px);
   font-weight: 430;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.035em;
   line-height: 0.96;
   margin: 0;
   max-width: 100%;
@@ -64,17 +53,6 @@
   max-width: 100%;
   text-align: center;
   width: max-content;
-}
-
-.pageDescription {
-  color: var(--explore-ivory-soft);
-  font-size: 16px;
-  font-weight: 430;
-  line-height: 1.5;
-  margin: 20px 0 0;
-  max-width: 54ch;
-  text-shadow: 0 2px 18px rgba(1, 5, 20, 0.58);
-  text-wrap: pretty;
 }
 
 .runnersSection {
@@ -101,15 +79,6 @@
   justify-content: center;
   min-height: 0;
   width: 100%;
-}
-
-.sectionTitle {
-  color: var(--explore-ivory);
-  font-size: 18px;
-  font-weight: 540;
-  letter-spacing: -0.025em;
-  line-height: 1.2;
-  margin: 0 0 14px;
 }
 
 .runnersIntro :global(.token-toolbar) {
@@ -342,11 +311,9 @@
   -webkit-backdrop-filter: blur(24px) saturate(1.08);
   backdrop-filter: blur(24px) saturate(1.08);
   background: rgba(248, 240, 233, 0.1);
-  border: 1px solid var(--explore-glass-border);
+  border: 0;
   border-radius: 24px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    0 18px 54px rgba(1, 1, 3, 0.26);
+  box-shadow: 0 18px 54px rgba(1, 1, 3, 0.26);
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -356,7 +323,6 @@
   position: relative;
   transition:
     background-color 200ms cubic-bezier(0.23, 1, 0.32, 1),
-    border-color 200ms cubic-bezier(0.23, 1, 0.32, 1),
     box-shadow 200ms cubic-bezier(0.23, 1, 0.32, 1),
     transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
   width: 100%;
@@ -383,7 +349,7 @@
   background: #010103;
   border: 0;
   border-radius: 18px;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  box-shadow: none;
   contain: paint;
   isolation: isolate;
   line-height: 0;
@@ -596,11 +562,9 @@
   align-items: center;
   backdrop-filter: blur(24px) saturate(1.08);
   background: rgba(248, 240, 233, 0.1);
-  border: 1px solid var(--explore-glass-border);
+  border: 0;
   border-radius: 24px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    0 18px 54px rgba(1, 1, 3, 0.24);
+  box-shadow: 0 18px 54px rgba(1, 1, 3, 0.24);
   color: var(--explore-ivory-soft);
   display: flex;
   flex-wrap: wrap;
@@ -637,11 +601,9 @@
   align-items: end;
   backdrop-filter: blur(24px) saturate(1.08);
   background: rgba(248, 240, 233, 0.1);
-  border: 1px solid var(--explore-glass-border);
+  border: 0;
   border-radius: 24px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    0 18px 54px rgba(1, 1, 3, 0.24);
+  box-shadow: 0 18px 54px rgba(1, 1, 3, 0.24);
   display: grid;
   gap: 40px;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -698,10 +660,7 @@
 @media (hover: hover) and (pointer: fine) {
   .runnerCard:has(a.runnerHitArea):hover {
     background: rgba(248, 240, 233, 0.14);
-    border-color: var(--explore-glass-border-strong);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.2),
-      0 22px 58px rgba(1, 1, 3, 0.3);
+    box-shadow: 0 22px 58px rgba(1, 1, 3, 0.3);
     transform: translate3d(0, -2px, 0);
   }
 
@@ -779,31 +738,21 @@
 
 @media (max-width: 700px) {
   .pageHeading {
-    min-height: 208px;
-    padding: 28px 0 24px;
+    min-height: 156px;
+    padding: 24px 0 20px;
   }
 
   .pageHeading h1 {
     font-size: clamp(40px, 11.4vw, 52px);
-    letter-spacing: -0.044em;
+    letter-spacing: -0.028em;
     line-height: 0.98;
     max-width: 16ch;
     overflow-wrap: break-word;
     white-space: normal;
   }
 
-  .pageEyebrow {
-    margin-bottom: 14px;
-  }
-
   .pageHeading h1 span {
     width: auto;
-  }
-
-  .pageDescription {
-    font-size: 15px;
-    margin-top: 16px;
-    max-width: 35ch;
   }
 
   .runnersSection {
@@ -976,17 +925,12 @@
 
 @media (max-width: 420px) {
   .pageHeading {
-    min-height: 196px;
+    min-height: 146px;
     padding-top: 24px;
   }
 
   .pageHeading h1 {
     font-size: clamp(38px, 11vw, 44px);
-  }
-
-  .pageDescription {
-    font-size: 14px;
-    max-width: 31ch;
   }
 
   .runnerHitArea,

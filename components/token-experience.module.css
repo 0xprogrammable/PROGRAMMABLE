@@ -1954,3 +1954,17 @@
     animation: none;
   }
 }
+
+/* Keep the token workspace tactile without outlining every nested surface.
+ * Address, input and action controls retain their explicit affordances. */
+.image,
+.launchRecord,
+.deepSummary,
+.customMarketPanel,
+.customAuthorityPanel,
+.customProvenancePanel,
+.tradeShell,
+.reviewOutput {
+  border-color: transparent;
+  box-shadow: 0 20px 56px rgb(0 0 0 / 0.22);
+}
