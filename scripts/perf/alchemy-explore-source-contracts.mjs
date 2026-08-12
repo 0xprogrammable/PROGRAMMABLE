@@ -215,13 +215,15 @@ export function evaluateAlchemyExploreSourceContracts(
         "limitBy: { by: PoolEvent_Pool_PoolId, count: 1 }",
       ) &&
       bitqueryMarketSource.includes("query ProgrammableMarketPrices") &&
+      bitqueryMarketSource.includes("tokenSupplies: Tokens(") &&
+      bitqueryMarketSource.includes("$tokenAddresses") &&
+      bitqueryMarketSource.includes("INDEXED_PRICE_RECOVERY_CONCURRENCY = 4") &&
       bitqueryMarketSource.includes(
         'Block: { Time: { till: "${trade.time}" } }',
       ) &&
       bitqueryMarketSource.includes(
         'Token: { Id: { is: "bid:eth" } }',
       ) &&
-      bitqueryMarketSource.includes("supply: null") &&
       bitqueryMarketSource.includes(
         'const dataset = range === "1h" ? "" : ", dataset: combined";',
       ) &&
