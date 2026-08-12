@@ -37,6 +37,36 @@ export const CUSTOM_FEE_POLICY_KIND = Object.freeze({
   noQualifyingMarket: 2,
 });
 
+export const CLASSIC_LAUNCHERS = Object.freeze([
+  {
+    id: "classic-v3",
+    name: "Classic V3",
+    address: "0xC3bd04aAc2fb2ba58efD7Eb673E544E0B80De770",
+    startBlock: 25_639_596n,
+    runtimeCodeHash:
+      "0x9cc9723456c471d90ac838c02fa4fc47ed4b7e82c85358e71deec978c48d2dc8",
+    eventTopic:
+      "0xf23bd7fdf96caf9195ba5982de473632f59015abc714915dfbbe06cbd8e255e5",
+    feeHook: "0x35Fe236EA82F7cF525c9719d7df8F49F94D720CC",
+  },
+  {
+    id: "classic-v2",
+    name: "Classic V2",
+    address: "0xD240D06f8586eB799f20056054e5b527405E6bAd",
+    startBlock: 25_624_131n,
+    runtimeCodeHash:
+      "0xd229555c79c61874549a1991c43df172104e1db3087ba8fca8804675b7440d36",
+    eventTopic:
+      "0x54f861f401872200b25acd4a9f53153ac06a7be4562b3e43025a4a85740a5675",
+    feeHook: "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC",
+  },
+]);
+
+export const TOKEN_SELECTORS = Object.freeze({
+  name: "0x06fdde03",
+  symbol: "0x95d89b41",
+});
+
 export const HOOKS = Object.freeze([
   {
     id: "classic-v3",
@@ -282,6 +312,89 @@ function abiWord(data, index) {
   const word = data.slice(start, start + 64);
   if (word.length !== 64) throw new Error("Custom-Event ist unvollständig");
   return `0x${word}`;
+}
+
+export function decodeAbiString(value) {
+  if (typeof value !== "string" || !/^0x(?:[0-9a-fA-F]{2})*$/.test(value))
+    throw new Error("Ungültiger Token-Text");
+  const payload = value.slice(2);
+  if (payload.length < 128) throw new Error("Token-Text ist unvollständig");
+  const offset = Number(BigInt(`0x${payload.slice(0, 64)}`));
+  if (!Number.isSafeInteger(offset) || offset % 32 !== 0)
+    throw new Error("Token-Text hat einen ungültigen Offset");
+  const lengthOffset = offset * 2;
+  if (payload.length < lengthOffset + 64)
+    throw new Error("Token-Text-Länge fehlt");
+  const length = Number(
+    BigInt(`0x${payload.slice(lengthOffset, lengthOffset + 64)}`),
+  );
+  if (!Number.isSafeInteger(length) || length > 256)
+    throw new Error("Token-Text ist zu lang");
+  const start = lengthOffset + 64;
+  const end = start + length * 2;
+  if (payload.length < end) throw new Error("Token-Text ist abgeschnitten");
+  const bytes = new Uint8Array(length);
+  for (let index = 0; index < length; index += 1)
+    bytes[index] = Number.parseInt(
+      payload.slice(start + index * 2, start + index * 2 + 2),
+      16,
+    );
+  const decoded = new TextDecoder("utf-8", { fatal: true })
+    .decode(bytes)
+    .trim();
+  if (decoded.length === 0) throw new Error("Token-Text ist leer");
+  return decoded;
+}
+
+export function decodeClassicLaunchLog(log, launcher) {
+  if (!launcher || !CLASSIC_LAUNCHERS.some(({ id }) => id === launcher.id))
+    throw new Error("Unbekannter Classic-Launcher");
+  if (
+    !log ||
+    log.removed === true ||
+    normalizeAddress(log.address) !== normalizeAddress(launcher.address) ||
+    !Array.isArray(log.topics) ||
+    log.topics.length !== 4 ||
+    log.topics[0]?.toLowerCase() !== launcher.eventTopic
+  )
+    throw new Error("Classic-Launch-Event ist nicht kanonisch");
+  const creator = topicAddress(log.topics[1]);
+  const token = topicAddress(log.topics[2]);
+  const poolId = log.topics[3]?.toLowerCase();
+  if (!/^0x[0-9a-f]{64}$/.test(poolId ?? ""))
+    throw new Error("Classic Pool-ID fehlt");
+  const feeHook = wordAddress(abiWord(log.data, 0));
+  if (normalizeAddress(feeHook) !== normalizeAddress(launcher.feeHook))
+    throw new Error("Classic Fee-Hook stimmt nicht");
+  return {
+    id: `${launcher.id}:${poolId}`,
+    releaseId: launcher.id,
+    releaseName: launcher.name,
+    creator,
+    token,
+    poolId,
+    feeHook,
+    blockNumber: BigInt(log.blockNumber),
+    logIndex: BigInt(log.logIndex),
+    transactionHash: log.transactionHash?.toLowerCase(),
+  };
+}
+
+export function reduceClassicLaunchLogs(entries) {
+  if (!Array.isArray(entries)) throw new Error("Classic-Events fehlen");
+  const launches = new Map();
+  for (const entry of entries) {
+    const launch = decodeClassicLaunchLog(entry.log, entry.launcher);
+    if (launches.has(launch.id)) throw new Error("Doppelter Classic-Launch");
+    launches.set(launch.id, launch);
+  }
+  return [...launches.values()].sort((left, right) => {
+    if (left.blockNumber !== right.blockNumber)
+      return left.blockNumber > right.blockNumber ? -1 : 1;
+    if (left.logIndex !== right.logIndex)
+      return left.logIndex > right.logIndex ? -1 : 1;
+    return left.id.localeCompare(right.id);
+  });
 }
 
 function topicAddress(topic) {

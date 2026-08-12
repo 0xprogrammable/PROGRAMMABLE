@@ -1,16 +1,19 @@
 import {
+  CLASSIC_LAUNCHERS,
   CLAIMS,
   CUSTOM_EVENT_TOPICS,
   CUSTOM_REGISTRY,
   HOOKS,
   MAINNET_CHAIN_ID,
   SELECTORS,
+  TOKEN_SELECTORS,
   TREASURY,
   atomicCapabilityStatus,
   buildClaimTransaction,
   buildWalletSendCalls,
   customLaunchClassification,
   customLaunchStateData,
+  decodeAbiString,
   decodeAddress,
   decodeCustomLaunchState,
   decodeUint256,
@@ -20,6 +23,7 @@ import {
   keccak256Hex,
   normalizeBatchId,
   readAccruedData,
+  reduceClassicLaunchLogs,
   reduceCustomRegistryLogs,
   shortAddress,
   toQuantityHex,
@@ -35,6 +39,12 @@ const state = {
   custom: {
     status: "idle",
     registryVerified: false,
+    launches: [],
+    error: null,
+  },
+  classic: {
+    status: "idle",
+    launchersVerified: false,
     launches: [],
     error: null,
   },
@@ -73,6 +83,13 @@ function setError(message = "") {
 
 function setStatus(message) {
   elements.status.textContent = message;
+}
+
+function disclosureIndicator() {
+  const indicator = document.createElement("span");
+  indicator.className = "disclosure-indicator";
+  indicator.setAttribute("aria-hidden", "true");
+  return indicator;
 }
 
 function hookVerified(claim) {
@@ -187,13 +204,81 @@ function buildCustomGroup() {
         : "Keine Custom-Fees offen";
   }
   value.append(count, hint);
-  summary.append(identity, value);
+  summary.append(identity, value, disclosureIndicator());
   details.append(summary);
 
   if (state.custom.launches.length > 0) {
     const list = document.createElement("ul");
     list.className = "asset-list";
     list.replaceChildren(...state.custom.launches.map(buildCustomRow));
+    details.append(list);
+  }
+  group.append(details);
+  return group;
+}
+
+function buildClassicLaunchRow(launch) {
+  const row = document.createElement("li");
+  row.className = "claim-row classic-launch-row";
+  row.dataset.state = "covered";
+
+  const identity = document.createElement("div");
+  identity.className = "claim-identity";
+  const name = document.createElement("strong");
+  name.textContent = launch.symbol || launch.name || "Classic Token";
+  const detail = document.createElement("span");
+  detail.textContent = `${launch.releaseName} · ${shortAddress(launch.token)}`;
+  identity.append(name, detail);
+
+  const value = document.createElement("div");
+  value.className = "claim-value";
+  const coverage = document.createElement("strong");
+  coverage.textContent = "Enthalten";
+  const status = document.createElement("span");
+  status.textContent = `Im ${launch.releaseName}-Claim`;
+  value.append(coverage, status);
+  row.append(identity, value);
+  return row;
+}
+
+function buildClassicLaunchGroup() {
+  const group = document.createElement("li");
+  group.className = "asset-group classic-launch-group";
+  const details = document.createElement("details");
+  const summary = document.createElement("summary");
+  const identity = document.createElement("span");
+  identity.className = "asset-group-identity";
+  const name = document.createElement("strong");
+  name.textContent = "Classic Launches";
+  const detail = document.createElement("span");
+  detail.textContent = "Neue Coins automatisch aus den Launchern";
+  identity.append(name, detail);
+
+  const value = document.createElement("span");
+  value.className = "asset-group-value";
+  const count = document.createElement("strong");
+  const hint = document.createElement("span");
+  if (state.account === null) {
+    count.textContent = "Onchain";
+    hint.textContent = "Nach Verbindung";
+  } else if (state.classic.status === "loading") {
+    count.textContent = "Wird gelesen";
+    hint.textContent = "V2 und V3";
+  } else if (state.classic.error) {
+    count.textContent = "Nicht verfügbar";
+    hint.textContent = "Hook-Claim bleibt aktiv";
+  } else {
+    count.textContent = `${state.classic.launches.length} erkannt`;
+    hint.textContent = "Alle über Classic-Hooks abgedeckt";
+  }
+  value.append(count, hint);
+  summary.append(identity, value, disclosureIndicator());
+  details.append(summary);
+
+  if (state.classic.launches.length > 0) {
+    const list = document.createElement("ul");
+    list.className = "asset-list";
+    list.replaceChildren(...state.classic.launches.map(buildClassicLaunchRow));
     details.append(list);
   }
   group.append(details);
@@ -248,7 +333,7 @@ function renderRows() {
       ? "Details anzeigen"
       : "Keine Asset-Fees offen";
   value.append(count, hint);
-  summary.append(identity, value);
+  summary.append(identity, value, disclosureIndicator());
   details.append(summary);
 
   if (visibleAssetClaims.length > 0) {
@@ -261,6 +346,7 @@ function renderRows() {
   assetGroup.append(details);
   elements.claimRows.replaceChildren(
     ...nativeRows,
+    buildClassicLaunchGroup(),
     assetGroup,
     buildCustomGroup(),
   );
@@ -387,6 +473,93 @@ async function readCustomRegistryLogs(blockTag) {
     );
   }
   return logs;
+}
+
+async function readClassicLauncherLogs(launcher, blockTag) {
+  const latest = BigInt(blockTag);
+  const logs = [];
+  for (
+    let fromBlock = launcher.startBlock;
+    fromBlock <= latest;
+    fromBlock += 4_000n
+  ) {
+    const toBlock = fromBlock + 3_999n < latest ? fromBlock + 3_999n : latest;
+    logs.push(
+      ...(await request("eth_getLogs", [
+        {
+          address: launcher.address,
+          fromBlock: toQuantityHex(fromBlock),
+          toBlock: toQuantityHex(toBlock),
+          topics: [launcher.eventTopic],
+        },
+      ])),
+    );
+  }
+  return logs;
+}
+
+async function readTokenText(token, selector, blockTag) {
+  return decodeAbiString(
+    await request("eth_call", [{ to: token, data: selector }, blockTag]),
+  );
+}
+
+async function readClassicLaunchMetadata(launch, blockTag) {
+  const [name, symbol] = await Promise.allSettled([
+    readTokenText(launch.token, TOKEN_SELECTORS.name, blockTag),
+    readTokenText(launch.token, TOKEN_SELECTORS.symbol, blockTag),
+  ]);
+  return {
+    ...launch,
+    name: name.status === "fulfilled" ? name.value : null,
+    symbol: symbol.status === "fulfilled" ? symbol.value : null,
+  };
+}
+
+async function readClassicLaunches(blockTag) {
+  state.classic = {
+    status: "loading",
+    launchersVerified: false,
+    launches: [],
+    error: null,
+  };
+  renderSummary();
+  try {
+    const launcherResults = await Promise.all(
+      CLASSIC_LAUNCHERS.map(async (launcher) => {
+        const [runtimeCode, logs] = await Promise.all([
+          request("eth_getCode", [launcher.address, blockTag]),
+          readClassicLauncherLogs(launcher, blockTag),
+        ]);
+        if (
+          keccak256Hex(runtimeCode).toLowerCase() !==
+          launcher.runtimeCodeHash.toLowerCase()
+        )
+          throw new Error(`${launcher.name} Launcher stimmt nicht`);
+        return logs.map((log) => ({ launcher, log }));
+      }),
+    );
+    const launches = reduceClassicLaunchLogs(launcherResults.flat());
+    const hydrated = await Promise.all(
+      launches.map((launch) => readClassicLaunchMetadata(launch, blockTag)),
+    );
+    state.classic = {
+      status: "ready",
+      launchersVerified: true,
+      launches: hydrated,
+      error: null,
+    };
+  } catch (error) {
+    state.classic = {
+      status: "failed",
+      launchersVerified: false,
+      launches: [],
+      error:
+        error instanceof Error
+          ? error.message
+          : "Classic Launches konnten nicht gelesen werden",
+    };
+  }
 }
 
 async function readCustomLaunch(launch, blockTag) {
@@ -530,7 +703,10 @@ async function refreshClaims() {
   const blockTag = await request("eth_blockNumber");
   state.blockTag = blockTag;
 
-  await readCustomRegistry(blockTag);
+  await Promise.all([
+    readCustomRegistry(blockTag),
+    readClassicLaunches(blockTag),
+  ]);
 
   const hookResults = await Promise.allSettled(
     HOOKS.map((hook) => readHook(hook, blockTag)),
@@ -572,11 +748,15 @@ async function refreshClaims() {
     setError(
       "Die Custom Registry konnte nicht vollständig verifiziert werden. Claims bleiben gesperrt.",
     );
+  if (state.classic.error)
+    setError(
+      "Die Classic-Launchliste konnte nicht vollständig gelesen werden. Der verifizierte gemeinsame Hook-Claim bleibt verfügbar.",
+    );
   setStatus(
     state.custom.error
       ? "Custom Registry konnte nicht vollständig gelesen werden"
       : failedClaims === 0
-        ? `Stand Block ${BigInt(blockTag).toString()} · ${verified}/${HOOKS.length} feste Contracts · ${state.custom.launches.length} Custom-Launch${state.custom.launches.length === 1 ? "" : "es"}`
+        ? `Stand Block ${BigInt(blockTag).toString()} · ${state.classic.launches.length} Classic · ${state.custom.launches.length} Custom`
         : `${failedClaims} Guthaben konnten nicht gelesen werden`,
   );
   renderSummary();

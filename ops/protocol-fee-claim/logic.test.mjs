@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  CLASSIC_LAUNCHERS,
   CLAIMS,
   CUSTOM_EVENT_TOPICS,
   CUSTOM_FEE_POLICY_KIND,
@@ -9,12 +10,15 @@ import {
   MAINNET_CHAIN_ID,
   SELECTORS,
   TREASURY,
+  TOKEN_SELECTORS,
   atomicCapabilityStatus,
   buildClaimTransaction,
   buildWalletSendCalls,
   claimData,
   customLaunchClassification,
   customLaunchStateData,
+  decodeAbiString,
+  decodeClassicLaunchLog,
   decodeCustomLaunchState,
   decodeCustomRegistryLog,
   decodeAddress,
@@ -26,6 +30,7 @@ import {
   keccak256Hex,
   normalizeBatchId,
   readAccruedData,
+  reduceClassicLaunchLogs,
   reduceCustomRegistryLogs,
   shortAddress,
   toQuantityHex,
@@ -60,6 +65,28 @@ test("uses the deployed claim and read selectors", () => {
   });
 });
 
+test("binds the verified V2 and V3 Classic launch discovery sources", () => {
+  assert.equal(CLASSIC_LAUNCHERS.length, 2);
+  assert.deepEqual(
+    CLASSIC_LAUNCHERS.map(({ id }) => id),
+    ["classic-v3", "classic-v2"],
+  );
+  assert.ok(
+    CLASSIC_LAUNCHERS.every(
+      ({ address, startBlock, runtimeCodeHash, eventTopic, feeHook }) =>
+        /^0x[0-9a-fA-F]{40}$/.test(address) &&
+        startBlock > 0n &&
+        /^0x[0-9a-f]{64}$/.test(runtimeCodeHash) &&
+        /^0x[0-9a-f]{64}$/.test(eventTopic) &&
+        /^0x[0-9a-fA-F]{40}$/.test(feeHook),
+    ),
+  );
+  assert.deepEqual(TOKEN_SELECTORS, {
+    name: "0x06fdde03",
+    symbol: "0x95d89b41",
+  });
+});
+
 function word(value) {
   return BigInt(value).toString(16).padStart(64, "0");
 }
@@ -78,6 +105,75 @@ function eventLog(topic, launchId, dataWords = [], extraTopics = []) {
     data: `0x${dataWords.join("")}`,
   };
 }
+
+function classicLog(launcher, { block = 25_700_000n, index = 0n } = {}) {
+  const creator = "0x1234567890123456789012345678901234567890";
+  const token = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd";
+  return {
+    address: launcher.address,
+    blockNumber: `0x${block.toString(16)}`,
+    logIndex: `0x${index.toString(16)}`,
+    transactionHash: `0x${"44".repeat(32)}`,
+    topics: [
+      launcher.eventTopic,
+      `0x${addressWord(creator)}`,
+      `0x${addressWord(token)}`,
+      `0x${"55".repeat(32)}`,
+    ],
+    data: `0x${addressWord(launcher.feeHook)}`,
+  };
+}
+
+function abiString(value) {
+  const bytes = Buffer.from(value, "utf8").toString("hex");
+  const padded = bytes.padEnd(Math.ceil(bytes.length / 64) * 64, "0");
+  return `0x${word(32)}${word(bytes.length / 2)}${padded}`;
+}
+
+test("decodes token metadata used for readable Classic launch rows", () => {
+  assert.equal(decodeAbiString(abiString("PROGRAMMABLE")), "PROGRAMMABLE");
+  assert.equal(decodeAbiString(abiString("PINK")), "PINK");
+  assert.throws(() => decodeAbiString("0x1234"), /unvollständig/);
+});
+
+test("reduces canonical Classic V2 and V3 launch events newest first", () => {
+  const v3 = CLASSIC_LAUNCHERS[0];
+  const v2 = CLASSIC_LAUNCHERS[1];
+  const v3Log = classicLog(v3, { block: 25_700_002n });
+  const v2Log = classicLog(v2, { block: 25_700_001n });
+  v2Log.topics[2] = `0x${addressWord("0x1111111111111111111111111111111111111111")}`;
+  v2Log.topics[3] = `0x${"66".repeat(32)}`;
+
+  const launches = reduceClassicLaunchLogs([
+    { launcher: v2, log: v2Log },
+    { launcher: v3, log: v3Log },
+  ]);
+  assert.equal(launches.length, 2);
+  assert.equal(launches[0].releaseId, "classic-v3");
+  assert.equal(launches[1].releaseId, "classic-v2");
+  assert.equal(launches[0].feeHook.toLowerCase(), v3.feeHook.toLowerCase());
+  assert.equal(decodeClassicLaunchLog(v3Log, v3).blockNumber, 25_700_002n);
+
+  assert.throws(
+    () =>
+      decodeClassicLaunchLog(
+        {
+          ...v3Log,
+          data: `0x${addressWord("0x0000000000000000000000000000000000000001")}`,
+        },
+        v3,
+      ),
+    /Fee-Hook stimmt nicht/,
+  );
+  assert.throws(
+    () =>
+      reduceClassicLaunchLogs([
+        { launcher: v3, log: v3Log },
+        { launcher: v3, log: v3Log },
+      ]),
+    /Doppelter Classic-Launch/,
+  );
+});
 
 test("binds the deployed Custom Registry and canonical discovery topics", () => {
   assert.equal(

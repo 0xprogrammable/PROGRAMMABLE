@@ -235,6 +235,9 @@ h1 {
 .custom-row[data-state="no-market"] .claim-value span {
   color: var(--success);
 }
+.classic-launch-row[data-state="covered"] .claim-value span {
+  color: var(--success);
+}
 .custom-row[data-state="adapter-required"] .claim-value span,
 .custom-row[data-state="pending"] .claim-value span {
   color: var(--warning);
@@ -256,13 +259,15 @@ h1 {
 .asset-group summary::-webkit-details-marker {
   display: none;
 }
-.asset-group summary::after {
+.disclosure-indicator {
   color: var(--pink-dark);
-  content: "+";
   font-size: 20px;
   margin-left: 14px;
 }
-.asset-group details[open] summary::after {
+.disclosure-indicator::before {
+  content: "+";
+}
+.asset-group details[open] .disclosure-indicator::before {
   content: "−";
 }
 .asset-group-value {

@@ -3,6 +3,9 @@
 Privates lokales Fenster für alle aktuell deployten Programmable Launcher-Fees:
 
 - Classic V1, V2 und V3 in ETH
+- automatische Erkennung aller Classic-V2/V3-Launches aus den verifizierten
+  Mainnet-Launcher-Events; neue Classic-Coins sind über den gemeinsamen Hook
+  ihrer Version bereits im aggregierten Claim enthalten
 - Stock V1 sowie der gemeinsame Stock-V2/V3-Hook für alle freigegebenen Quote Assets
 - dynamische Erkennung aller Custom-v4-Launches aus der finalisierten Mainnet Registry
 
@@ -36,6 +39,9 @@ Oder auf macOS `ops/protocol-fee-claim/Programmable Fees.command` doppelklicken.
 - Die Seite läuft ausschließlich lokal und liest keinen Private Key oder Seed.
 - MetaMask signiert und sendet jede Transaktion.
 - Vor dem Freischalten werden Runtime-Codehash, `launcherFeeRecipient()` und offene Guthaben am selben Mainnet-Block geprüft.
+- Die Classic-Liste prüft die Runtime-Codehashes der V2/V3-Launcher, scannt nur
+  deren kanonische Launch-Events und verlangt je Event den exakt gebundenen
+  gemeinsamen Fee-Hook. Neue Stock-Assets werden bewusst nicht dynamisch ergänzt.
 - Custom liest die Registry-Historie ab dem Deployment-Block in begrenzten Blöcken, gleicht sie mit `registrationCount()`, aktuellem `launchState()`, Fee-Empfänger und dem Runtime-Codehash jeder Quelle ab.
 - Eine unbekannte oder fee-tragende Custom-Quelle ohne verifizierten Claim-Adapter sperrt den globalen Claim-Button; sie wird nie blind aufgerufen.
 - Der verbundene Account muss die unveränderliche Treasury `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c` sein.
