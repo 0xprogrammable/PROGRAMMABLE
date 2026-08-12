@@ -78,9 +78,7 @@ export function readCandidateChange({
   execGit(root, ["cat-file", "-e", `${expectedCandidateCommit}^{commit}`]);
   execGit(root, ["cat-file", "-e", `${expectedMergeCommit}^{commit}`]);
 
-  const mergeParents = execGit(root, ["show", "-s", "--format=%P", expectedMergeCommit], "utf8")
-    .trim()
-    .split(" ");
+  const mergeParents = readCommitParents(root, expectedMergeCommit);
   if (
     mergeParents.length !== 2
     || mergeParents[0] !== expectedBaseCommit
@@ -105,6 +103,22 @@ export function readCandidateChange({
     candidateTree,
     changedPaths
   };
+}
+
+function readCommitParents(repositoryRoot, commit) {
+  const commitBytes = execGit(repositoryRoot, ["cat-file", "commit", commit]);
+  const headerEnd = commitBytes.indexOf("\n\n");
+  if (headerEnd === -1) throw new Error("candidate merge commit has no canonical header boundary");
+
+  const parents = [];
+  const headerLines = commitBytes.subarray(0, headerEnd).toString("utf8").split("\n");
+  for (const line of headerLines) {
+    if (!line.startsWith("parent ")) continue;
+    const parent = line.slice("parent ".length);
+    requireObjectId(parent, "candidate merge parent");
+    parents.push(parent);
+  }
+  return parents;
 }
 
 function parseChangedPathStream(output) {
@@ -149,7 +163,7 @@ function validateChangedPaths(inputPaths) {
 }
 
 function execGit(repositoryRoot, arguments_, encoding = null) {
-  return execFileSync("git", arguments_, {
+  return execFileSync("git", ["--no-pager", "--no-replace-objects", ...arguments_], {
     cwd: repositoryRoot,
     encoding,
     maxBuffer: MAX_GIT_OUTPUT_BYTES,
