@@ -36,6 +36,7 @@ const MAXIMUM_INDEXED_PRICE_RECOVERIES_PER_BATCH = 20;
 const MARKET_CACHE_CURRENT_MAX_AGE_MS = 2_000;
 const MARKET_CACHE_MAX_AGE_MS = 15 * 60 * 1_000;
 const DURABLE_MARKET_CACHE_SECONDS = 5 * 60;
+const CHART_CACHE_CURRENT_MAX_AGE_MS = 2_000;
 const CHART_CACHE_MAX_AGE_MS = 2 * 60 * 1_000;
 const MAXIMUM_CHART_TRADES = 2_000;
 const MAXIMUM_CHART_POINTS = 80;
@@ -299,17 +300,24 @@ export async function readBitqueryMarketChartV1(input: Readonly<{
   const now = input.now ?? new Date();
   const identity = canonicalMarketIdentities([input.identity])[0];
   if (!identity) throw new BitqueryMarketDataError("integrity");
-  const cacheKey = `${marketCacheKey(identity)}:${input.range}`;
+  const cacheKey = chartCacheKey(identity, input.range, input.valuation);
   const token = resolveToken(input.token);
   if (token === null) {
     return cachedChartOrUnavailable(identity, input.range, cacheKey, now);
   }
+  const currentCached = currentCachedChart(cacheKey, now);
+  if (currentCached !== null) return currentCached;
 
   const since = chartRangeStart(input.range, now);
-  const query = marketChartQuery(input.range, since !== null);
+  const deriveValuation = input.valuation === undefined;
+  const query = marketChartQuery(
+    input.range,
+    since !== null,
+    deriveValuation,
+  );
   const variables: Record<string, unknown> = {
     poolId: identity.poolId,
-    tokenAddress: identity.tokenAddress,
+    ...(deriveValuation ? { tokenAddress: identity.tokenAddress } : {}),
     ...(since === null ? {} : { since: since.toISOString() }),
   };
 
@@ -319,21 +327,22 @@ export async function readBitqueryMarketChartV1(input: Readonly<{
       token,
     });
     const evm = record(response.data.EVM);
-    const trading = record(response.data.Trading);
-    if (evm === null || trading === null) {
+    const trading = deriveValuation ? record(response.data.Trading) : null;
+    if (evm === null || (deriveValuation && trading === null)) {
       throw new BitqueryMarketDataError("response");
     }
     const rows = array(evm?.DEXTrades);
-    const indexedPrice = parseTokenPriceObservation(
-      array(trading?.Tokens)[0],
-      identity,
-    );
+    const indexedPrice = deriveValuation
+      ? parseTokenPriceObservation(array(trading?.Tokens)[0], identity)
+      : null;
     const parsed = rows.flatMap((row) => {
       const trade = parseTrade(row, identity);
       return trade === null ? [] : [trade];
     });
     const trades = canonicalTrades(parsed);
-    const supply = parseSupply(array(trading?.Tokens)[0], identity);
+    const supply = deriveValuation
+      ? parseSupply(array(trading?.Tokens)[0], identity)
+      : null;
 
     if (rows.length !== parsed.length) {
       throw new BitqueryMarketDataError("integrity");
@@ -987,10 +996,13 @@ function marketStatsQuery(identities: readonly MarketDataIdentityV1[]) {
 function marketChartQuery(
   range: MarketChartV1["range"],
   withSince: boolean,
+  withValuation: boolean,
 ) {
-  const definitions = withSince
-    ? "$poolId: String!, $tokenAddress: String!, $since: DateTime!"
-    : "$poolId: String!, $tokenAddress: String!";
+  const definitions = [
+    "$poolId: String!",
+    ...(withValuation ? ["$tokenAddress: String!"] : []),
+    ...(withSince ? ["$since: DateTime!"] : []),
+  ].join(", ");
   const blockFilter = withSince
     ? "Block: { Time: { since: $since } }"
     : "";
@@ -1011,13 +1023,13 @@ function marketChartQuery(
         }
       ) { ${tradeSelection()} }
     }
-    Trading {
+    ${withValuation ? `Trading {
       Tokens(
         limit: { count: 1 }
         orderBy: { descending: Block_Time }
         where: { Token: { Address: { is: $tokenAddress } } }
       ) { ${supplySelection()} }
-    }
+    }` : ""}
   }`;
 }
 
@@ -1604,6 +1616,53 @@ function cachedChartOrUnavailable(
     valuation: { status: "unavailable", reason: "source-unavailable" },
     truncated: false,
   };
+}
+
+function currentCachedChart(
+  key: string,
+  now: Date,
+): MarketChartV1 | null {
+  const cached = chartCache.get(key);
+  if (
+    !cached ||
+    cached.value.points.length === 0 ||
+    now.getTime() - cached.storedAt > CHART_CACHE_CURRENT_MAX_AGE_MS
+  ) {
+    return null;
+  }
+  const valuation = cached.value.valuation.status === "available" &&
+      now.getTime() - Date.parse(cached.value.valuation.asOfTime) >
+        MARKET_DATA_CURRENT_MAX_AGE_MS
+    ? { ...cached.value.valuation, freshness: "stale" as const }
+    : cached.value.valuation;
+  return valuation === cached.value.valuation
+    ? cached.value
+    : { ...cached.value, valuation };
+}
+
+function chartCacheKey(
+  identity: MarketDataIdentityV1,
+  range: MarketChartV1["range"],
+  valuation: MarketValuationV1 | undefined,
+): string {
+  const valuationKey = valuation === undefined
+    ? "derived"
+    : valuation.status === "unavailable"
+      ? `unavailable:${valuation.reason}`
+      : [
+          "available",
+          valuation.metric,
+          valuation.supplyBasis,
+          valuation.valueUsdWad,
+          valuation.fdvUsdWad ?? "",
+          valuation.marketCapUsdWad ?? "",
+          valuation.totalSupply ?? "",
+          valuation.circulatingSupply ?? "",
+          valuation.maxSupply ?? "",
+          valuation.asOfTime,
+          valuation.freshness,
+        ].join(":");
+  return `${marketCacheKey(identity)}:${range}:${valuationKey}`;
 }
 
 function chartRangeStart(range: MarketChartV1["range"], now: Date): Date | null {

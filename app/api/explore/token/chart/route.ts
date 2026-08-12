@@ -23,7 +23,7 @@ import { hydrateMissingCanonicalTokenSupplyV1 } from
   "../../../../../lib/market-data/canonical-token-supply.server";
 import { exploreEntryMarketIdentitiesV1 } from
   "../../../../../lib/market-data/explore-market-identities";
-import type { MarketChartV1 } from
+import type { MarketChartV1, MarketValuationV1 } from
   "../../../../../lib/market-data/market-data-v1";
 import { PROGRAMMABLE_MARKET_CHART_ERROR_SCHEMA_VERSION } from
   "../../../../../lib/market-data/market-data-v1";
@@ -46,6 +46,10 @@ const readCanonicalChartSource = createExploreConsumerSource<ExploreReadModel>({
 const readCustomChartSource = createExploreConsumerSource<
   readonly CustomProjectExploreEntry[]
 >({});
+const UNAVAILABLE_CANONICAL_VALUATION = Object.freeze({
+  status: "unavailable",
+  reason: "source-unavailable",
+} as const satisfies MarketValuationV1);
 
 async function readPrimaryChartModel() {
   const model = await readAlchemyExploreModel();
@@ -145,12 +149,7 @@ export async function GET(request: NextRequest) {
     const unresolvedEntry: ExploreEntry | null = token
       ? canonicalTokenExploreEntryV1(token)
       : customProject ?? null;
-    const entry = unresolvedEntry
-      ? (await hydrateMissingCanonicalTokenSupplyV1([
-          unresolvedEntry,
-        ]))[0] ?? unresolvedEntry
-      : null;
-    if (!entry) {
+    if (!unresolvedEntry) {
       if (
         canonicalSource?.status === "current" &&
         customSource?.status === "current"
@@ -167,7 +166,7 @@ export async function GET(request: NextRequest) {
         "Token identity is temporarily unavailable",
       );
     }
-    const identities = exploreEntryMarketIdentitiesV1(entry);
+    const identities = exploreEntryMarketIdentitiesV1(unresolvedEntry);
     if (identities.length === 0) {
       return unavailable(
         address,
@@ -176,25 +175,62 @@ export async function GET(request: NextRequest) {
         "Price history is unavailable for this market",
       );
     }
-    const marketByToken = await readBitqueryTokenMarketDataV1(identities, {
-      signal: request.signal,
-    });
-    const marketDataRead = marketByToken.get(address.toLowerCase());
-    const marketData = marketDataRead
-      ? withBitqueryMarketData(entry, marketDataRead).marketData
-      : undefined;
-    const identity = identities.find(
-      (candidate) => candidate.poolId === marketData?.primaryPoolId,
-    ) ?? identities[0];
-    const primaryMarket = marketData?.pools.find(
-      (candidate) => candidate.identity.poolId === identity.poolId,
-    );
-    const chart = await readBitqueryMarketChartV1({
-      identity,
-      range,
-      ...(primaryMarket ? { valuation: primaryMarket.valuation } : {}),
-      signal: request.signal,
-    });
+    const entryPromise = hydrateMissingCanonicalTokenSupplyV1([
+      unresolvedEntry,
+    ]).then((entries) => entries[0] ?? unresolvedEntry);
+    let chart: MarketChartV1;
+    if (identities.length === 1) {
+      const identity = identities[0];
+      const [entry, marketByToken, chartRead] = await Promise.all([
+        entryPromise,
+        readBitqueryTokenMarketDataV1(identities, {
+          signal: request.signal,
+        }),
+        readBitqueryMarketChartV1({
+          identity,
+          range,
+          valuation: UNAVAILABLE_CANONICAL_VALUATION,
+          signal: request.signal,
+        }),
+      ]);
+      const marketDataRead = marketByToken.get(address.toLowerCase());
+      const marketData = marketDataRead
+        ? withBitqueryMarketData(entry, marketDataRead).marketData
+        : undefined;
+      const primaryMarket = marketData?.pools.find(
+        (candidate) => candidate.identity.poolId === identity.poolId,
+      );
+      chart = {
+        ...chartRead,
+        valuation:
+          chartRead.readStatus === "live" && chartRead.points.length > 0
+            ? primaryMarket?.valuation ?? UNAVAILABLE_CANONICAL_VALUATION
+            : chartRead.valuation,
+      };
+    } else {
+      const [entry, marketByToken] = await Promise.all([
+        entryPromise,
+        readBitqueryTokenMarketDataV1(identities, {
+          signal: request.signal,
+        }),
+      ]);
+      const marketDataRead = marketByToken.get(address.toLowerCase());
+      const marketData = marketDataRead
+        ? withBitqueryMarketData(entry, marketDataRead).marketData
+        : undefined;
+      const identity = identities.find(
+        (candidate) => candidate.poolId === marketData?.primaryPoolId,
+      ) ?? identities[0];
+      const primaryMarket = marketData?.pools.find(
+        (candidate) => candidate.identity.poolId === identity.poolId,
+      );
+      chart = await readBitqueryMarketChartV1({
+        identity,
+        range,
+        valuation: primaryMarket?.valuation ?? UNAVAILABLE_CANONICAL_VALUATION,
+        signal: request.signal,
+      });
+    }
     if (chart.status === "unavailable") {
       return unavailable(
         address,

@@ -1216,6 +1216,131 @@ describe("Bitquery OHLCV chart and server stream", () => {
     expect(isMarketChartV1(fallback)).toBe(true);
   });
 
+  it("reuses a populated chart for the two-second server cache window", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      data: {
+        EVM: {
+          DEXTrades: [tradeRow({
+            block: "25740000",
+            time: "2026-08-11T14:01:00.000Z",
+            transaction: `0x${"45".repeat(32)}`,
+            priceQuote: "1",
+          })],
+        },
+        Trading: { Tokens: [supplyRow()] },
+      },
+    })) as typeof fetch;
+    const first = await readBitqueryMarketChartV1({
+      identity: PCAN,
+      range: "1h",
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+    const second = await readBitqueryMarketChartV1({
+      identity: PCAN,
+      range: "1h",
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:01.999Z"),
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(second).toEqual(first);
+  });
+
+  it("does not reuse a chart across different canonical valuations", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      data: {
+        EVM: {
+          DEXTrades: [tradeRow({
+            block: "25740000",
+            time: "2026-08-11T14:01:00.000Z",
+            transaction: `0x${"46".repeat(32)}`,
+            priceQuote: "1",
+          })],
+        },
+        Trading: { Tokens: [supplyRow()] },
+      },
+    })) as typeof fetch;
+    const firstValuation = {
+      status: "available",
+      metric: "fdv",
+      supplyBasis: "total",
+      valueUsdWad: "100",
+      fdvUsdWad: "100",
+      totalSupply: "1000",
+      asOfTime: "2026-08-11T14:01:00.000Z",
+      freshness: "current",
+    } as const;
+    const secondValuation = {
+      ...firstValuation,
+      valueUsdWad: "200",
+      fdvUsdWad: "200",
+    } as const;
+    const first = await readBitqueryMarketChartV1({
+      identity: PCAN,
+      range: "1h",
+      valuation: firstValuation,
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+    const second = await readBitqueryMarketChartV1({
+      identity: PCAN,
+      range: "1h",
+      valuation: secondValuation,
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:01.000Z"),
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(first.valuation).toEqual(firstValuation);
+    expect(second.valuation).toEqual(secondValuation);
+  });
+
+  it("omits redundant supply pricing when canonical valuation is provided", async () => {
+    const valuation = {
+      status: "unavailable",
+      reason: "source-unavailable",
+    } as const;
+    const fetchImpl = vi.fn(async (
+      _url: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      const request = JSON.parse(String(init?.body));
+      expect(request.query).not.toContain("Trading {");
+      expect(request.query).not.toContain("Tokens(");
+      expect(request.variables).not.toHaveProperty("tokenAddress");
+      return jsonResponse({
+        data: {
+          EVM: {
+            DEXTrades: [tradeRow({
+              block: "25740000",
+              time: "2026-08-11T14:01:00.000Z",
+              transaction: `0x${"47".repeat(32)}`,
+              priceQuote: "1",
+            })],
+          },
+        },
+      });
+    }) as typeof fetch;
+
+    const chart = await readBitqueryMarketChartV1({
+      identity: PCAN,
+      range: "1h",
+      valuation,
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(chart.valuation).toEqual(valuation);
+    expect(chart.points).toHaveLength(1);
+  });
+
   it("builds exact-pool quote candles without promoting raw DEX USD", async () => {
     const trades = [
       tradeRow({
