@@ -80,6 +80,13 @@ contract ProgrammableExactShardsFeePolicyVerifierV1Test is Test {
         assertFalse(vm.parseJsonBool(json, ".activationAllowed"));
         assertFalse(vm.parseJsonBool(json, ".launchAllowed"));
         assertFalse(vm.parseJsonBool(json, ".decision.currentContractsCanLaunch"));
+        assertFalse(vm.parseJsonBool(json, ".uiMetadataBoundary.feePolicyIncludesTokenName"));
+        assertFalse(vm.parseJsonBool(json, ".uiMetadataBoundary.feePolicyIncludesTokenSymbol"));
+        assertFalse(vm.parseJsonBool(json, ".uiMetadataBoundary.feePolicyIncludesPresentationBindingHash"));
+        assertFalse(vm.parseJsonBool(json, ".uiMetadataBoundary.presentationValuesAreSourceArtifactInputs"));
+        assertEq(
+            vm.parseJsonString(json, ".uiMetadataBoundary.economicsRemainExactly"), "INCLUSIVE_100_BPS_SPLIT_10_10_80"
+        );
         assertEq(vm.parseJsonBytes32(json, ".canonicalPolicy.revenuePolicyHash"), verifier.REVENUE_POLICY_HASH());
         assertEq(vm.parseJsonBytes32(json, ".typedHashSpec.feePolicyBindingHash"), verifier.feePolicyBindingHashV1());
 

@@ -15,13 +15,21 @@ interface IProgrammableExactShardsRegistryV1 {
         bytes32 projectId;
         bytes32 approvalId;
         bytes32 approvalBindingHash;
-        bytes32 repositoryId;
+        /// @dev Stable numeric GitHub repository ID; independent of owner/name, transfer and rename.
+        uint64 githubRepositoryId;
         bytes32 commitId;
         bytes32 sourceCommitment;
         bytes32 buildCommitment;
         bytes32 artifactSetHash;
         bytes32 deploymentConfigurationHash;
+        /// @dev Reviewed technical configuration commitment. It MUST NOT contain website presentation data.
         bytes32 configurationHash;
+        /// @dev keccak256(bytes(tokenName)) for the exact name selected on the Website after technical approval.
+        bytes32 tokenNameHash;
+        /// @dev keccak256(bytes(tokenSymbol)) for the exact symbol selected on the Website after technical approval.
+        bytes32 tokenSymbolHash;
+        /// @dev Exact Website presentation-record binding for description, image and links; never a source input.
+        bytes32 presentationBindingHash;
         bytes32 permissionsHash;
         bytes32 deploymentId;
         bytes32 deploymentSetHash;
@@ -98,6 +106,13 @@ interface IProgrammableExactShardsRegistryV1 {
         uint64 expiresAtBlock,
         bytes32 evidenceHash
     );
+
+    struct LaunchIntentStateV1 {
+        bytes32 bindingHash;
+        bytes32 evidenceHash;
+        uint64 validAfterBlock;
+        uint64 expiresAtBlock;
+    }
 
     event ExactShardsLaunchRegisteredV1(
         bytes32 indexed launchId,
@@ -178,6 +193,8 @@ interface IProgrammableExactShardsRegistryV1 {
     );
 
     function authorizeApproval(IProgrammableCustomRegistryV1.ApprovalAuthorizationV1 calldata authorization) external;
+    function authorizeLaunchIntent(IProgrammableCustomRegistryV1.ApprovalAuthorizationV1 calldata authorization)
+        external;
     function registerLaunch(LaunchRegistrationV1 calldata registration) external;
     function finalizeLaunch(IProgrammableCustomRegistryV1.FinalityProofV1 calldata proof) external;
     function correctLaunchRecord(IProgrammableCustomRegistryV1.RecordCorrectionV1 calldata correction) external;
@@ -196,22 +213,6 @@ interface IProgrammableExactShardsRegistryV1 {
     function feeClaim(bytes32 launchId, uint8 ordinal) external view returns (StoredFeeClaimV1 memory);
     function recordHashAtRevision(bytes32 launchId, uint64 revision) external view returns (bytes32);
 
-    function computeFeePolicyHash(
-        IProgrammableExactShardsFeePolicyVerifierV1.ProgrammableRevenuePolicyV1 calldata policy,
-        IProgrammableExactShardsFeePolicyVerifierV1.ProgrammableRevenueLegV1[3] calldata orderedLegs
-    ) external view returns (bytes32);
-    function computeFeePolicyRecordHash(
-        IProgrammableExactShardsFeePolicyVerifierV1.ProgrammableRevenuePolicyV1 calldata policy,
-        IProgrammableExactShardsFeePolicyVerifierV1.ProgrammableRevenueLegV1[3] calldata orderedLegs
-    ) external view returns (bytes32);
-    function computeApprovalBindingHash(LaunchRegistrationV1 calldata registration) external view returns (bytes32);
-    function computeRegistrationBindingHash(LaunchRegistrationV1 calldata registration) external view returns (bytes32);
-    function computeRegisteredRecordCommitment(LaunchRegistrationV1 calldata registration)
-        external
-        view
-        returns (bytes32);
-    function computeReviewDeploymentBindingHash(LaunchRegistrationV1 calldata registration)
-        external
-        view
-        returns (bytes32);
+    /// @dev Deterministic binding helpers are deliberately offchain/test-only so the production Registry
+    ///      remains below EIP-170. Every submitted binding is recomputed and checked during registration.
 }
