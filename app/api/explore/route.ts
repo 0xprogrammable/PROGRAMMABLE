@@ -538,10 +538,8 @@ export async function GET(request: NextRequest) {
       {
         headers: {
           "Cache-Control":
-            customProjects.length > 0 || dataQuality.status !== "complete"
-              ? "no-store"
-              : page.status === "ready"
-              ? "public, max-age=0, s-maxage=2, stale-while-revalidate=5"
+            page.status === "ready"
+              ? "public, max-age=0, s-maxage=15, stale-while-revalidate=60"
               : "public, max-age=0, s-maxage=30",
           "X-Programmable-Data-Quality": dataQuality.status,
           "X-Programmable-Market-Source": "bitquery",

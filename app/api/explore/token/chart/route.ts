@@ -223,11 +223,9 @@ export async function GET(request: NextRequest) {
       {
         headers: {
           "Cache-Control":
-            chart.status === "ready" &&
-                chart.valuation.status === "available" &&
-                chart.valuation.freshness === "current"
-              ? "public, max-age=0, s-maxage=2, stale-while-revalidate=5"
-              : "no-store",
+            chart.status === "waiting-for-first-trade"
+              ? "public, max-age=0, s-maxage=5, stale-while-revalidate=10"
+              : "public, max-age=0, s-maxage=15, stale-while-revalidate=60",
           "X-Programmable-Data-Quality": chart.status,
           "X-Programmable-Market-Source": "bitquery",
           ...(hasVerifiedPrice

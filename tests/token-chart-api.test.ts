@@ -223,7 +223,7 @@ describe("token chart Bitquery API", () => {
     expect(response.headers.get("X-Programmable-Market-Source")).toBe("bitquery");
     expect(response.headers.get("X-Programmable-Price-Source")).toBe("bitquery");
     expect(response.headers.get("Cache-Control")).toBe(
-      "public, max-age=0, s-maxage=2, stale-while-revalidate=5",
+      "public, max-age=0, s-maxage=15, stale-while-revalidate=60",
     );
   });
 
@@ -307,7 +307,9 @@ describe("token chart Bitquery API", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(response.headers.get("Cache-Control")).toBe(
+      "public, max-age=0, s-maxage=5, stale-while-revalidate=10",
+    );
     expect(body).toMatchObject({
       status: "waiting-for-first-trade",
       points: [],
