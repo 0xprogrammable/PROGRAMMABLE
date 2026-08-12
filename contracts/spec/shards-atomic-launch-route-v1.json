@@ -1,0 +1,162 @@
+{
+  "schemaVersion": "programmable.exact-shards-atomic-launch-route.v1",
+  "status": "IMPLEMENTATION_READY_NOT_DEPLOYED",
+  "activationAllowed": false,
+  "launchAllowed": false,
+  "externalActionOccurred": false,
+  "compiler": {
+    "solc": "0.8.26",
+    "evmVersion": "cancun",
+    "optimizer": true,
+    "optimizerRuns": 1000,
+    "viaIr": false,
+    "bytecodeHash": "none",
+    "cborMetadata": false
+  },
+  "canonicalDeployment": {
+    "chainId": 1,
+    "sharedRepositoryLineageRegistry": {
+      "addressState": "UNSET",
+      "address": null,
+      "runtimeCodeKeccak256": null,
+      "transactionHash": null,
+      "blockNumber": null,
+      "oneCanonicalInstanceForEveryRouteAndFactory": true
+    },
+    "exactShardsRegistry": {
+      "addressState": "UNSET",
+      "address": null,
+      "runtimeCodeKeccak256": null,
+      "transactionHash": null,
+      "blockNumber": null
+    },
+    "exactShardsAtomicRoute": {
+      "addressState": "UNSET",
+      "address": null,
+      "runtimeCodeKeccak256": null,
+      "transactionHash": null,
+      "blockNumber": null
+    },
+    "reviewedShardsFactory": {
+      "addressState": "UNSET",
+      "address": null,
+      "runtimeCodeKeccak256": "0x134a9e5674f22e62e939c2238693077b8027c553bb26d6a4e9e3d8554e5f85b5",
+      "reviewedSourceCommit": "91b38f3de64d96cac7e29f127c004f128fc1da59"
+    }
+  },
+  "rolePolicy": {
+    "repositoryLineageConsumerRole": "keccak256(bytes(\"programmable.github-repository-lineage.consumer.v1\"))",
+    "requiredConsumerRoleGrantTargets": [
+      "EXACT_REVIEWED_ATOMIC_ROUTE_CONTRACT"
+    ],
+    "forbiddenConsumerRoleGrantTargets": [
+      "EOA",
+      "SHARDS_REGISTRY",
+      "DIRECT_SHARDS_FACTORY",
+      "ARBITRARY_ADAPTER",
+      "CONTRACT_WITH_STANDALONE_CONSUME_SELECTOR"
+    ],
+    "exactShardsRegistryWriterBeforeActivation": "EXACT_SHARDS_ATOMIC_ROUTE_ONLY",
+    "bootstrapWriterMustBeRevokedBeforeActivation": true,
+    "grantEvidenceRequired": [
+      "EXACT_ROUTE_ADDRESS",
+      "EXACT_ROUTE_RUNTIME_CODE_HASH",
+      "CONSUMER_ROLE_GRANTED_EVENT",
+      "REGISTRY_WRITER_ROLE_GRANTED_EVENT",
+      "NO_OTHER_ACTIVE_CONSUMER_OR_WRITER_GRANTS"
+    ]
+  },
+  "atomicTopology": {
+    "entrypoint": "launch((...),bytes32,bytes32,bytes,(...))",
+    "orderedOperations": [
+      "VALIDATE_CALLER_AND_WEBSITE_SELECTED_METADATA_HASHES",
+      "CONSUME_CANONICAL_GITHUB_REPOSITORY_LINEAGE",
+      "EXECUTE_EXACT_REVIEWED_SHARDS_FACTORY",
+      "VERIFY_PRODUCED_TOKEN_ADDRESS_RUNTIME_NAME_AND_SYMBOL",
+      "REGISTER_EXACT_FINAL_RECORD",
+      "EMIT_ATOMIC_COMPLETION_WITH_PRESENTATION_BINDING"
+    ],
+    "sameEvmTransaction": true,
+    "downstreamRevertRollsBackFactoryDeploymentLineageAndRegistration": true,
+    "losingCrossRouteAttemptDeploysNoTokenOrHook": true,
+    "standaloneConsumeSelector": false,
+    "exactRetryCannotCreateSecondLaunch": true
+  },
+  "websiteMetadataBoundary": {
+    "technicalGithubApprovalExcludes": [
+      "tokenName",
+      "tokenSymbol",
+      "description",
+      "image",
+      "links"
+    ],
+    "websiteSelectableFactoryFields": [
+      "tokenName",
+      "tokenSymbol"
+    ],
+    "presentationBindingFields": [
+      "description",
+      "image",
+      "links"
+    ],
+    "jitPermitBindsExactSelection": true,
+    "substitutionAfterPermit": "REVERT",
+    "producedTokenNameAndSymbolPostcondition": true
+  },
+  "source": {
+    "routePath": "contracts/src/ProgrammableExactShardsAtomicLaunchRouteV1.sol",
+    "factoryInterfacePath": "contracts/src/interfaces/IProgrammableExactShardsLaunchFactoryV1.sol",
+    "factoryInterfaceSha256": "0x72f676157e109b6af5bbb7fc098f4a1fc1be6aa64c319a277e4d9f4825403021",
+    "sharedRegistryPath": "contracts/src/ProgrammableGithubRepositoryLineageRegistryV1.sol",
+    "sharedRegistryInterfacePath": "contracts/src/interfaces/IProgrammableGithubRepositoryLineageRegistryV1.sol",
+    "sharedRegistryInterfaceSha256": "0xbeccdffd2a9d6d46af6786bb8d78153c72144013bef67698e33d7f328eb3d512",
+    "shardsRegistryPath": "contracts/src/ProgrammableExactShardsRegistryV1.sol",
+    "shardsRegistryInterfacePath": "contracts/src/interfaces/IProgrammableExactShardsRegistryV1.sol",
+    "shardsRegistryInterfaceSha256": "0x9d5a84730dc874f8e2f39c2695d500b28d25a9bceb601e0593350e06f89a3d95",
+    "unitTestPath": "contracts/test/ProgrammableExactShardsAtomicLaunchRouteV1.t.sol"
+  },
+  "artifacts": {
+    "route": {
+      "sourceSha256": "0xee3bb8a620377b1feb97c22d466b15ee3e9e69285cf129d3e69741ffc7f7b530",
+      "canonicalAbiSha256": "0xa76815a0d8ac20371e9c971c7c18b46fea1ed5ad618441159cd11b44612056e4",
+      "creationCodeByteLength": 4524,
+      "creationCodeKeccak256": "0x2a6d22a255165cde1c2378e7d5f63efd52e992595bffb61166edf45383b49f3b",
+      "unlinkedRuntimeCodeByteLength": 3992,
+      "unlinkedRuntimeCodeKeccak256": "0x46c406140f599ee37b9a17644d9ae474a4da9d18ec3d9d7d2fa5304fca05dfb9",
+      "runtimeCodeLimitMarginBytes": 20584
+    },
+    "sharedRepositoryLineageRegistry": {
+      "sourceSha256": "0xf68617a5b45d6a63287312b8a519bfba7f783e3dad5b9312bc6043dc9880a59b",
+      "canonicalAbiSha256": "0xe90eb2d1c59415f885898e4153e20cef0c7564c9290010740bec7dc3d492d83f",
+      "creationCodeByteLength": 6130,
+      "creationCodeKeccak256": "0xf83413d5efe52fc562c1c1dee048413058a1ca24053c7d2b9f396fc6837b1c36",
+      "unlinkedRuntimeCodeByteLength": 5515,
+      "unlinkedRuntimeCodeKeccak256": "0x0374fd9de2c84fe89522fd3602dd4b0fb2ba2c5ed07fd2130b64e1d5821b7bf4",
+      "runtimeCodeLimitMarginBytes": 19061
+    },
+    "exactShardsRegistry": {
+      "sourceSha256": "0x2edefb9eef07a045acb12cba832b2990aee6c3bd93425629acd62b884aca8cf2",
+      "canonicalAbiSha256": "0x9492f1b19fe8dba9ebddcb8ae474c01971de51d64fe502bb2277c53f405aed62",
+      "creationCodeByteLength": 27268,
+      "creationCodeKeccak256": "0x15bc577db8933f8f9985ff77f768faabe62c197b53a1258915fda618f8c3650b",
+      "unlinkedRuntimeCodeByteLength": 24303,
+      "unlinkedRuntimeCodeKeccak256": "0x21c4e08e2471be1119f158021c4d6e426e5c953ea26719381b39fbcd0cc70d77",
+      "runtimeCodeLimitMarginBytes": 273
+    }
+  },
+  "activationRequirements": [
+    "INDEPENDENT_SECURITY_REVIEW_OF_EXACT_SOURCE_AND_RUNTIME",
+    "CANONICAL_DEPLOYMENT_RECEIPTS_FINALIZED",
+    "ALL_CONSTRUCTOR_RUNTIME_BINDINGS_MATCH",
+    "ONLY_EXACT_ATOMIC_ROUTE_HAS_SHARED_CONSUMER_ROLE",
+    "ONLY_EXACT_ATOMIC_ROUTE_HAS_SHARDS_REGISTRY_WRITER_ROLE",
+    "WEBSITE_DESCRIPTOR_BINDS_CANONICAL_ADDRESSES_AND_RUNTIMES",
+    "INDEXERS_BIND_FINAL_REGISTRY_AND_ATOMIC_ROUTE_EVENTS"
+  ],
+  "prohibitions": [
+    "NO_DEPLOYMENT_ADDRESS_INVENTION",
+    "NO_ROLE_GRANT_TO_EOA_REGISTRY_DIRECT_FACTORY_OR_GENERIC_ADAPTER",
+    "NO_SEPARATE_FACTORY_AND_POST_REGISTRATION_TRANSACTIONS",
+    "NO_ACTIVATION_FROM_LOCAL_OR_CI_EVIDENCE_ONLY"
+  ]
+}

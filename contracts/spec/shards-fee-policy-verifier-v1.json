@@ -5,8 +5,8 @@
   "launchAllowed": false,
   "externalActionOccurred": false,
   "productionBase": {
-    "commit": "a9260ec54324731226ccf0998a5110760ae1fc20",
-    "tree": "b810409f660d641f9205d6bf31b279133f0bef3b"
+    "commit": "c19e51979500ff9a588eb0093606454d48d68b2a",
+    "tree": "de80e26c9532c5e9a5522a42faca7156de92219f"
   },
   "decision": {
     "existingReviewedVerifierSupportsExactPolicy": false,
@@ -15,6 +15,19 @@
     "newShardsExecutionContractRequired": false,
     "smallestMissingLayerImplementedHere": "STATELESS_EXACT_THREE_CLAIM_FEE_POLICY_VERIFIER",
     "remainingRegistryRequirement": "DEPLOYED_REGISTRY_SUCCESSOR_MUST_BIND_THIS_EXACT_VERIFIER_AND STORE_THREE_DISTINCT_CLAIMS"
+  },
+  "uiMetadataBoundary": {
+    "feePolicyIncludesTokenName": false,
+    "feePolicyIncludesTokenSymbol": false,
+    "feePolicyIncludesPresentationBindingHash": false,
+    "githubTechnicalApprovalIncludesSelectedUiMetadata": false,
+    "websitePresentationFields": [
+      "description",
+      "image",
+      "links"
+    ],
+    "presentationValuesAreSourceArtifactInputs": false,
+    "economicsRemainExactly": "INCLUSIVE_100_BPS_SPLIT_10_10_80"
   },
   "candidateAudit": {
     "deployedRegistryV1": {
