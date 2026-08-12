@@ -524,11 +524,24 @@ async function readMarketBatch(
   const coreRequest = marketBatchQuery(identities);
   const liquidityRequest = marketLiquidityQuery(identities);
   const statsRequest = marketStatsQuery(identities);
-  const response = await executeBitqueryGraphql(
+  const coreRead = executeBitqueryGraphql(
     coreRequest.query,
     coreRequest.variables,
     options,
   );
+  const supplementaryReads = Promise.allSettled([
+    executeBitqueryGraphql(
+      liquidityRequest.query,
+      liquidityRequest.variables,
+      options,
+    ),
+    executeBitqueryGraphql(
+      statsRequest.query,
+      statsRequest.variables,
+      options,
+    ),
+  ]);
+  const response = await coreRead;
   const evm = record(response.data.EVM);
   const trading = record(response.data.Trading);
   if (evm === null) throw new BitqueryMarketDataError("response");
@@ -547,19 +560,12 @@ async function readMarketBatch(
       ? [{ index, trade }]
       : []
   );
-  const [priceResult, liquidityResult, statsResult] = await Promise.allSettled([
+  const [[priceResult], [liquidityResult, statsResult]] = await Promise.all([
+    Promise.allSettled([
       readIndexedPriceObservations(priceCandidates, options),
-      executeBitqueryGraphql(
-        liquidityRequest.query,
-        liquidityRequest.variables,
-        options,
-      ),
-      executeBitqueryGraphql(
-        statsRequest.query,
-        statsRequest.variables,
-        options,
-      ),
-    ]);
+    ]),
+    supplementaryReads,
+  ]);
 
   const indexedPricesByIndex = priceResult.status === "fulfilled"
     ? priceResult.value.observations

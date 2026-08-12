@@ -2057,10 +2057,14 @@ export function TokenDetailView({ address }: { address: string }) {
 
   useEffect(() => {
     if (!normalizedAddress || preview) return;
+    void preloadTokenChart(normalizedAddress, "1d");
+  }, [normalizedAddress, preview]);
+
+  useEffect(() => {
+    if (!normalizedAddress || preview) return;
 
     const tokenAddress = normalizedAddress;
     const controller = new AbortController();
-    void preloadTokenChart(tokenAddress, "1d");
 
     async function loadToken() {
       try {

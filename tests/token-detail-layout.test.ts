@@ -24,6 +24,17 @@ describe("token detail layout", () => {
     expect(chartSource).not.toContain(': "Onchain"');
   });
 
+  it("preloads the initial chart once per token instead of on every detail refresh", () => {
+    const viewSource = detailSource.slice(
+      detailSource.indexOf("export function TokenDetailView"),
+    );
+
+    expect(viewSource.match(/preloadTokenChart/g)).toHaveLength(1);
+    expect(viewSource).toMatch(
+      /void preloadTokenChart\(normalizedAddress, "1d"\);\s*\}, \[normalizedAddress, preview\]\);/,
+    );
+  });
+
   it("announces the exact inspected chart point without duplicating the visual tooltip", () => {
     const activeValueIdIndex = chartSource.indexOf("id={activeValueId}");
     const liveRegion = chartSource.slice(

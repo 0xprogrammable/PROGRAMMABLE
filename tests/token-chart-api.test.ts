@@ -252,6 +252,28 @@ describe("token chart Bitquery API", () => {
     );
   });
 
+  it("briefly reuses authoritative current one-point history", async () => {
+    mocks.readBitqueryMarketChartV1.mockResolvedValue(chart({
+      status: "insufficient-history",
+      points: [{
+        blockNumber: "25740002",
+        time: "2026-08-11T14:02:00.000Z",
+        priceUsd: "2",
+        tradeCount: 1,
+      }],
+      swapCount: 1,
+    }));
+
+    const response = await GET(new NextRequest(
+      `http://localhost/api/explore/token/chart?address=${token.tokenAddress}&range=1h`,
+    ));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe(
+      "public, max-age=0, s-maxage=2, stale-while-revalidate=5",
+    );
+  });
+
   it("starts a single-pool chart without waiting for market enrichment", async () => {
     let resolveMarket: ((value: ReadonlyMap<string, TokenMarketDataV1>) => void)
       | undefined;

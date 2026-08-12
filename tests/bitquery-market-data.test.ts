@@ -397,6 +397,48 @@ describe("Bitquery-only market data", () => {
     });
   });
 
+  it("starts independent market reads before the core snapshot completes", async () => {
+    let releaseCore: (() => void) | undefined;
+    const corePending = new Promise<void>((resolve) => {
+      releaseCore = resolve;
+    });
+    const started = new Set<string>();
+    const fetchImpl = vi.fn(async (
+      _url: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      const request = JSON.parse(String(init?.body));
+      if (request.query.includes("ProgrammableMarketSnapshot")) {
+        started.add("core");
+        await corePending;
+      } else if (request.query.includes("ProgrammableMarketLiquidity")) {
+        started.add("liquidity");
+      } else if (request.query.includes("ProgrammableMarketStats")) {
+        started.add("stats");
+      } else {
+        throw new Error("unexpected market request");
+      }
+      return jsonResponse(marketResponse());
+    }) as typeof fetch;
+
+    const read = readBitqueryTokenMarketDataV1([PCAN], {
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+    try {
+      await vi.waitFor(() => {
+        expect([...started].sort()).toEqual(["core", "liquidity", "stats"]);
+      });
+    } finally {
+      releaseCore?.();
+    }
+
+    const values = await read;
+    expect(values.get(PCAN.tokenAddress)).toMatchObject({ source: "bitquery" });
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
   it.each([
     ["wrong token id", supplyRow({ id: `bid:eth:${CLASSIC.tokenAddress}` })],
     ["wrong token address", supplyRow({ address: CLASSIC.tokenAddress })],

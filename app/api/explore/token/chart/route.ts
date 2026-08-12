@@ -50,6 +50,19 @@ const UNAVAILABLE_CANONICAL_VALUATION = Object.freeze({
   status: "unavailable",
   reason: "source-unavailable",
 } as const satisfies MarketValuationV1);
+const REUSABLE_CHART_CACHE_CONTROL =
+  "public, max-age=0, s-maxage=2, stale-while-revalidate=5";
+
+function chartResponseCacheControl(chart: MarketChartV1): string {
+  const hasReusableHistory =
+    chart.status === "ready" || chart.status === "insufficient-history";
+  return chart.readStatus === "live" &&
+      hasReusableHistory &&
+      chart.valuation.status === "available" &&
+      chart.valuation.freshness === "current"
+    ? REUSABLE_CHART_CACHE_CONTROL
+    : "no-store";
+}
 
 async function readPrimaryChartModel() {
   const model = await readAlchemyExploreModel();
@@ -258,12 +271,7 @@ export async function GET(request: NextRequest) {
       },
       {
         headers: {
-          "Cache-Control":
-            chart.status === "ready" &&
-                chart.valuation.status === "available" &&
-                chart.valuation.freshness === "current"
-              ? "public, max-age=0, s-maxage=2, stale-while-revalidate=5"
-              : "no-store",
+          "Cache-Control": chartResponseCacheControl(chart),
           "X-Programmable-Data-Quality": chart.status,
           "X-Programmable-Market-Source": "bitquery",
           ...(hasVerifiedPrice
