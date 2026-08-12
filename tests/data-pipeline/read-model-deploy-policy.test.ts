@@ -713,6 +713,10 @@ describe("read-model production deploy policy", () => {
       "/api/explore/token/chart?address=${goldenTokenAddress}&range=all",
     );
     expect(workflow).toContain(
+      "staged Explore exposed the non-public PCAN release canary",
+    );
+    expect(workflow).toContain("goldenSearch.total !== 0");
+    expect(workflow).toContain(
       '"0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce"',
     );
     expect(workflow).toContain(
@@ -751,10 +755,18 @@ describe("read-model production deploy policy", () => {
       '"./scripts/perf/bitquery-golden-market-parity.mjs"',
     );
     expect(workflow).toContain(
+      '"./scripts/perf/bitquery-historical-release-gate.mjs"',
+    );
+    expect(workflow).toContain(
       "await verifyBitqueryGoldenMarketParityV1({",
     );
     expect(workflow).toContain("const historicalPaidPathVerified =");
-    expect(workflow).toContain("goldenParity.confirmations >= 12");
+    expect(workflow).toContain(
+      "verifyBitqueryHistoricalGoldenReleaseV1({",
+    );
+    expect(workflow).toContain(
+      "historicalGoldenRelease.confirmations >= 12",
+    );
     expect(workflow).toContain('goldenChart.readStatus !== "live"');
     expect(workflow).toContain('goldenChart.readStatus === "live"');
     expect(workflow).toContain(

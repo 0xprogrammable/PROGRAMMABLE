@@ -13,6 +13,10 @@ import {
   verifyLiveCacheAndKeyContracts,
 } from "./read-model-live-verifier.mjs";
 import { verifyBitqueryGoldenMarketParityV1 } from "./bitquery-golden-market-parity.mjs";
+import {
+  boundedStaleMarketTimeV1,
+  verifyBitqueryHistoricalGoldenReleaseV1,
+} from "./bitquery-historical-release-gate.mjs";
 
 const HEALTH_PATH = "/api/ops/health";
 const EXPLORE_PATH = "/api/explore?limit=6&page=1&sort=market-cap";
@@ -21,6 +25,8 @@ const GOLDEN_TOKEN_ADDRESS =
 const GOLDEN_POOL_ID =
   "0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229";
 const GOLDEN_DETAIL_PATH = `/api/explore/token?address=${GOLDEN_TOKEN_ADDRESS}`;
+const GOLDEN_SEARCH_PATH =
+  `/api/explore?limit=20&page=1&q=${GOLDEN_TOKEN_ADDRESS}&sort=market-cap`;
 const GOLDEN_CHART_PATH =
   `/api/explore/token/chart?address=${GOLDEN_TOKEN_ADDRESS}&range=all`;
 const MAXIMUM_RESPONSE_BYTES = 2 * 1024 * 1024;
@@ -122,10 +128,7 @@ function currentMarketTime(value) {
     Date.now() - Date.parse(value) <= 6 * 60_000;
 }
 
-function boundedStaleMarketTime(value) {
-  return validMarketTime(value) &&
-    Date.now() - Date.parse(value) <= 24 * 60 * 60_000;
-}
+const boundedStaleMarketTime = boundedStaleMarketTimeV1;
 
 function exactBitqueryHeaders(response) {
   return response.headers.marketSource === "bitquery" &&
@@ -182,7 +185,7 @@ function honestExploreValuations(response) {
   return [null, "bitquery"].includes(response.headers.priceSource) &&
     (currentCount === 0 || response.headers.priceSource === "bitquery") &&
     response.headers.marketAsOf === marketAsOf &&
-    (marketAsOf === null || validMarketTime(marketAsOf));
+    (marketAsOf === null || boundedStaleMarketTime(marketAsOf));
 }
 
 function exactGoldenDetail(response) {
@@ -215,7 +218,6 @@ function exactGoldenDetail(response) {
     validMarketTime(valuation.asOfTime) &&
     response.headers.marketAsOf === valuation.asOfTime &&
     (valuation.freshness !== "current" || currentMarketTime(valuation.asOfTime)) &&
-    (valuation.freshness !== "stale" || boundedStaleMarketTime(valuation.asOfTime)) &&
     response.headers.dataQuality === response.body?.dataQuality?.status &&
     (valuation.freshness === "current"
       ? token.fdvUsdWad === valuation.valueWad &&
@@ -223,6 +225,17 @@ function exactGoldenDetail(response) {
       : valuation.freshness === "stale" &&
         token.fdvUsdWad === undefined &&
         response.headers.priceSource === null);
+}
+
+function exactGoldenSearch(response) {
+  return response.ok &&
+    exactBitqueryHeaders(response) &&
+    response.body?.status === "ready" &&
+    Array.isArray(response.body?.tokens) &&
+    response.body.tokens.every(
+      (token) => token?.tokenAddress?.toLowerCase() !== GOLDEN_TOKEN_ADDRESS,
+    ) &&
+    response.body.total === 0;
 }
 
 function exactGoldenChart(response) {
@@ -248,8 +261,6 @@ function exactGoldenChart(response) {
     !["current", "stale"].includes(chart.valuation?.freshness) ||
     (chart.valuation?.freshness === "current" &&
       !currentMarketTime(chart.valuation?.asOfTime)) ||
-    (chart.valuation?.freshness === "stale" &&
-      !boundedStaleMarketTime(chart.valuation?.asOfTime)) ||
     chart.asOfTime !== chart.points.at(-1)?.time ||
     response.headers.marketAsOf !== chart.asOfTime ||
     !validMarketTime(chart.asOfTime)
@@ -300,6 +311,11 @@ function publicChecks(responses) {
         exactBitqueryHeaders(responses.explore) &&
         honestExploreValuations(responses.explore),
       detail: "the production Explore route returns honest Bitquery FDV freshness",
+    },
+    {
+      id: "production-bitquery-canary-hidden",
+      condition: exactGoldenSearch(responses.goldenSearch),
+      detail: "the PCAN release canary stays absent from public Explore discovery",
     },
     {
       id: "production-bitquery-detail",
@@ -389,6 +405,7 @@ export async function verifyPostPromotion(input) {
     request(fetchImpl, targetUrl, "/", false),
     request(fetchImpl, targetUrl, HEALTH_PATH),
     request(fetchImpl, targetUrl, EXPLORE_PATH),
+    request(fetchImpl, targetUrl, GOLDEN_SEARCH_PATH),
     request(fetchImpl, targetUrl, GOLDEN_DETAIL_PATH),
     request(fetchImpl, targetUrl, GOLDEN_CHART_PATH),
   ]);
@@ -396,24 +413,32 @@ export async function verifyPostPromotion(input) {
     root: responses[0],
     health: responses[1],
     explore: responses[2],
-    goldenDetail: responses[3],
-    goldenChart: responses[4],
+    goldenSearch: responses[3],
+    goldenDetail: responses[4],
+    goldenChart: responses[5],
   })];
   let goldenParity = null;
+  let historicalGoldenRelease = null;
   try {
     goldenParity = await verifyBitqueryGoldenMarketParityV1({
-      token: responses[3].body?.token,
+      token: responses[4].body?.token,
       fetchImpl,
       rpcUrls: input.marketParityRpcUrls,
+    });
+    historicalGoldenRelease = verifyBitqueryHistoricalGoldenReleaseV1({
+      detailToken: responses[4].body?.token,
+      chart: responses[5].body,
+      parity: goldenParity,
     });
   } catch {
     // The public verifier reports only the typed gate, never provider details.
   }
   checks.push({
     id: "production-bitquery-golden-independent-parity",
-    condition: goldenParity?.schemaVersion ===
-      "programmable.bitquery-golden-market-parity.v1",
-    detail: "the public PCAN market price matches two independent same-block reads",
+    condition: historicalGoldenRelease?.schemaVersion ===
+        "programmable.bitquery-historical-release.v1" &&
+      historicalGoldenRelease.confirmations >= 12,
+    detail: "the direct PCAN history matches two independent same-block price, supply and liquidity reads",
   });
 
   if (input.evidencePath) {

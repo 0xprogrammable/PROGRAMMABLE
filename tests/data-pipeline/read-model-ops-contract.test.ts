@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { encodeFunctionResult, parseAbi } from "viem";
+import { encodeFunctionData, encodeFunctionResult, parseAbi } from "viem";
 import { describe, expect, it } from "vitest";
 
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
@@ -20,6 +20,8 @@ const GOLDEN_TOKEN_ADDRESS =
   "0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce";
 const GOLDEN_POOL_ID =
   "0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229";
+const PUBLIC_TOKEN_ADDRESS =
+  "0x1111111111111111111111111111111111111111";
 const TEST_STATE_VIEW = "0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227";
 const TEST_ETH_USD_FEED = "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419";
 const TEST_PARITY_BLOCK = 25_731_000n;
@@ -28,6 +30,7 @@ const TEST_PRICE_USD_WAD = 2_000n * 10n ** 18n;
 const TEST_FDV_USD_WAD = 2_000_000n * 10n ** 18n;
 const testStateViewAbi = parseAbi([
   "function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96,int24 tick,uint24 protocolFee,uint24 lpFee)",
+  "function getLiquidity(bytes32 poolId) view returns (uint128 liquidity)",
 ]);
 const testErc20Abi = parseAbi([
   "function decimals() view returns (uint8)",
@@ -352,6 +355,69 @@ describe("read-model operations source contract", () => {
     );
   });
 
+  it("fails closed when the historical PCAN gate widens the general stale ceiling", () => {
+    const helperPath = "scripts/perf/bitquery-historical-release-gate.mjs";
+    const helper = readFileSync(resolve(ROOT, helperPath), "utf8");
+    const unsafeHelper = helper.replace(
+      "const MAXIMUM_STALE_AGE_MS = 24 * 60 * 60_000",
+      "const MAXIMUM_STALE_AGE_MS = 48 * 60 * 60_000",
+    );
+    expect(unsafeHelper).not.toBe(helper);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [helperPath]: unsafeHelper,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-bitquery-stage-smoke",
+    );
+  });
+
+  it("fails closed when independent PCAN parity drops exact-block liquidity", () => {
+    const parityPath = "scripts/perf/bitquery-golden-market-parity.mjs";
+    const parity = readFileSync(resolve(ROOT, parityPath), "utf8");
+    const unsafeParity = parity.replace(
+      '  "function getLiquidity(bytes32 poolId) view returns (uint128 liquidity)",\n',
+      "",
+    );
+    expect(unsafeParity).not.toBe(parity);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [parityPath]: unsafeParity,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-bitquery-stage-smoke",
+    );
+  });
+
+  it("fails closed when the staged PCAN canary becomes discoverable", () => {
+    const workflowPath = ".github/workflows/deploy-production.yml";
+    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
+    const unsafeWorkflow = workflow.replace(
+      `            goldenSearch.tokens.some(
+              (token) => token?.tokenAddress?.toLowerCase() === goldenTokenAddress,
+            ) ||
+            goldenSearch.total !== 0`,
+      "            false",
+    );
+    expect(unsafeWorkflow).not.toBe(workflow);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [workflowPath]: unsafeWorkflow,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-bitquery-stage-smoke",
+    );
+  });
+
   it("rejects a Bitquery staged smoke bypass relocated to another workflow step", () => {
     const workflowPath = ".github/workflows/deploy-production.yml";
     const secretLine =
@@ -652,14 +718,24 @@ describe("read-model operations source contract", () => {
   });
 });
 
-function publicFetch(healthStatus = "healthy") {
+function publicFetch(
+  healthStatus = "healthy",
+  goldenMarketAgeMs = 60 * 60_000,
+) {
   return async (input: URL | RequestInfo, init?: RequestInit) => {
     const url = new URL(String(input));
-    const marketAsOf = new Date(Date.now() - 60 * 60_000).toISOString();
-    const earlierMarketTime = new Date(Date.now() - 2 * 60 * 60_000).toISOString();
-    const bitqueryHeaders = {
+    const goldenMarketAsOf = new Date(
+      Math.floor((Date.now() - goldenMarketAgeMs) / 1_000) * 1_000,
+    ).toISOString();
+    const publicMarketAsOf = new Date(
+      Math.floor((Date.now() - 60 * 60_000) / 1_000) * 1_000,
+    ).toISOString();
+    const earlierMarketTime = new Date(
+      Date.parse(goldenMarketAsOf) - 60 * 60_000,
+    ).toISOString();
+    const publicBitqueryHeaders = {
       "X-Programmable-Data-Quality": "stale",
-      "X-Programmable-Market-As-Of": marketAsOf,
+      "X-Programmable-Market-As-Of": publicMarketAsOf,
       "X-Programmable-Market-Source": "bitquery",
       "X-Programmable-Read-Source": "operational+durable+postgres",
     };
@@ -676,17 +752,28 @@ function publicFetch(healthStatus = "healthy") {
         result = {
           number: `0x${TEST_PARITY_BLOCK.toString(16)}`,
           hash: `0x${"11".repeat(32)}`,
-          timestamp: `0x${BigInt(Math.floor(Date.parse(marketAsOf) / 1_000)).toString(16)}`,
+          timestamp: `0x${BigInt(Math.floor(Date.parse(goldenMarketAsOf) / 1_000)).toString(16)}`,
         };
       } else if (request.method === "eth_call") {
         const call = request.params[0] as { to: string; data: string };
         const target = call.to.toLowerCase();
         if (target === TEST_STATE_VIEW.toLowerCase()) {
-          result = encodeFunctionResult({
+          const liquiditySelector = encodeFunctionData({
             abi: testStateViewAbi,
-            functionName: "getSlot0",
-            result: [2n ** 96n, 0, 0, 0],
-          });
+            functionName: "getLiquidity",
+            args: [GOLDEN_POOL_ID],
+          }).slice(0, 10);
+          result = call.data.startsWith(liquiditySelector)
+            ? encodeFunctionResult({
+                abi: testStateViewAbi,
+                functionName: "getLiquidity",
+                result: 1_000_000n,
+              })
+            : encodeFunctionResult({
+                abi: testStateViewAbi,
+                functionName: "getSlot0",
+                result: [2n ** 96n, 0, 0, 0],
+              });
         } else if (
           target === GOLDEN_TOKEN_ADDRESS &&
           call.data.startsWith("0x313ce567")
@@ -715,7 +802,9 @@ function publicFetch(healthStatus = "healthy") {
             result: 8,
           });
         } else {
-          const timestamp = BigInt(Math.floor(Date.parse(marketAsOf) / 1_000));
+          const timestamp = BigInt(
+            Math.floor(Date.parse(goldenMarketAsOf) / 1_000),
+          );
           result = encodeFunctionResult({
             abi: testFeedAbi,
             functionName: "latestRoundData",
@@ -751,10 +840,27 @@ function publicFetch(healthStatus = "healthy") {
       );
     }
     if (url.pathname === "/api/explore") {
+      if (url.searchParams.get("q") === GOLDEN_TOKEN_ADDRESS) {
+        return Response.json({
+          status: "ready",
+          tokens: [],
+          total: 0,
+          dataQuality: {
+            status: "partial",
+            valuation: { asOfTime: null },
+          },
+        }, {
+          headers: {
+            "X-Programmable-Data-Quality": "partial",
+            "X-Programmable-Market-Source": "bitquery",
+            "X-Programmable-Read-Source": "operational+durable+postgres",
+          },
+        });
+      }
       return Response.json({
         status: "ready",
         tokens: [{
-          tokenAddress: GOLDEN_TOKEN_ADDRESS,
+          tokenAddress: PUBLIC_TOKEN_ADDRESS,
           valuation: {
             status: "available",
             metric: "fdv",
@@ -763,14 +869,14 @@ function publicFetch(healthStatus = "healthy") {
             source: "bitquery",
             freshness: "stale",
             valueWad: TEST_FDV_USD_WAD.toString(),
-            asOfTime: marketAsOf,
+            asOfTime: publicMarketAsOf,
           },
         }],
         dataQuality: {
           status: "stale",
-          valuation: { asOfTime: marketAsOf },
+          valuation: { asOfTime: publicMarketAsOf },
         },
-      }, { headers: bitqueryHeaders });
+      }, { headers: publicBitqueryHeaders });
     }
     if (url.pathname === "/api/explore/token") {
       return Response.json({
@@ -787,7 +893,7 @@ function publicFetch(healthStatus = "healthy") {
             source: "bitquery",
             freshness: "stale",
             valueWad: TEST_FDV_USD_WAD.toString(),
-            asOfTime: marketAsOf,
+            asOfTime: goldenMarketAsOf,
           },
           marketData: {
             schemaVersion: "programmable.market-data.v1",
@@ -802,23 +908,20 @@ function publicFetch(healthStatus = "healthy") {
                 poolId: GOLDEN_POOL_ID,
                 protocol: "uniswap_v4",
               },
+              source: "bitquery",
               status: "stale",
+              quality: "partial",
+              asOfTime: goldenMarketAsOf,
               latestTrade: {
                 transactionHash: `0x${"22".repeat(32)}`,
                 logIndex: 1,
                 blockNumber: TEST_PARITY_BLOCK.toString(),
-                time: marketAsOf,
+                time: goldenMarketAsOf,
                 tokenSide: "buy",
                 priceUsdWad: TEST_PRICE_USD_WAD.toString(),
                 rawPriceUsdWad: TEST_PRICE_USD_WAD.toString(),
-                priceUsdAsOfTime: marketAsOf,
+                priceUsdAsOfTime: goldenMarketAsOf,
                 priceUsdSource: "bitquery-token-price-index-v1",
-              },
-              liquidity: {
-                asOfTime: marketAsOf,
-                asOfBlock: TEST_PARITY_BLOCK.toString(),
-                valueUsdWad: (20_000n * 10n ** 18n).toString(),
-                freshness: "stale",
               },
               valuation: {
                 status: "available",
@@ -827,7 +930,7 @@ function publicFetch(healthStatus = "healthy") {
                 valueUsdWad: TEST_FDV_USD_WAD.toString(),
                 fdvUsdWad: TEST_FDV_USD_WAD.toString(),
                 totalSupply: "1000",
-                asOfTime: marketAsOf,
+                asOfTime: goldenMarketAsOf,
                 freshness: "stale",
               },
             }],
@@ -839,7 +942,7 @@ function publicFetch(healthStatus = "healthy") {
         },
       }, {
         headers: {
-          "X-Programmable-Market-As-Of": marketAsOf,
+          "X-Programmable-Market-As-Of": goldenMarketAsOf,
           "X-Programmable-Data-Quality": "stale",
           "X-Programmable-Market-Source": "bitquery",
           "X-Programmable-Read-Source": "operational+durable+postgres",
@@ -852,19 +955,25 @@ function publicFetch(healthStatus = "healthy") {
         source: "bitquery",
         readStatus: "live",
         status: "ready",
+        range: "all",
         generatedAt: new Date().toISOString(),
         address: GOLDEN_TOKEN_ADDRESS,
-        identity: { poolId: GOLDEN_POOL_ID },
+        identity: {
+          chainId: "1",
+          tokenAddress: GOLDEN_TOKEN_ADDRESS,
+          poolId: GOLDEN_POOL_ID,
+          protocol: "uniswap_v4",
+        },
         points: [
           {
             blockNumber: "25730000",
             time: earlierMarketTime,
-            priceUsd: "0.2",
+            priceUsd: "1900",
           },
           {
             blockNumber: "25731000",
-            time: marketAsOf,
-            priceUsd: "0.25",
+            time: goldenMarketAsOf,
+            priceUsd: "2000",
           },
         ],
         valuation: {
@@ -872,13 +981,15 @@ function publicFetch(healthStatus = "healthy") {
           metric: "fdv",
           supplyBasis: "total",
           freshness: "stale",
-          asOfTime: marketAsOf,
+          valueUsdWad: TEST_FDV_USD_WAD.toString(),
+          fdvUsdWad: TEST_FDV_USD_WAD.toString(),
+          asOfTime: goldenMarketAsOf,
         },
-        asOfTime: marketAsOf,
+        asOfTime: goldenMarketAsOf,
       }, {
         headers: {
           "X-Programmable-Data-Quality": "ready",
-          "X-Programmable-Market-As-Of": marketAsOf,
+          "X-Programmable-Market-As-Of": goldenMarketAsOf,
           "X-Programmable-Market-Source": "bitquery",
           "X-Programmable-Price-Source": "bitquery",
         },
@@ -914,10 +1025,95 @@ describe("post-promotion route verification", () => {
       "production-root",
       "production-health",
       "production-explore",
+      "production-bitquery-canary-hidden",
       "production-bitquery-detail",
       "production-bitquery-chart",
       "production-bitquery-golden-independent-parity",
     ]);
+  });
+
+  it("accepts PCAN evidence older than 24 hours only after exact independent parity", async () => {
+    const result = await verifyPostPromotion(
+      postPromotionInput(publicFetch("healthy", 58 * 60 * 60_000)),
+    );
+    expect(result.ok).toBe(true);
+    expect(result.failures).toEqual([]);
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({
+        id: "production-bitquery-golden-independent-parity",
+        status: "pass",
+      }),
+    );
+  });
+
+  it("rejects historical PCAN evidence when exact-block pool liquidity is zero", async () => {
+    const base = publicFetch("healthy", 58 * 60 * 60_000);
+    const liquiditySelector = encodeFunctionData({
+      abi: testStateViewAbi,
+      functionName: "getLiquidity",
+      args: [GOLDEN_POOL_ID],
+    }).slice(0, 10);
+    const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
+      const url = new URL(String(input));
+      if (url.hostname !== "rpc-a.invalid" && url.hostname !== "rpc-b.invalid") {
+        return base(input, init);
+      }
+      const request = JSON.parse(String(init?.body ?? "{}")) as {
+        id: number;
+        method: string;
+        params: readonly [{ data?: string }];
+      };
+      if (
+        request.method === "eth_call" &&
+        request.params[0]?.data?.startsWith(liquiditySelector)
+      ) {
+        return Response.json({
+          jsonrpc: "2.0",
+          id: request.id,
+          result: encodeFunctionResult({
+            abi: testStateViewAbi,
+            functionName: "getLiquidity",
+            result: 0n,
+          }),
+        });
+      }
+      return base(input, init);
+    };
+    const result = await verifyPostPromotion(postPromotionInput(fetchImpl));
+    expect(result.ok).toBe(false);
+    expect(result.failures).toContainEqual(
+      expect.objectContaining({
+        id: "production-bitquery-golden-independent-parity",
+      }),
+    );
+  });
+
+  it("rejects a publicly discoverable PCAN release canary", async () => {
+    const base = publicFetch();
+    const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
+      const url = new URL(String(input));
+      if (
+        url.pathname !== "/api/explore" ||
+        url.searchParams.get("q") !== GOLDEN_TOKEN_ADDRESS
+      ) return base(input, init);
+      return Response.json({
+        status: "ready",
+        tokens: [{ tokenAddress: GOLDEN_TOKEN_ADDRESS }],
+        total: 1,
+        dataQuality: { status: "partial", valuation: { asOfTime: null } },
+      }, {
+        headers: {
+          "X-Programmable-Data-Quality": "partial",
+          "X-Programmable-Market-Source": "bitquery",
+          "X-Programmable-Read-Source": "operational+durable+postgres",
+        },
+      });
+    };
+    const result = await verifyPostPromotion(postPromotionInput(fetchImpl));
+    expect(result.ok).toBe(false);
+    expect(result.failures).toContainEqual(
+      expect.objectContaining({ id: "production-bitquery-canary-hidden" }),
+    );
   });
 
   it("rejects an internally coherent Bitquery price with the wrong onchain scale", async () => {
@@ -1064,13 +1260,15 @@ describe("post-promotion route verification", () => {
     );
   });
 
-  it("rejects Explore valuation evidence older than the stale release ceiling", async () => {
+  it("rejects non-PCAN Explore valuation evidence older than the stale release ceiling", async () => {
     const base = publicFetch();
     const tooOld = new Date(Date.now() - 25 * 60 * 60_000).toISOString();
     const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
       const url = new URL(String(input));
       const response = await base(input, init);
-      if (url.pathname !== "/api/explore") return response;
+      if (url.pathname !== "/api/explore" || url.searchParams.has("q")) {
+        return response;
+      }
       const body = await response.json();
       body.tokens[0].valuation.asOfTime = tooOld;
       body.dataQuality.valuation.asOfTime = tooOld;
@@ -1087,10 +1285,12 @@ describe("post-promotion route verification", () => {
 
   it("rejects an old FDV mislabeled as current", async () => {
     const base = publicFetch();
-    const fetchImpl = async (input: URL | RequestInfo) => {
+    const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
       const url = new URL(String(input));
-      const response = await base(input);
-      if (url.pathname !== "/api/explore") return response;
+      const response = await base(input, init);
+      if (url.pathname !== "/api/explore" || url.searchParams.has("q")) {
+        return response;
+      }
       const body = await response.json();
       body.tokens[0].valuation.freshness = "current";
       body.tokens[0].fdvUsdWad = body.tokens[0].valuation.valueWad;
