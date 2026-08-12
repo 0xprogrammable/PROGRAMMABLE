@@ -306,9 +306,8 @@ html[data-theme="dark"] .app-frame::before {
 
 /* Keep the refractive layer behind content and disable it where browsers
  * cannot render the SVG displacement cleanly. */
-@supports not (
-  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
-) {
+/* prettier-ignore */
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
   .liquid-glass-distortion::after {
     -webkit-filter: none;
     filter: none;
