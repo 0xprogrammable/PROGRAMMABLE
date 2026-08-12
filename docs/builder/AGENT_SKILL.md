@@ -54,7 +54,7 @@ they are not silently promoted to Programmable-tested deployments.
 ## Install the Builder
 
 The canonical package is synchronized with the Hookbuilder `0.5.1` development candidate at commit
-`3f06935a132830f9282b5936452cd562c0c0ad5a`, based on public `main`. The older
+`3f62d82fe4336b1c47e63e58fc49cab5afe87704`, based on public `main`. The older
 `programmable-v4-builder-v0.2.1` package is a historical beta contract and must not be selected for new model work.
 See [HOOKBUILDER_SYNC.md](HOOKBUILDER_SYNC.md) for the exact source tree and generated-mirror digest.
 
