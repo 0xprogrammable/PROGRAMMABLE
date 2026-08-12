@@ -207,6 +207,16 @@ jobs:
         with:
           node-version: 24
 
+      - name: Install Foundry for maintained skill tests
+        uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1
+        with:
+          version: v1.7.1
+
+      - name: Preload the portable-test Solidity compiler
+        run: |
+          mkdir -p -- "$RUNNER_TEMP/programmable-foundry-bootstrap"
+          forge build --use 0.8.26 --root "$RUNNER_TEMP/programmable-foundry-bootstrap"
+
       - name: Execute maintained skill tests
         working-directory: source
         shell: bash
