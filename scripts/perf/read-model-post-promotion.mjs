@@ -137,6 +137,49 @@ function exactBitqueryHeaders(response) {
     response.headers.dataQuality === response.body?.dataQuality?.status;
 }
 
+function exactCurrentPublicFdvLiquidity(token) {
+  const tokenAddress = token?.tokenAddress?.toLowerCase();
+  const valuation = token?.valuation;
+  const market = token?.marketData;
+  const primary = market?.pools?.find(
+    (pool) => pool?.identity?.poolId === market?.primaryPoolId,
+  );
+  const liquidity = primary?.liquidity;
+  const poolValuation = primary?.valuation;
+  return /^0x[0-9a-f]{40}$/u.test(tokenAddress ?? "") &&
+    tokenAddress !== GOLDEN_TOKEN_ADDRESS &&
+    valuation?.status === "available" &&
+    valuation.metric === "fdv" &&
+    valuation.supplyBasis === "total" &&
+    valuation.currency === "usd" &&
+    valuation.source === "bitquery" &&
+    valuation.freshness === "current" &&
+    positiveInteger(valuation.valueWad) &&
+    token.fdvUsdWad === valuation.valueWad &&
+    currentMarketTime(valuation.asOfTime) &&
+    market?.schemaVersion === "programmable.market-data.v1" &&
+    market.source === "bitquery" &&
+    currentMarketTime(market.generatedAt) &&
+    /^0x[0-9a-f]{64}$/u.test(market.primaryPoolId ?? "") &&
+    primary?.identity?.chainId === "1" &&
+    primary.identity.tokenAddress === tokenAddress &&
+    primary.identity.poolId === market.primaryPoolId &&
+    primary.identity.protocol === "uniswap_v4" &&
+    primary.source === "bitquery" &&
+    primary.status === "current" &&
+    liquidity?.freshness === "current" &&
+    positiveInteger(liquidity.valueUsdWad) &&
+    positiveInteger(liquidity.asOfBlock) &&
+    liquidity.asOfTime === valuation.asOfTime &&
+    currentMarketTime(liquidity.asOfTime) &&
+    poolValuation?.status === "available" &&
+    poolValuation.metric === "fdv" &&
+    poolValuation.supplyBasis === "total" &&
+    poolValuation.freshness === "current" &&
+    poolValuation.valueUsdWad === valuation.valueWad &&
+    poolValuation.asOfTime === valuation.asOfTime;
+}
+
 function honestExploreValuations(response) {
   const tokens = response.body?.tokens;
   if (!Array.isArray(tokens) || tokens.length === 0) return false;
@@ -174,7 +217,8 @@ function honestExploreValuations(response) {
     if (
       sawNonCurrent ||
       token.fdvUsdWad !== valuation.valueWad ||
-      !currentMarketTime(valuation.asOfTime)
+      !currentMarketTime(valuation.asOfTime) ||
+      !exactCurrentPublicFdvLiquidity(token)
     ) return false;
     const value = BigInt(valuation.valueWad);
     if (previousCurrentFdv !== null && value > previousCurrentFdv) return false;
@@ -182,10 +226,10 @@ function honestExploreValuations(response) {
     currentCount += 1;
   }
   const marketAsOf = response.body?.dataQuality?.valuation?.asOfTime ?? null;
-  return [null, "bitquery"].includes(response.headers.priceSource) &&
-    (currentCount === 0 || response.headers.priceSource === "bitquery") &&
+  return currentCount > 0 &&
+    response.headers.priceSource === "bitquery" &&
     response.headers.marketAsOf === marketAsOf &&
-    (marketAsOf === null || boundedStaleMarketTime(marketAsOf));
+    currentMarketTime(marketAsOf);
 }
 
 function exactGoldenDetail(response) {

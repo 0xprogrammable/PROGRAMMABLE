@@ -22,6 +22,7 @@ const GOLDEN_POOL_ID =
   "0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229";
 const PUBLIC_TOKEN_ADDRESS =
   "0x1111111111111111111111111111111111111111";
+const PUBLIC_POOL_ID = `0x${"44".repeat(32)}`;
 const TEST_STATE_VIEW = "0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227";
 const TEST_ETH_USD_FEED = "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419";
 const TEST_PARITY_BLOCK = 25_731_000n;
@@ -352,6 +353,50 @@ describe("read-model operations source contract", () => {
     });
     expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
       "ops-protected-bitquery-stage-smoke",
+    );
+  });
+
+  it("fails closed when staged release permits zero current public FDVs", () => {
+    const workflowPath = ".github/workflows/deploy-production.yml";
+    const workflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
+    const unsafeWorkflow = workflow.replace(
+      "          if (currentFdvCount < 1) {",
+      "          if (currentFdvCount < 0) {",
+    );
+    expect(unsafeWorkflow).not.toBe(workflow);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [workflowPath]: unsafeWorkflow,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-bitquery-stage-smoke",
+    );
+  });
+
+  it("fails closed when post-promotion permits zero current public FDVs", () => {
+    const postPromotionPath =
+      "scripts/perf/read-model-post-promotion.mjs";
+    const postPromotion = readFileSync(
+      resolve(ROOT, postPromotionPath),
+      "utf8",
+    );
+    const unsafePostPromotion = postPromotion.replace(
+      "  return currentCount > 0 &&",
+      "  return currentCount >= 0 &&",
+    );
+    expect(unsafePostPromotion).not.toBe(postPromotion);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [postPromotionPath]: unsafePostPromotion,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-post-promotion-binding",
     );
   });
 
@@ -747,7 +792,7 @@ function publicFetch(
     Math.floor((fixtureNow - goldenMarketAgeMs) / 1_000) * 1_000,
   ).toISOString();
   const publicMarketAsOf = new Date(
-    Math.floor((fixtureNow - 60 * 60_000) / 1_000) * 1_000,
+    Math.floor((fixtureNow - 2 * 60_000) / 1_000) * 1_000,
   ).toISOString();
   const earlierMarketTime = new Date(
     Date.parse(goldenMarketAsOf) - 60 * 60_000,
@@ -756,9 +801,10 @@ function publicFetch(
   return async (input: URL | RequestInfo, init?: RequestInit) => {
     const url = new URL(String(input));
     const publicBitqueryHeaders = {
-      "X-Programmable-Data-Quality": "stale",
+      "X-Programmable-Data-Quality": "complete",
       "X-Programmable-Market-As-Of": publicMarketAsOf,
       "X-Programmable-Market-Source": "bitquery",
+      "X-Programmable-Price-Source": "bitquery",
       "X-Programmable-Read-Source": "operational+durable+postgres",
     };
     if (url.hostname === "rpc-a.invalid" || url.hostname === "rpc-b.invalid") {
@@ -883,19 +929,55 @@ function publicFetch(
         status: "ready",
         tokens: [{
           tokenAddress: PUBLIC_TOKEN_ADDRESS,
+          fdvUsdWad: TEST_FDV_USD_WAD.toString(),
           valuation: {
             status: "available",
             metric: "fdv",
             supplyBasis: "total",
             currency: "usd",
             source: "bitquery",
-            freshness: "stale",
+            freshness: "current",
             valueWad: TEST_FDV_USD_WAD.toString(),
             asOfTime: publicMarketAsOf,
           },
+          marketData: {
+            schemaVersion: "programmable.market-data.v1",
+            source: "bitquery",
+            generatedAt: new Date(fixtureNow).toISOString(),
+            status: "current",
+            primaryPoolId: PUBLIC_POOL_ID,
+            pools: [{
+              identity: {
+                chainId: "1",
+                tokenAddress: PUBLIC_TOKEN_ADDRESS,
+                poolId: PUBLIC_POOL_ID,
+                protocol: "uniswap_v4",
+              },
+              source: "bitquery",
+              status: "current",
+              quality: "complete",
+              asOfTime: publicMarketAsOf,
+              liquidity: {
+                asOfTime: publicMarketAsOf,
+                asOfBlock: TEST_PARITY_BLOCK.toString(),
+                valueUsdWad: (50_000n * 10n ** 18n).toString(),
+                freshness: "current",
+              },
+              valuation: {
+                status: "available",
+                metric: "fdv",
+                supplyBasis: "total",
+                valueUsdWad: TEST_FDV_USD_WAD.toString(),
+                fdvUsdWad: TEST_FDV_USD_WAD.toString(),
+                totalSupply: "1000",
+                asOfTime: publicMarketAsOf,
+                freshness: "current",
+              },
+            }],
+          },
         }],
         dataQuality: {
-          status: "stale",
+          status: "complete",
           valuation: { asOfTime: publicMarketAsOf },
         },
       }, { headers: publicBitqueryHeaders });
@@ -1052,6 +1134,97 @@ describe("post-promotion route verification", () => {
       "production-bitquery-chart",
       "production-bitquery-golden-independent-parity",
     ]);
+  });
+
+  it("rejects zero current public FDVs even when exact PCAN history passes", async () => {
+    const base = publicFetch();
+    const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
+      const url = new URL(String(input));
+      const response = await base(input, init);
+      if (
+        url.pathname !== "/api/explore" ||
+        url.searchParams.has("q")
+      ) return response;
+      const body = await response.json();
+      body.tokens[0].valuation.freshness = "stale";
+      delete body.tokens[0].fdvUsdWad;
+      return Response.json(body, { headers: response.headers });
+    };
+    const result = await verifyPostPromotion(postPromotionInput(fetchImpl));
+    expect(result.ok).toBe(false);
+    expect(result.failures).toContainEqual(
+      expect.objectContaining({ id: "production-explore" }),
+    );
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({
+        id: "production-bitquery-golden-independent-parity",
+        status: "pass",
+      }),
+    );
+  });
+
+  it("rejects a current public FDV without positive primary-pool liquidity", async () => {
+    const base = publicFetch();
+    const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
+      const url = new URL(String(input));
+      const response = await base(input, init);
+      if (
+        url.pathname !== "/api/explore" ||
+        url.searchParams.has("q")
+      ) return response;
+      const body = await response.json();
+      body.tokens[0].marketData.pools[0].liquidity.valueUsdWad = "0";
+      return Response.json(body, { headers: response.headers });
+    };
+    const result = await verifyPostPromotion(postPromotionInput(fetchImpl));
+    expect(result.ok).toBe(false);
+    expect(result.failures).toContainEqual(
+      expect.objectContaining({ id: "production-explore" }),
+    );
+  });
+
+  it("rejects current liquidity from a different observation time", async () => {
+    const base = publicFetch();
+    const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
+      const url = new URL(String(input));
+      const response = await base(input, init);
+      if (
+        url.pathname !== "/api/explore" ||
+        url.searchParams.has("q")
+      ) return response;
+      const body = await response.json();
+      body.tokens[0].marketData.pools[0].liquidity.asOfTime = new Date(
+        Date.parse(body.tokens[0].valuation.asOfTime) - 1_000,
+      ).toISOString();
+      return Response.json(body, { headers: response.headers });
+    };
+    const result = await verifyPostPromotion(postPromotionInput(fetchImpl));
+    expect(result.ok).toBe(false);
+    expect(result.failures).toContainEqual(
+      expect.objectContaining({ id: "production-explore" }),
+    );
+  });
+
+  it("rejects PCAN as the only current public FDV", async () => {
+    const base = publicFetch();
+    const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
+      const url = new URL(String(input));
+      const response = await base(input, init);
+      if (
+        url.pathname !== "/api/explore" ||
+        url.searchParams.has("q")
+      ) return response;
+      const body = await response.json();
+      body.tokens[0].tokenAddress = GOLDEN_TOKEN_ADDRESS;
+      body.tokens[0].marketData.pools[0].identity.tokenAddress =
+        GOLDEN_TOKEN_ADDRESS;
+      return Response.json(body, { headers: response.headers });
+    };
+    const result = await verifyPostPromotion(postPromotionInput(fetchImpl));
+    expect(result.ok).toBe(false);
+    expect(result.failures).toContainEqual(
+      expect.objectContaining({ id: "production-explore" }),
+    );
   });
 
   it("accepts PCAN evidence older than 24 hours only after exact independent parity", async () => {
@@ -1307,6 +1480,7 @@ describe("post-promotion route verification", () => {
 
   it("rejects an old FDV mislabeled as current", async () => {
     const base = publicFetch();
+    const tooOld = new Date(Date.now() - 7 * 60_000).toISOString();
     const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
       const url = new URL(String(input));
       const response = await base(input, init);
@@ -1315,8 +1489,14 @@ describe("post-promotion route verification", () => {
       }
       const body = await response.json();
       body.tokens[0].valuation.freshness = "current";
+      body.tokens[0].valuation.asOfTime = tooOld;
       body.tokens[0].fdvUsdWad = body.tokens[0].valuation.valueWad;
-      return Response.json(body, { headers: response.headers });
+      body.tokens[0].marketData.pools[0].liquidity.asOfTime = tooOld;
+      body.tokens[0].marketData.pools[0].valuation.asOfTime = tooOld;
+      body.dataQuality.valuation.asOfTime = tooOld;
+      const headers = new Headers(response.headers);
+      headers.set("X-Programmable-Market-As-Of", tooOld);
+      return Response.json(body, { headers });
     };
     const result = await verifyPostPromotion(postPromotionInput(fetchImpl));
     expect(result.ok).toBe(false);

@@ -1256,7 +1256,22 @@ export function evaluateReadModelOperationsSourceContracts(
       stagedBitquerySmokeBlock.includes(
         'valuation.reason === "waiting-for-first-trade"',
       ) &&
-      !stagedBitquerySmokeBlock.includes("if (currentFdvCount < 1) {") &&
+      stagedBitquerySmokeBlock.includes(
+        'tokenAddress === goldenTokenAddress',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        'primary.liquidity?.asOfTime !== valuation.asOfTime',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        '!currentMarketTime(primary.liquidity?.asOfTime)',
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        '"staged Bitquery current public FDV lacks exact primary-pool liquidity evidence"',
+      ) &&
+      stagedBitquerySmokeBlock.includes("if (currentFdvCount < 1) {") &&
+      stagedBitquerySmokeBlock.includes(
+        '"staged Bitquery market path has no current public non-PCAN FDV with exact primary-pool liquidity evidence"',
+      ) &&
       stagedBitquerySmokeBlock.includes(
         '"staged Bitquery current Explore and detail FDV are not identical"',
       ) &&
@@ -1361,7 +1376,7 @@ export function evaluateReadModelOperationsSourceContracts(
       stagedBitquerySmokeBlock.includes(
         'goldenChart.readStatus === "live"',
       ) &&
-      stagedBitquerySmokeBlock.includes(
+      !stagedBitquerySmokeBlock.includes(
         "currentFdvCount < 1 && !historicalPaidPathVerified",
       ) &&
       stagedBitquerySmokeBlock.includes(
@@ -1526,6 +1541,7 @@ export function evaluateReadModelOperationsSourceContracts(
       ) &&
       postPromotion.includes("exactBitqueryHeaders") &&
       postPromotion.includes("honestExploreValuations") &&
+      postPromotion.includes("exactCurrentPublicFdvLiquidity") &&
       postPromotion.includes("exactGoldenDetail") &&
       postPromotion.includes("exactGoldenSearch") &&
       postPromotion.includes("exactGoldenChart") &&
@@ -1537,7 +1553,19 @@ export function evaluateReadModelOperationsSourceContracts(
       postPromotion.includes("verifyBitqueryHistoricalGoldenReleaseV1") &&
       postPromotion.includes('id: "production-bitquery-canary-hidden"') &&
       postPromotion.includes(
-        '(marketAsOf === null || boundedStaleMarketTime(marketAsOf))',
+        "return currentCount > 0 &&",
+      ) &&
+      postPromotion.includes(
+        'tokenAddress !== GOLDEN_TOKEN_ADDRESS',
+      ) &&
+      postPromotion.includes(
+        'liquidity.asOfTime === valuation.asOfTime',
+      ) &&
+      postPromotion.includes(
+        'currentMarketTime(liquidity.asOfTime)',
+      ) &&
+      postPromotion.includes(
+        'currentMarketTime(marketAsOf)',
       ) &&
       postPromotion.includes(
         'id: "production-bitquery-golden-independent-parity"',

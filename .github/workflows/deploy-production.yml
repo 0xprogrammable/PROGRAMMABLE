@@ -853,18 +853,36 @@ jobs:
                 "staged Bitquery Highest FDV is not monotonically descending",
               );
             }
+            const tokenAddress = token?.tokenAddress?.toLowerCase();
             const primary = token.marketData?.pools?.find(
               (pool) => pool.identity?.poolId === token.marketData?.primaryPoolId,
             );
             if (
+              !/^0x[0-9a-f]{40}$/.test(tokenAddress ?? "") ||
+              tokenAddress === goldenTokenAddress ||
+              token.marketData?.schemaVersion !==
+                "programmable.market-data.v1" ||
+              token.marketData.source !== "bitquery" ||
+              !currentMarketTime(token.marketData.generatedAt) ||
               !primary ||
+              primary.identity?.chainId !== "1" ||
+              primary.identity?.tokenAddress !== tokenAddress ||
+              primary.source !== "bitquery" ||
               primary.status !== "current" ||
               primary.liquidity?.freshness !== "current" ||
               !positiveInteger(primary.liquidity?.valueUsdWad) ||
-              primary.valuation?.asOfTime !== valuation.asOfTime
+              !positiveInteger(primary.liquidity?.asOfBlock) ||
+              primary.liquidity?.asOfTime !== valuation.asOfTime ||
+              !currentMarketTime(primary.liquidity?.asOfTime) ||
+              primary.valuation?.status !== "available" ||
+              primary.valuation.metric !== "fdv" ||
+              primary.valuation.supplyBasis !== "total" ||
+              primary.valuation.freshness !== "current" ||
+              primary.valuation.valueUsdWad !== valuation.valueWad ||
+              primary.valuation.asOfTime !== valuation.asOfTime
             ) {
               throw new Error(
-                "staged Bitquery current FDV lacks current trade and liquidity evidence",
+                "staged Bitquery current public FDV lacks exact primary-pool liquidity evidence",
               );
             }
             previousCurrentFdv = value;
@@ -900,6 +918,11 @@ jobs:
           ) {
             throw new Error(
               "staged Bitquery Explore has inconsistent market provenance",
+            );
+          }
+          if (currentFdvCount < 1) {
+            throw new Error(
+              "staged Bitquery market path has no current public non-PCAN FDV with exact primary-pool liquidity evidence",
             );
           }
           const newestPageSize = 100;
@@ -1274,11 +1297,6 @@ jobs:
             goldenChart.__marketHeaders?.dataQuality === goldenChart.status &&
             goldenChart.__marketHeaders?.marketSource === "bitquery" &&
             goldenChart.__marketHeaders?.priceSource === "bitquery";
-          if (currentFdvCount < 1 && !historicalPaidPathVerified) {
-            throw new Error(
-              "staged Bitquery market path has no current or independently verified history",
-            );
-          }
           process.stdout.write(
             `${JSON.stringify({
               status: "verified-bitquery-staged-market-apis",

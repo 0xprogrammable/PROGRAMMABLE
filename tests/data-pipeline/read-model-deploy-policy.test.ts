@@ -741,7 +741,16 @@ describe("read-model production deploy policy", () => {
     expect(workflow).toContain(
       'valuation.reason === "waiting-for-first-trade"',
     );
-    expect(workflow).not.toContain("if (currentFdvCount < 1) {");
+    expect(workflow).toContain("if (currentFdvCount < 1) {");
+    expect(workflow).toContain(
+      "staged Bitquery market path has no current public non-PCAN FDV with exact primary-pool liquidity evidence",
+    );
+    expect(workflow).toContain(
+      "primary.liquidity?.asOfTime !== valuation.asOfTime",
+    );
+    expect(workflow).toContain(
+      "!currentMarketTime(primary.liquidity?.asOfTime)",
+    );
     expect(workflow).toContain(
       "staged Bitquery current Explore and detail FDV are not identical",
     );
@@ -769,7 +778,7 @@ describe("read-model production deploy policy", () => {
     );
     expect(workflow).toContain('goldenChart.readStatus !== "live"');
     expect(workflow).toContain('goldenChart.readStatus === "live"');
-    expect(workflow).toContain(
+    expect(workflow).not.toContain(
       "currentFdvCount < 1 && !historicalPaidPathVerified",
     );
     expect(workflow).toContain(
