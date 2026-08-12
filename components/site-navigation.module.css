@@ -1,0 +1,258 @@
+.menuButton,
+.mobileSheet {
+  display: none;
+}
+
+@media (max-width: 60rem) {
+  .siteHeader.siteHeader {
+    height: auto;
+    min-height: var(--header-height);
+  }
+
+  .headerInner.headerInner {
+    grid-template-columns: minmax(44px, 1fr) auto;
+  }
+
+  .headerActions.headerActions {
+    gap: 8px;
+  }
+
+  .headerSocials.headerSocials {
+    display: none;
+  }
+
+  .menuButton {
+    align-items: center;
+    -webkit-backdrop-filter: var(--control-glass-backdrop);
+    backdrop-filter: var(--control-glass-backdrop);
+    background: var(--control-glass-background);
+    border: 1px solid var(--control-glass-border);
+    border-radius: var(--radius-control);
+    box-shadow: var(--liquid-glass-control-shadow);
+    color: var(--navigation-glass-ink);
+    display: inline-flex;
+    flex: none;
+    font-family: var(--font-instrument), sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    gap: 8px;
+    height: 44px;
+    justify-content: center;
+    line-height: 1;
+    min-width: 80px;
+    padding: 0 12px;
+    transition:
+      background-color 180ms cubic-bezier(0.32, 0.72, 0, 1),
+      border-color 180ms cubic-bezier(0.32, 0.72, 0, 1),
+      box-shadow 180ms cubic-bezier(0.32, 0.72, 0, 1),
+      transform 180ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  .menuButton:active {
+    transform: scale(0.96);
+  }
+
+  .menuButton:focus-visible {
+    box-shadow: 0 0 0 5px rgba(3, 8, 24, 0.86);
+    outline: 2px solid var(--brand-ivory);
+    outline-offset: 2px;
+  }
+
+  .menuIcon {
+    display: block;
+    height: 18px;
+    position: relative;
+    width: 18px;
+  }
+
+  .menuIcon svg {
+    height: 18px;
+    inset: 0;
+    position: absolute;
+    transition:
+      filter 200ms cubic-bezier(0.2, 0, 0, 1),
+      opacity 180ms cubic-bezier(0.2, 0, 0, 1),
+      transform 200ms cubic-bezier(0.2, 0, 0, 1);
+    width: 18px;
+  }
+
+  .iconVisible {
+    filter: blur(0);
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .iconHidden {
+    filter: blur(4px);
+    opacity: 0;
+    transform: scale(0.25);
+  }
+
+  .mobileSheet {
+    display: block;
+    margin: 0 auto;
+    max-height: 0;
+    max-width: 60rem;
+    opacity: 0;
+    overflow: hidden;
+    padding-inline-end: max(12px, env(safe-area-inset-right));
+    padding-inline-start: max(12px, env(safe-area-inset-left));
+    pointer-events: none;
+    transform: translateY(-8px);
+    transition:
+      max-height 300ms cubic-bezier(0.32, 0.72, 0, 1),
+      opacity 180ms cubic-bezier(0.32, 0.72, 0, 1),
+      transform 300ms cubic-bezier(0.32, 0.72, 0, 1),
+      visibility 0s linear 300ms;
+    visibility: hidden;
+    width: 100%;
+  }
+
+  .mobileSheetOpen {
+    margin-bottom: 12px;
+    max-height: 128px;
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+    transition:
+      max-height 300ms cubic-bezier(0.32, 0.72, 0, 1),
+      opacity 180ms cubic-bezier(0.32, 0.72, 0, 1),
+      transform 300ms cubic-bezier(0.32, 0.72, 0, 1),
+      visibility 0s linear 0s;
+    visibility: visible;
+  }
+
+  .mobileSheetSurface {
+    -webkit-backdrop-filter: blur(24px) saturate(1.12);
+    backdrop-filter: blur(24px) saturate(1.12);
+    background: var(--liquid-glass-surface-background-strong);
+    border: 1px solid var(--liquid-glass-border);
+    border-radius: 20px;
+    box-shadow: var(--liquid-glass-shadow);
+    padding: 8px;
+  }
+
+  .mobileSheet.mobileSheet :global(.mobile-nav) {
+    align-items: center;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    bottom: auto;
+    box-shadow: none;
+    display: grid;
+    gap: 4px;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    height: auto;
+    inset: auto;
+    max-width: none;
+    min-width: 0;
+    padding: 0;
+    position: static;
+    width: 100%;
+  }
+
+  .mobileSheet.mobileSheet :global(.mobile-nav a) {
+    align-items: center;
+    background: transparent;
+    border-radius: 12px;
+    color: var(--navigation-glass-ink-muted);
+    display: flex;
+    font-family: var(--font-instrument), sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    justify-content: center;
+    line-height: 1;
+    min-height: 48px;
+    min-width: 0;
+    padding: 0 8px;
+    text-align: center;
+    text-shadow: none;
+    transition:
+      background-color 160ms cubic-bezier(0.32, 0.72, 0, 1),
+      color 160ms cubic-bezier(0.32, 0.72, 0, 1),
+      transform 160ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  .mobileSheet.mobileSheet :global(.mobile-nav a::before) {
+    display: none;
+  }
+
+  .mobileSheet.mobileSheet :global(.mobile-nav a.active) {
+    background: var(--accent-soft);
+    color: var(--navigation-glass-ink);
+    font-weight: 600;
+  }
+
+  .mobileSheet.mobileSheet :global(.mobile-nav a:active) {
+    transform: scale(0.96);
+  }
+
+  .mobileSheet.mobileSheet :global(.mobile-nav a:focus-visible) {
+    box-shadow: none;
+    outline: 2px solid var(--brand-ivory);
+    outline-offset: -2px;
+  }
+}
+
+@media (max-width: 36rem) {
+  .mobileSheetOpen {
+    max-height: 184px;
+  }
+
+  .mobileSheet.mobileSheet :global(.mobile-nav) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 23.125rem) {
+  .menuButton {
+    min-width: 44px;
+    padding: 0;
+    width: 44px;
+  }
+
+  .menuButton > span:last-child {
+    display: none;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) and (max-width: 60rem) {
+  .menuButton:hover {
+    background: var(--control-glass-background-hover);
+    border-color: var(--liquid-glass-border-strong);
+  }
+
+  .mobileSheet.mobileSheet :global(.mobile-nav a:hover) {
+    background: var(--control-glass-background-hover);
+    color: var(--navigation-glass-ink);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menuButton,
+  .menuIcon svg,
+  .mobileSheet,
+  .mobileSheetOpen,
+  .mobileSheet.mobileSheet :global(.mobile-nav a) {
+    transition-duration: 0.01ms;
+  }
+
+  .mobileSheet {
+    transform: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .menuButton,
+  .mobileSheetSurface {
+    border-color: CanvasText;
+    box-shadow: none;
+  }
+
+  .menuButton:focus-visible,
+  .mobileSheet.mobileSheet :global(.mobile-nav a:focus-visible) {
+    outline-color: Highlight;
+  }
+}
