@@ -798,7 +798,10 @@ describe("read-model production deploy policy", () => {
       "currentFdvCount < 1 && !historicalPaidPathVerified",
     );
     expect(workflow).toContain(
-      "goldenChart.asOfTime !== goldenChart.points.at(-1)?.time",
+      "goldenChart.asOfTime !== goldenChart.points.at(-1)?.observedAt",
+    );
+    expect(workflow).toContain(
+      'point?.valueSemantics !== "period-median"',
     );
     expect(workflow).toContain(
       "staged PCAN chart is not a strictly ordered positive history",

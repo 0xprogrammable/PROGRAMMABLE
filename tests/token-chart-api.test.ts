@@ -151,16 +151,22 @@ function chart(
       {
         blockNumber: "25740001",
         time: "2026-08-11T14:01:00.000Z",
+        bucketStart: "2026-08-11T14:00:00.000Z",
+        bucketEnd: "2026-08-11T14:01:00.000Z",
+        observedAt: "2026-08-11T14:00:59.000Z",
+        valueSemantics: "period-median",
         priceUsd: "1.5",
-        ohlcUsd: { open: "1.4", high: "1.6", low: "1.3", close: "1.5" },
         volumeUsdWad: "150000000000000000000",
         tradeCount: 3,
       },
       {
         blockNumber: "25740002",
         time: "2026-08-11T14:02:00.000Z",
+        bucketStart: "2026-08-11T14:01:00.000Z",
+        bucketEnd: "2026-08-11T14:02:00.000Z",
+        observedAt: "2026-08-11T14:01:59.000Z",
+        valueSemantics: "period-median",
         priceUsd: "2",
-        ohlcUsd: { open: "1.5", high: "2.1", low: "1.5", close: "2" },
         volumeUsdWad: "250000000000000000000",
         tradeCount: 4,
       },
@@ -177,7 +183,7 @@ function chart(
       asOfTime: "2026-08-11T14:02:00.000Z",
       freshness: "current",
     },
-    asOfTime: "2026-08-11T14:02:00.000Z",
+    asOfTime: "2026-08-11T14:01:59.000Z",
     truncated: false,
     ...overrides,
   };
@@ -229,6 +235,7 @@ describe("token chart Bitquery API", () => {
       expect.objectContaining({
         identity,
         range: "1h",
+        historyStart: token.launchedAt,
         valuation: { status: "unavailable", reason: "source-unavailable" },
         signal: expect.any(AbortSignal),
       }),
@@ -258,6 +265,10 @@ describe("token chart Bitquery API", () => {
       points: [{
         blockNumber: "25740002",
         time: "2026-08-11T14:02:00.000Z",
+        bucketStart: "2026-08-11T14:01:00.000Z",
+        bucketEnd: "2026-08-11T14:02:00.000Z",
+        observedAt: "2026-08-11T14:01:59.000Z",
+        valueSemantics: "period-median",
         priceUsd: "2",
         tradeCount: 1,
       }],
@@ -513,7 +524,10 @@ describe("token chart Bitquery API", () => {
 
     expect(response.status).toBe(200);
     expect(mocks.readBitqueryMarketChartV1).toHaveBeenCalledWith(
-      expect.objectContaining({ identity: customIdentity }),
+      expect.objectContaining({
+        identity: customIdentity,
+        historyStart: customGraphToken.launchedAt,
+      }),
     );
   });
 

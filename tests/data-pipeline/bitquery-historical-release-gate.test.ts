@@ -84,8 +84,24 @@ function chart() {
       protocol: "uniswap_v4",
     },
     points: [
-      { blockNumber: "25730000", time: "2026-08-10T10:50:47.000Z", priceUsd: "1900" },
-      { blockNumber: BLOCK, time: TIME, priceUsd: "2000" },
+      {
+        blockNumber: "25730000",
+        time: "2026-08-10T11:00:00.000Z",
+        bucketStart: "2026-08-10T10:00:00.000Z",
+        bucketEnd: "2026-08-10T11:00:00.000Z",
+        observedAt: "2026-08-10T10:50:47.000Z",
+        valueSemantics: "period-median",
+        priceUsd: "1900",
+      },
+      {
+        blockNumber: BLOCK,
+        time: "2026-08-10T12:00:00.000Z",
+        bucketStart: "2026-08-10T11:00:00.000Z",
+        bucketEnd: "2026-08-10T12:00:00.000Z",
+        observedAt: TIME,
+        valueSemantics: "period-median",
+        priceUsd: "2000",
+      },
     ],
     valuation: {
       status: "available",
@@ -184,7 +200,7 @@ describe("Bitquery historical release gate", () => {
     })).toThrow("historical PCAN release evidence is not exactly bound");
   });
 
-  it("fails closed when the direct chart close is not the exact trade block", () => {
+  it("fails closed when the last chart observation is not the exact trade block", () => {
     const driftedChart = chart();
     driftedChart.points[1].blockNumber = "25731001";
     expect(() => verifyBitqueryHistoricalGoldenReleaseV1({

@@ -305,7 +305,7 @@ function exactGoldenChart(response) {
     !["current", "stale"].includes(chart.valuation?.freshness) ||
     (chart.valuation?.freshness === "current" &&
       !currentMarketTime(chart.valuation?.asOfTime)) ||
-    chart.asOfTime !== chart.points.at(-1)?.time ||
+    chart.asOfTime !== chart.points.at(-1)?.observedAt ||
     response.headers.marketAsOf !== chart.asOfTime ||
     !validMarketTime(chart.asOfTime)
   ) return false;
@@ -313,12 +313,23 @@ function exactGoldenChart(response) {
   let previousBlock = null;
   for (const point of chart.points) {
     const time = Date.parse(point?.time ?? "");
+    const bucketStart = Date.parse(point?.bucketStart ?? "");
+    const bucketEnd = Date.parse(point?.bucketEnd ?? "");
+    const observedAt = Date.parse(point?.observedAt ?? "");
     const block = positiveInteger(point?.blockNumber)
       ? BigInt(point.blockNumber)
       : null;
     const price = Number(point?.priceUsd ?? point?.priceQuote);
     if (
       !Number.isFinite(time) ||
+      point?.valueSemantics !== "period-median" ||
+      !Number.isFinite(bucketStart) ||
+      !Number.isFinite(bucketEnd) ||
+      !Number.isFinite(observedAt) ||
+      time !== bucketEnd ||
+      bucketStart >= bucketEnd ||
+      observedAt < bucketStart ||
+      observedAt > bucketEnd ||
       block === null ||
       !Number.isFinite(price) ||
       price <= 0 ||

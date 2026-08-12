@@ -1248,7 +1248,7 @@ jobs:
             !["current", "stale"].includes(goldenChart.valuation?.freshness) ||
             (goldenChart.valuation?.freshness === "current" &&
               !currentMarketTime(goldenChart.valuation?.asOfTime)) ||
-            goldenChart.asOfTime !== goldenChart.points.at(-1)?.time ||
+            goldenChart.asOfTime !== goldenChart.points.at(-1)?.observedAt ||
             goldenChart.__marketHeaders?.marketAsOf !== goldenChart.asOfTime ||
             goldenChart.__marketHeaders?.dataQuality !== goldenChart.status ||
             goldenChart.__marketHeaders?.priceSource !== "bitquery" ||
@@ -1260,6 +1260,9 @@ jobs:
           let previousChartBlock = null;
           for (const point of goldenChart.points) {
             const time = Date.parse(point?.time ?? "");
+            const bucketStart = Date.parse(point?.bucketStart ?? "");
+            const bucketEnd = Date.parse(point?.bucketEnd ?? "");
+            const observedAt = Date.parse(point?.observedAt ?? "");
             const block = positiveInteger(point?.blockNumber)
               ? BigInt(point.blockNumber)
               : null;
@@ -1267,6 +1270,14 @@ jobs:
             const numericPrice = Number(price);
             if (
               !Number.isFinite(time) ||
+              point?.valueSemantics !== "period-median" ||
+              !Number.isFinite(bucketStart) ||
+              !Number.isFinite(bucketEnd) ||
+              !Number.isFinite(observedAt) ||
+              time !== bucketEnd ||
+              bucketStart >= bucketEnd ||
+              observedAt < bucketStart ||
+              observedAt > bucketEnd ||
               block === null ||
               !Number.isFinite(numericPrice) ||
               numericPrice <= 0 ||

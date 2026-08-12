@@ -132,6 +132,27 @@ describe("token price chart inspection", () => {
     ).toEqual({});
   });
 
+  it("never derives an inspected FDV from a period median", () => {
+    expect(getChartFdvAtPoint(
+      {
+        status: "ready",
+        points: [],
+        swapCount: 2,
+        fdvUsdWad: "2000000000000000000000000",
+      },
+      {
+        blockNumber: "1",
+        priceUsd: "1250",
+        valueSemantics: "period-median",
+      },
+      {
+        blockNumber: "2",
+        priceUsd: "2500",
+        valueSemantics: "period-median",
+      },
+    )).toEqual({});
+  });
+
   it("never derives historical USD FDV from ETH or arbitrary quote ratios", () => {
     const payload = {
       status: "ready" as const,
@@ -157,14 +178,14 @@ describe("token price chart inspection", () => {
     });
   });
 
-  it("keeps a current one-point series as an accessible inspectable value", () => {
+  it("keeps a one-point series as an accessible inspectable value", () => {
     const chart = createChartGeometry([
       { blockNumber: "100", priceEth: "1", priceUsd: "3500" },
     ]);
 
     expect(chart).toMatchObject({
       unit: "USD",
-      current: 3500,
+      latestValue: 3500,
       path: "",
       areaPath: "",
       points: [

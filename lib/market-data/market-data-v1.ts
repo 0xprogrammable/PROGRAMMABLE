@@ -111,6 +111,10 @@ export type TokenMarketDataV1 = Readonly<{
 export type MarketChartPointV1 = Readonly<{
   blockNumber: string;
   time: string;
+  bucketStart: string;
+  bucketEnd: string;
+  observedAt: string;
+  valueSemantics: "period-median";
   priceUsd?: string;
   priceQuote?: string;
   quoteSymbol?: string;
@@ -278,15 +282,19 @@ export function isMarketChartV1(value: unknown): value is MarketChartV1 {
   const typedPoints = points as MarketChartPointV1[];
   let previousBlock: bigint | null = null;
   let previousTime = Number.NEGATIVE_INFINITY;
+  let previousBucketEnd = Number.NEGATIVE_INFINITY;
   for (const point of typedPoints) {
     const block = BigInt(point.blockNumber);
     const time = Date.parse(point.time);
+    const bucketStart = Date.parse(point.bucketStart);
     if (
       (previousBlock !== null && block <= previousBlock) ||
-      time < previousTime
+      time < previousTime ||
+      bucketStart < previousBucketEnd
     ) return false;
     previousBlock = block;
     previousTime = time;
+    previousBucketEnd = Date.parse(point.bucketEnd);
   }
   const observedTrades = typedPoints.reduce(
     (total, point) => total + point.tradeCount,
@@ -309,7 +317,7 @@ export function isMarketChartV1(value: unknown): value is MarketChartV1 {
       value.volumeUsdWad !== undefined ||
       value.asOfTime !== undefined
     ) return false;
-  } else if (value.asOfTime !== typedPoints.at(-1)?.time) {
+  } else if (value.asOfTime !== typedPoints.at(-1)?.observedAt) {
     return false;
   }
   if (value.status === "ready") {
@@ -453,7 +461,18 @@ function isMarketLiquidityV1(value: unknown): value is MarketLiquidityV1 {
 }
 
 function isMarketChartPointV1(value: unknown): value is MarketChartPointV1 {
-  return isRecord(value) &&
+  if (!isRecord(value)) return false;
+  if (
+    value.valueSemantics !== "period-median" ||
+    !validIsoTime(value.bucketStart) ||
+    !validIsoTime(value.bucketEnd) ||
+    !validIsoTime(value.observedAt) ||
+    value.time !== value.bucketEnd ||
+    Date.parse(value.bucketStart) >= Date.parse(value.bucketEnd) ||
+    Date.parse(value.observedAt) < Date.parse(value.bucketStart) ||
+    Date.parse(value.observedAt) > Date.parse(value.bucketEnd)
+  ) return false;
+  return (
     CANONICAL_UNSIGNED_INTEGER.test(String(value.blockNumber)) &&
     validIsoTime(value.time) &&
     optionalPositiveDecimal(value.priceUsd) &&
@@ -468,7 +487,8 @@ function isMarketChartPointV1(value: unknown): value is MarketChartPointV1 {
     Number.isSafeInteger(value.tradeCount) &&
     Number(value.tradeCount) > 0 &&
     (value.quoteSymbol === undefined ||
-      (typeof value.quoteSymbol === "string" && value.quoteSymbol.trim() !== ""));
+      (typeof value.quoteSymbol === "string" && value.quoteSymbol.trim() !== ""))
+  );
 }
 
 function isMarketOhlcV1(value: unknown): value is MarketOhlcV1 {

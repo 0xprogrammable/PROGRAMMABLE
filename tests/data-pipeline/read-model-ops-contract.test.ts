@@ -1129,12 +1129,24 @@ function publicFetch(
         points: [
           {
             blockNumber: "25730000",
-            time: earlierMarketTime,
+            time: goldenMarketAsOf,
+            bucketStart: earlierMarketTime,
+            bucketEnd: goldenMarketAsOf,
+            observedAt: earlierMarketTime,
+            valueSemantics: "period-median",
             priceUsd: "1900",
           },
           {
             blockNumber: "25731000",
-            time: goldenMarketAsOf,
+            time: new Date(
+              Date.parse(goldenMarketAsOf) + 60 * 60_000,
+            ).toISOString(),
+            bucketStart: goldenMarketAsOf,
+            bucketEnd: new Date(
+              Date.parse(goldenMarketAsOf) + 60 * 60_000,
+            ).toISOString(),
+            observedAt: goldenMarketAsOf,
+            valueSemantics: "period-median",
             priceUsd: "2000",
           },
         ],

@@ -1377,7 +1377,10 @@ export function evaluateReadModelOperationsSourceContracts(
       bitqueryHistoricalRelease.includes(
         "lastPoint?.blockNumber !== expectedBlock",
       ) &&
-      bitqueryHistoricalRelease.includes("chartPrice !== expectedPrice") &&
+      bitqueryHistoricalRelease.includes("periodMedian === null") &&
+      bitqueryHistoricalRelease.includes(
+        'lastPoint?.valueSemantics !== "period-median"',
+      ) &&
       bitqueryHistoricalRelease.includes("parity.confirmations < MINIMUM_CONFIRMATIONS") &&
       stagedBitquerySmokeBlock.includes(
         "const historicalPaidPathVerified =",
@@ -1404,7 +1407,10 @@ export function evaluateReadModelOperationsSourceContracts(
         "staged Bitquery Explore stale FDV is too old",
       ) &&
       stagedBitquerySmokeBlock.includes(
-        "goldenChart.asOfTime !== goldenChart.points.at(-1)?.time",
+        "goldenChart.asOfTime !== goldenChart.points.at(-1)?.observedAt",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        'point?.valueSemantics !== "period-median"',
       ) &&
       stagedBitquerySmokeBlock.includes(
         '"staged PCAN chart is not a strictly ordered positive history"',

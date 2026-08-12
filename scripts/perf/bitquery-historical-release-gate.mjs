@@ -100,8 +100,10 @@ export function classifyBitqueryStaleMarketReleaseV1(input) {
 /**
  * Resolve the direct-address PCAN canary after the independent parity read.
  * PCAN is intentionally absent from public Explore discovery. Its detail,
- * exact-pool valuation, chart close and parity receipt are bound to one token,
- * pool, block, time, price and FDV. The only older-than-24h value admitted by
+ * exact-pool valuation, chart observation and parity receipt are bound to one
+ * token, pool, block, observation time and FDV. The chart value remains an
+ * explicitly labelled period median and is never treated as the latest trade.
+ * The only older-than-24h value admitted by
  * this function is the exact PCAN candidate classified above.
  */
 export function verifyBitqueryHistoricalGoldenReleaseV1(input) {
@@ -121,7 +123,9 @@ export function verifyBitqueryHistoricalGoldenReleaseV1(input) {
   const expectedPrice = positiveInteger(trade?.priceUsdWad)
     ? BigInt(trade.priceUsdWad)
     : null;
-  const chartPrice = positiveDecimalToWad(lastPoint?.priceUsd);
+  const periodMedian = positiveDecimalToWad(
+    lastPoint?.priceUsd ?? lastPoint?.priceQuote,
+  );
   let temporalStatus;
   if (detailValuation?.freshness === "current") {
     if (!currentMarketTime(detailValuation.asOfTime, nowMs)) {
@@ -171,11 +175,18 @@ export function verifyBitqueryHistoricalGoldenReleaseV1(input) {
     chart?.identity?.protocol !== "uniswap_v4" ||
     !Array.isArray(chart?.points) ||
     chart.points.length < 1 ||
-    chart.asOfTime !== lastPoint?.time ||
-    lastPoint?.time !== trade?.time ||
+    chart.asOfTime !== lastPoint?.observedAt ||
+    lastPoint?.observedAt !== trade?.time ||
+    lastPoint?.valueSemantics !== "period-median" ||
+    lastPoint?.time !== lastPoint?.bucketEnd ||
+    !validMarketTime(lastPoint?.bucketStart, nowMs) ||
+    !validMarketTime(lastPoint?.bucketEnd, nowMs) ||
+    Date.parse(lastPoint.bucketStart) >= Date.parse(lastPoint.bucketEnd) ||
+    Date.parse(lastPoint.observedAt) < Date.parse(lastPoint.bucketStart) ||
+    Date.parse(lastPoint.observedAt) > Date.parse(lastPoint.bucketEnd) ||
     lastPoint?.blockNumber !== expectedBlock ||
     expectedPrice === null ||
-    chartPrice !== expectedPrice ||
+    periodMedian === null ||
     parity?.schemaVersion !== "programmable.bitquery-golden-market-parity.v1" ||
     parity.tokenAddress !== GOLDEN_TOKEN_ADDRESS ||
     parity.poolId !== GOLDEN_POOL_ID ||

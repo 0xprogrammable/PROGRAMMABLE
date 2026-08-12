@@ -202,6 +202,7 @@ export async function GET(request: NextRequest) {
         readBitqueryMarketChartV1({
           identity,
           range,
+          historyStart: unresolvedEntry.launchedAt,
           valuation: UNAVAILABLE_CANONICAL_VALUATION,
           signal: request.signal,
         }),
@@ -240,6 +241,7 @@ export async function GET(request: NextRequest) {
       chart = await readBitqueryMarketChartV1({
         identity,
         range,
+        historyStart: unresolvedEntry.launchedAt,
         valuation: primaryMarket?.valuation ?? UNAVAILABLE_CANONICAL_VALUATION,
         signal: request.signal,
       });

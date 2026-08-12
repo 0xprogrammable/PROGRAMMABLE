@@ -22,6 +22,10 @@ import styles from "./token-price-chart.module.css";
 export type TokenChartPoint = {
   blockNumber: string;
   time?: string;
+  bucketStart?: string;
+  bucketEnd?: string;
+  observedAt?: string;
+  valueSemantics?: "period-median";
   priceEth?: string;
   priceUsd?: string;
   priceQuote?: string;
@@ -166,6 +170,7 @@ export function getChartFdvAtPoint(
   inspectedPoint?: TokenChartPoint,
   latestPoint?: TokenChartPoint,
 ): TokenChartFdv {
+  if (inspectedPoint?.valueSemantics === "period-median") return {};
   if (!inspectedPoint || !latestPoint || inspectedPoint === latestPoint) {
     return {
       fdvEthWei: payload.fdvEthWei,
@@ -697,6 +702,23 @@ function formatPrice(value: number, unit: string) {
 }
 
 function chartPointContext(point: TokenChartPoint): string {
+  if (
+    point.valueSemantics === "period-median" &&
+    point.bucketStart &&
+    point.bucketEnd &&
+    Number.isFinite(Date.parse(point.bucketStart)) &&
+    Number.isFinite(Date.parse(point.bucketEnd))
+  ) {
+    const formatter = new Intl.DateTimeFormat("en", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "UTC",
+      timeZoneName: "short",
+    });
+    return `Period median, ${formatter.format(new Date(point.bucketStart))} to ${formatter.format(new Date(point.bucketEnd))}`;
+  }
   if (point.time && Number.isFinite(Date.parse(point.time))) {
     return new Intl.DateTimeFormat("en", {
       month: "short",
@@ -775,7 +797,7 @@ export function createChartGeometry(points: readonly TokenChartPoint[]) {
         (PLOT_BOTTOM - PLOT_TOP),
   }));
   const path = singlePoint ? "" : linePath(plottedPoints);
-  const last = plottedPoints.at(-1)?.value ?? plottedPoints[0].value;
+  const latestValue = plottedPoints.at(-1)?.value ?? plottedPoints[0].value;
 
   return {
     unit,
@@ -784,7 +806,7 @@ export function createChartGeometry(points: readonly TokenChartPoint[]) {
     areaPath: path
       ? `${path} L${PLOT_RIGHT},${VIEWBOX_HEIGHT} L${PLOT_LEFT},${VIEWBOX_HEIGHT} Z`
       : "",
-    current: last,
+    latestValue,
   } as const;
 }
 
@@ -960,13 +982,16 @@ export function TokenPriceChart({
     chart && activePointIndex !== null
       ? chart.points[Math.min(activePointIndex, chart.points.length - 1)]
       : null;
-  const displayedPrice = activePoint?.value ?? chart?.current;
+  const usesPeriodMedians = chart?.points.every(
+    (point) => point.valueSemantics === "period-median",
+  ) ?? false;
+  const displayedPrice = activePoint?.value ?? chart?.latestValue;
   const inspectedFdv = useMemo(() => {
     if (!payload) return null;
     const latestPoint = chart?.points.at(-1);
     return getChartFdvAtPoint(
       payload,
-      activePoint ?? latestPoint,
+      activePoint ?? undefined,
       latestPoint,
     );
   }, [activePoint, chart, payload]);
@@ -975,10 +1000,14 @@ export function TokenPriceChart({
       ? "Loading price history"
       : chart
         ? chart.points.length === 1
-          ? hasLimitedHistory
-            ? "Last verified price loaded from 1 point"
-            : "Current price loaded from 1 point"
-          : `Price history loaded with ${chart.points.length} points`
+          ? usesPeriodMedians
+            ? "One period median loaded"
+            : hasLimitedHistory
+              ? "Last verified price loaded from 1 point"
+              : "Current price loaded from 1 point"
+          : usesPeriodMedians
+            ? `Price history loaded with ${chart.points.length} period medians`
+            : `Price history loaded with ${chart.points.length} points`
         : emptyMessage;
 
   useEffect(() => {
@@ -1058,14 +1087,17 @@ export function TokenPriceChart({
         {chartStatus}
       </span>
       <span className="sr-only" id={instructionId}>
-        Use the left and right arrow keys to inspect each recorded price. Press
-        Home or End for the first or latest point, and Escape to return to the
-        latest price.
+        Use the left and right arrow keys to inspect each chart value. Press
+        Home or End for the first or last value, and Escape to stop inspecting.
       </span>
       <div className={styles.header}>
         <div>
           <p className={styles.eyebrow}>
-            {hasLimitedHistory ? "Last verified price" : "Price"}
+            {usesPeriodMedians
+              ? "Median price"
+              : hasLimitedHistory
+                ? "Last verified price"
+                : "Price"}
           </p>
           <p className={styles.value}>
             {chart && displayedPrice !== undefined
@@ -1108,7 +1140,7 @@ export function TokenPriceChart({
           className={styles.plot}
           role="group"
           tabIndex={0}
-          aria-label={`${tokenName} interactive price chart. Move the pointer or use arrow keys to inspect exact prices.`}
+          aria-label={`${tokenName} interactive price chart. Move the pointer or use arrow keys to inspect chart values.`}
           aria-describedby={`${instructionId} ${activeValueId}`}
           onBlur={() => setActivePointIndex(null)}
           onFocus={(event) => {

@@ -15,7 +15,6 @@ import {
   type MarketChartV1,
   type MarketDataIdentityV1,
   type MarketLiquidityV1,
-  type MarketOhlcV1,
   type MarketPoolDataV1,
   type MarketTradeV1,
   type MarketValuationV1,
@@ -40,8 +39,6 @@ const MARKET_CACHE_MAX_AGE_MS = 15 * 60 * 1_000;
 const DURABLE_MARKET_CACHE_SECONDS = 5 * 60;
 const CHART_CACHE_CURRENT_MAX_AGE_MS = 2_000;
 const CHART_CACHE_MAX_AGE_MS = 2 * 60 * 1_000;
-const MAXIMUM_CHART_TRADES = 2_000;
-const CHART_TRADE_PAGE_SIZE = 500;
 const CHART_READ_TIMEOUT_MS = 12_000;
 const MAXIMUM_CHART_POINTS = 80;
 const SUPPLY_PRICE_MAXIMUM_DISTANCE_MS = 24 * 60 * 60 * 1_000;
@@ -80,12 +77,6 @@ type MarketCacheEntry = Readonly<{
 type ChartCacheEntry = Readonly<{
   storedAt: number;
   value: MarketChartV1;
-}>;
-
-type ChartTradeCursor = Readonly<{
-  blockNumber: string;
-  transactionIndex: number;
-  logIndex: number;
 }>;
 
 const marketCache = new Map<string, MarketCacheEntry>();
@@ -305,12 +296,20 @@ async function mapWithConcurrency<T>(
 export async function readBitqueryMarketChartV1(input: Readonly<{
   identity: MarketDataIdentityV1;
   range: "1h" | "1d" | "1w" | "all";
+  historyStart?: string;
   valuation?: MarketValuationV1;
 }> & BitqueryReaderOptions): Promise<MarketChartV1> {
   const now = input.now ?? new Date();
   const identity = canonicalMarketIdentities([input.identity])[0];
   if (!identity) throw new BitqueryMarketDataError("integrity");
-  const cacheKey = chartCacheKey(identity, input.range, input.valuation);
+  const since = chartRangeStart(input.range, now, input.historyStart);
+  if (since === null) throw new BitqueryMarketDataError("integrity");
+  const cacheKey = chartCacheKey(
+    identity,
+    input.range,
+    input.valuation,
+    input.range === "all" ? since.toISOString() : null,
+  );
   const token = resolveToken(input.token);
   if (token === null) {
     return cachedChartOrUnavailable(identity, input.range, cacheKey, now);
@@ -318,7 +317,6 @@ export async function readBitqueryMarketChartV1(input: Readonly<{
   const currentCached = currentCachedChart(cacheKey, now);
   if (currentCached !== null) return currentCached;
 
-  const since = chartRangeStart(input.range, now);
   const deriveValuation = input.valuation === undefined;
   const chartController = new AbortController();
   const abortChartRead = () => chartController.abort();
@@ -326,66 +324,72 @@ export async function readBitqueryMarketChartV1(input: Readonly<{
   input.signal?.addEventListener("abort", abortChartRead, { once: true });
   const chartTimeout = setTimeout(abortChartRead, CHART_READ_TIMEOUT_MS);
   try {
-    const rows: MarketTradeV1[] = [];
-    let trading: Record<string, unknown> | null = null;
-    let responseWasPartial = false;
-    let cursor: ChartTradeCursor | null = null;
-    for (
-      let pageIndex = 0;
-      pageIndex * CHART_TRADE_PAGE_SIZE < MAXIMUM_CHART_TRADES;
-      pageIndex += 1
-    ) {
-      const withValuation = deriveValuation && pageIndex === 0;
-      const query = marketChartQuery(
-        input.range,
-        since !== null,
-        withValuation,
-        cursor,
+    const interval = chartInterval(input.range, since, now);
+    const query = marketChartQuery(
+      input.range,
+      deriveValuation,
+      interval,
+    );
+    const variables: Record<string, unknown> = {
+      poolId: identity.poolId,
+      tokenAddress: identity.tokenAddress,
+      till: now.toISOString(),
+      since: since.toISOString(),
+    };
+    const response = await executeBitqueryGraphql(query, variables, {
+      ...input,
+      token,
+      signal: chartController.signal,
+    });
+    const evm = record(response.data.EVM);
+    const trading = deriveValuation ? record(response.data.Trading) : null;
+    if (evm === null || (deriveValuation && trading === null)) {
+      throw new BitqueryMarketDataError("response");
+    }
+    const rows = array(evm.chart);
+    const points = rows.flatMap((row) => {
+      const point = parseMarketChartPoint(
+        row,
+        identity,
+        interval,
+        since,
+        now,
       );
-      const variables: Record<string, unknown> = {
-        poolId: identity.poolId,
-        till: now.toISOString(),
-        ...(withValuation ? { tokenAddress: identity.tokenAddress } : {}),
-        ...(since === null ? {} : { since: since.toISOString() }),
-      };
-      const response = await executeBitqueryGraphql(query, variables, {
-        ...input,
-        token,
-        signal: chartController.signal,
-      });
-      const evm = record(response.data.EVM);
-      if (evm === null) throw new BitqueryMarketDataError("response");
-      const pageRows = array(evm.DEXTrades);
-      const page = pageRows.flatMap((row) => {
-        const trade = parseTrade(row, identity);
-        return trade === null ? [] : [trade];
-      });
-      if (page.length !== pageRows.length) {
+      return point === null ? [] : [point];
+    });
+    if (points.length !== rows.length) {
+      throw new BitqueryMarketDataError("integrity");
+    }
+    points.sort((first, second) => {
+      const block = BigInt(first.blockNumber) - BigInt(second.blockNumber);
+      if (block !== 0n) return block < 0n ? -1 : 1;
+      return Date.parse(first.time) - Date.parse(second.time);
+    });
+    const totalRows = array(evm.chartTotal);
+    if (totalRows.length !== 1) throw new BitqueryMarketDataError("response");
+    const total = nonNegativeSafeInteger(record(totalRows[0])?.count);
+    if (total === null) throw new BitqueryMarketDataError("integrity");
+    const observed = points.reduce((sum, point) => {
+      const next = sum + point.tradeCount;
+      if (!Number.isSafeInteger(next)) {
         throw new BitqueryMarketDataError("integrity");
       }
-      assertDescendingChartPage(page, cursor);
-      if (withValuation) {
-        trading = record(response.data.Trading);
-        if (trading === null) throw new BitqueryMarketDataError("response");
-      }
-      rows.push(...page);
-      responseWasPartial ||= response.partial;
-      if (page.length < CHART_TRADE_PAGE_SIZE) break;
-      cursor = chartTradeCursor(page.at(-1) as MarketTradeV1);
+      return next;
+    }, 0);
+    if (observed > total || (total > 0 && points.length === 0)) {
+      throw new BitqueryMarketDataError("integrity");
     }
     const indexedPrice = deriveValuation
       ? parseTokenPriceObservation(array(trading?.Tokens)[0], identity)
       : null;
-    const trades = canonicalTrades(rows);
     const supply = deriveValuation
       ? parseSupply(array(trading?.Tokens)[0], identity)
       : null;
 
-    if (rows.length !== trades.length) {
-      throw new BitqueryMarketDataError("integrity");
-    }
-    if (trades.length === 0) {
-      if (responseWasPartial) throw new BitqueryMarketDataError("response");
+    if (total === 0) {
+      if (response.partial || points.length > 0) {
+        throw new BitqueryMarketDataError("response");
+      }
       const waiting: MarketChartV1 = {
         schemaVersion: PROGRAMMABLE_MARKET_CHART_SCHEMA_VERSION,
         source: "bitquery",
@@ -406,30 +410,14 @@ export async function readBitqueryMarketChartV1(input: Readonly<{
       return waiting;
     }
 
-    const truncated = rows.length >= MAXIMUM_CHART_TRADES;
-    const points = chartPoints(trades, input.range);
-    const latest = trades.at(-1) as MarketTradeV1;
-    const latestForValuation = enrichTradeWithIndexedUsd(
-      latest,
+    const truncated = observed < total;
+    const latest = points.at(-1) as MarketChartPointV1;
+    const valuation = input.valuation ?? valuationFromIndexedObservation(
       indexedPrice,
-      now,
-    );
-    const valuation = input.valuation ?? valuationFrom(
-      latestForValuation,
       supply,
       now,
     );
-    const volumeComplete = trades.every(
-      (trade) => trade.amountUsdWad !== undefined,
-    );
-    const volume = volumeComplete
-      ? sumPositiveIntegers(trades.map((trade) => trade.amountUsdWad))
-      : null;
-    const quotePriceComplete = trades.every(
-      (trade) =>
-        trade.priceQuoteWad !== undefined && trade.quoteSymbol !== undefined,
-    );
-    const partial = truncated || responseWasPartial || !quotePriceComplete;
+    const partial = truncated || response.partial;
     const status = partial
       ? "partial" as const
       : points.length === 1
@@ -444,10 +432,9 @@ export async function readBitqueryMarketChartV1(input: Readonly<{
       identity,
       range: input.range,
       points,
-      swapCount: trades.length,
-      ...(volume === null ? {} : { volumeUsdWad: volume.toString() }),
+      swapCount: observed,
       valuation,
-      asOfTime: latest.time,
+      asOfTime: latest.observedAt,
       truncated,
     };
     if (!isMarketChartV1(chart)) {
@@ -1083,50 +1070,53 @@ function marketStatsQuery(identities: readonly MarketDataIdentityV1[]) {
 
 function marketChartQuery(
   range: MarketChartV1["range"],
-  withSince: boolean,
   withValuation: boolean,
-  cursor: ChartTradeCursor | null,
+  interval: Readonly<{
+    count: number;
+    unit: "minutes" | "hours" | "days";
+  }>,
 ) {
   const definitions = [
     "$poolId: String!",
+    "$tokenAddress: String!",
     "$till: DateTime!",
-    ...(withValuation ? ["$tokenAddress: String!"] : []),
-    ...(withSince ? ["$since: DateTime!"] : []),
+    "$since: DateTime!",
   ].join(", ");
-  const blockFilter = withSince
-    ? "Block: { Time: { since: $since, till: $till } }"
-    : "Block: { Time: { till: $till } }";
-  const cursorFilter = cursor === null
-    ? ""
-    : `any: [
-            { Block: { Number: { lt: "${cursor.blockNumber}" } } }
-            {
-              Block: { Number: { eq: "${cursor.blockNumber}" } }
-              Transaction: { Index: { lt: ${cursor.transactionIndex} } }
+  const blockFilter = "Block: { Time: { since: $since, till: $till } }";
+  const where = `{
+            TransactionStatus: { Success: true }
+            ${blockFilter}
+            Trade: {
+              Dex: { ProtocolName: { is: "uniswap_v4" } }
+              PoolId: { is: $poolId }
+              Currency: { SmartContract: { is: $tokenAddress } }
             }
-            {
-              Block: { Number: { eq: "${cursor.blockNumber}" } }
-              Transaction: { Index: { eq: ${cursor.transactionIndex} } }
-              Log: { Index: { lt: ${cursor.logIndex} } }
-            }
-          ]`;
+          }`;
   const dataset = range === "1h" ? "" : ", dataset: combined";
   return `query ProgrammableMarketChart(${definitions}) {
     EVM(network: eth${dataset}) {
-      DEXTrades(
-        limit: { count: ${CHART_TRADE_PAGE_SIZE} }
-        orderBy: [
-          { descending: Block_Number }
-          { descending: Transaction_Index }
-          { descending: Log_Index }
-        ]
-        where: {
-          TransactionStatus: { Success: true }
-          ${blockFilter}
-          ${cursorFilter}
-          Trade: { Dex: { ProtocolName: { is: "uniswap_v4" } }, PoolId: { is: $poolId } }
+      chart: DEXTradeByTokens(
+        limit: { count: ${MAXIMUM_CHART_POINTS} }
+        orderBy: { descendingByField: "Block_Bucket" }
+        where: ${where}
+      ) {
+        Block {
+          Bucket: Time(interval: { count: ${interval.count}, in: ${interval.unit} })
+          Number(maximum: Block_Number)
+          Time(maximum: Block_Time)
         }
-      ) { ${tradeSelection()} }
+        Trade {
+          PoolId
+          Currency { SmartContract }
+          Side { Currency { SmartContract Symbol } }
+        }
+        price: median(of: Trade_Price)
+        count
+      }
+      chartTotal: DEXTradeByTokens(
+        limit: { count: 1 }
+        where: ${where}
+      ) { count }
     }
     ${withValuation ? `Trading {
       Tokens(
@@ -1136,6 +1126,123 @@ function marketChartQuery(
       ) { ${supplySelection()} }
     }` : ""}
   }`;
+}
+
+function chartInterval(
+  range: MarketChartV1["range"],
+  since: Date,
+  now: Date,
+): Readonly<{
+  count: number;
+  unit: "minutes" | "hours" | "days";
+}> {
+  if (range === "1h") return { count: 1, unit: "minutes" };
+  if (range === "1d") return { count: 20, unit: "minutes" };
+  if (range === "1w") return { count: 3, unit: "hours" };
+  const duration = now.getTime() - since.getTime();
+  const minimumBucketMs = Math.floor(
+    duration / (MAXIMUM_CHART_POINTS - 1),
+  ) + 1;
+  if (minimumBucketMs <= 60 * 60 * 1_000) {
+    return {
+      count: Math.max(1, Math.ceil(minimumBucketMs / (60 * 1_000))),
+      unit: "minutes",
+    };
+  }
+  if (minimumBucketMs <= 24 * 60 * 60 * 1_000) {
+    return {
+      count: Math.ceil(minimumBucketMs / (60 * 60 * 1_000)),
+      unit: "hours",
+    };
+  }
+  return {
+    count: Math.ceil(minimumBucketMs / (24 * 60 * 60 * 1_000)),
+    unit: "days",
+  };
+}
+
+function parseMarketChartPoint(
+  value: unknown,
+  identity: MarketDataIdentityV1,
+  interval: Readonly<{
+    count: number;
+    unit: "minutes" | "hours" | "days";
+  }>,
+  since: Date,
+  till: Date,
+): MarketChartPointV1 | null {
+  const row = record(value);
+  const block = record(row?.Block);
+  const trade = record(row?.Trade);
+  const currency = record(trade?.Currency);
+  const side = record(trade?.Side);
+  const quoteCurrency = record(side?.Currency);
+  const blockNumber = typeof block?.Number === "number" &&
+      Number.isSafeInteger(block.Number)
+    ? String(block.Number)
+    : block?.Number;
+  const bucket = isoTime(block?.Bucket);
+  const observedAt = isoTime(block?.Time);
+  const quoteAddress = canonicalCurrencyAddress(quoteCurrency?.SmartContract);
+  const quoteSymbol = nonEmptyString(quoteCurrency?.Symbol);
+  const price = positiveDecimal(row?.price);
+  const tradeCount = nonNegativeSafeInteger(row?.count);
+  if (
+    !row ||
+    !block ||
+    !trade ||
+    !currency ||
+    !side ||
+    !quoteCurrency ||
+    canonicalBytes32(trade.PoolId) !== identity.poolId ||
+    canonicalAddress(currency.SmartContract) !== identity.tokenAddress ||
+    quoteAddress === null ||
+    quoteAddress === identity.tokenAddress ||
+    quoteSymbol === null ||
+    !canonicalUnsignedInteger(blockNumber) ||
+    bucket === null ||
+    observedAt === null ||
+    price === null ||
+    tradeCount === null ||
+    tradeCount === 0
+  ) return null;
+  const providerBucketStart = Date.parse(bucket);
+  const bucketStartMs = Math.max(providerBucketStart, since.getTime());
+  const bucketEndMs = Math.min(
+    providerBucketStart + chartIntervalDurationMs(interval),
+    till.getTime(),
+  );
+  const observedAtMs = Date.parse(observedAt);
+  if (
+    bucketStartMs >= bucketEndMs ||
+    observedAtMs < bucketStartMs ||
+    observedAtMs > bucketEndMs
+  ) return null;
+  const bucketStart = new Date(bucketStartMs).toISOString();
+  const bucketEnd = new Date(bucketEndMs).toISOString();
+  return {
+    blockNumber: String(blockNumber),
+    time: bucketEnd,
+    bucketStart,
+    bucketEnd,
+    observedAt,
+    valueSemantics: "period-median",
+    priceQuote: price,
+    quoteSymbol,
+    tradeCount,
+  };
+}
+
+function chartIntervalDurationMs(interval: Readonly<{
+  count: number;
+  unit: "minutes" | "hours" | "days";
+}>): number {
+  const unitMs = interval.unit === "minutes"
+    ? 60 * 1_000
+    : interval.unit === "hours"
+      ? 60 * 60 * 1_000
+      : 24 * 60 * 60 * 1_000;
+  return interval.count * unitMs;
 }
 
 function tradeSelection() {
@@ -1666,6 +1773,54 @@ function valuationFrom(
   return { status: "unavailable", reason: "supply-unavailable" };
 }
 
+function valuationFromIndexedObservation(
+  observation: TokenPriceObservation | null,
+  supply: ParsedSupply,
+  now: Date,
+): MarketValuationV1 {
+  if (observation === null) {
+    return { status: "unavailable", reason: "price-unavailable" };
+  }
+  if (supply === null) {
+    return { status: "unavailable", reason: "supply-unavailable" };
+  }
+  const priceTime = Date.parse(observation.time);
+  const supplyTime = Date.parse(supply.asOfTime);
+  if (
+    !Number.isFinite(priceTime) ||
+    !Number.isFinite(supplyTime) ||
+    Math.abs(priceTime - supplyTime) > SUPPLY_PRICE_MAXIMUM_DISTANCE_MS ||
+    priceTime > now.getTime() + MAXIMUM_FUTURE_SKEW_MS ||
+    supplyTime > now.getTime() + MAXIMUM_FUTURE_SKEW_MS ||
+    (supply.maxSupply !== undefined &&
+      supply.totalSupply !== undefined &&
+      comparePositiveDecimals(supply.totalSupply, supply.maxSupply) > 0)
+  ) {
+    return { status: "unavailable", reason: "inconsistent-market-data" };
+  }
+  const priceUsdWad = BigInt(observation.priceUsdWad);
+  const fdv = supply.totalSupply === undefined
+    ? null
+    : multiplyWadByDecimal(priceUsdWad, supply.totalSupply);
+  if (fdv === null || supply.totalSupply === undefined) {
+    return { status: "unavailable", reason: "supply-unavailable" };
+  }
+  const valuationTime = Math.min(priceTime, supplyTime);
+  return {
+    status: "available",
+    metric: "fdv",
+    supplyBasis: "total",
+    valueUsdWad: fdv.toString(),
+    fdvUsdWad: fdv.toString(),
+    totalSupply: supply.totalSupply,
+    ...(supply.maxSupply === undefined ? {} : { maxSupply: supply.maxSupply }),
+    asOfTime: new Date(valuationTime).toISOString(),
+    freshness: now.getTime() - valuationTime > MARKET_DATA_CURRENT_MAX_AGE_MS
+      ? "stale"
+      : "current",
+  };
+}
+
 function supplyFromValuation(
   value: MarketValuationV1 | undefined,
 ): ParsedSupply {
@@ -1852,6 +2007,7 @@ function chartCacheKey(
   identity: MarketDataIdentityV1,
   range: MarketChartV1["range"],
   valuation: MarketValuationV1 | undefined,
+  historyStart: string | null,
 ): string {
   const valuationKey = valuation === undefined
     ? "derived"
@@ -1870,10 +2026,14 @@ function chartCacheKey(
           valuation.asOfTime,
           valuation.freshness,
         ].join(":");
-  return `${marketCacheKey(identity)}:${range}:${valuationKey}`;
+  return `${marketCacheKey(identity)}:${range}:${historyStart ?? "bounded"}:${valuationKey}`;
 }
 
-function chartRangeStart(range: MarketChartV1["range"], now: Date): Date | null {
+function chartRangeStart(
+  range: MarketChartV1["range"],
+  now: Date,
+  historyStart: string | undefined,
+): Date | null {
   const duration = range === "1h"
     ? 60 * 60 * 1_000
     : range === "1d"
@@ -1881,7 +2041,11 @@ function chartRangeStart(range: MarketChartV1["range"], now: Date): Date | null 
       : range === "1w"
         ? 7 * 24 * 60 * 60 * 1_000
         : null;
-  return duration === null ? null : new Date(now.getTime() - duration);
+  if (duration !== null) return new Date(now.getTime() - duration);
+  const parsed = historyStart === undefined ? Number.NaN : Date.parse(historyStart);
+  return Number.isFinite(parsed) && parsed <= now.getTime()
+    ? new Date(parsed)
+    : null;
 }
 
 function canonicalTrades(trades: readonly MarketTradeV1[]): MarketTradeV1[] {
@@ -1907,140 +2071,6 @@ function canonicalTrades(trades: readonly MarketTradeV1[]): MarketTradeV1[] {
     byKey.set(key, trade);
   }
   return [...byKey.values()];
-}
-
-function chartTradeCursor(trade: MarketTradeV1): ChartTradeCursor {
-  if (trade.transactionIndex === undefined) {
-    throw new BitqueryMarketDataError("integrity");
-  }
-  return {
-    blockNumber: trade.blockNumber,
-    transactionIndex: trade.transactionIndex,
-    logIndex: trade.logIndex,
-  };
-}
-
-function compareChartTradePosition(
-  first: ChartTradeCursor,
-  second: ChartTradeCursor,
-): number {
-  const firstBlock = BigInt(first.blockNumber);
-  const secondBlock = BigInt(second.blockNumber);
-  if (firstBlock !== secondBlock) return firstBlock < secondBlock ? -1 : 1;
-  if (first.transactionIndex !== second.transactionIndex) {
-    return first.transactionIndex < second.transactionIndex ? -1 : 1;
-  }
-  if (first.logIndex !== second.logIndex) {
-    return first.logIndex < second.logIndex ? -1 : 1;
-  }
-  return 0;
-}
-
-function assertDescendingChartPage(
-  trades: readonly MarketTradeV1[],
-  previousPageCursor: ChartTradeCursor | null,
-): void {
-  let previous = previousPageCursor;
-  for (const trade of trades) {
-    const current = chartTradeCursor(trade);
-    if (
-      previous !== null &&
-      compareChartTradePosition(current, previous) >= 0
-    ) {
-      throw new BitqueryMarketDataError("integrity");
-    }
-    previous = current;
-  }
-}
-
-function chartPoints(
-  trades: readonly MarketTradeV1[],
-  range: MarketChartV1["range"],
-): MarketChartPointV1[] {
-  const duration = chartBucketDurationMs(trades, range);
-  const buckets = new Map<number, MarketTradeV1[]>();
-  for (const trade of trades) {
-    const time = Date.parse(trade.time);
-    const key = Math.floor(time / duration);
-    const values = buckets.get(key) ?? [];
-    values.push(trade);
-    buckets.set(key, values);
-  }
-  return [...buckets.values()].map(chartPoint);
-}
-
-function chartBucketDurationMs(
-  trades: readonly MarketTradeV1[],
-  range: MarketChartV1["range"],
-): number {
-  if (range === "1h") return 60_000;
-  if (range === "1d") return 20 * 60_000;
-  if (range === "1w") return 3 * 60 * 60_000;
-  const first = Date.parse(trades[0]?.time ?? "");
-  const last = Date.parse(trades.at(-1)?.time ?? "");
-  if (!Number.isFinite(first) || !Number.isFinite(last) || last <= first) {
-    return 1;
-  }
-  return Math.max(1, Math.ceil((last - first + 1) / MAXIMUM_CHART_POINTS));
-}
-
-function chartPoint(trades: readonly MarketTradeV1[]): MarketChartPointV1 {
-  const trade = trades.at(-1) as MarketTradeV1;
-  const usdComplete = trades.every((value) => value.priceUsdWad !== undefined);
-  const quoteComplete = trades.every(
-    (value) =>
-      value.priceQuoteWad !== undefined && value.quoteSymbol !== undefined,
-  );
-  const volumeComplete = trades.every(
-    (value) => value.amountUsdWad !== undefined,
-  );
-  const usd = usdComplete
-    ? trades.map((value) => BigInt(value.priceUsdWad as string))
-    : [];
-  const quote = quoteComplete
-    ? trades.map((value) => BigInt(value.priceQuoteWad as string))
-    : [];
-  const quoteSymbols = new Set(
-    trades.map((value) => value.quoteSymbol).filter(
-      (value): value is string => Boolean(value),
-    ),
-  );
-  const ohlcUsd = marketOhlc(usd);
-  const ohlcQuote = quoteSymbols.size === 1 ? marketOhlc(quote) : null;
-  const volume = volumeComplete
-    ? sumPositiveIntegers(trades.map((value) => value.amountUsdWad))
-    : null;
-  return {
-    blockNumber: trade.blockNumber,
-    time: trade.time,
-    ...(ohlcUsd
-      ? { priceUsd: ohlcUsd.close, ohlcUsd }
-      : {}),
-    ...(ohlcQuote
-      ? { priceQuote: ohlcQuote.close, ohlcQuote }
-      : {}),
-    ...(quoteSymbols.size === 1
-      ? { quoteSymbol: [...quoteSymbols][0] }
-      : {}),
-    ...(volume === null ? {} : { volumeUsdWad: volume.toString() }),
-    tradeCount: trades.length,
-  };
-}
-
-function marketOhlc(values: readonly bigint[]): MarketOhlcV1 | null {
-  if (values.length === 0) return null;
-  let high = values[0];
-  let low = values[0];
-  for (const value of values.slice(1)) {
-    if (value > high) high = value;
-    if (value < low) low = value;
-  }
-  return {
-    open: wadToDecimal(values[0]),
-    high: wadToDecimal(high),
-    low: wadToDecimal(low),
-    close: wadToDecimal(values.at(-1) as bigint),
-  };
 }
 
 function marketCacheKey(identity: MarketDataIdentityV1): string {
@@ -2145,26 +2175,6 @@ function comparePositiveDecimals(first: string, second: string): number {
   const b = decimalParts(second);
   const comparison = a.coefficient * b.scale - b.coefficient * a.scale;
   return comparison === 0n ? 0 : comparison > 0n ? 1 : -1;
-}
-
-function wadToDecimal(value: bigint): string {
-  const raw = value.toString().padStart(19, "0");
-  const whole = raw.slice(0, -18);
-  const fraction = raw.slice(-18).replace(/0+$/u, "");
-  return fraction ? `${whole}.${fraction}` : whole;
-}
-
-function sumPositiveIntegers(
-  values: readonly (string | undefined)[],
-): bigint | null {
-  let found = false;
-  let total = 0n;
-  for (const value of values) {
-    if (!value || !CANONICAL_UNSIGNED_INTEGER.test(value)) continue;
-    total += BigInt(value);
-    found = true;
-  }
-  return found && total > 0n ? total : null;
 }
 
 function isoTime(value: unknown): string | null {
