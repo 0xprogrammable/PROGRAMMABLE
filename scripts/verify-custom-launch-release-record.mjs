@@ -34,7 +34,15 @@ const RECORD_STATUSES = new Set([
   "live",
 ]);
 const REVIEW_AUTHORITY_MODES = new Set(["manual_review", "autonomous_ai"]);
-const REQUIRED_LEVELS = new Set(["template", "clearance", "staging", "candidate", "promotion", "live"]);
+const REQUIRED_LEVELS = new Set([
+  "template",
+  "clearance",
+  "dark-staging",
+  "staging",
+  "candidate",
+  "promotion",
+  "live",
+]);
 const FORBIDDEN_SECRET_KEY = /^(?:access[_-]?token|identity[_-]?token|private[_-]?key|password|secret|database[_-]?url|credential)(?:[_-]?value)?$/i;
 const PLACEHOLDER_PATTERN = /(?:<[^>]+>|example\.invalid|replace[_ -]?me|todo|yyyy|nnn)/i;
 const CROSS_REPOSITORY_BINDING_REPOSITORY =
@@ -498,7 +506,8 @@ export function verifyReleaseRecord(
   if (schemaFailure !== null) return schemaFailure;
   const errors = [];
   const levels = ["template", "clearance", "staging", "candidate", "promotion", "live"];
-  const requiredIndex = levels.indexOf(require);
+  const darkStaging = require === "dark-staging";
+  const requiredIndex = darkStaging ? levels.indexOf("staging") : levels.indexOf(require);
   requireExactKeys(errors, record, "$", ["schemaVersion", "recordStatus", "createdAt", "releaseIntent", "subject", "commandCenter", "validation", "productionDependencies", "deployment", "promotionGate", "canary"]);
   const allowPlaceholders = require === "template";
   walkForSecretsAndPlaceholders(record, "", errors, allowPlaceholders);
@@ -578,7 +587,12 @@ export function verifyReleaseRecord(
   if (requiredIndex >= 2) {
     validateDependencies(errors, record.productionDependencies);
     validateRollback(errors, record.deployment?.rollback);
-    requireExact(errors, record.releaseIntent?.targetMode, "releaseIntent.targetMode", "enabled");
+    requireExact(
+      errors,
+      record.releaseIntent?.targetMode,
+      "releaseIntent.targetMode",
+      darkStaging ? "disabled" : "enabled",
+    );
   }
   if (requiredIndex === 2) {
     requireExact(errors, record.recordStatus, "recordStatus", "freeze_cleared");
@@ -781,7 +795,7 @@ function parseArguments(argv) {
     else if (file === null) file = argument;
     else throw new Error(`unexpected argument: ${argument}`);
   }
-  if (file === null) throw new Error("usage: verify-custom-launch-release-record.mjs <record.json> [--require template|clearance|staging|candidate|promotion|live] [--verify-cross-repository-attestation] [--cross-repository-attestation-summary path] [--json] [--github-output path] [expectation flags]");
+  if (file === null) throw new Error("usage: verify-custom-launch-release-record.mjs <record.json> [--require template|clearance|dark-staging|staging|candidate|promotion|live] [--verify-cross-repository-attestation] [--cross-repository-attestation-summary path] [--json] [--github-output path] [expectation flags]");
   if (crossRepositoryAttestationSummary !== null && !verifyCrossRepositoryAttestation) {
     throw new Error("cross-repository attestation summary output requires live attestation verification");
   }

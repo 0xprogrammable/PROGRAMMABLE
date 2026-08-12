@@ -123,6 +123,19 @@ blank, differently cased, or any other value fails the workflow before deploymen
 continuing production policy for every later push, not a one-run checkbox. After activation it must
 remain `enabled` unless Command Center explicitly authorizes the emergency-disable procedure.
 
+The stage workflow has three mutually exclusive Custom Launch modes:
+
+| Dispatch | Pulled public flag / protected mode | Detached record | Runtime gate |
+| --- | --- | --- | --- |
+| `custom_launch_public_enablement=false`, `custom_launch_dark_release=false` | `false` / `disabled` | Not consumed; this is an ordinary Website candidate | No Custom Launch release claim |
+| `custom_launch_public_enablement=false`, `custom_launch_dark_release=true` | `false` / `disabled` | Required with `targetMode="disabled"` and verification level `dark-staging` | Disabled readiness with every required dependency component `ready` |
+| `custom_launch_public_enablement=true`, `custom_launch_dark_release=false` | `true` / `enabled` | Required with `targetMode="enabled"` and verification level `staging` | Enabled readiness and authenticated principal canary |
+
+The workflow rejects both dispatch booleans being `true`, any disagreement with pulled production
+configuration, and any disagreement with the protected production mode. A dispatch selects the
+gate; it never rewrites production configuration. Both record-bound modes remain immutable
+`--skip-domain` stages and carry no promotion or public-activation authority.
+
 ## Gate 2 — production dependencies
 
 Provision and validate every dependency while the public switch remains absent or exactly `false`.
@@ -195,7 +208,21 @@ After freeze clearance and all preceding gates, deploy through the reviewed prod
 do not run an unrecorded laptop deployment or promote a different build. The workflow creates a
 production-targeted immutable candidate with `--skip-domain`; it does not move the production alias
 until the candidate returns its exact commit and immutable Vercel host and every mode-required probe
-passes. Only the resulting protected `verified=true` step output permits promotion of that same URL.
+passes. Only an enabled candidate may later enter the separate candidate-verification and promotion
+process. A dark candidate never produces promotion authority.
+
+For the dark deployment, dispatch the exact `production` commit with:
+
+- `custom_launch_public_enablement=false`;
+- `custom_launch_dark_release=true`;
+- the exact detached-record commit and canonical detached-record SHA-256.
+
+The detached record must bind the same Website commit, approval-service package, cross-repository
+attestation and binding document, rollback deployment, and `targetMode="disabled"`. Its eight
+validation gates and production dependencies must be complete, while candidate, promotion, live,
+and canary fields remain pending. The workflow verifies it at `dark-staging`, stages only with
+`vercel deploy --prebuilt --prod --skip-domain`, and retains run-scoped record, attestation, and dark
+readiness evidence. It contains no alias, promotion, or public-enable operation.
 
 Keep `PROGRAMMABLE_CUSTOM_LAUNCH_PUBLIC_ENABLED=false`. Verify both the immutable deployment URL and
 `https://programmable.market`:
@@ -223,6 +250,18 @@ results and the exact release commit and immutable deployment host:
     "reviewAuthorityMode": "<manual_review-or-autonomous_ai>"
   }
 }
+```
+
+The protected workflow enforces the same condition with:
+
+```bash
+PROGRAMMABLE_RELEASE_EXPECTED_COMMIT_SHA=<exact-40-character-commit> \
+PROGRAMMABLE_RELEASE_EXPECTED_DEPLOYMENT_HOST=<immutable-vercel-host> \
+PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_PACKAGE_ARTIFACT_HASH=sha256:<exact-reviewed-package-hash> \
+PROGRAMMABLE_APPROVAL_SERVICE_EXPECTED_REVIEW_AUTHORITY_MODE=<manual_review-or-autonomous_ai> \
+npm run probe:custom-launch -- \
+  --base-url=https://<immutable-deployment-host> \
+  --require-disabled
 ```
 
 The response also includes `checkedAt`. No readiness response may contain secret or internal

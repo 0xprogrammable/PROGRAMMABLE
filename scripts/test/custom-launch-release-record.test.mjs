@@ -91,11 +91,11 @@ function decision(status, subjectHash, suffix) {
   };
 }
 
-async function completeRecord(level = "live") {
+async function completeRecord(level = "live", targetMode = "enabled") {
   const record = await readTemplate();
   record.createdAt = "2026-08-06T11:00:00Z";
   record.releaseIntent.releaseId = "custom-launch-v1-20260806-001";
-  record.releaseIntent.targetMode = "enabled";
+  record.releaseIntent.targetMode = targetMode;
   record.subject.website.commitSha = commits.website;
   record.subject.website.reviewedDiffBaseSha = commits.base;
   record.subject.website.reviewedDiffHeadSha = commits.website;
@@ -353,6 +353,34 @@ test("each release level is independently fail closed", async () => {
 
   const live = await completeRecord("live");
   assert.equal(verifyReleaseRecord(live, { require: "live" }).ok, true);
+});
+
+test("dark staging requires a disabled target with complete staging evidence", async () => {
+  const darkStaging = await completeRecord("staging", "disabled");
+  assert.equal(
+    verifyReleaseRecord(darkStaging, { require: "dark-staging" }).ok,
+    true,
+  );
+
+  const enabledAsDark = await completeRecord("staging", "enabled");
+  const enabledAsDarkResult = verifyReleaseRecord(enabledAsDark, {
+    require: "dark-staging",
+  });
+  assert.equal(enabledAsDarkResult.ok, false);
+  assert.match(enabledAsDarkResult.errors.join("\n"), /targetMode/);
+
+  const disabledAsEnabled = verifyReleaseRecord(darkStaging, {
+    require: "staging",
+  });
+  assert.equal(disabledAsEnabled.ok, false);
+  assert.match(disabledAsEnabled.errors.join("\n"), /targetMode/);
+
+  darkStaging.productionDependencies = null;
+  const missingDependencies = verifyReleaseRecord(darkStaging, {
+    require: "dark-staging",
+  });
+  assert.equal(missingDependencies.ok, false);
+  assert.match(missingDependencies.errors.join("\n"), /productionDependencies/);
 });
 
 test("release records reject the former production alias", async () => {
