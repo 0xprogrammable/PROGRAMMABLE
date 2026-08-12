@@ -4,13 +4,16 @@ import { useEffect, useId, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X } from "lucide-react";
 import {
   DiscordBrandIcon,
   DuneBrandIcon,
   GitHubBrandIcon,
   XBrandIcon,
 } from "@/components/brand-icons";
+import {
+  NavigationCloseIcon,
+  NavigationMenuIcon,
+} from "@/components/navigation-icons";
 import { WalletButton } from "@/components/wallet-provider";
 import styles from "@/components/site-navigation.module.css";
 
@@ -167,13 +170,11 @@ export function SiteHeader() {
             onClick={() => setMenuPath(menuOpen ? null : pathname)}
           >
             <span className={styles.menuIcon} aria-hidden="true">
-              <Menu
+              <NavigationMenuIcon
                 className={menuOpen ? styles.iconHidden : styles.iconVisible}
-                strokeWidth={1.8}
               />
-              <X
+              <NavigationCloseIcon
                 className={menuOpen ? styles.iconVisible : styles.iconHidden}
-                strokeWidth={1.8}
               />
             </span>
             <span>Menu</span>
@@ -186,7 +187,7 @@ export function SiteHeader() {
           menuOpen ? styles.mobileSheetOpen : ""
         }`}
       >
-        <div className={styles.mobileSheetSurface}>
+        <div className={styles.mobileSheetSurface} id={menuId}>
           <MobileNavigation
             id={menuId}
             open={menuOpen}
@@ -219,12 +220,7 @@ export function MobileNavigation({
   if (!id) return null;
 
   return (
-    <nav
-      id={id}
-      className="mobile-nav"
-      aria-label="Primary navigation"
-      aria-hidden={!open}
-    >
+    <nav className="mobile-nav" aria-label="Primary navigation">
       {mobileNavItems.map((item) => {
         const current = isCurrent(pathname, item.href);
         return (

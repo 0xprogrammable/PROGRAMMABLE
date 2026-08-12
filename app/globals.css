@@ -7627,6 +7627,19 @@ html[data-theme="dark"] .launch-page[data-launch-model="classic-v3"] {
   .launch-page[data-launch-model="classic-v3"] .launch-select-option {
     min-height: 44px;
   }
+
+  .launch-page[data-launch-model="classic-v3"] .launch-select-menu {
+    bottom: max(16px, env(safe-area-inset-bottom));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    inset-inline: 16px;
+    max-height: min(280px, calc(100dvh - 32px));
+    min-width: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    position: fixed;
+    top: auto;
+    width: auto;
+  }
 }
 
 .deep-preset {

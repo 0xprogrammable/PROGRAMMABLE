@@ -2096,6 +2096,18 @@ body:has([data-docs-shell]) .site-header::before {
   }
 }
 
+/* Responsive navigation now expands from the header instead of occupying a
+ * fixed bottom rail. Keep only a small safe-area finish below route content. */
+@media (max-width: 960px) {
+  .app-frame > main {
+    padding-bottom: max(24px, env(safe-area-inset-bottom));
+  }
+
+  .app-frame:has(.landing-page-root) > main {
+    padding-bottom: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     transition: none;

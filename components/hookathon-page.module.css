@@ -188,7 +188,7 @@
 
 @media (max-width: 720px) {
   .page {
-    padding: 12px 16px calc(104px + env(safe-area-inset-bottom));
+    padding: 12px 16px max(32px, env(safe-area-inset-bottom));
   }
 
   .shell {

@@ -210,7 +210,7 @@
 
 .promptBox pre {
   color: var(--text);
-  font-family: var(--font-geist-mono), "SFMono-Regular", Consolas, monospace;
+  font-family: var(--font-plex-mono), "SFMono-Regular", Consolas, monospace;
   font-size: 13px;
   line-height: 1.55;
   margin: 0;

@@ -628,11 +628,28 @@
   }
 
   .footer {
-    min-height: 48px;
+    min-height: 44px;
   }
 
   .footerIcons {
-    display: none;
+    display: flex;
+    gap: 0;
+  }
+
+  .socialLink,
+  .footer a {
+    min-height: 44px;
+  }
+
+  .socialLink {
+    height: 44px;
+    width: 44px;
+  }
+
+  .socialLink svg,
+  .socialLogo {
+    height: 28px;
+    width: 28px;
   }
 }
 
