@@ -45,6 +45,21 @@ test("trusted guard is bound to the exact audited main candidate commit and tree
   assert.match(workflow, /--approved-tree "\$APPROVED_MAIN_CI_CONTROL_TREE"/u);
 });
 
+test("only the exact approved control-plane candidate bypasses the generic changed-file classifier", () => {
+  const publicIntake = section(workflow, "  public-intake:");
+  assert.match(publicIntake, /id: ci_control/u);
+  assert.match(publicIntake, /guard_report="\$\(timeout --signal=KILL 30s node "\$guard"/u);
+  assert.match(
+    publicIntake,
+    /report\.result === "approved-exact-main-ci-control-change" \? "true" : "false"/u
+  );
+  assert.match(
+    publicIntake,
+    /if \[\[ "\$\{\{ steps\.ci_control\.outputs\.approved_exact_candidate \}\}" == "true" \]\]; then\s+# [^\n]+\n(?:\s+# [^\n]+\n){3}\s+mode="builder-maintenance"\s+else\s+mode="\$\(timeout --signal=KILL 30s node "\$validator" --classify/u
+  );
+  assert.doesNotMatch(publicIntake, /maximum-changed-files|maximumChangedFiles/u);
+});
+
 test("trusted production intake uses the exact current Node 24 LTS runtime", () => {
   const publicIntake = section(workflow, "  public-intake:");
   assert.match(
