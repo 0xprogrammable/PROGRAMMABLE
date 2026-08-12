@@ -98,6 +98,7 @@ contract ProgrammableExactShardsRegistryV1 is AccessControlDefaultAdminRules, IP
     bytes32 public immutable VERIFIER_RUNTIME_CODE_HASH;
     // slither-disable-next-line naming-convention
     bytes32 public immutable FEE_POLICY_BINDING_HASH;
+    // slither-disable-next-line naming-convention
     ProgrammableExactShardsFeePolicyVerifierV1 public immutable FEE_POLICY_VERIFIER;
 
     uint64 public registrationCount;
