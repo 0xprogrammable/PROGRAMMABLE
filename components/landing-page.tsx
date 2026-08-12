@@ -9,40 +9,25 @@ import {
 } from "@/components/brand-icons";
 import styles from "@/components/landing-page.module.css";
 
-const launchSignals = [
-  {
-    index: "01",
-    title: "Classic",
-    detail: "Fixed supply",
-    href: "/launch",
-  },
-  {
-    index: "02",
-    title: "Uniswap v4",
-    detail: "One sided liquidity",
-    href: "/docs/creators/launch",
-  },
-  {
-    index: "03",
-    title: "Public record",
-    detail: "Review before signing",
-    href: "/explore",
-  },
-] as const;
-
 export function LandingPage() {
   return (
     <article className={`${styles.page} landing-page-root`}>
       <div className={styles.scene}>
         <section className={styles.panel} aria-labelledby="landing-title">
           <div className={styles.panelArt} aria-hidden="true">
-            <Image
-              src="/brand/programmable-floral-night-background-2172.webp"
-              alt=""
-              fill
-              priority
-              sizes="(max-width: 760px) 100vw, 92vw"
-            />
+            <picture className={styles.panelPicture}>
+              <source
+                media="(max-width: 760px)"
+                srcSet="/brand/atmosphere/night-sky-botanical-mobile-v2.avif"
+              />
+              <Image
+                src="/brand/atmosphere/night-sky-botanical-desktop-v2-1920.avif"
+                alt=""
+                fill
+                priority
+                sizes="(max-width: 760px) 100vw, 82vw"
+              />
+            </picture>
           </div>
           <Image
             className={styles.flowerLeft}
@@ -102,18 +87,11 @@ export function LandingPage() {
 
           <div className={`${styles.hero} ${styles.panelBody}`}>
             <div className={`${styles.heroCopy} ${styles.content}`}>
-              <p className={styles.kicker}>
-                <span aria-hidden="true">✳</span> Uniswap v4 launch surface
-              </p>
               <h1 id="landing-title">
                 <span>Tokens with</span>
                 <span>behavior</span>
                 <span>in view.</span>
               </h1>
-              <p className={styles.heroLead}>
-                Choose a model, set the details that matter, and review the
-                launch surface before your wallet signs.
-              </p>
               <nav className={styles.actions} aria-label="Get started">
                 <Link className={styles.primaryAction} href="/launch">
                   Create a token <span aria-hidden="true">↗</span>
@@ -122,68 +100,10 @@ export function LandingPage() {
                   Explore tokens
                 </Link>
               </nav>
-              <p className={styles.heroNote}>
-                <span aria-hidden="true">↳</span> Classic is the public launch
-                path today.
-              </p>
-            </div>
-
-            <aside className={styles.heroAside} aria-labelledby="aside-title">
-              <p className={styles.asideLabel} id="aside-title">
-                Make the important choices visible.
-              </p>
-              <p className={styles.asideCopy}>
-                Fixed supply, one sided Uniswap v4 liquidity, and a permanent
-                lock from the first review.
-              </p>
-              <dl className={styles.signalList}>
-                {launchSignals.map((signal) => (
-                  <div className={styles.signal} key={signal.index}>
-                    <dt>{signal.index}</dt>
-                    <dd>
-                      <Link href={signal.href}>
-                        <strong>{signal.title}</strong>
-                        <span>{signal.detail}</span>
-                      </Link>
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            </aside>
-          </div>
-
-          <div className={styles.panelBottom}>
-            <p className={styles.bottomNote}>
-              Programmable <span aria-hidden="true">/</span> Night Garden
-            </p>
-            <div className={styles.quickLinks}>
-              <Link className={styles.quickCard} href="/launch">
-                <span>Start here</span>
-                <strong>Create a token</strong>
-                <span aria-hidden="true">↗</span>
-              </Link>
-              <Link className={styles.quickCard} href="/explore">
-                <span>Public index</span>
-                <strong>Explore tokens</strong>
-                <span aria-hidden="true">↗</span>
-              </Link>
             </div>
           </div>
 
           <footer className={styles.footer}>
-            <Link
-              className={styles.footerBrand}
-              href="/"
-              aria-label="Programmable home"
-            >
-              Programmable<span aria-hidden="true">©</span>
-            </Link>
-            <nav className={styles.footerLinks} aria-label="Footer navigation">
-              <Link className={styles.docsLink} href="/docs">
-                Docs
-              </Link>
-              <Link href="/explore">Explore</Link>
-            </nav>
             <nav
               className={`${styles.footerIcons} ${styles.supportingLinks}`}
               aria-label="Programmable links"
