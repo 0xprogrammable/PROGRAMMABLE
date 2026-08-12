@@ -662,6 +662,7 @@ export function DocsNavigation({
           aria-controls="docs-mobile-navigation"
           aria-expanded={mobileNavigationOpen}
           aria-haspopup="dialog"
+          aria-label={`Open documentation navigation, ${activeLabel}`}
           onClick={openMobileNavigation}
         >
           <Menu aria-hidden="true" size={18} strokeWidth={1.8} />

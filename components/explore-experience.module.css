@@ -32,6 +32,17 @@
   width: 100%;
 }
 
+.pageEyebrow {
+  color: var(--explore-ivory-muted);
+  font-family: var(--font-instrument), sans-serif;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  margin: 0 0 16px;
+  text-transform: uppercase;
+}
+
 .pageHeading h1 {
   align-items: center;
   color: var(--explore-ivory);
@@ -85,9 +96,20 @@
 }
 
 .runnersIntro :global(.token-section-heading) {
+  align-items: center;
+  flex-direction: column;
   justify-content: center;
   min-height: 0;
   width: 100%;
+}
+
+.sectionTitle {
+  color: var(--explore-ivory);
+  font-size: 18px;
+  font-weight: 540;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+  margin: 0 0 14px;
 }
 
 .runnersIntro :global(.token-toolbar) {
@@ -425,7 +447,9 @@
 .runnerMeta {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
+  row-gap: 2px;
   margin-block-start: 2px;
   min-height: 44px;
   min-width: 0;
@@ -454,7 +478,7 @@
   align-items: baseline;
   color: var(--explore-ivory);
   display: inline-flex;
-  flex: none;
+  flex: 0 1 auto;
   font-family: var(--font-instrument), sans-serif;
   font-size: 14px;
   font-variant-numeric: tabular-nums;
@@ -496,7 +520,7 @@
   align-items: center;
   display: flex;
   gap: 2px;
-  margin: 0;
+  margin: 0 0 0 auto;
   min-height: 44px;
 }
 
@@ -591,6 +615,20 @@
 }
 
 .messageState p {
+  margin: 0;
+}
+
+.messageCopy {
+  display: grid;
+  gap: 8px;
+}
+
+.messageCopy h2 {
+  color: var(--explore-ivory);
+  font-size: 22px;
+  font-weight: 540;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
   margin: 0;
 }
 
@@ -754,6 +792,10 @@
     white-space: normal;
   }
 
+  .pageEyebrow {
+    margin-bottom: 14px;
+  }
+
   .pageHeading h1 span {
     width: auto;
   }
@@ -881,6 +923,10 @@
     padding: 4px 4px 0;
   }
 
+  .runnerSocials {
+    margin-left: auto;
+  }
+
   .runnerSocialLink {
     height: 44px;
     width: 44px;
@@ -912,6 +958,19 @@
 
   .emptyState h2 {
     font-size: 36px;
+  }
+
+  .messageState {
+    align-items: start;
+    flex-direction: column;
+    margin-top: 18px;
+    min-height: 148px;
+    padding: 28px 24px;
+    text-align: start;
+  }
+
+  .messageState :global(.text-button) {
+    align-self: start;
   }
 }
 
@@ -966,6 +1025,12 @@
   .runnerSocialLink {
     width: 44px;
   }
+
+  .runnerSocials {
+    flex-basis: 100%;
+    justify-content: flex-end;
+    margin-left: 0;
+  }
 }
 
 @media (max-width: 360px) {
@@ -1007,6 +1072,10 @@
 
   .runnerMeta {
     flex-wrap: wrap;
+  }
+
+  .runnerSocials {
+    justify-content: flex-start;
   }
 }
 

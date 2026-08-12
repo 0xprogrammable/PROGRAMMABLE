@@ -10,12 +10,12 @@
   border-radius: 24px;
   box-shadow: var(--liquid-glass-shadow);
   display: grid;
-  gap: 0 clamp(32px, 4vw, 58px);
+  gap: 0 clamp(36px, 4.5vw, 64px);
   grid-template-columns:
-    minmax(210px, 1.1fr)
-    minmax(110px, 0.56fr)
-    minmax(128px, 0.68fr)
-    minmax(300px, 1.5fr);
+    minmax(220px, 1.15fr)
+    minmax(112px, 0.56fr)
+    minmax(136px, 0.68fr)
+    minmax(260px, 1.35fr);
   overflow: hidden;
   min-width: 0;
   padding: 30px;
@@ -28,7 +28,7 @@
 .brand {
   align-content: start;
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .brandLink {
@@ -57,6 +57,15 @@
   letter-spacing: -0.005em;
   line-height: 1.5;
   margin: 0;
+}
+
+.tagline {
+  color: var(--text-soft);
+  font-size: 13.5px;
+  line-height: 1.55;
+  margin: 0;
+  max-width: 26ch;
+  text-wrap: pretty;
 }
 
 .risk p {
@@ -100,9 +109,16 @@
   font-size: 14px;
   font-weight: 560;
   min-height: 36px;
+  margin-inline-start: -10px;
+  padding-inline: 10px;
   transition:
     background-color 120ms ease,
     color 120ms ease;
+}
+
+.column a:focus-visible {
+  outline: 2px solid var(--brand-ivory);
+  outline-offset: 2px;
 }
 
 .risk {
@@ -126,6 +142,7 @@
 
   .risk {
     grid-column: 1 / -1;
+    border-top: 1px solid var(--liquid-glass-border);
     padding-top: 10px;
   }
 
@@ -155,6 +172,10 @@
 
   .column a {
     min-height: 44px;
+  }
+
+  .tagline {
+    max-width: 34ch;
   }
 }
 

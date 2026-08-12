@@ -49,13 +49,8 @@ const resourceLinks = [
 
 export function SiteFooter() {
   return (
-    <footer
-      className={`${styles.footer} page-width`}
-      aria-label="Site footer"
-    >
-      <div
-        className={`${styles.surface} liquid-glass-surface`}
-      >
+    <footer className={`${styles.footer} page-width`} aria-label="Site footer">
+      <div className={`${styles.surface} liquid-glass-surface`}>
         <section className={styles.brand}>
           <Link
             className={styles.brandLink}
@@ -72,6 +67,9 @@ export function SiteFooter() {
             />
             <span>Programmable</span>
           </Link>
+          <p className={styles.tagline}>
+            Explore, create, and track tokens built on Uniswap v4.
+          </p>
           <p className={styles.copyright}>© 2026 Programmable</p>
         </section>
 
@@ -92,7 +90,12 @@ export function SiteFooter() {
             {resourceLinks.map((link) => (
               <li key={link.href}>
                 {link.external ? (
-                  <a href={link.href} target="_blank" rel="noreferrer">
+                  <a
+                    href={link.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={`${link.label} (opens in a new tab)`}
+                  >
                     {link.label}
                   </a>
                 ) : (
@@ -107,8 +110,8 @@ export function SiteFooter() {
           <h2 className={styles.label}>Risk notice</h2>
           <p>
             Transactions may be irreversible. Tokens can be volatile, illiquid
-            or lose all value. Programmable does not provide financial advice
-            or guarantee a token&apos;s quality.
+            or lose all value. Programmable does not provide financial advice or
+            guarantee a token&apos;s quality.
           </p>
         </section>
       </div>
