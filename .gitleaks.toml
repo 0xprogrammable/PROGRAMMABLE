@@ -142,6 +142,16 @@ regexes = [
 ]
 
 [[allowlists]]
+description = "Route-closure manifests contain public onchain profile keys, not credentials"
+condition = "AND"
+regexTarget = "match"
+paths = [
+  '''config/hookemon-route-closure\.v1\.json''',
+  '''contracts/spec/shards-route-closure-v1\.json''',
+]
+regexes = ['''profileKey"?:\s*"0x[0-9a-fA-F]{64}"''']
+
+[[allowlists]]
 description = "Router V3 vendored artifacts contain public bytes32 profile and winner bindings"
 condition = "AND"
 regexTarget = "match"
