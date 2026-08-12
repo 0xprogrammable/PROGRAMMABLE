@@ -4,6 +4,9 @@ import { createHash } from "node:crypto";
 
 import type { TrustedLaunchPermitSignerV2 } from "@/lib/custom-launch/contract-v2";
 import { isReviewAuthorityModeV1 } from "@/lib/custom-launch/review-authority-v1";
+import {
+  isProductionTokenImageUploadReceiptSignerConfiguredV1,
+} from "@/lib/server/token-image-upload-receipt-v1";
 
 const SIGNER_KEYS = [
   "keyId",
@@ -25,7 +28,12 @@ export function isCustomLaunchPublicEnabled(
     return false;
   }
   const origin = environment.PROGRAMMABLE_APPROVAL_SERVICE_V2_ORIGIN?.trim();
-  if (!origin || !environment.NEXT_PUBLIC_PRIVY_APP_ID?.trim() || !environment.PRIVY_APP_SECRET?.trim()) {
+  if (
+    !origin
+    || !environment.NEXT_PUBLIC_PRIVY_APP_ID?.trim()
+    || !environment.PRIVY_APP_SECRET?.trim()
+    || !environment.TOKEN_IMAGE_BLOB_READ_WRITE_TOKEN?.trim()
+  ) {
     return false;
   }
   if (
@@ -35,6 +43,9 @@ export function isCustomLaunchPublicEnabled(
     )
   ) return false;
   if (configuredLaunchPermitSignersV2(environment).length === 0) return false;
+  if (!isProductionTokenImageUploadReceiptSignerConfiguredV1(environment)) {
+    return false;
+  }
   try {
     const url = new URL(origin);
     return url.protocol === "https:"

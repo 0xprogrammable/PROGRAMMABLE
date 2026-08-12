@@ -1,15 +1,21 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import sharp from "sharp";
+
+vi.mock("server-only", () => ({}));
 
 import {
   canOptimizeTokenImage,
   getProgrammableTokenImageAssetName,
   getTokenCardImageSource,
   getTokenImageFileError,
-  hasValidTokenImageSignature,
   isProgrammableTokenImageUrl,
   MAX_TOKEN_IMAGE_UPLOAD_BYTES,
   PROGRAMMABLE_TOKEN_IMAGE_HOST,
 } from "../lib/token-image";
+import {
+  inspectWebpStructure,
+  verifyTokenImageWebpV1,
+} from "../lib/server/token-image-webp-v1";
 
 describe("token image policy", () => {
   it("keeps prepared uploads within the card-performance budget", () => {
@@ -40,16 +46,66 @@ describe("token image policy", () => {
     ).toContain("smaller than 8 MB");
   });
 
-  it("checks the uploaded image signature", async () => {
-    const webp = new Blob([
-      new Uint8Array([
-        0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50,
-      ]),
-    ]);
-    const fake = new Blob([new TextEncoder().encode("not an image")]);
+  it("fully decodes only a structurally valid 1000 by 1000 WebP", async () => {
+    const webp = await sharp({
+      create: {
+        width: 1_000,
+        height: 1_000,
+        channels: 4,
+        background: { r: 21, g: 32, b: 43, alpha: 1 },
+      },
+    }).webp().toBuffer();
+    await expect(verifyTokenImageWebpV1(webp)).resolves.toMatchObject({
+      width: 1_000,
+      height: 1_000,
+    });
+    expect(inspectWebpStructure(webp)).toEqual({ width: 1_000, height: 1_000 });
+  });
 
-    await expect(hasValidTokenImageSignature(webp)).resolves.toBe(true);
-    await expect(hasValidTokenImageSignature(fake)).resolves.toBe(false);
+  it("rejects JPEG and PNG bytes relabelled as WebP", async () => {
+    const jpeg = await sharp({
+      create: {
+        width: 1_000,
+        height: 1_000,
+        channels: 3,
+        background: { r: 21, g: 32, b: 43 },
+      },
+    }).jpeg().toBuffer();
+    const png = await sharp({
+      create: {
+        width: 1_000,
+        height: 1_000,
+        channels: 3,
+        background: { r: 21, g: 32, b: 43 },
+      },
+    }).png().toBuffer();
+    await expect(verifyTokenImageWebpV1(jpeg)).rejects.toThrow("WebP");
+    await expect(verifyTokenImageWebpV1(png)).rejects.toThrow("WebP");
+  });
+
+  it("rejects wrong dimensions, broken RIFF lengths and corrupt image bytes", async () => {
+    const wrongDimensions = await sharp({
+      create: {
+        width: 999,
+        height: 1_000,
+        channels: 3,
+        background: { r: 21, g: 32, b: 43 },
+      },
+    }).webp().toBuffer();
+    const valid = await sharp({
+      create: {
+        width: 1_000,
+        height: 1_000,
+        channels: 3,
+        background: { r: 21, g: 32, b: 43 },
+      },
+    }).webp().toBuffer();
+    const brokenLength = Uint8Array.from(valid);
+    brokenLength[4] = (brokenLength[4]! + 1) & 0xff;
+    const corrupt = valid.subarray(0, valid.byteLength - 3);
+    await expect(verifyTokenImageWebpV1(wrongDimensions)).rejects.toThrow("1000");
+    await expect(verifyTokenImageWebpV1(brokenLength)).rejects.toThrow("WebP");
+    await expect(verifyTokenImageWebpV1(corrupt)).rejects.toThrow("WebP");
   });
 
   it("optimizes only local token images", () => {
@@ -83,6 +139,8 @@ describe("token image policy", () => {
         `https://${PROGRAMMABLE_TOKEN_IMAGE_HOST}.example.com/token-images/example.webp`,
       ),
     ).toBe(false);
+    expect(isProgrammableTokenImageUrl(`${image}?version=2`)).toBe(false);
+    expect(isProgrammableTokenImageUrl(`${image}#replacement`)).toBe(false);
     expect(
       getTokenCardImageSource("https://example.com/token.webp"),
     ).toBe("https://example.com/token.webp");

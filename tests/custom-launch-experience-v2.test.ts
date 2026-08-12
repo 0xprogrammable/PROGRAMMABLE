@@ -1513,6 +1513,7 @@ describe("custom launch browser authority", () => {
       preservedLinks: [],
       image: null,
       imagePreview: "",
+      imageUploadReceipt: null,
     } as const;
 
     expect(buildPresentationDraftFromForm({
