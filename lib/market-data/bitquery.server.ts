@@ -42,6 +42,7 @@ const CHART_CACHE_CURRENT_MAX_AGE_MS = 2_000;
 const CHART_CACHE_MAX_AGE_MS = 2 * 60 * 1_000;
 const MAXIMUM_CHART_TRADES = 2_000;
 const CHART_TRADE_PAGE_SIZE = 500;
+const CHART_READ_TIMEOUT_MS = 12_000;
 const MAXIMUM_CHART_POINTS = 80;
 const SUPPLY_PRICE_MAXIMUM_DISTANCE_MS = 24 * 60 * 60 * 1_000;
 const INDEXED_PRICE_MAXIMUM_DISTANCE_MS = MARKET_DATA_CURRENT_MAX_AGE_MS;
@@ -79,6 +80,12 @@ type MarketCacheEntry = Readonly<{
 type ChartCacheEntry = Readonly<{
   storedAt: number;
   value: MarketChartV1;
+}>;
+
+type ChartTradeCursor = Readonly<{
+  blockNumber: string;
+  transactionIndex: number;
+  logIndex: number;
 }>;
 
 const marketCache = new Map<string, MarketCacheEntry>();
@@ -313,24 +320,30 @@ export async function readBitqueryMarketChartV1(input: Readonly<{
 
   const since = chartRangeStart(input.range, now);
   const deriveValuation = input.valuation === undefined;
+  const chartController = new AbortController();
+  const abortChartRead = () => chartController.abort();
+  if (input.signal?.aborted) abortChartRead();
+  input.signal?.addEventListener("abort", abortChartRead, { once: true });
+  const chartTimeout = setTimeout(abortChartRead, CHART_READ_TIMEOUT_MS);
   try {
-    const rows: unknown[] = [];
+    const rows: MarketTradeV1[] = [];
     let trading: Record<string, unknown> | null = null;
     let responseWasPartial = false;
+    let cursor: ChartTradeCursor | null = null;
     for (
-      let offset = 0;
-      offset < MAXIMUM_CHART_TRADES;
-      offset += CHART_TRADE_PAGE_SIZE
+      let pageIndex = 0;
+      pageIndex * CHART_TRADE_PAGE_SIZE < MAXIMUM_CHART_TRADES;
+      pageIndex += 1
     ) {
-      const withValuation = deriveValuation && offset === 0;
+      const withValuation = deriveValuation && pageIndex === 0;
       const query = marketChartQuery(
         input.range,
         since !== null,
         withValuation,
+        cursor,
       );
       const variables: Record<string, unknown> = {
         poolId: identity.poolId,
-        offset,
         till: now.toISOString(),
         ...(withValuation ? { tokenAddress: identity.tokenAddress } : {}),
         ...(since === null ? {} : { since: since.toISOString() }),
@@ -338,10 +351,19 @@ export async function readBitqueryMarketChartV1(input: Readonly<{
       const response = await executeBitqueryGraphql(query, variables, {
         ...input,
         token,
+        signal: chartController.signal,
       });
       const evm = record(response.data.EVM);
-      const page = array(evm?.DEXTrades);
       if (evm === null) throw new BitqueryMarketDataError("response");
+      const pageRows = array(evm.DEXTrades);
+      const page = pageRows.flatMap((row) => {
+        const trade = parseTrade(row, identity);
+        return trade === null ? [] : [trade];
+      });
+      if (page.length !== pageRows.length) {
+        throw new BitqueryMarketDataError("integrity");
+      }
+      assertDescendingChartPage(page, cursor);
       if (withValuation) {
         trading = record(response.data.Trading);
         if (trading === null) throw new BitqueryMarketDataError("response");
@@ -349,20 +371,17 @@ export async function readBitqueryMarketChartV1(input: Readonly<{
       rows.push(...page);
       responseWasPartial ||= response.partial;
       if (page.length < CHART_TRADE_PAGE_SIZE) break;
+      cursor = chartTradeCursor(page.at(-1) as MarketTradeV1);
     }
     const indexedPrice = deriveValuation
       ? parseTokenPriceObservation(array(trading?.Tokens)[0], identity)
       : null;
-    const parsed = rows.flatMap((row) => {
-      const trade = parseTrade(row, identity);
-      return trade === null ? [] : [trade];
-    });
-    const trades = canonicalTrades(parsed);
+    const trades = canonicalTrades(rows);
     const supply = deriveValuation
       ? parseSupply(array(trading?.Tokens)[0], identity)
       : null;
 
-    if (rows.length !== parsed.length) {
+    if (rows.length !== trades.length) {
       throw new BitqueryMarketDataError("integrity");
     }
     if (trades.length === 0) {
@@ -438,6 +457,9 @@ export async function readBitqueryMarketChartV1(input: Readonly<{
     return chart;
   } catch {
     return cachedChartOrUnavailable(identity, input.range, cacheKey, now);
+  } finally {
+    clearTimeout(chartTimeout);
+    input.signal?.removeEventListener("abort", abortChartRead);
   }
 }
 
@@ -850,6 +872,7 @@ async function executeBitqueryGraphql(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   const abort = () => controller.abort();
+  if (options.signal?.aborted) abort();
   options.signal?.addEventListener("abort", abort, { once: true });
   try {
     const response = await fetchImpl(BITQUERY_HTTP_ENDPOINT, {
@@ -1062,10 +1085,10 @@ function marketChartQuery(
   range: MarketChartV1["range"],
   withSince: boolean,
   withValuation: boolean,
+  cursor: ChartTradeCursor | null,
 ) {
   const definitions = [
     "$poolId: String!",
-    "$offset: Int!",
     "$till: DateTime!",
     ...(withValuation ? ["$tokenAddress: String!"] : []),
     ...(withSince ? ["$since: DateTime!"] : []),
@@ -1073,11 +1096,25 @@ function marketChartQuery(
   const blockFilter = withSince
     ? "Block: { Time: { since: $since, till: $till } }"
     : "Block: { Time: { till: $till } }";
+  const cursorFilter = cursor === null
+    ? ""
+    : `any: [
+            { Block: { Number: { lt: "${cursor.blockNumber}" } } }
+            {
+              Block: { Number: { eq: "${cursor.blockNumber}" } }
+              Transaction: { Index: { lt: ${cursor.transactionIndex} } }
+            }
+            {
+              Block: { Number: { eq: "${cursor.blockNumber}" } }
+              Transaction: { Index: { eq: ${cursor.transactionIndex} } }
+              Log: { Index: { lt: ${cursor.logIndex} } }
+            }
+          ]`;
   const dataset = range === "1h" ? "" : ", dataset: combined";
   return `query ProgrammableMarketChart(${definitions}) {
     EVM(network: eth${dataset}) {
       DEXTrades(
-        limit: { count: ${CHART_TRADE_PAGE_SIZE}, offset: $offset }
+        limit: { count: ${CHART_TRADE_PAGE_SIZE} }
         orderBy: [
           { descending: Block_Number }
           { descending: Transaction_Index }
@@ -1086,6 +1123,7 @@ function marketChartQuery(
         where: {
           TransactionStatus: { Success: true }
           ${blockFilter}
+          ${cursorFilter}
           Trade: { Dex: { ProtocolName: { is: "uniswap_v4" } }, PoolId: { is: $poolId } }
         }
       ) { ${tradeSelection()} }
@@ -1116,7 +1154,8 @@ function tradeSelection() {
 function liquiditySelection() {
   return `
     Block { Number Time }
-    Transaction { Hash }
+    Log { Index }
+    Transaction { Hash Index }
     PoolEvent {
       Pool {
         PoolId
@@ -1245,35 +1284,58 @@ function parseLiquidity(
 ): MarketLiquidityV1 | null {
   const row = record(value);
   const block = record(row?.Block);
+  const log = record(row?.Log);
   const transaction = record(row?.Transaction);
   const event = record(row?.PoolEvent);
   const pool = record(event?.Pool);
   const liquidity = record(event?.Liquidity);
+  const eventTransactionHash = canonicalTransactionHash(transaction?.Hash);
+  const eventTransactionIndex = nonNegativeSafeInteger(transaction?.Index);
+  const eventLogIndex = nonNegativeSafeInteger(log?.Index);
   if (
     !block ||
+    !log ||
+    !transaction ||
     !event ||
     !pool ||
     !liquidity ||
     canonicalBytes32(pool.PoolId) !== identity.poolId ||
-    !canonicalUnsignedInteger(block.Number)
+    !canonicalUnsignedInteger(block.Number) ||
+    eventTransactionHash === null ||
+    eventTransactionIndex === null ||
+    eventLogIndex === null
   ) return null;
   const time = isoTime(block.Time);
   const currencyA = record(pool.CurrencyA);
   const currencyB = record(pool.CurrencyB);
   const eventBlockNumber = String(block.Number);
-  const eventTransactionHash = canonicalTransactionHash(transaction?.Hash);
   const addressA = canonicalCurrencyAddress(currencyA?.SmartContract);
   const addressB = canonicalCurrencyAddress(currencyB?.SmartContract);
+  const tokenIsA = addressA === identity.tokenAddress;
+  const tokenIsB = addressB === identity.tokenAddress;
+  if (tokenIsA === tokenIsB) return null;
+  const quoteAddress = tokenIsA ? addressB : addressA;
+  if (
+    quoteAddress === null ||
+    (sameEventTrade?.quoteAddress !== undefined &&
+      sameEventTrade.quoteAddress !== quoteAddress)
+  ) return null;
   const amountA = decimalString(liquidity.AmountCurrencyA);
   const amountB = decimalString(liquidity.AmountCurrencyB);
+  const amountAInUsd = liquidity.AmountCurrencyAInUSD;
+  const amountBInUsd = liquidity.AmountCurrencyBInUSD;
   const observedA = liquidityUsdWad(
-    liquidity.AmountCurrencyAInUSD,
+    amountAInUsd,
     amountA,
   );
   const observedB = liquidityUsdWad(
-    liquidity.AmountCurrencyBInUSD,
+    amountBInUsd,
     amountB,
   );
+  if (
+    (amountAInUsd !== undefined && amountAInUsd !== null && observedA === null) ||
+    (amountBInUsd !== undefined && amountBInUsd !== null && observedB === null)
+  ) return null;
   const tradePrice = sameEventTrade?.priceUsdWad
     ? BigInt(sameEventTrade.priceUsdWad)
     : null;
@@ -1287,10 +1349,14 @@ function parseLiquidity(
     eventTime: time,
     eventBlockNumber,
     eventTransactionHash,
+    eventTransactionIndex,
+    eventLogIndex,
     tokenPriceUsdWad: tradePrice,
     tokenPriceTime: sameEventTrade?.priceUsdAsOfTime,
     tokenPriceBlockNumber: sameEventTrade?.blockNumber,
     tokenPriceTransactionHash: sameEventTrade?.transactionHash,
+    tokenPriceTransactionIndex: sameEventTrade?.transactionIndex,
+    tokenPriceLogIndex: sameEventTrade?.logIndex,
     tokenPriceQuoteWad: tradeQuotePrice,
     quoteAddress: sameEventTrade?.quoteAddress,
   });
@@ -1301,10 +1367,14 @@ function parseLiquidity(
     eventTime: time,
     eventBlockNumber,
     eventTransactionHash,
+    eventTransactionIndex,
+    eventLogIndex,
     tokenPriceUsdWad: tradePrice,
     tokenPriceTime: sameEventTrade?.priceUsdAsOfTime,
     tokenPriceBlockNumber: sameEventTrade?.blockNumber,
     tokenPriceTransactionHash: sameEventTrade?.transactionHash,
+    tokenPriceTransactionIndex: sameEventTrade?.transactionIndex,
+    tokenPriceLogIndex: sameEventTrade?.logIndex,
     tokenPriceQuoteWad: tradeQuotePrice,
     quoteAddress: sameEventTrade?.quoteAddress,
   });
@@ -1327,11 +1397,15 @@ function deriveLiquiditySideUsd(input: Readonly<{
   identity: MarketDataIdentityV1;
   eventTime: string | null;
   eventBlockNumber: string;
-  eventTransactionHash: `0x${string}` | null;
+  eventTransactionHash: `0x${string}`;
+  eventTransactionIndex: number;
+  eventLogIndex: number;
   tokenPriceUsdWad: bigint | null;
   tokenPriceTime?: string;
   tokenPriceBlockNumber?: string;
   tokenPriceTransactionHash?: `0x${string}`;
+  tokenPriceTransactionIndex?: number;
+  tokenPriceLogIndex?: number;
   tokenPriceQuoteWad: bigint | null;
   quoteAddress?: `0x${string}`;
 }>): bigint | null {
@@ -1341,8 +1415,9 @@ function deriveLiquiditySideUsd(input: Readonly<{
   if (/^0(?:\.0+)?$/u.test(input.amount)) return 0n;
   const priceIsEventBound = input.tokenPriceTime === input.eventTime &&
     input.tokenPriceBlockNumber === input.eventBlockNumber &&
-    input.eventTransactionHash !== null &&
-    input.tokenPriceTransactionHash === input.eventTransactionHash;
+    input.tokenPriceTransactionHash === input.eventTransactionHash &&
+    input.tokenPriceTransactionIndex === input.eventTransactionIndex &&
+    input.tokenPriceLogIndex === input.eventLogIndex;
   if (
     input.address === input.identity.tokenAddress &&
     input.tokenPriceUsdWad !== null &&
@@ -1373,15 +1448,15 @@ function liquidityUsdWad(
   rawAmount: string | null,
 ): bigint | null {
   const normalized = decimalString(value);
-  if (normalized === null) return null;
+  if (normalized === null || rawAmount === null) return null;
+  const amountIsZero = /^0(?:\.0+)?$/u.test(rawAmount);
+  const usdIsZero = /^0(?:\.0+)?$/u.test(normalized);
+  if (amountIsZero !== usdIsZero) return null;
+  if (usdIsZero) return 0n;
   const [whole, fraction = ""] = normalized.split(".");
   const wad = BigInt(whole) * WAD +
     BigInt(fraction.slice(0, 18).padEnd(18, "0") || "0");
-  if (
-    wad === 0n &&
-    (rawAmount === null || !/^0(?:\.0+)?$/u.test(rawAmount))
-  ) return null;
-  return wad;
+  return wad > 0n ? wad : null;
 }
 
 function parseStats(value: unknown): Readonly<{
@@ -1832,6 +1907,50 @@ function canonicalTrades(trades: readonly MarketTradeV1[]): MarketTradeV1[] {
     byKey.set(key, trade);
   }
   return [...byKey.values()];
+}
+
+function chartTradeCursor(trade: MarketTradeV1): ChartTradeCursor {
+  if (trade.transactionIndex === undefined) {
+    throw new BitqueryMarketDataError("integrity");
+  }
+  return {
+    blockNumber: trade.blockNumber,
+    transactionIndex: trade.transactionIndex,
+    logIndex: trade.logIndex,
+  };
+}
+
+function compareChartTradePosition(
+  first: ChartTradeCursor,
+  second: ChartTradeCursor,
+): number {
+  const firstBlock = BigInt(first.blockNumber);
+  const secondBlock = BigInt(second.blockNumber);
+  if (firstBlock !== secondBlock) return firstBlock < secondBlock ? -1 : 1;
+  if (first.transactionIndex !== second.transactionIndex) {
+    return first.transactionIndex < second.transactionIndex ? -1 : 1;
+  }
+  if (first.logIndex !== second.logIndex) {
+    return first.logIndex < second.logIndex ? -1 : 1;
+  }
+  return 0;
+}
+
+function assertDescendingChartPage(
+  trades: readonly MarketTradeV1[],
+  previousPageCursor: ChartTradeCursor | null,
+): void {
+  let previous = previousPageCursor;
+  for (const trade of trades) {
+    const current = chartTradeCursor(trade);
+    if (
+      previous !== null &&
+      compareChartTradePosition(current, previous) >= 0
+    ) {
+      throw new BitqueryMarketDataError("integrity");
+    }
+    previous = current;
+  }
 }
 
 function chartPoints(

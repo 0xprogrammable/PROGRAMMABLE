@@ -224,6 +224,7 @@ export const BITQUERY_MARKET_STREAM_QUERY = `
         }
       ) {
         Block { Number Time }
+        Log { Index }
         PoolEvent {
           Pool {
             PoolId
@@ -237,7 +238,7 @@ export const BITQUERY_MARKET_STREAM_QUERY = `
             AmountCurrencyBInUSD
           }
         }
-        Transaction { Hash }
+        Transaction { Hash Index }
       }
     }
   }
