@@ -6,12 +6,12 @@ The canonical `programmable-v4-hook-builder` package in this repository is synch
 | Binding | Value |
 | --- | --- |
 | source repository | `https://github.com/0xprogrammable/hookbuilder` |
-| source ref | `codex/hookbuilder-latest-main-20260812` (candidate for `main`) |
-| source commit | `e44538ca554530485cb7ac46677c42599b21887b` |
-| source commit tree | `7d135cb8279e542615c227b1a24e992f3424b2b2` |
+| source ref | `main` |
+| source commit | `509060301ce9bb1b5e318b28aeeeeb846c020f68` |
+| source commit tree | `f49b32d6ff60e7e2b1457e5bd7e32ee3c81710a8` |
 | package version | `0.5.1` (development scope) |
 | canonical skill files | `640` |
-| generated skill tree digest | `dbeda5fad8a32e0c6dea24b0d5e00266c0d58b7ef155c9f8ff244e2c60b16ac8` |
+| generated skill tree digest | `0a9e5508fdb77e16527e0dd85d58c5d34569c573d0bc6a0dc47b024462471913` |
 
 The source skill is authoritative for the newest model. The repository-root Codex and Claude manifests and the
 `plugins/marketplace/plugins/programmable` distribution are generated from the same metadata and

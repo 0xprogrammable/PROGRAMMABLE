@@ -356,7 +356,7 @@
             "null"
           ],
           "minimum": 0,
-          "maximum": 100000
+          "maximum": 999999
         },
         "selectedSellHundredthsOfBip": {
           "type": [
@@ -364,7 +364,7 @@
             "null"
           ],
           "minimum": 0,
-          "maximum": 100000
+          "maximum": 999999
         },
         "minimumEffectiveHundredthsOfBip": {
           "const": 1000
@@ -375,7 +375,7 @@
             "null"
           ],
           "minimum": 1000,
-          "maximum": 100000
+          "maximum": 999999
         },
         "effectiveSellHundredthsOfBip": {
           "type": [
@@ -383,7 +383,7 @@
             "null"
           ],
           "minimum": 1000,
-          "maximum": 100000
+          "maximum": 999999
         },
         "platformHundredthsOfBip": {
           "const": 1000
@@ -394,7 +394,7 @@
             "null"
           ],
           "minimum": 0,
-          "maximum": 99000
+          "maximum": 998999
         },
         "projectSellHundredthsOfBip": {
           "type": [
@@ -402,7 +402,7 @@
             "null"
           ],
           "minimum": 0,
-          "maximum": 99000
+          "maximum": 998999
         },
         "formula": {
           "const": "per-side:effective=max(selected,1000);platform=1000;project=effective-1000"

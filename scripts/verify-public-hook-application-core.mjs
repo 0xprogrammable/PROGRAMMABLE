@@ -2594,14 +2594,14 @@ function validateProgrammableFeeProjection(fee, source) {
       fee.rates.effectiveBuyHundredthsOfBip,
       fee.rates.projectBuyHundredthsOfBip,
       "buy",
-      100_000
+      999_999
     );
     validateRate(
       fee.rates.selectedSellHundredthsOfBip,
       fee.rates.effectiveSellHundredthsOfBip,
       fee.rates.projectSellHundredthsOfBip,
       "sell",
-      100_000
+      999_999
     );
   } else {
     validateRate(
@@ -2675,6 +2675,23 @@ function validateProgrammableFeeProjection(fee, source) {
 }
 
 function validateProgrammableFeeCompatibility(application, compatibility) {
+  const rates = application.programmableFee.rates;
+  const customRateReviewRequired = application.programmableFee.policyVersion === "1.1.0"
+    && [rates.selectedBuyHundredthsOfBip, rates.selectedSellHundredthsOfBip]
+      .some((selected) => selected !== null && selected > 100_000);
+  const hasCustomRateReviewGate = compatibility.findings.some((finding) => (
+    finding.code === "REQUIRED_REVIEW_GATE"
+    && finding.path === "$.requiredGates.candidate.custom-programmable-fee-review"
+  ));
+  if (
+    customRateReviewRequired
+    && (compatibility.result !== "architecture-review-required" || !hasCustomRateReviewGate)
+  ) {
+    reject(
+      "PROGRAMMABLE_FEE_CUSTOM_REVIEW_REQUIRED",
+      "A selected fee above the reference accelerator range must remain in architecture review with the candidate custom fee review gate."
+    );
+  }
   if (
     application.programmableFee.collection.status !== "implemented"
     && compatibility.result === "prototype-ready"

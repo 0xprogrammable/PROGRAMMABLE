@@ -22,6 +22,9 @@ const skillRoot = path.resolve(testDirectory, "..", "..");
 const submissionSchema = JSON.parse(
   fs.readFileSync(path.join(skillRoot, "references", "submission.schema.json"), "utf8")
 );
+const publicApplicationSchema = JSON.parse(
+  fs.readFileSync(path.join(skillRoot, "references", "public-pr-application.schema.json"), "utf8")
+);
 const templateCatalog = loadTemplateCatalog({ skillRoot });
 
 function trustedHostTest(name, implementation) {
@@ -306,6 +309,58 @@ trustedHostTest("central projection preserves the exact catalog selection, packs
   const builderTemplate = catalogBuilderTemplate();
   const central = buildFixture(localReport, { builderTemplate });
   assert.deepEqual(validateCentral(central).application.builderTemplate, builderTemplate);
+});
+
+trustedHostTest("central projection accepts custom programmable fee rates above the reference accelerator", () => {
+  const localReport = {
+    decision: "PROTOTYPE_READY",
+    findings: [],
+    requiredGates: [{
+      id: "custom-programmable-fee-review",
+      stage: "candidate",
+      reason: "The selected fee exceeds the reference accelerator and requires custom review."
+    }]
+  };
+  const central = buildFixture(localReport, {
+    mutateSubmission(submission) {
+      Object.assign(submission.programmableFee.rates, {
+        selectedBuyHundredthsOfBip: 200_000,
+        selectedSellHundredthsOfBip: 200_000,
+        effectiveBuyHundredthsOfBip: 200_000,
+        effectiveSellHundredthsOfBip: 200_000,
+        projectBuyHundredthsOfBip: 199_000,
+        projectSellHundredthsOfBip: 199_000
+      });
+    }
+  });
+
+  assert.deepEqual(validateCentral(central).application.programmableFee.rates, {
+    ...implementedProgrammableFee({
+      feeSourcePath: "src/ProgrammableFeeHook.sol",
+      feeTestPath: "test/ProgrammableFeeHook.t.sol"
+    }).rates,
+    selectedBuyHundredthsOfBip: 200_000,
+    selectedSellHundredthsOfBip: 200_000,
+    effectiveBuyHundredthsOfBip: 200_000,
+    effectiveSellHundredthsOfBip: 200_000,
+    projectBuyHundredthsOfBip: 199_000,
+    projectSellHundredthsOfBip: 199_000
+  });
+});
+
+test("public application programmable fee bounds match the submission contract", () => {
+  const submissionRates = submissionSchema.properties.programmableFee.properties.rates.properties;
+  const publicRates = publicApplicationSchema.$defs.programmableFeeRates.properties;
+  for (const field of [
+    "selectedBuyHundredthsOfBip",
+    "selectedSellHundredthsOfBip",
+    "effectiveBuyHundredthsOfBip",
+    "effectiveSellHundredthsOfBip",
+    "projectBuyHundredthsOfBip",
+    "projectSellHundredthsOfBip"
+  ]) {
+    assert.equal(publicRates[field].maximum, submissionRates[field].maximum, field);
+  }
 });
 
 function buildFixture(localReport, {

@@ -152,6 +152,93 @@ test("trusted package validation rejects legacy and malformed mandatory fee proj
   }));
 });
 
+test("custom V1.1 fee rates above the reference accelerator remain candidate-review gated", () => {
+  const files = makePackage({
+    stage: "prototype",
+    compatibilityResult: "architecture-review-required",
+    findings: [{
+      code: "REQUIRED_REVIEW_GATE",
+      evidenceIds: [],
+      path: "$.requiredGates.candidate.custom-programmable-fee-review",
+      remediation: "Complete attributable custom fee review before candidate approval or launch consideration.",
+      severity: "warning",
+      summary: "The selected fee exceeds the reference accelerator and requires custom review."
+    }],
+    mutateApplication(application) {
+      upgradeApplicationToV11(application, {
+        selectedBuyHundredthsOfBip: 200_000,
+        selectedSellHundredthsOfBip: 200_000,
+        effectiveBuyHundredthsOfBip: 200_000,
+        effectiveSellHundredthsOfBip: 200_000,
+        projectBuyHundredthsOfBip: 199_000,
+        projectSellHundredthsOfBip: 199_000
+      });
+    }
+  });
+  const application = JSON.parse(files.get("application.json").toString("utf8"));
+  const validateSchema = compilePublicApplicationSchema();
+  assert.equal(validateSchema(application), true, JSON.stringify(validateSchema.errors));
+
+  const result = validatePublicApplicationPackageFiles({
+    applicationId: "example-hook",
+    packageFiles: files
+  });
+  assert.equal(result.application.programmableFee.rates.selectedBuyHundredthsOfBip, 200_000);
+  assert.equal(result.application.programmableFee.rates.projectBuyHundredthsOfBip, 199_000);
+  assert.equal(result.compatibility.result, "architecture-review-required");
+  assert.ok(result.compatibility.findings.some((finding) => (
+    finding.code === "REQUIRED_REVIEW_GATE"
+    && finding.path === "$.requiredGates.candidate.custom-programmable-fee-review"
+  )));
+  assert.notEqual(result.compatibility.result, "prototype-ready");
+});
+
+test("custom V1.1 fee rates cannot omit their candidate review gate", () => {
+  const files = makePackage({ mutateApplication(application) {
+    upgradeApplicationToV11(application, {
+      selectedBuyHundredthsOfBip: 200_000,
+      effectiveBuyHundredthsOfBip: 200_000,
+      projectBuyHundredthsOfBip: 199_000
+    });
+  } });
+  assert.throws(
+    () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: files }),
+    hasCode("PROGRAMMABLE_FEE_CUSTOM_REVIEW_REQUIRED")
+  );
+});
+
+test("V1.1 fee overflow and incorrect project derivation fail closed", () => {
+  const overflow = makePackage({ mutateApplication(application) {
+    upgradeApplicationToV11(application, {
+      selectedBuyHundredthsOfBip: 1_000_000,
+      selectedSellHundredthsOfBip: 1_000_000,
+      effectiveBuyHundredthsOfBip: 1_000_000,
+      effectiveSellHundredthsOfBip: 1_000_000,
+      projectBuyHundredthsOfBip: 999_000,
+      projectSellHundredthsOfBip: 999_000
+    });
+  } });
+  const overflowApplication = JSON.parse(overflow.get("application.json").toString("utf8"));
+  const validateSchema = compilePublicApplicationSchema();
+  assert.equal(validateSchema(overflowApplication), false);
+  assert.throws(
+    () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: overflow }),
+    hasCode("PROGRAMMABLE_FEE_PROJECTION_INVALID")
+  );
+
+  const incorrectProject = makePackage({ mutateApplication(application) {
+    upgradeApplicationToV11(application, {
+      selectedBuyHundredthsOfBip: 200_000,
+      effectiveBuyHundredthsOfBip: 200_000,
+      projectBuyHundredthsOfBip: 198_999
+    });
+  } });
+  assert.throws(
+    () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: incorrectProject }),
+    hasCode("PROGRAMMABLE_FEE_PROJECTION_INVALID")
+  );
+});
+
 test("trusted intake recomputes the fee projection from exact source submission bytes", async (t) => {
   const files = makePackage({ mutateApplication(application) {
     application.programmableFee.rates.selectedHundredthsOfBip = 40000;
@@ -2846,6 +2933,11 @@ function compareUtf8(left, right) {
 function makeSchemaApplication() {
   const application = JSON.parse(makePackage().get("application.json").toString("utf8"));
   application.stage = "proposal";
+  upgradeApplicationToV11(application);
+  return application;
+}
+
+function upgradeApplicationToV11(application, rateOverrides = {}) {
   application.builderTemplate = {
     schemaVersion: "1.0.0",
     source: "manual",
@@ -2866,7 +2958,8 @@ function makeSchemaApplication() {
       projectBuyHundredthsOfBip: legacyRates.projectHundredthsOfBip,
       projectSellHundredthsOfBip: legacyRates.projectHundredthsOfBip,
       formula: "per-side:effective=max(selected,1000);platform=1000;project=effective-1000",
-      lpFeeExcluded: legacyRates.lpFeeExcluded
+      lpFeeExcluded: legacyRates.lpFeeExcluded,
+      ...rateOverrides
     },
     accounting: {
       ...application.programmableFee.accounting,
@@ -2877,7 +2970,6 @@ function makeSchemaApplication() {
       fragmentationResistant: true
     }
   };
-  return application;
 }
 
 function compilePublicApplicationSchema() {

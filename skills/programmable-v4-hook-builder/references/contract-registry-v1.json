@@ -623,8 +623,8 @@
       "schema": {
         "id": "https://programmable.money/schemas/public-pr-application-v2.json",
         "path": "references/public-pr-application.schema.json",
-        "byteLength": 24866,
-        "sha256": "sha256:95e9a8f1046eb4ef3740bd8420d860ef667956f219e401e01ff639f513f024fa"
+        "byteLength": 24868,
+        "sha256": "sha256:a9b5af920381aaa2f18b1a0ccab3d3c5617d9ca7777372d56b80d37961ba3af2"
       },
       "validator": {
         "modulePath": "scripts/github-application-core.mjs",
@@ -10599,5 +10599,5 @@
     "validatorBindingsSha256": "sha256:16629c67eb119305456fbb266b40f26c73e36961fd340f6fa6b38820e5e41861",
     "validatorClosuresSha256": "sha256:fca0133e045871db99dce696e3e58fab95ae86f2e53044a8f49b7345191d6156"
   },
-  "registrySha256": "sha256:0af0f808095d779b32b727b51d1b3e687c1a7470a9291c6ae5f3dbba1c199679"
+  "registrySha256": "sha256:31a406c8071e045a2550b8286ea664bfd845c2f3b8cfc2da99f35e16387c20f7"
 }
