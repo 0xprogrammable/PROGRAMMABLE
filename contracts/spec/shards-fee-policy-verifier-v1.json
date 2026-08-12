@@ -5,8 +5,8 @@
   "launchAllowed": false,
   "externalActionOccurred": false,
   "productionBase": {
-    "commit": "e0851b30d7dfd759ccffea1d4c1acace044c05ad",
-    "tree": "9d79e375b4dea1772b90cb07123581dbd8bf62dc"
+    "commit": "c05b2df79ea18dfafe8d190183fc4ecbac143087",
+    "tree": "45c776cbe39e78bcb00e70bcab78d6aed50235e3"
   },
   "decision": {
     "existingReviewedVerifierSupportsExactPolicy": false,

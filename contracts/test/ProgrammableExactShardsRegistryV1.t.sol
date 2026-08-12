@@ -18,6 +18,12 @@ contract ExactShardsRegistryRuntimeTargetV1 {
     }
 }
 
+contract ExactShardsVerifierImpostorV1 {
+    function feePolicyBindingHashV1() external pure returns (bytes32) {
+        return 0x5d5d1c46e7627f6e171a18acdbecbfe9e40eca80016fba0142ddca6a054f6169;
+    }
+}
+
 contract ProgrammableExactShardsRegistryV1Test is Test {
     address internal constant ADMIN = address(0xA11CE);
     address internal constant APPROVER = address(0xA990);
@@ -29,6 +35,7 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
 
     uint64 internal constant GENERATION = 3;
     uint64 internal constant FINALITY_BLOCKS = 3;
+    uint256 internal constant MAX_REGISTRATION_GAS = 2_200_000;
 
     ProgrammableExactShardsFeePolicyVerifierV1 internal verifier;
     ProgrammableExactShardsRegistryV1 internal registry;
@@ -72,6 +79,58 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
         assertTrue(registry.hasRole(registry.WRITER_ROLE(), WRITER));
         assertFalse(registry.hasRole(registry.APPROVER_ROLE(), WRITER));
         assertFalse(registry.hasRole(registry.WRITER_ROLE(), APPROVER));
+    }
+
+    function test_constructorRejectsVerifierImpostorDespiteMatchingClaimedBinding() public {
+        ExactShardsVerifierImpostorV1 impostor = new ExactShardsVerifierImpostorV1();
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ProgrammableExactShardsRegistryV1.RuntimeCodeHashMismatch.selector,
+                address(impostor),
+                registry.EXPECTED_VERIFIER_RUNTIME_CODE_HASH(),
+                address(impostor).codehash
+            )
+        );
+        new ProgrammableExactShardsRegistryV1(_config(), ProgrammableExactShardsFeePolicyVerifierV1(address(impostor)));
+    }
+
+    function test_machineCheckableSpecMatchesArtifactAndFailClosedBoundary() public view {
+        string memory json = vm.readFile(string.concat(vm.projectRoot(), "/spec/shards-registry-successor-v1.json"));
+        assertEq(vm.parseJsonString(json, ".schemaVersion"), "programmable.exact-shards-registry-successor.v1");
+        assertEq(vm.parseJsonString(json, ".status"), "IMPLEMENTATION_READY_NOT_DEPLOYED");
+        assertFalse(vm.parseJsonBool(json, ".activationAllowed"));
+        assertFalse(vm.parseJsonBool(json, ".launchAllowed"));
+        assertFalse(vm.parseJsonBool(json, ".decision.currentContractsCanLaunch"));
+        assertEq(vm.parseJsonUint(json, ".exactPolicy.totalFeeBps"), 100);
+        assertEq(vm.parseJsonUint(json, ".exactPolicy.orderedClaims[0].grossVolumeFeeBps"), 10);
+        assertEq(vm.parseJsonUint(json, ".exactPolicy.orderedClaims[1].grossVolumeFeeBps"), 10);
+        assertEq(vm.parseJsonUint(json, ".exactPolicy.orderedClaims[2].grossVolumeFeeBps"), 80);
+        assertEq(
+            vm.parseJsonBytes32(json, ".reviewedInputs.feeVerifier.contentBindingHash"),
+            registry.FEE_POLICY_BINDING_HASH()
+        );
+        assertEq(
+            keccak256(type(ProgrammableExactShardsRegistryV1).creationCode),
+            vm.parseJsonBytes32(json, ".implementation.artifact.creationCodeKeccak256")
+        );
+        string memory buildArtifact = vm.readFile(
+            string.concat(
+                vm.projectRoot(), "/out/ProgrammableExactShardsRegistryV1.sol/ProgrammableExactShardsRegistryV1.json"
+            )
+        );
+        bytes memory unlinkedRuntime = vm.parseBytes(vm.parseJsonString(buildArtifact, ".deployedBytecode.object"));
+        assertEq(
+            keccak256(unlinkedRuntime),
+            vm.parseJsonBytes32(json, ".implementation.artifact.unlinkedRuntimeCodeKeccak256")
+        );
+        assertEq(
+            type(ProgrammableExactShardsRegistryV1).creationCode.length,
+            vm.parseJsonUint(json, ".implementation.artifact.creationCodeByteLength")
+        );
+        assertEq(
+            unlinkedRuntime.length, vm.parseJsonUint(json, ".implementation.artifact.unlinkedRuntimeCodeByteLength")
+        );
+        assertEq(address(registry).code.length, unlinkedRuntime.length);
     }
 
     function test_registersAndStoresAllThreeClaimsWithExactHashBinding() public {
@@ -121,6 +180,18 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
         );
         assertTrue(registry.approvalConsumed(registration.approvalId));
         assertTrue(registry.deploymentConsumed(registration.deploymentId));
+    }
+
+    function test_registrationGasStaysBelowHardMaximum() public {
+        IProgrammableExactShardsRegistryV1.LaunchRegistrationV1 memory registration = _registration("gas-bound");
+        _authorize(registration);
+
+        vm.prank(WRITER);
+        uint256 gasBefore = gasleft();
+        registry.registerLaunch(registration);
+        uint256 registrationGas = gasBefore - gasleft();
+
+        assertLe(registrationGas, MAX_REGISTRATION_GAS);
     }
 
     function test_completeLifecycleFinalityCorrectionAndRevocation() public {
@@ -418,22 +489,23 @@ contract ProgrammableExactShardsRegistryV1Test is Test {
         private
         returns (ProgrammableExactShardsRegistryV1)
     {
-        return new ProgrammableExactShardsRegistryV1(
-            ProgrammableExactShardsRegistryV1.RegistryConfigV1({
-                initialAdminDelay: 2 days,
-                initialAdmin: ADMIN,
-                initialApprover: APPROVER,
-                initialWriter: WRITER,
-                initialFinalizer: FINALIZER,
-                initialCorrector: CORRECTOR,
-                initialRevoker: REVOKER,
-                registryGeneration: GENERATION,
-                minimumFinalityBlocks: FINALITY_BLOCKS,
-                chainProfileHash: _hash("ethereum-mainnet-chain-profile"),
-                registryPolicyHash: _hash("exact-shards-registry-policy")
-            }),
-            verifier_
-        );
+        return new ProgrammableExactShardsRegistryV1(_config(), verifier_);
+    }
+
+    function _config() private pure returns (ProgrammableExactShardsRegistryV1.RegistryConfigV1 memory config) {
+        config = ProgrammableExactShardsRegistryV1.RegistryConfigV1({
+            initialAdminDelay: 2 days,
+            initialAdmin: ADMIN,
+            initialApprover: APPROVER,
+            initialWriter: WRITER,
+            initialFinalizer: FINALIZER,
+            initialCorrector: CORRECTOR,
+            initialRevoker: REVOKER,
+            registryGeneration: GENERATION,
+            minimumFinalityBlocks: FINALITY_BLOCKS,
+            chainProfileHash: _hash("ethereum-mainnet-chain-profile"),
+            registryPolicyHash: _hash("exact-shards-registry-policy")
+        });
     }
 
     function _registration(string memory label)
