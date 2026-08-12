@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "programmable.shards-slither-evidence.v2",
+  "status": "COMPLETE",
+  "scope": "whole contracts compilation with dependency, test and script findings filtered from detector output",
+  "workingDirectory": "contracts",
+  "command": "audit_tmp_dir=$(mktemp -d /tmp/shards-secure-workflow.XXXXXX); slither . --compile-force-framework foundry --exclude-dependencies --filter-paths 'lib/|test/|script/' --json \"$audit_tmp_dir/slither.json\" 2>&1 | tee \"$audit_tmp_dir/slither.txt\"; slither_code=${pipestatus[1]}",
+  "commandRecordedFromPreservedAuditorSession": true,
+  "toolchain": {
+    "slither": "0.11.5",
+    "forge": "1.7.1",
+    "forgeCommit": "4072e487",
+    "solc": "0.8.26+commit.8a97fa7a",
+    "foundryProfile": "default",
+    "optimizerEnabled": true,
+    "optimizerRuns": 1000,
+    "evmVersion": "cancun",
+    "bytecodeHash": "none",
+    "cborMetadata": false
+  },
+  "rawReport": {
+    "committed": false,
+    "ephemeralPathAtReview": "/tmp/shards-secure-workflow.2DhSHO/slither.json",
+    "sha256": "0x249dafd8882da2390c21bd87d97552ada008834eb9ce27cdb8d0e75e60198bcc",
+    "byteLength": 10372959,
+    "success": true,
+    "totalDetectorInstances": 286,
+    "wholeReportImpactCounts": {
+      "high": 8,
+      "medium": 87,
+      "low": 91,
+      "informational": 100
+    }
+  },
+  "scopedReview": {
+    "sourcePathPrefixes": [
+      "src/ProgrammableLaunchPermit",
+      "src/ProgrammableExactShards"
+    ],
+    "componentBindingSha256": "0x097e5d7e5e490a16febe309c7c057aa3be48d61cbd037c1e651ee3cf80191a91",
+    "rawHighInstances": 0,
+    "rawMediumInstances": 9,
+    "actionableHighFindings": 0,
+    "actionableMediumFindings": 0,
+    "untriagedFindings": 0,
+    "triageRecordCount": 9,
+    "triageSource": "contracts/spec/shards-security-properties-input-v2.json#slitherEvidence.rawMediumTriage",
+    "allRawMediumInstancesHaveExactTriage": true,
+    "noRawMediumInstanceDiscarded": true
+  },
+  "review": {
+    "reviewedBy": "independent-security-workflow",
+    "externalAuditClaim": false,
+    "suppressionsReviewed": true,
+    "reportAndTriageBindingComplete": true
+  }
+}

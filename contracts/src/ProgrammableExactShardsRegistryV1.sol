@@ -6,20 +6,19 @@ import {
 } from "@openzeppelin/contracts/access/extensions/AccessControlDefaultAdminRules.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
-import { ProgrammableExactShardsFeePolicyVerifierV1 } from "./ProgrammableExactShardsFeePolicyVerifierV1.sol";
+import { ProgrammableExactShardsFeePolicyVerifierV2 } from "./ProgrammableExactShardsFeePolicyVerifierV2.sol";
 import { IProgrammableCustomRegistryV1 } from "./interfaces/IProgrammableCustomRegistryV1.sol";
 import {
     IProgrammableExactShardsFeePolicyVerifierV1
 } from "./interfaces/IProgrammableExactShardsFeePolicyVerifierV1.sol";
 import { IProgrammableExactShardsRegistryV1 } from "./interfaces/IProgrammableExactShardsRegistryV1.sol";
-import {
-    IProgrammableGithubRepositoryLineageRegistryV1
-} from "./interfaces/IProgrammableGithubRepositoryLineageRegistryV1.sol";
+import { IProgrammableLaunchPermitAuthorityV1 } from "./interfaces/IProgrammableLaunchPermitAuthorityV1.sol";
 
 /// @title ProgrammableExactShardsRegistryV1
 /// @notice Native append-only Registry successor for the reviewed Shards three-claim policy.
-/// @dev Reuses the Registry V1 approval, finality, correction and revocation primitives while replacing its
-///      structurally insufficient two-leg fee record. This contract never deploys or activates Shards.
+/// @dev Reuses the Registry V1 approval, finality and revocation primitives while replacing its structurally
+///      insufficient two-leg fee record. Finalized records are immutable; faults are handled by terminal
+///      revocation, never by an unvalidated record-hash rewrite. This contract never deploys or activates Shards.
 contract ProgrammableExactShardsRegistryV1 is AccessControlDefaultAdminRules, IProgrammableExactShardsRegistryV1 {
     using SafeCast for uint256;
 
@@ -27,9 +26,9 @@ contract ProgrammableExactShardsRegistryV1 is AccessControlDefaultAdminRules, IP
         uint48 initialAdminDelay;
         address initialAdmin;
         address initialApprover;
+        address initialLaunchIntentApprover;
         address initialWriter;
         address initialFinalizer;
-        address initialCorrector;
         address initialRevoker;
         uint64 registryGeneration;
         uint64 minimumFinalityBlocks;
@@ -43,7 +42,7 @@ contract ProgrammableExactShardsRegistryV1 is AccessControlDefaultAdminRules, IP
         bytes32 feePolicyRecordHash;
     }
 
-    bytes32 public constant REGISTRY_SCHEMA_ID = keccak256("programmable.exact-shards-registry.v1");
+    bytes32 internal constant REGISTRY_SCHEMA_ID = keccak256("programmable.exact-shards-registry.v1");
     bytes32 internal constant APPROVAL_BINDING_DOMAIN = keccak256("programmable.exact-shards-approval-binding.v1");
     bytes32 internal constant REVIEW_DEPLOYMENT_BINDING_DOMAIN =
         keccak256("programmable.exact-shards-review-deployment-binding.v1");
@@ -52,25 +51,32 @@ contract ProgrammableExactShardsRegistryV1 is AccessControlDefaultAdminRules, IP
         keccak256("programmable.exact-shards-registered-record.v1");
     bytes32 internal constant LAUNCH_METADATA_BINDING_DOMAIN =
         keccak256("programmable.exact-shards-launch-metadata-binding.v1");
+    bytes32 internal constant PROJECT_ID_DOMAIN = keccak256("programmable.project-id.v1");
+    bytes32 internal constant APPROVAL_ID_DOMAIN = keccak256("programmable.target-approval-id.v1");
+    bytes32 internal constant LAUNCH_ID_DOMAIN = keccak256("programmable.target-launch-id.v1");
+    bytes32 internal constant PUBLIC_IDENTITY_BINDING_TYPEHASH = keccak256(
+        "ExactShardsPublicIdentityBindingV1(bytes32 websiteProjectIdSha256,bytes32 websiteLaunchIdSha256,bytes32 registryProjectId,bytes32 registryApprovalId,bytes32 registryLaunchId,uint64 githubRepositoryId,uint64 approvalGeneration,uint256 chainId,address registry,uint64 registryGeneration,bytes32 routeId,address primaryContract)"
+    );
+    bytes32 internal constant EXPECTED_ROUTE_ID = keccak256("programmable.exact-shards.atomic-launch-route.v1");
     bytes32 internal constant STORED_CLAIM_TYPEHASH = keccak256(
         "ProgrammableExactShardsStoredFeeClaimV1(uint8 ordinal,bytes32 roleHash,uint16 grossVolumeFeeBps,uint16 shareOfFeeBps,address initialRecipientOrAccumulator,bytes32 recipientModeHash,bytes4 claimSelector,bytes4 handoffSelector,bytes32 legHash)"
     );
     bytes32 internal constant FEE_POLICY_RECORD_DOMAIN = keccak256("programmable.exact-shards-fee-policy-record.v1");
-
-    bytes32 public constant APPROVER_ROLE = keccak256("programmable.custom-registry.approver.v1");
+    bytes32 internal constant APPROVER_ROLE = keccak256("programmable.custom-registry.approver.v1");
+    bytes32 internal constant LAUNCH_INTENT_APPROVER_ROLE =
+        keccak256("programmable.exact-shards-registry.launch-intent-approver.v1");
     bytes32 public constant WRITER_ROLE = keccak256("programmable.custom-registry.writer.v1");
-    bytes32 public constant FINALIZER_ROLE = keccak256("programmable.custom-registry.finalizer.v1");
-    bytes32 public constant CORRECTOR_ROLE = keccak256("programmable.custom-registry.corrector.v1");
-    bytes32 public constant REVOKER_ROLE = keccak256("programmable.custom-registry.revoker.v1");
+    bytes32 internal constant FINALIZER_ROLE = keccak256("programmable.custom-registry.finalizer.v1");
+    bytes32 internal constant REVOKER_ROLE = keccak256("programmable.custom-registry.revoker.v1");
 
-    bytes32 public constant EXPECTED_FEE_POLICY_BINDING_HASH =
-        0x5d5d1c46e7627f6e171a18acdbecbfe9e40eca80016fba0142ddca6a054f6169;
-    bytes32 public constant EXPECTED_VERIFIER_RUNTIME_CODE_HASH =
-        0xb4af3325444133062ec8382bc29c551ef87e812cbf269712a45ef6ec64db20c0;
+    bytes32 internal constant EXPECTED_FEE_POLICY_BINDING_HASH =
+        0xfad5a3fbf661221cdfc8cb96f6df69b46b97775692bed2521c652db678e15e0d;
+    bytes32 internal constant EXPECTED_VERIFIER_RUNTIME_CODE_HASH =
+        0xa07652baf4a500d08456f193c6117fde69eb0c04ed21116555ec289abdc3c5ac;
     bytes32 internal constant EXPECTED_SOURCE_REVISION_HASH =
         0x3352fe14662ce467e98f475cf91f10304ce4d69b6342fae4bf3dc968c494d6dc;
-    bytes32 internal constant EXPECTED_ROUTE_ARTIFACT_SHA256 =
-        0x066475058bfd47b85b4216f95b434756d67d7e289ffb36535c121ef5d7c11bab;
+    bytes32 internal constant EXPECTED_REVIEWED_TECHNICAL_BUILD_SHA256 =
+        0x2ad4194f0ff2d12245e8c933c02ceda6508bad03832a3f070dc426b35e9eb0ed;
     bytes32 internal constant EXPECTED_PROFILE_KEY = 0xb90e215e0e29c0dacf021e5e778847af4100433ee7d22014b73f8ca4add09d0c;
     bytes32 internal constant REVENUE_LEG_TYPEHASH = keccak256(
         "ProgrammableRevenueLegV1(bytes32 roleHash,uint16 feeBps,address recipient,bytes32 recipientModeHash)"
@@ -105,9 +111,13 @@ contract ProgrammableExactShardsRegistryV1 is AccessControlDefaultAdminRules, IP
     // slither-disable-next-line naming-convention
     bytes32 public immutable FEE_POLICY_BINDING_HASH;
     // slither-disable-next-line naming-convention
-    ProgrammableExactShardsFeePolicyVerifierV1 public immutable FEE_POLICY_VERIFIER;
+    bytes32 public immutable ECONOMIC_TEMPLATE_HASH;
     // slither-disable-next-line naming-convention
-    IProgrammableGithubRepositoryLineageRegistryV1 public immutable REPOSITORY_LINEAGE_REGISTRY;
+    ProgrammableExactShardsFeePolicyVerifierV2 public immutable FEE_POLICY_VERIFIER;
+    // slither-disable-next-line naming-convention
+    address public immutable LAUNCH_PERMIT_AUTHORITY;
+    // slither-disable-next-line naming-convention
+    address public immutable LAUNCH_ROUTE;
 
     uint64 public registrationCount;
     uint64 public transitionCount;
@@ -119,73 +129,73 @@ contract ProgrammableExactShardsRegistryV1 is AccessControlDefaultAdminRules, IP
     mapping(bytes32 launchId => mapping(uint64 revision => bytes32 recordHash)) private _recordHashes;
     mapping(bytes32 approvalId => IProgrammableCustomRegistryV1.ApprovalStateV1 state) private _approvalStates;
     mapping(bytes32 approvalId => LaunchIntentStateV1 state) private _launchIntentStates;
+    mapping(bytes32 launchId => PublicIdentityStateV1 state) private _publicIdentityStates;
     mapping(bytes32 approvalId => bool consumed) public approvalConsumed;
     mapping(bytes32 deploymentId => bool consumed) public deploymentConsumed;
     mapping(bytes32 evidenceHash => bool consumed) public transitionEvidenceConsumed;
+    /// @dev Permanent role-lineage separation: an account may only ever hold one Registry authority class.
+    mapping(address account => uint8 roleClass) private _authorityRoleClass;
 
-    error ApprovalAlreadyAuthorized(bytes32 approvalId);
-    error ApprovalAlreadyConsumed(bytes32 approvalId);
-    error ApprovalBindingMismatch(bytes32 supplied, bytes32 expected);
-    error ApprovalExpired(uint64 expiresAtBlock, uint256 currentBlock);
-    error ApprovalLaunchIdMismatch(bytes32 supplied, bytes32 authorized);
-    error ApprovalNotAuthorized(bytes32 approvalId);
-    error ApprovalNotYetValid(uint64 validAfterBlock, uint256 currentBlock);
+    error ApprovalAlreadyAuthorized();
+    error ApprovalAlreadyConsumed();
+    error ApprovalBindingMismatch();
+    error CanonicalIdentifierMismatch();
+    error ApprovalExpired();
+    error ApprovalLaunchIdMismatch();
+    error ApprovalNotAuthorized();
+    error ApprovalNotYetValid();
     error BlockHashMismatch(uint64 blockNumber, bytes32 supplied, bytes32 canonical);
-    error DeploymentAlreadyConsumed(bytes32 deploymentId);
-    error EvidenceAlreadyConsumed(bytes32 evidenceHash);
+    error DeploymentAlreadyConsumed();
+    error EvidenceAlreadyConsumed();
     error FinalityDepthInsufficient(uint64 observedBlock, uint64 confirmedHeadBlock, uint64 minimumBlocks);
     error HistoricalBlockOutsideNativeWindow(uint64 blockNumber, uint256 currentBlock);
-    error IncompatibleOperationalRoles(address account);
-    error InvalidBinding(bytes32 field);
+    error IncompatibleOperationalRoles();
+    /// @dev Compact stable field code. The release manifest maps every bytes4 code to its canonical field name.
+    error InvalidBinding();
     error InvalidApprovalWindow(uint64 validAfterBlock, uint64 expiresAtBlock);
     error InvalidFeeClaimIndex(uint8 ordinal);
-    error InvalidLaunchState(
-        bytes32 launchId,
-        IProgrammableCustomRegistryV1.LaunchStatus supplied,
-        IProgrammableCustomRegistryV1.LaunchStatus required
-    );
+    error InvalidLaunchState();
     error InvalidObservedTransactionHash();
-    error LaunchAlreadyRegistered(bytes32 launchId);
-    error LaunchIntentAlreadyActive(bytes32 approvalId, uint64 expiresAtBlock);
+    error LaunchAlreadyRegistered();
+    error LaunchIntentAlreadyActive();
     error LaunchIntentWindowTooLong(uint64 validAfterBlock, uint64 expiresAtBlock);
     error NoncanonicalBlock(uint64 blockNumber, uint256 currentBlock);
-    error PairMismatch(bytes32 idField, bytes32 versionField);
+    error PairMismatch();
     error PrimaryContractHasNoCode(address primaryContract);
-    error RecordHashUnchanged(bytes32 recordHash);
-    error RecordRevisionMismatch(uint64 supplied, uint64 expected);
-    error RegisteredRecordCommitmentMismatch(bytes32 supplied, bytes32 expected);
-    error RegistrationBindingMismatch(bytes32 supplied, bytes32 authorized);
-    error RegistryConfigurationInvalid(bytes32 field);
+    error RegisteredRecordCommitmentMismatch();
+    error RegistrationBindingMismatch();
+    error RegistryConfigurationInvalid();
     error RegistryScopeMismatch(uint256 suppliedChainId, uint64 suppliedGeneration);
-    error ReviewDeploymentBindingMismatch(bytes32 supplied, bytes32 expected);
+    error ReviewDeploymentBindingMismatch();
     error RuntimeCodeHashMismatch(address target, bytes32 supplied, bytes32 actual);
+    error SoleWriterIsImmutable();
 
     // Explicit fail-closed configuration guards are intentionally kept separate for field-level diagnostics.
     // slither-disable-next-line cyclomatic-complexity
     constructor(
         RegistryConfigV1 memory config,
-        ProgrammableExactShardsFeePolicyVerifierV1 feePolicyVerifier,
-        IProgrammableGithubRepositoryLineageRegistryV1 repositoryLineageRegistry
+        ProgrammableExactShardsFeePolicyVerifierV2 feePolicyVerifier,
+        IProgrammableLaunchPermitAuthorityV1 launchPermitAuthority
     ) AccessControlDefaultAdminRules(config.initialAdminDelay, config.initialAdmin) {
-        if (config.initialApprover == address(0)) revert RegistryConfigurationInvalid(bytes32("approver"));
-        if (config.initialWriter == address(0)) revert RegistryConfigurationInvalid(bytes32("writer"));
+        if (config.initialApprover == address(0)) revert RegistryConfigurationInvalid();
+        if (config.initialLaunchIntentApprover == address(0)) revert RegistryConfigurationInvalid();
+        if (config.initialWriter == address(0)) revert RegistryConfigurationInvalid();
         if (config.initialApprover == config.initialWriter) {
-            revert IncompatibleOperationalRoles(config.initialApprover);
+            revert IncompatibleOperationalRoles();
         }
-        if (config.initialFinalizer == address(0)) revert RegistryConfigurationInvalid(bytes32("finalizer"));
-        if (config.initialCorrector == address(0)) revert RegistryConfigurationInvalid(bytes32("corrector"));
-        if (config.initialRevoker == address(0)) revert RegistryConfigurationInvalid(bytes32("revoker"));
-        if (config.registryGeneration == 0) revert RegistryConfigurationInvalid(bytes32("generation"));
+        if (config.initialFinalizer == address(0)) revert RegistryConfigurationInvalid();
+        if (config.initialRevoker == address(0)) revert RegistryConfigurationInvalid();
+        if (config.registryGeneration == 0) revert RegistryConfigurationInvalid();
         if (config.minimumFinalityBlocks == 0 || config.minimumFinalityBlocks > 255) {
-            revert RegistryConfigurationInvalid(bytes32("finality-blocks"));
+            revert RegistryConfigurationInvalid();
         }
-        if (config.chainProfileHash == bytes32(0)) revert RegistryConfigurationInvalid(bytes32("chain-profile"));
-        if (config.registryPolicyHash == bytes32(0)) revert RegistryConfigurationInvalid(bytes32("registry-policy"));
+        if (config.chainProfileHash == bytes32(0)) revert RegistryConfigurationInvalid();
+        if (config.registryPolicyHash == bytes32(0)) revert RegistryConfigurationInvalid();
         if (address(feePolicyVerifier) == address(0) || address(feePolicyVerifier).code.length == 0) {
-            revert RegistryConfigurationInvalid(bytes32("fee-policy-verifier"));
+            revert RegistryConfigurationInvalid();
         }
-        if (address(repositoryLineageRegistry) == address(0) || address(repositoryLineageRegistry).code.length == 0) {
-            revert RegistryConfigurationInvalid(bytes32("repository-lineage-registry"));
+        if (address(launchPermitAuthority) == address(0) || address(launchPermitAuthority).code.length == 0) {
+            revert RegistryConfigurationInvalid();
         }
 
         bytes32 verifierRuntimeCodeHash = address(feePolicyVerifier).codehash;
@@ -194,9 +204,9 @@ contract ProgrammableExactShardsRegistryV1 is AccessControlDefaultAdminRules, IP
                 address(feePolicyVerifier), EXPECTED_VERIFIER_RUNTIME_CODE_HASH, verifierRuntimeCodeHash
             );
         }
-        bytes32 feePolicyBindingHash = feePolicyVerifier.feePolicyBindingHashV1();
+        bytes32 feePolicyBindingHash = feePolicyVerifier.feePolicyBindingHashV2();
         if (feePolicyBindingHash != EXPECTED_FEE_POLICY_BINDING_HASH) {
-            revert RegistryConfigurationInvalid(bytes32("fee-policy-binding"));
+            revert RegistryConfigurationInvalid();
         }
 
         CHAIN_ID = block.chainid;
@@ -206,8 +216,13 @@ contract ProgrammableExactShardsRegistryV1 is AccessControlDefaultAdminRules, IP
         REGISTRY_POLICY_HASH = config.registryPolicyHash;
         VERIFIER_RUNTIME_CODE_HASH = verifierRuntimeCodeHash;
         FEE_POLICY_BINDING_HASH = feePolicyBindingHash;
+        ECONOMIC_TEMPLATE_HASH = feePolicyVerifier.economicTemplateHashV1();
         FEE_POLICY_VERIFIER = feePolicyVerifier;
-        REPOSITORY_LINEAGE_REGISTRY = repositoryLineageRegistry;
+        LAUNCH_PERMIT_AUTHORITY = address(launchPermitAuthority);
+        LAUNCH_ROUTE = config.initialWriter;
+        // Base-constructor virtual dispatch is not a role-history boundary. Seed the initial admin
+        // explicitly so it can never acquire an operational authority class later.
+        _authorityRoleClass[config.initialAdmin] = _roleClass(DEFAULT_ADMIN_ROLE);
         REGISTRY_INSTANCE_HASH = keccak256(
             abi.encode(
                 REGISTRY_SCHEMA_ID,
@@ -219,15 +234,15 @@ contract ProgrammableExactShardsRegistryV1 is AccessControlDefaultAdminRules, IP
                 address(feePolicyVerifier),
                 verifierRuntimeCodeHash,
                 feePolicyBindingHash,
-                address(repositoryLineageRegistry),
-                address(repositoryLineageRegistry).codehash
+                address(launchPermitAuthority),
+                address(launchPermitAuthority).codehash
             )
         );
 
         _grantRole(APPROVER_ROLE, config.initialApprover);
+        _grantRole(LAUNCH_INTENT_APPROVER_ROLE, config.initialLaunchIntentApprover);
         _grantRole(WRITER_ROLE, config.initialWriter);
         _grantRole(FINALIZER_ROLE, config.initialFinalizer);
-        _grantRole(CORRECTOR_ROLE, config.initialCorrector);
         _grantRole(REVOKER_ROLE, config.initialRevoker);
     }
 
@@ -236,17 +251,17 @@ contract ProgrammableExactShardsRegistryV1 is AccessControlDefaultAdminRules, IP
         onlyRole(APPROVER_ROLE)
     {
         _requireScope(authorization.chainId, authorization.registryGeneration);
-        _requireBinding(authorization.approvalId, bytes32("approval-id"));
-        _requireBinding(authorization.launchId, bytes32("launch-id"));
-        _requireBinding(authorization.approvalBindingHash, bytes32("approval-binding"));
-        _requireBinding(authorization.evidenceHash, bytes32("approval-evidence"));
+        _requireBinding(authorization.approvalId);
+        _requireBinding(authorization.launchId);
+        _requireBinding(authorization.approvalBindingHash);
+        _requireBinding(authorization.evidenceHash);
         // The durable GitHub approval is technical-only. The legacy registration-binding slot is
         // deliberately equal to that technical hash until a separate just-in-time launch intent is bound.
         if (authorization.registrationBindingHash != authorization.approvalBindingHash) {
-            revert ApprovalBindingMismatch(authorization.registrationBindingHash, authorization.approvalBindingHash);
+            revert ApprovalBindingMismatch();
         }
         if (_approvalStates[authorization.approvalId].approvalBindingHash != bytes32(0)) {
-            revert ApprovalAlreadyAuthorized(authorization.approvalId);
+            revert ApprovalAlreadyAuthorized();
         }
         if (
             authorization.validAfterBlock == 0 || authorization.expiresAtBlock == 0
@@ -256,10 +271,10 @@ contract ProgrammableExactShardsRegistryV1 is AccessControlDefaultAdminRules, IP
             revert InvalidApprovalWindow(authorization.validAfterBlock, authorization.expiresAtBlock);
         }
         if (authorization.expiresAtBlock < block.number) {
-            revert ApprovalExpired(authorization.expiresAtBlock, block.number);
+            revert ApprovalExpired();
         }
         if (transitionEvidenceConsumed[authorization.evidenceHash]) {
-            revert EvidenceAlreadyConsumed(authorization.evidenceHash);
+            revert EvidenceAlreadyConsumed();
         }
 
         uint64 nextTransitionSequence = transitionCount + 1;
@@ -289,28 +304,28 @@ contract ProgrammableExactShardsRegistryV1 is AccessControlDefaultAdminRules, IP
 
     function authorizeLaunchIntent(IProgrammableCustomRegistryV1.ApprovalAuthorizationV1 calldata authorization)
         external
-        onlyRole(APPROVER_ROLE)
+        onlyRole(LAUNCH_INTENT_APPROVER_ROLE)
     {
         _requireScope(authorization.chainId, authorization.registryGeneration);
-        _requireBinding(authorization.approvalId, bytes32("approval-id"));
-        _requireBinding(authorization.launchId, bytes32("launch-id"));
-        _requireBinding(authorization.approvalBindingHash, bytes32("approval-binding"));
-        _requireBinding(authorization.registrationBindingHash, bytes32("launch-intent-binding"));
-        _requireBinding(authorization.evidenceHash, bytes32("launch-intent-evidence"));
+        _requireBinding(authorization.approvalId);
+        _requireBinding(authorization.launchId);
+        _requireBinding(authorization.approvalBindingHash);
+        _requireBinding(authorization.registrationBindingHash);
+        _requireBinding(authorization.evidenceHash);
 
         IProgrammableCustomRegistryV1.ApprovalStateV1 storage approval = _approvalStates[authorization.approvalId];
-        if (approval.approvalBindingHash == bytes32(0)) revert ApprovalNotAuthorized(authorization.approvalId);
+        if (approval.approvalBindingHash == bytes32(0)) revert ApprovalNotAuthorized();
         if (approval.consumed || approvalConsumed[authorization.approvalId]) {
-            revert ApprovalAlreadyConsumed(authorization.approvalId);
+            revert ApprovalAlreadyConsumed();
         }
         if (authorization.launchId != approval.launchId) {
-            revert ApprovalLaunchIdMismatch(authorization.launchId, approval.launchId);
+            revert ApprovalLaunchIdMismatch();
         }
         if (authorization.approvalBindingHash != approval.approvalBindingHash) {
-            revert ApprovalBindingMismatch(authorization.approvalBindingHash, approval.approvalBindingHash);
+            revert ApprovalBindingMismatch();
         }
         if (block.number < approval.validAfterBlock) {
-            revert ApprovalNotYetValid(approval.validAfterBlock, block.number);
+            revert ApprovalNotYetValid();
         }
         if (
             authorization.validAfterBlock == 0 || authorization.expiresAtBlock == 0
@@ -319,7 +334,7 @@ contract ProgrammableExactShardsRegistryV1 is AccessControlDefaultAdminRules, IP
             revert InvalidApprovalWindow(authorization.validAfterBlock, authorization.expiresAtBlock);
         }
         if (authorization.expiresAtBlock < block.number) {
-            revert ApprovalExpired(authorization.expiresAtBlock, block.number);
+            revert ApprovalExpired();
         }
         if (
             uint256(authorization.expiresAtBlock) - uint256(authorization.validAfterBlock)
@@ -335,10 +350,10 @@ contract ProgrammableExactShardsRegistryV1 is AccessControlDefaultAdminRules, IP
                 && intent.evidenceHash == authorization.evidenceHash
         ) return;
         if (intent.bindingHash != bytes32(0) && intent.expiresAtBlock >= block.number) {
-            revert LaunchIntentAlreadyActive(authorization.approvalId, intent.expiresAtBlock);
+            revert LaunchIntentAlreadyActive();
         }
         if (transitionEvidenceConsumed[authorization.evidenceHash]) {
-            revert EvidenceAlreadyConsumed(authorization.evidenceHash);
+            revert EvidenceAlreadyConsumed();
         }
 
         uint64 nextTransitionSequence = transitionCount + 1;
@@ -350,44 +365,53 @@ contract ProgrammableExactShardsRegistryV1 is AccessControlDefaultAdminRules, IP
         });
         transitionEvidenceConsumed[authorization.evidenceHash] = true;
         transitionCount = nextTransitionSequence;
+        emit ExactShardsLaunchIntentAuthorizedV1(
+            authorization.approvalId,
+            authorization.launchId,
+            authorization.registrationBindingHash,
+            authorization.evidenceHash,
+            nextTransitionSequence,
+            authorization.validAfterBlock,
+            authorization.expiresAtBlock
+        );
     }
 
     function registerLaunch(LaunchRegistrationV1 calldata registration) external onlyRole(WRITER_ROLE) {
         _requireScope(registration.chainId, registration.registryGeneration);
-        _requireBinding(registration.launchId, bytes32("launch-id"));
+        _requireBinding(registration.launchId);
         LaunchStateV1 storage existingLaunch = _launchStates[registration.launchId];
         if (existingLaunch.status != IProgrammableCustomRegistryV1.LaunchStatus.None) {
             if (
                 existingLaunch.status != IProgrammableCustomRegistryV1.LaunchStatus.Revoked
                     && registration.registeredRecordCommitment == existingLaunch.latestRecordHash
             ) return;
-            revert LaunchAlreadyRegistered(registration.launchId);
+            revert LaunchAlreadyRegistered();
         }
 
         IProgrammableCustomRegistryV1.ApprovalStateV1 storage approval = _approvalStates[registration.approvalId];
-        if (approval.approvalBindingHash == bytes32(0)) revert ApprovalNotAuthorized(registration.approvalId);
+        if (approval.approvalBindingHash == bytes32(0)) revert ApprovalNotAuthorized();
         if (approval.consumed || approvalConsumed[registration.approvalId]) {
-            revert ApprovalAlreadyConsumed(registration.approvalId);
+            revert ApprovalAlreadyConsumed();
         }
         if (registration.launchId != approval.launchId) {
-            revert ApprovalLaunchIdMismatch(registration.launchId, approval.launchId);
+            revert ApprovalLaunchIdMismatch();
         }
         LaunchIntentStateV1 memory intent = _launchIntentStates[registration.approvalId];
         if (block.number < intent.validAfterBlock) {
-            revert ApprovalNotYetValid(intent.validAfterBlock, block.number);
+            revert ApprovalNotYetValid();
         }
         if (intent.bindingHash == bytes32(0) || block.number > intent.expiresAtBlock) {
-            revert ApprovalExpired(intent.expiresAtBlock, block.number);
+            revert ApprovalExpired();
         }
-        if (deploymentConsumed[registration.deploymentId]) revert DeploymentAlreadyConsumed(registration.deploymentId);
+        if (deploymentConsumed[registration.deploymentId]) revert DeploymentAlreadyConsumed();
         FeeHashesV1 memory feeHashes = _verifiedFeeHashes(registration.feePolicy, registration.orderedFeeLegs);
         _validateRegistration(registration, feeHashes.feePolicyRecordHash);
         if (registration.approvalBindingHash != approval.approvalBindingHash) {
-            revert ApprovalBindingMismatch(registration.approvalBindingHash, approval.approvalBindingHash);
+            revert ApprovalBindingMismatch();
         }
         bytes32 identityHash = _identityHash(registration, feeHashes.feePolicyRecordHash);
         if (identityHash != intent.bindingHash) {
-            revert RegistrationBindingMismatch(identityHash, intent.bindingHash);
+            revert RegistrationBindingMismatch();
         }
 
         uint64 observedAtBlock = block.number.toUint64();
@@ -435,8 +459,20 @@ contract ProgrammableExactShardsRegistryV1 is AccessControlDefaultAdminRules, IP
             finalityPolicyHash: registration.finalityPolicyHash
         });
         _recordHashes[registration.launchId][1] = registration.registeredRecordCommitment;
+        bytes32 identityMappingHash = _publicIdentityMappingHash(registration);
+        _publicIdentityStates[registration.launchId] = PublicIdentityStateV1({
+            websiteProjectIdSha256: registration.websiteProjectIdSha256,
+            websiteLaunchIdSha256: registration.websiteLaunchIdSha256,
+            identityMappingHash: identityMappingHash
+        });
         _storeFeePolicy(registration, feeHashes);
         _emitLaunchRegistered(registration, feeHashes, registrationSequence, identityHash, observedAtBlock);
+        emit ExactShardsPublicIdentityBoundV1(
+            registration.launchId,
+            registration.websiteLaunchIdSha256,
+            registration.websiteProjectIdSha256,
+            identityMappingHash
+        );
     }
 
     function finalizeLaunch(IProgrammableCustomRegistryV1.FinalityProofV1 calldata proof)
@@ -446,18 +482,18 @@ contract ProgrammableExactShardsRegistryV1 is AccessControlDefaultAdminRules, IP
         _requireScope(proof.chainId, proof.registryGeneration);
         LaunchStateV1 storage state = _launchStates[proof.launchId];
         if (state.status != IProgrammableCustomRegistryV1.LaunchStatus.Observed) {
-            revert InvalidLaunchState(proof.launchId, state.status, IProgrammableCustomRegistryV1.LaunchStatus.Observed);
+            revert InvalidLaunchState();
         }
         if (proof.observedBlockNumber != state.observedAtBlock) {
             revert NoncanonicalBlock(proof.observedBlockNumber, state.observedAtBlock);
         }
         if (proof.observedTransactionHash == bytes32(0)) revert InvalidObservedTransactionHash();
         if (proof.finalityPolicyHash != _launchDetails[proof.launchId].finalityPolicyHash) {
-            revert InvalidBinding(bytes32("finality-policy"));
+            revert InvalidBinding();
         }
-        _requireBinding(proof.finalityEvidenceHash, bytes32("finality-evidence"));
+        _requireBinding(proof.finalityEvidenceHash);
         if (transitionEvidenceConsumed[proof.finalityEvidenceHash]) {
-            revert EvidenceAlreadyConsumed(proof.finalityEvidenceHash);
+            revert EvidenceAlreadyConsumed();
         }
         if (uint256(proof.confirmedHeadBlockNumber) < uint256(proof.observedBlockNumber) + MINIMUM_FINALITY_BLOCKS) {
             revert FinalityDepthInsufficient(
@@ -492,47 +528,6 @@ contract ProgrammableExactShardsRegistryV1 is AccessControlDefaultAdminRules, IP
         );
     }
 
-    function correctLaunchRecord(IProgrammableCustomRegistryV1.RecordCorrectionV1 calldata correction)
-        external
-        onlyRole(CORRECTOR_ROLE)
-    {
-        _requireScope(correction.chainId, correction.registryGeneration);
-        LaunchStateV1 storage state = _launchStates[correction.launchId];
-        if (state.status != IProgrammableCustomRegistryV1.LaunchStatus.Finalized) {
-            revert InvalidLaunchState(
-                correction.launchId, state.status, IProgrammableCustomRegistryV1.LaunchStatus.Finalized
-            );
-        }
-        uint64 expectedRevision = state.latestRecordRevision + 1;
-        if (correction.revision != expectedRevision) {
-            revert RecordRevisionMismatch(correction.revision, expectedRevision);
-        }
-        if (correction.previousRecordHash != state.latestRecordHash) {
-            revert InvalidBinding(bytes32("previous-record"));
-        }
-        _requireBinding(correction.correctedRecordHash, bytes32("corrected-record"));
-        if (correction.correctedRecordHash == correction.previousRecordHash) {
-            revert RecordHashUnchanged(correction.correctedRecordHash);
-        }
-        _consumeTransitionEvidence(correction.reasonCode, correction.evidenceHash);
-
-        uint64 nextTransitionSequence = transitionCount + 1;
-        state.latestRecordRevision = correction.revision;
-        state.latestRecordHash = correction.correctedRecordHash;
-        _recordHashes[correction.launchId][correction.revision] = correction.correctedRecordHash;
-        transitionCount = nextTransitionSequence;
-
-        emit ExactShardsLaunchRecordCorrectedV1(
-            correction.launchId,
-            correction.revision,
-            correction.correctedRecordHash,
-            nextTransitionSequence,
-            correction.previousRecordHash,
-            correction.reasonCode,
-            correction.evidenceHash
-        );
-    }
-
     function revokeLaunch(IProgrammableCustomRegistryV1.LaunchRevocationV1 calldata revocation)
         external
         onlyRole(REVOKER_ROLE)
@@ -543,9 +538,7 @@ contract ProgrammableExactShardsRegistryV1 is AccessControlDefaultAdminRules, IP
             state.status != IProgrammableCustomRegistryV1.LaunchStatus.Observed
                 && state.status != IProgrammableCustomRegistryV1.LaunchStatus.Finalized
         ) {
-            revert InvalidLaunchState(
-                revocation.launchId, state.status, IProgrammableCustomRegistryV1.LaunchStatus.Finalized
-            );
+            revert InvalidLaunchState();
         }
         _consumeTransitionEvidence(revocation.reasonCode, revocation.evidenceHash);
 
@@ -585,6 +578,14 @@ contract ProgrammableExactShardsRegistryV1 is AccessControlDefaultAdminRules, IP
         return _approvalStates[approvalId];
     }
 
+    function launchIntentState(bytes32 approvalId) external view returns (LaunchIntentStateV1 memory) {
+        return _launchIntentStates[approvalId];
+    }
+
+    function publicIdentityState(bytes32 launchId) external view returns (PublicIdentityStateV1 memory) {
+        return _publicIdentityStates[launchId];
+    }
+
     function feePolicyState(bytes32 launchId) external view returns (StoredFeePolicyV1 memory) {
         return _feePolicies[launchId];
     }
@@ -603,24 +604,22 @@ contract ProgrammableExactShardsRegistryV1 is AccessControlDefaultAdminRules, IP
         view
     {
         _requireBindings(registration);
-        _validatePair(registration.modelId, registration.modelVersion, bytes32("model-id"), bytes32("model-version"));
-        _validatePair(
-            registration.templateId, registration.templateVersion, bytes32("template-id"), bytes32("template-version")
-        );
+        _validatePair(registration.modelId, registration.modelVersion);
+        _validatePair(registration.templateId, registration.templateVersion);
         if (registration.sourceCommitment != EXPECTED_SOURCE_REVISION_HASH) {
-            revert InvalidBinding(bytes32("reviewed-source"));
+            revert InvalidBinding();
         }
-        if (registration.buildCommitment != EXPECTED_ROUTE_ARTIFACT_SHA256) {
-            revert InvalidBinding(bytes32("reviewed-route"));
+        if (registration.buildCommitment != EXPECTED_REVIEWED_TECHNICAL_BUILD_SHA256) {
+            revert InvalidBinding();
         }
         if (
             registration.marketPathId != EXPECTED_PROFILE_KEY
                 || registration.marketPathId != registration.feePolicy.profileKey
         ) {
-            revert InvalidBinding(bytes32("market-profile"));
+            revert InvalidBinding();
         }
-        if (registration.providerId != bytes32(0)) revert InvalidBinding(bytes32("provider-id"));
-        if (registration.launchWallet == address(0)) revert InvalidBinding(bytes32("launch-wallet"));
+        if (registration.providerId != bytes32(0)) revert InvalidBinding();
+        if (registration.launchWallet == address(0)) revert InvalidBinding();
         if (registration.primaryContract.code.length == 0) {
             revert PrimaryContractHasNoCode(registration.primaryContract);
         }
@@ -631,49 +630,76 @@ contract ProgrammableExactShardsRegistryV1 is AccessControlDefaultAdminRules, IP
             );
         }
 
-        bytes32 expectedApprovalBindingHash = _approvalBindingHash(registration, feePolicyRecordHash);
+        bytes32 expectedApprovalBindingHash = _approvalBindingHash(registration);
         if (registration.approvalBindingHash != expectedApprovalBindingHash) {
-            revert ApprovalBindingMismatch(registration.approvalBindingHash, expectedApprovalBindingHash);
+            revert ApprovalBindingMismatch();
         }
         bytes32 expectedReviewBindingHash = _reviewDeploymentBindingHash(registration, feePolicyRecordHash);
         if (registration.reviewDeploymentBindingHash != expectedReviewBindingHash) {
-            revert ReviewDeploymentBindingMismatch(registration.reviewDeploymentBindingHash, expectedReviewBindingHash);
+            revert ReviewDeploymentBindingMismatch();
         }
         bytes32 expectedRecordCommitment = _registeredRecordCommitment(registration, feePolicyRecordHash);
         if (registration.registeredRecordCommitment != expectedRecordCommitment) {
-            revert RegisteredRecordCommitmentMismatch(registration.registeredRecordCommitment, expectedRecordCommitment);
+            revert RegisteredRecordCommitmentMismatch();
         }
     }
 
-    function _requireBindings(LaunchRegistrationV1 calldata registration) private pure {
-        _requireBinding(registration.projectId, bytes32("project-id"));
-        _requireBinding(registration.approvalId, bytes32("approval-id"));
-        if (registration.githubRepositoryId == 0) revert InvalidBinding(bytes32("github-repository-id"));
-        _requireBinding(registration.commitId, bytes32("commit-id"));
-        _requireBinding(registration.sourceCommitment, bytes32("source"));
-        _requireBinding(registration.buildCommitment, bytes32("build"));
-        _requireBinding(registration.artifactSetHash, bytes32("artifacts"));
-        _requireBinding(registration.deploymentConfigurationHash, bytes32("deployment-config"));
-        _requireBinding(registration.configurationHash, bytes32("configuration-hash"));
-        _requireBinding(registration.tokenNameHash, bytes32("token-name"));
-        _requireBinding(registration.tokenSymbolHash, bytes32("token-symbol"));
-        _requireBinding(registration.presentationBindingHash, bytes32("presentation"));
-        _requireBinding(registration.permissionsHash, bytes32("permissions"));
-        _requireBinding(registration.deploymentId, bytes32("deployment-id"));
-        _requireBinding(registration.deploymentSetHash, bytes32("deployments"));
-        _requireBinding(registration.runtimeCodeSetHash, bytes32("runtimes"));
-        _requireBinding(registration.primaryRuntimeCodeHash, bytes32("primary-runtime"));
-        _requireBinding(registration.builderAttributionHash, bytes32("builder"));
-        _requireBinding(registration.originHash, bytes32("origin"));
-        _requireBinding(registration.assetSetHash, bytes32("assets"));
-        _requireBinding(registration.marketSetHash, bytes32("markets"));
-        _requireBinding(registration.marketPathId, bytes32("market-path"));
-        _requireBinding(registration.capabilitySetHash, bytes32("capabilities"));
-        _requireBinding(registration.reviewPolicyHash, bytes32("review-policy"));
-        _requireBinding(registration.securityReviewHash, bytes32("security-review"));
-        _requireBinding(registration.reviewResultId, bytes32("review-result"));
-        _requireBinding(registration.finalityPolicyHash, bytes32("finality-policy"));
-        _requireBinding(registration.registeredRecordCommitment, bytes32("registered-record-commitment"));
+    function _requireBindings(LaunchRegistrationV1 calldata registration) private view {
+        _requireBinding(registration.projectId);
+        _requireBinding(registration.websiteProjectIdSha256);
+        _requireBinding(registration.websiteLaunchIdSha256);
+        _requireBinding(registration.approvalId);
+        if (registration.githubRepositoryId == 0) revert InvalidBinding();
+        _requireBinding(registration.commitId);
+        _requireBinding(registration.sourceCommitment);
+        _requireBinding(registration.buildCommitment);
+        _requireBinding(registration.artifactSetHash);
+        _requireBinding(registration.deploymentConfigurationHash);
+        _requireBinding(registration.configurationHash);
+        _requireBinding(registration.tokenNameHash);
+        _requireBinding(registration.tokenSymbolHash);
+        _requireBinding(registration.presentationBindingHash);
+        _requireBinding(registration.permissionsHash);
+        _requireBinding(registration.deploymentId);
+        _requireBinding(registration.deploymentSetHash);
+        _requireBinding(registration.runtimeCodeSetHash);
+        _requireBinding(registration.primaryRuntimeCodeHash);
+        _requireBinding(registration.builderAttributionHash);
+        _requireBinding(registration.originHash);
+        _requireBinding(registration.assetSetHash);
+        _requireBinding(registration.marketSetHash);
+        _requireBinding(registration.marketPathId);
+        _requireBinding(registration.capabilitySetHash);
+        _requireBinding(registration.reviewPolicyHash);
+        _requireBinding(registration.securityReviewHash);
+        _requireBinding(registration.reviewResultId);
+        _requireBinding(registration.finalityPolicyHash);
+        _requireBinding(registration.registeredRecordCommitment);
+
+        bytes32 expectedProjectId =
+            keccak256(abi.encode(PROJECT_ID_DOMAIN, _repositoryKey(registration.githubRepositoryId)));
+        if (registration.projectId != expectedProjectId) {
+            revert CanonicalIdentifierMismatch();
+        }
+        bytes32 expectedApprovalId = keccak256(
+            abi.encode(
+                APPROVAL_ID_DOMAIN,
+                registration.projectId,
+                registration.approvalGeneration,
+                registration.approvalBindingHash,
+                registration.chainId,
+                address(this),
+                registration.registryGeneration,
+                EXPECTED_ROUTE_ID
+            )
+        );
+        if (registration.approvalId != expectedApprovalId) {
+            revert CanonicalIdentifierMismatch();
+        }
+        bytes32 expectedLaunchId = keccak256(abi.encode(LAUNCH_ID_DOMAIN, registration.projectId, expectedApprovalId));
+        if (registration.launchId != expectedLaunchId) {
+            revert CanonicalIdentifierMismatch();
+        }
     }
 
     function _storeFeePolicy(LaunchRegistrationV1 calldata registration, FeeHashesV1 memory feeHashes) private {
@@ -827,21 +853,17 @@ contract ProgrammableExactShardsRegistryV1 is AccessControlDefaultAdminRules, IP
             keccak256(abi.encode(REVENUE_LEG_TYPEHASH, leg.roleHash, leg.feeBps, leg.recipient, leg.recipientModeHash));
     }
 
-    function _approvalBindingHash(LaunchRegistrationV1 calldata registration, bytes32 feePolicyRecordHash)
-        private
-        view
-        returns (bytes32)
-    {
-        // Durable GitHub approval binds reviewed technical material only. Deployment choices, wallet,
-        // token name/symbol and Website presentation are bound later by the one-use launch-intent hash.
+    function _approvalBindingHash(LaunchRegistrationV1 calldata registration) private view returns (bytes32) {
+        // Durable GitHub approval binds reviewed source, exact technical configuration, reviewed finality
+        // and the route-independent economics template. The concrete holder hook, deployment graph, wallet,
+        // token name/symbol and Website presentation remain in the one-use launch intent and permit only.
         bytes32 reviewedSourceHash = keccak256(
             abi.encode(
                 registration.githubRepositoryId,
                 _repositoryKey(registration.githubRepositoryId),
                 registration.commitId,
                 registration.sourceCommitment,
-                registration.buildCommitment,
-                registration.artifactSetHash
+                registration.buildCommitment
             )
         );
         bytes32 reviewedModelHash = keccak256(
@@ -856,29 +878,21 @@ contract ProgrammableExactShardsRegistryV1 is AccessControlDefaultAdminRules, IP
                 registration.capabilitySetHash
             )
         );
-        bytes32 scopeHash = keccak256(
-            abi.encode(
-                REGISTRY_INSTANCE_HASH,
-                registration.chainId,
-                registration.registryGeneration,
-                registration.launchId,
-                registration.projectId,
-                registration.approvalId
-            )
-        );
         bytes32 reviewedSecurityAndEconomicsHash = keccak256(
             abi.encode(
                 registration.reviewPolicyHash,
                 registration.securityReviewHash,
                 registration.reviewResultId,
-                feePolicyRecordHash
+                FEE_POLICY_VERIFIER.economicTemplateHashV1(),
+                registration.configurationHash,
+                registration.finalityPolicyHash
             )
         );
         return keccak256(
             abi.encode(
                 APPROVAL_BINDING_DOMAIN,
-                REGISTRY_INSTANCE_HASH,
-                scopeHash,
+                registration.projectId,
+                registration.approvalGeneration,
                 reviewedSourceHash,
                 reviewedModelHash,
                 reviewedSecurityAndEconomicsHash
@@ -1006,18 +1020,41 @@ contract ProgrammableExactShardsRegistryV1 is AccessControlDefaultAdminRules, IP
                 registration.registryGeneration,
                 registration.launchId,
                 registration.projectId,
+                registration.websiteProjectIdSha256,
+                registration.websiteLaunchIdSha256,
                 registration.approvalId,
+                registration.approvalGeneration,
                 registration.approvalBindingHash
             )
         );
     }
 
-    function _requireBinding(bytes32 value, bytes32 field) private pure {
-        if (value == bytes32(0)) revert InvalidBinding(field);
+    function _publicIdentityMappingHash(LaunchRegistrationV1 calldata registration) private view returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                PUBLIC_IDENTITY_BINDING_TYPEHASH,
+                registration.websiteProjectIdSha256,
+                registration.websiteLaunchIdSha256,
+                registration.projectId,
+                registration.approvalId,
+                registration.launchId,
+                registration.githubRepositoryId,
+                registration.approvalGeneration,
+                registration.chainId,
+                address(this),
+                registration.registryGeneration,
+                EXPECTED_ROUTE_ID,
+                registration.primaryContract
+            )
+        );
     }
 
-    function _validatePair(bytes32 id, bytes32 version, bytes32 idField, bytes32 versionField) private pure {
-        if ((id == bytes32(0)) != (version == bytes32(0))) revert PairMismatch(idField, versionField);
+    function _requireBinding(bytes32 value) private pure {
+        if (value == bytes32(0)) revert InvalidBinding();
+    }
+
+    function _validatePair(bytes32 id, bytes32 version) private pure {
+        if ((id == bytes32(0)) != (version == bytes32(0))) revert PairMismatch();
     }
 
     function _requireScope(uint256 chainId, uint64 registryGeneration) private view {
@@ -1042,20 +1079,46 @@ contract ProgrammableExactShardsRegistryV1 is AccessControlDefaultAdminRules, IP
     }
 
     function _consumeTransitionEvidence(bytes32 reasonCode, bytes32 evidenceHash) private {
-        _requireBinding(reasonCode, bytes32("reason"));
-        _requireBinding(evidenceHash, bytes32("evidence"));
-        if (transitionEvidenceConsumed[evidenceHash]) revert EvidenceAlreadyConsumed(evidenceHash);
+        _requireBinding(reasonCode);
+        _requireBinding(evidenceHash);
+        if (transitionEvidenceConsumed[evidenceHash]) revert EvidenceAlreadyConsumed();
         transitionEvidenceConsumed[evidenceHash] = true;
     }
 
-    /// @dev Approval and writer remain independently held, matching Registry V1.
+    /// @dev The sole writer is the exact atomic launch route. A second writer could bypass the Permit Authority,
+    ///      the predicted/actual holder-hook equality and the post-deployment graph checks.
     function _grantRole(bytes32 role, address account) internal virtual override returns (bool) {
+        uint8 roleClass = _roleClass(role);
+        if (roleClass != 0) {
+            if (account == address(0)) revert IncompatibleOperationalRoles();
+            uint8 previous = _authorityRoleClass[account];
+            if (previous != 0 && previous != roleClass) revert IncompatibleOperationalRoles();
+            _authorityRoleClass[account] = roleClass;
+        }
+        if (role == WRITER_ROLE && LAUNCH_ROUTE != address(0) && account != LAUNCH_ROUTE) {
+            revert SoleWriterIsImmutable();
+        }
         if (
             (role == APPROVER_ROLE && hasRole(WRITER_ROLE, account))
                 || (role == WRITER_ROLE && hasRole(APPROVER_ROLE, account))
         ) {
-            revert IncompatibleOperationalRoles(account);
+            revert IncompatibleOperationalRoles();
         }
         return super._grantRole(role, account);
+    }
+
+    function _revokeRole(bytes32 role, address account) internal virtual override returns (bool) {
+        if (role == WRITER_ROLE && account == LAUNCH_ROUTE) revert SoleWriterIsImmutable();
+        return super._revokeRole(role, account);
+    }
+
+    function _roleClass(bytes32 role) private pure returns (uint8) {
+        if (role == DEFAULT_ADMIN_ROLE) return 1;
+        if (role == APPROVER_ROLE) return 2;
+        if (role == LAUNCH_INTENT_APPROVER_ROLE) return 3;
+        if (role == WRITER_ROLE) return 4;
+        if (role == FINALIZER_ROLE) return 5;
+        if (role == REVOKER_ROLE) return 6;
+        return 0;
     }
 }

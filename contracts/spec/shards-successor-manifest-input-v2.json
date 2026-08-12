@@ -1,0 +1,713 @@
+{
+  "schemaVersion": "programmable.exact-shards-successor-manifest-input.v2",
+  "reviewStatus": "REVIEWED_INPUT_NOT_DEPLOYMENT_AUTHORITY",
+  "activationAllowed": false,
+  "launchAllowed": false,
+  "deploymentAddresses": null,
+  "constructorEncodingFixturePolicy": "DETERMINISTIC_LENGTH_ONLY_NOT_A_DEPLOYMENT_INPUT_OR_ADDRESS_PLAN",
+  "productBoundary": {
+    "durableTechnicalInputs": [
+      "hookCreationCodeHash",
+      "tickLower",
+      "tickBand",
+      "tickUpper",
+      "startSqrtPriceX96",
+      "canonicalRendererPolicy",
+      "nftMetadataDerivationPolicy",
+      "economicTemplateHash",
+      "finalityPolicyHash"
+    ],
+    "websiteSelectedInputs": [
+      "tokenName",
+      "tokenSymbol",
+      "presentationBindingHash",
+      "launchWallet"
+    ],
+    "deterministicallyDerivedMetadata": {
+      "nftName": "tokenName + ASCII_SPACE + Pieces",
+      "nftSymbol": "tokenSymbol + ASCII_N",
+      "websiteMayOverride": false
+    },
+    "jitDeploymentInputs": [
+      "tokenSalt",
+      "hookSalt",
+      "predictedShardAddress",
+      "predictedHookAddress",
+      "predictedNftAddress",
+      "artifactSetHash",
+      "deploymentConfigurationHash",
+      "deploymentSetHash",
+      "runtimeCodeSetHash",
+      "concreteFeePolicyRecord",
+      "holderAccumulator = predictedHook then exactReturnedHook"
+    ],
+    "presentationIsSourceInput": false,
+    "technicalApprovalSurvivesPresentationOnlyChange": true,
+    "jitPermitBindsSelectedDerivedAndPredictedValues": true
+  },
+  "reviewedBuildBoundaryCorrection": {
+    "appliesToHistoricalReviewedBuildSha256": "0x2ad4194f0ff2d12245e8c933c02ceda6508bad03832a3f070dc426b35e9eb0ed",
+    "historicalMisclassification": ["nftName", "nftSymbol"],
+    "correctClassification": "DETERMINISTICALLY_DERIVED_METADATA_NOT_WEBSITE_SELECTED_OR_INDEPENDENT_JIT_INPUT",
+    "normativeBoundary": "productBoundary",
+    "changesReviewedSourceOrEconomics": false
+  },
+  "compiler": {
+    "version": "0.8.26+commit.8a97fa7a",
+    "evmVersion": "cancun",
+    "optimizerEnabled": true,
+    "optimizerRuns": 1000,
+    "viaIR": false,
+    "bytecodeHash": "none",
+    "appendCBOR": false
+  },
+  "limits": {
+    "eip170RuntimeBytes": 24576,
+    "eip3860InitcodeBytes": 49152,
+    "minimumRegistryRuntimeMarginBytes": 1024,
+    "minimumCoordinatorInitcodeMarginBytes": 1024
+  },
+  "reviewedSource": {
+    "repository": "https://github.com/jesse-stahl/shards-v1",
+    "commit": "91b38f3de64d96cac7e29f127c004f128fc1da59",
+    "tree": "92d6def8609e829487adea66c13901734e43c8c7",
+    "sourceRevisionHash": "0x3352fe14662ce467e98f475cf91f10304ce4d69b6342fae4bf3dc968c494d6dc",
+    "reviewedTechnicalBuild": {
+      "path": "spec/shards-reviewed-technical-build-v1.json",
+      "sha256": "0x2ad4194f0ff2d12245e8c933c02ceda6508bad03832a3f070dc426b35e9eb0ed"
+    }
+  },
+  "outputs": {
+    "fee": "spec/shards-fee-policy-verifier-v2.json",
+    "registry": "spec/shards-registry-successor-v2.json",
+    "route": "spec/shards-atomic-launch-route-v2.json"
+  },
+  "components": [
+    {
+      "id": "permitVerifier",
+      "manifestScopes": ["registry", "route"],
+      "artifact": "out/ProgrammableLaunchPermitVerifierV1.sol/ProgrammableLaunchPermitVerifierV1.json",
+      "compilationTarget": "src/ProgrammableLaunchPermitVerifierV1.sol",
+      "contract": "ProgrammableLaunchPermitVerifierV1",
+      "constructorArguments": []
+    },
+    {
+      "id": "permitAuthority",
+      "manifestScopes": ["registry", "route"],
+      "artifact": "out/ProgrammableLaunchPermitAuthorityV1.sol/ProgrammableLaunchPermitAuthorityV1.json",
+      "compilationTarget": "src/ProgrammableLaunchPermitAuthorityV1.sol",
+      "contract": "ProgrammableLaunchPermitAuthorityV1",
+      "constructorArguments": [
+        "172800",
+        "0x0000000000000000000000000000000000000011",
+        "0x0000000000000000000000000000000000000012",
+        "0x0000000000000000000000000000000000000013",
+        "0x0000000000000000000000000000000000000014",
+        "0x0000000000000000000000000000000000000015",
+        "0x0000000000000000000000000000000000000016",
+        "900",
+        "0x0000000000000000000000000000000000000017",
+        "0x1111111111111111111111111111111111111111111111111111111111111111"
+      ]
+    },
+    {
+      "id": "feePolicyVerifier",
+      "manifestScopes": ["fee", "registry", "route"],
+      "artifact": "out/ProgrammableExactShardsFeePolicyVerifierV2.sol/ProgrammableExactShardsFeePolicyVerifierV2.json",
+      "compilationTarget": "src/ProgrammableExactShardsFeePolicyVerifierV2.sol",
+      "contract": "ProgrammableExactShardsFeePolicyVerifierV2",
+      "constructorArguments": []
+    },
+    {
+      "id": "registry",
+      "manifestScopes": ["registry", "route"],
+      "artifact": "out/ProgrammableExactShardsRegistryV1.sol/ProgrammableExactShardsRegistryV1.json",
+      "compilationTarget": "src/ProgrammableExactShardsRegistryV1.sol",
+      "contract": "ProgrammableExactShardsRegistryV1",
+      "minimumRuntimeMarginBytes": 1024,
+      "constructorArguments": [
+        [
+          "172800",
+          "0x0000000000000000000000000000000000000021",
+          "0x0000000000000000000000000000000000000022",
+          "0x0000000000000000000000000000000000000023",
+          "0x0000000000000000000000000000000000000024",
+          "0x0000000000000000000000000000000000000025",
+          "0x0000000000000000000000000000000000000026",
+          "3",
+          "3",
+          "0x2222222222222222222222222222222222222222222222222222222222222222",
+          "0x3333333333333333333333333333333333333333333333333333333333333333"
+        ],
+        "0x0000000000000000000000000000000000000027",
+        "0x0000000000000000000000000000000000000028"
+      ]
+    },
+    {
+      "id": "poolManager",
+      "manifestScopes": ["route"],
+      "artifact": "out/PoolManager.sol/PoolManager.json",
+      "compilationTarget": "lib/v4-core/src/PoolManager.sol",
+      "contract": "PoolManager",
+      "constructorArguments": ["0x0000000000000000000000000000000000000031"]
+    },
+    {
+      "id": "defaultRenderer",
+      "manifestScopes": ["route"],
+      "artifact": "out/GeometricRendererV1.sol/GeometricRendererV1.json",
+      "compilationTarget": "lib/shards-v1/src/GeometricRendererV1.sol",
+      "contract": "GeometricRendererV1",
+      "constructorArguments": []
+    },
+    {
+      "id": "reviewedFactoryImplementation",
+      "manifestScopes": ["route"],
+      "artifact": "out/ShardLaunchFactoryV1.sol/ShardLaunchFactoryV1.json",
+      "compilationTarget": "lib/shards-v1/src/ShardLaunchFactoryV1.sol",
+      "contract": "ShardLaunchFactoryV1",
+      "constructorArguments": [
+        "0x0000000000000000000000000000000000000032",
+        "0x4444444444444444444444444444444444444444444444444444444444444444"
+      ]
+    },
+    {
+      "id": "routeGatedFactory",
+      "manifestScopes": ["route"],
+      "artifact": "out/ProgrammableExactShardsRouteGatedFactoryV2.sol/ProgrammableExactShardsRouteGatedFactoryV2.json",
+      "compilationTarget": "src/ProgrammableExactShardsRouteGatedFactoryV2.sol",
+      "contract": "ProgrammableExactShardsRouteGatedFactoryV2",
+      "constructorArguments": [
+        "0x0000000000000000000000000000000000000033",
+        "0x5555555555555555555555555555555555555555555555555555555555555555",
+        "0x0000000000000000000000000000000000000034"
+      ]
+    },
+    {
+      "id": "atomicLaunchRoute",
+      "manifestScopes": ["route"],
+      "artifact": "out/ProgrammableExactShardsAtomicLaunchRouteV1.sol/ProgrammableExactShardsAtomicLaunchRouteV1.json",
+      "compilationTarget": "src/ProgrammableExactShardsAtomicLaunchRouteV1.sol",
+      "contract": "ProgrammableExactShardsAtomicLaunchRouteV1",
+      "constructorArguments": [
+        "0x0000000000000000000000000000000000000035",
+        "0x0000000000000000000000000000000000000036",
+        "0x0000000000000000000000000000000000000037",
+        "0x6666666666666666666666666666666666666666666666666666666666666666"
+      ]
+    },
+    {
+      "id": "pairDeploymentCoordinator",
+      "manifestScopes": ["route"],
+      "artifact": "out/ProgrammableExactShardsPairDeploymentCoordinatorV1.sol/ProgrammableExactShardsPairDeploymentCoordinatorV1.json",
+      "compilationTarget": "src/ProgrammableExactShardsPairDeploymentCoordinatorV1.sol",
+      "contract": "ProgrammableExactShardsPairDeploymentCoordinatorV1",
+      "minimumInitcodeMarginBytes": 1024,
+      "constructorArguments": [
+        "0x0000000000000000000000000000000000000038",
+        "0x0000000000000000000000000000000000000039",
+        "0x000000000000000000000000000000000000003a",
+        "0x7777777777777777777777777777777777777777777777777777777777777777"
+      ]
+    },
+    {
+      "id": "shardToken",
+      "manifestScopes": ["route"],
+      "artifact": "out/ShardTokenV1.sol/ShardTokenV1.json",
+      "compilationTarget": "lib/shards-v1/src/ShardTokenV1.sol",
+      "contract": "ShardTokenV1",
+      "constructorArguments": ["NNNNNNNNNNNNNNNNNNNNNNNNN", "SSSSSSSSSSS"]
+    },
+    {
+      "id": "shardHook",
+      "manifestScopes": ["route"],
+      "artifact": "out/ShardHookV1.sol/ShardHookV1.json",
+      "compilationTarget": "lib/shards-v1/src/ShardHookV1.sol",
+      "contract": "ShardHookV1",
+      "constructorArguments": [
+        "0x0000000000000000000000000000000000000041",
+        "0x0000000000000000000000000000000000000042",
+        "-887200",
+        "60",
+        "887200",
+        "79228162514264337593543950336",
+        "0x0000000000000000000000000000000000000043",
+        "0x0000000000000000000000000000000000000044",
+        "0x0000000000000000000000000000000000000045"
+      ]
+    },
+    {
+      "id": "shardNft",
+      "manifestScopes": ["route"],
+      "artifact": "out/ShardNFTV1.sol/ShardNFTV1.json",
+      "compilationTarget": "lib/shards-v1/src/ShardNFTV1.sol",
+      "contract": "ShardNFTV1",
+      "constructorArguments": [
+        "0x0000000000000000000000000000000000000046",
+        "0x0000000000000000000000000000000000000047",
+        "NNNNNNNNNNNNNNNNNNNNNNNNN Pieces",
+        "SSSSSSSSSSSN"
+      ]
+    }
+  ],
+  "semanticAssertions": [
+    {
+      "id": "fee-three-claims-100-bps",
+      "scope": "fee",
+      "component": "feePolicyVerifier",
+      "kind": "sourceIncludesAll",
+      "values": [
+        "uint16 public constant TOTAL_FEE_BPS = 100;",
+        "uint16 public constant BUILDER_FEE_BPS = 10;",
+        "uint16 public constant PROGRAMMABLE_FEE_BPS = 10;",
+        "uint16 public constant HOLDER_FEE_BPS = 80;",
+        "IProgrammableExactShardsFeePolicyVerifierV1.ProgrammableRevenueLegV1[3] calldata orderedLegs"
+      ],
+      "meaning": "Exactly three inclusive gross-volume claims split 10/10/80 basis points."
+    },
+    {
+      "id": "fee-stable-technical-template",
+      "scope": "fee",
+      "component": "feePolicyVerifier",
+      "kind": "abiHasFunctions",
+      "values": ["economicTemplateHashV1", "feePolicyBindingHashV2", "verify"],
+      "meaning": "The durable economics and reviewed-source binding are explicit readbacks."
+    },
+    {
+      "id": "fee-reviewed-binding-constants",
+      "scope": "fee",
+      "component": "feePolicyVerifier",
+      "kind": "sourceIncludesAll",
+      "values": [
+        "0x898f3bc526249e1917752c322011f2fae8729496fe410398b3745b9972f897fd;",
+        "0xfad5a3fbf661221cdfc8cb96f6df69b46b97775692bed2521c652db678e15e0d;",
+        "0xb90e215e0e29c0dacf021e5e778847af4100433ee7d22014b73f8ca4add09d0c;",
+        "0xfb8110e8ea13fee890a868300dd1a9a5c467acb19a53f63beccc482757a36191;",
+        "0xceeBB3A6543CeBEB2ED66963897A0abEA52A50cC;",
+        "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c;"
+      ],
+      "meaning": "The manifest economics match the reviewed template, source binding, profile, basis and fixed recipients."
+    },
+    {
+      "id": "permit-authority-release-lifecycle",
+      "scope": "registry",
+      "component": "permitAuthority",
+      "kind": "abiHasFunctions",
+      "values": [
+        "consumePermit",
+        "cancelPermit",
+        "cancelApprovalGeneration",
+        "activateReleaseBinding",
+        "scheduleReleaseRetirement",
+        "deactivateReleaseBinding"
+      ],
+      "meaning": "One-use permits, approval-generation cancellation and governed release lifecycle are materialized onchain."
+    },
+    {
+      "id": "permit-verifier-domain-separation",
+      "scope": "registry",
+      "component": "permitVerifier",
+      "kind": "abiHasFunctions",
+      "values": ["permitDigest", "validateConsumption", "validateReleaseBinding", "validateKernelEnvelope"],
+      "meaning": "Permit identity, release binding and kernel envelope are independently validated."
+    },
+    {
+      "id": "registry-separated-approvers-and-sole-route",
+      "scope": "registry",
+      "component": "registry",
+      "kind": "sourceIncludesAll",
+      "values": [
+        "address initialApprover;",
+        "address initialLaunchIntentApprover;",
+        "LAUNCH_INTENT_APPROVER_ROLE",
+        "address public immutable LAUNCH_ROUTE;",
+        "if (role == WRITER_ROLE && account == LAUNCH_ROUTE) revert SoleWriterIsImmutable();"
+      ],
+      "meaning": "Durable approval, JIT launch-intent approval and the immutable sole launch route are separate authorities."
+    },
+    {
+      "id": "registry-immutable-revision-one-terminal-revoke",
+      "scope": "registry",
+      "component": "registry",
+      "kind": "sourceIncludesAll",
+      "values": [
+        "latestRecordRevision: 1,",
+        "LaunchStatus.Observed",
+        "LaunchStatus.Finalized",
+        "LaunchStatus.Revoked"
+      ],
+      "meaning": "Registration creates immutable revision 1; finality is a state transition and faults terminate in revocation."
+    },
+    {
+      "id": "registry-no-record-correction",
+      "scope": "registry",
+      "component": "registry",
+      "kind": "abiLacksSymbols",
+      "values": ["correctLaunchRecord", "ExactShardsLaunchRecordCorrectedV1"],
+      "meaning": "No correction function or correction event can rewrite a registered record."
+    },
+    {
+      "id": "registry-public-identity-state",
+      "scope": "registry",
+      "component": "registry",
+      "kind": "abiTupleHasFields",
+      "symbol": "registerLaunch",
+      "inputIndex": 0,
+      "values": ["websiteProjectIdSha256", "websiteLaunchIdSha256"],
+      "meaning": "Canonical Website SHA-256 identifiers are stored alongside Registry Keccak identifiers."
+    },
+    {
+      "id": "registry-public-identity-event",
+      "scope": "registry",
+      "component": "registry",
+      "kind": "abiEventHasFields",
+      "symbol": "ExactShardsPublicIdentityBoundV1",
+      "values": [
+        {"name": "launchId", "indexed": true},
+        {"name": "websiteLaunchIdSha256", "indexed": true},
+        {"name": "websiteProjectIdSha256", "indexed": true},
+        {"name": "identityMappingHash", "indexed": false}
+      ],
+      "meaning": "Indexers receive an explicit, filterable Website-to-Registry identity mapping."
+    },
+    {
+      "id": "registry-public-identity-domain-binding",
+      "scope": "registry",
+      "component": "registry",
+      "kind": "sourceIncludesAll",
+      "values": [
+        "bytes32 internal constant PUBLIC_IDENTITY_BINDING_TYPEHASH",
+        "ExactShardsPublicIdentityBindingV1(bytes32 websiteProjectIdSha256,bytes32 websiteLaunchIdSha256,bytes32 registryProjectId,bytes32 registryApprovalId,bytes32 registryLaunchId,uint64 githubRepositoryId,uint64 approvalGeneration,uint256 chainId,address registry,uint64 registryGeneration,bytes32 routeId,address primaryContract)",
+        "registration.websiteProjectIdSha256",
+        "registration.websiteLaunchIdSha256"
+      ],
+      "meaning": "The cross-domain identity mapping is domain-separated and part of the exact registration binding."
+    },
+    {
+      "id": "registry-authorize-approval-exact-abi",
+      "scope": "registry",
+      "component": "registry",
+      "kind": "abiExact",
+      "abiType": "function",
+      "symbol": "authorizeApproval",
+      "expected": "function authorizeApproval(authorization:tuple{chainId:uint256,registryGeneration:uint64,approvalId:bytes32,launchId:bytes32,approvalBindingHash:bytes32,registrationBindingHash:bytes32,validAfterBlock:uint64,expiresAtBlock:uint64,evidenceHash:bytes32})->() nonpayable",
+      "meaning": "Durable approval ABI order, types, tuple shape, arity, outputs and mutability are exact."
+    },
+    {
+      "id": "registry-authorize-intent-exact-abi",
+      "scope": "registry",
+      "component": "registry",
+      "kind": "abiExact",
+      "abiType": "function",
+      "symbol": "authorizeLaunchIntent",
+      "expected": "function authorizeLaunchIntent(authorization:tuple{chainId:uint256,registryGeneration:uint64,approvalId:bytes32,launchId:bytes32,approvalBindingHash:bytes32,registrationBindingHash:bytes32,validAfterBlock:uint64,expiresAtBlock:uint64,evidenceHash:bytes32})->() nonpayable",
+      "meaning": "JIT launch-intent ABI order, types, tuple shape, arity, outputs and mutability are exact."
+    },
+    {
+      "id": "registry-approval-state-exact-abi",
+      "scope": "registry",
+      "component": "registry",
+      "kind": "abiExact",
+      "abiType": "function",
+      "symbol": "approvalState",
+      "expected": "function approvalState(approvalId:bytes32)->(:tuple{launchId:bytes32,approvalBindingHash:bytes32,registrationBindingHash:bytes32,validAfterBlock:uint64,expiresAtBlock:uint64,evidenceHash:bytes32,consumed:bool}) view",
+      "meaning": "Durable approval state readback order, types, tuple shape, arity and mutability are exact."
+    },
+    {
+      "id": "registry-intent-state-exact-abi",
+      "scope": "registry",
+      "component": "registry",
+      "kind": "abiExact",
+      "abiType": "function",
+      "symbol": "launchIntentState",
+      "expected": "function launchIntentState(approvalId:bytes32)->(:tuple{bindingHash:bytes32,evidenceHash:bytes32,validAfterBlock:uint64,expiresAtBlock:uint64}) view",
+      "meaning": "JIT intent state readback order, types, tuple shape, arity and mutability are exact."
+    },
+    {
+      "id": "registry-register-launch-exact-abi",
+      "scope": "registry",
+      "component": "registry",
+      "kind": "abiExact",
+      "abiType": "function",
+      "symbol": "registerLaunch",
+      "expected": "function registerLaunch(registration:tuple{chainId:uint256,registryGeneration:uint64,launchId:bytes32,projectId:bytes32,websiteProjectIdSha256:bytes32,websiteLaunchIdSha256:bytes32,approvalId:bytes32,approvalBindingHash:bytes32,githubRepositoryId:uint64,approvalGeneration:uint64,commitId:bytes32,sourceCommitment:bytes32,buildCommitment:bytes32,artifactSetHash:bytes32,deploymentConfigurationHash:bytes32,configurationHash:bytes32,tokenNameHash:bytes32,tokenSymbolHash:bytes32,presentationBindingHash:bytes32,permissionsHash:bytes32,deploymentId:bytes32,deploymentSetHash:bytes32,runtimeCodeSetHash:bytes32,primaryContract:address,primaryRuntimeCodeHash:bytes32,launchWallet:address,modelId:bytes32,modelVersion:bytes32,templateId:bytes32,templateVersion:bytes32,providerId:bytes32,builderAttributionHash:bytes32,originHash:bytes32,assetSetHash:bytes32,marketSetHash:bytes32,marketPathId:bytes32,capabilitySetHash:bytes32,reviewPolicyHash:bytes32,securityReviewHash:bytes32,reviewResultId:bytes32,reviewDeploymentBindingHash:bytes32,finalityPolicyHash:bytes32,registeredRecordCommitment:bytes32,feePolicy:tuple{profileKey:bytes32,feeAsset:address,feeBasisHash:bytes32,totalFeeBps:uint16,legsHash:bytes32},orderedFeeLegs:tuple[3]{roleHash:bytes32,feeBps:uint16,recipient:address,recipientModeHash:bytes32}})->() nonpayable",
+      "meaning": "The complete registration record, including public identity and three claims, has an exact ABI."
+    },
+    {
+      "id": "registry-public-identity-readback-exact-abi",
+      "scope": "registry",
+      "component": "registry",
+      "kind": "abiExact",
+      "abiType": "function",
+      "symbol": "publicIdentityState",
+      "expected": "function publicIdentityState(launchId:bytes32)->(:tuple{websiteProjectIdSha256:bytes32,websiteLaunchIdSha256:bytes32,identityMappingHash:bytes32}) view",
+      "meaning": "Public identity readback order, types, tuple shape, arity and view mutability are exact."
+    },
+    {
+      "id": "registry-finalize-exact-abi",
+      "scope": "registry",
+      "component": "registry",
+      "kind": "abiExact",
+      "abiType": "function",
+      "symbol": "finalizeLaunch",
+      "expected": "function finalizeLaunch(proof:tuple{chainId:uint256,registryGeneration:uint64,launchId:bytes32,observedBlockNumber:uint64,observedBlockHash:bytes32,observedTransactionHash:bytes32,observedTransactionIndex:uint32,observedLogIndex:uint32,confirmedHeadBlockNumber:uint64,confirmedHeadBlockHash:bytes32,finalityPolicyHash:bytes32,finalityEvidenceHash:bytes32})->() nonpayable",
+      "meaning": "Finality proof ABI order, widths, tuple shape, arity and mutability are exact."
+    },
+    {
+      "id": "registry-launch-state-exact-abi",
+      "scope": "registry",
+      "component": "registry",
+      "kind": "abiExact",
+      "abiType": "function",
+      "symbol": "launchState",
+      "expected": "function launchState(launchId:bytes32)->(:tuple{status:uint8,observedAtBlock:uint64,finalizedAtBlock:uint64,latestRecordRevision:uint64,latestRecordHash:bytes32,identityHash:bytes32,feePolicyHash:bytes32,feePolicyRecordHash:bytes32,finalityEvidenceHash:bytes32}) view",
+      "meaning": "Observed/finalized/revoked launch state readback order, widths, tuple shape and mutability are exact."
+    },
+    {
+      "id": "registry-approval-event-exact-abi",
+      "scope": "registry",
+      "component": "registry",
+      "kind": "abiExact",
+      "abiType": "event",
+      "symbol": "ExactShardsApprovalAuthorizedV1",
+      "expected": "event ExactShardsApprovalAuthorizedV1(approvalId:bytes32:indexed,launchId:bytes32:indexed,approvalBindingHash:bytes32:indexed,registrationBindingHash:bytes32:data,transitionSequence:uint64:data,validAfterBlock:uint64:data,expiresAtBlock:uint64:data,evidenceHash:bytes32:data) anonymous:false",
+      "meaning": "Approval event topic positions, data order, exact types and arity are fixed."
+    },
+    {
+      "id": "registry-intent-event-exact-abi",
+      "scope": "registry",
+      "component": "registry",
+      "kind": "abiExact",
+      "abiType": "event",
+      "symbol": "ExactShardsLaunchIntentAuthorizedV1",
+      "expected": "event ExactShardsLaunchIntentAuthorizedV1(approvalId:bytes32:indexed,launchId:bytes32:indexed,bindingHash:bytes32:indexed,evidenceHash:bytes32:data,transitionSequence:uint64:data,validAfterBlock:uint64:data,expiresAtBlock:uint64:data) anonymous:false",
+      "meaning": "Intent event topic positions, data order, exact types and arity are fixed."
+    },
+    {
+      "id": "registry-public-identity-event-exact-abi",
+      "scope": "registry",
+      "component": "registry",
+      "kind": "abiExact",
+      "abiType": "event",
+      "symbol": "ExactShardsPublicIdentityBoundV1",
+      "expected": "event ExactShardsPublicIdentityBoundV1(launchId:bytes32:indexed,websiteLaunchIdSha256:bytes32:indexed,websiteProjectIdSha256:bytes32:indexed,identityMappingHash:bytes32:data) anonymous:false",
+      "meaning": "Public identity event topic positions, data order, exact types and arity are fixed."
+    },
+    {
+      "id": "registry-finality-event-exact-abi",
+      "scope": "registry",
+      "component": "registry",
+      "kind": "abiExact",
+      "abiType": "event",
+      "symbol": "ExactShardsLaunchFinalizedV1",
+      "expected": "event ExactShardsLaunchFinalizedV1(launchId:bytes32:indexed,observedTransactionHash:bytes32:indexed,finalityEvidenceHash:bytes32:indexed,transitionSequence:uint64:data,observedBlockNumber:uint64:data,observedBlockHash:bytes32:data,observedTransactionIndex:uint32:data,observedLogIndex:uint32:data,confirmedHeadBlockNumber:uint64:data,confirmedHeadBlockHash:bytes32:data,finalityPolicyHash:bytes32:data,finalizedAtBlock:uint64:data,finalizedAtTimestamp:uint64:data) anonymous:false",
+      "meaning": "Finality event topic positions, data order, exact widths and arity are fixed."
+    },
+    {
+      "id": "route-wallet-sender-bound",
+      "scope": "route",
+      "component": "atomicLaunchRoute",
+      "kind": "sourceIncludesAll",
+      "values": [
+        "if (msg.sender != execution.registration.launchWallet)",
+        "PERMIT_AUTHORITY.consumePermit",
+        "REGISTRY.registerLaunch"
+      ],
+      "meaning": "The launch wallet is the transaction sender while permit consume, deployment and registration remain atomic."
+    },
+    {
+      "id": "route-durable-technical-boundary",
+      "scope": "route",
+      "component": "atomicLaunchRoute",
+      "kind": "sourceIncludesAll",
+      "values": [
+        "TECHNICAL_CONFIGURATION_TYPEHASH",
+        "keccak256(hookCreationCode)",
+        "params.tickLower",
+        "params.tickBand",
+        "params.tickUpper",
+        "params.startSqrtPriceX96",
+        "DEFAULT_RENDERER_POLICY_HASH",
+        "NFT_METADATA_DERIVATION_POLICY_HASH",
+        "REGISTRY.ECONOMIC_TEMPLATE_HASH()",
+        "finalityPolicyHash"
+      ],
+      "meaning": "The durable technical approval binds hook code, ticks, start price, renderer/NFT policies, economics and finality."
+    },
+    {
+      "id": "route-selected-derived-jit-boundary",
+      "scope": "route",
+      "component": "atomicLaunchRoute",
+      "kind": "sourceIncludesAll",
+      "values": [
+        "params.renderer != address(0)",
+        "abi.encodePacked(params.tokenName, \" Pieces\")",
+        "abi.encodePacked(params.tokenSymbol, \"N\")",
+        "registration.tokenNameHash",
+        "registration.tokenSymbolHash",
+        "execution.registration.launchWallet",
+        "execution.registration.artifactSetHash",
+        "execution.registration.deploymentConfigurationHash",
+        "execution.registration.deploymentSetHash",
+        "execution.registration.runtimeCodeSetHash",
+        "execution.registration.orderedFeeLegs[2].recipient != prediction.hook"
+      ],
+      "meaning": "Website-selected values, deterministic NFT metadata and JIT artifact/deployment/runtime predictions remain distinct and exact."
+    },
+    {
+      "id": "route-factory-caller-gate",
+      "scope": "route",
+      "component": "routeGatedFactory",
+      "kind": "sourceIncludesAll",
+      "values": [
+        "address public immutable AUTHORIZED_ROUTE;",
+        "if (msg.sender != AUTHORIZED_ROUTE) revert UnauthorizedLaunchCaller(msg.sender, AUTHORIZED_ROUTE);"
+      ],
+      "meaning": "Only the immutable atomic route may execute the reviewed Shards factory implementation."
+    },
+    {
+      "id": "route-two-child-deterministic-pair",
+      "scope": "route",
+      "component": "pairDeploymentCoordinator",
+      "kind": "sourceIncludesAll",
+      "values": [
+        "address predictedFactory = _createAddress(address(this), 1);",
+        "address predictedRoute = _createAddress(address(this), 2);",
+        "if (registry.LAUNCH_ROUTE() != predictedRoute)"
+      ],
+      "meaning": "The factory and route are the first two CREATE children and the predeployed Registry is bound to the predicted route."
+    },
+    {
+      "id": "route-public-identity-registration",
+      "scope": "route",
+      "component": "registry",
+      "kind": "abiTupleHasFields",
+      "symbol": "registerLaunch",
+      "inputIndex": 0,
+      "values": ["websiteProjectIdSha256", "websiteLaunchIdSha256"],
+      "meaning": "The atomic route registers both canonical Website SHA-256 identifiers in the Registry record."
+    }
+  ],
+  "lifecycle": {
+    "states": ["UNREGISTERED", "OBSERVED_REVISION_1", "FINALIZED_REVISION_1", "REVOKED_TERMINAL"],
+    "allowedTransitions": [
+      "UNREGISTERED_TO_OBSERVED_REVISION_1",
+      "OBSERVED_REVISION_1_TO_FINALIZED_REVISION_1",
+      "OBSERVED_REVISION_1_TO_REVOKED_TERMINAL",
+      "FINALIZED_REVISION_1_TO_REVOKED_TERMINAL"
+    ],
+    "recordCorrectionAllowed": false
+  },
+  "roles": {
+    "classes": [
+      "DEFAULT_ADMIN",
+      "DURABLE_APPROVER",
+      "JIT_LAUNCH_INTENT_APPROVER",
+      "IMMUTABLE_ROUTE_WRITER",
+      "FINALIZER",
+      "REVOKER"
+    ],
+    "sameAddressAcrossOperationalClassesAllowed": false,
+    "launchRouteIsSoleWriter": true
+  },
+  "feePolicy": {
+    "chargeMode": "INCLUDED_IN_TOTAL",
+    "feeAsset": "0x0000000000000000000000000000000000000000",
+    "feeAssetSemantic": "NATIVE_ETH",
+    "feeBasisHash": "0xfb8110e8ea13fee890a868300dd1a9a5c467acb19a53f63beccc482757a36191",
+    "profileKey": "0xb90e215e0e29c0dacf021e5e778847af4100433ee7d22014b73f8ca4add09d0c",
+    "totalFeeBps": 100,
+    "shareDenominatorBps": 10000,
+    "economicTemplateHash": "0x898f3bc526249e1917752c322011f2fae8729496fe410398b3745b9972f897fd",
+    "feePolicyBindingHash": "0xfad5a3fbf661221cdfc8cb96f6df69b46b97775692bed2521c652db678e15e0d",
+    "orderedClaims": [
+      {
+        "ordinal": 0,
+        "role": "BUILDER",
+        "roleHash": "0x36a60a66fdf8fc39bbaab0d3ff46b52ffc8a9b6f3dc94b5fe9836816d72890af",
+        "grossVolumeFeeBps": 10,
+        "shareOfFeeBps": 1000,
+        "initialRecipient": "0xceebb3a6543cebeb2ed66963897a0abea52a50cc",
+        "recipientMode": "CURRENT_BUILDER_MAY_ROTATE_TO_SUCCESSOR",
+        "claimSelector": "0x69f9a5f0",
+        "handoffSelector": "0x4ce11d21"
+      },
+      {
+        "ordinal": 1,
+        "role": "PROGRAMMABLE",
+        "roleHash": "0x069cb8bbaf512d6f3d7fd962d64b67ce531a420f558aa3a2301e77be3640d875",
+        "grossVolumeFeeBps": 10,
+        "shareOfFeeBps": 1000,
+        "initialRecipient": "0x4957f49620aff3adbbe8195a4f633e49cc93376c",
+        "recipientMode": "IMMUTABLE_LAUNCHER_RECIPIENT",
+        "claimSelector": "0x64d46b85",
+        "handoffSelector": "0x00000000"
+      },
+      {
+        "ordinal": 2,
+        "role": "NFT_HOLDERS",
+        "roleHash": "0x84edd196638e45435db849686913b0ffb528525a1edc3aece78548ed6f2577f1",
+        "grossVolumeFeeBps": 80,
+        "shareOfFeeBps": 8000,
+        "initialRecipient": "JIT_ACTUAL_LAUNCHED_SHARD_HOOK",
+        "recipientMode": "EXACT_SHARDS_HOOK_RUNNING_HOLDER_ACCUMULATOR",
+        "claimSelector": "0x6ba4c138",
+        "handoffSelector": "0x00000000"
+      }
+    ]
+  },
+  "publicIdentity": {
+    "websiteProjectIdEncoding": "RAW_SHA256_DIGEST_OF_CANONICAL_WEBSITE_PROJECT_ID",
+    "websiteLaunchIdEncoding": "RAW_SHA256_DIGEST_OF_CANONICAL_WEBSITE_LAUNCH_ID",
+    "registryProjectIdEncoding": "KECCAK256_PROGRAMMABLE_PROJECT_ID_V1",
+    "registryApprovalIdEncoding": "KECCAK256_PROGRAMMABLE_TARGET_APPROVAL_ID_V1",
+    "registryLaunchIdEncoding": "KECCAK256_PROGRAMMABLE_TARGET_LAUNCH_ID_V1",
+    "mappingEvent": "ExactShardsPublicIdentityBoundV1",
+    "readback": "publicIdentityState(bytes32)",
+    "mappingIsPartOfRegistrationBinding": true
+  },
+  "graph": {
+    "nodes": [
+      "permitVerifier",
+      "permitAuthority",
+      "feePolicyVerifier",
+      "registry",
+      "poolManager",
+      "defaultRenderer",
+      "reviewedFactoryImplementation",
+      "routeGatedFactory",
+      "atomicLaunchRoute",
+      "pairDeploymentCoordinator",
+      "shardToken",
+      "shardHook",
+      "shardNft"
+    ],
+    "edges": [
+      ["permitAuthority", "permitVerifier", "IMMUTABLE_VERIFIER"],
+      ["registry", "permitAuthority", "IMMUTABLE_PERMIT_AUTHORITY"],
+      ["registry", "feePolicyVerifier", "IMMUTABLE_FEE_TEMPLATE"],
+      ["registry", "atomicLaunchRoute", "IMMUTABLE_SOLE_WRITER"],
+      ["reviewedFactoryImplementation", "poolManager", "IMMUTABLE_POOL_MANAGER"],
+      ["reviewedFactoryImplementation", "defaultRenderer", "IMMUTABLE_DEFAULT_RENDERER"],
+      ["routeGatedFactory", "reviewedFactoryImplementation", "RUNTIME_HASH_GATED_DELEGATECALL"],
+      ["routeGatedFactory", "atomicLaunchRoute", "IMMUTABLE_CALLER_GATE"],
+      ["atomicLaunchRoute", "routeGatedFactory", "ATOMIC_FACTORY_EXECUTION"],
+      ["atomicLaunchRoute", "permitAuthority", "ONE_USE_PERMIT_CONSUMER"],
+      ["atomicLaunchRoute", "registry", "ATOMIC_REGISTER"],
+      ["atomicLaunchRoute", "poolManager", "IMMUTABLE_RUNTIME_POSTCONDITION"],
+      ["atomicLaunchRoute", "defaultRenderer", "IMMUTABLE_RUNTIME_POSTCONDITION"],
+      ["pairDeploymentCoordinator", "routeGatedFactory", "CREATE_NONCE_1"],
+      ["pairDeploymentCoordinator", "atomicLaunchRoute", "CREATE_NONCE_2"],
+      ["pairDeploymentCoordinator", "permitAuthority", "IMMUTABLE_DEPENDENCY_READBACK"],
+      ["pairDeploymentCoordinator", "registry", "PREDEPLOYED_ROUTE_PRECOMMIT_READBACK"],
+      ["pairDeploymentCoordinator", "reviewedFactoryImplementation", "RUNTIME_HASH_BINDING"],
+      ["routeGatedFactory", "shardToken", "CREATE2"],
+      ["routeGatedFactory", "shardHook", "CREATE2"],
+      ["routeGatedFactory", "shardNft", "CREATE2"],
+      ["atomicLaunchRoute", "shardToken", "ADDRESS_RUNTIME_AND_METADATA_POSTCONDITION"],
+      ["atomicLaunchRoute", "shardHook", "ADDRESS_RUNTIME_AND_CONFIGURATION_POSTCONDITION"],
+      ["atomicLaunchRoute", "shardNft", "ADDRESS_RUNTIME_AND_METADATA_POSTCONDITION"]
+    ],
+    "deploymentAddresses": null,
+    "activation": false
+  }
+}

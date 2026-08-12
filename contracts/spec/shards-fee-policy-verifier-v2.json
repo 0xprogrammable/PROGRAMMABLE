@@ -1,0 +1,210 @@
+{
+  "schemaVersion": "programmable.exact-shards-fee-policy-verifier.v2",
+  "status": "SOURCE_CANDIDATE_NOT_DEPLOYED",
+  "activationAllowed": false,
+  "launchAllowed": false,
+  "externalActionOccurred": false,
+  "reviewedInput": {
+    "path": "contracts/spec/shards-successor-manifest-input-v2.json",
+    "rawBytesSha256": "0xbf17f2cb85bb22a7439a3e1d63dc1accd6dcd161e6ac1b244fb1380cf200bf6a",
+    "canonicalJsonSha256": "0x2fab4bdaf8567003e22e349a7ee8ca4071ea9de49af801eb333951c385bd7b23",
+    "semanticAssertionCount": 29
+  },
+  "reviewedSource": {
+    "repository": "https://github.com/jesse-stahl/shards-v1",
+    "commit": "91b38f3de64d96cac7e29f127c004f128fc1da59",
+    "tree": "92d6def8609e829487adea66c13901734e43c8c7",
+    "sourceRevisionHash": "0x3352fe14662ce467e98f475cf91f10304ce4d69b6342fae4bf3dc968c494d6dc",
+    "reviewedTechnicalBuild": {
+      "path": "contracts/spec/shards-reviewed-technical-build-v1.json",
+      "sha256": "0x2ad4194f0ff2d12245e8c933c02ceda6508bad03832a3f070dc426b35e9eb0ed"
+    }
+  },
+  "compiler": {
+    "version": "0.8.26+commit.8a97fa7a",
+    "evmVersion": "cancun",
+    "optimizerEnabled": true,
+    "optimizerRuns": 1000,
+    "viaIR": false,
+    "bytecodeHash": "none",
+    "appendCBOR": false
+  },
+  "eipLimits": {
+    "eip170RuntimeBytes": 24576,
+    "eip3860InitcodeBytes": 49152,
+    "minimumRegistryRuntimeMarginBytes": 1024,
+    "minimumCoordinatorInitcodeMarginBytes": 1024
+  },
+  "constructorEncodingFixturePolicy": "DETERMINISTIC_LENGTH_ONLY_NOT_A_DEPLOYMENT_INPUT_OR_ADDRESS_PLAN",
+  "productBoundary": {
+    "durableTechnicalInputs": [
+      "hookCreationCodeHash",
+      "tickLower",
+      "tickBand",
+      "tickUpper",
+      "startSqrtPriceX96",
+      "canonicalRendererPolicy",
+      "nftMetadataDerivationPolicy",
+      "economicTemplateHash",
+      "finalityPolicyHash"
+    ],
+    "websiteSelectedInputs": [
+      "tokenName",
+      "tokenSymbol",
+      "presentationBindingHash",
+      "launchWallet"
+    ],
+    "deterministicallyDerivedMetadata": {
+      "nftName": "tokenName + ASCII_SPACE + Pieces",
+      "nftSymbol": "tokenSymbol + ASCII_N",
+      "websiteMayOverride": false
+    },
+    "jitDeploymentInputs": [
+      "tokenSalt",
+      "hookSalt",
+      "predictedShardAddress",
+      "predictedHookAddress",
+      "predictedNftAddress",
+      "artifactSetHash",
+      "deploymentConfigurationHash",
+      "deploymentSetHash",
+      "runtimeCodeSetHash",
+      "concreteFeePolicyRecord",
+      "holderAccumulator = predictedHook then exactReturnedHook"
+    ],
+    "presentationIsSourceInput": false,
+    "technicalApprovalSurvivesPresentationOnlyChange": true,
+    "jitPermitBindsSelectedDerivedAndPredictedValues": true
+  },
+  "reviewedBuildBoundaryCorrection": {
+    "appliesToHistoricalReviewedBuildSha256": "0x2ad4194f0ff2d12245e8c933c02ceda6508bad03832a3f070dc426b35e9eb0ed",
+    "historicalMisclassification": [
+      "nftName",
+      "nftSymbol"
+    ],
+    "correctClassification": "DETERMINISTICALLY_DERIVED_METADATA_NOT_WEBSITE_SELECTED_OR_INDEPENDENT_JIT_INPUT",
+    "normativeBoundary": "productBoundary",
+    "changesReviewedSourceOrEconomics": false
+  },
+  "deployment": {
+    "addresses": null,
+    "transactions": null,
+    "deployedRuntimeEvidence": null,
+    "activation": false
+  },
+  "components": [
+    {
+      "id": "feePolicyVerifier",
+      "contract": "ProgrammableExactShardsFeePolicyVerifierV2",
+      "source": {
+        "path": "contracts/src/ProgrammableExactShardsFeePolicyVerifierV2.sol",
+        "sha256": "0xe612287816b92d7beae1f4c80107469db27a076f81cec1d266f5493734e252e2",
+        "keccak256": "0xdbc5882504e6467b1d5eb5ad6012cef7715c28ab9f7737c7e110ef1ee6f67834"
+      },
+      "artifact": {
+        "path": "contracts/out/ProgrammableExactShardsFeePolicyVerifierV2.sol/ProgrammableExactShardsFeePolicyVerifierV2.json",
+        "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+        "canonicalAbiSha256": "0x2958741a9dd8a65fa94b9c40e7b7f4e2e51c312486d57ebc0bc650dffeafc57f",
+        "normalizedArtifactSha256": "0xf54ee74a0d11db2c3be986ebee0fd2b012eeace3dab937313e6e6ff95e219300",
+        "rawForgeArtifactIsBinding": false,
+        "sourceClosureSha256": "0x147094c1a32d42d1c264c3644318b36dce529a978f4cc2403fdb376fa5ec1d6c",
+        "sourceClosureFileCount": 3,
+        "creationTemplateByteLength": 4675,
+        "creationTemplateKeccak256": "0x6538ad322ad1b9af3f6196fba080c6896a79b2a0f2f16e7e6e1ef40cb2f5196c",
+        "constructorEncodingByteLength": 0,
+        "eip3860LengthFixtureInitcodeByteLength": 4675,
+        "constructorEncodingFixtureIsDeploymentInput": false,
+        "initcodeLimitMarginBytes": 44477,
+        "runtimeTemplateByteLength": 4647,
+        "runtimeTemplateKeccak256": "0xa07652baf4a500d08456f193c6117fde69eb0c04ed21116555ec289abdc3c5ac",
+        "runtimeCodeLimitMarginBytes": 19929,
+        "runtimeTemplateContainsImmutables": false
+      },
+      "deployment": {
+        "address": null,
+        "transactionHash": null,
+        "blockNumber": null,
+        "activation": false
+      }
+    }
+  ],
+  "semanticAssertions": [
+    {
+      "id": "fee-three-claims-100-bps",
+      "status": "PASS",
+      "component": "feePolicyVerifier",
+      "evidenceKind": "sourceIncludesAll",
+      "meaning": "Exactly three inclusive gross-volume claims split 10/10/80 basis points."
+    },
+    {
+      "id": "fee-stable-technical-template",
+      "status": "PASS",
+      "component": "feePolicyVerifier",
+      "evidenceKind": "abiHasFunctions",
+      "meaning": "The durable economics and reviewed-source binding are explicit readbacks."
+    },
+    {
+      "id": "fee-reviewed-binding-constants",
+      "status": "PASS",
+      "component": "feePolicyVerifier",
+      "evidenceKind": "sourceIncludesAll",
+      "meaning": "The manifest economics match the reviewed template, source binding, profile, basis and fixed recipients."
+    }
+  ],
+  "exactPolicy": {
+    "chargeMode": "INCLUDED_IN_TOTAL",
+    "feeAsset": "0x0000000000000000000000000000000000000000",
+    "feeAssetSemantic": "NATIVE_ETH",
+    "feeBasisHash": "0xfb8110e8ea13fee890a868300dd1a9a5c467acb19a53f63beccc482757a36191",
+    "profileKey": "0xb90e215e0e29c0dacf021e5e778847af4100433ee7d22014b73f8ca4add09d0c",
+    "totalFeeBps": 100,
+    "shareDenominatorBps": 10000,
+    "economicTemplateHash": "0x898f3bc526249e1917752c322011f2fae8729496fe410398b3745b9972f897fd",
+    "feePolicyBindingHash": "0xfad5a3fbf661221cdfc8cb96f6df69b46b97775692bed2521c652db678e15e0d",
+    "orderedClaims": [
+      {
+        "ordinal": 0,
+        "role": "BUILDER",
+        "roleHash": "0x36a60a66fdf8fc39bbaab0d3ff46b52ffc8a9b6f3dc94b5fe9836816d72890af",
+        "grossVolumeFeeBps": 10,
+        "shareOfFeeBps": 1000,
+        "initialRecipient": "0xceebb3a6543cebeb2ed66963897a0abea52a50cc",
+        "recipientMode": "CURRENT_BUILDER_MAY_ROTATE_TO_SUCCESSOR",
+        "claimSelector": "0x69f9a5f0",
+        "handoffSelector": "0x4ce11d21"
+      },
+      {
+        "ordinal": 1,
+        "role": "PROGRAMMABLE",
+        "roleHash": "0x069cb8bbaf512d6f3d7fd962d64b67ce531a420f558aa3a2301e77be3640d875",
+        "grossVolumeFeeBps": 10,
+        "shareOfFeeBps": 1000,
+        "initialRecipient": "0x4957f49620aff3adbbe8195a4f633e49cc93376c",
+        "recipientMode": "IMMUTABLE_LAUNCHER_RECIPIENT",
+        "claimSelector": "0x64d46b85",
+        "handoffSelector": "0x00000000"
+      },
+      {
+        "ordinal": 2,
+        "role": "NFT_HOLDERS",
+        "roleHash": "0x84edd196638e45435db849686913b0ffb528525a1edc3aece78548ed6f2577f1",
+        "grossVolumeFeeBps": 80,
+        "shareOfFeeBps": 8000,
+        "initialRecipient": "JIT_ACTUAL_LAUNCHED_SHARD_HOOK",
+        "recipientMode": "EXACT_SHARDS_HOOK_RUNNING_HOLDER_ACCUMULATOR",
+        "claimSelector": "0x6ba4c138",
+        "handoffSelector": "0x00000000"
+      }
+    ]
+  },
+  "boundary": {
+    "durableTechnicalEconomicsOnly": true,
+    "holderAccumulatorIsJitActualLaunchedHook": true,
+    "websitePresentationIsSourceInput": false,
+    "routeAndFactoryRuntimeBelongToReleaseBinding": true
+  },
+  "contentCommitment": {
+    "canonicalization": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+    "sha256": "0xe577882bbfdbeec47ef0471569e7f8b5835575d3c9153b01bf5fbf674a5d0d7e"
+  }
+}

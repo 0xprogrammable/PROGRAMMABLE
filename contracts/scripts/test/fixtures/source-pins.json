@@ -25,6 +25,11 @@
       "name": "Permit2",
       "repository": "https://github.com/Uniswap/permit2.git",
       "commit": "cc56ad0f3439c502c246fc5cfcc3db92bb8b7219"
+    },
+    {
+      "name": "Shards V1 reviewed factory",
+      "repository": "https://github.com/jesse-stahl/shards-v1.git",
+      "commit": "91b38f3de64d96cac7e29f127c004f128fc1da59"
     }
   ]
 }

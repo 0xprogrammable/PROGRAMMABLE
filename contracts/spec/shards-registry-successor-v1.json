@@ -1,6 +1,8 @@
 {
   "schemaVersion": "programmable.exact-shards-registry-successor.v1",
-  "status": "IMPLEMENTATION_READY_NOT_DEPLOYED",
+  "status": "HISTORICAL_SUPERSEDED_NOT_DEPLOYED",
+  "historical": true,
+  "supersededBy": "contracts/spec/shards-registry-successor-v2.json",
   "activationAllowed": false,
   "launchAllowed": false,
   "externalActionOccurred": false,

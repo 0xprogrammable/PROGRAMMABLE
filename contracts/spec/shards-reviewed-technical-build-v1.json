@@ -1,0 +1,80 @@
+{
+  "schemaVersion": "programmable.shards-reviewed-technical-build.v1",
+  "status": "REVIEWED_SOURCE_BUILD_NOT_DEPLOYED",
+  "activationAllowed": false,
+  "launchAllowed": false,
+  "source": {
+    "repository": "https://github.com/jesse-stahl/shards-v1",
+    "commit": "91b38f3de64d96cac7e29f127c004f128fc1da59",
+    "tree": "92d6def8609e829487adea66c13901734e43c8c7",
+    "srcTree": "3429317d8f2d9657efb5f293a54540e97a37f0ae",
+    "sourceRevisionHash": "0x3352fe14662ce467e98f475cf91f10304ce4d69b6342fae4bf3dc968c494d6dc",
+    "srcTreeIsByteIdenticalToReviewedReleaseCommit": "5a8ce6e05db8e3249dce637f0a03201c2d1677ea",
+    "files": [
+      {"path":"src/GeometricRendererV1.sol","gitBlob":"f80e2fe9ebf924963f4802dd7979429cc75ba72a","sha256":"0x2f9549dba22296486f90f17746dd862caafe1a8b2c17854cf54788a7ce43d785"},
+      {"path":"src/ShardConstantsV1.sol","gitBlob":"ef9adbca9985fe53a8101ffac5895c1ace4d2021","sha256":"0x3c8dc2454117c57bb098f5af0297c4c0f70703404015ff31e1c3642ebbd4ba67"},
+      {"path":"src/ShardErrorsV1.sol","gitBlob":"0cb962b6aa65cc1f06e17046fb2709ddb659091c","sha256":"0x9604e4c0fb11c89f8ea81d32691fc4c810f58fe9997956edc6ee7ce75dbb9738"},
+      {"path":"src/ShardFeeDistributorV1.sol","gitBlob":"ab8f642dcd6a134c50c344772622177b1b0357b8","sha256":"0x0073d29ec69c9f2cf9a8b092a0e3941d8bdfc9667ce4c9b1aa9de211567e26fd"},
+      {"path":"src/ShardFeeForwarderV1.sol","gitBlob":"3fa927cf3b61085a9d7c20f7ae12373f6dc73891","sha256":"0xe5723a5deccdd565d84a4e95ca17535d4a099b8e588a053dc22538ec24209b13"},
+      {"path":"src/ShardHookV1.sol","gitBlob":"9daad5fa6a5cf48de71e7420d1866b9e97cc19bb","sha256":"0x29065fb2418a681cb9bf5e2b4622ef5e7fa0692efa887ba69f6d4d6e2aa8d663"},
+      {"path":"src/ShardLaunchFactoryV1.sol","gitBlob":"dc036527de168bb0505755d3d4cfac98a3cda509","sha256":"0x22f57deb2bb730b88ab6a1f948675d1cb6fbef0442e982f339e9c716e172e14f"},
+      {"path":"src/ShardNFTV1.sol","gitBlob":"7dddee58586583e862b1f859268dda2f75e456c2","sha256":"0x5aa93ba415fad5763a4e84819fb89b5226b918c682c56db73dec05540e2bea4f"},
+      {"path":"src/ShardSwapRouterV1.sol","gitBlob":"54237b86ed206565bcde6dbda3f0d30fbd33a30f","sha256":"0xb5dad143f264c75a3b44c48e5f79698d751d57b8ed97731d7603c4058ae8a02c"},
+      {"path":"src/ShardTokenV1.sol","gitBlob":"962c76971773ef2df5e30fad007084b9403cb535","sha256":"0x5c53920c52c69a87b38159d8a06285a2006e69773543ad72f2b5eb92f63ee22d"},
+      {"path":"src/interfaces/IShardHookV1.sol","gitBlob":"7346c27509e465ad031e29123371d2c7551497ec","sha256":"0x052c5e2895722852dbafc729dd3a2a8f2af1349ebed16e2fa7572dfd22a4b62b"},
+      {"path":"src/interfaces/IShardNFTV1.sol","gitBlob":"111278efdeaee628c10c7373630cd52a4a7ed0ee","sha256":"0xe75cd3a1a0da47f096524a09c7d87324854ed1876ca703ee9b62e2662cb3b45e"},
+      {"path":"src/interfaces/IShardRendererV1.sol","gitBlob":"039f39fd96618a4a8e378ed270141ba286cad86e","sha256":"0x653c5946785366c4eab4048aa709e8e04ac4a3fc8fded3eef022f7dd38b4bd25"}
+    ]
+  },
+  "compiler": {
+    "solc": "0.8.26",
+    "evmVersion": "cancun",
+    "optimizer": true,
+    "optimizerRuns": 1000,
+    "viaIr": false,
+    "bytecodeHash": "none",
+    "cborMetadata": false,
+    "foundryTomlSha256": "0x4ac50df246f5ab75afce20a78df2533275051dd3ea533fdfc2f56e1391c81dd6",
+    "remappingsSha256": "0x10bd08120add4aa247324df9b7be517bf4f2623a7ddd61993c74200428177fd2"
+  },
+  "dependencyPins": {
+    "v4-core": "59d3ecf53afa9264a16bba0e38f4c5d2231f80bc",
+    "v4-periphery": "ad04c9f24a170accf5ea1b2836bbafd514537ca6",
+    "openzeppelin-contracts": "21c8312b022f495ebe3621d5daeed20552b43ff9",
+    "openzeppelin-uniswap-hooks": "26dc8e53f812a1ca390d470342adb6cd8c3286ad",
+    "solady": "33b4b98e350bbcba6aa85642957c313e98b5f911"
+  },
+  "reviewedArtifactTemplates": {
+    "factory": {"runtimeBytes":20730,"creationCodeBytes":37878,"runtimeCodeHash":"0x5875d3528e57eb0a97807aa896a2e2385ebbaed0e21253255d6c79e91aabea50","creationCodeHash":"0xc6b8a2cd51ccf198c4e6e41f668c4e4f558f81de0e677ef27373c614bf4c02f8"},
+    "renderer": {"runtimeBytes":16777,"creationCodeBytes":16805,"runtimeCodeHash":"0x9b54a61918b2ddf9b7daf41d9bf2d705cbef3a0fd618275762b99e19c53459bf","creationCodeHash":"0x910d02d740c71d608b1dc3f49e26288b0f8a62abda0c7767e251d53520a6b51e"},
+    "hook": {"runtimeBytes":24465,"creationCodeBytes":26402,"runtimeTemplateCodeHash":"0x07d1d8a50ed58bb22231105094735b54c2da15903fedfb7a4237cadc264ec601","creationCodeHash":"0x3fbdbc069ee5bfcb1ded77a8d4e550f1bb0692a488b6eb5d23dac090fbca0716"},
+    "shard": {"runtimeBytes":1875,"creationCodeBytes":3001,"runtimeCodeHash":"0xb2737fd93f2ff31e850e2be773e6e7a92a239b28091be1d4b122ff864cd7aae8","creationCodeHash":"0xa6461c32c0121f0090519945d9c22ed6406a783994e020f72a20e85796cad107"},
+    "nft": {"runtimeBytes":7318,"creationCodeBytes":8240,"runtimeTemplateCodeHash":"0x82f9916598d254c7f16bf5d8bcd324906c832d47eb69f88fc88a32accad5d1cd","creationCodeHash":"0x888e18b33ff193b65eb61f44bc578d8d9365b505014af3782762a9d61fa39150"}
+  },
+  "upstreamReleaseEvidence": {
+    "releaseCommit": "5a8ce6e05db8e3249dce637f0a03201c2d1677ea",
+    "sourceCommitment": "3429317d8f2d9657efb5f293a54540e97a37f0ae",
+    "manifestSha256AtReviewedHead": "0x060a103099589e938e9191cab7c18d98aa5c733eef712b14096a33d5cb48dc8e",
+    "specSha256AtReviewedHead": "0x5e59c091a76aca97d2750c7e80b4ea421b071542af6e63d512c27eae23cd5e33"
+  },
+  "approvalBoundary": {
+    "durableTechnicalInputs": ["hookCreationCodeHash","tickLower","tickBand","tickUpper","startSqrtPriceX96","canonicalRendererPolicy","nftMetadataDerivationPolicy","economicTemplateHash","finalityPolicyHash"],
+    "jitDeploymentInputs": ["tokenSalt","hookSalt","tokenName","tokenSymbol","nftName","nftSymbol","presentationBindingHash","launchWallet","predictedAddresses","concreteFeePolicyRecord"],
+    "canonicalRendererPolicy": "FACTORY_DEFAULT_ONLY",
+    "nftNameRule": "tokenName + ASCII_SPACE_PIECES",
+    "nftSymbolRule": "tokenSymbol + ASCII_N",
+    "tokenNameMaxUtf8Bytes": 25,
+    "tokenSymbolMaxUtf8Bytes": 11,
+    "presentationIsSourceInput": false,
+    "holderRecipientRule": "JIT_PREDICTED_HOOK_THEN_EXACT_RETURNED_HOOK"
+  },
+  "economicTemplate": {
+    "feeAsset": "NATIVE",
+    "feeBasis": "INCLUSIVE_GROSS_SWAP_VOLUME",
+    "totalFeeBps": 100,
+    "orderedGrossVolumeClaimsBps": [10,10,80],
+    "orderedShareOfFeeBps": [1000,1000,8000],
+    "holderRecipientSemantic": "ACTUAL_LAUNCHED_SHARD_HOOK"
+  },
+  "platformExecutionBoundary": "NOT_INCLUDED_USE_RELEASE_BINDING"
+}

@@ -1,0 +1,761 @@
+{
+  "schemaVersion": "programmable.exact-shards-atomic-launch-route.v2",
+  "status": "SOURCE_CANDIDATE_NOT_DEPLOYED",
+  "activationAllowed": false,
+  "launchAllowed": false,
+  "externalActionOccurred": false,
+  "reviewedInput": {
+    "path": "contracts/spec/shards-successor-manifest-input-v2.json",
+    "rawBytesSha256": "0xbf17f2cb85bb22a7439a3e1d63dc1accd6dcd161e6ac1b244fb1380cf200bf6a",
+    "canonicalJsonSha256": "0x2fab4bdaf8567003e22e349a7ee8ca4071ea9de49af801eb333951c385bd7b23",
+    "semanticAssertionCount": 29
+  },
+  "reviewedSource": {
+    "repository": "https://github.com/jesse-stahl/shards-v1",
+    "commit": "91b38f3de64d96cac7e29f127c004f128fc1da59",
+    "tree": "92d6def8609e829487adea66c13901734e43c8c7",
+    "sourceRevisionHash": "0x3352fe14662ce467e98f475cf91f10304ce4d69b6342fae4bf3dc968c494d6dc",
+    "reviewedTechnicalBuild": {
+      "path": "contracts/spec/shards-reviewed-technical-build-v1.json",
+      "sha256": "0x2ad4194f0ff2d12245e8c933c02ceda6508bad03832a3f070dc426b35e9eb0ed"
+    }
+  },
+  "compiler": {
+    "version": "0.8.26+commit.8a97fa7a",
+    "evmVersion": "cancun",
+    "optimizerEnabled": true,
+    "optimizerRuns": 1000,
+    "viaIR": false,
+    "bytecodeHash": "none",
+    "appendCBOR": false
+  },
+  "eipLimits": {
+    "eip170RuntimeBytes": 24576,
+    "eip3860InitcodeBytes": 49152,
+    "minimumRegistryRuntimeMarginBytes": 1024,
+    "minimumCoordinatorInitcodeMarginBytes": 1024
+  },
+  "constructorEncodingFixturePolicy": "DETERMINISTIC_LENGTH_ONLY_NOT_A_DEPLOYMENT_INPUT_OR_ADDRESS_PLAN",
+  "productBoundary": {
+    "durableTechnicalInputs": [
+      "hookCreationCodeHash",
+      "tickLower",
+      "tickBand",
+      "tickUpper",
+      "startSqrtPriceX96",
+      "canonicalRendererPolicy",
+      "nftMetadataDerivationPolicy",
+      "economicTemplateHash",
+      "finalityPolicyHash"
+    ],
+    "websiteSelectedInputs": [
+      "tokenName",
+      "tokenSymbol",
+      "presentationBindingHash",
+      "launchWallet"
+    ],
+    "deterministicallyDerivedMetadata": {
+      "nftName": "tokenName + ASCII_SPACE + Pieces",
+      "nftSymbol": "tokenSymbol + ASCII_N",
+      "websiteMayOverride": false
+    },
+    "jitDeploymentInputs": [
+      "tokenSalt",
+      "hookSalt",
+      "predictedShardAddress",
+      "predictedHookAddress",
+      "predictedNftAddress",
+      "artifactSetHash",
+      "deploymentConfigurationHash",
+      "deploymentSetHash",
+      "runtimeCodeSetHash",
+      "concreteFeePolicyRecord",
+      "holderAccumulator = predictedHook then exactReturnedHook"
+    ],
+    "presentationIsSourceInput": false,
+    "technicalApprovalSurvivesPresentationOnlyChange": true,
+    "jitPermitBindsSelectedDerivedAndPredictedValues": true
+  },
+  "reviewedBuildBoundaryCorrection": {
+    "appliesToHistoricalReviewedBuildSha256": "0x2ad4194f0ff2d12245e8c933c02ceda6508bad03832a3f070dc426b35e9eb0ed",
+    "historicalMisclassification": [
+      "nftName",
+      "nftSymbol"
+    ],
+    "correctClassification": "DETERMINISTICALLY_DERIVED_METADATA_NOT_WEBSITE_SELECTED_OR_INDEPENDENT_JIT_INPUT",
+    "normativeBoundary": "productBoundary",
+    "changesReviewedSourceOrEconomics": false
+  },
+  "deployment": {
+    "addresses": null,
+    "transactions": null,
+    "deployedRuntimeEvidence": null,
+    "activation": false
+  },
+  "components": [
+    {
+      "id": "permitVerifier",
+      "contract": "ProgrammableLaunchPermitVerifierV1",
+      "source": {
+        "path": "contracts/src/ProgrammableLaunchPermitVerifierV1.sol",
+        "sha256": "0x240f369621917dcf99793d0c45023b8da45124790f826b331217d7b979c61201",
+        "keccak256": "0x4351b9eaa6937a32c6736a97508c9313ad80d507045a6af91b07c7e70e5c37e7"
+      },
+      "artifact": {
+        "path": "contracts/out/ProgrammableLaunchPermitVerifierV1.sol/ProgrammableLaunchPermitVerifierV1.json",
+        "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+        "canonicalAbiSha256": "0x417bada87c742b2a1bde7a735db7fe31e415da1266d7c57262bbce89c7dfd94a",
+        "normalizedArtifactSha256": "0x89806422babdba99c08ba743427e3d7ef51d681ba8098377c217e03746d44be4",
+        "rawForgeArtifactIsBinding": false,
+        "sourceClosureSha256": "0x9cdb12a82d1969a4e9827c138e61e5d9ab6d4ef722e7707d653dcad306d1e62b",
+        "sourceClosureFileCount": 11,
+        "creationTemplateByteLength": 12622,
+        "creationTemplateKeccak256": "0x202cbe6382c630a08e7ac10c01b818dfd03e13ead6f0e9e32333935a40da7afb",
+        "constructorEncodingByteLength": 0,
+        "eip3860LengthFixtureInitcodeByteLength": 12622,
+        "constructorEncodingFixtureIsDeploymentInput": false,
+        "initcodeLimitMarginBytes": 36530,
+        "runtimeTemplateByteLength": 12594,
+        "runtimeTemplateKeccak256": "0xe5a8bfe3a5cae5ce28e1a9424a09051f850a1d6ef79a5a1519c475636228a4a4",
+        "runtimeCodeLimitMarginBytes": 11982,
+        "runtimeTemplateContainsImmutables": false
+      },
+      "deployment": {
+        "address": null,
+        "transactionHash": null,
+        "blockNumber": null,
+        "activation": false
+      }
+    },
+    {
+      "id": "permitAuthority",
+      "contract": "ProgrammableLaunchPermitAuthorityV1",
+      "source": {
+        "path": "contracts/src/ProgrammableLaunchPermitAuthorityV1.sol",
+        "sha256": "0xd64e40876c1727849f19527ea4f0718e34f30f93ac103b67fe6bac677b1fd3d1",
+        "keccak256": "0x4469b69482ff24d631eddacb9b33789159047276f24734c5d332567050bf52de"
+      },
+      "artifact": {
+        "path": "contracts/out/ProgrammableLaunchPermitAuthorityV1.sol/ProgrammableLaunchPermitAuthorityV1.json",
+        "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+        "canonicalAbiSha256": "0xa5486b4b955e7a8dd05177e65f23f75ef369a3c4f35f9ea9bdda200ac40510f8",
+        "normalizedArtifactSha256": "0xe68f137bf60786b726bbbc84c5cc68e73206271ace98b44b1a34c92a4d11d242",
+        "rawForgeArtifactIsBinding": false,
+        "sourceClosureSha256": "0xf4e3f8c3135aec51ed0a76eb0cdf8f1f114e1092d3c8d1407f52f35f77d51ee1",
+        "sourceClosureFileCount": 16,
+        "creationTemplateByteLength": 26899,
+        "creationTemplateKeccak256": "0xa093a6de17364c5655876dc00e2e4dc92243f3d2250ba34422df21731bbeaf6c",
+        "constructorEncodingByteLength": 320,
+        "eip3860LengthFixtureInitcodeByteLength": 27219,
+        "constructorEncodingFixtureIsDeploymentInput": false,
+        "initcodeLimitMarginBytes": 21933,
+        "runtimeTemplateByteLength": 23047,
+        "runtimeTemplateKeccak256": "0x89d9d2bdc459c202bf975f8dafb8a49753b31b05046a41eb4e7f0dabfa521cb7",
+        "runtimeCodeLimitMarginBytes": 1529,
+        "runtimeTemplateContainsImmutables": true
+      },
+      "deployment": {
+        "address": null,
+        "transactionHash": null,
+        "blockNumber": null,
+        "activation": false
+      }
+    },
+    {
+      "id": "feePolicyVerifier",
+      "contract": "ProgrammableExactShardsFeePolicyVerifierV2",
+      "source": {
+        "path": "contracts/src/ProgrammableExactShardsFeePolicyVerifierV2.sol",
+        "sha256": "0xe612287816b92d7beae1f4c80107469db27a076f81cec1d266f5493734e252e2",
+        "keccak256": "0xdbc5882504e6467b1d5eb5ad6012cef7715c28ab9f7737c7e110ef1ee6f67834"
+      },
+      "artifact": {
+        "path": "contracts/out/ProgrammableExactShardsFeePolicyVerifierV2.sol/ProgrammableExactShardsFeePolicyVerifierV2.json",
+        "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+        "canonicalAbiSha256": "0x2958741a9dd8a65fa94b9c40e7b7f4e2e51c312486d57ebc0bc650dffeafc57f",
+        "normalizedArtifactSha256": "0xf54ee74a0d11db2c3be986ebee0fd2b012eeace3dab937313e6e6ff95e219300",
+        "rawForgeArtifactIsBinding": false,
+        "sourceClosureSha256": "0x147094c1a32d42d1c264c3644318b36dce529a978f4cc2403fdb376fa5ec1d6c",
+        "sourceClosureFileCount": 3,
+        "creationTemplateByteLength": 4675,
+        "creationTemplateKeccak256": "0x6538ad322ad1b9af3f6196fba080c6896a79b2a0f2f16e7e6e1ef40cb2f5196c",
+        "constructorEncodingByteLength": 0,
+        "eip3860LengthFixtureInitcodeByteLength": 4675,
+        "constructorEncodingFixtureIsDeploymentInput": false,
+        "initcodeLimitMarginBytes": 44477,
+        "runtimeTemplateByteLength": 4647,
+        "runtimeTemplateKeccak256": "0xa07652baf4a500d08456f193c6117fde69eb0c04ed21116555ec289abdc3c5ac",
+        "runtimeCodeLimitMarginBytes": 19929,
+        "runtimeTemplateContainsImmutables": false
+      },
+      "deployment": {
+        "address": null,
+        "transactionHash": null,
+        "blockNumber": null,
+        "activation": false
+      }
+    },
+    {
+      "id": "registry",
+      "contract": "ProgrammableExactShardsRegistryV1",
+      "source": {
+        "path": "contracts/src/ProgrammableExactShardsRegistryV1.sol",
+        "sha256": "0xe172d3ef56fd15d586f7f3cd173b8c8c12d8cf5687e4d6a1517b8932a657919a",
+        "keccak256": "0x7448fd549bb8063d099e42cea39975a4357948994df27fc1d3ebdce8f7624738"
+      },
+      "artifact": {
+        "path": "contracts/out/ProgrammableExactShardsRegistryV1.sol/ProgrammableExactShardsRegistryV1.json",
+        "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+        "canonicalAbiSha256": "0xd27a3881d5cf874c71a23c833a2ec0cd6f892491b6575973a53a07a0d5d72a0c",
+        "normalizedArtifactSha256": "0xb355b1236b11f820026f74a1c008b572f6684c1134c2aaebd0aee5d8ce3dbac2",
+        "rawForgeArtifactIsBinding": false,
+        "sourceClosureSha256": "0x011f6e94c278eb2a12d4c61aca5e7b9444a9b20d08ab38cf75f4d8af7f1ab437",
+        "sourceClosureFileCount": 18,
+        "creationTemplateByteLength": 26862,
+        "creationTemplateKeccak256": "0xe43983bf70f32d3814a7388fbeebe4b2f036639f7eb0e05ce16f87b8d85b8217",
+        "constructorEncodingByteLength": 416,
+        "eip3860LengthFixtureInitcodeByteLength": 27278,
+        "constructorEncodingFixtureIsDeploymentInput": false,
+        "initcodeLimitMarginBytes": 21874,
+        "runtimeTemplateByteLength": 23471,
+        "runtimeTemplateKeccak256": "0x7c31b0c52f59b716a1a7cfd1cde93e739697e7d9b8f25e863cc16d9b5c4aa83c",
+        "runtimeCodeLimitMarginBytes": 1105,
+        "runtimeTemplateContainsImmutables": true
+      },
+      "deployment": {
+        "address": null,
+        "transactionHash": null,
+        "blockNumber": null,
+        "activation": false
+      }
+    },
+    {
+      "id": "poolManager",
+      "contract": "PoolManager",
+      "source": {
+        "path": "contracts/lib/v4-core/src/PoolManager.sol",
+        "sha256": "0x3b6ab111dadf613e3cfd617e4b1c6ab75b5445cd15cbe52d7c6207fc02449717",
+        "keccak256": "0xf9ff5d5e261a21a5e72a01c5badd988beeff437e0f6b82fd56f80be42d727c07"
+      },
+      "artifact": {
+        "path": "contracts/out/PoolManager.sol/PoolManager.json",
+        "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+        "canonicalAbiSha256": "0xb072eae166f323623396ef08fcdc398b9a959031a644fba52e0adcea891059b4",
+        "normalizedArtifactSha256": "0x8dc30dedd9ee0b045e5e87cef576b7719463791ac474a3abb01a2949cb3bd8ac",
+        "rawForgeArtifactIsBinding": false,
+        "sourceClosureSha256": "0x5aa3530c096c0eddcdb9a271de33d7c17e8dcfb14301c276955536ee8dcca8d5",
+        "sourceClosureFileCount": 45,
+        "creationTemplateByteLength": 21951,
+        "creationTemplateKeccak256": "0x13c7a914bd5544f85796170e889d96c229d5fa179efb82fc8d783882e1cb92d5",
+        "constructorEncodingByteLength": 32,
+        "eip3860LengthFixtureInitcodeByteLength": 21983,
+        "constructorEncodingFixtureIsDeploymentInput": false,
+        "initcodeLimitMarginBytes": 27169,
+        "runtimeTemplateByteLength": 21757,
+        "runtimeTemplateKeccak256": "0x76064aa15cbfe3e4209106c21abd8ae2dbf1f1f273b42c36cc3fcbc4308c7386",
+        "runtimeCodeLimitMarginBytes": 2819,
+        "runtimeTemplateContainsImmutables": true
+      },
+      "deployment": {
+        "address": null,
+        "transactionHash": null,
+        "blockNumber": null,
+        "activation": false
+      }
+    },
+    {
+      "id": "defaultRenderer",
+      "contract": "GeometricRendererV1",
+      "source": {
+        "path": "contracts/lib/shards-v1/src/GeometricRendererV1.sol",
+        "sha256": "0x2f9549dba22296486f90f17746dd862caafe1a8b2c17854cf54788a7ce43d785",
+        "keccak256": "0xe70bcc675d62669682888072639e1df70222fd84e73932bacec8d5b8ba60196f"
+      },
+      "artifact": {
+        "path": "contracts/out/GeometricRendererV1.sol/GeometricRendererV1.json",
+        "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+        "canonicalAbiSha256": "0xa3b19f8d901f2222363c6f5dab48ff83c1b6db899fbc6e4edab301f51cf29376",
+        "normalizedArtifactSha256": "0x0ee40e11cdea7cfe75c64a95687e6011548a919cbfd43728aeaa7cf5fd3a8e99",
+        "rawForgeArtifactIsBinding": false,
+        "sourceClosureSha256": "0x3354ead8fb67bffe4f1a0ec596a03d60770bf041fa4e3096901b11774aafa9db",
+        "sourceClosureFileCount": 4,
+        "creationTemplateByteLength": 16805,
+        "creationTemplateKeccak256": "0x910d02d740c71d608b1dc3f49e26288b0f8a62abda0c7767e251d53520a6b51e",
+        "constructorEncodingByteLength": 0,
+        "eip3860LengthFixtureInitcodeByteLength": 16805,
+        "constructorEncodingFixtureIsDeploymentInput": false,
+        "initcodeLimitMarginBytes": 32347,
+        "runtimeTemplateByteLength": 16777,
+        "runtimeTemplateKeccak256": "0x9b54a61918b2ddf9b7daf41d9bf2d705cbef3a0fd618275762b99e19c53459bf",
+        "runtimeCodeLimitMarginBytes": 7799,
+        "runtimeTemplateContainsImmutables": false
+      },
+      "deployment": {
+        "address": null,
+        "transactionHash": null,
+        "blockNumber": null,
+        "activation": false
+      }
+    },
+    {
+      "id": "reviewedFactoryImplementation",
+      "contract": "ShardLaunchFactoryV1",
+      "source": {
+        "path": "contracts/lib/shards-v1/src/ShardLaunchFactoryV1.sol",
+        "sha256": "0x22f57deb2bb730b88ab6a1f948675d1cb6fbef0442e982f339e9c716e172e14f",
+        "keccak256": "0x235fafc23f0b7e093278cd2c297dbed90bf4638c651675cfde874ccc71a5afe9"
+      },
+      "artifact": {
+        "path": "contracts/out/ShardLaunchFactoryV1.sol/ShardLaunchFactoryV1.json",
+        "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+        "canonicalAbiSha256": "0x469ca96407970a7a9f262e17dd1b9fd6063e9c7c0573f5e16f812993e74b2c42",
+        "normalizedArtifactSha256": "0x29582d185f3e9c81693c4a149f94bc1c708f8802c5115d2e4c7196d6df724a46",
+        "rawForgeArtifactIsBinding": false,
+        "sourceClosureSha256": "0xde234fc6590e9c80c1378e01dddf447d8d26c501c6e41a0e00c2f7b8c6333101",
+        "sourceClosureFileCount": 69,
+        "creationTemplateByteLength": 37878,
+        "creationTemplateKeccak256": "0xc6b8a2cd51ccf198c4e6e41f668c4e4f558f81de0e677ef27373c614bf4c02f8",
+        "constructorEncodingByteLength": 64,
+        "eip3860LengthFixtureInitcodeByteLength": 37942,
+        "constructorEncodingFixtureIsDeploymentInput": false,
+        "initcodeLimitMarginBytes": 11210,
+        "runtimeTemplateByteLength": 20730,
+        "runtimeTemplateKeccak256": "0x5875d3528e57eb0a97807aa896a2e2385ebbaed0e21253255d6c79e91aabea50",
+        "runtimeCodeLimitMarginBytes": 3846,
+        "runtimeTemplateContainsImmutables": true
+      },
+      "deployment": {
+        "address": null,
+        "transactionHash": null,
+        "blockNumber": null,
+        "activation": false
+      }
+    },
+    {
+      "id": "routeGatedFactory",
+      "contract": "ProgrammableExactShardsRouteGatedFactoryV2",
+      "source": {
+        "path": "contracts/src/ProgrammableExactShardsRouteGatedFactoryV2.sol",
+        "sha256": "0x8a90452ccdf74865b040e657e66e0470fec2aaf5766e4cba61c2eb3b927414f0",
+        "keccak256": "0xf142c7b77119935bca99618fd678a0f0a8eacbecec57336b9fd136c86c394435"
+      },
+      "artifact": {
+        "path": "contracts/out/ProgrammableExactShardsRouteGatedFactoryV2.sol/ProgrammableExactShardsRouteGatedFactoryV2.json",
+        "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+        "canonicalAbiSha256": "0x7ed601f202154da5e381409446a26981c719d765ada398ea898ee7758dbad4b8",
+        "normalizedArtifactSha256": "0x259c689767f5f5661cb89941e21bcd0e06abd7979f35f2686428fb27ec4a39ef",
+        "rawForgeArtifactIsBinding": false,
+        "sourceClosureSha256": "0x5e62fc0ddaa7b5b06ea6965a184df09b648b381c400f0deebf0b7083d9473d7b",
+        "sourceClosureFileCount": 72,
+        "creationTemplateByteLength": 19466,
+        "creationTemplateKeccak256": "0xa1e7575d45796d9a440bc68b2b370db49cebe2bbb531a0eb912dec8fc4b0006e",
+        "constructorEncodingByteLength": 96,
+        "eip3860LengthFixtureInitcodeByteLength": 19562,
+        "constructorEncodingFixtureIsDeploymentInput": false,
+        "initcodeLimitMarginBytes": 29590,
+        "runtimeTemplateByteLength": 18953,
+        "runtimeTemplateKeccak256": "0xac768c0767edb21fd5bff2e64c40f2503d55d34c983b449336d0df11fac479da",
+        "runtimeCodeLimitMarginBytes": 5623,
+        "runtimeTemplateContainsImmutables": true
+      },
+      "deployment": {
+        "address": null,
+        "transactionHash": null,
+        "blockNumber": null,
+        "activation": false
+      }
+    },
+    {
+      "id": "atomicLaunchRoute",
+      "contract": "ProgrammableExactShardsAtomicLaunchRouteV1",
+      "source": {
+        "path": "contracts/src/ProgrammableExactShardsAtomicLaunchRouteV1.sol",
+        "sha256": "0x380e9bf80d61025fa79da870073e106820161aab08691287e10a4f993da1609f",
+        "keccak256": "0x1cc9b5bc64081e19f8bc0c21216c2f02d1ddaec49735153e53ee98f5c515bccc"
+      },
+      "artifact": {
+        "path": "contracts/out/ProgrammableExactShardsAtomicLaunchRouteV1.sol/ProgrammableExactShardsAtomicLaunchRouteV1.json",
+        "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+        "canonicalAbiSha256": "0x187467d3256e138fba87f892f562976e86e6942fe56d943c99b17337b32dc1d7",
+        "normalizedArtifactSha256": "0xfce707ae273c1e2ba269c3a9a4ab0377854d36c75a0185874e1e90a0aba1be2d",
+        "rawForgeArtifactIsBinding": false,
+        "sourceClosureSha256": "0x4d4030bed181a58c19de3887c5c104dd7d204b9ae27969bec15ce514044a6afe",
+        "sourceClosureFileCount": 75,
+        "creationTemplateByteLength": 24715,
+        "creationTemplateKeccak256": "0xce8ef04719656263a2b27e7330d149dfaed63e29d2e26115e9ac52c6d354a86d",
+        "constructorEncodingByteLength": 128,
+        "eip3860LengthFixtureInitcodeByteLength": 24843,
+        "constructorEncodingFixtureIsDeploymentInput": false,
+        "initcodeLimitMarginBytes": 24309,
+        "runtimeTemplateByteLength": 22423,
+        "runtimeTemplateKeccak256": "0xf59687e15e5699074f9864ff667dee32f475b2f030e5b77571fb43f7c434a0e7",
+        "runtimeCodeLimitMarginBytes": 2153,
+        "runtimeTemplateContainsImmutables": true
+      },
+      "deployment": {
+        "address": null,
+        "transactionHash": null,
+        "blockNumber": null,
+        "activation": false
+      }
+    },
+    {
+      "id": "pairDeploymentCoordinator",
+      "contract": "ProgrammableExactShardsPairDeploymentCoordinatorV1",
+      "source": {
+        "path": "contracts/src/ProgrammableExactShardsPairDeploymentCoordinatorV1.sol",
+        "sha256": "0x9e54cdc99cd7c48828905ba0e65d989d6558de2a7efdbe8116d67fd87acd7958",
+        "keccak256": "0x427db7f4c49439a7566e2706764d62f9bbf4266c71dae3960fed948baabdae76"
+      },
+      "artifact": {
+        "path": "contracts/out/ProgrammableExactShardsPairDeploymentCoordinatorV1.sol/ProgrammableExactShardsPairDeploymentCoordinatorV1.json",
+        "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+        "canonicalAbiSha256": "0x1b5d37953af15c2e5536ddd082cd4f4d5cafd7917ec5df747999e372ab3db65e",
+        "normalizedArtifactSha256": "0x780811e32afbc7c7f0f31ff92301f868da4da500dcec1ba045a52c0e3f996485",
+        "rawForgeArtifactIsBinding": false,
+        "sourceClosureSha256": "0xada472ff9da17214a8ff14dec948676c7039dd6646c9d348721056b194a2db0a",
+        "sourceClosureFileCount": 81,
+        "creationTemplateByteLength": 47243,
+        "creationTemplateKeccak256": "0x0f0774227ccc0738aaa88e305a45cf96e589c195edc83de1c0f30ef8cd98e66f",
+        "constructorEncodingByteLength": 128,
+        "eip3860LengthFixtureInitcodeByteLength": 47371,
+        "constructorEncodingFixtureIsDeploymentInput": false,
+        "initcodeLimitMarginBytes": 1781,
+        "runtimeTemplateByteLength": 664,
+        "runtimeTemplateKeccak256": "0x60d6d432212d8835acb4acb4877889ff7ea6a2c9c09f115d1bad6a76119a6554",
+        "runtimeCodeLimitMarginBytes": 23912,
+        "runtimeTemplateContainsImmutables": true
+      },
+      "deployment": {
+        "address": null,
+        "transactionHash": null,
+        "blockNumber": null,
+        "activation": false
+      }
+    },
+    {
+      "id": "shardToken",
+      "contract": "ShardTokenV1",
+      "source": {
+        "path": "contracts/lib/shards-v1/src/ShardTokenV1.sol",
+        "sha256": "0x5c53920c52c69a87b38159d8a06285a2006e69773543ad72f2b5eb92f63ee22d",
+        "keccak256": "0x707126f31c57621082232f8697ce6a2fe4e9450a02ef47459700162de8e8ad6b"
+      },
+      "artifact": {
+        "path": "contracts/out/ShardTokenV1.sol/ShardTokenV1.json",
+        "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+        "canonicalAbiSha256": "0xcd37a85ab3755240710e6058c665091c05bf9636fb276789eb4a93d472e715f6",
+        "normalizedArtifactSha256": "0xfc73a72ef4686b3b327b90922d1147ce9033462bae24e4f75656ba5ce67f6229",
+        "rawForgeArtifactIsBinding": false,
+        "sourceClosureSha256": "0x70f137955fc2545a91f127ac0b2c845b41d5758f6dd5aea0fb36057137bad9fa",
+        "sourceClosureFileCount": 7,
+        "creationTemplateByteLength": 3001,
+        "creationTemplateKeccak256": "0xa6461c32c0121f0090519945d9c22ed6406a783994e020f72a20e85796cad107",
+        "constructorEncodingByteLength": 192,
+        "eip3860LengthFixtureInitcodeByteLength": 3193,
+        "constructorEncodingFixtureIsDeploymentInput": false,
+        "initcodeLimitMarginBytes": 45959,
+        "runtimeTemplateByteLength": 1875,
+        "runtimeTemplateKeccak256": "0xb2737fd93f2ff31e850e2be773e6e7a92a239b28091be1d4b122ff864cd7aae8",
+        "runtimeCodeLimitMarginBytes": 22701,
+        "runtimeTemplateContainsImmutables": false
+      },
+      "deployment": {
+        "address": null,
+        "transactionHash": null,
+        "blockNumber": null,
+        "activation": false
+      }
+    },
+    {
+      "id": "shardHook",
+      "contract": "ShardHookV1",
+      "source": {
+        "path": "contracts/lib/shards-v1/src/ShardHookV1.sol",
+        "sha256": "0x29065fb2418a681cb9bf5e2b4622ef5e7fa0692efa887ba69f6d4d6e2aa8d663",
+        "keccak256": "0xd321ab373d8f81b2267f388990cb5d6bcebb60336255aa5e93a0d7eab7eeeeef"
+      },
+      "artifact": {
+        "path": "contracts/out/ShardHookV1.sol/ShardHookV1.json",
+        "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+        "canonicalAbiSha256": "0xbbdd0618235ffac75ef87f3bdb11694be02e67c5d8c572c06465ab68b3da1ae4",
+        "normalizedArtifactSha256": "0x3e8b0ac8b39355c7d9d0f041f2d802b33bcd38892bd0faa086ea9e5e4a35bc4c",
+        "rawForgeArtifactIsBinding": false,
+        "sourceClosureSha256": "0x6976d934cfd8f520f8a57a87f8e1c547515f358fd7fc4a4b339e5f74e7f1df43",
+        "sourceClosureFileCount": 50,
+        "creationTemplateByteLength": 26402,
+        "creationTemplateKeccak256": "0x3fbdbc069ee5bfcb1ded77a8d4e550f1bb0692a488b6eb5d23dac090fbca0716",
+        "constructorEncodingByteLength": 288,
+        "eip3860LengthFixtureInitcodeByteLength": 26690,
+        "constructorEncodingFixtureIsDeploymentInput": false,
+        "initcodeLimitMarginBytes": 22462,
+        "runtimeTemplateByteLength": 24465,
+        "runtimeTemplateKeccak256": "0x07d1d8a50ed58bb22231105094735b54c2da15903fedfb7a4237cadc264ec601",
+        "runtimeCodeLimitMarginBytes": 111,
+        "runtimeTemplateContainsImmutables": true
+      },
+      "deployment": {
+        "address": null,
+        "transactionHash": null,
+        "blockNumber": null,
+        "activation": false
+      }
+    },
+    {
+      "id": "shardNft",
+      "contract": "ShardNFTV1",
+      "source": {
+        "path": "contracts/lib/shards-v1/src/ShardNFTV1.sol",
+        "sha256": "0x5aa93ba415fad5763a4e84819fb89b5226b918c682c56db73dec05540e2bea4f",
+        "keccak256": "0x427641c4d443e1d25dfc4ffda6aefb41c5d4cef0bb9c6a1e041911c2829cb342"
+      },
+      "artifact": {
+        "path": "contracts/out/ShardNFTV1.sol/ShardNFTV1.json",
+        "canonicalAbiEncoding": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+        "canonicalAbiSha256": "0xfa411058dbd6216124248e3123caafc0eae016340d07a4e6542a768471de75aa",
+        "normalizedArtifactSha256": "0xa1909df8dfa7ffcc6766ca015d411ffc7d54e657890bd00df1fd51538b58c78d",
+        "rawForgeArtifactIsBinding": false,
+        "sourceClosureSha256": "0xf69d1e21f4f3bac4e5f9da094ba08dcb764a0b3a3ebb507da9b5ca4f6a05f447",
+        "sourceClosureFileCount": 23,
+        "creationTemplateByteLength": 8240,
+        "creationTemplateKeccak256": "0x888e18b33ff193b65eb61f44bc578d8d9365b505014af3782762a9d61fa39150",
+        "constructorEncodingByteLength": 256,
+        "eip3860LengthFixtureInitcodeByteLength": 8496,
+        "constructorEncodingFixtureIsDeploymentInput": false,
+        "initcodeLimitMarginBytes": 40656,
+        "runtimeTemplateByteLength": 7318,
+        "runtimeTemplateKeccak256": "0x82f9916598d254c7f16bf5d8bcd324906c832d47eb69f88fc88a32accad5d1cd",
+        "runtimeCodeLimitMarginBytes": 17258,
+        "runtimeTemplateContainsImmutables": true
+      },
+      "deployment": {
+        "address": null,
+        "transactionHash": null,
+        "blockNumber": null,
+        "activation": false
+      }
+    }
+  ],
+  "semanticAssertions": [
+    {
+      "id": "route-wallet-sender-bound",
+      "status": "PASS",
+      "component": "atomicLaunchRoute",
+      "evidenceKind": "sourceIncludesAll",
+      "meaning": "The launch wallet is the transaction sender while permit consume, deployment and registration remain atomic."
+    },
+    {
+      "id": "route-durable-technical-boundary",
+      "status": "PASS",
+      "component": "atomicLaunchRoute",
+      "evidenceKind": "sourceIncludesAll",
+      "meaning": "The durable technical approval binds hook code, ticks, start price, renderer/NFT policies, economics and finality."
+    },
+    {
+      "id": "route-selected-derived-jit-boundary",
+      "status": "PASS",
+      "component": "atomicLaunchRoute",
+      "evidenceKind": "sourceIncludesAll",
+      "meaning": "Website-selected values, deterministic NFT metadata and JIT artifact/deployment/runtime predictions remain distinct and exact."
+    },
+    {
+      "id": "route-factory-caller-gate",
+      "status": "PASS",
+      "component": "routeGatedFactory",
+      "evidenceKind": "sourceIncludesAll",
+      "meaning": "Only the immutable atomic route may execute the reviewed Shards factory implementation."
+    },
+    {
+      "id": "route-two-child-deterministic-pair",
+      "status": "PASS",
+      "component": "pairDeploymentCoordinator",
+      "evidenceKind": "sourceIncludesAll",
+      "meaning": "The factory and route are the first two CREATE children and the predeployed Registry is bound to the predicted route."
+    },
+    {
+      "id": "route-public-identity-registration",
+      "status": "PASS",
+      "component": "registry",
+      "evidenceKind": "abiTupleHasFields",
+      "meaning": "The atomic route registers both canonical Website SHA-256 identifiers in the Registry record."
+    }
+  ],
+  "graph": {
+    "nodes": [
+      "permitVerifier",
+      "permitAuthority",
+      "feePolicyVerifier",
+      "registry",
+      "poolManager",
+      "defaultRenderer",
+      "reviewedFactoryImplementation",
+      "routeGatedFactory",
+      "atomicLaunchRoute",
+      "pairDeploymentCoordinator",
+      "shardToken",
+      "shardHook",
+      "shardNft"
+    ],
+    "edges": [
+      [
+        "permitAuthority",
+        "permitVerifier",
+        "IMMUTABLE_VERIFIER"
+      ],
+      [
+        "registry",
+        "permitAuthority",
+        "IMMUTABLE_PERMIT_AUTHORITY"
+      ],
+      [
+        "registry",
+        "feePolicyVerifier",
+        "IMMUTABLE_FEE_TEMPLATE"
+      ],
+      [
+        "registry",
+        "atomicLaunchRoute",
+        "IMMUTABLE_SOLE_WRITER"
+      ],
+      [
+        "reviewedFactoryImplementation",
+        "poolManager",
+        "IMMUTABLE_POOL_MANAGER"
+      ],
+      [
+        "reviewedFactoryImplementation",
+        "defaultRenderer",
+        "IMMUTABLE_DEFAULT_RENDERER"
+      ],
+      [
+        "routeGatedFactory",
+        "reviewedFactoryImplementation",
+        "RUNTIME_HASH_GATED_DELEGATECALL"
+      ],
+      [
+        "routeGatedFactory",
+        "atomicLaunchRoute",
+        "IMMUTABLE_CALLER_GATE"
+      ],
+      [
+        "atomicLaunchRoute",
+        "routeGatedFactory",
+        "ATOMIC_FACTORY_EXECUTION"
+      ],
+      [
+        "atomicLaunchRoute",
+        "permitAuthority",
+        "ONE_USE_PERMIT_CONSUMER"
+      ],
+      [
+        "atomicLaunchRoute",
+        "registry",
+        "ATOMIC_REGISTER"
+      ],
+      [
+        "atomicLaunchRoute",
+        "poolManager",
+        "IMMUTABLE_RUNTIME_POSTCONDITION"
+      ],
+      [
+        "atomicLaunchRoute",
+        "defaultRenderer",
+        "IMMUTABLE_RUNTIME_POSTCONDITION"
+      ],
+      [
+        "pairDeploymentCoordinator",
+        "routeGatedFactory",
+        "CREATE_NONCE_1"
+      ],
+      [
+        "pairDeploymentCoordinator",
+        "atomicLaunchRoute",
+        "CREATE_NONCE_2"
+      ],
+      [
+        "pairDeploymentCoordinator",
+        "permitAuthority",
+        "IMMUTABLE_DEPENDENCY_READBACK"
+      ],
+      [
+        "pairDeploymentCoordinator",
+        "registry",
+        "PREDEPLOYED_ROUTE_PRECOMMIT_READBACK"
+      ],
+      [
+        "pairDeploymentCoordinator",
+        "reviewedFactoryImplementation",
+        "RUNTIME_HASH_BINDING"
+      ],
+      [
+        "routeGatedFactory",
+        "shardToken",
+        "CREATE2"
+      ],
+      [
+        "routeGatedFactory",
+        "shardHook",
+        "CREATE2"
+      ],
+      [
+        "routeGatedFactory",
+        "shardNft",
+        "CREATE2"
+      ],
+      [
+        "atomicLaunchRoute",
+        "shardToken",
+        "ADDRESS_RUNTIME_AND_METADATA_POSTCONDITION"
+      ],
+      [
+        "atomicLaunchRoute",
+        "shardHook",
+        "ADDRESS_RUNTIME_AND_CONFIGURATION_POSTCONDITION"
+      ],
+      [
+        "atomicLaunchRoute",
+        "shardNft",
+        "ADDRESS_RUNTIME_AND_METADATA_POSTCONDITION"
+      ]
+    ],
+    "deploymentAddresses": null,
+    "activation": false
+  },
+  "lifecycle": {
+    "states": [
+      "UNREGISTERED",
+      "OBSERVED_REVISION_1",
+      "FINALIZED_REVISION_1",
+      "REVOKED_TERMINAL"
+    ],
+    "allowedTransitions": [
+      "UNREGISTERED_TO_OBSERVED_REVISION_1",
+      "OBSERVED_REVISION_1_TO_FINALIZED_REVISION_1",
+      "OBSERVED_REVISION_1_TO_REVOKED_TERMINAL",
+      "FINALIZED_REVISION_1_TO_REVOKED_TERMINAL"
+    ],
+    "recordCorrectionAllowed": false
+  },
+  "publicIdentity": {
+    "websiteProjectIdEncoding": "RAW_SHA256_DIGEST_OF_CANONICAL_WEBSITE_PROJECT_ID",
+    "websiteLaunchIdEncoding": "RAW_SHA256_DIGEST_OF_CANONICAL_WEBSITE_LAUNCH_ID",
+    "registryProjectIdEncoding": "KECCAK256_PROGRAMMABLE_PROJECT_ID_V1",
+    "registryApprovalIdEncoding": "KECCAK256_PROGRAMMABLE_TARGET_APPROVAL_ID_V1",
+    "registryLaunchIdEncoding": "KECCAK256_PROGRAMMABLE_TARGET_LAUNCH_ID_V1",
+    "mappingEvent": "ExactShardsPublicIdentityBoundV1",
+    "readback": "publicIdentityState(bytes32)",
+    "mappingIsPartOfRegistrationBinding": true
+  },
+  "atomicity": {
+    "senderMustEqualLaunchWallet": true,
+    "consumePermitDeployValidateAndRegisterOneTransaction": true,
+    "downstreamRevertRollsBackEntireLaunch": true,
+    "factoryCallableOnlyByImmutableRoute": true,
+    "coordinatorFactoryCreateNonce": 1,
+    "coordinatorRouteCreateNonce": 2
+  },
+  "contentCommitment": {
+    "canonicalization": "RECURSIVE_LEXICOGRAPHIC_OBJECT_KEYS_ARRAY_ORDER_PRESERVED_UTF8_NO_NEWLINE",
+    "sha256": "0xcee4b90f10e5cdd86fd2bf6fb5fbd729d9596d3f119441da94ad9d16c93f3337"
+  }
+}

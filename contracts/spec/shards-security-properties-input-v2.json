@@ -1,0 +1,737 @@
+{
+  "schemaVersion": "programmable.exact-shards-security-properties-input.v2",
+  "descriptorId": "programmable.exact-shards.security-properties.v2",
+  "status": "REVIEWED_PROPERTIES_SLITHER_PENDING",
+  "activationAllowed": false,
+  "launchAllowed": false,
+  "externalAuditClaim": false,
+  "externalAuditReport": null,
+  "baseManifests": {
+    "fee": "spec/shards-fee-policy-verifier-v2.json",
+    "registry": "spec/shards-registry-successor-v2.json",
+    "route": "spec/shards-atomic-launch-route-v2.json"
+  },
+  "externalGitObjectResolutions": {
+    "recordedBy": "independent-public-identity-lane",
+    "goldenPath": "spec/exact-shards-public-identity-golden.json",
+    "repository": "https://github.com/0xprogrammable/programmable.git",
+    "commit": {
+      "oidSha1": "e59bce4fabe43369ebc5a0ef9718fdd73b747c81",
+      "objectType": "commit"
+    },
+    "tree": {
+      "oidSha1": "fec89669b681b1f26789583e65c754a88797d6b7",
+      "objectType": "tree"
+    },
+    "blobs": [
+      {
+        "label": "sourceModule",
+        "path": "services/autonomous-approval-v1/src/adapters/custom-launch-public-identity-v2.ts",
+        "oidSha1": "f6ebcd5de53115c573e5ebc3137d621d5b49987f",
+        "objectType": "blob"
+      },
+      {
+        "label": "canonicalHashModule",
+        "path": "services/autonomous-approval-v1/src/domain/hashing.ts",
+        "oidSha1": "292e01e357a6f27500cf51eba17cf873026de213",
+        "objectType": "blob"
+      },
+      {
+        "label": "canonicalJsonModule",
+        "path": "services/autonomous-approval-v1/src/domain/canonical-json.ts",
+        "oidSha1": "464f15cb080b36ddf3e1ed8687e55d53e404973d",
+        "objectType": "blob"
+      },
+      {
+        "label": "identityValidatorModule",
+        "path": "services/autonomous-approval-v1/src/rpc/finalized-launch-verifier.ts",
+        "oidSha1": "700fb4e4596351db964e07df659d7da186b9ca38",
+        "objectType": "blob"
+      },
+      {
+        "label": "projectionFixtureModule",
+        "path": "services/autonomous-approval-v1/test/adapters/custom-launch-public-identity-v2.test.ts",
+        "oidSha1": "6b1a5fd84d68d914a2801185ea32c1cdbc4fdd24",
+        "objectType": "blob"
+      }
+    ],
+    "finalSourceRevisionRegenerationRequired": false
+  },
+  "componentIds": [
+    "permitVerifier",
+    "permitAuthority",
+    "feePolicyVerifier",
+    "registry",
+    "poolManager",
+    "defaultRenderer",
+    "reviewedFactoryImplementation",
+    "routeGatedFactory",
+    "atomicLaunchRoute",
+    "pairDeploymentCoordinator",
+    "shardToken",
+    "shardHook",
+    "shardNft"
+  ],
+  "threatModel": {
+    "protectedAssets": [
+      "one successful launch graph per GitHub repository lineage",
+      "permit, release, route, configuration, wallet and execution bindings",
+      "exact CREATE2 token, hook and NFT graph and its runtime identities",
+      "permanently locked v4 liquidity and canonical pool identity",
+      "ETH fee custody and conservative builder, Programmable and holder accounting",
+      "append-only registry identity, revision-one record and terminal revocation state",
+      "canonical-block finality evidence and public Website-to-registry identity mapping"
+    ],
+    "adversaries": [
+      "arbitrary EOA or contract without an assigned authority role",
+      "applicant attempting post-approval metadata, wallet, salt, calldata or runtime substitution",
+      "permit replay across repository, chain, authority, signer epoch, release or route",
+      "direct caller of the reviewed factory implementation or wrapper fallback",
+      "front-runner attempting foreign-pool or wrong-price initialization",
+      "swapper attempting fee bypass, partial-fill overcharge, oversized swap or negative-delta accounting",
+      "reentrant recipient or callback during permit consumption, atomic launch or fee payout",
+      "operational role holder attempting authority-class collapse or evidence reuse",
+      "finalizer supplying stale, noncanonical, shallow or replayed block evidence"
+    ],
+    "trustedAssumptions": [
+      "the exact compiler settings, source closure and normalized artifacts bound by this descriptor are reproduced",
+      "the pinned PoolManager and renderer runtime code hashes identify the reviewed dependencies",
+      "the EIP-712 signer key and separated governance keys remain uncompromised within their documented powers",
+      "the chain implements Cancun EIP-1153 semantics required by ReentrancyGuardTransient",
+      "the GitHub technical approval and just-in-time Website intent evidence are produced by their documented offchain authorities",
+      "the native blockhash window is used before historical hashes become unavailable"
+    ],
+    "outOfScope": [
+      "consensus failure, validator censorship and canonical-chain failure",
+      "market price, liquidity demand, MEV and economic profitability",
+      "Website hosting availability and wallet user-interface compromise",
+      "loss or malicious use of a governance key within that role's explicit authority",
+      "security of any source, artifact, dependency runtime or deployment not exactly bound by this descriptor"
+    ]
+  },
+  "accessControlMatrix": [
+    {
+      "id": "permit-default-admin",
+      "component": "permitAuthority",
+      "authorityClass": "DEFAULT_ADMIN",
+      "power": "delayed role administration only",
+      "forbiddenWith": ["SIGNER_GOVERNOR", "RELEASE_GOVERNOR", "PAUSER", "CANCELLER", "CONSUMER", "SIGNER"]
+    },
+    {
+      "id": "permit-signer-governor",
+      "component": "permitAuthority",
+      "authorityClass": "SIGNER_GOVERNOR",
+      "power": "rotate to a fresh EOA signer epoch",
+      "forbiddenWith": ["DEFAULT_ADMIN", "RELEASE_GOVERNOR", "PAUSER", "CANCELLER", "CONSUMER", "SIGNER"]
+    },
+    {
+      "id": "permit-release-governor",
+      "component": "permitAuthority",
+      "authorityClass": "RELEASE_GOVERNOR",
+      "power": "activate, schedule retirement, deactivate releases and unpause",
+      "forbiddenWith": ["DEFAULT_ADMIN", "SIGNER_GOVERNOR", "PAUSER", "CANCELLER", "CONSUMER", "SIGNER"]
+    },
+    {
+      "id": "permit-pauser",
+      "component": "permitAuthority",
+      "authorityClass": "PAUSER",
+      "power": "pause new permit consumption",
+      "forbiddenWith": ["DEFAULT_ADMIN", "SIGNER_GOVERNOR", "RELEASE_GOVERNOR", "CANCELLER", "CONSUMER", "SIGNER"]
+    },
+    {
+      "id": "permit-canceller",
+      "component": "permitAuthority",
+      "authorityClass": "CANCELLER",
+      "power": "cancel permits or approval generations and disable signer epochs",
+      "forbiddenWith": ["DEFAULT_ADMIN", "SIGNER_GOVERNOR", "RELEASE_GOVERNOR", "PAUSER", "CONSUMER", "SIGNER"]
+    },
+    {
+      "id": "permit-consumer",
+      "component": "permitAuthority",
+      "authorityClass": "CONSUMER",
+      "power": "consume a valid one-use permit from an authorized contract route",
+      "forbiddenWith": ["DEFAULT_ADMIN", "SIGNER_GOVERNOR", "RELEASE_GOVERNOR", "PAUSER", "CANCELLER", "SIGNER"]
+    },
+    {
+      "id": "permit-signer",
+      "component": "permitAuthority",
+      "authorityClass": "SIGNER",
+      "power": "sign the exact current-epoch EIP-712 permit only",
+      "forbiddenWith": ["DEFAULT_ADMIN", "SIGNER_GOVERNOR", "RELEASE_GOVERNOR", "PAUSER", "CANCELLER", "CONSUMER"]
+    },
+    {
+      "id": "registry-default-admin",
+      "component": "registry",
+      "authorityClass": "DEFAULT_ADMIN",
+      "power": "delayed role administration subject to permanent role-lineage separation",
+      "forbiddenWith": ["TECHNICAL_APPROVER", "LAUNCH_INTENT_APPROVER", "WRITER", "FINALIZER", "REVOKER"]
+    },
+    {
+      "id": "registry-technical-approver",
+      "component": "registry",
+      "authorityClass": "TECHNICAL_APPROVER",
+      "power": "authorize the durable source, technical configuration, economics and finality policy",
+      "forbiddenWith": ["DEFAULT_ADMIN", "LAUNCH_INTENT_APPROVER", "WRITER", "FINALIZER", "REVOKER"]
+    },
+    {
+      "id": "registry-launch-intent-approver",
+      "component": "registry",
+      "authorityClass": "LAUNCH_INTENT_APPROVER",
+      "power": "authorize a short-lived exact registration binding for Website-selected launch data",
+      "forbiddenWith": ["DEFAULT_ADMIN", "TECHNICAL_APPROVER", "WRITER", "FINALIZER", "REVOKER"]
+    },
+    {
+      "id": "registry-writer",
+      "component": "registry",
+      "authorityClass": "WRITER",
+      "power": "the immutable atomic route alone may register the postcondition-checked graph",
+      "forbiddenWith": ["DEFAULT_ADMIN", "TECHNICAL_APPROVER", "LAUNCH_INTENT_APPROVER", "FINALIZER", "REVOKER"]
+    },
+    {
+      "id": "registry-finalizer",
+      "component": "registry",
+      "authorityClass": "FINALIZER",
+      "power": "finalize an observed launch with canonical depth and blockhash evidence",
+      "forbiddenWith": ["DEFAULT_ADMIN", "TECHNICAL_APPROVER", "LAUNCH_INTENT_APPROVER", "WRITER", "REVOKER"]
+    },
+    {
+      "id": "registry-revoker",
+      "component": "registry",
+      "authorityClass": "REVOKER",
+      "power": "terminally revoke an observed or finalized record with one-use evidence",
+      "forbiddenWith": ["DEFAULT_ADMIN", "TECHNICAL_APPROVER", "LAUNCH_INTENT_APPROVER", "WRITER", "FINALIZER"]
+    },
+    {
+      "id": "factory-authorized-route",
+      "component": "routeGatedFactory",
+      "authorityClass": "IMMUTABLE_ROUTE",
+      "power": "invoke the sole supported launch selector through the reviewed delegatecall implementation",
+      "forbiddenWith": []
+    },
+    {
+      "id": "launch-wallet",
+      "component": "atomicLaunchRoute",
+      "authorityClass": "BOUND_APPLICANT_WALLET",
+      "power": "submit only its own fully bound launch transaction",
+      "forbiddenWith": []
+    }
+  ],
+  "properties": [
+    {
+      "id": "SP-EIP712-DOMAIN",
+      "category": "signatures",
+      "statement": "The permit digest uses EIP-712 name, version, chainId and permit-authority verifying contract and binds all 26 permit fields, the 17-field release and three-field kernel envelope.",
+      "enforcement": "ONCHAIN_AND_GOLDEN_VECTOR",
+      "componentIds": ["permitVerifier", "permitAuthority"],
+      "evidenceIds": ["permit-golden", "permit-authority"],
+      "invariantIds": ["INV-PERMIT-DIGEST"]
+    },
+    {
+      "id": "SP-PERMIT-REPLAY",
+      "category": "signatures",
+      "statement": "A successful consume requires the current signer epoch and exact per-repository nonce, permanently consumes the repository lineage and launchId, and advances the nonce only on success.",
+      "enforcement": "ONCHAIN",
+      "componentIds": ["permitAuthority", "permitVerifier"],
+      "evidenceIds": ["permit-authority", "cross-route-e2e"],
+      "invariantIds": ["INV-PERMIT-REPLAY", "INV-REPOSITORY-ONCE"]
+    },
+    {
+      "id": "SP-PERMIT-CANCELLATION",
+      "category": "signatures",
+      "statement": "Permit cancellation, approval-generation cancellation, signer disabling, time bounds and release retirement/deactivation fail closed without consuming a reusable nonce before one successful launch.",
+      "enforcement": "ONCHAIN",
+      "componentIds": ["permitAuthority", "permitVerifier"],
+      "evidenceIds": ["permit-authority"],
+      "invariantIds": ["INV-CANCELLATION"]
+    },
+    {
+      "id": "SP-RELEASE-BINDING",
+      "category": "signatures",
+      "statement": "Release generations are monotonic and bind exact authority, verifier, registry, profile, route, runtime code hashes, route writer authority and execution authority.",
+      "enforcement": "ONCHAIN",
+      "componentIds": ["permitVerifier", "permitAuthority", "registry", "atomicLaunchRoute"],
+      "evidenceIds": ["permit-authority", "real-graph-e2e"],
+      "invariantIds": ["INV-RELEASE-GRAPH"]
+    },
+    {
+      "id": "SP-CREATE2-GRAPH",
+      "category": "deployment",
+      "statement": "CREATE2 predictions bind wrapper deployer, salts, initcode, token and derived NFT metadata, renderer, ticks, price and recipients; direct implementation deployment cannot occupy the wrapper graph.",
+      "enforcement": "ONCHAIN",
+      "componentIds": ["reviewedFactoryImplementation", "routeGatedFactory", "shardToken", "shardHook", "shardNft"],
+      "evidenceIds": ["route-factory", "shard-launch-factory"],
+      "invariantIds": ["INV-CREATE2-PREDICTION"]
+    },
+    {
+      "id": "SP-DELEGATECALL-GATE",
+      "category": "deployment",
+      "statement": "The wrapper accepts only launch from its immutable route, verifies the implementation runtime hash again before delegatecall, rejects fallback selectors and preserves the reviewed slot-zero mapping layout.",
+      "enforcement": "ONCHAIN_AND_ARTIFACT_BINDING",
+      "componentIds": ["reviewedFactoryImplementation", "routeGatedFactory", "atomicLaunchRoute"],
+      "evidenceIds": ["route-factory"],
+      "invariantIds": ["INV-DELEGATECALL-SURFACE"]
+    },
+    {
+      "id": "SP-TRANSIENT-REENTRANCY",
+      "category": "reentrancy",
+      "statement": "Permit consumption and the full atomic launch entrypoint are guarded by Cancun transient-storage reentrancy locks; external effects revert atomically on callback failure.",
+      "enforcement": "ONCHAIN_AND_EVM_PROFILE",
+      "componentIds": ["permitAuthority", "atomicLaunchRoute"],
+      "evidenceIds": ["real-graph-e2e", "hook-attacks"],
+      "invariantIds": ["INV-ATOMIC-ROLLBACK"]
+    },
+    {
+      "id": "SP-V4-RETURN-DELTA",
+      "category": "uniswap-v4",
+      "statement": "The canonical hook declares both beforeSwapReturnDelta and afterSwapReturnDelta and uses signed hook deltas to retain only the ETH fee while preserving PoolManager delta settlement.",
+      "enforcement": "ONCHAIN_AND_UPSTREAM_V4_TESTS",
+      "componentIds": ["poolManager", "shardHook"],
+      "evidenceIds": ["hook-fees"],
+      "invariantIds": ["INV-V4-NONNEGATIVE-DELTA"]
+    },
+    {
+      "id": "SP-V4-PARTIAL-FILL",
+      "category": "uniswap-v4",
+      "statement": "When ETH is specified and a beforeSwap fee cannot be corrected on the unspecified return-delta side, any partial fill is rejected and leaves no fee; complete fills at the limit remain valid.",
+      "enforcement": "ONCHAIN",
+      "componentIds": ["shardHook"],
+      "evidenceIds": ["hook-fees"],
+      "invariantIds": ["INV-PARTIAL-FILL"]
+    },
+    {
+      "id": "SP-V4-CANONICAL-POOL",
+      "category": "uniswap-v4",
+      "statement": "The hook permits only native ETH versus its immutable SHARD token, exact pool fee, tick spacing, hook address and reviewed start price, and rejects swaps before one-shot initialization or through a foreign pool.",
+      "enforcement": "ONCHAIN",
+      "componentIds": ["poolManager", "shardHook"],
+      "evidenceIds": ["hook-fees", "hook-attacks"],
+      "invariantIds": ["INV-CANONICAL-POOL"]
+    },
+    {
+      "id": "SP-V4-FEE-ACCOUNTING",
+      "category": "uniswap-v4",
+      "statement": "Every swap quadrant charges the inclusive ETH fee with carried remainders; builder plus Programmable plus holder accounting conserves every wei and fees remain covered by ETH or ERC-6909 claims.",
+      "enforcement": "ONCHAIN_AND_FUZZ",
+      "componentIds": ["feePolicyVerifier", "registry", "shardHook"],
+      "evidenceIds": ["fee-policy", "hook-fees", "fee-split"],
+      "invariantIds": ["INV-FEE-CONSERVATION", "INV-FEE-CUMULATIVE", "INV-FEE-POLICY-IMMUTABLE"]
+    },
+    {
+      "id": "SP-ROLLBACK-ATOMICITY",
+      "category": "lifecycle",
+      "statement": "Permit consumption, repository marking, factory deployment, graph validation and registry registration occur in one transaction so any downstream failure rolls every effect back and permits an exact retry.",
+      "enforcement": "EVM_ATOMICITY_AND_E2E",
+      "componentIds": ["permitAuthority", "atomicLaunchRoute", "routeGatedFactory", "registry"],
+      "evidenceIds": ["real-graph-e2e", "registry-lifecycle"],
+      "invariantIds": ["INV-ATOMIC-ROLLBACK"]
+    },
+    {
+      "id": "SP-REPOSITORY-ONCE",
+      "category": "lifecycle",
+      "statement": "Repository uniqueness lives permanently in the stable Permit Authority across signer epochs, release generations and competing real route stacks; registry retry idempotence does not weaken it.",
+      "enforcement": "ONCHAIN_AND_CROSS_ROUTE_E2E",
+      "componentIds": ["permitAuthority", "registry", "atomicLaunchRoute"],
+      "evidenceIds": ["permit-authority", "cross-route-e2e", "registry-lifecycle"],
+      "invariantIds": ["INV-REPOSITORY-ONCE"]
+    },
+    {
+      "id": "SP-FINALITY",
+      "category": "lifecycle",
+      "statement": "Finalization requires the observed block, transaction identity, configured minimum depth, nonzero one-use evidence and canonical observed and confirmed-head block hashes inside the native blockhash window.",
+      "enforcement": "ONCHAIN",
+      "componentIds": ["registry"],
+      "evidenceIds": ["registry-lifecycle"],
+      "invariantIds": ["INV-REGISTRY-MONOTONIC"]
+    },
+    {
+      "id": "SP-REORG",
+      "category": "lifecycle",
+      "statement": "A reorg or stale proof fails closed when either supplied historical block hash differs from blockhash; unavailable history beyond 256 blocks cannot be treated as canonical evidence.",
+      "enforcement": "ONCHAIN",
+      "componentIds": ["registry"],
+      "evidenceIds": ["registry-lifecycle"],
+      "invariantIds": ["INV-REGISTRY-MONOTONIC"]
+    },
+    {
+      "id": "SP-REGISTRY-LIFECYCLE",
+      "category": "lifecycle",
+      "statement": "Observed becomes finalized or terminally revoked; revision one and fee claims remain immutable, approval, deployment and evidence are one-use, and revocation cannot be repaired by record rewrite.",
+      "enforcement": "ONCHAIN_AND_INVARIANT",
+      "componentIds": ["registry"],
+      "evidenceIds": ["registry-lifecycle", "registry-invariants"],
+      "invariantIds": ["INV-REGISTRY-MONOTONIC", "INV-FEE-POLICY-IMMUTABLE", "INV-ONE-USE-REGISTRY", "INV-REVOCATION-TERMINAL"]
+    },
+    {
+      "id": "SP-ROLE-SEPARATION",
+      "category": "access-control",
+      "statement": "Permit and registry authority classes are distinct at construction and permanently lineage-separated; the immutable route is the sole registry writer and wrapper launch caller.",
+      "enforcement": "ONCHAIN_AND_INVARIANT",
+      "componentIds": ["permitAuthority", "registry", "routeGatedFactory"],
+      "evidenceIds": ["permit-authority", "registry-lifecycle", "route-factory"],
+      "invariantIds": ["INV-ROLE-SEPARATION"]
+    }
+  ],
+  "invariants": [
+    {"id": "INV-PERMIT-DIGEST", "evidenceId": "permit-golden", "function": "test_javascriptGoldenMatchesAll26Permit17ReleaseAnd3KernelFields"},
+    {"id": "INV-PERMIT-REPLAY", "evidenceId": "permit-authority", "function": "test_signedPermitConsumesCanonicalDigestAndHardRejectsReplay"},
+    {"id": "INV-CANCELLATION", "evidenceId": "permit-authority", "function": "test_cancelledAndExpiredGenerationsReuseNonceUntilOneSuccess"},
+    {"id": "INV-RELEASE-GRAPH", "evidenceId": "permit-authority", "function": "test_releaseValidationBindsExactProfileGraphAndRegistryAuthority"},
+    {"id": "INV-CREATE2-PREDICTION", "evidenceId": "shard-launch-factory", "function": "test_deployedAddressesEqualPredictions"},
+    {"id": "INV-DELEGATECALL-SURFACE", "evidenceId": "route-factory", "function": "test_copiedLaunchAndArbitraryImplementationSelectorsCannotReachDelegateExecution"},
+    {"id": "INV-V4-NONNEGATIVE-DELTA", "evidenceId": "hook-fees", "function": "testFuzz_poolIsNeverLeftWithNegativeDelta"},
+    {"id": "INV-PARTIAL-FILL", "evidenceId": "hook-fees", "function": "test_partialFillIsRejectedNotOvercharged"},
+    {"id": "INV-CANONICAL-POOL", "evidenceId": "hook-attacks", "function": "test_ATTACK_cannotInitialiseForeignPool"},
+    {"id": "INV-FEE-CONSERVATION", "evidenceId": "hook-fees", "function": "testFuzz_theSplitConservesEveryFee"},
+    {"id": "INV-FEE-CUMULATIVE", "evidenceId": "fee-split", "function": "testFuzz_outerFeeIsCumulative"},
+    {"id": "INV-ATOMIC-ROLLBACK", "evidenceId": "real-graph-e2e", "function": "test_downstreamRuntimeSetFailureRollsBackPermitRepoFactoryGraphAndRegistryThenRetrySucceeds"},
+    {"id": "INV-REPOSITORY-ONCE", "evidenceId": "cross-route-e2e", "function": "test_twoRealReleaseStacksCanProduceOnlyOneGraphForOneRepositoryLineage"},
+    {"id": "INV-REGISTRY-MONOTONIC", "evidenceId": "registry-invariants", "function": "invariant_countsAreMonotonicAndMatchSuccessfulTransitions"},
+    {"id": "INV-FEE-POLICY-IMMUTABLE", "evidenceId": "registry-invariants", "function": "invariant_feePolicyAndThreeClaimsRemainImmutable"},
+    {"id": "INV-ONE-USE-REGISTRY", "evidenceId": "registry-invariants", "function": "invariant_approvalDeploymentAndRevisionAreOneUseBound"},
+    {"id": "INV-REVOCATION-TERMINAL", "evidenceId": "registry-invariants", "function": "invariant_revocationIsTerminal"},
+    {"id": "INV-ROLE-SEPARATION", "evidenceId": "registry-lifecycle", "function": "test_roleSeparationAndWrongCallerFailClosed"}
+  ],
+  "testEvidence": [
+    {
+      "id": "permit-golden",
+      "path": "test/ProgrammableLaunchPermitV1Golden.t.sol",
+      "functions": ["test_javascriptGoldenMatchesAll26Permit17ReleaseAnd3KernelFields"]
+    },
+    {
+      "id": "permit-authority",
+      "path": "test/ProgrammableLaunchPermitAuthorityV1.t.sol",
+      "functions": [
+        "test_signedPermitConsumesCanonicalDigestAndHardRejectsReplay",
+        "test_cancelledAndExpiredGenerationsReuseNonceUntilOneSuccess",
+        "test_repositoryConsumptionSurvivesSignerAndReleaseRotation",
+        "test_signerRotationInvalidatesOldEpochAndNewEpochCanReissue",
+        "test_crossProductActivationDoesNotRetireAndExplicitRetirementHasExactBoundary",
+        "test_approvalGenerationCancellationUsesNumericRepositoryAndBlocksEveryPermitGeneration",
+        "test_releaseValidationBindsExactProfileGraphAndRegistryAuthority",
+        "test_rolesStayDisjointIncludingDelayedDefaultAdminTransfer"
+      ]
+    },
+    {
+      "id": "fee-policy",
+      "path": "test/ProgrammableExactShardsFeePolicyVerifierV2.t.sol",
+      "functions": [
+        "test_exactReviewedEconomicTemplateAndBindingMatchV2Manifest",
+        "test_everyEconomicTemplateFieldMutationFailsClosed"
+      ]
+    },
+    {
+      "id": "registry-lifecycle",
+      "path": "test/ProgrammableExactShardsRegistryV1.t.sol",
+      "functions": [
+        "test_exactRegistryReceiptRetryIsIdempotentWhileRepositoryOnceLivesInPermitAuthority",
+        "test_completeLifecycleFinalityImmutableRecordAndRevocation",
+        "test_finalityFailsClosedOnDepthHashAndEvidenceReplay",
+        "test_roleSeparationAndWrongCallerFailClosed"
+      ]
+    },
+    {
+      "id": "registry-invariants",
+      "path": "test/invariant/ProgrammableExactShardsRegistryV1Invariant.t.sol",
+      "functions": [
+        "invariant_countsAreMonotonicAndMatchSuccessfulTransitions",
+        "invariant_feePolicyAndThreeClaimsRemainImmutable",
+        "invariant_approvalDeploymentAndRevisionAreOneUseBound",
+        "invariant_revocationIsTerminal"
+      ]
+    },
+    {
+      "id": "route-factory",
+      "path": "test/ProgrammableExactShardsRouteGatedFactoryV2.t.sol",
+      "functions": [
+        "test_exactReviewedImplementationExecutesOnlyThroughPinnedCallerAndPersistsConfiguration",
+        "test_copiedLaunchAndArbitraryImplementationSelectorsCannotReachDelegateExecution",
+        "test_directImplementationGraphCannotOccupyWrapperGraph",
+        "test_implementationRuntimeMutationFailsBeforeAnyGraphDeployment"
+      ]
+    },
+    {
+      "id": "real-graph-e2e",
+      "path": "test/ProgrammableExactShardsRealGraphE2EV1.t.sol",
+      "functions": [
+        "test_realAuthorityRegistryCoordinatorAndReviewedFactoryLaunchOneExactGraph",
+        "test_downstreamRuntimeSetFailureRollsBackPermitRepoFactoryGraphAndRegistryThenRetrySucceeds",
+        "test_postPermitPresentationNameOrSymbolSubstitutionFailsBeforeConsumeOrDeployment",
+        "test_postPermitTechnicalAndDerivationMutationsCannotConsumeOrDeployRealGraph"
+      ]
+    },
+    {
+      "id": "cross-route-e2e",
+      "path": "test/ProgrammableExactShardsCrossRouteRealGraphE2EV1.t.sol",
+      "functions": ["test_twoRealReleaseStacksCanProduceOnlyOneGraphForOneRepositoryLineage"]
+    },
+    {
+      "id": "hook-fees",
+      "path": "lib/shards-v1/test/ShardHookFeesV1.t.sol",
+      "functions": [
+        "test_feeIsExactlyOnePercent_zeroForOne_exactIn",
+        "test_feeIsExactlyOnePercent_zeroForOne_exactOut",
+        "test_feeIsExactlyOnePercent_oneForZero_exactIn",
+        "test_feeIsExactlyOnePercent_oneForZero_exactOut",
+        "test_partialFillIsRejectedNotOvercharged",
+        "test_partialFillIsRejectedOnExactOutputEthToo",
+        "test_completeFillLandingExactlyOnTheLimitSucceeds",
+        "testFuzz_theSplitConservesEveryFee",
+        "testFuzz_poolIsNeverLeftWithNegativeDelta"
+      ]
+    },
+    {
+      "id": "hook-attacks",
+      "path": "lib/shards-v1/test/ShardHookAttackV1.t.sol",
+      "functions": [
+        "test_ATTACK_cannotInitialiseForeignPool",
+        "test_ATTACK_cannotFrontRunInitialiseAtDifferentPrice",
+        "test_ATTACK_reentrantTransferDuringReleasingFails",
+        "test_ATTACK_reentrantBuyDuringUnlockFails",
+        "test_ATTACK_reentrantSellDuringUnlockFails",
+        "test_ATTACK_reentrantClaimFails"
+      ]
+    },
+    {
+      "id": "fee-split",
+      "path": "lib/shards-v1/test/ShardFeeSplitV1.t.sol",
+      "functions": [
+        "testFuzz_split_conserves",
+        "testFuzz_splitIsConservativeAndCumulative",
+        "testFuzz_outerFeeIsCumulative",
+        "test_builderClaimRevertsAndRestoresAccrualForRejectingRecipient",
+        "test_launcherClaimRevertsAndRestoresAccrualForRejectingRecipient"
+      ]
+    },
+    {
+      "id": "shard-launch-factory",
+      "path": "lib/shards-v1/test/ShardLaunchFactoryV1.t.sol",
+      "functions": [
+        "test_predictionHelpersAreDeterministicAndUseExactInitCode",
+        "test_effectiveTokenSaltBindsHookSaltAndEveryLaunchParameter",
+        "test_deployedAddressesEqualPredictions",
+        "test_duplicateTokenSaltForSameMetadataRevertsWithoutChangingFirstLaunch",
+        "test_failureAfterDeploymentsRollsBackTokenHookNftMappingAndEvent"
+      ]
+    }
+  ],
+  "sourceRequirements": [
+    {
+      "id": "source-eip712",
+      "componentId": "permitVerifier",
+      "includesAll": [
+        "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)",
+        "MessageHashUtils.toTypedDataHash",
+        "if (permit.chainId != chainId) revert WrongChain"
+      ]
+    },
+    {
+      "id": "source-permit-replay",
+      "componentId": "permitAuthority",
+      "includesAll": [
+        "mapping(bytes32 repositoryKey => uint256 nonce) public nextNonce",
+        "if (permit.nonce != nonce) revert NonceMismatch",
+        "nonReentrant",
+        "RepositoryAlreadyConsumed"
+      ]
+    },
+    {
+      "id": "source-delegatecall",
+      "componentId": "routeGatedFactory",
+      "includesAll": [
+        "if (msg.sender != AUTHORIZED_ROUTE) revert UnauthorizedLaunchCaller",
+        "if (actual != expected) revert ImplementationRuntimeCodeHashMismatch",
+        "delegatecall(gas(), implementation",
+        "revert UnsupportedFactoryCall(msg.sig)"
+      ]
+    },
+    {
+      "id": "source-atomic-transient-guard",
+      "componentId": "atomicLaunchRoute",
+      "includesAll": [
+        "ReentrancyGuardTransient",
+        "external\n        nonReentrant",
+        "PERMIT_AUTHORITY.consumePermit",
+        "FACTORY.launch",
+        "REGISTRY.registerLaunch"
+      ]
+    },
+    {
+      "id": "source-v4-deltas",
+      "componentId": "shardHook",
+      "includesAll": [
+        "beforeSwapReturnDelta: true",
+        "afterSwapReturnDelta: true",
+        "toBeforeSwapDelta",
+        "PartialFillNotSupported",
+        "PoolId.unwrap(key.toId()) != PoolId.unwrap(poolKey.toId())",
+        "_distributeFee(fee);"
+      ]
+    },
+    {
+      "id": "source-finality-reorg",
+      "componentId": "registry",
+      "includesAll": [
+        "confirmedHeadBlockNumber) < uint256(proof.observedBlockNumber) + MINIMUM_FINALITY_BLOCKS",
+        "_requireCanonicalHistoricalBlock(proof.observedBlockNumber, proof.observedBlockHash)",
+        "block.number - blockNumber > 256",
+        "bytes32 canonical = blockhash(blockNumber)",
+        "latestRecordRevision: 1"
+      ]
+    }
+  ],
+  "slitherEvidence": {
+    "requiredForRelease": true,
+    "status": "COMPLETE",
+    "evidencePath": "security/shards-slither-evidence-v2.json",
+    "evidenceSha256": "0xd1e45d6cc0a380c4a74e0c18e13086fa786e880a056906df85015ca50f0065c9",
+    "analyzedComponentBindingSha256": "0x097e5d7e5e490a16febe309c7c057aa3be48d61cbd037c1e651ee3cf80191a91",
+    "actionableHighFindings": 0,
+    "rawMediumInstances": 9,
+    "actionableMediumFindings": 0,
+    "untriagedMediumFindings": 0,
+    "mediumCountSemantics": "actionableMediumFindings and untriagedMediumFindings never erase rawMediumInstances",
+    "suppressionsReviewed": true,
+    "triageReviewedBy": "independent-security-workflow",
+    "rawMediumTriage": [
+      {
+        "id": "SLITHER-M-001",
+        "detector": "incorrect-equality",
+        "componentId": "permitAuthority",
+        "sourcePath": "contracts/src/ProgrammableLaunchPermitAuthorityV1.sol",
+        "function": "_grantRole",
+        "lineRange": [612, 638],
+        "findingLines": [614],
+        "rawInstance": "role == CONSUMER_ROLE && account.code.length == 0",
+        "rawDetectorFingerprintSha256": "0x99a07c81703ca215f4ded91b42ca72bd17f5a2cce1a538b5ce59491a2424f34a",
+        "classification": "INTENTIONAL_EXACT_PREDICATE",
+        "rationale": "Only the exact consumer role requires contract code; exact role equality is the authorization boundary.",
+        "actionable": false
+      },
+      {
+        "id": "SLITHER-M-002",
+        "detector": "incorrect-equality",
+        "componentId": "permitAuthority",
+        "sourcePath": "contracts/src/ProgrammableLaunchPermitAuthorityV1.sol",
+        "function": "_requirePermitUnspentAndApprovalActive",
+        "lineRange": [533, 551],
+        "findingLines": [540],
+        "rawInstance": "status.state == PermitStateV1.CANCELLED",
+        "rawDetectorFingerprintSha256": "0xe6b9c856ddd3472c0badfac8f357de4316eb99dfda50707b8a6938ab8453fcb1",
+        "classification": "INTENTIONAL_EXACT_PREDICATE",
+        "rationale": "Permit status is an enum and the exact terminal CANCELLED state requires a distinct error.",
+        "actionable": false
+      },
+      {
+        "id": "SLITHER-M-003",
+        "detector": "incorrect-equality",
+        "componentId": "permitAuthority",
+        "sourcePath": "contracts/src/ProgrammableLaunchPermitAuthorityV1.sol",
+        "function": "_requirePermitUnspentAndApprovalActive",
+        "lineRange": [533, 551],
+        "findingLines": [539],
+        "rawInstance": "status.state == PermitStateV1.CONSUMED",
+        "rawDetectorFingerprintSha256": "0x41e1b5dbf80ddf5aa5dbe1d7b1148af365652e15611cdb98b43e4332b65ac833",
+        "classification": "INTENTIONAL_EXACT_PREDICATE",
+        "rationale": "Permit status is an enum and the exact terminal CONSUMED state requires a distinct error.",
+        "actionable": false
+      },
+      {
+        "id": "SLITHER-M-004",
+        "detector": "locked-ether",
+        "componentId": "routeGatedFactory",
+        "sourcePath": "contracts/src/ProgrammableExactShardsRouteGatedFactoryV2.sol",
+        "function": "receive",
+        "lineRange": [20, 294],
+        "findingLines": [208, 209, 210],
+        "rawInstance": "receive() external payable",
+        "rawDetectorFingerprintSha256": "0x849ea651c3fea90767972dc15912ab04fba98b2159fe134e70b3dac20439016a",
+        "classification": "FALSE_POSITIVE",
+        "rationale": "The receive function unconditionally reverts DirectEtherTransferUnsupported, so the wrapper cannot accept or lock ETH through it.",
+        "actionable": false
+      },
+      {
+        "id": "SLITHER-M-005",
+        "detector": "uninitialized-local",
+        "componentId": "permitVerifier",
+        "sourcePath": "contracts/src/ProgrammableLaunchPermitVerifierV1.sol",
+        "function": "generationBindingHash",
+        "lineRange": [100, 100],
+        "findingLines": [100],
+        "rawInstance": "GenerationBindingPreimageV1 memory preimage",
+        "rawDetectorFingerprintSha256": "0xd0bc975c3405180eec6f72b98e4d9752975ee18434e0d82ffb041943469de011",
+        "classification": "FALSE_POSITIVE",
+        "rationale": "Solidity zero-initializes the memory struct and every field included in the final hash is explicitly assigned before use.",
+        "actionable": false
+      },
+      {
+        "id": "SLITHER-M-006",
+        "detector": "uninitialized-local",
+        "componentId": "atomicLaunchRoute",
+        "sourcePath": "contracts/src/ProgrammableExactShardsAtomicLaunchRouteV1.sol",
+        "function": "_runtimeCodeSetHash",
+        "lineRange": [681, 681],
+        "findingLines": [681],
+        "rawInstance": "RuntimeCodeSetV1 memory runtimeSet",
+        "rawDetectorFingerprintSha256": "0xa9399cd40279c7ff527d8f85486129fabcc5a7d5e68c00a83770691a7ef25c21",
+        "classification": "FALSE_POSITIVE",
+        "rationale": "Solidity zero-initializes the memory struct and every runtime-set field included in the final hash is explicitly assigned before use.",
+        "actionable": false
+      },
+      {
+        "id": "SLITHER-M-007",
+        "detector": "uninitialized-local",
+        "componentId": "routeGatedFactory",
+        "sourcePath": "contracts/src/ProgrammableExactShardsRouteGatedFactoryV2.sol",
+        "function": "_configurationHash",
+        "lineRange": [257, 257],
+        "findingLines": [257],
+        "rawInstance": "ConfigurationDataV2 memory data",
+        "rawDetectorFingerprintSha256": "0xf971a61ce7d0ab6bbb7959f21be7997d1e9f3e815341ba79760e22cc96e4230e",
+        "classification": "FALSE_POSITIVE",
+        "rationale": "Solidity zero-initializes the memory struct and every configuration field included in the final hash is explicitly assigned before use.",
+        "actionable": false
+      },
+      {
+        "id": "SLITHER-M-008",
+        "detector": "unused-return",
+        "componentId": "permitVerifier",
+        "sourcePath": "contracts/src/ProgrammableLaunchPermitVerifierV1.sol",
+        "function": "validEOASignature",
+        "lineRange": [324, 328],
+        "findingLines": [326],
+        "rawInstance": "(address recovered, ECDSA.RecoverError error,) = ECDSA.tryRecover(digest, signature)",
+        "rawDetectorFingerprintSha256": "0xa00f9873ef51a0309130716087d4b210c55031b6278043f9c31f4de53f62eb9b",
+        "classification": "INTENTIONAL_UNUSED_AUXILIARY_RETURN",
+        "rationale": "The recovered signer and error enum are both checked; the third return is auxiliary error data not needed for the boolean verifier result.",
+        "actionable": false
+      },
+      {
+        "id": "SLITHER-M-009",
+        "detector": "unused-return",
+        "componentId": "atomicLaunchRoute",
+        "sourcePath": "contracts/src/ProgrammableExactShardsAtomicLaunchRouteV1.sol",
+        "function": "launch",
+        "lineRange": [201, 277],
+        "findingLines": [236, 237, 238, 239, 240, 241, 242],
+        "rawInstance": "(, bytes32 repositoryKey,) = PERMIT_AUTHORITY.consumePermit(...) ",
+        "rawDetectorFingerprintSha256": "0xd9e411a2df069353d635bcb808c05ce63b8dc8275aaff39b5eb204c5d497e7b5",
+        "classification": "INTENTIONAL_UNUSED_AUXILIARY_RETURN",
+        "rationale": "The route uses repositoryKey for its completion event; Permit Authority internally validates, records and emits the digest and nonce consumption before returning them.",
+        "actionable": false
+      }
+    ],
+    "manualV4HookReview": {
+      "reviewedBy": "independent-security-workflow",
+      "componentId": "shardHook",
+      "allFourEthFeeQuadrantsCorrect": true,
+      "ethSpecifiedChargedBeforeAndFullFillEnforced": true,
+      "ethUnspecifiedChargedAfterOnActualDelta": true,
+      "selfSwapsSkipCallbacksAndChargeExplicitly": true,
+      "externalFeeRecipientCallInsideCallbacks": false,
+      "pairedCallbackScratchReentrancyReachable": false,
+      "requiredSourceFixFound": false,
+      "exactHookSourceApprovalRemainsValid": true
+    }
+  },
+  "output": "spec/shards-security-properties-v2.json"
+}
