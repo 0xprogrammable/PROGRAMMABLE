@@ -495,6 +495,23 @@ export function buildCustomLaunchSelection(input: Readonly<{
   };
 }
 
+export function customLaunchFixedTokenIdentityCopyV1(
+  descriptor: LaunchDescriptorV2,
+): string | null {
+  const fieldIds = new Set(
+    descriptor.configurationSchema.fields.map(({ fieldId }) => fieldId),
+  );
+  const tokenNameIsEditable = fieldIds.has("tokenName");
+  const tokenSymbolIsEditable = fieldIds.has("tokenSymbol");
+  if (tokenNameIsEditable && tokenSymbolIsEditable) return null;
+  if (!tokenNameIsEditable && !tokenSymbolIsEditable) {
+    return "Token identity is fixed by the approved source";
+  }
+  return tokenNameIsEditable
+    ? "Token ticker is fixed by the approved source"
+    : "Token name is fixed by the approved source";
+}
+
 export function defaultLaunchRoute(descriptor: LaunchDescriptorV2) {
   const route = descriptor.routes.find(
     ({ choiceId }) => choiceId === descriptor.defaultChoiceId,
@@ -1410,6 +1427,7 @@ export function CustomLaunchExperience({
   const [configuration, setConfiguration] = useState<Record<string, string>>({});
   const [presentation, setPresentation] = useState<PresentationForm>(emptyPresentation);
   const [presentationVersion, setPresentationVersion] = useState(0);
+  const [imageUploading, setImageUploading] = useState(false);
   const [setupLoading, setSetupLoading] = useState(false);
   const [launchProgress, setLaunchProgress] = useState<LaunchProgress>("idle");
   const [statusMessage, setStatusMessage] = useState("");
@@ -1430,7 +1448,8 @@ export function CustomLaunchExperience({
     githubUserId,
     walletAccount: wallet?.account ?? null,
   });
-  const imageInputRef = useRef<HTMLInputElement>(null);
+  const imageSelectionGenerationRef = useRef(0);
+  const imageUploadAbortControllerRef = useRef<AbortController | null>(null);
   const flowGenerationRef = useRef(0);
   const applicationsRequestGenerationRef = useRef(0);
   const applicationsAbortControllerRef = useRef<AbortController | null>(null);
@@ -1458,10 +1477,14 @@ export function CustomLaunchExperience({
   }, []);
 
   const resetApplicationScopedState = useCallback(() => {
+    imageSelectionGenerationRef.current += 1;
+    imageUploadAbortControllerRef.current?.abort();
+    imageUploadAbortControllerRef.current = null;
     setDescriptor(null);
     setConfiguration({});
     setPresentation(emptyPresentation);
     setPresentationVersion(0);
+    setImageUploading(false);
     setSetupLoading(false);
     setLaunchProgress("idle");
     setStatusMessage("");
@@ -1596,6 +1619,8 @@ export function CustomLaunchExperience({
 
   useEffect(() => () => {
     flowGenerationRef.current += 1;
+    imageSelectionGenerationRef.current += 1;
+    imageUploadAbortControllerRef.current?.abort();
     applicationsAbortControllerRef.current?.abort();
     flowAbortControllerRef.current?.abort();
   }, []);
@@ -1887,10 +1912,17 @@ export function CustomLaunchExperience({
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file || !selected) return;
+    imageUploadAbortControllerRef.current?.abort();
+    const imageController = new AbortController();
+    imageUploadAbortControllerRef.current = imageController;
+    const imageSelectionGeneration = ++imageSelectionGenerationRef.current;
     const generation = flowGenerationRef.current;
     const applicationHandle = selected.applicationHandle;
-    const isCurrent = () => generation === flowGenerationRef.current
+    const isCurrent = () => !imageController.signal.aborted
+      && imageSelectionGeneration === imageSelectionGenerationRef.current
+      && generation === flowGenerationRef.current
       && selected.applicationHandle === applicationHandle;
+    setImageUploading(true);
     setApplicantRecovery("none");
     setError("");
     setStatusMessage("Preparing image");
@@ -1905,19 +1937,36 @@ export function CustomLaunchExperience({
         method: "POST",
         headers: { authorization: `Bearer ${session.accessToken}` },
         body: form,
+        cache: "no-store",
+        credentials: "same-origin",
+        redirect: "error",
+        signal: imageController.signal,
       });
-      const body = await response.json() as { url?: string; error?: string };
+      const contentType = response.headers.get("content-type")
+        ?.split(";", 1)[0]?.trim().toLowerCase();
+      if (contentType !== "application/json" || response.redirected) {
+        throw new Error("Unable to verify the uploaded image");
+      }
+      const body = await response.json() as { url?: unknown; error?: unknown };
       if (!isCurrent()) return;
-      if (!response.ok || !body.url) throw new Error(body.error ?? "Unable to upload image");
+      if (!response.ok) {
+        throw new Error(typeof body.error === "string"
+          ? body.error
+          : "Unable to upload image");
+      }
+      if (typeof body.url !== "string" || !isProgrammableTokenImageUrl(body.url)) {
+        throw new Error("Unable to verify the uploaded image");
+      }
+      const imageUrl = body.url;
       const contentSha256 = await fileSha256V2(
         new Uint8Array(await image.arrayBuffer()),
       );
       if (!isCurrent()) return;
       setPresentation((current) => ({
         ...current,
-        imagePreview: body.url!,
+        imagePreview: imageUrl,
         image: {
-          uri: body.url!,
+          uri: imageUrl,
           contentSha256,
           mediaType: "image/webp",
           byteLength: image.size,
@@ -1930,6 +1979,11 @@ export function CustomLaunchExperience({
       if (!isCurrent()) return;
       setApplicantFailure(caught);
       setStatusMessage("");
+    } finally {
+      if (isCurrent()) {
+        imageUploadAbortControllerRef.current = null;
+        setImageUploading(false);
+      }
     }
   }
 
@@ -2086,6 +2140,10 @@ export function CustomLaunchExperience({
   async function launch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selected || !descriptor || pendingGrantReissue !== null) return;
+    if (imageUploadAbortControllerRef.current !== null) {
+      setError("Wait for the project image to finish preparing");
+      return;
+    }
     if (githubPrincipalHash === null) {
       setError("Sign in again with the GitHub account that opened this submission");
       return;
@@ -2645,6 +2703,9 @@ export function CustomLaunchExperience({
       : "Try again";
 
   const approvedRoute = descriptor ? defaultLaunchRoute(descriptor) : null;
+  const fixedTokenIdentityCopy = descriptor
+    ? customLaunchFixedTokenIdentityCopyV1(descriptor)
+    : null;
   const feeReview = approvedRoute
     ? customLaunchFeeReviewV1(approvedRoute.feePolicy)
     : null;
@@ -2781,17 +2842,17 @@ export function CustomLaunchExperience({
         </section>
       ) : (
         <form className={styles.setupSheet} aria-busy={launchProgress !== "idle"} aria-describedby={error ? "custom-launch-form-error" : undefined} onSubmit={launch}>
-          <fieldset disabled={launchProgress !== "idle" || pendingGrantReissue !== null || applicantRecovery !== "none"}>
+          <fieldset aria-busy={imageUploading} disabled={launchProgress !== "idle" || imageUploading || pendingGrantReissue !== null || applicantRecovery !== "none"}>
             <section className={styles.formSection}>
               <div className={styles.sectionHeading}><span aria-hidden="true">01</span><div><h2>Project details</h2></div></div>
               <div className={styles.identityGrid}>
                 <div className={styles.imageField}>
                   <span>Project image</span>
-                  <button className={styles.imageButton} type="button" aria-label={presentation.image ? "Change project image" : "Choose project image"} onClick={() => imageInputRef.current?.click()}>
-                    {isProgrammableTokenImageUrl(presentation.imagePreview) ? <Image src={getTokenCardImageSource(presentation.imagePreview)} alt="Project preview" width={150} height={150} unoptimized /> : <><ImagePlus aria-hidden="true" size={22} /><span>Choose image</span></>}
-                  </button>
+                  <label className={styles.imageButton} aria-busy={imageUploading}>
+                    {imageUploading ? <><LoaderCircle aria-hidden="true" className={styles.spin} size={22} /><span>Preparing image</span></> : isProgrammableTokenImageUrl(presentation.imagePreview) ? <Image src={getTokenCardImageSource(presentation.imagePreview)} alt="Project image preview" width={150} height={150} unoptimized /> : <><ImagePlus aria-hidden="true" size={22} /><span>Choose image</span></>}
+                    <input className={styles.visuallyHidden} type="file" aria-label={presentation.image ? "Change project image" : "Choose project image"} accept="image/png,image/jpeg,image/webp" onChange={(event) => void selectImage(event)} />
+                  </label>
                   {presentation.image ? <button className={styles.removeImageButton} type="button" onClick={() => setPresentation((current) => ({ ...current, image: null, imagePreview: "" }))}>Remove image</button> : null}
-                  <input ref={imageInputRef} className={styles.visuallyHidden} type="file" tabIndex={-1} aria-label="Choose project image" accept="image/png,image/jpeg,image/webp" onChange={(event) => void selectImage(event)} />
                 </div>
                 <div className={styles.fieldStack}>
                   <label><span>Short description</span><textarea value={presentation.description} maxLength={4096} onChange={(event) => setPresentation((current) => ({ ...current, description: event.target.value }))} placeholder="What does this project make possible?" /></label>
@@ -2813,19 +2874,27 @@ export function CustomLaunchExperience({
               </div>
             </section>
 
-            {descriptor.configurationSchema.fields.length > 0 ? (
-              <section className={styles.formSection}>
-                <div className={styles.sectionHeading}><span aria-hidden="true">02</span><div><h2>Approved launch parameters</h2></div></div>
+            <section className={styles.formSection}>
+              <div className={styles.sectionHeading}><span aria-hidden="true">02</span><div><h2>Approved launch parameters</h2></div></div>
+              {fixedTokenIdentityCopy ? (
+                <dl className={styles.fixedParameterList}>
+                  <div>
+                    <dt>Token identity</dt>
+                    <dd>{fixedTokenIdentityCopy}</dd>
+                  </div>
+                </dl>
+              ) : null}
+              {descriptor.configurationSchema.fields.length > 0 ? (
                 <div className={styles.parameterGrid}>
                   {descriptor.configurationSchema.fields.map((field) => (
                     <ConfigurationField key={field.fieldId} field={field} value={configuration[field.fieldId] ?? ""} onChange={(value) => setConfiguration((current) => ({ ...current, [field.fieldId]: value }))} />
                   ))}
                 </div>
-              </section>
-            ) : null}
+              ) : null}
+            </section>
 
             <section className={styles.formSection}>
-              <div className={styles.sectionHeading}><span aria-hidden="true">{descriptor.configurationSchema.fields.length > 0 ? "03" : "02"}</span><div><h2>Review</h2></div></div>
+              <div className={styles.sectionHeading}><span aria-hidden="true">03</span><div><h2>Review</h2></div></div>
               <dl className={styles.reviewList}>
                 <div><dt>Source</dt><dd>{selected.repositoryFullName} · {selected.commitOid.slice(0, 9)}</dd></div>
                 <div><dt>Network</dt><dd>{chainLabel(approvedRoute?.chainId)}</dd></div>
