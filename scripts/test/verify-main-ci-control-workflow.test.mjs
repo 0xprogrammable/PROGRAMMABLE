@@ -39,10 +39,20 @@ test("CI control guard executes only exact default-branch code over inert candid
 });
 
 test("trusted guard is bound to the exact audited main candidate commit and tree", () => {
-  assert.match(workflow, /APPROVED_MAIN_CI_CONTROL_COMMIT: 6520f1c4af583bd9420549dd811db8e1e301696e/u);
-  assert.match(workflow, /APPROVED_MAIN_CI_CONTROL_TREE: e5104254109e7c0f58a59c0cc5b9ad8fddd04f6c/u);
+  assert.match(workflow, /APPROVED_MAIN_CI_CONTROL_COMMIT: 34e8c233e71ca0f2dcc68d40af70632b86b2a92a/u);
+  assert.match(workflow, /APPROVED_MAIN_CI_CONTROL_TREE: 525b5524e2c12c84753f7ac46788f7f244dc9709/u);
   assert.match(workflow, /--approved-commit "\$APPROVED_MAIN_CI_CONTROL_COMMIT"/u);
   assert.match(workflow, /--approved-tree "\$APPROVED_MAIN_CI_CONTROL_TREE"/u);
+});
+
+test("trusted production intake uses the exact current Node 24 LTS runtime", () => {
+  const publicIntake = section(workflow, "  public-intake:");
+  assert.match(
+    publicIntake,
+    /actions\/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7\.0\.0/u
+  );
+  assert.match(publicIntake, /node-version: 24\.19\.0/u);
+  assert.doesNotMatch(publicIntake, /node-version: (?:20|22)(?:\D|$)/u);
 });
 
 function section(source, start, end = null) {

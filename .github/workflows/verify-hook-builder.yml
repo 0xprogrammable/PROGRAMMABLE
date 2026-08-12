@@ -73,9 +73,9 @@ jobs:
           test "$(git -C "$GITHUB_WORKSPACE/base" rev-parse HEAD)" = "$EXPECTED_BASE_SHA"
 
       - name: Set up Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 24.14.0
+          node-version: 24.19.0
 
       - name: Fetch exact candidate merge as blobless data
         id: candidate_fetch
@@ -113,8 +113,8 @@ jobs:
           EXPECTED_BASE_COMMIT: ${{ github.event.pull_request.base.sha }}
           EXPECTED_CANDIDATE_COMMIT: ${{ github.event.pull_request.head.sha }}
           EXPECTED_MERGE_COMMIT: ${{ steps.candidate_fetch.outputs.merge_commit }}
-          APPROVED_MAIN_CI_CONTROL_COMMIT: 6520f1c4af583bd9420549dd811db8e1e301696e
-          APPROVED_MAIN_CI_CONTROL_TREE: e5104254109e7c0f58a59c0cc5b9ad8fddd04f6c
+          APPROVED_MAIN_CI_CONTROL_COMMIT: 34e8c233e71ca0f2dcc68d40af70632b86b2a92a
+          APPROVED_MAIN_CI_CONTROL_TREE: 525b5524e2c12c84753f7ac46788f7f244dc9709
         run: |
           set -euo pipefail
 
