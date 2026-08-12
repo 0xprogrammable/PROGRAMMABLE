@@ -4,6 +4,7 @@ const GOLDEN_POOL_ID =
   "0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229";
 const MAXIMUM_FUTURE_SKEW_MS = 60_000;
 const MAXIMUM_STALE_AGE_MS = 24 * 60 * 60_000;
+const MAXIMUM_DEFERRED_PCAN_AGE_MS = 96 * 60 * 60_000;
 const MINIMUM_CONFIRMATIONS = 12;
 const MAXIMUM_DEVIATION_BPS = 1_500;
 
@@ -60,8 +61,10 @@ function currentMarketTime(value, nowMs) {
 /**
  * The general stale ceiling stays at 24 hours. An older value can only be
  * deferred when the response itself carries the exact PCAN token and primary
- * pool identity. Deferral is not acceptance: the release must subsequently
- * pass verifyBitqueryHistoricalGoldenReleaseV1.
+ * pool identity and is capped at 96 hours. That fixed window keeps this
+ * historical correctness canary finite; it is never evidence that the current
+ * provider path is fresh. Deferral is not acceptance: the release must
+ * subsequently pass verifyBitqueryHistoricalGoldenReleaseV1.
  */
 export function classifyBitqueryStaleMarketReleaseV1(input) {
   const nowMs = input?.nowMs ?? Date.now();
@@ -79,6 +82,11 @@ export function classifyBitqueryStaleMarketReleaseV1(input) {
   }
   if (exactGoldenPool(token) === null) {
     throw new Error("stale market release candidate exceeds the 24 hour ceiling");
+  }
+  if (
+    nowMs - Date.parse(valuation.asOfTime) > MAXIMUM_DEFERRED_PCAN_AGE_MS
+  ) {
+    throw new Error("historical PCAN release evidence exceeds the 96 hour ceiling");
   }
   return Object.freeze({
     status: "deferred-pcan",
@@ -203,6 +211,7 @@ export const BITQUERY_HISTORICAL_RELEASE_V1 = Object.freeze({
   tokenAddress: GOLDEN_TOKEN_ADDRESS,
   poolId: GOLDEN_POOL_ID,
   maximumStaleAgeMs: MAXIMUM_STALE_AGE_MS,
+  maximumDeferredPcanAgeMs: MAXIMUM_DEFERRED_PCAN_AGE_MS,
   minimumConfirmations: MINIMUM_CONFIRMATIONS,
   maximumDeviationBps: MAXIMUM_DEVIATION_BPS,
 });

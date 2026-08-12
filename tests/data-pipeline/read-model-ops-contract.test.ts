@@ -375,6 +375,26 @@ describe("read-model operations source contract", () => {
     );
   });
 
+  it("fails closed when the historical PCAN deferral ceiling is widened", () => {
+    const helperPath = "scripts/perf/bitquery-historical-release-gate.mjs";
+    const helper = readFileSync(resolve(ROOT, helperPath), "utf8");
+    const unsafeHelper = helper.replace(
+      "const MAXIMUM_DEFERRED_PCAN_AGE_MS = 96 * 60 * 60_000",
+      "const MAXIMUM_DEFERRED_PCAN_AGE_MS = 365 * 24 * 60 * 60_000",
+    );
+    expect(unsafeHelper).not.toBe(helper);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [helperPath]: unsafeHelper,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-bitquery-stage-smoke",
+    );
+  });
+
   it("fails closed when independent PCAN parity drops exact-block liquidity", () => {
     const parityPath = "scripts/perf/bitquery-golden-market-parity.mjs";
     const parity = readFileSync(resolve(ROOT, parityPath), "utf8");

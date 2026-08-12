@@ -1303,6 +1303,18 @@ export function evaluateReadModelOperationsSourceContracts(
         "const MAXIMUM_STALE_AGE_MS = 24 * 60 * 60_000",
       ) &&
       bitqueryHistoricalRelease.includes(
+        "const MAXIMUM_DEFERRED_PCAN_AGE_MS = 96 * 60 * 60_000",
+      ) &&
+      bitqueryHistoricalRelease.includes(
+        "maximumDeferredPcanAgeMs: MAXIMUM_DEFERRED_PCAN_AGE_MS",
+      ) &&
+      bitqueryHistoricalRelease.includes(
+        "nowMs - Date.parse(valuation.asOfTime) > MAXIMUM_DEFERRED_PCAN_AGE_MS",
+      ) &&
+      bitqueryHistoricalRelease.includes(
+        'throw new Error("historical PCAN release evidence exceeds the 96 hour ceiling")',
+      ) &&
+      bitqueryHistoricalRelease.includes(
         "export function classifyBitqueryStaleMarketReleaseV1",
       ) &&
       bitqueryHistoricalRelease.includes(

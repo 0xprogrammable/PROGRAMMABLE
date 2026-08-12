@@ -17,6 +17,7 @@ const TIME = "2026-08-10T11:50:47.000Z";
 const NOW = Date.parse("2026-08-13T00:00:00.000Z");
 const PRICE = "2000000000000000000000";
 const FDV = "2000000000000000000000000";
+const MAXIMUM_DEFERRED_PCAN_AGE_MS = 96 * 60 * 60_000;
 
 function detailToken(overrides: Record<string, unknown> = {}) {
   return {
@@ -117,6 +118,13 @@ function parity(overrides: Record<string, unknown> = {}) {
 }
 
 describe("Bitquery historical release gate", () => {
+  it("publishes the finite deferred PCAN evidence ceiling", () => {
+    expect(
+      historicalReleaseGate.BITQUERY_HISTORICAL_RELEASE_V1
+        .maximumDeferredPcanAgeMs,
+    ).toBe(MAXIMUM_DEFERRED_PCAN_AGE_MS);
+  });
+
   it("accepts an older-than-24h PCAN observation only after exact parity", () => {
     const token = detailToken();
     expect(boundedStaleMarketTimeV1(TIME, NOW)).toBe(false);
@@ -138,6 +146,25 @@ describe("Bitquery historical release gate", () => {
       historicalPoolLiquidity: "1000000",
       confirmations: 20,
     });
+  });
+
+  it("accepts the exact 96h boundary and rejects evidence one millisecond older", () => {
+    const token = detailToken();
+    const boundaryNow = Date.parse(TIME) + MAXIMUM_DEFERRED_PCAN_AGE_MS;
+    expect(classifyBitqueryStaleMarketReleaseV1({
+      token,
+      nowMs: boundaryNow,
+    })).toMatchObject({ status: "deferred-pcan" });
+    expect(() => classifyBitqueryStaleMarketReleaseV1({
+      token,
+      nowMs: boundaryNow + 1,
+    })).toThrow("historical PCAN release evidence exceeds the 96 hour ceiling");
+    expect(() => verifyBitqueryHistoricalGoldenReleaseV1({
+      detailToken: token,
+      chart: chart(),
+      parity: parity(),
+      nowMs: boundaryNow + 1,
+    })).toThrow("historical PCAN release evidence exceeds the 96 hour ceiling");
   });
 
   it.each([
