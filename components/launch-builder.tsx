@@ -2793,6 +2793,12 @@ function TokenStep({
             <summary>
               <span>Project links</span>
               <small>Optional</small>
+              <ChevronDown
+                aria-hidden="true"
+                className="classic-link-disclosure-icon"
+                size={17}
+                strokeWidth={1.9}
+              />
             </summary>
             <div className="classic-link-fields">
               <label className="field">
