@@ -14,8 +14,7 @@
   min-height: 44px;
 }
 
-.betaLabel,
-.kicker {
+.betaLabel {
   color: var(--accent-strong);
   font-size: 11px;
   font-weight: 720;

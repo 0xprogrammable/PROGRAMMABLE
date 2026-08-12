@@ -2656,12 +2656,7 @@ export function CustomLaunchExperience({
       <CustomLaunchFrame boundaryRef={commitSessionBoundary} onBack={onBack} title="Build a custom launch">
         <div className={styles.introGrid}>
           <section className={styles.introPrimary}>
-            <span className={styles.kicker}>Open builder</span>
             <h2>Start with an idea.</h2>
-            <p>
-              Describe what you want to build to an agent, or submit the reviewed files
-              yourself. Your exact GitHub version must be approved before it can launch.
-            </p>
             <div className={styles.actions}>
               <a className="primary-button" href={BUILDER_SKILL_URL} target="_blank" rel="noreferrer">
                 Build with an agent <ExternalLink aria-hidden="true" size={16} />
@@ -2676,11 +2671,6 @@ export function CustomLaunchExperience({
               {wallet ? <GitHubBrandIcon /> : <Wallet />}
             </span>
             <h2>{wallet ? "Already submitted?" : "Connect your launch wallet"}</h2>
-            <p>
-              {wallet
-                ? "Next, verify the GitHub account that opened the submission. GitHub is source provenance only."
-                : "Choose the wallet that will sign and submit the launch. You can change it before confirmation."}
-            </p>
             {wallet ? (
               <div className={styles.walletGate}>
                 <div>
@@ -2725,7 +2715,6 @@ export function CustomLaunchExperience({
     return (
       <CustomLaunchFrame boundaryRef={commitSessionBoundary} onBack={onBack} title="Custom launches" eyebrow={githubUsername ? `@${githubUsername}` : "GitHub submissions"}>
         <div className={styles.listToolbar}>
-          <p>Every status is tied to one exact GitHub commit.</p>
           {applicantRecovery !== "none" ? (
             <button className={styles.secondaryButton} type="button" disabled={applicantReauthorizing} onClick={() => void recoverApplicantAccess()}>
               {applicantRecoveryAction}
@@ -2739,7 +2728,6 @@ export function CustomLaunchExperience({
         {applications.length === 0 ? (
           <section className={styles.emptyState}>
             <h2>No custom submissions yet</h2>
-            <p>Build with an agent or submit the required files on GitHub.</p>
             <div className={styles.actions}>
               <a className="primary-button" href={BUILDER_SKILL_URL} target="_blank" rel="noreferrer">Build with an agent</a>
               <a className={styles.secondaryButton} href={SUBMISSION_REQUIREMENTS_URL} target="_blank" rel="noreferrer">Read GitHub application guide</a>
@@ -2795,7 +2783,7 @@ export function CustomLaunchExperience({
         <form className={styles.setupSheet} aria-busy={launchProgress !== "idle"} aria-describedby={error ? "custom-launch-form-error" : undefined} onSubmit={launch}>
           <fieldset disabled={launchProgress !== "idle" || pendingGrantReissue !== null || applicantRecovery !== "none"}>
             <section className={styles.formSection}>
-              <div className={styles.sectionHeading}><span>01</span><div><h2>Project details</h2><p>These details describe the project. They cannot change the approved code.</p></div></div>
+              <div className={styles.sectionHeading}><span aria-hidden="true">01</span><div><h2>Project details</h2></div></div>
               <div className={styles.identityGrid}>
                 <div className={styles.imageField}>
                   <span>Project image</span>
@@ -2827,7 +2815,7 @@ export function CustomLaunchExperience({
 
             {descriptor.configurationSchema.fields.length > 0 ? (
               <section className={styles.formSection}>
-                <div className={styles.sectionHeading}><span>02</span><div><h2>Approved launch parameters</h2><p>Only fields allowed by the reviewed specification appear here.</p></div></div>
+                <div className={styles.sectionHeading}><span aria-hidden="true">02</span><div><h2>Approved launch parameters</h2></div></div>
                 <div className={styles.parameterGrid}>
                   {descriptor.configurationSchema.fields.map((field) => (
                     <ConfigurationField key={field.fieldId} field={field} value={configuration[field.fieldId] ?? ""} onChange={(value) => setConfiguration((current) => ({ ...current, [field.fieldId]: value }))} />
@@ -2837,7 +2825,7 @@ export function CustomLaunchExperience({
             ) : null}
 
             <section className={styles.formSection}>
-              <div className={styles.sectionHeading}><span>{descriptor.configurationSchema.fields.length > 0 ? "03" : "02"}</span><div><h2>Review</h2><p>The wallet receives one transaction built from this exact approved version.</p></div></div>
+              <div className={styles.sectionHeading}><span aria-hidden="true">{descriptor.configurationSchema.fields.length > 0 ? "03" : "02"}</span><div><h2>Review</h2></div></div>
               <dl className={styles.reviewList}>
                 <div><dt>Source</dt><dd>{selected.repositoryFullName} · {selected.commitOid.slice(0, 9)}</dd></div>
                 <div><dt>Network</dt><dd>{chainLabel(approvedRoute?.chainId)}</dd></div>

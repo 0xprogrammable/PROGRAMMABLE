@@ -27,8 +27,7 @@ import {
   useLiveDataRefresh,
 } from "@/components/use-live-data-refresh";
 import { WebsiteLinkIcon } from "@/components/website-link-icon";
-import { parseDiscoverableMarketTradeCapabilityV1 } from
-  "@/lib/custom-launch/trade-capability-v1";
+import { parseDiscoverableMarketTradeCapabilityV1 } from "@/lib/custom-launch/trade-capability-v1";
 import {
   exploreValuation,
   isExploreDataQuality,
@@ -198,10 +197,7 @@ function launchBlockNumber(token: LauncherToken) {
     : 0n;
 }
 
-function comparePreviewLaunchOrder(
-  left: LauncherToken,
-  right: LauncherToken,
-) {
+function comparePreviewLaunchOrder(left: LauncherToken, right: LauncherToken) {
   const leftBlock = launchBlockNumber(left);
   const rightBlock = launchBlockNumber(right);
   if (leftBlock !== rightBlock) return leftBlock < rightBlock ? -1 : 1;
@@ -387,9 +383,13 @@ function parseLaunchCategoryProvenance(
   value: unknown,
   category: "classic" | "custom",
 ): ExploreLaunchCategoryProvenance | null {
-  if (!isRecord(value)
-    || value.schemaVersion !== "programmable.explore-launch-category-provenance.v1"
-    || value.category !== category) return null;
+  if (
+    !isRecord(value) ||
+    value.schemaVersion !==
+      "programmable.explore-launch-category-provenance.v1" ||
+    value.category !== category
+  )
+    return null;
   if (value.source === "canonical-launch-stamp-router") {
     return isBytes32(value.launchId) &&
       isBytes32(value.stampHash) &&
@@ -402,39 +402,41 @@ function parseLaunchCategoryProvenance(
       Number(value.transactionIndex) >= 0 &&
       Number.isSafeInteger(value.logIndex) &&
       Number(value.logIndex) >= 0
-      ? value as unknown as ExploreLaunchCategoryProvenance
+      ? (value as unknown as ExploreLaunchCategoryProvenance)
       : null;
   }
   if (category === "classic") {
-    return value.source === "canonical-launch-read-model"
-      && typeof value.recordId === "string"
-      && (typeof value.modelId === "string" || value.modelId === null)
-      && (typeof value.modelVersion === "string" || value.modelVersion === null)
-      ? value as unknown as ExploreLaunchCategoryProvenance
+    return value.source === "canonical-launch-read-model" &&
+      typeof value.recordId === "string" &&
+      (typeof value.modelId === "string" || value.modelId === null) &&
+      (typeof value.modelVersion === "string" || value.modelVersion === null)
+      ? (value as unknown as ExploreLaunchCategoryProvenance)
       : null;
   }
-  const baseValid = isSha256(value.projectId)
-    && isSha256(value.launchId)
-    && isSha256(value.sourceRecordBindingHash)
-    && isSha256(value.finalizedLaunchBindingHash);
+  const baseValid =
+    isSha256(value.projectId) &&
+    isSha256(value.launchId) &&
+    isSha256(value.sourceRecordBindingHash) &&
+    isSha256(value.finalizedLaunchBindingHash);
   if (!baseValid) return null;
   if (value.source === "interface-preview") {
     return value as unknown as ExploreLaunchCategoryProvenance;
   }
-  return value.source === "registry.custom-launched"
-    && isTokenAddress(value.registryAddress)
-    && typeof value.registryStartBlock === "string"
-    && /^[1-9][0-9]*$/u.test(value.registryStartBlock)
-    && isBytes32(value.transactionHash)
-    && isBytes32(value.blockHash)
-    && typeof value.blockNumber === "string"
-    && /^[1-9][0-9]*$/u.test(value.blockNumber)
-    && Number.isSafeInteger(value.transactionIndex)
-    && Number(value.transactionIndex) >= 0
-    && Number.isSafeInteger(value.logIndex)
-    && Number(value.logIndex) >= 0
-    && isBytes32(value.configurationHash)
-    ? value as unknown as ExploreLaunchCategoryProvenance : null;
+  return value.source === "registry.custom-launched" &&
+    isTokenAddress(value.registryAddress) &&
+    typeof value.registryStartBlock === "string" &&
+    /^[1-9][0-9]*$/u.test(value.registryStartBlock) &&
+    isBytes32(value.transactionHash) &&
+    isBytes32(value.blockHash) &&
+    typeof value.blockNumber === "string" &&
+    /^[1-9][0-9]*$/u.test(value.blockNumber) &&
+    Number.isSafeInteger(value.transactionIndex) &&
+    Number(value.transactionIndex) >= 0 &&
+    Number.isSafeInteger(value.logIndex) &&
+    Number(value.logIndex) >= 0 &&
+    isBytes32(value.configurationHash)
+    ? (value as unknown as ExploreLaunchCategoryProvenance)
+    : null;
 }
 
 function isSha256(value: unknown): value is `sha256:${string}` {
@@ -442,13 +444,18 @@ function isSha256(value: unknown): value is `sha256:${string}` {
 }
 
 function parseCustomExploreAsset(value: unknown) {
-  if (!isRecord(value)
-    || typeof value.assetId !== "string"
-    || !isRecord(value.identity)
-    || typeof value.identity.namespace !== "string"
-    || typeof value.identity.value !== "string"
-    || (value.decimals !== undefined && (!Number.isSafeInteger(value.decimals)
-      || Number(value.decimals) < 0 || Number(value.decimals) > 255))) return null;
+  if (
+    !isRecord(value) ||
+    typeof value.assetId !== "string" ||
+    !isRecord(value.identity) ||
+    typeof value.identity.namespace !== "string" ||
+    typeof value.identity.value !== "string" ||
+    (value.decimals !== undefined &&
+      (!Number.isSafeInteger(value.decimals) ||
+        Number(value.decimals) < 0 ||
+        Number(value.decimals) > 255))
+  )
+    return null;
   return {
     assetId: value.assetId,
     identity: {
@@ -457,36 +464,48 @@ function parseCustomExploreAsset(value: unknown) {
     },
     ...(typeof value.name === "string" ? { name: value.name } : {}),
     ...(typeof value.symbol === "string" ? { symbol: value.symbol } : {}),
-    ...(value.decimals === undefined ? {} : { decimals: Number(value.decimals) }),
+    ...(value.decimals === undefined
+      ? {}
+      : { decimals: Number(value.decimals) }),
   };
 }
 
 function parseCustomExploreMarkets(value: unknown, chainId: string) {
   if (!Array.isArray(value) || value.length > 256) return null;
-  type CustomMarket = Extract<ExploreEntry, { exploreKind: "custom-project" }>["markets"][number];
+  type CustomMarket = Extract<
+    ExploreEntry,
+    { exploreKind: "custom-project" }
+  >["markets"][number];
   const markets: CustomMarket[] = [];
   for (const candidate of value) {
-    if (!isRecord(candidate)
-      || typeof candidate.marketId !== "string"
-      || typeof candidate.kind !== "string"
-      || !["active", "paused", "closed", "verification_pending"].includes(
+    if (
+      !isRecord(candidate) ||
+      typeof candidate.marketId !== "string" ||
+      typeof candidate.kind !== "string" ||
+      !["active", "paused", "closed", "verification_pending"].includes(
         String(candidate.status),
-      )
-      || (candidate.poolId !== undefined && !isBytes32(candidate.poolId))) return null;
+      ) ||
+      (candidate.poolId !== undefined && !isBytes32(candidate.poolId))
+    )
+      return null;
     const baseAsset = parseCustomExploreAsset(candidate.baseAsset);
     const quoteAsset = parseCustomExploreAsset(candidate.quoteAsset);
     if (baseAsset === null || quoteAsset === null) return null;
-    const capability = candidate.tradeCapability === undefined
-      ? undefined
-      : parseDiscoverableMarketTradeCapabilityV1({
-          value: candidate.tradeCapability,
-          chainId,
-          marketId: candidate.marketId,
-          baseAssetId: baseAsset.assetId,
-          quoteAssetId: quoteAsset.assetId,
-          ...(candidate.poolId === undefined ? {} : { poolId: candidate.poolId }),
-        });
-    if (candidate.tradeCapability !== undefined && capability === null) return null;
+    const capability =
+      candidate.tradeCapability === undefined
+        ? undefined
+        : parseDiscoverableMarketTradeCapabilityV1({
+            value: candidate.tradeCapability,
+            chainId,
+            marketId: candidate.marketId,
+            baseAssetId: baseAsset.assetId,
+            quoteAssetId: quoteAsset.assetId,
+            ...(candidate.poolId === undefined
+              ? {}
+              : { poolId: candidate.poolId }),
+          });
+    if (candidate.tradeCapability !== undefined && capability === null)
+      return null;
     markets.push({
       marketId: candidate.marketId,
       kind: candidate.kind,
@@ -504,50 +523,51 @@ function parseCustomExploreMarkets(value: unknown, chainId: string) {
 
 function parseCustomExploreEntry(value: unknown): ExploreEntry | null {
   const categoryProvenance = isRecord(value)
-    ? parseLaunchCategoryProvenance(
-        value.launchCategoryProvenance,
-        "custom",
-      )
+    ? parseLaunchCategoryProvenance(value.launchCategoryProvenance, "custom")
     : null;
-  if (!isRecord(value)
-    || value.exploreKind !== "custom-project"
-    || typeof value.id !== "string"
-    || typeof value.name !== "string"
-    || typeof value.launchedAt !== "string"
-    || typeof value.finalizedAt !== "string"
-    || typeof value.chainId !== "string"
-    || typeof value.modelId !== "string"
-    || !isSha256(value.customProjectId)
-    || !isSha256(value.customLaunchId)
-    || !isRecord(value.launchingWallet)
-    || typeof value.launchingWallet.namespace !== "string"
-    || typeof value.launchingWallet.value !== "string"
-    || !/^eip155:[1-9][0-9]*$/u.test(value.launchingWallet.namespace)
-    || !/^0x[0-9a-f]{40}$/u.test(value.launchingWallet.value)
-    || !isSha256(value.postLaunchAuthorityInventoryHash)
-    || !isRecord(value.postLaunchAuthorityInventory)
-    || value.postLaunchAuthorityInventory.schemaVersion
-      !== "programmable.post-launch-authority-inventory.v1"
-    || value.postLaunchAuthorityInventory.postLaunchAuthorityInventoryHash
-      !== value.postLaunchAuthorityInventoryHash
-    || value.postLaunchAuthorityInventory.githubAuthority
-      !== "provenance-only-never-post-launch-authority"
-    || !Array.isArray(value.postLaunchAuthorityInventory.postLaunchAuthorities)
-    || !Array.isArray(value.markets)
-    || !Array.isArray(value.links)
-    || categoryProvenance === null
-    || categoryProvenance.source === "canonical-launch-stamp-router"
-  ) return null;
+  if (
+    !isRecord(value) ||
+    value.exploreKind !== "custom-project" ||
+    typeof value.id !== "string" ||
+    typeof value.name !== "string" ||
+    typeof value.launchedAt !== "string" ||
+    typeof value.finalizedAt !== "string" ||
+    typeof value.chainId !== "string" ||
+    typeof value.modelId !== "string" ||
+    !isSha256(value.customProjectId) ||
+    !isSha256(value.customLaunchId) ||
+    !isRecord(value.launchingWallet) ||
+    typeof value.launchingWallet.namespace !== "string" ||
+    typeof value.launchingWallet.value !== "string" ||
+    !/^eip155:[1-9][0-9]*$/u.test(value.launchingWallet.namespace) ||
+    !/^0x[0-9a-f]{40}$/u.test(value.launchingWallet.value) ||
+    !isSha256(value.postLaunchAuthorityInventoryHash) ||
+    !isRecord(value.postLaunchAuthorityInventory) ||
+    value.postLaunchAuthorityInventory.schemaVersion !==
+      "programmable.post-launch-authority-inventory.v1" ||
+    value.postLaunchAuthorityInventory.postLaunchAuthorityInventoryHash !==
+      value.postLaunchAuthorityInventoryHash ||
+    value.postLaunchAuthorityInventory.githubAuthority !==
+      "provenance-only-never-post-launch-authority" ||
+    !Array.isArray(value.postLaunchAuthorityInventory.postLaunchAuthorities) ||
+    !Array.isArray(value.markets) ||
+    !Array.isArray(value.links) ||
+    categoryProvenance === null ||
+    categoryProvenance.source === "canonical-launch-stamp-router"
+  )
+    return null;
   const links = value.links.map(parseTokenLink);
   if (links.some((link) => link === null)) return null;
   if (value.tokenAddress !== undefined && !isTokenAddress(value.tokenAddress)) {
     return null;
   }
-  if (value.tokenDecimals !== undefined && (
-    !Number.isSafeInteger(value.tokenDecimals)
-    || Number(value.tokenDecimals) < 0
-    || Number(value.tokenDecimals) > 255
-  )) return null;
+  if (
+    value.tokenDecimals !== undefined &&
+    (!Number.isSafeInteger(value.tokenDecimals) ||
+      Number(value.tokenDecimals) < 0 ||
+      Number(value.tokenDecimals) > 255)
+  )
+    return null;
   const markets = parseCustomExploreMarkets(value.markets, value.chainId);
   if (markets === null) return null;
   return {
@@ -558,7 +578,9 @@ function parseCustomExploreEntry(value: unknown): ExploreEntry | null {
     ...(typeof value.description === "string"
       ? { description: value.description }
       : {}),
-    ...(safeImageUrl(value.imageUrl) ? { imageUrl: value.imageUrl as string } : {}),
+    ...(safeImageUrl(value.imageUrl)
+      ? { imageUrl: value.imageUrl as string }
+      : {}),
     links: links as TokenLink[],
     launchedAt: value.launchedAt,
     finalizedAt: value.finalizedAt,
@@ -576,8 +598,12 @@ function parseCustomExploreEntry(value: unknown): ExploreEntry | null {
     >["postLaunchAuthorityInventory"],
     postLaunchAuthorityInventoryHash: value.postLaunchAuthorityInventoryHash,
     markets,
-    ...(value.tokenAddress === undefined ? {} : { tokenAddress: value.tokenAddress }),
-    ...(value.tokenDecimals === undefined ? {} : { tokenDecimals: value.tokenDecimals as number }),
+    ...(value.tokenAddress === undefined
+      ? {}
+      : { tokenAddress: value.tokenAddress }),
+    ...(value.tokenDecimals === undefined
+      ? {}
+      : { tokenDecimals: value.tokenDecimals as number }),
     launchCategoryProvenance: value.launchCategoryProvenance as Extract<
       ExploreEntry,
       { exploreKind: "custom-project" }
@@ -587,16 +613,18 @@ function parseCustomExploreEntry(value: unknown): ExploreEntry | null {
 
 function parseExploreEntry(value: unknown): ValuedExploreEntry | null {
   const attachValuation = <T extends ExploreEntry>(entry: T) => {
-    const valuation = isRecord(value) && value.valuation === undefined
-      ? exploreValuation(entry)
-      : isRecord(value) && isExploreValuation(value.valuation)
-        ? value.valuation
-        : null;
-    const marketData = isRecord(value) && value.marketData !== undefined
-      ? isTokenMarketDataV1(value.marketData)
-        ? value.marketData
-        : null
-      : undefined;
+    const valuation =
+      isRecord(value) && value.valuation === undefined
+        ? exploreValuation(entry)
+        : isRecord(value) && isExploreValuation(value.valuation)
+          ? value.valuation
+          : null;
+    const marketData =
+      isRecord(value) && value.marketData !== undefined
+        ? isTokenMarketDataV1(value.marketData)
+          ? value.marketData
+          : null
+        : undefined;
     return valuation === null || marketData === null
       ? null
       : {
@@ -610,23 +638,27 @@ function parseExploreEntry(value: unknown): ValuedExploreEntry | null {
     return entry ? attachValuation(entry) : null;
   }
   const token = parseLauncherToken(value);
-  const expectedCategory = token?.launchStampProvenance?.kind === "custom-graph"
-    ? "custom"
-    : "classic";
+  const expectedCategory =
+    token?.launchStampProvenance?.kind === "custom-graph"
+      ? "custom"
+      : "classic";
   const categoryProvenance = isRecord(value)
     ? parseLaunchCategoryProvenance(
         value.launchCategoryProvenance,
         expectedCategory,
       )
     : null;
-  if (!token || !isRecord(value)
-    || value.exploreKind !== "token"
-    || categoryProvenance === null) return null;
+  if (
+    !token ||
+    !isRecord(value) ||
+    value.exploreKind !== "token" ||
+    categoryProvenance === null
+  )
+    return null;
   const stamp = token.launchStampProvenance;
   if (stamp) {
     if (
-      categoryProvenance.source !==
-        "canonical-launch-stamp-router" ||
+      categoryProvenance.source !== "canonical-launch-stamp-router" ||
       categoryProvenance.launchId.toLowerCase() !==
         stamp.launchId.toLowerCase() ||
       categoryProvenance.stampHash.toLowerCase() !==
@@ -819,10 +851,7 @@ export async function loadExploreModelDataset(
 ) {
   const firstPageSearch = new URLSearchParams(search);
   firstPageSearch.set("page", "1");
-  firstPageSearch.set(
-    "limit",
-    String(EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE),
-  );
+  firstPageSearch.set("limit", String(EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE));
   const firstPage = await loadExplorePayload(
     `${contentKey}\u0000model-page:1`,
     firstPageSearch,
@@ -855,9 +884,7 @@ export async function loadExploreModelDataset(
 
   return {
     ...firstPage,
-    tokens: [firstPage, ...remainingPages].flatMap(
-      (payload) => payload.tokens,
-    ),
+    tokens: [firstPage, ...remainingPages].flatMap((payload) => payload.tokens),
   };
 }
 
@@ -898,9 +925,7 @@ export function filterTokensByLaunchModel<T extends ExploreEntry>(
   modelFilter: ExploreModelFilter,
 ) {
   if (modelFilter === "all") return tokens;
-  return tokens.filter(
-    (token) => tokenLaunchModelGroup(token) === modelFilter,
-  );
+  return tokens.filter((token) => tokenLaunchModelGroup(token) === modelFilter);
 }
 
 export function paginateTokensByExploreFilters<T extends ExploreEntry>(
@@ -946,10 +971,8 @@ export function getExploreValuationMetric(
   token: ExploreEntry | ValuedExploreEntry,
 ): MarketCapMetric | undefined {
   const valuation = valuationForEntry(token);
-  if (
-    valuation.status !== "available" ||
-    valuation.freshness !== "current"
-  ) return undefined;
+  if (valuation.status !== "available" || valuation.freshness !== "current")
+    return undefined;
   const value = Number(BigInt(valuation.valueWad)) / 1e18;
   if (!Number.isFinite(value) || value <= 0) return undefined;
   if (valuation.currency === "usd") return { kind: "usd", value };
@@ -970,40 +993,23 @@ export function getExplorePaginationItems(
   }
 
   if (currentPage >= pageCount - 2) {
-    return [
-      1,
-      "start-gap",
-      pageCount - 2,
-      pageCount - 1,
-      pageCount,
-    ];
+    return [1, "start-gap", pageCount - 2, pageCount - 1, pageCount];
   }
 
-  return [
-    1,
-    "start-gap",
-    currentPage,
-    "end-gap",
-    pageCount,
-  ];
+  return [1, "start-gap", currentPage, "end-gap", pageCount];
 }
 
 export function tokenHasSocialLinks(
   token: Readonly<{ links?: readonly TokenLink[] }>,
 ) {
   return Boolean(
-    token.links?.some(
-      (link) => link.kind === "x" || link.kind === "telegram",
-    ),
+    token.links?.some((link) => link.kind === "x" || link.kind === "telegram"),
   );
 }
 
 export function filterTokensBySocialPresence<
   T extends Readonly<{ links?: readonly TokenLink[] }>,
->(
-  tokens: T[],
-  socialFilter: ExploreSocialFilter,
-) {
+>(tokens: T[], socialFilter: ExploreSocialFilter) {
   if (socialFilter === "all") return tokens;
   const shouldHaveSocials = socialFilter === "yes";
   return tokens.filter(
@@ -1016,7 +1022,7 @@ export function exploreTokenCardDescription(token: ExploreEntry) {
   if (description) return description;
 
   return token.exploreKind === "token" &&
-      isLaunchStampProvenanceV1(token.launchStampProvenance)
+    isLaunchStampProvenanceV1(token.launchStampProvenance)
     ? "Canonical Router stamp. v4 pool initialized."
     : undefined;
 }
@@ -1026,34 +1032,35 @@ export function getTokenCards(
 ): TokenCard[] {
   return tokens.map((token) => {
     const valuation = valuationForEntry(token);
-    return ({
-    id: token.id,
-    name: token.name,
-    description: exploreTokenCardDescription(token),
-    imageUrl:
-      token.imageUrl?.trim() || getFallbackTokenImage(
-        token.tokenAddress ?? token.id,
+    return {
+      id: token.id,
+      name: token.name,
+      description: exploreTokenCardDescription(token),
+      imageUrl:
+        token.imageUrl?.trim() ||
+        getFallbackTokenImage(token.tokenAddress ?? token.id),
+      links: [...(token.links ?? [])].sort(
+        (left, right) => tokenLinkOrder[left.kind] - tokenLinkOrder[right.kind],
       ),
-    links: [...(token.links ?? [])].sort(
-      (left, right) => tokenLinkOrder[left.kind] - tokenLinkOrder[right.kind],
-    ),
-    valuation: getExploreValuationMetric(token),
-    ...(valuation.status === "available"
-      ? {
-          valuationMetric:
-            valuation.metric === "market-cap" ? "Market cap" as const : "FDV" as const,
-        }
-      : {}),
-    marketStatus: exploreMarketStatusLabel(token),
-    usesFallbackImage: !token.imageUrl?.trim(),
-    ...(token.tokenAddress === undefined
-      ? {}
-      : { tokenAddress: token.tokenAddress }),
-    launchCategory:
-      token.launchCategoryProvenance.category === "classic"
-        ? "Classic"
-        : "Custom",
-    });
+      valuation: getExploreValuationMetric(token),
+      ...(valuation.status === "available"
+        ? {
+            valuationMetric:
+              valuation.metric === "market-cap"
+                ? ("Market cap" as const)
+                : ("FDV" as const),
+          }
+        : {}),
+      marketStatus: exploreMarketStatusLabel(token),
+      usesFallbackImage: !token.imageUrl?.trim(),
+      ...(token.tokenAddress === undefined
+        ? {}
+        : { tokenAddress: token.tokenAddress }),
+      launchCategory:
+        token.launchCategoryProvenance.category === "classic"
+          ? "Classic"
+          : "Custom",
+    };
   });
 }
 
@@ -1089,12 +1096,14 @@ function ExploreGridSkeleton() {
   return (
     <div
       className={`${styles.runnerGrid} ${styles.skeletonGrid}`}
-      aria-hidden="true"
+      role="status"
+      aria-label="Loading launches"
     >
       {exploreSkeletonItems.map((index) => (
         <article
           className={`${styles.runnerCard} ${styles.skeletonCard}`}
           key={index}
+          aria-hidden="true"
         >
           <div className={`${styles.runnerArt} ${styles.skeletonArt}`} />
           <div className={styles.skeletonBody}>
@@ -1142,8 +1151,7 @@ export function ExploreView() {
   const normalizedQuery = query.trim();
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [sort, setSort] = useState<TokenSort>("market-cap");
-  const [socialFilter, setSocialFilter] =
-    useState<ExploreSocialFilter>("all");
+  const [socialFilter, setSocialFilter] = useState<ExploreSocialFilter>("all");
   const [modelFilter, setModelFilter] = useState<ExploreModelFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [retryKey, setRetryKey] = useState(0);
@@ -1326,12 +1334,7 @@ export function ExploreView() {
       }
       const leftFdv = BigInt(left.indexedMarketCapUsdWad ?? "0");
       const rightFdv = BigInt(right.indexedMarketCapUsdWad ?? "0");
-      const delta =
-        leftFdv === rightFdv
-          ? 0
-          : leftFdv > rightFdv
-            ? -1
-            : 1;
+      const delta = leftFdv === rightFdv ? 0 : leftFdv > rightFdv ? -1 : 1;
       return sort === "market-cap" ? delta : -delta;
     });
 
@@ -1360,8 +1363,7 @@ export function ExploreView() {
       }
     : state;
 
-  const payload =
-    displayState.phase === "ready" ? displayState.payload : null;
+  const payload = displayState.phase === "ready" ? displayState.payload : null;
   const cards = useMemo(
     () => getTokenCards(payload?.tokens ?? []),
     [payload?.tokens],
@@ -1393,8 +1395,7 @@ export function ExploreView() {
   function renderTokenState() {
     if (
       displayState.phase === "loading" ||
-      (displayState.phase === "error" &&
-        displayState.requestKey !== requestKey)
+      (displayState.phase === "error" && displayState.requestKey !== requestKey)
     ) {
       return (
         <div className={styles.loadingState}>
@@ -1406,12 +1407,11 @@ export function ExploreView() {
     if (displayState.phase === "error") {
       return (
         <div className={styles.messageState} role="alert">
-          <p>{displayState.message}</p>
-          <button
-            className="text-button"
-            type="button"
-            onClick={retryTokens}
-          >
+          <div className={styles.messageCopy}>
+            <h2>Couldn’t load launches</h2>
+            <p>{displayState.message}</p>
+          </div>
+          <button className="text-button" type="button" onClick={retryTokens}>
             Try again
           </button>
         </div>
@@ -1422,8 +1422,8 @@ export function ExploreView() {
       return (
         <div className={`${styles.emptyState} liquid-glass-surface`}>
           <div>
-            <h2>Token index unavailable</h2>
-            <p>Explore is not available in this environment.</p>
+            <h2>Explore is getting ready</h2>
+            <p>The launch index is not available in this environment yet.</p>
           </div>
         </div>
       );
@@ -1434,8 +1434,11 @@ export function ExploreView() {
         return (
           <div className={`${styles.emptyState} liquid-glass-surface`}>
             <div>
-              <h2>Launches temporarily unavailable</h2>
-              <p>Try again in a moment.</p>
+              <h2>Launches are catching up</h2>
+              <p>
+                Some launches are temporarily unavailable. Try again in a
+                moment.
+              </p>
             </div>
             <button
               className={styles.emptyAction}
@@ -1447,13 +1450,8 @@ export function ExploreView() {
           </div>
         );
       }
-      if (
-        debouncedQuery ||
-        socialFilter !== "all" ||
-        modelFilter !== "all"
-      ) {
-        const hasActiveFilter =
-          socialFilter !== "all" || modelFilter !== "all";
+      if (debouncedQuery || socialFilter !== "all" || modelFilter !== "all") {
+        const hasActiveFilter = socialFilter !== "all" || modelFilter !== "all";
         const noMatchMessage = debouncedQuery
           ? hasActiveFilter
             ? "No tokens match this search and filters"
@@ -1461,7 +1459,10 @@ export function ExploreView() {
           : "No tokens match these filters";
         return (
           <div className={styles.messageState}>
-            <p>{noMatchMessage}</p>
+            <div className={styles.messageCopy}>
+              <h2>No matching launches</h2>
+              <p>{noMatchMessage}</p>
+            </div>
             <button
               className="text-button"
               type="button"
@@ -1482,11 +1483,11 @@ export function ExploreView() {
       return (
         <div className={`${styles.emptyState} liquid-glass-surface`}>
           <div>
-            <h2>No tokens yet</h2>
-            <p>Create the first token.</p>
+            <h2>No launches yet</h2>
+            <p>Be the first to launch a token and it will appear here.</p>
           </div>
           <Link className={styles.emptyAction} href="/launch">
-            Create token
+            Start a launch
           </Link>
         </div>
       );
@@ -1533,10 +1534,7 @@ export function ExploreView() {
           );
 
           return (
-            <article
-              className={styles.runnerCard}
-              key={token.id}
-            >
+            <article className={styles.runnerCard} key={token.id}>
               {href ? (
                 <Link
                   className={styles.runnerHitArea}
@@ -1614,13 +1612,10 @@ export function ExploreView() {
     <>
       <div className={`${styles.page} explore-page page-width`}>
         <header className={styles.pageHeading}>
-          <h1 aria-label="Tokens that behave how you imagine">
-            <span>Tokens that behave</span>
-            <span>how you imagine</span>
+          <h1 aria-label="Explore programmable launches">
+            <span>Explore programmable</span>
+            <span>launches</span>
           </h1>
-          <p className={styles.pageDescription}>
-            Browse launches by model, valuation or social presence.
-          </p>
         </header>
 
         <section
@@ -1631,7 +1626,7 @@ export function ExploreView() {
           <div className={styles.runnersIntro}>
             {hasPublicTokens ? (
               <div className="token-section-heading">
-                <h2 className="sr-only">Tokens</h2>
+                <h2 className="sr-only">Launches</h2>
                 <div className="token-toolbar">
                   <div
                     className="token-search liquid-glass-control"
@@ -1639,7 +1634,7 @@ export function ExploreView() {
                   >
                     <Search aria-hidden="true" size={17} />
                     <label className="sr-only" htmlFor="explore-token-search">
-                      Search tokens by name, ticker or contract address
+                      Search by name, symbol or contract address
                     </label>
                     <input
                       ref={searchInputRef}
@@ -1648,7 +1643,7 @@ export function ExploreView() {
                       autoComplete="off"
                       spellCheck={false}
                       value={query}
-                      placeholder="Search tokens"
+                      placeholder="Search by name, symbol or contract address"
                       onChange={(event) => setQuery(event.target.value)}
                     />
                     {query ? (
@@ -1760,9 +1755,7 @@ export function ExploreView() {
                           <button
                             key={option.id}
                             className={
-                              socialFilter === option.id
-                                ? "active"
-                                : undefined
+                              socialFilter === option.id ? "active" : undefined
                             }
                             type="button"
                             aria-pressed={socialFilter === option.id}
@@ -1823,13 +1816,13 @@ export function ExploreView() {
                   pageCount > 1 ? (
                     <nav
                       className="token-pagination liquid-glass-control"
-                      aria-label="Token pages"
+                      aria-label="Launch pages"
                     >
                       <button
                         type="button"
-                        aria-label="Previous token page"
+                        aria-label="Previous launch page"
                         aria-disabled={activePage === 1 || busy}
-                        disabled={activePage === 1}
+                        disabled={activePage === 1 || busy}
                         onClick={() => {
                           if (busy) return;
                           setCurrentPage((page) => Math.max(1, page - 1));
@@ -1847,11 +1840,12 @@ export function ExploreView() {
                                 activePage === item ? "active" : undefined
                               }
                               type="button"
-                              aria-label={`Token page ${item}`}
+                              aria-label={`Launch page ${item}`}
                               aria-current={
                                 activePage === item ? "page" : undefined
                               }
                               aria-disabled={busy}
+                              disabled={busy}
                               onClick={() => {
                                 if (busy) return;
                                 setCurrentPage(item);
@@ -1869,14 +1863,14 @@ export function ExploreView() {
 
                       <button
                         type="button"
-                        aria-label="Next token page"
+                        aria-label="Next launch page"
                         aria-disabled={activePage === pageCount || busy}
-                        disabled={activePage === pageCount}
+                        disabled={activePage === pageCount || busy}
                         onClick={() => {
                           if (busy) return;
                           setCurrentPage((page) =>
                             Math.min(pageCount, page + 1),
-                          )
+                          );
                         }}
                       >
                         <ChevronRight aria-hidden="true" size={15} />
@@ -1911,10 +1905,7 @@ export function ExploreView() {
                   ? "Prices may be out of date"
                   : dataQualityMessage}
               </span>
-              <button
-                type="button"
-                onClick={retryTokens}
-              >
+              <button type="button" onClick={retryTokens}>
                 Refresh
               </button>
             </div>

@@ -37,11 +37,17 @@
 .eligibility,
 .judging {
   align-items: center;
-  border-top: 1px solid var(--panel-border-soft);
   display: flex;
   flex-direction: column;
   justify-content: center;
   text-align: center;
+}
+
+/* Let breathing room carry section hierarchy; the page does not need rules
+ * cutting across the night field between each content block. */
+.eligibility,
+.judging {
+  margin-block-start: clamp(20px, 3vw, 32px);
 }
 
 .prizes {

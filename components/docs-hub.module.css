@@ -420,3 +420,15 @@
     transition: none;
   }
 }
+
+/* Cards use a quiet surface and depth rather than a stack of gray keylines. */
+.pathCard {
+  background: color-mix(in srgb, var(--surface-soft) 56%, transparent);
+  border-color: transparent;
+  box-shadow: 0 18px 44px rgb(0 0 0 / 0.18);
+}
+
+.pathCard:hover {
+  border-color: transparent;
+  box-shadow: 0 22px 52px rgb(0 0 0 / 0.28);
+}

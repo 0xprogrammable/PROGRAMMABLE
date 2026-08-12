@@ -1943,3 +1943,57 @@
     outline-color: Highlight;
   }
 }
+
+/* Minimal night reading surface: hierarchy comes from type, space and depth;
+ * decorative rules remain reserved for controls and data tables. */
+.page {
+  --docs-canvas: #09080d;
+  --surface: #111019;
+  --surface-raised: #171520;
+  --surface-soft: #201d2a;
+  background:
+    radial-gradient(
+      circle at 80% 2%,
+      rgb(183 107 152 / 0.07),
+      transparent 30rem
+    ),
+    var(--docs-canvas);
+}
+
+:global(html:has([data-docs-shell])),
+:global(body:has([data-docs-shell])),
+:global(body:has([data-docs-shell]) .app-frame),
+:global(body:has([data-docs-shell]) .site-header) {
+  background-color: #09080d;
+}
+
+.docsFeedback {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.pageNavigation ul {
+  border-inline-start: 0;
+}
+
+.pageNavigation a {
+  padding-inline-start: 0;
+}
+
+.pageNavigation a::before {
+  display: none;
+}
+
+.launchInspector,
+.commandPanel {
+  border-color: transparent;
+  box-shadow: 0 20px 52px rgb(0 0 0 / 0.2);
+}
+
+.sampleTabs,
+.codePre,
+.commandPre,
+.codeNote {
+  border-block: 0;
+  border-top: 0;
+}

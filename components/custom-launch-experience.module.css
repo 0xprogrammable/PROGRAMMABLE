@@ -1,4 +1,6 @@
 .page {
+  --custom-surface-shadow: 0 24px 68px rgb(1 1 3 / 0.28);
+  --custom-inner-shadow: 0 16px 42px rgb(1 1 3 / 0.18);
   padding-top: 16px;
 }
 
@@ -19,28 +21,19 @@
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   background: var(--liquid-glass-surface-background);
-  border: 1px solid var(--liquid-glass-border);
-  box-shadow: var(--liquid-glass-shadow);
+  border: 0;
+  box-shadow: var(--custom-surface-shadow);
 }
 
 .applicationRow {
   background: var(--liquid-glass-inner-background);
-  box-shadow: var(--liquid-glass-inner-shadow);
+  box-shadow: var(--custom-inner-shadow);
 }
 
 .introPrimary {
   border-radius: 28px;
   min-height: 390px;
   padding: clamp(30px, 5vw, 54px);
-}
-
-.kicker {
-  color: var(--accent-strong);
-  display: block;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.055em;
-  text-transform: uppercase;
 }
 
 .introPrimary h2 {
@@ -50,18 +43,6 @@
   line-height: 0.98;
   margin: 19px 0 18px;
   max-width: 9ch;
-}
-
-.introPrimary p,
-.statusEntry p,
-.emptyState p,
-.listToolbar p {
-  color: var(--text-soft);
-  line-height: 1.58;
-}
-
-.introPrimary p {
-  max-width: 55ch;
 }
 
 .actions {
@@ -130,7 +111,7 @@
 .statusEntry h2 {
   font-size: 26px;
   letter-spacing: -0.035em;
-  margin: 56px 0 8px;
+  margin: 20px 0 8px;
 }
 
 .githubButton {
@@ -193,14 +174,9 @@
 .listToolbar {
   align-items: center;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   margin: 2px auto 16px;
   max-width: 1000px;
-}
-
-.listToolbar p {
-  font-size: 13px;
-  margin: 0;
 }
 
 .iconButton {
@@ -362,34 +338,25 @@
 }
 
 .formSection + .formSection {
-  border-top: 1px solid var(--panel-border-soft);
+  border-block-start: 0;
+  margin-top: 10px;
 }
 
 .sectionHeading {
   align-items: flex-start;
   display: grid;
   gap: 13px;
-  grid-template-columns: 30px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .sectionHeading > span {
-  color: var(--accent-strong);
-  font-size: 11px;
-  font-weight: 700;
-  padding-top: 5px;
+  display: none;
 }
 
 .sectionHeading h2 {
   font-size: 21px;
   letter-spacing: -0.03em;
   margin: 0;
-}
-
-.sectionHeading p {
-  color: var(--text-soft);
-  font-size: 12.5px;
-  line-height: 1.5;
-  margin: 4px 0 0;
 }
 
 .identityGrid {
@@ -485,9 +452,9 @@
 }
 
 .moreLinks {
-  border-top: 1px solid var(--panel-border-soft);
+  border-block-start: 0;
   margin-top: 4px;
-  padding-top: 10px;
+  padding-top: 2px;
 }
 
 .moreLinks summary {
@@ -531,11 +498,11 @@
 
 .reviewList > div {
   align-items: baseline;
-  border-top: 1px solid var(--panel-border-soft);
+  border-block-start: 0;
   display: grid;
   gap: 16px;
   grid-template-columns: minmax(120px, 0.45fr) minmax(0, 1fr);
-  padding: 11px 0;
+  padding: 9px 0;
 }
 
 .reviewList dt {
@@ -561,11 +528,12 @@
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   background: var(--liquid-glass-inner-background);
-  border-top: 1px solid var(--panel-border-soft);
+  border-block-start: 0;
   display: flex;
   gap: 16px;
   justify-content: space-between;
   min-height: 72px;
+  margin-top: 12px;
   padding: 11px 28px;
 }
 

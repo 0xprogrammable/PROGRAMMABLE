@@ -4,7 +4,8 @@ import { LandingPage } from "@/components/landing-page";
 
 export const metadata: Metadata = {
   title: "Programmable",
-  description: "Tokens that behave how you imagine.",
+  description:
+    "Create tokens with a clear launch model and programmable onchain behavior.",
 };
 
 export default function HomePage() {

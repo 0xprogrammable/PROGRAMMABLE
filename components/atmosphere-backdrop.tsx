@@ -1,6 +1,7 @@
 import Image from "next/image";
 
 const TWINKLE_COUNT = 36;
+const LOWER_TWINKLE_COUNT = 12;
 const PLANT_SIZES = "(max-width: 520px) 46vw, (max-width: 1500px) 22vw, 330px";
 
 export function AtmosphereBackdrop() {
@@ -12,6 +13,11 @@ export function AtmosphereBackdrop() {
       <span className="atmosphere-sparkles">
         {Array.from({ length: TWINKLE_COUNT }, (_, index) => (
           <i key={index} />
+        ))}
+      </span>
+      <span className="atmosphere-sparkles atmosphere-sparkles-lower">
+        {Array.from({ length: LOWER_TWINKLE_COUNT }, (_, index) => (
+          <i key={`lower-${index}`} />
         ))}
       </span>
       <span className="atmosphere-botanicals">

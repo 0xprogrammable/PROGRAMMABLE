@@ -1168,7 +1168,6 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
 
       <section className={styles.hero} aria-labelledby="applicant-launch-title">
         <div className={styles.heroCopy}>
-          <span className={styles.kicker}>Applicant launch</span>
           <h1 id="applicant-launch-title" ref={titleRef} tabIndex={-1}>
             {exactHookemonApplicant
               ? "Prepare the Hookemon launch"
@@ -1211,7 +1210,6 @@ export function ManualApplicantLaunch({ onBack }: { onBack: () => void }) {
         >
           <div className={styles.sectionHeading}>
             <div>
-              <span className={styles.kicker}>Your launch</span>
               <h2 id="applicant-workspace-title">Approved submission</h2>
             </div>
             {loading ? (
