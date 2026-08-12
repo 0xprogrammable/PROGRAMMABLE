@@ -71,12 +71,60 @@ export function spawnSafeGitSync(args, options = {}) {
   });
 }
 
+/**
+ * Run only raw, read-only object plumbing. Unlike worktree-facing Git commands,
+ * rev-parse/cat-file/ls-tree never invoke clean, smudge, process, diff, textconv,
+ * hook, fsmonitor, or LFS drivers, so legitimate repository-local driver config
+ * is accepted while safe arguments/environment still neutralize replace refs,
+ * lazy fetch, credentials, external protocols, hooks, attributes, and prompts.
+ */
+export function safeRawGitArguments(args) {
+  assertSafeRawGitCommand(args);
+  return safeGitArguments(args);
+}
+
+export function spawnSafeRawGitSync(args, options = {}) {
+  const { env = process.env, ...spawnOptions } = options;
+  return spawnSync("git", safeRawGitArguments(args), {
+    ...spawnOptions,
+    shell: false,
+    env: safeGitEnvironment(env)
+  });
+}
+
 export function resolveRepositoryRoot(explicitRoot, cwd = process.cwd()) {
   const candidate = explicitRoot ? path.resolve(explicitRoot) : gitRoot(cwd);
   if (!candidate || !fs.existsSync(candidate) || !fs.statSync(candidate).isDirectory()) {
     throw new Error("repository root is unavailable; run inside a Git repository or pass --repository-root");
   }
   return fs.realpathSync(candidate);
+}
+
+export function resolveInstalledPackageRoot(scriptDirectory) {
+  if (typeof scriptDirectory !== "string" || scriptDirectory.length === 0) {
+    throw new TypeError("installed package script directory must be a non-empty path");
+  }
+  const scripts = fs.realpathSync(path.resolve(scriptDirectory));
+  if (!fs.statSync(scripts).isDirectory()) throw new Error("installed package scripts path is not a directory");
+
+  const skillRoot = fs.realpathSync(path.resolve(scripts, ".."));
+  const skillManifest = path.join(skillRoot, "SKILL.md");
+  if (!regularNonSymlinkFile(skillManifest)) {
+    throw new Error("installed package root is unavailable; canonical SKILL.md is missing");
+  }
+
+  const pluginRoot = path.resolve(skillRoot, "..", "..");
+  const pluginManifest = path.join(pluginRoot, ".codex-plugin", "plugin.json");
+  const packagedSkillRoot = path.join(pluginRoot, "skills", path.basename(skillRoot));
+  if (
+    regularNonSymlinkFile(pluginManifest)
+    && fs.existsSync(packagedSkillRoot)
+    && fs.statSync(packagedSkillRoot).isDirectory()
+    && fs.realpathSync(packagedSkillRoot) === skillRoot
+  ) {
+    return fs.realpathSync(pluginRoot);
+  }
+  return skillRoot;
 }
 
 export function assertInsideRepository(repositoryRoot, target, { allowMissing = false } = {}) {
@@ -116,6 +164,104 @@ function gitRoot(cwd) {
   });
   if (result.status !== 0) return null;
   return result.stdout.trim() || null;
+}
+
+function regularNonSymlinkFile(file) {
+  if (!fs.existsSync(file)) return false;
+  const stat = fs.lstatSync(file);
+  return stat.isFile() && !stat.isSymbolicLink();
+}
+
+function assertSafeRawGitCommand(args) {
+  if (!Array.isArray(args)) throw new TypeError("Raw Git arguments must be an array");
+  let index = 0;
+  while (index < args.length) {
+    const argument = args[index];
+    if (argument === "-c" || argument === "--config-env") {
+      throw new TypeError("Raw Git caller Git configuration overrides are forbidden");
+    }
+    if (argument === "-C") {
+      if (typeof args[index + 1] !== "string" || args[index + 1].length === 0) {
+        throw new TypeError(`Raw Git ${argument} requires one value`);
+      }
+      index += 2;
+      continue;
+    }
+    if (["--no-pager", "--no-replace-objects", "--literal-pathspecs"].includes(argument)) {
+      index += 1;
+      continue;
+    }
+    break;
+  }
+  const command = args[index];
+  if (!new Set(["rev-parse", "cat-file", "ls-tree"]).has(command)) {
+    throw new TypeError("Raw Git runner permits only rev-parse, cat-file, and ls-tree");
+  }
+  const commandArguments = args.slice(index + 1);
+  if (command === "rev-parse") {
+    const gitDirectoryQuery = commandArguments.length === 1 && commandArguments[0] === "--git-dir";
+    const absoluteGitDirectoryQuery = commandArguments.length === 1 && commandArguments[0] === "--absolute-git-dir";
+    const gitCommonDirectoryQuery = commandArguments.length === 1 && commandArguments[0] === "--git-common-dir";
+    const gitObjectDirectoryQuery = commandArguments.length === 2
+      && commandArguments[0] === "--git-path"
+      && commandArguments[1] === "objects";
+    const topLevelQuery = commandArguments.length === 1 && commandArguments[0] === "--show-toplevel";
+    const exactObjectQuery = (
+      commandArguments.length === 2
+      && commandArguments[0] === "--verify"
+      && safeRawRevision(commandArguments[1])
+    );
+    if (
+      !gitDirectoryQuery
+      && !absoluteGitDirectoryQuery
+      && !gitCommonDirectoryQuery
+      && !gitObjectDirectoryQuery
+      && !topLevelQuery
+      && !exactObjectQuery
+    ) {
+      throw new TypeError("Raw Git rev-parse permits only exact Git-control paths, --show-toplevel, or one --verify object query");
+    }
+    return;
+  }
+  if (command === "cat-file") {
+    const batch = commandArguments.length === 1 && commandArguments[0] === "--batch";
+    const exactBlob = commandArguments.length === 2 && commandArguments[0] === "blob" && /^[0-9a-f]{40}$/u.test(commandArguments[1]);
+    const exactObjectSize = commandArguments.length === 2 && commandArguments[0] === "-s" && /^[0-9a-f]{40}$/u.test(commandArguments[1]);
+    if (!batch && !exactBlob && !exactObjectSize) {
+      throw new TypeError("Raw Git cat-file permits only --batch, -s for one exact object, or one exact blob object");
+    }
+    return;
+  }
+  const recursiveExactTree = (
+    commandArguments.length === 6
+    && commandArguments[0] === "-r"
+    && commandArguments[1] === "-z"
+    && commandArguments[2] === "--full-tree"
+    && /^[0-9a-f]{40}$/u.test(commandArguments[3])
+    && commandArguments[4] === "--"
+    && commandArguments[5] === "."
+  );
+  if (recursiveExactTree) return;
+  const separator = commandArguments.indexOf("--");
+  const options = separator === -1 ? commandArguments : commandArguments.slice(0, separator);
+  const paths = separator === -1 ? [] : commandArguments.slice(separator + 1);
+  const fixedOptions = options.filter((argument) => !["-z", "--full-tree"].includes(argument));
+  if (
+    separator < 0
+    || fixedOptions.length !== 1
+    || !safeRawRevision(fixedOptions[0])
+    || paths.length < 1
+    || paths.some((repositoryPath) => typeof repositoryPath !== "string" || repositoryPath.length === 0 || repositoryPath.startsWith("-"))
+  ) {
+    throw new TypeError("Raw Git ls-tree requires one exact revision and literal paths after --");
+  }
+}
+
+function safeRawRevision(value) {
+  return typeof value === "string" && (
+    /^(?:HEAD|[0-9a-f]{40})(?:\^\{(?:commit|tree)\})?$/u.test(value)
+    || /^HEAD:(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))(?!.*\\)[^\u0000-\u001f\u007f]+$/u.test(value)
+  );
 }
 
 function gitNullDevice() {
@@ -203,7 +349,9 @@ function nearestExisting(target) {
 
 function assertNoSymlinkComponents(repository, target) {
   const relative = path.relative(repository, target);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) throw new Error(`path escapes repository: ${target}`);
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error(`path escapes repository: ${target}`);
+  }
   let current = repository;
   for (const segment of relative.split(path.sep).filter(Boolean)) {
     current = path.join(current, segment);
@@ -215,5 +363,6 @@ function assertNoSymlinkComponents(repository, target) {
 
 function inside(parent, child) {
   const relative = path.relative(parent, child);
-  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+  return relative === ""
+    || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
 }

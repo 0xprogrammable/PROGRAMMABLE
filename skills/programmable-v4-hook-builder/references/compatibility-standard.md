@@ -1,12 +1,14 @@
 # Programmable compatibility standard
 
-Version: `1.3.0`
+Version: `1.6.0`
 
 This standard defines the information and structural checks required before a Programmable prototype begins. It does
 not approve a model, certify security or predict support from Uniswap routing or third-party indexers.
 
-The launch scope is one launched token and one canonical v4 launch pool, with any application, game, service, indexer,
-or other project surfaces required by the idea. Every launch-ready canonical pool uses one fee-enforcing hook. Use the
+The project scope may contain multiple launched or existing assets, pools, markets, chains, applications, games,
+services, indexers, or other surfaces. Declare each launch unit and lifecycle. The released Programmable runtime may
+support one primary launched token and one canonical v4 fee pool per launch unit; wider technically complete designs
+remain reviewable and become platform capability decisions. Every runtime-supported canonical fee pool uses one fee-enforcing hook. Use the
 standard Programmable fee-hook profile through project-specific source when no other behavior must execute atomically with a pool action, and integrate
 the fee into the project's single hook when custom behavior is required. Both paths require exact tests and maintainer review. A reusable hook for arbitrary
 existing pools may be built and reviewed but cannot claim platform-launch compatibility until the creation,
@@ -15,6 +17,19 @@ initialization, liquidity, trading, claims, failure, and retirement lifecycle is
 The standard has no launch-type allowlist. Unknown mechanics route to architecture discussion. Only an objective
 reproducible conflict can create an adverse safety finding; a missing category, parser limitation, missing tool, or
 unavailable evidence cannot establish that an idea is unsafe.
+
+## Generic launch boundary
+
+Every prototype binds an open `launchPlan.targetStrategy` slug rather than selecting from a product allowlist. It names
+the immutable target component, exact call/configuration/liquidity source paths, executable tests, inclusive native-value
+range, refund policy, absent-pool prestate and required post-acceptance bundle. Novel targets remain architecture-review
+eligible; missing bindings fail prototype readiness.
+
+The canonical PoolKey launch also binds a positive uint128 `minimumInitialLiquidity`. Executor V1 starts from an absent
+pool, calls one exact target, then requires that exact PoolKey to exist with at least the declared active liquidity.
+Submission review proves only the plan and closed source paths. After real Registry acceptance, the offline
+`launch-bundle` command may derive an unsigned candidate from exact local Git/file/artifact bytes. It cannot establish
+runtime, deployment or authorization evidence.
 
 ## Chain application scope and launch scope
 
@@ -43,17 +58,46 @@ remain runtime-unverified. Resolving one of those records preserves its trust ti
 it does not relabel the record as a Programmable-tested deployment. The `programmable-tested` dependency baseline names
 the pinned build/source dependency set, not chain runtime support.
 
-## Decision states
+## Readiness states
 
-| State | Meaning | Next action |
+The authoritative result has two independent axes:
+
+| `readiness.design` | Meaning | Next action |
 | --- | --- | --- |
-| `PROTOTYPE_READY` | Deterministic checks found no known structural blocker; semantic and security review are still required | Complete semantic review, then build an isolated prototype and its evidence package |
-| `REDESIGN_REQUIRED` | The idea may be viable, but one or more material decisions or safeguards are unresolved | Resolve the named findings and rerun preflight |
-| `UNSUPPORTED` | The current design conflicts with a hard platform, disclosure, provenance, or security boundary | Change the design materially; do not implement around the gate |
+| `DESIGN_NEEDS_INFORMATION` | A product-changing fact is unresolved | Ask the smallest material question |
+| `DESIGN_CHANGES_REQUIRED` | The declared design conflicts with a mandatory product or security rule | Repair the named design finding and rerun preflight |
+| `DESIGN_REVIEW_REQUIRED` | The design is novel or cannot be classified automatically, but no hard conflict is known | Continue architecture review without labelling the idea unsafe |
+| `DESIGN_READY` | The design may enter isolated implementation | Build and collect implementation evidence |
+| `DESIGN_HARD_CONFLICT` | The requested behavior depends on an objective hard safety conflict | Change the requested behavior; do not implement around the boundary |
+
+| `readiness.implementation` | Meaning |
+| --- | --- |
+| `NOT_STARTED` | No implementation evidence is claimed |
+| `IN_PROGRESS` | Implementation exists or is being built, but the validation package is incomplete |
+| `IMPLEMENTATION_REVIEW_REQUIRED` | Source or evidence needs a supported or human review path |
+| `IMPLEMENTATION_CHANGES_REQUIRED` | The current implementation has an objective repairable finding |
+| `STRUCTURALLY_COMPLETE` | Repository closure and portable static package checks completed against builder-declared evidence; no evidence command or sandbox rebuild ran |
+
+`readiness.design` and `readiness.implementation` are authoritative. Report v3 retains the older `decision` field for
+one migration release only and marks it `decisionCompatibility: LEGACY_COMPATIBILITY_ONLY`:
+
+| Legacy `decision` | Compatibility meaning only |
+| --- | --- |
+| `PROTOTYPE_READY` | At most, no known structural design blocker; it never means source exists or builds and tests passed |
+| `REDESIGN_REQUIRED` | One or more findings require attention; inspect both readiness axes to determine whether the finding is about design or implementation |
+| `UNSUPPORTED` | A compatibility projection of an objective hard design conflict, never of novelty, missing tooling, parser limits, or unavailable evidence |
+
+A legacy decision cannot override either readiness axis. In particular, `PROTOTYPE_READY` never proves an
+implementation. This builder does not emit `PROTOTYPE_VALIDATED` or `SANDBOX_REBUILD_VERIFIED`. A
+`STRUCTURALLY_COMPLETE` result records static repository closure only; `sandboxVerification.state: NOT_RUN` remains
+explicit, and independent verification, audit, maintainer acceptance, submission, deployment, launch, provider
+support, and availability remain separate.
+GitHub PR transport, application review, launch authorization, transactions, runtime verification, monitoring, and
+public availability remain separate external states.
 
 The validator reports known structural compatibility only. Free-text meaning requires the independent semantic review in
 [intake-playbook.md](intake-playbook.md). New findings during semantic review or implementation can return a model to
-preflight.
+the corresponding readiness state.
 
 ## Progressive preflight
 
@@ -121,7 +165,8 @@ Lock the exact `PoolKey` inputs:
 - Native ETH represented by the zero address, when used
 - LP fee mode and explicit fee value or dynamic-fee flag
 - Tick spacing
-- Whether a custom hook exists; if it does, its address and all 14 permission bits
+- Whether any hook exists, including the standard Programmable fee profile; if it does, its profile, address, and all 14
+  permission bits
 - Canonical-pool registration and alternative-pool policy
 
 Every asset has a stable id, role, origin, exact address when pre-existing, transfer behavior, issuer controls, upgrade
@@ -147,14 +192,30 @@ Permission bits, from highest to lowest:
 | `0x0001` | `afterRemoveLiquidityReturnDelta` |
 
 When `hook.used` is false, all 14 bits are false, hook-only configuration is neutral, and no hook address is mined.
-`noHookArchitecture.route` must select the applicable proposal architecture, but that design cannot be launch-ready:
-keep `programmableFee.collection.status` at `pending-hook-integration` and route it to architecture or changes-required
-review. Before prototype readiness, implement the standard fee-hook profile or integrate the policy into the project's
-single custom hook, with exact source, tests, and maintainer review. When `hook.used` is true,
-`noHookArchitecture` is null, every return-delta bit requires its parent
+`noHookArchitecture.route` must select the applicable proposal architecture. New submissions keep only that route and
+rationale there and place transfer policy, tax, automatic liquidity, provider limits, and tests in the optional
+top-level `tokenMechanics` profile. Existing `1.4.0` drafts may retain those five fields under `noHookArchitecture`;
+the checker deterministically falls back to that legacy profile, prefers the top-level profile when both exist, and
+blocks divergent duplicate declarations. The no-hook design cannot be launch-ready:
+keep `programmableFee.collection.status` at `pending-hook-integration`. The design axis may still reach `DESIGN_READY`
+when the required integration is fully specified; the legacy projection or implementation axis may still record the
+missing work. Before implementation can reach `STRUCTURALLY_COMPLETE`, implement the standard fee-hook profile or
+integrate the policy into the project's single custom hook, with exact declared source, tests, and static package
+closure. Maintainer review remains a separate external state. When
+`hook.used` is true, `noHookArchitecture` is null, while `tokenMechanics` may still describe bounded token-side
+behavior paired with the standard or integrated Programmable fee hook. Every return-delta bit requires its parent
 callback and the deployed address must match the final permission mask. Any
 compiler, metadata, import, optimizer, constructor, deployer, or creation-code change invalidates a previously mined
 CREATE2 salt.
+
+An included quote or swap client also completes `integration.sdkSafetyProfile`. It imports `@uniswap/v4-sdk` only from
+the public package root, disables local `Pool` math for hooked routes, binds an executable hooked quote source, keeps
+hookData byte-identical per hop, selects the exact Universal Router generation, and records the matching per-hop and
+SDK `2.3.x` slippage semantics. A liquidity-position client additionally sets
+`deprecatedLiquidityActionsDisabled=true` and proves its final action bytes and traces contain neither
+`MINT_POSITION_FROM_DELTAS` nor `INCREASE_LIQUIDITY_FROM_DELTAS`; current v4 periphery marks both sandwich-vulnerable
+and deprecated. See `v4-sdk-integration.md` and `v4-liquidity-and-state.md`; these fields are null when their client is
+not included.
 
 Every callback authenticates the immutable PoolManager. Inside a callback, `msg.sender` is PoolManager. The callback's
 `sender` argument commonly identifies a router or PositionManager, not the end user. `hookData` is untrusted bytes.
@@ -174,9 +235,15 @@ project = effective - 1,000
 
 The split is non-additive: a selected total of `3%` remains `3%`, allocated `0.1%` to Programmable and `2.9%` to the
 project. LP fees are excluded. Router charges, transfer taxes, app payments, donations, or alternative-pool behavior
-are not substitutes. Bind the root `programmableFee` record to the canonical pool hook, all four swap modes, executed
-amount after partial fills, quote asset, value flow, collection and claim events, and liability keys
+are not substitutes. Bind the root `programmableFee` record to the canonical pool hook, every successful supported swap
+mode, deterministic pre-movement rejection for each unsupported quadrant, executed amount after partial fills, quote
+asset, value flow, collection and claim events, and liability keys
 `(poolId,currency,owner)` with no cross-pool netting.
+
+Policy version `1.1.0` also fixes rounding semantics: platform and project streams keep independent cumulative remainders
+for the canonical pool lifetime; claims never reset them; positive gross quote amounts below 1,000 smallest units revert;
+and the declared accounting is fragmentation-resistant. A per-swap floor or claim-scoped remainder is changes-required,
+not an alternative implementation of the policy.
 
 Use `hook.feeMechanism.collectionPath: quadrant-dependent-swap-return-delta`. For each mode, bind a before-swap return
 delta when the quote asset is the specified currency and an after-swap return delta when it is the executed unspecified
@@ -201,7 +268,7 @@ For a dynamic LP fee, additionally lock:
 
 A dynamic LP fee belongs to liquidity providers and is not creator revenue.
 
-For a model-specific no-hook transfer tax, lock the buy, sell, and peer-transfer rates; immutable maximum; exemption
+For a transfer tax in `tokenMechanics`, lock the buy, sell, and peer-transfer rates; immutable maximum; exemption
 set; recipient destinations and shares; value-flow ids; mutability, authority, and delay; PoolManager transfer scope
 and classification; liquidity-add/remove and alternative-pool treatment; event; and failure behavior. A token sees the
 shared PoolManager, not a trustworthy PoolId or swap-versus-liquidity action label, so any ingress/egress classification
@@ -287,7 +354,8 @@ Resolve the following when the corresponding surface exists:
   bindings for the documented Uniswap SDK packages
 - Permit2 chain, verifying contract, token, spender, amount, nonce, expiration, and signature deadline
 - Quoter behavior, including that revert-based quoting is read-only simulation
-- Exact-input and exact-output support in both directions
+- Complete four-quadrant support/rejection matrix; successful modes have exact execution semantics and unsupported modes
+  reject before value, state, liability, quote, router, or UI movement
 - Slippage, deadline, hookData, partial fills, native value, and refund handling
 - StateView reads pinned to one block
 - Indexer discovery versus receipt and lifecycle proof
@@ -309,14 +377,17 @@ blocking finding until an exact generation is selected.
 
 Bind public presentation separately from protocol behavior. Record the exact project name and description, token name
 and symbol, project/token URIs, logo URIs and content hashes, whether each metadata record is mutable, and the exact
-owner of every mutable record. Preserve Unicode names, but review compatibility forms, mixed-script confusables and
-protected provider lookalikes before display. Invisible controls and bidirectional overrides are not valid metadata.
+owner of every mutable record. Preserve legitimate Unicode names, but review compatibility forms, mixed-script
+confusables and protected provider lookalikes before display. Control, default-ignorable, private-use, noncharacter and
+bidirectional code points are not valid public identity or label metadata.
 
 Record affiliations as structured relationships. `technology-use` means only that the project uses the named
 technology. Official, partner, sponsored, audit or other organizational claims require public attributable evidence and
-human verification. Record provider-facing tags and labels per provider with `not-requested`, `unknown`, or
-`provider-documented` support. Unknown support adds provider review only; it is not a compatibility rejection and must
-not be converted into a favorable support claim.
+human verification. Record each provider and exact surface separately with `not-requested`, `unknown`, `unsupported`,
+`stale`, or `provider-confirmed` support. Every evidence record binds `observedAt`, `validUntil`, evidence kind, an
+attributable HTTPS URI and its SHA-256. Missing or expired evidence falls back to `unknown` or `stale` review; it never
+becomes an unsafe architecture finding. `provider-confirmed` requires complete current evidence and still needs external
+verification.
 
 Locally resolved package files are not primary GitHub source. Mark them as builder-declared local evidence, exclude
 them from primary source paths, and require a separate package-lock/install/closure gate before treating their version
@@ -375,17 +446,26 @@ self-assessment, not a badge. Programmable does not convert it into “safe.”
 
 ## Semantic readiness
 
-`PROTOTYPE_READY` may be presented only when all conditions hold:
+`readiness.design: DESIGN_READY` may be presented only when all conditions hold:
 
-1. The deterministic report has no hard or blocking finding.
+1. The deterministic report has no hard or blocking design finding.
 2. Independent semantic review confirms that the design card, structured fields, worked numerical examples, value
    conservation, failure behavior, proposal, threat model, and test plan agree.
-3. `programmableFee.collection.status` is `implemented`, the single canonical-pool hook binding is complete, and exact
-   source and tests cover the mandatory fee policy. A pending or substitute integration remains changes-required.
+3. The design completely specifies the required canonical-pool hook binding, non-additive mandatory fee policy, claim
+   authority, and exact source and test obligations. Source need not exist yet at design stage.
+
+`DESIGN_READY` permits isolated implementation only. It does not mean code exists, was tested or reviewed, was
+submitted, or can launch. Set `readiness.implementation: STRUCTURALLY_COMPLETE` only after the exact source and
+repository closure are statically bound to the declared evidence. This does not execute an evidence command or rebuild
+the implementation. A pending or substitute fee integration prevents `STRUCTURALLY_COMPLETE` even when the design
+itself is ready.
 
 Schema-valid prose is not evidence that an equation is correct or a dependency claim is true.
 Review public UI and application strings as well as documents. Ignore comments and declared test fixtures, but reject
 unsupported approval, audit, safety, deployment and availability claims that would actually be shown to users.
+
+`PROTOTYPE_READY` is not a launch-admission verdict. Apply [approval-criteria.md](approval-criteria.md) to the immutable
+prototype before reporting `CHANGES REQUIRED`, `PLATFORM PENDING`, or `READY FOR FINAL VERIFICATION`.
 
 ## Platform profiles
 
@@ -410,8 +490,9 @@ See [project-surfaces-and-capabilities.md](project-surfaces-and-capabilities.md)
 
 A permissionless launch model may not hide or retain arbitrary minting, transfer freezing, confiscation, blacklisting,
 undisclosed transfer tax, arbitrary execution, or silent fee and payout changes. A disclosed, bounded transfer tax can
-continue only through the model-specific no-hook profile with unrestricted transfer and sell liveness, exact recipients,
-authority, custody, provider limitations, and tests. Any administration changes the trust profile and may make the
+continue through the top-level `tokenMechanics` profile, paired with the mandatory standard/integrated fee hook or kept
+as a model-specific no-hook proposal, with unrestricted transfer and sell liveness, exact recipients, authority,
+custody, provider limitations, and tests. Any administration changes the trust profile and may make the
 design unsuitable for this category.
 
 Token behavior names are open slugs. A behavior outside the acceleration catalog must use `tokenBehaviorExtensions`
@@ -450,7 +531,8 @@ approval, compatibility or audit coverage.
 
 ## Hard incompatibilities
 
-Return `UNSUPPORTED` for the current design when any condition below is true:
+Set `readiness.design` to `DESIGN_HARD_CONFLICT` when any condition below is true. The legacy compatibility projection
+may then return `UNSUPPORTED`:
 
 - Hidden or intentionally misleading economic behavior
 - Unauthenticated privileged entry point or callback
@@ -459,11 +541,14 @@ Return `UNSUPPORTED` for the current design when any condition below is true:
 - Arbitrary target and calldata executed with protocol authority
 - Unverifiable custody, solvency source, or value flow
 
-Repairable implementation defects and missing evidence block the current revision as `REDESIGN_REQUIRED` or a tooling
-state; they do not make the product category unsupported. This includes unbounded critical loops, ignored call or
+Repairable implementation defects and missing evidence use the appropriate implementation changes- or review-required
+state; the legacy projection may still say `REDESIGN_REQUIRED`. They do not make the product category unsupported.
+This includes unbounded critical loops, ignored call or
 token-transfer results, floating dependency pins, incomplete signature bindings, missing runtime/CREATE2/permission
 evidence, and unsupported mainnet, audit, approval, routing, or availability wording. Name the exact correction and
-rerun the invalidated checks. Return `UNSUPPORTED` only when the requested behavior itself depends on the hard conflict.
+rerun the invalidated checks. Novelty, parser limitations, missing tools, and unavailable evidence route to design or
+implementation review rather than a hard conflict. Use legacy `UNSUPPORTED` only when the requested behavior itself
+depends on the objective hard conflict.
 
 ## Sources
 

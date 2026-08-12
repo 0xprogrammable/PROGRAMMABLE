@@ -1,0 +1,198 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:trade-execution:1.0.0",
+  "title": "Programmable trade execution interface v1 envelopes",
+  "description": "Closed logical envelopes carried as ABI-v2 bytes by quote(bytes) selector 0xedfa3568 and buildExecution(bytes) selector 0x21be7c85. This interface defines compatibility only; it is not deployment, approval, route admission, or execution evidence.",
+  "oneOf": [
+    { "$ref": "#/$defs/requestEnvelope" },
+    { "$ref": "#/$defs/quoteEnvelope" },
+    { "$ref": "#/$defs/buildExecutionEnvelope" }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "not": { "const": "sha256:0000000000000000000000000000000000000000000000000000000000000000" }
+    },
+    "bytes32": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$",
+      "not": { "const": "0x0000000000000000000000000000000000000000000000000000000000000000" }
+    },
+    "address": { "type": "string", "pattern": "^0x[0-9a-f]{40}$" },
+    "nonzeroAddress": { "type": "string", "pattern": "^0x(?!0{40}$)[0-9a-f]{40}$" },
+    "bytes": { "type": "string", "pattern": "^0x(?:[0-9a-f]{2})*$", "maxLength": 1048578 },
+    "nonemptyBytes": { "type": "string", "pattern": "^0x(?:[0-9a-f]{2})+$", "maxLength": 1048578 },
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "positiveUint256": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$",
+      "maxLength": 78
+    },
+    "uint256": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]*)$",
+      "maxLength": 78
+    },
+    "header": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "interfaceId", "interfaceVersion", "encoding", "mappingProfile", "tupleWrapping"],
+      "properties": {
+        "schemaVersion": { "const": "1.0.0" },
+        "interfaceId": { "const": "programmable-trade-execution-v1" },
+        "interfaceVersion": { "const": "1.0.0" },
+        "encoding": { "const": "abi-v2" },
+        "mappingProfile": { "const": "canonical-json-to-abi-v1" },
+        "tupleWrapping": { "const": "field-sequence-no-outer-offset" }
+      }
+    },
+    "requestEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["$schema", "header", "contract", "abiType", "payload"],
+      "properties": {
+        "$schema": { "const": "urn:programmable:trade-execution:1.0.0" },
+        "header": { "$ref": "#/$defs/header" },
+        "contract": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "entrypointSignature", "selector"],
+              "properties": {
+                "id": { "const": "programmable-trade-request-v1" },
+                "entrypointSignature": { "const": "quote(bytes)" },
+                "selector": { "const": "0xedfa3568" }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "entrypointSignature", "selector"],
+              "properties": {
+                "id": { "const": "programmable-trade-request-v1" },
+                "entrypointSignature": { "const": "buildExecution(bytes)" },
+                "selector": { "const": "0x21be7c85" }
+              }
+            }
+          ]
+        },
+        "abiType": {
+          "const": "(bytes32,bytes32,uint256,bytes32,bytes32,address,address,bool,bool,uint256,uint16,uint256,bytes32,bytes32)"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "manifestSha256",
+            "modeId",
+            "chainId",
+            "poolKeySha256",
+            "hookDataSha256",
+            "sender",
+            "recipient",
+            "direction",
+            "amountMode",
+            "amountSpecified",
+            "slippageBps",
+            "deadline",
+            "fundingProfileId",
+            "feeBehaviorSha256"
+          ],
+          "properties": {
+            "manifestSha256": { "$ref": "#/$defs/sha256" },
+            "modeId": { "$ref": "#/$defs/slug" },
+            "chainId": { "$ref": "#/$defs/positiveUint256" },
+            "poolKeySha256": { "$ref": "#/$defs/sha256" },
+            "hookDataSha256": { "$ref": "#/$defs/sha256" },
+            "sender": { "$ref": "#/$defs/nonzeroAddress" },
+            "recipient": { "$ref": "#/$defs/nonzeroAddress" },
+            "direction": { "enum": ["zero-for-one", "one-for-zero"] },
+            "amountMode": { "enum": ["exact-input", "exact-output"] },
+            "amountSpecified": { "$ref": "#/$defs/positiveUint256" },
+            "slippageBps": { "type": "integer", "minimum": 0, "maximum": 9999 },
+            "deadline": { "$ref": "#/$defs/positiveUint256" },
+            "fundingProfileId": { "$ref": "#/$defs/slug" },
+            "feeBehaviorSha256": { "$ref": "#/$defs/sha256" }
+          }
+        }
+      }
+    },
+    "quoteEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["$schema", "header", "contract", "abiType", "payload"],
+      "properties": {
+        "$schema": { "const": "urn:programmable:trade-execution:1.0.0" },
+        "header": { "$ref": "#/$defs/header" },
+        "contract": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "entrypointSignature", "selector"],
+          "properties": {
+            "id": { "const": "programmable-trade-quote-v1" },
+            "entrypointSignature": { "const": "quote(bytes)" },
+            "selector": { "const": "0xedfa3568" }
+          }
+        },
+        "abiType": { "const": "(bytes32,bytes32,uint256,bytes32,uint256,uint256,bytes32,bytes32)" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["requestSha256", "manifestSha256", "blockNumber", "blockHash", "amountSpecified", "amountQuoted", "callDataSha256", "feeBehaviorSha256"],
+          "properties": {
+            "requestSha256": { "$ref": "#/$defs/sha256" },
+            "manifestSha256": { "$ref": "#/$defs/sha256" },
+            "blockNumber": { "$ref": "#/$defs/uint256" },
+            "blockHash": { "$ref": "#/$defs/bytes32" },
+            "amountSpecified": { "$ref": "#/$defs/positiveUint256" },
+            "amountQuoted": { "$ref": "#/$defs/positiveUint256" },
+            "callDataSha256": { "$ref": "#/$defs/sha256" },
+            "feeBehaviorSha256": { "$ref": "#/$defs/sha256" }
+          }
+        }
+      }
+    },
+    "buildExecutionEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["$schema", "header", "contract", "abiType", "payload"],
+      "properties": {
+        "$schema": { "const": "urn:programmable:trade-execution:1.0.0" },
+        "header": { "$ref": "#/$defs/header" },
+        "contract": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "entrypointSignature", "selector"],
+          "properties": {
+            "id": { "const": "programmable-trade-execution-envelope-v1" },
+            "entrypointSignature": { "const": "buildExecution(bytes)" },
+            "selector": { "const": "0x21be7c85" }
+          }
+        },
+        "abiType": { "const": "(bytes32,bytes32,address,uint256,bytes,uint256,bytes32,bytes32)" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["requestSha256", "quoteSha256", "target", "value", "calldata", "deadline", "actionPlanSha256", "fundingWitnessSha256"],
+          "properties": {
+            "requestSha256": { "$ref": "#/$defs/sha256" },
+            "quoteSha256": { "$ref": "#/$defs/sha256" },
+            "target": { "$ref": "#/$defs/nonzeroAddress" },
+            "value": { "$ref": "#/$defs/uint256" },
+            "calldata": { "$ref": "#/$defs/nonemptyBytes" },
+            "deadline": { "$ref": "#/$defs/positiveUint256" },
+            "actionPlanSha256": { "$ref": "#/$defs/sha256" },
+            "fundingWitnessSha256": { "$ref": "#/$defs/sha256" }
+          }
+        }
+      }
+    }
+  }
+}

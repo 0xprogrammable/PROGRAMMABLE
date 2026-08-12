@@ -17,12 +17,11 @@ import {
 import {
   buildReviewTarget,
   analyzeRepositoryReview,
-  parseRemappings,
   validateDependencyLock
 } from "./review-target-core.mjs";
 import { validateFoundryBuildInfo } from "./build-info-core.mjs";
+import { validateFeeConformance } from "./fee-conformance-core.mjs";
 import { parseCliOrExit } from "./cli-args.mjs";
-import { extractPublicClaimText, findUnsupportedPublicClaims } from "./public-claims-core.mjs";
 import {
   assertInsideRepository,
   resolveRepositoryRoot
@@ -30,47 +29,33 @@ import {
 import {
   declaredSoliditySourceAndTestPaths,
   declaredSourceAndTestPaths,
-  isCanonicalReviewTargetPath,
-  isGitLfsPointer,
-  REVIEW_TARGET_CONTRACT_V1
+  isGitLfsPointer
 } from "./review-target-contract.mjs";
+import {
+  MAX_BUILD_INFO_BYTES,
+  SHA256_DIGEST_PATTERN
+} from "./verify-package-contracts.mjs";
+import { createProposalReadinessValidator } from "./verify-package-proposal-readiness.mjs";
+import { verifyUnsupportedPublicClaims } from "./verify-package-public-claims.mjs";
+import {
+  createVerifyPackageResourceRuntime,
+  readJson
+} from "./verify-package-resource-core.mjs";
+import {
+  maskSolidityTrivia,
+  scanSolidity
+} from "./verify-package-solidity-policy.mjs";
 
-const MAX_FILE_BYTES = REVIEW_TARGET_CONTRACT_V1.maximumFileBytes;
-const MAX_BUILD_INFO_BYTES = 64_000_000;
-const MAX_FILES = REVIEW_TARGET_CONTRACT_V1.maximumFiles;
-const MAX_ENTRIES = 1_024;
-const MAX_TOTAL_BYTES = REVIEW_TARGET_CONTRACT_V1.maximumTotalBytes;
-const MAX_TOTAL_INTAKE_BYTES = MAX_BUILD_INFO_BYTES + MAX_TOTAL_BYTES;
-const MAX_PATH_DEPTH = REVIEW_TARGET_CONTRACT_V1.maximumPathDepth;
-const SHA256_DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/u;
-const PROPOSAL_PLACEHOLDER_PATTERN = /^(?:unresolved|unknown|tbd|todo|to be determined|not decided)(?:\s*[:.!-].*)?$/iu;
-const PROPOSAL_INSTRUCTION_PATTERN = /^describe\b/iu;
-const PROPOSAL_DOCUMENTS = ["PROPOSAL.md", "THREAT_MODEL.md", "TEST_PLAN.md", "EVIDENCE.md"];
-const PROPOSAL_PLACEHOLDER_SENTINELS = [
-  "Describe the model in one concrete sentence before implementation begins.",
-  "| Outcome | What a creator launches and what traders and LPs experience |",
-  "| Authorities | Every mutable capability and controller |",
-  "| Failure | Revert, retry, fallback, unwind, migration, or retirement |",
-  "Explain why the project uses Uniswap v4. State `hook.used` explicitly."
-];
-const TRUSTED_FIRST_PARTY_ROOTS = [
-  "app",
-  "contracts",
-  "models",
-  "script",
-  "spec",
-  "src",
-  "submissions",
-  "test"
-];
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const skillRoot = path.resolve(scriptDirectory, "..");
 const { options, positionals } = parseCliOrExit({
   command: "verify-package.mjs",
-  usage: "verify-package.mjs [--repository-root <path>] <submission-directory>",
+  usage: "verify-package.mjs [--repository-root <path>] [--require-intake-ready | --require-ready] <submission-directory>",
   summary: "Validate one public proposal or prototype package without executing submitter code.",
   options: [
-    { name: "--repository-root", key: "repositoryRoot", type: "value", valueName: "path", description: "Use this Git worktree instead of the current directory." }
+    { name: "--repository-root", key: "repositoryRoot", type: "value", valueName: "path", description: "Use this Git worktree instead of the current directory." },
+    { name: "--require-intake-ready", key: "requireIntakeReady", type: "boolean", description: "Fail unless static package intake is READY." },
+    { name: "--require-ready", key: "requireReady", type: "boolean", description: "Deprecated alias for --require-intake-ready." }
   ],
   positionals: { min: 1, max: 1, names: ["submission-directory"] }
 });
@@ -87,6 +72,7 @@ try {
 } catch (error) {
   fail(`trusted skill resource is invalid: ${error.message}`, 2);
 }
+const proposalReadinessErrors = createProposalReadinessValidator({ skillRoot, submissionTemplate });
 const input = positionals[0];
 
 let repositoryRoot;
@@ -103,10 +89,22 @@ const errors = [];
 const warnings = [];
 const toolingBlockers = [];
 const requiredFiles = ["submission.json", "PROPOSAL.md", "THREAT_MODEL.md", "TEST_PLAN.md", "EVIDENCE.md"];
-const repositoryResources = new Map();
-let repositoryResourceBytes = 0;
-let repositoryNormalResourceBytes = 0;
-let repositoryResourceBlocked = false;
+const resourceRuntime = createVerifyPackageResourceRuntime({
+  repositoryRoot,
+  packageRoot,
+  errors,
+  toolingBlockers
+});
+const {
+  resolveRepositoryFile,
+  walkPackage,
+  validatePackageBudgets,
+  declaredBuildInfoBudgetPath,
+  loadTrustedOrderedRemappings,
+  trustedFirstPartyRoots,
+  addToolingBlocker,
+  relative
+} = resourceRuntime;
 
 let packageEntries;
 try {
@@ -143,8 +141,11 @@ validatePackageBudgets(
 
 if (!preflight) {
   errors.push("preflight report is unavailable");
-} else if (submission?.stage === "prototype" && preflight.decision !== "PROTOTYPE_READY") {
-  errors.push(`prototype package requires PROTOTYPE_READY; current decision is ${preflight.decision}`);
+} else if (
+  submission?.stage === "prototype"
+  && preflight.readiness?.implementation !== "STRUCTURALLY_COMPLETE"
+) {
+  errors.push(`prototype package requires STRUCTURALLY_COMPLETE; current implementation readiness is ${preflight.readiness?.implementation ?? "unavailable"}`);
 }
 
 const reportPath = path.join(packageRoot, "compatibility-report.json");
@@ -164,7 +165,15 @@ if (submission) {
     const value = submission.builder?.[field];
     if (typeof value !== "string" || value.trim().length === 0) errors.push(`builder.${field} is required for a public intake package`);
   }
-  rejectUnsupportedPublicClaims(errors);
+  verifyUnsupportedPublicClaims({
+    claimErrors: errors,
+    packageEntries,
+    packageRoot,
+    repositoryRoot,
+    submission,
+    addToolingBlocker,
+    relative
+  });
   if (submission.stage === "proposal") {
     errors.push(...proposalReadinessErrors({ submission, packageRoot }));
   }
@@ -176,6 +185,7 @@ if (submission) {
     submission.implementation?.specificationPath,
     submission.implementation?.testEvidencePath,
     submission.implementation?.dependencyLockPath,
+    submission.implementation?.feeConformanceManifestPath,
     submission.implementation?.gateStatusPath,
     submission.implementation?.reviewTargetPath,
     submission.implementation?.runtimeAssetManifestPath,
@@ -194,28 +204,50 @@ if (submission) {
     }
   }
 
-  if (submission.stage === "prototype" && !repositoryResourceBlocked) {
+  if (submission.stage === "prototype" && !resourceRuntime.repositoryResourceBlocked) {
     verifyPrototypePackage();
   }
 }
 
 const toolingBlocked = toolingBlockers.length > 0;
+const intakeReady = errors.length === 0 && !toolingBlocked;
 const declaredPackageDependencies = Array.isArray(submission?.integration?.sdkDependencies)
   ? submission.integration.sdkDependencies
   : [];
 const result = {
   validationState: toolingBlocked ? "TOOLING_BLOCKED" : "COMPLETED",
   toolingBlocked,
-  intakeValidated: errors.length === 0,
+  readiness: preflight?.readiness ?? null,
+  intake: {
+    state: intakeReady ? "READY" : "BLOCKED",
+    assurance: "static-structure-and-builder-declared-evidence-only"
+  },
+  sandboxVerification: {
+    state: "NOT_RUN"
+  },
+  intakeValidated: intakeReady,
   packageStructureValid: errors.length === 0,
   package: relative(packageRoot),
   stage: submission?.stage ?? null,
   preflightDecision: preflight?.decision ?? null,
-  designReadyForPrototype: preflight?.decision === "PROTOTYPE_READY" && !toolingBlocked,
-  prototypeIntakeValidated: submission?.stage === "prototype" && preflight?.decision === "PROTOTYPE_READY" && errors.length === 0,
+  preflightDecisionCompatibility: preflight?.decisionCompatibility ?? null,
   accepted: false,
   releaseEligible: false,
   available: false,
+  deprecatedBooleanProjections: {
+    state: "DEPRECATED_COMPATIBILITY_ONLY",
+    fields: {
+      intakeValidated: "use intake.state",
+      accepted: "use externalAuthority.acceptance",
+      releaseEligible: "use externalAuthority.releaseEligibility",
+      available: "use externalAuthority.availability"
+    }
+  },
+  externalAuthority: {
+    acceptance: "NOT_CHECKED",
+    releaseEligibility: "NOT_CHECKED",
+    availability: "NOT_CHECKED"
+  },
   packageDependencyEvidence: {
     state: declaredPackageDependencies.length === 0
       ? "not-declared"
@@ -227,166 +259,11 @@ const result = {
   submissionHash: preflight?.submissionHash ?? null,
   errors: [...new Set(errors)].sort(),
   warnings: [...new Set(warnings)].sort(),
-  note: "This gate validates public intake structure, deterministic preflight freshness and declared evidence without executing submitter code. It is not acceptance, an audit, deployment evidence, routing approval or availability."
+  note: "This gate validates public intake structure, deterministic preflight freshness and builder-declared evidence without executing submitter code or evidence commands. READY is static intake assurance only. Sandbox rebuild and independent verification were not run; this is not prototype validation, acceptance, an audit, deployment evidence, routing approval or availability."
 };
 
 console.log(JSON.stringify(result, null, 2));
-if (!result.intakeValidated) process.exit(1);
-
-function proposalReadinessErrors({ submission: value, packageRoot: root }) {
-  const readinessErrors = [];
-  const add = (message) => readinessErrors.push(`proposal readiness: ${message}`);
-
-  if (![value.model?.summary, value.model?.userOutcome, value.model?.whyV4]
-    .every((entry) => concreteProposalNarrative(entry, { minimumLength: 24, rejectInstruction: true }))) {
-    add("replace the scaffold idea with project-specific model.summary, model.userOutcome and model.whyV4 statements");
-  }
-
-  const architectureReady = [value.pool?.currency0, value.pool?.currency1]
-    .every(concreteProposalLabel)
-    && typeof value.pool?.canonical === "boolean"
-    && Number.isInteger(value.pool?.tickSpacing)
-    && ["static", "dynamic"].includes(value.pool?.lpFee?.mode)
-    && typeof value.hook?.used === "boolean";
-  if (!architectureReady) {
-    add("fix the base architecture before applying: name both pool assets, the canonical-pool policy, tick spacing, LP-fee mode and whether a custom hook is used");
-  }
-
-  if (!completeProposalLifecycle(value.launchLifecycle)) {
-    add("complete every lifecycle phase with actor, value flow, custody, failure and event, or a concrete not-applicable reason");
-  }
-
-  if (!completeProposalValueFlows(value.valueFlows)) {
-    add("document at least one complete value flow with its action, asset, source, destination, amount rule, settlement and failure behavior");
-  }
-
-  if (!completeProposalAuthorities(value)) {
-    add("list every authority with its controller, capabilities, mutability, delay and user-exit impact, or explicitly document why the design has no mutable authority");
-  }
-
-  if (!concreteProposalNarrative(value.operations?.incidentResponse, { minimumLength: 24 })) {
-    add("state a concrete incident and failure response instead of leaving the recovery path open");
-  }
-
-  if (!specificOpenArchitectureQuestions(value.unresolved)) {
-    add("replace scaffold open decisions with specific named architecture questions ending in '?', or use an empty list when none remain");
-  }
-
-  for (const documentName of PROPOSAL_DOCUMENTS) {
-    const documentPath = path.join(root, documentName);
-    if (!fs.existsSync(documentPath) || !fs.statSync(documentPath).isFile()) continue;
-    const contents = fs.readFileSync(documentPath, "utf8");
-    const template = renderedProposalTemplate(documentName, value.model);
-    if (substantiallyMatchesScaffold(contents, template)) {
-      add(`${documentName} is still substantially the generated scaffold; replace its instructions with project-specific content`);
-      continue;
-    }
-    if (documentName === "PROPOSAL.md" && PROPOSAL_PLACEHOLDER_SENTINELS.some((sentinel) => contents.includes(sentinel))) {
-      add("PROPOSAL.md still contains generated design-card or architecture placeholders");
-    }
-  }
-
-  return [...new Set(readinessErrors)];
-}
-
-function completeProposalLifecycle(lifecycle) {
-  const phases = Object.values(lifecycle ?? {});
-  if (phases.length === 0) return false;
-  return phases.every((phase) => {
-    if (phase?.applicable === true) {
-      return [phase.actor, phase.valueFlow, phase.custody, phase.failure, phase.event]
-        .every((entry) => concreteProposalNarrative(entry));
-    }
-    if (phase?.applicable === false) {
-      return concreteProposalNarrative(phase.notApplicableReason);
-    }
-    return false;
-  });
-}
-
-function completeProposalValueFlows(valueFlows) {
-  if (!Array.isArray(valueFlows) || valueFlows.length === 0) return false;
-  return valueFlows.every((flow) => [flow?.id, flow?.action, flow?.asset, flow?.from, flow?.to]
-    .every(concreteProposalLabel)
-    && [flow?.amountRule, flow?.settlement, flow?.failure]
-      .every((entry) => concreteProposalNarrative(entry)));
-}
-
-function completeProposalAuthorities(value) {
-  const authorities = Array.isArray(value.authorities) ? value.authorities : [];
-  if (authorities.length > 0) {
-    return authorities.every((authority) => concreteProposalLabel(authority?.role)
-      && concreteProposalLabel(authority?.controller)
-      && Array.isArray(authority?.capabilities)
-      && authority.capabilities.length > 0
-      && authority.capabilities.every(concreteProposalLabel)
-      && typeof authority?.mutable === "boolean"
-      && concreteProposalLabel(authority?.delay)
-      && concreteProposalNarrative(authority?.userExitImpact));
-  }
-
-  const noAuthorityEvidence = [
-    value.risk?.rationales?.upgradeability,
-    value.risk?.rationales?.autonomy,
-    value.operations?.incidentResponse,
-    ...(Array.isArray(value.disclosures) ? value.disclosures : [])
-  ];
-  return noAuthorityEvidence.some((entry) => concreteProposalNarrative(entry)
-    && explicitNoAuthorityStatement(entry));
-}
-
-function explicitNoAuthorityStatement(value) {
-  const normalized = value.trim();
-  return /\b(?:no|without)\b.{0,120}\b(?:admin(?:istrator)?|authorit(?:y|ies)|controller|governance|keeper|multisig|operator|oracle|owner|pause|privileged role|proxy|redirect|rescue|signer|upgrade)\b/iu.test(normalized)
-    || /\bimmutable\b.{0,120}\b(?:admin(?:istrator)?|authorit(?:y|ies)|controller|governance|keeper|multisig|operator|oracle|owner|pause|privileged role|proxy|redirect|rescue|signer|upgrade)\b/iu.test(normalized);
-}
-
-function specificOpenArchitectureQuestions(unresolved) {
-  if (!Array.isArray(unresolved)) return false;
-  const scaffoldQuestions = new Set((submissionTemplate.unresolved ?? []).map(normalizeProposalText));
-  return unresolved.every((entry) => concreteProposalNarrative(entry, { minimumLength: 24 })
-    && entry.trim().endsWith("?")
-    && !scaffoldQuestions.has(normalizeProposalText(entry)));
-}
-
-function concreteProposalLabel(value) {
-  return typeof value === "string"
-    && value.trim().length > 0
-    && !PROPOSAL_PLACEHOLDER_PATTERN.test(value);
-}
-
-function concreteProposalNarrative(value, { minimumLength = 12, rejectInstruction = false } = {}) {
-  if (typeof value !== "string") return false;
-  const normalized = value.trim();
-  if (normalized.length < minimumLength || PROPOSAL_PLACEHOLDER_PATTERN.test(normalized)) return false;
-  return !rejectInstruction || !PROPOSAL_INSTRUCTION_PATTERN.test(normalized);
-}
-
-function renderedProposalTemplate(documentName, model = {}) {
-  return fs.readFileSync(path.join(skillRoot, "assets", "templates", documentName), "utf8")
-    .replaceAll("{{MODEL_ID}}", model.id ?? "")
-    .replaceAll("{{MODEL_NAME}}", model.name ?? "")
-    .replaceAll("{{MODEL_SUMMARY}}", "Describe the model in one concrete sentence before implementation begins.");
-}
-
-function substantiallyMatchesScaffold(contents, template) {
-  if (normalizeProposalText(contents) === normalizeProposalText(template)) return true;
-  const templateLines = significantProposalLines(template);
-  if (templateLines.length === 0) return false;
-  const contentLines = new Set(significantProposalLines(contents));
-  const retained = templateLines.filter((line) => contentLines.has(line)).length;
-  return retained / templateLines.length >= 0.65;
-}
-
-function significantProposalLines(value) {
-  return [...new Set(value.split(/\r?\n/u)
-    .map((line) => normalizeProposalText(line))
-    .filter((line) => line.length >= 32 && !/^[-|: ]+$/u.test(line)))];
-}
-
-function normalizeProposalText(value) {
-  return String(value).trim().replace(/\s+/gu, " ").toLowerCase();
-}
+if (!intakeReady || ((options.requireIntakeReady || options.requireReady) && result.intake.state !== "READY")) process.exitCode = 1;
 
 function verifyPrototypePackage() {
   let dependencyLock = null;
@@ -419,6 +296,7 @@ function verifyPrototypePackage() {
     }));
   }
   verifyCompilerBuildInfo(dependencyLock, freshReviewTarget);
+  verifyProgrammableFeeConformance();
 
   const reviewTargetPath = submission.implementation?.reviewTargetPath;
   if (reviewTargetPath && freshReviewTarget) {
@@ -440,8 +318,32 @@ function verifyPrototypePackage() {
     if (!record.path.endsWith(".sol")) continue;
     if (record.kind === "solidity-dependency-import" || record.kind === "solidity-package-dependency-import") continue;
     const target = resolveRepositoryFile(record.path, errors);
-    if (target) scanSolidity(target, errors, warnings);
+    if (target) scanSolidity(target, errors, warnings, { submission, relative });
   }
+}
+
+function verifyProgrammableFeeConformance() {
+  const manifestPath = submission.implementation?.feeConformanceManifestPath;
+  if (!manifestPath) return;
+  const manifest = resolveRepositoryFile(manifestPath, errors);
+  if (!manifest) return;
+  let result;
+  try {
+    result = validateFeeConformance({
+      root: repositoryRoot,
+      manifestPath
+    });
+  } catch (error) {
+    errors.push(`fee conformance: ${error.message}`);
+    return;
+  }
+  if (result?.ok !== true) {
+    const messages = Array.isArray(result?.errors) && result.errors.length > 0
+      ? result.errors
+      : ["structural fee-conformance result is invalid"];
+    errors.push(...messages.map((message) => `fee conformance: ${message}`));
+  }
+  for (const warning of result?.warnings ?? []) warnings.push(`fee conformance: ${warning}`);
 }
 
 function verifyCompilerBuildInfo(dependencyLock, freshReviewTarget) {
@@ -677,495 +579,6 @@ function verifyDeploymentEvidence(record, index) {
   if (evidence?.sourceStatus !== "matched") errors.push(`onchain dependency ${index} deployment evidence sourceStatus must be matched`);
   if (typeof evidence?.verificationProvider !== "string" || evidence.verificationProvider.trim().length === 0) errors.push(`onchain dependency ${index} deployment evidence needs verificationProvider`);
   if (typeof evidence?.compiler !== "string" || evidence.compiler.trim().length === 0) errors.push(`onchain dependency ${index} deployment evidence needs compiler`);
-}
-
-function scanSolidity(file, scanErrors, scanWarnings) {
-  // Intake binds the declared compiler artifact to the reviewed source bytes,
-  // but AST output is optional. Keep this policy gate independent of optional
-  // compiler output: erase comments and literals, then reject every assembly
-  // form.
-  const source = maskSolidityTrivia(fs.readFileSync(file, "utf8"));
-  const name = relative(file);
-  if (submission.hook?.used === false) {
-    const hookInterface = /\b(?:BaseHook|IHooks|getHookPermissions)\b|\bHooks\s*\./u;
-    const hookCallback = /\bfunction\s+(?:beforeInitialize|afterInitialize|beforeAddLiquidity|afterAddLiquidity|beforeRemoveLiquidity|afterRemoveLiquidity|beforeSwap|afterSwap|beforeDonate|afterDonate)\s*\(/u;
-    if (hookInterface.test(source)) {
-      scanErrors.push(`${name}: hook.used=false conflicts with a Solidity v4 hook interface or permission declaration`);
-    }
-    if (hookCallback.test(source)) {
-      scanErrors.push(`${name}: hook.used=false conflicts with a Solidity v4 hook callback declaration`);
-    }
-  }
-  const assemblyPolicy = inspectInlineAssembly(source);
-  if (assemblyPolicy.present) {
-    scanErrors.push(`${name}: contains local inline assembly that requires an isolated maintainer review before intake`);
-  }
-  if (assemblyPolicy.usesOrigin) {
-    scanErrors.push(`${name}: uses Yul origin()`);
-  }
-  const prohibited = [
-    [/\btx\s*\.\s*origin\b/, "uses tx.origin"],
-    [/\bdelegatecall\b\s*(?:\{[^}]*\}\s*)?\(/s, "uses delegatecall"],
-    [/\bselfdestruct\b\s*\(/, "uses selfdestruct"],
-    [/pragma\s+solidity\s+(?:\^|~|>=|<=|>|<)/, "uses a floating Solidity pragma"]
-  ];
-  const review = [
-    [/\.call\s*(?:\{|\()/, "contains a low-level call"],
-    [/\b(?:TODO|FIXME|XXX)\b/, "contains an unresolved implementation marker"]
-  ];
-  for (const [pattern, message] of prohibited) if (pattern.test(source)) scanErrors.push(`${name}: ${message}`);
-  for (const [pattern, message] of review) if (pattern.test(source)) scanWarnings.push(`${name}: ${message}; include an explicit review disposition`);
-
-  const authorityText = (submission.authorities ?? []).flatMap((authority) => authority.capabilities ?? []).join(" ").toLowerCase();
-  if (/\b(?:onlyOwner|onlyRole|AccessControl|Ownable)\b/.test(source) && (submission.authorities?.length ?? 0) === 0) {
-    scanErrors.push(`${name}: source declares privileged access control but submission.authorities is empty`);
-  }
-  const capabilityNames = {
-    mint: ["mint", "issue"],
-    blacklist: ["blacklist", "blockAccount", "denylist"],
-    pause: ["pause", "freeze", "halt"],
-    upgrade: ["upgrade", "setImplementation", "changeImplementation"],
-    feeRecipient: ["setFeeRecipient", "changeFeeRecipient"],
-    payout: ["payout", "setReceiver", "setRecipient", "redirect"],
-    rescue: ["rescue", "sweep", "recover"]
-  };
-  for (const [capability, functionNames] of Object.entries(capabilityNames)) {
-    const alternatives = functionNames.join("|");
-    const callable = new RegExp(`\\bfunction\\s+(?:${alternatives})\\w*\\s*\\([^)]*\\)[\\s\\S]{0,400}\\b(?:public|external)\\b`, "i");
-    if (callable.test(source) && !authorityText.includes(capability.toLowerCase()) && !functionNames.some((entry) => authorityText.includes(entry.toLowerCase()))) {
-      scanErrors.push(`${name}: public or external ${capability} capability is not declared in submission.authorities`);
-    }
-  }
-}
-
-function maskSolidityTrivia(source) {
-  let output = "";
-  let mode = "code";
-  let quote = null;
-
-  for (let index = 0; index < source.length; index += 1) {
-    const current = source[index];
-    const next = source[index + 1];
-
-    if (mode === "line-comment") {
-      if (current === "\n") {
-        output += "\n";
-        mode = "code";
-      } else {
-        output += " ";
-      }
-      continue;
-    }
-
-    if (mode === "block-comment") {
-      if (current === "*" && next === "/") {
-        output += "  ";
-        index += 1;
-        mode = "code";
-      } else {
-        output += current === "\n" ? "\n" : " ";
-      }
-      continue;
-    }
-
-    if (mode === "string") {
-      output += current === "\n" ? "\n" : " ";
-      if (current === "\\") {
-        if (next !== undefined) {
-          output += next === "\n" ? "\n" : " ";
-          index += 1;
-        }
-      } else if (current === quote) {
-        mode = "code";
-        quote = null;
-      }
-      continue;
-    }
-
-    if (current === "/" && next === "/") {
-      output += "  ";
-      index += 1;
-      mode = "line-comment";
-    } else if (current === "/" && next === "*") {
-      output += "  ";
-      index += 1;
-      mode = "block-comment";
-    } else if (current === '"' || current === "'") {
-      output += " ";
-      mode = "string";
-      quote = current;
-    } else {
-      output += current;
-    }
-  }
-
-  return output;
-}
-
-function inspectInlineAssembly(source) {
-  let present = false;
-  let usesOrigin = false;
-  const assemblyPattern = /\bassembly\b/g;
-  let match;
-
-  while ((match = assemblyPattern.exec(source)) !== null) {
-    present = true;
-    let cursor = match.index + match[0].length;
-    cursor = skipWhitespace(source, cursor);
-
-    if (source[cursor] === "(") {
-      cursor = closingDelimiter(source, cursor, "(", ")");
-      if (cursor === -1) break;
-      cursor = skipWhitespace(source, cursor + 1);
-      assemblyPattern.lastIndex = cursor;
-    }
-
-    if (source[cursor] !== "{") continue;
-    const close = closingDelimiter(source, cursor, "{", "}");
-    if (close === -1) {
-      usesOrigin ||= /\borigin\s*\(\s*\)/.test(source.slice(cursor + 1));
-      break;
-    } else {
-      usesOrigin ||= /\borigin\s*\(\s*\)/.test(source.slice(cursor + 1, close));
-      assemblyPattern.lastIndex = close + 1;
-    }
-  }
-
-  return { present, usesOrigin };
-}
-
-function skipWhitespace(source, start) {
-  let cursor = start;
-  while (cursor < source.length && /\s/.test(source[cursor])) cursor += 1;
-  return cursor;
-}
-
-function closingDelimiter(source, start, open, close) {
-  let depth = 0;
-  for (let cursor = start; cursor < source.length; cursor += 1) {
-    if (source[cursor] === open) depth += 1;
-    else if (source[cursor] === close) {
-      depth -= 1;
-      if (depth === 0) return cursor;
-    }
-  }
-  return -1;
-}
-
-function rejectUnsupportedPublicClaims(claimErrors) {
-  const publicApplicationDocuments = new Set([
-    "submission.json",
-    "compatibility-report.json",
-    "PROPOSAL.md",
-    "THREAT_MODEL.md",
-    "TEST_PLAN.md",
-    "EVIDENCE.md"
-  ]);
-  const packageTargets = packageEntries
-    .filter((entry) => entry.stat.isFile()
-      && entry.stat.size <= MAX_FILE_BYTES
-      && publicApplicationDocuments.has(path.relative(packageRoot, entry.path).replaceAll(path.sep, "/")))
-    .map((entry) => entry.path);
-  const scannedTargets = new Set();
-  for (const target of packageTargets) {
-    scannedTargets.add(path.resolve(target));
-    const text = extractPublicClaimText(fs.readFileSync(target, "utf8"), path.extname(target));
-    for (const finding of findUnsupportedPublicClaims(text)) {
-      claimErrors.push(`${relative(target)} contains an unsupported ${finding} claim`);
-    }
-  }
-
-  for (const relativePath of declaredPublicClaimPaths(submission)) {
-    const extension = path.extname(relativePath).toLowerCase();
-    if (!isSupportedPublicClaimPath(relativePath, extension)) continue;
-    if (!isCanonicalReviewTargetPath(relativePath)) continue;
-    const target = path.resolve(repositoryRoot, relativePath);
-    if (scannedTargets.has(target) || isTestLikePublicSourcePath(relativePath)) continue;
-    try {
-      const stat = fs.lstatSync(target);
-      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_FILE_BYTES) continue;
-      assertInsideRepository(repositoryRoot, target);
-    } catch {
-      continue;
-    }
-    scannedTargets.add(target);
-    const publicText = extractPublicClaimText(fs.readFileSync(target, "utf8"), extension);
-    for (const finding of findUnsupportedPublicClaims(publicText)) {
-      claimErrors.push(`${relativePath} contains an unsupported ${finding} claim in declared public UI, locale or content text`);
-    }
-  }
-}
-
-function declaredPublicClaimPaths(value) {
-  const integration = value?.integration ?? {};
-  const routing = integration.routingAndDiscoverability ?? {};
-  const reconstruction = integration.dataReconstruction ?? {};
-  const handoff = integration.platformHandoff ?? {};
-  const testPaths = new Set([
-    ...(value?.implementation?.testPaths ?? []),
-    ...(integration.integrationTestPaths ?? []),
-    ...(routing.testPaths ?? []),
-    ...(reconstruction.testPaths ?? []),
-    ...(handoff.testPaths ?? []),
-    ...(value?.projectSurfaces ?? []).flatMap((surface) => surface?.testPaths ?? []),
-    ...(value?.capabilityExtensions ?? []).flatMap((extension) => extension?.testPaths ?? []),
-    ...(value?.tokenBehaviorExtensions ?? []).flatMap((extension) => extension?.testPaths ?? [])
-  ]);
-  const declared = [
-    ...(integration.appSourcePaths ?? []),
-    ...(handoff.uiSourcePaths ?? []),
-    ...(value?.projectSurfaces ?? [])
-      .filter(isPublicFacingProjectSurface)
-      .flatMap((surface) => surface?.sourcePaths ?? [])
-  ];
-  return [...new Set(declared)].filter((entry) => !testPaths.has(entry));
-}
-
-function isPublicFacingProjectSurface(surface) {
-  if (["browser", "mobile-client"].includes(surface?.executionBoundary)) return true;
-  return new Set(["game-client", "map-client", "mobile-app", "web-app"]).has(surface?.kind);
-}
-
-function isSupportedPublicClaimPath(relativePath, extension) {
-  if (!/[.](?:[cm]?[jt]sx?|html?|vue|svelte|json|ya?ml|mdx?|markdown|txt)$/iu.test(extension)) return false;
-  const baseName = path.posix.basename(relativePath).toLowerCase();
-  if (/^(?:bun|npm-shrinkwrap|package|package-lock|pnpm-lock|yarn)\.(?:json|lock|ya?ml|lockb)$/u.test(baseName)) return false;
-  if (/^(?:babel|eslint|jest|jsconfig|next|nuxt|postcss|prettier|rollup|stylelint|svelte|tailwind|tsconfig|vite|vitest|webpack)(?:\.[^.]+)*\.(?:json|ya?ml|[cm]?[jt]s)$/u.test(baseName)) return false;
-  return true;
-}
-
-function isTestLikePublicSourcePath(value) {
-  return /(?:^|\/)(?:__tests__|test|tests|fixtures?|stories)(?:\/|$)|\.(?:test|spec|stories?|story)\.[^.\/]+$/iu.test(value);
-}
-
-function resolveRepositoryFile(
-  relativePath,
-  resolutionErrors,
-  {
-    errorPrefix = null,
-    maxFileBytes = MAX_FILE_BYTES,
-    resourceClass = "normal"
-  } = {}
-) {
-  const addError = (message) => {
-    resolutionErrors.push(errorPrefix ? `${errorPrefix}: ${message}` : message);
-  };
-  if (!safeRepositoryRelativePath(relativePath)) {
-    addError(`invalid repository-relative path: ${String(relativePath)}`);
-    return null;
-  }
-
-  const lexicalTarget = path.resolve(repositoryRoot, relativePath);
-  try {
-    if (fs.lstatSync(lexicalTarget).isSymbolicLink()) {
-      addError(`implementation path contains a symbolic link: ${relativePath}`);
-      return null;
-    }
-  } catch (error) {
-    if (error?.code !== "ENOENT") {
-      addError(repositoryPathResolutionError(error, relativePath));
-      return null;
-    }
-  }
-
-  let target;
-  try {
-    target = assertInsideRepository(repositoryRoot, lexicalTarget);
-  } catch (error) {
-    addError(repositoryPathResolutionError(error, relativePath));
-    return null;
-  }
-
-  let stat;
-  try {
-    stat = fs.lstatSync(target);
-  } catch (error) {
-    addError(repositoryPathResolutionError(error, relativePath));
-    return null;
-  }
-  if (stat.isSymbolicLink()) {
-    addError(`implementation path contains a symbolic link: ${relativePath}`);
-    return null;
-  }
-  if (!stat.isFile()) {
-    addError(`implementation path is not a file: ${relativePath}`);
-    return null;
-  }
-  if (stat.size > maxFileBytes) {
-    addError(`implementation file exceeds the ${maxFileBytes} byte review limit: ${relativePath}`);
-    repositoryResourceBlocked = true;
-    return null;
-  }
-
-  const repositoryPath = path.relative(repositoryRoot, target).replaceAll(path.sep, "/");
-  if (repositoryPath.split("/").length > MAX_PATH_DEPTH) {
-    addError(`implementation path exceeds the ${MAX_PATH_DEPTH} segment review limit: ${relativePath}`);
-    repositoryResourceBlocked = true;
-    return null;
-  }
-  if (!repositoryResources.has(target)) {
-    if (repositoryResources.size >= MAX_FILES) {
-      addError(`declared repository resources exceed the ${MAX_FILES} file review limit`);
-      repositoryResourceBlocked = true;
-      return null;
-    }
-    if (
-      resourceClass === "normal" &&
-      repositoryNormalResourceBytes + stat.size > MAX_TOTAL_BYTES
-    ) {
-      addError(`declared normal repository resources exceed the ${MAX_TOTAL_BYTES} byte review limit`);
-      repositoryResourceBlocked = true;
-      return null;
-    }
-    if (repositoryResourceBytes + stat.size > MAX_TOTAL_INTAKE_BYTES) {
-      addError(`declared repository resources exceed the ${MAX_TOTAL_INTAKE_BYTES} byte review limit`);
-      repositoryResourceBlocked = true;
-      return null;
-    }
-    repositoryResources.set(target, { size: stat.size, resourceClass });
-    repositoryResourceBytes += stat.size;
-    if (resourceClass === "normal") repositoryNormalResourceBytes += stat.size;
-  }
-  return target;
-}
-
-function readJson(target, maxFileBytes = MAX_FILE_BYTES) {
-  const stat = fs.lstatSync(target);
-  if (stat.isSymbolicLink()) throw new Error("symbolic links are not allowed");
-  if (!stat.isFile()) throw new Error("not a regular file");
-  if (stat.size > maxFileBytes) throw new Error(`file exceeds ${maxFileBytes} bytes`);
-  return JSON.parse(fs.readFileSync(target, "utf8"));
-}
-
-function walkPackage(directory, depth = 0, state = { entries: 0, files: 0, bytes: 0 }) {
-  if (depth > MAX_PATH_DEPTH) throw new Error(`package contains a directory deeper than ${MAX_PATH_DEPTH} segments`);
-  const entries = [];
-  const directoryHandle = fs.opendirSync(directory);
-  try {
-    let directoryEntry;
-    while ((directoryEntry = directoryHandle.readSync()) !== null) {
-      const target = path.join(directory, directoryEntry.name);
-      const stat = fs.lstatSync(target);
-      state.entries += 1;
-      if (state.entries > MAX_ENTRIES) throw new Error(`package exceeds the ${MAX_ENTRIES} filesystem entry review limit`);
-      if (stat.isSymbolicLink()) throw new Error(`symbolic links are not allowed: ${path.relative(packageRoot, target).replaceAll(path.sep, "/")}`);
-      entries.push({ path: target, stat });
-      if (stat.isFile()) {
-        state.files += 1;
-        state.bytes += stat.size;
-        const relativePath = path.relative(packageRoot, target).replaceAll(path.sep, "/");
-        if (state.files > MAX_FILES) throw new Error(`package exceeds the ${MAX_FILES} file review limit`);
-        if (relativePath === "submission.json" && stat.size > MAX_FILE_BYTES) {
-          throw new Error(`file exceeds the ${MAX_FILE_BYTES} byte review limit: ${relativePath}`);
-        }
-        if (state.bytes > MAX_TOTAL_INTAKE_BYTES) {
-          throw new Error(`package exceeds the ${MAX_TOTAL_INTAKE_BYTES} byte review limit`);
-        }
-        if (relativePath.split("/").length > MAX_PATH_DEPTH) throw new Error(`path exceeds the ${MAX_PATH_DEPTH} segment review limit: ${relativePath}`);
-      } else if (stat.isDirectory()) {
-        entries.push(...walkPackage(target, depth + 1, state));
-      } else {
-        throw new Error(`unsupported filesystem entry: ${path.relative(packageRoot, target).replaceAll(path.sep, "/")}`);
-      }
-    }
-  } finally {
-    directoryHandle.closeSync();
-  }
-  return entries;
-}
-
-function validatePackageBudgets(entries, buildInfoTarget, budgetErrors) {
-  let normalBytes = 0;
-  let blocked = false;
-  for (const entry of entries) {
-    if (!entry.stat.isFile()) continue;
-    const relativePath = path.relative(packageRoot, entry.path).replaceAll(path.sep, "/");
-    const exactBuildInfo =
-      buildInfoTarget !== null && path.resolve(entry.path) === buildInfoTarget;
-    if (exactBuildInfo) continue;
-    normalBytes += entry.stat.size;
-    if (entry.stat.size > MAX_FILE_BYTES) {
-      budgetErrors.push(
-        `package resource preflight: file exceeds the ${MAX_FILE_BYTES} byte review limit: ${relativePath}`
-      );
-      blocked = true;
-    }
-  }
-  if (normalBytes > MAX_TOTAL_BYTES) {
-    budgetErrors.push(
-      `package resource preflight: normal files exceed the ${MAX_TOTAL_BYTES} byte review limit`
-    );
-    blocked = true;
-  }
-  if (blocked) repositoryResourceBlocked = true;
-}
-
-function declaredBuildInfoBudgetPath(value) {
-  if (value?.stage !== "prototype") return null;
-  if (declaredSoliditySourceAndTestPaths(value).length === 0) return null;
-  const paths = value.implementation?.compilerBuildInfoPaths;
-  if (
-    !Array.isArray(paths) ||
-    paths.length !== 1 ||
-    !safeRepositoryRelativePath(paths[0])
-  ) {
-    return null;
-  }
-  return path.resolve(repositoryRoot, paths[0]);
-}
-
-function loadTrustedOrderedRemappings() {
-  const source = fs.readFileSync(path.join(repositoryRoot, "remappings.txt"), "utf8");
-  const validated = new Map(
-    parseRemappings(source).map(({ prefix, target }) => [prefix, target])
-  );
-  const ordered = [];
-  for (const rawLine of source.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (line.length === 0 || line.startsWith("#")) continue;
-    const separator = line.indexOf("=");
-    const prefix = line.slice(0, separator).trim();
-    ordered.push(`${prefix}=${validated.get(prefix)}`);
-  }
-  return ordered;
-}
-
-function trustedFirstPartyRoots() {
-  const packagePath = path.relative(repositoryRoot, packageRoot).replaceAll(path.sep, "/");
-  return [...new Set([
-    ...TRUSTED_FIRST_PARTY_ROOTS,
-    ...(packagePath ? [packagePath] : [])
-  ])].sort();
-}
-
-function safeRepositoryRelativePath(value) {
-  return isCanonicalReviewTargetPath(value);
-}
-
-function addToolingBlocker(message) {
-  const normalized = `tooling blocked: ${message}`;
-  toolingBlockers.push(normalized);
-  errors.push(normalized);
-}
-
-function repositoryPathResolutionError(error, relativePath) {
-  if (
-    error?.code === "ENOENT" ||
-    /(?:does not exist|no existing ancestor)/i.test(error?.message ?? "")
-  ) {
-    return `implementation path does not exist: ${relativePath}`;
-  }
-  if (/symbolic|symlink/i.test(error?.message ?? "")) {
-    return `implementation path contains a symbolic link: ${relativePath}`;
-  }
-  if (/(?:outside|escape)/i.test(error?.message ?? "")) {
-    return `implementation path resolves outside repository: ${relativePath}`;
-  }
-  return `implementation path cannot be resolved: ${relativePath}`;
-}
-
-function relative(target) {
-  return path.relative(repositoryRoot, target).replaceAll(path.sep, "/");
 }
 
 function fail(message, code) {

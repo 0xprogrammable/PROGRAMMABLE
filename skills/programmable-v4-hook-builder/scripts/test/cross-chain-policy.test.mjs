@@ -61,6 +61,37 @@ test("complete profile accepts a canonical non-EVM source network and sender", (
   assert.ok(report.risk.featureTriggers.includes("cross-chain"));
 });
 
+test("outbound launch-chain routes may target a canonical non-EVM network", () => {
+  const submission = crossChainSubmission();
+  submission.capabilities.crossChain.direction = "outbound-from-launch-chain";
+  submission.capabilities.crossChain.source = {
+    network: { namespace: "eip155", reference: "1" },
+    domain: "ethereum-mainnet",
+    authenticatedSender: {
+      encoding: "evm-address",
+      value: address("3"),
+      canonicalizationRule: null
+    }
+  };
+  submission.capabilities.crossChain.destination = {
+    network: {
+      namespace: "solana",
+      reference: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"
+    },
+    domain: "solana-mainnet",
+    receiver: {
+      encoding: "base58",
+      value: "Vote111111111111111111111111111111111111111",
+      canonicalizationRule: null
+    }
+  };
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.deepEqual(crossChainFindings(report), [], JSON.stringify(crossChainFindings(report)));
+  assert.ok(report.requiredGates.some(({ id }) => id === "bridge-and-cross-domain-review"));
+});
+
 test("bridge domain identifiers may be short canonical values", () => {
   const submission = crossChainSubmission();
   submission.capabilities.crossChain.source.domain = "10";
@@ -108,9 +139,9 @@ test("provider names and declared risk triggers cannot disable cross-chain revie
 test("cross-chain prototype binds one pinned onchain bridge dependency", async (t) => {
   await t.test("missing dependency id", () => {
     const submission = crossChainSubmission();
-    submission.capabilities.crossChain.bridgeDependencyId = "missing-bridge";
+    submission.capabilities.crossChain.localBridgeDependencyId = "missing-bridge";
 
-    assertFinding(submission, "CROSS_CHAIN_BRIDGE_DEPENDENCY_UNBOUND", "$.capabilities.crossChain.bridgeDependencyId");
+    assertFinding(submission, "CROSS_CHAIN_BRIDGE_DEPENDENCY_UNBOUND", "$.capabilities.crossChain.localBridgeDependencyId");
   });
 
   await t.test("offchain record cannot stand in for the destination bridge contract", () => {
@@ -118,14 +149,14 @@ test("cross-chain prototype binds one pinned onchain bridge dependency", async (
     const dependencyIndex = submission.dependencies.onchain.findIndex(({ id }) => id === "canonical-bridge-caller");
     submission.dependencies.offchain.push(...submission.dependencies.onchain.splice(dependencyIndex, 1));
 
-    assertFinding(submission, "CROSS_CHAIN_BRIDGE_DEPENDENCY_NOT_ONCHAIN", "$.capabilities.crossChain.bridgeDependencyId");
+    assertFinding(submission, "CROSS_CHAIN_BRIDGE_DEPENDENCY_NOT_ONCHAIN", "$.capabilities.crossChain.localBridgeDependencyId");
   });
 
   await t.test("unpinned bridge source is rejected", () => {
     const submission = crossChainSubmission();
     submission.dependencies.onchain.find(({ id }) => id === "canonical-bridge-caller").revision = null;
 
-    assertFinding(submission, "CROSS_CHAIN_BRIDGE_DEPENDENCY_UNPINNED", "$.capabilities.crossChain.bridgeDependencyId");
+    assertFinding(submission, "CROSS_CHAIN_BRIDGE_DEPENDENCY_UNPINNED", "$.capabilities.crossChain.localBridgeDependencyId");
   });
 
   await t.test("mutable package tag is not immutable source evidence", () => {
@@ -134,14 +165,14 @@ test("cross-chain prototype binds one pinned onchain bridge dependency", async (
     dependency.revision = null;
     dependency.packageVersion = "latest";
 
-    assertFinding(submission, "CROSS_CHAIN_BRIDGE_DEPENDENCY_UNPINNED", "$.capabilities.crossChain.bridgeDependencyId");
+    assertFinding(submission, "CROSS_CHAIN_BRIDGE_DEPENDENCY_UNPINNED", "$.capabilities.crossChain.localBridgeDependencyId");
   });
 
-  await t.test("destination receiver needs its own deployment binding", () => {
+  await t.test("local bridge address must match its pinned deployment", () => {
     const submission = crossChainSubmission();
-    submission.capabilities.crossChain.destination.receiver = address("9");
+    submission.capabilities.crossChain.localBridgeAddress = address("9");
 
-    assertFinding(submission, "CROSS_CHAIN_RECEIVER_UNBOUND", "$.capabilities.crossChain.destination.receiver");
+    assertFinding(submission, "CROSS_CHAIN_BRIDGE_CALLER_MISMATCH", "$.capabilities.crossChain.localBridgeAddress");
   });
 });
 
@@ -156,18 +187,18 @@ test("cross-chain prototype rejects the wrong source, sender, destination or dom
     assertFinding(submission, "CROSS_CHAIN_SOURCE_DESTINATION_CONFLICT", "$.capabilities.crossChain.source.network");
   });
 
-  await t.test("destination chain differs from the launch target", () => {
+  await t.test("inbound destination differs from the launch target", () => {
     const submission = crossChainSubmission();
-    submission.capabilities.crossChain.destination.chainId = 8453;
+    submission.capabilities.crossChain.destination.network.reference = "8453";
 
-    assertFinding(submission, "CROSS_CHAIN_DESTINATION_CHAIN_MISMATCH", "$.capabilities.crossChain.destination.chainId");
+    assertFinding(submission, "CROSS_CHAIN_LOCAL_ENDPOINT_MISMATCH", "$.capabilities.crossChain.destination.network");
   });
 
-  await t.test("destination caller differs from the pinned bridge address", () => {
+  await t.test("local bridge differs from the pinned bridge address", () => {
     const submission = crossChainSubmission();
-    submission.capabilities.crossChain.destination.authenticatedBridgeCaller = address("9");
+    submission.capabilities.crossChain.localBridgeAddress = address("9");
 
-    assertFinding(submission, "CROSS_CHAIN_BRIDGE_CALLER_MISMATCH", "$.capabilities.crossChain.destination.authenticatedBridgeCaller");
+    assertFinding(submission, "CROSS_CHAIN_BRIDGE_CALLER_MISMATCH", "$.capabilities.crossChain.localBridgeAddress");
   });
 
   await t.test("source network namespace is not a valid CAIP-2 namespace", () => {
@@ -176,6 +207,19 @@ test("cross-chain prototype rejects the wrong source, sender, destination or dom
 
     assertFinding(submission, "SCHEMA_PATTERN", "$.capabilities.crossChain.source.network.namespace");
   });
+
+  for (const reference of ["0", "01", "+1", "0x1"]) {
+    await t.test(`destination eip155 reference ${reference} is not canonical`, () => {
+      const submission = crossChainSubmission();
+      submission.capabilities.crossChain.destination.network.reference = reference;
+
+      assertFinding(
+        submission,
+        "CROSS_CHAIN_DESTINATION_NETWORK_INVALID",
+        "$.capabilities.crossChain.destination.network.reference"
+      );
+    });
+  }
 
   await t.test("source sender value does not match its declared encoding", () => {
     const submission = crossChainSubmission();
@@ -197,7 +241,7 @@ test("cross-chain prototype rejects the wrong source, sender, destination or dom
     assertFinding(submission, "CROSS_CHAIN_SOURCE_SENDER_ENCODING_INVALID", "$.capabilities.crossChain.source.authenticatedSender.value");
   });
 
-  for (const field of ["sourceNetwork", "sourceDomain", "sourceSender", "destinationDomain", "payloadHash", "timestampOrExpiry"]) {
+  for (const field of ["sourceNetwork", "sourceDomain", "sourceSender", "destinationNetwork", "destinationDomain", "payloadHash", "timestampOrExpiry"]) {
     await t.test(`${field} is not authenticated`, () => {
       const submission = crossChainSubmission();
       submission.capabilities.crossChain.message.domainBindings[field] = false;
@@ -395,7 +439,7 @@ test("custom cross-chain identities and domains require explicit derivation and 
 
     assertFinding(
       submission,
-      "CROSS_CHAIN_SOURCE_CANONICALIZATION_MISSING",
+      "CROSS_CHAIN_SOURCE_SENDER_CANONICALIZATION_MISSING",
       "$.capabilities.crossChain.source.authenticatedSender.canonicalizationRule"
     );
   });
@@ -491,7 +535,7 @@ function crossChainSubmission({ stage = "prototype", complete = true } = {}) {
   submission.stage = stage;
   submission.model.summary = "Consume one authenticated cross-chain bridge message before recording pool-scoped state.";
   submission.model.whyV4 = "The admitted message changes only the exact canonical PoolId after destination authentication and replay checks.";
-  submission.dependencies.onchain = [bridgeCallerDependency(), receiverDependency()];
+  submission.dependencies.onchain = [bridgeCallerDependency()];
   submission.capabilities.crossChain = complete ? completeCrossChainPolicy() : unresolvedCrossChainPolicy();
   submission.risk.featureTriggers = ["cross-chain"];
   return submission;
@@ -500,7 +544,9 @@ function crossChainSubmission({ stage = "prototype", complete = true } = {}) {
 function completeCrossChainPolicy() {
   return {
     used: true,
-    bridgeDependencyId: "canonical-bridge-caller",
+    direction: "inbound-to-launch-chain",
+    localBridgeDependencyId: "canonical-bridge-caller",
+    localBridgeAddress: address("1"),
     source: {
       network: {
         namespace: "eip155",
@@ -514,11 +560,16 @@ function completeCrossChainPolicy() {
       }
     },
     destination: {
-      chainId: 1,
+      network: {
+        namespace: "eip155",
+        reference: "1"
+      },
       domain: "ethereum-mainnet",
-      receiver: address("3"),
-      receiverDependencyId: "cross-chain-receiver",
-      authenticatedBridgeCaller: address("1")
+      receiver: {
+        encoding: "evm-address",
+        value: address("3"),
+        canonicalizationRule: null
+      }
     },
     message: {
       identifierDerivation: "keccak256 of source chain, source domain, authenticated sender, nonce and payload hash.",
@@ -531,14 +582,13 @@ function completeCrossChainPolicy() {
       atomicConsumption: true,
       duplicateBehavior: "ignore-after-authentication",
       domainBindings: {
-        bridgeDependencyId: true,
+        localBridgeDependencyId: true,
         sourceNetwork: true,
         sourceDomain: true,
         sourceSender: true,
-        destinationChainId: true,
+        destinationNetwork: true,
         destinationDomain: true,
-        receiver: true,
-        receiverDependencyId: true,
+        destinationReceiver: true,
         modelId: true,
         poolId: true,
         action: true,
@@ -612,13 +662,19 @@ function completeQuarantinePolicy() {
 
 function unresolvedCrossChainPolicy() {
   const policy = completeCrossChainPolicy();
-  policy.bridgeDependencyId = null;
+  policy.direction = null;
+  policy.localBridgeDependencyId = null;
+  policy.localBridgeAddress = null;
   policy.source = {
     network: { namespace: null, reference: null },
     domain: null,
     authenticatedSender: { encoding: null, value: null, canonicalizationRule: null }
   };
-  policy.destination = { chainId: null, domain: null, receiver: null, receiverDependencyId: null, authenticatedBridgeCaller: null };
+  policy.destination = {
+    network: { namespace: null, reference: null },
+    domain: null,
+    receiver: { encoding: null, value: null, canonicalizationRule: null }
+  };
   for (const key of Object.keys(policy.message)) {
     policy.message[key] = key === "domainBindings"
       ? Object.fromEntries(Object.keys(policy.message.domainBindings).map((field) => [field, null]))

@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "starter",
+  "id": "blank-custom",
+  "label": "Blank custom project",
+  "summary": "Start from an owner-defined idea without forcing it into a known launch category.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "architecture-review-required",
+  "defaultPacks": [
+    "metadata-disclosures",
+    "test-evidence-threat-model"
+  ],
+  "conflictsWith": [],
+  "capabilities": [
+    "owner-defined-capabilities"
+  ],
+  "projectSurfaces": [
+    "application",
+    "contract",
+    "game",
+    "indexer",
+    "other",
+    "service"
+  ],
+  "requiredFacts": [
+    "The complete user outcome and lifecycle",
+    "Every actor, asset, value flow, authority, dependency and failure path",
+    "Which behavior belongs onchain and which behavior belongs in an application or service",
+    "Whether any token or Uniswap v4 market boundary applies; when it does, bind the exact boundary, and when it does not, mark it inapplicable and bind the actual external or non-launchable integration boundary"
+  ],
+  "requiredFiles": [
+    "Project-specific source and configuration",
+    "Architecture proposal",
+    "Threat model",
+    "Test plan",
+    "Evidence index"
+  ],
+  "requiredTests": [
+    "Lifecycle happy path and every declared failure path",
+    "Authorization, value conservation and user-exit properties",
+    "Capability-specific adversarial tests after architecture review"
+  ],
+  "risks": [
+    "Unknown trust or value boundaries must remain explicit",
+    "A missing adapter can delay integration without making the idea unsafe"
+  ]
+}

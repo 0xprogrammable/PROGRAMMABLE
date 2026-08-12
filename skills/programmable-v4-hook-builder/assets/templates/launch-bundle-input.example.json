@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "1.0.0",
+  "authority": "builder-supplied-pre-authorization",
+  "registry": {
+    "registryCommit": null,
+    "registryTreeObjectId": null,
+    "acceptancePath": null,
+    "acceptanceSha256": null,
+    "applicationId": null,
+    "applicationRevision": null,
+    "packageSha256": null
+  },
+  "source": {
+    "numericRepositoryId": null,
+    "repositoryUri": null,
+    "revisionObjectId": null,
+    "treeObjectId": null,
+    "reviewedSourceClosureHash": null,
+    "submission": {
+      "root": "source",
+      "path": null,
+      "sha256": null
+    },
+    "reviewTarget": {
+      "root": "source",
+      "path": null,
+      "sha256": null
+    }
+  },
+  "build": {
+    "compiler": null,
+    "settings": { "root": "source", "path": null, "sha256": null },
+    "dependencyLock": { "root": "source", "path": null, "sha256": null },
+    "buildInfo": { "root": "evidence", "path": null, "sha256": null },
+    "abi": { "root": "evidence", "path": null, "sha256": null }
+  },
+  "artifacts": [],
+  "evidence": {
+    "build": { "root": "evidence", "path": null, "sha256": null },
+    "configuration": { "root": "evidence", "path": null, "sha256": null },
+    "feeConformance": { "root": "evidence", "path": null, "sha256": null }
+  },
+  "launchInfrastructure": {
+    "authorityContract": null,
+    "launcher": null,
+    "launchCaller": null,
+    "nativeValue": null,
+    "poolManager": null,
+    "hook": null,
+    "chainId": null
+  },
+  "executorCall": {
+    "target": null,
+    "refundRecipient": null,
+    "callData": null,
+    "hookConfiguration": null
+  },
+  "assetAddresses": [
+    {
+      "assetId": "eth",
+      "address": "0x0000000000000000000000000000000000000000"
+    },
+    {
+      "assetId": "launched-token",
+      "address": null
+    }
+  ]
+}

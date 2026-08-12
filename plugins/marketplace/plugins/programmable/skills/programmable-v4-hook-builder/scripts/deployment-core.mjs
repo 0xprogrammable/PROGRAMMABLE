@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateOfficialLaunchpadReference } from "./official-launchpad-core.mjs";
+import { parseBoundedStrictJsonBytes } from "./strict-json-core.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_DEPLOYMENT_SNAPSHOT = path.resolve(scriptDirectory, "..", "references", "deployment-snapshot.json");
@@ -23,9 +24,10 @@ const feedBackedRepositories = new Set([
   "https://github.com/uniswap/permit2",
   "https://github.com/uniswap/universal-router"
 ]);
+const MAX_DEPLOYMENT_REFERENCE_BYTES = 4 * 1024 * 1024;
 
 export function loadDeploymentSnapshot(target = DEFAULT_DEPLOYMENT_SNAPSHOT) {
-  const snapshot = JSON.parse(fs.readFileSync(target, "utf8"));
+  const snapshot = parseDeploymentFile(target);
   const errors = [];
   if (snapshot.schemaVersion !== 1) errors.push("deployment snapshot schemaVersion must be 1");
   if (typeof snapshot.feedUrl !== "string" || !snapshot.feedUrl.startsWith("https://")) errors.push("deployment snapshot feedUrl must be HTTPS");
@@ -54,9 +56,19 @@ export function loadDeploymentSnapshot(target = DEFAULT_DEPLOYMENT_SNAPSHOT) {
 }
 
 export function loadOfficialDeploymentReference(target = DEFAULT_OFFICIAL_DEPLOYMENT_REFERENCE) {
-  const reference = JSON.parse(fs.readFileSync(target, "utf8"));
+  const reference = parseDeploymentFile(target);
   validateOfficialLaunchpadReference(reference);
   return reference;
+}
+
+function parseDeploymentFile(target) {
+  const stat = fs.lstatSync(target);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.size < 2 || stat.size > MAX_DEPLOYMENT_REFERENCE_BYTES) {
+    throw new Error("deployment reference must be one bounded regular JSON file");
+  }
+  return parseBoundedStrictJsonBytes(fs.readFileSync(target), {
+    maxSourceBytes: MAX_DEPLOYMENT_REFERENCE_BYTES
+  });
 }
 
 export function loadDeploymentRegistry({

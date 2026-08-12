@@ -1,0 +1,169 @@
+{
+  "$schema": "urn:programmable:launch-bundle-input-v2:2.0.0",
+  "schemaVersion": "2.0.0",
+  "contract": {
+    "id": "launch-bundle-input-v2",
+    "version": "2.0.0"
+  },
+  "bundleId": "replace-with-exact-launch-bundle",
+  "applicationId": "replace-with-exact-application",
+  "platform": {
+    "feeRecipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    "independentAdminAuthorizer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+    "rolesSeparated": true
+  },
+  "sources": [
+    {
+      "id": "source-repository",
+      "repositoryUri": "https://github.com/example/replace-source-repository",
+      "numericRepositoryId": "1",
+      "revisionObjectId": "0000000000000000000000000000000000000000",
+      "treeObjectId": "0000000000000000000000000000000000000000"
+    },
+    {
+      "id": "registry-source",
+      "repositoryUri": "https://github.com/0xprogrammable/submit-launch",
+      "numericRepositoryId": "1320171831",
+      "revisionObjectId": "0000000000000000000000000000000000000000",
+      "treeObjectId": "0000000000000000000000000000000000000000"
+    }
+  ],
+  "artifacts": {
+    "application": {
+      "id": "application",
+      "sourceRef": "registry-source",
+      "path": "application.v3.json",
+      "gitBlobObjectId": "0967ef424bce6791893e9a57bb952f80fd536e93",
+      "schemaId": "https://programmable.money/schemas/public-pr-application-v3.json",
+      "mediaType": "application/json",
+      "sha256": "sha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+      "byteLength": 3,
+      "content": "{}\n"
+    },
+    "submission": {
+      "id": "submission",
+      "sourceRef": "source-repository",
+      "path": "submission.v2.json",
+      "gitBlobObjectId": "0967ef424bce6791893e9a57bb952f80fd536e93",
+      "schemaId": "urn:programmable:v4-hook-submission:2.0.0",
+      "mediaType": "application/json",
+      "sha256": "sha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+      "byteLength": 3,
+      "content": "{}\n"
+    },
+    "ideaSource": {
+      "id": "idea-source",
+      "sourceRef": "source-repository",
+      "path": "idea-source.v1.json",
+      "gitBlobObjectId": "0967ef424bce6791893e9a57bb952f80fd536e93",
+      "schemaId": "urn:programmable:idea-source:1.0.0",
+      "mediaType": "application/json",
+      "sha256": "sha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+      "byteLength": 3,
+      "content": "{}\n"
+    },
+    "intentContract": {
+      "id": "intent-contract",
+      "sourceRef": "source-repository",
+      "path": "intent-contract.v1.json",
+      "gitBlobObjectId": "0967ef424bce6791893e9a57bb952f80fd536e93",
+      "schemaId": "urn:programmable:intent-contract:1.0.0",
+      "mediaType": "application/json",
+      "sha256": "sha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+      "byteLength": 3,
+      "content": "{}\n"
+    },
+    "architectureDecisions": {
+      "id": "architecture-decisions",
+      "sourceRef": "source-repository",
+      "path": "architecture-decisions.v1.json",
+      "gitBlobObjectId": "0967ef424bce6791893e9a57bb952f80fd536e93",
+      "schemaId": "urn:programmable:architecture-decisions:1.0.0",
+      "mediaType": "application/json",
+      "sha256": "sha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+      "byteLength": 3,
+      "content": "{}\n"
+    },
+    "intentFidelity": {
+      "id": "intent-fidelity",
+      "sourceRef": "source-repository",
+      "path": "intent-fidelity.v1.json",
+      "gitBlobObjectId": "0967ef424bce6791893e9a57bb952f80fd536e93",
+      "schemaId": "urn:programmable:intent-fidelity:1.0.0",
+      "mediaType": "application/json",
+      "sha256": "sha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+      "byteLength": 3,
+      "content": "{}\n"
+    },
+    "feePolicy": {
+      "id": "fee-policy",
+      "sourceRef": "source-repository",
+      "path": "fee-policy.v2.json",
+      "gitBlobObjectId": "0967ef424bce6791893e9a57bb952f80fd536e93",
+      "schemaId": "urn:programmable:fee-policy-v2:1.0.0",
+      "mediaType": "application/json",
+      "sha256": "sha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+      "byteLength": 3,
+      "content": "{}\n"
+    },
+    "security": {
+      "id": "security-assessment",
+      "sourceRef": "registry-source",
+      "path": "security-assessment.v1.json",
+      "gitBlobObjectId": "0967ef424bce6791893e9a57bb952f80fd536e93",
+      "schemaId": "urn:programmable:open-world-security:1.0.0",
+      "mediaType": "application/json",
+      "sha256": "sha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+      "byteLength": 3,
+      "content": "{}\n"
+    },
+    "executionSurfaceCoverage": {
+      "id": "execution-surface-coverage",
+      "sourceRef": "registry-source",
+      "path": "execution-surface-coverage.v1.json",
+      "gitBlobObjectId": "0967ef424bce6791893e9a57bb952f80fd536e93",
+      "schemaId": "urn:programmable:execution-surface-coverage:1.0.0",
+      "mediaType": "application/json",
+      "sha256": "sha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+      "byteLength": 3,
+      "content": "{}\n"
+    },
+    "tradeCapabilities": [],
+    "registryAcceptance": null,
+    "evidence": []
+  },
+  "feeScopeBindings": [
+    {
+      "id": "replace-fee-scope-binding",
+      "feeScopeId": "replace-fee-scope",
+      "marketRef": "replace-market",
+      "protocolContextRef": null,
+      "chainId": "1",
+      "poolId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "quoteCurrency": "0x0000000000000000000000000000000000000000",
+      "collectionProfile": "custom-reviewed",
+      "implementationRef": null,
+      "implementationSourceRef": null,
+      "state": "unresolved",
+      "evidenceRefs": []
+    }
+  ],
+  "protocolContexts": [],
+  "reviewRequirements": [
+    {
+      "id": "replace-placeholder-artifacts",
+      "subjectRefs": [
+        "launch-bundle"
+      ],
+      "state": "unresolved",
+      "evidenceRefs": [],
+      "note": "Replace every placeholder with exact committed files and exact Git snapshots before review."
+    }
+  ],
+  "authorizationRequest": {
+    "approvalInherited": false,
+    "priorApprovalRefs": [],
+    "humanAdminAuthorization": null,
+    "independentHumanReviewRequired": true
+  }
+}

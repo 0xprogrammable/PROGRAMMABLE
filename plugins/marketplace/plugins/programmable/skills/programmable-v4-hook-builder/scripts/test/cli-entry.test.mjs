@@ -38,12 +38,74 @@ test("doctor delegates to the existing readiness command and emits JSON", () => 
     assert.equal(output.ok, true);
     assert.equal(output.result.repositoryRoot, fixture.repository);
     assert.equal(output.result.readyForDeterministicPreflight, true);
+    assert.equal(
+      output.result.readyForApplicationV3Preparation,
+      output.result.readyForRepositoryWork
+        && output.result.runtimeCompatibility.applicationV3.platformSupported
+        && output.result.runtimeCompatibility.applicationV3.exactObjectGit.status === "ready"
+    );
+    assert.equal(
+      output.result.applicationV3SubmissionToolchainAvailable,
+      output.result.readyForApplicationV3Preparation && output.result.githubCli.available
+    );
+    assert.equal(output.result.readyForApplicationV3Submission, false);
     assert.equal(output.result.readyForPublicBeta, false);
+    assert.equal(output.result.githubCli.requiredForPublicBetaApplication, true);
+    assert.equal(output.result.githubCli.authenticationChecked, false);
+    assert.equal(output.result.readyForGitHubApplicationClient, output.result.githubCli.available);
+    assert.ok(output.result.publicBetaBlockers.includes("GITHUB_AUTHENTICATION_NOT_CHECKED"));
+    assert.ok(output.result.publicBetaBlockers.includes("PUBLIC_GIT_REACHABILITY_NOT_CHECKED"));
+    assert.ok(output.result.publicBetaBlockers.includes("EXTERNAL_ACCEPTANCE_NOT_CHECKED"));
     assert.equal(output.result.publicBetaGit.publicReachability.status, "notChecked");
     assert.equal(output.result.publicBetaGit.readyForPreparePrLocal, false);
   } finally {
     fixture.cleanup();
   }
+});
+
+test("doctor defaults to the installed plugin root when the host cwd is not a Git worktree", (t) => {
+  const cacheRoot = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "programmable-installed-plugin-")));
+  t.after(() => fs.rmSync(cacheRoot, { recursive: true, force: true }));
+  const pluginRoot = path.join(cacheRoot, "cache", "programmable-v4-builder");
+  const installedSkillRoot = path.join(pluginRoot, "skills", "programmable-v4-hook-builder");
+  const hostCwd = path.join(cacheRoot, "host-cwd");
+  const transientDirectories = new Set(["broadcast", "cache", "coverage", "node_modules", "out"]);
+  fs.mkdirSync(path.join(pluginRoot, ".codex-plugin"), { recursive: true });
+  fs.mkdirSync(hostCwd, { recursive: true });
+  fs.cpSync(skillRoot, installedSkillRoot, {
+    recursive: true,
+    filter: (source) => !transientDirectories.has(path.basename(source))
+  });
+  const repositoryRoot = path.resolve(skillRoot, "..", "..");
+  const manifestCandidates = [
+    path.join(repositoryRoot, ".codex-plugin", "plugin.json"),
+    path.join(repositoryRoot, "plugins", "marketplace", "plugins", "programmable", ".codex-plugin", "plugin.json")
+  ];
+  const sourceManifest = manifestCandidates.find((candidate) => fs.existsSync(candidate));
+  assert.ok(sourceManifest, "the repository must expose a generated Codex plugin manifest");
+  fs.copyFileSync(sourceManifest, path.join(pluginRoot, ".codex-plugin", "plugin.json"));
+
+  const result = childProcess.spawnSync(
+    process.execPath,
+    [path.join(installedSkillRoot, "scripts", "cli.mjs"), "doctor"],
+    { cwd: hostCwd, encoding: "utf8", shell: false }
+  );
+  assert.equal(result.status, 0, result.stdout || result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.ok, true);
+  assert.equal(output.result.installedPackageRoot, fs.realpathSync(pluginRoot));
+  assert.equal(output.result.repositoryRoot, fs.realpathSync(pluginRoot));
+  assert.equal(output.result.repositoryRootSource, "installed-package");
+  assert.deepEqual(output.result.gitWorktreeChecks, {
+    status: "unavailable-not-a-worktree",
+    available: false,
+    discoveredRoot: null,
+    reason: "the selected directory is not a Git worktree; Git-only preparation checks are unavailable"
+  });
+  assert.equal(output.result.readyForRepositoryWork, false);
+  assert.equal(output.result.readyForApplicationV3Preparation, false);
+  assert.equal(output.result.readyForApplicationV3Submission, false);
+  assert.equal(output.result.publicBetaGit.gitRepository.status, "missing");
 });
 
 test("scaffold and check route through the canonical scripts", () => {
@@ -71,11 +133,67 @@ test("scaffold and check route through the canonical scripts", () => {
     const checkOutput = JSON.parse(check.stdout);
     assert.equal(checkOutput.command, "check");
     assert.equal(checkOutput.ok, true);
+    assert.equal(checkOutput.result.gatePassed, false);
+    assert.deepEqual(checkOutput.result.commandOutcome, {
+      blockingFindingsPresent: true,
+      designReady: false,
+      enforcedGate: "none",
+      intakeReady: false,
+      readinessFlags: ["--require-design-ready", "--require-intake-ready", "--require-prototype-validated"],
+      reportGenerated: true,
+      selectedGatePassed: null,
+      zeroExitMeaning: "REPORT_GENERATED_ONLY_NOT_READINESS"
+    });
     assert.equal(checkOutput.result.submissionHash, JSON.parse(fs.readFileSync(report, "utf8")).submissionHash);
     assert.deepEqual(checkOutput.result.reportWritten, {
       path: "submissions/entry-model/compatibility-report.json",
       submissionHash: checkOutput.result.submissionHash
     });
+
+    const required = runCli([
+      "check",
+      submission,
+      "--require-design-ready",
+      "--repository-root",
+      fixture.repository
+    ]);
+    assert.equal(required.status, 1, required.stdout || required.stderr);
+    const requiredOutput = JSON.parse(required.stdout);
+    assert.equal(requiredOutput.error.code, "CHECK_DESIGN_NOT_READY");
+    assert.equal(requiredOutput.error.details.commandOutcome.enforcedGate, "design-ready");
+    assert.equal(requiredOutput.error.details.commandOutcome.selectedGatePassed, false);
+    assert.equal(
+      requiredOutput.error.details.commandOutcome.zeroExitMeaning,
+      "SELECTED_READINESS_GATE_PASSED"
+    );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("check can diagnose without writing and rejects conflicting report options", () => {
+  const fixture = createRepository();
+  try {
+    const scaffold = runCli(["scaffold", "read-only-check", "--repository-root", fixture.repository]);
+    assert.equal(scaffold.status, 0, scaffold.stdout || scaffold.stderr);
+    const submission = path.join(fixture.repository, "submissions", "read-only-check", "submission.json");
+    const report = path.join(fixture.repository, "submissions", "read-only-check", "compatibility-report.json");
+    const check = runCli(["check", submission, "--no-write", "--repository-root", fixture.repository]);
+    assert.equal(check.status, 0, check.stdout || check.stderr);
+    assert.equal(fs.existsSync(report), false);
+    assert.equal(JSON.parse(check.stdout).result.reportWritten, null);
+
+    const conflicting = runCli([
+      "check",
+      submission,
+      "--no-write",
+      "--write-report",
+      report,
+      "--repository-root",
+      fixture.repository
+    ]);
+    assert.equal(conflicting.status, 2, conflicting.stdout || conflicting.stderr);
+    assert.equal(JSON.parse(conflicting.stdout).error.code, "USAGE_ERROR");
   } finally {
     fixture.cleanup();
   }
@@ -197,6 +315,11 @@ test("package delegates to the existing package verifier", () => {
     assert.equal(output.command, "package");
     assert.equal(output.ok, true);
     assert.equal(output.result.intakeValidated, true);
+    assert.equal(output.result.intake.state, "READY");
+    assert.equal(output.result.intake.assurance, "static-structure-and-builder-declared-evidence-only");
+    assert.equal(output.result.sandboxVerification.state, "NOT_RUN");
+    assert.equal(output.result.deprecatedBooleanProjections.state, "DEPRECATED_COMPATIBILITY_ONLY");
+    assert.equal(output.result.externalAuthority.acceptance, "NOT_CHECKED");
     assert.match(output.result.submissionHash, /^sha256:[0-9a-f]{64}$/);
   } finally {
     fixture.cleanup();
@@ -239,7 +362,7 @@ test("companion command validates v2 structure and atomically writes canonical J
   }
 });
 
-test("check writes unsupported proposal closure diagnostics and require-ready blocks the prototype", () => {
+test("check exposes structural intake and fails closed for independent prototype validation", () => {
   const fixture = createReadyProposalRepository();
   try {
     const sourcePath = "submissions/ready-model/app/entry.ts";
@@ -260,7 +383,26 @@ test("check writes unsupported proposal closure diagnostics and require-ready bl
     assert.ok(report.closure.diagnostics.some(({ code }) => code === "JAVASCRIPT_ALIAS_RESOLUTION_UNPROVEN"));
 
     submission.stage = "prototype";
+    submission.launchPlan.callDataSourcePaths = [sourcePath];
+    submission.launchPlan.hookConfigurationSourcePaths = [sourcePath];
+    submission.launchPlan.liquiditySourcePaths = [sourcePath];
+    submission.launchPlan.testPaths = [sourcePath];
     fs.writeFileSync(submissionPath, `${JSON.stringify(submission, null, 2)}\n`);
+    result = runCli([
+      "check",
+      submissionPath,
+      "--require-intake-ready",
+      "--repository-root",
+      fixture.repository
+    ]);
+    assert.equal(result.status, 1, result.stdout || result.stderr);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.error.code, "CHECK_INTAKE_NOT_READY");
+    assert.equal(output.error.details.closure.status, "incomplete");
+    assert.ok(output.error.details.findings.some(({ code }) => code === "JAVASCRIPT_ALIAS_RESOLUTION_UNPROVEN"));
+    report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
+    assert.equal(report.closure.status, "incomplete");
+
     result = runCli([
       "check",
       submissionPath,
@@ -269,12 +411,21 @@ test("check writes unsupported proposal closure diagnostics and require-ready bl
       fixture.repository
     ]);
     assert.equal(result.status, 1, result.stdout || result.stderr);
-    const output = JSON.parse(result.stdout);
-    assert.equal(output.error.code, "CHECK_NOT_READY");
-    assert.equal(output.error.details.closure.status, "incomplete");
-    assert.ok(output.error.details.findings.some(({ code }) => code === "JAVASCRIPT_ALIAS_RESOLUTION_UNPROVEN"));
-    report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
-    assert.equal(report.closure.status, "incomplete");
+    const deprecatedAlias = JSON.parse(result.stdout);
+    assert.equal(deprecatedAlias.error.code, "CHECK_INTAKE_NOT_READY");
+
+    result = runCli([
+      "check",
+      submissionPath,
+      "--require-prototype-validated",
+      "--require-design-ready",
+      "--repository-root",
+      fixture.repository
+    ]);
+    assert.equal(result.status, 1, result.stdout || result.stderr);
+    const independent = JSON.parse(result.stdout);
+    assert.equal(independent.error.code, "INDEPENDENT_VERIFICATION_REQUIRED");
+    assert.equal(independent.error.details.sandboxVerification.state, "NOT_RUN");
   } finally {
     fixture.cleanup();
   }

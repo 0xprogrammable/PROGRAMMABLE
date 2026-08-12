@@ -1,15 +1,30 @@
-import childProcess from "node:child_process";
-import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
-import { TextDecoder } from "node:util";
 
 import {
   GITHUB_PUBLIC_SOURCE_CONTRACT_V1,
   GitHubPublicSourceError
 } from "./github-public-source-core.mjs";
+import {
+  GitCommandExecutionError,
+  measureDirectoryBytes,
+  runBoundedExactGitProcess
+} from "./github-exact-object-process-core.mjs";
+import {
+  buildResultRecords,
+  compareNumericVersion,
+  compareUtf8,
+  enforceContentLimits,
+  escapeSparsePattern,
+  parseBatchCheck,
+  parseBatchObjects,
+  parseGitVersion,
+  parseTreeRecords,
+  uniqueObjectIds,
+  verifyGitObjectId
+} from "./github-exact-object-protocol-core.mjs";
 import {
   isCanonicalReviewTargetPath,
   isGitLfsPointer,
@@ -31,6 +46,10 @@ export const GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1 = Object.freeze({
   maximumTimeoutMs: GITHUB_PUBLIC_SOURCE_CONTRACT_V1.limits.maximumTimeoutMs
 });
 
+export async function runBoundedExactGitProcessV1(options) {
+  return runBoundedExactGitProcess(options, GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1);
+}
+
 const REQUEST_KEYS = new Set([
   "repositoryUri",
   "revisionObjectId",
@@ -43,16 +62,11 @@ const REQUEST_KEYS = new Set([
 const LOWER_HEX_40 = /^[0-9a-f]{40}$/u;
 const GITHUB_OWNER = /^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$/u;
 const GITHUB_REPOSITORY = /^[a-z0-9._-]{1,100}$/u;
-const REGULAR_BLOB_MODES = new Set(["100644", "100755"]);
-const STRICT_UTF8 = new TextDecoder("utf-8", { fatal: true });
 const TEMPORARY_PREFIX = "programmable-github-objects-";
 const SMALL_COMMAND_OUTPUT_BYTES = 65_536;
 const COMMIT_OUTPUT_BYTES = 1_048_576;
 const TREE_LIST_OUTPUT_BYTES = 1_048_576;
 const BATCH_PROTOCOL_OVERHEAD_BYTES = 1_048_576;
-const KILL_GRACE_MS = 250;
-const TEMPORARY_SIZE_POLL_MS = 25;
-const MAXIMUM_TEMPORARY_ENTRIES = 65_536;
 const SAFE_GIT_CONFIG = Object.freeze([
   "-c", "credential.helper=",
   "-c", "credential.interactive=never",
@@ -82,13 +96,6 @@ const SAFE_GIT_CONFIG = Object.freeze([
   "-c", "gc.auto=0"
 ]);
 
-class GitCommandExecutionError extends Error {
-  constructor(reason, message, options = {}) {
-    super(message, options.cause === undefined ? undefined : { cause: options.cause });
-    this.name = "GitCommandExecutionError";
-    this.reason = reason;
-  }
-}
 
 /**
  * Creates an anonymous exact-object resolver. Factory options are trusted
@@ -267,26 +274,6 @@ async function requireBackfillCapability(state) {
   if (!/(?:^|\n)usage: git backfill(?: |\n)/u.test(output)) {
     throw toolingBlocked("git backfill --sparse is required");
   }
-}
-
-function parseGitVersion(output) {
-  let source;
-  try {
-    source = STRICT_UTF8.decode(output);
-  } catch {
-    return null;
-  }
-  const match = /^git version ([0-9]+\.[0-9]+\.[0-9]+)(?:[^0-9.]|$)/u.exec(source.trim());
-  return match?.[1] ?? null;
-}
-
-function compareNumericVersion(left, right) {
-  const leftParts = left.split(".").map(Number);
-  const rightParts = right.split(".").map(Number);
-  for (let index = 0; index < 3; index += 1) {
-    if (leftParts[index] !== rightParts[index]) return leftParts[index] - rightParts[index];
-  }
-  return 0;
 }
 
 async function initializeBareRepository(state, gitDirectory, repositoryUri) {
@@ -471,32 +458,6 @@ async function readObjectSizes(state, gitDirectory, treeRecords) {
   return parseBatchCheck(result.stdout, objectIds);
 }
 
-function enforceContentLimits(request, treeRecords, objectSizes) {
-  let totalBytes = 0;
-  for (const record of treeRecords.values()) {
-    const header = objectSizes.get(record.objectId);
-    if (header?.type !== "blob") {
-      throw new GitHubPublicSourceError(
-        "GITHUB_DECLARED_PATH_NOT_FOUND",
-        "A declared source blob was unavailable after sparse backfill"
-      );
-    }
-    if (header.size > request.maximumFileBytes) {
-      throw new GitHubPublicSourceError(
-        "GITHUB_RESPONSE_TOO_LARGE",
-        "A declared source blob exceeds the bounded inert-content limit"
-      );
-    }
-    totalBytes += header.size;
-    if (totalBytes > request.maximumTotalBytes) {
-      throw new GitHubPublicSourceError(
-        "GITHUB_RESPONSE_TOO_LARGE",
-        "Declared source blobs exceed the aggregate inert-content limit"
-      );
-    }
-  }
-}
-
 async function readBlobObjects(state, gitDirectory, treeRecords, maximumTotalBytes) {
   const objectIds = uniqueObjectIds(treeRecords);
   const result = await invokeRepositoryGit(state, gitDirectory, ["cat-file", "--batch"], {
@@ -520,150 +481,6 @@ async function readBlobObjects(state, gitDirectory, treeRecords, maximumTotalByt
     }
   }
   return objects;
-}
-
-function buildResultRecords(treeRecords, objectSizes, objectBytes) {
-  const records = new Map();
-  for (const [filePath, treeRecord] of treeRecords) {
-    const bytes = objectBytes.get(treeRecord.objectId)?.bytes;
-    const expectedSize = objectSizes.get(treeRecord.objectId)?.size;
-    if (!(bytes instanceof Buffer) || bytes.length !== expectedSize) {
-      throw new GitHubPublicSourceError("GITHUB_PROTOCOL_ERROR", "Git blob bytes did not match declared object metadata");
-    }
-    records.set(filePath, {
-      mode: treeRecord.mode,
-      objectId: treeRecord.objectId,
-      bytes: Buffer.from(bytes)
-    });
-  }
-  return records;
-}
-
-function parseTreeRecords(output, requestedPaths) {
-  const requested = new Set(requestedPaths);
-  const records = new Map();
-  const entries = splitNulRecords(output);
-  for (const entry of entries) {
-    const tab = entry.indexOf(0x09);
-    if (tab < 0) protocolError("Git tree output did not contain a path separator");
-    const header = entry.subarray(0, tab).toString("ascii");
-    const match = header.match(/^([0-7]{6}) ([a-z]+) ([0-9a-f]{40})$/u);
-    if (!match) protocolError("Git tree output contained invalid object metadata");
-    let filePath;
-    try {
-      filePath = STRICT_UTF8.decode(entry.subarray(tab + 1));
-    } catch (error) {
-      throw new GitHubPublicSourceError("GITHUB_PROTOCOL_ERROR", "Git tree output contained a non-UTF-8 path", {
-        cause: error
-      });
-    }
-    if (!requested.has(filePath) || records.has(filePath)) {
-      protocolError("Git tree output did not match the exact declared paths");
-    }
-    if (match[2] !== "blob" || !REGULAR_BLOB_MODES.has(match[1])) {
-      throw new GitHubPublicSourceError(
-        "GITHUB_DECLARED_PATH_NOT_FOUND",
-        "A declared source path was not found as a regular blob in the exact tree"
-      );
-    }
-    records.set(filePath, { mode: match[1], objectId: match[3] });
-  }
-  if (records.size !== requested.size) {
-    throw new GitHubPublicSourceError(
-      "GITHUB_DECLARED_PATH_NOT_FOUND",
-      "A declared source path was not found as a regular blob in the exact tree"
-    );
-  }
-  return new Map([...records].sort(([left], [right]) => compareUtf8(left, right)));
-}
-
-function parseBatchCheck(output, requestedObjectIds) {
-  let text;
-  try {
-    text = STRICT_UTF8.decode(output);
-  } catch (error) {
-    throw new GitHubPublicSourceError("GITHUB_PROTOCOL_ERROR", "Git object metadata was not valid UTF-8", {
-      cause: error
-    });
-  }
-  const lines = text.endsWith("\n") ? text.slice(0, -1).split("\n") : [];
-  if (lines.length !== requestedObjectIds.length) {
-    protocolError("Git object metadata count did not match the request");
-  }
-  const records = new Map();
-  for (let index = 0; index < lines.length; index += 1) {
-    const objectId = requestedObjectIds[index];
-    const match = lines[index].match(/^([0-9a-f]{40}) ([a-z]+) (0|[1-9][0-9]*)$/u);
-    if (!match || match[1] !== objectId) {
-      protocolError("Git object metadata did not match the exact requested object");
-    }
-    const size = Number(match[3]);
-    if (!Number.isSafeInteger(size)) protocolError("Git object size was outside the supported integer range");
-    records.set(objectId, { type: match[2], size });
-  }
-  return records;
-}
-
-function parseBatchObjects(output, requestedObjectIds) {
-  const records = new Map();
-  let cursor = 0;
-  for (const requestedObjectId of requestedObjectIds) {
-    const headerEnd = output.indexOf(0x0a, cursor);
-    if (headerEnd < cursor || headerEnd - cursor > 256) {
-      protocolError("Git batch output contained an invalid object header");
-    }
-    const header = output.subarray(cursor, headerEnd).toString("ascii");
-    const match = header.match(/^([0-9a-f]{40}) ([a-z]+) (0|[1-9][0-9]*)$/u);
-    if (!match || match[1] !== requestedObjectId) {
-      protocolError("Git batch output did not match the exact requested object");
-    }
-    const size = Number(match[3]);
-    if (!Number.isSafeInteger(size)) protocolError("Git object size was outside the supported integer range");
-    const bodyStart = headerEnd + 1;
-    const bodyEnd = bodyStart + size;
-    if (bodyEnd >= output.length || output[bodyEnd] !== 0x0a) {
-      protocolError("Git batch output contained truncated object bytes");
-    }
-    records.set(requestedObjectId, {
-      type: match[2],
-      bytes: Buffer.from(output.subarray(bodyStart, bodyEnd))
-    });
-    cursor = bodyEnd + 1;
-  }
-  if (cursor !== output.length) protocolError("Git batch output contained unexpected trailing bytes");
-  return records;
-}
-
-function splitNulRecords(output) {
-  if (output.length === 0) return [];
-  if (output.at(-1) !== 0) protocolError("Git tree output was not NUL terminated");
-  const records = [];
-  let start = 0;
-  for (let index = 0; index < output.length; index += 1) {
-    if (output[index] !== 0) continue;
-    if (index === start) protocolError("Git tree output contained an empty record");
-    records.push(output.subarray(start, index));
-    start = index + 1;
-  }
-  return records;
-}
-
-function escapeSparsePattern(value) {
-  return value.replace(/[\\!#*?\[\] ]/gu, (character) => `\\${character}`);
-}
-
-function uniqueObjectIds(treeRecords) {
-  return [...new Set([...treeRecords.values()].map((entry) => entry.objectId))].sort();
-}
-
-function verifyGitObjectId(type, bytes, expectedObjectId, errorCode) {
-  const observedObjectId = createHash("sha1")
-    .update(`${type} ${bytes.length}\0`, "utf8")
-    .update(bytes)
-    .digest("hex");
-  if (observedObjectId !== expectedObjectId) {
-    throw new GitHubPublicSourceError(errorCode, `Git ${type} bytes did not match the exact object id`);
-  }
 }
 
 async function invokeRepositoryGit(state, gitDirectory, args, options) {
@@ -763,223 +580,6 @@ function safeGitEnvironment(disableLazyFetch) {
   return environment;
 }
 
-export async function runBoundedExactGitProcessV1({
-  gitExecutable,
-  args,
-  cwd,
-  env,
-  input,
-  timeoutMs,
-  maximumOutputBytes,
-  monitoredDirectory,
-  maximumTemporaryBytes,
-  maximumFileSizeBytes = GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1.maximumTemporaryFileBytes,
-  maximumAddressSpaceBytes = GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1.maximumAddressSpaceBytes,
-  maximumCpuSeconds = GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1.maximumCpuSeconds
-}) {
-  if (process.platform !== "darwin" && process.platform !== "linux") {
-    throw new GitCommandExecutionError("platform", "bounded Git execution supports macOS and Linux only");
-  }
-  const fileLimitBlocks = Math.floor(maximumFileSizeBytes / 1024);
-  const addressSpaceLimitKilobytes = process.platform === "linux"
-    ? Math.floor(maximumAddressSpaceBytes / 1024)
-    : 0;
-  if (
-    typeof gitExecutable !== "string"
-    || gitExecutable.length < 1
-    || /[\u0000\r\n]/u.test(gitExecutable)
-    || !Array.isArray(args)
-    || args.some((entry) => typeof entry !== "string" || /\u0000/u.test(entry))
-    || (cwd !== null && cwd !== undefined && (typeof cwd !== "string" || cwd.length < 1 || /\u0000/u.test(cwd)))
-    || !isPlainObject(env)
-    || (input !== null && !(input instanceof Uint8Array))
-    || !Number.isInteger(timeoutMs)
-    || timeoutMs < GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1.minimumTimeoutMs
-    || timeoutMs > GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1.maximumTimeoutMs
-    || !Number.isInteger(maximumOutputBytes)
-    || maximumOutputBytes < 1
-    || !Number.isInteger(maximumTemporaryBytes)
-    || maximumTemporaryBytes < 1
-    || maximumTemporaryBytes > GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1.maximumTemporaryRepositoryBytes
-    || !Number.isInteger(maximumFileSizeBytes)
-    || maximumFileSizeBytes < 1024
-    || maximumFileSizeBytes > GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1.maximumTemporaryFileBytes
-    || !Number.isInteger(maximumAddressSpaceBytes)
-    || maximumAddressSpaceBytes < 64 * 1024 * 1024
-    || maximumAddressSpaceBytes > GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1.maximumAddressSpaceBytes
-    || !Number.isInteger(maximumCpuSeconds)
-    || maximumCpuSeconds < 1
-    || maximumCpuSeconds > GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1.maximumCpuSeconds
-    || fileLimitBlocks < 1
-    || (monitoredDirectory !== null
-      && (typeof monitoredDirectory !== "string" || monitoredDirectory.length < 1 || /\u0000/u.test(monitoredDirectory)))
-  ) {
-    throw new GitCommandExecutionError("options", "bounded Git execution received invalid trusted process options");
-  }
-
-  return new Promise((resolve, reject) => {
-    // GitHub's production runner is Linux. RLIMIT_AS constrains pack expansion
-    // there; macOS has no settable RLIMIT_AS, but retains the inherited file,
-    // CPU, output, storage and wall-clock limits. Positional parameters keep
-    // every Git argument out of shell evaluation.
-    const launcher = [
-      'ulimit -f "$1" || exit 125',
-      'ulimit -t "$2" || exit 125',
-      'if [[ "$3" != "0" ]]; then ulimit -v "$3" || exit 125; fi',
-      'shift 3',
-      'exec "$@"'
-    ].join("; ");
-    let child;
-    try {
-      child = childProcess.spawn("/bin/bash", [
-        "--noprofile",
-        "--norc",
-        "-c",
-        launcher,
-        "bounded-exact-git",
-        String(fileLimitBlocks),
-        String(maximumCpuSeconds),
-        String(addressSpaceLimitKilobytes),
-        gitExecutable,
-        ...args
-      ], {
-        cwd: cwd ?? undefined,
-        detached: true,
-        env,
-        shell: false,
-        stdio: ["pipe", "pipe", "pipe"],
-        windowsHide: true
-      });
-    } catch (error) {
-      reject(new GitCommandExecutionError("spawn", "cannot spawn git", { cause: error }));
-      return;
-    }
-
-    const stdoutChunks = [];
-    const stderrChunks = [];
-    let outputBytes = 0;
-    let outputExceeded = false;
-    let temporaryBytesExceeded = false;
-    let timedOut = false;
-    let terminated = false;
-    let settled = false;
-    let forceKillTimer = null;
-
-    const killGroup = (signal) => {
-      if (!Number.isInteger(child.pid)) return;
-      try {
-        process.kill(-child.pid, signal);
-      } catch (error) {
-        if (error?.code === "ESRCH") return;
-        try {
-          child.kill(signal);
-        } catch {
-          // The process may have exited between the group and direct kill.
-        }
-      }
-    };
-    const terminate = () => {
-      if (terminated) return;
-      terminated = true;
-      killGroup("SIGTERM");
-      forceKillTimer = setTimeout(() => killGroup("SIGKILL"), KILL_GRACE_MS);
-      forceKillTimer.unref?.();
-    };
-    const timeout = setTimeout(() => {
-      timedOut = true;
-      terminate();
-    }, timeoutMs);
-    timeout.unref?.();
-    const sizePoll = monitoredDirectory === null ? null : setInterval(() => {
-      if (temporaryBytesExceeded || settled) return;
-      try {
-        if (measureDirectoryBytes(monitoredDirectory) > maximumTemporaryBytes) {
-          temporaryBytesExceeded = true;
-          terminate();
-        }
-      } catch {
-        temporaryBytesExceeded = true;
-        terminate();
-      }
-    }, TEMPORARY_SIZE_POLL_MS);
-    sizePoll?.unref?.();
-
-    const collect = (target) => (chunk) => {
-      if (outputExceeded) return;
-      const bytes = Buffer.from(chunk);
-      outputBytes += bytes.length;
-      if (outputBytes > maximumOutputBytes) {
-        outputExceeded = true;
-        terminate();
-        return;
-      }
-      target.push(bytes);
-    };
-    child.stdout.on("data", collect(stdoutChunks));
-    child.stderr.on("data", collect(stderrChunks));
-    child.on("error", (error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      if (sizePoll !== null) clearInterval(sizePoll);
-      killGroup("SIGKILL");
-      if (forceKillTimer !== null) clearTimeout(forceKillTimer);
-      reject(new GitCommandExecutionError("spawn", "git process failed", { cause: error }));
-    });
-    child.on("close", (status, signal) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      if (sizePoll !== null) clearInterval(sizePoll);
-      // A leader that exits successfully must not leave git-remote, index-pack
-      // or another helper alive outside the bounded operation.
-      killGroup("SIGKILL");
-      if (forceKillTimer !== null) clearTimeout(forceKillTimer);
-      if (monitoredDirectory !== null) {
-        try {
-          if (measureDirectoryBytes(monitoredDirectory) > maximumTemporaryBytes) {
-            temporaryBytesExceeded = true;
-          }
-        } catch {
-          temporaryBytesExceeded = true;
-        }
-      }
-      const stderr = Buffer.concat(stderrChunks);
-      const stderrText = stderr.toString("utf8");
-      const fileSizeExceeded = signal === "SIGXFSZ"
-        || status === 153
-        || /File size limit exceeded/iu.test(stderrText);
-      const addressSpaceExceeded = /(?:out of memory|cannot allocate memory|memory exhausted|failed to allocate memory|bad_alloc)/iu
-        .test(stderrText);
-      // Bash applies the same soft and hard RLIMIT_CPU value. Linux may report
-      // that hard-limit termination as SIGKILL instead of SIGXCPU. Only treat
-      // an otherwise unexplained SIGKILL as a resource kill: every SIGKILL
-      // initiated by our timeout/output/storage/input handling follows terminate().
-      const cpuExceeded = signal === "SIGXCPU"
-        || status === 152
-        || (signal === "SIGKILL" && !terminated && !fileSizeExceeded && !addressSpaceExceeded);
-      resolve({
-        status: Number.isInteger(status) ? status : 1,
-        signal,
-        stdout: Buffer.concat(stdoutChunks),
-        stderr,
-        timedOut,
-        outputExceeded,
-        temporaryBytesExceeded,
-        fileSizeExceeded,
-        addressSpaceExceeded,
-        cpuExceeded
-      });
-    });
-
-    child.stdin.on("error", (error) => {
-      if (error?.code !== "EPIPE" && !settled) terminate();
-    });
-    if (input === null) child.stdin.end();
-    else child.stdin.end(input);
-  });
-}
-
 async function removeExactTemporaryDirectory(directory, expectedParent) {
   const resolvedDirectory = path.resolve(directory);
   if (
@@ -1002,25 +602,6 @@ function normalizeResolverError(error) {
   return toolingBlocked("exact Git object resolution failed locally", error);
 }
 
-function measureDirectoryBytes(directory) {
-  const pending = [directory];
-  let entries = 0;
-  let totalBytes = 0;
-  while (pending.length > 0) {
-    const current = pending.pop();
-    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-      entries += 1;
-      if (entries > MAXIMUM_TEMPORARY_ENTRIES) return Number.POSITIVE_INFINITY;
-      const entryPath = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        pending.push(entryPath);
-      } else if (entry.isFile()) {
-        totalBytes += fs.statSync(entryPath).size;
-      }
-    }
-  }
-  return totalBytes;
-}
 
 function toolingBlocked(detail, cause = undefined) {
   return new GitHubPublicSourceError(
@@ -1030,9 +611,6 @@ function toolingBlocked(detail, cause = undefined) {
   );
 }
 
-function protocolError(message) {
-  throw new GitHubPublicSourceError("GITHUB_PROTOCOL_ERROR", message);
-}
 
 function invalidRequest(message) {
   throw new GitHubPublicSourceError("INVALID_REQUEST", message);
@@ -1080,8 +658,4 @@ function isGitResult(value) {
 function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
-}
-
-function compareUtf8(left, right) {
-  return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"));
 }

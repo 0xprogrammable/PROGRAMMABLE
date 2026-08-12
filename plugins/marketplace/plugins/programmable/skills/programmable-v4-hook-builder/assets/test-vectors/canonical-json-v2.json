@@ -1,0 +1,208 @@
+{
+  "$schema": "urn:programmable:canonical-json-test-vectors:2.0.0",
+  "schemaVersion": "2.0.0",
+  "profileId": "urn:programmable:canonical-json:2.0.0",
+  "jsonCases": [
+    {
+      "id": "ascii-object-order",
+      "category": "object-order",
+      "input": {
+        "z": 1,
+        "a": 2,
+        "nested": {
+          "b": true,
+          "a": null
+        }
+      },
+      "canonical": "{\"a\":2,\"nested\":{\"a\":null,\"b\":true},\"z\":1}",
+      "sha256": "sha256:ffcad6c861363824a847fc3bc8ef0001445d4617652188401fcdb50c29964c89"
+    },
+    {
+      "id": "unicode-utf8-key-order",
+      "category": "unicode",
+      "input": {
+        "𐀀": "supplementary",
+        "": "private-use",
+        "é": "composed",
+        "é": "decomposed"
+      },
+      "canonical": "{\"é\":\"decomposed\",\"é\":\"composed\",\"\":\"private-use\",\"𐀀\":\"supplementary\"}",
+      "sha256": "sha256:06da68031d9f6ed4cfa43e69b9530f2509461899915298c77729886e04f38433"
+    },
+    {
+      "id": "unicode-and-json-escapes",
+      "category": "unicode",
+      "input": {
+        "controls": "\b\t\n\f\r\"\\/",
+        "emoji": "🪝"
+      },
+      "canonical": "{\"controls\":\"\\b\\t\\n\\f\\r\\\"\\\\/\",\"emoji\":\"🪝\"}",
+      "sha256": "sha256:7546b4d1721febc73625d94e1af21983bb624d606d5c7808002003bfeee7a5e6"
+    },
+    {
+      "id": "finite-number-encoding",
+      "category": "numeric",
+      "input": [
+        0,
+        0,
+        1,
+        -1,
+        1.5,
+        1e-7,
+        1e+21,
+        9007199254740991,
+        9007199254740992
+      ],
+      "canonical": "[0,0,1,-1,1.5,1e-7,1e+21,9007199254740991,9007199254740992]",
+      "sha256": "sha256:6a506277b38ccd6c766f13f2b2ff9117e1b83b131476d23e1a910f1eef4fb767"
+    },
+    {
+      "id": "integer-looking-key-order",
+      "category": "object-order",
+      "input": {
+        "10": "ten",
+        "2": "two",
+        "1": "one",
+        "a": "a"
+      },
+      "canonical": "{\"1\":\"one\",\"10\":\"ten\",\"2\":\"two\",\"a\":\"a\"}",
+      "sha256": "sha256:47bb5aa96c755fc4d86ee3597fc937fa185ac1f77ec28460413f7dab2de7aced"
+    }
+  ],
+  "runtimeCases": [
+    {
+      "id": "null-prototype-object",
+      "category": "plain-object",
+      "fixture": "null-prototype-object",
+      "canonical": "{\"a\":\"ok\",\"z\":1}",
+      "sha256": "sha256:e2c540b0f86af9c32756acb5288e20ce742285048924644e504eb3dab16c49b8"
+    },
+    {
+      "id": "shared-acyclic-reference",
+      "category": "cycle",
+      "fixture": "shared-acyclic-reference",
+      "canonical": "{\"left\":{\"value\":\"same\"},\"right\":{\"value\":\"same\"}}",
+      "sha256": "sha256:dd6943da9a36675ca9f40f540fbec5783a00eb17441e659650afac48e10703af"
+    },
+    {
+      "id": "nan",
+      "category": "non-finite",
+      "fixture": "nan",
+      "errorCode": "CANONICAL_JSON_NON_FINITE_NUMBER"
+    },
+    {
+      "id": "negative-zero",
+      "category": "numeric",
+      "fixture": "negative-zero",
+      "canonical": "0",
+      "sha256": "sha256:5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+    },
+    {
+      "id": "positive-infinity",
+      "category": "non-finite",
+      "fixture": "positive-infinity",
+      "errorCode": "CANONICAL_JSON_NON_FINITE_NUMBER"
+    },
+    {
+      "id": "negative-infinity",
+      "category": "non-finite",
+      "fixture": "negative-infinity",
+      "errorCode": "CANONICAL_JSON_NON_FINITE_NUMBER"
+    },
+    {
+      "id": "self-cycle",
+      "category": "cycle",
+      "fixture": "self-cycle",
+      "errorCode": "CANONICAL_JSON_CYCLE"
+    },
+    {
+      "id": "mutual-cycle",
+      "category": "cycle",
+      "fixture": "mutual-cycle",
+      "errorCode": "CANONICAL_JSON_CYCLE"
+    },
+    {
+      "id": "date-object",
+      "category": "plain-object",
+      "fixture": "date-object",
+      "errorCode": "CANONICAL_JSON_NON_PLAIN_OBJECT"
+    },
+    {
+      "id": "map-object",
+      "category": "plain-object",
+      "fixture": "map-object",
+      "errorCode": "CANONICAL_JSON_NON_PLAIN_OBJECT"
+    },
+    {
+      "id": "class-instance",
+      "category": "plain-object",
+      "fixture": "class-instance",
+      "errorCode": "CANONICAL_JSON_NON_PLAIN_OBJECT"
+    },
+    {
+      "id": "getter-object",
+      "category": "plain-object",
+      "fixture": "getter-object",
+      "errorCode": "CANONICAL_JSON_ACCESSOR"
+    },
+    {
+      "id": "non-enumerable-property",
+      "category": "plain-object",
+      "fixture": "non-enumerable-property",
+      "errorCode": "CANONICAL_JSON_NON_ENUMERABLE_PROPERTY"
+    },
+    {
+      "id": "symbol-key",
+      "category": "plain-object",
+      "fixture": "symbol-key",
+      "errorCode": "CANONICAL_JSON_SYMBOL_KEY"
+    },
+    {
+      "id": "sparse-array",
+      "category": "plain-object",
+      "fixture": "sparse-array",
+      "errorCode": "CANONICAL_JSON_SPARSE_ARRAY"
+    },
+    {
+      "id": "named-array-property",
+      "category": "plain-object",
+      "fixture": "named-array-property",
+      "errorCode": "CANONICAL_JSON_ARRAY_SHAPE"
+    },
+    {
+      "id": "undefined-value",
+      "category": "plain-object",
+      "fixture": "undefined-value",
+      "errorCode": "CANONICAL_JSON_UNSUPPORTED_TYPE"
+    },
+    {
+      "id": "bigint-value",
+      "category": "numeric",
+      "fixture": "bigint-value",
+      "errorCode": "CANONICAL_JSON_UNSUPPORTED_TYPE"
+    },
+    {
+      "id": "lone-high-surrogate",
+      "category": "unicode",
+      "fixture": "lone-high-surrogate",
+      "errorCode": "CANONICAL_JSON_INVALID_UNICODE"
+    },
+    {
+      "id": "lone-low-surrogate-key",
+      "category": "unicode",
+      "fixture": "lone-low-surrogate-key",
+      "errorCode": "CANONICAL_JSON_INVALID_UNICODE"
+    }
+  ],
+  "legacyV1Freeze": {
+    "profileId": "urn:programmable:canonical-json:legacy-v1",
+    "unicodeOrder": {
+      "canonical": "{\"𐀀\":\"supplementary\",\"\":\"private-use\"}",
+      "sha256": "sha256:afbba5e7ece53d6eaf190380eb4ee93fa9dbcd7d1798bf1dfd5ae40e8f4dbe4b"
+    },
+    "feeConformanceFixture": {
+      "receiptSha256": "sha256:6d61541c9bd831784763d4d722d6afec91088452ec3fef167b803cee6a6f0ee9",
+      "vectorSetSha256": "sha256:dbfb629e94c4d7b490d775668880a2664752dc498ae9d94e80992e475c9711b1"
+    }
+  }
+}

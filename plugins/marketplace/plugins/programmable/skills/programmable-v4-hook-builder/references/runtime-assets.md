@@ -1,44 +1,61 @@
-# Runtime assets
+# Runtime assets and large project data
 
-Use the runtime-asset channel for large, non-executable project data such as GLB/glTF models, audio, video, textures,
-level data, map data, tiles, sprites, and other media that would otherwise exceed the source-review byte limits.
+Use this reference for non-executable project data such as models, audio, video, textures, maps, tiles, sprites, fonts,
+level data and other media. Runtime assets are first-class dependency and review surfaces. They do not create a project
+size allowlist and must not be hidden merely to fit an inline source-closure budget.
 
-Create a manifest from `assets/templates/runtime-assets.example.json`, validate it against
-`runtime-assets-v1.schema.json`, and set `submission.json.implementation.runtimeAssetManifestPath` to its repository
-path. Do not also list those data files in source or test path arrays. A literal JavaScript or TypeScript `?url` import
-is accepted only when its resolved file is declared by this manifest.
+Historical `runtime-assets-v1.schema.json`, `runtime-assets.example.json`, `submission.json` bindings and `prepare-pr`
+behavior remain available only for exact V1 reproduction. New work models assets through Submission V2 components,
+dependencies, product surfaces, source bindings and Application V3 repository closure.
 
-For a repository asset, record its exact repository path, regular non-executable Git blob id, SHA-256, MIME type and
-size. Record how and when it loads, its failure behavior, its license declaration and evidence, and its provenance.
-The checker compares the declaration with the path and blob in `HEAD`, hashes ordinary or materialized LFS content in
-bounded chunks, and never renders, loads, imports, or executes the asset. Before excluding materialized bytes from the
-strict source closure, it also performs bounded inert-content classification: executable and shader signatures fail
-closed, while known closed GLB, PNG, JPEG, GIF, WebP, WAV, WOFF/WOFF2 and small structured-JSON forms must match their
-declared format and final boundary. Unknown formats, large structured text, MP3 and other formats without a sufficiently
-closed deterministic classifier remain usable but enter attributable content review instead of being called unsafe.
+## Record each asset
 
-The manifest does not contain the repository root-tree id because that would create a self-reference once the manifest
-or generated review target is committed. `prepare-pr` binds the manifest and its declared blob ids to the independently
-resolved exact public commit and root tree. The generated source-resolution record carries that root-tree identity.
+For every local or remote runtime asset record:
 
-Git LFS is supported. The committed pointer blob, its SHA-256 object id and declared size are bound exactly. When the
-large object is materialized, the checker hashes and classifies it. When only the pointer is available, the project
-enters attributable asset review instead of being labelled unsafe or failing source closure; the pointer alone is never
-treated as proof that the unavailable object is inert.
+- stable id and owning repository/component;
+- exact repository path or external origin;
+- Git blob when committed, byte length, SHA-256 and declared media type;
+- loading point, consumer and failure/fallback behavior;
+- license, provenance and attributable evidence;
+- mutability, cache/update policy and integrity expectations; and
+- whether the bytes are ordinary Git, Git LFS, generated, or externally hosted.
 
-External HTTPS or IPFS resources may be declared with a nullable SHA-256. They are never fetched by deterministic
-checks and always enter attributable provider, integrity, license and provenance review. A declared digest, release
-tag, `latest` URL or mutable provider endpoint is not upgraded to verified identity without a separate exact fetch and
-origin receipt. A review-required asset does not by itself block structural prototype readiness.
+Keep code, tests, shaders, WebAssembly, HTML, CSS, native libraries, executables and scripts in executable source closure.
+Renaming executable content or assigning a media MIME type does not turn it into an inert asset. Bounded magic/container
+checks can prove only that bytes match a known structural format; they do not prove that application decoders are safe.
 
-Keep code, tests, shaders, WebAssembly, HTML, CSS, native libraries, executables and scripts in the strict source/test
-closure. Renaming executable content or giving it a media MIME type does not make it an asset; review must treat such a
-misclassification as an invalid package. Adding a plausible media header does not help: closed formats must end at their
-declared container boundary, and a directly appended executable suffix fails closed. Content classification is a
-bounded structural gate, not a claim that arbitrary data can never be decoded by reviewed application code. The
-runtime-asset channel does not weaken the 2 MB per-file, 20 MB total,
-semantic dependency-closure, compiler, test or security requirements for executable project surfaces.
+## Git and Git LFS evidence
 
-The closed v1 bounds are 256 assets, 512 MB per declared asset, 2 GB aggregate declared bytes, a 1 MB manifest, 512
-evidence paths and the canonical repository-path limits. Symlinks, Gitlinks, executable blob modes, traversal, duplicate
-ids or paths, false blob ids, false sizes, and false verifiable hashes fail closed.
+For ordinary Git blobs, bind and hash the exact committed bytes from the pinned tree. For Git LFS, distinguish:
+
+1. the committed pointer blob;
+2. the expected LFS object id and size;
+3. locally materialized object bytes; and
+4. public GitHub LFS availability for the exact repository/revision.
+
+Local materialized bytes can support local classification and hashing but do **not** prove that reviewers or trusted
+intake can fetch the object publicly. A pointer alone does not prove the large object is available, matches local bytes,
+or is inert. Application review therefore keeps Git LFS as an independent dependency/availability hold unless a
+versioned public reproducibility contract proves the exact object. Launch Bundle V2 remains `NOT_AUTHORIZED` while a
+required asset or executable dependency is unavailable or unresolved. Moving necessary bytes to an ordinary verified
+Git blob or a separately verified public companion repository is the current repair path.
+
+Do not call a Git LFS limitation a product rejection. Preserve the idea, exact local evidence and dependency requirement;
+route the unresolved public object to tooling/dependency review.
+
+## External assets
+
+HTTPS, IPFS or provider-hosted assets remain external dependencies. A URL, release label or claimed digest is not proof
+of origin or current availability. Bind exact content identity where possible and separately record provider, retrieval
+time, response/integrity evidence, mutability, license, fallback and user-visible failure behavior. Deterministic local
+package checks must not silently fetch them.
+
+## Closure and review
+
+Application V3 closes each repository through inline paths or a content-addressed source manifest. Large asset sets may
+use manifest fragments and deterministic split review; no fixed count or aggregate byte limit is a product-category
+rule. Resource exhaustion produces an explicit tooling hold with a continuation path.
+
+Test loading, decoding, cancellation, cache corruption, missing bytes, hash mismatch, oversized input, decompression or
+parser bounds, license/provenance display and the product's fallback behavior. Asset closure is not an audit, runtime
+receipt, public availability proof, provider statement or launch authorization.

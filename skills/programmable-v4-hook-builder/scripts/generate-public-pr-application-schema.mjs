@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseBoundedStrictJsonBytes } from "./strict-json-core.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const referenceDirectory = path.resolve(scriptDirectory, "../references");
@@ -14,6 +15,7 @@ const SOURCE_SCHEMA_ID = "urn:programmable:github-public-source-contract-v1";
 const SOURCE_DEFINITION = "GitHubPublicSourceRequestV1";
 const GENERATED_PREFIX = "githubSource__";
 const DERIVATION_KEY = "x-programmable-derived-from";
+const MAX_SCHEMA_BYTES = 4 * 1024 * 1024;
 
 function canonicalJson(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
@@ -32,7 +34,11 @@ function sha256(value) {
 }
 
 function readJson(filePath) {
-  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  const stat = fs.lstatSync(filePath);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.size < 2 || stat.size > MAX_SCHEMA_BYTES) {
+    throw new Error(`schema input is not one bounded regular file: ${filePath}`);
+  }
+  return parseBoundedStrictJsonBytes(fs.readFileSync(filePath), { maxSourceBytes: MAX_SCHEMA_BYTES });
 }
 
 function localDefinitionName(reference) {

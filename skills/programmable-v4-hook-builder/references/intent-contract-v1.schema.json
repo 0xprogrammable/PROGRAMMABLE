@@ -1,0 +1,281 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:intent-contract:1.0.0",
+  "title": "Programmable language-independent intent contract",
+  "description": "Machine-semantic product intent with exact provenance. Open fact kinds use explicit schema bindings instead of keyword classification.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "applicationId",
+    "revision",
+    "ideaSourceSha256",
+    "status",
+    "workingLanguage",
+    "route",
+    "entities",
+    "facts",
+    "ambiguities",
+    "confirmation"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "applicationId": { "$ref": "#/$defs/slug" },
+    "revision": { "type": "integer", "minimum": 1 },
+    "ideaSourceSha256": { "$ref": "#/$defs/sha256" },
+    "status": { "enum": ["draft", "builder-confirmed", "delegated-defaults", "legacy-unconfirmed"] },
+    "workingLanguage": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "route": { "$ref": "#/$defs/route" },
+    "entities": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/entity" }
+    },
+    "facts": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/fact" }
+    },
+    "ambiguities": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/ambiguity" }
+    },
+    "confirmation": { "$ref": "#/$defs/confirmation" }
+  },
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "maxLength": 120
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\)[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "schemaBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "schemaId", "path", "sha256", "byteLength"],
+      "properties": {
+        "kind": { "enum": ["builtin", "repository"] },
+        "schemaId": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "path": {
+          "oneOf": [
+            { "$ref": "#/$defs/repositoryPath" },
+            { "type": "null" }
+          ]
+        },
+        "sha256": {
+          "oneOf": [
+            { "$ref": "#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        },
+        "byteLength": { "type": ["integer", "null"], "minimum": 1 }
+      }
+    },
+    "localizedText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["language", "text"],
+      "properties": {
+        "language": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "text": { "type": "string", "minLength": 1 }
+      }
+    },
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "reasons", "blockedByRefs"],
+      "properties": {
+        "id": {
+          "enum": ["DIRECT_BUILD", "CUSTOM_ARCHITECTURE", "INTEGRATION_PENDING", "SAFE_REDESIGN"],
+          "description": "Closed workflow state, not a product or idea allowlist."
+        },
+        "reasons": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/localizedText" }
+        },
+        "blockedByRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        }
+      }
+    },
+    "entity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "label", "description"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "kind": {
+          "$ref": "#/$defs/slug",
+          "description": "Open entity kind."
+        },
+        "label": { "$ref": "#/$defs/localizedText" },
+        "description": { "$ref": "#/$defs/localizedText" }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ideaEntryId", "startByte", "endByte", "legacySourceRef", "relation"],
+      "properties": {
+        "ideaEntryId": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "maxLength": 120
+        },
+        "startByte": { "type": ["integer", "null"], "minimum": 0 },
+        "endByte": { "type": ["integer", "null"], "minimum": 0 },
+        "legacySourceRef": { "type": ["string", "null"] },
+        "relation": { "enum": ["direct", "derived", "default-proposed", "legacy-derived"] }
+      }
+    },
+    "fact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "materiality",
+        "modality",
+        "state",
+        "subjectRefs",
+        "semanticPayload",
+        "payloadSchema",
+        "plainLanguage",
+        "provenance"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "kind": {
+          "$ref": "#/$defs/slug",
+          "description": "Open semantic fact kind. Unknown kinds remain valid when payloadSchema is bound."
+        },
+        "materiality": { "enum": ["core", "material", "preference"] },
+        "modality": { "enum": ["must", "must-not", "desired", "delegated-default"] },
+        "state": { "enum": ["confirmed", "inferred", "default-proposed", "unresolved", "legacy-unconfirmed"] },
+        "subjectRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "semanticPayload": {
+          "description": "Non-executable JSON validated against payloadSchema by the package validator."
+        },
+        "payloadSchema": { "$ref": "#/$defs/schemaBinding" },
+        "plainLanguage": { "$ref": "#/$defs/localizedText" },
+        "provenance": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/provenance" }
+        }
+      }
+    },
+    "ambiguityOption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "consequences", "semanticEffect"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "label": { "$ref": "#/$defs/localizedText" },
+        "consequences": { "$ref": "#/$defs/localizedText" },
+        "semanticEffect": {
+          "description": "Declarative, non-executable effect validated by a separately bound fact schema when selected."
+        }
+      }
+    },
+    "ambiguity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "factRefs",
+        "question",
+        "materialEffects",
+        "options",
+        "status",
+        "selectedOptionId",
+        "resolutionIdeaEntryId",
+        "defaultOptionId",
+        "defaultIsReversible",
+        "blocks"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "kind": { "$ref": "#/$defs/slug" },
+        "factRefs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "question": { "$ref": "#/$defs/localizedText" },
+        "materialEffects": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "options": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/ambiguityOption" }
+        },
+        "status": { "enum": ["open", "resolved", "delegated-default"] },
+        "selectedOptionId": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "maxLength": 120
+        },
+        "resolutionIdeaEntryId": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "maxLength": 120
+        },
+        "defaultOptionId": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "maxLength": 120
+        },
+        "defaultIsReversible": { "type": ["boolean", "null"] },
+        "blocks": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        }
+      }
+    },
+    "confirmation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "ideaEntryId", "confirmedFactIds", "delegatedDefaultFactIds"],
+      "properties": {
+        "state": { "enum": ["not-requested", "builder-confirmed", "delegated-defaults", "legacy-unconfirmed"] },
+        "ideaEntryId": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "maxLength": 120
+        },
+        "confirmedFactIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "delegatedDefaultFactIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        }
+      }
+    }
+  }
+}

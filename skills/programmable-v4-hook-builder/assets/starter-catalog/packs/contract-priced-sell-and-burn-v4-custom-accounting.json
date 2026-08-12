@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "contract-priced-sell-and-burn-v4-custom-accounting",
+  "label": "Contract-priced sell and burn v4 custom-accounting adapter",
+  "summary": "Optionally connect the standalone contract-price and burn mechanism to a reviewed v4 full-consumption custom-accounting path.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "architecture-review-required",
+  "requires": [
+    "contract-priced-sell-and-burn",
+    "custom-hook-behavior"
+  ],
+  "conflictsWith": [
+    "ordinary-launch"
+  ],
+  "capabilities": [
+    "sync-custom-zero-amm"
+  ],
+  "projectSurfaces": [
+    "contract"
+  ],
+  "requiredFacts": [
+    "The exact v4 PoolKey, hook permissions and canonical market scope that opt into the adapter",
+    "How full-consumption returned deltas are backed, settled and conserved without stealing or stranding inputs",
+    "How contract-price execution, burns and executed gross quote-side volume bind to the applicable Fee V2 custom-accounting profile",
+    "The standalone contract-price and burn path that remains usable without this optional adapter"
+  ],
+  "requiredFiles": [
+    "Optional v4 custom-accounting adapter source",
+    "PoolKey admission, callback and settlement specification",
+    "Fee V2 custom-accounting policy instance and custody reconstruction",
+    "Differential adapter and standalone-path tests"
+  ],
+  "requiredTests": [
+    "Direct non-PoolManager callback rejection and exact PoolKey admission",
+    "Full-consumption delta conservation for exact input, exact output, partial fill and failure paths",
+    "Standalone contract-price and burn behavior remains unchanged when the adapter is absent or disabled",
+    "Fee basis, funding, custody, claim and no-double-collection checks for each canonical adapter scope"
+  ],
+  "risks": [
+    "Full-consumption custom accounting can steal inputs unless every returned delta is backed and conserved",
+    "Ordinary routers and quote providers may not simulate the adapter correctly",
+    "Adapter coupling can accidentally make the standalone market depend on hook or PoolManager liveness"
+  ]
+}

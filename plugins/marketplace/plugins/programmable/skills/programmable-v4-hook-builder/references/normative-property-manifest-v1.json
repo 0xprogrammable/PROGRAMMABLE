@@ -1,0 +1,31 @@
+{
+  "$schema": "urn:programmable:normative-property-manifest-v1:1.0.0",
+  "schemaVersion": "1.0.0",
+  "kind": "programmable-normative-property-manifest",
+  "entries": [
+    { "path": "SKILL.md", "role": "agent-contract", "recursive": false },
+    { "path": "THIRD_PARTY_NOTICES.md", "role": "legal-or-provenance", "recursive": false },
+    { "path": "agents/openai.yaml", "role": "agent-contract", "recursive": false },
+    { "path": "references", "role": "normative-reference", "recursive": true },
+    { "path": "assets/templates", "role": "authoring-template", "recursive": true },
+    {
+      "path": "assets/test-vectors",
+      "role": "test-vector",
+      "recursive": true,
+      "excludePrefixes": [
+        "assets/test-vectors/approval-policy-blind-fixtures-v1.json",
+        "assets/test-vectors/blind-eval-definitions-v1.json"
+      ]
+    },
+    { "path": "assets/test-vectors/approval-policy-blind-fixtures-v1.json", "role": "blind-evaluation-fixture", "recursive": false },
+    { "path": "assets/test-vectors/blind-eval-definitions-v1.json", "role": "blind-evaluation-fixture", "recursive": false },
+    { "path": "assets/build-profiles", "role": "builder-catalog", "recursive": true },
+    { "path": "assets/starter-catalog", "role": "builder-catalog", "recursive": true },
+    { "path": "assets/reference-kernels", "role": "reference-kernel", "recursive": true },
+    { "path": "scripts", "role": "enforcement-implementation", "recursive": true, "excludePrefixes": ["scripts/test/"] },
+    { "path": "scripts/test/typed-launch-contracts-v1.test.mjs", "role": "enforcement-test", "recursive": false },
+    { "path": "scripts/test/resolve-contract-core.test.mjs", "role": "enforcement-test", "recursive": false },
+    { "path": "scripts/test/cli.test.mjs", "role": "enforcement-test", "recursive": false },
+    { "path": "scripts/test/launch-plan-graph.test.mjs", "role": "enforcement-test", "recursive": false }
+  ]
+}

@@ -5,39 +5,49 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { normativePolicyInventory } from "../submission-core.mjs";
 
 const testDirectory = path.dirname(fileURLToPath(import.meta.url));
 const skillRoot = path.resolve(testDirectory, "..", "..");
 
-for (const policyPath of [
-  "references/official-launchpad-deployments.json",
-  "references/official-model-patterns.md",
-  "references/routing-and-discovery.md",
-  "scripts/metadata-core.mjs",
-  "scripts/public-claims-core.mjs",
-  "scripts/official-launchpad-core.mjs"
-]) {
-  test(`policy bundle binds ${policyPath}`, () => {
-    const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "programmable-policy-bundle-"));
-    const copiedSkill = path.join(fixtureRoot, "programmable-v4-hook-builder");
+test("normative manifest binds every policy, template, enforcement file and blind fixture", () => {
+  const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "programmable-policy-bundle-"));
+  const copiedSkill = path.join(fixtureRoot, "programmable-v4-hook-builder");
 
-    try {
-      fs.cpSync(skillRoot, copiedSkill, { recursive: true });
-      const firstHash = validate(copiedSkill).toolchain.policyBundleSha256;
-      const fixtureChange = policyPath.endsWith(".mjs")
-        ? "\n// Policy fixture change.\n"
-        : "\nPolicy fixture change.\n";
-      fs.appendFileSync(path.join(copiedSkill, policyPath), fixtureChange);
+  try {
+    fs.cpSync(skillRoot, copiedSkill, { recursive: true });
+    const policyPaths = normativePolicyInventory();
+    assert.ok(policyPaths.includes("references/normative-property-manifest-v1.json"));
+    assert.ok(policyPaths.includes("assets/templates/EVIDENCE.md"));
+    assert.ok(policyPaths.includes("assets/templates/PROPOSAL.md"));
+    assert.ok(policyPaths.includes("assets/templates/TEST_PLAN.md"));
+    assert.ok(policyPaths.includes("assets/templates/THREAT_MODEL.md"));
+    assert.ok(policyPaths.includes("assets/test-vectors/approval-policy-blind-fixtures-v1.json"));
+    assert.ok(policyPaths.includes("assets/test-vectors/blind-eval-definitions-v1.json"));
+    assert.ok(policyPaths.includes("scripts/resolve-contract-core.mjs"));
+    assert.ok(policyPaths.includes("scripts/resolve-contract.mjs"));
+    assert.ok(policyPaths.includes("scripts/test/resolve-contract-core.test.mjs"));
+    assert.ok(policyPaths.includes("scripts/test/cli.test.mjs"));
+    assert.ok(policyPaths.includes("references/launch-plan-graph-input-v1.schema.json"));
+    assert.ok(policyPaths.includes("references/launch-plan-graph-output-v1.schema.json"));
+    assert.ok(policyPaths.includes("scripts/launch-plan-graph-core.mjs"));
+    assert.ok(policyPaths.includes("scripts/launch-plan-graph.mjs"));
+    assert.ok(policyPaths.includes("scripts/test/launch-plan-graph.test.mjs"));
+    const firstHash = validate(copiedSkill).toolchain.policyBundleSha256;
+
+    for (const policyPath of policyPaths) {
+      const target = path.join(copiedSkill, policyPath);
+      const sourceBytes = fs.readFileSync(target);
+      fs.writeFileSync(target, Buffer.concat([sourceBytes, Buffer.from("\n")]));
       const secondHash = validate(copiedSkill).toolchain.policyBundleSha256;
-
-      assert.match(firstHash, /^sha256:[a-f0-9]{64}$/);
       assert.match(secondHash, /^sha256:[a-f0-9]{64}$/);
-      assert.notEqual(secondHash, firstHash);
-    } finally {
-      fs.rmSync(fixtureRoot, { recursive: true, force: true });
+      assert.notEqual(secondHash, firstHash, policyPath);
+      fs.writeFileSync(target, sourceBytes);
     }
-  });
-}
+  } finally {
+    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+  }
+});
 
 test("policy bundle normalizes only exact gh installer changes", () => {
   const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "programmable-installed-policy-bundle-"));

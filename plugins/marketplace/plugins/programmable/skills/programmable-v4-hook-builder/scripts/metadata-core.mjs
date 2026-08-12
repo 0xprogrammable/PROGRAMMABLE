@@ -5,26 +5,25 @@ const confusableCharacters = new Map(Object.entries({
   "\u0430": "a", "\u0435": "e", "\u0456": "i", "\u0458": "j", "\u043e": "o", "\u0440": "p", "\u0441": "c", "\u0445": "x", "\u0443": "y", "\u044c": "b"
 }));
 
-const invisibleOrBidiPattern = /[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/u;
+const invisibleOrBidiPattern = /[\p{Control}\p{Default_Ignorable_Code_Point}\p{Bidi_Control}\p{Private_Use}\p{Surrogate}\p{Noncharacter_Code_Point}\u2028\u2029]/u;
+const invisibleOrBidiGlobalPattern = /[\p{Control}\p{Default_Ignorable_Code_Point}\p{Bidi_Control}\p{Private_Use}\p{Surrogate}\p{Noncharacter_Code_Point}\u2028\u2029]/gu;
 const mappedConfusablePattern = /[\u0391-\u03c7\u0405\u0406\u0410-\u0458]/u;
 const latinPattern = /\p{Script=Latin}/u;
 const greekPattern = /\p{Script=Greek}/u;
 const cyrillicPattern = /\p{Script=Cyrillic}/u;
-
-export const PROTECTED_PROVIDER_KEYS = Object.freeze(new Set([
-  "openzeppelin",
-  "programmable",
-  "uniswap"
-]));
 
 export function normalizeConfusableText(value) {
   if (typeof value !== "string") return "";
   return value
     .normalize("NFKC")
     .replace(/[\u0391-\u03c7\u0405\u0406\u0410-\u0458]/gu, (character) => confusableCharacters.get(character) ?? character)
-    .replace(/[\u00ad\u061c\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/gu, "")
+    .replace(invisibleOrBidiGlobalPattern, "")
     .replace(/[’‘]/gu, "'")
     .replace(/[‐‑‒–—]/gu, "-");
+}
+
+export function hasForbiddenInvisibleOrBidi(value) {
+  return typeof value === "string" && invisibleOrBidiPattern.test(value);
 }
 
 export function publicIdentityKey(value) {
@@ -34,6 +33,22 @@ export function publicIdentityKey(value) {
     .replace(/\p{Mark}+/gu, "")
     .replace(/[^a-z0-9]+/gu, "");
 }
+
+export const PROTECTED_PROVIDER_IDENTITIES = Object.freeze([
+  { id: "dexscreener", aliases: ["Dexscreener", "Dex Screener", "Dex-Screener"] },
+  { id: "fomo", aliases: ["Fomo", "Fomo app", "Fomo-app"] },
+  { id: "gmgn", aliases: ["GMGN", "GMGN.AI", "GMGN AI"] },
+  { id: "openzeppelin", aliases: ["OpenZeppelin", "Open Zeppelin"] },
+  { id: "programmable", aliases: ["Programmable"] },
+  { id: "uniswap", aliases: ["Uniswap"] }
+].map((identity) => Object.freeze({
+  id: identity.id,
+  aliases: Object.freeze([...identity.aliases])
+})));
+
+export const PROTECTED_PROVIDER_KEYS = Object.freeze(new Set(
+  PROTECTED_PROVIDER_IDENTITIES.flatMap(({ aliases }) => aliases.map(publicIdentityKey))
+));
 
 export function inspectPublicMetadataText(value) {
   if (typeof value !== "string") {
@@ -51,7 +66,7 @@ export function inspectPublicMetadataText(value) {
   return Object.freeze({
     hasCompatibilityCharacters: value.normalize("NFKC") !== value,
     hasConfusableCharacters: mixedConfusableScripts || (mappedConfusablePattern.test(value) && PROTECTED_PROVIDER_KEYS.has(identityKey)),
-    hasInvisibleOrBidi: invisibleOrBidiPattern.test(value),
+    hasInvisibleOrBidi: hasForbiddenInvisibleOrBidi(value),
     identityKey,
     mixedConfusableScripts
   });

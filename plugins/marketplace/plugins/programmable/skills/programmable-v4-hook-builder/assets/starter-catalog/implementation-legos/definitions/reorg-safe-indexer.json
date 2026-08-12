@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "programmable-implementation-lego",
+  "id": "reorg-safe-indexer",
+  "label": "Reorg-safe indexer buffer",
+  "summary": "A bounded defensive-copy canonical-chain buffer with normalized hashes, canonical duplicate identity, unfinalized rollback and one inspectable finalized anchor.",
+  "maturity": "code-ready",
+  "maturityMeaning": "Deterministic reusable source is packaged and hash-bound; project integration, tests and review are still required.",
+  "feeApplicability": "not-a-fee-enforcement-component",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "automaticAdverseDecision": false,
+  "reviewRoute": "custom-review",
+  "activatesFor": {
+    "starterIds": [],
+    "packIds": [
+      "multi-repo-app-service-indexer"
+    ],
+    "capabilityIds": [
+      "companion-repositories"
+    ]
+  },
+  "requiresLegos": [],
+  "projectSurfaces": [
+    "indexer",
+    "service"
+  ],
+  "dependencyRequirements": [
+    "TypeScript with BigInt support",
+    "Atomic project-specific checkpoint persistence"
+  ],
+  "requiredFacts": [
+    "Bind deployment start blocks, confirmation depth and canonical block-hash source",
+    "Persist finalized checkpoints and derived rows in one atomic transaction, then prune only blocks below the retained finalized anchor",
+    "Deep-copy ingested records and emitted finalized snapshots so caller mutation cannot rewrite buffered canonical state",
+    "Normalize block hashes and require duplicate number-plus-hash snapshots to have the same canonical parent and record digest",
+    "Accept only bounded dense arrays with canonical index properties and acyclic plain data objects as records; reject accessors, exotic objects and oversized structures with controlled errors",
+    "Reconcile event-derived state against confirmed onchain reads"
+  ],
+  "hardConflictPredicates": [
+    "An orphaned log can remain in published state after its block leaves the canonical chain",
+    "A finalized checkpoint or retained anchor can be silently rewritten, lost or pruned without a hold or operator alert",
+    "Caller mutation of an input block or returned finalized record can mutate the internal canonical buffer",
+    "The same normalized block number and hash can be replayed with a different parent or record snapshot",
+    "Cyclic, exotic or unbounded record values can bypass deterministic snapshot identity or crash validation",
+    "Backfill can skip a failed range and still advance the published cursor"
+  ],
+  "claims": {
+    "audited": false,
+    "deployed": false,
+    "productionReady": false,
+    "providerSupport": "not-claimed"
+  },
+  "files": [
+    {
+      "sourcePath": "templates/reorg-safe-indexer/CanonicalEventBuffer.ts",
+      "targetPath": "implementation/reorg-safe-indexer/src/CanonicalEventBuffer.ts",
+      "role": "source",
+      "language": "typescript",
+      "sha256": "f04a084ddf1d11887d9dadc8c92a3376a4ccafc8b52ba7c3fcffdbb7a71560ec"
+    }
+  ]
+}

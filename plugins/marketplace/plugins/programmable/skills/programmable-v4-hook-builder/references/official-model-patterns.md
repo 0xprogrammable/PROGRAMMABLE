@@ -3,16 +3,16 @@
 Use this reference only after the intake has identified a matching capability. A resemblance to an upstream model is
 not approval to copy it, evidence of compatibility, or inherited audit coverage.
 
-Source snapshot observed on `2026-08-01`:
+Source snapshot rechecked on `2026-08-03`:
 
 | Source | Pinned revision | Relevant surface |
 | --- | --- | --- |
-| [Uniswap v4 periphery](https://github.com/Uniswap/v4-periphery/tree/3245c3cb99c48fa1dc2459c3b60abc37d4294aba) | `3245c3cb99c48fa1dc2459c3b60abc37d4294aba` | Permissioned adapters, position manager, router and `ReservesLens` |
+| [Uniswap v4 periphery](https://github.com/Uniswap/v4-periphery/tree/545a5d2a87228167edde48f3b9eda122d1e3c4d6) | `545a5d2a87228167edde48f3b9eda122d1e3c4d6` | Permissioned adapters, exact-output full-fill routing, position manager and `ReservesLens` |
 | [Uniswap v4 hooks public](https://github.com/Uniswap/v4-hooks-public/tree/7da5210f2c81a700820a6b4f585264233d91f349) | `7da5210f2c81a700820a6b4f585264233d91f349` | `PermissionedHooks`, DualPool and its audit report |
-| [Uniswap Universal Router](https://github.com/Uniswap/universal-router/tree/fa3f856951967abd7e0cf33901f6cead31eb5469) | `fa3f856951967abd7e0cf33901f6cead31eb5469` | Command execution and v4 action routing |
-| [Uniswap UniRoute public](https://github.com/Uniswap/uniroute-public/tree/3cce57b8ad8aae7ffa72d4947c535321ada60486) | `3cce57b8ad8aae7ffa72d4947c535321ada60486` | Public routing-engine reference |
+| [Uniswap Universal Router](https://github.com/Uniswap/universal-router/tree/d203e7f5525aeae385800f9490b93886711701df) | `d203e7f5525aeae385800f9490b93886711701df` | Bounded command decoding, signed-route dual identity and v4 action routing |
+| [Uniswap UniRoute public](https://github.com/Uniswap/uniroute-public/tree/0e002a0bcb35624df416a9bba7705aef66eb2c52) | `0e002a0bcb35624df416a9bba7705aef66eb2c52` | Public routing-engine reference |
 | [Uniswap onchain router](https://github.com/Uniswap/onchain-router/tree/b01c21e64ae899a8410df91370ab647b1ecec33a) | `b01c21e64ae899a8410df91370ab647b1ecec33a` | Limited onchain quoting and execution reference |
-| [Uniswap Hooklist](https://github.com/Uniswap/hooklist/tree/8488c73fd6042a0d37b3312e9f9b74e8d5ced71d) | `8488c73fd6042a0d37b3312e9f9b74e8d5ced71d` | Known hook deployments and compatibility metadata |
+| [Uniswap Hooklist](https://github.com/Uniswap/hooklist/tree/43ca58a8ca62bb950a1b1f01ef23929bd86b8943) | `43ca58a8ca62bb950a1b1f01ef23929bd86b8943` | Known hook deployments and compatibility metadata |
 | [Uniswap v4 subgraph](https://github.com/Uniswap/v4-subgraph/tree/0c13ab2fbd95306272528ed781511d7e2aa338d3) | `0c13ab2fbd95306272528ed781511d7e2aa338d3` | Event-derived discovery and history |
 | [OpenZeppelin Uniswap Hooks](https://github.com/OpenZeppelin/uniswap-hooks/tree/26dc8e53f812a1ca390d470342adb6cd8c3286ad) | `26dc8e53f812a1ca390d470342adb6cd8c3286ad` | Reusable base primitives, including experimental custom accounting |
 | [Uniswap Foundation security framework](https://github.com/uniswapfoundation/security-framework/tree/e7e8da52fd5717b6eb4517ea779b766f63148c41) | `e7e8da52fd5717b6eb4517ea779b766f63148c41` | Risk and review framework |
@@ -33,6 +33,10 @@ An audit, test suite, factory provenance or official repository name applies onl
 different compiler/configuration, new dependency, owner policy or economic parameter is a new target.
 
 ## Permissioned Pools
+
+This section applies only when a proposal claims the official Permissioned Pools lane or reuses its components. Another
+permissioned or RWA architecture is a new review target, not an automatic failure; evaluate its asset rights, eligibility,
+custody, settlement, redemption, routing, failure, and legal/product gates directly.
 
 Use the [architecture guide](https://developers.uniswap.org/docs/protocols/v4/permissioned-pools/architecture) and
 [deployment guide](https://developers.uniswap.org/docs/protocols/v4/permissioned-pools/deploy-a-permissioned-pool) as the
@@ -201,6 +205,23 @@ The standard v4 path is a [Universal Router](https://developers.uniswap.org/docs
 `PathKey` with intermediate currency, fee, tick spacing, hook and `hookData`, then settles the endpoint input and takes
 the endpoint output. Use the exact pinned SDK for exact-output path order; do not hand-reverse a route from memory.
 
+At observed source head `d203e7f5525aeae385800f9490b93886711701df`, the dispatcher detects an already-unlocked
+PoolManager and executes the decoded `V4_SWAP` actions without opening a second unlock; otherwise it uses the ordinary
+unlock path. Treat this as a distinct nested execution profile. Bind payer and recipient sentinels to the router's
+`execute` caller, not an outer lock owner; prove the nested command cannot spend an outer actor's credit, closes every
+delta, preserves `CurrencyNotSettled` failure, composes multiple actions, and handles native value/refunds. This is
+source behavior only. It does not prove any deployed router address or provider route runs this revision.
+
+Treat every router command byte string as hostile even when produced by an SDK. Before each read, prove the bounded
+static head, dynamic offset, dynamic length, overflow-safe `length * elementSize`, and short selector. Reject truncated,
+overlapping, out-of-range or arithmetic-overflow encodings before `calldataload`, copying, dispatch or token movement.
+Do not reproduce a decoder that assumes ABI-valid bytes merely because the outer function decoded successfully.
+
+For `signedRouteContext`, authenticate two distinct identities: the hook callback caller must be the exact PoolManager,
+and the callback sender carried by PoolManager must be the exact reviewed Universal Router. Checking only one identity
+permits direct-callback or alternate-router confusion. Bind chain, router generation, PoolKey, route bytes, payer,
+recipient, nonce and expiry into the signed context and test both identity failures independently.
+
 [Flash accounting](https://developers.uniswap.org/docs/protocols/v4/concepts/flash-accounting) nets intermediate
 currencies, so a multihop route can transfer only the endpoints while each pool and hook still runs sequentially within
 one unlock. Test:
@@ -211,9 +232,15 @@ one unlock. Test:
 - split or interleaved v2/v3/v4 commands, subplans, partial-failure behavior, Permit2, native wrapping and refunds;
 - final endpoint deltas, every intermediate zero delta, slippage and quote-to-execution parity at a bound block.
 
+For exact output, success means the requested output is filled in full at every relevant hop or the route reverts. Do
+not rely only on final per-currency net deltas: a path that repeats a currency can net an intermediate underfill away.
+Test repeated-currency multihop routes, middle-hop price limits, zero progress and requested-versus-actual output for each
+hop. This source-level periphery invariant is not present merely because a contracts-registry sibling gitlink or router
+head was observed; verify the selected dependency closure.
+
 Provider routes are separate lanes:
 
-- [Hooklist](https://github.com/Uniswap/hooklist/tree/8488c73fd6042a0d37b3312e9f9b74e8d5ced71d)
+- [Hooklist](https://github.com/Uniswap/hooklist/tree/43ca58a8ca62bb950a1b1f01ef23929bd86b8943)
   records known deployment and compatibility metadata. Inclusion or `verifiedSource` does not place a hook on the Labs
   routing allowlist and is not a security conclusion.
 - The [hook allowlist](https://developers.uniswap.org/hook-allowlist) is mutable provider policy, not a protocol
@@ -229,11 +256,13 @@ Provider routes are separate lanes:
   is event-derived discovery and history, not an authoritative reserve source or executable quote. Bind the deployment,
   schema revision, start block, confirmation policy and reorg/resync behavior.
 
-Treat [UniRoute public](https://github.com/Uniswap/uniroute-public/tree/3cce57b8ad8aae7ffa72d4947c535321ada60486)
+Treat [UniRoute public](https://github.com/Uniswap/uniroute-public/tree/0e002a0bcb35624df416a9bba7705aef66eb2c52)
 and the [onchain router](https://github.com/Uniswap/onchain-router/tree/b01c21e64ae899a8410df91370ab647b1ecec33a)
 as reference-only until their exact package, license closure, deployment, quote model and hook-data behavior are resolved.
 A quote engine that models only v4 core math or executes empty `hookData` does not prove support for dynamic, return-delta,
-custom-data or permissioned hooks.
+custom-data or permissioned hooks. Likewise, UniRoute's Robinhood-only, spot-derived, capped pool-cache admission path is
+not evidence that the same pool is supported on Ethereum, enabled in the hosted service, safely priced, quoted, or
+executable.
 
 ## Exploit-derived accounting regressions
 

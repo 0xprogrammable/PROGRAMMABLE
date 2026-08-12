@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "programmable-implementation-lego",
+  "id": "token-supply-modes",
+  "label": "Token supply modes",
+  "summary": "Reusable fixed, capped-mint and burn-only supply-policy checks for an explicitly selected token architecture.",
+  "maturity": "code-ready",
+  "maturityMeaning": "Deterministic reusable source is packaged and hash-bound; project integration, tests and review are still required.",
+  "feeApplicability": "not-a-fee-enforcement-component",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "automaticAdverseDecision": false,
+  "reviewRoute": "custom-review",
+  "activatesFor": {
+    "starterIds": [
+      "custom-token-standard-fee-hook",
+      "ordinary-launch"
+    ],
+    "packIds": [],
+    "capabilityIds": [
+      "custom-token-behavior",
+      "fixed-supply-token"
+    ]
+  },
+  "requiresLegos": [],
+  "projectSurfaces": [
+    "contract"
+  ],
+  "dependencyRequirements": [
+    "Solidity 0.8.26"
+  ],
+  "requiredFacts": [
+    "Select one supply mode and bind every mint or burn caller",
+    "Bind initial supply, cap, recipient and irreversible authority policy",
+    "Define whether transfer, pool and claim flows observe gross or net supply changes"
+  ],
+  "hardConflictPredicates": [
+    "A fixed-supply declaration retains any callable mint path",
+    "A capped-mint path can produce total supply above the immutable cap",
+    "A burn path can debit an account without that account or an explicitly disclosed authority"
+  ],
+  "claims": {
+    "audited": false,
+    "deployed": false,
+    "productionReady": false,
+    "providerSupport": "not-claimed"
+  },
+  "files": [
+    {
+      "sourcePath": "templates/token-supply-modes/TokenSupplyModes.sol",
+      "targetPath": "implementation/token-supply-modes/src/TokenSupplyModes.sol",
+      "role": "source",
+      "language": "solidity",
+      "sha256": "d0631c7b5f34180667e8a32f82d3aca73e478c195b6554a8c981bb6b0b65a8e5"
+    }
+  ]
+}

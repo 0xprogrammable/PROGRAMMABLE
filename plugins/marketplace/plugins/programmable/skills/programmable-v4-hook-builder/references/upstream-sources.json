@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "snapshotDate": "2026-08-01",
-  "observedAt": "2026-08-01T04:07:25Z",
+  "observedAt": "2026-08-03T22:10:41Z",
   "driftPolicy": {
     "organization": "Uniswap",
     "repositoryNamePatterns": [
@@ -266,8 +266,10 @@
       "repository": "https://github.com/Uniswap/v4-periphery.git",
       "defaultBranch": "main",
       "trackedRef": "refs/heads/main",
-      "commit": "3245c3cb99c48fa1dc2459c3b60abc37d4294aba",
-      "commitTimestamp": "2026-07-13T18:34:41Z",
+      "commit": "545a5d2a87228167edde48f3b9eda122d1e3c4d6",
+      "commitTimestamp": "2026-08-03T20:21:42Z",
+      "previousObservedCommit": "3245c3cb99c48fa1dc2459c3b60abc37d4294aba",
+      "observedAt": "2026-08-03T22:10:41Z",
       "archived": false,
       "license": "MIT",
       "classification": "observed-periphery-source-head",
@@ -279,7 +281,7 @@
           "commit": "59d3ecf53afa9264a16bba0e38f4c5d2231f80bc"
         }
       ],
-      "note": "BaseHook and HookMiner are no longer located here; its pinned core differs from the observed v4-core head."
+      "note": "Observed source makes exact-output routes all-or-nothing by checking full fill at every hop, including repeated-currency multihop routes whose intermediate underfill could otherwise be hidden by PoolManager netting. Its pinned core stays at 59d3ecf53afa9264a16bba0e38f4c5d2231f80bc. This is observed source guidance, not a tested Programmable baseline or deployed-router claim."
     },
     {
       "name": "Uniswap v4 Hooks Public",
@@ -327,8 +329,9 @@
       "repository": "https://github.com/Uniswap/uniroute-public.git",
       "defaultBranch": "main",
       "trackedRef": "refs/heads/main",
-      "commit": "3cce57b8ad8aae7ffa72d4947c535321ada60486",
-      "commitTimestamp": "2026-07-31T18:47:04Z",
+      "commit": "0e002a0bcb35624df416a9bba7705aef66eb2c52",
+      "commitTimestamp": "2026-08-03T21:51:38Z",
+      "observedAt": "2026-08-03T22:10:41Z",
       "archived": false,
       "classification": "observed-offchain-routing-engine-source",
       "license": null,
@@ -339,8 +342,8 @@
       },
       "compatibilitySet": null,
       "notAResolvedBaseline": true,
-      "previousObservedCommit": "beaab6050068be2efa329ce9fbcf76d3a14dabe7",
-      "note": "Public core routing logic with placeholder configuration. The reviewed successor adds Robinhood hook allowlist entries, one exact-input-only routing limitation, and configurable token-negative and block-number caches. It is not a hosted quote service, a production configuration, evidence that those settings are deployed, or evidence that a hook is routed."
+      "previousObservedCommit": "2cf851e7bb5ed0e722da9edc027aeeafae525f38",
+      "note": "Public source adds a Robinhood-V4-only Aurora pool-source path that can derive a bounded one-hop TVL top-up for one unpriced side from native, wrapped-native, or USDG spot pricing, then reports parity after the serving hook filter. The 1-native-unit cap bounds ranking influence but does not prove robust price discovery. The feature is env-gated source code, not Ethereum support, a hosted quote service, production configuration, deployment receipt, approval, or evidence that any hook is currently routed."
     },
     {
       "name": "Uniswap Onchain Router",
@@ -542,8 +545,10 @@
       "repository": "https://github.com/Uniswap/hooklist.git",
       "defaultBranch": "main",
       "trackedRef": "refs/heads/main",
-      "commit": "8488c73fd6042a0d37b3312e9f9b74e8d5ced71d",
-      "commitTimestamp": "2026-07-30T14:56:38Z",
+      "commit": "43ca58a8ca62bb950a1b1f01ef23929bd86b8943",
+      "commitTimestamp": "2026-08-03T17:36:06Z",
+      "previousObservedCommit": "8488c73fd6042a0d37b3312e9f9b74e8d5ced71d",
+      "observedAt": "2026-08-03T22:10:41Z",
       "archived": false,
       "classification": "registry-and-intake-reference",
       "license": null,
@@ -560,28 +565,32 @@
       "repository": "https://github.com/Uniswap/uniswap-ai.git",
       "defaultBranch": "main",
       "trackedRef": "refs/heads/main",
-      "commit": "9660491dc662fea76c2f8565c2f7ba2abf6e8840",
-      "commitTimestamp": "2026-07-31T22:08:37Z",
+      "commit": "86820b932572c4f6dd70116061bc6d67680bd108",
+      "commitTimestamp": "2026-08-03T20:17:45Z",
+      "previousObservedCommit": "9660491dc662fea76c2f8565c2f7ba2abf6e8840",
+      "observedAt": "2026-08-03T22:10:41Z",
       "archived": false,
       "classification": "agent-guidance-reference",
       "license": "MIT",
       "compatibilitySet": null,
-      "notAResolvedBaseline": true
+      "notAResolvedBaseline": true,
+      "note": "Observed head changes repository review automation only. The eight source blobs bound by evals/source-receipts.json remain unchanged, so that historical source receipt intentionally stays pinned to 9660491dc662fea76c2f8565c2f7ba2abf6e8840."
     },
     {
       "name": "Uniswap AI Toolkit",
       "repository": "https://github.com/Uniswap/ai-toolkit.git",
       "defaultBranch": "next",
       "trackedRef": "refs/heads/next",
-      "commit": "9b405c71e42d0cec4026f2c158edf99716600baa",
-      "commitTimestamp": "2026-07-31T21:11:13Z",
+      "commit": "f0812c1d0a52ef4bcbda873d2e7eefa374a3fcf6",
+      "commitTimestamp": "2026-08-03T19:51:53Z",
+      "observedAt": "2026-08-03T22:10:41Z",
       "archived": false,
       "classification": "general-agent-development-tooling-reference",
       "license": "MIT",
       "compatibilitySet": null,
       "notAResolvedBaseline": true,
-      "previousObservedCommit": "bb873ee808564ed0c917b156b651f4ddda43a4c2",
-      "note": "The default branch is next and contains general development tooling. The reviewed successor changes ai-toolkit's own GitHub pull-request review workflow and adds workflow-security and plugin-convention reviewers; it does not change protocol-specific v4 guidance, which remains in Uniswap/uniswap-ai."
+      "previousObservedCommit": "9b405c71e42d0cec4026f2c158edf99716600baa",
+      "note": "The default branch is next. The observed range changes toolkit workflow, release and general development-plugin guidance and adds a backtest-change skill; it does not change protocol-specific v4 guidance, which remains in Uniswap/uniswap-ai."
     },
     {
       "name": "Uniswap Foundation Hooks Security Framework",
@@ -644,47 +653,68 @@
       "repository": "https://github.com/Uniswap/contracts.git",
       "defaultBranch": "main",
       "trackedRef": "refs/heads/main",
-      "commit": "d47f0f73407c1b0b9d8959bf460a612cdc4a516e",
+      "commit": "0ecb1fcaed7cf36b3f33524e09c07efe5387f9b5",
+      "commitTimestamp": "2026-08-03T20:43:13Z",
+      "previousObservedCommit": "580e74a1e1bced14c09ab66f9e6d7e3ebdd61ac4",
+      "observedAt": "2026-08-03T22:10:41Z",
       "archived": false,
       "classification": "observed-deployment-registry-head",
       "license": null,
       "compatibilitySet": null,
       "notAResolvedBaseline": true,
       "deploymentSnapshotSourceCommit": "37936185dee7decf681360ec799c124e0e034672",
-      "note": "The committed deployment snapshot remains bound to its feed-producing commit, not this current head. Consume registry data without copying unlicensed code or prose."
+      "dependencyEdgeSource": "repository-gitlinks-at-observed-commit",
+      "dependencyEdges": [
+        {
+          "repository": "https://github.com/Uniswap/universal-router.git",
+          "commit": "d203e7f5525aeae385800f9490b93886711701df"
+        },
+        {
+          "repository": "https://github.com/Uniswap/v4-periphery.git",
+          "commit": "545a5d2a87228167edde48f3b9eda122d1e3c4d6"
+        }
+      ],
+      "note": "Observed head updates only the Universal Router and v4-periphery gitlinks. The two sibling gitlinks are dependency edges, not a tested compatibility set: Universal Router itself still pins v4-periphery 363226d9e1e2180b67bf6857023dbaad751010c5. The committed deployment snapshot and unchanged observed feed remain bound to their feed-producing commit."
     },
     {
       "name": "Uniswap SDK Monorepo",
       "repository": "https://github.com/Uniswap/sdks.git",
-      "commit": "275572cf5257df4c60bba502504406eb0c649032",
+      "commit": "d4e9116c61b9e39c74c5704d0224d91ff55d34d3",
+      "commitTimestamp": "2026-08-02T14:53:11Z",
+      "previousObservedCommit": "1e30c3265f3cfb818ed912833f3e65630c8b3490",
+      "observedAt": "2026-08-03",
       "classification": "observed-monorepo-head",
       "license": null,
       "compatibilitySet": null,
       "notAResolvedBaseline": true,
-      "note": "Runtime integrations bind each package's exact version, registry integrity, declared license and release gitHead instead of treating monorepo HEAD as a package lock."
+      "note": "The reviewed two-commit advance changes only liquidity-launcher-sdk strategy-generation records and its release version; @uniswap/v4-sdk remains 2.3.1. Runtime integrations bind each package's exact version, registry integrity, declared license and release gitHead instead of treating monorepo HEAD as a package lock."
     },
     {
       "name": "Uniswap Universal Router",
       "repository": "https://github.com/Uniswap/universal-router.git",
       "defaultBranch": "main",
       "trackedRef": "refs/heads/main",
-      "commit": "fa3f856951967abd7e0cf33901f6cead31eb5469",
+      "commit": "d203e7f5525aeae385800f9490b93886711701df",
+      "commitTimestamp": "2026-08-03T20:28:06Z",
+      "previousObservedCommit": "9e9a780a3c17b61fc78a1a73c85684859dda1bad",
+      "observedAt": "2026-08-03T22:10:41Z",
       "archived": false,
       "classification": "observed-router-source-head",
       "license": "GPL-3.0",
       "compatibilitySet": null,
       "notAResolvedBaseline": true,
+      "dependencyEdgeSource": "repository-gitlinks-at-observed-commit",
       "dependencyEdges": [
         {
           "repository": "https://github.com/Uniswap/v4-periphery.git",
-          "commit": "9dafaaecc1e2e1e824eda9d941085f96517d827b"
+          "commit": "363226d9e1e2180b67bf6857023dbaad751010c5"
         },
         {
           "repository": "https://github.com/Uniswap/permit2.git",
           "commit": "cc56ad0f3439c502c246fc5cfcc3db92bb8b7219"
         }
       ],
-      "note": "Observed source only. A deployed router generation requires independent release, address, runtime and interface evidence."
+      "note": "Observed source bounds command-input decoding before every static head, dynamic offset, array length, multiplication and short-selector read; it also adds UNWRAP_WETH_EXACT, uses uint256 amountMin for SWEEP, and hardens signedRouteContext so a hook authenticates both PoolManager as callback caller and Universal Router as callback sender. Its v4-periphery gitlink remains 363226d9e1e2180b67bf6857023dbaad751010c5, so the sibling periphery exact-output fix is not part of this router source tree. This is source behavior only; a deployed generation requires independent evidence."
     },
     {
       "name": "Uniswap Permit2 Current Head",

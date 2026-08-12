@@ -4,17 +4,19 @@ import path from "node:path";
 import { TextDecoder } from "node:util";
 import { deriveApplicationRevision } from "./cli-central-base.mjs";
 import { CENTRAL_APPLICATION_FILES } from "./cli-central-package.mjs";
+import { normalizeBuilderTemplate } from "./builder-template-contract.mjs";
 import { validateCompanionClosureReceipts } from "./companion-manifest-contract.mjs";
 import { validateGitHubPublicSourceRequestV1 } from "./github-public-source-core.mjs";
 import { CliFailure, sanitizeMessage } from "./cli-runtime.mjs";
 import { canonicalJson } from "./submission-core.mjs";
+import { hasForbiddenInvisibleOrBidi } from "./metadata-core.mjs";
+import { parseBoundedStrictJson } from "./strict-json-core.mjs";
 
 const APPLICATION_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const GITHUB_LOGIN_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/u;
 const OPAQUE_DECIMAL_PATTERN = /^[1-9][0-9]{0,63}$/u;
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/u;
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/u;
-const CONTROL_OR_BIDI_PATTERN = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u00ad\u061c\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/u;
 const REVIEW_FILES = Object.freeze(CENTRAL_APPLICATION_FILES.slice(1));
 const MAX_PACKAGE_BYTES = 512 * 1024;
 const MAX_FILE_BYTES = Object.freeze({
@@ -62,7 +64,12 @@ export function snapshotLocalDraftPackage({ targetDirectory, applicationId, expe
   }
 
   const validated = validateClosedPackageFiles({ applicationId, files });
-  const centralPackage = centralPackageFromFiles({ applicationId, files, application: validated.application });
+  const centralPackage = centralPackageFromFiles({
+    applicationId,
+    files,
+    application: validated.application,
+    compatibility: validated.compatibility
+  });
   return Object.freeze({
     kind: "local-unmerged-application-draft-v1",
     applicationId,
@@ -194,6 +201,7 @@ function validateClosedCentralPackage(centralPackage, applicationId) {
   if (
     !isExactObject(centralPackage, [
       "applicationRevision",
+      "compatibilityResult",
       "encoding",
       "fileCount",
       "fileOrder",
@@ -242,6 +250,7 @@ function validateClosedCentralPackage(centralPackage, applicationId) {
   if (
     centralPackage.applicationRevision !== validated.application.applicationRevision
     || centralPackage.stage !== validated.application.stage
+    || centralPackage.compatibilityResult !== validated.compatibility.result
   ) {
     invalidDraft("the central-package summary does not match application.json");
   }
@@ -286,6 +295,7 @@ function validateApplication(application, applicationId) {
       "applicationId",
       "applicationRevision",
       "builder",
+      "builderTemplate",
       "companionClosure",
       "declarations",
       "programmableFee",
@@ -314,6 +324,11 @@ function validateApplication(application, applicationId) {
     || !validContact(application.builder.contact)
   ) {
     invalidDraft("the local draft builder identity is invalid");
+  }
+  try {
+    application.builderTemplate = normalizeBuilderTemplate(application.builderTemplate);
+  } catch {
+    invalidDraft("the local draft builder-template provenance is invalid");
   }
   if (
     !isExactObject(application.declarations, [
@@ -445,7 +460,7 @@ function validateMarkdown(bytes, name, heading) {
     !source.endsWith("\n")
     || source.includes("\r")
     || source.includes("\t")
-    || CONTROL_OR_BIDI_PATTERN.test(source)
+    || hasForbiddenInvisibleOrBidi(source.replaceAll("\n", ""))
     || source.split("\n", 1)[0] !== heading
     || source.slice(heading.length + 1).trim().length < 40
     || /<[!/?A-Za-z]/u.test(source)
@@ -459,18 +474,18 @@ function validateMarkdown(bytes, name, heading) {
 
 function parseCanonicalJson(bytes, name) {
   const source = decodeUtf8(bytes, name);
-  if (source.includes("\r") || CONTROL_OR_BIDI_PATTERN.test(source)) invalidDraft(`${name} contains unsafe text`);
   let value;
   try {
-    value = JSON.parse(source);
+    value = parseBoundedStrictJson(source, { maxSourceBytes: MAX_FILE_BYTES[name] });
   } catch {
-    invalidDraft(`${name} is not valid JSON`);
+    invalidDraft(`${name} is not valid duplicate-free JSON`);
   }
+  if (source.includes("\r") || hasForbiddenInvisibleOrBidi(source.replaceAll("\n", ""))) invalidDraft(`${name} contains unsafe text`);
   if (source !== `${canonicalJson(value)}\n`) invalidDraft(`${name} is not exact canonical JSON`);
   return value;
 }
 
-function centralPackageFromFiles({ applicationId, files, application }) {
+function centralPackageFromFiles({ applicationId, files, application, compatibility }) {
   const records = CENTRAL_APPLICATION_FILES.map((fileName) => {
     const bytes = files.get(fileName);
     return Object.freeze({
@@ -484,6 +499,7 @@ function centralPackageFromFiles({ applicationId, files, application }) {
     targetDirectory: `submissions/${applicationId}`,
     stage: application.stage,
     applicationRevision: application.applicationRevision,
+    compatibilityResult: compatibility.result,
     fileCount: records.length,
     fileOrder: [...CENTRAL_APPLICATION_FILES],
     encoding: "utf8",
@@ -590,7 +606,7 @@ function boundedText(value, minimum, maximum) {
     && value.length >= minimum
     && value.length <= maximum
     && value.trim() === value
-    && !CONTROL_OR_BIDI_PATTERN.test(value);
+    && !hasForbiddenInvisibleOrBidi(value);
 }
 
 function decodeUtf8(bytes, name) {

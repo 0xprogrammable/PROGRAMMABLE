@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "active-liquidity-market",
+  "label": "active liquidity market",
+  "summary": "Plan an orderbook, bin, vault, or inventory-driven market inside one custom v4 hook with a dedicated executable quoter and explicit liveness.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "architecture-review-required",
+  "requires": [
+    "custom-hook-behavior",
+    "v4-swap-client"
+  ],
+  "conflictsWith": [],
+  "capabilities": [
+    "active-liquidity-market",
+    "custom-accounting",
+    "hook-owned-liquidity"
+  ],
+  "projectSurfaces": [
+    "application",
+    "contract",
+    "keeper"
+  ],
+  "requiredFacts": [
+    "Exact pricing, spread, bin or order rules; inventory and share math; deposits, withdrawals, fees and loss allocation",
+    "Dedicated quote path that executes the same hook state transition, sender, hookData, price limits and partial-fill behavior as swaps",
+    "Vault and PoolId namespace, ownership, maker permissions, cancellation, JIT or lock rules, and solvency invariants",
+    "Keeper or maker liveness assumptions, stale inventory, unavailable quote source, fallback and user exit",
+    "How mandatory Programmable fees compose with market spreads, LP fees, maker fees and project charges without double counting"
+  ],
+  "requiredFiles": [
+    "Pricing and inventory specification with worked examples",
+    "Pinned hook, vault, quoter and client source closure",
+    "Maker, keeper, custody, cancellation and exit authority map",
+    "Executable stateful invariants and adversarial market simulations",
+    "App quote, route, disclosure and monitoring integration"
+  ],
+  "requiredTests": [
+    "All swap quadrants, partial fills, depleted inventory, crossed or empty book, boundary bins, rounding and price limits",
+    "Quote-to-execution parity under same-block state change, maker action, JIT behavior, hookData change and reorg",
+    "Deposit, withdrawal, share donation, loss, cancellation, expiry, lock, unauthorized maker and cross-pool isolation",
+    "Keeper or quoter outage, stale state, gas exhaustion, reentrancy, malicious token and recovery",
+    "Fee composition, liabilities, claims, solvency, user exit and retirement after every successful and reverting path"
+  ],
+  "risks": [
+    "Custom market math creates a larger invariant and manipulation surface than an ordinary concentrated-liquidity pool",
+    "A non-equivalent quoter can present executable-looking prices that the hook cannot or will not honor",
+    "Inventory, vault shares, maker orders and PoolManager deltas can diverge unless one state machine owns settlement"
+  ]
+}

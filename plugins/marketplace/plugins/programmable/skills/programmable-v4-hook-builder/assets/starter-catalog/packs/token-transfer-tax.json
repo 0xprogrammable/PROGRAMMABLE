@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "token-transfer-tax",
+  "label": "Token transfer tax",
+  "summary": "Model a disclosed token-level transfer tax with explicit scope, exemptions, accounting and pool compatibility evidence.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "architecture-review-required",
+  "requires": [],
+  "conflictsWith": [],
+  "capabilities": [
+    "fee-on-transfer-token",
+    "token-side-special-behavior",
+    "token-transfer-tax"
+  ],
+  "projectSurfaces": [
+    "contract",
+    "indexer",
+    "metadata"
+  ],
+  "requiredFacts": [
+    "Exact tax rate, maximum rate, taxed transfer classes and rounding direction",
+    "Exempt actors and paths, who can change exemptions, and whether behavior is immutable",
+    "Gross amount, net amount, recipient liabilities and every destination of taxed value",
+    "PoolManager, router, liquidity, claim and wallet behavior when actual received value differs from requested value",
+    "Public disclosures that distinguish token transfer tax from LP fee, platform share and project hook fee"
+  ],
+  "requiredFiles": [
+    "Transfer-tax token source",
+    "Tax authority and exemption policy",
+    "Value-flow and accounting specification",
+    "Pool and router compatibility evidence",
+    "Public tax disclosure"
+  ],
+  "requiredTests": [
+    "Taxed and exempt transfer matrix across zero, minimum, ordinary and maximum amounts",
+    "Buy, sell, direct transfer, liquidity, claim and router behavior for gross and net amounts",
+    "Rate and exemption authority boundaries including renouncement or immutability claims",
+    "No hidden confiscation, transfer blocking, balance inflation or recipient insolvency",
+    "Pool settlement fails safely or remains exactly solvent when token balance deltas differ"
+  ],
+  "risks": [
+    "Fee-on-transfer accounting can break pool settlement, routers, liquidity operations and integrations",
+    "Mutable rates or exemptions can create honeypot, bypass, favoritism or undisclosed control",
+    "Gross-versus-net confusion can overcharge users or make liabilities insolvent"
+  ]
+}

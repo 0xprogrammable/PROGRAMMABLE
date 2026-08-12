@@ -158,8 +158,8 @@ function addRepositoryRoutes(routes, request, options = {}) {
       },
       repository: { id: new RawJsonNumber(options.actionsRepositoryId ?? metadataId) },
       event: "pull_request",
-      status: "completed",
-      conclusion: "success",
+      status: options.actionsStatus ?? "completed",
+      conclusion: options.actionsConclusion === undefined ? "success" : options.actionsConclusion,
       html_url: `${request.repositoryUri}/actions/runs/${runId}`,
     }));
   }
@@ -779,6 +779,27 @@ test("binds GitHub Actions evidence to repository, commit, tree, workflow path, 
     await expectCode(
       resolveGitHubPublicSourceV1(sourceRequest(request), { transport: createFakeTransport(routes) }),
       "GITHUB_ACTIONS_RUN_MISMATCH",
+    );
+  });
+
+  await t.test("pending run", async () => {
+    const routes = new Map();
+    addRepositoryRoutes(routes, request, {
+      actionsStatus: "in_progress",
+      actionsConclusion: null,
+    });
+    await expectCode(
+      resolveGitHubPublicSourceV1(sourceRequest(request), { transport: createFakeTransport(routes) }),
+      "GITHUB_ACTIONS_RUN_NOT_SUCCESSFUL",
+    );
+  });
+
+  await t.test("failed run", async () => {
+    const routes = new Map();
+    addRepositoryRoutes(routes, request, { actionsConclusion: "failure" });
+    await expectCode(
+      resolveGitHubPublicSourceV1(sourceRequest(request), { transport: createFakeTransport(routes) }),
+      "GITHUB_ACTIONS_RUN_NOT_SUCCESSFUL",
     );
   });
 

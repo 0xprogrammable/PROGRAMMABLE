@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:launch-bundle-input:1.0.0",
+  "title": "Programmable post-acceptance launch-bundle candidate input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "authority",
+    "registry",
+    "source",
+    "build",
+    "artifacts",
+    "evidence",
+    "launchInfrastructure",
+    "executorCall",
+    "assetAddresses"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "authority": { "const": "builder-supplied-pre-authorization" },
+    "registry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["registryCommit", "registryTreeObjectId", "acceptancePath", "acceptanceSha256", "applicationId", "applicationRevision", "packageSha256"],
+      "properties": {
+        "registryCommit": { "$ref": "#/$defs/gitObjectOrNull" },
+        "registryTreeObjectId": { "$ref": "#/$defs/gitObjectOrNull" },
+        "acceptancePath": { "type": ["string", "null"], "pattern": "^registry/acceptances/[a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9.-]*\\.json$", "maxLength": 1024 },
+        "acceptanceSha256": { "$ref": "#/$defs/sha256OrNull" },
+        "applicationId": { "type": ["string", "null"], "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 100 },
+        "applicationRevision": { "type": ["integer", "null"], "minimum": 1, "maximum": 1000000 },
+        "packageSha256": { "$ref": "#/$defs/sha256OrNull" }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["numericRepositoryId", "repositoryUri", "revisionObjectId", "treeObjectId", "reviewedSourceClosureHash", "submission", "reviewTarget"],
+      "properties": {
+        "numericRepositoryId": { "type": ["string", "null"], "pattern": "^[1-9][0-9]{0,63}$", "maxLength": 64 },
+        "repositoryUri": { "type": ["string", "null"], "pattern": "^https://github\\.com/(?![^/]*--)[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?/(?!\\.{1,2}$)(?!.*\\.git$)(?=[a-z0-9._-]*[a-z0-9])[a-z0-9._-]{1,100}$" },
+        "revisionObjectId": { "$ref": "#/$defs/gitObjectOrNull" },
+        "treeObjectId": { "$ref": "#/$defs/gitObjectOrNull" },
+        "reviewedSourceClosureHash": { "$ref": "#/$defs/sha256OrNull" },
+        "submission": { "$ref": "#/$defs/sourceFileRef" },
+        "reviewTarget": { "$ref": "#/$defs/sourceFileRef" }
+      }
+    },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["compiler", "settings", "dependencyLock", "buildInfo", "abi"],
+      "properties": {
+        "compiler": { "type": ["string", "null"], "minLength": 1, "maxLength": 100 },
+        "settings": { "$ref": "#/$defs/sourceFileRef" },
+        "dependencyLock": { "$ref": "#/$defs/sourceFileRef" },
+        "buildInfo": { "$ref": "#/$defs/evidenceFileRef" },
+        "abi": { "$ref": "#/$defs/evidenceFileRef" }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/artifact" }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["build", "configuration", "feeConformance"],
+      "properties": {
+        "build": { "$ref": "#/$defs/evidenceFileRef" },
+        "configuration": { "$ref": "#/$defs/evidenceFileRef" },
+        "feeConformance": { "$ref": "#/$defs/evidenceFileRef" }
+      }
+    },
+    "launchInfrastructure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authorityContract", "launcher", "launchCaller", "nativeValue", "poolManager", "hook", "chainId"],
+      "properties": {
+        "authorityContract": { "$ref": "#/$defs/addressOrNull" },
+        "launcher": { "$ref": "#/$defs/addressOrNull" },
+        "launchCaller": { "$ref": "#/$defs/addressOrNull" },
+        "nativeValue": { "$ref": "#/$defs/uintOrNull" },
+        "poolManager": { "$ref": "#/$defs/addressOrNull" },
+        "hook": { "$ref": "#/$defs/addressOrNull" },
+        "chainId": { "$ref": "#/$defs/uintOrNull" }
+      }
+    },
+    "executorCall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "refundRecipient", "callData", "hookConfiguration"],
+      "properties": {
+        "target": { "$ref": "#/$defs/addressOrNull" },
+        "refundRecipient": { "$ref": "#/$defs/addressOrNull" },
+        "callData": { "type": ["string", "null"], "pattern": "^0x(?:[0-9a-fA-F]{2})*$", "maxLength": 262146 },
+        "hookConfiguration": { "type": ["string", "null"], "pattern": "^0x(?:[0-9a-fA-F]{2})*$", "maxLength": 131074 }
+      }
+    },
+    "assetAddresses": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["assetId", "address"],
+        "properties": {
+          "assetId": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "address": { "$ref": "#/$defs/addressOrNull" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "addressOrNull": { "type": ["string", "null"], "pattern": "^0x[a-fA-F0-9]{40}$" },
+    "sha256OrNull": { "type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$" },
+    "gitObjectOrNull": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40}$" },
+    "uintOrNull": { "type": ["string", "null"], "pattern": "^(?:0|[1-9][0-9]*)$", "maxLength": 78 },
+    "sourceFileRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root", "path", "sha256"],
+      "properties": {
+        "root": { "const": "source" },
+        "path": { "type": ["string", "null"], "minLength": 1, "maxLength": 1024 },
+        "sha256": { "$ref": "#/$defs/sha256OrNull" }
+      }
+    },
+    "evidenceFileRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root", "path", "sha256"],
+      "properties": {
+        "root": { "const": "evidence" },
+        "path": { "type": ["string", "null"], "minLength": 1, "maxLength": 1024 },
+        "sha256": { "$ref": "#/$defs/sha256OrNull" }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["component", "codeMode", "address", "source", "artifact", "creationBytecodeJsonPointer", "runtimeBytecodeJsonPointer", "constructorArgs"],
+      "properties": {
+        "component": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 100 },
+        "codeMode": { "const": "immutable" },
+        "address": { "type": "string", "pattern": "^0x[a-fA-F0-9]{40}$" },
+        "source": { "$ref": "#/$defs/sourceFileRef" },
+        "artifact": { "$ref": "#/$defs/evidenceFileRef" },
+        "creationBytecodeJsonPointer": { "type": "string", "minLength": 2, "maxLength": 1024 },
+        "runtimeBytecodeJsonPointer": { "type": "string", "minLength": 2, "maxLength": 1024 },
+        "constructorArgs": { "type": "string", "pattern": "^0x(?:[0-9a-fA-F]{2})*$", "maxLength": 131074 }
+      }
+    }
+  }
+}

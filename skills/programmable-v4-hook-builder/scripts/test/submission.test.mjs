@@ -28,6 +28,11 @@ import {
 import { analyzeRepositoryClosure, buildReviewTarget } from "../review-target-core.mjs";
 import { CliFailure, preparePullRequest } from "../cli-prepare-pr.mjs";
 import { validateGitHubPublicSourceRequestV1 } from "../github-public-source-core.mjs";
+import {
+  PROTECTED_PROVIDER_IDENTITIES,
+  PROTECTED_PROVIDER_KEYS,
+  publicIdentityKey
+} from "../metadata-core.mjs";
 
 const testDirectory = path.dirname(fileURLToPath(import.meta.url));
 const skillRoot = path.resolve(testDirectory, "..", "..");
@@ -51,12 +56,15 @@ assert.equal(fixtureCommit.status, 0, fixtureCommit.stderr);
 test.after(() => fs.rmSync(repositoryRoot, { recursive: true, force: true }));
 const template = JSON.parse(fs.readFileSync(path.join(skillRoot, "assets", "templates", "submission.example.json"), "utf8"));
 const noHookArchitectureTemplate = JSON.parse(fs.readFileSync(path.join(skillRoot, "assets", "templates", "no-hook-architecture.example.json"), "utf8"));
+const tokenMechanicsTemplate = JSON.parse(fs.readFileSync(path.join(skillRoot, "assets", "templates", "token-mechanics.example.json"), "utf8"));
 const schema = JSON.parse(fs.readFileSync(path.join(skillRoot, "references", "submission.schema.json"), "utf8"));
 
 test("complete standard proposal is prototype ready", () => {
   const report = analyzeSubmission(readySubmission(), { schema });
 
   assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.equal(report.readiness.design, "DESIGN_READY");
+  assert.equal(report.readiness.implementation, "NOT_STARTED");
   assert.equal(report.hookPermissionMask, "0x0040");
   assert.equal(report.risk.score, 2);
   assert.equal(report.risk.baseTier, "low");
@@ -64,14 +72,79 @@ test("complete standard proposal is prototype ready", () => {
   assert.equal(report.findings.filter(({ severity }) => severity === "blocker").length, 0);
 });
 
+test("launch liquidity is a positive uint128 and open strategy slugs never become a product allowlist", () => {
+  const openStrategy = readySubmission();
+  openStrategy.launchPlan.targetStrategy = "threejs-location-quest-with-wallet-rewards";
+  let report = analyzeSubmission(openStrategy, { schema });
+  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.equal(report.findings.some(({ code }) => code === "LAUNCH_TARGET_STRATEGY_UNRESOLVED"), false);
+
+  const unresolvedProposal = readySubmission();
+  unresolvedProposal.pool.minimumInitialLiquidity = null;
+  report = analyzeSubmission(unresolvedProposal, { schema });
+  assert.equal(report.readiness.design, "DESIGN_NEEDS_INFORMATION");
+  assert.ok(report.findings.some(({ code, path }) => code === "UNRESOLVED_DECISION" && path === "$.pool.minimumInitialLiquidity"));
+
+  const maximum = readySubmission();
+  maximum.pool.minimumInitialLiquidity = ((1n << 128n) - 1n).toString();
+  report = analyzeSubmission(maximum, { schema });
+  assert.equal(report.findings.some(({ code }) => code === "MINIMUM_INITIAL_LIQUIDITY_UNRESOLVED"), false);
+
+  for (const [label, value] of [
+    ["null", null],
+    ["zero", "0"],
+    ["negative", "-1"],
+    ["number", 1],
+    ["leading zero", "01"],
+    ["overflow", (1n << 128n).toString()]
+  ]) {
+    const prototype = readySubmission();
+    prototype.stage = "prototype";
+    prototype.pool.minimumInitialLiquidity = value;
+    report = analyzeSubmission(prototype, { schema });
+    assert.ok(report.findings.some(({ code }) => code === "MINIMUM_INITIAL_LIQUIDITY_UNRESOLVED"), label);
+  }
+});
+
+test("an open product decision asks for information instead of claiming a design defect", () => {
+  const submission = readySubmission();
+  submission.unresolved = [
+    "Should game rewards use a capped pre-funded pool or protocol custody?"
+  ];
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.equal(report.decision, "REDESIGN_REQUIRED");
+  assert.equal(report.readiness.design, "DESIGN_NEEDS_INFORMATION");
+  assert.deepEqual(report.readiness.designBlockerCodes, ["UNRESOLVED_DECISION"]);
+  assert.ok(report.findings.some(({ code }) => code === "UNRESOLVED_DECISION"));
+});
+
+test("design readiness permits the planned mandatory fee to be implemented before source exists", () => {
+  const submission = readySubmission();
+  submission.programmableFee.collection.status = "pending-hook-integration";
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.equal(report.decision, "REDESIGN_REQUIRED");
+  assert.equal(report.readiness.design, "DESIGN_READY");
+  assert.equal(report.readiness.implementation, "NOT_STARTED");
+  assert.deepEqual(report.readiness.designBlockerCodes, []);
+  assert.ok(report.readiness.implementationBlockerCodes.includes("PROGRAMMABLE_FEE_INTEGRATION_PENDING"));
+  assert.ok(report.requiredGates.some(({ id, stage }) => id === "programmable-fee-implementation" && stage === "prototype"));
+});
+
 test("mandatory Programmable fee applies the non-additive minimum formula at 0, 5, 10 and 300 bips", () => {
   for (const selectedBips of [0, 5, 10, 300]) {
     const submission = readySubmission();
     const selected = selectedBips * 100;
     const effective = Math.max(selected, 1000);
-    submission.programmableFee.rates.selectedHundredthsOfBip = selected;
-    submission.programmableFee.rates.effectiveHundredthsOfBip = effective;
-    submission.programmableFee.rates.projectHundredthsOfBip = effective - 1000;
+    submission.programmableFee.rates.selectedBuyHundredthsOfBip = selected;
+    submission.programmableFee.rates.selectedSellHundredthsOfBip = selected;
+    submission.programmableFee.rates.effectiveBuyHundredthsOfBip = effective;
+    submission.programmableFee.rates.effectiveSellHundredthsOfBip = effective;
+    submission.programmableFee.rates.projectBuyHundredthsOfBip = effective - 1000;
+    submission.programmableFee.rates.projectSellHundredthsOfBip = effective - 1000;
 
     const report = analyzeSubmission(submission, { schema });
 
@@ -82,9 +155,9 @@ test("mandatory Programmable fee applies the non-additive minimum formula at 0, 
 
 test("mandatory Programmable fee rejects additive 300-to-310 bips and any platform rate other than 10 bips", () => {
   const additive = readySubmission();
-  additive.programmableFee.rates.selectedHundredthsOfBip = 30000;
-  additive.programmableFee.rates.effectiveHundredthsOfBip = 31000;
-  additive.programmableFee.rates.projectHundredthsOfBip = 30000;
+  additive.programmableFee.rates.selectedBuyHundredthsOfBip = 30000;
+  additive.programmableFee.rates.effectiveBuyHundredthsOfBip = 31000;
+  additive.programmableFee.rates.projectBuyHundredthsOfBip = 30000;
   let report = analyzeSubmission(additive, { schema });
   assert.equal(report.decision, "REDESIGN_REQUIRED");
   assert.ok(report.findings.some(({ code }) => code === "PROGRAMMABLE_FEE_EFFECTIVE_RATE_INVALID"));
@@ -115,11 +188,35 @@ test("mandatory Programmable fee owner and owner-only claim policy cannot be red
   }
 });
 
+test("mandatory Programmable fee v1.1 binds fragmentation-resistant cumulative rounding", () => {
+  assert.equal(template.programmableFee.policyVersion, "1.1.0");
+  const cases = [
+    [(submission) => { submission.programmableFee.accounting.roundingPolicy = "per-swap-floor"; }, "PROGRAMMABLE_FEE_ROUNDING_POLICY_INVALID"],
+    [(submission) => { submission.programmableFee.accounting.remainderScope = "per-claim"; }, "PROGRAMMABLE_FEE_REMAINDER_SCOPE_INVALID"],
+    [(submission) => { submission.programmableFee.accounting.claimResetsRemainders = true; }, "PROGRAMMABLE_FEE_CLAIM_REMAINDER_RESET_FORBIDDEN"],
+    [(submission) => { submission.programmableFee.accounting.minimumGrossQuoteUnits = 1; }, "PROGRAMMABLE_FEE_MINIMUM_GROSS_QUOTE_INVALID"],
+    [(submission) => { submission.programmableFee.accounting.fragmentationResistant = false; }, "PROGRAMMABLE_FEE_FRAGMENTATION_RESISTANCE_REQUIRED"]
+  ];
+  for (const [mutate, expectedCode] of cases) {
+    const submission = readySubmission();
+    mutate(submission);
+    const report = analyzeSubmission(submission, { schema });
+    assert.equal(report.decision, "REDESIGN_REQUIRED", expectedCode);
+    assert.ok(report.findings.some(({ code }) => code === expectedCode), `${expectedCode}: ${JSON.stringify(report.findings)}`);
+  }
+});
+
 test("prototype fee cannot be replaced by LP or router accounting and binds modes, evidence, events and owner", () => {
   const destinationRoot = fs.mkdtempSync(path.join(repositoryRoot, ".skill-platform-fee-negative-"));
   try {
     const { submission } = createPrototypePackage(destinationRoot);
-    assert.equal(analyzeSubmission(submission, { schema }).decision, "PROTOTYPE_READY");
+    const readyReport = analyzeSubmission(submission, { schema });
+    assert.equal(readyReport.decision, "PROTOTYPE_READY");
+    assert.equal(readyReport.readiness.design, "DESIGN_READY");
+    assert.equal(readyReport.readiness.implementation, "IN_PROGRESS");
+    assert.equal(readyReport.decisionCompatibility, "LEGACY_COMPATIBILITY_ONLY");
+    assert.equal(readyReport.intake.state, "NOT_CHECKED");
+    assert.equal(readyReport.sandboxVerification.state, "NOT_RUN");
 
     const mutations = [
       [(draft) => { draft.hook.feeMechanism.used = false; }, "PROGRAMMABLE_FEE_HOOK_MECHANISM_MISSING"],
@@ -153,7 +250,71 @@ test("prototype fee cannot be replaced by LP or router accounting and binds mode
   }
 });
 
-test("document-only validator cannot satisfy require-ready without repository closure", () => {
+test("prototype fee binds asymmetric buy and sell rates to a separate immutable project owner", () => {
+  const destinationRoot = fs.mkdtempSync(path.join(repositoryRoot, ".skill-platform-fee-directional-"));
+  try {
+    const { submission } = createPrototypePackage(destinationRoot);
+    Object.assign(submission.programmableFee.rates, {
+      selectedBuyHundredthsOfBip: 30000,
+      selectedSellHundredthsOfBip: 20000,
+      effectiveBuyHundredthsOfBip: 30000,
+      effectiveSellHundredthsOfBip: 20000,
+      projectBuyHundredthsOfBip: 29000,
+      projectSellHundredthsOfBip: 19000
+    });
+    submission.hook.feeMechanism.maximumHundredthsOfBip = 30000;
+    submission.hook.feeMechanism.recipients.push({
+      role: "project-owner",
+      sharePpm: null,
+      addressSource: "launch-wallet",
+      address: null,
+      binding: "launch-transaction-sender",
+      derivationRule: null,
+      mutable: false,
+      mutationController: "none",
+      newAddressValidation: "none",
+      mutationEvent: null
+    });
+
+    let report = analyzeSubmission(submission, { schema });
+    assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+
+    const missingProjectOwner = structuredClone(submission);
+    missingProjectOwner.hook.feeMechanism.recipients = missingProjectOwner.hook.feeMechanism.recipients
+      .filter(({ role }) => role !== "project-owner");
+    report = analyzeSubmission(missingProjectOwner, { schema });
+    assert.ok(report.findings.some(({ code }) => code === "PROGRAMMABLE_FEE_PROJECT_RECIPIENT_UNBOUND"));
+
+    const inexactFixedShare = structuredClone(submission);
+    inexactFixedShare.hook.feeMechanism.recipients[0].sharePpm = 33333;
+    report = analyzeSubmission(inexactFixedShare, { schema });
+    assert.ok(report.findings.some(({ code }) => code === "PROGRAMMABLE_FEE_FIXED_SHARE_FORBIDDEN"));
+
+    const customRate = structuredClone(submission);
+    Object.assign(customRate.programmableFee.rates, {
+      selectedBuyHundredthsOfBip: 200000,
+      selectedSellHundredthsOfBip: 200000,
+      effectiveBuyHundredthsOfBip: 200000,
+      effectiveSellHundredthsOfBip: 200000,
+      projectBuyHundredthsOfBip: 199000,
+      projectSellHundredthsOfBip: 199000
+    });
+    customRate.hook.feeMechanism.maximumHundredthsOfBip = 200000;
+    customRate.implementation.feeConformanceManifestPath = null;
+    report = analyzeSubmission(customRate, { schema });
+    assert.equal(report.findings.some(({ code }) => code === "PROGRAMMABLE_FEE_SELECTED_RATE_ABOVE_KERNEL_MAXIMUM"), false);
+    assert.equal(
+      report.findings.some(({ code, path }) => code === "SCHEMA_MAXIMUM" && path.startsWith("$.programmableFee.rates.")),
+      false,
+      JSON.stringify(report.findings)
+    );
+    assert.ok(report.requiredGates.some(({ id }) => id === "custom-programmable-fee-review"));
+  } finally {
+    fs.rmSync(destinationRoot, { recursive: true, force: true });
+  }
+});
+
+test("document-only validator cannot satisfy deprecated require-ready without repository closure", () => {
   const submissionPath = path.join(repositoryRoot, "models", "document-only-ready.json");
   writeJson(submissionPath, readySubmission());
   const result = childProcess.spawnSync(
@@ -168,7 +329,29 @@ test("document-only validator cannot satisfy require-ready without repository cl
   assert.equal(result.status, 1, result.stderr);
   const report = JSON.parse(result.stdout);
   assert.equal(report.decision, "PROTOTYPE_READY");
+  assert.equal(report.readiness.implementation, "NOT_STARTED");
   assert.equal(Object.hasOwn(report, "closure"), false);
+});
+
+test("prototype-validation requirement always fails closed for the local validator", () => {
+  const submissionPath = path.join(repositoryRoot, "models", "independent-verification-required.json");
+  writeJson(submissionPath, readySubmission());
+  const result = childProcess.spawnSync(
+    process.execPath,
+    [
+      path.join(skillRoot, "scripts", "validate-submission.mjs"),
+      submissionPath,
+      "--require-prototype-validated",
+      "--repository-root",
+      repositoryRoot
+    ],
+    { cwd: repositoryRoot, encoding: "utf8", shell: false }
+  );
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /INDEPENDENT_VERIFICATION_REQUIRED/u);
+  const report = JSON.parse(result.stdout);
+  assert.notEqual(report.readiness.implementation, "PROTOTYPE_VALIDATED");
+  assert.equal(report.sandboxVerification.state, "NOT_RUN");
 });
 
 test("ordinary fixed-supply no-hook launch remains reviewable but is not prototype ready", () => {
@@ -176,11 +359,23 @@ test("ordinary fixed-supply no-hook launch remains reviewable but is not prototy
   const report = analyzeSubmission(submission, { schema });
 
   assert.equal(report.decision, "REDESIGN_REQUIRED", JSON.stringify(report.findings));
+  assert.equal(report.readiness.design, "DESIGN_CHANGES_REQUIRED");
   assert.ok(report.findings.some(({ code }) => code === "PROGRAMMABLE_FEE_HOOK_REQUIRED"));
   assert.equal(report.hookPermissionMask, null);
   assert.equal(submission.assets.filter(({ role }) => role === "launched").length, 1);
   assert.equal(submission.pool.canonical, true);
   assert.equal(report.requiredGates.some(({ id }) => id.startsWith("callback-")), false);
+});
+
+test("unresolved hook usage does not claim the explicit no-hook fee blocker or gate", () => {
+  const submission = readySubmission();
+  submission.hook.used = null;
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.ok(report.findings.some(({ code }) => code === "HOOK_USAGE_UNRESOLVED"));
+  assert.equal(report.findings.some(({ code }) => code === "PROGRAMMABLE_FEE_HOOK_REQUIRED"), false);
+  assert.equal(report.requiredGates.some(({ id }) => id === "programmable-fee-no-hook-architecture-review"), false);
 });
 
 test("transparent transfer-tax and auto-liquidity token enters model-specific no-hook review", () => {
@@ -207,9 +402,57 @@ test("transparent transfer-tax and auto-liquidity token enters model-specific no
   ]) assert.ok(report.requiredGates.some(({ id }) => id === gateId), gateId);
 });
 
+test("top-level token mechanics compose with the standard Programmable fee hook", () => {
+  const submission = standardHookTaxTokenSubmission();
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.equal(report.findings.some(({ code }) => code === "CUSTOM_HOOK_NO_HOOK_PROFILE_CONFLICT"), false, JSON.stringify(report.findings));
+  assert.equal(report.findings.some(({ code }) => code === "NON_STANDARD_TOKEN_ADAPTER_MISSING"), false, JSON.stringify(report.findings));
+  for (const gateId of [
+    "transfer-tax-accounting-and-liveness-tests",
+    "transfer-tax-provider-compatibility",
+    "auto-liquidity-lifecycle-and-reentrancy-tests",
+    "auto-liquidity-custody-and-exit-review",
+    "independent-token-mechanics-provider-approval",
+    "adversarial-token-tests"
+  ]) assert.ok(report.requiredGates.some(({ id }) => id === gateId), gateId);
+
+  submission.tokenMechanics.transferTax.maximumHundredthsOfBip = null;
+  const incompleteReport = analyzeSubmission(submission, { schema });
+  assert.ok(incompleteReport.findings.some(({ code, path }) => (
+    code === "TRANSFER_TAX_MAXIMUM_MISSING" && path === "$.tokenMechanics.transferTax.maximumHundredthsOfBip"
+  )), JSON.stringify(incompleteReport.findings));
+});
+
+test("legacy nested token mechanics remain a deterministic fallback", () => {
+  const submission = modelSpecificTaxTokenSubmission();
+  Object.assign(submission.noHookArchitecture, structuredClone(submission.tokenMechanics));
+  submission.tokenMechanics = null;
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.equal(report.findings.some(({ code }) => code === "TOKEN_MECHANICS_DUPLICATE_CONFLICT"), false);
+  assert.equal(report.findings.some(({ code }) => code === "NON_STANDARD_TOKEN_ADAPTER_MISSING"), false);
+  assert.ok(report.requiredGates.some(({ id }) => id === "transfer-tax-accounting-and-liveness-tests"));
+  assert.ok(report.requiredGates.some(({ id }) => id === "auto-liquidity-lifecycle-and-reentrancy-tests"));
+});
+
+test("duplicate token-mechanics declarations must be identical", () => {
+  const submission = modelSpecificTaxTokenSubmission();
+  Object.assign(submission.noHookArchitecture, structuredClone(submission.tokenMechanics));
+  let report = analyzeSubmission(submission, { schema });
+  assert.equal(report.findings.some(({ code }) => code === "TOKEN_MECHANICS_DUPLICATE_CONFLICT"), false);
+
+  submission.noHookArchitecture.transferTax.sellHundredthsOfBip += 1;
+  report = analyzeSubmission(submission, { schema });
+  assert.ok(report.findings.some(({ code, path }) => (
+    code === "TOKEN_MECHANICS_DUPLICATE_CONFLICT" && path === "$.tokenMechanics.transferTax"
+  )), JSON.stringify(report.findings));
+});
+
 test("auto-liquidity accepts a bounded launch allocation without requiring transfer tax", () => {
   const submission = modelSpecificTaxTokenSubmission();
-  submission.noHookArchitecture.transferTax = officialNoHookArchitecture().transferTax;
+  submission.tokenMechanics.transferTax = officialNoHookArchitecture().transferTax;
   submission.assets.find(({ role }) => role === "launched").behaviors = ["standard"];
   submission.valueFlows.push({
     id: "auto-liquidity-launch-allocation",
@@ -221,7 +464,7 @@ test("auto-liquidity accepts a bounded launch allocation without requiring trans
     settlement: "Record the allocation before trading and debit only actual amounts used by the bounded swap and liquidity-add lifecycle.",
     failure: "A failed allocation or later liquidity action cannot mint, confiscate, borrow or redirect any user balance."
   });
-  submission.noHookArchitecture.autoLiquidity.fundingSources = [{
+  submission.tokenMechanics.autoLiquidity.fundingSources = [{
     id: "immutable-launch-allocation",
     kind: "launcher-allocation",
     assetId: "launched-token",
@@ -235,7 +478,7 @@ test("auto-liquidity accepts a bounded launch allocation without requiring trans
     withdrawalRule: "No creator or administrator can withdraw or redirect this allocation outside the declared canonical-liquidity lifecycle.",
     failureRule: "Failure leaves the exact unspent allocation retryable and cannot block transfers or debit another account."
   }];
-  submission.noHookArchitecture.autoLiquidity.valueFlowIds.push("auto-liquidity-launch-allocation");
+  submission.tokenMechanics.autoLiquidity.valueFlowIds.push("auto-liquidity-launch-allocation");
   submission.risk.featureTriggers = submission.risk.featureTriggers.filter((trigger) => !["non-standard-token", "transfer-tax"].includes(trigger));
 
   const report = analyzeSubmission(submission, { schema });
@@ -336,7 +579,7 @@ test("open token behavior path still rejects hidden controls", () => {
 
 test("model-specific no-hook path rejects concealed sell restrictions", () => {
   const submission = modelSpecificTaxTokenSubmission();
-  submission.noHookArchitecture.transferPolicy.poolSellsAllowed = false;
+  submission.tokenMechanics.transferPolicy.poolSellsAllowed = false;
 
   const report = analyzeSubmission(submission, { schema });
 
@@ -344,12 +587,25 @@ test("model-specific no-hook path rejects concealed sell restrictions", () => {
   assert.ok(report.findings.some(({ code, severity }) => code === "HIDDEN_TRANSFER_OR_SELL_RESTRICTION" && severity === "hard"));
 });
 
+test("legacy official-route mechanics still enforce transfer liveness", () => {
+  const submission = noCustomHookSubmission();
+  submission.noHookArchitecture.transferPolicy.poolSellsAllowed = false;
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.ok(report.findings.some(({ code, severity, path }) => (
+    code === "HIDDEN_TRANSFER_OR_SELL_RESTRICTION"
+    && severity === "hard"
+    && path === "$.noHookArchitecture.transferPolicy.poolSellsAllowed"
+  )), JSON.stringify(report.findings));
+});
+
 test("model-specific no-hook tax requires exact bounds, value flows, provider limits and tests", () => {
   const submission = modelSpecificTaxTokenSubmission();
-  submission.noHookArchitecture.transferTax.maximumHundredthsOfBip = 20000;
-  submission.noHookArchitecture.transferTax.recipientValueFlowIds = ["missing-flow"];
-  submission.noHookArchitecture.providerCompatibility.limitations = [];
-  submission.noHookArchitecture.testScenarios = [];
+  submission.tokenMechanics.transferTax.maximumHundredthsOfBip = 20000;
+  submission.tokenMechanics.transferTax.recipientValueFlowIds = ["missing-flow"];
+  submission.tokenMechanics.providerCompatibility.limitations = [];
+  submission.tokenMechanics.testScenarios = [];
 
   const report = analyzeSubmission(submission, { schema });
 
@@ -357,17 +613,17 @@ test("model-specific no-hook tax requires exact bounds, value flows, provider li
   for (const code of [
     "TRANSFER_TAX_RATE_ABOVE_MAXIMUM",
     "TRANSFER_TAX_VALUE_FLOW_UNKNOWN",
-    "NO_HOOK_PROVIDER_LIMITS_MISSING",
-    "NO_HOOK_TEST_SCENARIO_MISSING"
+    "TOKEN_MECHANICS_PROVIDER_LIMITS_MISSING",
+    "TOKEN_MECHANICS_TEST_SCENARIO_MISSING"
   ]) assert.ok(report.findings.some((finding) => finding.code === code), code);
 });
 
 test("mutable transfer tax binds one explicit bounded authority and delay", () => {
   const submission = modelSpecificTaxTokenSubmission();
-  submission.noHookArchitecture.transferTax.mutable = true;
-  submission.noHookArchitecture.transferTax.authorityRole = "fee-policy-admin";
-  submission.noHookArchitecture.transferTax.changeDelay = "Every change executes only after the immutable seven-day timelock and cannot exceed the fixed maximum.";
-  submission.noHookArchitecture.testScenarios.push("authority-and-delay");
+  submission.tokenMechanics.transferTax.mutable = true;
+  submission.tokenMechanics.transferTax.authorityRole = "fee-policy-admin";
+  submission.tokenMechanics.transferTax.changeDelay = "Every change executes only after the immutable seven-day timelock and cannot exceed the fixed maximum.";
+  submission.tokenMechanics.testScenarios.push("authority-and-delay");
   submission.authorities = [{
     role: "fee-policy-admin",
     controller: "The exact immutable timelock contract named by chain address in the dependency records.",
@@ -404,6 +660,125 @@ test("Unicode confusables enter identity review instead of automatic rejection",
   assert.ok(report.requiredGates.some(({ id }) => id === "public-metadata-unicode-and-affiliation-review"));
 });
 
+test("default-ignorable Unicode is rejected while legitimate non-Latin metadata remains reviewable", () => {
+  for (const hidden of ["\u034f", "\ufe0f", "\u{e0001}"]) {
+    const submission = readySubmission();
+    submission.publicMetadata.project.name = `Garden${hidden}Game`;
+    const report = analyzeSubmission(submission, { schema });
+    assert.equal(report.decision, "UNSUPPORTED", JSON.stringify(report.findings));
+    assert.ok(report.findings.some(({ severity, code }) => severity === "hard" && code === "PUBLIC_METADATA_CONTROL_CHARACTERS"));
+  }
+
+  const nonLatin = readySubmission();
+  nonLatin.publicMetadata.project.name = "庭園ゲーム";
+  const report = analyzeSubmission(nonLatin, { schema });
+  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.equal(report.findings.some(({ code }) => code === "PUBLIC_METADATA_CONTROL_CHARACTERS"), false);
+});
+
+test("protected provider identities are data-driven review warnings without broad word false-positives", () => {
+  const requiredProviders = new Set(["dexscreener", "fomo", "gmgn", "openzeppelin", "programmable", "uniswap"]);
+  assert.deepEqual(new Set(PROTECTED_PROVIDER_IDENTITIES.map(({ id }) => id)), requiredProviders);
+  for (const { aliases } of PROTECTED_PROVIDER_IDENTITIES) {
+    for (const alias of aliases) assert.equal(PROTECTED_PROVIDER_KEYS.has(publicIdentityKey(alias)), true, alias);
+  }
+  for (const harmless of ["Dexterity Screener Toolkit", "Fomometer", "General Market Game Network", "Screening tools"]) {
+    assert.equal(PROTECTED_PROVIDER_KEYS.has(publicIdentityKey(harmless)), false, harmless);
+  }
+
+  const submission = readySubmission();
+  submission.publicMetadata.project.name = "Dex Screener";
+  submission.publicMetadata.localDiscoveryTags = ["gmgn"];
+  submission.publicMetadata.providerPresentations.push({
+    provider: "gmgn",
+    surface: "web-interface",
+    supportStatus: "unknown",
+    tags: ["gmgn"],
+    labels: ["Fomo app"],
+    observedAt: null,
+    validUntil: null,
+    evidenceKind: null,
+    evidenceUri: null,
+    evidenceSha256: null
+  });
+  const report = analyzeSubmission(submission, { schema });
+  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.ok(report.findings.some(({ severity, code, path }) => (
+    severity === "warning"
+    && code === "PROTECTED_PROVIDER_NAME_REQUIRES_REVIEW"
+    && path.endsWith(".tags[0]")
+  )));
+  assert.ok(report.findings.some(({ severity, code, path }) => (
+    severity === "warning"
+    && code === "PROTECTED_PROVIDER_NAME_REQUIRES_REVIEW"
+    && path === "$.publicMetadata.localDiscoveryTags[0]"
+  )));
+  assert.equal(report.findings.some(({ severity }) => severity === "hard"), false);
+
+  const harmlessSubmission = readySubmission();
+  harmlessSubmission.publicMetadata.project.name = "Dexterity Screener Toolkit";
+  const harmlessReport = analyzeSubmission(harmlessSubmission, { schema });
+  assert.equal(harmlessReport.findings.some(({ code }) => code === "PROTECTED_PROVIDER_NAME_REQUIRES_REVIEW"), false);
+});
+
+test("manual public discovery tags are owner-selected, canonical and provider-neutral", () => {
+  const submission = readySubmission();
+  submission.publicMetadata.localDiscoveryTags = ["browser-fps", "community-game"];
+  let report = analyzeSubmission(submission, { schema });
+  assert.equal(report.findings.some(({ code }) => code === "PUBLIC_DISCOVERY_TAGS_NONCANONICAL"), false);
+  assert.equal(report.findings.some(({ code }) => code === "TEMPLATE_LOCAL_DISCOVERY_TAG_MISSING"), false);
+
+  submission.publicMetadata.localDiscoveryTags = ["community-game", "browser-fps"];
+  report = analyzeSubmission(submission, { schema });
+  assert.ok(report.findings.some(({ severity, code }) => severity === "blocker" && code === "PUBLIC_DISCOVERY_TAGS_NONCANONICAL"));
+
+  submission.publicMetadata.localDiscoveryTags = ["browser-fps", "browser-fps"];
+  report = analyzeSubmission(submission, { schema });
+  assert.ok(report.findings.some(({ severity, code }) => severity === "blocker" && code === "PUBLIC_DISCOVERY_TAGS_NONCANONICAL"));
+});
+
+test("historical template catalogs remain submittable but cannot claim current reviewed provenance", () => {
+  const submission = readySubmission();
+  const catalogDigest = "f".repeat(64);
+  const selectionDigest = crypto.createHash("sha256")
+    .update(Buffer.from("programmable.template-selection.v1", "utf8"))
+    .update(Buffer.from([0]))
+    .update(Buffer.from(canonicalJson({
+      schemaVersion: "1.0.0",
+      catalogDigest,
+      starterId: "retired-starter",
+      requestedPackIds: [],
+      selectedPackIds: [],
+      customCapabilities: [],
+      localTags: []
+    }), "utf8"))
+    .digest("hex");
+  submission.builderTemplate = {
+    schemaVersion: "1.0.0",
+    source: "catalog",
+    templateSelection: {
+      catalogDigest,
+      selectionDigest,
+      starterId: "retired-starter",
+      requestedPackIds: [],
+      defaultPackIds: [],
+      autoIncludedPackIds: [],
+      selectedPackIds: [],
+      selectedCapabilityIds: [],
+      customCapabilities: [],
+      ownerProvidedLocalTags: [],
+      localProjectTags: ["retired-starter"]
+    }
+  };
+
+  assert.deepEqual(validateAgainstSchema(submission, schema), []);
+  const report = analyzeSubmission(submission, { schema });
+  assert.ok(report.findings.some(({ severity, code }) => severity === "warning" && code === "BUILDER_TEMPLATE_CATALOG_HISTORY_UNVERIFIED"));
+  assert.ok(report.requiredGates.some(({ id, stage }) => id === "builder-template-catalog-history-review" && stage === "candidate"));
+  assert.equal(report.findings.some(({ severity }) => severity === "hard"), false);
+  assert.equal(report.findings.some(({ code }) => code === "BUILDER_TEMPLATE_PROVENANCE_INVALID"), false);
+});
+
 test("claimed affiliations require evidence and remain review-owned", () => {
   const submission = readySubmission();
   submission.publicMetadata.claimedAffiliations.push({
@@ -425,10 +800,15 @@ test("unknown provider support creates review only and does not reject the proje
   const submission = readySubmission();
   submission.publicMetadata.providerPresentations.push({
     provider: "new-provider",
+    surface: "web-interface",
     supportStatus: "unknown",
     tags: ["onchain-game"],
     labels: ["Onchain game"],
-    evidenceUri: null
+    observedAt: null,
+    validUntil: null,
+    evidenceKind: null,
+    evidenceUri: null,
+    evidenceSha256: null
   });
 
   const report = analyzeSubmission(submission, { schema });
@@ -436,6 +816,53 @@ test("unknown provider support creates review only and does not reject the proje
   assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
   assert.ok(report.findings.some(({ severity, code }) => severity === "warning" && code === "PROVIDER_SUPPORT_REVIEW_REQUIRED"));
   assert.ok(report.requiredGates.some(({ id, stage }) => id === "provider-presentation-and-support-review" && stage === "external"));
+});
+
+test("provider confirmation, unsupported and stale states stay evidence-bound without becoming unsafe", () => {
+  const currentEvidence = {
+    provider: "new-provider",
+    surface: "web-interface",
+    supportStatus: "provider-confirmed",
+    tags: ["onchain-game"],
+    labels: ["Onchain game"],
+    observedAt: "2020-01-01T00:00:00Z",
+    validUntil: "2999-01-01T00:00:00Z",
+    evidenceKind: "provider-documentation",
+    evidenceUri: "https://provider.example/documentation/onchain-games",
+    evidenceSha256: `sha256:${"a".repeat(64)}`
+  };
+  const confirmed = readySubmission();
+  confirmed.publicMetadata.providerPresentations.push(currentEvidence);
+  let report = analyzeSubmission(confirmed, { schema });
+  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.ok(report.findings.some(({ code }) => code === "PROVIDER_SUPPORT_EVIDENCE_REVIEW_REQUIRED"));
+
+  const missing = structuredClone(confirmed);
+  missing.publicMetadata.providerPresentations[0].evidenceSha256 = null;
+  report = analyzeSubmission(missing, { schema });
+  assert.equal(report.decision, "REDESIGN_REQUIRED");
+  assert.equal(report.findings.some(({ severity }) => severity === "hard"), false);
+  assert.ok(report.findings.some(({ code }) => code === "PROVIDER_STATUS_EVIDENCE_REQUIRED"));
+
+  const expired = structuredClone(confirmed);
+  expired.publicMetadata.providerPresentations[0].observedAt = "2000-01-01T00:00:00Z";
+  expired.publicMetadata.providerPresentations[0].validUntil = "2001-01-01T00:00:00Z";
+  report = analyzeSubmission(expired, { schema });
+  assert.equal(report.decision, "REDESIGN_REQUIRED");
+  assert.equal(report.findings.some(({ severity }) => severity === "hard"), false);
+  assert.ok(report.findings.some(({ code }) => code === "PROVIDER_STATUS_EVIDENCE_EXPIRED"));
+
+  const stale = structuredClone(expired);
+  stale.publicMetadata.providerPresentations[0].supportStatus = "stale";
+  report = analyzeSubmission(stale, { schema });
+  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.ok(report.findings.some(({ code }) => code === "PROVIDER_EVIDENCE_STALE"));
+
+  const unsupported = structuredClone(confirmed);
+  unsupported.publicMetadata.providerPresentations[0].supportStatus = "unsupported";
+  report = analyzeSubmission(unsupported, { schema });
+  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.ok(report.findings.some(({ code }) => code === "PROVIDER_SURFACE_UNSUPPORTED"));
 });
 
 test("external-call gate describes the declared model when no custom hook is used", () => {
@@ -488,6 +915,10 @@ test("ordinary no-hook prototype remains architecture discussion and cannot bypa
       compilerBuildInfoPaths: [],
       dependencyLockPath: null
     };
+    submission.launchPlan.callDataSourcePaths = [submission.implementation.specificationPath];
+    submission.launchPlan.hookConfigurationSourcePaths = [];
+    submission.launchPlan.liquiditySourcePaths = [submission.implementation.specificationPath];
+    submission.launchPlan.testPaths = [...submission.implementation.testPaths];
     bindSingleProjectSurface(submission, {
       sourcePaths: submission.implementation.sourcePaths,
       testPaths: submission.implementation.testPaths,
@@ -560,7 +991,13 @@ test("fee-bearing hook prototype package verifies without included-client protoc
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
     const report = JSON.parse(result.stdout);
-    assert.equal(report.prototypeIntakeValidated, true, JSON.stringify(report.errors));
+    assert.equal(report.intake.state, "READY", JSON.stringify(report.errors));
+    assert.equal(report.readiness.implementation, "STRUCTURALLY_COMPLETE");
+    assert.equal(report.sandboxVerification.state, "NOT_RUN");
+    assert.equal(report.deprecatedBooleanProjections.state, "DEPRECATED_COMPATIBILITY_ONLY");
+    assert.equal(report.externalAuthority.acceptance, "NOT_CHECKED");
+    assert.equal(report.externalAuthority.releaseEligibility, "NOT_CHECKED");
+    assert.equal(report.externalAuthority.availability, "NOT_CHECKED");
     for (const absentClientDependency of ["Universal Router", "Permit2", "StateView", "V4Quoter"]) {
       assert.equal(report.errors.some((message) => message.includes(absentClientDependency)), false, absentClientDependency);
     }
@@ -889,6 +1326,7 @@ test("hook-owned fee requires all four quadrants and ownership semantics", () =>
   submission.hook.feeMechanism = {
     used: true,
     classification: "hook-owned-fee",
+    allocationMode: "fixed-ppm",
     chargedCurrency: "The unspecified swap currency for each quadrant.",
     swapQuadrants: {
       zeroForOneExactInput: hookFeeQuadrant("currency1"),
@@ -961,14 +1399,20 @@ test("fixed-supply token rejects uint256 overflow", () => {
   assert.ok(report.findings.some(({ code }) => code === "FIXED_SUPPLY_UINT256_OVERFLOW"));
 });
 
-test("launch lifecycle requires one launched asset and one quote asset", () => {
-  const submission = readySubmission();
-  submission.assets[0].role = "launched";
-  const report = analyzeSubmission(submission, { schema });
+test("launch lifecycle requires identifiable launched and quote assets without imposing an exact one-token product model", () => {
+  const missingQuote = readySubmission();
+  missingQuote.assets[0].role = "other";
+  let report = analyzeSubmission(missingQuote, { schema });
+  assert.equal(report.decision, "REDESIGN_REQUIRED");
+  assert.equal(report.findings.some(({ code }) => code === "LAUNCHED_ASSET_COUNT_INVALID"), false);
+  assert.ok(report.findings.some(({ code }) => code === "QUOTE_ASSET_COUNT_INVALID"));
 
+  const missingLaunched = readySubmission();
+  missingLaunched.assets[1].role = "other";
+  report = analyzeSubmission(missingLaunched, { schema });
   assert.equal(report.decision, "REDESIGN_REQUIRED");
   assert.ok(report.findings.some(({ code }) => code === "LAUNCHED_ASSET_COUNT_INVALID"));
-  assert.ok(report.findings.some(({ code }) => code === "QUOTE_ASSET_COUNT_INVALID"));
+  assert.equal(report.findings.some(({ code }) => code === "QUOTE_ASSET_COUNT_INVALID"), false);
 });
 
 test("dynamic fee needs an explicit initial update path", () => {
@@ -1079,6 +1523,7 @@ test("hook fee splits must account for every part per million", () => {
   submission.hook.feeMechanism = {
     used: true,
     classification: "hook-owned-fee",
+    allocationMode: "fixed-ppm",
     chargedCurrency: "The unspecified currency in each structured quadrant.",
     swapQuadrants: {
       zeroForOneExactInput: hookFeeQuadrant("currency1"),
@@ -1220,16 +1665,16 @@ test("schema rejects unknown fields and out-of-range risk dimensions", () => {
   assert.ok(findings.some(({ code, path }) => code === "SCHEMA_MAXIMUM" && path.endsWith("externalDependencies")));
 });
 
-test("mandatory fee and open project semantics are a versioned 1.3.0 standard rather than a silent 1.2.0 mutation", () => {
-  assert.equal(schema.$id, "urn:programmable:v4-hook-submission:1.3.0");
-  assert.equal(schema.properties.standardVersion.const, "1.3.0");
+test("launch handoff is a versioned 1.6.0 standard rather than a silent 1.5.0 mutation", () => {
+  assert.equal(schema.$id, "urn:programmable:v4-hook-submission:1.6.0");
+  assert.equal(schema.properties.standardVersion.const, "1.6.0");
   const report = analyzeSubmission(readySubmission(), { schema });
-  assert.equal(report.reportVersion, 2);
-  assert.equal(report.standardVersion, "1.3.0");
+  assert.equal(report.reportVersion, 3);
+  assert.equal(report.standardVersion, "1.6.0");
 
   const stale = readySubmission();
-  stale.$schema = "urn:programmable:v4-hook-submission:1.1.0";
-  stale.standardVersion = "1.1.0";
+  stale.$schema = "urn:programmable:v4-hook-submission:1.4.0";
+  stale.standardVersion = "1.4.0";
   const findings = validateAgainstSchema(stale, schema);
   assert.ok(findings.some(({ code, path }) => code === "SCHEMA_CONST" && path === "$.$schema"));
   assert.ok(findings.some(({ code, path }) => code === "SCHEMA_CONST" && path === "$.standardVersion"));
@@ -1241,7 +1686,7 @@ test("prompt injection text is treated as inert submission data", () => {
   const report = analyzeSubmission(submission, { schema });
 
   assert.equal(report.decision, "PROTOTYPE_READY");
-  assert.ok(report.disclaimer.includes("not acceptance"));
+  assert.ok(report.disclaimer.includes("No local state means prototype validated"));
 });
 
 test("canonical hashing is stable across object key order", () => {
@@ -1503,14 +1948,65 @@ test("included client stays fully bound and fails each omitted client surface", 
       ["Permit2", (submission) => { submission.integration.permit2DependencyId = null; }, "INTEGRATION_DEPENDENCY_UNBOUND"],
       ["official SDK", (submission) => { submission.integration.sdkDependencies = submission.integration.sdkDependencies.filter(({ packageName }) => packageName !== "@uniswap/v4-sdk"); }, "PACKAGE_DEPENDENCY_MISSING"],
       ["router action profile", (submission) => { submission.integration.routerActionProfile.routerVersionExplicit = null; }, "ROUTER_VERSION_IMPLICIT"],
+      ["official router command", (submission) => { submission.integration.routerActionProfile.universalRouterCommand = "custom-reviewed"; }, "OFFICIAL_ROUTER_COMMAND_INVALID"],
+      ["exact input action", (submission) => { submission.integration.routerActionProfile.v4Actions = submission.integration.routerActionProfile.v4Actions.filter((action) => !action.startsWith("SWAP_EXACT_IN")); }, "V4_EXACT_INPUT_ACTION_MISSING"],
+      ["exact output action", (submission) => { submission.integration.routerActionProfile.v4Actions = submission.integration.routerActionProfile.v4Actions.filter((action) => !action.startsWith("SWAP_EXACT_OUT")); }, "V4_EXACT_OUTPUT_ACTION_MISSING"],
+      ["settlement action", (submission) => { submission.integration.routerActionProfile.v4Actions = submission.integration.routerActionProfile.v4Actions.filter((action) => !action.startsWith("SETTLE")); }, "V4_SETTLE_ACTION_MISSING"],
+      ["take action", (submission) => { submission.integration.routerActionProfile.v4Actions = submission.integration.routerActionProfile.v4Actions.filter((action) => !action.startsWith("TAKE")); }, "V4_TAKE_ACTION_MISSING"],
+      ["ERC-20 input Permit2", (submission) => { submission.integration.routerActionProfile.permit2Mode = "native-only"; }, "PERMIT2_NATIVE_ONLY_ERC20_INPUT"],
       ["app source", (submission) => { submission.integration.appSourcePaths = []; }, "INTEGRATION_PATHS_MISSING"],
       ["integration test", (submission) => { submission.integration.integrationTestPaths = []; }, "INTEGRATION_PATHS_MISSING"],
-      ["quote parity", (submission) => { submission.integration.quoteExecutionParity = null; }, "QUOTE_EXECUTION_PARITY_MISSING"]
+      ["quote parity", (submission) => { submission.integration.quoteExecutionParity = null; }, "QUOTE_EXECUTION_PARITY_MISSING"],
+      ["root imports", (submission) => { submission.integration.sdkSafetyProfile.packageRootImportsOnly = false; }, "SDK_ROOT_IMPORTS_REQUIRED"],
+      ["hooked quote source", (submission) => { submission.integration.sdkSafetyProfile.hookedQuoteSource = null; }, "HOOKED_QUOTE_SOURCE_UNRESOLVED"],
+      ["local hooked math", (submission) => { submission.integration.sdkSafetyProfile.localHookedPoolMathDisabled = false; }, "LOCAL_HOOKED_POOL_MATH_FORBIDDEN"],
+      ["hookData parity", (submission) => { submission.integration.sdkSafetyProfile.hookDataParity = null; }, "HOOK_DATA_PARITY_MISSING"],
+      ["multi-hop hookData", (submission) => { submission.integration.sdkSafetyProfile.multiHopHookDataMode = null; }, "MULTIHOP_HOOK_DATA_MODE_UNRESOLVED"],
+      ["per-hop price bounds", (submission) => { submission.integration.sdkSafetyProfile.perHopPriceBounds = null; }, "PER_HOP_PRICE_BOUNDS_MISSING"],
+      ["slippage semantics", (submission) => { submission.integration.sdkSafetyProfile.slippageSemantics = "custom-reviewed"; }, "SDK_SLIPPAGE_SEMANTICS_MISMATCH"],
+      ["undeclared liquidity profile", (submission) => { submission.integration.sdkSafetyProfile.deprecatedLiquidityActionsDisabled = true; }, "LIQUIDITY_CLIENT_PROFILE_CONFLICT"]
     ]) {
       const submission = structuredClone(complete);
       mutate(submission);
       const report = analyzeSubmission(submission, { schema });
       assert.ok(report.findings.some(({ code }) => code === expectedCode), `${label}: ${JSON.stringify(report.findings)}`);
+    }
+
+    assert.ok(completeReport.requiredGates.some(({ id }) => id === "sdk-root-import-hooked-quote-and-hop-parity-tests"));
+  } finally {
+    fs.rmSync(destinationRoot, { recursive: true, force: true });
+  }
+});
+
+test("liquidity clients reject deprecated from-deltas actions and require a trace-backed guard", () => {
+  const destinationRoot = fs.mkdtempSync(path.join(repositoryRoot, ".skill-liquidity-client-prototype-"));
+  try {
+    const complete = createPrototypePackage(destinationRoot).submission;
+    const capability = structuredClone(complete.projectCapabilities[0]);
+    capability.id = "liquidity-position-client";
+    capability.summary = "Build and reconcile explicit PositionManager liquidity actions with exact user bounds.";
+    complete.projectCapabilities.push(capability);
+    complete.projectSurfaces[0].capabilityIds.push(capability.id);
+    complete.projectSurfaces[0].capabilityIds.sort();
+    complete.integration.sdkSafetyProfile.deprecatedLiquidityActionsDisabled = true;
+
+    let report = analyzeSubmission(complete, { schema });
+    assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+    assert.ok(report.requiredGates.some(({ id }) => id === "explicit-liquidity-actions-and-subscriber-adversarial-tests"));
+
+    const missingGuard = structuredClone(complete);
+    missingGuard.integration.sdkSafetyProfile.deprecatedLiquidityActionsDisabled = false;
+    report = analyzeSubmission(missingGuard, { schema });
+    assert.ok(report.findings.some(({ code }) => code === "DEPRECATED_LIQUIDITY_ACTION_GUARD_REQUIRED"));
+
+    for (const action of ["MINT_POSITION_FROM_DELTAS", "INCREASE_LIQUIDITY_FROM_DELTAS"]) {
+      const deprecated = structuredClone(complete);
+      deprecated.integration.routerActionProfile.v4Actions.push(action);
+      report = analyzeSubmission(deprecated, { schema });
+      assert.ok(
+        report.findings.some(({ code, message }) => code === "DEPRECATED_LIQUIDITY_ACTION_FORBIDDEN" && message.includes(action)),
+        `${action}: ${JSON.stringify(report.findings)}`
+      );
     }
   } finally {
     fs.rmSync(destinationRoot, { recursive: true, force: true });
@@ -2066,11 +2562,230 @@ test("scaffolder creates an isolated package and never touches the model registr
     const scaffoldPath = path.join(destinationRoot, "garden-fee", "submission.json");
     assert.ok(fs.existsSync(scaffoldPath));
     const scaffold = JSON.parse(fs.readFileSync(scaffoldPath, "utf8"));
+    assert.deepEqual(scaffold.builderTemplate, {
+      schemaVersion: "1.0.0",
+      source: "manual",
+      templateSelection: null
+    });
     assert.equal(scaffold.programmableFee.ownership.claimAvailability, "anytime");
     assert.equal(scaffold.programmableFee.accounting.accrualMode, "claimable-liability");
     assert.equal(fs.readFileSync(registryPath, "utf8"), before);
   } finally {
     fs.rmSync(destinationRoot, { recursive: true, force: true });
+  }
+});
+
+test("tax and automatic-liquidity template capabilities require token mechanics explicitly", () => {
+  const root = fs.mkdtempSync(path.join(repositoryRoot, ".skill-token-mechanics-bridge-test-"));
+  const planDirectory = path.join(root, "builder-plan");
+  const destinationRoot = path.join(root, "submissions");
+  try {
+    let result = childProcess.spawnSync(
+      process.execPath,
+      [
+        path.join(skillRoot, "scripts", "template-catalog.mjs"),
+        "materialize",
+        "--starter",
+        "custom-token-standard-fee-hook",
+        "--pack",
+        "token-transfer-tax",
+        "--pack",
+        "tax-financed-auto-liquidity",
+        "--target",
+        planDirectory
+      ],
+      { cwd: repositoryRoot, encoding: "utf8", shell: false }
+    );
+    assert.equal(result.status, 0, result.stderr);
+
+    result = childProcess.spawnSync(
+      process.execPath,
+      [
+        path.join(skillRoot, "scripts", "scaffold-submission.mjs"),
+        "tax-funded-liquidity",
+        "--destination",
+        destinationRoot,
+        "--template-plan",
+        path.join(planDirectory, "programmable-template.json")
+      ],
+      { cwd: repositoryRoot, encoding: "utf8", shell: false }
+    );
+    assert.equal(result.status, 0, result.stderr);
+
+    const submission = JSON.parse(fs.readFileSync(path.join(destinationRoot, "tax-funded-liquidity", "submission.json"), "utf8"));
+    assert.equal(submission.tokenMechanics, null);
+    const report = analyzeSubmission(submission, { schema });
+    assert.ok(report.findings.some(({ code, path }) => (
+      code === "TEMPLATE_TOKEN_MECHANICS_MISSING" && path === "$.tokenMechanics"
+    )), JSON.stringify(report.findings));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("ordinary-launch scaffold derives an ordinary token category", () => {
+  const root = fs.mkdtempSync(path.join(repositoryRoot, ".skill-ordinary-category-test-"));
+  const planDirectory = path.join(root, "builder-plan");
+  const destinationRoot = path.join(root, "submissions");
+  try {
+    let result = childProcess.spawnSync(
+      process.execPath,
+      [path.join(skillRoot, "scripts", "template-catalog.mjs"), "materialize", "--starter", "ordinary-launch", "--target", planDirectory],
+      { cwd: repositoryRoot, encoding: "utf8", shell: false }
+    );
+    assert.equal(result.status, 0, result.stderr);
+    result = childProcess.spawnSync(
+      process.execPath,
+      [path.join(skillRoot, "scripts", "scaffold-submission.mjs"), "ordinary-token", "--destination", destinationRoot, "--template-plan", path.join(planDirectory, "programmable-template.json")],
+      { cwd: repositoryRoot, encoding: "utf8", shell: false }
+    );
+    assert.equal(result.status, 0, result.stderr);
+    const submission = JSON.parse(fs.readFileSync(path.join(destinationRoot, "ordinary-token", "submission.json"), "utf8"));
+    assert.equal(submission.model.category, "permissionless-token");
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("scaffolder binds one exact materialized template plan and preserves open capabilities and local tags", () => {
+  const root = fs.mkdtempSync(path.join(repositoryRoot, ".skill-template-bridge-test-"));
+  const planDirectory = path.join(root, "builder-plan");
+  const destinationRoot = path.join(root, "submissions");
+  try {
+    let result = childProcess.spawnSync(
+      process.execPath,
+      [
+        path.join(skillRoot, "scripts", "template-catalog.mjs"),
+        "materialize",
+        "--starter",
+        "blank-custom",
+        "--custom-capability",
+        "moving-arena=Moving arena changes the next swap rule",
+        "--local-tag",
+        "browser-fps",
+        "--target",
+        planDirectory
+      ],
+      { cwd: repositoryRoot, encoding: "utf8", shell: false }
+    );
+    assert.equal(result.status, 0, result.stderr);
+    const planPath = path.join(planDirectory, "programmable-template.json");
+
+    result = childProcess.spawnSync(
+      process.execPath,
+      [
+        path.join(skillRoot, "scripts", "scaffold-submission.mjs"),
+        "moving-arena",
+        "--destination",
+        destinationRoot,
+        "--template-plan",
+        planPath
+      ],
+      { cwd: repositoryRoot, encoding: "utf8", shell: false }
+    );
+    assert.equal(result.status, 0, result.stderr);
+    const submission = JSON.parse(fs.readFileSync(path.join(destinationRoot, "moving-arena", "submission.json"), "utf8"));
+    assert.equal(submission.standardVersion, "1.6.0");
+    assert.equal(submission.builderTemplate.source, "catalog");
+    assert.equal(submission.builderTemplate.templateSelection.starterId, "blank-custom");
+    assert.deepEqual(submission.builderTemplate.templateSelection.ownerProvidedLocalTags, ["browser-fps"]);
+    assert.deepEqual(submission.publicMetadata.localDiscoveryTags, ["browser-fps"]);
+    assert.ok(submission.builderTemplate.templateSelection.localProjectTags.includes("browser-fps"));
+    assert.deepEqual(
+      submission.builderTemplate.templateSelection.selectedCapabilityIds,
+      JSON.parse(fs.readFileSync(planPath, "utf8")).machineCapabilities.knownCapabilityIds
+    );
+    for (const internalId of [
+      ...submission.builderTemplate.templateSelection.selectedPackIds,
+      ...submission.builderTemplate.templateSelection.selectedCapabilityIds
+    ]) {
+      assert.equal(submission.publicMetadata.localDiscoveryTags.includes(internalId), false, internalId);
+    }
+    assert.deepEqual(
+      submission.builderTemplate.templateSelection.customCapabilities.map(({ id, label }) => ({ id, label })),
+      [{ id: "moving-arena", label: "Moving arena changes the next swap rule" }]
+    );
+
+    const forgedCurrentSelection = structuredClone(submission);
+    const removedCapabilityId = forgedCurrentSelection.builderTemplate.templateSelection.selectedCapabilityIds.pop();
+    forgedCurrentSelection.builderTemplate.templateSelection.localProjectTags = forgedCurrentSelection.builderTemplate.templateSelection.localProjectTags
+      .filter((tag) => tag !== removedCapabilityId);
+    const forgedCurrentReport = analyzeSubmission(forgedCurrentSelection, { schema });
+    assert.ok(forgedCurrentReport.findings.some(({ severity, code }) => severity === "blocker" && code === "BUILDER_TEMPLATE_PROVENANCE_INVALID"));
+
+    let report = analyzeSubmission(submission, { schema });
+    assert.equal(report.findings.some(({ code, path }) => (
+      code === "TEMPLATE_CAPABILITY_MISSING_FROM_ARCHITECTURE"
+      && path === "$.builderTemplate.templateSelection.customCapabilities[0].id"
+    )), false);
+    assert.ok(submission.projectCapabilities.some(({ id }) => id === "moving-arena"));
+    assert.ok(submission.capabilityExtensions.some(({ capabilityId }) => capabilityId === "moving-arena"));
+    assert.ok(submission.projectSurfaces.some(({ capabilityIds }) => capabilityIds.includes("moving-arena")));
+    assert.match(
+      fs.readFileSync(path.join(destinationRoot, "moving-arena", "PROPOSAL.md"), "utf8"),
+      /Moving arena changes the next swap rule/u
+    );
+
+    submission.publicMetadata.localDiscoveryTags = [];
+    report = analyzeSubmission(submission, { schema });
+    assert.ok(
+      report.findings.some(({ severity, code }) => severity === "blocker" && code === "TEMPLATE_LOCAL_DISCOVERY_TAG_MISSING"),
+      JSON.stringify(report.findings)
+    );
+
+    const originalPlan = JSON.parse(fs.readFileSync(planPath, "utf8"));
+    const forgedCatalogPlan = structuredClone(originalPlan);
+    forgedCatalogPlan.catalogDigest = "0".repeat(64);
+    forgedCatalogPlan.selectionDigest = crypto.createHash("sha256")
+      .update(Buffer.from("programmable.template-selection.v1", "utf8"))
+      .update(Buffer.from([0]))
+      .update(Buffer.from(canonicalJson({
+        schemaVersion: "1.0.0",
+        catalogDigest: forgedCatalogPlan.catalogDigest,
+        starterId: forgedCatalogPlan.selection.starterId,
+        requestedPackIds: forgedCatalogPlan.selection.requestedPackIds,
+        selectedPackIds: forgedCatalogPlan.selection.selectedPackIds,
+        customCapabilities: forgedCatalogPlan.customCapabilities.map(({ id, label }) => ({ id, label })),
+        localTags: forgedCatalogPlan.tagSuggestions.ownerProvidedLocalTags
+      }), "utf8"))
+      .digest("hex");
+    fs.writeFileSync(planPath, `${JSON.stringify(forgedCatalogPlan, null, 2)}\n`);
+    result = childProcess.spawnSync(
+      process.execPath,
+      [
+        path.join(skillRoot, "scripts", "scaffold-submission.mjs"),
+        "forged-catalog-plan",
+        "--destination",
+        destinationRoot,
+        "--template-plan",
+        planPath
+      ],
+      { cwd: repositoryRoot, encoding: "utf8", shell: false }
+    );
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /exact hash-bound catalog/u);
+    assert.equal(fs.existsSync(path.join(destinationRoot, "forged-catalog-plan")), false);
+
+    const tamperedPlan = structuredClone(originalPlan);
+    tamperedPlan.selectionDigest = "0".repeat(64);
+    fs.writeFileSync(planPath, `${JSON.stringify(tamperedPlan, null, 2)}\n`);
+    result = childProcess.spawnSync(
+      process.execPath,
+      [
+        path.join(skillRoot, "scripts", "scaffold-submission.mjs"),
+        "tampered-plan",
+        "--destination",
+        destinationRoot,
+        "--template-plan",
+        planPath
+      ],
+      { cwd: repositoryRoot, encoding: "utf8", shell: false }
+    );
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /selectionDigest does not bind/u);
+    assert.equal(fs.existsSync(path.join(destinationRoot, "tampered-plan")), false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });
 
@@ -2114,11 +2829,14 @@ test("proposal package verifier rejects an unchanged scaffold after identity fie
     assert.equal(result.status, 1, result.stderr || result.stdout);
     const report = JSON.parse(result.stdout);
     assert.equal(report.intakeValidated, false);
+    assert.equal(report.intake.state, "BLOCKED");
+    assert.equal(report.intake.assurance, "static-structure-and-builder-declared-evidence-only");
+    assert.equal(report.sandboxVerification.state, "NOT_RUN");
     assert.equal(report.accepted, false);
     assert.equal(report.releaseEligible, false);
     assert.equal(report.preflightDecision, "REDESIGN_REQUIRED");
-    assert.equal(report.designReadyForPrototype, false);
-    assert.equal(report.prototypeIntakeValidated, false);
+    assert.equal(Object.hasOwn(report, "designReadyForPrototype"), false);
+    assert.equal(Object.hasOwn(report, "prototypeIntakeValidated"), false);
     assert.ok(report.errors.some((error) => error.includes("replace the scaffold idea")), JSON.stringify(report.errors));
     assert.ok(report.errors.some((error) => error.includes("PROPOSAL.md is still substantially")), JSON.stringify(report.errors));
     assert.ok(report.errors.some((error) => error.includes("specific named architecture questions")), JSON.stringify(report.errors));
@@ -2175,8 +2893,11 @@ test("proposal package verifier accepts a concrete design with one named archite
     assert.equal(result.status, 0, result.stderr || result.stdout);
     const report = JSON.parse(result.stdout);
     assert.equal(report.intakeValidated, true, JSON.stringify(report.errors));
+    assert.equal(report.intake.state, "READY");
+    assert.equal(report.intake.assurance, "static-structure-and-builder-declared-evidence-only");
+    assert.equal(report.sandboxVerification.state, "NOT_RUN");
     assert.equal(report.preflightDecision, "REDESIGN_REQUIRED");
-    assert.equal(report.designReadyForPrototype, false);
+    assert.equal(Object.hasOwn(report, "designReadyForPrototype"), false);
   } finally {
     fs.rmSync(destinationRoot, { recursive: true, force: true });
   }
@@ -2209,6 +2930,55 @@ test("prototype binds unfamiliar source types and routes them to tooling review"
     assert.ok(report.findings.some(({ code, path }) => code === "DECLARED_FILE_TOOLING_REVIEW_REQUIRED" && path.endsWith(expectedPath)));
   }
   assert.ok(report.requiredGates.some(({ id, stage }) => id === "declared-file-tooling-or-manual-review" && stage === "candidate"));
+});
+
+test("Foundry gas snapshots are exact text evidence, not an unsupported language blocker", () => {
+  const submission = readySubmission();
+  submission.stage = "prototype";
+  submission.implementation.testPaths = [
+    ...submission.implementation.testPaths,
+    ".gas-snapshot"
+  ];
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.equal(
+    report.findings.some(({ code, path: findingPath }) => (
+      code === "DECLARED_FILE_TOOLING_REVIEW_REQUIRED"
+      && findingPath === `$.implementation.testPaths[${submission.implementation.testPaths.length - 1}]`
+    )),
+    false
+  );
+});
+
+test("proposal implementation files stay visible without pretending prototype evidence passed", () => {
+  const submission = readySubmission();
+  submission.stage = "proposal";
+  submission.implementation.sourcePaths = ["src/ExploratoryHook.sol"];
+  submission.implementation.testPaths = ["test/ExploratoryHook.t.sol"];
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.ok(report.findings.some(({ code }) => code === "PROPOSAL_CONTAINS_UNVERIFIED_IMPLEMENTATION"));
+  assert.equal(report.findings.some(({ code }) => code === "SOURCE_WORKFLOW_EVIDENCE_MISSING"), false);
+});
+
+test("prototype evidence gaps distinguish tooling from custom architecture review", () => {
+  const submission = readySubmission();
+  submission.stage = "prototype";
+  submission.implementation.githubActionsRunIds = [];
+  submission.implementation.feeConformanceManifestPath = null;
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.ok(report.findings.some(({ code }) => code === "SOURCE_WORKFLOW_EVIDENCE_MISSING"));
+  assert.ok(report.requiredGates.some(({ id, stage }) => id === "source-workflow-evidence" && stage === "prototype"));
+  assert.ok(report.findings.some(({ code, severity }) => (
+    code === "PROGRAMMABLE_FEE_CONFORMANCE_EVIDENCE_MISSING" && severity === "warning"
+  )));
+  assert.ok(report.requiredGates.some(({ id, stage }) => (
+    id === "custom-programmable-fee-review" && stage === "candidate"
+  )));
 });
 
 test("prototype requires repository-relative compiler build-info JSON paths", () => {
@@ -2780,10 +3550,35 @@ for (const [label, importStatement] of [
   });
 }
 
-test("complete prototype package passes intake without becoming accepted", () => {
+test("synthetic no-op prototype with fake evidence reaches static intake only and never executes its marker command", () => {
   const destinationRoot = fs.mkdtempSync(path.join(repositoryRoot, ".skill-prototype-pass-test-"));
   try {
-    const { modelRoot } = createPrototypePackage(destinationRoot);
+    const { modelRoot, submission } = createPrototypePackage(destinationRoot);
+    const structuralCheck = childProcess.spawnSync(
+      process.execPath,
+      [
+        path.join(skillRoot, "scripts", "validate-submission.mjs"),
+        path.join(modelRoot, "submission.json"),
+        "--require-intake-ready",
+        "--repository-root",
+        repositoryRoot
+      ],
+      { cwd: repositoryRoot, encoding: "utf8", shell: false }
+    );
+    assert.equal(structuralCheck.status, 0, structuralCheck.stderr || structuralCheck.stdout);
+    const structuralReport = JSON.parse(structuralCheck.stdout);
+    assert.equal(structuralReport.readiness.implementation, "STRUCTURALLY_COMPLETE");
+    assert.equal(structuralReport.intake.state, "STRUCTURE_CHECKED");
+    assert.equal(structuralReport.sandboxVerification.state, "NOT_RUN");
+    const markerPath = path.join(destinationRoot, "EVIDENCE_COMMAND_EXECUTED");
+    const gateStatusPath = path.resolve(repositoryRoot, submission.implementation.gateStatusPath);
+    const gateStatus = JSON.parse(fs.readFileSync(gateStatusPath, "utf8"));
+    for (const gate of gateStatus.gates) {
+      for (const evidence of gate.evidence) {
+        evidence.command = `${process.execPath} -e ${JSON.stringify(`require("node:fs").writeFileSync(${JSON.stringify(markerPath)}, "executed")`)}`;
+      }
+    }
+    writeJson(gateStatusPath, gateStatus);
     const result = childProcess.spawnSync(
       process.execPath,
       [path.join(skillRoot, "scripts", "verify-package.mjs"), "--repository-root", repositoryRoot, modelRoot],
@@ -2792,8 +3587,14 @@ test("complete prototype package passes intake without becoming accepted", () =>
     assert.equal(result.status, 0, result.stderr || result.stdout);
     const report = JSON.parse(result.stdout);
     assert.equal(report.intakeValidated, true);
-    assert.equal(report.designReadyForPrototype, true);
-    assert.equal(report.prototypeIntakeValidated, true);
+    assert.equal(report.intake.state, "READY");
+    assert.equal(report.intake.assurance, "static-structure-and-builder-declared-evidence-only");
+    assert.equal(report.readiness.implementation, "STRUCTURALLY_COMPLETE");
+    assert.equal(report.sandboxVerification.state, "NOT_RUN");
+    assert.equal(report.preflightDecisionCompatibility, "LEGACY_COMPATIBILITY_ONLY");
+    assert.equal(Object.hasOwn(report, "designReadyForPrototype"), false);
+    assert.equal(Object.hasOwn(report, "prototypeIntakeValidated"), false);
+    assert.equal(fs.existsSync(markerPath), false);
     assert.equal(report.accepted, false);
     assert.equal(report.releaseEligible, false);
     assert.equal(report.available, false);
@@ -2862,7 +3663,9 @@ test("prototype authority roundtrip survives packaging and fails closed on every
     const packageResult = verifyPrototypeProcess(modelRoot, temporaryRepository);
     assert.equal(packageResult.status, 0, packageResult.stderr || packageResult.stdout);
     const packageReport = JSON.parse(packageResult.stdout);
-    assert.equal(packageReport.prototypeIntakeValidated, true);
+    assert.equal(packageReport.intake.state, "READY");
+    assert.equal(packageReport.readiness.implementation, "STRUCTURALLY_COMPLETE");
+    assert.equal(packageReport.sandboxVerification.state, "NOT_RUN");
     const currentHead = runGit(temporaryRepository, ["rev-parse", "HEAD"]);
     assert.notEqual(gateStatus.gates[0].evidence[0].commit, currentHead);
 
@@ -2969,8 +3772,8 @@ test("prototype authority roundtrip survives packaging and fails closed on every
           profileUrl: `https://github.com/${submission.builder.github}`
         }),
         centralBaseResolver: async ({ baseBranch, applicationId }) => ({
-          repositorySlug: "0xprogrammable/programmable",
-          repositoryUrl: "https://github.com/0xprogrammable/programmable",
+          repositorySlug: "0xprogrammable/submit-launch",
+          repositoryUrl: "https://github.com/0xprogrammable/submit-launch",
           baseBranch,
           baseCommit: "c".repeat(40),
           baseTree: "d".repeat(40),
@@ -3070,6 +3873,39 @@ test("public UI source claims are checked while comments and test sources are ig
     assert.notEqual(visibleClaim.status, 0);
     const report = JSON.parse(visibleClaim.stdout);
     assert.ok(report.errors.some((message) => /ui\.tsx contains an unsupported Uniswap verification/.test(message)), JSON.stringify(report.errors));
+  } finally {
+    fs.rmSync(destinationRoot, { recursive: true, force: true });
+  }
+});
+
+test("incomplete bounded public-claim analysis conservatively blocks intake", () => {
+  const destinationRoot = fs.mkdtempSync(path.join(repositoryRoot, ".skill-ui-claim-limit-test-"));
+  try {
+    const { modelRoot, submission } = createPrototypePackage(destinationRoot);
+    const uiPath = path.resolve(repositoryRoot, submission.integration.platformHandoff.uiSourcePaths[0]);
+    const oversizedJoinItems = Array.from({ length: 27_000 }, () => `""`).join(",");
+    const oversizedJoinSeparator = "x".repeat(20_000);
+    const source = [
+      `const oversizedStaticCopy = [${oversizedJoinItems}].join(${JSON.stringify(oversizedJoinSeparator)});`,
+      `export const publicCopy = ["This hook is un", "ruggable."].join("");`
+    ].join("\n");
+    fs.writeFileSync(uiPath, source);
+    rewritePrototypePackageArtifacts(modelRoot, submission);
+
+    const result = childProcess.spawnSync(
+      process.execPath,
+      [path.join(skillRoot, "scripts", "verify-package.mjs"), "--repository-root", repositoryRoot, modelRoot],
+      { cwd: repositoryRoot, encoding: "utf8", shell: false }
+    );
+
+    assert.notEqual(result.status, 0);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.validationState, "TOOLING_BLOCKED");
+    assert.equal(report.intake.state, "BLOCKED");
+    assert.ok(
+      report.errors.some((message) => /public claim analysis is incomplete \(STATIC_JAVASCRIPT_RESOURCE_LIMIT\)/u.test(message)),
+      JSON.stringify(report.errors)
+    );
   } finally {
     fs.rmSync(destinationRoot, { recursive: true, force: true });
   }
@@ -3257,6 +4093,16 @@ function configureNoIncludedSwapClient(submission, routingMode) {
     permit2Mode: null,
     finalSwapDeltaValidated: null
   };
+  submission.integration.sdkSafetyProfile = {
+    packageRootImportsOnly: null,
+    hookedQuoteSource: null,
+    localHookedPoolMathDisabled: null,
+    hookDataParity: null,
+    multiHopHookDataMode: null,
+    perHopPriceBounds: null,
+    slippageSemantics: null,
+    deprecatedLiquidityActionsDisabled: null
+  };
   submission.integration.appSourcePaths = [];
   submission.integration.integrationTestPaths = [];
   submission.integration.quoteExecutionParity = null;
@@ -3390,6 +4236,7 @@ function completePublicMetadata() {
       metadataMutable: false,
       metadataOwner: null
     },
+    localDiscoveryTags: [],
     claimedAffiliations: [{
       organization: "Uniswap",
       relationship: "technology-use",
@@ -3417,6 +4264,7 @@ function readySubmission() {
     currency1: "launched-token",
     orderingRule: "Sort currencies by canonical Uniswap address ordering; native ETH is the zero address.",
     tickSpacing: 60,
+    minimumInitialLiquidity: "1000000",
     lpFee: {
       classification: "lp-fee",
       mode: "static",
@@ -3446,6 +4294,7 @@ function readySubmission() {
     canonical: true,
     alternativePools: "Only the recorded PoolKey is canonical; other pools do not receive or imply this behavior."
   };
+  submission.launchPlan = completeLaunchPlan();
   submission.hook.used = true;
   submission.hook.base = "Pinned OpenZeppelin BaseHook from the Programmable-tested baseline.";
   submission.hook.upgradeable = false;
@@ -3471,6 +4320,7 @@ function readySubmission() {
   submission.hook.feeMechanism = {
     used: false,
     classification: "none",
+    allocationMode: null,
     chargedCurrency: null,
     swapQuadrants: {
       zeroForOneExactInput: null,
@@ -3534,6 +4384,16 @@ function readySubmission() {
       permit2Mode: null,
       finalSwapDeltaValidated: null
     },
+    sdkSafetyProfile: {
+      packageRootImportsOnly: null,
+      hookedQuoteSource: null,
+      localHookedPoolMathDisabled: null,
+      hookDataParity: null,
+      multiHopHookDataMode: null,
+      perHopPriceBounds: null,
+      slippageSemantics: null,
+      deprecatedLiquidityActionsDisabled: null
+    },
     appSourcePaths: [],
     integrationTestPaths: [],
     quoteExecutionParity: null,
@@ -3549,9 +4409,12 @@ function readySubmission() {
       "ProgrammableFeeClaimed(bytes32 indexed poolId,address indexed owner,address indexed destination,address quoteAsset,uint256 amount)"
     ]
   };
-  submission.programmableFee.rates.selectedHundredthsOfBip = 0;
-  submission.programmableFee.rates.effectiveHundredthsOfBip = 1000;
-  submission.programmableFee.rates.projectHundredthsOfBip = 0;
+  submission.programmableFee.rates.selectedBuyHundredthsOfBip = 0;
+  submission.programmableFee.rates.selectedSellHundredthsOfBip = 0;
+  submission.programmableFee.rates.effectiveBuyHundredthsOfBip = 1000;
+  submission.programmableFee.rates.effectiveSellHundredthsOfBip = 1000;
+  submission.programmableFee.rates.projectBuyHundredthsOfBip = 0;
+  submission.programmableFee.rates.projectSellHundredthsOfBip = 0;
   submission.programmableFee.collection.status = "implemented";
   submission.programmableFee.collection.supportedSwapModes = [...submission.integration.swapModes];
   submission.programmableFee.collection.swapModePaths = {
@@ -3605,6 +4468,28 @@ function readySubmission() {
   submission.disclosures = ["The hook records aggregate activity and does not identify an end user behind a router."];
   submission.unresolved = [];
   return submission;
+}
+
+function completeLaunchPlan() {
+  return {
+    executorVersion: "launch-authorization-executor-v1",
+    targetStrategy: "atomic-token-and-pool-launch",
+    targetComponent: "launch-target",
+    callDataFunction: "Call the immutable launch target entrypoint that creates or binds the token, initializes the exact PoolKey and adds the reviewed initial liquidity atomically.",
+    callDataSourcePaths: ["src/LaunchTarget.sol"],
+    hookConfigurationRule: "Encode only the immutable, review-approved hook configuration needed by the exact launched hook; use 0x when no separate configuration payload exists.",
+    hookConfigurationSourcePaths: ["src/LaunchTarget.sol"],
+    initialLiquidityRule: "Initialize the absent canonical pool and leave at least the declared minimumInitialLiquidity active before the executor performs its final checks.",
+    liquiditySourcePaths: ["src/LaunchTarget.sol"],
+    testPaths: ["test/LaunchTarget.t.sol"],
+    nativeValueRule: "The creator chooses the seed amount inside the reviewed inclusive range; the accepted launch bundle binds the exact final msg.value.",
+    minimumNativeValue: "0",
+    maximumNativeValue: "1000000000000000000",
+    nativeValueSource: "The launch UI and target tests derive msg.value from the user-confirmed quote-side seed amount without changing the reviewed bounds.",
+    refundRecipientPolicy: "Refund any unused native value only to the exact creator-controlled recipient bound in the final launch call.",
+    poolMustBeUninitialized: true,
+    postAcceptanceBundleRequired: true
+  };
 }
 
 function noCustomHookSubmission() {
@@ -3704,6 +4589,7 @@ function configureImplementedProgrammableFee(submission, { sourcePath, testPath 
   submission.hook.feeMechanism = {
     used: true,
     classification: "hook-owned-fee",
+    allocationMode: "programmable-rate-formula",
     chargedCurrency: "The canonical pool quote asset for gross quote-side volume in every supported swap mode.",
     swapQuadrants: {
       zeroForOneExactInput: programmableFeeQuadrant("currency0", "gross-input"),
@@ -3718,7 +4604,7 @@ function configureImplementedProgrammableFee(submission, { sourcePath, testPath 
     collectionEvent: submission.programmableFee.accounting.collectionEvent,
     recipients: [{
       role: "programmable-platform",
-      sharePpm: 1000000,
+      sharePpm: null,
       addressSource: "fixed-address",
       address: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
       binding: "exact-address",
@@ -3866,7 +4752,11 @@ function modelSpecificTaxTokenSubmission() {
   const submission = noCustomHookSubmission();
   submission.target.officialLaunchProfileId = null;
   submission.target.dependencyBaseline = "model-specific-pinned";
-  submission.noHookArchitecture = structuredClone(noHookArchitectureTemplate);
+  submission.noHookArchitecture = {
+    route: noHookArchitectureTemplate.route,
+    rationale: noHookArchitectureTemplate.rationale
+  };
+  submission.tokenMechanics = structuredClone(tokenMechanicsTemplate);
   submission.model = {
     id: "transparent-tax-auto-liquidity-token",
     name: "Transparent Tax Auto-Liquidity Token",
@@ -3981,6 +4871,26 @@ function modelSpecificTaxTokenSubmission() {
     "Every buy, sell and transfer stays permitted, but the exact visible rate may reduce the recipient amount.",
     "Passing Programmable checks does not prove routing, quoting, indexer, scanner or listing support for this token."
   ];
+  return submission;
+}
+
+function standardHookTaxTokenSubmission() {
+  const submission = modelSpecificTaxTokenSubmission();
+  const standardHookSubmission = readySubmission();
+  submission.noHookArchitecture = null;
+  submission.hook = structuredClone(standardHookSubmission.hook);
+  submission.programmableFee = structuredClone(standardHookSubmission.programmableFee);
+  const programmableFeeFlowId = submission.programmableFee.accounting.valueFlowId;
+  if (!submission.valueFlows.some(({ id }) => id === programmableFeeFlowId)) {
+    const programmableFeeFlow = standardHookSubmission.valueFlows.find(({ id }) => id === programmableFeeFlowId);
+    assert.ok(programmableFeeFlow, programmableFeeFlowId);
+    submission.valueFlows.push(structuredClone(programmableFeeFlow));
+  }
+  submission.risk.featureTriggers = [...new Set([
+    ...submission.risk.featureTriggers,
+    "custom-accounting",
+    "return-delta"
+  ])].sort();
   return submission;
 }
 
@@ -4284,6 +5194,16 @@ function createPrototypePackage(destinationRoot, {
     permit2Mode: "mixed",
     finalSwapDeltaValidated: true
   };
+  submission.integration.sdkSafetyProfile = {
+    packageRootImportsOnly: true,
+    hookedQuoteSource: "v4-quoter-simulation",
+    localHookedPoolMathDisabled: true,
+    hookDataParity: "Quote and execution use the identical PoolKey, sender assumptions, block context, and byte-for-byte hookData; this no-custom-data fixture binds 0x on every hop.",
+    multiHopHookDataMode: "empty-all-hops",
+    perHopPriceBounds: "Universal Router V2_2_0 supplies one minHopPriceX36 bound for each pool and tests array length, both exactness modes, and final user deltas.",
+    slippageSemantics: "output-loss-sdk-v2.3",
+    deprecatedLiquidityActionsDisabled: null
+  };
   submission.integration.appSourcePaths = [`${repositoryPackagePath}/app/route.ts`];
   submission.integration.integrationTestPaths = [`${repositoryPackagePath}/test/route.test.ts`];
   submission.integration.quoteExecutionParity = "Executable fixtures compare the quoted and final caller deltas for all four directions and exactness modes at one coherent fork block.";
@@ -4347,6 +5267,10 @@ function createPrototypePackage(destinationRoot, {
     gateStatusPath: `${repositoryPackagePath}/evidence/gate-status.json`,
     reviewTargetPath: `${repositoryPackagePath}/evidence/review-target.json`
   };
+  submission.launchPlan.callDataSourcePaths = [`${repositoryPackagePath}/src/Observer.sol`];
+  submission.launchPlan.hookConfigurationSourcePaths = [`${repositoryPackagePath}/src/Observer.sol`];
+  submission.launchPlan.liquiditySourcePaths = [`${repositoryPackagePath}/src/Observer.sol`];
+  submission.launchPlan.testPaths = [`${repositoryPackagePath}/test/Observer.t.sol`];
   configureImplementedProgrammableFee(submission, {
     sourcePath: `${repositoryPackagePath}/src/Observer.sol`,
     testPath: `${repositoryPackagePath}/test/Observer.t.sol`
@@ -4361,6 +5285,10 @@ function createPrototypePackage(destinationRoot, {
 
   const preflight = analyzeRepositorySubmission(submission, modelRoot, targetRepositoryRoot);
   assert.equal(preflight.decision, "PROTOTYPE_READY", JSON.stringify(preflight.findings));
+  assert.equal(preflight.readiness.implementation, "STRUCTURALLY_COMPLETE");
+  assert.equal(preflight.intake.state, "STRUCTURE_CHECKED");
+  assert.equal(preflight.intake.assurance, "static-structure-and-builder-declared-evidence-only");
+  assert.equal(preflight.sandboxVerification.state, "NOT_RUN");
   writeJson(path.join(modelRoot, "compatibility-report.json"), preflight);
   writePrototypeAuthorityFiles({
     modelRoot,
@@ -4577,6 +5505,7 @@ function configuredHookFeeSubmission() {
   submission.hook.feeMechanism = {
     used: true,
     classification: "hook-owned-fee",
+    allocationMode: "fixed-ppm",
     chargedCurrency: "The exact currency derived from the amount basis in each swap quadrant.",
     swapQuadrants: {
       zeroForOneExactInput: hookFeeQuadrant("currency1"),

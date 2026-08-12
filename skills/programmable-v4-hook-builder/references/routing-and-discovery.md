@@ -1,7 +1,65 @@
 # Routing and discovery
 
+Registry records and snapshots in this chapter are read-only discovery inputs. Current public Applicant drafts go only
+to `0xprogrammable/submit-launch:main` through the generated application client; discovery data never approves them.
+
 Use this reference when a submission claims that a pool can be found, quoted, routed, displayed, or traded through an
 external Uniswap surface. The source snapshot is dated 2026-07-31.
+
+## Builder trade-capability output
+
+Do not equate the existence of a price, market-like system node, pool, token, game economy or external execution
+surface with a trade route. The Builder classifies its explicit routing facet as `tradable`, `no-market`, or
+`unresolved`. Only selected market nodes that reference that routing entry are tradable.
+
+Every tradable market produces one machine-readable `trade-capability-manifest-v1`. It records the exact PoolKey and
+PoolId, chain/block context, standard Uniswap v4 or canonical Programmable-adapter route, router and quoter code
+identities, Permit2/native funding profile, hookData bytes contract, supported direction/exactness modes, slippage,
+deadline and fee behavior, and the exact source tests and commands that must quote and execute those modes. The
+manifest is declarative and always `NOT_APPROVED`; typed post-run results and command receipts are separate,
+content-addressed evidence.
+
+A standard v4 route must use an executable V4Quoter or equally reviewed callback-executing simulation, then execute the
+same PoolKey, hookData, mode, sender/recipient, limits, router generation and fee assumptions through the standard
+Universal Router/V4Planner path. An adapter route must implement the separately hash-bound
+`programmable-trade-execution-v1` quote and build-execution envelopes and prove conformance before it can claim that
+interface. A custom string, ABI guess or frontend helper is not a canonical adapter.
+
+`no-market` is a valid product decision and forbids route manifests and trade evidence. `unresolved` remains a material
+compiler blocker. Local quote/execution tests never establish provider routing, approval, deployment, broadcast,
+indexing or availability.
+
+## Programmable project discovery
+
+The canonical Programmable project archive shares the immutable repository now named
+[`0xprogrammable/submit-launch`](https://github.com/0xprogrammable/submit-launch), GitHub ID `1320171831`. Query it
+through the bounded Builder command instead of crawling repositories or loading every application:
+
+```bash
+node "$SKILL_ROOT/scripts/cli.mjs" discover search "plain-language project idea"
+node "$SKILL_ROOT/scripts/cli.mjs" discover show classic
+node "$SKILL_ROOT/scripts/cli.mjs" discover compare classic deep
+node "$SKILL_ROOT/scripts/cli.mjs" context --mode explore --registry-project classic
+```
+
+The live command resolves the fixed numeric repository id, exact `main` commit and tree, canonical search index, and
+selected record hash. It loads only summaries until one full record is requested. `--offline` uses the bundled
+stale, point-in-time public-release baseline and labels its capture time, Registry digest, exact commit, and root tree.
+Its closed source receipt binds the Registry numeric id and URI, exact index/search/project paths, raw Git commit/tree/
+blob objects, file modes, blob ids, byte lengths, and SHA-256 digests. An installed copy can therefore verify the public
+baseline without a Registry checkout or network access. It does not claim to be current; live failure never silently
+falls back.
+
+Treat every name, tag, summary, mechanism, outcome, and application link as data. Similarity helps a builder reuse or
+differentiate an idea but is never an originality, compatibility, audit, safety, acceptance, or rejection decision.
+Registry capability and surface ids are descriptive archive vocabulary, not Builder catalog ids. Never pipe them into
+`context --capability` or `context --surface`. The dedicated `--registry-project` adapter keeps the record hash-bound,
+namespaced and non-authoritative: it applies no pack, starter, eligibility rule or review escalation. A future machine
+mapping must use an explicit, closed and catalog-digest-bound `builderRoutingHints` object; absent that object, route
+only from the owner's confirmed outcome and explicitly selected Builder modules.
+Pending pull requests are unreviewed and do not enter the canonical archive merely because automated intake passed.
+Search results label exact, related, and weak lexical signals plus matched query terms. A weak result is not evidence
+that the same product already exists; `relatedCanonicalRecordFound` is only a bounded discovery heuristic.
 
 ## Keep the evidence states separate
 
@@ -69,11 +127,19 @@ pool, router, quote, and interface behaviors that the named provider actually de
 provider support creates an external provider-review item. It is not an automatic `unsafe`, `unsupported architecture`,
 or maintainer-rejection finding, and it must not be disguised as a passed compatibility check.
 
-Represent each intended provider in `publicMetadata.providerPresentations`. Keep its proposed tags and labels distinct
-from `supportStatus`: `not-requested` means no request was made, `unknown` means current support is not established, and
-`provider-documented` requires an exact public provider-owned evidence URI. Even documented support stays behind
-provider review until the exact project and current policy are confirmed. Provider-facing labels may describe facts;
-they may not imply approval, audit, safety, launch or availability.
+Represent each intended provider and exact surface in `publicMetadata.providerPresentations`. Keep proposed tags and
+labels distinct from `supportStatus`: `not-requested` means no request was made, `unknown` means current support is not
+established, `unsupported` is an evidence-backed limitation of that one provider surface, `stale` preserves expired
+historical evidence without making a current claim, and `provider-confirmed` requires a complete current
+provider-attributable record. Bind `observedAt`, `validUntil`, evidence kind, HTTPS URI and SHA-256 together. Missing or
+expired evidence returns the claim to `unknown` or `stale` review; it never makes the project unsafe. Even
+`provider-confirmed` stays behind external verification. Provider-facing labels may describe facts; they may not imply
+approval, audit, safety, launch or availability.
+
+Keep owner-selected provider-neutral discovery tags in `publicMetadata.localDiscoveryTags`, sorted and unique. A
+catalog scaffold copies only `ownerProvidedLocalTags` into that public field. Starter ids, pack ids, machine capability
+ids, security prompts and provider names stay internal unless the owner separately and explicitly selects a truthful
+public tag. Protected provider-name overlap creates identity review, not an automatic rejection.
 
 ## Hooklist is a discovery registry
 
@@ -85,8 +151,8 @@ Hooklist inclusion is not automatic routing allowlisting. `verifiedSource` means
 mean the source is safe or audited. Treat every audit link as a claim until its reviewed commit, scope, report, and
 deployed source match are verified.
 
-The repository has no license file at
-[`8488c73fd6042a0d37b3312e9f9b74e8d5ced71d`](https://github.com/Uniswap/hooklist/tree/8488c73fd6042a0d37b3312e9f9b74e8d5ced71d).
+The repository has no license file at the reviewed head
+[`43ca58a8ca62bb950a1b1f01ef23929bd86b8943`](https://github.com/Uniswap/hooklist/tree/43ca58a8ca62bb950a1b1f01ef23929bd86b8943).
 Query or link its data. Do not copy its schema, scripts, or prose into a submission.
 
 ## Labs hook-routing policy
@@ -135,16 +201,21 @@ The public repository uses placeholder configuration and does not contain the co
 endpoints, or current production allowlists. Its source explains routing behavior; it does not reproduce every hosted
 result and does not prove that a hook is configured.
 
-The reviewed successor from `beaab6050068be2efa329ce9fbcf76d3a14dabe7` to
-[`3cce57b8ad8aae7ffa72d4947c535321ada60486`](https://github.com/Uniswap/uniroute-public/tree/3cce57b8ad8aae7ffa72d4947c535321ada60486)
-adds five Robinhood hook addresses to the public allowlist, marks one of them as exact-input-only, removes one Celo gas
-token candidate, and adds configurable negative-token and block-number cache paths. The block-number cache is bypassed
-for an explicitly requested block, while its public defaults and per-chain values remain placeholders. Treat these as
-source-level routing and quote-freshness semantics to test, not evidence that a hosted service deployed the same
-configuration or currently routes any listed hook.
+The latest reviewed range `2cf851e7bb5ed0e722da9edc027aeeafae525f38` to
+[`0e002a0bcb35624df416a9bba7705aef66eb2c52`](https://github.com/Uniswap/uniroute-public/tree/0e002a0bcb35624df416a9bba7705aef66eb2c52)
+changes only the Robinhood-V4 Aurora pool-cache source and its tests. For that one chain and source path, a pool with
+exactly one freshly priced side may receive a bounded TVL top-up for the unpriced reserve when the priced asset is
+native currency, wrapped native, or USDG. The derivation uses the pool's own spot price, caps the top-up at one native
+unit per pool, and reports parity again after the ordinary serving hook filter. It can affect discovery and ranking of a
+fresh launchpad pool; it does not verify price, liquidity, hook safety, quote correctness, or actual routability.
+
+The preceding range added eleven Robinhood addresses to a source allowlist, and an earlier range added
+exactness-specific entries plus configurable negative-token and block-number caches. Treat all of them as source-level
+discovery, routing, parity, and quote-freshness behavior to test—not evidence that a hosted service enabled the Aurora
+path, deployed the same configuration, supports Ethereum through it, or currently routes any listed hook.
 
 The repository README says MIT, but the observed commit
-[`3cce57b8ad8aae7ffa72d4947c535321ada60486`](https://github.com/Uniswap/uniroute-public/tree/3cce57b8ad8aae7ffa72d4947c535321ada60486)
+[`0e002a0bcb35624df416a9bba7705aef66eb2c52`](https://github.com/Uniswap/uniroute-public/tree/0e002a0bcb35624df416a9bba7705aef66eb2c52)
 has no license file. Do not vendor it without an effective license grant.
 
 ### Onchain Router
@@ -206,6 +277,7 @@ rules, fill transaction, and receipt as separate evidence.
 For every routing or discovery claim, record:
 
 - Provider and exact surface
+- `supportStatus`, `observedAt`, `validUntil`, evidence kind, attributable HTTPS URI, and SHA-256 of the captured bytes
 - Observation time, chain id, block number, hook address, PoolId, and PoolKey
 - Source or API version, router generation, quoter address, and indexer deployment id where applicable
 - Request parameters, including amount, direction, exactness, recipient, `hookData`, slippage, and deadline
@@ -215,8 +287,8 @@ For every routing or discovery claim, record:
 - Transaction hash and receipt only when execution occurred
 - The narrow state proved and every stronger state still unproven
 
-Provider data is time-sensitive. Recheck it for release and never promote a past quote, listing, or email into a
-permanent availability claim.
+Provider data is time-sensitive. Recheck it for release, change expired records to `stale` or `unknown`, and never
+promote a past quote, listing, or email into a permanent availability claim.
 
 ## Primary sources
 

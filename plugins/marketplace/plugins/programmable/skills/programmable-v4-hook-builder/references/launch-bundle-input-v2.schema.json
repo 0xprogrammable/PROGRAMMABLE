@@ -1,0 +1,430 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:launch-bundle-input-v2:2.0.0",
+  "title": "Programmable open-world launch bundle input v2",
+  "description": "An unsigned, content-bound request for independent Programmable review. Product kinds, asset counts, market counts and implementation profiles are deliberately open. Protocol-specific checks apply only to an explicitly declared protocol context. Structural validity is not approval.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "contract",
+    "bundleId",
+    "applicationId",
+    "platform",
+    "sources",
+    "artifacts",
+    "feeScopeBindings",
+    "protocolContexts",
+    "reviewRequirements",
+    "authorizationRequest"
+  ],
+  "properties": {
+    "$schema": { "const": "urn:programmable:launch-bundle-input-v2:2.0.0" },
+    "schemaVersion": { "const": "2.0.0" },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "const": "launch-bundle-input-v2" },
+        "version": { "const": "2.0.0" }
+      }
+    },
+    "bundleId": { "$ref": "#/$defs/slug" },
+    "applicationId": { "$ref": "#/$defs/slug" },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["feeRecipient", "independentAdminAuthorizer", "rolesSeparated"],
+      "properties": {
+        "feeRecipient": { "const": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c" },
+        "independentAdminAuthorizer": { "const": "0x2Bb333d48DFAF1596D9036671d2E43168994249E" },
+        "rolesSeparated": { "const": true }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/sourceSnapshot" }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "application",
+        "submission",
+        "ideaSource",
+        "intentContract",
+        "architectureDecisions",
+        "intentFidelity",
+        "feePolicy",
+        "security",
+        "executionSurfaceCoverage",
+        "tradeCapabilities",
+        "registryAcceptance",
+        "evidence"
+      ],
+      "properties": {
+        "application": { "$ref": "#/$defs/jsonContentBinding" },
+        "submission": { "$ref": "#/$defs/jsonContentBinding" },
+        "ideaSource": { "$ref": "#/$defs/jsonContentBinding" },
+        "intentContract": { "$ref": "#/$defs/jsonContentBinding" },
+        "architectureDecisions": { "$ref": "#/$defs/jsonContentBinding" },
+        "intentFidelity": { "$ref": "#/$defs/jsonContentBinding" },
+        "feePolicy": { "$ref": "#/$defs/jsonContentBinding" },
+        "security": { "$ref": "#/$defs/jsonContentBinding" },
+        "executionSurfaceCoverage": {
+          "description": "Exact application-package execution entrypoint enumeration, source-verification projection and control evidence.",
+          "$ref": "#/$defs/jsonContentBinding"
+        },
+        "tradeCapabilities": {
+          "description": "Exactly one content-bound trade-capability manifest for each explicitly selected tradable Submission V2 market; empty for no-market or unresolved trade applicability.",
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/tradeCapabilityContentBinding" }
+        },
+        "registryAcceptance": {
+          "description": "Exact trusted Registry review decision. Null is the honest pre-acceptance dry-run state and can never produce a matched launch-preparation report.",
+          "oneOf": [
+            { "$ref": "#/$defs/jsonContentBinding" },
+            { "type": "null" }
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/evidenceContentBinding" }
+        }
+      }
+    },
+    "feeScopeBindings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/feeScopeBinding" }
+    },
+    "protocolContexts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/protocolContext" }
+    },
+    "reviewRequirements": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/reviewRequirement" }
+    },
+    "authorizationRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approvalInherited",
+        "priorApprovalRefs",
+        "humanAdminAuthorization",
+        "independentHumanReviewRequired"
+      ],
+      "properties": {
+        "approvalInherited": { "const": false },
+        "priorApprovalRefs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "humanAdminAuthorization": { "type": "null" },
+        "independentHumanReviewRequired": { "const": true }
+      }
+    }
+  },
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "gitObject": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "address": {
+      "type": "string",
+      "pattern": "^0x[a-fA-F0-9]{40}$"
+    },
+    "bytes32": {
+      "type": "string",
+      "pattern": "^0x[a-fA-F0-9]{64}$"
+    },
+    "canonicalPositiveUint256Decimal": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,77}$",
+      "description": "Canonical base-10 EVM uint256 in the inclusive range 1..2^256-1; semantic validation enforces the upper bound."
+    },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sourceSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "repositoryUri",
+        "numericRepositoryId",
+        "revisionObjectId",
+        "treeObjectId"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "repositoryUri": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "numericRepositoryId": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,63}$",
+          "maxLength": 80
+        },
+        "revisionObjectId": { "$ref": "#/$defs/gitObject" },
+        "treeObjectId": { "$ref": "#/$defs/gitObject" }
+      }
+    },
+    "jsonContentBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "sourceRef",
+        "path",
+        "gitBlobObjectId",
+        "schemaId",
+        "mediaType",
+        "sha256",
+        "byteLength",
+        "content"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "sourceRef": { "$ref": "#/$defs/slug" },
+        "path": { "$ref": "#/$defs/repositoryPath" },
+        "gitBlobObjectId": { "$ref": "#/$defs/gitObject" },
+        "schemaId": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "mediaType": { "const": "application/json" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "byteLength": { "type": "integer", "minimum": 1 },
+        "content": { "type": "string", "minLength": 1 }
+      }
+    },
+    "evidenceContentBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "evidenceType",
+        "sourceRef",
+        "path",
+        "gitBlobObjectId",
+        "schemaId",
+        "mediaType",
+        "sha256",
+        "byteLength",
+        "content"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "evidenceType": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "Open evidence kind. Unknown and future kinds remain valid."
+        },
+        "sourceRef": { "$ref": "#/$defs/slug" },
+        "path": { "$ref": "#/$defs/repositoryPath" },
+        "gitBlobObjectId": { "$ref": "#/$defs/gitObject" },
+        "schemaId": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "mediaType": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "byteLength": { "type": "integer", "minimum": 1 },
+        "content": { "type": "string", "minLength": 1 }
+      }
+    },
+    "tradeCapabilityContentBinding": {
+      "allOf": [
+        { "$ref": "#/$defs/jsonContentBinding" },
+        {
+          "properties": {
+            "schemaId": { "const": "urn:programmable:trade-capability-manifest:1.0.0" }
+          }
+        }
+      ]
+    },
+    "reviewState": {
+      "enum": ["unresolved", "satisfied", "not-applicable", "conflict"]
+    },
+    "feeScopeBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "feeScopeId",
+        "marketRef",
+        "protocolContextRef",
+        "chainId",
+        "poolId",
+        "quoteCurrency",
+        "collectionProfile",
+        "implementationRef",
+        "implementationSourceRef",
+        "state",
+        "evidenceRefs"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "feeScopeId": { "$ref": "#/$defs/slug" },
+        "marketRef": { "$ref": "#/$defs/slug" },
+        "protocolContextRef": {
+          "oneOf": [{ "$ref": "#/$defs/slug" }, { "type": "null" }]
+        },
+        "chainId": { "$ref": "#/$defs/canonicalPositiveUint256Decimal" },
+        "poolId": { "$ref": "#/$defs/bytes32" },
+        "quoteCurrency": { "$ref": "#/$defs/address" },
+        "collectionProfile": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "implementationRef": {
+          "oneOf": [{ "$ref": "#/$defs/repositoryPath" }, { "type": "null" }]
+        },
+        "implementationSourceRef": {
+          "oneOf": [{ "$ref": "#/$defs/slug" }, { "type": "null" }]
+        },
+        "state": { "$ref": "#/$defs/reviewState" },
+        "evidenceRefs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/slug" }
+        }
+      }
+    },
+    "protocolContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "protocolId",
+        "targetRefs",
+        "assetRefs",
+        "marketRefs",
+        "hookRefs",
+        "profile",
+        "reviewChecks",
+        "v4"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "protocolId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "Open protocol identity; it is not a product allowlist."
+        },
+        "targetRefs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "assetRefs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "marketRefs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "hookRefs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "profile": {
+          "description": "Open declarative protocol or integration metadata."
+        },
+        "reviewChecks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/reviewRequirement" }
+        },
+        "v4": {
+          "oneOf": [{ "$ref": "#/$defs/v4Context" }, { "type": "null" }]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "protocolId": { "const": "uniswap-v4" } },
+            "required": ["protocolId"]
+          },
+          "then": { "properties": { "v4": { "$ref": "#/$defs/v4Context" } } }
+        }
+      ]
+    },
+    "v4Context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "poolManagerAddress",
+        "nativeAmmMode",
+        "customAccountingUsed",
+        "callbackAuthentication",
+        "permissionAddressMatch",
+        "deltaConservation",
+        "unlockSettlement",
+        "customAccountingReview"
+      ],
+      "properties": {
+        "poolManagerAddress": {
+          "oneOf": [{ "$ref": "#/$defs/address" }, { "type": "null" }]
+        },
+        "nativeAmmMode": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "Open mode. The value `none` is valid for reviewed full-consumption custom accounting."
+        },
+        "customAccountingUsed": { "type": ["boolean", "null"] },
+        "callbackAuthentication": { "$ref": "#/$defs/invariantCheck" },
+        "permissionAddressMatch": { "$ref": "#/$defs/invariantCheck" },
+        "deltaConservation": { "$ref": "#/$defs/invariantCheck" },
+        "unlockSettlement": { "$ref": "#/$defs/invariantCheck" },
+        "customAccountingReview": { "$ref": "#/$defs/invariantCheck" }
+      }
+    },
+    "invariantCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "evidenceRefs", "note"],
+      "properties": {
+        "state": { "$ref": "#/$defs/reviewState" },
+        "evidenceRefs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "note": { "type": ["string", "null"] }
+      }
+    },
+    "reviewRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "subjectRefs", "state", "evidenceRefs", "note"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "Open requirement identity; unknown requirements remain representable."
+        },
+        "subjectRefs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 1000 }
+        },
+        "state": { "$ref": "#/$defs/reviewState" },
+        "evidenceRefs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "note": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

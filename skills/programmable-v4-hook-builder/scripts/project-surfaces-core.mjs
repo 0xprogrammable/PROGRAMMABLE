@@ -40,6 +40,7 @@ const knownSurfaceKinds = new Set([
   "indexer",
   "keeper",
   "map-client",
+  "metadata",
   "mobile-app",
   "monitoring",
   "onchain-contract",

@@ -1,13 +1,16 @@
 import childProcess from "node:child_process";
 import path from "node:path";
 import process from "node:process";
+import { TextDecoder } from "node:util";
 import { fileURLToPath } from "node:url";
 import { canonicalJson } from "./submission-core.mjs";
+import { parseBoundedStrictJsonBytes } from "./strict-json-core.mjs";
 
 export const CLI_SCHEMA_VERSION = "1.0.0";
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const MAX_CHILD_OUTPUT_BYTES = 32_000_000;
 const MAX_CHILD_RUNTIME_MS = 120_000;
+const strictUtf8 = new TextDecoder("utf-8", { fatal: true });
 
 export class CliFailure extends Error {
   constructor(code, message, { exitCode = 2, details = null } = {}) {
@@ -60,7 +63,6 @@ export function runBundledCommand(script, args, { cwd, failureCode = "COMMAND_FA
     [path.join(scriptDirectory, script), ...args],
     {
       cwd,
-      encoding: "utf8",
       shell: false,
       env: safeChildEnvironment(),
       timeout: MAX_CHILD_RUNTIME_MS,
@@ -71,14 +73,15 @@ export function runBundledCommand(script, args, { cwd, failureCode = "COMMAND_FA
     throw new CliFailure(failureCode, `cannot execute ${script}: ${result.error.message}`);
   }
   const parsed = parseJsonOutput(result.stdout);
+  const stdout = decodeChildOutput(result.stdout);
   if (result.status !== 0) {
-    const diagnostic = sanitizeMessage(result.stderr) || `${script} exited with status ${result.status}`;
+    const diagnostic = sanitizeMessage(decodeChildOutput(result.stderr)) || `${script} exited with status ${result.status}`;
     throw new CliFailure(failureCode, diagnostic, {
       exitCode: result.status === 1 ? 1 : 2,
       details: parsed
     });
   }
-  return { parsed, stdout: result.stdout.trim() };
+  return { parsed, stdout: stdout.trim() };
 }
 
 export function requireJsonResult(commandResult, command) {
@@ -97,13 +100,25 @@ export function sanitizeMessage(value) {
     .slice(0, 1_000);
 }
 
-function parseJsonOutput(output) {
-  const source = String(output ?? "").trim();
-  if (source.length === 0) return null;
+export function parseJsonOutput(output) {
+  const bytes = Buffer.isBuffer(output)
+    ? output
+    : Buffer.from(String(output ?? ""), "utf8");
+  if (bytes.length === 0) return null;
   try {
-    return JSON.parse(source);
+    return parseBoundedStrictJsonBytes(bytes, { maxSourceBytes: MAX_CHILD_OUTPUT_BYTES });
   } catch {
     return null;
+  }
+}
+
+function decodeChildOutput(output) {
+  if (output === null || output === undefined) return "";
+  const bytes = Buffer.isBuffer(output) ? output : Buffer.from(String(output), "utf8");
+  try {
+    return strictUtf8.decode(bytes);
+  } catch {
+    return "";
   }
 }
 

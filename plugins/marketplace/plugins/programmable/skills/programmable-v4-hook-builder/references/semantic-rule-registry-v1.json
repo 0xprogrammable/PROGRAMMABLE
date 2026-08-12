@@ -1,0 +1,861 @@
+{
+  "$schema": "urn:programmable:semantic-rule-registry-v1:1.0.0",
+  "schemaVersion": "1.0.0",
+  "kind": "programmable-semantic-rule-registry",
+  "scope": {
+    "profile": "managed-finding-namespaces-and-canonical-rule-categories",
+    "completeRuleInventoryClaimed": false,
+    "completeCanonicalRuleCategoryCoverageClaimed": true,
+    "managedFindingNamespaces": [
+      {
+        "ownerFile": "scripts/open-world-security-core.mjs",
+        "prefix": "SOURCE_SEMANTIC_",
+        "completeInventoryClaimed": true
+      },
+      {
+        "ownerFile": "scripts/v4-hook-semantic-contract-core.mjs",
+        "prefix": "V4_",
+        "completeInventoryClaimed": true
+      }
+    ]
+  },
+  "ruleCategories": [
+    {
+      "category": "chain",
+      "id": "builder.chain-rules.v1",
+      "canonicalOwnerFile": "scripts/submission-cross-chain-identity-analysis.mjs",
+      "trigger": "The cross-chain submission endpoint-identity slice rejects identical source and destination network identities.",
+      "tests": {
+        "positive": [
+          {
+            "path": "scripts/test/cross-chain-policy.test.mjs",
+            "testCase": "complete cross-chain prototype profile passes its structural security preflight"
+          }
+        ],
+        "negative": [
+          {
+            "path": "scripts/test/cross-chain-policy.test.mjs",
+            "testCase": "cross-chain prototype rejects the wrong source, sender, destination or domain"
+          }
+        ]
+      },
+      "invalidationSet": [
+        "scripts/submission-cross-chain-identity-analysis.mjs",
+        "scripts/test/cross-chain-policy.test.mjs",
+        "references/submission.schema.json",
+        "references/security-and-evidence.md"
+      ],
+      "projections": [
+        {
+          "path": "scripts/submission-cross-chain-identity-analysis.mjs",
+          "literal": "CROSS_CHAIN_SOURCE_DESTINATION_CONFLICT",
+          "expectedOccurrences": 1
+        },
+        {
+          "path": "scripts/test/cross-chain-policy.test.mjs",
+          "literal": "CROSS_CHAIN_SOURCE_DESTINATION_CONFLICT",
+          "expectedOccurrences": 1
+        }
+      ]
+    },
+    {
+      "category": "fee",
+      "id": "builder.fee-rules.v1",
+      "canonicalOwnerFile": "scripts/fee-policy-v2-contract.mjs",
+      "trigger": "The Fee Policy V2 contract creates and validates its externally funded rate rule.",
+      "tests": {
+        "positive": [
+          {
+            "path": "scripts/test/fee-policy-v2.test.mjs",
+            "testCase": "policy document binds profiles scope owner and solvency semantics"
+          }
+        ],
+        "negative": [
+          {
+            "path": "scripts/test/fee-policy-v2.test.mjs",
+            "testCase": "policy validator mirrors every closed schema field and rejects unknown properties"
+          }
+        ]
+      },
+      "invalidationSet": [
+        "scripts/fee-policy-v2-contract.mjs",
+        "scripts/test/fee-policy-v2.test.mjs",
+        "references/fee-policy-v2.schema.json",
+        "references/programmable-fee-policy-v2.md"
+      ],
+      "projections": [
+        {
+          "path": "scripts/fee-policy-v2-contract.mjs",
+          "literal": "uint256-rate-custom-reviewed-segregated-funding-only",
+          "expectedOccurrences": 2
+        },
+        {
+          "path": "scripts/test/fee-policy-v2.test.mjs",
+          "literal": "uint256-rate-custom-reviewed-segregated-funding-only",
+          "expectedOccurrences": 2
+        }
+      ]
+    },
+    {
+      "category": "schema",
+      "id": "builder.schema-rules.v1",
+      "canonicalOwnerFile": "scripts/restricted-json-schema-definition-core.mjs",
+      "trigger": "The restricted submission-schema engine rejects unsupported JSON Schema keywords instead of ignoring them.",
+      "tests": {
+        "positive": [
+          {
+            "path": "scripts/test/schema-security.test.mjs",
+            "testCase": "every supported composition and conditional keyword is enforced"
+          }
+        ],
+        "negative": [
+          {
+            "path": "scripts/test/schema-security.test.mjs",
+            "testCase": "unsupported schema keywords fail closed instead of becoming decorative"
+          }
+        ]
+      },
+      "invalidationSet": [
+        "scripts/restricted-json-schema-definition-core.mjs",
+        "scripts/restricted-json-schema-core.mjs",
+        "scripts/test/schema-security.test.mjs",
+        "references/submission.schema.json"
+      ],
+      "projections": [
+        {
+          "path": "scripts/restricted-json-schema-definition-core.mjs",
+          "literal": "SCHEMA_KEYWORD_UNSUPPORTED",
+          "expectedOccurrences": 1
+        },
+        {
+          "path": "scripts/test/schema-security.test.mjs",
+          "literal": "SCHEMA_KEYWORD_UNSUPPORTED",
+          "expectedOccurrences": 1
+        }
+      ]
+    },
+    {
+      "category": "status",
+      "id": "builder.status-rules.v1",
+      "canonicalOwnerFile": "scripts/github-application-status-core.mjs",
+      "trigger": "The GitHub review-status projection maps an immutable merged pull record to its bounded public status.",
+      "tests": {
+        "positive": [
+          {
+            "path": "scripts/test/github-application.test.mjs",
+            "testCase": "status accepts a full first review page and selects the latest review by immutable id"
+          }
+        ],
+        "negative": [
+          {
+            "path": "scripts/test/github-application.test.mjs",
+            "testCase": "status maps GitHub signals without inventing approval"
+          }
+        ]
+      },
+      "invalidationSet": [
+        "scripts/github-application-status-core.mjs",
+        "scripts/test/github-application.test.mjs",
+        "references/github-application-journey.md"
+      ],
+      "projections": [
+        {
+          "path": "scripts/github-application-status-core.mjs",
+          "literal": "review-record-merged",
+          "expectedOccurrences": 2
+        },
+        {
+          "path": "scripts/test/github-application.test.mjs",
+          "literal": "review-record-merged",
+          "expectedOccurrences": 1
+        }
+      ]
+    },
+    {
+      "category": "version",
+      "id": "builder.version-rules.v1",
+      "canonicalOwnerFile": "scripts/builder-lifecycle-update.mjs",
+      "trigger": "The authenticated lifecycle-update checker rejects release-version or release-sequence downgrades.",
+      "tests": {
+        "positive": [
+          {
+            "path": "scripts/test/builder-lifecycle.test.mjs",
+            "testCase": "update-check verifies the supplied pin and Ed25519 payload without activation"
+          }
+        ],
+        "negative": [
+          {
+            "path": "scripts/test/builder-lifecycle.test.mjs",
+            "testCase": "update-check rejects an authenticated downgrade"
+          }
+        ]
+      },
+      "invalidationSet": [
+        "scripts/builder-lifecycle-update.mjs",
+        "scripts/test/builder-lifecycle.test.mjs",
+        "references/upgrades-and-release.md"
+      ],
+      "projections": [
+        {
+          "path": "scripts/builder-lifecycle-update.mjs",
+          "literal": "UPDATE_DOWNGRADE_REJECTED",
+          "expectedOccurrences": 1
+        },
+        {
+          "path": "scripts/test/builder-lifecycle.test.mjs",
+          "literal": "UPDATE_DOWNGRADE_REJECTED",
+          "expectedOccurrences": 1
+        }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "open-world.callback.pool-manager-auth.v1",
+      "canonicalOwnerFile": "scripts/open-world-security-core.mjs",
+      "findingCodes": [
+        "CALLBACK_POOL_MANAGER_AUTH_MISSING"
+      ],
+      "trigger": "A source-assessed design enables any Uniswap v4 callback entry point.",
+      "severity": "blocker",
+      "tests": {
+        "positive": [
+          {
+            "path": "scripts/test/open-world-security.test.mjs",
+            "testCase": "a completely bound callback has no callback finding"
+          }
+        ],
+        "negative": [
+          {
+            "path": "scripts/test/open-world-security.test.mjs",
+            "testCase": "a source-level missing PoolManager guard requires a code change"
+          }
+        ]
+      },
+      "invalidationSet": [
+        "scripts/open-world-security-core.mjs",
+        "scripts/test/open-world-security.test.mjs",
+        "references/open-world-security-v1.schema.json",
+        "references/security-and-evidence.md"
+      ],
+      "projections": [
+        {
+          "path": "scripts/open-world-security-core.mjs",
+          "literal": "CALLBACK_POOL_MANAGER_AUTH_MISSING",
+          "expectedOccurrences": 1
+        },
+        {
+          "path": "scripts/test/open-world-security.test.mjs",
+          "literal": "CALLBACK_POOL_MANAGER_AUTH_MISSING",
+          "expectedOccurrences": 1
+        }
+      ]
+    },
+    {
+      "id": "open-world.source-semantic-coverage.v1",
+      "canonicalOwnerFile": "scripts/open-world-security-core.mjs",
+      "findingCodes": [
+        "SOURCE_SEMANTIC_COVERAGE_UNPROVEN"
+      ],
+      "trigger": "An assessment claims source-assessed closure without any source-derived semantic profile or analyzer finding.",
+      "severity": "blocker",
+      "tests": {
+        "positive": [
+          {
+            "path": "scripts/test/open-world-security.test.mjs",
+            "testCase": "a completely bound callback has no callback finding"
+          }
+        ],
+        "negative": [
+          {
+            "path": "scripts/test/open-world-security.test.mjs",
+            "testCase": "unknown ideas remain eligible and malformed evidence requires repair rather than rejection"
+          }
+        ]
+      },
+      "invalidationSet": [
+        "scripts/open-world-security-core.mjs",
+        "scripts/test/open-world-security.test.mjs",
+        "references/open-world-security-v1.schema.json",
+        "references/security-and-evidence.md"
+      ],
+      "projections": [
+        {
+          "path": "scripts/open-world-security-core.mjs",
+          "literal": "SOURCE_SEMANTIC_COVERAGE_UNPROVEN",
+          "expectedOccurrences": 1
+        },
+        {
+          "path": "scripts/test/open-world-security.test.mjs",
+          "literal": "SOURCE_SEMANTIC_COVERAGE_UNPROVEN",
+          "expectedOccurrences": 2
+        }
+      ]
+    },
+    {
+      "id": "submission.dynamic-fee.time-weighted-input.v1",
+      "canonicalOwnerFile": "scripts/submission-assets-launch-analysis.mjs",
+      "findingCodes": [
+        "INSTANTANEOUS_DEPTH_METRIC"
+      ],
+      "trigger": "A dynamic LP fee derives its update from a liquidity, depth, TVL, or market-cap observation.",
+      "severity": "blocker",
+      "tests": {
+        "positive": [
+          {
+            "path": "scripts/test/submission.test.mjs",
+            "testCase": "fully specified time-weighted liquidity fee reaches high-risk prototype review"
+          }
+        ],
+        "negative": [
+          {
+            "path": "scripts/test/submission.test.mjs",
+            "testCase": "instantaneous liquidity depth cannot drive a dynamic fee"
+          }
+        ]
+      },
+      "invalidationSet": [
+        "scripts/submission-assets-launch-analysis.mjs",
+        "scripts/test/submission.test.mjs",
+        "references/v4-liquidity-and-state.md"
+      ],
+      "projections": [
+        {
+          "path": "scripts/submission-assets-launch-analysis.mjs",
+          "literal": "INSTANTANEOUS_DEPTH_METRIC",
+          "expectedOccurrences": 1
+        },
+        {
+          "path": "scripts/test/submission.test.mjs",
+          "literal": "INSTANTANEOUS_DEPTH_METRIC",
+          "expectedOccurrences": 1
+        }
+      ]
+    },
+    {
+      "id": "submission.hook-address.permission-validation.v1",
+      "canonicalOwnerFile": "scripts/submission-assurance-analysis.mjs",
+      "findingCodes": [
+        "HOOK_ADDRESS_VALIDATION_BYPASS"
+      ],
+      "trigger": "A production hook address is mined, constructed, or accepted for a declared permission bitmap.",
+      "severity": "hard",
+      "tests": {
+        "positive": [
+          {
+            "path": "scripts/test/submission.test.mjs",
+            "testCase": "complete standard proposal is prototype ready"
+          }
+        ],
+        "negative": [
+          {
+            "path": "scripts/test/submission.test.mjs",
+            "testCase": "production hook-address validation bypass is unsupported"
+          }
+        ]
+      },
+      "invalidationSet": [
+        "scripts/submission-assurance-analysis.mjs",
+        "scripts/test/submission.test.mjs",
+        "references/compatibility-standard.md"
+      ],
+      "projections": [
+        {
+          "path": "scripts/submission-assurance-analysis.mjs",
+          "literal": "HOOK_ADDRESS_VALIDATION_BYPASS",
+          "expectedOccurrences": 1
+        },
+        {
+          "path": "scripts/test/submission.test.mjs",
+          "literal": "HOOK_ADDRESS_VALIDATION_BYPASS",
+          "expectedOccurrences": 1
+        }
+      ]
+    },
+    {
+      "id": "submission.lp-fee.full-rate-exact-output.v1",
+      "canonicalOwnerFile": "scripts/submission-integration-client-analysis.mjs",
+      "findingCodes": [
+        "FULL_LP_FEE_EXACT_OUTPUT_UNSUPPORTED"
+      ],
+      "trigger": "An LP fee is one hundred percent while any exact-output swap mode remains supported.",
+      "severity": "blocker",
+      "tests": {
+        "positive": [
+          {
+            "path": "scripts/test/submission.test.mjs",
+            "testCase": "complete standard proposal is prototype ready"
+          }
+        ],
+        "negative": [
+          {
+            "path": "scripts/test/submission.test.mjs",
+            "testCase": "one hundred percent LP fee rejects exact-output support"
+          }
+        ]
+      },
+      "invalidationSet": [
+        "scripts/submission-integration-client-analysis.mjs",
+        "scripts/test/submission.test.mjs",
+        "references/v4-protocol-mechanics.md"
+      ],
+      "projections": [
+        {
+          "path": "scripts/submission-integration-client-analysis.mjs",
+          "literal": "FULL_LP_FEE_EXACT_OUTPUT_UNSUPPORTED",
+          "expectedOccurrences": 1
+        },
+        {
+          "path": "scripts/test/submission.test.mjs",
+          "literal": "FULL_LP_FEE_EXACT_OUTPUT_UNSUPPORTED",
+          "expectedOccurrences": 1
+        }
+      ]
+    },
+    {
+      "id": "submission.programmable-fee.non-additive-minimum.v1",
+      "canonicalOwnerFile": "scripts/submission-programmable-fee-analysis.mjs",
+      "findingCodes": [
+        "PROGRAMMABLE_FEE_EFFECTIVE_RATE_INVALID"
+      ],
+      "trigger": "A canonical-pool swap selects project buy or sell rates and the mandatory platform split is derived.",
+      "severity": "blocker",
+      "tests": {
+        "positive": [
+          {
+            "path": "scripts/test/submission.test.mjs",
+            "testCase": "mandatory Programmable fee applies the non-additive minimum formula at 0, 5, 10 and 300 bips"
+          }
+        ],
+        "negative": [
+          {
+            "path": "scripts/test/submission.test.mjs",
+            "testCase": "mandatory Programmable fee rejects additive 300-to-310 bips and any platform rate other than 10 bips"
+          }
+        ]
+      },
+      "invalidationSet": [
+        "scripts/submission-programmable-fee-analysis.mjs",
+        "scripts/test/submission.test.mjs",
+        "references/programmable-fee-policy.md",
+        "references/submission.schema.json"
+      ],
+      "projections": [
+        {
+          "path": "scripts/submission-programmable-fee-analysis.mjs",
+          "literal": "per-side:effective=max(selected,1000);platform=1000;project=effective-1000",
+          "expectedOccurrences": 1
+        },
+        {
+          "path": "scripts/test/submission.test.mjs",
+          "literal": "PROGRAMMABLE_FEE_EFFECTIVE_RATE_INVALID",
+          "expectedOccurrences": 1
+        },
+        {
+          "path": "references/programmable-fee-policy.md",
+          "literal": "per-side:effective=max(selected,1000);platform=1000;project=effective-1000",
+          "expectedOccurrences": 1
+        }
+      ]
+    },
+    {
+      "id": "submission.return-delta.parent-callback.v1",
+      "canonicalOwnerFile": "scripts/submission-hook-analysis.mjs",
+      "findingCodes": [
+        "RETURN_DELTA_PARENT_PERMISSION_MISSING"
+      ],
+      "trigger": "Any return-delta permission bit is enabled for a hook callback.",
+      "severity": "blocker",
+      "tests": {
+        "positive": [
+          {
+            "path": "scripts/test/submission.test.mjs",
+            "testCase": "fully described return-delta design can reach prototype review but stays high risk"
+          }
+        ],
+        "negative": [
+          {
+            "path": "scripts/test/submission.test.mjs",
+            "testCase": "return-delta permission requires its parent callback"
+          }
+        ]
+      },
+      "invalidationSet": [
+        "scripts/submission-hook-analysis.mjs",
+        "scripts/test/submission.test.mjs",
+        "references/compatibility-standard.md",
+        "references/v4-protocol-mechanics.md"
+      ],
+      "projections": [
+        {
+          "path": "scripts/submission-hook-analysis.mjs",
+          "literal": "RETURN_DELTA_PARENT_PERMISSION_MISSING",
+          "expectedOccurrences": 1
+        },
+        {
+          "path": "scripts/test/submission.test.mjs",
+          "literal": "RETURN_DELTA_PARENT_PERMISSION_MISSING",
+          "expectedOccurrences": 1
+        }
+      ]
+    },
+    {
+      "id": "submission.return-delta.settlement-sequence.v1",
+      "canonicalOwnerFile": "scripts/settlement-policy-core.mjs",
+      "findingCodes": [
+        "ERC20_SETTLEMENT_SEQUENCE_INVALID",
+        "NATIVE_SETTLEMENT_SEQUENCE_INVALID"
+      ],
+      "trigger": "A return-delta cancellation path settles native or ERC-20 debt with PoolManager.",
+      "severity": "blocker",
+      "tests": {
+        "positive": [
+          {
+            "path": "scripts/test/submission.test.mjs",
+            "testCase": "native settlement uses sync then msg.value settle without token transfer"
+          }
+        ],
+        "negative": [
+          {
+            "path": "scripts/test/submission.test.mjs",
+            "testCase": "settlement sequence cannot mix native and ERC20 asset kinds"
+          }
+        ]
+      },
+      "invalidationSet": [
+        "scripts/settlement-policy-core.mjs",
+        "scripts/test/submission.test.mjs",
+        "references/v4-liquidity-and-state.md",
+        "references/v4-protocol-mechanics.md"
+      ],
+      "projections": [
+        {
+          "path": "scripts/settlement-policy-core.mjs",
+          "literal": "ERC20_SETTLEMENT_SEQUENCE_INVALID",
+          "expectedOccurrences": 1
+        },
+        {
+          "path": "scripts/test/submission.test.mjs",
+          "literal": "ERC20_SETTLEMENT_SEQUENCE_INVALID",
+          "expectedOccurrences": 1
+        },
+        {
+          "path": "scripts/settlement-policy-core.mjs",
+          "literal": "NATIVE_SETTLEMENT_SEQUENCE_INVALID",
+          "expectedOccurrences": 1
+        }
+      ]
+    },
+    {
+      "id": "v4.bounded-swap-witness-contract.v1",
+      "canonicalOwnerFile": "scripts/v4-hook-semantic-contract-core.mjs",
+      "findingCodes": [
+        "V4_HOOK_DATA_WITNESS_CONFLICT",
+        "V4_SWAP_WITNESS_AUTHENTICATION_SEMANTICS_FORBIDDEN",
+        "V4_SWAP_WITNESS_BYTE_LENGTH_INVALID",
+        "V4_SWAP_WITNESS_DELTA_BINDING_INVALID",
+        "V4_SWAP_WITNESS_DOMAIN_SEMANTICS_FORBIDDEN",
+        "V4_SWAP_WITNESS_ENCODING_INVALID",
+        "V4_SWAP_WITNESS_IDENTITY_SEMANTICS_FORBIDDEN",
+        "V4_SWAP_WITNESS_PARTIAL_FILL_POLICY_REQUIRED",
+        "V4_SWAP_WITNESS_REPLAY_SEMANTICS_FORBIDDEN",
+        "V4_SWAP_WITNESS_TYPE_INVALID",
+        "V4_SWAP_WITNESS_VALUE_SEMANTICS_INVALID",
+        "V4_SWAP_WITNESS_VERSIONING_SEMANTICS_FORBIDDEN"
+      ],
+      "trigger": "A bounded exact-output swap witness binds one fixed ABI word to executed gross quote volume without identity, authentication, domain, version or replay semantics.",
+      "severity": "blocker",
+      "tests": {
+        "positive": [
+          {
+            "path": "scripts/test/v4-hook-semantic-contract.test.mjs",
+            "testCase": "real V2 exact-output hookData is a fixed bounded swap witness without identity, auth or replay semantics"
+          }
+        ],
+        "negative": [
+          {
+            "path": "scripts/test/v4-hook-semantic-contract.test.mjs",
+            "testCase": "bounded swap witness rejects malformed shape, missing delta binding and invented credential semantics"
+          }
+        ]
+      },
+      "invalidationSet": [
+        "scripts/v4-hook-semantic-contract-core.mjs",
+        "scripts/test/v4-hook-semantic-contract.test.mjs",
+        "references/security-and-evidence.md",
+        "references/v4-protocol-mechanics.md"
+      ],
+      "projections": [
+        {
+          "path": "scripts/v4-hook-semantic-contract-core.mjs",
+          "literal": "V4_SWAP_WITNESS_BYTE_LENGTH_INVALID",
+          "expectedOccurrences": 1
+        },
+        {
+          "path": "scripts/test/v4-hook-semantic-contract.test.mjs",
+          "literal": "V4_SWAP_WITNESS_BYTE_LENGTH_INVALID",
+          "expectedOccurrences": 1
+        }
+      ]
+    },
+    {
+      "id": "v4.callback-identity-and-pool-isolation.v1",
+      "canonicalOwnerFile": "scripts/v4-hook-semantic-contract-core.mjs",
+      "findingCodes": [
+        "V4_CALLBACK_SENDER_AS_END_USER_FORBIDDEN",
+        "V4_CALLBACK_SENDER_ROLE_UNRESOLVED",
+        "V4_CROSS_POOL_NETTING_UNPROVEN",
+        "V4_CROSS_POOL_SUBSIDY_FORBIDDEN",
+        "V4_END_USER_AUTH_MODEL_UNRESOLVED",
+        "V4_HOOK_DATA_DOMAIN_BINDING_REQUIRED",
+        "V4_HOOK_DATA_IDENTITY_BINDING_MISSING",
+        "V4_HOOK_DATA_MALFORMED_REJECTION_REQUIRED",
+        "V4_HOOK_DATA_MODE_UNRESOLVED",
+        "V4_HOOK_DATA_REPLAY_PROTECTION_REQUIRED",
+        "V4_HOOK_DATA_VERSIONING_REQUIRED",
+        "V4_MSG_SENDER_ROLE_INVALID",
+        "V4_POOL_MANAGER_ADDRESS_UNRESOLVED",
+        "V4_POOL_MANAGER_AUTH_UNPROVEN",
+        "V4_POOL_MANAGER_BINDING_UNRESOLVED",
+        "V4_POOL_NAMESPACE_UNRESOLVED"
+      ],
+      "trigger": "A Uniswap v4 hook receives a callback, identifies an actor, consumes hookData, or shares state across pools.",
+      "severity": "blocker",
+      "tests": {
+        "positive": [
+          {
+            "path": "scripts/test/v4-hook-semantic-contract.test.mjs",
+            "testCase": "v4 semantic contract binds all 14 permissions to address bits and a complete source model"
+          }
+        ],
+        "negative": [
+          {
+            "path": "scripts/test/v4-hook-semantic-contract.test.mjs",
+            "testCase": "identity, PoolManager, cross-pool and hookData mutations fail closed"
+          }
+        ]
+      },
+      "invalidationSet": [
+        "scripts/v4-hook-semantic-contract-core.mjs",
+        "scripts/test/v4-hook-semantic-contract.test.mjs",
+        "references/security-and-evidence.md",
+        "references/v4-protocol-mechanics.md"
+      ],
+      "projections": [
+        {
+          "path": "scripts/v4-hook-semantic-contract-core.mjs",
+          "literal": "V4_POOL_MANAGER_AUTH_UNPROVEN",
+          "expectedOccurrences": 1
+        },
+        {
+          "path": "scripts/test/v4-hook-semantic-contract.test.mjs",
+          "literal": "V4_POOL_MANAGER_AUTH_UNPROVEN",
+          "expectedOccurrences": 1
+        }
+      ]
+    },
+    {
+      "id": "v4.deployment-preimage-and-permissions.v1",
+      "canonicalOwnerFile": "scripts/v4-hook-semantic-contract-core.mjs",
+      "findingCodes": [
+        "V4_DEPLOYMENT_EVIDENCE_REQUIRED",
+        "V4_DEPLOYMENT_HASH_UNRESOLVED",
+        "V4_DEPLOYMENT_POOL_MANAGER_UNRESOLVED",
+        "V4_DEPLOYMENT_PREIMAGE_UNRESOLVED",
+        "V4_EXPECTED_HOOK_ADDRESS_UNRESOLVED",
+        "V4_HOOK_ADDRESS_PERMISSION_MISMATCH",
+        "V4_HOOK_MINER_SALT_UNRESOLVED",
+        "V4_PERMISSION_MASK_MISMATCH"
+      ],
+      "trigger": "A v4 hook deployment binds CREATE2 preimage material, PoolManager, runtime code and all fourteen address permission bits.",
+      "severity": "hard",
+      "tests": {
+        "positive": [
+          {
+            "path": "scripts/test/v4-hook-semantic-contract.test.mjs",
+            "testCase": "v4 semantic contract binds all 14 permissions to address bits and a complete source model"
+          }
+        ],
+        "negative": [
+          {
+            "path": "scripts/test/v4-hook-semantic-contract.test.mjs",
+            "testCase": "permission-mask and expected-address mutations are detected independently"
+          }
+        ]
+      },
+      "invalidationSet": [
+        "scripts/v4-hook-semantic-contract-core.mjs",
+        "scripts/test/v4-hook-semantic-contract.test.mjs",
+        "references/compatibility-standard.md",
+        "references/v4-protocol-mechanics.md"
+      ],
+      "projections": [
+        {
+          "path": "scripts/v4-hook-semantic-contract-core.mjs",
+          "literal": "V4_PERMISSION_MASK_MISMATCH",
+          "expectedOccurrences": 1
+        },
+        {
+          "path": "scripts/test/v4-hook-semantic-contract.test.mjs",
+          "literal": "V4_PERMISSION_MASK_MISMATCH",
+          "expectedOccurrences": 1
+        }
+      ]
+    },
+    {
+      "id": "v4.profile-closed-contract.v1",
+      "canonicalOwnerFile": "scripts/v4-hook-semantic-contract-core.mjs",
+      "findingCodes": [
+        "V4_SEMANTIC_GROUP_FIELD_MISSING",
+        "V4_SEMANTIC_GROUP_MISSING",
+        "V4_SEMANTIC_PROFILE_FIELD_MISSING",
+        "V4_SEMANTIC_PROFILE_REQUIRED",
+        "V4_SEMANTIC_PROFILE_VERSION_INVALID",
+        "V4_SEMANTIC_PURPOSE_MISSING",
+        "V4_SEMANTIC_UNKNOWN_FIELD"
+      ],
+      "trigger": "A proposal or prototype declares a Uniswap v4 hook without the complete versioned closed semantic contract.",
+      "severity": "blocker",
+      "tests": {
+        "positive": [
+          {
+            "path": "scripts/test/v4-hook-semantic-contract.test.mjs",
+            "testCase": "v4 semantic contract binds all 14 permissions to address bits and a complete source model"
+          }
+        ],
+        "negative": [
+          {
+            "path": "scripts/test/v4-hook-semantic-contract.test.mjs",
+            "testCase": "permissions without a semantic profile stay reviewable at proposal and block prototype readiness"
+          }
+        ]
+      },
+      "invalidationSet": [
+        "scripts/v4-hook-semantic-contract-core.mjs",
+        "scripts/test/v4-hook-semantic-contract.test.mjs",
+        "references/security-and-evidence.md",
+        "references/v4-protocol-mechanics.md"
+      ],
+      "projections": [
+        {
+          "path": "scripts/v4-hook-semantic-contract-core.mjs",
+          "literal": "V4_SEMANTIC_PROFILE_FIELD_MISSING",
+          "expectedOccurrences": 1
+        },
+        {
+          "path": "scripts/test/v4-hook-semantic-contract.test.mjs",
+          "literal": "permissions without a semantic profile stay reviewable at proposal and block prototype readiness",
+          "expectedOccurrences": 1
+        }
+      ]
+    },
+    {
+      "id": "v4.reentrancy-routing-and-evidence.v1",
+      "canonicalOwnerFile": "scripts/v4-hook-semantic-contract-core.mjs",
+      "findingCodes": [
+        "V4_CROSS_FUNCTION_REENTRANCY_REVIEW_REQUIRED",
+        "V4_EVIDENCE_REFS_INVALID",
+        "V4_EXTERNAL_CALL_ORDER_REVIEW_REQUIRED",
+        "V4_IMPLEMENTATION_EVIDENCE_REQUIRED",
+        "V4_NESTED_UNLOCK_MODEL_UNRESOLVED",
+        "V4_REENTRANCY_MODEL_UNRESOLVED",
+        "V4_ROUTER_EVIDENCE_REQUIRED",
+        "V4_ROUTING_SURFACE_UNPROVEN"
+      ],
+      "trigger": "A v4 hook reaches prototype stage without closed reentrancy, routing parity, or executable evidence coverage.",
+      "severity": "blocker",
+      "tests": {
+        "positive": [
+          {
+            "path": "scripts/test/v4-hook-semantic-contract.test.mjs",
+            "testCase": "v4 semantic contract binds all 14 permissions to address bits and a complete source model"
+          }
+        ],
+        "negative": [
+          {
+            "path": "scripts/test/v4-hook-semantic-contract.test.mjs",
+            "testCase": "permissions without a semantic profile stay reviewable at proposal and block prototype readiness"
+          }
+        ]
+      },
+      "invalidationSet": [
+        "scripts/v4-hook-semantic-contract-core.mjs",
+        "scripts/test/v4-hook-semantic-contract.test.mjs",
+        "references/security-and-evidence.md",
+        "references/v4-sdk-integration.md"
+      ],
+      "projections": [
+        {
+          "path": "scripts/v4-hook-semantic-contract-core.mjs",
+          "literal": "V4_REENTRANCY_MODEL_UNRESOLVED",
+          "expectedOccurrences": 1
+        },
+        {
+          "path": "scripts/test/v4-hook-semantic-contract.test.mjs",
+          "literal": "v4 semantic contract binds all 14 permissions to address bits and a complete source model",
+          "expectedOccurrences": 1
+        }
+      ]
+    },
+    {
+      "id": "v4.swap-accounting-and-return-delta.v1",
+      "canonicalOwnerFile": "scripts/v4-hook-semantic-contract-core.mjs",
+      "findingCodes": [
+        "V4_BOUNDARY_VALUE_COVERAGE_REQUIRED",
+        "V4_CREDIT_BACKING_REQUIRED",
+        "V4_DELTA_SIGN_DERIVATION_REQUIRED",
+        "V4_PARTIAL_FILL_POLICY_UNRESOLVED",
+        "V4_RETURN_DELTA_BACKING_CONFLICT",
+        "V4_RETURN_DELTA_BACKING_UNRESOLVED",
+        "V4_RETURN_DELTA_CONSERVATION_REQUIRED",
+        "V4_RETURN_DELTA_EVIDENCE_REQUIRED",
+        "V4_RETURN_DELTA_HARD_BOUNDS_REQUIRED",
+        "V4_RETURN_DELTA_JUSTIFICATION_REQUIRED",
+        "V4_RETURN_DELTA_NOOP_ANALYSIS_REQUIRED",
+        "V4_RETURN_DELTA_PROFILE_PERMISSION_MISMATCH",
+        "V4_ROUNDING_MODEL_UNRESOLVED",
+        "V4_SETTLEMENT_SEQUENCE_UNRESOLVED",
+        "V4_SPECIFIED_CURRENCY_DERIVATION_REQUIRED",
+        "V4_SWAP_QUADRANT_MATRIX_INCOMPLETE",
+        "V4_UNLOCK_DELTA_CLOSURE_REQUIRED",
+        "V4_UNSPECIFIED_CURRENCY_DERIVATION_REQUIRED",
+        "V4_UNSUPPORTED_SWAP_SIDE_EFFECT_GUARD_REQUIRED"
+      ],
+      "trigger": "A hook transforms swap accounting, settlement, credits or return deltas in any direction and exactness quadrant.",
+      "severity": "blocker",
+      "tests": {
+        "positive": [
+          {
+            "path": "scripts/test/v4-hook-semantic-contract.test.mjs",
+            "testCase": "v4 semantic contract binds all 14 permissions to address bits and a complete source model"
+          }
+        ],
+        "negative": [
+          {
+            "path": "scripts/test/v4-hook-semantic-contract.test.mjs",
+            "testCase": "return-delta permissions require matching backing, bounds, quadrants and executable evidence"
+          }
+        ]
+      },
+      "invalidationSet": [
+        "scripts/v4-hook-semantic-contract-core.mjs",
+        "scripts/test/v4-hook-semantic-contract.test.mjs",
+        "references/security-and-evidence.md",
+        "references/v4-liquidity-and-state.md",
+        "references/v4-protocol-mechanics.md"
+      ],
+      "projections": [
+        {
+          "path": "scripts/v4-hook-semantic-contract-core.mjs",
+          "literal": "V4_RETURN_DELTA_BACKING_UNRESOLVED",
+          "expectedOccurrences": 1
+        },
+        {
+          "path": "scripts/test/v4-hook-semantic-contract.test.mjs",
+          "literal": "V4_RETURN_DELTA_BACKING_UNRESOLVED",
+          "expectedOccurrences": 1
+        }
+      ]
+    }
+  ]
+}

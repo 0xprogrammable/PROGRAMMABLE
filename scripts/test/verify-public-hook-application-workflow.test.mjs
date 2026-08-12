@@ -96,6 +96,17 @@ test("every third-party action is pinned to an immutable full commit", () => {
   }
 });
 
+test("Hookbuilder maintenance and trusted intake run on the current Node 24 LTS line", () => {
+  const setupNodePin = "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020";
+  assert.equal((normalMaintenanceJob.match(new RegExp(setupNodePin, "gu")) ?? []).length, 1);
+  assert.equal((publicJob.match(new RegExp(setupNodePin, "gu")) ?? []).length, 1);
+  assert.equal((postMergeJob.match(new RegExp(setupNodePin, "gu")) ?? []).length, 1);
+  for (const source of [normalMaintenanceJob, publicJob, postMergeJob]) {
+    assert.match(source, /node-version: 24/u);
+    assert.doesNotMatch(source, /node-version: 20/u);
+  }
+});
+
 test("candidate data is an exact base-repository PR merge in a bare blobless object store", () => {
   assert.match(candidateFetchStep, /--fetch-candidate/u);
   assert.match(candidateFetchStep, /--repository "\$\{\{ github\.repository \}\}"/u);
