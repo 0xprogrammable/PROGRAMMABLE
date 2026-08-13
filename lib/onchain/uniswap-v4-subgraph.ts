@@ -106,6 +106,7 @@ export type OfficialV4SubgraphOptions = {
   endpoint?: string;
   timeoutMs?: number;
   fetcher?: Fetcher;
+  signal?: AbortSignal;
 };
 
 export type OfficialV4LiquidityEvidenceV1 = Readonly<{
@@ -531,10 +532,18 @@ async function fetchPoolAnalytics(input: {
   poolIds: string[];
   timeoutMs: number;
   fetcher: Fetcher;
+  signal?: AbortSignal;
 }) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), input.timeoutMs);
+  const abortFromCaller = () => controller.abort(input.signal?.reason);
+  const timeout = setTimeout(
+    () => controller.abort(new Error("Uniswap v4 subgraph request timed out")),
+    input.timeoutMs,
+  );
+  if (input.signal?.aborted) abortFromCaller();
+  else input.signal?.addEventListener("abort", abortFromCaller, { once: true });
   try {
+    controller.signal.throwIfAborted();
     const response = await input.fetcher(input.endpoint, {
       method: "POST",
       headers: {
@@ -558,6 +567,7 @@ async function fetchPoolAnalytics(input: {
     return parseOfficialV4SubgraphResponse(JSON.parse(body));
   } finally {
     clearTimeout(timeout);
+    input.signal?.removeEventListener("abort", abortFromCaller);
   }
 }
 
@@ -595,7 +605,9 @@ async function fetchPoolAnalyticsCached(input: {
   poolIds: string[];
   timeoutMs: number;
   fetcher: Fetcher;
+  signal?: AbortSignal;
 }) {
+  input.signal?.throwIfAborted();
   const state = stateFor(input.fetcher);
   const now = Date.now();
   const key = cacheKey(input.poolIds);
@@ -625,6 +637,7 @@ async function fetchPoolAnalyticsCached(input: {
       return response;
     })
     .catch((error: unknown) => {
+      if (input.signal?.aborted) throw error;
       state.consecutiveFailures += 1;
       if (state.consecutiveFailures >= CIRCUIT_FAILURE_THRESHOLD) {
         state.openUntil = Date.now() + CIRCUIT_OPEN_MS;
@@ -866,6 +879,7 @@ export async function readOfficialV4LiquidityEvidence(
   },
   options: OfficialV4SubgraphOptions = {},
 ): Promise<readonly OfficialV4LiquidityEvidenceV1[]> {
+  options.signal?.throwIfAborted();
   const eligibleTokens = input.tokens.filter(supportsOfficialPoolTvlEvidence);
   if (eligibleTokens.length === 0) return [];
 
@@ -927,10 +941,12 @@ export async function readOfficialV4LiquidityEvidence(
               poolIds: requestedPoolIds,
               timeoutMs: boundedTimeout(options.timeoutMs),
               fetcher,
+              signal: options.signal,
             }).then((response) => ({ response, requestedPoolIds })),
           ),
       );
     } catch {
+      options.signal?.throwIfAborted();
       throw new OfficialV4LiquidityEvidenceReadError("coverage-incomplete");
     }
     for (const result of completed) {

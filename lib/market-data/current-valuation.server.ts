@@ -82,34 +82,70 @@ function withoutUnevidencedCurrentBitqueryValuation(
   return marketData ? { ...entry, marketData } : entry;
 }
 
-function deadline<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+function deadline<T>(
+  operation: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+  upstreamSignal?: AbortSignal,
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error("Current market evidence deadline exceeded")),
-      timeoutMs,
+    const controller = new AbortController();
+    let settled = false;
+    const cleanup = () => {
+      clearTimeout(timer);
+      upstreamSignal?.removeEventListener("abort", abortFromUpstream);
+    };
+    const settle = (
+      complete: (value: T | PromiseLike<T>) => void,
+      value: T,
+    ) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      complete(value);
+    };
+    const fail = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    const abort = (reason: unknown) => {
+      if (!controller.signal.aborted) controller.abort(reason);
+      fail(reason);
+    };
+    const abortFromUpstream = () => abort(
+      upstreamSignal?.reason ?? new Error("Current market evidence aborted"),
     );
-    promise.then(
+    const timer = setTimeout(() => abort(
+      new Error("Current market evidence deadline exceeded"),
+    ), timeoutMs);
+    if (upstreamSignal?.aborted) {
+      abortFromUpstream();
+      return;
+    }
+    upstreamSignal?.addEventListener("abort", abortFromUpstream, { once: true });
+    Promise.resolve().then(() => operation(controller.signal)).then(
       (value) => {
-        clearTimeout(timer);
-        resolve(value);
+        settle(resolve, value);
       },
       (error) => {
-        clearTimeout(timer);
-        reject(error);
+        fail(error);
       },
     );
   });
 }
 
 export async function settleCurrentEvidenceSnapshot<T>(input: Readonly<{
-  read: Promise<T | null>;
+  read: (signal: AbortSignal) => Promise<T | null>;
   requireComplete: boolean;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }>): Promise<T | null> {
   try {
     const snapshot = await deadline(
       input.read,
       input.timeoutMs ?? CURRENT_EVIDENCE_ROUTE_DEADLINE_MS,
+      input.signal,
     );
     if (snapshot === null && input.requireComplete) {
       throw new Error("Current market evidence reference head is unavailable");
@@ -129,6 +165,30 @@ function knownLiquidityIneligible(token: LauncherToken | undefined): boolean {
   if (!activeDepth || !/^(?:0|[1-9]\d*)$/u.test(activeDepth)) return false;
   return BigInt(activeDepth) <
     BigInt(MARKET_DATA_MINIMUM_FDV_LIQUIDITY_USD_WAD);
+}
+
+function exactStateAtSnapshot(
+  token: LauncherToken | undefined,
+  snapshot: ExploreSnapshot,
+) {
+  const state = token?.liveMarketStateEvidence;
+  return state !== undefined &&
+    state.blockNumber === snapshot.blockNumber &&
+    state.blockHash.toLowerCase() === snapshot.blockHash.toLowerCase()
+    ? state
+    : undefined;
+}
+
+function exactPriceAtSnapshot(
+  token: LauncherToken | undefined,
+  snapshot: ExploreSnapshot,
+) {
+  const price = token?.liveMarketPriceEvidence;
+  return price !== undefined &&
+    price.blockNumber === snapshot.blockNumber &&
+    price.blockHash.toLowerCase() === snapshot.blockHash.toLowerCase()
+    ? price
+    : undefined;
 }
 
 function baseValuedEntry(
@@ -152,6 +212,41 @@ function baseValuedEntry(
           : "source-unavailable",
     },
   };
+}
+
+/**
+ * Adds Bitquery trades, volume and chart data after a page has already been
+ * ordered from exact current evidence. The independently proven valuation is
+ * preserved, while every numeric Bitquery valuation remains sanitized.
+ */
+export async function attachBitqueryMarketDataToValuedEntries(input: Readonly<{
+  entries: readonly ValuedExploreEntry[];
+  marketByToken:
+    | ReadonlyMap<string, TokenMarketDataV1>
+    | Promise<ReadonlyMap<string, TokenMarketDataV1>>;
+  maximumValuationAgeMs?: number;
+  now?: Date;
+}>): Promise<ValuedExploreEntry[]> {
+  const marketByToken = await input.marketByToken;
+  return input.entries.map((entry) => {
+    const withMarketData = baseValuedEntry(entry, marketByToken, {
+      maximumValuationAgeMs: input.maximumValuationAgeMs,
+      now: input.now,
+    });
+    const withPreservedValuation = {
+      ...withMarketData,
+      valuation: entry.valuation,
+    } as ValuedExploreEntry;
+    const reason = entry.valuation.status === "unavailable" &&
+        entry.valuation.reason === "liquidity-unavailable"
+      ? "liquidity-unavailable" as const
+      : "source-unavailable" as const;
+    return withoutUnevidencedCurrentBitqueryValuation(
+      withPreservedValuation,
+      false,
+      reason,
+    );
+  });
 }
 
 function classicNativeToken(entry: ExploreEntry): entry is Extract<
@@ -181,6 +276,7 @@ export async function valueExploreEntriesWithCurrentEvidence(input: Readonly<{
   requireCompleteLiquidityCoverage?: boolean;
   allowHistoricalBitqueryFallback?: boolean;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }>): Promise<ValuedExploreEntry[]> {
   const candidates = input.entries.filter(classicNativeToken);
   const timeoutMs = input.timeoutMs ?? CURRENT_EVIDENCE_ROUTE_DEADLINE_MS;
@@ -202,7 +298,7 @@ export async function valueExploreEntriesWithCurrentEvidence(input: Readonly<{
     deployment !== null;
 
   const currentEvidenceOutcome = canReadCurrentEvidence
-    ? deadline((async () => {
+    ? deadline(async (signal) => {
         const operationalSnapshotOutcome = await operationalSnapshotRead;
         if (operationalSnapshotOutcome.status === "rejected") {
           throw operationalSnapshotOutcome.error;
@@ -213,33 +309,103 @@ export async function valueExploreEntriesWithCurrentEvidence(input: Readonly<{
             "Current market evidence reference head is unavailable",
           );
         }
-        const liquidityRead = readOfficialV4LiquidityEvidence({
-          tokens: candidates,
-          referenceHead: {
-            chainId: 1,
-            blockNumber: operationalSnapshot.blockNumber,
-            blockHash: operationalSnapshot.blockHash,
-          },
-          now: input.now,
-        });
         const pricedSnapshotRead = withSameBlockEthUsdQuote({
           deployment,
           snapshot: operationalSnapshot,
+          signal,
         });
-        let liquidityCoverageFailed = false;
-        const [liquidityEvidence, pricedSnapshot] = await Promise.all([
-          input.requireCompleteLiquidityCoverage
-            ? liquidityRead
-            : liquidityRead.catch(
-                () => {
-                  liquidityCoverageFailed = true;
-                  return [] as readonly OfficialV4LiquidityEvidenceV1[];
-                },
-              ),
+        // StateView and Chainlink are both bound to the same confirmed block.
+        // Start them together; the first StateView pass deliberately carries
+        // no quote, then the exact-block cache applies the verified quote
+        // without another provider read.
+        const stateSnapshotRead = enrichTokensWithAlchemyPoolState({
+          deployment,
+          snapshot: operationalSnapshot,
+          tokens: candidates,
+          signal,
+        });
+        const [pricedSnapshot, stateTokens] = await Promise.all([
           input.requireCompleteLiquidityCoverage
             ? pricedSnapshotRead
             : pricedSnapshotRead.catch(() => null),
+          input.requireCompleteLiquidityCoverage
+            ? stateSnapshotRead
+            : stateSnapshotRead.catch(() => [] as LauncherToken[]),
         ]);
+        if (!pricedSnapshot) {
+          return { status: "source-unavailable" as const };
+        }
+        const stateByToken = new Map(
+          stateTokens.map((token) => [token.tokenAddress.toLowerCase(), token]),
+        );
+        const stateCoverageIncomplete = candidates.some((candidate) =>
+          exactStateAtSnapshot(
+            stateByToken.get(candidate.tokenAddress.toLowerCase()),
+            operationalSnapshot,
+          ) === undefined
+        );
+        if (stateCoverageIncomplete) {
+          if (input.requireCompleteLiquidityCoverage) {
+            throw new Error("Current StateView market evidence is incomplete");
+          }
+          return { status: "source-unavailable" as const };
+        }
+
+        const pricedTokens = await enrichTokensWithAlchemyPoolState({
+          deployment,
+          snapshot: pricedSnapshot,
+          tokens: candidates,
+          signal,
+        }).catch((error) => {
+          if (input.requireCompleteLiquidityCoverage) throw error;
+          return [] as LauncherToken[];
+        });
+        const pricedByToken = new Map(
+          pricedTokens.map((token) => [
+            token.tokenAddress.toLowerCase(),
+            token,
+          ]),
+        );
+        const priceCoverageIncomplete = candidates.some((candidate) => {
+          const priced = pricedByToken.get(
+            candidate.tokenAddress.toLowerCase(),
+          );
+          const state = exactStateAtSnapshot(priced, operationalSnapshot);
+          return state === undefined ||
+            (state.activeLiquidity !== "0" &&
+              exactPriceAtSnapshot(priced, operationalSnapshot) === undefined);
+        });
+        if (priceCoverageIncomplete) {
+          if (input.requireCompleteLiquidityCoverage) {
+            throw new Error("Current StateView market evidence is incomplete");
+          }
+          return { status: "source-unavailable" as const };
+        }
+
+        const liquidityCandidates = candidates.filter((candidate) => {
+          const priced = pricedByToken.get(candidate.tokenAddress.toLowerCase());
+          return exactPriceAtSnapshot(priced, operationalSnapshot) !== undefined &&
+            !knownLiquidityIneligible(priced);
+        });
+        const liquidityRequestedPools = new Set(
+          liquidityCandidates.map((candidate) => candidate.poolId.toLowerCase()),
+        );
+        let liquidityCoverageFailed = false;
+        const liquidityEvidence = liquidityCandidates.length === 0
+          ? [] as readonly OfficialV4LiquidityEvidenceV1[]
+          : await readOfficialV4LiquidityEvidence({
+              tokens: liquidityCandidates,
+              referenceHead: {
+                chainId: 1,
+                blockNumber: operationalSnapshot.blockNumber,
+                blockHash: operationalSnapshot.blockHash,
+              },
+              now: input.now,
+            }, { signal }).catch((error) => {
+              if (input.requireCompleteLiquidityCoverage) throw error;
+              liquidityCoverageFailed = true;
+              return [] as readonly OfficialV4LiquidityEvidenceV1[];
+            });
         if (liquidityCoverageFailed) {
           return { status: "source-unavailable" as const };
         }
@@ -249,53 +415,13 @@ export async function valueExploreEntriesWithCurrentEvidence(input: Readonly<{
             evidence,
           ]),
         );
-        const priceCandidates = candidates.filter((entry) =>
-          liquidityByPool.has(entry.poolId.toLowerCase()),
-        );
-        const pricedTokens = pricedSnapshot && priceCandidates.length > 0
-          ? await enrichTokensWithAlchemyPoolState({
-              deployment,
-              snapshot: pricedSnapshot,
-              tokens: priceCandidates,
-            }).catch((error) => {
-              if (input.requireCompleteLiquidityCoverage) throw error;
-              return [] as LauncherToken[];
-            })
-          : [];
-        const pricedByToken = new Map(
-          pricedTokens.map((token) => [
-            token.tokenAddress.toLowerCase(),
-            token,
-          ]),
-        );
-        const stateCoverageIncomplete =
-          input.requireCompleteLiquidityCoverage &&
-          priceCandidates.some((candidate) => {
-            const priced = pricedByToken.get(
-              candidate.tokenAddress.toLowerCase(),
-            );
-            const state = priced?.liveMarketStateEvidence;
-            const price = priced?.liveMarketPriceEvidence;
-            const exactState = state !== undefined &&
-              state.blockNumber === operationalSnapshot.blockNumber &&
-              state.blockHash.toLowerCase() ===
-                operationalSnapshot.blockHash.toLowerCase();
-            const exactPrice = price !== undefined &&
-              price.blockNumber === operationalSnapshot.blockNumber &&
-              price.blockHash.toLowerCase() ===
-                operationalSnapshot.blockHash.toLowerCase();
-            return !exactState ||
-              (state.activeLiquidity !== "0" && !exactPrice);
-          });
-        if (stateCoverageIncomplete) {
-          throw new Error("Current StateView market evidence is incomplete");
-        }
         return {
           status: "complete" as const,
           liquidityByPool,
+          liquidityRequestedPools,
           pricedByToken,
         };
-      })(), timeoutMs).then(
+      }, timeoutMs, input.signal).then(
       (value) => ({ status: "fulfilled" as const, value }),
       (error: unknown) => ({ status: "rejected" as const, error }),
     )
@@ -330,7 +456,8 @@ export async function valueExploreEntriesWithCurrentEvidence(input: Readonly<{
     return baseEntries;
   }
   if (outcome.value.status === "source-unavailable") return baseEntries;
-  const { liquidityByPool, pricedByToken } = outcome.value;
+  const { liquidityByPool, liquidityRequestedPools, pricedByToken } =
+    outcome.value;
   return marketEntries.map((entry) => {
     if (entry.exploreKind !== "token") return entry;
     const priced = pricedByToken.get(entry.tokenAddress.toLowerCase());
@@ -341,14 +468,17 @@ export async function valueExploreEntriesWithCurrentEvidence(input: Readonly<{
       currentEntry,
       liquidityByPool.get(entry.poolId.toLowerCase()),
     );
-    if (!liquidityByPool.has(entry.poolId.toLowerCase())) {
+    if (knownLiquidityIneligible(priced)) {
       return withoutUnevidencedCurrentBitqueryValuation(
         valued,
         input.allowHistoricalBitqueryFallback === true,
         "liquidity-unavailable",
       );
     }
-    if (knownLiquidityIneligible(priced)) {
+    if (
+      liquidityRequestedPools.has(entry.poolId.toLowerCase()) &&
+      !liquidityByPool.has(entry.poolId.toLowerCase())
+    ) {
       return withoutUnevidencedCurrentBitqueryValuation(
         valued,
         input.allowHistoricalBitqueryFallback === true,

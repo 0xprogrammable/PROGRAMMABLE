@@ -42,6 +42,7 @@ const CHART_CACHE_CURRENT_MAX_AGE_MS = 2_000;
 const CHART_CACHE_MAX_AGE_MS = 2 * 60 * 1_000;
 const CHART_READ_TIMEOUT_MS = 12_000;
 const MAXIMUM_CHART_POINTS = 80;
+const MAXIMUM_ALL_HISTORY_CHART_POINTS = 32;
 const SUPPLY_PRICE_MAXIMUM_DISTANCE_MS = 24 * 60 * 60 * 1_000;
 const INDEXED_PRICE_MAXIMUM_DISTANCE_MS = MARKET_DATA_CURRENT_MAX_AGE_MS;
 const MAXIMUM_FUTURE_SKEW_MS = 60_000;
@@ -1036,6 +1037,7 @@ function marketChartQuery(
     unit: "minutes" | "hours" | "days";
   }>,
 ) {
+  const pointLimit = chartPointLimit(range);
   const definitions = [
     "$poolId: String!",
     "$tokenAddress: String!",
@@ -1058,7 +1060,7 @@ function marketChartQuery(
   return `query ProgrammableMarketChart(${definitions}) {
     EVM(network: eth${dataset}) {
       chart: DEXTradeByTokens(
-        limit: { count: ${MAXIMUM_CHART_POINTS} }
+        limit: { count: ${pointLimit} }
         orderBy: { descendingByField: "Block_Bucket" }
         where: ${where}
       ) {
@@ -1096,7 +1098,7 @@ function chartInterval(
   if (range === "1w") return { count: 3, unit: "hours" };
   const duration = now.getTime() - since.getTime();
   const minimumBucketMs = Math.floor(
-    duration / (MAXIMUM_CHART_POINTS - 1),
+    duration / (chartPointLimit(range) - 1),
   ) + 1;
   if (minimumBucketMs <= 60 * 60 * 1_000) {
     return {
@@ -1114,6 +1116,12 @@ function chartInterval(
     count: Math.ceil(minimumBucketMs / (24 * 60 * 60 * 1_000)),
     unit: "days",
   };
+}
+
+function chartPointLimit(range: MarketChartV1["range"]): number {
+  return range === "all"
+    ? MAXIMUM_ALL_HISTORY_CHART_POINTS
+    : MAXIMUM_CHART_POINTS;
 }
 
 function parseMarketChartPoint(
