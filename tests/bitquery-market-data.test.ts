@@ -18,6 +18,7 @@ import {
   isTokenMarketDataV1,
   marketDataStatusLabel,
   selectPrimaryMarketPoolV1,
+  type MarketChartIdentityV1,
   type MarketDataIdentityV1,
 } from "../lib/market-data/market-data-v1";
 import { exploreEntriesMarketIdentitiesV1 } from
@@ -26,31 +27,47 @@ import type { ExploreEntry } from "../lib/tokens";
 
 const OAUTH_TOKEN = "ory_at_test_market_data_token_123456";
 const WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
-const PCAN: MarketDataIdentityV1 = {
+const NATIVE_ETH = "0x0000000000000000000000000000000000000000";
+const PCAN: MarketChartIdentityV1 = {
   chainId: "1",
   tokenAddress: "0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce",
+  quoteAddress: NATIVE_ETH,
   poolId: "0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229",
   protocol: "uniswap_v4",
 };
-const CLASSIC: MarketDataIdentityV1 = {
+const CLASSIC: MarketChartIdentityV1 = {
   chainId: "1",
   tokenAddress: "0x3f2a426365e7a438a7f9f758766cff419d207d51",
+  quoteAddress: NATIVE_ETH,
   poolId: "0x9b8b0aa54cbf844b8534cfb817a0da47c039e67e472d239308f6a47e487e0619",
   protocol: "uniswap_v4",
 };
-const SECOND_CUSTOM: MarketDataIdentityV1 = {
+const SECOND_CUSTOM: MarketChartIdentityV1 = {
   chainId: "1",
   tokenAddress: "0x1111111111111111111111111111111111111111",
+  quoteAddress: WETH,
   poolId: `0x${"33".repeat(32)}`,
   protocol: "uniswap_v4",
 };
 
-function generatedIdentity(index: number): MarketDataIdentityV1 {
+function generatedIdentity(index: number): MarketChartIdentityV1 {
   return {
     chainId: "1",
     tokenAddress: `0x${index.toString(16).padStart(40, "0")}`,
+    quoteAddress: WETH,
     poolId: `0x${index.toString(16).padStart(64, "0")}`,
     protocol: "uniswap_v4",
+  };
+}
+
+function marketIdentity(
+  identity: MarketChartIdentityV1,
+): MarketDataIdentityV1 {
+  return {
+    chainId: identity.chainId,
+    tokenAddress: identity.tokenAddress,
+    poolId: identity.poolId,
+    protocol: identity.protocol,
   };
 }
 
@@ -112,7 +129,7 @@ function tradeRow(input: Readonly<{
 }
 
 function chartBucketRow(input: Readonly<{
-  identity?: MarketDataIdentityV1;
+  identity?: MarketChartIdentityV1;
   block?: string;
   bucket?: string;
   time?: string;
@@ -133,8 +150,9 @@ function chartBucketRow(input: Readonly<{
       Currency: { SmartContract: identity.tokenAddress },
       Side: {
         Currency: {
-          SmartContract: input.quoteAddress ?? WETH,
-          Symbol: input.quoteSymbol ?? "WETH",
+          SmartContract: input.quoteAddress ?? identity.quoteAddress,
+          Symbol: input.quoteSymbol ??
+            (identity.quoteAddress === NATIVE_ETH ? "ETH" : "WETH"),
         },
       },
     },
@@ -164,7 +182,7 @@ function chartResponse(input: Readonly<{
 }
 
 function liquidityRow(
-  identity = PCAN,
+  identity: MarketDataIdentityV1 = PCAN,
   options: Readonly<{
     omitFirstUsd?: boolean;
     omitSecondUsd?: boolean;
@@ -445,7 +463,7 @@ describe("Bitquery-only market data", () => {
       status: "current",
       primaryPoolId: PCAN.poolId,
       pools: [{
-        identity: PCAN,
+        identity: marketIdentity(PCAN),
         status: "current",
         latestTrade: {
           priceUsdWad: "250000000000000000",
@@ -616,7 +634,7 @@ describe("Bitquery-only market data", () => {
     });
     const pool = values.get(PCAN.tokenAddress)?.pools[0];
 
-    expect(pool?.identity).toEqual(PCAN);
+    expect(pool?.identity).toEqual(marketIdentity(PCAN));
     expect(pool?.liquidity?.valueUsdWad).toBe("9999000000000000000000");
     expect(pool?.valuation).toEqual({
       status: "unavailable",
@@ -886,7 +904,7 @@ describe("Bitquery-only market data", () => {
       now: new Date("2026-08-11T14:02:00.000Z"),
     });
     expect(values.get(identity.tokenAddress)?.pools[0]?.identity).toEqual(
-      identity,
+      marketIdentity(identity),
     );
   });
 
@@ -953,8 +971,12 @@ describe("Bitquery-only market data", () => {
     });
 
     expect(fetchImpl).toHaveBeenCalledTimes(3);
-    expect(values.get(PCAN.tokenAddress)?.pools[0]?.identity).toEqual(PCAN);
-    expect(values.get(CLASSIC.tokenAddress)?.pools[0]?.identity).toEqual(CLASSIC);
+    expect(values.get(PCAN.tokenAddress)?.pools[0]?.identity).toEqual(
+      marketIdentity(PCAN),
+    );
+    expect(values.get(CLASSIC.tokenAddress)?.pools[0]?.identity).toEqual(
+      marketIdentity(CLASSIC),
+    );
   });
 
   it("bounds historical USD price aliases without dropping later pools", async () => {
@@ -1382,7 +1404,7 @@ describe("Bitquery-only market data", () => {
 
   it("prefers a traded pool over a higher-liquidity pool with no trades", () => {
     const traded = {
-      identity: PCAN,
+      identity: marketIdentity(PCAN),
       source: "bitquery" as const,
       status: "current" as const,
       quality: "partial" as const,
@@ -1413,7 +1435,9 @@ describe("Bitquery-only market data", () => {
         reason: "waiting-for-first-trade" as const,
       },
     };
-    expect(selectPrimaryMarketPoolV1([waiting, traded])?.identity).toEqual(PCAN);
+    expect(selectPrimaryMarketPoolV1([waiting, traded])?.identity).toEqual(
+      marketIdentity(PCAN),
+    );
   });
 
   it("omits a conflicted PoolId from market reads without deleting launch identities", () => {
@@ -1465,9 +1489,13 @@ describe("Bitquery OHLCV chart and server stream", () => {
         expect(request.query).toContain(
           "Currency: { SmartContract: { is: $tokenAddress } }",
         );
+        expect(request.query).toContain(
+          "Side: { Currency: { SmartContract: { is: $quoteAddress } } }",
+        );
         expect(request.variables).toMatchObject({
           poolId: PCAN.poolId,
           tokenAddress: PCAN.tokenAddress,
+          quoteAddress: "0x",
         });
         expect(request.variables.since).toMatch(/^2026-0[78]-/u);
         return jsonResponse(chartResponse({ points: [], total: "0" }));
@@ -1521,6 +1549,7 @@ describe("Bitquery OHLCV chart and server stream", () => {
       expect(request.variables).toMatchObject({
         poolId: PCAN.poolId,
         tokenAddress: PCAN.tokenAddress,
+        quoteAddress: "0x",
         till: "2026-08-11T14:02:00.000Z",
       });
       expect(request.query).not.toContain("Trading {");
@@ -1530,7 +1559,6 @@ describe("Bitquery OHLCV chart and server stream", () => {
     const chart = await readBitqueryMarketChartV1({
       identity: PCAN,
       range: "1h",
-      valuation: { status: "unavailable", reason: "source-unavailable" },
       fetchImpl,
       token: OAUTH_TOKEN,
       now: new Date("2026-08-11T14:02:00.000Z"),
@@ -1558,6 +1586,35 @@ describe("Bitquery OHLCV chart and server stream", () => {
     expect(isMarketChartV1(chart)).toBe(true);
   });
 
+  it("fails closed when a provider row carries a different quote currency", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(chartResponse({
+      points: [chartBucketRow({
+        quoteAddress: WETH,
+        quoteSymbol: "WETH",
+      })],
+      total: "3",
+    }))) as typeof fetch;
+
+    const chart = await readBitqueryMarketChartV1({
+      identity: PCAN,
+      range: "1h",
+      fetchImpl,
+      token: OAUTH_TOKEN,
+      now: new Date("2026-08-11T14:02:00.000Z"),
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(chart).toMatchObject({
+      readStatus: "cache-fallback",
+      status: "unavailable",
+      identity: PCAN,
+      points: [],
+      swapCount: 0,
+      truncated: false,
+    });
+    expect(isMarketChartV1(chart)).toBe(true);
+  });
+
   it("uses order-independent bucket prices when multiple swaps share a block", async () => {
     const fetchImpl = vi.fn(async (
       _url: string | URL | Request,
@@ -1581,7 +1638,6 @@ describe("Bitquery OHLCV chart and server stream", () => {
     const chart = await readBitqueryMarketChartV1({
       identity: PCAN,
       range: "1h",
-      valuation: { status: "unavailable", reason: "source-unavailable" },
       fetchImpl,
       token: OAUTH_TOKEN,
       now: new Date("2026-08-11T14:02:00.000Z"),
@@ -1634,7 +1690,6 @@ describe("Bitquery OHLCV chart and server stream", () => {
       identity: PCAN,
       range: "all",
       historyStart,
-      valuation: { status: "unavailable", reason: "source-unavailable" },
       fetchImpl,
       token: OAUTH_TOKEN,
       now: new Date("2026-08-11T14:02:00.000Z"),
@@ -1669,7 +1724,6 @@ describe("Bitquery OHLCV chart and server stream", () => {
     await expect(readBitqueryMarketChartV1({
       identity: PCAN,
       range: "all",
-      valuation: { status: "unavailable", reason: "source-unavailable" },
       fetchImpl: vi.fn() as typeof fetch,
       token: OAUTH_TOKEN,
       now: new Date("2026-08-11T14:02:00.000Z"),
@@ -1686,7 +1740,6 @@ describe("Bitquery OHLCV chart and server stream", () => {
       identity: PCAN,
       range: "all",
       historyStart: "2026-07-29T00:00:00.000Z",
-      valuation: { status: "unavailable", reason: "source-unavailable" },
       fetchImpl,
       token: OAUTH_TOKEN,
       now: new Date("2026-08-11T14:02:00.000Z"),
@@ -1712,7 +1765,6 @@ describe("Bitquery OHLCV chart and server stream", () => {
       identity: PCAN,
       range: "all",
       historyStart: "2026-07-29T00:00:00.000Z",
-      valuation: { status: "unavailable", reason: "source-unavailable" },
       fetchImpl,
       token: OAUTH_TOKEN,
       now: new Date("2026-08-11T14:02:00.000Z"),
@@ -1736,7 +1788,6 @@ describe("Bitquery OHLCV chart and server stream", () => {
     const chart = await readBitqueryMarketChartV1({
       identity: PCAN,
       range: "1d",
-      valuation: { status: "unavailable", reason: "source-unavailable" },
       fetchImpl,
       token: OAUTH_TOKEN,
       now: new Date("2026-08-11T14:02:00.000Z"),
@@ -1778,7 +1829,6 @@ describe("Bitquery OHLCV chart and server stream", () => {
       const pending = readBitqueryMarketChartV1({
         identity: PCAN,
         range: "1d",
-        valuation: { status: "unavailable", reason: "source-unavailable" },
         fetchImpl,
         token: OAUTH_TOKEN,
         now: new Date("2026-08-11T14:02:00.000Z"),
@@ -1869,7 +1919,7 @@ describe("Bitquery OHLCV chart and server stream", () => {
       readStatus: "cache-fallback",
       status: "partial",
       generatedAt: live.generatedAt,
-      valuation: { status: "available", freshness: "stale" },
+      valuation: { status: "unavailable", reason: "source-unavailable" },
     });
     expect(fallback.points).toHaveLength(1);
     expect(isMarketChartV1(fallback)).toBe(true);
@@ -1904,58 +1954,7 @@ describe("Bitquery OHLCV chart and server stream", () => {
     expect(second).toEqual(first);
   });
 
-  it("does not reuse a chart across different canonical valuations", async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse(chartResponse({
-      points: [chartBucketRow({
-        block: "25740000",
-        time: "2026-08-11T14:01:00.000Z",
-        price: "1",
-        count: "1",
-      })],
-      total: "1",
-    }))) as typeof fetch;
-    const firstValuation = {
-      status: "available",
-      metric: "fdv",
-      supplyBasis: "total",
-      valueUsdWad: "100",
-      fdvUsdWad: "100",
-      totalSupply: "1000",
-      asOfTime: "2026-08-11T14:01:00.000Z",
-      freshness: "current",
-    } as const;
-    const secondValuation = {
-      ...firstValuation,
-      valueUsdWad: "200",
-      fdvUsdWad: "200",
-    } as const;
-    const first = await readBitqueryMarketChartV1({
-      identity: PCAN,
-      range: "1h",
-      valuation: firstValuation,
-      fetchImpl,
-      token: OAUTH_TOKEN,
-      now: new Date("2026-08-11T14:02:00.000Z"),
-    });
-    const second = await readBitqueryMarketChartV1({
-      identity: PCAN,
-      range: "1h",
-      valuation: secondValuation,
-      fetchImpl,
-      token: OAUTH_TOKEN,
-      now: new Date("2026-08-11T14:02:01.000Z"),
-    });
-
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
-    expect(first.valuation).toEqual(firstValuation);
-    expect(second.valuation).toEqual(secondValuation);
-  });
-
-  it("omits redundant supply pricing when canonical valuation is provided", async () => {
-    const valuation = {
-      status: "unavailable",
-      reason: "source-unavailable",
-    } as const;
+  it("never queries supply or owns a current valuation", async () => {
     const fetchImpl = vi.fn(async (
       _url: string | URL | Request,
       init?: RequestInit,
@@ -1977,14 +1976,16 @@ describe("Bitquery OHLCV chart and server stream", () => {
     const chart = await readBitqueryMarketChartV1({
       identity: PCAN,
       range: "1h",
-      valuation,
       fetchImpl,
       token: OAUTH_TOKEN,
       now: new Date("2026-08-11T14:02:00.000Z"),
     });
 
     expect(fetchImpl).toHaveBeenCalledTimes(1);
-    expect(chart.valuation).toEqual(valuation);
+    expect(chart.valuation).toEqual({
+      status: "unavailable",
+      reason: "source-unavailable",
+    });
     expect(chart.points).toHaveLength(1);
   });
 
@@ -2194,7 +2195,7 @@ describe("Bitquery OHLCV chart and server stream", () => {
       }),
     });
     expect(onData).toHaveBeenCalledWith(expect.objectContaining({
-      identity: PCAN,
+      identity: marketIdentity(PCAN),
       market: expect.objectContaining({ source: "bitquery", status: "current" }),
     }));
     expect(onData).toHaveBeenCalledTimes(1);

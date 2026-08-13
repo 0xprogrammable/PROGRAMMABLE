@@ -729,6 +729,9 @@ describe("read-model production deploy policy", () => {
       'goldenChart.schemaVersion !== "programmable.market-chart.v1"',
     );
     expect(workflow).toContain(
+      "goldenChart.identity?.quoteAddress !== goldenQuoteAddress",
+    );
+    expect(workflow).toContain(
       "staged Bitquery Highest FDV is not monotonically descending",
     );
     expect(workflow).toContain(
@@ -800,6 +803,14 @@ describe("read-model production deploy policy", () => {
     expect(workflow).toContain(
       "goldenChart.asOfTime !== goldenChart.points.at(-1)?.observedAt",
     );
+    expect(workflow).toContain(
+      'goldenChart.valuation?.status !== "unavailable"',
+    );
+    expect(workflow).toContain(
+      'goldenChart.valuation?.reason !== "source-unavailable"',
+    );
+    expect(workflow).toContain('"fdvUsdWad" in goldenChart');
+    expect(workflow).toContain('"valuationMetric" in goldenChart');
     expect(workflow).toContain(
       'point?.valueSemantics !== "period-median"',
     );

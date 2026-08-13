@@ -24,6 +24,8 @@ const GOLDEN_TOKEN_ADDRESS =
   "0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce";
 const GOLDEN_POOL_ID =
   "0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229";
+const GOLDEN_QUOTE_ADDRESS =
+  "0x0000000000000000000000000000000000000000";
 const GOLDEN_DETAIL_PATH = `/api/explore/token?address=${GOLDEN_TOKEN_ADDRESS}`;
 const GOLDEN_SEARCH_PATH =
   `/api/explore?limit=20&page=1&q=${GOLDEN_TOKEN_ADDRESS}&sort=market-cap`;
@@ -296,15 +298,18 @@ function exactGoldenChart(response) {
     chart.readStatus !== "live" ||
     !currentMarketTime(chart.generatedAt) ||
     chart.address?.toLowerCase() !== GOLDEN_TOKEN_ADDRESS ||
+    chart.identity?.chainId !== "1" ||
+    chart.identity?.tokenAddress?.toLowerCase() !== GOLDEN_TOKEN_ADDRESS ||
     chart.identity?.poolId !== GOLDEN_POOL_ID ||
+    chart.identity?.quoteAddress !== GOLDEN_QUOTE_ADDRESS ||
+    chart.identity?.protocol !== "uniswap_v4" ||
     !["ready", "insufficient-history", "partial"].includes(chart.status) ||
     !Array.isArray(chart.points) ||
     chart.points.length < 1 ||
-    chart.valuation?.metric !== "fdv" ||
-    chart.valuation?.supplyBasis !== "total" ||
-    !["current", "stale"].includes(chart.valuation?.freshness) ||
-    (chart.valuation?.freshness === "current" &&
-      !currentMarketTime(chart.valuation?.asOfTime)) ||
+    chart.valuation?.status !== "unavailable" ||
+    chart.valuation?.reason !== "source-unavailable" ||
+    "fdvUsdWad" in chart ||
+    "valuationMetric" in chart ||
     chart.asOfTime !== chart.points.at(-1)?.observedAt ||
     response.headers.marketAsOf !== chart.asOfTime ||
     !validMarketTime(chart.asOfTime)

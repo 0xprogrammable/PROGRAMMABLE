@@ -151,7 +151,7 @@ describe("token detail layout", () => {
     expect(detailSource).not.toMatch(/<h2>\s*Trade \$/i);
   });
 
-  it("uses only typed chart FDV while labeling total-supply value as FDV", () => {
+  it("keeps canonical detail valuation independent from chart history", () => {
     expect(detailSource).toContain(
       'const currentLabel = isMarketCap ? "Market cap" : "FDV";',
     );
@@ -164,6 +164,18 @@ describe("token detail layout", () => {
     expect(chartSource).not.toContain("payload.marketCap");
     expect(chartSource).not.toContain("payload.fdvUsdWad ?? fdvUsdWad");
     expect(chartSource).not.toMatch(/marketCap(?:Eth|Usd)\w*\?: string/);
+    expect(detailSource).not.toContain("chartFdv");
+    expect(detailSource).not.toContain("setChartFdv");
+    expect(detailSource).not.toContain("onFdvChange");
+    expect(chartSource).not.toContain("onFdvChange");
+    expect(chartSource).not.toContain("getChartFdvAtPoint");
+    expect(chartSource).not.toContain("function withoutChartFdv");
+    expect(chartSource).not.toContain("fdvUsdWad?: string");
+    expect(chartSource).not.toContain("valuationMetric?:");
+    expect(chartSource).toContain('"fdvUsdWad" in value');
+    expect(chartSource).toContain(
+      'value.valuation.reason !== "source-unavailable"',
+    );
   });
 
   it("omits empty team-profile filler copy", () => {

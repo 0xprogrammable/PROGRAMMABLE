@@ -25,7 +25,6 @@ import {
 import {
   TokenPriceChart,
   preloadTokenChart,
-  type TokenChartFdv,
   type TokenChartVolume,
 } from "@/components/token-price-chart";
 import { CustomMarketTrade } from "@/components/custom-market-trade";
@@ -1219,7 +1218,6 @@ function TokenDetailContent({
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState("");
   const [chartVolume, setChartVolume] = useState<TokenChartVolume | null>(null);
-  const [chartFdv, setChartFdv] = useState<TokenChartFdv | null>(null);
   const [tradeFlow, setTradeFlow] = useState<TradeFlow>({
     phase: "form",
   });
@@ -1257,14 +1255,10 @@ function TokenDetailContent({
   const metrics = useMemo(() => {
     return buildTokenDetailMetrics(
       token,
-      chartFdv
-        ? (formatUsdWadAmount(chartFdv.fdvUsdWad) ??
-          formatEth(chartFdv.fdvEth, "amount") ??
-          "Unavailable")
-        : null,
+      null,
       buildChartVolumeMetric(chartVolume),
     );
-  }, [chartFdv, chartVolume, token]);
+  }, [chartVolume, token]);
 
   const explorerBase =
     chainId === 1
@@ -1564,7 +1558,6 @@ function TokenDetailContent({
               launchModel={classicTradeLaunchModel}
               preview={preview}
               onVolumeChange={setChartVolume}
-              onFdvChange={setChartFdv}
             />
             <MetricGrid metrics={metrics} />
           </div>

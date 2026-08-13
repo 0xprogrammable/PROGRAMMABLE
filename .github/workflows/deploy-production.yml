@@ -617,6 +617,8 @@ jobs:
             "0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce";
           const goldenPoolId =
             "0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229";
+          const goldenQuoteAddress =
+            "0x0000000000000000000000000000000000000000";
           const origin = new URL(process.env.STAGED_TARGET_URL);
           if (
             origin.protocol !== "https:" ||
@@ -1237,17 +1239,21 @@ jobs:
             goldenChart.readStatus !== "live" ||
             !currentMarketTime(goldenChart.generatedAt) ||
             goldenChart.address?.toLowerCase() !== goldenTokenAddress ||
+            goldenChart.identity?.chainId !== "1" ||
+            goldenChart.identity?.tokenAddress?.toLowerCase() !==
+              goldenTokenAddress ||
             goldenChart.identity?.poolId !== goldenPoolId ||
+            goldenChart.identity?.quoteAddress !== goldenQuoteAddress ||
+            goldenChart.identity?.protocol !== "uniswap_v4" ||
             !["ready", "insufficient-history", "partial"].includes(
               goldenChart.status,
             ) ||
             !Array.isArray(goldenChart.points) ||
             goldenChart.points.length < 1 ||
-            goldenChart.valuation?.metric !== "fdv" ||
-            goldenChart.valuation?.supplyBasis !== "total" ||
-            !["current", "stale"].includes(goldenChart.valuation?.freshness) ||
-            (goldenChart.valuation?.freshness === "current" &&
-              !currentMarketTime(goldenChart.valuation?.asOfTime)) ||
+            goldenChart.valuation?.status !== "unavailable" ||
+            goldenChart.valuation?.reason !== "source-unavailable" ||
+            "fdvUsdWad" in goldenChart ||
+            "valuationMetric" in goldenChart ||
             goldenChart.asOfTime !== goldenChart.points.at(-1)?.observedAt ||
             goldenChart.__marketHeaders?.marketAsOf !== goldenChart.asOfTime ||
             goldenChart.__marketHeaders?.dataQuality !== goldenChart.status ||

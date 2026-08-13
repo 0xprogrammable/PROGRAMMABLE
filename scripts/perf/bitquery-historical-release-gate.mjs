@@ -2,6 +2,8 @@ const GOLDEN_TOKEN_ADDRESS =
   "0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce";
 const GOLDEN_POOL_ID =
   "0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229";
+const GOLDEN_QUOTE_ADDRESS =
+  "0x0000000000000000000000000000000000000000";
 const MAXIMUM_FUTURE_SKEW_MS = 60_000;
 const MAXIMUM_STALE_AGE_MS = 24 * 60 * 60_000;
 const MAXIMUM_DEFERRED_PCAN_AGE_MS = 96 * 60 * 60_000;
@@ -114,7 +116,6 @@ export function verifyBitqueryHistoricalGoldenReleaseV1(input) {
   const detailPool = exactGoldenPool(detailToken);
   const detailValuation = detailToken?.valuation;
   const poolValuation = detailPool?.valuation;
-  const chartValuation = chart?.valuation;
   const trade = detailPool?.latestTrade;
   const lastPoint = Array.isArray(chart?.points) ? chart.points.at(-1) : null;
   const expectedValue = detailValuation?.valueWad;
@@ -151,18 +152,15 @@ export function verifyBitqueryHistoricalGoldenReleaseV1(input) {
     poolValuation.metric !== "fdv" ||
     poolValuation.supplyBasis !== "total" ||
     poolValuation.freshness !== detailValuation.freshness ||
-    chartValuation?.status !== "available" ||
-    chartValuation.metric !== "fdv" ||
-    chartValuation.supplyBasis !== "total" ||
-    chartValuation.freshness !== detailValuation.freshness ||
     !positiveInteger(expectedValue) ||
     !validMarketTime(expectedTime, nowMs) ||
     poolValuation.valueUsdWad !== expectedValue ||
     poolValuation.fdvUsdWad !== expectedValue ||
     poolValuation.asOfTime !== expectedTime ||
-    chartValuation.valueUsdWad !== expectedValue ||
-    chartValuation.fdvUsdWad !== expectedValue ||
-    chartValuation.asOfTime !== expectedTime ||
+    chart?.valuation?.status !== "unavailable" ||
+    chart.valuation.reason !== "source-unavailable" ||
+    "fdvUsdWad" in chart ||
+    "valuationMetric" in chart ||
     chart?.schemaVersion !== "programmable.market-chart.v1" ||
     chart.source !== "bitquery" ||
     chart.readStatus !== "live" ||
@@ -172,6 +170,7 @@ export function verifyBitqueryHistoricalGoldenReleaseV1(input) {
     chart?.identity?.chainId !== "1" ||
     chart?.identity?.tokenAddress?.toLowerCase() !== GOLDEN_TOKEN_ADDRESS ||
     chart?.identity?.poolId !== GOLDEN_POOL_ID ||
+    chart?.identity?.quoteAddress !== GOLDEN_QUOTE_ADDRESS ||
     chart?.identity?.protocol !== "uniswap_v4" ||
     !Array.isArray(chart?.points) ||
     chart.points.length < 1 ||
@@ -221,6 +220,7 @@ export function verifyBitqueryHistoricalGoldenReleaseV1(input) {
 export const BITQUERY_HISTORICAL_RELEASE_V1 = Object.freeze({
   tokenAddress: GOLDEN_TOKEN_ADDRESS,
   poolId: GOLDEN_POOL_ID,
+  quoteAddress: GOLDEN_QUOTE_ADDRESS,
   maximumStaleAgeMs: MAXIMUM_STALE_AGE_MS,
   maximumDeferredPcanAgeMs: MAXIMUM_DEFERRED_PCAN_AGE_MS,
   minimumConfirmations: MINIMUM_CONFIRMATIONS,

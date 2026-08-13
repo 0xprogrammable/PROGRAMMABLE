@@ -266,7 +266,7 @@ export function evaluateAlchemyExploreSourceContracts(
       canonicalSupplySource.includes("group.length >= 2") &&
       canonicalSupplySource.includes("if (!agreed) return entry;") &&
       routeSources
-        .filter(({ id }) => id !== "token-list")
+        .filter(({ id }) => ["explore", "token-detail"].includes(id))
         .every(({ source }) => {
           const supplyHydration = source.indexOf(
             "hydrateMissingCanonicalTokenSupplyV1(",
@@ -296,7 +296,7 @@ export function evaluateAlchemyExploreSourceContracts(
             reconciliation > inputEnd &&
             (supplyCompletesFirst || inputsJoinBeforeValuation);
         }),
-    "missing supply is hydrated before market valuation only after fixed readers agree on block hash, decimals and total supply",
+    "missing supply is hydrated on valuation-bearing routes only after fixed readers agree on block hash, decimals and total supply",
   );
 
   for (const route of routeSources) {

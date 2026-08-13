@@ -20,6 +20,8 @@ const GOLDEN_TOKEN_ADDRESS =
   "0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce";
 const GOLDEN_POOL_ID =
   "0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229";
+const GOLDEN_QUOTE_ADDRESS =
+  "0x0000000000000000000000000000000000000000";
 const PUBLIC_TOKEN_ADDRESS =
   "0x1111111111111111111111111111111111111111";
 const PUBLIC_POOL_ID = `0x${"44".repeat(32)}`;
@@ -1124,6 +1126,7 @@ function publicFetch(
           chainId: "1",
           tokenAddress: GOLDEN_TOKEN_ADDRESS,
           poolId: GOLDEN_POOL_ID,
+          quoteAddress: GOLDEN_QUOTE_ADDRESS,
           protocol: "uniswap_v4",
         },
         points: [
@@ -1151,13 +1154,8 @@ function publicFetch(
           },
         ],
         valuation: {
-          status: "available",
-          metric: "fdv",
-          supplyBasis: "total",
-          freshness: "stale",
-          valueUsdWad: TEST_FDV_USD_WAD.toString(),
-          fdvUsdWad: TEST_FDV_USD_WAD.toString(),
-          asOfTime: goldenMarketAsOf,
+          status: "unavailable",
+          reason: "source-unavailable",
         },
         asOfTime: goldenMarketAsOf,
       }, {
@@ -1516,6 +1514,24 @@ describe("post-promotion route verification", () => {
       if (url.pathname !== "/api/explore/token/chart") return response;
       const body = await response.json();
       body.readStatus = "cache-fallback";
+      return Response.json(body, { headers: response.headers });
+    };
+    const result = await verifyPostPromotion(postPromotionInput(fetchImpl));
+    expect(result.ok).toBe(false);
+    expect(result.failures).toContainEqual(
+      expect.objectContaining({ id: "production-bitquery-chart" }),
+    );
+  });
+
+  it("rejects a chart whose quote identity is not canonical native ETH", async () => {
+    const base = publicFetch();
+    const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
+      const url = new URL(String(input));
+      const response = await base(input, init);
+      if (url.pathname !== "/api/explore/token/chart") return response;
+      const body = await response.json();
+      body.identity.quoteAddress =
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
       return Response.json(body, { headers: response.headers });
     };
     const result = await verifyPostPromotion(postPromotionInput(fetchImpl));

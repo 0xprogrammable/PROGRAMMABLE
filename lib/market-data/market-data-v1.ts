@@ -26,6 +26,10 @@ export type MarketDataIdentityV1 = Readonly<{
   protocol: "uniswap_v4";
 }>;
 
+export type MarketChartIdentityV1 = MarketDataIdentityV1 & Readonly<{
+  quoteAddress: `0x${string}`;
+}>;
+
 export type MarketDataFreshnessV1 = "current" | "stale";
 
 export type MarketValuationV1 =
@@ -142,12 +146,12 @@ export type MarketChartV1 = Readonly<{
     | "waiting-for-first-trade"
     | "unavailable";
   generatedAt: string;
-  identity: MarketDataIdentityV1;
+  identity: MarketChartIdentityV1;
   range: "1h" | "1d" | "1w" | "all";
   points: readonly MarketChartPointV1[];
   swapCount: number;
   volumeUsdWad?: string;
-  valuation: MarketValuationV1;
+  valuation: Extract<MarketValuationV1, { status: "unavailable" }>;
   asOfTime?: string;
   truncated: boolean;
 }>;
@@ -180,6 +184,19 @@ export function isMarketDataIdentityV1(
     BYTES32.test(value.poolId) &&
     value.poolId === value.poolId.toLowerCase() &&
     value.protocol === "uniswap_v4";
+}
+
+export function isMarketChartIdentityV1(
+  value: unknown,
+): value is MarketChartIdentityV1 {
+  if (!isMarketDataIdentityV1(value) || !("quoteAddress" in value)) {
+    return false;
+  }
+  const quoteAddress = value.quoteAddress;
+  return typeof quoteAddress === "string" &&
+    ADDRESS.test(quoteAddress) &&
+    quoteAddress === quoteAddress.toLowerCase() &&
+    quoteAddress !== value.tokenAddress;
 }
 
 export function isMarketValuationV1(
@@ -265,7 +282,7 @@ export function isMarketChartV1(value: unknown): value is MarketChartV1 {
       "unavailable",
     ].includes(String(value.status)) ||
     !validIsoTime(value.generatedAt) ||
-    !isMarketDataIdentityV1(value.identity) ||
+    !isMarketChartIdentityV1(value.identity) ||
     !["1h", "1d", "1w", "all"].includes(String(value.range)) ||
     !Array.isArray(value.points) ||
     !Number.isSafeInteger(value.swapCount) ||

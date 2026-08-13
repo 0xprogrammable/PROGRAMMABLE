@@ -1242,6 +1242,9 @@ export function evaluateReadModelOperationsSourceContracts(
         'goldenChart.schemaVersion !== "programmable.market-chart.v1"',
       ) &&
       stagedBitquerySmokeBlock.includes(
+        "goldenChart.identity?.quoteAddress !== goldenQuoteAddress",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
         '"staged Bitquery Highest FDV is not monotonically descending"',
       ) &&
       stagedBitquerySmokeBlock.includes(
@@ -1366,7 +1369,16 @@ export function evaluateReadModelOperationsSourceContracts(
         "poolValuation.valueUsdWad !== expectedValue",
       ) &&
       bitqueryHistoricalRelease.includes(
-        "chartValuation.valueUsdWad !== expectedValue",
+        'chart?.valuation?.status !== "unavailable"',
+      ) &&
+      bitqueryHistoricalRelease.includes(
+        'chart.valuation.reason !== "source-unavailable"',
+      ) &&
+      bitqueryHistoricalRelease.includes(
+        '"fdvUsdWad" in chart',
+      ) &&
+      bitqueryHistoricalRelease.includes(
+        '"valuationMetric" in chart',
       ) &&
       bitqueryHistoricalRelease.includes(
         "!positiveInteger(parity.historicalPoolLiquidity)",
@@ -1375,7 +1387,13 @@ export function evaluateReadModelOperationsSourceContracts(
         "chart?.identity?.poolId !== GOLDEN_POOL_ID",
       ) &&
       bitqueryHistoricalRelease.includes(
+        "chart?.identity?.quoteAddress !== GOLDEN_QUOTE_ADDRESS",
+      ) &&
+      bitqueryHistoricalRelease.includes(
         "lastPoint?.blockNumber !== expectedBlock",
+      ) &&
+      bitqueryHistoricalRelease.includes(
+        "chart.asOfTime !== lastPoint?.observedAt",
       ) &&
       bitqueryHistoricalRelease.includes("periodMedian === null") &&
       bitqueryHistoricalRelease.includes(
@@ -1572,6 +1590,9 @@ export function evaluateReadModelOperationsSourceContracts(
       postPromotion.includes("exactGoldenDetail") &&
       postPromotion.includes("exactGoldenSearch") &&
       postPromotion.includes("exactGoldenChart") &&
+      postPromotion.includes(
+        "chart.identity?.quoteAddress !== GOLDEN_QUOTE_ADDRESS",
+      ) &&
       postPromotion.includes(
         "const boundedStaleMarketTime = boundedStaleMarketTimeV1",
       ) &&

@@ -11,6 +11,7 @@ import {
   PROGRAMMABLE_MARKET_DATA_SCHEMA_VERSION,
   isMarketChartV1,
   selectPrimaryMarketPoolV1,
+  type MarketChartIdentityV1,
   type MarketChartPointV1,
   type MarketChartV1,
   type MarketDataIdentityV1,
@@ -294,20 +295,17 @@ async function mapWithConcurrency<T>(
 }
 
 export async function readBitqueryMarketChartV1(input: Readonly<{
-  identity: MarketDataIdentityV1;
+  identity: MarketChartIdentityV1;
   range: "1h" | "1d" | "1w" | "all";
   historyStart?: string;
-  valuation?: MarketValuationV1;
 }> & BitqueryReaderOptions): Promise<MarketChartV1> {
   const now = input.now ?? new Date();
-  const identity = canonicalMarketIdentities([input.identity])[0];
-  if (!identity) throw new BitqueryMarketDataError("integrity");
+  const identity = canonicalMarketChartIdentity(input.identity);
   const since = chartRangeStart(input.range, now, input.historyStart);
   if (since === null) throw new BitqueryMarketDataError("integrity");
   const cacheKey = chartCacheKey(
     identity,
     input.range,
-    input.valuation,
     input.range === "all" ? since.toISOString() : null,
   );
   const token = resolveToken(input.token);
@@ -317,7 +315,6 @@ export async function readBitqueryMarketChartV1(input: Readonly<{
   const currentCached = currentCachedChart(cacheKey, now);
   if (currentCached !== null) return currentCached;
 
-  const deriveValuation = input.valuation === undefined;
   const chartController = new AbortController();
   const abortChartRead = () => chartController.abort();
   if (input.signal?.aborted) abortChartRead();
@@ -327,12 +324,12 @@ export async function readBitqueryMarketChartV1(input: Readonly<{
     const interval = chartInterval(input.range, since, now);
     const query = marketChartQuery(
       input.range,
-      deriveValuation,
       interval,
     );
     const variables: Record<string, unknown> = {
       poolId: identity.poolId,
       tokenAddress: identity.tokenAddress,
+      quoteAddress: bitqueryCurrencyAddress(identity.quoteAddress),
       till: now.toISOString(),
       since: since.toISOString(),
     };
@@ -342,8 +339,7 @@ export async function readBitqueryMarketChartV1(input: Readonly<{
       signal: chartController.signal,
     });
     const evm = record(response.data.EVM);
-    const trading = deriveValuation ? record(response.data.Trading) : null;
-    if (evm === null || (deriveValuation && trading === null)) {
+    if (evm === null) {
       throw new BitqueryMarketDataError("response");
     }
     const rows = array(evm.chart);
@@ -379,13 +375,6 @@ export async function readBitqueryMarketChartV1(input: Readonly<{
     if (observed > total || (total > 0 && points.length === 0)) {
       throw new BitqueryMarketDataError("integrity");
     }
-    const indexedPrice = deriveValuation
-      ? parseTokenPriceObservation(array(trading?.Tokens)[0], identity)
-      : null;
-    const supply = deriveValuation
-      ? parseSupply(array(trading?.Tokens)[0], identity)
-      : null;
-
     if (total === 0) {
       if (response.partial || points.length > 0) {
         throw new BitqueryMarketDataError("response");
@@ -402,7 +391,7 @@ export async function readBitqueryMarketChartV1(input: Readonly<{
         swapCount: 0,
         valuation: {
           status: "unavailable",
-          reason: "waiting-for-first-trade",
+          reason: "source-unavailable",
         },
         truncated: false,
       };
@@ -412,11 +401,6 @@ export async function readBitqueryMarketChartV1(input: Readonly<{
 
     const truncated = observed < total;
     const latest = points.at(-1) as MarketChartPointV1;
-    const valuation = input.valuation ?? valuationFromIndexedObservation(
-      indexedPrice,
-      supply,
-      now,
-    );
     const partial = truncated || response.partial;
     const status = partial
       ? "partial" as const
@@ -433,7 +417,7 @@ export async function readBitqueryMarketChartV1(input: Readonly<{
       range: input.range,
       points,
       swapCount: observed,
-      valuation,
+      valuation: { status: "unavailable", reason: "source-unavailable" },
       asOfTime: latest.observedAt,
       truncated,
     };
@@ -750,29 +734,6 @@ type TokenPriceObservation = Readonly<{
   priceUsdWad: string;
 }>;
 
-function parseTokenPriceObservation(
-  value: unknown,
-  identity: MarketDataIdentityV1,
-): TokenPriceObservation | null {
-  const row = record(value);
-  const token = record(row?.Token);
-  const block = record(row?.Block);
-  const price = record(row?.Price);
-  const ohlc = record(price?.Ohlc);
-  const id = nonEmptyString(token?.Id)?.toLowerCase();
-  if (
-    canonicalAddress(token?.Address) !== identity.tokenAddress ||
-    (id !== `eth:${identity.tokenAddress}` &&
-      id !== `bid:eth:${identity.tokenAddress}`) ||
-    price?.IsQuotedInUsd !== true
-  ) return null;
-  const time = isoTime(block?.Time);
-  const priceUsdWad = decimalToWad(ohlc?.Close);
-  return time === null || priceUsdWad === null
-    ? null
-    : { time, priceUsdWad: priceUsdWad.toString() };
-}
-
 function parseNativeQuotePriceObservation(
   value: unknown,
   trade: MarketTradeV1,
@@ -1070,7 +1031,6 @@ function marketStatsQuery(identities: readonly MarketDataIdentityV1[]) {
 
 function marketChartQuery(
   range: MarketChartV1["range"],
-  withValuation: boolean,
   interval: Readonly<{
     count: number;
     unit: "minutes" | "hours" | "days";
@@ -1079,6 +1039,7 @@ function marketChartQuery(
   const definitions = [
     "$poolId: String!",
     "$tokenAddress: String!",
+    "$quoteAddress: String!",
     "$till: DateTime!",
     "$since: DateTime!",
   ].join(", ");
@@ -1090,6 +1051,7 @@ function marketChartQuery(
               Dex: { ProtocolName: { is: "uniswap_v4" } }
               PoolId: { is: $poolId }
               Currency: { SmartContract: { is: $tokenAddress } }
+              Side: { Currency: { SmartContract: { is: $quoteAddress } } }
             }
           }`;
   const dataset = range === "1h" ? "" : ", dataset: combined";
@@ -1118,13 +1080,6 @@ function marketChartQuery(
         where: ${where}
       ) { count }
     }
-    ${withValuation ? `Trading {
-      Tokens(
-        limit: { count: 1 }
-        orderBy: { descending: Block_Time }
-        where: { Token: { Address: { is: $tokenAddress } } }
-      ) { ${supplySelection()} }
-    }` : ""}
   }`;
 }
 
@@ -1163,7 +1118,7 @@ function chartInterval(
 
 function parseMarketChartPoint(
   value: unknown,
-  identity: MarketDataIdentityV1,
+  identity: MarketChartIdentityV1,
   interval: Readonly<{
     count: number;
     unit: "minutes" | "hours" | "days";
@@ -1196,8 +1151,7 @@ function parseMarketChartPoint(
     !quoteCurrency ||
     canonicalBytes32(trade.PoolId) !== identity.poolId ||
     canonicalAddress(currency.SmartContract) !== identity.tokenAddress ||
-    quoteAddress === null ||
-    quoteAddress === identity.tokenAddress ||
+    quoteAddress !== identity.quoteAddress ||
     quoteSymbol === null ||
     !canonicalUnsignedInteger(blockNumber) ||
     bucket === null ||
@@ -1773,54 +1727,6 @@ function valuationFrom(
   return { status: "unavailable", reason: "supply-unavailable" };
 }
 
-function valuationFromIndexedObservation(
-  observation: TokenPriceObservation | null,
-  supply: ParsedSupply,
-  now: Date,
-): MarketValuationV1 {
-  if (observation === null) {
-    return { status: "unavailable", reason: "price-unavailable" };
-  }
-  if (supply === null) {
-    return { status: "unavailable", reason: "supply-unavailable" };
-  }
-  const priceTime = Date.parse(observation.time);
-  const supplyTime = Date.parse(supply.asOfTime);
-  if (
-    !Number.isFinite(priceTime) ||
-    !Number.isFinite(supplyTime) ||
-    Math.abs(priceTime - supplyTime) > SUPPLY_PRICE_MAXIMUM_DISTANCE_MS ||
-    priceTime > now.getTime() + MAXIMUM_FUTURE_SKEW_MS ||
-    supplyTime > now.getTime() + MAXIMUM_FUTURE_SKEW_MS ||
-    (supply.maxSupply !== undefined &&
-      supply.totalSupply !== undefined &&
-      comparePositiveDecimals(supply.totalSupply, supply.maxSupply) > 0)
-  ) {
-    return { status: "unavailable", reason: "inconsistent-market-data" };
-  }
-  const priceUsdWad = BigInt(observation.priceUsdWad);
-  const fdv = supply.totalSupply === undefined
-    ? null
-    : multiplyWadByDecimal(priceUsdWad, supply.totalSupply);
-  if (fdv === null || supply.totalSupply === undefined) {
-    return { status: "unavailable", reason: "supply-unavailable" };
-  }
-  const valuationTime = Math.min(priceTime, supplyTime);
-  return {
-    status: "available",
-    metric: "fdv",
-    supplyBasis: "total",
-    valueUsdWad: fdv.toString(),
-    fdvUsdWad: fdv.toString(),
-    totalSupply: supply.totalSupply,
-    ...(supply.maxSupply === undefined ? {} : { maxSupply: supply.maxSupply }),
-    asOfTime: new Date(valuationTime).toISOString(),
-    freshness: now.getTime() - valuationTime > MARKET_DATA_CURRENT_MAX_AGE_MS
-      ? "stale"
-      : "current",
-  };
-}
-
 function supplyFromValuation(
   value: MarketValuationV1 | undefined,
 ): ParsedSupply {
@@ -1942,7 +1848,7 @@ function cachedOrUnavailable(
 }
 
 function cachedChartOrUnavailable(
-  identity: MarketDataIdentityV1,
+  identity: MarketChartIdentityV1,
   range: MarketChartV1["range"],
   key: string,
   now: Date,
@@ -1961,9 +1867,7 @@ function cachedChartOrUnavailable(
       ...cached.value,
       readStatus: "cache-fallback",
       status: "partial",
-      valuation: cached.value.valuation.status === "available"
-        ? { ...cached.value.valuation, freshness: "stale" }
-        : cached.value.valuation,
+      valuation: { status: "unavailable", reason: "source-unavailable" },
     };
   }
   return {
@@ -1993,40 +1897,42 @@ function currentCachedChart(
   ) {
     return null;
   }
-  const valuation = cached.value.valuation.status === "available" &&
-      now.getTime() - Date.parse(cached.value.valuation.asOfTime) >
-        MARKET_DATA_CURRENT_MAX_AGE_MS
-    ? { ...cached.value.valuation, freshness: "stale" as const }
-    : cached.value.valuation;
-  return valuation === cached.value.valuation
-    ? cached.value
-    : { ...cached.value, valuation };
+  return cached.value;
 }
 
 function chartCacheKey(
-  identity: MarketDataIdentityV1,
+  identity: MarketChartIdentityV1,
   range: MarketChartV1["range"],
-  valuation: MarketValuationV1 | undefined,
   historyStart: string | null,
 ): string {
-  const valuationKey = valuation === undefined
-    ? "derived"
-    : valuation.status === "unavailable"
-      ? `unavailable:${valuation.reason}`
-      : [
-          "available",
-          valuation.metric,
-          valuation.supplyBasis,
-          valuation.valueUsdWad,
-          valuation.fdvUsdWad ?? "",
-          valuation.marketCapUsdWad ?? "",
-          valuation.totalSupply ?? "",
-          valuation.circulatingSupply ?? "",
-          valuation.maxSupply ?? "",
-          valuation.asOfTime,
-          valuation.freshness,
-        ].join(":");
-  return `${marketCacheKey(identity)}:${range}:${historyStart ?? "bounded"}:${valuationKey}`;
+  return `${marketCacheKey(identity)}:${identity.quoteAddress}:${range}:${historyStart ?? "bounded"}`;
+}
+
+function canonicalMarketChartIdentity(
+  identity: MarketChartIdentityV1,
+): MarketChartIdentityV1 {
+  const tokenAddress = canonicalAddress(identity.tokenAddress);
+  const quoteAddress = canonicalCurrencyAddress(identity.quoteAddress);
+  const poolId = canonicalBytes32(identity.poolId);
+  if (
+    identity.chainId !== "1" ||
+    identity.protocol !== "uniswap_v4" ||
+    tokenAddress === null ||
+    quoteAddress === null ||
+    quoteAddress === tokenAddress ||
+    poolId === null
+  ) throw new BitqueryMarketDataError("integrity");
+  return {
+    chainId: "1",
+    tokenAddress,
+    quoteAddress,
+    poolId,
+    protocol: "uniswap_v4",
+  };
+}
+
+function bitqueryCurrencyAddress(value: `0x${string}`): string {
+  return value === NATIVE_ETH_ADDRESS ? "0x" : value;
 }
 
 function chartRangeStart(

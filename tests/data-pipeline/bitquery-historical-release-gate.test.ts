@@ -12,6 +12,7 @@ const {
 const TOKEN = "0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce";
 const POOL =
   "0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229";
+const QUOTE = "0x0000000000000000000000000000000000000000";
 const BLOCK = "25731000";
 const TIME = "2026-08-10T11:50:47.000Z";
 const NOW = Date.parse("2026-08-13T00:00:00.000Z");
@@ -81,6 +82,7 @@ function chart() {
       chainId: "1",
       tokenAddress: TOKEN,
       poolId: POOL,
+      quoteAddress: QUOTE,
       protocol: "uniswap_v4",
     },
     points: [
@@ -104,13 +106,8 @@ function chart() {
       },
     ],
     valuation: {
-      status: "available",
-      metric: "fdv",
-      supplyBasis: "total",
-      freshness: "stale",
-      valueUsdWad: FDV,
-      fdvUsdWad: FDV,
-      asOfTime: TIME,
+      status: "unavailable",
+      reason: "source-unavailable",
     },
     asOfTime: TIME,
   };
@@ -203,6 +200,18 @@ describe("Bitquery historical release gate", () => {
   it("fails closed when the last chart observation is not the exact trade block", () => {
     const driftedChart = chart();
     driftedChart.points[1].blockNumber = "25731001";
+    expect(() => verifyBitqueryHistoricalGoldenReleaseV1({
+      detailToken: detailToken(),
+      chart: driftedChart,
+      parity: parity(),
+      nowMs: NOW,
+    })).toThrow("historical PCAN release evidence is not exactly bound");
+  });
+
+  it("fails closed when the chart quote identity is not canonical native ETH", () => {
+    const driftedChart = chart();
+    driftedChart.identity.quoteAddress =
+      "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
     expect(() => verifyBitqueryHistoricalGoldenReleaseV1({
       detailToken: detailToken(),
       chart: driftedChart,
