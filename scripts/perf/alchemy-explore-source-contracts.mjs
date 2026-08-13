@@ -276,6 +276,7 @@ export function evaluateAlchemyExploreSourceContracts(
           );
           const inputEnd = Math.max(supplyHydration, marketRead);
           const reconciliation = [
+            "valueExploreEntriesWithCurrentEvidence({",
             "valueExploreEntriesWithMarketData(",
             "withBitqueryMarketData(",
           ]
@@ -287,9 +288,11 @@ export function evaluateAlchemyExploreSourceContracts(
             reconciliation,
           );
           const supplyCompletesFirst =
-            source.slice(Math.max(0, supplyHydration - 16), supplyHydration)
-              .includes("await") &&
-            marketRead > supplyHydration;
+            source.slice(Math.max(0, supplyHydration - 96), supplyHydration)
+                .includes("await") &&
+              marketRead < supplyHydration &&
+              source.slice(marketRead, supplyHydration)
+                .includes("readBitqueryTokenMarketDataV1(");
           const inputsJoinBeforeValuation = inputWindow.includes("Promise.all");
           return supplyHydration >= 0 &&
             marketRead >= 0 &&
@@ -350,8 +353,12 @@ export function evaluateAlchemyExploreSourceContracts(
     routeSources
       .filter(({ id }) => id !== "token-list")
       .every(
-        ({ source }) =>
-          source.includes('"X-Programmable-Market-Source": "bitquery"') &&
+        ({ id, source }) =>
+          (id === "token-chart"
+            ? source.includes('"X-Programmable-Market-Source": "bitquery"')
+            : source.includes(
+                '"stateview-chainlink+official-uniswap-v4-subgraph+bitquery"',
+              ) && source.includes('"X-Programmable-Price-Source": "stateview-chainlink"')) &&
           !source.includes('"X-Programmable-Rpc-Provider"'),
       ) &&
       routeSources
