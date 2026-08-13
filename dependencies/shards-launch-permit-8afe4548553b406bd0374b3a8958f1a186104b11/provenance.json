@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Exact frozen shared launch-permit interfaces used by Hookemon V2 plus exact implementation fixtures used only for compatibility tests",
+  "upstream": {
+    "repository": "https://github.com/0xprogrammable/programmable.git",
+    "commit": "8afe4548553b406bd0374b3a8958f1a186104b11",
+    "tree": "19393b3a1010db11de4b45d686580ee8b52f79f5",
+    "committedAt": "2026-08-13T01:42:18+02:00"
+  },
+  "licenseEvidence": {
+    "perFileSpdxIdentifier": "MIT",
+    "repositoryLicenseFileAtPinnedCommit": null,
+    "note": "Each copied Solidity file carries the exact upstream SPDX-License-Identifier: MIT header. The pinned repository tree contains no standalone LICENSE, COPYING or NOTICE file."
+  },
+  "productionImports": [
+    "interfaces/IProgrammableLaunchPermitAuthorityV1.sol",
+    "interfaces/IProgrammableLaunchPermitVerifierV1.sol",
+    "interfaces/IProgrammablePermitBoundRouteV1.sol"
+  ],
+  "testFixtureOnly": [
+    "ProgrammableLaunchPermitAuthorityV1.sol",
+    "ProgrammableLaunchPermitVerifierV1.sol"
+  ],
+  "files": [
+    {
+      "path": "ProgrammableLaunchPermitAuthorityV1.sol",
+      "upstreamPath": "contracts/src/ProgrammableLaunchPermitAuthorityV1.sol",
+      "gitBlob": "97c9a2e5ce2f9a5a89d58202b59b6e8e5f7add0f",
+      "sha256": "d64e40876c1727849f19527ea4f0718e34f30f93ac103b67fe6bac677b1fd3d1"
+    },
+    {
+      "path": "ProgrammableLaunchPermitVerifierV1.sol",
+      "upstreamPath": "contracts/src/ProgrammableLaunchPermitVerifierV1.sol",
+      "gitBlob": "2d5eb3d065d384d352c4d162e5a15c1bd83aeee2",
+      "sha256": "240f369621917dcf99793d0c45023b8da45124790f826b331217d7b979c61201"
+    },
+    {
+      "path": "interfaces/IProgrammableLaunchPermitAuthorityV1.sol",
+      "upstreamPath": "contracts/src/interfaces/IProgrammableLaunchPermitAuthorityV1.sol",
+      "gitBlob": "c6f5f199997958561a2238968bb284ca253e1837",
+      "sha256": "3aaae1dcf9f04b4ee38aa30ebd518d18f946a945f37142c1d0d02dcd8bec4169"
+    },
+    {
+      "path": "interfaces/IProgrammableLaunchPermitVerifierV1.sol",
+      "upstreamPath": "contracts/src/interfaces/IProgrammableLaunchPermitVerifierV1.sol",
+      "gitBlob": "2fa9f1f2f999de10f05cee7c0b5a0d62deebf1e4",
+      "sha256": "eafa31f8b84900b16412d68694fad4a8aae81881a81297572449aab8722bee6e"
+    },
+    {
+      "path": "interfaces/IProgrammablePermitBoundRouteV1.sol",
+      "upstreamPath": "contracts/src/interfaces/IProgrammablePermitBoundRouteV1.sol",
+      "gitBlob": "398d7fb095f4719c1e77e449eed1e11f20061343",
+      "sha256": "c049d50669ac8591051677276cd401c0edff30f687dc9e215473987b52c83395"
+    }
+  ],
+  "activationAllowed": false,
+  "deploymentAddresses": null
+}

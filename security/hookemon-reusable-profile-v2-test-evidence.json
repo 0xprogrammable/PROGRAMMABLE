@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "activationAllowed": false,
+  "normalSolc": "0.8.26",
+  "focusedSharedAuthorityRegistryLifecycle": {
+    "command": "forge test --match-path test/router_vnext/ProgrammableHookemonLaunchRegistryV1.t.sol -vv",
+    "result": "7 passed; 0 failed; 0 skipped",
+    "coverage": [
+      "actual Profile V2 deploy, exact frozen Authority release activation and real Kernel registration within the reviewed gas cap",
+      "exact EIP-712 consumption and same-transaction Registry record",
+      "downstream rollback restores Authority, nonce and Registry",
+      "cross-route and cross-release permanent repository consumption",
+      "permit cancellation and approval-generation revocation",
+      "single immutable Registry writer and no per-launch approver",
+      "stale later-transaction registration rejection"
+    ],
+    "rawLogCommitted": false,
+    "rawLogPathAtReview": "/tmp/hookemon-authority-registry-frozen.log",
+    "kernelRegistrationGasUsed": 8136327,
+    "kernelRegistrationGasRegressionMaximum": 8200000,
+    "profileRuntimeByteRegressionMaximum": 22000,
+    "rawLogSha256": "2e3d15527182f44d5a61b6adb90dae2b4ed521d9dd48a163ad710a5842f9ff47",
+    "rawLogByteLength": 1044
+  },
+  "focusedHookemonPostconditions": {
+    "command": "forge test --match-path test/router_vnext/ProgrammableExactHookemonNormalCreateProfileV1.t.sol --match-test 'testAtomicLifecycleUsesNonceOneAndFinalizesExactTwentyFourComponentGraph|testReusableVerifierReadsDynamicIdentityAndExactGraphWithoutPerLaunchDeployment|testWrongPlanCodeBlobAndFeeRollbackWithoutConsumingRetry|testWebsiteSelectedTokenIdentityAndPresentationHashBinding|testTokenIdentityTamperAndWebsitePolicyViolationsFailClosed' -vv",
+    "result": "5 passed; 0 failed; 0 skipped",
+    "coverage": [
+      "24-component graph and nonce-one launcher",
+      "dynamic Website identity with fixed reviewed artifact",
+      "29,000 project plus 1,000 Programmable inclusive fee postconditions",
+      "position timelock owner, approved multisig beneficiary, empty NFT approval and vault admin/guardian semantics",
+      "fee mismatch, code mismatch and identity mutation rollback"
+    ],
+    "rawLogCommitted": false,
+    "rawLogPathAtReview": "/tmp/hookemon-postconditions-frozen.log",
+    "rawLogSha256": "34c5a02075301484f45f1d7b65b652c7e4d92e78e2d296f309ad5b5837687e92",
+    "rawLogByteLength": 826
+  },
+  "fullForgeSuite": {
+    "command": "forge test -vv",
+    "result": "235 passed; 0 failed; 3 skipped; 238 total",
+    "rawLogCommitted": false,
+    "rawLogPathAtReview": "/tmp/hookemon-full-test-frozen.log",
+    "rawLogSha256": "9fc057f049d4d3ab3c27d1cd5c3ebb2183250f0b228212eb8b6b07592296e86f",
+    "rawLogByteLength": 41726,
+    "skipNote": "Three pre-existing fork-dependent suites are explicitly skipped when their external fork configuration is absent; no focused Hookemon V2 test is skipped."
+  },
+  "deploymentAddresses": null,
+  "releaseActivationTransaction": null
+}

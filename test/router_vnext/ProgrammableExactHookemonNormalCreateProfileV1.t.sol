@@ -23,7 +23,8 @@ import {
 } from "../../src/router_vnext/ProgrammableExactHookemonNormalCreateProfileV1.sol";
 import {
     IExactHookemonAtomicLauncherViewV1,
-    ProgrammableExactHookemonPostconditionVerifierV1
+    ProgrammableExactHookemonPostconditionVerifierV1,
+    ProgrammableExactHookemonPostconditionVerifierV2
 } from "../../src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol";
 
 contract HookemonNormalCreateProfileHarnessV1 is ProgrammableExactHookemonNormalCreateProfileBaseV1 {
@@ -982,6 +983,50 @@ contract ProgrammableExactHookemonNormalCreateProfileV1Test is Test {
         assertEq(consumption.consumer, address(fixture.profile), "repository consumer");
     }
 
+    function testReusableVerifierReadsDynamicIdentityAndExactGraphWithoutPerLaunchDeployment() external {
+        (Fixture memory fixture, PreparedLaunch memory prepared) =
+            _fixtureWithIdentity(unicode"Hookémon Community", "HKMN2");
+        ProgrammableExactHookemonPostconditionVerifierV2 reusableVerifier =
+            new ProgrammableExactHookemonPostconditionVerifierV2();
+        bytes32 verifierRuntimeHash = address(reusableVerifier).codehash;
+        bytes32 verifierBindingHash = reusableVerifier.runtimeBindingHashV1();
+
+        _launch(fixture, prepared);
+        (bytes32 architectureHash, bytes32 poolHash, bytes32 revenueHash) = reusableVerifier.verifyExactHookemonPostconditionsV2(
+            prepared.plan.exclusive.accounts[0],
+            prepared.plan.exclusive.runtimeCodeHashes[0],
+            prepared.plan.tokenNameHash,
+            prepared.plan.tokenSymbolHash
+        );
+        assertEq(architectureHash, prepared.plan.expectedArchitectureStateHash, "dynamic architecture");
+        assertEq(poolHash, prepared.plan.expectedPoolStateHash, "dynamic pool");
+        assertEq(revenueHash, prepared.plan.expectedRevenueStateHash, "dynamic revenue");
+        assertEq(address(reusableVerifier).codehash, verifierRuntimeHash, "verifier runtime drift");
+        assertEq(reusableVerifier.runtimeBindingHashV1(), verifierBindingHash, "verifier binding drift");
+
+        vm.expectRevert();
+        reusableVerifier.verifyExactHookemonPostconditionsV2(
+            prepared.plan.exclusive.accounts[0],
+            prepared.plan.exclusive.runtimeCodeHashes[0],
+            keccak256("changed-name"),
+            prepared.plan.tokenSymbolHash
+        );
+        vm.expectRevert();
+        reusableVerifier.verifyExactHookemonPostconditionsV2(
+            prepared.plan.exclusive.accounts[0],
+            prepared.plan.exclusive.runtimeCodeHashes[0],
+            prepared.plan.tokenNameHash,
+            keccak256("CHANGED")
+        );
+        vm.expectRevert();
+        reusableVerifier.verifyExactHookemonPostconditionsV2(
+            prepared.plan.exclusive.accounts[0],
+            keccak256("changed-launcher-runtime"),
+            prepared.plan.tokenNameHash,
+            prepared.plan.tokenSymbolHash
+        );
+    }
+
     function testReviewedConfigurableLauncherArtifactReconstructsExactly() external {
         ProgrammableExactHookemonLauncherCodeStoreV1 codeStore = _reviewedCodeStore();
         assertEq(codeStore.creationCodeLengthV1(), 45_393, "reviewed creation length");
@@ -1535,7 +1580,7 @@ contract ProgrammableExactHookemonNormalCreateProfileV1Test is Test {
         HookemonExpectedStateCalculatorV1 calculator,
         HookemonLifecycleMockTypesV1.ComponentContextV1 memory context,
         IProgrammableExactHookemonNormalCreateProfileV1.ExactHookemonPlanV1 memory plan
-    ) private view returns (bytes32 architectureHash, bytes32 poolHash, bytes32 revenueHash) {
+    ) private pure returns (bytes32 architectureHash, bytes32 poolHash, bytes32 revenueHash) {
         return calculator.expectedStateHashes(
             context,
             plan.exclusive.accounts,

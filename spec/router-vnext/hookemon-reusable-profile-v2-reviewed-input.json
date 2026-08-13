@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 2,
+  "reviewStatus": "TECHNICAL_CANDIDATE",
+  "activationAllowed": false,
+  "routeIdText": "PROGRAMMABLE_ROUTE:HOOKEMON:EXACT_REUSABLE_NORMAL_CREATE:v2",
+  "profileIdText": "HOOKEMON:EXACT_REUSABLE_NORMAL_CREATE:v2",
+  "sourceRevisions": {
+    "hookemonApprovedRepositoryHead": {
+      "repository": "hookemonv4/hookemon",
+      "numericGithubRepositoryId": 1324982531,
+      "commit": "9943c158998147f4fea9049fb42b8c4a5d044c1d",
+      "tree": "99a6984362a86e49ae8f2318b170da6d916dc519"
+    },
+    "hookemonExecutableArtifactSource": {
+      "commit": "55fd47cec3ed8e61e59d5a919d98aeec2e269549",
+      "tree": "2667ff1bee70dd082596d5f65b3ed4cb2c1ce387"
+    },
+    "sharedShardsAuthority": {
+      "repository": "https://github.com/0xprogrammable/programmable.git",
+      "commit": "8afe4548553b406bd0374b3a8958f1a186104b11",
+      "tree": "19393b3a1010db11de4b45d686580ee8b52f79f5",
+      "provenancePath": "dependencies/shards-launch-permit-8afe4548553b406bd0374b3a8958f1a186104b11/provenance.json"
+    }
+  },
+  "productBoundary": {
+    "durableTechnicalApproval": [
+      "reviewed Hookemon source commit and tree",
+      "executable launcher artifact commit and tree",
+      "complete contract graph and runtime set",
+      "all ticks, pool configuration and pool-manager identity",
+      "29,000 project plus 1,000 Programmable inclusive quote-fee policy",
+      "LP fee 3,000 pips as a separate fee",
+      "position timelock and approved multisig holder semantics",
+      "artifact authorizer, renderer policy, factories and final postconditions",
+      "exact shared Authority, Verifier, Registry, Profile and PlanModule release binding"
+    ],
+    "websiteSelectedAfterApproval": [
+      "tokenName",
+      "tokenSymbol",
+      "presentation image, description and links commitment",
+      "applicant and funding wallet"
+    ],
+    "jitDeterministic": [
+      "token and hook deployment salts mined under reviewed constraints",
+      "profile CREATE2 executor address",
+      "nonce-one launcher address",
+      "token, hook and launch component addresses",
+      "exact execution plan, calldata, graph and runtime commitments"
+    ],
+    "hiddenManualPerLaunchTransition": false,
+    "registryPrivilegedPreauthorizationPerLaunch": false,
+    "technicalApprovalOccursOncePerRepositoryGeneration": true
+  },
+  "websitePolicy": {
+    "tokenName": { "maxUnicodeCodePoints": 32, "maxUtf8Bytes": 48 },
+    "tokenSymbol": { "maxUnicodeCodePoints": 10, "maxUtf8Bytes": 12, "pattern": "^[A-Z0-9]+$" },
+    "presentationOnlyFields": ["image", "description", "links"],
+    "fundingPrecondition": "Exact USDC allowance equals liquidityUsdcAmount plus cycleBootstrapUsdcAmount for the predicted launcher"
+  },
+  "walletUx": {
+    "freshEoaPrompts": 3,
+    "exactAllowanceAlreadyPresentPrompts": 2,
+    "sequence": [
+      "exact USDC allowance transaction when missing",
+      "Kernel applicant wallet intent typed-data signature",
+      "single atomic launch transaction"
+    ]
+  },
+  "atomicOrder": [
+    "kernelActivateGrant",
+    "kernelBeginExecution",
+    "sharedAuthorityConsumePermit",
+    "create2FixedExecutor",
+    "normalCreateNonceOneLauncher",
+    "verifyExactArchitecturePoolHolderAndRevenuePostconditions",
+    "registryRegisterFromSameBlockAuthorityConsumption",
+    "kernelFinalizeExecution"
+  ],
+  "securitySemantics": {
+    "repositoryOnce": "Permanent shared Authority repository consumption survives signer and release rotation and blocks every later route.",
+    "rollback": "Any deployment, postcondition, Registry or Kernel finalization revert rolls back Authority consumption, Registry record and every new contract.",
+    "registryWriter": "Immutable LAUNCH_ROUTE is the only WRITER_ROLE account; every other grant is rejected.",
+    "approvalCancellation": "Canonical repository key plus approval generation; approvalId cannot narrow revocation.",
+    "release": "Exact Authority, Registry, Profile, route, runtime hashes, profile binding, execution authority and REQUIRED Kernel envelope.",
+    "postconditions": "Architecture, canonical pool, custody/holder ownership, locked position, empty approvals, 29,000/1,000 inclusive fee split, Programmable fee owner, and no unexpected balances are re-read after deployment."
+  },
+  "contracts": [
+    { "sourcePath": "src/router_vnext/ProgrammableExactHookemonReusableNormalCreateProfileV2.sol", "contractName": "ProgrammableExactHookemonReusableNormalCreateProfileV2", "eip170Required": true },
+    { "sourcePath": "src/router_vnext/ProgrammableExactHookemonReusablePlanModuleV2.sol", "contractName": "ProgrammableExactHookemonReusablePlanModuleV2", "eip170Required": true },
+    { "sourcePath": "src/router_vnext/ProgrammableExactHookemonNormalCreateExecutorV2.sol", "contractName": "ProgrammableExactHookemonNormalCreateExecutorV2", "eip170Required": true },
+    { "sourcePath": "src/router_vnext/ProgrammableHookemonLaunchRegistryV1.sol", "contractName": "ProgrammableHookemonLaunchRegistryV1", "eip170Required": true },
+    { "sourcePath": "src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol", "contractName": "ProgrammableExactHookemonPostconditionVerifierV2", "eip170Required": true },
+    { "sourcePath": "src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol", "contractName": "ProgrammableExactHookemonArchitectureVerifierModuleV2", "eip170Required": true },
+    { "sourcePath": "src/router_vnext/ProgrammableExactHookemonPostconditionVerifierV1.sol", "contractName": "ProgrammableExactHookemonEconomicVerifierModuleV1", "eip170Required": true }
+  ],
+  "evidenceRequirements": {
+    "focusedLifecycleTests": "7 passed; 0 failed; 0 skipped",
+    "focusedPostconditionTests": "5 passed; 0 failed; 0 skipped",
+    "measuredKernelRegistrationGas": 8136327,
+    "kernelRegistrationGasRegressionMaximum": 8200000,
+    "profileRuntimeByteRegressionMaximum": 22000,
+    "fullForgeSuite": "235 passed; 0 failed; 3 skipped; 238 total",
+    "slitherVersion": "0.11.5",
+    "slitherReportPath": "/tmp/hookemon-v2-slither-final2.json",
+    "slitherReportSha256": "36f1768f50bab6cfecc216fff14cae299610b079af3371c42d0cdc3b22bb98a9",
+    "slitherReportByteLength": 12152193,
+    "slitherTotalDetectorInstances": 315,
+    "slitherScopedTriagePath": "security/hookemon-reusable-profile-v2-slither-triage.json",
+    "testEvidencePath": "security/hookemon-reusable-profile-v2-test-evidence.json"
+  },
+  "externalActivationGates": {
+    "deploymentAddresses": null,
+    "verifiedRuntimeCodeHashes": null,
+    "roleTransactions": null,
+    "releaseActivationTransaction": null,
+    "chainFinalityEvidence": null,
+    "websiteAndIndexerDiscoveryEvidence": null,
+    "realEndToEndLaunchEvidence": null
+  }
+}
