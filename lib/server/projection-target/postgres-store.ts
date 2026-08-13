@@ -553,7 +553,11 @@ function storedRecordFromRow(
   row: StoredProjectionRowV1,
 ): ProjectionTargetStoredRecordV1 {
   const lane = row.lane;
-  if (lane !== "website.entitlement" && lane !== "website.custom-launched") {
+  if (
+    lane !== "website.entitlement"
+    && lane !== "website.custom-launched"
+    && lane !== "website.approval-v3"
+  ) {
     throw new TypeError("stored projection lane is invalid");
   }
   return Object.freeze({
