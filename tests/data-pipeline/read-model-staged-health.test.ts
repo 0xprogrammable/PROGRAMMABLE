@@ -107,6 +107,10 @@ describe("staged health handoff runtime", () => {
     );
     expect(vercelRequest?.headers.get("authorization")).toBe(`Bearer ${TOKEN}`);
     expect(vercelRequest?.url.searchParams.get("teamId")).toBe(TEAM_ID);
+    expect(requests.map(({ url }) => url.hostname)).toEqual([
+      "api.vercel.com",
+      new URL(TARGET_URL).hostname,
+    ]);
   });
 
   it.each([
@@ -132,15 +136,24 @@ describe("staged health handoff runtime", () => {
       "staged-health-deployment-commit",
     ],
   ])("fails closed on a mismatched %s", async (_label, mutation, failureId) => {
+    const requests: Array<{ headers: Headers; url: URL }> = [];
     const result = await verifyStagedHealth(
       stagedHealthInput(
-        stagedFetch({ deployment: deploymentFixture(mutation) }),
+        stagedFetch({ deployment: deploymentFixture(mutation), requests }),
       ),
     );
     expect(result.ok).toBe(false);
     expect(result.failures).toContainEqual(
       expect.objectContaining({ id: failureId }),
     );
+    expect(requests.map(({ url }) => url.hostname)).toEqual(["api.vercel.com"]);
+    expect(
+      requests.some(
+        ({ headers }) =>
+          headers.get("x-vercel-protection-bypass") ===
+          AUTOMATION_BYPASS_SECRET,
+      ),
+    ).toBe(false);
   });
 
   it.each([

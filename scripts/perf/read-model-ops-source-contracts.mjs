@@ -805,12 +805,14 @@ export const STAGED_HEALTH_HANDOFF_SOURCE_GUARDS = Object.freeze([
   "deployment.projectId === input.projectId ||",
   'deployment.readyState === "READY"',
   "deploymentCommit(deployment) === input.expectedGitHead",
+  "if (deploymentFailures.length > 0) {",
+  "const response = await requestHealth(",
   '"x-vercel-protection-bypass": automationBypassSecret',
   'redirect: "error"',
   'response.ok && response.body?.status === "healthy"',
 ]);
 const STAGED_HEALTH_HANDOFF_SCRIPT_SHA256 =
-  "b94c538699c23ad0099a177b3323a4bc055410d2c3ddd79b6bee44b84f51c0b1";
+  "853e49a15d1d056f538a7451c5fc67829056c6e48bebd4a6aa791242a61b9d73";
 const STAGED_HEALTH_HANDOFF_WORKFLOW_STEP = [
   "      - name: Gate exact staged operational health",
   "        env:",
@@ -2296,6 +2298,15 @@ export function evaluateReadModelOperationsSourceContracts(
     stagedHealthGate >= 0 && stagedCandidateHandoff > stagedHealthGate
       ? deployWorkflow.slice(stagedHealthGate, stagedCandidateHandoff).trimEnd()
       : "";
+  const stagedHealthDeploymentLookup = stagedHealth.indexOf(
+    "const deployment = await fetchVercelDeployment(",
+  );
+  const stagedHealthIdentityFailureGuard = stagedHealth.indexOf(
+    "if (deploymentFailures.length > 0) {",
+  );
+  const stagedHealthProtectedRequest = stagedHealth.indexOf(
+    "const response = await requestHealth(",
+  );
   check(
     "ops-staged-health-handoff-gate",
     packageJson?.scripts?.["perf:read-model:staged-health"] ===
@@ -2305,6 +2316,9 @@ export function evaluateReadModelOperationsSourceContracts(
         stagedHealth,
         STAGED_HEALTH_HANDOFF_SOURCE_GUARDS,
       ) &&
+      stagedHealthDeploymentLookup >= 0 &&
+      stagedHealthIdentityFailureGuard > stagedHealthDeploymentLookup &&
+      stagedHealthProtectedRequest > stagedHealthIdentityFailureGuard &&
       stagedBindingReverification >= 0 &&
       stagedHealthGate > stagedBindingReverification &&
       stagedCandidateHandoff > stagedHealthGate &&

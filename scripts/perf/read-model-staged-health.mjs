@@ -101,19 +101,16 @@ export async function verifyStagedHealth(input) {
     );
   }
   const fetchImpl = input.fetchImpl ?? fetch;
-  const [deployment, response] = await Promise.all([
-    fetchVercelDeployment({
-      idOrUrl: target.hostname,
-      token: input.token,
-      teamId: input.teamId,
-      fetchImpl,
-    }),
-    requestHealth(fetchImpl, target, input.automationBypassSecret),
-  ]);
+  const deployment = await fetchVercelDeployment({
+    idOrUrl: target.hostname,
+    token: input.token,
+    teamId: input.teamId,
+    fetchImpl,
+  });
   const deploymentHost = String(deployment.url ?? "")
     .replace(/^https?:\/\//u, "")
     .replace(/\/$/u, "");
-  const checks = [
+  const deploymentChecks = [
     {
       id: "staged-health-deployment-id",
       condition: deployment.id === input.expectedDeploymentId,
@@ -141,17 +138,47 @@ export async function verifyStagedHealth(input) {
       condition: deploymentCommit(deployment) === input.expectedGitHead,
       detail: "the staged deployment is bound to the exact reviewed Git commit",
     },
-    {
-      id: "staged-health-response",
-      condition: response.ok && response.body?.status === "healthy",
-      detail: "the exact staged deployment operational health route is healthy",
-    },
   ];
-  const normalizedChecks = checks.map(({ id, condition, detail }) => ({
-    id,
-    status: condition ? "pass" : "fail",
-    detail,
-  }));
+  const normalizedDeploymentChecks = deploymentChecks.map(
+    ({ id, condition, detail }) => ({
+      id,
+      status: condition ? "pass" : "fail",
+      detail,
+    }),
+  );
+  const deploymentFailures = normalizedDeploymentChecks.filter(
+    ({ status }) => status === "fail",
+  );
+  if (deploymentFailures.length > 0) {
+    return {
+      ok: false,
+      targetUrl: target.toString(),
+      deploymentId: input.expectedDeploymentId,
+      gitHead: input.expectedGitHead,
+      checks: normalizedDeploymentChecks,
+      failures: deploymentFailures,
+    };
+  }
+
+  const response = await requestHealth(
+    fetchImpl,
+    target,
+    input.automationBypassSecret,
+  );
+  const responseCheck = {
+    id: "staged-health-response",
+    condition: response.ok && response.body?.status === "healthy",
+    detail: "the exact staged deployment operational health route is healthy",
+  };
+  const normalizedResponseCheck = {
+    id: responseCheck.id,
+    status: responseCheck.condition ? "pass" : "fail",
+    detail: responseCheck.detail,
+  };
+  const normalizedChecks = [
+    ...normalizedDeploymentChecks,
+    normalizedResponseCheck,
+  ];
   const failures = normalizedChecks.filter(({ status }) => status === "fail");
   return {
     ok: failures.length === 0,
