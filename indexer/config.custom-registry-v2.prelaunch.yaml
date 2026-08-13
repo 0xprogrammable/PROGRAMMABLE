@@ -1,0 +1,21 @@
+# This source remains inert until every deployment field is replaced with
+# reviewed, finalized Ethereum mainnet evidence.
+schema_version: programmable.custom-registry-v2-indexer-source.v1
+status: prelaunch
+active: false
+generation: "2"
+chain_id: 1
+abi_artifact: docs/security/abi/ProgrammableCustomRegistryV2.json
+event_set_artifact: docs/security/CUSTOM_REGISTRY_EVENT_SET_V2.json
+contract:
+  name: CustomRegistryV2
+  address: null
+  start_block: null
+  runtime_code_keccak256: null
+events:
+  - "CustomLaunchApprovalAuthorizedV2(bytes32 indexed approvalId, bytes32 indexed descriptorHash, uint64 validAfterBlock, uint64 expiresAtBlock, bytes32 approvalEvidenceHash, uint64 transitionSequence)"
+  - "CustomLaunchRegisteredV2(bytes32 indexed launchId, bytes32 indexed descriptorHash, address indexed primaryContract, bytes32 approvalId, bytes32 approvalEvidenceHash, bytes32 registrationEvidenceHash, uint64 observedAtBlock, uint64 transitionSequence)"
+  - "CustomLaunchDescriptorCommittedV2(bytes32 indexed launchId, bytes32 indexed descriptorHash, address indexed primaryContract, address launchWallet, bytes32 primaryRuntimeCodeHash, bytes32 componentSetHash, bytes32 projectCommitment, uint8 marketMode, uint16 protocolFeeBps)"
+  - "CustomLaunchDescriptorEvidenceCommittedV2(bytes32 indexed launchId, bytes32 indexed sourceArtifactHash, bytes32 indexed configurationHash, bytes32 launchPlanHash)"
+  - "CustomLaunchFinalizedV2(bytes32 indexed launchId, bytes32 indexed descriptorHash, bytes32 indexed finalityEvidenceHash, uint64 observedAtBlock, bytes32 observedBlockHash, uint64 confirmedHeadBlock, bytes32 confirmedHeadBlockHash, uint64 finalizedAtBlock, uint64 transitionSequence)"
+  - "CustomLaunchRevokedV2(bytes32 indexed launchId, bytes32 indexed descriptorHash, bytes32 indexed revocationEvidenceHash, bytes32 reasonHash, uint64 revokedAtBlock, uint64 transitionSequence)"

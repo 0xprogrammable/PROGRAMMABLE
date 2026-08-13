@@ -8,6 +8,10 @@ import { describe, expect, it } from "vitest";
 import * as executionProof from "../../scripts/perf/bitquery-golden-market-parity.mjs";
 
 const { verifyBitqueryGoldenMarketExecutionV1 } = executionProof;
+const RPC_URLS = Object.freeze([
+  "https://lb.drpc.live/ethereum/test-witness-key",
+  "https://test-witness.ethereum-mainnet.quiknode.pro/test-witness-key/",
+]);
 
 const PCAN_ADDRESS = "0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce";
 const POOL =
@@ -33,8 +37,6 @@ const EXECUTION_QUOTE_WAD = "11008417139";
 const BITQUERY_PRICE_USD_WAD = "21113176432735";
 const BITQUERY_FDV_USD_WAD = "21113176432735000000";
 const CHAINLINK_EXECUTION_FDV_USD_WAD = "21094317527929000000";
-const MEV_BLOCKER = "https://rpc.mevblocker.io";
-const TENDERLY = "https://mainnet.gateway.tenderly.co";
 
 const erc20Abi = parseAbi([
   "function decimals() view returns (uint8)",
@@ -137,7 +139,7 @@ function witnessFetch(mutation: WitnessMutation = {}) {
       readonly params: unknown[];
     };
     calls.push({ rpcUrl, method: request.method, params: request.params });
-    const second = rpcUrl === TENDERLY;
+    const second = rpcUrl === RPC_URLS[1];
     const blockHash = second && mutation.secondProviderBlockHash
       ? mutation.secondProviderBlockHash
       : BLOCK_HASH;
@@ -223,6 +225,7 @@ describe("Bitquery golden execution proof", () => {
   it("reproduces the exact receipt execution through fixed archive witnesses", async () => {
     const witness = witnessFetch();
     const result = await verifyBitqueryGoldenMarketExecutionV1({
+      rpcUrls: RPC_URLS,
       token: token(),
       fetchImpl: witness.fetchImpl,
     });
@@ -257,7 +260,7 @@ describe("Bitquery golden execution proof", () => {
       },
     });
     expect(new Set(witness.calls.map(({ rpcUrl }) => rpcUrl))).toEqual(
-      new Set([MEV_BLOCKER, TENDERLY]),
+      new Set(RPC_URLS),
     );
     expect(witness.calls.filter(({ method }) => method === "eth_call"))
       .toHaveLength(8);
@@ -276,6 +279,7 @@ describe("Bitquery golden execution proof", () => {
     async (_label, mutation) => {
       const witness = witnessFetch(mutation);
       await expect(verifyBitqueryGoldenMarketExecutionV1({
+      rpcUrls: RPC_URLS,
         token: token(),
         fetchImpl: witness.fetchImpl,
       })).rejects.toThrow();
@@ -287,6 +291,7 @@ describe("Bitquery golden execution proof", () => {
     wrongAmount.marketData.pools[0].latestTrade.tokenAmount = "1";
     const amountWitness = witnessFetch();
     await expect(verifyBitqueryGoldenMarketExecutionV1({
+      rpcUrls: RPC_URLS,
       token: wrongAmount,
       fetchImpl: amountWitness.fetchImpl,
     })).rejects.toThrow("independent execution witnesses did not agree");
@@ -295,6 +300,7 @@ describe("Bitquery golden execution proof", () => {
     wrongQuote.marketData.pools[0].latestTrade.priceQuoteWad = "11008417140";
     const quoteWitness = witnessFetch();
     await expect(verifyBitqueryGoldenMarketExecutionV1({
+      rpcUrls: RPC_URLS,
       token: wrongQuote,
       fetchImpl: quoteWitness.fetchImpl,
     })).rejects.toThrow("does not match its receipt witness");
@@ -309,6 +315,7 @@ describe("Bitquery golden execution proof", () => {
     wrongUsd.valuation.valueWad = wrongFdv;
     const witness = witnessFetch();
     await expect(verifyBitqueryGoldenMarketExecutionV1({
+      rpcUrls: RPC_URLS,
       token: wrongUsd,
       fetchImpl: witness.fetchImpl,
     })).rejects.toThrow("does not match its receipt witness");
@@ -334,6 +341,7 @@ describe("Bitquery golden execution proof", () => {
     };
 
     await expect(verifyBitqueryGoldenMarketExecutionV1({
+      rpcUrls: RPC_URLS,
       token: token(),
       fetchImpl,
     })).rejects.toThrow("oversized body");
@@ -359,6 +367,7 @@ describe("Bitquery golden execution proof", () => {
     };
 
     await expect(verifyBitqueryGoldenMarketExecutionV1({
+      rpcUrls: RPC_URLS,
       token: token(),
       fetchImpl,
     })).rejects.toThrow("oversized body");
@@ -374,6 +383,7 @@ describe("Bitquery golden execution proof", () => {
     };
 
     await expect(verifyBitqueryGoldenMarketExecutionV1({
+      rpcUrls: RPC_URLS,
       token: token(),
       fetchImpl,
     })).rejects.toThrow("invalid JSON");

@@ -47,12 +47,6 @@ const feeRows = [
     split: `${formatBps(PROGRAMMABLE_FEE_TABLE.publicTemplate.creatorBps)} to the template creator and ${formatBps(PROGRAMMABLE_FEE_TABLE.publicTemplate.programmableBps)} to Programmable.`,
     treatment: PROGRAMMABLE_FEE_TABLE.publicTemplate.chargeMode,
   },
-  {
-    path: "Partner template",
-    total: formatBps(PROGRAMMABLE_FEE_TABLE.partnerTemplate.totalBps),
-    split: `${formatBps(PROGRAMMABLE_FEE_TABLE.partnerTemplate.partnerBps)} to the partner and ${formatBps(PROGRAMMABLE_FEE_TABLE.partnerTemplate.programmableBps)} to Programmable.`,
-    treatment: PROGRAMMABLE_FEE_TABLE.partnerTemplate.chargeMode,
-  },
 ] as const;
 
 export default function EconomicsDocsPage() {
@@ -128,9 +122,8 @@ export default function EconomicsDocsPage() {
         <p>
           Classic creator rewards are the selected swap fee minus the 10 bps
           Programmable share. Public template creators receive 10 bps from
-          official launches that use their exact template version. Partner
-          templates use a separate 15 bps partner share and 5 bps Programmable
-          share.
+          official launches that use their exact template version once that
+          separately documented payout path is active.
         </p>
         <p>
           Earnings depend on actual qualifying activity. A review, listing or

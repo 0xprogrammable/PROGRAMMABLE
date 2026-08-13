@@ -144,7 +144,7 @@ function provider(identity: string, rpcClient = client()) {
 function verify(dynamicSources?: readonly VerifiedDynamicSourceLineage[]) {
   return verifyEnvioCandidateBatchWithDualRpc({
     candidates: [candidate()],
-    providers: [provider("alchemy-mainnet"), provider("quicknode-mainnet")],
+    providers: [provider("drpc-mainnet"), provider("quicknode-mainnet")],
     dynamicSources,
     requireDynamicLineage: true,
     rpcPolicy: { maxAttempts: 1 },
@@ -190,7 +190,7 @@ describe("two-phase dynamic source lineage", () => {
       verifyEnvioCandidateBatchWithDualRpc({
         candidates: [candidate()],
         providers: [
-          provider("alchemy-mainnet", client(changed)),
+          provider("drpc-mainnet", client(changed)),
           provider("quicknode-mainnet", client(changed)),
         ],
         dynamicSources: [lineage()],

@@ -122,7 +122,7 @@ type ProviderFixture = Readonly<{
 }>;
 
 function providerFixture(
-  vendor: "alchemy" | "quicknode",
+  vendor: "drpc" | "quicknode",
   overrides: Readonly<{
     chainId?: number;
     head?: bigint;
@@ -133,7 +133,7 @@ function providerFixture(
     vendorGroup?: string;
   }> = {},
 ): ProviderFixture {
-  const marker = vendor === "alchemy" ? "a" : "b";
+  const marker = vendor === "drpc" ? "a" : "b";
   const getChainId = vi.fn(async () => overrides.chainId ?? 1);
   const getBlockNumber = vi.fn(async () => overrides.head ?? BLOCK_NUMBER);
   const getBlock = vi.fn(async (request?: unknown) => {
@@ -181,7 +181,7 @@ function providerFixture(
 function providerPair(
   secondOverrides: Parameters<typeof providerFixture>[1] = {},
 ) {
-  const first = providerFixture("alchemy");
+  const first = providerFixture("drpc");
   const second = providerFixture("quicknode", secondOverrides);
   return { first, second, providers: [first.provider, second.provider] as const };
 }
@@ -285,8 +285,8 @@ describe("dual-RPC optimistic block reader", () => {
         parentHash: PARENT_HASH,
         timestamp: "1722687488",
       },
-      providerIdentities: ["alchemy-mainnet", "quicknode-mainnet"],
-      providerVendorGroups: ["alchemy", "quicknode"],
+      providerIdentities: ["drpc-mainnet", "quicknode-mainnet"],
+      providerVendorGroups: ["drpc", "quicknode"],
       providerHeads: [BLOCK_NUMBER.toString(), BLOCK_NUMBER.toString()],
       confirmations: 0,
       providerCallCounts: [4, 4],
@@ -339,7 +339,7 @@ describe("dual-RPC optimistic block reader", () => {
       blockHash: hash,
       topics: [topic0],
     });
-    const first = providerFixture("alchemy", {
+    const first = providerFixture("drpc", {
       head: blockNumber,
       block: candidateBlock({ number: blockNumber, hash }),
       logs: [log],
@@ -400,7 +400,7 @@ describe("dual-RPC optimistic block reader", () => {
   });
 
   it("returns both verified heads and confirmations from the lower head", async () => {
-    const first = providerFixture("alchemy", { head: BLOCK_NUMBER + 5n });
+    const first = providerFixture("drpc", { head: BLOCK_NUMBER + 5n });
     const second = providerFixture("quicknode", { head: BLOCK_NUMBER + 3n });
 
     const result = await readOptimisticBlockWithDualRpc({
@@ -428,7 +428,7 @@ describe("dual-RPC optimistic block reader", () => {
       number: head,
       hash: `0x${"88".repeat(32)}`,
     });
-    const first = providerFixture("alchemy", { head, headBlock });
+    const first = providerFixture("drpc", { head, headBlock });
     const second = providerFixture("quicknode", { head, headBlock });
 
     const result = await readOptimisticBlockWithDualRpc({
@@ -445,7 +445,7 @@ describe("dual-RPC optimistic block reader", () => {
 
   it("rejects different hashes for the same reported provider head", async () => {
     const head = BLOCK_NUMBER + 2n;
-    const first = providerFixture("alchemy", { head });
+    const first = providerFixture("drpc", { head });
     const second = providerFixture("quicknode", { head });
 
     await expect(
@@ -473,7 +473,7 @@ describe("dual-RPC optimistic block reader", () => {
       number: excessiveHead,
       hash: `0x${"88".repeat(32)}`,
     });
-    const first = providerFixture("alchemy", {
+    const first = providerFixture("drpc", {
       head: excessiveHead,
       headBlock,
     });
@@ -583,7 +583,7 @@ describe("dual-RPC optimistic block reader", () => {
   });
 
   it("rejects provider identity reuse and pre-release hints", async () => {
-    const sameVendor = providerPair({ vendorGroup: "alchemy" });
+    const sameVendor = providerPair({ vendorGroup: "drpc" });
     await expect(
       readOptimisticBlockWithDualRpc({
         providers: sameVendor.providers,

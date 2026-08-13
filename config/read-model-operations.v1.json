@@ -9,9 +9,30 @@
     "boundedRefresh": {
       "runtime": {
         "path": "lib/onchain/read-model.ts",
-        "sha256": "5f0c5c23582a48fc7995cc4fcba865a9c20199418c0b7a0b7f9b687b2ae8717d"
+        "sha256": "73c99640515732c975600b5e9a8cd4ffb7fafbc04536a563126c76ea60b27fe6"
       },
-      "eventFiltersPerRange": 5,
+      "dependencies": [
+        {
+          "path": "lib/onchain/parallel-reads.ts",
+          "sha256": "ef2bf54f390dca210dfdb3b5ba29c4cf8f6eaea2574c9be219a5410dbf8fb64e"
+        }
+      ],
+      "releaseRuntimes": [
+        {
+          "release": "classic-v3",
+          "path": "lib/onchain/classic-v3-read-model.ts",
+          "sha256": "c97c6f5875bf089b8545bfc55bd20f26c1520bdbe0c640e873f70ca08b4cc4a3",
+          "eventFiltersPerRange": 2
+        },
+        {
+          "release": "stock-paired-v1-v3",
+          "path": "lib/onchain/stock-paired-read-model.ts",
+          "sha256": "9c9badce8d6dfb000a29fd4abcc013701f5a81736ce9ad9fd1e72816b3a75b2f",
+          "eventFiltersPerRange": 3
+        }
+      ],
+      "eventFiltersPerRange": 2,
+      "providerPasses": 2,
       "requestDeadlineMs": 270000
     },
     "schedulerWatchdog": {
@@ -47,15 +68,15 @@
         },
         "deploymentConfig": {
           "path": "lib/onchain/config.ts",
-          "sha256": "715ee5b492d8ec7ed9d3870286f09debb344f9cdb05556a41ab8e50d0aa23cb2"
+          "sha256": "0e75c3d55b54933504c702977c0d7972a788fe89d63cc3c2a7d19138ae7fbcb7"
         },
         "providerConfig": {
           "path": "lib/onchain/website-rpc-providers.server.ts",
-          "sha256": "b6c35adf7598b53989fc68e82affcdc5b75559125e387a03afd6468933888fb3"
+          "sha256": "c0a6283dcb9a8dd2ccc153242436fcf25db24c4b57acb73148fd804b632057e7"
         },
         "currentMarketRpc": {
           "path": "lib/market-data/current-market-rpc.server.ts",
-          "sha256": "ead586a84aba823c5312607b551f9a5701e18ce52c9b35bfb7882213434a746c"
+          "sha256": "ef2e01d5a184839ce8c5bebe4ec8d05b374930be13ff16d65bccee12c7e96085"
         }
       }
     },
@@ -78,12 +99,12 @@
       },
       "runtime": {
         "path": "lib/data-pipeline/projector-runtime-config.server.ts",
-        "sha256": "78483bf9b1110b4a97b719c6bb9bf9256285729e6002deb3621a9d1987373010"
+        "sha256": "25c5427bd24714262e04d3eb14b6b31c71820e9b4070817d4146fe1309bb7fb5"
       },
       "dependencies": [
         {
           "path": "lib/data-pipeline/candidate-projector-runtime-binding.server.ts",
-          "sha256": "1d4515a3ea088ed5164f3083e6fa7e6d639e786f23b18e85b663c4395c64abf5"
+          "sha256": "014476a4f7b344b1d8a7c92aafab95d3e9efda1da4d2e323b83e838e8a068228"
         }
       ],
       "migrations": [
@@ -126,6 +147,10 @@
         {
           "path": "supabase/migrations/20260801204500_reuse_dual_rpc_block_evidence_constraint.sql",
           "sha256": "92cc63189b41eda613ba9da21b7ef21bee650a93f1825f5ee063727ee6c06b11"
+        },
+        {
+          "path": "supabase/migrations/20260813083835_provider_neutral_drpc_quicknode.sql",
+          "sha256": "ee6ae24120ad633509a1341f8995905dff19b66052a083588075517f1acbc9f0"
         }
       ]
     },
@@ -140,7 +165,7 @@
       },
       "runtime": {
         "path": "lib/data-pipeline/market-projector-runtime.server.ts",
-        "sha256": "5ce3b98d0a373c45b309011b59cc6ec7eeaef54bc112f2b55d32dca433566da0"
+        "sha256": "170138d1d3cc8de5cacb0b2b7a8f587d83e75d6e4031c314b226b673cc9dac6b"
       },
       "migrations": [
         {
@@ -154,6 +179,10 @@
         {
           "path": "supabase/migrations/20260803000100_market_projector_health_view.sql",
           "sha256": "946000d60600f8b144fb535579f6808b0acfd6da3331f17511f712e7bb24b2fd"
+        },
+        {
+          "path": "supabase/migrations/20260813083835_provider_neutral_drpc_quicknode.sql",
+          "sha256": "ee6ae24120ad633509a1341f8995905dff19b66052a083588075517f1acbc9f0"
         }
       ]
     }
@@ -192,11 +221,11 @@
         },
         {
           "path": "lib/data-pipeline/optimistic-market-state.server.ts",
-          "sha256": "88e55d7311c40ada819820c665fbe54247eb605373b5028346889e247dc790e3"
+          "sha256": "e608497bc890bf2fbaf8f6af056fe91a5a4c84bae04c1a4fd80dccd04b779d9e"
         },
         {
           "path": "lib/data-pipeline/optimistic-live-runtime.server.ts",
-          "sha256": "817b4563eb503aa761efc922c264cf1699fd2264160adfd1a5294308750533f6"
+          "sha256": "9cfc38593e10acdbb4206c93f7eea403ae32b944fd875cd2da8b330f6929bcd4"
         },
         {
           "path": "lib/data-pipeline/read-model-real-block-sla-capture.server.ts",
@@ -208,7 +237,7 @@
         },
         {
           "path": "lib/data-pipeline/rpc-providers.server.ts",
-          "sha256": "d6694f99366226a64a07b28ef3646cc05556048bc1ce790f9fbac4929c3ce77c"
+          "sha256": "8901014d3f4beab60ff324efc90d2d57a3e034399942e9b42c2f01a0d7ef9b5d"
         },
         {
           "path": "app/api/ops/read-model-real-block-sla/route.ts",
@@ -217,6 +246,10 @@
         {
           "path": "supabase/migrations/20260802104211_real_block_sla_runtime_receipts.sql",
           "sha256": "0b9331f2b452084c4544b751ce1fbd41bba7e927ef81d6cddcb258c36f8729dc"
+        },
+        {
+          "path": "supabase/migrations/20260813083835_provider_neutral_drpc_quicknode.sql",
+          "sha256": "ee6ae24120ad633509a1341f8995905dff19b66052a083588075517f1acbc9f0"
         }
       ]
     }
@@ -232,7 +265,7 @@
       "maximumDeliveryToFirstVisibleMs": 10000,
       "script": {
         "path": "scripts/perf/read-model-real-block-sla-gate.mjs",
-        "sha256": "68cb5f77d3891070cba84f6b69f13eabb177016823f9baed6decdf62aa1a0c3a"
+        "sha256": "c6fa20ec8f4bbc18dc15da91328329f1822db31df66d6bd02e403f06e93fc28f"
       },
       "schema": {
         "path": "config/read-model-real-block-sla-db-attestation.schema.json",

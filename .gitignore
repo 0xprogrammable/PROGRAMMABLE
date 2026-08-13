@@ -25,11 +25,13 @@
 /tmp/
 /var/
 /outputs/qa/
+/output/playwright/
 /artifacts/
 /.codex-temp-programmable-readme-gif/
 /.superpowers/
 /.worktrees/
 *.tsbuildinfo
+/test-results/
 **/.cre_build_tmp.*
 **/binary.wasm
 

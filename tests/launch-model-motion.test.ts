@@ -6,6 +6,13 @@ const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 describe("launch model artwork", () => {
+  const removedPartnerMarkers = [
+    String.fromCharCode(97, 101, 111, 110, 102, 114, 97, 109, 101, 119, 111, 114, 107),
+    ["based", "bidx"].join(""),
+    `launch-model-${String.fromCharCode(97, 101, 111, 110)}`,
+    `launch-model-${String.fromCharCode(98, 97, 115, 101, 100, 98, 105, 100)}`,
+  ];
+
   it("uses the owned botanical art and exact Programmable loop asset", () => {
     const source = read("components/launch-entry.tsx");
     const css = read("components/launch-experience.module.css");
@@ -16,14 +23,9 @@ describe("launch model artwork", () => {
     expect(source).toContain(
       'src="/brand/loop/programmable-loop-mark-warm-ivory-v1-1536.png"',
     );
-    expect(source).toContain('src="/brand/create/aeon-framework-v1.webp"');
-    expect(source).toContain('src="/brand/create/basedbid-v2.png"');
-    expect(css).toMatch(
-      /\.basedBidArt \.artImage\s*\{[^}]*object-fit:\s*cover;/s,
-    );
-    expect(css).toMatch(
-      /\.modelCard\[data-launch-model-option="basedbid"\] \.basedBidArt \.artImage\s*\{[^}]*filter:\s*none;/s,
-    );
+    for (const marker of removedPartnerMarkers) {
+      expect(source).not.toContain(marker);
+    }
   });
 
   it("keeps model images stable on hover", () => {
@@ -58,20 +60,9 @@ describe("launch model artwork", () => {
       'aria-describedby="launch-model-custom-description"',
     );
     expect(source).toContain('data-launch-model-option="custom"');
-    expect(source).toContain('href="https://x.com/aeonframework"');
-    expect(source).toContain(
-      'aria-labelledby="launch-model-aeon-title"',
-    );
-    expect(source).toContain(
-      'aria-describedby="launch-model-aeon-description"',
-    );
-    expect(source).toContain('href="https://x.com/basedbidx"');
-    expect(source).toContain(
-      'aria-labelledby="launch-model-basedbid-title"',
-    );
-    expect(source).toContain(
-      'aria-describedby="launch-model-basedbid-description"',
-    );
+    for (const marker of removedPartnerMarkers) {
+      expect(source).not.toContain(marker);
+    }
     expect(source).toMatch(
       /\$\{launchExperience\.modelArt\}[\s\S]{0,250}aria-hidden="true"[\s\S]{0,300}src="\/brand\/create\/classic-botanical-v4\.webp"[\s\S]{0,120}alt=""/,
     );

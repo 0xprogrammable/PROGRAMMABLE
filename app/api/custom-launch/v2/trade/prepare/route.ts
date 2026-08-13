@@ -13,6 +13,8 @@ import {
   selectConservativeCustomPreparationV1,
   type CustomMarketTradeRuntimeClientV1,
 } from "@/lib/server/custom-launch/trade-v1";
+import { isCustomLaunchRegistryPublicReadEnabled } from
+  "@/lib/server/custom-launch/public-readiness";
 import { safeServerErrorSummary } from "@/lib/server/safe-error";
 
 export const dynamic = "force-dynamic";
@@ -84,6 +86,11 @@ export async function POST(request: NextRequest) {
     return json({ error: "Send a valid JSON Custom trade request" }, 400);
   }
   try {
+    if (!isCustomLaunchRegistryPublicReadEnabled()) {
+      throw new CustomMarketTradeUnavailableErrorV1(
+        "Custom trade preparation is unavailable",
+      );
+    }
     const tradeRequest = parseCustomMarketTradeRequestV1(body);
     const providers = tradeActionRpcProviders(tradeRequest.chainId);
     const results = await Promise.allSettled(providers.map(({ endpoint }) =>

@@ -522,17 +522,9 @@ export function customLaunchFeeReviewV1(
     });
   }
   const recipients = Object.freeze(policy.legs.map(({ recipient, role }) => Object.freeze({
-    label: role === "programmable" ? "Programmable" : policy.providerId === "aeon" ? "AEON" : policy.providerId,
+    label: role === "programmable" ? "Programmable" : policy.providerId,
     value: recipient.value,
   })));
-  if (policy.feeMode === "aeon-partner-custom") {
-    return Object.freeze({
-      summary: "20 bps total: 15 bps AEON and 5 bps Programmable, with no additional 10 bps",
-      identity,
-      marketPath: policy.marketPathId,
-      recipients,
-    });
-  }
   return Object.freeze({
     summary: "10 bps Programmable, added on top",
     identity,

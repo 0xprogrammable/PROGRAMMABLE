@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getAddress, keccak256, type Hex } from "viem";
+import { keccak256, type Hex } from "viem";
 
 import {
   CUSTOM_REGISTRY_CONTRACT_KEYS,
@@ -11,12 +11,6 @@ import {
 } from "../../custom-launch/registry-public-manifest-v1";
 import { parseStrictJson } from "../projection-target/canonical-json";
 
-const ADDRESS = /^0x[0-9a-fA-F]{40}$/u;
-const RUNTIME_CODE_KECCAK256 = /^0x[0-9a-f]{64}$/u;
-const POSITIVE_BLOCK = /^[1-9][0-9]{0,19}$/u;
-const IDENTIFIER = /^[a-z0-9][a-z0-9._:/+\-]{0,127}$/u;
-const PLACEHOLDER_TEXT = /(?:^|[._:/+\-])(?:example|placeholder|prelaunch|replace|tbd|todo|unknown)(?:$|[._:/+\-])/iu;
-const UINT64_MAX = 18_446_744_073_709_551_615n;
 const MAXIMUM_RPC_RESPONSE_BYTES = 131_072;
 const RPC_TIMEOUT_MS = 5_000;
 
@@ -80,137 +74,8 @@ type Environment = Readonly<Record<string, string | undefined>>;
 export function resolveCustomRegistryPublicManifestV1(
   environment: Environment = process.env,
 ): CustomRegistryPublicManifestV1 {
-  try {
-    if (environment.PROGRAMMABLE_CUSTOM_REGISTRY_PUBLIC_ENABLED !== "true") {
-      return PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1;
-    }
-
-    const generation = exactIdentifier(
-      environment.PROGRAMMABLE_CUSTOM_REGISTRY_GENERATION,
-    );
-    const startBlock = exactStartBlock(
-      environment.PROGRAMMABLE_CUSTOM_REGISTRY_START_BLOCK,
-    );
-    const addresses = new Set<string>();
-    const contracts = Object.fromEntries(CUSTOM_REGISTRY_CONTRACT_KEYS.map((key) => {
-      const binding = CONTRACT_ENVIRONMENT[key];
-      const address = exactAddress(environment[binding.address]);
-      const identity = address.toLowerCase();
-      if (addresses.has(identity)) {
-        throw new TypeError("Custom Registry contract addresses must be unique");
-      }
-      addresses.add(identity);
-      return [key, Object.freeze({
-        address,
-        runtimeCodeKeccak256: exactRuntimeCodeKeccak256(
-          environment[binding.runtimeCodeKeccak256],
-        ),
-      })];
-    })) as CustomRegistryPublicManifestV1["contracts"];
-
-    const specifications = Object.freeze({
-      abi: exactSpecificationBinding(environment, SPECIFICATION_ENVIRONMENT.abi),
-      eventSet: exactSpecificationBinding(
-        environment,
-        SPECIFICATION_ENVIRONMENT.eventSet,
-      ),
-      hashSpec: exactSpecificationBinding(
-        environment,
-        SPECIFICATION_ENVIRONMENT.hashSpec,
-      ),
-    });
-
-    return Object.freeze({
-      schemaVersion: "programmable.custom-registry-public-manifest.v1",
-      status: "live",
-      chainId: "1",
-      caip2: "eip155:1",
-      publicSubmissionsEnabled: false,
-      generation,
-      startBlock,
-      contracts: Object.freeze(contracts),
-      specifications,
-    });
-  } catch {
-    return PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1;
-  }
-}
-
-function exactAddress(value: string | undefined): `0x${string}` {
-  if (
-    typeof value !== "string"
-    || value.trim() !== value
-    || !ADDRESS.test(value)
-  ) throw new TypeError("Custom Registry address is invalid");
-  const body = value.slice(2).toLowerCase();
-  if (
-    /^0{40}$/u.test(body)
-    || /^0{36}dead$/u.test(body)
-    || /^([0-9a-f])\1{39}$/u.test(body)
-  ) throw new TypeError("Custom Registry placeholder address is invalid");
-  return getAddress(value);
-}
-
-function exactRuntimeCodeKeccak256(value: string | undefined): `0x${string}` {
-  if (
-    typeof value !== "string"
-    || !RUNTIME_CODE_KECCAK256.test(value)
-    || /^0x([0-9a-f])\1{63}$/u.test(value)
-  ) throw new TypeError("Custom Registry runtime code hash is invalid");
-  return value as `0x${string}`;
-}
-
-function exactStartBlock(value: string | undefined): string {
-  if (typeof value !== "string" || !POSITIVE_BLOCK.test(value)) {
-    throw new TypeError("Custom Registry start block is invalid");
-  }
-  const parsed = BigInt(value);
-  if (parsed > UINT64_MAX) {
-    throw new TypeError("Custom Registry start block is invalid");
-  }
-  return value;
-}
-
-function exactIdentifier(value: string | undefined): string {
-  if (
-    typeof value !== "string"
-    || !IDENTIFIER.test(value)
-    || PLACEHOLDER_TEXT.test(value)
-  ) throw new TypeError("Custom Registry identifier is invalid");
-  return value;
-}
-
-function exactSpecificationBinding(
-  environment: Environment,
-  keys: Readonly<{ identifier: string; url: string }>,
-) {
-  const identifier = exactIdentifier(environment[keys.identifier]);
-  const url = exactPublicHttpsUrl(environment[keys.url]);
-  return Object.freeze({ identifier, url });
-}
-
-function exactPublicHttpsUrl(value: string | undefined): string {
-  if (typeof value !== "string" || value.trim() !== value || value.length > 2_048) {
-    throw new TypeError("Custom Registry public URL is invalid");
-  }
-  const url = new URL(value);
-  const hostname = url.hostname.toLowerCase();
-  if (
-    url.protocol !== "https:"
-    || url.username !== ""
-    || url.password !== ""
-    || url.search !== ""
-    || url.hash !== ""
-    || url.pathname === "/"
-    || hostname === "localhost"
-    || hostname.endsWith(".localhost")
-    || hostname.endsWith(".example")
-    || hostname.endsWith(".example.com")
-    || hostname.endsWith(".invalid")
-    || hostname.endsWith(".test")
-    || hostname === "example.com"
-  ) throw new TypeError("Custom Registry public URL is invalid");
-  return url.toString();
+  void environment;
+  return PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1;
 }
 
 export type CustomRegistryRuntimeVerificationV1 =

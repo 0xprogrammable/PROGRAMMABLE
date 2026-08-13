@@ -1,10 +1,32 @@
 #!/usr/bin/env node
 
-import { readFile, rename, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 export const VERCEL_SENSITIVE_PRODUCTION_METADATA_SCHEMA =
   "programmable.vercel-sensitive-production-metadata.v1";
+
+export function omitVercelEnvironmentValues(metadata) {
+  if (
+    metadata === null
+    || typeof metadata !== "object"
+    || Array.isArray(metadata)
+    || Object.keys(metadata).sort().join("\0") !== "envs"
+    || !Array.isArray(metadata.envs)
+  ) {
+    throw new Error("Vercel environment metadata is invalid");
+  }
+  return Object.freeze({
+    envs: metadata.envs.map((entry) => {
+      if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+        throw new Error("Vercel environment metadata is invalid");
+      }
+      const valueFreeEntry = { ...entry };
+      delete valueFreeEntry.value;
+      return Object.freeze(valueFreeEntry);
+    }),
+  });
+}
 
 export function bindVercelSensitiveProductionMetadata({
   metadata,
@@ -56,20 +78,24 @@ function argumentsFrom(argv) {
   return result;
 }
 
+async function readStandardInput() {
+  const chunks = [];
+  for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks).toString("utf8");
+}
+
 async function main(argv) {
   const args = argumentsFrom(argv);
-  const source = JSON.parse(await readFile(args["metadata-file"], "utf8"));
+  const source = JSON.parse(await readStandardInput());
   const bound = bindVercelSensitiveProductionMetadata({
-    metadata: source,
+    metadata: omitVercelEnvironmentValues(source),
     vercelProjectId: args["vercel-project-id"],
   });
-  const replacement = `${args["metadata-file"]}.bound`;
-  await writeFile(replacement, `${JSON.stringify(bound)}\n`, {
+  await writeFile(args["metadata-file"], `${JSON.stringify(bound)}\n`, {
     encoding: "utf8",
     flag: "wx",
     mode: 0o600,
   });
-  await rename(replacement, args["metadata-file"]);
   process.stdout.write(`${JSON.stringify({
     status: "bound",
     schemaVersion: bound.schemaVersion,

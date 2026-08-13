@@ -7,6 +7,8 @@ import {
 } from "viem";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { rpcProviderCommitment } from
+  "../lib/data-pipeline/rpc-provider-commitments";
 import { createStockPairedPoolKey } from "../lib/trade/stock-paired";
 import { computeOfficialV4PoolId } from "../lib/uniswap/liquidity-launcher-sdk";
 
@@ -301,13 +303,26 @@ function request(action: "claim" | "convert-to-eth" = "claim") {
 describe("Stock-Paired action identity activation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    const drpc = "https://lb.drpc.live/ethereum/drpc-stock-key";
+    const quicknode =
+      "https://stock-node.ethereum-mainnet.quiknode.pro/quicknode-stock-key/";
     vi.stubEnv(
-      "ETHEREUM_RPC_URL",
-      "https://eth-mainnet.g.alchemy.com/v2/alchemy-stock-key",
+      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_PROVIDER",
+      "drpc",
+    );
+    vi.stubEnv("PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL", drpc);
+    vi.stubEnv(
+      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT",
+      rpcProviderCommitment("endpoint", drpc),
     );
     vi.stubEnv(
-      "ETHEREUM_RPC_URL_B",
-      "https://stock-node.quiknode.pro/quicknode-stock-key/",
+      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_PROVIDER",
+      "quicknode",
+    );
+    vi.stubEnv("PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_URL", quicknode);
+    vi.stubEnv(
+      "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT",
+      rpcProviderCommitment("endpoint", quicknode),
     );
     mocks.lookup.mockResolvedValue(actionReward);
     mocks.readLegacy.mockResolvedValue(legacyModel);
@@ -425,8 +440,8 @@ describe("Stock-Paired action identity activation", () => {
     async (indexedEnabled) => {
       mocks.indexedEnabled = indexedEnabled;
       vi.stubEnv(
-        "ETHEREUM_RPC_URL_B",
-        "https://eth-mainnet.g.alchemy.com/v2/second-stock-secret",
+        "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_URL",
+        "https://lb.drpc.live/ethereum/second-stock-secret",
       );
 
       const response = await POST(request());
@@ -434,7 +449,7 @@ describe("Stock-Paired action identity activation", () => {
 
       expect(response.status).toBe(503);
       expect(mocks.createPublicClient).not.toHaveBeenCalled();
-      expect(serialized).not.toContain("alchemy-stock-key");
+      expect(serialized).not.toContain("drpc-stock-key");
       expect(serialized).not.toContain("second-stock-secret");
     },
   );

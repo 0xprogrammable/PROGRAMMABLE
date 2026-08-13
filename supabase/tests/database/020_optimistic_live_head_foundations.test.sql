@@ -214,7 +214,7 @@ set local role programmable_projector;
 
 select programmable_private.register_rpc_provider_deployment(
   '21000000-0000-4000-8000-000000000001', 1,
-  'alchemy', 'optimistic-live-head-test-v1',
+  'drpc', 'optimistic-live-head-test-v1',
   pg_catalog.decode(pg_catalog.repeat('13', 32), 'hex'),
   pg_catalog.decode(pg_catalog.repeat('14', 32), 'hex'),
   'rpc-endpoint-commitments-v1',

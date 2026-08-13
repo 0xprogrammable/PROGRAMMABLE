@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "programmable.custom-registry-v2-deployment.v1",
+  "status": "prelaunch",
+  "generation": "2",
+  "chainId": "1",
+  "caip2": "eip155:1",
+  "publicReadEnabled": false,
+  "indexingEnabled": false,
+  "registry": {
+    "address": null,
+    "runtimeCodeKeccak256": null,
+    "deploymentTransactionHash": null,
+    "deploymentBlock": null,
+    "deploymentBlockHash": null
+  },
+  "release": {
+    "sourceCommit": null,
+    "sourceTree": null,
+    "sourceArtifactSha256": null,
+    "abiArtifactSha256": null,
+    "eventSetSha256": null
+  },
+  "finality": {
+    "minimumConfirmations": null,
+    "policyBindingHash": null
+  },
+  "profiles": {
+    "NoMarket0": {
+      "marketMode": 0,
+      "protocolFeeBps": 0
+    },
+    "Standard10": {
+      "marketMode": 1,
+      "protocolFeeBps": 10
+    }
+  }
+}

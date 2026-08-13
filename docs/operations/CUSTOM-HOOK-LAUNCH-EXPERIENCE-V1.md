@@ -142,8 +142,8 @@ Show a plain-language summary of:
 - pool configuration, including an explicit `No pool at launch` state;
 - the exact provider, model, template, semantic version, and market path from the approved fee
   policy;
-- Standard Custom at 10 bps Programmable added on top, AEON at 20 bps total split 15 bps AEON and
-  5 bps Programmable with no additional 10 bps, or 0 bps when no qualifying market path exists;
+- Standard Custom at 10 bps Programmable added on top, or 0 bps when no qualifying market path
+  exists; partner and non-standard fee modes fail closed;
 - every fee recipient from the approved plan, including the fixed Programmable recipient;
 - launch wallet and any other recipient;
 - external dependencies and material permissions;

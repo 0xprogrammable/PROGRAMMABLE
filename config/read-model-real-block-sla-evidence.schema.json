@@ -133,7 +133,7 @@
     "dualRpc": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["block", "alchemy", "quicknode"],
+      "required": ["block", "drpc", "quicknode"],
       "properties": {
         "block": {
           "type": "object",
@@ -155,7 +155,7 @@
             "logsCommitment": { "$ref": "#/$defs/nonzeroBytes32" }
           }
         },
-        "alchemy": { "$ref": "#/$defs/provider" },
+        "drpc": { "$ref": "#/$defs/provider" },
         "quicknode": { "$ref": "#/$defs/provider" }
       }
     },
@@ -306,7 +306,7 @@
         "totalCallCount"
       ],
       "properties": {
-        "providerId": { "enum": ["alchemy", "quicknode"] },
+        "providerId": { "enum": ["drpc", "quicknode"] },
         "providerDeploymentId": {
           "type": "string",
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"

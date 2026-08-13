@@ -18,6 +18,7 @@ import {
   canonicalJson,
   sha256,
 } from "./hosted-db-operator-core.mjs";
+import { validateBootstrapProviderRoles } from "./bootstrap-provider-roles.mjs";
 
 const ADDRESS = /^0x[0-9a-f]{40}$/u;
 const BYTES32 = /^0x[0-9a-f]{64}$/u;
@@ -463,25 +464,7 @@ function validateCanonicalReleaseCandidate(binding, candidateEnvioEvidence) {
 
 function validateProviderSet(providers, candidateEnvioEvidence) {
   validateCandidateEnvioEvidence(candidateEnvioEvidence);
-  if (!Array.isArray(providers) || providers.length !== 4) {
-    throw new Error("bootstrap provider set is incomplete");
-  }
-  if (
-    canonicalJson(
-      providers.map(({ providerType, vendor = null }) => ({
-        providerType,
-        vendor,
-      })),
-    ) !==
-      canonicalJson([
-        { providerType: "envio_deployment", vendor: null },
-        { providerType: "rpc_provider", vendor: "alchemy" },
-        { providerType: "rpc_provider", vendor: "quicknode" },
-        { providerType: "uniswap_subgraph", vendor: null },
-      ])
-  ) {
-    throw new Error("bootstrap provider order is not canonical");
-  }
+  validateBootstrapProviderRoles(providers);
   const envio = providers.filter(
     ({ providerType }) => providerType === "envio_deployment",
   );
@@ -525,7 +508,7 @@ function validateProviderSet(providers, candidateEnvioEvidence) {
     "Uniswap subgraph provider",
   );
   const vendors = rpc.map(({ vendor }) => vendor).sort();
-  if (canonicalJson(vendors) !== canonicalJson(["alchemy", "quicknode"])) {
+  if (canonicalJson(vendors) !== canonicalJson(["drpc", "quicknode"])) {
     throw new Error("bootstrap RPC vendors are not the canonical independent pair");
   }
   for (const provider of rpc) {
@@ -2069,6 +2052,7 @@ export function validateReviewedBootstrapPlan(plan) {
   ) {
     throw new Error("reviewed bootstrap plan is invalid");
   }
+  validateBootstrapProviderRoles(plan.providerBindings);
   exactIsoTimestamp(plan.createdAt, "reviewed bootstrap creation time");
   const { planSha256, ...payload } = plan;
   if (sha256(canonicalJson(payload)) !== planSha256) {
@@ -2111,7 +2095,7 @@ export function validateReviewedBootstrapPlan(plan) {
     canonicalJson(providerTypes) !==
       canonicalJson([
         { providerType: "envio_deployment", vendor: null },
-        { providerType: "rpc_provider", vendor: "alchemy" },
+        { providerType: "rpc_provider", vendor: "drpc" },
         { providerType: "rpc_provider", vendor: "quicknode" },
         { providerType: "uniswap_subgraph", vendor: null },
       ]) ||
@@ -2121,19 +2105,19 @@ export function validateReviewedBootstrapPlan(plan) {
   ) {
     throw new Error("reviewed provider set is invalid");
   }
-  const [candidate, alchemy, quicknode, graph] = plan.providerBindings;
+  const [candidate, drpc, quicknode, graph] = plan.providerBindings;
   if (
     candidate.redactedIdentity !==
       plan.candidateIsolation.candidateEnvioIdentity ||
     candidate.providerDeploymentId !==
       plan.candidateIsolation.candidateEnvioProviderDeploymentId ||
-    alchemy.chainId !== 1 ||
+    drpc.chainId !== 1 ||
     quicknode.chainId !== 1 ||
-    alchemy.redactedIdentity !== "rpc:1:alchemy" ||
+    drpc.redactedIdentity !== "rpc:1:drpc" ||
     quicknode.redactedIdentity !== "rpc:1:quicknode" ||
-    alchemy.constructorVersion !== "rpc-provider-v1" ||
+    drpc.constructorVersion !== "rpc-provider-v1" ||
     quicknode.constructorVersion !== "rpc-provider-v1" ||
-    alchemy.endpointEvidenceDomain !== "rpc-endpoint-commitments-v1" ||
+    drpc.endpointEvidenceDomain !== "rpc-endpoint-commitments-v1" ||
     quicknode.endpointEvidenceDomain !== "rpc-endpoint-commitments-v1" ||
     graph.redactedIdentity !==
       `uniswap-v4:ethereum:${graph.deployment}`

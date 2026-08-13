@@ -50,9 +50,9 @@ export default function CreatorProgramsDocsPage() {
       <section id="partnerships">
         <h2>Partnerships</h2>
         <p>
-          A partner template uses one 20 bps fee, split 15 bps to the partner
-          and 5 bps to Programmable. A partnership is bound to the exact
-          provider, template version, fee path and payout identity.
+          Partnerships do not create a special production fee path. Custom
+          launches remain bound to the standard 10 bps policy or the explicit
+          no-market zero-fee state.
         </p>
         <p>
           No partner version is assumed active by this reference. The exact

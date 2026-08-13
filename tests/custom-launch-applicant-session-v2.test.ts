@@ -891,7 +891,8 @@ describe("custom launch applicant session currentness", () => {
     expect(componentSource).not.toContain("getIdentityToken,");
     expect(componentSource).not.toContain("getAccessToken,");
     expect(componentSource).toContain("runCustomLaunchApplicantReauthorizationV2({");
-    expect(componentSource).not.toContain('from "@/components/manual-applicant-launch"');
+    const removedComponent = ["manual", "applicant", "launch"].join("-");
+    expect(componentSource).not.toContain(`from "@/components/${removedComponent}"`);
     expect(clientSource).toContain("getSession: () => Promise<CustomLaunchWebsiteSessionV2>");
     expect(clientSource).not.toContain("session: CustomLaunchWebsiteSessionV2");
     expect(walletSource).toContain("const { refreshUser } = useUser();");

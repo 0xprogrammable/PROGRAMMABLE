@@ -5,6 +5,8 @@ import {
   parseAbi,
   toEventSelector,
 } from "viem";
+import { runtimeProductionProviderEndpoints } from
+  "./read-model-provider-binding.mjs";
 
 const PCAN_TOKEN_ADDRESS =
   "0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce";
@@ -13,10 +15,6 @@ const PCAN_POOL_ID =
 const NATIVE_CURRENCY = "0x0000000000000000000000000000000000000000";
 const MAINNET_POOL_MANAGER = "0x000000000004444c5dc75cb358380d2e3de08a90";
 const MAINNET_ETH_USD_FEED = "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419";
-const DEFAULT_ARCHIVE_RPC_URLS = Object.freeze([
-  "https://rpc.mevblocker.io",
-  "https://mainnet.gateway.tenderly.co",
-]);
 const MINIMUM_CONFIRMATIONS = 12n;
 const MAXIMUM_FEED_AGE_SECONDS = 7_200n;
 const MAXIMUM_EXECUTION_USD_DEVIATION_BPS = 25n;
@@ -455,6 +453,15 @@ async function readProviderWithRetry(fetchImpl, rpcUrl, input) {
  * executed trade with a StateView spot price after that price-moving swap.
  */
 export async function verifyBitqueryGoldenMarketExecutionV1(input) {
+  const archiveRpcUrls = input.rpcUrls ??
+    runtimeProductionProviderEndpoints(process.env);
+  if (
+    !Array.isArray(archiveRpcUrls) ||
+    archiveRpcUrls.length !== 2 ||
+    archiveRpcUrls[0] === archiveRpcUrls[1]
+  ) {
+    throw new Error("exactly two independent production RPC witnesses are required");
+  }
   const token = input?.token;
   const fetchImpl = input?.fetchImpl ?? fetch;
   if (token?.tokenAddress?.toLowerCase() !== PCAN_TOKEN_ADDRESS) {
@@ -519,7 +526,7 @@ export async function verifyBitqueryGoldenMarketExecutionV1(input) {
     tokenDecimals,
     "golden execution token amount",
   );
-  const [first, second] = await Promise.all(DEFAULT_ARCHIVE_RPC_URLS.map(
+  const [first, second] = await Promise.all(archiveRpcUrls.map(
     (rpcUrl) => readProviderWithRetry(fetchImpl, rpcUrl, {
       tokenAddress: PCAN_TOKEN_ADDRESS,
       poolId: PCAN_POOL_ID,
@@ -589,7 +596,7 @@ export async function verifyBitqueryGoldenMarketExecutionV1(input) {
     : bitqueryFdvUsdWad - chainlinkExecutionFdvUsdWad;
   return Object.freeze({
     schemaVersion: "programmable.bitquery-golden-market-execution.v1",
-    providerCount: DEFAULT_ARCHIVE_RPC_URLS.length,
+    providerCount: archiveRpcUrls.length,
     tokenAddress: PCAN_TOKEN_ADDRESS,
     poolId: PCAN_POOL_ID,
     quoteAddress: NATIVE_CURRENCY,
@@ -634,7 +641,7 @@ export const BITQUERY_GOLDEN_MARKET_EXECUTION_V1 = Object.freeze({
   quoteAddress: NATIVE_CURRENCY,
   poolManager: MAINNET_POOL_MANAGER,
   chainlinkFeedAddress: MAINNET_ETH_USD_FEED.toLowerCase(),
-  archiveRpcReaderCount: DEFAULT_ARCHIVE_RPC_URLS.length,
+  archiveRpcReaderCount: 2,
   minimumConfirmations: Number(MINIMUM_CONFIRMATIONS),
   maximumExecutionUsdDeviationBps: Number(
     MAXIMUM_EXECUTION_USD_DEVIATION_BPS,

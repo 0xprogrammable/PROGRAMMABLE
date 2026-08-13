@@ -31,7 +31,7 @@ describe("Envio candidate deployment evidence", () => {
     const serialized = JSON.stringify({ baseline, audit }).toLowerCase();
 
     for (const forbidden of [
-      "alchemy.com",
+      "drpc.com",
       "quiknode.pro",
       "supabase.co",
       "api_key",

@@ -3,10 +3,12 @@ import {
   formatUnits,
   getAddress,
   HttpRequestError,
-  http,
   keccak256,
+  LimitExceededRpcError,
   parseAbiItem,
   ResponseBodyTooLargeError,
+  RpcRequestError,
+  TimeoutError,
   type Address,
   type Hex,
   type PublicClient,
@@ -29,6 +31,10 @@ import {
   nativePriceWadFromSqrtPriceX96,
 } from "./math";
 import { buildTokenLinks, sanitizeImageUrl } from "./metadata";
+import {
+  persistentRpcHttp,
+  withPersistentRpcIntegrityScope,
+} from "./persistent-rpc-cache.server";
 import type { ExploreReadModel, ReadyOnchainDeployment } from "./types";
 
 const launchedEvent = parseAbiItem(
@@ -38,7 +44,7 @@ const feeEvent = parseAbiItem(
   "event NativeSwapFeesAccrued(bytes32 indexed poolId,address indexed swapSender,bool indexed isBuy,uint16 appliedTotalSwapFeeBps,uint256 grossNativeAmount,uint256 creatorFee,uint256 launcherFee)",
 );
 
-type ClassicV3Release = {
+export type ClassicV3Release = {
   launcher: Address;
   hook: Address;
   rewardVaultFactory: Address;
@@ -88,7 +94,27 @@ const EMPTY_VOLUME: FeeVolume = {
 const RPC_PROVENANCE_BATCH_SIZE = 1;
 const TOKEN_HYDRATION_BATCH_SIZE = 6;
 const BLOCK_TIMESTAMP_BATCH_SIZE = 4;
-const MINIMUM_LOG_BLOCK_RANGE = 100n;
+const MINIMUM_LOG_BLOCK_RANGE = 1n;
+const TRANSIENT_RETRIES_PER_WINDOW = 1;
+const MINIMUM_RANGE_TRANSIENT_RETRIES = 2;
+
+function isTransientLogReadError(error: unknown) {
+  if (error instanceof TimeoutError) return true;
+  if (error instanceof HttpRequestError) {
+    return (
+      error.status === undefined ||
+      error.status === 408 ||
+      error.status === 425 ||
+      error.status === 429 ||
+      error.status >= 500
+    );
+  }
+  return (
+    error instanceof RpcRequestError &&
+    error.code === -32603 &&
+    error.details.trim().toLowerCase() === "service temporarily unavailable"
+  );
+}
 
 function minimum(left: bigint, right: bigint) {
   return left < right ? left : right;
@@ -110,15 +136,62 @@ async function mapInBatches<Input, Output>(
   return output;
 }
 
+async function allSettledOrThrow<
+  const Values extends readonly unknown[],
+>(
+  values: Values,
+): Promise<{ -readonly [Key in keyof Values]: Awaited<Values[Key]> }> {
+  const results = await Promise.allSettled(values);
+  const failure = results.find(
+    (result): result is PromiseRejectedResult =>
+      result.status === "rejected",
+  );
+  if (failure) throw failure.reason;
+  return results.map(
+    (result) => (result as PromiseFulfilledResult<unknown>).value,
+  ) as { -readonly [Key in keyof Values]: Awaited<Values[Key]> };
+}
+
 function sameHex(left: string, right: string) {
   return left.toLowerCase() === right.toLowerCase();
 }
 
-function clientFor(config: ReadyOnchainDeployment, endpoint: string) {
+function clientFor(
+  config: ReadyOnchainDeployment,
+  endpoint: string,
+  release: ClassicV3Release,
+) {
   return createPublicClient({
     chain: config.chainId === 1 ? mainnet : sepolia,
     batch: { multicall: true },
-    transport: http(endpoint, { retryCount: 1, timeout: 10_000 }),
+    transport: persistentRpcHttp(endpoint, {
+      chainId: config.chainId,
+      maxLogBlockRange: config.logBlockRange,
+      http: { retryCount: 1, timeout: 10_000 },
+      immutableCodeBindings: [
+        {
+          address: release.launcher,
+          expectedRuntimeCodeHash: release.launcherRuntimeCodeHash,
+          notBeforeBlock: release.startBlock,
+        },
+        {
+          address: release.hook,
+          expectedRuntimeCodeHash: release.hookRuntimeCodeHash,
+          notBeforeBlock: release.startBlock,
+        },
+        {
+          address: release.rewardVaultFactory,
+          expectedRuntimeCodeHash:
+            release.rewardVaultFactoryRuntimeCodeHash,
+          notBeforeBlock: release.startBlock,
+        },
+        {
+          address: config.stateView,
+          expectedRuntimeCodeHash: config.stateViewRuntimeCodeHash,
+          notBeforeBlock: release.startBlock,
+        },
+      ],
+    }),
   });
 }
 
@@ -168,7 +241,30 @@ async function assertRuntime(
   }
 }
 
-async function readEvents(
+function assertCanonicalClassicV3EventSource(
+  eventName: string,
+  actualAddress: Address,
+  release: ClassicV3Release,
+) {
+  const expectedAddress =
+    eventName === "MemeTokenLaunchedV2"
+      ? release.launcher
+      : eventName === "NativeSwapFeesAccrued"
+        ? release.hook
+        : null;
+  if (expectedAddress === null) {
+    throw new Error(
+      `RPC returned event outside the canonical Classic V3 filter: ${eventName}`,
+    );
+  }
+  if (!sameHex(actualAddress, expectedAddress)) {
+    throw new Error(
+      `RPC returned ${eventName} from a non-canonical Classic V3 contract`,
+    );
+  }
+}
+
+export async function readClassicV3Events(
   client: PublicClient,
   config: ReadyOnchainDeployment,
   release: ClassicV3Release,
@@ -181,35 +277,56 @@ async function readEvents(
     fromBlockFloor > release.startBlock
       ? fromBlockFloor
       : release.startBlock;
-  let logBlockRange = config.logBlockRange;
+  const configuredLogBlockRange = toBlock >= fromBlock
+    ? toBlock - fromBlock + 1n
+    : config.logBlockRange;
+  let logBlockRange = configuredLogBlockRange;
+  let transientRetries = 0;
   while (fromBlock <= toBlock) {
     const rangeEnd = minimum(
       toBlock,
       fromBlock + logBlockRange - 1n,
     );
-    const readLogs = async () => {
-      const launchLogs = await client.getLogs({
-        address: release.launcher,
-        event: launchedEvent,
-        fromBlock,
-        toBlock: rangeEnd,
-        strict: true,
-      });
-      const feeLogs = await client.getLogs({
-        address: release.hook,
-        event: feeEvent,
-        fromBlock,
-        toBlock: rangeEnd,
-        strict: true,
-      });
-      return [launchLogs, feeLogs] as const;
-    };
+    const readLogs = () =>
+      allSettledOrThrow([
+        client.getLogs({
+          address: release.launcher,
+          event: launchedEvent,
+          fromBlock,
+          toBlock: rangeEnd,
+          strict: true,
+        }),
+        client.getLogs({
+          address: release.hook,
+          event: feeEvent,
+          fromBlock,
+          toBlock: rangeEnd,
+          strict: true,
+        }),
+      ] as const);
     let logs: Awaited<ReturnType<typeof readLogs>>;
     try {
       logs = await readLogs();
     } catch (error) {
+      const transient = isTransientLogReadError(error);
+      const transientRetryLimit =
+        logBlockRange === MINIMUM_LOG_BLOCK_RANGE
+          ? MINIMUM_RANGE_TRANSIENT_RETRIES
+          : TRANSIENT_RETRIES_PER_WINDOW;
+      if (transient && transientRetries < transientRetryLimit) {
+        transientRetries += 1;
+        console.warn("Classic V3 log window retried after transient RPC rejection", {
+          fromBlock: fromBlock.toString(),
+          attemptedToBlock: rangeEnd.toString(),
+          retry: transientRetries,
+          retryLimit: transientRetryLimit,
+          errorName: error instanceof Error ? error.name : "UnknownError",
+        });
+        continue;
+      }
       if (
-        (error instanceof HttpRequestError ||
+        (transient ||
+          error instanceof LimitExceededRpcError ||
           error instanceof ResponseBodyTooLargeError) &&
         logBlockRange > MINIMUM_LOG_BLOCK_RANGE &&
         rangeEnd > fromBlock
@@ -219,13 +336,14 @@ async function readEvents(
           reducedRange < MINIMUM_LOG_BLOCK_RANGE
             ? MINIMUM_LOG_BLOCK_RANGE
             : reducedRange;
+        transientRetries = 0;
         console.warn(
           "Classic V3 log range reduced after RPC rejection",
           {
             fromBlock: fromBlock.toString(),
             attemptedToBlock: rangeEnd.toString(),
             nextRange: logBlockRange.toString(),
-            errorName: error.name,
+            errorName: error instanceof Error ? error.name : "UnknownError",
           },
         );
         continue;
@@ -234,6 +352,11 @@ async function readEvents(
     }
     const [launchLogs, feeLogs] = logs;
     for (const log of launchLogs) {
+      assertCanonicalClassicV3EventSource(
+        log.eventName,
+        log.address,
+        release,
+      );
       if (log.removed || log.blockNumber === null) continue;
       launches.push({
         deployer: getAddress(log.args.deployer),
@@ -254,6 +377,11 @@ async function readEvents(
       });
     }
     for (const log of feeLogs) {
+      assertCanonicalClassicV3EventSource(
+        log.eventName,
+        log.address,
+        release,
+      );
       if (log.removed) continue;
       const key = log.args.poolId.toLowerCase();
       const current = volumes.get(key) ?? { ...EMPTY_VOLUME };
@@ -264,11 +392,20 @@ async function readEvents(
       volumes.set(key, current);
     }
     fromBlock = rangeEnd + 1n;
+    transientRetries = 0;
+    if (logBlockRange < configuredLogBlockRange) {
+      logBlockRange = minimum(
+        configuredLogBlockRange,
+        logBlockRange * 2n,
+      );
+    }
   }
   return { launches, volumes };
 }
 
-function eventFingerprint(value: Awaited<ReturnType<typeof readEvents>>) {
+function eventFingerprint(
+  value: Awaited<ReturnType<typeof readClassicV3Events>>,
+) {
   return JSON.stringify(
     {
       launches: value.launches,
@@ -459,9 +596,9 @@ export async function readClassicV3ExploreModel(
     return { tokens: [], launcherFeesAccrued: 0n };
   }
   const clients = [
-    clientFor(config, config.rpcUrl),
+    clientFor(config, config.rpcUrl, release),
     ...(config.rpcUrlSecondary
-      ? [clientFor(config, config.rpcUrlSecondary)]
+      ? [clientFor(config, config.rpcUrlSecondary, release)]
       : []),
   ];
   await mapInBatches(
@@ -502,17 +639,17 @@ export async function readClassicV3ExploreModel(
           ),
       ),
   );
-  const eventSets = await mapInBatches(
-    clients,
-    RPC_PROVENANCE_BATCH_SIZE,
-    (client) =>
-      readEvents(
-        client,
-        config,
-        release,
-        toBlock,
-        options.fromBlock ?? release.startBlock,
-      ),
+  const eventSets = await allSettledOrThrow(
+    clients.map((client) =>
+      withPersistentRpcIntegrityScope(() =>
+        readClassicV3Events(
+          client,
+          config,
+          release,
+          toBlock,
+          options.fromBlock ?? release.startBlock,
+        ),
+      )),
   );
   const launcherFees = await mapInBatches(
     clients,

@@ -90,7 +90,7 @@ test("runs all lanes for dependency, workflow, and unknown surfaces", () => {
     "config/read-model-operations.v1.json",
     "docs/security/CUSTOM_REGISTRY_EVENT_SET_V1.json",
     "docs/operations/releases/custom-launch-release-record.template.json",
-    "lib/vendor/router-v2-shared-lifecycle-v3/source-manifest.json",
+    "lib/vendor/unrecognized-release-authority/source-manifest.json",
     "new-runtime/file.bin",
   ]) {
     assert.deepEqual(

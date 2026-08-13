@@ -9,7 +9,7 @@ const ALCHEMY_MAINNET_RPC_PATH = /^\/v2\/[A-Za-z0-9_-]{8,256}$/u;
 const DRPC_MAINNET_RPC_HOST = "lb.drpc.live";
 const DRPC_MAINNET_RPC_PATH = /^\/ethereum\/[A-Za-z0-9_-]{8,512}\/?$/u;
 const QUICKNODE_MAINNET_RPC_HOST =
-  /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+quiknode\.pro$/u;
+  /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.ethereum-mainnet\.quiknode\.pro$/u;
 const QUICKNODE_MAINNET_RPC_PATH = /^\/[A-Za-z0-9_-]{8,256}\/?$/u;
 
 export const WEBSITE_MAINNET_RPC_ENV = Object.freeze({
@@ -23,7 +23,7 @@ export const WEBSITE_MAINNET_RPC_ENV = Object.freeze({
     "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT",
 } as const);
 
-type WebsiteRpcBinding = Readonly<{
+export type WebsiteRpcBinding = Readonly<{
   provider: MainnetRpcProviderId;
   url: string;
   endpointCommitment: string;
@@ -36,6 +36,22 @@ export type WebsiteMainnetRpcPair = Readonly<{
   primary: WebsiteRpcBinding;
   secondary: WebsiteRpcBinding;
 }>;
+
+export function productionMainnetRpcEnvironment(
+  primaryUrl: string,
+  secondaryUrl: string,
+) {
+  return Object.freeze({
+    [WEBSITE_MAINNET_RPC_ENV.primaryProvider]: "drpc",
+    [WEBSITE_MAINNET_RPC_ENV.primaryUrl]: primaryUrl,
+    [WEBSITE_MAINNET_RPC_ENV.primaryCommitment]:
+      rpcProviderCommitment("endpoint", primaryUrl),
+    [WEBSITE_MAINNET_RPC_ENV.secondaryProvider]: "quicknode",
+    [WEBSITE_MAINNET_RPC_ENV.secondaryUrl]: secondaryUrl,
+    [WEBSITE_MAINNET_RPC_ENV.secondaryCommitment]:
+      rpcProviderCommitment("endpoint", secondaryUrl),
+  });
+}
 
 function selectedLegacyValue(
   preferred: string | undefined,
@@ -214,4 +230,22 @@ export function websiteMainnetRpcPair(
   return roleBoundConfigured
     ? roleBoundPair(environment)
     : legacyPair(environment);
+}
+
+/**
+ * Resolves the exact private provider pair used by every production read
+ * surface. The legacy Alchemy compatibility path is intentionally excluded:
+ * a release may use only the complete role-bound dRPC + QuickNode binding.
+ */
+export function productionMainnetRpcPair(
+  environment: RuntimeEnvironment = process.env,
+): WebsiteMainnetRpcPair {
+  const resolved = roleBoundPair(environment);
+  if (
+    resolved.primary.provider !== "drpc" ||
+    resolved.secondary.provider !== "quicknode"
+  ) {
+    throw new Error("Production RPC provider roles are invalid");
+  }
+  return resolved;
 }

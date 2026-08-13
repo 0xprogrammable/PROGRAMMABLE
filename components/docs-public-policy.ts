@@ -36,13 +36,6 @@ export const PROGRAMMABLE_PRODUCT_STATES = {
     label: "Custom hooks",
     lifecycle: "Live",
   },
-  partnerTemplates: {
-    availability: "Unavailable",
-    detail:
-      "No partner template is active. Each exact version and fee path requires separate activation.",
-    label: "Partner templates",
-    lifecycle: "Preview",
-  },
   publicTemplates: {
     availability: "Unavailable",
     detail:
@@ -76,15 +69,6 @@ export const PROGRAMMABLE_FEE_TABLE = {
     programmableBps: PLATFORM_FEE_BPS,
     status: "Live",
     total: "selected separately for buys and sells from 100 to 1,000 bps",
-  },
-  partnerTemplate: {
-    basis: "the active partner template market path",
-    chargeMode: "included in one 20 bps partner template fee",
-    partnerBps: PROGRAMMABLE_FEE_POLICY.partnerTemplate.partnerShareBps,
-    programmableBps:
-      PROGRAMMABLE_FEE_POLICY.partnerTemplate.programmableShareBps,
-    status: "Preview",
-    totalBps: PROGRAMMABLE_FEE_POLICY.partnerTemplate.totalBps,
   },
   publicTemplate: {
     basis: "an official launch using the exact active template version",

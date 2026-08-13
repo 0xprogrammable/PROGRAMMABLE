@@ -21,9 +21,9 @@ const executionInput = Object.freeze({
   run_id: "80000000-0000-4000-8000-000000000001",
   provider_a_id: "10000000-0000-4000-8000-000000000002",
   provider_b_id: "10000000-0000-4000-8000-000000000003",
-  provider_a_identity: "alchemy-mainnet-11111111111111111111111111111111",
+  provider_a_identity: "drpc-mainnet-11111111111111111111111111111111",
   provider_b_identity: "quicknode-mainnet-55555555555555555555555555555555",
-  provider_a_vendor_group: "alchemy",
+  provider_a_vendor_group: "drpc",
   provider_b_vendor_group: "quicknode",
   provider_a_endpoint_commitment: bytes32("3"),
   provider_b_endpoint_commitment: bytes32("5"),
@@ -95,7 +95,7 @@ describe("provider evidence v3 projection codecs", () => {
       ]),
     );
     expect(execution.contentFingerprint).toBe(
-      "0x9ce10c58b04e1d21bb51f78092e358ecc125aeef8ae597f88eae12dcf029cc4d",
+      "0x00087447f5afbc50d050867f949549b169765272c915b5c43e7d144cde9c5bfa",
     );
     expect(reward.contentFingerprint).toBe(
       "0x0bc3258a5ca6d74ac6710e5e2ba218d6c9f4ec46cda0e4fb4777e3799b5ddb54",
@@ -125,8 +125,8 @@ describe("provider evidence v3 projection codecs", () => {
 
   it("freezes a structural execution trace independent of JSON key order", () => {
     const call = {
-      providerIdentity: "alchemy-mainnet-11111111111111111111111111111111",
-      providerVendorGroup: "alchemy",
+      providerIdentity: "drpc-mainnet-11111111111111111111111111111111",
+      providerVendorGroup: "drpc",
       providerEndpointCommitment: bytes32("3"),
       providerOriginCommitment: bytes32("4"),
       operation: "getTransactionReceipt",
@@ -154,8 +154,8 @@ describe("provider evidence v3 projection codecs", () => {
         operation: "getTransactionReceipt",
         providerOriginCommitment: bytes32("4"),
         providerEndpointCommitment: bytes32("3"),
-        providerVendorGroup: "alchemy",
-        providerIdentity: "alchemy-mainnet-11111111111111111111111111111111",
+        providerVendorGroup: "drpc",
+        providerIdentity: "drpc-mainnet-11111111111111111111111111111111",
       }],
       providerCallCounts: [1, 0],
       elapsedMs: 5,
@@ -174,7 +174,7 @@ describe("provider evidence v3 projection codecs", () => {
       ),
     );
     expect(projectionExecutionTraceCommitmentV1(trace)).toBe(
-      "0x466d9059a360712fd7d40fc9a4fd326cf58ed7d8f4a7f93a31da4edd9bbdc620",
+      "0x9514e7eb430c305ad89a84268123b225c14554759bd357bfe459635a974539ab",
     );
   });
 
@@ -201,8 +201,8 @@ describe("provider evidence v3 projection codecs", () => {
       ...trace,
       providerCallCounts: [1, 0],
       calls: [{
-        providerIdentity: "alchemy",
-        providerVendorGroup: "alchemy",
+        providerIdentity: "drpc",
+        providerVendorGroup: "drpc",
         providerEndpointCommitment: bytes32("3"),
         providerOriginCommitment: bytes32("4"),
         operation: "unknown",
@@ -217,8 +217,8 @@ describe("provider evidence v3 projection codecs", () => {
   it("encodes reward traces whose logical calls summarize raw RPC counts", () => {
     const providers = [
       {
-        identity: "alchemy-mainnet-11111111111111111111111111111111",
-        vendor: "alchemy",
+        identity: "drpc-mainnet-11111111111111111111111111111111",
+        vendor: "drpc",
         endpoint: bytes32("3"),
         origin: bytes32("4"),
       },
@@ -250,7 +250,7 @@ describe("provider evidence v3 projection codecs", () => {
       })),
     });
     expect(commitment).toBe(
-      "0x387a035634613b9c1fcf9369aeea587e325815bef91d3d3945e56136d0472043",
+      "0x31ba49fc53411f6712ce58597d5281fdbf9b99e2a3352c7340b1df4054187b48",
     );
   });
 });

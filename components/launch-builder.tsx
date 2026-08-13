@@ -85,6 +85,10 @@ import {
   type LaunchModel,
 } from "@/lib/launch";
 import { prepareTokenImage } from "@/lib/token-image";
+import {
+  browserWalletRequestIsPending,
+  subscribeToBrowserWalletRequest,
+} from "@/lib/wallet-request-lock";
 import { formatEther } from "viem";
 
 type TokenImageState = {
@@ -1012,6 +1016,20 @@ function useBrowserPendingLaunch(
   };
 }
 
+function useBrowserWalletRequestPending(account: string | undefined) {
+  const chainId = String(launchChainId);
+  const subscribe = useCallback(
+    (listener: () => void) =>
+      subscribeToBrowserWalletRequest(account, chainId, listener),
+    [account, chainId],
+  );
+  const snapshot = useCallback(
+    () => browserWalletRequestIsPending(account, chainId),
+    [account, chainId],
+  );
+  return useSyncExternalStore(subscribe, snapshot, () => false);
+}
+
 function shortenAddress(address: string) {
   return `${address.slice(0, 8)}…${address.slice(-6)}`;
 }
@@ -1148,12 +1166,13 @@ function LaunchBuilderFormView({
     setSubmissionPhaseRecord(null);
   }, []);
   const launching = launchPhase !== "idle";
+  const walletRequestPending = useBrowserWalletRequestPending(wallet?.account);
   const submissionBusy =
     Boolean(transactionHash) &&
     (submissionPhase === "receipt" || submissionPhase === "indexing");
   const hasSubmittedTransaction = Boolean(transactionHash);
   const unresolvedSubmission = Boolean(transactionHash) && !indexedLaunch;
-  const draftLocked = launchDraftIsLocked(
+  const draftLocked = walletRequestPending || launchDraftIsLocked(
     pendingRestoreComplete,
     launchPhase,
     transactionHash,
@@ -1858,6 +1877,8 @@ function LaunchBuilderFormView({
             : "";
   const controlsLockMessage = !pendingRestoreComplete
     ? "Checking this browser for an unfinished launch."
+    : walletRequestPending && !launching
+      ? "A wallet confirmation is already open for this account. If that tab closed, this unlocks within five minutes."
     : launching
       ? "Token details are locked while the transaction is prepared."
       : unresolvedSubmission
@@ -1957,6 +1978,7 @@ function LaunchBuilderFormView({
       disabled={
         !pendingRestoreComplete ||
         launching ||
+        walletRequestPending ||
         (model === "classic-v3" && !classicV3LaunchAvailable) ||
         (model === "stock-paired" && !stockPairedLaunchAllowed)
       }
@@ -1967,6 +1989,8 @@ function LaunchBuilderFormView({
           ? "Classic is not deployed"
           : !pendingRestoreComplete
             ? "Checking launch status"
+            : walletRequestPending && !launching
+              ? "Confirm in other tab"
             : launchPhase === "preparing"
               ? "Preparing launch"
               : launchPhase === "confirming"

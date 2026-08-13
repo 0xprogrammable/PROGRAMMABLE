@@ -2,7 +2,6 @@ import {
   createPublicClient,
   formatUnits,
   getAddress,
-  http,
   parseAbi,
   parseAbiItem,
   type AbiEvent,
@@ -36,6 +35,7 @@ import {
   type VerifiedDeepV3ReadRelease,
 } from "./deep-v3-read-model";
 import { mergeDeepExploreModel } from "./deep-read-model";
+import { persistentRpcHttp } from "./persistent-rpc-cache.server";
 import type {
   ExploreReadModel,
   ExploreSnapshot,
@@ -84,7 +84,10 @@ function createClient(rpcUrl: string) {
   return createPublicClient({
     chain: mainnet,
     batch: { multicall: true },
-    transport: http(rpcUrl, { retryCount: 2, timeout: 12_000 }),
+    transport: persistentRpcHttp(rpcUrl, {
+      chainId: 1,
+      http: { retryCount: 2, timeout: 12_000 },
+    }),
   });
 }
 

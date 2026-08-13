@@ -7,11 +7,15 @@ import {
   boundedRpcExecutor,
   createProductionDualRpcProviders,
 } from "../../lib/data-pipeline/rpc-providers.server";
+import { productionMainnetRpcEnvironment } from
+  "../../lib/onchain/website-rpc-providers.server";
 
-const ALCHEMY =
-  "https://eth-mainnet.g.alchemy.com/v2/alchemy-test-key";
+const DRPC =
+  "https://lb.drpc.live/ethereum/drpc-test-key";
 const QUICKNODE =
-  "https://programmable.ethereum.quiknode.pro/quicknode-test-token/";
+  "https://programmable.ethereum-mainnet.quiknode.pro/quicknode-test-token/";
+const rpcEnvironment = (primary = DRPC, secondary = QUICKNODE) =>
+  productionMainnetRpcEnvironment(primary, secondary);
 
 describe("production dual-RPC providers", () => {
   it("paces provider calls below the sustained request ceiling", async () => {
@@ -39,19 +43,16 @@ describe("production dual-RPC providers", () => {
   });
 
   it("derives fixed independent identities from exact paid-provider URLs", () => {
-    const providers = createProductionDualRpcProviders({
-      PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY,
-      PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE,
-    });
+    const providers = createProductionDualRpcProviders(rpcEnvironment());
 
     expect(providers[0].identity).toMatch(
-      /^alchemy-mainnet-[0-9a-f]{32}$/u,
+      /^drpc-mainnet-[0-9a-f]{32}$/u,
     );
     expect(providers[1].identity).toMatch(
       /^quicknode-mainnet-[0-9a-f]{32}$/u,
     );
     expect(providers.map(({ vendorGroup }) => vendorGroup)).toEqual([
-      "alchemy",
+      "drpc",
       "quicknode",
     ]);
     expect(providers[0].client).not.toBe(providers[1].client);
@@ -75,18 +76,15 @@ describe("production dual-RPC providers", () => {
         value: async () => 11155111,
       }),
     ).toThrow(TypeError);
-    expect(JSON.stringify(providers)).not.toContain("alchemy-test-key");
+    expect(JSON.stringify(providers)).not.toContain("drpc-test-key");
     expect(JSON.stringify(providers)).not.toContain("quicknode-test-token");
     expect(JSON.stringify(providers)).not.toContain(
-      "programmable.ethereum.quiknode.pro",
+      "programmable.ethereum-mainnet.quiknode.pro",
     );
   });
 
   it("fails closed when a production platform marker conflicts with NODE_ENV=test", () => {
-    const providers = createProductionDualRpcProviders({
-      PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY,
-      PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE,
-    });
+    const providers = createProductionDualRpcProviders(rpcEnvironment());
     vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("VERCEL_ENV", "production");
     try {
@@ -108,10 +106,7 @@ describe("production dual-RPC providers", () => {
   });
 
   it("rejects a structurally identical but unregistered pair in production", () => {
-    const providers = createProductionDualRpcProviders({
-      PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY,
-      PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE,
-    });
+    const providers = createProductionDualRpcProviders(rpcEnvironment());
     vi.stubEnv("NODE_ENV", "production");
     try {
       expect(() => assertProductionDualRpcProviders(providers)).not.toThrow();
@@ -134,67 +129,45 @@ describe("production dual-RPC providers", () => {
   it.each([
     [{}, "missing URLs"],
     [
-      {
-        PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL:
-          "https://eth-sepolia.g.alchemy.com/v2/alchemy-test-key",
-        PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE,
-      },
-      "wrong Alchemy network",
+      rpcEnvironment("https://eth-sepolia.drpc.org/drpc-test-key"),
+      "wrong dRPC network",
     ],
     [
-      {
-        PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY,
-        PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL:
-          "https://example.com/quicknode-test-token/",
-      },
+      rpcEnvironment(DRPC, "https://example.com/quicknode-test-token/"),
       "non-QuickNode secondary",
     ],
     [
-      {
-        PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: `${ALCHEMY}?leak=true`,
-        PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE,
-      },
+      rpcEnvironment(`${DRPC}?leak=true`),
       "query-bearing endpoint",
     ],
     [
-      {
-        PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY,
-        PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL:
-          "https://user:password@programmable.ethereum.quiknode.pro/quicknode-test-token/",
-      },
+      rpcEnvironment(
+        DRPC,
+        "https://user:password@programmable.ethereum-mainnet.quiknode.pro/quicknode-test-token/",
+      ),
       "embedded basic auth",
     ],
     [
-      {
-        PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL:
-          "http://eth-mainnet.g.alchemy.com/v2/alchemy-test-key",
-        PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE,
-      },
+      rpcEnvironment("http://lb.drpc.live/ethereum/drpc-test-key"),
       "non-TLS endpoint",
     ],
     [
-      {
-        PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL:
-          "https://eth-mainnet.g.alchemy.com/v2/docs-demo",
-        PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE,
-      },
-      "public Alchemy demo credential",
+      rpcEnvironment("https://lb.drpc.live/ethereum/docs-demo"),
+      "public dRPC demo credential",
     ],
     [
-      {
-        PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY,
-        PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL:
-          "https://docs-demo.quiknode.pro/docs-demo/",
-      },
+      rpcEnvironment(
+        DRPC,
+        "https://docs-demo.ethereum-mainnet.quiknode.pro/docs-demo/",
+      ),
       "public QuickNode demo credential",
     ],
     [
       {
-        PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY,
-        PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE,
-        NEXT_PUBLIC_PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY,
+        ...rpcEnvironment(),
+        NEXT_PUBLIC_PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL: DRPC,
       },
-      "browser-exposed Alchemy endpoint",
+      "browser-exposed dRPC endpoint",
     ],
   ] as const)("rejects %s (%s)", (environment, label) => {
     expect(label.length).toBeGreaterThan(0);

@@ -26,10 +26,6 @@
     {
       "path": "/api/ops/protocol-revenue",
       "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/ops/manual-router-finality",
-      "schedule": "* * * * *"
     }
   ]
 }

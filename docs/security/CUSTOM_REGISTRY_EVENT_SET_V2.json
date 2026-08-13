@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "programmable.custom-registry-events.v2",
+  "events": [
+    {
+      "name": "CustomLaunchApprovalAuthorizedV2",
+      "signature": "CustomLaunchApprovalAuthorizedV2(bytes32,bytes32,uint64,uint64,bytes32,uint64)",
+      "topic0": "0x0e874040f763d3e3bb5113ce92972ed6be8ea07733a7784bdbe0ecb7109d98dc"
+    },
+    {
+      "name": "CustomLaunchDescriptorCommittedV2",
+      "signature": "CustomLaunchDescriptorCommittedV2(bytes32,bytes32,address,address,bytes32,bytes32,bytes32,uint8,uint16)",
+      "topic0": "0xeea1cf15f2ba8d37da12a479ae76d8ad73fdbbb6858a8b65e14f48223acb2710"
+    },
+    {
+      "name": "CustomLaunchDescriptorEvidenceCommittedV2",
+      "signature": "CustomLaunchDescriptorEvidenceCommittedV2(bytes32,bytes32,bytes32,bytes32)",
+      "topic0": "0x34595c5180d763f5b2c10aca1da959831338e796fc59a61126fecae7c1892bc5"
+    },
+    {
+      "name": "CustomLaunchFinalizedV2",
+      "signature": "CustomLaunchFinalizedV2(bytes32,bytes32,bytes32,uint64,bytes32,uint64,bytes32,uint64,uint64)",
+      "topic0": "0xf802938990e789d45e6da3d5b2279e331046f46c620b9a1b29142cda4742194b"
+    },
+    {
+      "name": "CustomLaunchRegisteredV2",
+      "signature": "CustomLaunchRegisteredV2(bytes32,bytes32,address,bytes32,bytes32,bytes32,uint64,uint64)",
+      "topic0": "0x3fb8dc12d1d86f1e54d35567d484ab5d659773c3cacaaa440682e8ad7312c93b"
+    },
+    {
+      "name": "CustomLaunchRevokedV2",
+      "signature": "CustomLaunchRevokedV2(bytes32,bytes32,bytes32,bytes32,uint64,uint64)",
+      "topic0": "0x6e186da7fa5669e16c95d0c70f89700d5b3cfb31dd0e13d82b799424102b0195"
+    },
+    {
+      "name": "DefaultAdminDelayChangeCanceled",
+      "signature": "DefaultAdminDelayChangeCanceled()",
+      "topic0": "0x2b1fa2edafe6f7b9e97c1a9e0c3660e645beb2dcaa2d45bdbf9beaf5472e1ec5"
+    },
+    {
+      "name": "DefaultAdminDelayChangeScheduled",
+      "signature": "DefaultAdminDelayChangeScheduled(uint48,uint48)",
+      "topic0": "0xf1038c18cf84a56e432fdbfaf746924b7ea511dfe03a6506a0ceba4888788d9b"
+    },
+    {
+      "name": "DefaultAdminTransferCanceled",
+      "signature": "DefaultAdminTransferCanceled()",
+      "topic0": "0x8886ebfc4259abdbc16601dd8fb5678e54878f47b3c34836cfc51154a9605109"
+    },
+    {
+      "name": "DefaultAdminTransferScheduled",
+      "signature": "DefaultAdminTransferScheduled(address,uint48)",
+      "topic0": "0x3377dc44241e779dd06afab5b788a35ca5f3b778836e2990bdb26a2a4b2e5ed6"
+    },
+    {
+      "name": "OperationalControllerTransferAcceptedV2",
+      "signature": "OperationalControllerTransferAcceptedV2(bytes32,address,address)",
+      "topic0": "0x9bd25012b3092f3ab75b14e267308c5765ef97aa95256491cf5653fc39c5d500"
+    },
+    {
+      "name": "OperationalControllerTransferCanceledV2",
+      "signature": "OperationalControllerTransferCanceledV2(bytes32,address)",
+      "topic0": "0x378c015a7816e77abf17e5c2b0750bc046bf1ddc50ba2376376ceb162b8d868e"
+    },
+    {
+      "name": "OperationalControllerTransferScheduledV2",
+      "signature": "OperationalControllerTransferScheduledV2(bytes32,address,address,uint48)",
+      "topic0": "0x4c8061c2277fb5edf78a647c068430efd74f41a4ad5775a1fdfd93ec348890b8"
+    },
+    {
+      "name": "RoleAdminChanged",
+      "signature": "RoleAdminChanged(bytes32,bytes32,bytes32)",
+      "topic0": "0xbd79b86ffe0ab8e8776151514217cd7cacd52c909f66475c3af44e129f0b00ff"
+    },
+    {
+      "name": "RoleGranted",
+      "signature": "RoleGranted(bytes32,address,address)",
+      "topic0": "0x2f8788117e7eff1d82e926ec794901d17c78024a50270940304540a733656f0d"
+    },
+    {
+      "name": "RoleRevoked",
+      "signature": "RoleRevoked(bytes32,address,address)",
+      "topic0": "0xf6391f5c32d9c69d2a47ea670b442974b53935d1edc7fd64eb21e047a839171b"
+    }
+  ]
+}
