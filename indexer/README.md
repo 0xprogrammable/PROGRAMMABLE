@@ -33,7 +33,7 @@ systems. Beneficiary seed hydration is a separate block-pinned dual-RPC worker.
 
 Requirements:
 
-- Node.js 22 or newer
+- Node.js 24.14 or newer, below Node 25
 - pnpm 10.32.0
 - Docker for a full local Envio stack
 
