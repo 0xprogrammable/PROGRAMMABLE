@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createPublicClient,
+  encodeDeployData,
   getAddress,
   getContractAddress,
   http,
@@ -16,6 +17,10 @@ import {
   computeConstructorCommitment,
   requireDistinctRpcOrigins,
 } from "./custom-registry-v2-deployment-guards.mjs";
+import {
+  assertCustomRegistryV2ProductionConstructor,
+  loadCustomRegistryV2ProductionPolicy,
+} from "./custom-registry-v2-production-policy.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const outputIndex = process.argv.indexOf("--output");
@@ -86,12 +91,19 @@ const config = {
   minimumFinalityBlocks: positiveInteger("REGISTRY_MINIMUM_FINALITY_BLOCKS", 255n),
   registryPolicyCommitment: bytes32("REGISTRY_POLICY_COMMITMENT"),
 };
+const productionPolicy = await loadCustomRegistryV2ProductionPolicy(root);
+assertCustomRegistryV2ProductionConstructor(config, productionPolicy);
 const constructorCommitment = computeConstructorCommitment(config);
 if (new Set(Object.values(config).filter((value) => typeof value === "string" && /^0x[0-9a-fA-F]{40}$/.test(value))).size !== 5) {
   throw new Error("admin and operational roles must be five distinct accounts");
 }
 
 const clients = [rpcA, rpcB].map((url) => createPublicClient({ chain: mainnet, transport: http(url) }));
+const deploymentData = encodeDeployData({
+  abi: committedAbiDocument.abi,
+  bytecode: artifact.bytecode.object,
+  args: [config],
+});
 const observations = await Promise.all(clients.map(async (client) => {
   const [chainId, finalized, latest, nonce, balance, priorityFee] = await Promise.all([
     client.getChainId(),
@@ -105,12 +117,7 @@ const observations = await Promise.all(clients.map(async (client) => {
   const predictedAddress = getContractAddress({ from: deployer, nonce: BigInt(nonce) });
   const [predictedCode, estimatedGas] = await Promise.all([
     client.getCode({ address: predictedAddress, blockTag: "latest" }),
-    client.estimateContractGas({
-      abi: committedAbiDocument.abi,
-      bytecode: artifact.bytecode.object,
-      args: [config],
-      account: deployer,
-    }),
+    client.estimateGas({ account: deployer, data: deploymentData }),
   ]);
   if (predictedCode !== undefined && predictedCode !== "0x") throw new Error("predicted deployment address has code");
   return {
@@ -187,6 +194,10 @@ const plan = {
   },
   constructor: config,
   constructorCommitment,
+  productionPolicy: {
+    document: path.relative(root, productionPolicy.documentPath),
+    registryPolicyCommitment: productionPolicy.registryPolicyCommitment,
+  },
   releaseAuthorization: {
     owner: releaseOwner,
     maximumValiditySeconds: manifest.releaseAuthorization.maximumValiditySeconds,

@@ -1,0 +1,53 @@
+{
+  "schemaVersion": "programmable.custom-registry-v2-safe-controller-policy.v1",
+  "chainId": "1",
+  "safeVersion": "1.4.1",
+  "source": {
+    "repository": "safe-fndn/safe-smart-account",
+    "tag": "v1.4.1",
+    "commit": "bf943f80fec5ac647159d26161446ac5d716a294"
+  },
+  "deploymentInventory": {
+    "repository": "safe-global/safe-deployments",
+    "commit": "5bb0ebd7150a777f39bec4733e4d799c4b637b49",
+    "tree": "9c48b5f3bd56e47239a15c8da9d2e2c4d9f87679"
+  },
+  "singleton": {
+    "address": "0x41675C099F32341bf84BFc5382aF534df5C7461a",
+    "runtimeCodeKeccak256": "0x1fe2df852ba3299d6534ef416eefa406e56ced995bca886ab7a553e6d0c5e1c4"
+  },
+  "proxyFactory": {
+    "address": "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67",
+    "runtimeCodeKeccak256": "0x50c3cdc4074750a7a974204a716c999edd37482f907608d960b2b025ee0b3317",
+    "proxyCreationCodeKeccak256": "0x1856e0ee08399d74e0ea0b03adca210aeade6f748969ac023cdcb4dd62dcaf5f"
+  },
+  "setup": {
+    "threshold": 1,
+    "to": "0x0000000000000000000000000000000000000000",
+    "data": "0x",
+    "fallbackHandler": "0x0000000000000000000000000000000000000000",
+    "paymentToken": "0x0000000000000000000000000000000000000000",
+    "payment": "0",
+    "paymentReceiver": "0x0000000000000000000000000000000000000000",
+    "modules": [],
+    "guard": "0x0000000000000000000000000000000000000000"
+  },
+  "storageSlots": {
+    "fallbackHandler": "0x6c9a6c4a39284e37ed1cf53d337577d14212a4870fb976a4366c693b939918d5",
+    "guard": "0x4a204f620c8c5ccdca3fd54d003badd85ba500436a431f0cbda4f558c93c34c8"
+  },
+  "roles": {
+    "approver": {
+      "saltNonce": "17617897239101837117177080654048181435023415572887786950068943254098972935077"
+    },
+    "registrar": {
+      "saltNonce": "44096841411846234081209696804905865608906419847713637963804828202859581648262"
+    },
+    "finalizer": {
+      "saltNonce": "31357831541499710372809238130690992481015648600276251008730804611193782025375"
+    },
+    "revoker": {
+      "saltNonce": "63478965709317179552987150222061520259145583023848861163898958250560301399397"
+    }
+  }
+}

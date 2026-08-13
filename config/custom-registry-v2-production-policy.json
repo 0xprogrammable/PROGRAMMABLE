@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "programmable.custom-registry-v2-production-policy.v1",
+  "registryGeneration": 2,
+  "chainId": "1",
+  "registrySource": {
+    "repositoryId": "1314365508",
+    "repository": "0xprogrammable/programmable",
+    "ref": "production",
+    "commit": "d276f09c81fc4b182ad98cf96980a27c37d68643",
+    "tree": "8661c0a6655f7009b9f4b4a81af2cb0104b8e728"
+  },
+  "descriptorBinding": {
+    "fields": [
+      "chainId",
+      "launchWallet",
+      "primaryContract",
+      "primaryRuntimeCodeHash",
+      "componentSetHash",
+      "sourceArtifactHash",
+      "configurationHash",
+      "launchPlanHash",
+      "projectCommitment",
+      "marketMode",
+      "protocolFeeBps"
+    ],
+    "launchId": "keccak256(abi.encode(LAUNCH_ID_DOMAIN,chainId,descriptorHash))",
+    "runtimeCodeRequired": true,
+    "primaryContractSingleUse": true,
+    "descriptorSingleUse": true
+  },
+  "approval": {
+    "exactDescriptorHashRequired": true,
+    "validAfterBlockRequired": true,
+    "expiresAtBlockRequired": true,
+    "approvalEvidenceSingleUse": true,
+    "consumedAtRegistration": true
+  },
+  "registration": {
+    "registrationEvidenceSingleUse": true,
+    "initialStatus": "Observed",
+    "observedAtBlock": "block.number"
+  },
+  "finality": {
+    "minimumFinalityBlocks": 12,
+    "canonicalNativeBlockhashRequired": true,
+    "observedBlockHashRequired": true,
+    "confirmedHeadBlockHashRequired": true,
+    "finalityEvidenceSingleUse": true,
+    "terminalStatus": "Finalized"
+  },
+  "revocation": {
+    "revocationEvidenceSingleUse": true,
+    "reasonHashRequired": true,
+    "terminalStatus": "Revoked"
+  },
+  "profiles": {
+    "NoMarket0": {
+      "marketMode": 0,
+      "protocolFeeBps": 0
+    },
+    "Standard10": {
+      "marketMode": 1,
+      "protocolFeeBps": 10
+    }
+  },
+  "controllerPolicy": {
+    "defaultAdminDelaySeconds": 172800,
+    "adminDistinctFromOperationalControllers": true,
+    "operationalControllersDistinct": true,
+    "operationalControllersMustHaveRuntimeCode": true,
+    "operationalControllerTransferTwoStep": true
+  }
+}

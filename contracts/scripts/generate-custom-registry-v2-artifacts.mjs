@@ -15,9 +15,18 @@ const sourcePaths = [
   "contracts/scripts/authorize-custom-registry-v2-deployment.mjs",
   "contracts/scripts/custom-registry-v2-deployment-guards.mjs",
   "contracts/scripts/broadcast-custom-registry-v2-deployment.mjs",
+  "contracts/scripts/custom-registry-v2-production-policy.mjs",
+  "contracts/scripts/custom-registry-v2-safe-controller-guards.mjs",
+  "contracts/scripts/prepare-custom-registry-v2-safe-controllers.mjs",
+  "contracts/scripts/verify-custom-registry-v2-safe-controllers.mjs",
   "contracts/scripts/test/custom-registry-v2-deployment-guards.test.mjs",
   "contracts/scripts/test/custom-registry-v2-deployment-cli.test.mjs",
+  "contracts/scripts/test/custom-registry-v2-production-policy.test.mjs",
+  "contracts/scripts/test/custom-registry-v2-safe-controller-guards.test.mjs",
   "config/custom-registry-v2-release-policy.json",
+  "config/custom-registry-v2-production-policy.json",
+  "config/custom-registry-v2-production-constructor.json",
+  "config/custom-registry-v2-safe-controller-policy.json",
 ];
 const outputs = {
   manifest: path.join(root, "contracts/spec/custom-registry-v2-predeployment.json"),
