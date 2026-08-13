@@ -10,7 +10,7 @@ const APPROVED_OPERATIONS = Object.freeze({
     schedule: "*/5 * * * *",
     retainedUntil: "indexed-read-cutover",
     route: "app/api/ops/index-v2/route.ts",
-    sha256: "2d0731780d7c1eba7bbb087ffabb751f1e948783d84954c4041a9f342abcfce0",
+    sha256: "f28fb7054e0bb4670b3d0aa1c2f2b7362085dcf0390fc19eb0b5eb26be464ef7",
     schedulerWatchdog: Object.freeze({
       provider: "github-actions",
       workflow: Object.freeze({
@@ -36,7 +36,7 @@ const APPROVED_OPERATIONS = Object.freeze({
         maximumHeadAgeSeconds: 300,
         healthRoute: Object.freeze({
           path: "app/api/ops/health/route.ts",
-          sha256: "fda037f55c3c633a860c11eb65a160eaffc77e66489f803e9933ad3b02926f3f",
+          sha256: "2dd1539b39761c0416991af20dcc7ab27b5855ba0dc456244bd218b157386f59",
         }),
         rpcRuntime: Object.freeze({
           path: "lib/onchain/rpc-health.ts",
@@ -49,6 +49,10 @@ const APPROVED_OPERATIONS = Object.freeze({
         providerConfig: Object.freeze({
           path: "lib/onchain/website-rpc-providers.server.ts",
           sha256: "c0a6283dcb9a8dd2ccc153242436fcf25db24c4b57acb73148fd804b632057e7",
+        }),
+        currentMarketRpc: Object.freeze({
+          path: "lib/market-data/current-market-rpc.server.ts",
+          sha256: "ead586a84aba823c5312607b551f9a5701e18ce52c9b35bfb7882213434a746c",
         }),
       }),
     }),
@@ -779,6 +783,50 @@ export const STAGED_HEALTH_HANDOFF_SOURCE_GUARDS = Object.freeze([
   'redirect: "error"',
   'response.ok && response.body?.status === "healthy"',
 ]);
+export const STAGED_DURABLE_REFRESH_SOURCE_GUARDS = Object.freeze([
+  'const REFRESH_PATH = "/api/ops/index-v2";',
+  'const HEALTH_PATH = "/api/ops/health";',
+  '!target.hostname.endsWith(".vercel.app")',
+  "fetchVercelDeployment({",
+  "idOrUrl: target.hostname",
+  "deployment.id === input.expectedDeploymentId",
+  "deploymentHost === target.hostname",
+  "deployment.projectId === input.projectId ||",
+  'deployment.readyState === "READY"',
+  "deploymentCommit(deployment) === input.expectedGitHead",
+  "if (!deploymentMatches) {",
+  "Authorization: `Bearer ${input.cronSecret}`",
+  '"x-vercel-protection-bypass": input.automationBypassSecret',
+  'redirect: "error"',
+  "if (!exactRefreshResponse(refresh)) {",
+  'value.body.indexSource === "durable"',
+  'value.body.indexedReadModel?.status === "disabled"',
+  "index.ageSeconds <= MAXIMUM_FRESH_AGE_SECONDS",
+  'rpc?.quorum?.status === "verified"',
+  "confirmedBlockNumber >= refreshBlock",
+  'confirmedBlock.hash !== `0x${"00".repeat(32)}`',
+  "primaryHead >= confirmedBlockNumber",
+  "secondaryHead >= confirmedBlockNumber",
+  '"stage_refresh_proof"',
+]);
+const STAGED_DURABLE_REFRESH_SCRIPT_SHA256 =
+  "989495b90b8f8ebb549da1e869116d9dc3373567d8bff721285ced702271d68e";
+const STAGED_DURABLE_REFRESH_WORKFLOW_STEP = [
+  "      - name: Refresh and prove exact staged durable read model",
+  "        if: needs.release-gate.outputs.verified_read_model == 'true'",
+  "        env:",
+  "          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}",
+  "          CRON_SECRET: ${{ secrets.CRON_SECRET }}",
+  "          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
+  "          STAGED_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}",
+  "          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
+  "          EXPECTED_GIT_HEAD: ${{ github.sha }}",
+  "        run: >-",
+  "          npm run perf:read-model:staged-refresh --",
+  '          --target-url "$STAGED_TARGET_URL"',
+  '          --deployment-id "$STAGED_DEPLOYMENT_ID"',
+  '          --git-head "$EXPECTED_GIT_HEAD"',
+].join("\n");
 const STAGED_HEALTH_HANDOFF_SCRIPT_SHA256 =
   "853e49a15d1d056f538a7451c5fc67829056c6e48bebd4a6aa791242a61b9d73";
 const STAGED_HEALTH_HANDOFF_WORKFLOW_STEP = [
@@ -923,6 +971,17 @@ function legacySchedulerWatchdogIsFailClosed(
       source,
       binding.rpcProof?.providerConfig,
       expectedSha256Overrides,
+    ) &&
+    sourceBindingMatches(
+      source,
+      binding.rpcProof?.currentMarketRpc,
+      expectedSha256Overrides,
+    ) &&
+    source(binding.rpcProof?.healthRoute?.path)?.includes(
+      "currentMarketOnchainDeployment(deployment)",
+    ) &&
+    source(APPROVED_OPERATIONS.legacyIndexer.route)?.includes(
+      "currentMarketOnchainDeployment(deployment)",
     ) &&
     workflowSource.includes('name: Refresh production read model') &&
     workflowSource.includes('    - cron: "2-57/5 * * * *"') &&
@@ -1613,6 +1672,9 @@ export function evaluateReadModelOperationsSourceContracts(
   const stagedHealth = source(
     "scripts/perf/read-model-staged-health.mjs",
   ) ?? "";
+  const stagedDurableRefresh = source(
+    "scripts/perf/read-model-staged-refresh.mjs",
+  ) ?? "";
   const postPromotion = source("scripts/perf/read-model-post-promotion.mjs") ?? "";
   const postPromotionVerifierStart = postPromotion.indexOf(
     "export async function verifyPostPromotion(input) {",
@@ -2271,6 +2333,15 @@ export function evaluateReadModelOperationsSourceContracts(
   const stagedBindingReverification = deployWorkflow.indexOf(
     "Reverify staged candidate binding",
   );
+  const stagedDeploymentResolution = deployWorkflow.indexOf(
+    "Resolve exact staged deployment",
+  );
+  const stagedDurableRefreshGate = deployWorkflow.indexOf(
+    "      - name: Refresh and prove exact staged durable read model",
+  );
+  const stagedDurableRefreshGateEnd = deployWorkflow.indexOf(
+    "      - name: Smoke staged public market APIs",
+  );
   const stagedHealthGate = deployWorkflow.indexOf(
     "      - name: Gate exact staged operational health",
   );
@@ -2281,6 +2352,51 @@ export function evaluateReadModelOperationsSourceContracts(
     stagedHealthGate >= 0 && stagedCandidateHandoff > stagedHealthGate
       ? deployWorkflow.slice(stagedHealthGate, stagedCandidateHandoff).trimEnd()
       : "";
+  const stagedDurableRefreshGateBlock =
+    stagedDurableRefreshGate >= 0 &&
+      stagedDurableRefreshGateEnd > stagedDurableRefreshGate
+      ? deployWorkflow
+        .slice(stagedDurableRefreshGate, stagedDurableRefreshGateEnd)
+        .trimEnd()
+      : "";
+  const stagedDurableRefreshDeploymentLookup = stagedDurableRefresh.indexOf(
+    "const deployment = await fetchVercelDeployment(",
+  );
+  const stagedDurableRefreshIdentityFailureGuard =
+    stagedDurableRefresh.indexOf("if (!deploymentMatches) {");
+  const stagedDurableRefreshProtectedRequest = stagedDurableRefresh.indexOf(
+    "const refresh = await requestJson(",
+  );
+  const stagedDurableRefreshHealthRequest = stagedDurableRefresh.indexOf(
+    "health = await requestJson(",
+  );
+  check(
+    "ops-staged-durable-refresh-gate",
+    packageJson?.scripts?.["perf:read-model:staged-refresh"] ===
+      "node scripts/perf/read-model-staged-refresh.mjs" &&
+      sha256(stagedDurableRefresh) === STAGED_DURABLE_REFRESH_SCRIPT_SHA256 &&
+      includesEverySourceFragment(
+        stagedDurableRefresh,
+        STAGED_DURABLE_REFRESH_SOURCE_GUARDS,
+      ) &&
+      stagedDurableRefreshDeploymentLookup >= 0 &&
+      stagedDurableRefreshIdentityFailureGuard >
+      stagedDurableRefreshDeploymentLookup &&
+      stagedDurableRefreshProtectedRequest >
+      stagedDurableRefreshIdentityFailureGuard &&
+      stagedDurableRefreshHealthRequest > stagedDurableRefreshProtectedRequest &&
+      stagedDeploymentResolution >= 0 &&
+      stagedDurableRefreshGate > stagedDeploymentResolution &&
+      stagedDurableRefreshGateEnd > stagedDurableRefreshGate &&
+      stagedBitquerySmoke > stagedDurableRefreshGate &&
+      stagedHealthGate > stagedDurableRefreshGate &&
+      stagedDurableRefreshGateBlock === STAGED_DURABLE_REFRESH_WORKFLOW_STEP &&
+      !stagedDurableRefreshGateBlock.includes(
+        "NEXT_PUBLIC_VERCEL_AUTOMATION_BYPASS_SECRET",
+      ) &&
+      !stagedDurableRefreshGateBlock.includes("NEXT_PUBLIC_CRON_SECRET"),
+    "the exact staged deployment refreshes the durable model and proves fresh RPC-bound visibility before market and handoff gates",
+  );
   const stagedHealthDeploymentLookup = stagedHealth.indexOf(
     "const deployment = await fetchVercelDeployment(",
   );

@@ -745,6 +745,10 @@ describe("read-model operations source contract", () => {
       "RPC provider config",
       "lib/onchain/website-rpc-providers.server.ts",
     ],
+    [
+      "current-market RPC quorum",
+      "lib/market-data/current-market-rpc.server.ts",
+    ],
   ])("rejects unreviewed %s bytes", (_label, path) => {
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: {

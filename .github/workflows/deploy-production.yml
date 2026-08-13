@@ -565,6 +565,21 @@ jobs:
             --retry 12 --retry-all-errors --retry-delay 5 \
             --max-time 30 "$DEPLOYMENT_URL/" > /dev/null
 
+      - name: Refresh and prove exact staged durable read model
+        if: needs.release-gate.outputs.verified_read_model == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          STAGED_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
+          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
+          EXPECTED_GIT_HEAD: ${{ github.sha }}
+        run: >-
+          npm run perf:read-model:staged-refresh --
+          --target-url "$STAGED_TARGET_URL"
+          --deployment-id "$STAGED_DEPLOYMENT_ID"
+          --git-head "$EXPECTED_GIT_HEAD"
+
       - name: Smoke staged public market APIs
         if: needs.release-gate.outputs.verified_read_model == 'true'
         env:

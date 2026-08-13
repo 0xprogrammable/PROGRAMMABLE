@@ -153,6 +153,7 @@
     "perf:read-model:real-block-sla": "node scripts/perf/read-model-real-block-sla-gate.mjs",
     "perf:read-model:staged-deployment": "node scripts/perf/read-model-staged-deployment.mjs",
     "perf:read-model:staged-health": "node scripts/perf/read-model-staged-health.mjs",
+    "perf:read-model:staged-refresh": "node scripts/perf/read-model-staged-refresh.mjs",
     "perf:read-model:ops-gate": "node scripts/perf/read-model-ops-source-contracts.mjs",
     "perf:read-model:production-binding": "node scripts/perf/read-model-production-binding.mjs",
     "perf:read-model:post-promotion": "node scripts/perf/read-model-post-promotion.mjs"

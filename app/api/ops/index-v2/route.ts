@@ -7,6 +7,7 @@ import {
   readLiveExploreModel,
   writeDurableExploreModel,
 } from "../../../../lib/onchain";
+import { currentMarketOnchainDeployment } from "../../../../lib/market-data/current-market-rpc.server";
 import { writePortfolioHistorySnapshot } from "../../../../lib/profile/portfolio-history-storage.server";
 
 export const dynamic = "force-dynamic";
@@ -82,12 +83,13 @@ export async function GET(request: NextRequest) {
         "The verified production release is not operationally eligible",
       );
     }
+    const durableRefreshDeployment = currentMarketOnchainDeployment(deployment);
     let model: Awaited<ReturnType<typeof readLiveExploreModel>> | null =
       null;
     let lastReadError: unknown;
     for (let attempt = 1; attempt <= INDEX_READ_ATTEMPTS; attempt += 1) {
       try {
-        model = await readLiveExploreModel(deployment);
+        model = await readLiveExploreModel(durableRefreshDeployment);
         break;
       } catch (error) {
         lastReadError = error;
