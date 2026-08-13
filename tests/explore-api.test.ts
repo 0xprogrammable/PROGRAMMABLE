@@ -933,6 +933,42 @@ describe("Explore API Bitquery market boundary", () => {
     ).toHaveLength(30);
   });
 
+  it("starts the current-evidence budget after identity reads settle", async () => {
+    let resolveCanonical!: (model: ExploreReadModel) => void;
+    mocks.readAlchemyExploreModel.mockReturnValueOnce(
+      new Promise<ExploreReadModel>((resolve) => {
+        resolveCanonical = resolve;
+      }),
+    );
+
+    const responseRead = GET(
+      new NextRequest("http://localhost/api/explore?sort=market-cap"),
+    );
+    await vi.waitFor(() => {
+      expect(mocks.readAlchemyExploreModel).toHaveBeenCalledOnce();
+    });
+    expect(mocks.settleCurrentEvidenceSnapshot).not.toHaveBeenCalled();
+    expect(
+      mocks.valueExploreEntriesWithCurrentEvidenceSnapshot,
+    ).not.toHaveBeenCalled();
+
+    resolveCanonical(readyModel());
+    const response = await responseRead;
+
+    expect(response.status).toBe(200);
+    expect(mocks.settleCurrentEvidenceSnapshot).toHaveBeenCalledOnce();
+    expect(
+      mocks.valueExploreEntriesWithCurrentEvidenceSnapshot,
+    ).toHaveBeenCalledWith(expect.objectContaining({
+      timeoutMs: expect.any(Number),
+    }));
+    const timeoutMs =
+      mocks.valueExploreEntriesWithCurrentEvidenceSnapshot.mock.calls[0]?.[0]
+        .timeoutMs;
+    expect(timeoutMs).toBeGreaterThan(0);
+    expect(timeoutMs).toBeLessThanOrEqual(4_500);
+  });
+
   it("replays later market-cap pages against the exact first-page ranking", async () => {
     const firstResponse = await GET(new NextRequest(
       "http://localhost/api/explore?sort=market-cap&page=1&limit=10",

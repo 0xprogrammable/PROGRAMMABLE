@@ -734,6 +734,19 @@ export async function GET(request: NextRequest) {
     const currentMarketDeployment = deployment.status === "ready"
       ? currentMarketOnchainDeployment(deployment)
       : null;
+    const [
+      canonicalAttempt,
+      customAttempt,
+      referenceHead,
+    ] = await Promise.all([
+      canonicalRead,
+      customRead,
+      readExploreReferenceHeadWithinRouteBudget(),
+    ]);
+    // Identity discovery has its own bounded reads. Start the current-market
+    // budget only after those reads settle so a cold canonical cache cannot
+    // consume the entire StateView, Chainlink and official-v4 evidence window
+    // before the evidence operation begins.
     const currentEvidenceDeadlineAt =
       Date.now() + CURRENT_EVIDENCE_ROUTE_DEADLINE_MS;
     const requireCompleteCurrentValuation =
@@ -757,20 +770,11 @@ export async function GET(request: NextRequest) {
       : Promise.resolve(null);
     // Attach a rejection handler immediately; global ranking rethrows the
     // settled error inside the valuation orchestrator rather than leaking an
-    // unhandled promise while identity reads complete.
+    // unhandled promise.
     const operationalSnapshotOutcome = operationalSnapshotRead.then(
       (value) => ({ status: "fulfilled" as const, value }),
       (error: unknown) => ({ status: "rejected" as const, error }),
     );
-    const [
-      canonicalAttempt,
-      customAttempt,
-      referenceHead,
-    ] = await Promise.all([
-      canonicalRead,
-      customRead,
-      readExploreReferenceHeadWithinRouteBudget(),
-    ]);
     if (canonicalAttempt.source === null && customAttempt.source === null) {
       throw canonicalAttempt.error ?? customAttempt.error;
     }

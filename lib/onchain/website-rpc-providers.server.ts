@@ -9,7 +9,7 @@ const ALCHEMY_MAINNET_RPC_PATH = /^\/v2\/[A-Za-z0-9_-]{8,256}$/u;
 const DRPC_MAINNET_RPC_HOST = "lb.drpc.live";
 const DRPC_MAINNET_RPC_PATH = /^\/ethereum\/[A-Za-z0-9_-]{8,512}\/?$/u;
 const QUICKNODE_MAINNET_RPC_HOST =
-  /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.quiknode\.pro$/u;
+  /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+quiknode\.pro$/u;
 const QUICKNODE_MAINNET_RPC_PATH = /^\/[A-Za-z0-9_-]{8,256}\/?$/u;
 
 export const WEBSITE_MAINNET_RPC_ENV = Object.freeze({

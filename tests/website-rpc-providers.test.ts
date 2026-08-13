@@ -12,6 +12,8 @@ const ALCHEMY_URL =
 const DRPC_URL = "https://lb.drpc.live/ethereum/drpc-test-key";
 const QUICKNODE_URL =
   "https://programmable-mainnet.quiknode.pro/quicknode-test-key/";
+const MULTI_LABEL_QUICKNODE_URL =
+  "https://programmable.base-mainnet.quiknode.pro/quicknode-test-key/";
 
 function environment(input?: Readonly<{
   primaryProvider?: string;
@@ -75,6 +77,20 @@ describe("Website Mainnet RPC provider bindings", () => {
     });
   });
 
+  it("accepts commitment-bound QuickNode endpoints with valid subdomains", () => {
+    const selected = websiteMainnetRpcPair(environment({
+      secondaryProvider: "quicknode",
+      secondaryUrl: MULTI_LABEL_QUICKNODE_URL,
+    }));
+
+    expect(selected.secondary).toEqual({
+      provider: "quicknode",
+      url: MULTI_LABEL_QUICKNODE_URL,
+      endpointCommitment:
+        rpcProviderCommitment("endpoint", MULTI_LABEL_QUICKNODE_URL),
+    });
+  });
+
   it("ignores legacy bindings only after a complete role-bound pair is valid", () => {
     const selected = websiteMainnetRpcPair({
       ...environment(),
@@ -110,11 +126,16 @@ describe("Website Mainnet RPC provider bindings", () => {
       primaryProvider: "drpc",
       primaryUrl: "https://eth.drpc.org/",
     }))).toThrow("Website primary RPC binding is invalid");
-    expect(() => websiteMainnetRpcPair(environment({
-      secondaryProvider: "quicknode",
-      secondaryUrl:
-        "https://programmable.base-mainnet.quiknode.pro/quicknode-test-key/",
-    }))).toThrow("Website secondary RPC binding is invalid");
+    for (const secondaryUrl of [
+      "https://quiknode.pro/quicknode-test-key/",
+      "https://programmable.quiknode.pro.evil.example/quicknode-test-key/",
+      "https://evilquiknode.pro/quicknode-test-key/",
+    ]) {
+      expect(() => websiteMainnetRpcPair(environment({
+        secondaryProvider: "quicknode",
+        secondaryUrl,
+      }))).toThrow("Website secondary RPC binding is invalid");
+    }
   });
 
   it("requires independent vendor identities, not only distinct URLs", () => {

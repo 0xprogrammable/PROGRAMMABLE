@@ -48,7 +48,7 @@ const APPROVED_OPERATIONS = Object.freeze({
         }),
         providerConfig: Object.freeze({
           path: "lib/onchain/website-rpc-providers.server.ts",
-          sha256: "12018bf29c2521b3fbae2c64ba2e93d586e0f9978c36403f24249becb71f07ed",
+          sha256: "b6c35adf7598b53989fc68e82affcdc5b75559125e387a03afd6468933888fb3",
         }),
       }),
     }),
