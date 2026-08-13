@@ -118,9 +118,9 @@
     "profileRuntimeByteRegressionMaximum": 22000,
     "fullForgeSuite": "238 passed; 0 failed; 3 skipped; 241 total",
     "slitherVersion": "0.11.5",
-    "slitherReportPath": "/tmp/hookemon-v2-isolated-slither.json",
-    "slitherReportSha256": "c8de9d2e51d2c2448ec992ac819381f735a789718ab7a1a8520fe854f15c6621",
-    "slitherReportByteLength": 12058079,
+    "slitherReportPath": "/tmp/hookemon-v2-7e008d0-slither.json",
+    "slitherReportSha256": "d9c0f430683ec5fe08858b243ebde8d80fddab12435314e3bd8473a902c3732a",
+    "slitherReportByteLength": 12047527,
     "slitherTotalDetectorInstances": 314,
     "slitherScopedTriagePath": "security/hookemon-reusable-profile-v2-slither-triage.json",
     "testEvidencePath": "security/hookemon-reusable-profile-v2-test-evidence.json"
