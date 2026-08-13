@@ -23,6 +23,8 @@ const mocks = vi.hoisted(() => ({
   readDurableExploreModel: vi.fn(),
   readBitqueryTokenMarketDataV1: vi.fn(),
   hydrateMissingCanonicalTokenSupplyV1: vi.fn(),
+  valueExploreEntriesWithCurrentEvidence: vi.fn(),
+  settleCurrentEvidenceSnapshot: vi.fn(),
   safeAlchemyError: vi.fn((error) => error),
 }));
 
@@ -73,6 +75,18 @@ vi.mock("../lib/market-data/canonical-token-supply.server", () => ({
   hydrateMissingCanonicalTokenSupplyV1:
     mocks.hydrateMissingCanonicalTokenSupplyV1,
 }));
+
+vi.mock("../lib/market-data/current-valuation.server", () => ({
+  CURRENT_EVIDENCE_ROUTE_DEADLINE_MS: 4_500,
+  settleCurrentEvidenceSnapshot: mocks.settleCurrentEvidenceSnapshot,
+  valueExploreEntriesWithCurrentEvidence:
+    mocks.valueExploreEntriesWithCurrentEvidence,
+}));
+
+import {
+  valuationSortValue,
+  withBitqueryMarketData,
+} from "../lib/explore-financial-data";
 
 import {
   dedupeExploreEntriesV1,
@@ -247,6 +261,9 @@ describe("Explore API Bitquery market boundary", () => {
       rpcUrlSecondary: "https://secondary.example",
     });
     mocks.readVerifiedOperationalMarketSnapshot.mockResolvedValue(snapshot);
+    mocks.settleCurrentEvidenceSnapshot.mockImplementation(
+      async ({ read }: { read: Promise<unknown> }) => await read,
+    );
     mocks.withSameBlockEthUsdQuote.mockImplementation(
       async ({ snapshot: value }) => value,
     );
@@ -259,6 +276,28 @@ describe("Explore API Bitquery market boundary", () => {
     );
     mocks.hydrateMissingCanonicalTokenSupplyV1.mockImplementation(
       async (entries: readonly ExploreEntry[]) => [...entries],
+    );
+    mocks.valueExploreEntriesWithCurrentEvidence.mockImplementation(
+      async ({ entries, marketByToken }: {
+        entries: readonly ExploreEntry[];
+        marketByToken: Promise<ReadonlyMap<string, TokenMarketDataV1>>;
+      }) => {
+        const markets = await marketByToken;
+        return entries.map((entry) => {
+          const market = entry.tokenAddress
+            ? markets.get(entry.tokenAddress.toLowerCase())
+            : undefined;
+          return market
+            ? withBitqueryMarketData(entry, market)
+            : {
+                ...entry,
+                valuation: {
+                  status: "unavailable" as const,
+                  reason: "source-unavailable" as const,
+                },
+              };
+        });
+      },
     );
   });
 
@@ -307,7 +346,6 @@ describe("Explore API Bitquery market boundary", () => {
         query: "",
         socials: null,
         sort,
-        topThenNewest: false,
       }).tokens.map(({ id }) => id);
 
     const newest = [
@@ -376,7 +414,6 @@ describe("Explore API Bitquery market boundary", () => {
           query: "",
           socials: null,
           sort: "newest",
-          topThenNewest: false,
         }).tokens.map(({ id }) => id),
       ).toEqual(expected);
     }
@@ -443,7 +480,6 @@ describe("Explore API Bitquery market boundary", () => {
         query: "",
         socials: null,
         sort,
-        topThenNewest: false,
       }).tokens.map(({ id }) => id);
 
     expect(paginate("market-cap")).toEqual([
@@ -460,6 +496,41 @@ describe("Explore API Bitquery market boundary", () => {
       "1:eth",
       "1:quote",
     ]);
+  });
+
+  it("keeps explicit market-cap pagination globally monotonic beyond 20 entries", () => {
+    const entries = Array.from({ length: 25 }, (_, index) => ({
+      ...orderedEntry({
+        id: `1:global-${index}`,
+        kind: "token",
+        block: String(1_000 + index),
+        transaction: 0,
+        log: 0,
+      }),
+      valuation: {
+        status: "available" as const,
+        metric: "fdv" as const,
+        supplyBasis: "total" as const,
+        currency: "usd" as const,
+        valueWad: String((index * 17) % 25 + 1),
+        freshness: "current" as const,
+        source: "stateview-chainlink" as const,
+      },
+    }));
+    const pages = [1, 2, 3].flatMap((page) =>
+      paginateExploreEntriesV1(entries, {
+        page,
+        pageSize: 10,
+        query: "",
+        socials: null,
+        sort: "market-cap",
+      }).tokens,
+    );
+    const values = pages.map((entry) => valuationSortValue(entry)!);
+
+    expect(new Set(pages.map(({ id }) => id)).size).toBe(25);
+    expect(values).toEqual([...values].sort((left, right) =>
+      left === right ? 0 : left > right ? -1 : 1));
   });
 
   it("deduplicates exact canonical records but fails closed on conflicts", () => {
@@ -590,9 +661,7 @@ describe("Explore API Bitquery market boundary", () => {
       source: "bitquery",
       asOfTime: MARKET_OBSERVATION_TIME,
     });
-    expect(body.tokens[0].fdvUsdWad).toBe(
-      body.tokens[0].valuation.valueWad,
-    );
+    expect(body.tokens[0]).not.toHaveProperty("fdvUsdWad");
     for (const field of [
       "marketCapEth",
       "marketCapEthWei",
@@ -687,7 +756,7 @@ describe("Explore API Bitquery market boundary", () => {
     expect(response.status).toBe(200);
     expect(body.dataQuality).toMatchObject({
       status: "stale",
-      valuation: { status: "stale", stale: 30 },
+      valuation: { status: "stale", stale: 9 },
     });
     expect(response.headers.get("X-Programmable-Data-Quality")).toBe("stale");
     expect(response.headers.get("Cache-Control")).toBe(

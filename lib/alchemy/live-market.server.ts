@@ -14,7 +14,10 @@ import {
   marketCapNativeWadFromSqrtPriceX96,
   nativePriceWadFromSqrtPriceX96,
 } from "../onchain/math";
-import { withOperationalRpcFailover } from "../onchain/operational-rpc-failover.server";
+import {
+  OperationalRpcUnavailableError,
+  withOperationalRpcFailover,
+} from "../onchain/operational-rpc-failover.server";
 import { readOperationalRpcHealth } from "../onchain/rpc-health";
 import type { ExploreSnapshot, ReadyOnchainDeployment } from "../onchain/types";
 import {
@@ -37,6 +40,7 @@ type LivePoolState = Readonly<{
   lpFeePips: number;
   activeLiquidity: bigint;
   blockNumber: bigint;
+  blockHash: Hex;
 }>;
 
 const livePoolStateCache = new Map<
@@ -64,6 +68,7 @@ function trimPoolStateCache() {
 }
 
 const NATIVE_CURRENCY = "0x0000000000000000000000000000000000000000";
+const Q96 = 1n << 96n;
 const ethUsdReadAbi = parseAbi([
   "function decimals() view returns (uint8)",
   "function latestRoundData() view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)",
@@ -126,6 +131,8 @@ function validValuationToken(token: LauncherToken) {
 
 function withoutNativeValuation(token: LauncherToken): LauncherToken {
   const withoutValuation = { ...token };
+  delete withoutValuation.liveMarketStateEvidence;
+  delete withoutValuation.liveMarketPriceEvidence;
   delete withoutValuation.tokenPriceEth;
   delete withoutValuation.tokenPriceEthWei;
   delete withoutValuation.tokenPriceUsdWad;
@@ -150,6 +157,17 @@ function snapshotBlock(snapshot: ExploreSnapshot) {
   return BigInt(snapshot.blockNumber);
 }
 
+function unixTimestampIso(value: string): string | undefined {
+  if (!/^(?:0|[1-9]\d*)$/u.test(value)) return undefined;
+  try {
+    const seconds = BigInt(value);
+    if (seconds > 8_640_000_000_000n) return undefined;
+    return new Date(Number(seconds) * 1_000).toISOString();
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * A launch-discovery snapshot may be newer than the durable market snapshot.
  * Never carry the durable ETH/USD quote across that block boundary: doing so
@@ -161,6 +179,7 @@ export function withoutUnboundEthUsdQuote(
 ): ExploreSnapshot {
   const withoutQuote = { ...snapshot };
   delete withoutQuote.ethUsdQuote;
+  delete withoutQuote.blockTimestamp;
   return withoutQuote;
 }
 
@@ -236,12 +255,19 @@ export async function withSameBlockEthUsdQuote(input: {
         answer,
         updatedAt,
       });
-      return { roundId, answer, decimals, updatedAt };
+      return {
+        roundId,
+        answer,
+        decimals,
+        updatedAt,
+        blockTimestamp: block.timestamp,
+      };
     },
   );
 
   return {
     ...snapshot,
+    blockTimestamp: quote.blockTimestamp.toString(),
     ethUsdQuote: {
       feedAddress: ETH_USD_FEED_ADDRESS,
       roundId: quote.roundId.toString(),
@@ -256,11 +282,13 @@ function poolStateCacheKey(input: {
   deployment: ReadyOnchainDeployment;
   blockNumber: bigint;
   poolId: string;
+  blockHash: Hex;
 }) {
   return [
     input.deployment.chainId,
     input.deployment.stateView.toLowerCase(),
     input.blockNumber.toString(),
+    input.blockHash.toLowerCase(),
     input.poolId.toLowerCase(),
   ].join(":");
 }
@@ -269,12 +297,21 @@ function applyLivePoolState(
   token: LauncherToken,
   state: LivePoolState | null,
   snapshot: ExploreSnapshot,
+  deployment: ReadyOnchainDeployment,
 ) {
   if (!validPoolStateToken(token)) return token;
   // Preserve a last-known-good valuation with its original indexed block. The
   // chart consumer treats that provenance as stale/partial and never relabels
   // it as the current snapshot while the live read is unavailable.
-  if (!state) return token;
+  if (!state) {
+    const withoutEvidence = { ...token };
+    delete withoutEvidence.liveMarketStateEvidence;
+    delete withoutEvidence.liveMarketPriceEvidence;
+    return withoutEvidence;
+  }
+  if (state.blockHash.toLowerCase() !== snapshot.blockHash.toLowerCase()) {
+    return withoutNativeValuation(token);
+  }
 
   const currentState = {
     // A successful live read starts a new, single-block valuation set. Never
@@ -284,9 +321,19 @@ function applyLivePoolState(
     activeLiquidity: state.activeLiquidity.toString(),
     protocolFeePips: state.protocolFeePips,
     lpFeePips: state.lpFeePips,
+    liveMarketStateEvidence: {
+      source: "uniswap-v4-stateview-v1",
+      blockNumber: state.blockNumber.toString(),
+      blockHash: state.blockHash,
+      sqrtPriceX96: state.sqrtPriceX96.toString(),
+      activeLiquidity: state.activeLiquidity.toString(),
+    },
   } satisfies LauncherToken;
   if (state.activeLiquidity <= 0n || !validValuationToken(token)) {
-    return withoutNativeValuation(currentState);
+    return {
+      ...withoutNativeValuation(currentState),
+      liveMarketStateEvidence: currentState.liveMarketStateEvidence,
+    };
   }
 
   const tokenDecimals = token.tokenDecimals as number;
@@ -313,6 +360,23 @@ function applyLivePoolState(
         snapshot.ethUsdQuote.decimals,
       )
     : undefined;
+  const activeVirtualToken0Wei =
+    (state.activeLiquidity * Q96) / state.sqrtPriceX96;
+  const activeVirtualLiquidityUsdWad = snapshot.ethUsdQuote
+    ? usdValueFromWei(
+        (2n * activeVirtualToken0Wei).toString(),
+        BigInt(snapshot.ethUsdQuote.answer),
+        snapshot.ethUsdQuote.decimals,
+      )
+    : undefined;
+  const blockTimestamp = snapshot.blockTimestamp;
+  const blockTime = blockTimestamp
+    ? unixTimestampIso(blockTimestamp)
+    : undefined;
+  const quoteUpdatedAt = snapshot.ethUsdQuote?.updatedAt;
+  const quoteUpdatedAtTime = quoteUpdatedAt
+    ? unixTimestampIso(quoteUpdatedAt)
+    : undefined;
 
   return {
     ...currentState,
@@ -327,6 +391,48 @@ function applyLivePoolState(
     ...(marketCapUsdWad === undefined
       ? {}
       : { fdvUsdWad: marketCapUsdWad.toString() }),
+    ...(tokenPriceUsdWad === undefined ||
+      marketCapUsdWad === undefined ||
+      activeVirtualLiquidityUsdWad === undefined ||
+      !snapshot.ethUsdQuote ||
+      !blockTimestamp ||
+      !blockTime ||
+      !quoteUpdatedAtTime ||
+      deployment.chainId !== 1
+      ? {}
+      : {
+          liveMarketPriceEvidence: {
+            schemaVersion:
+              "programmable.stateview-chainlink-price-evidence.v1",
+            source: "uniswap-v4-stateview-chainlink-v1",
+            chainId: "1",
+            poolId: token.poolId,
+            tokenAddress: token.tokenAddress,
+            quoteAddress: NATIVE_CURRENCY,
+            stateViewAddress: deployment.stateView,
+            stateViewRuntimeCodeHash: deployment.stateViewRuntimeCodeHash,
+            blockNumber: state.blockNumber.toString(),
+            blockHash: snapshot.blockHash,
+            blockTimestamp,
+            blockTime,
+            sqrtPriceX96: state.sqrtPriceX96.toString(),
+            activeLiquidity: state.activeLiquidity.toString(),
+            activeVirtualToken0Wei: activeVirtualToken0Wei.toString(),
+            activeVirtualLiquidityUsdWad:
+              activeVirtualLiquidityUsdWad.toString(),
+            activeVirtualLiquidityValueBasis:
+              "stateview-active-liquidity-virtual-depth-usd",
+            tokenPriceEthWei: tokenPriceEthWei.toString(),
+            tokenPriceUsdWad: tokenPriceUsdWad.toString(),
+            totalSupplyRaw: totalSupplyRaw.toString(),
+            tokenDecimals,
+            fdvUsdWad: marketCapUsdWad.toString(),
+            ethUsdQuote: {
+              ...snapshot.ethUsdQuote,
+              updatedAtTime: quoteUpdatedAtTime,
+            },
+          },
+        }),
   } satisfies LauncherToken;
 }
 
@@ -347,6 +453,7 @@ export async function enrichTokensWithAlchemyPoolState(input: {
       deployment: input.deployment,
       blockNumber,
       poolId,
+      blockHash: input.snapshot.blockHash,
     });
     const cached = currentCacheEntry(cacheKey);
     if (cached) states.set(poolId, cached);
@@ -364,7 +471,7 @@ export async function enrichTokensWithAlchemyPoolState(input: {
             timeout: 12_000,
           }),
         });
-        const [slot0Results, liquidityResults] = await Promise.all([
+        const [slot0Results, liquidityResults, block] = await Promise.all([
           client.multicall({
             allowFailure: true,
             blockNumber,
@@ -385,7 +492,11 @@ export async function enrichTokensWithAlchemyPoolState(input: {
               args: [token.poolId as Hex],
             })),
           }),
+          client.getBlock({ blockNumber }),
         ]);
+        if (block.hash.toLowerCase() !== input.snapshot.blockHash.toLowerCase()) {
+          throw new OperationalRpcUnavailableError();
+        }
         return missing.map((_, index): LivePoolState | null => {
           const slot0 = slot0Results[index];
           const liquidity = liquidityResults[index];
@@ -404,6 +515,7 @@ export async function enrichTokensWithAlchemyPoolState(input: {
             lpFeePips,
             activeLiquidity: liquidity.result,
             blockNumber,
+            blockHash: block.hash,
           };
         });
       },
@@ -416,6 +528,7 @@ export async function enrichTokensWithAlchemyPoolState(input: {
         deployment: input.deployment,
         blockNumber,
         poolId,
+        blockHash: input.snapshot.blockHash,
       });
       const value = batch.then((results) => results[index] ?? null);
       livePoolStateCache.set(cacheKey, {
@@ -434,6 +547,7 @@ export async function enrichTokensWithAlchemyPoolState(input: {
         token,
         state ? await state : null,
         input.snapshot,
+        input.deployment,
       );
     }),
   );

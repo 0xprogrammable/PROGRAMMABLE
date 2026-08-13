@@ -123,6 +123,7 @@ export type ExploreSnapshot = {
   chainId: number;
   blockNumber: string;
   blockHash: Hex;
+  blockTimestamp?: string;
   confirmations: number;
   ethUsdQuote?: {
     feedAddress: Address;

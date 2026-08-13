@@ -54,6 +54,19 @@ const deployment = {
 describe("Alchemy live pool market state", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    const hashes = new Map<bigint, `0x${string}`>([
+      [25_680_000n, `0x${"77".repeat(32)}`],
+      [25_730_555n, "0x88e3bc3a2ffed82bf413cd16c2bad04d8e5482306b55398ceb791285ff5248b1"],
+      [25_680_001n, `0x${"88".repeat(32)}`],
+      [25_680_002n, `0x${"dd".repeat(32)}`],
+      [25_680_003n, `0x${"78".repeat(32)}`],
+    ]);
+    mocks.getBlock.mockImplementation(
+      async ({ blockNumber }: { blockNumber: bigint }) => ({
+        hash: hashes.get(blockNumber) ?? `0x${"00".repeat(32)}`,
+        timestamp: 1_786_400_100n,
+      }),
+    );
   });
 
   it("replaces an older ETH/USD quote with a verified same-block quote", async () => {
@@ -521,5 +534,163 @@ describe("Alchemy live pool market state", () => {
     expect(enriched).toEqual(staleToken);
     expect(enriched?.indexedValuationBlockNumber).toBe("25680001");
     expect(mocks.multicall).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not reuse same-height pool state across a block-hash change", async () => {
+    const token = {
+      id: "1:reorg-cache",
+      name: "Reorg cache",
+      symbol: "REORG",
+      tokenAddress: "0x1313131313131313131313131313131313131313",
+      hookAddress: "0x2424242424242424242424242424242424242424",
+      poolId: `0x${"35".repeat(32)}`,
+      launchedAt: "2026-08-13T00:00:00.000Z",
+      totalSupplyRaw: "1000000000000000000000",
+      tokenDecimals: 18,
+      launchModel: "classic",
+      totalSwapFeeBps: 100,
+      liquidityPath: "meme",
+    } satisfies LauncherToken;
+    const firstHash = `0x${"41".repeat(32)}` as const;
+    const secondHash = `0x${"42".repeat(32)}` as const;
+    mocks.multicall
+      .mockResolvedValueOnce([{ status: "success", result: [1n << 96n, 1, 0, 0] }])
+      .mockResolvedValueOnce([{ status: "success", result: 1_000_000n }])
+      .mockResolvedValueOnce([{ status: "success", result: [1n << 96n, 2, 0, 0] }])
+      .mockResolvedValueOnce([{ status: "success", result: 2_000_000n }]);
+    mocks.getBlock
+      .mockResolvedValueOnce({ hash: firstHash, timestamp: 1_786_400_100n })
+      .mockResolvedValueOnce({ hash: secondHash, timestamp: 1_786_400_101n });
+
+    const [first] = await enrichTokensWithAlchemyPoolState({
+      deployment,
+      snapshot: {
+        chainId: 1,
+        blockNumber: "25690000",
+        blockHash: firstHash,
+        confirmations: 12,
+      },
+      tokens: [token],
+    });
+    const [second] = await enrichTokensWithAlchemyPoolState({
+      deployment,
+      snapshot: {
+        chainId: 1,
+        blockNumber: "25690000",
+        blockHash: secondHash,
+        confirmations: 12,
+      },
+      tokens: [token],
+    });
+
+    expect(first).toMatchObject({
+      currentTick: 1,
+      liveMarketStateEvidence: { blockHash: firstHash },
+    });
+    expect(second).toMatchObject({
+      currentTick: 2,
+      liveMarketStateEvidence: { blockHash: secondHash },
+    });
+    expect(mocks.multicall).toHaveBeenCalledTimes(4);
+  });
+
+  it("replays StateView on the secondary when the primary block hash mismatches", async () => {
+    const expectedHash = `0x${"51".repeat(32)}` as const;
+    const token = {
+      id: "1:hash-failover",
+      name: "Hash failover",
+      symbol: "HASH",
+      tokenAddress: "0x1414141414141414141414141414141414141414",
+      hookAddress: "0x2525252525252525252525252525252525252525",
+      poolId: `0x${"36".repeat(32)}`,
+      launchedAt: "2026-08-13T00:00:00.000Z",
+      totalSupplyRaw: "1000000000000000000000",
+      tokenDecimals: 18,
+      launchModel: "classic",
+      totalSwapFeeBps: 100,
+      liquidityPath: "meme",
+    } satisfies LauncherToken;
+    mocks.multicall
+      .mockResolvedValueOnce([{ status: "success", result: [1n << 96n, 1, 0, 0] }])
+      .mockResolvedValueOnce([{ status: "success", result: 10n }])
+      .mockResolvedValueOnce([{ status: "success", result: [1n << 96n, 2, 0, 0] }])
+      .mockResolvedValueOnce([{ status: "success", result: 20n }]);
+    mocks.getBlock
+      .mockResolvedValueOnce({
+        hash: `0x${"52".repeat(32)}`,
+        timestamp: 1_786_400_100n,
+      })
+      .mockResolvedValueOnce({ hash: expectedHash, timestamp: 1_786_400_100n });
+
+    const [enriched] = await enrichTokensWithAlchemyPoolState({
+      deployment: {
+        ...deployment,
+        rpcUrlSecondary: "https://secondary.example",
+      },
+      snapshot: {
+        chainId: 1,
+        blockNumber: "25690001",
+        blockHash: expectedHash,
+        confirmations: 12,
+      },
+      tokens: [token],
+    });
+
+    expect(enriched).toMatchObject({
+      currentTick: 2,
+      activeLiquidity: "20",
+      liveMarketStateEvidence: { blockHash: expectedHash },
+    });
+    expect(mocks.multicall).toHaveBeenCalledTimes(4);
+  });
+
+  it("publishes no evidence when both StateView providers disagree on the hash", async () => {
+    const expectedHash = `0x${"61".repeat(32)}` as const;
+    const token = {
+      id: "1:hash-fail-closed",
+      name: "Hash fail closed",
+      symbol: "CLOSED",
+      tokenAddress: "0x1515151515151515151515151515151515151515",
+      hookAddress: "0x2626262626262626262626262626262626262626",
+      poolId: `0x${"37".repeat(32)}`,
+      launchedAt: "2026-08-13T00:00:00.000Z",
+      totalSupplyRaw: "1000000000000000000000",
+      tokenDecimals: 18,
+      launchModel: "classic",
+      totalSwapFeeBps: 100,
+      liquidityPath: "meme",
+    } satisfies LauncherToken;
+    mocks.multicall
+      .mockResolvedValueOnce([{ status: "success", result: [1n << 96n, 1, 0, 0] }])
+      .mockResolvedValueOnce([{ status: "success", result: 10n }])
+      .mockResolvedValueOnce([{ status: "success", result: [1n << 96n, 2, 0, 0] }])
+      .mockResolvedValueOnce([{ status: "success", result: 20n }]);
+    mocks.getBlock
+      .mockResolvedValueOnce({
+        hash: `0x${"62".repeat(32)}`,
+        timestamp: 1_786_400_100n,
+      })
+      .mockResolvedValueOnce({
+        hash: `0x${"63".repeat(32)}`,
+        timestamp: 1_786_400_100n,
+      });
+
+    const [enriched] = await enrichTokensWithAlchemyPoolState({
+      deployment: {
+        ...deployment,
+        rpcUrlSecondary: "https://secondary.example",
+      },
+      snapshot: {
+        chainId: 1,
+        blockNumber: "25690002",
+        blockHash: expectedHash,
+        confirmations: 12,
+      },
+      tokens: [token],
+    });
+
+    expect(enriched).not.toHaveProperty("liveMarketStateEvidence");
+    expect(enriched).not.toHaveProperty("liveMarketPriceEvidence");
+    expect(mocks.multicall).toHaveBeenCalledTimes(4);
   });
 });

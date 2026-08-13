@@ -9,10 +9,8 @@ export const PROGRAMMABLE_MARKET_CHART_ERROR_SCHEMA_VERSION =
 
 export const MARKET_DATA_CURRENT_MAX_AGE_MS = 5 * 60 * 1_000;
 
-// A public current FDV needs enough exact-pool depth to make a single dust
-// trade an insufficient price signal. This is deliberately conservative: a
-// launch remains discoverable when it is below the threshold, but its USD FDV
-// is unavailable instead of being ranked from an unsafe observation.
+// This threshold is an eligibility rule for publishing a current FDV. It does
+// not claim executable depth, manipulation resistance or price-impact bounds.
 export const MARKET_DATA_MINIMUM_FDV_LIQUIDITY_USD_WAD =
   "10000000000000000000000" as const;
 export const MARKET_DATA_MAXIMUM_RAW_INDEXED_PRICE_DEVIATION_BPS = 1_000 as const;

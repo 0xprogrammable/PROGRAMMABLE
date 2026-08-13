@@ -8,12 +8,17 @@ import {
   valuationSortValue,
   type ValuedExploreEntry,
   withBitqueryMarketData,
+  withCurrentOnchainValuation,
   withExploreValuation,
   withPublicExploreBitqueryMarketData,
 } from "../lib/explore-financial-data";
+import type { OfficialV4LiquidityEvidenceV1 } from
+  "../lib/onchain/uniswap-v4-subgraph";
 import type { TokenMarketDataV1 } from
   "../lib/market-data/market-data-v1";
 import type { LauncherToken } from "../lib/tokens";
+import { stampedClassicExploreEntry } from
+  "./launch-stamp-surface-fixture";
 
 const TOKEN_ADDRESS =
   "0x79870000000000000000000000000000000024ee" as const;
@@ -40,7 +45,230 @@ function goldenToken(
   };
 }
 
+function currentEvidenceFixture(
+  activeLiquidity = 2_000_000_000_000_000_000n,
+) {
+  const blockTimestamp = Math.floor(Date.now() / 1_000).toString();
+  const blockTime = new Date(Number(blockTimestamp) * 1_000).toISOString();
+  const tokenPriceUsdWad = "2500000000000000000000";
+  const fdvUsdWad = "2500000000000000000000000000000";
+  const activeVirtualToken0Wei = activeLiquidity.toString();
+  const activeVirtualLiquidityUsdWad =
+    (activeLiquidity * 2n * 2_500n).toString();
+  const token = canonicalTokenExploreEntryV1(goldenToken({
+    launchModel: "classic",
+    totalSupplyRaw: "1000000000000000000000000000",
+    tokenDecimals: 18,
+    activeLiquidity: activeLiquidity.toString(),
+    tokenPriceEthWei: "1000000000000000000",
+    tokenPriceUsdWad,
+    fdvUsdWad,
+    indexedValuationBlockNumber: "25750000",
+    liveMarketPriceEvidence: {
+      schemaVersion: "programmable.stateview-chainlink-price-evidence.v1",
+      source: "uniswap-v4-stateview-chainlink-v1",
+      chainId: "1",
+      poolId: `0x${"33".repeat(32)}`,
+      tokenAddress: TOKEN_ADDRESS,
+      quoteAddress: "0x0000000000000000000000000000000000000000",
+      stateViewAddress: "0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227",
+      stateViewRuntimeCodeHash: `0x${"44".repeat(32)}`,
+      blockNumber: "25750000",
+      blockHash: `0x${"55".repeat(32)}`,
+      blockTimestamp,
+      blockTime,
+      sqrtPriceX96: (1n << 96n).toString(),
+      activeLiquidity: activeLiquidity.toString(),
+      activeVirtualToken0Wei,
+      activeVirtualLiquidityUsdWad,
+      activeVirtualLiquidityValueBasis:
+        "stateview-active-liquidity-virtual-depth-usd",
+      tokenPriceEthWei: "1000000000000000000",
+      tokenPriceUsdWad,
+      totalSupplyRaw: "1000000000000000000000000000",
+      tokenDecimals: 18,
+      fdvUsdWad,
+      ethUsdQuote: {
+        feedAddress: "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
+        roundId: "1",
+        answer: "250000000000",
+        decimals: 8,
+        updatedAt: blockTimestamp,
+        updatedAtTime: blockTime,
+      },
+    },
+  }));
+  const liquidityEvidence = {
+    source: "official-uniswap-v4-subgraph",
+    identity: {
+      chainId: "1",
+      protocol: "uniswap_v4",
+      poolId: token.poolId,
+      tokenAddress: token.tokenAddress,
+      quoteAddress: "0x0000000000000000000000000000000000000000",
+    },
+    valueBasis: "official-subgraph-pool-tvl-usd",
+    tvlUsdWad: "10000000000000000000000",
+    reportedPoolBalances: {
+      token0: {
+        address: "0x0000000000000000000000000000000000000000",
+        decimals: 18,
+        amountDecimal: "2",
+      },
+      token1: {
+        address: TOKEN_ADDRESS,
+        decimals: 18,
+        amountDecimal: "4000000",
+      },
+    },
+    freshness: "current",
+    provenance: {
+      subgraphId: "DiYPVdygkfjDWhbxGSqAQxwBKmfKnkWQojqeM2rkLb3G",
+      deployment: "QmZsgJLiLQKpb8hxTmQ5LWyrFVvfWzVaL4WK8dfFBn7EeK",
+      indexedBlockNumber: "25749999",
+      indexedBlockHash: `0x${"66".repeat(32)}`,
+      indexedBlockTimestamp: blockTimestamp,
+      indexedBlockTime: blockTime,
+      referenceHeadBlockNumber: "25750000",
+      referenceHeadBlockHash: `0x${"55".repeat(32)}`,
+      lagBlocks: "1",
+    },
+  } satisfies OfficialV4LiquidityEvidenceV1;
+  const valued = {
+    ...token,
+    valuation: { status: "unavailable", reason: "source-unavailable" },
+  } satisfies ValuedExploreEntry<typeof token>;
+  return { valued, liquidityEvidence };
+}
+
 describe("Explore financial-data semantics", () => {
+  it("promotes trade-independent current FDV only at the dual liquidity threshold", () => {
+    const { valued, liquidityEvidence } = currentEvidenceFixture();
+    const current = withCurrentOnchainValuation(valued, liquidityEvidence);
+
+    expect(current).not.toHaveProperty("marketData");
+    expect(current.valuation).toMatchObject({
+      status: "available",
+      source: "stateview-chainlink",
+      valueWad: "2500000000000000000000000000000",
+      asOfBlock: "25750000",
+      asOfBlockHash: `0x${"55".repeat(32)}`,
+      priceEvidence: {
+        activeVirtualLiquidityUsdWad: "10000000000000000000000",
+        activeVirtualLiquidityValueBasis:
+          "stateview-active-liquidity-virtual-depth-usd",
+      },
+    });
+    expect(publicExploreEntryV1(current)).toMatchObject({
+      fdvUsdWad: "2500000000000000000000000000000",
+      tokenPriceUsdWad: "2500000000000000000000",
+    });
+  });
+
+  it("rejects inactive-TVL plus dust active virtual depth below the threshold", () => {
+    const { valued, liquidityEvidence } = currentEvidenceFixture(
+      1_999_999_999_999_999_999n,
+    );
+    const rejected = withCurrentOnchainValuation(
+      valued,
+      { ...liquidityEvidence, tvlUsdWad: "999999999999999999999999999" },
+    );
+
+    expect(rejected.valuation).toEqual({
+      status: "unavailable",
+      reason: "source-unavailable",
+    });
+    expect(publicExploreEntryV1(rejected)).not.toHaveProperty("fdvUsdWad");
+  });
+
+  it("rejects non-native currency0 orientation even with matching pool TVL", () => {
+    const { valued, liquidityEvidence } = currentEvidenceFixture();
+    const rejected = withCurrentOnchainValuation(valued, {
+      ...liquidityEvidence,
+      reportedPoolBalances: {
+        ...liquidityEvidence.reportedPoolBalances,
+        token0: {
+          ...liquidityEvidence.reportedPoolBalances.token0,
+          address: TOKEN_ADDRESS,
+        },
+      },
+    });
+
+    expect(rejected.valuation).toEqual({
+      status: "unavailable",
+      reason: "source-unavailable",
+    });
+  });
+
+  it("rejects mismatched official pool decimals", () => {
+    const { valued, liquidityEvidence } = currentEvidenceFixture();
+    const rejected = withCurrentOnchainValuation(valued, {
+      ...liquidityEvidence,
+      reportedPoolBalances: {
+        ...liquidityEvidence.reportedPoolBalances,
+        token1: {
+          ...liquidityEvidence.reportedPoolBalances.token1,
+          decimals: 17,
+        },
+      },
+    });
+
+    expect(rejected.valuation).toEqual({
+      status: "unavailable",
+      reason: "source-unavailable",
+    });
+  });
+
+  it("promotes a canonical Router-stamped Classic native/token pool", () => {
+    const { valued, liquidityEvidence } = currentEvidenceFixture();
+    const price = valued.liveMarketPriceEvidence!;
+    const stamped = {
+      ...stampedClassicExploreEntry,
+      totalSupplyRaw: valued.totalSupplyRaw!,
+      tokenDecimals: 18,
+      indexedValuationBlockNumber: valued.indexedValuationBlockNumber!,
+      tokenPriceUsdWad: valued.tokenPriceUsdWad!,
+      fdvUsdWad: valued.fdvUsdWad!,
+      liveMarketPriceEvidence: {
+        ...price,
+        poolId: stampedClassicExploreEntry.poolId,
+        tokenAddress: stampedClassicExploreEntry.tokenAddress,
+      },
+      valuation: valued.valuation,
+    } as unknown as ValuedExploreEntry<typeof stampedClassicExploreEntry>;
+    const stampedLiquidity = {
+      ...liquidityEvidence,
+      identity: {
+        ...liquidityEvidence.identity,
+        poolId: stamped.poolId,
+        tokenAddress: stamped.tokenAddress,
+      },
+      reportedPoolBalances: {
+        ...liquidityEvidence.reportedPoolBalances,
+        token1: {
+          ...liquidityEvidence.reportedPoolBalances.token1,
+          address: stamped.tokenAddress,
+        },
+      },
+    } satisfies OfficialV4LiquidityEvidenceV1;
+
+    expect(withCurrentOnchainValuation(stamped, stampedLiquidity).valuation)
+      .toMatchObject({ status: "available", source: "stateview-chainlink" });
+
+    const malformed = {
+      ...stamped,
+      launchStampProvenance: {
+        ...stamped.launchStampProvenance,
+        poolKey: {
+          ...stamped.launchStampProvenance.poolKey,
+          currency0: stamped.tokenAddress,
+          currency1: "0xffffffffffffffffffffffffffffffffffffffff",
+        },
+      },
+    } as unknown as typeof stamped;
+    expect(withCurrentOnchainValuation(malformed, stampedLiquidity).valuation)
+      .toEqual(valued.valuation);
+  });
   it("labels a positive-liquidity total-supply valuation only as FDV", () => {
     expect(
       exploreValuation(goldenToken(), { referenceBlock: "25725569" }),

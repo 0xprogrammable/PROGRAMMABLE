@@ -4,12 +4,18 @@ import type {
   ExploreEntry,
   LauncherToken,
 } from "./tokens";
+import type { OfficialV4LiquidityEvidenceV1 } from
+  "./onchain/uniswap-v4-subgraph";
+import {
+  marketCapNativeWadFromSqrtPriceX96,
+  nativePriceWadFromSqrtPriceX96,
+} from "./onchain/math";
+import { usdValueFromWei } from "./onchain/usd";
 import {
   MARKET_DATA_CURRENT_MAX_AGE_MS,
   MARKET_DATA_MAXIMUM_RAW_INDEXED_PRICE_DEVIATION_BPS,
   MARKET_DATA_MINIMUM_FDV_LIQUIDITY_USD_WAD,
   MARKET_DATA_USD_PRICE_SOURCE,
-  isTokenMarketDataV1,
   type MarketPoolDataV1,
   type TokenMarketDataV1,
 } from "./market-data/market-data-v1";
@@ -17,15 +23,33 @@ import {
 export const EXPLORE_DATA_QUALITY_SCHEMA_VERSION =
   "programmable.explore-data-quality.v1" as const;
 export const EXPLORE_VALUATION_MAX_LAG_BLOCKS = 64n;
-// This mirrors the fail-closed general stale ceiling in the production release
-// gate. The direct token-detail path deliberately keeps its separate exact
-// historical PCAN evidence contract.
-export const PUBLIC_EXPLORE_MAXIMUM_STALE_FDV_AGE_MS =
-  24 * 60 * 60_000;
+export const EXPLORE_MAXIMUM_STALE_VALUATION_AGE_MS =
+  24 * 60 * 60 * 1_000;
 
 const UINT_256_MAX = (1n << 256n) - 1n;
 const WAD = 10n ** 18n;
 const MAXIMUM_MARKET_FUTURE_SKEW_MS = 60_000;
+const NATIVE_CURRENCY_ADDRESS =
+  "0x0000000000000000000000000000000000000000";
+
+export function isCanonicalClassicNativeTokenEntry(
+  entry: ExploreEntry,
+): entry is CanonicalTokenExploreEntry {
+  if (entry.exploreKind !== "token" || entry.launchModel !== "classic") {
+    return false;
+  }
+  if (entry.liquidityPath === "meme") {
+    return entry.launchStampProvenance === undefined;
+  }
+  const stamp = entry.launchStampProvenance;
+  return entry.liquidityPath === "programmable-v4" &&
+    stamp?.kind === "classic" &&
+    stamp.chainId === 1 &&
+    stamp.poolId.toLowerCase() === entry.poolId.toLowerCase() &&
+    stamp.poolKey.currency0.toLowerCase() === NATIVE_CURRENCY_ADDRESS &&
+    stamp.poolKey.currency1.toLowerCase() === entry.tokenAddress.toLowerCase() &&
+    stamp.poolKey.hooks.toLowerCase() === entry.hookAddress.toLowerCase();
+}
 
 export type ExploreValuation =
   | Readonly<{
@@ -36,10 +60,12 @@ export type ExploreValuation =
       valueWad: string;
       quoteSymbol?: string;
       freshness: "current" | "stale" | "unknown";
-      source?: "bitquery";
+      source?: "bitquery" | "stateview-chainlink";
       asOfTime?: string;
       asOfBlock?: string;
+      asOfBlockHash?: `0x${string}`;
       lagBlocks?: string;
+      priceEvidence?: NonNullable<LauncherToken["liveMarketPriceEvidence"]>;
     }>
   | Readonly<{
       status: "unavailable";
@@ -57,6 +83,7 @@ export type ValuedExploreEntry<T extends ExploreEntry = ExploreEntry> =
   T & Readonly<{
     valuation: ExploreValuation;
     marketData?: TokenMarketDataV1;
+    liquidityEvidence?: OfficialV4LiquidityEvidenceV1;
   }>;
 
 const LEGACY_MARKET_CAP_FIELDS = [
@@ -131,8 +158,8 @@ type ValuationContext = Readonly<{
 }>;
 
 type BitqueryValuationContext = Readonly<{
-  maximumStaleAgeMs?: number;
-  nowMs?: number;
+  maximumValuationAgeMs?: number;
+  now?: Date;
 }>;
 
 function uint256(value: unknown): bigint | null {
@@ -172,6 +199,21 @@ function decimalToWad(value: unknown): bigint | null {
 
 function blockNumber(value: unknown): bigint | null {
   return positiveUint256(value);
+}
+
+function unixTimestampMatchesIso(value: unknown, iso: unknown): boolean {
+  if (
+    typeof value !== "string" ||
+    !/^(?:0|[1-9]\d*)$/u.test(value) ||
+    typeof iso !== "string"
+  ) return false;
+  try {
+    const seconds = BigInt(value);
+    return seconds <= 8_640_000_000_000n &&
+      new Date(Number(seconds) * 1_000).toISOString() === iso;
+  } catch {
+    return false;
+  }
 }
 
 function valuationFreshness(
@@ -311,25 +353,7 @@ export function withExploreValuation<T extends ExploreEntry>(
 export function withBitqueryMarketData<T extends ExploreEntry>(
   entry: T,
   marketData: TokenMarketDataV1,
-): ValuedExploreEntry<T> {
-  return withReconciledBitqueryMarketData(entry, marketData, {});
-}
-
-export function withPublicExploreBitqueryMarketData<T extends ExploreEntry>(
-  entry: T,
-  marketData: TokenMarketDataV1,
-  nowMs = Date.now(),
-): ValuedExploreEntry<T> {
-  return withReconciledBitqueryMarketData(entry, marketData, {
-    maximumStaleAgeMs: PUBLIC_EXPLORE_MAXIMUM_STALE_FDV_AGE_MS,
-    nowMs,
-  });
-}
-
-function withReconciledBitqueryMarketData<T extends ExploreEntry>(
-  entry: T,
-  marketData: TokenMarketDataV1,
-  context: BitqueryValuationContext,
+  context: BitqueryValuationContext = {},
 ): ValuedExploreEntry<T> {
   const reconciledMarketData = reconcileBitqueryValuations(
     entry,
@@ -366,6 +390,179 @@ function withReconciledBitqueryMarketData<T extends ExploreEntry>(
                     : "inconsistent-snapshot",
         };
   return { ...entry, valuation, marketData: reconciledMarketData };
+}
+
+function matchingCurrentLiquidityEvidence(
+  entry: CanonicalTokenExploreEntry,
+  evidence: OfficialV4LiquidityEvidenceV1 | undefined,
+  price: NonNullable<LauncherToken["liveMarketPriceEvidence"]> | undefined,
+): price is NonNullable<LauncherToken["liveMarketPriceEvidence"]> {
+  return evidence !== undefined &&
+    price !== undefined &&
+    isCanonicalClassicNativeTokenEntry(entry) &&
+    evidence.source === "official-uniswap-v4-subgraph" &&
+    evidence.valueBasis === "official-subgraph-pool-tvl-usd" &&
+    evidence.freshness === "current" &&
+    evidence.identity.chainId === "1" &&
+    evidence.identity.protocol === "uniswap_v4" &&
+    evidence.identity.poolId.toLowerCase() === entry.poolId.toLowerCase() &&
+    evidence.identity.tokenAddress.toLowerCase() ===
+      entry.tokenAddress.toLowerCase() &&
+    evidence.identity.quoteAddress.toLowerCase() ===
+      price.quoteAddress.toLowerCase() &&
+    evidence.identity.quoteAddress.toLowerCase() === NATIVE_CURRENCY_ADDRESS &&
+    evidence.reportedPoolBalances.token0.address.toLowerCase() ===
+      NATIVE_CURRENCY_ADDRESS &&
+    evidence.reportedPoolBalances.token0.decimals === 18 &&
+    evidence.reportedPoolBalances.token1.address.toLowerCase() ===
+      entry.tokenAddress.toLowerCase() &&
+    evidence.reportedPoolBalances.token1.decimals === entry.tokenDecimals &&
+    evidence.provenance.referenceHeadBlockNumber === price.blockNumber &&
+    evidence.provenance.referenceHeadBlockHash.toLowerCase() ===
+      price.blockHash.toLowerCase();
+}
+
+function validCurrentPriceEvidence(
+  entry: CanonicalTokenExploreEntry,
+): NonNullable<LauncherToken["liveMarketPriceEvidence"]> | undefined {
+  const price = entry.liveMarketPriceEvidence;
+  let recomputedTokenEth: bigint;
+  let recomputedFdvEth: bigint;
+  let recomputedTokenUsd: bigint;
+  let recomputedFdvUsd: bigint;
+  let recomputedActiveVirtualToken0: bigint;
+  let recomputedActiveVirtualUsd: bigint;
+  try {
+    const sqrtPriceX96 = BigInt(price?.sqrtPriceX96 ?? "");
+    const totalSupplyRaw = BigInt(price?.totalSupplyRaw ?? "");
+    const quoteAnswer = BigInt(price?.ethUsdQuote.answer ?? "");
+    recomputedTokenEth = nativePriceWadFromSqrtPriceX96(
+      sqrtPriceX96,
+      price?.tokenDecimals ?? -1,
+    );
+    recomputedFdvEth = marketCapNativeWadFromSqrtPriceX96(
+      totalSupplyRaw,
+      sqrtPriceX96,
+    );
+    const tokenUsd = usdValueFromWei(
+      recomputedTokenEth.toString(),
+      quoteAnswer,
+      price?.ethUsdQuote.decimals ?? -1,
+    );
+    const fdvUsd = usdValueFromWei(
+      recomputedFdvEth.toString(),
+      quoteAnswer,
+      price?.ethUsdQuote.decimals ?? -1,
+    );
+    recomputedActiveVirtualToken0 =
+      (BigInt(price?.activeLiquidity ?? "") * (1n << 96n)) /
+      sqrtPriceX96;
+    const activeVirtualUsd = usdValueFromWei(
+      (2n * recomputedActiveVirtualToken0).toString(),
+      quoteAnswer,
+      price?.ethUsdQuote.decimals ?? -1,
+    );
+    if (
+      tokenUsd === undefined ||
+      fdvUsd === undefined ||
+      activeVirtualUsd === undefined
+    ) return undefined;
+    recomputedTokenUsd = BigInt(tokenUsd);
+    recomputedFdvUsd = BigInt(fdvUsd);
+    recomputedActiveVirtualUsd = BigInt(activeVirtualUsd);
+  } catch {
+    return undefined;
+  }
+  const blockTime = Date.parse(price?.blockTime ?? "");
+  const now = Date.now();
+  if (
+    !price ||
+    price.schemaVersion !==
+      "programmable.stateview-chainlink-price-evidence.v1" ||
+    price.source !== "uniswap-v4-stateview-chainlink-v1" ||
+    price.chainId !== "1" ||
+    price.quoteAddress.toLowerCase() !== NATIVE_CURRENCY_ADDRESS ||
+    !/^0x[0-9a-f]{40}$/iu.test(price.stateViewAddress) ||
+    !/^0x[0-9a-f]{64}$/iu.test(price.stateViewRuntimeCodeHash) ||
+    !/^0x[0-9a-f]{64}$/iu.test(price.blockHash) ||
+    price.poolId.toLowerCase() !== entry.poolId.toLowerCase() ||
+    price.tokenAddress.toLowerCase() !== entry.tokenAddress.toLowerCase() ||
+    price.totalSupplyRaw !== entry.totalSupplyRaw ||
+    price.tokenDecimals !== entry.tokenDecimals ||
+    price.blockNumber !== entry.indexedValuationBlockNumber ||
+    price.fdvUsdWad !== entry.fdvUsdWad ||
+    price.tokenPriceUsdWad !== entry.tokenPriceUsdWad ||
+    positiveUint256(price.sqrtPriceX96) === null ||
+    positiveUint256(price.activeLiquidity) === null ||
+    positiveUint256(price.activeVirtualToken0Wei) === null ||
+    positiveUint256(price.activeVirtualLiquidityUsdWad) === null ||
+    price.activeVirtualLiquidityValueBasis !==
+      "stateview-active-liquidity-virtual-depth-usd" ||
+    positiveUint256(price.tokenPriceEthWei) === null ||
+    positiveUint256(price.tokenPriceUsdWad) === null ||
+    positiveUint256(price.fdvUsdWad) === null ||
+    positiveUint256(price.ethUsdQuote.answer) === null ||
+    positiveUint256(price.ethUsdQuote.roundId) === null ||
+    !/^0x[0-9a-f]{40}$/iu.test(price.ethUsdQuote.feedAddress) ||
+    !Number.isInteger(price.ethUsdQuote.decimals) ||
+    price.ethUsdQuote.decimals < 0 ||
+    price.ethUsdQuote.decimals > 255 ||
+    !unixTimestampMatchesIso(price.blockTimestamp, price.blockTime) ||
+    !unixTimestampMatchesIso(
+      price.ethUsdQuote.updatedAt,
+      price.ethUsdQuote.updatedAtTime,
+    ) ||
+    recomputedTokenEth.toString() !== price.tokenPriceEthWei ||
+    recomputedTokenUsd.toString() !== price.tokenPriceUsdWad ||
+    recomputedFdvUsd.toString() !== price.fdvUsdWad ||
+    recomputedActiveVirtualToken0.toString() !==
+      price.activeVirtualToken0Wei ||
+    recomputedActiveVirtualUsd.toString() !==
+      price.activeVirtualLiquidityUsdWad ||
+    recomputedActiveVirtualUsd <
+      BigInt(MARKET_DATA_MINIMUM_FDV_LIQUIDITY_USD_WAD) ||
+    !Number.isFinite(blockTime) ||
+    blockTime > now + MAXIMUM_MARKET_FUTURE_SKEW_MS ||
+    now - blockTime > MARKET_DATA_CURRENT_MAX_AGE_MS ||
+    !Number.isFinite(Date.parse(price.ethUsdQuote.updatedAtTime))
+  ) {
+    return undefined;
+  }
+  return price;
+}
+
+/**
+ * Promotes a current FDV only when an exact StateView/Chainlink price and an
+ * independently attributed official-v4 pool TVL observation bind to the same
+ * canonical Classic pool and confirmed RPC reference block.
+ */
+export function withCurrentOnchainValuation<T extends ExploreEntry>(
+  entry: ValuedExploreEntry<T>,
+  liquidityEvidence?: OfficialV4LiquidityEvidenceV1,
+): ValuedExploreEntry<T> {
+  if (entry.exploreKind !== "token") return entry;
+  const priceEvidence = validCurrentPriceEvidence(entry);
+  if (!matchingCurrentLiquidityEvidence(entry, liquidityEvidence, priceEvidence)) {
+    return entry;
+  }
+  return {
+    ...entry,
+    valuation: {
+      status: "available",
+      metric: "fdv",
+      supplyBasis: "total",
+      currency: "usd",
+      valueWad: priceEvidence.fdvUsdWad,
+      freshness: "current",
+      source: "stateview-chainlink",
+      asOfTime: priceEvidence.blockTime,
+      asOfBlock: priceEvidence.blockNumber,
+      asOfBlockHash: priceEvidence.blockHash,
+      lagBlocks: "0",
+      priceEvidence,
+    },
+    liquidityEvidence,
+  };
 }
 
 function reconcileBitqueryValuations<T extends ExploreEntry>(
@@ -473,8 +670,13 @@ function reconcileBitqueryValuations<T extends ExploreEntry>(
     const evidenceTimes = liquidityTime === null
       ? [tradeTime, priceTime]
       : [tradeTime, priceTime, liquidityTime];
-    const asOfTime = new Date(Math.min(...evidenceTimes)).toISOString();
-    if (!marketValuationWithinMaximumAge(asOfTime, context)) {
+    const asOfTimestamp = Math.min(...evidenceTimes);
+    const asOfTime = new Date(asOfTimestamp).toISOString();
+    const valuationReferenceTime = context.now?.getTime() ?? generatedTime;
+    if (
+      context.maximumValuationAgeMs !== undefined &&
+      valuationReferenceTime - asOfTimestamp > context.maximumValuationAgeMs
+    ) {
       return {
         ...pool,
         quality: "partial",
@@ -508,21 +710,6 @@ function reconcileBitqueryValuations<T extends ExploreEntry>(
     };
   });
   return { ...marketData, pools };
-}
-
-function marketValuationWithinMaximumAge(
-  asOfTime: string,
-  context: BitqueryValuationContext,
-): boolean {
-  if (context.maximumStaleAgeMs === undefined) return true;
-  const nowMs = context.nowMs ?? Date.now();
-  const asOfMs = Date.parse(asOfTime);
-  return Number.isSafeInteger(context.maximumStaleAgeMs) &&
-    context.maximumStaleAgeMs >= 0 &&
-    Number.isSafeInteger(nowMs) &&
-    Number.isFinite(asOfMs) &&
-    asOfMs <= nowMs + MAXIMUM_MARKET_FUTURE_SKEW_MS &&
-    nowMs - asOfMs <= context.maximumStaleAgeMs;
 }
 
 function usdPricesWithinConfidence(rawPrice: bigint, indexedPrice: bigint): boolean {
@@ -563,47 +750,32 @@ export function publicExploreEntryV1(
   if (entry.exploreKind === "custom-project") return entry;
 
   const output = { ...entry } as Record<string, unknown>;
+  delete output.liveMarketStateEvidence;
+  delete output.liveMarketPriceEvidence;
   for (const field of LEGACY_MARKET_CAP_FIELDS) delete output[field];
   for (const field of LEGACY_EXTERNAL_MARKET_FIELDS) delete output[field];
-  const primaryMarket = entry.marketData?.pools.find(
-    (pool) => pool.identity.poolId === entry.marketData?.primaryPoolId,
-  );
-  const bitqueryFdv = primaryMarket?.valuation.status === "available"
-      && primaryMarket.valuation.freshness === "current"
-    ? primaryMarket.valuation.fdvUsdWad
-    : undefined;
-  if (bitqueryFdv !== undefined) {
-    output.fdvUsdWad = bitqueryFdv;
-  } else if (
+  if (
     entry.valuation.status === "available" &&
     entry.valuation.metric === "fdv" &&
     entry.valuation.currency === "usd" &&
-    entry.valuation.freshness === "current"
+    entry.valuation.freshness === "current" &&
+    entry.valuation.source !== "bitquery"
   ) {
     output.fdvUsdWad = entry.valuation.valueWad;
   } else {
     delete output.fdvUsdWad;
   }
-  const latestTrade = primaryMarket?.status === "current"
-    ? primaryMarket.latestTrade
-    : undefined;
   if (
-    latestTrade?.priceUsdWad &&
-    latestTrade.priceUsdSource === MARKET_DATA_USD_PRICE_SOURCE &&
-    primaryMarket?.valuation.status === "available" &&
-    primaryMarket.valuation.freshness === "current"
+    entry.valuation.status === "available" &&
+    entry.valuation.source === "stateview-chainlink" &&
+    entry.valuation.priceEvidence
   ) {
-    output.tokenPriceUsdWad = latestTrade.priceUsdWad;
-  }
-  if (latestTrade?.priceQuoteWad) {
-    output.tokenPriceQuoteWad = latestTrade.priceQuoteWad;
-    output.tokenPriceQuote = wadToDecimal(BigInt(latestTrade.priceQuoteWad));
-    if (latestTrade.quoteSymbol) output.quoteAssetSymbol = latestTrade.quoteSymbol;
-    if (latestTrade.quoteAddress) output.quoteAssetAddress = latestTrade.quoteAddress;
-    if (["ETH", "WETH"].includes(latestTrade.quoteSymbol?.toUpperCase() ?? "")) {
-      output.tokenPriceEthWei = latestTrade.priceQuoteWad;
-      output.tokenPriceEth = wadToDecimal(BigInt(latestTrade.priceQuoteWad));
-    }
+    const price = entry.valuation.priceEvidence;
+    output.tokenPriceUsdWad = price.tokenPriceUsdWad;
+    output.tokenPriceEthWei = price.tokenPriceEthWei;
+    output.tokenPriceEth = wadToDecimal(BigInt(price.tokenPriceEthWei));
+    output.quoteAssetAddress = price.quoteAddress;
+    output.quoteAssetSymbol = "ETH";
   }
   return output as PublicCanonicalExploreEntry;
 }
@@ -617,23 +789,11 @@ function wadToDecimal(value: bigint): string {
 
 export function valuationSortValue(entry: ExploreEntry): bigint | null {
   const value = (entry as Partial<ValuedExploreEntry>).valuation;
-  const marketData = (entry as Partial<ValuedExploreEntry>).marketData;
-  if (marketData && isTokenMarketDataV1(marketData)) {
-    const primary = marketData.pools.find(
-      (pool) => pool.identity.poolId === marketData.primaryPoolId,
-    );
-    const fdv = primary?.valuation.status === "available"
-        && primary.valuation.metric === "fdv"
-        && primary.valuation.supplyBasis === "total"
-        && primary.valuation.freshness === "current"
-      ? primary.valuation.fdvUsdWad
-      : undefined;
-    return positiveUint256(fdv);
-  }
   return value?.status === "available" &&
     value.metric === "fdv" &&
     value.currency === "usd" &&
-    value.freshness === "current"
+    value.freshness === "current" &&
+    value.source !== "bitquery"
     ? positiveUint256(value.valueWad)
     : null;
 }
@@ -781,12 +941,17 @@ export function isExploreValuation(value: unknown): value is ExploreValuation {
     (candidate.currency !== "quote" ||
       (typeof candidate.quoteSymbol === "string" &&
         candidate.quoteSymbol.trim().length > 0)) &&
-    (candidate.source === undefined || candidate.source === "bitquery") &&
+    (candidate.source === undefined ||
+      candidate.source === "bitquery" ||
+      candidate.source === "stateview-chainlink") &&
     (candidate.asOfTime === undefined ||
       (typeof candidate.asOfTime === "string" &&
         Number.isFinite(Date.parse(candidate.asOfTime)))) &&
     (candidate.asOfBlock === undefined ||
       blockNumber(candidate.asOfBlock) !== null) &&
+    (candidate.asOfBlockHash === undefined ||
+      (typeof candidate.asOfBlockHash === "string" &&
+        /^0x[0-9a-f]{64}$/iu.test(candidate.asOfBlockHash))) &&
     (candidate.lagBlocks === undefined || uint256(candidate.lagBlocks) !== null);
 }
 
