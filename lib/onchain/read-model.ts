@@ -821,8 +821,13 @@ async function readReadyModel(
     ),
   );
 
-  const indexedEventSets = await allSettledOrThrow(
-    clients.map((candidate, providerIndex) =>
+  const indexedEventSets = await mapInBatches(
+    clients.map((candidate, providerIndex) => ({
+      candidate,
+      providerIndex,
+    })),
+    RPC_PROVENANCE_BATCH_SIZE,
+    ({ candidate, providerIndex }) =>
       withReadStage("classic-events", () =>
         withPersistentRpcIntegrityScope(
           () => indexVerifiedEvents(candidate, config, toBlock),
@@ -839,7 +844,6 @@ async function readReadyModel(
           },
         ),
       ),
-    ),
   );
   const launcherFeeValues = await withReadStage(
     "launcher-fee-accounting",

@@ -470,24 +470,23 @@ export async function readClassicV3EventsQuorum(
     );
     const readCheckpoint = () => withPersistentRpcIntegrityScope(
       async () => {
-        const [sets, boundaries] = await Promise.all([
-          allSettledOrThrow(
-            clients.map((client) =>
-              readClassicV3Events(
-                client,
-                config,
-                release,
-                rangeEnd,
-                fromBlock,
-              )
+        const sets = await mapInBatches(
+          clients,
+          RPC_PROVENANCE_BATCH_SIZE,
+          (client) =>
+            readClassicV3Events(
+              client,
+              config,
+              release,
+              rangeEnd,
+              fromBlock,
             ),
+        );
+        const boundaries = await allSettledOrThrow(
+          clients.map((client) =>
+            client.getBlock({ blockNumber: rangeEnd })
           ),
-          allSettledOrThrow(
-            clients.map((client) =>
-              client.getBlock({ blockNumber: rangeEnd })
-            ),
-          ),
-        ]);
+        );
         const fingerprint = eventFingerprint(sets[0]);
         if (
           sets.some((candidate) => eventFingerprint(candidate) !== fingerprint) ||

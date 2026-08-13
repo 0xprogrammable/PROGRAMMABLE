@@ -931,8 +931,13 @@ export async function readStockPairedExploreModel(
     activeReleases,
     1,
     async (release) => {
-      const eventSets = await allSettledOrThrow(
-        clients.map((candidate, providerIndex) =>
+      const eventSets = await mapInBatches(
+        clients.map((candidate, providerIndex) => ({
+          candidate,
+          providerIndex,
+        })),
+        RPC_PROVENANCE_BATCH_SIZE,
+        ({ candidate, providerIndex }) =>
           withPersistentRpcIntegrityScope(
             () =>
               readStockPairedEvents(
@@ -952,7 +957,7 @@ export async function readStockPairedExploreModel(
               ].join(":"),
               expectedCursorBindings: 3,
             },
-          )),
+          ),
       );
       const fingerprint = eventFingerprint(eventSets[0]);
       if (

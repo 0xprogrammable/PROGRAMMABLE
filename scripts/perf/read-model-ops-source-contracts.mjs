@@ -14,7 +14,7 @@ const APPROVED_OPERATIONS = Object.freeze({
     boundedRefresh: Object.freeze({
       runtime: Object.freeze({
         path: "lib/onchain/read-model.ts",
-        sha256: "f787ca685a1168a119137dc42894b86a0843ec339e9e380be2b32070d256c1a8",
+        sha256: "168e440ffbaa78f24c55cf4a484c8735443251071eb2794ccc3321d0b708f0cb",
       }),
       dependencies: Object.freeze([
         Object.freeze({
@@ -34,13 +34,13 @@ const APPROVED_OPERATIONS = Object.freeze({
         Object.freeze({
           release: "classic-v3",
           path: "lib/onchain/classic-v3-read-model.ts",
-          sha256: "4921b6869284d405976bc00f9426f1dbf05c5cf02f0354746a57c6ee8631cddd",
+          sha256: "da6b9cb5e938435010e7a2c0f6ea9a597e7f04257570bd243e368f68c2d28188",
           eventFiltersPerRange: 2,
         }),
         Object.freeze({
           release: "stock-paired-v1-v3",
           path: "lib/onchain/stock-paired-read-model.ts",
-          sha256: "749399f6b360fdcbebf3d2632d82409aba00dcbb3367538c89941a81532cce67",
+          sha256: "2074bff385c644f6bd9dfb2879e52e713457a3b04cedfe858dc297ad19baee74",
           eventFiltersPerRange: 3,
         }),
       ]),
@@ -1635,6 +1635,9 @@ export function evaluateReadModelOperationsSourceContracts(
       refreshRuntimeSource?.includes("events: CLASSIC_FEE_HOOK_EVENTS") &&
       refreshRuntimeSource?.includes("assertCanonicalClassicEventSource(") &&
       refreshRuntimeSource?.includes(
+        "const indexedEventSets = await mapInBatches(",
+      ) &&
+      refreshRuntimeSource?.includes(
         "clients.map((candidate, providerIndex) =>",
       ) &&
       refreshRuntimeSource?.includes(
@@ -1645,6 +1648,7 @@ export function evaluateReadModelOperationsSourceContracts(
       classicV3RefreshSource?.includes(
         "assertCanonicalClassicV3EventSource(",
       ) &&
+      classicV3RefreshSource?.includes("const sets = await mapInBatches(") &&
       classicV3RefreshSource?.includes("readClassicV3EventsQuorum(") &&
       classicV3RefreshSource?.includes('"classic-v3-events-v2"') &&
       classicV3RefreshSource?.includes("clients.length !== 2") &&
@@ -1688,13 +1692,16 @@ export function evaluateReadModelOperationsSourceContracts(
       stockPairedRefreshSource?.includes("events: STOCK_LAUNCHER_EVENTS") &&
       stockPairedRefreshSource?.includes("assertCanonicalStockEventSource(") &&
       stockPairedRefreshSource?.includes(
+        "const eventSets = await mapInBatches(",
+      ) &&
+      stockPairedRefreshSource?.includes(
         "clients.map((candidate, providerIndex) =>",
       ) &&
       stockPairedRefreshSource?.includes(
         "persistentRpcProviderId(providerEndpoints[providerIndex])",
       ) &&
       stockPairedRefreshSource?.includes("expectedCursorBindings: 3"),
-    "all active release scanners use minimal canonical filters, settle complete ranges, adapt exact RPC rejections, compare two provider passes, atomically publish Classic V3 provider-stream checkpoints in a fail-closed v4 namespace and settle registry slices in parallel before deterministic merging and the platform deadline",
+    "all active release scanners use minimal canonical filters, settle complete ranges, adapt exact RPC rejections, compare two serialized provider passes, atomically publish Classic V3 provider-stream checkpoints in a fail-closed v4 namespace and settle registry slices in parallel before deterministic merging and the platform deadline",
   );
   const schedulerWatchdog = operations?.legacyIndexer?.schedulerWatchdog;
   check(
