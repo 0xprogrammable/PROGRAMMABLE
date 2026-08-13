@@ -10,7 +10,15 @@ const APPROVED_OPERATIONS = Object.freeze({
     schedule: "*/5 * * * *",
     retainedUntil: "indexed-read-cutover",
     route: "app/api/ops/index-v2/route.ts",
-    sha256: "f28fb7054e0bb4670b3d0aa1c2f2b7362085dcf0390fc19eb0b5eb26be464ef7",
+    sha256: "06235ff68203da970d51022fe0a9bbe3a7d0096c547ecd7fc31b1ce1d4f1da52",
+    boundedRefresh: Object.freeze({
+      runtime: Object.freeze({
+        path: "lib/onchain/read-model.ts",
+        sha256: "5f0c5c23582a48fc7995cc4fcba865a9c20199418c0b7a0b7f9b687b2ae8717d",
+      }),
+      eventFiltersPerRange: 5,
+      requestDeadlineMs: 270_000,
+    }),
     schedulerWatchdog: Object.freeze({
       provider: "github-actions",
       workflow: Object.freeze({
@@ -1457,6 +1465,32 @@ export function evaluateReadModelOperationsSourceContracts(
           expectedSha256Overrides,
         ),
     "the five-minute legacy route remains byte-bound until indexed-read cutover",
+  );
+  const boundedRefresh = operations?.legacyIndexer?.boundedRefresh;
+  const legacyRouteSource = source(APPROVED_OPERATIONS.legacyIndexer.route);
+  const refreshRuntimeSource = source(boundedRefresh?.runtime?.path);
+  check(
+    "ops-legacy-bounded-refresh",
+    exactJson(
+      boundedRefresh,
+      APPROVED_OPERATIONS.legacyIndexer.boundedRefresh,
+    ) &&
+      sourceBindingMatches(
+        source,
+        boundedRefresh?.runtime,
+        expectedSha256Overrides,
+      ) &&
+      legacyRouteSource?.includes(
+        "const INDEX_REFRESH_DEADLINE_MS = 270_000;",
+      ) &&
+      legacyRouteSource?.includes("withIndexRefreshDeadline(() =>") &&
+      !legacyRouteSource?.includes("INDEX_READ_ATTEMPTS") &&
+      refreshRuntimeSource?.includes("TimeoutError,") &&
+      refreshRuntimeSource?.includes("error instanceof TimeoutError ||") &&
+      refreshRuntimeSource?.includes(
+        "const readLogs = () =>\n      allSettledOrThrow([",
+      ),
+    "the canonical refresh scans five disjoint event filters concurrently, bisects timeouts and fails before the platform deadline",
   );
   const schedulerWatchdog = operations?.legacyIndexer?.schedulerWatchdog;
   check(

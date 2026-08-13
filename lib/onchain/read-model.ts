@@ -6,6 +6,7 @@ import {
   http,
   keccak256,
   ResponseBodyTooLargeError,
+  TimeoutError,
   type Address,
   type Hex,
   type PublicClient,
@@ -176,6 +177,22 @@ async function mapInBatches<Input, Output>(
   return output;
 }
 
+async function allSettledOrThrow<
+  const Values extends readonly unknown[],
+>(
+  values: Values,
+): Promise<{ -readonly [Key in keyof Values]: Awaited<Values[Key]> }> {
+  const results = await Promise.allSettled(values);
+  const failure = results.find(
+    (result): result is PromiseRejectedResult =>
+      result.status === "rejected",
+  );
+  if (failure) throw failure.reason;
+  return results.map(
+    (result) => (result as PromiseFulfilledResult<unknown>).value,
+  ) as { -readonly [Key in keyof Values]: Awaited<Values[Key]> };
+}
+
 async function withReadStage<Output>(
   stage: string,
   read: () => Promise<Output>,
@@ -226,7 +243,7 @@ function indexedEventsFingerprint(events: IndexedEvents) {
   );
 }
 
-async function indexVerifiedEvents(
+export async function indexVerifiedEvents(
   client: PublicClient,
   config: ReadyOnchainDeployment,
   toBlock: bigint,
@@ -244,56 +261,51 @@ async function indexVerifiedEvents(
       toBlock,
       fromBlock + logBlockRange - 1n,
     );
-    const readLogs = async () => {
-      const launchLogs = await client.getLogs({
-        address: config.launcher,
-        event: memeTokenLaunchedEvent,
-        fromBlock,
-        toBlock: rangeEnd,
-        strict: true,
-      });
-      const liquidityLogs = await client.getLogs({
-        address: config.launcher,
-        event: memeLiquidityConfiguredEvent,
-        fromBlock,
-        toBlock: rangeEnd,
-        strict: true,
-      });
-      const initialBuyLogs = await client.getLogs({
-        address: config.launcher,
-        event: memeCreatorInitialBuyEvent,
-        fromBlock,
-        toBlock: rangeEnd,
-        strict: true,
-      });
-      const feeLogs = await client.getLogs({
-        address: config.feeHook,
-        event: nativeSwapFeesAccruedEvent,
-        fromBlock,
-        toBlock: rangeEnd,
-        strict: true,
-      });
-      const claimLogs = await client.getLogs({
-        address: config.feeHook,
-        event: creatorFeesClaimedEvent,
-        fromBlock,
-        toBlock: rangeEnd,
-        strict: true,
-      });
-      return [
-        launchLogs,
-        liquidityLogs,
-        initialBuyLogs,
-        feeLogs,
-        claimLogs,
-      ] as const;
-    };
+    const readLogs = () =>
+      allSettledOrThrow([
+        client.getLogs({
+          address: config.launcher,
+          event: memeTokenLaunchedEvent,
+          fromBlock,
+          toBlock: rangeEnd,
+          strict: true,
+        }),
+        client.getLogs({
+          address: config.launcher,
+          event: memeLiquidityConfiguredEvent,
+          fromBlock,
+          toBlock: rangeEnd,
+          strict: true,
+        }),
+        client.getLogs({
+          address: config.launcher,
+          event: memeCreatorInitialBuyEvent,
+          fromBlock,
+          toBlock: rangeEnd,
+          strict: true,
+        }),
+        client.getLogs({
+          address: config.feeHook,
+          event: nativeSwapFeesAccruedEvent,
+          fromBlock,
+          toBlock: rangeEnd,
+          strict: true,
+        }),
+        client.getLogs({
+          address: config.feeHook,
+          event: creatorFeesClaimedEvent,
+          fromBlock,
+          toBlock: rangeEnd,
+          strict: true,
+        }),
+      ] as const);
     let logs: Awaited<ReturnType<typeof readLogs>>;
     try {
       logs = await readLogs();
     } catch (error) {
       if (
-        (error instanceof ResponseBodyTooLargeError ||
+        (error instanceof TimeoutError ||
+          error instanceof ResponseBodyTooLargeError ||
           error instanceof HttpRequestError) &&
         logBlockRange > MINIMUM_LOG_BLOCK_RANGE &&
         rangeEnd > fromBlock
