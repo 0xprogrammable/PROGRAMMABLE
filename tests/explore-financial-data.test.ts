@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { canonicalTokenExploreEntryV1 } from "../lib/explore-entry-v1";
 import {
+  EXPLORE_MAXIMUM_STALE_VALUATION_AGE_MS,
   buildExploreDataQuality,
   exploreValuation,
   publicExploreEntryV1,
@@ -10,7 +11,6 @@ import {
   withBitqueryMarketData,
   withCurrentOnchainValuation,
   withExploreValuation,
-  withPublicExploreBitqueryMarketData,
 } from "../lib/explore-financial-data";
 import type { OfficialV4LiquidityEvidenceV1 } from
   "../lib/onchain/uniswap-v4-subgraph";
@@ -505,10 +505,13 @@ describe("Explore financial-data semantics", () => {
     expect(valuationSortValue(entry)).toBeNull();
     expect(publicExploreEntryV1(entry)).not.toHaveProperty("fdvUsdWad");
 
-    const publicEntry = withPublicExploreBitqueryMarketData(
+    const publicEntry = withBitqueryMarketData(
       canonicalTokenExploreEntryV1(goldenToken()),
       marketData,
-      Date.parse(marketData.generatedAt),
+      {
+        maximumValuationAgeMs: EXPLORE_MAXIMUM_STALE_VALUATION_AGE_MS,
+        now: new Date(marketData.generatedAt),
+      },
     );
     expect(publicEntry.valuation).toEqual({
       status: "unavailable",

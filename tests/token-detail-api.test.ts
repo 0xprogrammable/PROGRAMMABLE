@@ -274,6 +274,7 @@ describe("token detail Bitquery market read", () => {
           chainId: "1",
           tokenAddress: TOKEN_ADDRESS,
           poolId: POOL_ID,
+          quoteAddress: "0x0000000000000000000000000000000000000000",
           protocol: "uniswap_v4",
         },
       ],

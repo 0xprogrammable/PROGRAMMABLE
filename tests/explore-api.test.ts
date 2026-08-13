@@ -278,9 +278,16 @@ describe("Explore API Bitquery market boundary", () => {
       async (entries: readonly ExploreEntry[]) => [...entries],
     );
     mocks.valueExploreEntriesWithCurrentEvidence.mockImplementation(
-      async ({ entries, marketByToken }: {
+      async ({
+        entries,
+        marketByToken,
+        maximumValuationAgeMs,
+        now,
+      }: {
         entries: readonly ExploreEntry[];
         marketByToken: Promise<ReadonlyMap<string, TokenMarketDataV1>>;
+        maximumValuationAgeMs?: number;
+        now?: Date;
       }) => {
         const markets = await marketByToken;
         return entries.map((entry) => {
@@ -288,7 +295,10 @@ describe("Explore API Bitquery market boundary", () => {
             ? markets.get(entry.tokenAddress.toLowerCase())
             : undefined;
           return market
-            ? withBitqueryMarketData(entry, market)
+            ? withBitqueryMarketData(entry, market, {
+                maximumValuationAgeMs,
+                now,
+              })
             : {
                 ...entry,
                 valuation: {
@@ -958,6 +968,7 @@ describe("Explore API Bitquery market boundary", () => {
       chainId: "1",
       tokenAddress: target.tokenAddress,
       poolId: target.poolId,
+      quoteAddress: "0x0000000000000000000000000000000000000000",
       protocol: "uniswap_v4",
     });
   });
