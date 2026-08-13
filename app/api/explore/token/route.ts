@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAddress, isAddress } from "viem";
 
 import {
+  getAlchemyOnchainDeployment,
   readAlchemyExploreModel,
   safeAlchemyError,
 } from "../../../../lib/alchemy/explore.server";
+import { readVerifiedOperationalMarketSnapshot } from
+  "../../../../lib/alchemy/live-market.server";
 import { suppressRouterBoundCustomProjectDuplicates } from "../../../../lib/alchemy/router-custom-collision";
 import {
   createExploreConsumerSource,
@@ -16,7 +19,6 @@ import { canonicalTokenExploreEntryV1 } from "../../../../lib/explore-entry-v1";
 import {
   buildExploreDataQuality,
   publicExploreEntryV1,
-  withBitqueryMarketData,
   type ValuedExploreEntry,
 } from "../../../../lib/explore-financial-data";
 import { readBitqueryTokenMarketDataV1 } from
@@ -25,6 +27,11 @@ import { hydrateMissingCanonicalTokenSupplyV1 } from
   "../../../../lib/market-data/canonical-token-supply.server";
 import { exploreEntryMarketIdentitiesV1 } from
   "../../../../lib/market-data/explore-market-identities";
+import {
+  CURRENT_EVIDENCE_ROUTE_DEADLINE_MS,
+  settleCurrentEvidenceSnapshot,
+  valueExploreEntriesWithCurrentEvidence,
+} from "../../../../lib/market-data/current-valuation.server";
 import type { TokenMarketDataV1 } from
   "../../../../lib/market-data/market-data-v1";
 import { readExploreReferenceHeadWithinRouteBudget } from "../../../../lib/explore-reference-head.server";
@@ -110,6 +117,16 @@ export async function GET(request: NextRequest) {
 
   try {
     const address = getAddress(input);
+    const deployment = getAlchemyOnchainDeployment();
+    const currentEvidenceDeadlineAt =
+      Date.now() + CURRENT_EVIDENCE_ROUTE_DEADLINE_MS;
+    const operationalSnapshotRead = deployment.status === "ready"
+      ? settleCurrentEvidenceSnapshot({
+          read: readVerifiedOperationalMarketSnapshot(deployment),
+          requireComplete: false,
+          timeoutMs: CURRENT_EVIDENCE_ROUTE_DEADLINE_MS,
+        })
+      : Promise.resolve(null);
     const [
       canonicalAttempt,
       customAttempt,
@@ -202,41 +219,34 @@ export async function GET(request: NextRequest) {
     const unresolvedIdentityEntry = token
       ? canonicalTokenExploreEntryV1(token)
       : customProject ?? null;
-    const [identityEntry, marketByToken] = unresolvedIdentityEntry
-      ? await Promise.all([
-          hydrateMissingCanonicalTokenSupplyV1([
-            unresolvedIdentityEntry,
-          ]).then((entries) => entries[0] ?? unresolvedIdentityEntry),
-          readBitqueryTokenMarketDataV1(
-            exploreEntryMarketIdentitiesV1(unresolvedIdentityEntry),
-            { signal: request.signal },
-          ),
-        ])
-      : [null, new Map<string, TokenMarketDataV1>()] as const;
-    const marketData = identityEntry?.tokenAddress
-      ? marketByToken.get(identityEntry.tokenAddress.toLowerCase())
-      : undefined;
-    const primaryMarket = marketData?.pools.find(
-      (pool) => pool.identity.poolId === marketData.primaryPoolId,
+    const marketByToken = unresolvedIdentityEntry
+      ? readBitqueryTokenMarketDataV1(
+          exploreEntryMarketIdentitiesV1(unresolvedIdentityEntry),
+          { signal: request.signal },
+        )
+      : Promise.resolve(new Map<string, TokenMarketDataV1>());
+    const identityEntry = unresolvedIdentityEntry
+      ? await hydrateMissingCanonicalTokenSupplyV1([
+          unresolvedIdentityEntry,
+        ]).then((entries) => entries[0] ?? unresolvedIdentityEntry)
+      : null;
+    const valuedEntry: ValuedExploreEntry | null = identityEntry
+      ? (await valueExploreEntriesWithCurrentEvidence({
+          entries: [identityEntry],
+          marketByToken,
+          deployment: deployment.status === "ready" ? deployment : null,
+          operationalSnapshot: operationalSnapshotRead,
+          now: new Date(),
+          allowHistoricalBitqueryFallback: true,
+          timeoutMs: Math.max(0, currentEvidenceDeadlineAt - Date.now()),
+        }))[0] ?? null
+      : null;
+    const primaryMarket = valuedEntry?.marketData?.pools.find(
+      (pool) => pool.identity.poolId === valuedEntry.marketData?.primaryPoolId,
     );
     const hasVerifiedPrice = primaryMarket?.status === "current" &&
       (primaryMarket.latestTrade?.priceUsdWad !== undefined ||
         primaryMarket.latestTrade?.priceQuoteWad !== undefined);
-    const valuedEntry: ValuedExploreEntry | null = identityEntry
-      ? marketData
-        ? withBitqueryMarketData(identityEntry, marketData)
-        : {
-            ...identityEntry,
-            valuation: {
-              status: "unavailable",
-              reason:
-                identityEntry.exploreKind === "custom-project" &&
-                    identityEntry.markets.length === 0
-                  ? "no-market"
-                  : "source-unavailable",
-            },
-          }
-      : null;
     const valuedToken = valuedEntry?.exploreKind === "token"
       ? valuedEntry
       : null;
@@ -263,6 +273,12 @@ export async function GET(request: NextRequest) {
     const publicValuedCustomProject = valuedCustomProject
       ? publicExploreEntryV1(valuedCustomProject)
       : null;
+    const currentOnchainValuation =
+      valuedEntry?.valuation.status === "available" &&
+        valuedEntry.valuation.source === "stateview-chainlink" &&
+        valuedEntry.valuation.freshness === "current"
+        ? valuedEntry.valuation
+        : null;
     const status = "ready" as const;
     return NextResponse.json(
       {
@@ -285,15 +301,23 @@ export async function GET(request: NextRequest) {
               ? "public, max-age=0, s-maxage=2, stale-while-revalidate=5"
               : "public, max-age=0, s-maxage=30",
           "X-Programmable-Data-Quality": dataQuality.status,
-          "X-Programmable-Market-Source": "bitquery",
+          "X-Programmable-Market-Source": currentOnchainValuation
+            ? "stateview-chainlink+official-uniswap-v4-subgraph+bitquery"
+            : "bitquery",
           ...(dataQuality.valuation.asOfTime
             ? {
                 "X-Programmable-Market-As-Of":
                   dataQuality.valuation.asOfTime,
               }
             : {}),
-          ...(hasVerifiedPrice
-            ? { "X-Programmable-Price-Source": "bitquery" }
+          ...(currentOnchainValuation
+            ? {
+                "X-Programmable-Price-Source": "stateview-chainlink",
+                "X-Programmable-Valuation-Block":
+                  currentOnchainValuation.asOfBlock ?? "",
+              }
+            : hasVerifiedPrice
+              ? { "X-Programmable-Price-Source": "bitquery" }
             : {}),
           ...sourceHeaders,
         },

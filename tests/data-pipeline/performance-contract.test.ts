@@ -1305,7 +1305,7 @@ describe("read-model performance contract", () => {
         {
           sourceOverrides: {
             [exploreRoutePath]: exploreRouteSource.replaceAll(
-              '"X-Programmable-Market-Source": "bitquery"',
+              '"stateview-chainlink+official-uniswap-v4-subgraph+bitquery"',
               '"X-Programmable-Market-Source": "alchemy"',
             ),
           },

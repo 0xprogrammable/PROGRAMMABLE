@@ -8,7 +8,7 @@ import type {
   MarketDataIdentityV1,
   TokenMarketDataV1,
 } from "../lib/market-data/market-data-v1";
-import type { LauncherToken } from "../lib/tokens";
+import type { ExploreEntry, LauncherToken } from "../lib/tokens";
 import { customGraphToken } from "./launch-stamp-surface-fixture";
 
 const mocks = vi.hoisted(() => ({
@@ -23,6 +23,8 @@ const mocks = vi.hoisted(() => ({
   readDurableExploreModel: vi.fn(),
   readBitqueryTokenMarketDataV1: vi.fn(),
   hydrateMissingCanonicalTokenSupplyV1: vi.fn(),
+  valueExploreEntriesWithCurrentEvidence: vi.fn(),
+  settleCurrentEvidenceSnapshot: vi.fn(),
   safeAlchemyError: vi.fn((error) => error),
 }));
 
@@ -73,6 +75,15 @@ vi.mock("../lib/market-data/canonical-token-supply.server", () => ({
   hydrateMissingCanonicalTokenSupplyV1:
     mocks.hydrateMissingCanonicalTokenSupplyV1,
 }));
+
+vi.mock("../lib/market-data/current-valuation.server", () => ({
+  CURRENT_EVIDENCE_ROUTE_DEADLINE_MS: 4_500,
+  settleCurrentEvidenceSnapshot: mocks.settleCurrentEvidenceSnapshot,
+  valueExploreEntriesWithCurrentEvidence:
+    mocks.valueExploreEntriesWithCurrentEvidence,
+}));
+
+import { withBitqueryMarketData } from "../lib/explore-financial-data";
 
 import { GET } from "../app/api/explore/token/route";
 
@@ -179,6 +190,9 @@ describe("token detail Bitquery market read", () => {
     mocks.readVerifiedOperationalMarketSnapshot.mockResolvedValue(
       launchDiscoverySnapshot,
     );
+    mocks.settleCurrentEvidenceSnapshot.mockImplementation(
+      async ({ read }: { read: Promise<unknown> }) => await read,
+    );
     mocks.withSameBlockEthUsdQuote.mockImplementation(
       async ({ snapshot: value }) => value,
     );
@@ -197,6 +211,28 @@ describe("token detail Bitquery market read", () => {
     );
     mocks.hydrateMissingCanonicalTokenSupplyV1.mockImplementation(
       async (entries: readonly unknown[]) => [...entries],
+    );
+    mocks.valueExploreEntriesWithCurrentEvidence.mockImplementation(
+      async ({ entries, marketByToken }: {
+        entries: readonly ExploreEntry[];
+        marketByToken: Promise<ReadonlyMap<string, TokenMarketDataV1>>;
+      }) => {
+        const markets = await marketByToken;
+        return entries.map((entry) => {
+          const market = entry.tokenAddress
+            ? markets.get(entry.tokenAddress.toLowerCase())
+            : undefined;
+          return market
+            ? withBitqueryMarketData(entry, market)
+            : {
+                ...entry,
+                valuation: {
+                  status: "unavailable" as const,
+                  reason: "source-unavailable" as const,
+                },
+              };
+        });
+      },
     );
   });
 
@@ -238,6 +274,7 @@ describe("token detail Bitquery market read", () => {
           chainId: "1",
           tokenAddress: TOKEN_ADDRESS,
           poolId: POOL_ID,
+          quoteAddress: "0x0000000000000000000000000000000000000000",
           protocol: "uniswap_v4",
         },
       ],
@@ -248,7 +285,6 @@ describe("token detail Bitquery market read", () => {
       name: canonical.name,
       symbol: canonical.symbol,
       tokenAddress: canonical.tokenAddress,
-      fdvUsdWad: "1250000000000000000000000",
       valuation: {
         status: "available",
         metric: "fdv",
@@ -371,7 +407,6 @@ describe("token detail Bitquery market read", () => {
     expect(mocks.withSameBlockEthUsdQuote).not.toHaveBeenCalled();
     expect(mocks.enrichTokensWithAlchemyPoolState).not.toHaveBeenCalled();
     expect(body.token).toMatchObject({
-      fdvUsdWad: "2334305942998987256000000",
       valuation: {
         status: "available",
         freshness: "current",

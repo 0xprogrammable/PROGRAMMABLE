@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import type {
+  MarketChartIdentityV1,
   MarketChartV1,
   MarketDataIdentityV1,
   TokenMarketDataV1,
@@ -73,9 +74,10 @@ const token = {
 const identity = {
   chainId: "1",
   tokenAddress: token.tokenAddress,
+  quoteAddress: "0x0000000000000000000000000000000000000000",
   poolId: token.poolId,
   protocol: "uniswap_v4",
-} as const satisfies MarketDataIdentityV1;
+} as const satisfies MarketChartIdentityV1;
 
 const snapshot = {
   chainId: 1,
@@ -137,7 +139,7 @@ function tokenMarketData(
 
 function chart(
   overrides: Partial<MarketChartV1> = {},
-  marketIdentity: MarketDataIdentityV1 = identity,
+  marketIdentity: MarketChartIdentityV1 = identity,
 ): MarketChartV1 {
   return {
     schemaVersion: "programmable.market-chart.v1",
@@ -151,16 +153,22 @@ function chart(
       {
         blockNumber: "25740001",
         time: "2026-08-11T14:01:00.000Z",
+        bucketStart: "2026-08-11T14:00:00.000Z",
+        bucketEnd: "2026-08-11T14:01:00.000Z",
+        observedAt: "2026-08-11T14:00:59.000Z",
+        valueSemantics: "period-median",
         priceUsd: "1.5",
-        ohlcUsd: { open: "1.4", high: "1.6", low: "1.3", close: "1.5" },
         volumeUsdWad: "150000000000000000000",
         tradeCount: 3,
       },
       {
         blockNumber: "25740002",
         time: "2026-08-11T14:02:00.000Z",
+        bucketStart: "2026-08-11T14:01:00.000Z",
+        bucketEnd: "2026-08-11T14:02:00.000Z",
+        observedAt: "2026-08-11T14:01:59.000Z",
+        valueSemantics: "period-median",
         priceUsd: "2",
-        ohlcUsd: { open: "1.5", high: "2.1", low: "1.5", close: "2" },
         volumeUsdWad: "250000000000000000000",
         tradeCount: 4,
       },
@@ -168,16 +176,10 @@ function chart(
     swapCount: 7,
     volumeUsdWad: "400000000000000000000",
     valuation: {
-      status: "available",
-      metric: "fdv",
-      supplyBasis: "total",
-      valueUsdWad: "2000000000000000000000000",
-      fdvUsdWad: "2000000000000000000000000",
-      totalSupply: "1000000",
-      asOfTime: "2026-08-11T14:02:00.000Z",
-      freshness: "current",
+      status: "unavailable",
+      reason: "source-unavailable",
     },
-    asOfTime: "2026-08-11T14:02:00.000Z",
+    asOfTime: "2026-08-11T14:01:59.000Z",
     truncated: false,
     ...overrides,
   };
@@ -221,15 +223,12 @@ describe("token chart Bitquery API", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(mocks.readBitqueryTokenMarketDataV1).toHaveBeenCalledWith(
-      [identity],
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-    );
+    expect(mocks.readBitqueryTokenMarketDataV1).not.toHaveBeenCalled();
     expect(mocks.readBitqueryMarketChartV1).toHaveBeenCalledWith(
       expect.objectContaining({
         identity,
         range: "1h",
-        valuation: { status: "unavailable", reason: "source-unavailable" },
+        historyStart: token.launchedAt,
         signal: expect.any(AbortSignal),
       }),
     );
@@ -238,13 +237,14 @@ describe("token chart Bitquery API", () => {
       source: "bitquery",
       status: "ready",
       address: token.tokenAddress,
-      fdvUsdWad: "2000000000000000000000000",
-      valuationMetric: "fdv",
+      valuation: { status: "unavailable", reason: "source-unavailable" },
       points: [
         { priceUsd: "1.5", tradeCount: 3 },
         { priceUsd: "2", tradeCount: 4 },
       ],
     });
+    expect(body).not.toHaveProperty("fdvUsdWad");
+    expect(body).not.toHaveProperty("valuationMetric");
     expect(response.headers.get("X-Programmable-Market-Source")).toBe("bitquery");
     expect(response.headers.get("X-Programmable-Price-Source")).toBe("bitquery");
     expect(response.headers.get("Cache-Control")).toBe(
@@ -258,6 +258,10 @@ describe("token chart Bitquery API", () => {
       points: [{
         blockNumber: "25740002",
         time: "2026-08-11T14:02:00.000Z",
+        bucketStart: "2026-08-11T14:01:00.000Z",
+        bucketEnd: "2026-08-11T14:02:00.000Z",
+        observedAt: "2026-08-11T14:01:59.000Z",
+        valueSemantics: "period-median",
         priceUsd: "2",
         tradeCount: 1,
       }],
@@ -274,13 +278,9 @@ describe("token chart Bitquery API", () => {
     );
   });
 
-  it("starts a single-pool chart without waiting for market enrichment", async () => {
-    let resolveMarket: ((value: ReadonlyMap<string, TokenMarketDataV1>) => void)
-      | undefined;
-    mocks.readBitqueryTokenMarketDataV1.mockReturnValue(new Promise((resolve) => {
-      resolveMarket = resolve;
-    }));
-    mocks.readBitqueryMarketChartV1.mockResolvedValue(chart({
+  it("does not let single-pool chart reads own current valuation", async () => {
+    mocks.readBitqueryMarketChartV1.mockResolvedValue({
+      ...chart(),
       valuation: {
         status: "available",
         metric: "fdv",
@@ -291,46 +291,29 @@ describe("token chart Bitquery API", () => {
         asOfTime: "2026-08-11T14:02:00.000Z",
         freshness: "current",
       },
-    }));
+    } as unknown as MarketChartV1);
 
-    const responsePromise = GET(new NextRequest(
+    const response = await GET(new NextRequest(
       `http://localhost/api/explore/token/chart?address=${token.tokenAddress}`,
     ));
-    await vi.waitFor(() => {
-      expect(mocks.readBitqueryMarketChartV1).toHaveBeenCalledTimes(1);
-    });
-    expect(resolveMarket).toBeTypeOf("function");
-    resolveMarket?.(new Map([[token.tokenAddress, tokenMarketData()]]));
-    const response = await responsePromise;
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.valuation).toMatchObject({
-      status: "available",
-      fdvUsdWad: "2000000000000000000000000",
+    expect(mocks.readBitqueryTokenMarketDataV1).not.toHaveBeenCalled();
+    expect(body.valuation).toEqual({
+      status: "unavailable",
+      reason: "source-unavailable",
     });
-    expect(body.fdvUsdWad).toBe("2000000000000000000000000");
+    expect(body).not.toHaveProperty("fdvUsdWad");
+    expect(body).not.toHaveProperty("valuationMetric");
   });
 
-  it("starts a single-pool chart without waiting for supply hydration", async () => {
-    let resolveSupply: ((value: readonly typeof token[]) => void) | undefined;
-    mocks.hydrateMissingCanonicalTokenSupplyV1.mockReturnValue(
-      new Promise((resolve) => {
-        resolveSupply = resolve;
-      }),
-    );
-
-    const responsePromise = GET(new NextRequest(
+  it("does not hydrate supply for a history-only chart", async () => {
+    const response = await GET(new NextRequest(
       `http://localhost/api/explore/token/chart?address=${token.tokenAddress}`,
     ));
-    await vi.waitFor(() => {
-      expect(mocks.readBitqueryMarketChartV1).toHaveBeenCalledTimes(1);
-      expect(mocks.readBitqueryTokenMarketDataV1).toHaveBeenCalledTimes(1);
-    });
-    expect(resolveSupply).toBeTypeOf("function");
-    resolveSupply?.([token]);
-
-    expect((await responsePromise).status).toBe(200);
+    expect(response.status).toBe(200);
+    expect(mocks.hydrateMissingCanonicalTokenSupplyV1).not.toHaveBeenCalled();
   });
 
   it("uses a verified durable identity when the primary identity source fails", async () => {
@@ -418,7 +401,7 @@ describe("token chart Bitquery API", () => {
       status: "waiting-for-first-trade",
       points: [],
       swapCount: 0,
-      valuation: { reason: "waiting-for-first-trade" },
+      valuation: { status: "unavailable", reason: "source-unavailable" },
     });
     expect(body).not.toHaveProperty("fdvUsdWad");
     expect(response.headers.get("X-Programmable-Price-Source")).toBeNull();
@@ -451,7 +434,8 @@ describe("token chart Bitquery API", () => {
   });
 
   it("does not relabel a chart cache fallback with a current market valuation", async () => {
-    mocks.readBitqueryMarketChartV1.mockResolvedValue(chart({
+    mocks.readBitqueryMarketChartV1.mockResolvedValue({
+      ...chart(),
       readStatus: "cache-fallback",
       status: "partial",
       valuation: {
@@ -464,7 +448,7 @@ describe("token chart Bitquery API", () => {
         asOfTime: "2026-08-11T13:00:00.000Z",
         freshness: "stale",
       },
-    }));
+    } as unknown as MarketChartV1);
 
     const response = await GET(new NextRequest(
       `http://localhost/api/explore/token/chart?address=${token.tokenAddress}`,
@@ -476,21 +460,21 @@ describe("token chart Bitquery API", () => {
     expect(body).toMatchObject({
       readStatus: "cache-fallback",
       status: "partial",
-      valuation: {
-        fdvUsdWad: "1500000000000000000000000",
-        freshness: "stale",
-      },
-      fdvUsdWad: "1500000000000000000000000",
+      valuation: { status: "unavailable", reason: "source-unavailable" },
     });
+    expect(body).not.toHaveProperty("fdvUsdWad");
   });
 
   it("supports a Router-stamped Custom v4 pool", async () => {
     const customIdentity = {
       chainId: "1",
       tokenAddress: customGraphToken.tokenAddress.toLowerCase() as `0x${string}`,
+      quoteAddress:
+        customGraphToken.launchStampProvenance.poolKey.currency0.toLowerCase() as
+          `0x${string}`,
       poolId: customGraphToken.poolId,
       protocol: "uniswap_v4",
-    } as const satisfies MarketDataIdentityV1;
+    } as const satisfies MarketChartIdentityV1;
     mocks.readAlchemyExploreModel.mockResolvedValue({
       status: "ready",
       tokens: [customGraphToken],
@@ -513,7 +497,10 @@ describe("token chart Bitquery API", () => {
 
     expect(response.status).toBe(200);
     expect(mocks.readBitqueryMarketChartV1).toHaveBeenCalledWith(
-      expect.objectContaining({ identity: customIdentity }),
+      expect.objectContaining({
+        identity: customIdentity,
+        historyStart: customGraphToken.launchedAt,
+      }),
     );
   });
 

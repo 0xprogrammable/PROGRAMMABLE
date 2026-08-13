@@ -13,14 +13,10 @@ import {
 } from "../../../../../lib/explore-consumer.server";
 import { canonicalTokenExploreEntryV1 } from
   "../../../../../lib/explore-entry-v1";
-import { withBitqueryMarketData } from
-  "../../../../../lib/explore-financial-data";
 import {
   readBitqueryMarketChartV1,
   readBitqueryTokenMarketDataV1,
 } from "../../../../../lib/market-data/bitquery.server";
-import { hydrateMissingCanonicalTokenSupplyV1 } from
-  "../../../../../lib/market-data/canonical-token-supply.server";
 import { exploreEntryMarketIdentitiesV1 } from
   "../../../../../lib/market-data/explore-market-identities";
 import type { MarketChartV1, MarketValuationV1 } from
@@ -57,9 +53,7 @@ function chartResponseCacheControl(chart: MarketChartV1): string {
   const hasReusableHistory =
     chart.status === "ready" || chart.status === "insufficient-history";
   return chart.readStatus === "live" &&
-      hasReusableHistory &&
-      chart.valuation.status === "available" &&
-      chart.valuation.freshness === "current"
+      hasReusableHistory
     ? REUSABLE_CHART_CACHE_CONTROL
     : "no-store";
 }
@@ -188,62 +182,34 @@ export async function GET(request: NextRequest) {
         "Price history is unavailable for this market",
       );
     }
-    const entryPromise = hydrateMissingCanonicalTokenSupplyV1([
-      unresolvedEntry,
-    ]).then((entries) => entries[0] ?? unresolvedEntry);
     let chart: MarketChartV1;
     if (identities.length === 1) {
       const identity = identities[0];
-      const [entry, marketByToken, chartRead] = await Promise.all([
-        entryPromise,
-        readBitqueryTokenMarketDataV1(identities, {
-          signal: request.signal,
-        }),
-        readBitqueryMarketChartV1({
-          identity,
-          range,
-          valuation: UNAVAILABLE_CANONICAL_VALUATION,
-          signal: request.signal,
-        }),
-      ]);
-      const marketDataRead = marketByToken.get(address.toLowerCase());
-      const marketData = marketDataRead
-        ? withBitqueryMarketData(entry, marketDataRead).marketData
-        : undefined;
-      const primaryMarket = marketData?.pools.find(
-        (candidate) => candidate.identity.poolId === identity.poolId,
-      );
-      chart = {
-        ...chartRead,
-        valuation:
-          chartRead.readStatus === "live" && chartRead.points.length > 0
-            ? primaryMarket?.valuation ?? UNAVAILABLE_CANONICAL_VALUATION
-            : chartRead.valuation,
-      };
-    } else {
-      const [entry, marketByToken] = await Promise.all([
-        entryPromise,
-        readBitqueryTokenMarketDataV1(identities, {
-          signal: request.signal,
-        }),
-      ]);
-      const marketDataRead = marketByToken.get(address.toLowerCase());
-      const marketData = marketDataRead
-        ? withBitqueryMarketData(entry, marketDataRead).marketData
-        : undefined;
-      const identity = identities.find(
-        (candidate) => candidate.poolId === marketData?.primaryPoolId,
-      ) ?? identities[0];
-      const primaryMarket = marketData?.pools.find(
-        (candidate) => candidate.identity.poolId === identity.poolId,
-      );
       chart = await readBitqueryMarketChartV1({
         identity,
         range,
-        valuation: primaryMarket?.valuation ?? UNAVAILABLE_CANONICAL_VALUATION,
+        historyStart: unresolvedEntry.launchedAt,
+        signal: request.signal,
+      });
+    } else {
+      const marketByToken = await readBitqueryTokenMarketDataV1(identities, {
+        signal: request.signal,
+      });
+      const marketDataRead = marketByToken.get(address.toLowerCase());
+      const identity = identities.find(
+        (candidate) => candidate.poolId === marketDataRead?.primaryPoolId,
+      ) ?? identities[0];
+      chart = await readBitqueryMarketChartV1({
+        identity,
+        range,
+        historyStart: unresolvedEntry.launchedAt,
         signal: request.signal,
       });
     }
+    chart = {
+      ...chart,
+      valuation: UNAVAILABLE_CANONICAL_VALUATION,
+    };
     if (chart.status === "unavailable") {
       return unavailable(
         address,
@@ -254,9 +220,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const fdvUsdWad = chart.valuation.status === "available"
-      ? chart.valuation.fdvUsdWad
-      : undefined;
     const hasVerifiedPrice = chart.points.some(
       (point) => point.priceUsd !== undefined || point.priceQuote !== undefined,
     );
@@ -264,10 +227,6 @@ export async function GET(request: NextRequest) {
       {
         ...chart,
         address,
-        ...(fdvUsdWad ? { fdvUsdWad } : {}),
-        valuationMetric: chart.valuation.status === "available"
-          ? chart.valuation.metric
-          : null,
       },
       {
         headers: {

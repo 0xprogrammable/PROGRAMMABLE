@@ -13,6 +13,8 @@ const CAPACITY_MESSAGE =
   /(?:monthly[_\s-]*capacity[_\s-]*(?:exceeded|reached)|capacity[_\s-]*(?:exceeded|reached)|rate[_\s-]*limit(?:ed)?|too many requests)/iu;
 const ARCHIVE_LIMITATION_MESSAGE =
   /archive requests require a personal token/iu;
+const PROVIDER_ROUTING_UNAVAILABLE_MESSAGE =
+  /can't route your request to suitable provider/iu;
 
 function errorChain(error: unknown) {
   const chain: unknown[] = [];
@@ -27,6 +29,16 @@ function errorChain(error: unknown) {
         : undefined;
   }
   return chain;
+}
+
+function containsRpcEndpointError(error: unknown) {
+  return errorChain(error).some(
+    (candidate) =>
+      candidate instanceof HttpRequestError ||
+      candidate instanceof RpcRequestError ||
+      candidate instanceof SocketClosedError ||
+      candidate instanceof TimeoutError,
+  );
 }
 
 function rpcCapacityMessage(error: RpcRequestError) {
@@ -47,11 +59,23 @@ function rpcArchiveLimitationMessage(error: RpcRequestError) {
   return details.some((value) => ARCHIVE_LIMITATION_MESSAGE.test(value));
 }
 
+function rpcProviderRoutingUnavailable(error: RpcRequestError) {
+  const details = [
+    error.details,
+    typeof error.data === "string" ? error.data : undefined,
+    error.cause instanceof Error ? error.cause.message : undefined,
+  ].filter((value): value is string => Boolean(value));
+  return error.code === 12 && details.some(
+    (value) => PROVIDER_ROUTING_UNAVAILABLE_MESSAGE.test(value),
+  );
+}
+
 /**
  * Provider failover is intentionally narrower than a generic retry. A
  * secondary RPC is eligible only when the primary transport is unavailable or
- * explicitly rejects capacity. Contract, chain, decoding and integrity errors
- * stay on the primary path and remain visible to the caller.
+ * explicitly rejects capacity. Other failures stay on the primary path;
+ * provider-independent integrity errors remain intact while endpoint-bearing
+ * viem errors are redacted before they reach framework logging.
  */
 export function isOperationalRpcFailoverEligible(error: unknown) {
   return errorChain(error).some((candidate) => {
@@ -75,7 +99,8 @@ export function isOperationalRpcFailoverEligible(error: unknown) {
         candidate.code === 429 ||
         candidate.code === -32_005 ||
         rpcCapacityMessage(candidate) ||
-        rpcArchiveLimitationMessage(candidate)
+        rpcArchiveLimitationMessage(candidate) ||
+        rpcProviderRoutingUnavailable(candidate)
       );
     }
     return false;
@@ -101,6 +126,20 @@ export class OperationalRpcUnavailableError extends Error {
   }
 }
 
+export class OperationalRpcReadError extends Error {
+  override name = "OperationalRpcReadError";
+
+  constructor() {
+    super("Operational RPC read failed");
+  }
+}
+
+function redactRpcEndpointError(error: unknown) {
+  return containsRpcEndpointError(error)
+    ? new OperationalRpcReadError()
+    : error;
+}
+
 /**
  * Runs one complete read against the configured primary. The fixed secondary
  * receives exactly one attempt only after an eligible transport/capacity
@@ -123,7 +162,7 @@ export async function withOperationalRpcFailover<
       secondaryUrl === deployment.rpcUrl ||
       !isOperationalRpcFailoverEligible(primaryError)
     ) {
-      throw primaryError;
+      throw redactRpcEndpointError(primaryError);
     }
 
     try {
@@ -134,7 +173,7 @@ export async function withOperationalRpcFailover<
         // nested causes and can otherwise expose authenticated RPC URLs.
         throw new OperationalRpcUnavailableError();
       }
-      throw secondaryError;
+      throw redactRpcEndpointError(secondaryError);
     }
   }
 }
