@@ -106,14 +106,21 @@ export function normalizeKeychainPasswordOutput(output) {
   if (!Buffer.isBuffer(output)) {
     throw new Error("Keychain password output is invalid");
   }
-  const direct = output.toString("ascii");
+  if (output.some((value) => value > 0x7f)) {
+    output.fill(0);
+    throw new Error("Keychain password output is invalid");
+  }
+  const direct = output.toString("latin1");
   if (/^0x[0-9a-f]{64}\n$/u.test(direct)) {
     return output;
   }
   if (/^[0-9a-f]{134}\n$/u.test(direct)) {
     const decoded = Buffer.from(direct.slice(0, -1), "hex");
     output.fill(0);
-    if (/^0x[0-9a-f]{64}\n$/u.test(decoded.toString("ascii"))) {
+    if (
+      decoded.every((value) => value <= 0x7f) &&
+      /^0x[0-9a-f]{64}\n$/u.test(decoded.toString("latin1"))
+    ) {
       return decoded;
     }
     decoded.fill(0);

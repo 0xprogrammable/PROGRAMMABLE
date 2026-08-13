@@ -137,6 +137,25 @@ test("rejects and clears noncanonical Keychain password output", () => {
     /password output is invalid/u,
   );
   assert.equal(malformedWrapped.every((value) => value === 0), true);
+
+  const highBitDirect = Buffer.from(`0x${"33".repeat(32)}\n`, "ascii");
+  highBitDirect[2] |= 0x80;
+  assert.throws(
+    () => normalizeKeychainPasswordOutput(highBitDirect),
+    /password output is invalid/u,
+  );
+  assert.equal(highBitDirect.every((value) => value === 0), true);
+
+  const canonicalWrapped = Buffer.from(
+    `${Buffer.from(`0x${"44".repeat(32)}\n`, "ascii").toString("hex")}\n`,
+    "ascii",
+  );
+  canonicalWrapped[0] |= 0x80;
+  assert.throws(
+    () => normalizeKeychainPasswordOutput(canonicalWrapped),
+    /password output is invalid/u,
+  );
+  assert.equal(canonicalWrapped.every((value) => value === 0), true);
 });
 
 test("predicts a stable owner-bound Safe CREATE2 address", () => {
