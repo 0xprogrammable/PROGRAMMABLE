@@ -4,6 +4,7 @@ import { keccak256, type EIP1193RequestFn } from "viem";
 vi.mock("server-only", () => ({}));
 
 import {
+  bindPrivateBlobReadMetadata,
   createMemoryPersistentRpcCacheStore,
   createPersistentRpcRequest,
   persistentRpcCachePathByteLimit,
@@ -1186,6 +1187,29 @@ describe("persistent RPC log cursor", () => {
         declaredContentLength: 3,
       }),
     ).rejects.toThrow(/does not match/u);
+  });
+
+  it("binds a compressed private Blob response to its authenticated HEAD metadata", () => {
+    expect(
+      bindPrivateBlobReadMetadata({
+        responseEtag: 'W/"a51ca021c9c058ed68999c1ef7728007"',
+        headEtag: '"a51ca021c9c058ed68999c1ef7728007"',
+        headSize: 23_849,
+      }),
+    ).toEqual({
+      etag: '"a51ca021c9c058ed68999c1ef7728007"',
+      declaredSize: 23_849,
+    });
+  });
+
+  it("rejects a private Blob that changes between GET and HEAD", () => {
+    expect(() =>
+      bindPrivateBlobReadMetadata({
+        responseEtag: 'W/"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
+        headEtag: '"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"',
+        headSize: 23_849,
+      }),
+    ).toThrow(/changed while it was being read/u);
   });
 
   it("reduces total steady-state RPC requests and conservative Alchemy CU by at least 80 percent", async () => {
