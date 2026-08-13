@@ -16,7 +16,7 @@ export const PROGRAMMABLE_GITHUB_ACTIONS_APP_ID = "15368";
 export const PROGRAMMABLE_GITHUB_ACTIONS_APP_SLUG = "github-actions";
 export const PROGRAMMABLE_MAINTAINER_GITHUB_USER_ID = "309941960";
 export const PROGRAMMABLE_MAINTAINER_GITHUB_LOGIN = "0xprogrammable";
-export const REQUIRED_APPLICATION_CHECKS = Object.freeze(["public-intake", "Node 22", "Node 24"]);
+export const REQUIRED_APPLICATION_CHECKS = Object.freeze(["public-intake", "Node 24"]);
 export const CENTRAL_APPLICATION_FILES = Object.freeze([
   "application.json",
   "PROPOSAL.md",

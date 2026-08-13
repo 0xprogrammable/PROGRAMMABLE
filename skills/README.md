@@ -4,9 +4,10 @@ Programmable publishes one canonical Agent Skills package for designing and revi
 package follows the open [Agent Skills specification](https://agentskills.io/specification), so compatible agents can
 load the same instructions, references, templates, and validation tools without separate prompts for each product.
 
-The canonical package is synchronized with the Hookbuilder `0.5.1` development candidate at commit
-`509060301ce9bb1b5e318b28aeeeeb846c020f68`, based on public `main`. The stable Hookbuilder `v0.4.3` release remains
-available for historical reproduction; it is not the newest model.
+The canonical package is synchronized with the immutable public Hookbuilder `v0.5.1` Node 24 release. Annotated tag
+object `7f0beec2afe00facd25ba65cecbb18f285f15b91` resolves to commit
+`547482adf6ed0ed19e9cd4d0e884abd70e143229` and the exact skill tree recorded in
+[HOOKBUILDER_SYNC.md](../docs/builder/HOOKBUILDER_SYNC.md).
 
 ## Available skill
 
@@ -31,37 +32,26 @@ The exact source and mirror binding is recorded in [HOOKBUILDER_SYNC.md](../docs
 
 ## Quick install
 
-Install interactively with one command:
+Install the immutable public release for Codex with one command:
 
 ```bash
 gh skill install 0xprogrammable/hookbuilder \
-  skills/programmable-v4-hook-builder@main \
+  skills/programmable-v4-hook-builder \
   --agent codex \
   --scope user \
-  --force
+  --pin v0.5.1
 ```
 
-To preselect the Builder while keeping the agent setup interactive:
+Without a version argument, `gh skill` selects the repository's latest tagged release. Keep `--pin v0.5.1` when exact,
+repeatable installation matters; older tags are historical releases only.
 
-```bash
-gh skill install 0xprogrammable/hookbuilder \
-  skills/programmable-v4-hook-builder@main \
-  --agent codex \
-  --scope user \
-  --force
-```
+## Inspect and install the newest Builder model
 
-Without a version argument, `gh skill` selects the repository's latest tagged release. Explicitly select `main` for
-the newest model; use `v0.4.3` only when reproducing a stable historical release.
-
-## Install the newest Builder model
-
-Inspect the skill before installing it. `main` is the newest public development source and is intentionally distinct
-from the latest stable release.
+Inspect the exact immutable release before installing it:
 
 ```bash
 gh skill preview 0xprogrammable/hookbuilder \
-  skills/programmable-v4-hook-builder@main
+  programmable-v4-hook-builder@v0.5.1
 ```
 
 Install the same revision for one supported host:
@@ -69,32 +59,32 @@ Install the same revision for one supported host:
 ```bash
 # Codex
 gh skill install 0xprogrammable/hookbuilder \
-  skills/programmable-v4-hook-builder@main \
+  skills/programmable-v4-hook-builder \
   --agent codex \
   --scope user \
-  --force
+  --pin v0.5.1
 
 # Claude Code
 gh skill install 0xprogrammable/hookbuilder \
-  skills/programmable-v4-hook-builder@main \
+  skills/programmable-v4-hook-builder \
   --agent claude-code \
   --scope user \
-  --force
+  --pin v0.5.1
 
 # GitHub Copilot
 gh skill install 0xprogrammable/hookbuilder \
-  skills/programmable-v4-hook-builder@main \
+  skills/programmable-v4-hook-builder \
   --agent github-copilot \
   --scope user \
-  --force
+  --pin v0.5.1
 ```
 
 The `gh skill` command chooses the host-specific destination. Its skill commands are currently a preview feature, and
 host behavior still depends on each agent's sandbox, tool permissions, and Agent Skills implementation. Installation
 does not grant wallet access, deployment authority, review approval, or permission to publish external changes.
 
-Builder `v0.2.1` and earlier remain historical beta contracts. New work uses Hookbuilder `0.5.1` development `main`,
-including the open-world compiler, Application V3 preparation and current fee-conformance contracts.
+Builder `v0.2.1` and earlier remain historical beta contracts. New work uses the immutable Hookbuilder `v0.5.1`
+release, including the open-world compiler, Application V3 preparation and current fee-conformance contracts.
 
 For repository-scoped use, change `--scope user` to `--scope project` only when the generated `.agents/` directory is
 intentionally committed or excluded from Git; otherwise it makes the project worktree dirty and blocks `prepare-pr`.

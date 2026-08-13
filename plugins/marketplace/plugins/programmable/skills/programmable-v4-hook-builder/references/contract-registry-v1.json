@@ -632,7 +632,7 @@
         "mode": "direct",
         "moduleByteLength": 1070,
         "moduleSha256": "sha256:c4561640a691f3cf383ad5b5dd04d58bd9a809e93a3a462e36e8cfe564f5d6c4",
-        "closureSha256": "sha256:2ea7643e70cbad3dec39bbfab43abd8e11b9090a0eadc0f15f00e5d0e79fa941"
+        "closureSha256": "sha256:c5fe74def28877c8345184aa69051d1dd0c01547c6f00dea67f34f64570f8ed2"
       }
     },
     {
@@ -1799,7 +1799,7 @@
       "profile": "static-local-esm-import-closure-v1",
       "rootModulePath": "scripts/github-application-core.mjs",
       "moduleCount": 72,
-      "totalByteLength": 886574,
+      "totalByteLength": 886563,
       "modules": [
         {
           "path": "scripts/builder-template-contract.mjs",
@@ -1818,8 +1818,8 @@
         },
         {
           "path": "scripts/github-application-constants.mjs",
-          "byteLength": 3373,
-          "sha256": "sha256:3850eb323442c9518fcc68c0d8cc155df6c6db560ba174fb92ce691a7cc1dd2a",
+          "byteLength": 3362,
+          "sha256": "sha256:c8b399ca9a578fa2773986a8ebcd4bfad7755ee5247db412ddb5d939b642c453",
           "localImports": [
             "scripts/registry-intake-contract.mjs"
           ]
@@ -2494,7 +2494,7 @@
           ]
         }
       ],
-      "closureSha256": "sha256:2ea7643e70cbad3dec39bbfab43abd8e11b9090a0eadc0f15f00e5d0e79fa941"
+      "closureSha256": "sha256:c5fe74def28877c8345184aa69051d1dd0c01547c6f00dea67f34f64570f8ed2"
     },
     {
       "profile": "static-local-esm-import-closure-v1",
@@ -10596,8 +10596,8 @@
     "validatorClosureModuleBindingCount": 1010,
     "validatorClosureDistinctModuleCount": 171,
     "schemaPathsSha256": "sha256:610762ddd56550d2852596417842b753d32d5ed509433439435fd492aa3110ab",
-    "validatorBindingsSha256": "sha256:16629c67eb119305456fbb266b40f26c73e36961fd340f6fa6b38820e5e41861",
-    "validatorClosuresSha256": "sha256:fca0133e045871db99dce696e3e58fab95ae86f2e53044a8f49b7345191d6156"
+    "validatorBindingsSha256": "sha256:6e578df1ac7fdf969025fe44d140b7d1e64431f469bbe0b6f8fa2b6aed1e0612",
+    "validatorClosuresSha256": "sha256:0cb2eeb08104ac55b424ef93a182a6409f0b6f2d052020ff2717f6a031cba0fb"
   },
-  "registrySha256": "sha256:31a406c8071e045a2550b8286ea664bfd845c2f3b8cfc2da99f35e16387c20f7"
+  "registrySha256": "sha256:0a711a61961990eb0c215819ddc6ddc970ea148c9eea5c2f7aa1bf7c91deb3b8"
 }

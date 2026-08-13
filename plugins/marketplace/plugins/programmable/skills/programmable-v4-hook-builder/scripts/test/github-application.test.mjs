@@ -1045,11 +1045,6 @@ test("status re-reads the PR and reports a different prepared package without ca
       detailsUrl: null
     },
     {
-      name: "Node 22",
-      state: "missing",
-      detailsUrl: null
-    },
-    {
       name: "Node 24",
       state: "missing",
       detailsUrl: null
@@ -1075,14 +1070,9 @@ test("status preserves the canonical trusted Registry check details link", async
       detailsUrl: "https://github.com/0xprogrammable/submit-launch/actions/runs/1001/job/801"
     },
     {
-      name: "Node 22",
-      state: "passing",
-      detailsUrl: "https://github.com/0xprogrammable/submit-launch/actions/runs/1001/job/802"
-    },
-    {
       name: "Node 24",
       state: "passing",
-      detailsUrl: "https://github.com/0xprogrammable/submit-launch/actions/runs/1001/job/803"
+      detailsUrl: "https://github.com/0xprogrammable/submit-launch/actions/runs/1001/job/802"
     }
   ]);
 });
@@ -2069,8 +2059,7 @@ function rawCheck({
 function rawRequiredChecks({ publicIntakeConclusion = "success", appId = "15368" } = {}) {
   return [
     rawCheck({ id: "801", name: "public-intake", conclusion: publicIntakeConclusion, appId }),
-    rawCheck({ id: "802", name: "Node 22", appId }),
-    rawCheck({ id: "803", name: "Node 24", appId })
+    rawCheck({ id: "802", name: "Node 24", appId })
   ];
 }
 

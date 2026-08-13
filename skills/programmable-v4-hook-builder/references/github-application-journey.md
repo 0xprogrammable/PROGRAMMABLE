@@ -168,7 +168,7 @@ The projection is deliberately small:
 | GitHub observation | Client status |
 | --- | --- |
 | Open draft before the trusted required checks start | `submitted` |
-| `public-intake`, `Node 22`, or `Node 24` is missing, skipped, queued, requested, waiting, pending, or in progress | `checks-running` |
+| `public-intake` or `Node 24` is missing, skipped, queued, requested, waiting, pending, or in progress | `checks-running` |
 | Latest reviewer state requests changes, or one trusted required check failed | `changes-requested` |
 | Required checks pass and the `builder:architecture-review` label is present | `architecture-review` |
 | Required checks pass and the `builder:review-in-progress` label is present | `review-in-progress` |

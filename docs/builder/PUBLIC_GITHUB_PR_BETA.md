@@ -68,8 +68,8 @@ for the permissionless path.
 
 ### Mandatory Programmable fee
 
-The legacy beta application path uses Builder `v0.2.1` records. New model work uses Hookbuilder `0.5.1` development
-`main` and its per-side Fee V1.1 contract; legacy v2 applications remain readable only for migration and historical
+The legacy beta application path uses Builder `v0.2.1` records. New model work uses the immutable Hookbuilder `v0.5.1`
+release and its per-side Fee V1.1 contract; legacy v2 applications remain readable only for migration and historical
 review.
 
 - `effective side rate = max(builder-selected side rate, 10 bps)`;

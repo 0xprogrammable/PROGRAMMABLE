@@ -5,7 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   createDeterministicTestBatches,
   runDeterministicTestBatches
@@ -989,6 +989,22 @@ test("installed verifier accepts current pinned gh skill GitHub provenance", () 
   } finally {
     fs.rmSync(fixture.fixtureRoot, { recursive: true, force: true });
   }
+});
+
+test("portable verifier rejects runtimes below Node 24 before scanning package bytes", () => {
+  const bootstrap = [
+    'Object.defineProperty(process.versions, "node", { value: "22.23.1" });',
+    `process.argv = [process.execPath, ${JSON.stringify(verifier)}, "--installed"];`,
+    `await import(${JSON.stringify(pathToFileURL(verifier).href)});`
+  ].join("\n");
+  const result = childProcess.spawnSync(
+    process.execPath,
+    ["--input-type=module", "--eval", bootstrap],
+    { cwd: skillRoot, encoding: "utf8", shell: false }
+  );
+  assert.equal(result.status, 1, result.stdout || result.stderr);
+  assert.equal(result.stdout, "");
+  assert.match(result.stderr, /NODE_24_OR_NEWER_REQUIRED/u);
 });
 
 test("installed metadata parser accepts exact unpinned GitHub and quoted local profiles", () => {
