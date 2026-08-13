@@ -53,6 +53,7 @@ describe("legacy index operations routes", () => {
 
   afterEach(() => {
     delete process.env.CRON_SECRET;
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -88,6 +89,58 @@ describe("legacy index operations routes", () => {
     expect(mocks.readLiveExploreModel).toHaveBeenCalledTimes(1);
     expect(mocks.writeDurableExploreModel).toHaveBeenCalledTimes(1);
     expect(mocks.writePortfolioHistorySnapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries transient read failures and persists only the successful model", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    mocks.readLiveExploreModel
+      .mockRejectedValueOnce(
+        Object.assign(new Error("sensitive provider response"), { code: 429 }),
+      )
+      .mockRejectedValueOnce(new Error("temporary provider failure"))
+      .mockRejectedValueOnce(new Error("temporary provider failure"))
+      .mockResolvedValueOnce({ status: "ready" });
+
+    const responsePromise = getCanonicalIndex(request());
+    await vi.runAllTimersAsync();
+    const response = await responsePromise;
+
+    expect(response.status).toBe(200);
+    expect(mocks.readLiveExploreModel).toHaveBeenCalledTimes(4);
+    expect(mocks.writeDurableExploreModel).toHaveBeenCalledTimes(1);
+    expect(console.warn).toHaveBeenCalledWith(
+      "Programmable index read will retry",
+      expect.objectContaining({
+        attempt: 1,
+        errorClassChain: expect.arrayContaining([
+          expect.objectContaining({ name: "Error", code: 429 }),
+        ]),
+      }),
+    );
+    expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toContain(
+      "sensitive provider response",
+    );
+  });
+
+  it("returns 503 after four failed reads without starting a write", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.readLiveExploreModel.mockRejectedValue(new Error("provider offline"));
+
+    const responsePromise = getCanonicalIndex(request());
+    await vi.runAllTimersAsync();
+    const response = await responsePromise;
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    await expect(response.json()).resolves.toEqual({
+      error: "Index refresh failed",
+    });
+    expect(mocks.readLiveExploreModel).toHaveBeenCalledTimes(4);
+    expect(mocks.writeDurableExploreModel).not.toHaveBeenCalled();
   });
 
   it("keeps the old writer alias permanently closed", async () => {
