@@ -244,6 +244,10 @@ export type OfficialV4LiquidityEvidenceReadCategory =
   | "response-block-number-schema"
   | "response-block-hash-schema"
   | "response-block-timestamp-schema"
+  | "response-block-timestamp-null"
+  | "response-block-timestamp-number"
+  | "response-block-timestamp-string"
+  | "response-block-timestamp-other"
   | "response-pool-schema"
   | "response-pool-id-schema"
   | "response-pool-token-schema"
@@ -454,10 +458,23 @@ function strictBlockTimestamp(value: unknown): {
   timestamp: string;
   time: string;
 } {
-  const timestamp = strictBlockNumber(
-    value,
-    "response-block-timestamp-schema",
-  );
+  let timestamp: bigint;
+  try {
+    timestamp = strictBlockNumber(
+      value,
+      "response-block-timestamp-schema",
+    );
+  } catch {
+    return invalidResponse(
+      value === null
+        ? "response-block-timestamp-null"
+        : typeof value === "number"
+          ? "response-block-timestamp-number"
+          : typeof value === "string"
+            ? "response-block-timestamp-string"
+            : "response-block-timestamp-other",
+    );
+  }
   if (timestamp > 8_640_000_000_000n) {
     return invalidResponse("response-block-timestamp-schema");
   }
