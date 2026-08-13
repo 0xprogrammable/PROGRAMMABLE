@@ -15,14 +15,14 @@ const APPROVED_OPERATIONS = Object.freeze({
       provider: "github-actions",
       workflow: Object.freeze({
         path: ".github/workflows/refresh-production-read-model.yml",
-        sha256: "3da07d2ec2ae59991aea77da64c0552e8d9fc7ed96a7d6b9130bdc469d7cc9c6",
+        sha256: "778f68df03c9a66a17c5f58643940e0beb2e4090eacd5f126a5feb9a0ed6b616",
       }),
       nodeRuntime: Object.freeze({
         setupAction: "actions/setup-node",
         setupActionSha: "820762786026740c76f36085b0efc47a31fe5020",
         setupActionRelease: "v7.0.0",
         version: "24.14.0",
-        dependencyCache: false,
+        packageManagerCache: false,
       }),
       schedule: "2-57/5 * * * *",
       targetOrigin: "https://programmable.market",
@@ -798,7 +798,7 @@ function legacySchedulerWatchdogIsFailClosed(
     `        uses: ${binding?.nodeRuntime?.setupAction}@${binding?.nodeRuntime?.setupActionSha} # ${binding?.nodeRuntime?.setupActionRelease}`,
     "        with:",
     `          node-version: ${binding?.nodeRuntime?.version}`,
-    `          cache: ${binding?.nodeRuntime?.dependencyCache}`,
+    `          package-manager-cache: ${binding?.nodeRuntime?.packageManagerCache}`,
   ].join("\n");
   const pinnedNodeSetupIndex = workflowSource?.indexOf(pinnedNodeSetup) ?? -1;
   const watchdogStepIndex =
@@ -817,7 +817,7 @@ function legacySchedulerWatchdogIsFailClosed(
       "820762786026740c76f36085b0efc47a31fe5020" &&
     binding.nodeRuntime?.setupActionRelease === "v7.0.0" &&
     binding.nodeRuntime?.version === "24.14.0" &&
-    binding.nodeRuntime?.dependencyCache === false &&
+    binding.nodeRuntime?.packageManagerCache === false &&
     binding.rpcProof?.confirmedBlockRequired === true &&
     binding.rpcProof?.providerPairRequired === true &&
     binding.rpcProof?.maximumHeadAgeSeconds === 300 &&
