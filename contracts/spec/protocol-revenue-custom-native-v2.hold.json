@@ -1,0 +1,240 @@
+{
+  "schemaVersion": "programmable.protocol-revenue.custom-native.release-hold.v2",
+  "status": "HOLD",
+  "activationAllowed": false,
+  "productionBase": {
+    "repository": "https://github.com/0xprogrammable/programmable",
+    "branch": "production",
+    "commit": "f9ce9cb8756b4d6dae0f64b95816b428f9f23b89",
+    "tree": "02f79d77f57feb708e392215994935d6fd21a162"
+  },
+  "candidate": {
+    "branch": "codex/custom-v2-fee-source-release-v1",
+    "implementationCommit": "437d84959153dc7aa8514c48cae462175197cd08",
+    "implementationTree": "9949a1a083b006c93b0e237b5648f780db221ccc",
+    "reissuedAncestry": [
+      {
+        "sourceCommit": "a940f6094b582fbad575227f2988235210e39787",
+        "localCommit": "204cc6d37e444fc651d7123f8b92cc5d638d1207",
+        "purpose": "protocol-revenue vNext native core"
+      },
+      {
+        "sourceCommit": "d1d417251231f18c67ee1d6aeabda8b618f908eb",
+        "localCommit": "391a83b1126fa7c961912705d9ab433115ac8f58",
+        "purpose": "exact registry view decoding"
+      },
+      {
+        "sourceCommit": "4171949545d1787dc17850d7b2ee31b8e2952269",
+        "localCommit": "021775e1b4ecd1ff840b69be6d78d6aa3a9fc72d",
+        "purpose": "future Custom native source admission"
+      },
+      {
+        "sourceCommit": "65255f6d2bb0a0885dad77e5d595266a290c83c5",
+        "localCommit": "485c79c57bf54fcb101fafa393ebfbfe4116cd0c",
+        "purpose": "Custom release bridge and finalized enumeration"
+      }
+    ]
+  },
+  "scope": {
+    "chainId": 1,
+    "launchClass": "future-custom-v2-only",
+    "asset": "0x0000000000000000000000000000000000000000",
+    "recipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    "programmableFeeBps": 10,
+    "claimSelector": "0xb9d2fad0",
+    "sourceInterfaceId": "0x808cb67a",
+    "canonicalPoolManager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+    "canonicalPoolManagerRuntimeCodeHash": "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293",
+    "minimumActivationDelayBlocks": 64,
+    "minimumLaunchFinalityBlocks": 64,
+    "claimBatchMaximumPerTransaction": 8,
+    "overallFutureSourceSet": "unbounded by contract address list; worker must paginate finalized registrar enumeration"
+  },
+  "exactExclusions": [
+    "Custom V1 provenance-only launches",
+    "historical Custom sources",
+    "Classic launches",
+    "Main Coin",
+    "Stocks",
+    "Deep",
+    "quote assets",
+    "ERC-20 assets",
+    "arbitrary targets",
+    "arbitrary calldata",
+    "arbitrary recipients",
+    "buybacks",
+    "swaps",
+    "splitting",
+    "scheduling"
+  ],
+  "admissionBoundary": {
+    "approvalBindsExpectedLaunchStampHash": true,
+    "registrarEqualityChecksExpectedLaunchStampHash": true,
+    "sourceMustBePredictedCreate2AndAbsentAtApproval": true,
+    "sourceActivationAuthoritySeparated": true,
+    "sourceMustHaveZeroHistoricalClaimCounter": true,
+    "launchStampMustBindCanonicalPoolManagerAndRuntime": true,
+    "finalizedRegistrarEligibilityRecheckedAtEveryClaim": true,
+    "registryV1Accepted": false
+  },
+  "statefulClaimReceiptPort": {
+    "contract": "ProtocolRevenueCustomClaimRecorderV1",
+    "writeSelector": "0x6b0f475d",
+    "writeSignature": "recordClaim(uint64,bytes32,uint256,bytes32)",
+    "readSelector": "0x852424ae",
+    "readSignature": "claimRecord(bytes32)",
+    "readTuple": [
+      "bool exists",
+      "uint64 cycleId",
+      "uint256 totalClaimedWei",
+      "bytes32 sourceTotalsHash",
+      "bytes32 claimBatchCommitment",
+      "bytes32 sourceBindingHash",
+      "uint256 claimBlockNumber"
+    ],
+    "eventSignature": "ClaimOnlyClaimRecordedV1(uint64,bytes32,bytes32,uint256,bytes32)",
+    "eventSignatureHash": "0x992cb48b6f4f3b91b7610aca96e6321bcff8f616468f58437fe10cea1956ecc0",
+    "recordType": "ClaimOnlyClaimRecordV1(uint256 chainId,uint64 cycleId,bytes32 sourceKindHash,uint256 claimBlockNumber,bytes32 claimBatchCommitment,bytes32 sourceTotalsHash,uint256 totalClaimedWei,bytes32 sourceBindingHash)",
+    "sourceKindHashInput": "custom",
+    "sourceBindingFormula": "keccak256(abi.encode(recorderAddress, recorderRuntimeCodeHash, activationId))",
+    "soleWriter": "exact immutable ProtocolRevenueClaimExecutorV1 address",
+    "recordOverwriteAllowed": false,
+    "sameCycleSameBatchReplayAllowed": false,
+    "zeroTotalPolicy": "reject and roll back complete claim transaction",
+    "legacyUnrecordedClaimEntrypoints": "always revert RecordedBatchRequired"
+  },
+  "deploymentDependencyGraph": [
+    "deploy and verify collector and core source registry",
+    "deploy and verify Custom Registry V2 with separated operational roles",
+    "deploy and verify Custom release registrar bound to that Registry V2 and Launch Stamp reader",
+    "grant only the registrar the core SOURCE_PROPOSER_ROLE and revoke the bootstrap proposer",
+    "freeze deployer nonce N, predicted ClaimExecutor address at N+1, and a nonzero predeployment activation commitment",
+    "deploy ClaimRecorder at nonce N with the predicted ClaimExecutor as its immutable sole writer",
+    "read the deployed ClaimRecorder runtime code hash",
+    "deploy ClaimExecutor at nonce N+1 bound to the exact recorder address/runtime and Custom registrar address/runtime",
+    "verify the predicted and actual ClaimExecutor addresses are identical",
+    "bind settlement Phase B to the exact recorder address, deployed runtime code hash, and activation id"
+  ],
+  "artifactTemplates": {
+    "customRegistryV2": {
+      "runtimeSizeBytes": 23758,
+      "initcodeTemplateSizeBytes": 27402,
+      "runtimeMarginBytes": 818,
+      "unpatchedRuntimeTemplateKeccak256": "0xfca06e57ed5d020796e820ecf541e386fbb45fdc58b241fec7ff6f4c23077838",
+      "actualDeploymentRuntimeCodeHash": null
+    },
+    "customRegistrar": {
+      "runtimeSizeBytes": 22152,
+      "initcodeTemplateSizeBytes": 25625,
+      "runtimeMarginBytes": 2424,
+      "unpatchedRuntimeTemplateKeccak256": "0xfbdae06a31f8f3f985bcca38f29d837e44caab7c4295880d04207dd3edb39e9c",
+      "actualDeploymentRuntimeCodeHash": null
+    },
+    "customClaimRecorder": {
+      "runtimeSizeBytes": 2394,
+      "initcodeTemplateSizeBytes": 2738,
+      "runtimeMarginBytes": 22182,
+      "unpatchedRuntimeTemplateKeccak256": "0x880a8902ec9ccb6da57c81f50a5d5244b1bc9ca81bf4ac0fec48324431eb0d61",
+      "actualDeploymentRuntimeCodeHash": null
+    },
+    "customClaimExecutor": {
+      "runtimeSizeBytes": 10097,
+      "initcodeTemplateSizeBytes": 12627,
+      "runtimeMarginBytes": 14479,
+      "unpatchedRuntimeTemplateKeccak256": "0x99184ca47cf38ceb3f7c6c82e33f12d79b44d71a62ad528c1a6d9e53c7864214",
+      "actualDeploymentRuntimeCodeHash": null
+    },
+    "hashQualification": "Template hashes contain unpatched immutable placeholders and are not deployment runtime code hashes. Exact runtime hashes remain null until constructor-specific deployed bytecode is read."
+  },
+  "implementationFilesSha256": {
+    "contracts/src/custom-launch-vnext/ProgrammableCustomRevenueRegistryV2.sol": "3afa4fe390e3a42d9f6db0e22668f0197ef9c373a1ccb6ad4da7fe46e40cc9ad",
+    "contracts/src/protocol-revenue-vnext/ProtocolRevenueClaimExecutorV1.sol": "ecae684ba25d16518e30a3f1cc35f712a77f7af6e83c1d59ffb94325ff645684",
+    "contracts/src/protocol-revenue-vnext/custom/IProgrammableCustomRevenueReleaseV2.sol": "4c77097c034e2fffb9958d2322a42fd48238ea39e57a5cd10ea3cd45eccac06b",
+    "contracts/src/protocol-revenue-vnext/custom/ProtocolRevenueCustomClaimRecorderV1.sol": "14761f7b00dc5f0d07c094fa4ad1b277971ac43e978910541e1f2692bdc26753",
+    "contracts/src/protocol-revenue-vnext/custom/ProtocolRevenueCustomLaunchRegistrarV1.sol": "a0f1f1cb372b691d2e7e2d0e7c5167450ca29863650e20dc1dbf6a7e316395c9",
+    "contracts/test/custom-launch-vnext/ProgrammableCustomRevenueRegistryV2.t.sol": "d431898ad969254f4a835e6e7eb7d348b444ec05efe22adb7a948ca3787b114a",
+    "contracts/test/protocol-revenue-vnext/CoreExecutor.t.sol": "0173123d6919ee92d701d0c47f92a58e219d4debccfc9371ab9ff8d938a96082",
+    "contracts/test/protocol-revenue-vnext/CoreInvariant.t.sol": "a2e6df8e4711cdc111f279b4a8ae005563a2d99bf7416b1448135a40f94b8357",
+    "contracts/test/protocol-revenue-vnext/CoreTestBase.t.sol": "f0884dfa2fc51b8f44e0589289f3e99968137672d3d15e5d7ba18bad42c922a7",
+    "contracts/test/protocol-revenue-vnext/CustomClaimRecorder.t.sol": "83b16e4cd8a3f409b68df5d318ca170b02a896ff36073bf79d7e34636c9a696c",
+    "contracts/test/protocol-revenue-vnext/CustomReleaseBridge.t.sol": "2621d9d376c5ee967b80c44fc642838d87a45e317fecc1ad77d895ce23635584"
+  },
+  "localValidation": {
+    "forgeFormat": "pass",
+    "forgeLintHighAndMedium": "pass",
+    "gitDiffCheck": "pass",
+    "ciProfile": {
+      "protocolRevenueTestsPassed": 55,
+      "customRegistryTestsPassed": 6,
+      "failed": 0,
+      "fuzzRunsPerFuzzTest": 10000,
+      "invariantRunsPerInvariant": 1000,
+      "invariantDepth": 128,
+      "invariantCallsPerInvariant": 128000
+    },
+    "slither": {
+      "version": "0.11.5",
+      "targets": [
+        "ProtocolRevenueClaimExecutorV1.sol",
+        "ProtocolRevenueCustomClaimRecorderV1.sol",
+        "ProgrammableCustomRevenueRegistryV2.sol"
+      ],
+      "highFindings": 0,
+      "mediumFindings": 0,
+      "triagePath": "contracts/security/PROTOCOL-REVENUE-CUSTOM-NATIVE-V2-SLITHER.md"
+    },
+    "canonicalPoolManagerRead": {
+      "checkedAtDate": "2026-08-12",
+      "providers": [
+        {
+          "endpoint": "https://ethereum-rpc.publicnode.com",
+          "blockNumber": 25739910
+        },
+        {
+          "endpoint": "https://eth.drpc.org",
+          "blockNumber": 25739912
+        },
+        {
+          "endpoint": "https://1rpc.io/eth",
+          "blockNumber": 25739912
+        }
+      ],
+      "runtimeCodeHashConsensus": "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293",
+      "runtimeSizeBytesConsensus": 24009
+    }
+  },
+  "releaseGates": {
+    "independentContractReview": false,
+    "exactOperationalRoleAddressesFrozen": false,
+    "exactDeploymentPlanFrozen": false,
+    "claimRecorderAddressAndRuntimeBound": false,
+    "settlementDirectReadIntegrated": false,
+    "customClaimWorkerIntegrated": false,
+    "deploymentPrepared": false,
+    "deployed": false,
+    "sourceVerified": false,
+    "runtimeVerified": false,
+    "customLaunchLifecycleVerified": false,
+    "claimReceiptLifecycleVerified": false,
+    "finalizedProviderEvidence": false,
+    "monitoringConfigured": false,
+    "available": false,
+    "live": false
+  },
+  "hardLiveBlockers": [
+    "No exact deployment addresses, constructor arguments, role accounts, deployer nonce, activation id, or constructor-specific runtime hashes are frozen.",
+    "No deployed or source-verified Collector, Source Registry, Custom Registry V2, Custom Registrar, ClaimRecorder, or ClaimExecutor exists for this candidate.",
+    "Settlement Phase B has not yet frozen and validated direct field-by-field reads from this exact ClaimRecorder address and deployed runtime code hash.",
+    "The production Custom launch pipeline and claim worker have not yet been rebound to this exact candidate ABI, commit, registrar enumeration, and claimBatchAndRecord selector.",
+    "No finalized end-to-end Mainnet lifecycle, durable scheduler state, provider reconciliation, canary claim, or monitoring evidence exists.",
+    "No independent security review is complete."
+  ],
+  "deploymentEvidence": {
+    "addresses": {},
+    "transactions": [],
+    "receipts": [],
+    "sourceVerification": null,
+    "runtimeVerification": null,
+    "lifecycleVerification": null
+  }
+}

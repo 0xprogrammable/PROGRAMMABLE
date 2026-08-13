@@ -68,6 +68,30 @@ export type CustomLaunchFeePolicyV1 = Readonly<
     })
 >;
 
+/**
+ * Exact permissionless native-fee surface required on the Registry V1
+ * `primaryContract` for every future fee-bearing Custom launch.
+ *
+ * The claim console discovers the source from the existing registry rather
+ * than trusting a second, mutable index. The policy is null only when the
+ * reviewed launch fee policy has no qualifying market and therefore no
+ * Programmable fee leg.
+ */
+export type CustomLaunchManualClaimPolicyV1 = Readonly<{
+  readonly schemaVersion: "programmable.custom-manual-claim-policy.v1";
+  readonly discoveryMode: "custom-registry-v1-primary-contract";
+  readonly sourceRole: "primary-contract";
+  readonly asset: "0x0000000000000000000000000000000000000000";
+  readonly recipient: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c";
+  readonly claimSelector: "0xb9d2fad0";
+  readonly accruedSelector: "0x3129853d";
+  readonly totalClaimedSelector: "0x4a383b32";
+  readonly recipientSelector: "0x424ff2a5";
+  readonly feeBpsSelector: "0x32c0314d";
+  readonly sourceInterfaceId: "0x808cb67a";
+  readonly expectedProgrammableFeeBps: 5 | 10;
+}>;
+
 export interface TrustedLaunchPermitSignerV2 {
   readonly keyId: string;
   readonly signerEpoch: string;
@@ -292,6 +316,7 @@ export interface LaunchDescriptorV2 {
       valueWei: string;
     }>;
     feePolicy: CustomLaunchFeePolicyV1;
+    manualClaimPolicy: CustomLaunchManualClaimPolicyV1 | null;
   }>[];
   readonly defaultChoiceId: string;
 }

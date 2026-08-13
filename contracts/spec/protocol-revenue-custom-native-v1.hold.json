@@ -1,0 +1,152 @@
+{
+  "schemaVersion": "programmable.protocol-revenue.custom-native.release-hold.v1",
+  "status": "HOLD",
+  "activationAllowed": false,
+  "productionBase": {
+    "repository": "https://github.com/0xprogrammable/programmable",
+    "branch": "production",
+    "commit": "f9ce9cb8756b4d6dae0f64b95816b428f9f23b89",
+    "tree": "02f79d77f57feb708e392215994935d6fd21a162"
+  },
+  "reviewedCoreAncestry": {
+    "coreCommit": "9a484053629307665a37f56aaae8967758da989d",
+    "registryViewHardeningCommit": "574db272b76aaba23ac9b7eb0026a73941986b53"
+  },
+  "scope": {
+    "chainId": 1,
+    "launchClass": "future-custom-only",
+    "asset": "0x0000000000000000000000000000000000000000",
+    "recipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    "claimSelector": "0xb9d2fad0",
+    "sourceInterfaceId": "0x808cb67a",
+    "minimumActivationDelayBlocks": 64,
+    "proposalMustPrecedeSourceDeployment": true,
+    "permissionlessClaim": true,
+    "runtimeCodeHashRecheckedAtEveryClaim": true,
+    "claimBatchMaximum": 8
+  },
+  "components": {
+    "sourceInterface": {
+      "path": "contracts/src/protocol-revenue-vnext/IProgrammableProtocolFeeSourceV1.sol",
+      "deploymentAddress": null,
+      "runtimeCodeHash": null
+    },
+    "collector": {
+      "path": "contracts/src/protocol-revenue-vnext/ProtocolRevenueCollectorV1.sol",
+      "deploymentAddress": null,
+      "runtimeCodeHash": null
+    },
+    "sourceRegistry": {
+      "path": "contracts/src/protocol-revenue-vnext/ProtocolRevenueSourceRegistryV1.sol",
+      "deploymentAddress": null,
+      "runtimeCodeHash": null
+    },
+    "claimExecutor": {
+      "path": "contracts/src/protocol-revenue-vnext/ProtocolRevenueClaimExecutorV1.sol",
+      "deploymentAddress": null,
+      "runtimeCodeHash": null
+    }
+  },
+  "eligibility": {
+    "sourceOfTruth": "ProtocolRevenueSourceRegistryV1 activated source IDs",
+    "requirements": [
+      "predicted source proposed before source deployment",
+      "activation block at least 64 blocks after proposal",
+      "exact deployed runtime code hash",
+      "exact IProgrammableProtocolFeeSourceV1 views and canonical claim selector",
+      "fixed native asset and fixed reward-wallet recipient",
+      "zero cumulative claims at activation",
+      "registered and not quarantined at execution"
+    ],
+    "productionCustomRegistryV1": {
+      "address": "0x17e18c88bda9bfb73924cdc989c07b0707e72671",
+      "classification": "launch-provenance-only",
+      "usableAsExecutableRevenueSourceRegistry": false
+    }
+  },
+  "explicitExclusions": [
+    "Custom V1 provenance-only inference",
+    "already deployed or historical Custom sources",
+    "Classic launches",
+    "Stocks",
+    "quote assets",
+    "ERC-20 assets",
+    "arbitrary targets",
+    "arbitrary calldata",
+    "arbitrary recipients",
+    "buybacks",
+    "splitting",
+    "scheduling"
+  ],
+  "externalRegistrarBlocker": {
+    "code": "CUSTOM_LAUNCH_EXECUTABLE_SOURCE_REGISTRAR_NOT_IN_PRODUCTION",
+    "blocking": true,
+    "evidence": "The exact production base has no Custom launch pipeline that supplies a predeployment IProgrammableProtocolFeeSourceV1 address and independently registers its exact executable binding.",
+    "requiredExternalFlow": [
+      "derive and approve the exact predicted CREATE2 fee-source address and runtime code hash",
+      "propose the fixed native source binding before any code exists at that address",
+      "wait at least 64 blocks",
+      "deploy exactly the reviewed runtime at the predicted address",
+      "activate the exact source ID with the independent activator role",
+      "bind the activated source ID to the finalized Custom launch record",
+      "enumerate only activated non-quarantined source IDs in the standalone Custom claim worker"
+    ],
+    "prohibitedFallback": "Do not derive executable claim targets from Custom Registry V1 launch provenance."
+  },
+  "unresolvedDeploymentBindings": {
+    "registryInitialAdmin": null,
+    "registryInitialProposer": null,
+    "registryInitialActivator": null,
+    "registryInitialQuarantiner": null,
+    "collectorAddress": null,
+    "sourceRegistryAddress": null,
+    "claimExecutorAddress": null,
+    "isolatedCallGas": null
+  },
+  "localValidation": {
+    "forgeTests": {
+      "passed": 36,
+      "failed": 0,
+      "fuzzRunsPerFuzzTest": 1000,
+      "invariantRunsPerInvariant": 256,
+      "invariantCallsPerInvariant": 16384,
+      "invariantReverts": 0
+    },
+    "forgeFormat": "pass",
+    "forgeLint": "pass-with-notes",
+    "slither": {
+      "version": "0.11.5",
+      "triagePath": "contracts/security/PROTOCOL-REVENUE-CUSTOM-NATIVE-V1-SLITHER.md",
+      "unmitigatedFindings": 0
+    },
+    "runtimeSizeBytes": {
+      "collector": 1394,
+      "sourceRegistry": 12094,
+      "claimExecutor": 6712
+    }
+  },
+  "releaseGates": {
+    "independentContractReview": false,
+    "externalRegistrarIntegrated": false,
+    "customLaunchBindingIntegrated": false,
+    "customClaimWorkerIntegrated": false,
+    "authorityClaimOnlyExecutorIntegrated": false,
+    "splitterIntegrated": false,
+    "deploymentPrepared": false,
+    "deployed": false,
+    "sourceVerified": false,
+    "lifecycleVerified": false,
+    "finalizedProviderEvidence": false,
+    "monitoringConfigured": false,
+    "available": false,
+    "live": false
+  },
+  "deploymentEvidence": {
+    "transactions": [],
+    "receipts": [],
+    "sourceVerification": null,
+    "runtimeVerification": null,
+    "lifecycleVerification": null
+  },
+  "integrationNote": "This is a standalone Custom-native claim subset. It does not broaden the Authority claim-only executor and must remain disabled there until the registrar, worker and exact deployment bindings pass their own review."
+}

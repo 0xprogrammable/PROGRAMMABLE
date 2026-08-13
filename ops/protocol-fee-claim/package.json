@@ -1,0 +1,7 @@
+{
+  "name": "programmable-fee-claim",
+  "private": true,
+  "scripts": {
+    "build": "node build.mjs"
+  }
+}

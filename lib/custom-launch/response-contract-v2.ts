@@ -264,7 +264,7 @@ function validateLaunchRouteV2(value: unknown): void {
   const record = exactRecord(value, [
     "choiceId", "chainId", "chainProfileId", "launchRouteId",
     "launchRouteBindingHash", "routeAdapterId", "executionMode", "walletActionKind",
-    "walletExecutionKind", "transactionValuePolicy", "feePolicy",
+    "walletExecutionKind", "transactionValuePolicy", "feePolicy", "manualClaimPolicy",
   ]);
   identifier(record.choiceId);
   positiveDecimal(record.chainId);
@@ -273,14 +273,45 @@ function validateLaunchRouteV2(value: unknown): void {
   digest(record.launchRouteBindingHash);
   identifier(record.routeAdapterId);
   identifier(record.executionMode);
-  validateCustomLaunchFeePolicyV1(record.feePolicy, {
+  const feeMode = validateCustomLaunchFeePolicyV1(record.feePolicy, {
     chainId: record.chainId as string,
   });
+  validateCustomLaunchManualClaimPolicyV1(record.manualClaimPolicy, feeMode);
   literal(record.walletActionKind, "eip1193-send-transaction");
   literal(record.walletExecutionKind, "eoa-direct");
   const policy = exactRecord(record.transactionValuePolicy, ["kind", "valueWei"]);
   literal(policy.kind, "exact");
   unsignedDecimal(policy.valueWei);
+}
+
+function validateCustomLaunchManualClaimPolicyV1(
+  value: unknown,
+  feeMode: "standard-programmable-custom" | "aeon-partner-custom" | "no-qualifying-market",
+): void {
+  if (feeMode === "no-qualifying-market") {
+    if (value !== null) mismatch();
+    return;
+  }
+  const policy = exactRecord(value, [
+    "schemaVersion", "discoveryMode", "sourceRole", "asset", "recipient",
+    "claimSelector", "accruedSelector", "totalClaimedSelector", "recipientSelector",
+    "feeBpsSelector", "sourceInterfaceId", "expectedProgrammableFeeBps",
+  ]);
+  literal(policy.schemaVersion, "programmable.custom-manual-claim-policy.v1");
+  literal(policy.discoveryMode, "custom-registry-v1-primary-contract");
+  literal(policy.sourceRole, "primary-contract");
+  literal(policy.asset, ZERO_ADDRESS_V1);
+  literal(policy.recipient, PROGRAMMABLE_FEE_RECIPIENT_V1);
+  literal(policy.claimSelector, "0xb9d2fad0");
+  literal(policy.accruedSelector, "0x3129853d");
+  literal(policy.totalClaimedSelector, "0x4a383b32");
+  literal(policy.recipientSelector, "0x424ff2a5");
+  literal(policy.feeBpsSelector, "0x32c0314d");
+  literal(policy.sourceInterfaceId, "0x808cb67a");
+  literal(
+    policy.expectedProgrammableFeeBps,
+    feeMode === "standard-programmable-custom" ? 10 : 5,
+  );
 }
 
 function validatePresentationResponseV1(value: unknown): void {

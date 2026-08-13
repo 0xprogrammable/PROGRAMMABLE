@@ -14,6 +14,11 @@ const APPLICATION_HANDLE = /^github-[0-9a-f]{64}$/u;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:@/+\-]{0,255}$/u;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const UINT256 = /^(?:0|[1-9][0-9]{0,77})$/u;
+const EVM_ADDRESS = /^0x[0-9A-Fa-f]{40}$/u;
+const FEE_ID = /^[a-z0-9][a-z0-9._:-]{0,127}$/u;
+const SEMVER = /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u;
+const PROGRAMMABLE_FEE_RECIPIENT =
+  "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c";
 const RFC3339_UTC_MILLISECONDS =
   /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}Z$/u;
 const CURSOR = /^[A-Za-z0-9_-]{16,512}$/u;
@@ -663,8 +668,10 @@ function validateLaunchRoute(value) {
     "chainProfileId",
     "choiceId",
     "executionMode",
+    "feePolicy",
     "launchRouteBindingHash",
     "launchRouteId",
+    "manualClaimPolicy",
     "routeAdapterId",
     "transactionValuePolicy",
     "walletActionKind",
@@ -690,6 +697,131 @@ function validateLaunchRoute(value) {
     || !UINT256.test(value.transactionValuePolicy.valueWei)
     || BigInt(value.transactionValuePolicy.valueWei) >= (1n << 256n)
   ) throw new TypeError("Authenticated canary transaction value policy is invalid");
+  const feeMode = validateLaunchFeePolicy(value.feePolicy);
+  validateManualClaimPolicy(value.manualClaimPolicy, feeMode);
+}
+
+function validateLaunchFeePolicy(value) {
+  assertRecord(value, "Authenticated canary launch fee policy");
+  assertExactKeys(value, [
+    "chargeMode", "feeMode", "legs", "marketPathId", "modelId",
+    "normalProgrammableTenBpsApplied", "providerId", "schemaVersion", "semanticVersion",
+    "templateId", "totalRateBps", "totalRatePpm",
+  ]);
+  if (
+    value.schemaVersion !== "programmable.custom-launch-fee-policy.v1"
+    || typeof value.providerId !== "string" || !FEE_ID.test(value.providerId)
+    || typeof value.modelId !== "string" || !FEE_ID.test(value.modelId)
+    || typeof value.templateId !== "string" || !FEE_ID.test(value.templateId)
+    || typeof value.semanticVersion !== "string" || !SEMVER.test(value.semanticVersion)
+    || ![
+      "standard-programmable-custom", "aeon-partner-custom", "no-qualifying-market",
+    ].includes(value.feeMode)
+    || !Array.isArray(value.legs)
+  ) throw new TypeError("Authenticated canary launch fee policy is invalid");
+
+  if (value.feeMode === "no-qualifying-market") {
+    if (
+      value.marketPathId !== null
+      || value.totalRatePpm !== 0
+      || value.totalRateBps !== 0
+      || value.chargeMode !== "none"
+      || value.normalProgrammableTenBpsApplied !== false
+      || value.legs.length !== 0
+    ) throw new TypeError("Authenticated canary launch fee policy is invalid");
+    return value.feeMode;
+  }
+
+  if (typeof value.marketPathId !== "string" || !SAFE_ID.test(value.marketPathId)) {
+    throw new TypeError("Authenticated canary launch fee policy is invalid");
+  }
+  for (const leg of value.legs) validateLaunchFeeLeg(leg);
+  if (value.feeMode === "standard-programmable-custom") {
+    const programmable = value.legs[0];
+    if (
+      value.providerId === "aeon"
+      || value.totalRatePpm !== 1000
+      || value.totalRateBps !== 10
+      || value.chargeMode !== "added-on-top"
+      || value.normalProgrammableTenBpsApplied !== true
+      || value.legs.length !== 1
+      || programmable.role !== "programmable"
+      || programmable.ratePpm !== 1000
+      || programmable.rateBps !== 10
+      || programmable.recipient.namespace !== "eip155:1"
+      || programmable.recipient.value !== PROGRAMMABLE_FEE_RECIPIENT
+    ) throw new TypeError("Authenticated canary launch fee policy is invalid");
+    return value.feeMode;
+  }
+
+  const [provider, programmable] = value.legs;
+  if (
+    value.providerId !== "aeon"
+    || value.totalRatePpm !== 2000
+    || value.totalRateBps !== 20
+    || value.chargeMode !== "included-in-partner-total"
+    || value.normalProgrammableTenBpsApplied !== false
+    || value.legs.length !== 2
+    || provider.role !== "provider"
+    || provider.ratePpm !== 1500
+    || provider.rateBps !== 15
+    || provider.recipient.namespace !== "eip155:1"
+    || provider.recipient.value.toLowerCase()
+      === PROGRAMMABLE_FEE_RECIPIENT.toLowerCase()
+    || programmable.role !== "programmable"
+    || programmable.ratePpm !== 500
+    || programmable.rateBps !== 5
+    || programmable.recipient.namespace !== "eip155:1"
+    || programmable.recipient.value !== PROGRAMMABLE_FEE_RECIPIENT
+  ) throw new TypeError("Authenticated canary launch fee policy is invalid");
+  return value.feeMode;
+}
+
+function validateLaunchFeeLeg(value) {
+  assertRecord(value, "Authenticated canary launch fee leg");
+  assertExactKeys(value, ["rateBps", "ratePpm", "recipient", "role"]);
+  assertRecord(value.recipient, "Authenticated canary launch fee recipient");
+  assertExactKeys(value.recipient, ["namespace", "value"]);
+  if (
+    !["provider", "programmable"].includes(value.role)
+    || ![500, 1000, 1500].includes(value.ratePpm)
+    || ![5, 10, 15].includes(value.rateBps)
+    || value.ratePpm !== value.rateBps * 100
+    || value.recipient.namespace !== "eip155:1"
+    || typeof value.recipient.value !== "string"
+    || !EVM_ADDRESS.test(value.recipient.value)
+    || value.recipient.value === "0x0000000000000000000000000000000000000000"
+  ) throw new TypeError("Authenticated canary launch fee leg is invalid");
+}
+
+function validateManualClaimPolicy(value, feeMode) {
+  if (feeMode === "no-qualifying-market") {
+    if (value !== null) {
+      throw new TypeError("Authenticated canary manual claim policy is invalid");
+    }
+    return;
+  }
+  assertRecord(value, "Authenticated canary manual claim policy");
+  assertExactKeys(value, [
+    "accruedSelector", "asset", "claimSelector", "discoveryMode",
+    "expectedProgrammableFeeBps", "feeBpsSelector", "recipient", "recipientSelector",
+    "schemaVersion", "sourceInterfaceId", "sourceRole", "totalClaimedSelector",
+  ]);
+  if (
+    value.schemaVersion !== "programmable.custom-manual-claim-policy.v1"
+    || value.discoveryMode !== "custom-registry-v1-primary-contract"
+    || value.sourceRole !== "primary-contract"
+    || value.asset !== "0x0000000000000000000000000000000000000000"
+    || value.recipient !== PROGRAMMABLE_FEE_RECIPIENT
+    || value.claimSelector !== "0xb9d2fad0"
+    || value.accruedSelector !== "0x3129853d"
+    || value.totalClaimedSelector !== "0x4a383b32"
+    || value.recipientSelector !== "0x424ff2a5"
+    || value.feeBpsSelector !== "0x32c0314d"
+    || value.sourceInterfaceId !== "0x808cb67a"
+    || value.expectedProgrammableFeeBps
+      !== (feeMode === "standard-programmable-custom" ? 10 : 5)
+  ) throw new TypeError("Authenticated canary manual claim policy is invalid");
 }
 
 function validateForeignApplicationDenial(value) {
