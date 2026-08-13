@@ -71,8 +71,8 @@ const projectNames = Object.freeze([
   ["jesse", "stahl"].join("[-_ ]?"),
 ]);
 const applicantIdentityPatterns = Object.freeze([
-  new RegExp(`\\b${["a", "eon"].join("")}\\b`, "iu"),
-  new RegExp(`\\b${["based", "bid"].join("")}\\b`, "iu"),
+  new RegExp(`(?:\\b${["a", "eon"].join("")}\\b|${["aeon", "framework"].join("")})`, "iu"),
+  new RegExp(`(?:\\b${["based", "bid"].join("")}\\b|\\b${["based", "bid", "x"].join("")}\\b)`, "iu"),
 ]);
 const applicantCardMarkers = Object.freeze([
   ["13253", "24453"].join(""),
