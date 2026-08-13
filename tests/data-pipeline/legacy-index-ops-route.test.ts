@@ -23,6 +23,13 @@ import { GET as getClosedAlias } from "../../app/api/ops/index/route";
 import { GET as getCanonicalIndex } from "../../app/api/ops/index-v2/route";
 
 const SECRET = "legacy-index-test-secret-32-characters";
+const deployment = Object.freeze({
+  status: "ready" as const,
+  rpcProviderIds: Object.freeze({
+    primary: "drpc" as const,
+    secondary: "quicknode" as const,
+  }),
+});
 
 function request(secret = SECRET) {
   return new NextRequest("https://programmable.family/api/ops/index-v2", {
@@ -34,7 +41,7 @@ describe("legacy index operations routes", () => {
   beforeEach(() => {
     process.env.CRON_SECRET = SECRET;
     Object.values(mocks).forEach((mock) => mock.mockReset());
-    mocks.getOperationalOnchainDeployment.mockReturnValue({ status: "ready" });
+    mocks.getOperationalOnchainDeployment.mockReturnValue(deployment);
     mocks.readLiveExploreModel.mockResolvedValue({ status: "ready" });
     mocks.writeDurableExploreModel.mockResolvedValue({
       blockNumber: "25600000",
@@ -87,7 +94,12 @@ describe("legacy index operations routes", () => {
       tokenCount: 265,
     });
     expect(mocks.readLiveExploreModel).toHaveBeenCalledTimes(1);
+    expect(mocks.readLiveExploreModel).toHaveBeenCalledWith(deployment);
     expect(mocks.writeDurableExploreModel).toHaveBeenCalledTimes(1);
+    expect(mocks.writeDurableExploreModel).toHaveBeenCalledWith(
+      deployment,
+      { status: "ready" },
+    );
     expect(mocks.writePortfolioHistorySnapshot).toHaveBeenCalledTimes(1);
   });
 

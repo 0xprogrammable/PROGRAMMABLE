@@ -763,6 +763,11 @@ describe("read-model operations source contract", () => {
   it.each([
     ["health route", "app/api/ops/health/route.ts"],
     ["RPC health runtime", "lib/onchain/rpc-health.ts"],
+    ["RPC deployment config", "lib/onchain/config.ts"],
+    [
+      "RPC provider config",
+      "lib/onchain/website-rpc-providers.server.ts",
+    ],
   ])("rejects unreviewed %s bytes", (_label, path) => {
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: {

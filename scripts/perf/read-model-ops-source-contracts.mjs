@@ -40,7 +40,15 @@ const APPROVED_OPERATIONS = Object.freeze({
         }),
         rpcRuntime: Object.freeze({
           path: "lib/onchain/rpc-health.ts",
-          sha256: "4c8e5fb0f879ef72f2e8d742886b61b004de55fc59a440ef34893b352c33f865",
+          sha256: "b88c14b6e537c04acc1684157c0e801b457f97205300fb1847f72865d30bdecd",
+        }),
+        deploymentConfig: Object.freeze({
+          path: "lib/onchain/config.ts",
+          sha256: "715ee5b492d8ec7ed9d3870286f09debb344f9cdb05556a41ab8e50d0aa23cb2",
+        }),
+        providerConfig: Object.freeze({
+          path: "lib/onchain/website-rpc-providers.server.ts",
+          sha256: "12018bf29c2521b3fbae2c64ba2e93d586e0f9978c36403f24249becb71f07ed",
         }),
       }),
     }),
@@ -823,6 +831,16 @@ function legacySchedulerWatchdogIsFailClosed(
     binding.rpcProof?.maximumHeadAgeSeconds === 300 &&
     sourceBindingMatches(source, binding.rpcProof?.healthRoute, expectedSha256Overrides) &&
     sourceBindingMatches(source, binding.rpcProof?.rpcRuntime, expectedSha256Overrides) &&
+    sourceBindingMatches(
+      source,
+      binding.rpcProof?.deploymentConfig,
+      expectedSha256Overrides,
+    ) &&
+    sourceBindingMatches(
+      source,
+      binding.rpcProof?.providerConfig,
+      expectedSha256Overrides,
+    ) &&
     workflowSource.includes('name: Refresh production read model') &&
     workflowSource.includes('    - cron: "2-57/5 * * * *"') &&
     workflowSource.includes("  workflow_dispatch:") &&
