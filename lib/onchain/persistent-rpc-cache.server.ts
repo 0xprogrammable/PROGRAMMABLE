@@ -1680,6 +1680,33 @@ function contentLength(headers: Readonly<{ get(name: string): string | null }>) 
   return parsed;
 }
 
+function normalizedBlobEtag(value: string) {
+  return value.trim().replace(/^W\//u, "");
+}
+
+export function bindPrivateBlobReadMetadata(input: Readonly<{
+  responseEtag: string;
+  headEtag: string;
+  headSize: number;
+}>) {
+  const responseEtag = normalizedBlobEtag(input.responseEtag);
+  const headEtag = normalizedBlobEtag(input.headEtag);
+  if (
+    responseEtag.length < 1 ||
+    headEtag.length < 1 ||
+    responseEtag !== headEtag
+  ) {
+    fail("Persistent RPC Blob changed while it was being read");
+  }
+  if (!Number.isSafeInteger(input.headSize) || input.headSize < 0) {
+    fail("Persistent RPC Blob HEAD size is invalid");
+  }
+  return {
+    etag: input.headEtag,
+    declaredSize: input.headSize,
+  } as const;
+}
+
 export async function readBoundedBlobJson(input: Readonly<{
   stream: ReadableStream<Uint8Array>;
   maximumBytes: number;
@@ -1761,7 +1788,7 @@ export async function readBoundedBlobJson(input: Readonly<{
 function blobStore(token: string): PersistentRpcCacheStore {
   return {
     async read(path) {
-      const { get } = await import("@vercel/blob");
+      const { get, head } = await import("@vercel/blob");
       const result = await get(path, {
         access: "private",
         token,
@@ -1769,13 +1796,29 @@ function blobStore(token: string): PersistentRpcCacheStore {
       });
       if (!result || result.statusCode !== 200 || !result.stream) return null;
       const maximumBytes = persistentRpcCachePathByteLimit(path);
+      let metadata;
+      try {
+        const current = await head(path, { token });
+        metadata = bindPrivateBlobReadMetadata({
+          responseEtag: result.blob.etag,
+          headEtag: current.etag,
+          headSize: current.size,
+        });
+      } catch (error) {
+        await result.stream.cancel(
+          "Persistent RPC Blob metadata could not be bound",
+        );
+        throw error;
+      }
       return {
-        etag: result.blob.etag,
+        etag: metadata.etag,
         value: await readBoundedBlobJson({
           stream: result.stream,
           maximumBytes,
-          declaredSize: result.blob.size,
-          declaredContentLength: contentLength(result.headers),
+          declaredSize: metadata.declaredSize,
+          declaredContentLength: result.headers.get("content-encoding")
+            ? null
+            : contentLength(result.headers),
         }),
       };
     },
