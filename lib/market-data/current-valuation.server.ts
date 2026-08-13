@@ -11,8 +11,9 @@ import {
   type ValuedExploreEntry,
 } from "../explore-financial-data";
 import {
-  readOfficialV4LiquidityEvidence,
+  readOfficialV4LiquidityEvidenceSnapshot,
   type OfficialV4LiquidityEvidenceV1,
+  type OfficialV4LiquiditySnapshotV1,
 } from "../onchain/uniswap-v4-subgraph";
 import type {
   ExploreSnapshot,
@@ -31,6 +32,22 @@ export const CURRENT_EVIDENCE_ROUTE_DEADLINE_MS = 4_500;
 export type CurrentEvidenceSnapshotOutcome =
   | Readonly<{ status: "fulfilled"; value: ExploreSnapshot | null }>
   | Readonly<{ status: "rejected"; error: unknown }>;
+
+export type ExploreLiquiditySnapshotV1 =
+  | OfficialV4LiquiditySnapshotV1
+  | Readonly<{ chainId: 1; blockNumber: "none"; blockHash: "none" }>;
+
+const NO_LIQUIDITY_SNAPSHOT = {
+  chainId: 1,
+  blockNumber: "none",
+  blockHash: "none",
+} as const satisfies ExploreLiquiditySnapshotV1;
+
+function concreteLiquiditySnapshot(
+  snapshot: ExploreLiquiditySnapshotV1 | undefined,
+): snapshot is OfficialV4LiquiditySnapshotV1 {
+  return snapshot !== undefined && snapshot.blockNumber !== "none";
+}
 
 function withoutUnevidencedCurrentBitqueryValuation(
   entry: ValuedExploreEntry,
@@ -261,7 +278,7 @@ function classicNativeToken(entry: ExploreEntry): entry is Extract<
  * current FDV only from the independently bound StateView/Chainlink and
  * official-v4 liquidity evidence paths.
  */
-export async function valueExploreEntriesWithCurrentEvidence(input: Readonly<{
+type ValueExploreEntriesWithCurrentEvidenceInput = Readonly<{
   entries: readonly ExploreEntry[];
   marketByToken:
     | ReadonlyMap<string, TokenMarketDataV1>
@@ -277,7 +294,16 @@ export async function valueExploreEntriesWithCurrentEvidence(input: Readonly<{
   allowHistoricalBitqueryFallback?: boolean;
   timeoutMs?: number;
   signal?: AbortSignal;
-}>): Promise<ValuedExploreEntry[]> {
+  liquiditySnapshot?: ExploreLiquiditySnapshotV1;
+}>;
+
+async function valueExploreEntriesWithCurrentEvidenceInternal(
+  input: ValueExploreEntriesWithCurrentEvidenceInput & Readonly<{
+    captureLiquiditySnapshot?: (
+      snapshot: ExploreLiquiditySnapshotV1,
+    ) => void;
+  }>,
+): Promise<ValuedExploreEntry[]> {
   const candidates = input.entries.filter(classicNativeToken);
   const timeoutMs = input.timeoutMs ?? CURRENT_EVIDENCE_ROUTE_DEADLINE_MS;
   const deployment = input.deployment?.chainId === 1
@@ -293,7 +319,8 @@ export async function valueExploreEntriesWithCurrentEvidence(input: Readonly<{
           : { status: "fulfilled", value: value as ExploreSnapshot | null },
       (error: unknown) => ({ status: "rejected" as const, error }),
     );
-  const canReadCurrentEvidence = candidates.length > 0 &&
+  const canReadCurrentEvidence =
+    (candidates.length > 0 || input.requireCompleteLiquidityCoverage === true) &&
     timeoutMs > 0 &&
     deployment !== null;
 
@@ -308,6 +335,26 @@ export async function valueExploreEntriesWithCurrentEvidence(input: Readonly<{
           throw new Error(
             "Current market evidence reference head is unavailable",
           );
+        }
+        const referenceHead = {
+          chainId: 1 as const,
+          blockNumber: operationalSnapshot.blockNumber,
+          blockHash: operationalSnapshot.blockHash,
+        };
+        if (candidates.length === 0) {
+          if (
+            input.liquiditySnapshot &&
+            input.liquiditySnapshot.blockNumber !== "none"
+          ) {
+            throw new Error("Explore liquidity snapshot changed");
+          }
+          return {
+            status: "complete" as const,
+            liquidityByPool: new Map(),
+            liquidityRequestedPools: new Set<string>(),
+            pricedByToken: new Map<string, LauncherToken>(),
+            liquiditySnapshot: NO_LIQUIDITY_SNAPSHOT,
+          };
         }
         const pricedSnapshotRead = withSameBlockEthUsdQuote({
           deployment,
@@ -390,27 +437,53 @@ export async function valueExploreEntriesWithCurrentEvidence(input: Readonly<{
         const liquidityRequestedPools = new Set(
           liquidityCandidates.map((candidate) => candidate.poolId.toLowerCase()),
         );
+        if (liquidityCandidates.length === 0) {
+          if (
+            input.liquiditySnapshot &&
+            input.liquiditySnapshot.blockNumber !== "none"
+          ) {
+            throw new Error("Explore liquidity snapshot changed");
+          }
+          return {
+            status: "complete" as const,
+            liquidityByPool: new Map(),
+            liquidityRequestedPools,
+            pricedByToken,
+            liquiditySnapshot: NO_LIQUIDITY_SNAPSHOT,
+          };
+        }
+        if (input.liquiditySnapshot?.blockNumber === "none") {
+          throw new Error("Explore liquidity snapshot changed");
+        }
+        const requestedLiquiditySnapshot = concreteLiquiditySnapshot(
+            input.liquiditySnapshot,
+          )
+          ? input.liquiditySnapshot
+          : undefined;
         let liquidityCoverageFailed = false;
-        const liquidityEvidence = liquidityCandidates.length === 0
-          ? [] as readonly OfficialV4LiquidityEvidenceV1[]
-          : await readOfficialV4LiquidityEvidence({
+        const liquidityRead = await readOfficialV4LiquidityEvidenceSnapshot({
               tokens: liquidityCandidates,
-              referenceHead: {
-                chainId: 1,
-                blockNumber: operationalSnapshot.blockNumber,
-                blockHash: operationalSnapshot.blockHash,
-              },
+              referenceHead,
+              ...(requestedLiquiditySnapshot
+                ? { liquiditySnapshot: requestedLiquiditySnapshot }
+                : {}),
               now: input.now,
             }, { signal }).catch((error) => {
               if (input.requireCompleteLiquidityCoverage) throw error;
               liquidityCoverageFailed = true;
-              return [] as readonly OfficialV4LiquidityEvidenceV1[];
+              return {
+                evidence: [] as readonly OfficialV4LiquidityEvidenceV1[],
+                snapshot: null,
+              };
             });
         if (liquidityCoverageFailed) {
           return { status: "source-unavailable" as const };
         }
+        if (input.requireCompleteLiquidityCoverage && !liquidityRead.snapshot) {
+          throw new Error("Current liquidity snapshot is unavailable");
+        }
         const liquidityByPool = new Map(
-          liquidityEvidence.map((evidence) => [
+          liquidityRead.evidence.map((evidence) => [
             evidence.identity.poolId.toLowerCase(),
             evidence,
           ]),
@@ -420,6 +493,7 @@ export async function valueExploreEntriesWithCurrentEvidence(input: Readonly<{
           liquidityByPool,
           liquidityRequestedPools,
           pricedByToken,
+          liquiditySnapshot: liquidityRead.snapshot,
         };
       }, timeoutMs, input.signal).then(
       (value) => ({ status: "fulfilled" as const, value }),
@@ -440,7 +514,10 @@ export async function valueExploreEntriesWithCurrentEvidence(input: Readonly<{
       input.allowHistoricalBitqueryFallback === true,
     ),
   );
-  if (candidates.length === 0) return baseEntries;
+  if (
+    candidates.length === 0 &&
+    input.requireCompleteLiquidityCoverage !== true
+  ) return baseEntries;
   if (!canReadCurrentEvidence || currentEvidenceOutcome === null) {
     if (input.requireCompleteLiquidityCoverage) {
       throw new Error(timeoutMs <= 0
@@ -456,8 +533,14 @@ export async function valueExploreEntriesWithCurrentEvidence(input: Readonly<{
     return baseEntries;
   }
   if (outcome.value.status === "source-unavailable") return baseEntries;
-  const { liquidityByPool, liquidityRequestedPools, pricedByToken } =
+  const {
+    liquidityByPool,
+    liquidityRequestedPools,
+    pricedByToken,
+    liquiditySnapshot,
+  } =
     outcome.value;
+  if (liquiditySnapshot) input.captureLiquiditySnapshot?.(liquiditySnapshot);
   return marketEntries.map((entry) => {
     if (entry.exploreKind !== "token") return entry;
     const priced = pricedByToken.get(entry.tokenAddress.toLowerCase());
@@ -491,4 +574,30 @@ export async function valueExploreEntriesWithCurrentEvidence(input: Readonly<{
       "source-unavailable",
     );
   });
+}
+
+export async function valueExploreEntriesWithCurrentEvidence(
+  input: ValueExploreEntriesWithCurrentEvidenceInput,
+): Promise<ValuedExploreEntry[]> {
+  return valueExploreEntriesWithCurrentEvidenceInternal(input);
+}
+
+export async function valueExploreEntriesWithCurrentEvidenceSnapshot(
+  input: ValueExploreEntriesWithCurrentEvidenceInput,
+): Promise<Readonly<{
+  entries: ValuedExploreEntry[];
+  liquiditySnapshot: ExploreLiquiditySnapshotV1;
+}>> {
+  let liquiditySnapshot: ExploreLiquiditySnapshotV1 | null = null;
+  const entries = await valueExploreEntriesWithCurrentEvidenceInternal({
+    ...input,
+    requireCompleteLiquidityCoverage: true,
+    captureLiquiditySnapshot: (snapshot) => {
+      liquiditySnapshot = snapshot;
+    },
+  });
+  if (liquiditySnapshot === null) {
+    throw new Error("Current liquidity snapshot is unavailable");
+  }
+  return { entries, liquiditySnapshot };
 }

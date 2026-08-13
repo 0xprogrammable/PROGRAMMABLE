@@ -128,6 +128,7 @@ export async function GET(request: NextRequest) {
       ? settleCurrentEvidenceSnapshot({
           read: (signal) => readVerifiedOperationalMarketSnapshot(
             currentMarketDeployment,
+            undefined,
             { signal },
           ),
           requireComplete: false,

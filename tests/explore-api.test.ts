@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   hydrateMissingCanonicalTokenSupplyV1: vi.fn(),
   attachBitqueryMarketDataToValuedEntries: vi.fn(),
   valueExploreEntriesWithCurrentEvidence: vi.fn(),
+  valueExploreEntriesWithCurrentEvidenceSnapshot: vi.fn(),
   settleCurrentEvidenceSnapshot: vi.fn(),
   safeAlchemyError: vi.fn((error) => error),
 }));
@@ -90,6 +91,8 @@ vi.mock("../lib/market-data/current-valuation.server", () => ({
   settleCurrentEvidenceSnapshot: mocks.settleCurrentEvidenceSnapshot,
   valueExploreEntriesWithCurrentEvidence:
     mocks.valueExploreEntriesWithCurrentEvidence,
+  valueExploreEntriesWithCurrentEvidenceSnapshot:
+    mocks.valueExploreEntriesWithCurrentEvidenceSnapshot,
 }));
 
 import {
@@ -195,6 +198,57 @@ const snapshot = {
   blockHash: `0x${"55".repeat(32)}` as const,
   confirmations: 12,
 };
+const liquiditySnapshot = {
+  chainId: 1 as const,
+  blockNumber: "25629999",
+  blockHash: `0x${"44".repeat(32)}` as const,
+};
+
+type ValuationSnapshotBody = Readonly<{
+  schemaVersion: "programmable.explore-valuation-snapshot.v1";
+  chainId: 1;
+  blockNumber: string;
+  blockHash: string;
+  liquidityBlockNumber: string;
+  liquidityBlockHash: string;
+  rankingCommitment: string;
+  sort: "market-cap" | "market-cap-asc";
+  query: string;
+  socials: "yes" | "no" | null;
+  pageSize: number;
+}>;
+
+function valuationReplayQuery(
+  valuationSnapshot: ValuationSnapshotBody,
+  input: Readonly<{ page: number; limit: number; sort?: string }>,
+) {
+  return new URLSearchParams({
+    sort: input.sort ?? valuationSnapshot.sort,
+    page: String(input.page),
+    limit: String(input.limit),
+    valuationBlock: valuationSnapshot.blockNumber,
+    valuationBlockHash: valuationSnapshot.blockHash,
+    liquidityBlock: valuationSnapshot.liquidityBlockNumber,
+    liquidityBlockHash: valuationSnapshot.liquidityBlockHash,
+    rankingCommitment: valuationSnapshot.rankingCommitment,
+  }).toString();
+}
+
+function fixedValuationReplayQuery(
+  overrides: Readonly<Record<string, string>> = {},
+) {
+  return new URLSearchParams({
+    sort: "market-cap",
+    page: "2",
+    limit: "10",
+    valuationBlock: snapshot.blockNumber,
+    valuationBlockHash: snapshot.blockHash,
+    liquidityBlock: liquiditySnapshot.blockNumber,
+    liquidityBlockHash: liquiditySnapshot.blockHash,
+    rankingCommitment: `sha256:${"aa".repeat(32)}`,
+    ...overrides,
+  }).toString();
+}
 
 function readyModel(): ExploreReadModel {
   return {
@@ -275,7 +329,18 @@ describe("Explore API Bitquery market boundary", () => {
       rpcUrl: "https://current-primary.example",
       rpcUrlSecondary: "https://current-secondary.example",
     });
-    mocks.readVerifiedOperationalMarketSnapshot.mockResolvedValue(snapshot);
+    mocks.readVerifiedOperationalMarketSnapshot.mockImplementation(
+      async (_deployment, expected?: {
+        blockNumber: string;
+        blockHash: `0x${string}`;
+      }) => expected
+        ? {
+            ...snapshot,
+            blockNumber: expected.blockNumber,
+            blockHash: expected.blockHash,
+          }
+        : snapshot,
+    );
     mocks.settleCurrentEvidenceSnapshot.mockImplementation(
       async ({
         read,
@@ -383,6 +448,17 @@ describe("Explore API Bitquery market boundary", () => {
               };
         });
       },
+    );
+    mocks.valueExploreEntriesWithCurrentEvidenceSnapshot.mockImplementation(
+      async (input: Parameters<
+        typeof mocks.valueExploreEntriesWithCurrentEvidence
+      >[0]) => ({
+        entries: await mocks.valueExploreEntriesWithCurrentEvidence({
+          ...input,
+          requireCompleteLiquidityCoverage: true,
+        }),
+        liquiditySnapshot: input.liquiditySnapshot ?? liquiditySnapshot,
+      }),
     );
   });
 
@@ -642,6 +718,9 @@ describe("Explore API Bitquery market boundary", () => {
     "q=token&q=other",
     "sort=newest&extra=1",
     "socials=maybe",
+    "page=02",
+    "page=0",
+    "limit=00",
   ])("rejects non-canonical query shapes before identity or market reads: %s", async (query) => {
     const response = await GET(
       new NextRequest(`http://localhost/api/explore?${query}`),
@@ -649,6 +728,33 @@ describe("Explore API Bitquery market boundary", () => {
 
     expect(response.status).toBe(400);
     expect(mocks.readAlchemyExploreModel).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    `sort=market-cap&page=2&valuationBlock=${snapshot.blockNumber}`,
+    `sort=market-cap&page=2&valuationBlockHash=${snapshot.blockHash}`,
+    `sort=market-cap&page=2&rankingCommitment=sha256:${"aa".repeat(32)}`,
+    `sort=market-cap&page=1&valuationBlock=${snapshot.blockNumber}` +
+      `&valuationBlockHash=${snapshot.blockHash}` +
+      `&rankingCommitment=sha256:${"aa".repeat(32)}`,
+    `sort=newest&page=2&valuationBlock=${snapshot.blockNumber}` +
+      `&valuationBlockHash=${snapshot.blockHash}` +
+      `&rankingCommitment=sha256:${"aa".repeat(32)}`,
+    fixedValuationReplayQuery({ valuationBlock: "1".repeat(79) }),
+    fixedValuationReplayQuery({ liquidityBlock: "2147483648" }),
+    fixedValuationReplayQuery({
+      liquidityBlock: "none",
+      liquidityBlockHash: liquiditySnapshot.blockHash,
+    }),
+  ])("rejects incomplete or inapplicable valuation snapshots: %s", async (query) => {
+    const response = await GET(
+      new NextRequest(`http://localhost/api/explore?${query}`),
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(mocks.readAlchemyExploreModel).not.toHaveBeenCalled();
+    expect(mocks.readVerifiedOperationalMarketSnapshot).not.toHaveBeenCalled();
   });
 
   it("fails closed when the canonical source and durable fallback are unavailable", async () => {
@@ -717,6 +823,7 @@ describe("Explore API Bitquery market boundary", () => {
         rpcUrl: "https://current-primary.example",
         rpcUrlSecondary: "https://current-secondary.example",
       }),
+      undefined,
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(mocks.valueExploreEntriesWithCurrentEvidence).toHaveBeenCalledWith(
@@ -735,6 +842,19 @@ describe("Explore API Bitquery market boundary", () => {
       totalPages: 1,
       sort: "market-cap",
       sortMetric: "fdv",
+      valuationSnapshot: {
+        schemaVersion: "programmable.explore-valuation-snapshot.v1",
+        chainId: 1,
+        blockNumber: snapshot.blockNumber,
+        blockHash: snapshot.blockHash,
+        liquidityBlockNumber: liquiditySnapshot.blockNumber,
+        liquidityBlockHash: liquiditySnapshot.blockHash,
+        rankingCommitment: expect.stringMatching(/^sha256:[0-9a-f]{64}$/u),
+        sort: "market-cap",
+        query: "",
+        socials: null,
+        pageSize: 100,
+      },
       dataQuality: {
         schemaVersion: "programmable.explore-data-quality.v1",
         status: "complete",
@@ -811,6 +931,259 @@ describe("Explore API Bitquery market boundary", () => {
     expect(
       mocks.readBitqueryTokenMarketDataV1.mock.calls[0]?.[0],
     ).toHaveLength(30);
+  });
+
+  it("replays later market-cap pages against the exact first-page ranking", async () => {
+    const firstResponse = await GET(new NextRequest(
+      "http://localhost/api/explore?sort=market-cap&page=1&limit=10",
+    ));
+    const firstBody = await firstResponse.json();
+    const valuationSnapshot = firstBody.valuationSnapshot as
+      ValuationSnapshotBody;
+
+    const secondResponse = await GET(new NextRequest(
+      `http://localhost/api/explore?${valuationReplayQuery(
+        valuationSnapshot,
+        { page: 2, limit: 10 },
+      )}`,
+    ));
+    const secondBody = await secondResponse.json();
+
+    expect(firstResponse.status).toBe(200);
+    expect(secondResponse.status).toBe(200);
+    expect(secondBody).toMatchObject({
+      page: 2,
+      total: 30,
+      totalPages: 3,
+      valuationSnapshot,
+    });
+    expect(mocks.readVerifiedOperationalMarketSnapshot).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        rpcUrl: "https://current-primary.example",
+        rpcUrlSecondary: "https://current-secondary.example",
+      }),
+      {
+        blockNumber: valuationSnapshot.blockNumber,
+        blockHash: valuationSnapshot.blockHash,
+      },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(mocks.hydrateMissingCanonicalTokenSupplyV1).toHaveBeenLastCalledWith(
+      expect.any(Array),
+      {
+        deployment: expect.objectContaining({
+          rpcUrl: "https://current-primary.example",
+          rpcUrlSecondary: "https://current-secondary.example",
+        }),
+        snapshot: {
+          blockNumber: valuationSnapshot.blockNumber,
+          blockHash: valuationSnapshot.blockHash,
+        },
+      },
+    );
+    const ids = [...firstBody.tokens, ...secondBody.tokens].map(
+      (entry: { id: string }) => entry.id,
+    );
+    expect(new Set(ids).size).toBe(20);
+  });
+
+  it("returns and replays the explicit-none liquidity mode", async () => {
+    mocks.valueExploreEntriesWithCurrentEvidenceSnapshot.mockImplementation(
+      async (input: Parameters<
+        typeof mocks.valueExploreEntriesWithCurrentEvidence
+      >[0]) => ({
+        entries: await mocks.valueExploreEntriesWithCurrentEvidence({
+          ...input,
+          requireCompleteLiquidityCoverage: true,
+        }),
+        liquiditySnapshot: input.liquiditySnapshot ?? {
+          chainId: 1,
+          blockNumber: "none",
+          blockHash: "none",
+        },
+      }),
+    );
+    const firstResponse = await GET(new NextRequest(
+      "http://localhost/api/explore?sort=market-cap&page=1&limit=10",
+    ));
+    const firstBody = await firstResponse.json();
+    const valuationSnapshot = firstBody.valuationSnapshot as
+      ValuationSnapshotBody;
+    const secondResponse = await GET(new NextRequest(
+      `http://localhost/api/explore?${valuationReplayQuery(
+        valuationSnapshot,
+        { page: 2, limit: 10 },
+      )}`,
+    ));
+    const secondBody = await secondResponse.json();
+
+    expect(firstResponse.status).toBe(200);
+    expect(secondResponse.status).toBe(200);
+    expect(valuationSnapshot).toMatchObject({
+      liquidityBlockNumber: "none",
+      liquidityBlockHash: "none",
+    });
+    expect(secondBody.valuationSnapshot).toEqual(valuationSnapshot);
+    expect(
+      mocks.valueExploreEntriesWithCurrentEvidenceSnapshot.mock.calls[1]?.[0],
+    ).toMatchObject({
+      liquiditySnapshot: {
+        chainId: 1,
+        blockNumber: "none",
+        blockHash: "none",
+      },
+    });
+  });
+
+  it.each([
+    ["adds", (tokens: LauncherToken[]) => [...tokens, token(31)]],
+    ["removes", (tokens: LauncherToken[]) => tokens.slice(0, -1)],
+    ["changes", (tokens: LauncherToken[]) => tokens.map((entry, index) =>
+      index === 0
+        ? { ...entry, launchedAt: "2026-08-01T12:34:56.000Z" }
+        : entry)],
+  ] as const)("fails closed before Bitquery when identity projection %s", async (
+    _label,
+    mutate,
+  ) => {
+    const firstResponse = await GET(new NextRequest(
+      "http://localhost/api/explore?sort=market-cap&page=1&limit=10",
+    ));
+    const firstBody = await firstResponse.json();
+    const valuationSnapshot = firstBody.valuationSnapshot as
+      ValuationSnapshotBody;
+    const nextModel = readyModel();
+    mocks.readAlchemyExploreModel.mockResolvedValue({
+      ...nextModel,
+      tokens: mutate([...nextModel.tokens]),
+    });
+    mocks.readBitqueryTokenMarketDataV1.mockClear();
+
+    const response = await GET(new NextRequest(
+      `http://localhost/api/explore?${valuationReplayQuery(
+        valuationSnapshot,
+        { page: 2, limit: 10 },
+      )}`,
+    ));
+
+    expect(firstResponse.status).toBe(200);
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(mocks.readBitqueryTokenMarketDataV1).not.toHaveBeenCalled();
+  });
+
+  it("rejects a replay page beyond the recomputed snapshot before Bitquery", async () => {
+    const firstResponse = await GET(new NextRequest(
+      "http://localhost/api/explore?sort=market-cap&page=1&limit=10",
+    ));
+    const firstBody = await firstResponse.json();
+    const valuationSnapshot = firstBody.valuationSnapshot as
+      ValuationSnapshotBody;
+    mocks.readBitqueryTokenMarketDataV1.mockClear();
+
+    const response = await GET(new NextRequest(
+      `http://localhost/api/explore?${valuationReplayQuery(
+        valuationSnapshot,
+        { page: 4, limit: 10 },
+      )}`,
+    ));
+
+    expect(firstResponse.status).toBe(200);
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(mocks.readBitqueryTokenMarketDataV1).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["block hash", { blockHash: `0x${"66".repeat(32)}` }],
+    ["block number", { blockNumber: "25629999" }],
+    ["liquidity block hash", {
+      liquidityBlockHash: `0x${"77".repeat(32)}`,
+    }],
+    ["liquidity block number", { liquidityBlockNumber: "25629998" }],
+    ["ranking commitment", {
+      rankingCommitment: `sha256:${"aa".repeat(32)}`,
+    }],
+  ] as const)("fails closed when replay %s is mutated", async (_label, mutation) => {
+    const firstResponse = await GET(new NextRequest(
+      "http://localhost/api/explore?sort=market-cap&page=1&limit=10",
+    ));
+    const firstBody = await firstResponse.json();
+    const valuationSnapshot = {
+      ...(firstBody.valuationSnapshot as ValuationSnapshotBody),
+      ...mutation,
+    };
+
+    const response = await GET(new NextRequest(
+      `http://localhost/api/explore?${valuationReplayQuery(
+        valuationSnapshot,
+        { page: 2, limit: 10 },
+      )}`,
+    ));
+
+    expect(firstResponse.status).toBe(200);
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+  });
+
+  it("fails closed when an otherwise valid replay snapshot is no longer available", async () => {
+    const firstResponse = await GET(new NextRequest(
+      "http://localhost/api/explore?sort=market-cap&page=1&limit=10",
+    ));
+    const firstBody = await firstResponse.json();
+    const valuationSnapshot = firstBody.valuationSnapshot as
+      ValuationSnapshotBody;
+    mocks.readVerifiedOperationalMarketSnapshot.mockImplementationOnce(
+      async () => null,
+    );
+
+    const response = await GET(new NextRequest(
+      `http://localhost/api/explore?${valuationReplayQuery(
+        valuationSnapshot,
+        { page: 2, limit: 10 },
+      )}`,
+    ));
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+  });
+
+  it("keeps a 125-token market-cap traversal complete and duplicate-free", async () => {
+    mocks.readAlchemyExploreModel.mockResolvedValue({
+      ...readyModel(),
+      tokens: Array.from({ length: 125 }, (_, index) => ({
+        ...token(index + 1),
+        launchedAt: new Date(Date.UTC(2026, 6, 1, 0, 0, index)).toISOString(),
+      })),
+    });
+    const firstResponse = await GET(new NextRequest(
+      "http://localhost/api/explore?sort=market-cap&page=1&limit=100",
+    ));
+    const firstBody = await firstResponse.json();
+    const valuationSnapshot = firstBody.valuationSnapshot as
+      ValuationSnapshotBody;
+    const secondResponse = await GET(new NextRequest(
+      `http://localhost/api/explore?${valuationReplayQuery(
+        valuationSnapshot,
+        { page: 2, limit: 100 },
+      )}`,
+    ));
+    const secondBody = await secondResponse.json();
+    const symbols = [...firstBody.tokens, ...secondBody.tokens].map(
+      (entry: LauncherToken) => entry.symbol,
+    );
+
+    expect(firstResponse.status).toBe(200);
+    expect(secondResponse.status).toBe(200);
+    expect(firstBody).toMatchObject({ page: 1, total: 125, totalPages: 2 });
+    expect(secondBody).toMatchObject({ page: 2, total: 125, totalPages: 2 });
+    expect(symbols).toEqual(
+      Array.from({ length: 125 }, (_, index) => `T${125 - index}`),
+    );
+    expect(new Set(symbols).size).toBe(125);
+    expect(mocks.readBitqueryTokenMarketDataV1.mock.calls.map(
+      ([identities]) => identities.length,
+    )).toEqual([100, 25]);
   });
 
   it("sorts global current evidence before reading Bitquery for only the page", async () => {
@@ -1196,7 +1569,6 @@ describe("Explore API Bitquery market boundary", () => {
   });
 
   it.each([
-    ["lowest FDV", "sort=lowest-market-cap&page=3&limit=10"],
     ["social filter", "socials=yes&page=3&limit=10"],
     ["search", "q=token&page=3&limit=10"],
   ])("keeps all matching tokens paginated for %s", async (_label, query) => {
@@ -1218,6 +1590,40 @@ describe("Explore API Bitquery market boundary", () => {
       "operational+durable+postgres",
     );
     expect(response.headers.get("X-Programmable-Rpc-Provider")).toBeNull();
+    expect(response.headers.get("X-Programmable-Price-Source")).toBe(
+      "bitquery",
+    );
+  });
+
+  it("keeps all matching tokens paginated for lowest FDV with snapshot replay", async () => {
+    const firstResponse = await GET(new NextRequest(
+      "http://localhost/api/explore?sort=lowest-market-cap&page=1&limit=10",
+    ));
+    const firstBody = await firstResponse.json();
+    const valuationSnapshot = firstBody.valuationSnapshot as
+      ValuationSnapshotBody;
+    const response = await GET(new NextRequest(
+      `http://localhost/api/explore?${valuationReplayQuery(
+        valuationSnapshot,
+        { page: 3, limit: 10, sort: "market-cap-asc" },
+      )}`,
+    ));
+    const body = await response.json();
+
+    expect(firstResponse.status).toBe(200);
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      status: "ready",
+      page: 3,
+      pageSize: 10,
+      total: 30,
+      totalPages: 3,
+      valuationSnapshot,
+    });
+    expect(body.tokens).toHaveLength(10);
+    expect(response.headers.get("X-Programmable-Read-Source")).toBe(
+      "operational+durable+postgres",
+    );
     expect(response.headers.get("X-Programmable-Price-Source")).toBe(
       "bitquery",
     );

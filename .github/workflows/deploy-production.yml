@@ -1964,6 +1964,19 @@ jobs:
           grep -Fx "deployment_id=$EXPECTED_DEPLOYMENT_ID" "$binding_output"
           grep -Fx "target_url=$STAGED_TARGET_URL" "$binding_output"
 
+      - name: Gate exact staged operational health
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          STAGED_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
+          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
+          EXPECTED_GIT_HEAD: ${{ github.sha }}
+        run: >-
+          npm run perf:read-model:staged-health --
+          --target-url "$STAGED_TARGET_URL"
+          --deployment-id "$STAGED_DEPLOYMENT_ID"
+          --git-head "$EXPECTED_GIT_HEAD"
+
       - name: Record staged candidate handoff
         env:
           DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}

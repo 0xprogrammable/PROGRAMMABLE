@@ -71,6 +71,74 @@ const POOL_ANALYTICS_QUERY = `
   }
 `;
 
+const POOL_ANALYTICS_AT_BLOCK_QUERY = `
+  query ProgrammableExplorePoolsAtBlock(
+    $poolIds: [ID!]!
+    $first: Int!
+    $blockNumber: Int!
+  ) {
+    _meta(block: { number: $blockNumber }) {
+      deployment
+      block {
+        number
+        hash
+        timestamp
+      }
+      hasIndexingErrors
+    }
+    pools(
+      first: $first
+      where: { id_in: $poolIds }
+      orderBy: id
+      orderDirection: asc
+      block: { number: $blockNumber }
+    ) {
+      id
+      token0 { id decimals }
+      token1 { id decimals }
+      hooks
+      feeTier
+      tickSpacing
+      liquidity
+      sqrtPrice
+      tick
+      txCount
+      volumeUSD
+      totalValueLockedToken0
+      totalValueLockedToken1
+      totalValueLockedUSD
+    }
+  }
+`;
+
+const POOL_SNAPSHOT_QUERY = `
+  query ProgrammableExplorePoolSnapshot {
+    _meta {
+      deployment
+      block {
+        number
+        hash
+        timestamp
+      }
+      hasIndexingErrors
+    }
+  }
+`;
+
+const POOL_SNAPSHOT_AT_BLOCK_QUERY = `
+  query ProgrammableExplorePoolSnapshotAtBlock($blockNumber: Int!) {
+    _meta(block: { number: $blockNumber }) {
+      deployment
+      block {
+        number
+        hash
+        timestamp
+      }
+      hasIndexingErrors
+    }
+  }
+`;
+
 type Fetcher = (input: string, init?: RequestInit) => Promise<Response>;
 
 type ParsedPool = {
@@ -150,6 +218,14 @@ export type OfficialV4LiquidityReferenceHeadV1 = Readonly<{
   chainId: 1;
   blockNumber: string;
   blockHash: `0x${string}`;
+}>;
+
+export type OfficialV4LiquiditySnapshotV1 =
+  OfficialV4LiquidityReferenceHeadV1;
+
+export type OfficialV4LiquidityEvidenceSnapshotReadV1 = Readonly<{
+  evidence: readonly OfficialV4LiquidityEvidenceV1[];
+  snapshot: OfficialV4LiquiditySnapshotV1;
 }>;
 
 export class OfficialV4LiquidityEvidenceReadError extends Error {
@@ -440,6 +516,20 @@ export function parseOfficialV4SubgraphResponse(
   };
 }
 
+function parseOfficialV4SubgraphSnapshotResponse(value: unknown) {
+  if (
+    !isRecord(value) ||
+    !hasOnlyKeys(value, ["data"]) ||
+    !isRecord(value.data) ||
+    !hasOnlyKeys(value.data, ["_meta"])
+  ) {
+    return invalidResponse();
+  }
+  return parseOfficialV4SubgraphResponse({
+    data: { _meta: value.data._meta, pools: [] },
+  });
+}
+
 function validEndpoint(value: string) {
   try {
     const url = new URL(value);
@@ -530,6 +620,9 @@ async function fetchPoolAnalytics(input: {
   endpoint: string;
   apiKey: string;
   poolIds: string[];
+  referenceSnapshot?: OfficialV4LiquidityReferenceHeadV1;
+  cacheNamespace?: "display" | "liquidity";
+  metaOnly?: boolean;
   timeoutMs: number;
   fetcher: Fetcher;
   signal?: AbortSignal;
@@ -550,13 +643,27 @@ async function fetchPoolAnalytics(input: {
         authorization: `Bearer ${input.apiKey}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({
-        query: POOL_ANALYTICS_QUERY,
-        variables: {
-          poolIds: input.poolIds,
-          first: OFFICIAL_V4_SUBGRAPH_MAXIMUM_POOL_IDS,
-        },
-      }),
+      body: JSON.stringify(input.metaOnly
+        ? {
+            query: input.referenceSnapshot
+              ? POOL_SNAPSHOT_AT_BLOCK_QUERY
+              : POOL_SNAPSHOT_QUERY,
+            variables: input.referenceSnapshot
+              ? { blockNumber: Number(input.referenceSnapshot.blockNumber) }
+              : {},
+          }
+        : {
+            query: input.referenceSnapshot
+              ? POOL_ANALYTICS_AT_BLOCK_QUERY
+              : POOL_ANALYTICS_QUERY,
+            variables: {
+              poolIds: input.poolIds,
+              first: OFFICIAL_V4_SUBGRAPH_MAXIMUM_POOL_IDS,
+              ...(input.referenceSnapshot
+                ? { blockNumber: Number(input.referenceSnapshot.blockNumber) }
+                : {}),
+            },
+          }),
       cache: "no-store",
       signal: controller.signal,
     });
@@ -564,7 +671,10 @@ async function fetchPoolAnalytics(input: {
       throw new Error("Uniswap v4 subgraph request failed");
     }
     const body = await readBoundedResponseBody(response);
-    return parseOfficialV4SubgraphResponse(JSON.parse(body));
+    const parsed: unknown = JSON.parse(body);
+    return input.metaOnly
+      ? parseOfficialV4SubgraphSnapshotResponse(parsed)
+      : parseOfficialV4SubgraphResponse(parsed);
   } finally {
     clearTimeout(timeout);
     input.signal?.removeEventListener("abort", abortFromCaller);
@@ -584,8 +694,15 @@ function stateFor(fetcher: Fetcher) {
   return created;
 }
 
-function cacheKey(poolIds: readonly string[]) {
-  return [...poolIds].sort().join(",");
+function cacheKey(
+  poolIds: readonly string[],
+  referenceSnapshot?: OfficialV4LiquidityReferenceHeadV1,
+  cacheNamespace: "display" | "liquidity" = "display",
+) {
+  const pools = [...poolIds].sort().join(",");
+  return referenceSnapshot
+    ? `snapshot:${referenceSnapshot.blockNumber}:${referenceSnapshot.blockHash}:${pools}`
+    : `${cacheNamespace}:latest:${pools}`;
 }
 
 function pruneCache(state: FetcherState, now: number) {
@@ -603,6 +720,9 @@ async function fetchPoolAnalyticsCached(input: {
   endpoint: string;
   apiKey: string;
   poolIds: string[];
+  referenceSnapshot?: OfficialV4LiquidityReferenceHeadV1;
+  cacheNamespace?: "display" | "liquidity";
+  metaOnly?: boolean;
   timeoutMs: number;
   fetcher: Fetcher;
   signal?: AbortSignal;
@@ -610,7 +730,11 @@ async function fetchPoolAnalyticsCached(input: {
   input.signal?.throwIfAborted();
   const state = stateFor(input.fetcher);
   const now = Date.now();
-  const key = cacheKey(input.poolIds);
+  const key = cacheKey(
+    input.poolIds,
+    input.referenceSnapshot,
+    input.cacheNamespace,
+  );
   const cached = state.cache.get(key);
   if (cached && cached.expiresAt > now) return cached.response;
   if (cached) state.cache.delete(key);
@@ -742,6 +866,7 @@ function canonicalReferenceHead(
     typeof value.blockNumber !== "string" ||
     !/^(0|[1-9]\d*)$/.test(value.blockNumber) ||
     value.blockNumber.length > 78 ||
+    BigInt(value.blockNumber) > 2_147_483_647n ||
     typeof value.blockHash !== "string" ||
     !/^0x[0-9a-fA-F]{64}$/.test(value.blockHash)
   ) {
@@ -778,12 +903,38 @@ function referenceHeadLag(
   const lag = reference - indexed;
   if (
     lag > MAXIMUM_SUBGRAPH_LAG_BLOCKS ||
-    (lag === 0n &&
-      response.indexedBlockHash !== referenceHead.blockHash.toLowerCase())
+    (lag === 0n && response.indexedBlockHash !== referenceHead.blockHash)
   ) {
     return undefined;
   }
   return lag.toString();
+}
+
+function responseIsAheadOfReferenceHead(
+  response: ParsedResponse,
+  referenceHead: OfficialV4LiquidityReferenceHeadV1,
+) {
+  return BigInt(response.indexedBlockNumber) >
+    BigInt(referenceHead.blockNumber);
+}
+
+function responseMatchesLiquiditySnapshot(
+  response: ParsedResponse,
+  snapshot: OfficialV4LiquiditySnapshotV1,
+) {
+  return response.indexedBlockNumber === snapshot.blockNumber &&
+    response.indexedBlockHash === snapshot.blockHash;
+}
+
+function responseCoversExactly(
+  response: ParsedResponse,
+  requestedPoolIds: readonly string[],
+) {
+  const requested = new Set<string>(requestedPoolIds);
+  const returned = new Set<string>(response.pools.map((pool) => pool.id));
+  return returned.size === requested.size &&
+    [...requested].every((poolId) => returned.has(poolId)) &&
+    [...returned].every((poolId) => requested.has(poolId));
 }
 
 function isCurrentIndexedTime(response: ParsedResponse, now: Date) {
@@ -861,32 +1012,53 @@ function liquidityEvidence(
 /**
  * Reads independently attributable official Uniswap v4 subgraph pool TVL.
  *
- * Evidence is returned only for a canonical PoolKey, a fresh indexed block at
- * or behind the supplied reference head, and at least the public pool-TVL
- * eligibility floor. This aggregate TVL does not prove current-tick USD depth
- * or manipulation resistance. StateView's active-liquidity scalar is
- * deliberately not interpreted as reserves or TVL, and a missing or rejected
- * entry must stay unavailable.
+ * The first read selects one fresh Graph snapshot at or behind the supplied
+ * RPC reference head. Every later batch is pinned to that exact Graph block
+ * number, and its returned hash must match. A caller can supply the selected
+ * snapshot again to replay a continuation without mixing Graph states.
+ * Evidence is returned only for a canonical PoolKey and at least the public
+ * pool-TVL eligibility floor. This aggregate TVL does not prove current-tick
+ * USD depth or manipulation resistance. StateView's active-liquidity scalar
+ * is deliberately not interpreted as reserves or TVL, and a missing or
+ * rejected entry must stay unavailable.
  * An empty result means every eligible requested pool was covered but none
  * qualified. Invalid configuration or any failed batch rejects the whole read
  * so global ordering can never mistake partial coverage for complete coverage.
  */
-export async function readOfficialV4LiquidityEvidence(
+export async function readOfficialV4LiquidityEvidenceSnapshot(
   input: {
     tokens: readonly LauncherToken[];
     referenceHead: OfficialV4LiquidityReferenceHeadV1;
+    liquiditySnapshot?: OfficialV4LiquiditySnapshotV1;
     now?: Date;
   },
   options: OfficialV4SubgraphOptions = {},
-): Promise<readonly OfficialV4LiquidityEvidenceV1[]> {
+): Promise<OfficialV4LiquidityEvidenceSnapshotReadV1> {
   options.signal?.throwIfAborted();
   const eligibleTokens = input.tokens.filter(supportsOfficialPoolTvlEvidence);
-  if (eligibleTokens.length === 0) return [];
-
   const referenceHead = canonicalReferenceHead(input.referenceHead);
+  const requestedSnapshot = input.liquiditySnapshot === undefined
+    ? undefined
+    : canonicalReferenceHead(input.liquiditySnapshot);
   const now = input.now ?? new Date();
-  if (!referenceHead || !Number.isFinite(now.getTime())) {
+  if (
+    !referenceHead ||
+    (input.liquiditySnapshot !== undefined && !requestedSnapshot) ||
+    !Number.isFinite(now.getTime())
+  ) {
     throw new OfficialV4LiquidityEvidenceReadError("invalid-input");
+  }
+  if (requestedSnapshot) {
+    const requestedBlock = BigInt(requestedSnapshot.blockNumber);
+    const referenceBlock = BigInt(referenceHead.blockNumber);
+    if (
+      requestedBlock > referenceBlock ||
+      referenceBlock - requestedBlock > MAXIMUM_SUBGRAPH_LAG_BLOCKS ||
+      (requestedBlock === referenceBlock &&
+        requestedSnapshot.blockHash !== referenceHead.blockHash)
+    ) {
+      throw new OfficialV4LiquidityEvidenceReadError("invalid-input");
+    }
   }
 
   const apiKey =
@@ -898,17 +1070,83 @@ export async function readOfficialV4LiquidityEvidence(
   if (!validApiKey(apiKey) || !validEndpoint(endpoint)) {
     throw new OfficialV4LiquidityEvidenceReadError("invalid-config");
   }
+  const fetcher = options.fetcher ?? fetch;
+
+  if (eligibleTokens.length === 0) {
+    let response: ParsedResponse;
+    try {
+      response = await fetchPoolAnalyticsCached({
+        endpoint,
+        apiKey,
+        poolIds: [],
+        referenceSnapshot: requestedSnapshot,
+        cacheNamespace: "liquidity",
+        metaOnly: true,
+        timeoutMs: boundedTimeout(options.timeoutMs),
+        fetcher,
+        signal: options.signal,
+      });
+    } catch {
+      options.signal?.throwIfAborted();
+      throw new OfficialV4LiquidityEvidenceReadError("coverage-incomplete");
+    }
+    if (
+      requestedSnapshot === undefined &&
+      responseIsAheadOfReferenceHead(response, referenceHead)
+    ) {
+      try {
+        response = await fetchPoolAnalyticsCached({
+          endpoint,
+          apiKey,
+          poolIds: [],
+          referenceSnapshot: referenceHead,
+          cacheNamespace: "liquidity",
+          metaOnly: true,
+          timeoutMs: boundedTimeout(options.timeoutMs),
+          fetcher,
+          signal: options.signal,
+        });
+      } catch {
+        options.signal?.throwIfAborted();
+        throw new OfficialV4LiquidityEvidenceReadError(
+          "coverage-incomplete",
+        );
+      }
+      if (!responseMatchesLiquiditySnapshot(response, referenceHead)) {
+        throw new OfficialV4LiquidityEvidenceReadError(
+          "coverage-incomplete",
+        );
+      }
+    }
+    if (
+      referenceHeadLag(response, referenceHead) === undefined ||
+      (requestedSnapshot !== undefined &&
+        !responseMatchesLiquiditySnapshot(response, requestedSnapshot)) ||
+      !isCurrentIndexedTime(response, now)
+    ) {
+      throw new OfficialV4LiquidityEvidenceReadError("coverage-incomplete");
+    }
+    return {
+      evidence: [],
+      snapshot: {
+        chainId: 1,
+        blockNumber: response.indexedBlockNumber,
+        blockHash: response.indexedBlockHash,
+      },
+    };
+  }
 
   const poolIds = canonicalPoolIds(
     eligibleTokens,
     OFFICIAL_V4_LIQUIDITY_MAXIMUM_POOL_IDS_PER_READ + 1,
   );
-  if (poolIds.length === 0) return [];
+  if (poolIds.length === 0) {
+    throw new OfficialV4LiquidityEvidenceReadError("invalid-input");
+  }
   if (poolIds.length > OFFICIAL_V4_LIQUIDITY_MAXIMUM_POOL_IDS_PER_READ) {
     throw new OfficialV4LiquidityEvidenceReadError("invalid-input");
   }
 
-  const fetcher = options.fetcher ?? fetch;
   const requests: string[][] = [];
   for (
     let index = 0;
@@ -921,8 +1159,67 @@ export async function readOfficialV4LiquidityEvidence(
   }
 
   const responses: ParsedResponse[] = [];
+  let liquiditySnapshot = requestedSnapshot;
+  let requestIndex = 0;
+  if (!liquiditySnapshot) {
+    const requestedPoolIds = requests[0]!;
+    let response: ParsedResponse;
+    try {
+      response = await fetchPoolAnalyticsCached({
+        endpoint,
+        apiKey,
+        poolIds: requestedPoolIds,
+        cacheNamespace: "liquidity",
+        timeoutMs: boundedTimeout(options.timeoutMs),
+        fetcher,
+        signal: options.signal,
+      });
+    } catch {
+      options.signal?.throwIfAborted();
+      throw new OfficialV4LiquidityEvidenceReadError("coverage-incomplete");
+    }
+    if (responseIsAheadOfReferenceHead(response, referenceHead)) {
+      try {
+        response = await fetchPoolAnalyticsCached({
+          endpoint,
+          apiKey,
+          poolIds: requestedPoolIds,
+          referenceSnapshot: referenceHead,
+          cacheNamespace: "liquidity",
+          timeoutMs: boundedTimeout(options.timeoutMs),
+          fetcher,
+          signal: options.signal,
+        });
+      } catch {
+        options.signal?.throwIfAborted();
+        throw new OfficialV4LiquidityEvidenceReadError(
+          "coverage-incomplete",
+        );
+      }
+      if (!responseMatchesLiquiditySnapshot(response, referenceHead)) {
+        throw new OfficialV4LiquidityEvidenceReadError(
+          "coverage-incomplete",
+        );
+      }
+    }
+    if (
+      referenceHeadLag(response, referenceHead) === undefined ||
+      !responseCoversExactly(response, requestedPoolIds) ||
+      !isCurrentIndexedTime(response, now)
+    ) {
+      throw new OfficialV4LiquidityEvidenceReadError("coverage-incomplete");
+    }
+    liquiditySnapshot = {
+      chainId: 1,
+      blockNumber: response.indexedBlockNumber,
+      blockHash: response.indexedBlockHash,
+    };
+    responses.push(response);
+    requestIndex = 1;
+  }
+
   for (
-    let index = 0;
+    let index = requestIndex;
     index < requests.length;
     index += MAXIMUM_IN_FLIGHT_REQUESTS
   ) {
@@ -939,6 +1236,8 @@ export async function readOfficialV4LiquidityEvidence(
               endpoint,
               apiKey,
               poolIds: requestedPoolIds,
+              referenceSnapshot: liquiditySnapshot,
+              cacheNamespace: "liquidity",
               timeoutMs: boundedTimeout(options.timeoutMs),
               fetcher,
               signal: options.signal,
@@ -950,15 +1249,7 @@ export async function readOfficialV4LiquidityEvidence(
       throw new OfficialV4LiquidityEvidenceReadError("coverage-incomplete");
     }
     for (const result of completed) {
-      const requested = new Set<string>(result.requestedPoolIds);
-      const returned = new Set<string>(
-        result.response.pools.map((pool) => pool.id),
-      );
-      if (
-        returned.size !== requested.size ||
-        [...requested].some((poolId) => !returned.has(poolId)) ||
-        [...returned].some((poolId) => !requested.has(poolId))
-      ) {
+      if (!responseCoversExactly(result.response, result.requestedPoolIds)) {
         throw new OfficialV4LiquidityEvidenceReadError(
           "coverage-incomplete",
         );
@@ -967,13 +1258,21 @@ export async function readOfficialV4LiquidityEvidence(
     }
   }
 
+  if (!liquiditySnapshot) {
+    throw new OfficialV4LiquidityEvidenceReadError("coverage-incomplete");
+  }
+
   const responseByPoolId = new Map<
     string,
     { pool: ParsedPool; response: ParsedResponse; lagBlocks: string }
   >();
   for (const response of responses) {
     const lagBlocks = referenceHeadLag(response, referenceHead);
-    if (lagBlocks === undefined || !isCurrentIndexedTime(response, now)) {
+    if (
+      lagBlocks === undefined ||
+      !responseMatchesLiquiditySnapshot(response, liquiditySnapshot) ||
+      !isCurrentIndexedTime(response, now)
+    ) {
       throw new OfficialV4LiquidityEvidenceReadError("coverage-incomplete");
     }
     for (const pool of response.pools) {
@@ -999,7 +1298,22 @@ export async function readOfficialV4LiquidityEvidence(
     );
     if (item) evidence.push(item);
   }
-  return evidence;
+  return { evidence, snapshot: liquiditySnapshot };
+}
+
+export async function readOfficialV4LiquidityEvidence(
+  input: {
+    tokens: readonly LauncherToken[];
+    referenceHead: OfficialV4LiquidityReferenceHeadV1;
+    now?: Date;
+  },
+  options: OfficialV4SubgraphOptions = {},
+): Promise<readonly OfficialV4LiquidityEvidenceV1[]> {
+  if (input.tokens.filter(supportsOfficialPoolTvlEvidence).length === 0) {
+    return [];
+  }
+  return (await readOfficialV4LiquidityEvidenceSnapshot(input, options))
+    .evidence;
 }
 
 function indexedMarketCap(

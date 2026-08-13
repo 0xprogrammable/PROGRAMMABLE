@@ -294,6 +294,7 @@ describe("token detail Bitquery market read", () => {
         rpcUrl: "https://current-primary.example",
         rpcUrlSecondary: "https://current-secondary.example",
       }),
+      undefined,
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(mocks.valueExploreEntriesWithCurrentEvidence).toHaveBeenCalledWith(

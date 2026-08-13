@@ -4,13 +4,14 @@ vi.mock("server-only", () => ({}));
 
 const mocks = vi.hoisted(() => ({
   readOfficialV4LiquidityEvidence: vi.fn(),
+  readOfficialV4LiquidityEvidenceSnapshot: vi.fn(),
   withSameBlockEthUsdQuote: vi.fn(),
   enrichTokensWithAlchemyPoolState: vi.fn(),
 }));
 
 vi.mock("../lib/onchain/uniswap-v4-subgraph", () => ({
-  readOfficialV4LiquidityEvidence:
-    mocks.readOfficialV4LiquidityEvidence,
+  readOfficialV4LiquidityEvidenceSnapshot:
+    mocks.readOfficialV4LiquidityEvidenceSnapshot,
 }));
 vi.mock("../lib/alchemy/live-market.server", () => ({
   withSameBlockEthUsdQuote: mocks.withSameBlockEthUsdQuote,
@@ -20,6 +21,7 @@ vi.mock("../lib/alchemy/live-market.server", () => ({
 import {
   attachBitqueryMarketDataToValuedEntries,
   valueExploreEntriesWithCurrentEvidence,
+  valueExploreEntriesWithCurrentEvidenceSnapshot,
 } from
   "../lib/market-data/current-valuation.server";
 import type { TokenMarketDataV1 } from
@@ -180,6 +182,26 @@ function tokenWithState(
 describe("current Explore valuation orchestration", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    mocks.readOfficialV4LiquidityEvidenceSnapshot.mockImplementation(
+      async (input: {
+        tokens: readonly unknown[];
+        referenceHead: {
+          chainId: 1;
+          blockNumber: string;
+          blockHash: `0x${string}`;
+        };
+        liquiditySnapshot?: {
+          chainId: 1;
+          blockNumber: string;
+          blockHash: `0x${string}`;
+        };
+      }, options?: unknown) => ({
+        evidence: input.tokens.length === 0
+          ? []
+          : await mocks.readOfficialV4LiquidityEvidence(input, options),
+        snapshot: input.liquiditySnapshot ?? input.referenceHead,
+      }),
+    );
   });
 
   it("keeps current Bitquery nested but unavailable at top level when dual evidence fails", async () => {
@@ -400,6 +422,69 @@ describe("current Explore valuation orchestration", () => {
       status: "unavailable",
       reason: "liquidity-unavailable",
     });
+  });
+
+  it("replays the explicit-none liquidity snapshot with zero Graph calls", async () => {
+    mocks.withSameBlockEthUsdQuote.mockResolvedValue(snapshot);
+    mocks.enrichTokensWithAlchemyPoolState.mockResolvedValue([
+      tokenWithState("0"),
+    ]);
+    const input = {
+      entries: [token],
+      marketByToken: new Map([[tokenAddress, marketData]]),
+      deployment,
+      operationalSnapshot: snapshot,
+      now: new Date("2026-08-13T00:02:00.000Z"),
+    } as const;
+
+    const first = await valueExploreEntriesWithCurrentEvidenceSnapshot(input);
+    const replay = await valueExploreEntriesWithCurrentEvidenceSnapshot({
+      ...input,
+      liquiditySnapshot: first.liquiditySnapshot,
+    });
+
+    expect(first.liquiditySnapshot).toEqual({
+      chainId: 1,
+      blockNumber: "none",
+      blockHash: "none",
+    });
+    expect(replay.liquiditySnapshot).toEqual(first.liquiditySnapshot);
+    expect(mocks.readOfficialV4LiquidityEvidenceSnapshot).not.toHaveBeenCalled();
+    expect(mocks.readOfficialV4LiquidityEvidence).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "none becomes Graph-eligible",
+      tokenWithState("1", "10000000000000000000000"),
+      { chainId: 1 as const, blockNumber: "none" as const, blockHash: "none" as const },
+    ],
+    [
+      "pinned Graph snapshot becomes ineligible",
+      tokenWithState("0"),
+      {
+        chainId: 1 as const,
+        blockNumber: "25749999",
+        blockHash: `0x${"bb".repeat(32)}` as const,
+      },
+    ],
+  ])("fails closed when replay liquidity mode changes: %s", async (
+    _label,
+    stateToken,
+    requestedLiquiditySnapshot,
+  ) => {
+    mocks.withSameBlockEthUsdQuote.mockResolvedValue(snapshot);
+    mocks.enrichTokensWithAlchemyPoolState.mockResolvedValue([stateToken]);
+
+    await expect(valueExploreEntriesWithCurrentEvidenceSnapshot({
+      entries: [token],
+      marketByToken: new Map([[tokenAddress, marketData]]),
+      deployment,
+      operationalSnapshot: snapshot,
+      liquiditySnapshot: requestedLiquiditySnapshot,
+      now: new Date("2026-08-13T00:02:00.000Z"),
+    })).rejects.toThrow("Explore liquidity snapshot changed");
+    expect(mocks.readOfficialV4LiquidityEvidenceSnapshot).not.toHaveBeenCalled();
   });
 
   it("fails global ranking when positive active liquidity lacks price evidence", async () => {

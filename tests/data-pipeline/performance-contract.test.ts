@@ -1323,23 +1323,49 @@ describe("read-model performance contract", () => {
       resolve(process.cwd(), canonicalSupplyPath),
       "utf8",
     );
-    const singleProviderSupply =
-      alchemySourceContracts.evaluateAlchemyExploreSourceContracts(
-        process.cwd(),
-        {
-          sourceOverrides: {
-            [canonicalSupplyPath]: canonicalSupplySource.replace(
-              "group.length >= 2",
-              "group.length >= 1",
-            ),
-          },
-        },
-      );
-    expect(
-      singleProviderSupply.failures.map(
-        (failure: { id: string }) => failure.id,
+    for (const unsafeSupply of [
+      canonicalSupplySource.replace(
+        "group.length >= 2",
+        "group.length >= 1",
       ),
-    ).toContain("canonical-token-supply-quorum");
+      canonicalSupplySource.replace(
+        "agreed.blockHash.toLowerCase() !== requestedSnapshot.blockHash",
+        "false",
+      ),
+    ]) {
+      const unboundSupply =
+        alchemySourceContracts.evaluateAlchemyExploreSourceContracts(
+          process.cwd(),
+          { sourceOverrides: { [canonicalSupplyPath]: unsafeSupply } },
+        );
+      expect(
+        unboundSupply.failures.map(
+          (failure: { id: string }) => failure.id,
+        ),
+      ).toContain("canonical-token-supply-quorum");
+    }
+
+    for (const unsafeExploreRoute of [
+      exploreRouteSource.replace(
+        "valueExploreEntriesWithCurrentEvidenceSnapshot({",
+        "valueExploreEntriesWithCurrentEvidence({",
+      ),
+      exploreRouteSource.replace(
+        "blockHash: operationalSnapshot.blockHash",
+        "blockHash: referenceHead.blockHash",
+      ),
+    ]) {
+      const unboundSupply =
+        alchemySourceContracts.evaluateAlchemyExploreSourceContracts(
+          process.cwd(),
+          { sourceOverrides: { [exploreRoutePath]: unsafeExploreRoute } },
+        );
+      expect(
+        unboundSupply.failures.map(
+          (failure: { id: string }) => failure.id,
+        ),
+      ).toContain("canonical-token-supply-quorum");
+    }
 
     const currentMarketRpcPath =
       "lib/market-data/current-market-rpc.server.ts";
