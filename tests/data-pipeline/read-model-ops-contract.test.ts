@@ -661,6 +661,36 @@ describe("read-model operations source contract", () => {
       "error instanceof TimeoutError ||",
       "false ||",
     ],
+    [
+      "Classic V2 result-limit range bisection",
+      "lib/onchain/read-model.ts",
+      "error instanceof LimitExceededRpcError ||",
+      "false ||",
+    ],
+    [
+      "Classic V3 complete-range settlement",
+      "lib/onchain/classic-v3-read-model.ts",
+      "allSettledOrThrow([",
+      "Promise.all([",
+    ],
+    [
+      "Classic V3 result-limit range bisection",
+      "lib/onchain/classic-v3-read-model.ts",
+      "error instanceof LimitExceededRpcError ||",
+      "false ||",
+    ],
+    [
+      "Stock launcher topic-OR filtering",
+      "lib/onchain/stock-paired-read-model.ts",
+      "events: STOCK_LAUNCHER_EVENTS",
+      "event: launchedEvent",
+    ],
+    [
+      "Stock result-limit range bisection",
+      "lib/onchain/stock-paired-read-model.ts",
+      "error instanceof LimitExceededRpcError ||",
+      "false ||",
+    ],
   ])(
     "rejects a legacy refresh missing %s",
     (_label, path, needle, replacement) => {
