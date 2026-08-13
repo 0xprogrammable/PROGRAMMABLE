@@ -1,0 +1,7 @@
+{
+  "schemaVersion": "programmable.custom-registry-release-policy.v2",
+  "releaseOwner": "0xc7fB6d0d2b78A30D0D3599F7F4BAd5c9b87665AF",
+  "maximumAuthorizationValiditySeconds": 300,
+  "activationAllowed": false,
+  "status": "SOURCE_BOUND_OWNER_NO_DEPLOYMENT_AUTHORIZATION"
+}

@@ -65,8 +65,12 @@ export function assertReviewedAuthorization({ authorization, preflightSha256, pl
     || authorization.source?.commit !== plan.source?.commit
     || authorization.source?.tree !== plan.source?.tree
     || !/^0x[0-9a-fA-F]{40}$/.test(authorization.ownerAuthorizationAddress ?? "")
+    || !/^0x[0-9a-fA-F]{40}$/.test(plan.releaseAuthorization?.owner ?? "")
+    || getAddress(authorization.ownerAuthorizationAddress) !== getAddress(plan.releaseAuthorization.owner)
+    || plan.releaseAuthorization.maximumValiditySeconds !== 300
     || !Number.isSafeInteger(authorization.expiresAtTimestamp)
     || authorization.expiresAtTimestamp < nowTimestamp
+    || authorization.expiresAtTimestamp > nowTimestamp + 300
     || authorization.expiresAtTimestamp > plan.expiresAtTimestamp
   ) throw new Error("reviewed broadcast authorization is stale or invalid");
   const expected = computeReviewedPlanDigest({
@@ -108,6 +112,25 @@ export function assertArtifactBinding({ artifactBytecode, manifestBytes, committ
     || sha256(manifestBytes) !== plan.source?.sourceManifestSha256
     || sha256(committedAbiBytes) !== manifest.artifact?.abiSha256
   ) throw new Error("committed deployment ABI, bytecode, or manifest drifted from plan");
+}
+
+export function assertPredictedAddressUnoccupied(firstCode, secondCode) {
+  if ((firstCode !== undefined && firstCode !== "0x") || (secondCode !== undefined && secondCode !== "0x")) {
+    throw new Error("predicted address is occupied on an independent RPC");
+  }
+}
+
+export function assertPostDeploymentBinding({ actual, expected }) {
+  if (
+    !actual.runtimeA || actual.runtimeA === "0x" || actual.runtimeA !== actual.runtimeB
+    || actual.chainId !== 1n
+    || actual.adminDelay !== BigInt(expected.initialAdminDelay)
+    || getAddress(actual.admin) !== getAddress(expected.initialAdmin)
+    || actual.minimumFinalityBlocks !== BigInt(expected.minimumFinalityBlocks)
+    || actual.policy !== expected.registryPolicyCommitment
+    || actual.controllers.some((controller, index) => getAddress(controller) !== getAddress(expected.controllers[index]))
+    || actual.roleAssignments.some((assigned) => assigned !== true)
+  ) throw new Error("post-deployment immutable, controller, or role verification failed");
 }
 
 export function assertLiveBinding({ first, second, plan }) {

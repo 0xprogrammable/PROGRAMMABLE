@@ -9,7 +9,9 @@ import {
   assertArtifactBinding,
   assertDeployerBinding,
   assertLiveBinding,
+  assertPostDeploymentBinding,
   assertPreflightEnvelope,
+  assertPredictedAddressUnoccupied,
   assertReviewedAuthorization,
   assertSourceBinding,
   computeConstructorCommitment,
@@ -53,6 +55,10 @@ const planFixture = () => ({
   signingAllowed: false,
   expiresAtTimestamp: 200,
   source: { commit: "a", tree: "b" },
+  releaseAuthorization: {
+    owner: privateKeyToAccount(`0x${"22".repeat(32)}`).address,
+    maximumValiditySeconds: 300,
+  },
   commonFinalizedAnchor: { blockNumber: "100", blockHash: "0xanchor" },
   create: { exactPendingNonce: 7 },
 });
@@ -85,6 +91,14 @@ test("requires a separate exact reviewed, signed, and unexpired authorization", 
   await verifyReviewedAuthorizationSignature(authorization);
   assert.throws(
     () => assertReviewedAuthorization({ authorization: { ...authorization, broadcastAllowed: false }, preflightSha256, plan, nowTimestamp: 180 }),
+    /authorization is stale or invalid/,
+  );
+  assert.throws(
+    () => assertReviewedAuthorization({ authorization: { ...authorization, expiresAtTimestamp: 481 }, preflightSha256, plan: { ...plan, expiresAtTimestamp: 900 }, nowTimestamp: 180 }),
+    /authorization is stale or invalid/,
+  );
+  assert.throws(
+    () => assertReviewedAuthorization({ authorization: { ...authorization, ownerAuthorizationAddress: "0x0000000000000000000000000000000000000001" }, preflightSha256, plan, nowTimestamp: 180 }),
     /authorization is stale or invalid/,
   );
   assert.throws(
@@ -145,5 +159,42 @@ test("binds committed ABI, bytecode, manifest, and exact constructor order", () 
   assert.notEqual(
     computeConstructorCommitment(config),
     computeConstructorCommitment({ ...config, initialApprover: config.initialRegistrar, initialRegistrar: config.initialApprover }),
+  );
+});
+
+test("fails closed on independent occupied code and post-deployment mismatch", () => {
+  assertPredictedAddressUnoccupied("0x", "0x");
+  assert.throws(() => assertPredictedAddressUnoccupied("0x", "0x6000"), /independent RPC/);
+  const expected = {
+    initialAdminDelay: "10",
+    initialAdmin: "0x0000000000000000000000000000000000000001",
+    minimumFinalityBlocks: "64",
+    registryPolicyCommitment: `0x${"44".repeat(32)}`,
+    controllers: [
+      "0x0000000000000000000000000000000000000002",
+      "0x0000000000000000000000000000000000000003",
+      "0x0000000000000000000000000000000000000004",
+      "0x0000000000000000000000000000000000000005",
+    ],
+  };
+  const actual = {
+    runtimeA: "0x6000",
+    runtimeB: "0x6000",
+    chainId: 1n,
+    adminDelay: 10n,
+    admin: expected.initialAdmin,
+    minimumFinalityBlocks: 64n,
+    policy: expected.registryPolicyCommitment,
+    controllers: expected.controllers,
+    roleAssignments: [true, true, true, true],
+  };
+  assertPostDeploymentBinding({ actual, expected });
+  assert.throws(
+    () => assertPostDeploymentBinding({ actual: { ...actual, controllers: [...actual.controllers.slice(0, 3), actual.controllers[0]] }, expected }),
+    /post-deployment/,
+  );
+  assert.throws(
+    () => assertPostDeploymentBinding({ actual: { ...actual, roleAssignments: [true, false, true, true] }, expected }),
+    /post-deployment/,
   );
 });

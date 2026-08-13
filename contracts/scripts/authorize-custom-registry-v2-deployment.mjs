@@ -27,7 +27,6 @@ if (!preflightPath.startsWith("/tmp/") || (outputPath !== null && !outputPath.st
 const ownerAuthorizationAddress = process.env.REGISTRY_RELEASE_OWNER;
 const ownerAuthorizationSignature = process.env.REGISTRY_OWNER_AUTHORIZATION_SIGNATURE;
 const expiresAtTimestamp = Number(process.env.REGISTRY_AUTHORIZATION_EXPIRES_AT);
-if (!/^0x[0-9a-fA-F]{40}$/.test(ownerAuthorizationAddress ?? "")) throw new Error("REGISTRY_RELEASE_OWNER is required");
 if (!printMessage && !/^0x[0-9a-fA-F]{130}$/.test(ownerAuthorizationSignature ?? "")) {
   throw new Error("REGISTRY_OWNER_AUTHORIZATION_SIGNATURE is required");
 }
@@ -36,6 +35,11 @@ const preflightSha256 = `0x${createHash("sha256").update(preflightBytes).digest(
 const plan = JSON.parse(preflightBytes);
 const nowTimestamp = Math.floor(Date.now() / 1000);
 assertPreflightEnvelope(plan, nowTimestamp);
+if (
+  !/^0x[0-9a-fA-F]{40}$/.test(ownerAuthorizationAddress ?? "")
+  || !/^0x[0-9a-fA-F]{40}$/.test(plan.releaseAuthorization?.owner ?? "")
+  || ownerAuthorizationAddress.toLowerCase() !== plan.releaseAuthorization.owner.toLowerCase()
+) throw new Error("REGISTRY_RELEASE_OWNER does not match the reviewed preflight");
 if (computeConstructorCommitment(plan.constructor) !== plan.constructorCommitment) {
   throw new Error("constructor commitment mismatch");
 }
@@ -45,7 +49,12 @@ if (commit !== plan.source.commit || tree !== plan.source.tree) throw new Error(
 if (execFileSync("git", ["status", "--porcelain"], { cwd: root, encoding: "utf8" }) !== "") {
   throw new Error("authorization requires a clean worktree");
 }
-if (!Number.isSafeInteger(expiresAtTimestamp) || expiresAtTimestamp < nowTimestamp || expiresAtTimestamp > plan.expiresAtTimestamp) {
+if (
+  !Number.isSafeInteger(expiresAtTimestamp)
+  || expiresAtTimestamp < nowTimestamp
+  || expiresAtTimestamp > nowTimestamp + 300
+  || expiresAtTimestamp > plan.expiresAtTimestamp
+) {
   throw new Error("REGISTRY_AUTHORIZATION_EXPIRES_AT is stale or outside the preflight window");
 }
 const authorization = {

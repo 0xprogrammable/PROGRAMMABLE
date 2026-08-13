@@ -13,9 +13,12 @@ const paths = [
   "contracts/scripts/authorize-custom-registry-v2-deployment.mjs",
   "contracts/scripts/custom-registry-v2-deployment-guards.mjs",
   "contracts/scripts/broadcast-custom-registry-v2-deployment.mjs",
+  "contracts/scripts/test/custom-registry-v2-deployment-guards.test.mjs",
+  "contracts/scripts/test/custom-registry-v2-deployment-cli.test.mjs",
   "contracts/spec/custom-registry-v2-predeployment.json",
   "docs/security/abi/ProgrammableCustomRegistryV2.json",
   "docs/security/CUSTOM_REGISTRY_EVENT_SET_V2.json",
+  "config/custom-registry-v2-release-policy.json",
 ];
 const forbidden = [/providerId/i, /partnerId/i, /partnerFactoryRegistry/i, /repositoryId/i, /repositoryOwner/i];
 
@@ -27,12 +30,16 @@ for (const relative of paths) {
 }
 
 const manifest = JSON.parse(await readFile(path.join(root, "contracts/spec/custom-registry-v2-predeployment.json"), "utf8"));
+const releasePolicy = JSON.parse(await readFile(path.join(root, "config/custom-registry-v2-release-policy.json"), "utf8"));
 if (
   manifest.status !== "SOURCE_ONLY_NOT_DEPLOYED" ||
   manifest.activationAllowed !== false ||
   Object.values(manifest.deployment).some((value) => value !== null) ||
   manifest.policy.market.protocolFeeBps !== 10 ||
   manifest.policy.noMarket.protocolFeeBps !== 0
+  || releasePolicy.releaseOwner !== manifest.releaseAuthorization.owner
+  || releasePolicy.maximumAuthorizationValiditySeconds !== 300
+  || releasePolicy.activationAllowed !== false
 ) {
   throw new Error("neutral predeployment manifest is not fail-closed");
 }

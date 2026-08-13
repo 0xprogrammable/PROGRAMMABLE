@@ -68,6 +68,14 @@ for (const [relative, digest] of Object.entries(manifest.sourceDigests ?? {})) {
 }
 
 const deployer = getAddress(required("REGISTRY_DEPLOYER"));
+const releaseOwner = getAddress(required("REGISTRY_RELEASE_OWNER"));
+if (
+  !manifest.releaseAuthorization?.owner
+  || manifest.releaseAuthorization.maximumValiditySeconds !== 300
+  || releaseOwner !== getAddress(manifest.releaseAuthorization.owner)
+) {
+  throw new Error("release owner does not match the committed source manifest");
+}
 const config = {
   initialAdminDelay: positiveInteger("REGISTRY_ADMIN_DELAY_SECONDS", (1n << 48n) - 1n),
   initialAdmin: getAddress(required("REGISTRY_ADMIN")),
@@ -179,6 +187,10 @@ const plan = {
   },
   constructor: config,
   constructorCommitment,
+  releaseAuthorization: {
+    owner: releaseOwner,
+    maximumValiditySeconds: manifest.releaseAuthorization.maximumValiditySeconds,
+  },
   broadcastAllowed: false,
   signingAllowed: false,
 };

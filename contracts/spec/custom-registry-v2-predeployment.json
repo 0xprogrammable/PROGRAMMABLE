@@ -13,14 +13,22 @@
       "protocolFeeBps": 0
     }
   },
+  "releaseAuthorization": {
+    "owner": "0xc7fB6d0d2b78A30D0D3599F7F4BAd5c9b87665AF",
+    "maximumValiditySeconds": 300,
+    "status": "SOURCE_BOUND_OWNER_NO_DEPLOYMENT_AUTHORIZATION"
+  },
   "sourceDigests": {
     "contracts/src/interfaces/IProgrammableCustomRegistryV2.sol": "0xaca7226e3a03895bf1c8a16c4ec28197197805784a951b36b7fa057c57d80b1c",
     "contracts/src/ProgrammableCustomRegistryV2.sol": "0x6845ec501466bbb98f72142d588cc0fe8cca46753f5a61d58ee9daf579df423b",
     "contracts/script/DeployProgrammableCustomRegistryV2.s.sol": "0xdb8a8376323dfbc3c2ac60e31364d6bf767d8e597e2e8b765fd3685a8542a622",
-    "contracts/scripts/prepare-custom-registry-v2-deployment.mjs": "0xd9ae39bc5256263b031d6a48ce45ecd8bfaadb4d558c74f30c5b7898eba37d0c",
-    "contracts/scripts/authorize-custom-registry-v2-deployment.mjs": "0x0178ef3c5ca639504e4450295ece114744d65b2ae42e9b167d04a646fb93e1f1",
-    "contracts/scripts/custom-registry-v2-deployment-guards.mjs": "0x00fc873d958d05d1d0b75a0ba0f286650ad68af2115d2b34d08a81cdc8697c84",
-    "contracts/scripts/broadcast-custom-registry-v2-deployment.mjs": "0x7a8512347cde74653c42b2b7bec9e9d8583d9cd4a7a6a1cf3495f5edd231a3a0"
+    "contracts/scripts/prepare-custom-registry-v2-deployment.mjs": "0xf08a9bd647d7fe02021c4c3aba2e2afa781deeaddd0afb06e2780d27adaba6aa",
+    "contracts/scripts/authorize-custom-registry-v2-deployment.mjs": "0x0f1e15c8d982118160ff2dc5e50910b7193542a2541521a37219d55cd791af85",
+    "contracts/scripts/custom-registry-v2-deployment-guards.mjs": "0x67a0df6fcf3baf11d34b7c54cb2431d3ce1e5420ac1abcf6680d53356658199f",
+    "contracts/scripts/broadcast-custom-registry-v2-deployment.mjs": "0x7fb851cd7425be227f66a3a9f3aaafaba04344919f51f650d16129b6651755ed",
+    "contracts/scripts/test/custom-registry-v2-deployment-guards.test.mjs": "0x6952a6fd894cb4ab919df82e93ebb0309718d37ee1c88ccdb3166a9c6c49ccc4",
+    "contracts/scripts/test/custom-registry-v2-deployment-cli.test.mjs": "0xed7c2a8a34029567fc55349af3507e988736de6ef18d40bf121f3f2c925a5dd8",
+    "config/custom-registry-v2-release-policy.json": "0xbd9edda9041525d97f6a5ffc5bcf8748a5fcb63416d3af68c9ddb71da5298ae6"
   },
   "compiler": {
     "version": "0.8.26",

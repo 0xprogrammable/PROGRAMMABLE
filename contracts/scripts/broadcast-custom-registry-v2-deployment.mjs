@@ -17,6 +17,8 @@ import {
   assertArtifactBinding,
   assertDeployerBinding,
   assertLiveBinding,
+  assertPostDeploymentBinding,
+  assertPredictedAddressUnoccupied,
   assertPreflightEnvelope,
   assertReviewedAuthorization,
   assertSourceBinding,
@@ -98,9 +100,7 @@ const live = await Promise.all(clients.map(async (client) => {
 }));
 const [a, b] = live;
 assertLiveBinding({ first: a, second: b, plan });
-if ((a.code !== undefined && a.code !== "0x") || (b.code !== undefined && b.code !== "0x")) {
-  throw new Error("predicted address is occupied on an independent RPC");
-}
+assertPredictedAddressUnoccupied(a.code, b.code);
 if (getContractAddress({ from: account.address, nonce: BigInt(a.nonce) }) !== plan.create.predictedAddress) {
   throw new Error("predicted CREATE address mismatch");
 }
@@ -153,17 +153,22 @@ const expectedControllers = [
   plan.constructor.initialFinalizer,
   plan.constructor.initialRevoker,
 ].map(getAddress);
-if (
-  !runtimeA || runtimeA === "0x" || runtimeA !== runtimeB
-  || chainId !== 1n
-  || adminDelay !== BigInt(plan.constructor.initialAdminDelay)
-  || getAddress(admin) !== getAddress(plan.constructor.initialAdmin)
-  || minimumFinalityBlocks !== BigInt(plan.constructor.minimumFinalityBlocks)
-  || policy !== plan.constructor.registryPolicyCommitment
-  || controllers.some((controller, index) => getAddress(controller) !== expectedControllers[index])
-) throw new Error("post-deployment immutable or controller verification failed");
 const roleAssignments = await Promise.all(roleValues.map((role, index) => read("hasRole", [role, expectedControllers[index]])));
-if (roleAssignments.some((assigned) => assigned !== true)) {
-  throw new Error("post-deployment operational role verification failed");
-}
+assertPostDeploymentBinding({
+  actual: {
+    runtimeA,
+    runtimeB,
+    chainId,
+    adminDelay,
+    admin,
+    minimumFinalityBlocks,
+    policy,
+    controllers,
+    roleAssignments,
+  },
+  expected: {
+    ...plan.constructor,
+    controllers: expectedControllers,
+  },
+});
 process.stdout.write(`${JSON.stringify({ transactionHash, contractAddress: receipt.contractAddress })}\n`);

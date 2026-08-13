@@ -15,6 +15,9 @@ const sourcePaths = [
   "contracts/scripts/authorize-custom-registry-v2-deployment.mjs",
   "contracts/scripts/custom-registry-v2-deployment-guards.mjs",
   "contracts/scripts/broadcast-custom-registry-v2-deployment.mjs",
+  "contracts/scripts/test/custom-registry-v2-deployment-guards.test.mjs",
+  "contracts/scripts/test/custom-registry-v2-deployment-cli.test.mjs",
+  "config/custom-registry-v2-release-policy.json",
 ];
 const outputs = {
   manifest: path.join(root, "contracts/spec/custom-registry-v2-predeployment.json"),
@@ -25,6 +28,13 @@ const outputs = {
 const sha256 = (value) => `0x${createHash("sha256").update(value).digest("hex")}`;
 const json = (value) => `${JSON.stringify(value, null, 2)}\n`;
 const artifact = JSON.parse(await readFile(artifactPath, "utf8"));
+const releasePolicy = JSON.parse(await readFile(path.join(root, "config/custom-registry-v2-release-policy.json"), "utf8"));
+if (
+  releasePolicy.schemaVersion !== "programmable.custom-registry-release-policy.v2"
+  || releasePolicy.maximumAuthorizationValiditySeconds !== 300
+  || releasePolicy.activationAllowed !== false
+  || (releasePolicy.releaseOwner !== null && !/^0x[0-9a-fA-F]{40}$/.test(releasePolicy.releaseOwner))
+) throw new Error("release policy is invalid");
 const abi = artifact.abi;
 const sourceDigests = Object.fromEntries(
   await Promise.all(sourcePaths.map(async (relative) => [relative, sha256(await readFile(path.join(root, relative)))])),
@@ -57,6 +67,11 @@ const manifest = {
   policy: {
     market: { id: "standard10", protocolFeeBps: 10 },
     noMarket: { id: "no-market0", protocolFeeBps: 0 },
+  },
+  releaseAuthorization: {
+    owner: releasePolicy.releaseOwner,
+    maximumValiditySeconds: releasePolicy.maximumAuthorizationValiditySeconds,
+    status: releasePolicy.status,
   },
   sourceDigests,
   compiler: {
