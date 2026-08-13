@@ -1035,7 +1035,7 @@
           "internalType": "bytes32"
         },
         {
-          "name": "account",
+          "name": "callerConfirmation",
           "type": "address",
           "internalType": "address"
         }
@@ -1748,6 +1748,17 @@
           "name": "currentBlock",
           "type": "uint256",
           "internalType": "uint256"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "ImmutableOperationalRole",
+      "inputs": [
+        {
+          "name": "role",
+          "type": "bytes32",
+          "internalType": "bytes32"
         }
       ]
     },

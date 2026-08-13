@@ -10,34 +10,67 @@ import {
   CUSTOM_REGISTRY_V2_EVENT_SIGNATURES,
 } from "../lib/data-pipeline/custom-registry-v2-event-manifest";
 import {
+  computeCustomRegistryV2DescriptorHash,
+  computeCustomRegistryV2LaunchId,
   parseCustomRegistryV2ApiRecord,
 } from "../lib/server/custom-launch/registry-read-v2";
 
 const hash = (byte: string) => `0x${byte.repeat(64)}`;
 const address = (byte: string) => `0x${byte.repeat(40)}`;
+const readBinding = {
+  registryAddress: address("2") as `0x${string}`,
+  registryRuntimeCodeHash: hash("3") as `0x${string}`,
+  registryPolicyCommitment: hash("4") as `0x${string}`,
+  minimumFinalityBlocks: "12",
+};
+const parse = (value: unknown) => parseCustomRegistryV2ApiRecord(value, readBinding);
 
-function finalizedRecord() {
+function finalizedRecord(marketMode = 1, protocolFeeBps = 10) {
+  const descriptor = {
+    chainId: 1n,
+    launchWallet: address("4") as `0x${string}`,
+    primaryContract: address("3") as `0x${string}`,
+    primaryRuntimeCodeHash: hash("5") as `0x${string}`,
+    componentSetHash: hash("6") as `0x${string}`,
+    sourceArtifactHash: hash("7") as `0x${string}`,
+    configurationHash: hash("8") as `0x${string}`,
+    launchPlanHash: hash("9") as `0x${string}`,
+    projectCommitment: hash("a") as `0x${string}`,
+    marketMode,
+    protocolFeeBps,
+  };
+  const descriptorHash = computeCustomRegistryV2DescriptorHash(descriptor);
   return {
     schemaVersion: "programmable.custom-registry-v2-read.v1",
     generation: "2",
     chainId: "1",
     status: "finalized",
-    launchId: hash("1"),
-    descriptorHash: hash("2"),
-    primaryContract: address("3"),
-    launchWallet: address("4"),
-    primaryRuntimeCodeHash: hash("5"),
-    componentSetHash: hash("6"),
-    sourceArtifactHash: hash("7"),
-    configurationHash: hash("8"),
-    launchPlanHash: hash("9"),
-    projectCommitment: hash("a"),
-    marketMode: 1,
-    protocolFeeBps: 10,
+    registry: {
+      address: address("2"),
+      runtimeCodeHash: hash("3"),
+      policyCommitment: hash("4"),
+      minimumFinalityBlocks: "12",
+    },
+    launchId: computeCustomRegistryV2LaunchId(descriptorHash),
+    descriptorHash,
+    primaryContract: descriptor.primaryContract,
+    launchWallet: descriptor.launchWallet,
+    primaryRuntimeCodeHash: descriptor.primaryRuntimeCodeHash,
+    componentSetHash: descriptor.componentSetHash,
+    sourceArtifactHash: descriptor.sourceArtifactHash,
+    configurationHash: descriptor.configurationHash,
+    launchPlanHash: descriptor.launchPlanHash,
+    projectCommitment: descriptor.projectCommitment,
+    marketMode,
+    protocolFeeBps,
     approval: { approvalId: hash("b"), evidenceHash: hash("c") },
     registration: {
       evidenceHash: hash("d"),
+      transactionHash: hash("5"),
       observedAtBlock: "100",
+      observedBlockHash: hash("f"),
+      transactionIndex: "1",
+      logIndex: "2",
       transitionSequence: "2",
     },
     finality: {
@@ -118,10 +151,8 @@ describe("Custom Registry V2 offchain bindings", () => {
     [0, 0, "NoMarket0"],
     [1, 10, "Standard10"],
   ] as const)("maps mode %i and fee %i to %s", (marketMode, protocolFeeBps, profile) => {
-    expect(parseCustomRegistryV2ApiRecord({
-      ...finalizedRecord(),
-      marketMode,
-      protocolFeeBps,
+    expect(parse({
+      ...finalizedRecord(marketMode, protocolFeeBps),
     })).toMatchObject({ marketProfile: profile });
   });
 
@@ -131,7 +162,7 @@ describe("Custom Registry V2 offchain bindings", () => {
     [1, 11],
     [2, 10],
   ])("rejects an unsupported mode/fee pair", (marketMode, protocolFeeBps) => {
-    expect(() => parseCustomRegistryV2ApiRecord({
+    expect(() => parse({
       ...finalizedRecord(),
       marketMode,
       protocolFeeBps,
@@ -139,26 +170,38 @@ describe("Custom Registry V2 offchain bindings", () => {
   });
 
   it("rejects non-final records, added fields and impossible finality", () => {
-    expect(() => parseCustomRegistryV2ApiRecord({
+    expect(() => parse({
       ...finalizedRecord(),
       status: "registered",
     })).toThrow(/identity/u);
-    expect(() => parseCustomRegistryV2ApiRecord({
+    expect(() => parse({
       ...finalizedRecord(),
       extra: true,
     })).toThrow(/keys/u);
-    expect(() => parseCustomRegistryV2ApiRecord({
+    expect(() => parse({
       ...finalizedRecord(),
       finality: { ...finalizedRecord().finality, confirmedHeadBlock: "99" },
     })).toThrow(/block relation/u);
-    expect(() => parseCustomRegistryV2ApiRecord({
+    expect(() => parse({
       ...finalizedRecord(),
       finality: { ...finalizedRecord().finality, transitionSequence: "2" },
     })).toThrow(/lifecycle sequence/u);
-    expect(() => parseCustomRegistryV2ApiRecord({
+    expect(() => parse({
       ...finalizedRecord(),
       descriptorHash: `0x${"00".repeat(32)}`,
     })).toThrow(/descriptor hash/u);
+    expect(() => parse({
+      ...finalizedRecord(),
+      launchId: hash("1"),
+    })).toThrow(/launch id/u);
+    expect(() => parse({
+      ...finalizedRecord(),
+      registry: { ...finalizedRecord().registry, minimumFinalityBlocks: "13" },
+    })).toThrow(/release binding/u);
+    expect(() => parse({
+      ...finalizedRecord(),
+      registration: { ...finalizedRecord().registration, observedBlockHash: hash("a") },
+    })).toThrow(/block relation/u);
   });
 });
 

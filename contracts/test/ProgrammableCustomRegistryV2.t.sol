@@ -46,6 +46,31 @@ contract ProgrammableCustomRegistryV2Test is Test {
         assertFalse(registry.hasRole(registry.DEFAULT_ADMIN_ROLE(), REGISTRAR));
     }
 
+    function test_operationalRolesRemainImmutableAndSeparatedAfterDeployment() public {
+        bytes32[4] memory roles =
+            [registry.APPROVER_ROLE(), registry.REGISTRAR_ROLE(), registry.FINALIZER_ROLE(), registry.REVOKER_ROLE()];
+        address[4] memory holders = [APPROVER, REGISTRAR, FINALIZER, REVOKER];
+        for (uint256 i = 0; i < roles.length; ++i) {
+            vm.expectRevert(
+                abi.encodeWithSelector(ProgrammableCustomRegistryV2.ImmutableOperationalRole.selector, roles[i])
+            );
+            vm.prank(ADMIN);
+            registry.grantRole(roles[i], ADMIN);
+
+            vm.expectRevert(
+                abi.encodeWithSelector(ProgrammableCustomRegistryV2.ImmutableOperationalRole.selector, roles[i])
+            );
+            vm.prank(ADMIN);
+            registry.revokeRole(roles[i], holders[i]);
+
+            vm.expectRevert(
+                abi.encodeWithSelector(ProgrammableCustomRegistryV2.ImmutableOperationalRole.selector, roles[i])
+            );
+            vm.prank(holders[i]);
+            registry.renounceRole(roles[i], holders[i]);
+        }
+    }
+
     function test_marketDescriptorRegistersOnlyAtStandard10() public {
         IProgrammableCustomRegistryV2.LaunchDescriptorV2 memory descriptor = _descriptor(target, true);
         (bytes32 approvalId, bytes32 descriptorHash) = _authorize(descriptor, "market");

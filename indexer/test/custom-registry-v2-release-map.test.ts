@@ -33,5 +33,18 @@ describe("Custom Registry V2 prelaunch source binding", () => {
       contractName: "CustomRegistryV2",
       startBlock: 25_700_000,
     });
+    for (const [address, runtimeCodeKeccak256] of [
+      [`0x${"00".repeat(20)}`, `0x${"22".repeat(32)}`],
+      [`0x${"11".repeat(20)}`, `0x${"00".repeat(32)}`],
+    ] as const) {
+      expect(() => requireLiveCustomRegistryV2Source({
+        ...CUSTOM_REGISTRY_V2_PRELAUNCH_SOURCE,
+        status: "live",
+        active: true,
+        address,
+        startBlock: 25_700_000,
+        runtimeCodeKeccak256,
+      })).toThrow(/not live-bound/u);
+    }
   });
 });

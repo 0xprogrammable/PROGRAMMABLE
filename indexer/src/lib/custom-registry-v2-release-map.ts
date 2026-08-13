@@ -32,11 +32,13 @@ export function requireLiveCustomRegistryV2Source(
     || source.active !== true
     || source.address === null
     || !/^0x[0-9a-f]{40}$/u.test(source.address)
+    || source.address === `0x${"00".repeat(20)}`
     || source.startBlock === null
     || !Number.isSafeInteger(source.startBlock)
     || source.startBlock < 1
     || source.runtimeCodeKeccak256 === null
     || !/^0x[0-9a-f]{64}$/u.test(source.runtimeCodeKeccak256)
+    || source.runtimeCodeKeccak256 === `0x${"00".repeat(32)}`
   ) throw new TypeError("Custom Registry V2 index source is not live-bound");
   return Object.freeze({
     contractName: "CustomRegistryV2" as const,

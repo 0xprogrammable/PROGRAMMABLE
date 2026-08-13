@@ -15,8 +15,10 @@
   },
   "sourceDigests": {
     "contracts/src/interfaces/IProgrammableCustomRegistryV2.sol": "0x0edb7785b12181f9039c478261c5bcb2db4f689611687f3df30924ca6bd719ad",
-    "contracts/src/ProgrammableCustomRegistryV2.sol": "0xfb8705aae8210d9e348eb05e98de810865c412de36a5499049a0c28099b8662d",
-    "contracts/script/DeployProgrammableCustomRegistryV2.s.sol": "0xee64bedde47f93d083d5c6ff14eac3317612706b5a48ca91578ed8a8deef9674"
+    "contracts/src/ProgrammableCustomRegistryV2.sol": "0x27f8a9a5512a982d48e30ebe006b4d585b0f82c50d2eb09f5a6a1eb9936d0686",
+    "contracts/script/DeployProgrammableCustomRegistryV2.s.sol": "0x3dcc00a0d25b7dd897d08de73da4d34384baf566c2f87b8fcabc9d2b1141b74f",
+    "contracts/scripts/prepare-custom-registry-v2-deployment.mjs": "0xceb7f964ad6e2be38eacbcc288d9e2d6081babca7917bbd2d65dc1731c3b62e5",
+    "contracts/scripts/custom-registry-v2-deployment-guards.mjs": "0xc27861594ead6d0e525000a9ddc08fae8962542f17c29a2f111969a870ac1e3a"
   },
   "compiler": {
     "version": "0.8.26",
@@ -27,8 +29,8 @@
     "cborMetadata": false
   },
   "artifact": {
-    "creationBytecodeKeccak256": "0x3a000a89fe06d9c154f789efeb6377c3ceacf09b3c88ea67ea4f4482afe61651",
-    "runtimeTemplateKeccak256": "0x8a2aac0e04e27a9c7beb51d5b1b231ab40979b14282b38df08c5721730ecc663",
+    "creationBytecodeKeccak256": "0x0a750e17997375c9b79a9cafe62b72e74ed64cc149b87dc85b2b3665069faefe",
+    "runtimeTemplateKeccak256": "0x6626c7b3223247e6b03610e01db44ca94abcd29c965090f0cf2615665e9f055c",
     "runtimeImmutableReferences": [
       {
         "start": 882,
@@ -43,23 +45,23 @@
         "length": 32
       },
       {
-        "start": 4628,
+        "start": 4499,
         "length": 32
       },
       {
-        "start": 4820,
+        "start": 4691,
         "length": 32
       },
       {
-        "start": 8171,
+        "start": 8054,
         "length": 32
       },
       {
-        "start": 9058,
+        "start": 9220,
         "length": 32
       },
       {
-        "start": 9141,
+        "start": 9303,
         "length": 32
       }
     ],

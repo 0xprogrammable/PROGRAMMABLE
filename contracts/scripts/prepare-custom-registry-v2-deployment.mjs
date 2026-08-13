@@ -5,12 +5,17 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createPublicClient,
+  encodeAbiParameters,
   getAddress,
   getContractAddress,
   http,
   keccak256,
 } from "viem";
 import { mainnet } from "viem/chains";
+import {
+  assessDeploymentCost,
+  requireDistinctRpcOrigins,
+} from "./custom-registry-v2-deployment-guards.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const outputIndex = process.argv.indexOf("--output");
@@ -35,7 +40,9 @@ const bytes32 = (name) => {
 };
 const rpcA = required("REGISTRY_PREFLIGHT_RPC_URL_A");
 const rpcB = required("REGISTRY_PREFLIGHT_RPC_URL_B");
-if (rpcA === rpcB) throw new Error("preflight RPC endpoints must be distinct");
+requireDistinctRpcOrigins(rpcA, rpcB);
+const maxFeePerGas = positiveInteger("REGISTRY_MAX_FEE_PER_GAS_WEI", (1n << 256n) - 1n);
+const maxTotalCostWei = positiveInteger("REGISTRY_MAX_TOTAL_COST_WEI", (1n << 256n) - 1n);
 
 const artifactBytes = await readFile(
   path.join(root, "contracts/out/ProgrammableCustomRegistryV2.sol/ProgrammableCustomRegistryV2.json"),
@@ -45,6 +52,14 @@ const manifestBytes = await readFile(path.join(root, "contracts/spec/custom-regi
 const manifest = JSON.parse(manifestBytes);
 if (manifest.status !== "SOURCE_ONLY_NOT_DEPLOYED" || manifest.activationAllowed !== false) {
   throw new Error("source manifest is not fail-closed");
+}
+if (
+  manifest.artifact?.creationBytecodeKeccak256 !== keccak256(artifact.bytecode.object)
+  || manifest.artifact?.runtimeTemplateKeccak256 !== keccak256(artifact.deployedBytecode.object)
+) throw new Error("artifact does not match the source manifest");
+for (const [relative, digest] of Object.entries(manifest.sourceDigests ?? {})) {
+  const actual = `0x${createHash("sha256").update(await readFile(path.join(root, relative))).digest("hex")}`;
+  if (actual !== digest) throw new Error(`${relative} does not match the source manifest`);
 }
 
 const deployer = getAddress(required("REGISTRY_DEPLOYER"));
@@ -58,16 +73,35 @@ const config = {
   minimumFinalityBlocks: positiveInteger("REGISTRY_MINIMUM_FINALITY_BLOCKS", 255n),
   registryPolicyCommitment: bytes32("REGISTRY_POLICY_COMMITMENT"),
 };
+const constructorCommitment = keccak256(encodeAbiParameters(
+  [{
+    type: "tuple",
+    components: [
+      { name: "initialAdminDelay", type: "uint48" },
+      { name: "initialAdmin", type: "address" },
+      { name: "initialApprover", type: "address" },
+      { name: "initialRegistrar", type: "address" },
+      { name: "initialFinalizer", type: "address" },
+      { name: "initialRevoker", type: "address" },
+      { name: "minimumFinalityBlocks", type: "uint64" },
+      { name: "registryPolicyCommitment", type: "bytes32" },
+    ],
+  }],
+  [config],
+));
 if (new Set(Object.values(config).filter((value) => typeof value === "string" && /^0x[0-9a-fA-F]{40}$/.test(value))).size !== 5) {
   throw new Error("admin and operational roles must be five distinct accounts");
 }
 
 const clients = [rpcA, rpcB].map((url) => createPublicClient({ chain: mainnet, transport: http(url) }));
 const observations = await Promise.all(clients.map(async (client) => {
-  const [chainId, finalized, nonce] = await Promise.all([
+  const [chainId, finalized, latest, nonce, balance, priorityFee] = await Promise.all([
     client.getChainId(),
     client.getBlock({ blockTag: "finalized" }),
+    client.getBlock({ blockTag: "latest" }),
     client.getTransactionCount({ address: deployer, blockTag: "pending" }),
+    client.getBalance({ address: deployer, blockTag: "latest" }),
+    client.estimateMaxPriorityFeePerGas(),
   ]);
   if (chainId !== 1) throw new Error("preflight endpoint is not Ethereum mainnet");
   const predictedAddress = getContractAddress({ from: deployer, nonce: BigInt(nonce) });
@@ -88,6 +122,10 @@ const observations = await Promise.all(clients.map(async (client) => {
     pendingNonce: nonce,
     predictedAddress,
     estimatedGas,
+    blockGasLimit: latest.gasLimit,
+    baseFeePerGas: latest.baseFeePerGas,
+    maxPriorityFeePerGas: priorityFee,
+    deployerBalance: balance,
   };
 }));
 
@@ -97,10 +135,24 @@ if (
   a.finalizedBlockHash !== b.finalizedBlockHash ||
   a.pendingNonce !== b.pendingNonce ||
   a.predictedAddress !== b.predictedAddress
+  || a.blockGasLimit !== b.blockGasLimit
+  || a.baseFeePerGas !== b.baseFeePerGas
+  || a.maxPriorityFeePerGas !== b.maxPriorityFeePerGas
+  || a.deployerBalance !== b.deployerBalance
 ) {
   throw new Error("independent preflight observations disagree");
 }
+if (!Number.isSafeInteger(Number(a.pendingNonce))) throw new Error("deployer nonce exceeds JSON safe integer range");
 const gasLimit = observations.reduce((maximum, observation) => observation.estimatedGas > maximum ? observation.estimatedGas : maximum, 0n) * 120n / 100n;
+const observedFeePerGas = (a.baseFeePerGas ?? 0n) * 2n + a.maxPriorityFeePerGas;
+const maximumCostWei = assessDeploymentCost({
+  gasLimit,
+  blockGasLimit: a.blockGasLimit,
+  observedFeePerGas,
+  maxFeePerGas,
+  maxTotalCostWei,
+  deployerBalance: a.deployerBalance,
+});
 const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
 const sourceTree = execFileSync("git", ["rev-parse", "HEAD^{tree}"], { cwd: root, encoding: "utf8" }).trim();
 const status = execFileSync("git", ["status", "--porcelain"], { cwd: root, encoding: "utf8" });
@@ -115,7 +167,7 @@ const plan = {
     sourceManifestSha256: `0x${createHash("sha256").update(manifestBytes).digest("hex")}`,
     creationBytecodeKeccak256: keccak256(artifact.bytecode.object),
   },
-  chainId: "1",
+  chainId: 1,
   commonFinalizedAnchor: {
     blockNumber: a.finalizedBlockNumber.toString(),
     blockHash: a.finalizedBlockHash,
@@ -123,12 +175,19 @@ const plan = {
   create: {
     kind: "CREATE",
     deployer,
-    exactPendingNonce: a.pendingNonce.toString(),
+    exactPendingNonce: Number(a.pendingNonce),
     predictedAddress: a.predictedAddress,
     gasEstimates: observations.map((observation) => observation.estimatedGas.toString()),
     gasLimit: gasLimit.toString(),
+    blockGasLimit: a.blockGasLimit.toString(),
+    observedFeePerGas: observedFeePerGas.toString(),
+    reviewedMaxFeePerGas: maxFeePerGas.toString(),
+    reviewedMaxTotalCostWei: maxTotalCostWei.toString(),
+    maximumCostWei: maximumCostWei.toString(),
+    deployerBalanceWei: a.deployerBalance.toString(),
   },
   constructor: config,
+  constructorCommitment,
   broadcastAllowed: false,
   signingAllowed: false,
 };

@@ -76,6 +76,7 @@ contract ProgrammableCustomRegistryV2 is AccessControlDefaultAdminRules, IProgra
     error FinalityDepthInsufficient(uint64 observedBlock, uint64 confirmedHeadBlock, uint64 minimumBlocks);
     error HistoricalBlockOutsideNativeWindow(uint64 blockNumber, uint256 currentBlock);
     error IncompatibleOperationalRoles(address account);
+    error ImmutableOperationalRole(bytes32 role);
     error InvalidBinding(bytes32 field);
     error InvalidLaunchState(bytes32 launchId, LaunchStatus supplied, LaunchStatus required);
     error InvalidPolicy(MarketMode marketMode, uint16 protocolFeeBps);
@@ -111,6 +112,27 @@ contract ProgrammableCustomRegistryV2 is AccessControlDefaultAdminRules, IProgra
         returns (bool)
     {
         return interfaceId == type(IProgrammableCustomRegistryV2).interfaceId || super.supportsInterface(interfaceId);
+    }
+
+    /// @dev Operational roles are immutable after deployment. A default administrator cannot collapse independent
+    ///      approval, registration, finalization, and revocation authorities into one account.
+    function grantRole(bytes32 role, address account) public virtual override(AccessControlDefaultAdminRules) {
+        if (_isOperationalRole(role)) revert ImmutableOperationalRole(role);
+        super.grantRole(role, account);
+    }
+
+    function revokeRole(bytes32 role, address account) public virtual override(AccessControlDefaultAdminRules) {
+        if (_isOperationalRole(role)) revert ImmutableOperationalRole(role);
+        super.revokeRole(role, account);
+    }
+
+    function renounceRole(bytes32 role, address callerConfirmation)
+        public
+        virtual
+        override(AccessControlDefaultAdminRules)
+    {
+        if (_isOperationalRole(role)) revert ImmutableOperationalRole(role);
+        super.renounceRole(role, callerConfirmation);
     }
 
     function authorizeApproval(ApprovalAuthorizationV2 calldata authorization) external onlyRole(APPROVER_ROLE) {
@@ -388,6 +410,10 @@ contract ProgrammableCustomRegistryV2 is AccessControlDefaultAdminRules, IProgra
         bool standardMarket = marketMode == MarketMode.Market && protocolFeeBps == STANDARD10_PROTOCOL_FEE_BPS;
         bool noMarket = marketMode == MarketMode.NoMarket && protocolFeeBps == NO_MARKET0_PROTOCOL_FEE_BPS;
         if (!standardMarket && !noMarket) revert InvalidPolicy(marketMode, protocolFeeBps);
+    }
+
+    function _isOperationalRole(bytes32 role) private pure returns (bool) {
+        return role == APPROVER_ROLE || role == REGISTRAR_ROLE || role == FINALIZER_ROLE || role == REVOKER_ROLE;
     }
 
     function _validateRuntime(address target, bytes32 declaredCodeHash) private view {

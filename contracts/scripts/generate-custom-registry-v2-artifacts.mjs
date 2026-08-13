@@ -11,6 +11,8 @@ const sourcePaths = [
   "contracts/src/interfaces/IProgrammableCustomRegistryV2.sol",
   "contracts/src/ProgrammableCustomRegistryV2.sol",
   "contracts/script/DeployProgrammableCustomRegistryV2.s.sol",
+  "contracts/scripts/prepare-custom-registry-v2-deployment.mjs",
+  "contracts/scripts/custom-registry-v2-deployment-guards.mjs",
 ];
 const outputs = {
   manifest: path.join(root, "contracts/spec/custom-registry-v2-predeployment.json"),
