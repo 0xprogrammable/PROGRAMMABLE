@@ -352,6 +352,27 @@ describe("Generic launch record V2", () => {
     )).toThrow(/invalid/u);
   });
 
+  it.each([
+    ["approval revision", (candidate: GenericLaunchSourceProjectionV2) => ({
+      ...candidate,
+      approval: { ...candidate.approval, approvalRevision: "1".repeat(79) },
+    })],
+    ["log index", (candidate: GenericLaunchSourceProjectionV2) => ({
+      ...candidate,
+      lifecycle: {
+        ...candidate.lifecycle,
+        finalization: {
+          ...candidate.lifecycle.finalization,
+          logIndex: "1".repeat(79),
+        },
+      },
+    })],
+  ])("rejects a decimal wider than uint256 for %s", (_label, mutate) => {
+    expect(() => record(
+      mutate(projection()) as GenericLaunchSourceProjectionV2,
+    )).toThrow(/invalid/u);
+  });
+
   it("rejects any added field and any hash mutation", () => {
     const value = record();
     expect(() => parseGenericLaunchRecordV2({ ...value, criteria: [] }))

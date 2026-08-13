@@ -6,8 +6,8 @@ import { canonicalSha256, type Sha256Digest } from
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const HASH32 = /^0x[0-9a-f]{64}$/u;
 const ADDRESS = /^0x[0-9a-f]{40}$/u;
-const DECIMAL = /^(?:0|[1-9][0-9]*)$/u;
-const POSITIVE_DECIMAL = /^[1-9][0-9]*$/u;
+const DECIMAL = /^(?:0|[1-9][0-9]{0,77})$/u;
+const POSITIVE_DECIMAL = /^[1-9][0-9]{0,77}$/u;
 const GIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
 const REPOSITORY_FULL_NAME = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/u;
 const ZERO_HASH32 = `0x${"00".repeat(32)}` as const;
