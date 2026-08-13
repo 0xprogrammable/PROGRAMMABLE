@@ -65,6 +65,10 @@ vi.mock("../lib/onchain", async (importOriginal) => {
   };
 });
 
+vi.mock("../lib/alchemy/explore.server", () => ({
+  readAlchemyExploreModel: mocks.readLegacy,
+}));
+
 vi.mock("../lib/trade/server", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/trade/server")>();
   return {
