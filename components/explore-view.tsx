@@ -177,6 +177,7 @@ export const EXPLORE_TOKENS_PER_PAGE = 9;
 export const EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE = 100;
 const QUERY_DEBOUNCE_MS = 200;
 const EXPLORE_REQUEST_TIMEOUT_MS = 12_000;
+const EXPLORE_MARKET_CAP_TRANSIENT_RETRY_LIMIT = 1;
 export const EXPLORE_REFRESH_INTERVAL_MS = LIVE_DATA_REFRESH_INTERVAL_MS;
 const fallbackTokenImages = [
   "/brand/programmable-token-fallback-01-dawn.webp",
@@ -1188,17 +1189,30 @@ async function fetchExplorePayload(
   signal: AbortSignal,
   contract: ExploreValuationRequestContract,
 ) {
-  const response = await fetch(`/api/explore?${search.toString()}`, {
-    headers: { Accept: "application/json" },
-    signal,
-  });
-  const body: unknown = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new Error(readApiError(body));
+  const requestUrl = `/api/explore?${search.toString()}`;
+  let transientRetries = 0;
+  while (true) {
+    const response = await fetch(requestUrl, {
+      headers: { Accept: "application/json" },
+      signal,
+    });
+    const body: unknown = await response.json().catch(() => null);
+    if (!response.ok) {
+      if (
+        response.status === 503 &&
+        contract.sort === "market-cap" &&
+        transientRetries < EXPLORE_MARKET_CAP_TRANSIENT_RETRY_LIMIT &&
+        !signal.aborted
+      ) {
+        transientRetries += 1;
+        continue;
+      }
+      throw new Error(readApiError(body));
+    }
+    const payload = parseExplorePayload(body);
+    assertExploreValuationResponseContract(payload, contract);
+    return payload;
   }
-  const payload = parseExplorePayload(body);
-  assertExploreValuationResponseContract(payload, contract);
-  return payload;
 }
 
 export function loadExplorePayload(
