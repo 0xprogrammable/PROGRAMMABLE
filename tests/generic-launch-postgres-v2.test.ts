@@ -28,6 +28,10 @@ const address = (value: string) => `0x${value.repeat(40)}` as const;
 const APPROVAL_ID = hash("1");
 const LAUNCH_ID = hash("4");
 const DESCRIPTOR_HASH = hash("3");
+const LIFECYCLE_OBSERVATION = Object.freeze({
+  observationCommonHead: "112",
+  observationCommonHeadHash: hash("e"),
+});
 
 describe("Generic launch V2 Postgres materialization/read store", () => {
   it("appends lifecycle generations and hides finalized bytes after revocation", async () => {
@@ -45,6 +49,15 @@ describe("Generic launch V2 Postgres materialization/read store", () => {
           authorization: { artifact: { accepted: true } },
           receivedAt: expect.any(Date),
         });
+      await store.putApprovalReconciliation({
+        approvalId: APPROVAL_ID,
+        launchId: LAUNCH_ID,
+        descriptorHash: DESCRIPTOR_HASH,
+        outcome: "unconsumed",
+        observationCommonHead: "90",
+        observationCommonHeadHash: hash("d"),
+        signal,
+      });
       expect((await store.putIfNewLifecycle({
         approvalId: APPROVAL_ID,
         launchId: LAUNCH_ID,
@@ -52,6 +65,7 @@ describe("Generic launch V2 Postgres materialization/read store", () => {
         lifecycleEvidenceHash: sha("a"),
         state: "finalized",
         record,
+        ...LIFECYCLE_OBSERVATION,
         signal,
       })).kind).toBe("created");
       expect((await store.putIfNewLifecycle({
@@ -61,6 +75,7 @@ describe("Generic launch V2 Postgres materialization/read store", () => {
         lifecycleEvidenceHash: sha("a"),
         state: "finalized",
         record,
+        ...LIFECYCLE_OBSERVATION,
         signal,
       })).kind).toBe("existing");
       await store.putApprovalReconciliation({
@@ -72,6 +87,15 @@ describe("Generic launch V2 Postgres materialization/read store", () => {
         observationCommonHeadHash: hash("e"),
         signal,
       });
+      await expect(store.putApprovalReconciliation({
+        approvalId: APPROVAL_ID,
+        launchId: LAUNCH_ID,
+        descriptorHash: DESCRIPTOR_HASH,
+        outcome: "unconsumed",
+        observationCommonHead: "113",
+        observationCommonHeadHash: hash("f"),
+        signal,
+      })).rejects.toThrow(/identity conflicted/u);
       await expect(assertPostgresGenericLaunchReadStoreReadyV2(pool, 180_000))
         .resolves.toBeUndefined();
 
@@ -104,6 +128,7 @@ describe("Generic launch V2 Postgres materialization/read store", () => {
         lifecycleEvidenceHash: sha("f"),
         state: "revoked",
         record: null,
+        ...LIFECYCLE_OBSERVATION,
         signal,
       })).rejects.toThrow(/canonical lifecycle identity/u);
 
@@ -114,6 +139,8 @@ describe("Generic launch V2 Postgres materialization/read store", () => {
         lifecycleEvidenceHash: sha("d"),
         state: "revoked",
         record: null,
+        observationCommonHead: "120",
+        observationCommonHeadHash: hash("f"),
         signal,
       })).kind).toBe("created");
       await store.putApprovalReconciliation({
@@ -143,6 +170,8 @@ describe("Generic launch V2 Postgres materialization/read store", () => {
         lifecycleEvidenceHash: sha("a"),
         state: "finalized",
         record,
+        observationCommonHead: "124",
+        observationCommonHeadHash: hash("9"),
         signal,
       })).kind).toBe("created");
       await store.putApprovalReconciliation({
@@ -182,6 +211,7 @@ describe("Generic launch V2 Postgres materialization/read store", () => {
         lifecycleEvidenceHash: sha("a"),
         state: "finalized",
         record: launchRecord(),
+        ...LIFECYCLE_OBSERVATION,
         signal: new AbortController().signal,
       });
       await store.putApprovalReconciliation({
@@ -209,12 +239,101 @@ describe("Generic launch V2 Postgres materialization/read store", () => {
         REVOKE TRUNCATE
           ON programmable_website_projection_v1.generic_launch_materializations_v2
           FROM PUBLIC;
+        CREATE ROLE hidden_bypass NOLOGIN BYPASSRLS;
+        GRANT hidden_bypass TO programmable_website_projection_runtime;
+        SET ROLE programmable_website_projection_runtime;
+      `);
+      await expect(assertPostgresGenericLaunchReadStoreReadyV2(pool, 180_000))
+        .rejects.toThrow(/storage posture/u);
+      await database.exec(`
+        RESET ROLE;
+        REVOKE hidden_bypass FROM programmable_website_projection_runtime;
+        DROP ROLE hidden_bypass;
         DROP POLICY generic_launch_materializations_v2_runtime_insert
           ON programmable_website_projection_v1.generic_launch_materializations_v2;
         SET ROLE programmable_website_projection_runtime;
       `);
       await expect(assertPostgresGenericLaunchReadStoreReadyV2(pool, 180_000))
         .rejects.toThrow(/storage posture/u);
+    } finally {
+      await database.close();
+    }
+  }, 20_000);
+
+  it("repairs a legacy partial lifecycle commit without changing its record", async () => {
+    const database = new PGlite();
+    try {
+      await migrate(database);
+      const pool = new TestPool(database);
+      await insertApproval(pool);
+      const record = launchRecord();
+      await database.exec("RESET ROLE");
+      await pool.query(`
+        INSERT INTO programmable_website_projection_v1.generic_launch_materializations_v2
+          (approval_id, launch_id, descriptor_hash, lifecycle_generation,
+           lifecycle_state, lifecycle_evidence_hash, canonical_record,
+           record_hash, source_projection_hash, finalization_block)
+        VALUES ($1, $2, $3, 1, 'finalized', $4, $5, $6, $7, 100)
+      `, [APPROVAL_ID, LAUNCH_ID, DESCRIPTOR_HASH, sha("a"),
+        canonicalizeJson(record as unknown as JsonValue), record.recordHash,
+        record.sourceProjectionHash]);
+      await database.exec("SET ROLE programmable_website_projection_runtime");
+      const store = createPostgresGenericLaunchMaterializationStoreV2(pool);
+      const signal = new AbortController().signal;
+      expect(await store.getLatestLifecycle({ launchId: LAUNCH_ID, signal }))
+        .toMatchObject({
+          recordHash: record.recordHash,
+          observationCommonHead: "112",
+          observationCommonHeadHash: hash("e"),
+        });
+      expect((await store.putIfNewLifecycle({
+        approvalId: APPROVAL_ID,
+        launchId: LAUNCH_ID,
+        descriptorHash: DESCRIPTOR_HASH,
+        lifecycleEvidenceHash: sha("a"),
+        state: "finalized",
+        record,
+        ...LIFECYCLE_OBSERVATION,
+        signal,
+      })).kind).toBe("existing");
+      await expect(assertPostgresGenericLaunchReadStoreReadyV2(pool, 180_000))
+        .resolves.toBeUndefined();
+    } finally {
+      await database.close();
+    }
+  }, 20_000);
+
+  it("rolls back materialization when its consumed checkpoint conflicts", async () => {
+    const database = new PGlite();
+    try {
+      await migrate(database);
+      const pool = new TestPool(database);
+      await insertApproval(pool);
+      const store = createPostgresGenericLaunchMaterializationStoreV2(pool);
+      const signal = new AbortController().signal;
+      await store.putApprovalReconciliation({
+        approvalId: APPROVAL_ID,
+        launchId: hash("8"),
+        descriptorHash: DESCRIPTOR_HASH,
+        outcome: "unconsumed",
+        ...LIFECYCLE_OBSERVATION,
+        signal,
+      });
+      await expect(store.putIfNewLifecycle({
+        approvalId: APPROVAL_ID,
+        launchId: LAUNCH_ID,
+        descriptorHash: DESCRIPTOR_HASH,
+        lifecycleEvidenceHash: sha("a"),
+        state: "finalized",
+        record: launchRecord(),
+        ...LIFECYCLE_OBSERVATION,
+        signal,
+      })).rejects.toThrow(/identity conflicted/u);
+      const rows = await pool.query<{ total: unknown }>(`
+        SELECT count(*)::text AS total
+          FROM programmable_website_projection_v1.generic_launch_materializations_v2
+      `);
+      expect(rows.rows[0]?.total).toBe("0");
     } finally {
       await database.close();
     }
@@ -235,6 +354,21 @@ describe("Generic launch V2 Postgres materialization/read store", () => {
       `);
       await expect(assertPostgresGenericLaunchReadStoreReadyV2(pool, 180_000))
         .rejects.toThrow(/stale/u);
+    } finally {
+      await database.close();
+    }
+  }, 20_000);
+
+  it("rejects delivery before exceeding the explicit release inventory", async () => {
+    const database = new PGlite();
+    try {
+      await migrate(database);
+      const pool = new TestPool(database);
+      for (let index = 1; index <= 48; index += 1) {
+        await insertApproval(pool, hexHash(index), String(100 + index));
+      }
+      await expect(insertApproval(pool, hexHash(49), "149"))
+        .rejects.toThrow(/capacity is exhausted/u);
     } finally {
       await database.close();
     }
@@ -282,6 +416,7 @@ describe("Generic launch V2 Postgres materialization/read store", () => {
         lifecycleEvidenceHash: sha("a"),
         state: "finalized",
         record,
+        ...LIFECYCLE_OBSERVATION,
         signal,
       });
       await store.putApprovalReconciliation({
@@ -329,6 +464,8 @@ describe("Generic launch V2 Postgres materialization/read store", () => {
         lifecycleEvidenceHash: sha("d"),
         state: "revoked",
         record: null,
+        observationCommonHead: "120",
+        observationCommonHeadHash: hash("f"),
         signal,
       });
       await store.putApprovalReconciliation({
@@ -448,8 +585,18 @@ async function insertApproval(
        request_digest, canonical_write, canonical_acknowledgement,
        canonical_readback, record_binding_hash)
     VALUES ('website.approval-v3', $1, 'approval', $2, $3, $4, $5, $6, $7, $8)
-  `, [sha("1"), `approval:${approvalId}`, sha(salt), sha(`${Number(salt) + 1}`), write,
-    acknowledgement, readback, sha(`${Number(salt) + 2}`)]);
+  `, [sha("1"), `approval:${approvalId}`, uniqueDigest(salt, 0),
+    uniqueDigest(salt, 1), write, acknowledgement, readback,
+    uniqueDigest(salt, 2)]);
+}
+
+function uniqueDigest(salt: string, offset: number): `sha256:${string}` {
+  const value = BigInt(salt) + BigInt(offset);
+  return `sha256:${value.toString(16).padStart(64, "0")}`;
+}
+
+function hexHash(value: number): `0x${string}` {
+  return `0x${value.toString(16).padStart(64, "0")}`;
 }
 
 async function migrate(database: PGlite) {

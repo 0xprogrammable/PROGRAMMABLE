@@ -113,7 +113,8 @@ const APPROVED_OPERATIONS = Object.freeze({
     maximumApprovalInventory: 48,
     batchLimit: 16,
     concurrency: 8,
-    maximumInitialLogBlocks: 250_000,
+    maximumInitialLogBlocks: 20_000,
+    maximumConcurrentLogRequests: 24,
     route: Object.freeze({
       path: "app/api/ops/custom-launch/generic-v2-projector/route.ts",
       sha256: "d2f6509eba91dd5690e58d121daf4802aa1367b3807da31ed7ec060ba84b1f14",
@@ -124,15 +125,15 @@ const APPROVED_OPERATIONS = Object.freeze({
     }),
     store: Object.freeze({
       path: "lib/server/custom-launch/generic-launch-postgres-v2.ts",
-      sha256: "8874c3277a518c189c000d05cddef400d2cb0b7884fa7d730e2c5b3456cf438f",
+      sha256: "5cdc8a5765816c3336d7af0aa490aaf420ec59ed65ffd16e8af25f170c8696c7",
     }),
     registryReader: Object.freeze({
       path: "lib/server/custom-launch/generic-launch-registry-reader-v2.ts",
-      sha256: "08be733d2f6735d3198ec078b22d365e36f783d7ca4e7c11b804aaad04760898",
+      sha256: "a8b6607c641949ad384def4cb9b808233fecea37aadcd9517da69c9845a3dafd",
     }),
     migration: Object.freeze({
       path: "ops/website-projection-target/migrations/0005_generic_launch_materializations_v2.sql",
-      sha256: "cbc8140b7956f5abb6631a608f4e919102b468faac8c0efe9ad6802354e69f8f",
+      sha256: "695328763c639b7d11562c394183864998e532eb6cc38d341020e8843de213b8",
     }),
   }),
   independentCrons: Object.freeze([
@@ -1541,7 +1542,12 @@ export function evaluateReadModelOperationsSourceContracts(
       customReconciler.leaseMs === 55_000 &&
       customReconciler.maximumApprovalInventory === 48 &&
       customReconciler.concurrency === 8 &&
-      customReconciler.maximumInitialLogBlocks === 250_000 &&
+      customReconciler.maximumInitialLogBlocks === 20_000 &&
+      customReconciler.maximumConcurrentLogRequests === 24 &&
+      /MAXIMUM_INITIAL_LOG_BLOCKS\s*=\s*20_000n/u
+        .test(source(customReconciler.registryReader.path)) &&
+      /MAXIMUM_CONCURRENT_LOG_REQUESTS\s*=\s*24/u
+        .test(source(customReconciler.registryReader.path)) &&
       customReconcilerRoute.includes(`limit: ${customReconciler.batchLimit}`),
     "Custom Launch V2 public reads fail closed on the reviewed lifecycle age and bounded sweep",
   );

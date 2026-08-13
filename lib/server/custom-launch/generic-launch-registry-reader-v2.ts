@@ -31,7 +31,8 @@ import type {
 const ABI = registryAbiArtifact.abi as Abi;
 const ZERO_HASH32 = `0x${"00".repeat(32)}` as const;
 const MAXIMUM_LOG_WINDOW_BLOCKS = 5_000n;
-const MAXIMUM_INITIAL_LOG_BLOCKS = 250_000n;
+const MAXIMUM_INITIAL_LOG_BLOCKS = 20_000n;
+const MAXIMUM_CONCURRENT_LOG_REQUESTS = 24;
 
 export interface GenericLaunchRegistryReleaseV2 {
   readonly registryAddress: `0x${string}`;
@@ -567,8 +568,11 @@ async function readBoundedLifecycleLogs(
   if (!incremental && toBlock - fromBlock + 1n > MAXIMUM_INITIAL_LOG_BLOCKS) {
     throw new TypeError("Registry initial lifecycle evidence exceeds its bound");
   }
+  const requests: Array<() => Promise<Awaited<ReturnType<PublicClient["getLogs"]>>>>
+    = [];
   for (let start = fromBlock; start <= toBlock;) {
     signal.throwIfAborted();
+    const windowStart = start;
     const end = start + MAXIMUM_LOG_WINDOW_BLOCKS - 1n < toBlock
       ? start + MAXIMUM_LOG_WINDOW_BLOCKS - 1n
       : toBlock;
@@ -608,20 +612,31 @@ async function readBoundedLifecycleLogs(
     ]) as readonly (readonly [string, Readonly<Record<string, `0x${string}`>>])[];
     for (const [name, args] of filters) {
       const event = registryEvent(name);
-      const window = await client.getLogs({
-        address,
-        event,
-        args,
-        fromBlock: start,
-        toBlock: end,
-        strict: true,
+      requests.push(async () => {
+        const window = await client.getLogs({
+          address,
+          event,
+          args,
+          fromBlock: windowStart,
+          toBlock: end,
+          strict: true,
+        });
+        if (window.length > 1) {
+          throw new TypeError(`Registry ${name} evidence exceeds its bound`);
+        }
+        return window;
       });
-      if (window.length > 1) {
-        throw new TypeError(`Registry ${name} evidence exceeds its bound`);
-      }
-      logs.push(...window);
     }
     start = end + 1n;
+  }
+  for (let offset = 0; offset < requests.length;
+    offset += MAXIMUM_CONCURRENT_LOG_REQUESTS) {
+    signal.throwIfAborted();
+    const windows = await Promise.all(requests.slice(
+      offset,
+      offset + MAXIMUM_CONCURRENT_LOG_REQUESTS,
+    ).map(async (request) => await request()));
+    windows.forEach((window) => logs.push(...window));
   }
   signal.throwIfAborted();
   return logs;

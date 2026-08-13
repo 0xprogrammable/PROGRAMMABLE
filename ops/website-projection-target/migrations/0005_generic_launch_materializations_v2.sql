@@ -97,6 +97,65 @@ CREATE INDEX generic_launch_reconciliation_attempts_v2_attempt_idx
   ON programmable_website_projection_v1.generic_launch_reconciliation_attempts_v2
   (attempted_at, approval_id);
 
+CREATE FUNCTION programmable_website_projection_v1.enforce_approval_v3_capacity_v1()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = pg_catalog
+AS $capacity$
+BEGIN
+  IF NEW.lane <> 'website.approval-v3' THEN
+    RETURN NEW;
+  END IF;
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended('programmable.website.approval-v3.capacity.v1', 0)
+  );
+  IF EXISTS (
+    SELECT 1
+      FROM programmable_website_projection_v1.projection_records existing
+     WHERE (existing.lane = NEW.lane
+       AND existing.projection_key = NEW.projection_key)
+        OR existing.idempotency_key = NEW.idempotency_key
+  ) THEN
+    RETURN NEW;
+  END IF;
+  IF (SELECT count(*)
+        FROM programmable_website_projection_v1.projection_records existing
+       WHERE existing.lane = 'website.approval-v3') >= 48 THEN
+    RAISE EXCEPTION 'website Approval v3 release capacity is exhausted'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END
+$capacity$;
+
+REVOKE ALL ON FUNCTION
+  programmable_website_projection_v1.enforce_approval_v3_capacity_v1()
+  FROM PUBLIC;
+
+DO $function_roles$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+    EXECUTE 'REVOKE ALL ON FUNCTION programmable_website_projection_v1.enforce_approval_v3_capacity_v1() FROM anon';
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+    EXECUTE 'REVOKE ALL ON FUNCTION programmable_website_projection_v1.enforce_approval_v3_capacity_v1() FROM authenticated';
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
+    EXECUTE 'REVOKE ALL ON FUNCTION programmable_website_projection_v1.enforce_approval_v3_capacity_v1() FROM service_role';
+  END IF;
+END
+$function_roles$;
+
+GRANT EXECUTE ON FUNCTION
+  programmable_website_projection_v1.enforce_approval_v3_capacity_v1()
+  TO programmable_website_projection_runtime;
+
+CREATE TRIGGER projection_records_approval_v3_capacity_v1
+BEFORE INSERT ON programmable_website_projection_v1.projection_records
+FOR EACH ROW EXECUTE FUNCTION
+  programmable_website_projection_v1.enforce_approval_v3_capacity_v1();
+
 ALTER TABLE programmable_website_projection_v1.generic_launch_materializations_v2
   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE programmable_website_projection_v1.generic_launch_materializations_v2
@@ -178,7 +237,7 @@ GRANT SELECT, INSERT
 GRANT SELECT, INSERT
   ON programmable_website_projection_v1.generic_launch_reconciliations_v2
   TO programmable_website_projection_runtime;
-GRANT UPDATE (observation_common_head, observation_common_head_hash, observed_at)
+GRANT UPDATE (outcome, observation_common_head, observation_common_head_hash, observed_at)
   ON programmable_website_projection_v1.generic_launch_reconciliations_v2
   TO programmable_website_projection_runtime;
 

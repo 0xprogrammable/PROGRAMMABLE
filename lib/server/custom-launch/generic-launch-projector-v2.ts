@@ -119,6 +119,7 @@ export interface GenericLaunchMaterializationStoreV2 {
     state: "finalized" | "revoked" | "invalidated";
     recordHash: Sha256Digest | null;
     record: GenericLaunchRecordV2 | null;
+    lastFinalizedRecord: GenericLaunchRecordV2 | null;
     observationCommonHead: string;
     observationCommonHeadHash: `0x${string}`;
   }> | null>;
@@ -138,6 +139,8 @@ export interface GenericLaunchMaterializationStoreV2 {
     lifecycleEvidenceHash: Sha256Digest;
     state: "finalized" | "revoked" | "invalidated";
     record: GenericLaunchRecordV2 | null;
+    observationCommonHead: string;
+    observationCommonHeadHash: `0x${string}`;
     signal: AbortSignal;
   }>): Promise<Readonly<{ kind: "created" | "existing" }>>;
 }
@@ -243,8 +246,9 @@ export function createGenericLaunchProjectorV2(input: Readonly<{
       );
       let record: GenericLaunchRecordV2 | null = null;
       if (lifecycle.status === "finalized") {
-        if (previous?.state === "finalized" && previous.record !== null) {
-          record = previous.record;
+        if (previous?.lastFinalizedRecord !== null
+          && previous?.lastFinalizedRecord !== undefined) {
+          record = previous.lastFinalizedRecord;
         } else {
           const { chainId: _chainId, ...publicDescriptor } = approval.descriptor;
           void _chainId;
@@ -308,13 +312,6 @@ export function createGenericLaunchProjectorV2(input: Readonly<{
         lifecycleEvidenceHash,
         state: lifecycle.status,
         record,
-        signal,
-      });
-      await input.store.putApprovalReconciliation({
-        approvalId,
-        launchId: approval.launchId,
-        descriptorHash: approval.descriptorHash,
-        outcome: "consumed",
         observationCommonHead: lifecycle.observationCommonHead,
         observationCommonHeadHash: lifecycle.observationCommonHeadHash,
         signal,

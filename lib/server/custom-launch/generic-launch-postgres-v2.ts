@@ -2,7 +2,10 @@ import "server-only";
 
 import { canonicalizeJson, parseStrictJson, type JsonValue } from
   "../projection-target/canonical-json";
-import type { ProjectionTargetPostgresPoolV1 } from
+import type {
+  ProjectionTargetPostgresClientV1,
+  ProjectionTargetPostgresPoolV1,
+} from
   "../projection-target/postgres-store";
 import type { Sha256Digest } from "../projection-target/hashing";
 import {
@@ -37,6 +40,7 @@ interface LifecycleRow extends Record<string, unknown> {
   lifecycle_state: unknown;
   record_hash: unknown;
   canonical_record: unknown;
+  last_finalized_record: unknown;
   observation_common_head: unknown;
   observation_common_head_hash: unknown;
 }
@@ -93,6 +97,16 @@ interface StorageProviderPostureRow extends Record<string, unknown> {
   provider_access_count: unknown;
 }
 
+interface StorageMembershipPostureRow extends Record<string, unknown> {
+  reachable_membership_count: unknown;
+}
+
+interface StorageAdmissionPostureRow extends Record<string, unknown> {
+  trigger_count: unknown;
+  function_count: unknown;
+  provider_execute_count: unknown;
+}
+
 export function createPostgresGenericLaunchMaterializationStoreV2(
   pool: ProjectionTargetPostgresPoolV1,
 ): GenericLaunchMaterializationStoreV2 {
@@ -135,13 +149,22 @@ export function createPostgresGenericLaunchMaterializationStoreV2(
         SELECT m.approval_id, m.descriptor_hash,
                m.lifecycle_generation::text, m.lifecycle_evidence_hash,
                m.lifecycle_state, m.record_hash, m.canonical_record,
+               finalized.canonical_record AS last_finalized_record,
                r.observation_common_head::text, r.observation_common_head_hash
           FROM programmable_website_projection_v1.generic_launch_materializations_v2 m
-          JOIN programmable_website_projection_v1.generic_launch_reconciliations_v2 r
+          LEFT JOIN programmable_website_projection_v1.generic_launch_reconciliations_v2 r
             ON r.launch_id = m.launch_id
            AND r.approval_id = m.approval_id
            AND r.descriptor_hash = m.descriptor_hash
            AND r.outcome = 'consumed'
+          LEFT JOIN LATERAL (
+            SELECT canonical_record
+              FROM programmable_website_projection_v1.generic_launch_materializations_v2 f
+             WHERE f.launch_id = m.launch_id
+               AND f.lifecycle_state = 'finalized'
+             ORDER BY f.lifecycle_generation DESC
+             LIMIT 1
+          ) finalized ON true
          WHERE m.launch_id = $1
          ORDER BY m.lifecycle_generation DESC
          LIMIT 1
@@ -167,12 +190,15 @@ export function createPostgresGenericLaunchMaterializationStoreV2(
            observation_common_head, observation_common_head_hash)
         VALUES ($1, $2, $3, $4, $5::numeric, $6)
         ON CONFLICT (approval_id) DO UPDATE SET
+          outcome = EXCLUDED.outcome,
           observation_common_head = EXCLUDED.observation_common_head,
           observation_common_head_hash = EXCLUDED.observation_common_head_hash,
           observed_at = clock_timestamp()
         WHERE generic_launch_reconciliations_v2.launch_id = EXCLUDED.launch_id
           AND generic_launch_reconciliations_v2.descriptor_hash = EXCLUDED.descriptor_hash
-          AND generic_launch_reconciliations_v2.outcome = EXCLUDED.outcome
+          AND (generic_launch_reconciliations_v2.outcome = EXCLUDED.outcome
+            OR (generic_launch_reconciliations_v2.outcome = 'unconsumed'
+              AND EXCLUDED.outcome = 'consumed'))
         RETURNING approval_id
       `, [approvalId, launchId, descriptorHash, input.outcome, head, headHash]);
       input.signal.throwIfAborted();
@@ -190,6 +216,14 @@ export function createPostgresGenericLaunchMaterializationStoreV2(
       const lifecycleEvidenceHash = digest(
         input.lifecycleEvidenceHash,
         "lifecycle evidence",
+      );
+      const observationCommonHead = decimal(
+        input.observationCommonHead,
+        "observation common head",
+      );
+      const observationCommonHeadHash = hash32(
+        input.observationCommonHeadHash,
+        "observation common head hash",
       );
       const record = input.record === null
         ? null
@@ -245,6 +279,10 @@ export function createPostgresGenericLaunchMaterializationStoreV2(
               !== (record?.recordHash ?? null)) {
             throw new TypeError("Generic launch lifecycle idempotency conflicted");
           }
+          await putConsumedReconciliation(client, {
+            approvalId, launchId, descriptorHash,
+            observationCommonHead, observationCommonHeadHash,
+          });
           await client.query("COMMIT");
           open = false;
           return Object.freeze({ kind: "existing" as const });
@@ -277,12 +315,16 @@ export function createPostgresGenericLaunchMaterializationStoreV2(
           record?.sourceProjectionHash ?? null,
           record?.sourceProjection.lifecycle.finalization.blockNumber ?? null,
         ]);
-        if (inserted.rowCount === 1) {
-          await client.query("COMMIT");
-          open = false;
-          return Object.freeze({ kind: "created" as const });
+        if (inserted.rowCount !== 1) {
+          throw new TypeError("Generic launch lifecycle insert failed");
         }
-        throw new TypeError("Generic launch lifecycle insert failed");
+        await putConsumedReconciliation(client, {
+          approvalId, launchId, descriptorHash,
+          observationCommonHead, observationCommonHeadHash,
+        });
+        await client.query("COMMIT");
+        open = false;
+        return Object.freeze({ kind: "created" as const });
       } catch (error) {
         if (open) await client.query("ROLLBACK").catch(() => undefined);
         throw error;
@@ -291,6 +333,39 @@ export function createPostgresGenericLaunchMaterializationStoreV2(
       }
     },
   });
+}
+
+async function putConsumedReconciliation(
+  client: ProjectionTargetPostgresClientV1,
+  input: Readonly<{
+    approvalId: `0x${string}`;
+    launchId: `0x${string}`;
+    descriptorHash: `0x${string}`;
+    observationCommonHead: string;
+    observationCommonHeadHash: `0x${string}`;
+  }>,
+): Promise<void> {
+  const result = await client.query(`
+    INSERT INTO programmable_website_projection_v1.generic_launch_reconciliations_v2
+      (approval_id, launch_id, descriptor_hash, outcome,
+       observation_common_head, observation_common_head_hash)
+    VALUES ($1, $2, $3, 'consumed', $4::numeric, $5)
+    ON CONFLICT (approval_id) DO UPDATE SET
+      outcome = 'consumed',
+      observation_common_head = EXCLUDED.observation_common_head,
+      observation_common_head_hash = EXCLUDED.observation_common_head_hash,
+      observed_at = clock_timestamp()
+    WHERE generic_launch_reconciliations_v2.launch_id = EXCLUDED.launch_id
+      AND generic_launch_reconciliations_v2.descriptor_hash = EXCLUDED.descriptor_hash
+      AND generic_launch_reconciliations_v2.outcome IN ('unconsumed', 'consumed')
+    RETURNING approval_id
+  `, [
+    input.approvalId, input.launchId, input.descriptorHash,
+    input.observationCommonHead, input.observationCommonHeadHash,
+  ]);
+  if (result.rowCount !== 1) {
+    throw new TypeError("Generic launch reconciliation identity conflicted");
+  }
 }
 
 export function createPostgresGenericLaunchReadStoreV2(input: Readonly<{
@@ -537,6 +612,7 @@ async function assertGenericLaunchMaterializationStorageV2(
     "generic_launch_reconciliations_v2|observation_common_head|programmable_website_projection_runtime|UPDATE|false",
     "generic_launch_reconciliations_v2|observation_common_head_hash|programmable_website_projection_runtime|UPDATE|false",
     "generic_launch_reconciliations_v2|observed_at|programmable_website_projection_runtime|UPDATE|false",
+    "generic_launch_reconciliations_v2|outcome|programmable_website_projection_runtime|UPDATE|false",
   ];
   if (actualColumnAcl.length !== expectedColumnAcl.length
     || actualColumnAcl.some((value, index) => value !== expectedColumnAcl[index])) {
@@ -568,6 +644,90 @@ async function assertGenericLaunchMaterializationStorageV2(
     providerPosture.rows[0]?.provider_access_count,
     "Generic launch provider role access count",
   ) !== "0") {
+    throw new TypeError("Generic launch materialization storage posture is invalid");
+  }
+  const membershipPosture = await pool.query<StorageMembershipPostureRow>(`
+    WITH RECURSIVE roots(root_oid, role_oid) AS (
+      SELECT oid, oid FROM pg_roles
+       WHERE rolname IN (
+         current_user, 'anon', 'authenticated', 'service_role'
+       )
+    ), reachable(root_oid, role_oid) AS (
+      SELECT root_oid, role_oid FROM roots
+      UNION
+      SELECT reachable.root_oid, memberships.roleid
+        FROM reachable
+        JOIN pg_auth_members memberships
+          ON memberships.member = reachable.role_oid
+    )
+    SELECT count(*) FILTER (WHERE root_oid <> role_oid)::text
+      AS reachable_membership_count
+      FROM reachable
+  `);
+  if (decimal(
+    membershipPosture.rows[0]?.reachable_membership_count,
+    "Generic launch reachable role membership count",
+  ) !== "0") {
+    throw new TypeError("Generic launch materialization storage posture is invalid");
+  }
+  const admissionPosture = await pool.query<StorageAdmissionPostureRow>(`
+    SELECT (
+      SELECT count(*)::text
+        FROM pg_trigger trigger
+        JOIN pg_class table_class ON table_class.oid = trigger.tgrelid
+        JOIN pg_namespace table_schema ON table_schema.oid = table_class.relnamespace
+        JOIN pg_proc function ON function.oid = trigger.tgfoid
+       WHERE table_schema.nspname = 'programmable_website_projection_v1'
+         AND table_class.relname = 'projection_records'
+         AND trigger.tgname = 'projection_records_approval_v3_capacity_v1'
+         AND trigger.tgenabled = 'O'
+         AND trigger.tgtype = 7
+         AND function.proname = 'enforce_approval_v3_capacity_v1'
+    ) AS trigger_count,
+    (
+      SELECT count(*)::text
+        FROM pg_proc function
+        JOIN pg_namespace function_schema ON function_schema.oid = function.pronamespace
+        JOIN pg_class owner_table
+          ON owner_table.relname = 'generic_launch_materializations_v2'
+        JOIN pg_namespace owner_schema ON owner_schema.oid = owner_table.relnamespace
+       WHERE function_schema.nspname = 'programmable_website_projection_v1'
+         AND function.proname = 'enforce_approval_v3_capacity_v1'
+         AND owner_schema.nspname = 'programmable_website_projection_v1'
+         AND function.proowner = owner_table.relowner
+         AND function.prosecdef = false
+         AND function.proconfig = ARRAY['search_path=pg_catalog']::text[]
+         AND position('website.approval-v3' in function.prosrc) > 0
+         AND position('>= 48' in function.prosrc) > 0
+         AND position('pg_advisory_xact_lock' in function.prosrc) > 0
+         AND has_function_privilege(current_user, function.oid, 'EXECUTE')
+         AND NOT EXISTS (
+           SELECT 1 FROM aclexplode(function.proacl) acl
+            WHERE acl.grantee <> function.proowner
+              AND (acl.grantee = 0
+                OR pg_get_userbyid(acl.grantee)
+                  <> 'programmable_website_projection_runtime'
+                OR acl.privilege_type <> 'EXECUTE'
+                OR acl.is_grantable)
+         )
+    ) AS function_count,
+    (
+      SELECT count(*)::text
+        FROM pg_roles provider
+        JOIN pg_proc function
+          ON function.proname = 'enforce_approval_v3_capacity_v1'
+        JOIN pg_namespace function_schema ON function_schema.oid = function.pronamespace
+       WHERE provider.rolname IN ('anon', 'authenticated', 'service_role')
+         AND function_schema.nspname = 'programmable_website_projection_v1'
+         AND has_function_privilege(provider.rolname, function.oid, 'EXECUTE')
+    ) AS provider_execute_count
+  `);
+  if (decimal(admissionPosture.rows[0]?.trigger_count,
+      "Generic launch capacity trigger count") !== "1"
+    || decimal(admissionPosture.rows[0]?.function_count,
+      "Generic launch capacity function count") !== "1"
+    || decimal(admissionPosture.rows[0]?.provider_execute_count,
+      "Generic launch provider capacity execute count") !== "0") {
     throw new TypeError("Generic launch materialization storage posture is invalid");
   }
 }
@@ -655,6 +815,31 @@ function lifecycleRow(row: LifecycleRow) {
   if (state !== "finalized" && state !== "revoked" && state !== "invalidated") {
     throw new TypeError("stored lifecycle state is invalid");
   }
+  const record = row.canonical_record === null
+    ? null
+    : parseGenericLaunchRecordV2(canonicalObject(
+      row.canonical_record,
+      "stored lifecycle record",
+    ));
+  const lastFinalizedRecord = row.last_finalized_record === null
+    ? null
+    : parseGenericLaunchRecordV2(canonicalObject(
+      row.last_finalized_record,
+      "last finalized lifecycle record",
+    ));
+  const observationCommonHead = row.observation_common_head === null
+    ? record?.sourceProjection.lifecycle.latestCommonHead
+    : decimal(row.observation_common_head, "lifecycle observation common head");
+  const observationCommonHeadHash = row.observation_common_head_hash === null
+    ? record?.sourceProjection.lifecycle.latestCommonHeadHash
+    : hash32(
+      row.observation_common_head_hash,
+      "lifecycle observation common head hash",
+    );
+  if (observationCommonHead === undefined
+    || observationCommonHeadHash === undefined) {
+    throw new TypeError("stored lifecycle observation is unavailable");
+  }
   return Object.freeze({
     approvalId: hash32(row.approval_id, "lifecycle Approval ID"),
     descriptorHash: hash32(row.descriptor_hash, "lifecycle descriptor hash"),
@@ -664,20 +849,10 @@ function lifecycleRow(row: LifecycleRow) {
     recordHash: row.record_hash === null
       ? null
       : digest(row.record_hash, "lifecycle record hash"),
-    record: row.canonical_record === null
-      ? null
-      : parseGenericLaunchRecordV2(canonicalObject(
-        row.canonical_record,
-        "stored lifecycle record",
-      )),
-    observationCommonHead: decimal(
-      row.observation_common_head,
-      "lifecycle observation common head",
-    ),
-    observationCommonHeadHash: hash32(
-      row.observation_common_head_hash,
-      "lifecycle observation common head hash",
-    ),
+    record,
+    lastFinalizedRecord,
+    observationCommonHead,
+    observationCommonHeadHash,
   });
 }
 

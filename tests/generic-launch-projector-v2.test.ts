@@ -121,6 +121,8 @@ function memoryStore(): GenericLaunchMaterializationStoreV2 & {
         state: row.state,
         recordHash: row.record?.recordHash ?? null,
         record: row.record,
+        lastFinalizedRecord: rows.findLast((candidate) =>
+          candidate.launchId === launchId && candidate.record !== null)?.record ?? null,
         observationCommonHead: observation?.observationCommonHead ?? "112",
         observationCommonHeadHash:
           observation?.observationCommonHeadHash ?? hash("e"),
@@ -298,6 +300,40 @@ describe("Generic launch V2 Registry projector", () => {
       .toBe("created");
     expect(store.rows).toHaveLength(2);
     expect(store.rows[1]).toMatchObject({ state: "invalidated", record: null });
+  });
+
+  it("restores the original public identity after a transient invalidation", async () => {
+    const store = memoryStore();
+    let current: VerifiedRegistryLifecycleV2 = lifecycle;
+    const projector = createGenericLaunchProjectorV2({
+      store,
+      verifyApprovalArtifact: () => approval,
+      readRegistryLifecycle: async () => current,
+      readModelBindingHash: sha("f"),
+    });
+    const first = await projector.project({ approvalId: approval.approvalId });
+    current = {
+      status: "invalidated",
+      latestCommonHead: "121",
+      latestCommonHeadHash: hash("f"),
+      registryStatus: "1",
+      invalidationEvidenceHash: sha("e"),
+      observationCommonHead: "121",
+      observationCommonHeadHash: hash("f"),
+    };
+    await projector.project({ approvalId: approval.approvalId });
+    current = {
+      ...lifecycle,
+      latestCommonHead: "130",
+      latestCommonHeadHash: hash("9"),
+      observationCommonHead: "130",
+      observationCommonHeadHash: hash("9"),
+    };
+    const recovered = await projector.project({ approvalId: approval.approvalId });
+    expect(recovered.kind).toBe("existing");
+    expect(recovered.recordHash).toBe(first.recordHash);
+    expect(store.rows).toHaveLength(2);
+    expect(store.rows[0]?.record?.recordHash).toBe(first.recordHash);
   });
 
   it("fails closed on approval identity or lifecycle drift", async () => {
